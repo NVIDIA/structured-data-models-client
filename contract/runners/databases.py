@@ -1325,17 +1325,29 @@ def _sql_text(text: str | None) -> str:
     return f"'{text}'"
 
 
-def _qualified(engine: str, namespace: tuple[str, ...], table: str) -> str:
+def _qualified(
+    engine: str, namespace: tuple[str, ...], table: str, fold: bool = False
+) -> str:
     quoting = backtick if engine == 'databricks' else quote
-    return '.'.join(quoting(part) for part in (*namespace, table))
+    return '.'.join(
+        quoting(part) for part in (*namespace, table.upper() if fold else table)
+    )
 
 
 def _warehouse_constraints(
-    engine: str, duck: Any, table: str, namespace: tuple[str, ...]
+    engine: str,
+    duck: Any,
+    table: str,
+    namespace: tuple[str, ...],
+    fold: bool = False,
 ) -> tuple[set[str], list[str], list[str]]:
     r"""A table's ``NOT NULL`` columns, the key clauses ``engine`` stores
     and a note for each it does not (:data:`CONSTRAINTS_NOT_STORED`)."""
-    quoting = backtick if engine == 'databricks' else quote
+    quote_as = backtick if engine == 'databricks' else quote
+
+    def quoting(name: str) -> str:
+        return quote_as(name.upper() if fold else name)
+
     not_null: set[str] = set()
     clauses: list[str] = []
     notes: list[str] = []
@@ -1379,7 +1391,7 @@ def _warehouse_constraints(
                 continue
             reference = (
                 f'FOREIGN KEY ({listed}) REFERENCES '
-                f'{_qualified(engine, namespace, target)} ('
+                f'{_qualified(engine, namespace, target, fold)} ('
                 + ', '.join(quoting(column) for column in targets)
                 + ')'
             )
@@ -1410,21 +1422,28 @@ def _batches(rows: list[str]) -> Iterator[list[str]]:
 
 
 def warehouse_statements(
-    duck: Any, engine: str, namespace: tuple[str, ...]
+    duck: Any, engine: str, namespace: tuple[str, ...], fold: bool = False
 ) -> tuple[list[str], list[str]]:
     r"""The statements loading every table of ``duck``'s main schema into
     ``engine``'s schema ``namespace`` (catalog or database, then schema),
     each table dropped first, every value as :func:`stored` sends it, and
     a note for each constraint the engine does not store. A value the
-    engine cannot hold is refused by name (:class:`Unloadable`)."""
+    engine cannot hold is refused by name (:class:`Unloadable`). With
+    ``fold``, every table and column is named as Snowflake stores an
+    unquoted name, in upper case, so a semantic view's YAML, which names
+    them unquoted, reads them."""
     if engine not in WAREHOUSE_ENGINES:
         raise ValueError(f'no warehouse engine {engine!r}')
     if len(namespace) != 2 or not all(namespace):
         raise ValueError('a warehouse schema is named by two parts')
-    quoting = backtick if engine == 'databricks' else quote
+    quote_as = backtick if engine == 'databricks' else quote
+
+    def quoting(name: str) -> str:
+        return quote_as(name.upper() if fold else name)
+
     tables = _tables(duck)
     statements = [
-        f'DROP TABLE IF EXISTS {_qualified(engine, namespace, table)}'
+        f'DROP TABLE IF EXISTS {_qualified(engine, namespace, table, fold)}'
         for table in reversed(tables)
     ]
     notes: list[str] = []
@@ -1433,7 +1452,7 @@ def warehouse_statements(
         data = stored(duck, table, engine)
         names = [field.name for field in source.schema]
         not_null, clauses, left_out = _warehouse_constraints(
-            engine, duck, table, namespace
+            engine, duck, table, namespace, fold
         )
         notes.extend(left_out)
         families = [family(field.type) for field in source.schema]
@@ -1446,7 +1465,7 @@ def warehouse_statements(
             + (' NOT NULL' if name in not_null else '')
             for name, kind in zip(names, declared, strict=True)
         ]
-        qualified = _qualified(engine, namespace, table)
+        qualified = _qualified(engine, namespace, table, fold)
         create = (
             f'CREATE TABLE {qualified} (' + ', '.join(columns + clauses) + ')'
         )
@@ -1520,6 +1539,7 @@ def load(
     *,
     namespace: tuple[str, ...] | None = None,
     refuse_negative_zero: bool = True,
+    fold: bool = False,
 ) -> list[str]:
     r"""Every table of ``duck``'s main schema, loaded into ``database``,
     each column stored as the type map says; :class:`Unloadable` names a
@@ -1546,7 +1566,7 @@ def load(
     already read the zeros as SQLite stores them (the provider kit's
     ``zeros``) loads it as 0.0; a contract case, which names the value it
     holds, never does."""
-    if database in ENGINE and hasattr(target, 'connection'):
+    if database in ENGINE and hasattr(target, 'names'):
         return load_leg(duck, database, target)
     if database == 'sqlite':
         _load_sqlite(duck, Path(target), refuse_negative_zero)
@@ -1562,7 +1582,9 @@ def load(
     if database in ('databricks', 'snowflake'):
         if namespace is None:
             raise ValueError(f'a {database} load needs its schema')
-        statements, notes = warehouse_statements(duck, database, namespace)
+        statements, notes = warehouse_statements(
+            duck, database, namespace, fold
+        )
         run = target if callable(target) else statement_runner(target)
         for statement in statements:
             run(statement)
@@ -1676,16 +1698,23 @@ class CaseSchema:
             )
         self.views.append((kind, name))
 
-    def load(self, duck: Any) -> list[str]:
-        r"""The case's tables in the schema, alone; :func:`load`'s notes."""
+    def load(self, duck: Any, fold: bool = False) -> list[str]:
+        r"""The case's tables in the schema, alone; :func:`load`'s notes;
+        with ``fold``, named as Snowflake stores unquoted names."""
         self.clear()
-        self.tables = _tables(duck)
+        self.tables = [name.upper() if fold else name for name in _tables(duck)]
         if self.database == 'lakebase':
             self.types = _load_postgres(
                 duck, self.target, self.namespace[0], replace=True
             )
             return []
-        return load(duck, self.database, self.target, namespace=self.namespace)
+        return load(
+            duck,
+            self.database,
+            self.target,
+            namespace=self.namespace,
+            fold=fold,
+        )
 
 
 #: Each leg's test schema across the run's cases, by leg and schema: the
@@ -1730,8 +1759,17 @@ def load_leg(duck: Any, leg: str, target: Any) -> list[str]:
     if schema is None:
         schema = _SCHEMAS[key] = CaseSchema(database, writer, namespace)
     schema.target = writer
-    notes = schema.load(duck)
     view = target.view
+    # A Snowflake semantic view's YAML names its tables and columns
+    # unquoted, which Snowflake reads in upper case: the case's tables are
+    # created so.
+    fold = bool(
+        leg == 'snowflake'
+        and view
+        and view.get('yaml')
+        and view.get('kind') == 'semantic_view'
+    )
+    notes = schema.load(duck, fold)
     if view and view.get('yaml'):
         schema.create_view(view['kind'], view['name'], view['yaml'])
     # The old client reads every table of the schema when a case names

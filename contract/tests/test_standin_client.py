@@ -88,3 +88,47 @@ def test_a_case_with_no_capture_is_pending_live(root: Path | None) -> None:
         client.open('databricks-sql', {'id': 'no.such.case'}, None, root)
     with pytest.raises(client.StandInFailure, match='not served'):
         client.open('duckdb', {'id': 'x'}, None, root)
+
+
+def test_lakebase_is_served_on_the_local_postgres(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Review r2 P2: Lakebase's offline engine is the local Postgres, its
+    # tables the case's, loaded under the capture's {schema}.
+    import os
+
+    if not os.environ.get('SDM_POSTGRES_TEST_DSN'):
+        assert not os.environ.get('SDM_REQUIRE_POSTGRES')
+        return
+    case = json.loads(
+        (ROOT / 'contract/cases/s1/base.regression.json').read_text()
+    )
+    session = client.open('lakebase', case, None, ROOT / 'contract/captures')
+    try:
+        assert session.names['schema'] == '{schema}'
+        step = {
+            'id': 1,
+            'request': {
+                'request': 'scan',
+                'table': {'source': ['{schema}', 'users']},
+                'columns': ['user_id'],
+                'filters': [],
+                'limit': None,
+            },
+            'plan': {
+                'plan': 'sql',
+                'statements': [
+                    {
+                        'dialect': 'postgres',
+                        'text': 'SELECT "user_id" FROM "{schema}"."users"',
+                        'params': [],
+                    }
+                ],
+                'expect': {'expect': 'discover'},
+            },
+        }
+        table = session.provider(step, {})
+        assert sorted(table.column('user_id').to_pylist()) == list(range(8))
+        assert session.verdict() == {'live_only': None, 'flagged': []}
+    finally:
+        session.close()
