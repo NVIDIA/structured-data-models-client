@@ -632,11 +632,11 @@
     "dtype": "date"
    },
    "core": "success",
-   "reach": "TIMESTAMPTZ under SET TimeZone = 'UTC'",
+   "reach": "TIMESTAMPTZ under SET GLOBAL TimeZone = 'UTC'",
    "reference": "success",
    "evidence": "probe (T1.33 part 2 review): timestamp[us, tz=UTC], described timestamp, success through predict",
    "witness": [
-    "SET TimeZone = 'UTC'",
+    "SET GLOBAL TimeZone = 'UTC'",
     "CREATE OR REPLACE TABLE users AS SELECT *, TIMESTAMPTZ '2024-01-01 00:00:00+00' AS f FROM users"
    ],
    "duckdb_arrow": "timestamp[us, tz=UTC]",
@@ -732,7 +732,7 @@
    "reference": "success",
    "evidence": "inventory time.timestamptz; probe",
    "witness": [
-    "SET TimeZone = 'America/Los_Angeles'",
+    "SET GLOBAL TimeZone = 'America/Los_Angeles'",
     "CREATE OR REPLACE TABLE users AS SELECT *, TIMESTAMPTZ '2024-01-01 00:00:00+00' + to_days(user_id::INTEGER) AS f FROM users"
    ],
    "duckdb_arrow": "timestamp[us, tz=America/Los_Angeles]",

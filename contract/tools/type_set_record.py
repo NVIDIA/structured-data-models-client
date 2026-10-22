@@ -11,7 +11,13 @@ Run with the reference checkout's interpreter (the environment of
 ``contract/reference-env.txt``, the ``ref-pandas3`` cell), from this
 repository's root::
 
-    ~/code/sdmc-reference/.venv/bin/python -I contract/tools/type_set_record.py
+    TZ=America/Los_Angeles ~/code/sdmc-reference/.venv/bin/python -I \
+        contract/tools/type_set_record.py
+
+The process's zone is named because ``duckdb_arrow_by_setting``'s
+``default`` reads it: a TIMESTAMPTZ with no zone set comes over in the
+process's zone, recorded in Los Angeles. Every witness sets its zone with
+``SET GLOBAL TimeZone``, which every cursor takes (C16).
 
 Written by T1.33's independent test author. A ``witness`` is the DuckDB
 statements, after ``contract/bases.yaml``'s ``shop``, that add the column
@@ -122,7 +128,7 @@ SETTINGS: dict[str, list[str]] = {
         'SET arrow_output_list_view = true',
     ],
     'arrow_output_version_1.5': ["SET arrow_output_version = '1.5'"],
-    'TimeZone_UTC': ["SET TimeZone = 'UTC'"],
+    'TimeZone_UTC': ["SET GLOBAL TimeZone = 'UTC'"],
 }
 
 
