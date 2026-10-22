@@ -316,7 +316,9 @@ def test_t30_no_stamp_when_a_seeded_case_differs_from_the_old_client(
     # (T3.0 fix 2): the stamp case needs one, the refusal holds without.
     dsn = os.environ.get('SDM_POSTGRES_TEST_DSN', '')
     if not seeded and not dsn:
-        pytest.skip('the stamp needs SDM_POSTGRES_TEST_DSN: the case runs on Postgres')
+        pytest.skip(
+            'the stamp needs SDM_POSTGRES_TEST_DSN: the case runs on Postgres'
+        )
     env = _env(
         tmp_path,
         SDM_PHASE_BRANCH=PHASE,

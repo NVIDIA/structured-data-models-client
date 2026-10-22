@@ -30,6 +30,10 @@ from typing import Any
 
 import pytest
 
+# Tests of the checking and orchestration tools, some copying the checkout:
+# CI runs them in its tooling jobs (tooling_tests.py).
+pytestmark = pytest.mark.tooling
+
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / 'scripts/rust_core'
 GIT_ENV = {

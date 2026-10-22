@@ -820,7 +820,8 @@ def _(w: World) -> tuple[bool, str]:
 @case('check --pushed-refs: a push naming no lane is not checked')
 def _(w: World) -> tuple[bool, str]:
     sha = w.commit(w.clone, 'no package named')
-    ran = pushed(w, f'refs/heads/main {sha} refs/heads/main {w.base}')
+    # A topic branch: main is protected since T3.0 (the owner, Q14).
+    ran = pushed(w, f'refs/heads/topic {sha} refs/heads/topic {w.base}')
     ok = ran.code == 0 and 'no lane branch in this push' in ran.text
     return verdict(ok, 'nothing to check', ran)
 
