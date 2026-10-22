@@ -2386,9 +2386,10 @@ jobs:
 
   # The JAR-load test (exit 4 of T3.11, locked check 14): the JAR and its
   # runtime dependencies alone, on each JDK and platform the JAR promises,
-  # where no Rust toolchain is: in a clean JDK container on Linux (Eclipse
-  # Temurin's image, pinned by digest, pulled anonymously from ECR Public),
-  # and on the runner on macOS, which runs no containers, with no Rust step.
+  # where no Rust toolchain is: in a clean JDK container on Linux
+  # (Microsoft's build of OpenJDK, pinned by digest, pulled anonymously
+  # from MCR, which sets no anonymous pull limit), and on the runner on
+  # macOS, which runs no containers, with no Rust step.
   java-load:
     name: java-load (${{ matrix.jdk }}, ${{ matrix.platform }})
     runs-on: ${{ matrix.runner }}
@@ -2403,16 +2404,16 @@ jobs:
           - jdk: '17'
             platform: linux-x86_64
             runner: ubuntu-latest
-            image: public.ecr.aws/docker/library/eclipse-temurin:17-jdk@sha256:fe947d993c32dd9cf651a4353a6ed723c2370b3a9d034ea4cab4775404ea531a
+            image: mcr.microsoft.com/openjdk/jdk:17-ubuntu@sha256:fadd15520f396beb223d4d2951fff9199b019f1b1304edfb9feca603f0f3f7ee
           - jdk: '21'
             platform: linux-x86_64
             runner: ubuntu-latest
-            image: public.ecr.aws/docker/library/eclipse-temurin:21-jdk@sha256:23cc5734ff46e776f51ce66eb9ee08444fd47caabec0a95b7eb6e94be2d3696d
+            image: mcr.microsoft.com/openjdk/jdk:21-ubuntu@sha256:08c68d2c69d56f1e8096c66136799d33c19bcb5a3b285be9055cd9a432a922c1
           # The same image index: the runner pulls its arm64 image.
           - jdk: '21'
             platform: linux-aarch64
             runner: ubuntu-24.04-arm
-            image: public.ecr.aws/docker/library/eclipse-temurin:21-jdk@sha256:23cc5734ff46e776f51ce66eb9ee08444fd47caabec0a95b7eb6e94be2d3696d
+            image: mcr.microsoft.com/openjdk/jdk:21-ubuntu@sha256:08c68d2c69d56f1e8096c66136799d33c19bcb5a3b285be9055cd9a432a922c1
           - jdk: '21'
             platform: macos-arm64
             runner: macos-15

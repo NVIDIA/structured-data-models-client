@@ -984,7 +984,7 @@ def test_ci4_every_image_ci_names_is_pinned_by_digest(
         env = workflow['env']
         aarch64 = workflow['jobs']['native-wheel-aarch64']['env']['MANYLINUX']
         # The JAR-load jobs' clean JDK containers (T3.11), the only job
-        # containers: the runner pulls them, anonymously, from ECR Public.
+        # containers: the runner pulls them, anonymously, from MCR.
         load = workflow['jobs']['java-load']
         jdks = {
             entry['image']
@@ -993,9 +993,7 @@ def test_ci4_every_image_ci_names_is_pinned_by_digest(
         }
         assert load['container'] == '${{ matrix.image }}'
         for image in jdks:
-            assert image.startswith(
-                'public.ecr.aws/docker/library/eclipse-temurin:'
-            ), image
+            assert image.startswith('mcr.microsoft.com/openjdk/jdk:'), image
         named = {env['POSTGRES_IMAGE'], env['MANYLINUX'], aarch64, *jdks}
         assert set(images) == named, set(images) ^ named
         for name, job in workflow['jobs'].items():

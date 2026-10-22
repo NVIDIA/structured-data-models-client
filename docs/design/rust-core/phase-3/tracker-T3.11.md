@@ -34,7 +34,8 @@ Design: [design.md](design.md), choice 10, the Packages row T3.11, locked check 
 - **The host facts** are read as the Python host reads them (`TZ`, `/etc/localtime`, Python's default `zoneinfo.TZPATH`, `sys.platform`'s names), so both hosts hand the core the same facts on one machine.
 - **The Linux natives are built in the wheels' jobs** (`native-wheel`, `native-wheel-aarch64`, `native-test-ops`), in their manylinux2014 images, from the same build, as choice 10 says; macOS's in `java-native` on the engine wheels' runners.
   macOS is in because the design's locked check 14 names it; the core had not been built for macOS before, and the orchestrator has asked the owner whether to keep it.
-- **The JAR-load jobs' containers.** Eclipse Temurin's JDK images from ECR Public, pinned by digest, the workflow's only job containers; `tests/test_ci_workflow.py` admits them by name.
+- **The JAR-load jobs' containers.** Microsoft's OpenJDK images from MCR, pinned by digest, the workflow's only job containers; `tests/test_ci_workflow.py` admits them by name.
+  The first choice, Eclipse Temurin's from ECR Public, met ECR's anonymous data limit on the first run; MCR sets none (the orchestrator's decision).
 
 ## Probes
 
