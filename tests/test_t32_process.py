@@ -144,7 +144,8 @@ def test_t32_lane_start_refuses_a_brief_missing_a_heading(
     refused = _start(
         world, 'T3.4', '--brief', str(_brief(tmp_path / 'short.md', dropped))
     )
-    assert refused.code not in (0, 2), refused.text
+    assert refused.code != 0, refused.text
+    assert 'unrecognized arguments' not in refused.text, refused.text
     assert dropped.removeprefix('## ') in refused.text, refused.text
     assert world.local_state() == before
     whole = _start(world, 'T3.4', '--brief', str(_brief(tmp_path / 'whole.md')))
@@ -166,7 +167,6 @@ def test_t32_lane_refuses_a_package_id_with_a_letter_from_phase_3(
     refused = _start(world, 'T3.4a')
     assert refused.code != 0, refused.text
     assert 'T3.4a' in refused.text
-    assert not world.gh_calls() or refused.code != 0
 
 
 @pending
