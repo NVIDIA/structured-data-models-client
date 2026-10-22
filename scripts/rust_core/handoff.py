@@ -274,7 +274,7 @@ def step_reference(
         cases = {
             case: path
             for case, path in chosen.items()
-            if database in runner.case_databases(loaded[case])
+            if database in case_databases(runner, loaded[case])
         }
         if not cases:
             continue
@@ -363,17 +363,30 @@ def step_reference(
             step.notes.append(
                 f'{database}: {", ".join(sorted(cases))} match the old client'
             )
-    step_warehouses(step, root, chosen, loaded, runner, python, expect, scratch)
+    if runner is not None and hasattr(runner, 'case_warehouses'):
+        step_warehouses(
+            step, root, chosen, loaded, runner, python, expect, scratch
+        )
     return step
 
 
+def case_databases(runner: Any, case: dict[str, Any]) -> tuple[str, ...]:
+    r"""The databases ``case`` runs on, as the candidate's runner reads
+    them; a tree whose runner has no such reader, its ``databases``."""
+    if runner is not None and hasattr(runner, 'case_databases'):
+        return tuple(runner.case_databases(case))
+    return tuple(case.get('databases') or DATABASES)
+
+
 def runner_module(root: Path) -> Any:
-    r"""The candidate's ``run_python.py``, for how it reads a case's legs."""
+    r"""The candidate's ``run_python.py``, for how it reads a case's legs;
+    ``None`` in a tree without one."""
     import importlib.util
 
-    spec = importlib.util.spec_from_file_location(
-        'handoff_run_python', root / 'contract/runners/run_python.py'
-    )
+    path = root / 'contract/runners/run_python.py'
+    if not path.is_file():
+        return None
+    spec = importlib.util.spec_from_file_location('handoff_run_python', path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
