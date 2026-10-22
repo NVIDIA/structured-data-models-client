@@ -31,7 +31,7 @@ from sdm_client._rust.providers.databricks import (
     BATCH_COLUMN,
     DatabricksProvider,
     DatabricksSparkProvider,
-    DatabricksWarehouseProvider,
+    DatabricksSqlProvider,
     PlanNotRun,
 )
 from sdm_client._rust.run import _driver
@@ -518,7 +518,7 @@ def test_the_client_tells_the_databricks_connections_apart() -> None:
         (
             'warehouse',
             ['main', 'sales'],
-            DatabricksWarehouseProvider,
+            DatabricksSqlProvider,
         ),
         ('spark', [None, 'sales'], DatabricksSparkProvider),
     ],

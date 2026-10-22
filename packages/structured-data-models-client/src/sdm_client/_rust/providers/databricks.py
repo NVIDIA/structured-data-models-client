@@ -111,14 +111,26 @@ class DatabricksProvider:
         return pa.concat_tables(tables)
 
 
-class DatabricksWarehouseProvider(DatabricksProvider):
+class DatabricksSqlProvider(DatabricksProvider):
     r"""The provider over a SQL warehouse connection
     (``databricks.sql.connect``)."""
 
 
 class DatabricksSparkProvider(DatabricksProvider):
-    r"""The provider over a notebook's Spark session, wrapped in
-    ``sdm_connectors.backends.spark.SparkConnection``."""
+    r"""The provider over a notebook's Spark session: the session itself,
+    which is wrapped in ``sdm_connectors.backends.spark.SparkConnection``
+    (its checks and its refusal of a session whose frames cannot return
+    Arrow included), or a ``SparkConnection`` already."""
+
+    def __init__(self, session: Any, *, budget: int = PARAMETER_BUDGET) -> None:
+        from sdm_connectors.backends.spark import SparkConnection
+
+        connection = (
+            session
+            if isinstance(session, SparkConnection)
+            else SparkConnection(session)
+        )
+        super().__init__(connection, budget=budget)
 
 
 def for_source(source: Any) -> tuple[dict[str, Any], DatabricksProvider]:
@@ -135,7 +147,7 @@ def for_source(source: Any) -> tuple[dict[str, Any], DatabricksProvider]:
     from sdm_client._routing import route_key
 
     spark = route_key(source) == 'databricks-spark'
-    made = DatabricksSparkProvider if spark else DatabricksWarehouseProvider
+    made = DatabricksSparkProvider if spark else DatabricksSqlProvider
     return choice, made(source.connection)
 
 
