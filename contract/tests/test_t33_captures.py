@@ -29,13 +29,12 @@ writer, and never again: a later version reads it through the converter.
 
 Each test listed in ``contract/tests/t33-pending.json``'s ``pending`` (as
 ``py:<function name>``) failed when written and is held to failing
-(``xfail``, strict) until the implementer takes it out.
+(``t33_gate.py``) until the implementer takes it out.
 """
 
 from __future__ import annotations
 
 import importlib.util
-import json
 import secrets
 import sys
 from pathlib import Path
@@ -46,7 +45,6 @@ import pytest
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
-PENDING_FILE = HERE / 't33-pending.json'
 FIXTURE = HERE / 't33-capture-v1'
 #: The Snowflake variables of the owner's env file (KO3-24), which no
 #: capture may hold.
@@ -76,19 +74,21 @@ def _captures() -> ModuleType:
     return _load('captures', ROOT / 'contract/runners/captures.py')
 
 
-def _pending_names(key: str) -> set[str]:
-    return set(json.loads(PENDING_FILE.read_text(encoding='utf-8'))[key])
+def _gate() -> ModuleType:
+    key = 't33_gate'
+    if key not in sys.modules:
+        spec = importlib.util.spec_from_file_location(
+            key, Path(__file__).with_name('t33_gate.py')
+        )
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        sys.modules[key] = module
+    return sys.modules[key]
 
 
-def pending(test: Any) -> Any:
-    r"""Holds ``test`` to failing while ``t33-pending.json`` lists it."""
-    if f'py:{test.__name__}' in _pending_names('pending'):
-        return pytest.mark.xfail(
-            strict=True,
-            reason='T3.3: failing until implemented; once it passes, take '
-            f'py:{test.__name__} out of contract/tests/t33-pending.json',
-        )(test)
-    return test
+#: Runs a test through the gate: it must pass, or fail while pending.
+pending = _gate().gated
 
 
 def _bytes(path: Path) -> bytes:
