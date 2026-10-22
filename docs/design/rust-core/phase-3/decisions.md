@@ -69,6 +69,14 @@ The repository is public, so private names in the owner's words are replaced by 
 | KO3-25 | The Lakebase instance is one in the owner's workspace, found by the orchestrator | "8. You should be able to find another one in our [workspace name] workspace" | approved by owner 2026-10-22 |
 | KO3-26 | Both x86_64 and aarch64 are in scope | "9. Yes, both x86 and aarch64. I'm not sure you're right, I believe we support both, but double-check" | approved by owner 2026-10-22 |
 
+## Java in Phase 3 (2026-10-22)
+
+Source: the owner's message on 2026-10-22, recorded in `$SDM_ORCH_STATE/phase-3/owner-answers-2026-10-21.md`, section "2026-10-22: Java in Phase 3", written after reading the draft design, which kept Java out under Phase 2's KO2-34.
+
+| # | Decision | Owner's words | Status |
+|---|---|---|---|
+| KO3-27 | Java support starts in Phase 3; this replaces KO2-34's deferral of Java until S2 is switched for Python | "BTW side note - is it possible to begin the Java implementation as well? I'm looking at our migration-plan.md at https://github.com/NVIDIA/structured-data-models-client/blob/rust-core/docs/design/rust-core/migration-plan.md and it includes "Java follows on Databricks" so I'm wondering why you've not considered it here. I think we should start adding Java support as well in phase 3" | approved by owner 2026-10-22 |
+
 ## Kickoff answers
 
 None yet beyond the rows above: the open questions are in [design.md](design.md), "Owner questions", each with a recommendation.
