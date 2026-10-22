@@ -1,0 +1,339 @@
+{
+  "format": "sdm-case/1",
+  "id": "adventureworks.quickstart.large-order-90d",
+  "status": "acceptance",
+  "slice": "S2",
+  "warehouses": [
+    "databricks-sql",
+    "databricks-spark",
+    "snowflake",
+    "lakebase"
+  ],
+  "paths": [
+    "schema.from-source/tables/databricks-sql",
+    "query.materialize/indices-binary/databricks-sql",
+    "client.predict/binary/databricks-sql",
+    "schema.from-source/tables/databricks-spark",
+    "query.materialize/indices-binary/databricks-spark",
+    "client.predict/binary/databricks-spark",
+    "schema.from-source/tables/snowflake",
+    "query.materialize/indices-binary/snowflake",
+    "client.predict/binary/snowflake",
+    "schema.from-source/tables/lakebase",
+    "query.materialize/indices-binary/lakebase",
+    "client.predict/binary/lakebase"
+  ],
+  "routes": [
+    "schema.from-source/tables/databricks-sql",
+    "schema.from-source/catalog-keys/databricks-sql",
+    "query.materialize/indices-binary/databricks-sql",
+    "query.materialize/indices-multiclass/databricks-sql",
+    "query.materialize/indices-regression/databricks-sql",
+    "query.materialize/indices-link-prediction/databricks-sql",
+    "query.materialize/indices-ranking/databricks-sql",
+    "query.materialize/indices-forecast/databricks-sql",
+    "client.predict/binary/databricks-sql",
+    "client.predict/multiclass/databricks-sql",
+    "client.predict/regression/databricks-sql",
+    "client.predict/link-prediction/databricks-sql",
+    "client.predict/ranking/databricks-sql",
+    "client.predict/forecast/databricks-sql",
+    "schema.from-source/tables/databricks-spark",
+    "schema.from-source/catalog-keys/databricks-spark",
+    "query.materialize/indices-binary/databricks-spark",
+    "query.materialize/indices-multiclass/databricks-spark",
+    "query.materialize/indices-regression/databricks-spark",
+    "query.materialize/indices-link-prediction/databricks-spark",
+    "query.materialize/indices-ranking/databricks-spark",
+    "query.materialize/indices-forecast/databricks-spark",
+    "client.predict/binary/databricks-spark",
+    "client.predict/multiclass/databricks-spark",
+    "client.predict/regression/databricks-spark",
+    "client.predict/link-prediction/databricks-spark",
+    "client.predict/ranking/databricks-spark",
+    "client.predict/forecast/databricks-spark",
+    "schema.from-source/tables/snowflake",
+    "schema.from-source/catalog-keys/snowflake",
+    "query.materialize/indices-binary/snowflake",
+    "query.materialize/indices-multiclass/snowflake",
+    "query.materialize/indices-regression/snowflake",
+    "query.materialize/indices-link-prediction/snowflake",
+    "query.materialize/indices-ranking/snowflake",
+    "query.materialize/indices-forecast/snowflake",
+    "client.predict/binary/snowflake",
+    "client.predict/multiclass/snowflake",
+    "client.predict/regression/snowflake",
+    "client.predict/link-prediction/snowflake",
+    "client.predict/ranking/snowflake",
+    "client.predict/forecast/snowflake",
+    "schema.from-source/tables/lakebase",
+    "schema.from-source/catalog-keys/lakebase",
+    "query.materialize/indices-binary/lakebase",
+    "query.materialize/indices-multiclass/lakebase",
+    "query.materialize/indices-regression/lakebase",
+    "query.materialize/indices-link-prediction/lakebase",
+    "query.materialize/indices-ranking/lakebase",
+    "query.materialize/indices-forecast/lakebase",
+    "client.predict/binary/lakebase",
+    "client.predict/multiclass/lakebase",
+    "client.predict/regression/lakebase",
+    "client.predict/link-prediction/lakebase",
+    "client.predict/ranking/lakebase",
+    "client.predict/forecast/lakebase"
+  ],
+  "cells": [
+    "int64/primary-key",
+    "int64/foreign-key",
+    "timestamp-us/time-column",
+    "utf8/feature",
+    "float64/feature"
+  ],
+  "input": {
+    "base": "adventureworks",
+    "from_source": {
+      "tables": {
+        "customers": "adventureworks_customers",
+        "products": "adventureworks_products",
+        "sales_order_headers": "adventureworks_sales_order_headers",
+        "sales_order_details": "adventureworks_sales_order_details"
+      },
+      "primary_keys": {
+        "customers": "CustomerID",
+        "products": "ProductID",
+        "sales_order_headers": "SalesOrderID",
+        "sales_order_details": "SalesOrderDetailID"
+      },
+      "time_columns": {
+        "sales_order_headers": "OrderDate",
+        "sales_order_details": "OrderDate",
+        "customers": null,
+        "products": null
+      },
+      "relationships": [
+        {
+          "source_table": "sales_order_headers",
+          "source_column": "CustomerID",
+          "target_table": "customers",
+          "target_column": "CustomerID"
+        },
+        {
+          "source_table": "sales_order_details",
+          "source_column": "CustomerID",
+          "target_table": "customers",
+          "target_column": "CustomerID"
+        },
+        {
+          "source_table": "sales_order_details",
+          "source_column": "ProductID",
+          "target_table": "products",
+          "target_column": "ProductID"
+        }
+      ]
+    },
+    "edits": [
+      {
+        "op": "delete_column",
+        "table": "customers",
+        "column": "rowguid"
+      },
+      {
+        "op": "delete_column",
+        "table": "customers",
+        "column": "ModifiedDate"
+      },
+      {
+        "op": "delete_column",
+        "table": "customers",
+        "column": "AccountNumber"
+      },
+      {
+        "op": "delete_column",
+        "table": "products",
+        "column": "rowguid"
+      },
+      {
+        "op": "delete_column",
+        "table": "products",
+        "column": "ModifiedDate"
+      },
+      {
+        "op": "delete_column",
+        "table": "products",
+        "column": "Name"
+      },
+      {
+        "op": "delete_column",
+        "table": "products",
+        "column": "ProductNumber"
+      },
+      {
+        "op": "delete_column",
+        "table": "products",
+        "column": "SellStartDate"
+      },
+      {
+        "op": "delete_column",
+        "table": "products",
+        "column": "SellEndDate"
+      },
+      {
+        "op": "delete_column",
+        "table": "products",
+        "column": "DiscontinuedDate"
+      },
+      {
+        "op": "delete_column",
+        "table": "sales_order_headers",
+        "column": "rowguid"
+      },
+      {
+        "op": "delete_column",
+        "table": "sales_order_headers",
+        "column": "ModifiedDate"
+      },
+      {
+        "op": "delete_column",
+        "table": "sales_order_headers",
+        "column": "SalesOrderNumber"
+      },
+      {
+        "op": "delete_column",
+        "table": "sales_order_headers",
+        "column": "PurchaseOrderNumber"
+      },
+      {
+        "op": "delete_column",
+        "table": "sales_order_headers",
+        "column": "AccountNumber"
+      },
+      {
+        "op": "delete_column",
+        "table": "sales_order_headers",
+        "column": "CreditCardApprovalCode"
+      },
+      {
+        "op": "delete_column",
+        "table": "sales_order_headers",
+        "column": "Comment"
+      },
+      {
+        "op": "delete_column",
+        "table": "sales_order_headers",
+        "column": "RevisionNumber"
+      },
+      {
+        "op": "delete_column",
+        "table": "sales_order_headers",
+        "column": "Status"
+      },
+      {
+        "op": "delete_column",
+        "table": "sales_order_headers",
+        "column": "ShipDate"
+      },
+      {
+        "op": "delete_column",
+        "table": "sales_order_details",
+        "column": "rowguid"
+      },
+      {
+        "op": "delete_column",
+        "table": "sales_order_details",
+        "column": "ModifiedDate"
+      },
+      {
+        "op": "delete_column",
+        "table": "sales_order_details",
+        "column": "CarrierTrackingNumber"
+      }
+    ],
+    "pql": "PREDICT COUNT(sales_order_headers.* WHERE sales_order_headers.TotalDue > 1000, 0, 90, days) > 0 FOR EACH customers.CustomerID",
+    "materialize": {
+      "indices": [
+        11610,
+        16774,
+        28423,
+        12977,
+        28462,
+        20435,
+        17793,
+        12880,
+        29945,
+        23907,
+        26556,
+        27414,
+        26995,
+        22665,
+        12557,
+        26690,
+        11860,
+        28429,
+        22552,
+        11348,
+        21691,
+        12959,
+        21063,
+        11327,
+        21510,
+        24805,
+        24001,
+        22227,
+        23084,
+        18251,
+        16039,
+        16097,
+        18160,
+        27459,
+        22086,
+        27559,
+        14821,
+        12039,
+        14916,
+        12498,
+        14157,
+        12196,
+        21765,
+        16032,
+        21469,
+        21234,
+        12563,
+        28793,
+        18213,
+        13405,
+        21062,
+        11683,
+        27269,
+        25659,
+        26948,
+        14107,
+        20515,
+        13032,
+        22278,
+        26831,
+        18883,
+        19284,
+        27624,
+        14927,
+        22746,
+        25426,
+        23166,
+        13968,
+        17637,
+        12362,
+        25630,
+        25404,
+        13762,
+        13791,
+        12514
+      ],
+      "anchor_time": "2024-12-17"
+    }
+  },
+  "until": "predict",
+  "expect": {
+    "outcome": "success",
+    "stage": "predict"
+  },
+  "why": "PR #29's kumo_relational_quickstart.ipynb at the reference, the large-order question (an order with TotalDue over 1000 in the next 90 days), a binary classification with a filtered count, on the AdventureWorks base loaded into each warehouse's test schema (choice 1): the schema as the notebook builds it (four keys, both event tables timed by OrderDate, customers and products with no time column, its three relationships, its leave_out columns deleted), the customers or products the notebook selects computed on the fixture, PAST its latest OrderDate less 180 days. The notebook also passes num_context_samples=5000, which the case format has no field for yet (T3.2), so the case asks with the default context; one file for every leg whose engine stores the data (T3.4 brief, open question 1)",
+  "source": "written by T3.4's test author from the reference at 43e55f4f"
+}
