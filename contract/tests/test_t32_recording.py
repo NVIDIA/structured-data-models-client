@@ -417,7 +417,8 @@ def test_t32_the_statement_log_takes_psycopg_s_copy_and_stream(
     r"""P2-T2.1a-2: on Postgres, and on Lakebase, which psycopg reaches,
     the statement log logs ``Cursor.copy`` and ``Cursor.stream`` as it
     logs ``execute``: each a statement the driver runs."""
-    psycopg = pytest.importorskip('psycopg')
+    import psycopg
+
     called: list[str] = []
 
     def copy_(self: Any, statement: Any, params: Any = None, **kw: Any) -> Any:
