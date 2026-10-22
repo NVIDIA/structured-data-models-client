@@ -40,10 +40,13 @@ from typing import Any
 #: Postgres server in a schema of its own.
 TARGETS = ('sqlite', 'postgres', 'databricks', 'snowflake', 'lakebase')
 
+#: The engines loaded by SQL statements alone (:func:`warehouse_statements`).
+WAREHOUSE_ENGINES = ('databricks', 'snowflake')
+
 #: Each warehouse leg's engine, whose column of the type map it loads by:
 #: both Databricks legs read the same Unity Catalog tables, and Lakebase is
 #: Postgres 17 (design, choice 1).
-LEG_ENGINES = {
+ENGINE = {
     'databricks-sql': 'databricks',
     'databricks-spark': 'databricks',
     'snowflake': 'snowflake',
@@ -63,10 +66,11 @@ LEG_ENGINES = {
 #: :func:`composite_name`; ``(f)`` the fractional digits of the column's
 #: unit (0, 3, 6 or 9). A value past what the engine's
 #: type holds (a nanosecond on Postgres's microsecond times) is refused.
-#: ``<engine>_not_stored`` says why an engine stores no column of the type
-#: (Databricks and Snowflake have no unsigned integers, for one): a case
-#: holding one does not run on that engine's legs, and its cell is never
-#: counted as covered there (KO2-47; :func:`not_stored`).
+#: Databricks and Snowflake (T3.3) have no unsigned integers, so an
+#: unsigned column is declared in a type holding its whole range, as on
+#: Postgres; a type an engine has no column type for at all (a time of day
+#: or an interval on Databricks) is stored in a form of its own and listed
+#: by :func:`non_native`, never counted as covered there (KO2-47).
 TYPE_MAP: dict[str, dict[str, str]] = {
     'boolean': {
         'duckdb': 'BOOLEAN',
@@ -107,30 +111,30 @@ TYPE_MAP: dict[str, dict[str, str]] = {
         'duckdb': 'UTINYINT',
         'sqlite': 'INTEGER',
         'postgres': 'smallint',
-        'databricks_not_stored': 'no unsigned integers',
-        'snowflake_not_stored': 'no unsigned integers',
+        'databricks': 'SMALLINT',
+        'snowflake': 'NUMBER(38,0)',
     },
     'uint16': {
         'duckdb': 'USMALLINT',
         'sqlite': 'INTEGER',
         'postgres': 'integer',
-        'databricks_not_stored': 'no unsigned integers',
-        'snowflake_not_stored': 'no unsigned integers',
+        'databricks': 'INT',
+        'snowflake': 'NUMBER(38,0)',
     },
     'uint32': {
         'duckdb': 'UINTEGER',
         'sqlite': 'INTEGER',
         'postgres': 'bigint',
-        'databricks_not_stored': 'no unsigned integers',
-        'snowflake_not_stored': 'no unsigned integers',
+        'databricks': 'BIGINT',
+        'snowflake': 'NUMBER(38,0)',
     },
     'uint64': {
         'duckdb': 'UBIGINT',
         'sqlite': 'TEXT',
         'sqlite_value': 'digits',
         'postgres': 'numeric(20,0)',
-        'databricks_not_stored': 'no unsigned integers',
-        'snowflake_not_stored': 'no unsigned integers',
+        'databricks': 'DECIMAL(20,0)',
+        'snowflake': 'NUMBER(38,0)',
     },
     'float32': {
         'duckdb': 'FLOAT',
@@ -183,7 +187,8 @@ TYPE_MAP: dict[str, dict[str, str]] = {
         'sqlite': 'TIME',
         'sqlite_value': 'iso',
         'postgres': 'time',
-        'databricks_not_stored': 'no time-of-day type in tables',
+        'databricks': 'STRING',
+        'databricks_value': 'iso',
         'snowflake': 'TIME(f)',
     },
     'timestamp': {
@@ -207,8 +212,10 @@ TYPE_MAP: dict[str, dict[str, str]] = {
         'sqlite': 'INTERVAL',
         'sqlite_value': 'iso',
         'postgres': 'interval',
-        'databricks_not_stored': 'no interval type in tables',
-        'snowflake_not_stored': 'no interval type in tables',
+        'databricks': 'STRING',
+        'databricks_value': 'iso',
+        'snowflake': 'VARCHAR',
+        'snowflake_value': 'iso',
     },
     'list': {
         'duckdb': 'T[] or T[n]',
@@ -244,7 +251,8 @@ TYPE_MAP: dict[str, dict[str, str]] = {
         'sqlite_value': 'json',
         'postgres': 'jsonb',
         'postgres_value': 'json',
-        'databricks_not_stored': 'no union type',
+        'databricks': 'STRING',
+        'databricks_value': 'json',
         'snowflake': 'VARIANT',
         'snowflake_value': 'json',
     },
@@ -981,56 +989,23 @@ def backtick(name: str) -> str:
     return '`' + name.replace('`', '``') + '`'
 
 
-def not_stored(engine: str, kind: Any, where: str = '') -> str | None:
-    r"""Why ``engine`` stores no column of the Arrow type ``kind`` (any
-    member of a nested type included), or ``None`` when it stores it."""
-    name = family(kind)
-    reason = TYPE_MAP[name].get(f'{engine}_not_stored')
-    if reason is not None:
-        return f'{where or name}: {kind}, and {engine} has {reason}'
-    if name == 'map':
-        return not_stored(engine, kind.key_type, where) or not_stored(
-            engine, kind.item_type, where
-        )
-    if name == 'list':
-        return not_stored(engine, kind.value_type, where)
-    if name == 'struct':
-        for member in kind:
-            found = not_stored(engine, member.type, where)
-            if found is not None:
-                return found
-    return None
-
-
-def unstored(duck: Any, leg: str) -> list[str]:
-    r"""Each column of ``duck``'s main schema that ``leg``'s engine stores
-    no column of (:func:`not_stored`), named with its reason: a case with
-    any does not run on the leg (KO2-47)."""
-    engine = LEG_ENGINES[leg]
-    found = []
-    for table in _tables(duck):
-        for field in _read(duck, table).schema:
-            try:
-                reason = not_stored(engine, field.type, f'{table}.{field.name}')
-            except KeyError:
-                reason = (
-                    f'{table}.{field.name}: the type map has no {field.type}'
-                )
-            if reason is not None:
-                found.append(reason)
-    return found
-
-
 def _unit_digits(kind: Any) -> int:
     return _FRACTION_DIGITS[kind.unit]
 
 
-def _warehouse_type(engine: str, kind: Any, where: str) -> str:
-    r"""The type ``engine`` declares for the Arrow type ``kind``."""
-    reason = not_stored(engine, kind, where)
-    if reason is not None:
-        raise Unloadable(reason)
-    name = family(kind)
+def column_type(kind: Any, engine: str, where: str) -> str:
+    r"""The column type ``engine`` (``databricks`` or ``snowflake``)
+    declares for the Arrow type ``kind``: the type map's, with a decimal's
+    precision and scale, a time's fractional digits, and Databricks'
+    nested types spelled out; :class:`Unloadable` names ``where`` for a
+    type it cannot hold in any form."""
+    if engine not in WAREHOUSE_ENGINES:
+        raise ValueError(f'no warehouse engine {engine!r}')
+    try:
+        name = family(kind)
+    except KeyError:
+        raise Unloadable(f'{where}: the type map has no {kind}') from None
+    entry = TYPE_MAP[name]
     if name == 'decimal':
         if kind.precision > 38:
             raise Unloadable(
@@ -1039,32 +1014,212 @@ def _warehouse_type(engine: str, kind: Any, where: str) -> str:
             )
         base = 'DECIMAL' if engine == 'databricks' else 'NUMBER'
         return f'{base}({kind.precision},{kind.scale})'
-    if engine == 'databricks':
+    if engine == 'databricks' and f'{engine}_value' not in entry:
         if name == 'list':
-            return f'ARRAY<{_warehouse_type(engine, kind.value_type, where)}>'
+            return f'ARRAY<{column_type(kind.value_type, engine, where)}>'
         if name == 'struct':
             members = ', '.join(
                 f'{backtick(member.name)}: '
-                + _warehouse_type(engine, member.type, where)
+                + column_type(member.type, engine, where)
                 for member in kind
             )
             return f'STRUCT<{members}>'
         if name == 'map':
             return (
-                f'MAP<{_warehouse_type(engine, kind.key_type, where)}, '
-                f'{_warehouse_type(engine, kind.item_type, where)}>'
+                f'MAP<{column_type(kind.key_type, engine, where)}, '
+                f'{column_type(kind.item_type, engine, where)}>'
             )
-        return TYPE_MAP[name]['databricks']
-    declared = TYPE_MAP[name]['snowflake']
+    declared = entry[engine]
     if declared.endswith('(f)'):
         return declared[:-3] + f'({_unit_digits(kind)})'
     return declared
 
 
-def _whole_micros_on(engine: str, value: Any, where: str) -> None:
-    r"""Databricks holds microseconds; a finer instant is refused by name."""
+def _stored_type(kind: Any, engine: str) -> Any:
+    r"""The Arrow type a column of ``kind`` is sent to ``engine`` as: the
+    type itself where the engine holds it; a wider signed integer, or a
+    decimal of 20 digits, for an unsigned one Databricks lacks; text for
+    a stored form (``<engine>_value``); a nanosecond time as microseconds
+    on Databricks; a nested type of stored members."""
+    import pyarrow as pa
+
+    name = family(kind)
+    if f'{engine}_value' in TYPE_MAP[name]:
+        return pa.string()
     if engine == 'databricks':
-        _whole_micros(value[1], value[2], where)
+        widened = {
+            'uint8': pa.int16(),
+            'uint16': pa.int32(),
+            'uint32': pa.int64(),
+            'uint64': pa.decimal128(20, 0),
+        }
+        if name in widened:
+            return widened[name]
+        if name in ('timestamp', 'timestamptz') and kind.unit == 'ns':
+            return pa.timestamp('us', kind.tz)
+        if name == 'list':
+            return pa.list_(_stored_type(kind.value_type, engine))
+        if name == 'struct':
+            return pa.struct(
+                [
+                    pa.field(m.name, _stored_type(m.type, engine), m.nullable)
+                    for m in kind
+                ]
+            )
+        if name == 'map':
+            return pa.map_(
+                _stored_type(kind.key_type, engine),
+                _stored_type(kind.item_type, engine),
+            )
+    return kind
+
+
+def _stored_cell(value: Any, kind: Any, engine: str, where: str) -> Any:
+    r"""One cell of :func:`_cells` as :func:`_stored_type` holds it."""
+    if value is None:
+        return None
+    name = family(kind)
+    if name == 'union' and all(item is None for item in value.values()):
+        # Arrow's unions carry no nulls of their own: DuckDB's NULL union
+        # is its member's null, which a warehouse stores as NULL.
+        return None
+    stored = TYPE_MAP[name].get(f'{engine}_value')
+    if stored == 'iso':
+        return _iso(value)
+    if stored == 'json':
+        return _json(value, where)
+    if name == 'uint64' and engine == 'databricks':
+        return Decimal(value)
+    if name in ('timestamp', 'timestamptz', 'time', 'date'):
+        if name != 'date' and engine == 'databricks':
+            _whole_micros(value[1], value[2], where)
+        return _temporal(value, kind)
+    if name == 'list':
+        return [
+            _stored_cell(item, kind.value_type, engine, where) for item in value
+        ]
+    if name == 'struct':
+        return {
+            m.name: _stored_cell(value[m.name], m.type, engine, where)
+            for m in kind
+        }
+    if name == 'map':
+        return [
+            (
+                _stored_cell(k, kind.key_type, engine, where),
+                _stored_cell(v, kind.item_type, engine, where),
+            )
+            for k, v in value
+        ]
+    return value
+
+
+def _temporal(value: tuple[Any, ...], kind: Any) -> Any:
+    r"""A temporal cell's ticks (a date's days), which pyarrow builds the
+    column from."""
+    del kind
+    return value[1]
+
+
+def _stored_array(cells: list[Any], kind: Any, stored: Any) -> Any:
+    r"""An Arrow array of ``stored`` from the stored cells of a ``kind``
+    column, temporal ones from their ticks so nothing passes through a
+    library's own type."""
+    import pyarrow as pa
+
+    name = family(kind)
+    if name in ('timestamp', 'timestamptz') and pa.types.is_timestamp(stored):
+        per = (
+            _UNIT[kind.unit] // _UNIT[stored.unit]
+            if kind.unit != stored.unit
+            else 1
+        )
+        ticks = [None if c is None else c // per for c in cells]
+        return pa.array(ticks, pa.int64()).cast(stored)
+    if name == 'time' and pa.types.is_time(stored):
+        width = pa.int64() if stored.bit_width == 64 else pa.int32()
+        return pa.array(cells, width).cast(stored)
+    if name == 'date' and pa.types.is_date(stored):
+        return pa.array(cells, pa.int32()).cast(stored)
+    if name == 'list' and pa.types.is_list(stored):
+        flat = [item for cell in cells if cell is not None for item in cell]
+        values = _stored_array(flat, kind.value_type, stored.value_type)
+        offsets, at = [0], 0
+        for cell in cells:
+            at += 0 if cell is None else len(cell)
+            offsets.append(at)
+        mask = pa.array([cell is None for cell in cells])
+        return pa.ListArray.from_arrays(
+            pa.array(offsets, pa.int32()), values, mask=mask
+        ).cast(stored)
+    if name == 'struct' and pa.types.is_struct(stored):
+        children = [
+            _stored_array(
+                [None if c is None else c[m.name] for c in cells],
+                m.type,
+                stored.field(i).type,
+            )
+            for i, m in enumerate(kind)
+        ]
+        mask = pa.array([cell is None for cell in cells])
+        return pa.StructArray.from_arrays(
+            children, fields=list(stored), mask=mask
+        )
+    if name == 'map' and pa.types.is_map(stored):
+        keys = _stored_array(
+            [k for cell in cells if cell is not None for k, _ in cell],
+            kind.key_type,
+            stored.key_type,
+        )
+        items = _stored_array(
+            [v for cell in cells if cell is not None for _, v in cell],
+            kind.item_type,
+            stored.item_type,
+        )
+        offsets, at = [0], 0
+        for cell in cells:
+            at += 0 if cell is None else len(cell)
+            offsets.append(at)
+        mask = pa.array([cell is None for cell in cells])
+        return pa.MapArray.from_arrays(
+            pa.array(offsets, pa.int32()), keys, items, mask=mask
+        ).cast(stored)
+    return pa.array(cells, stored)
+
+
+def stored(duck: Any, table: str, engine: str) -> Any:
+    r"""DuckDB's ``table`` as the loader sends it to ``engine``: each column
+    in the type map's stored form (:func:`_stored_type`), its rows in
+    DuckDB's order; :class:`Unloadable` names ``table.column`` for a type
+    or a value the engine cannot hold exactly (a nanosecond on Databricks,
+    which holds microseconds)."""
+    import pyarrow as pa
+
+    if engine not in WAREHOUSE_ENGINES:
+        raise ValueError(f'no warehouse engine {engine!r}')
+    _lost(duck, table)
+    data = _read(duck, table)
+    columns, fields = [], []
+    for i, field in enumerate(data.schema):
+        where = f'{table}.{field.name}'
+        column_type(field.type, engine, where)
+        kind = _stored_type(field.type, engine)
+        try:
+            cells = [
+                _stored_cell(value, field.type, engine, where)
+                for value in _cells(data.column(i).combine_chunks())
+            ]
+            array = _stored_array(cells, field.type, kind)
+        except Unloadable:
+            raise
+        except (OverflowError, ValueError, pa.ArrowInvalid) as error:
+            raise Unloadable(
+                f'{where}: a value {engine} cannot take '
+                f'({type(error).__name__})'
+            ) from None
+        columns.append(array)
+        fields.append(pa.field(field.name, kind, field.nullable))
+    return pa.Table.from_arrays(columns, schema=pa.schema(fields))
 
 
 def _hex(data: bytes) -> str:
@@ -1080,8 +1235,9 @@ def _float_text(value: float) -> str:
 
 
 def _databricks_literal(value: Any, kind: Any, where: str) -> str:
-    r"""A cell as a Databricks SQL literal of the column's type."""
-    declared = _warehouse_type('databricks', kind, where)
+    r"""A stored cell (:func:`_cells` of :func:`stored`'s column) as a
+    Databricks SQL literal of the column's type."""
+    declared = column_type(kind, 'databricks', where)
     if value is None:
         return f'CAST(NULL AS {declared})'
     name = family(kind)
@@ -1100,7 +1256,6 @@ def _databricks_literal(value: Any, kind: Any, where: str) -> str:
     if name == 'date':
         return f"DATE'{_iso(value)}'"
     if name in ('timestamp', 'timestamptz'):
-        _whole_micros_on('databricks', value, where)
         return f"CAST('{_iso(value)}' AS {declared})"
     if name == 'list':
         items = ', '.join(
@@ -1111,14 +1266,13 @@ def _databricks_literal(value: Any, kind: Any, where: str) -> str:
         # A struct casts to a struct member by member in order, so the
         # members' own names are the declared type's, whatever they hold.
         members = ', '.join(
-            f"'f{i}', "
-            + _databricks_literal(value[member.name], member.type, where)
-            for i, member in enumerate(kind)
+            f"'f{i}', " + _databricks_literal(value[m.name], m.type, where)
+            for i, m in enumerate(kind)
         )
         return f'CAST(NAMED_STRUCT({members}) AS {declared})'
     if name == 'map':
-        keys = [key for key, _ in value]
-        if len(set(map(repr, keys))) != len(keys):
+        keys = [repr(key) for key, _ in value]
+        if len(set(keys)) != len(keys):
             raise Unloadable(f'{where}: a map with a key twice')
         entries = ', '.join(
             _databricks_literal(key, kind.key_type, where)
@@ -1131,40 +1285,36 @@ def _databricks_literal(value: Any, kind: Any, where: str) -> str:
 
 
 def _snowflake_text(value: Any, name: str, where: str) -> str | None:
-    r"""A cell as the text constant Snowflake's ``SELECT`` converts
-    (:func:`_snowflake_reader`)."""
+    r"""A stored cell as the text constant Snowflake's ``SELECT`` converts
+    (:func:`_snowflake_reader`); ``name`` the column's family."""
     if value is None:
         return None
+    if 'snowflake_value' in TYPE_MAP[name] or name == 'string':
+        return _hex(value.encode())
     if name == 'boolean':
         return 'true' if value else 'false'
-    if name in ('int8', 'int16', 'int32', 'int64'):
-        return str(int(value))
     if name in ('float32', 'float64'):
-        return {'NaN': 'NaN', 'Infinity': 'inf', '-Infinity': '-inf'}.get(
-            _float_text(value), _float_text(value)
-        )
+        text = _float_text(value)
+        return {'Infinity': 'inf', '-Infinity': '-inf'}.get(text, text)
     if name == 'decimal':
         return canonical_decimal_text(value)
-    if name == 'string':
-        return _hex(value.encode())
     if name == 'binary':
         return _hex(bytes(value))
     if name in ('date', 'time', 'timestamp', 'timestamptz'):
         return _iso(value)
-    if name in ('list', 'struct', 'map', 'union'):
-        return _hex(_json(value, where).encode())
-    raise Unloadable(f'{where}: a value of {name} the loader cannot write')
+    return str(int(value))
 
 
 def _snowflake_reader(name: str, declared: str, column: str) -> str:
     r"""The expression reading a column of :func:`_snowflake_text`'s text
     constants as ``declared``."""
-    if name == 'string':
+    stored = TYPE_MAP[name].get('snowflake_value')
+    if stored == 'json':
+        return f'PARSE_JSON(HEX_DECODE_STRING({column}))::{declared}'
+    if stored is not None or name == 'string':
         return f'HEX_DECODE_STRING({column})'
     if name == 'binary':
         return f"TO_BINARY({column}, 'HEX')"
-    if name in ('list', 'struct', 'map', 'union'):
-        return f'PARSE_JSON(HEX_DECODE_STRING({column}))::{declared}'
     return f'CAST({column} AS {declared})'
 
 
@@ -1268,10 +1418,10 @@ def warehouse_statements(
 ) -> tuple[list[str], list[str]]:
     r"""The statements loading every table of ``duck``'s main schema into
     ``engine``'s schema ``namespace`` (catalog or database, then schema),
-    each table dropped first, and a note for each constraint the engine
-    does not store. A column the engine stores no column of, or a value
-    its type cannot hold, is refused by name (:class:`Unloadable`)."""
-    if engine not in ('databricks', 'snowflake'):
+    each table dropped first, every value as :func:`stored` sends it, and
+    a note for each constraint the engine does not store. A value the
+    engine cannot hold is refused by name (:class:`Unloadable`)."""
+    if engine not in WAREHOUSE_ENGINES:
         raise ValueError(f'no warehouse engine {engine!r}')
     if len(namespace) != 2 or not all(namespace):
         raise ValueError('a warehouse schema is named by two parts')
@@ -1283,23 +1433,18 @@ def warehouse_statements(
     ]
     notes: list[str] = []
     for table in tables:
-        _lost(duck, table)
-        data = _read(duck, table)
-        names = [field.name for field in data.schema]
+        source = _read(duck, table)
+        data = stored(duck, table, engine)
+        names = [field.name for field in source.schema]
         not_null, clauses, left_out = _warehouse_constraints(
             engine, duck, table, namespace
         )
         notes.extend(left_out)
-        declared, families = [], []
-        for field in data.schema:
-            where = f'{table}.{field.name}'
-            try:
-                families.append(family(field.type))
-            except KeyError:
-                raise Unloadable(
-                    f'{where}: the type map has no {field.type}'
-                ) from None
-            declared.append(_warehouse_type(engine, field.type, where))
+        families = [family(field.type) for field in source.schema]
+        declared = [
+            column_type(field.type, engine, f'{table}.{field.name}')
+            for field in source.schema
+        ]
         columns = [
             f'{quoting(name)} {kind}'
             + (' NOT NULL' if name in not_null else '')
