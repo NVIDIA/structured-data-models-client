@@ -28,7 +28,6 @@
     "client.predict/ranking/databricks-sql",
     "client.predict/forecast/databricks-sql"
   ],
-  "seam": "baseline",
   "cells": [
     "int64/primary-key",
     "int64/foreign-key",
