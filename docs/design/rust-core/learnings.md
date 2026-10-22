@@ -13,12 +13,14 @@ The owner, 2026-10-21: "The problem is all these "lessons" aren't being enforced
 So each lesson names what enforces it, in one of four states:
 
 - *exists*: a script, hook or CI job in the repository before Phase 3;
-- *T3.0*: built by T3.0, Phase 3's first package, which landed before this page's update (the handbook's "The Phase 3 process mechanisms (T3.0)" says how to use each);
-- *planned (T3.n)*: a mechanism [phase-3/design.md](phase-3/design.md) schedules in package T3.n, with the one focused test that shows it can fail;
-- *wording only*: nothing stops a breach; reviewers and the owner must catch it.
+- *T3.0*: built by T3.0, Phase 3's first package, which lands just before this page's update, in the same stack (the handbook's "The Phase 3 process mechanisms (T3.0)" says how to use each);
+- *T3.1*: built in T3.1, the package that rewrites this page;
+- *wording only*: nothing stops a breach yet; reviewers and the owner must catch it. Where a later Phase 3 package will add the mechanism, the line says which, and that package updates the line when it lands.
 
-A lesson whose main rule is wording only says so in its heading; there are two (lessons 18 and 20), and where part of another lesson is wording only, its line says which part.
-T3.1's test `tests/test_learnings_enforced.py` (planned, T3.1) reads this page: every lesson has one "Enforced by" line, every file it names exists once the package that builds it has landed, and the lessons marked wording only are counted.
+A line names only what exists when T3.1 lands.
+
+A lesson whose main rule is wording only says so in its heading; there are three (lessons 10, 18 and 20), and where part of another lesson is wording only, its line says which part.
+T3.1's test `tests/test_learnings_enforced.py` reads this page: every lesson has one "Enforced by" line, every file it names exists, and at most three lessons are marked wording only.
 
 ## The short version
 
@@ -71,7 +73,7 @@ It cost eight fix rounds over about 14 hours until the host decided equality and
 **Lesson:** the core takes typed Arrow data and returns typed results and errors; each language turns its own types into that contract.
 Before a rule moves into the core, answer one question: can the core compute it from plain data without the host language's runtime?
 If not, the host computes it and the contract carries the result.
-**Enforced by:** the L0 guards and the emulation allowlist (*exists*: `scripts/rust_core/l0_scan.py`, `scripts/rust_core/l0_deps.py`, `scripts/rust_core/emulation-allowlist.txt`, in CI's `rust-lint`); the "Host or core" heading every package brief must fill, which `lane.py start --brief` refuses to leave out (*planned, T3.1*: `docs/design/rust-core/orchestration/briefs/package.md`).
+**Enforced by:** the L0 guards and the emulation allowlist (*exists*: `scripts/rust_core/l0_scan.py`, `scripts/rust_core/l0_deps.py`, `scripts/rust_core/emulation-allowlist.txt`, in CI's `rust-lint`); the "Host or core" heading every package brief must fill (`docs/design/rust-core/orchestration/briefs/package.md`), which `scripts/rust_core/brief_check.py` checks before the brief's agents start (*T3.1*); the orchestrator runs it, so it is *wording only* until T3.2's tooling train makes `lane.py start` refuse a brief that fails it.
 
 ### 2. Write down what "match" means, or matching copies the reference's accidents (first attempt and Phase 2)
 
@@ -90,7 +92,7 @@ Emulating pandas' type system was open-ended, and the overlap of dtypes, Arrow, 
 Meanwhile the first core had only 16 direct dependencies, used only `arrow-select` of the Arrow compute crates and no time zone, YAML or big-integer library, and never measured Polars or DataFusion.
 The first attempt's archive still holds a 2,150-line hand-written YAML reader; Phase 3 reads view YAML and must not port it.
 **Lesson:** for each piece, decide "use a library", "port a defined algorithm" or "keep in the host", and record the measured reason; the brief names the reference code a port follows, with file and line.
-**Enforced by:** `l0_deps.py`, which refuses a crate the design's dependency graph does not hold (*exists*); the brief's "Reference code to port" heading, refused when missing by `lane.py start --brief` (*planned, T3.1*).
+**Enforced by:** `l0_deps.py`, which refuses a crate the design's dependency graph does not hold (*exists*); the brief's "Reference code to port" heading, checked by `scripts/rust_core/brief_check.py` (*T3.1*, run by the orchestrator, as in lesson 1).
 
 ### 4. A behavior is in the core only when the pure-Rust host runs it, end to end (first attempt and Phase 1)
 
@@ -111,7 +113,7 @@ Other tests pinned our own old behavior (an old refusal, an old locked set), one
 **Lesson:** the main test layer is public-API cases recorded from the reference by a separate test author.
 A test states the behavior a user sees ("every answer the reference accepts still predicts"), is shown failing on the broken build before it counts, and a database-specific test fails rather than skips when its database is missing in CI.
 Migration-specific tests of internals are retired once replacements are shown to catch the same failures.
-**Enforced by:** `handoff.py`'s fix-round step, which reruns every new or changed test on the previous round's SHA and stamps nothing unless one fails there, and the review launch refusing a SHA without a stamp (*T3.0*: `scripts/rust_core/handoff.py`, `scripts/rust_core/orchestration/codex_pane.py`, `scripts/rust_core/orchestration/guard_cmd.py`); `SDM_REQUIRE_POSTGRES=1` on every Postgres step in CI (*exists* on most steps; the rest, carried row P2-T2.14c-1, *planned, T3.2*); the landing review's `git log` check that no implementer commit touched a test author's file (*exists*, review).
+**Enforced by:** `handoff.py`'s fix-round step, which reruns every new or changed test on the previous round's SHA and stamps nothing unless one fails there, and the review launch refusing a SHA without a stamp (*T3.0*: `scripts/rust_core/handoff.py`, `scripts/rust_core/orchestration/codex_pane.py`, `scripts/rust_core/orchestration/guard_cmd.py`); `SDM_REQUIRE_POSTGRES=1` on every Postgres step in CI (*exists* on most steps; the rest is carried row P2-T2.14c-1, which T3.3 adds); the landing review's `git log` check that no implementer commit touched a test author's file (*exists*, review).
 
 ### 6. Reproduce against the reference before review, over every input the package touches (Phase 1 and Phase 2)
 
@@ -122,7 +124,7 @@ It cost about 12.5 hours of extra review and fix rounds on the critical path and
 **Lesson:** every brief lists the package's input axes: value classes (null, NaN and its bit patterns, signed zero, each integer width's extremes, past 2^53 and 2^63, past 38 and 76 digits, time zones and folds, text encodings, spellings of the same value, odd identifiers), every reading the reference makes of a value, the databases, and the CI cells (current, floor, Databricks).
 The test author turns them into cases recorded from the reference; before the first push the package's cases run against those recorded answers, and every fix re-runs them.
 The reviewers read the result rather than probing for it (the owner, 2026-10-21: "The reviewers shouldn't really need to live test, that's the point of CI or the implementer and the tests we write").
-**Enforced by:** `handoff.py`'s reference step, which runs the package's cases on python-core (and rust-host when `rust/` changed) against the recorded old-client answers on each database the case names, with no stamp on a difference, and the review launch refusing a SHA without a stamp (*T3.0*); `contract/tools/differential.py` gaining the SQLite and Postgres axis (*planned, T3.2*, carried row P2-T2.16-4); the "Input axes" brief heading (*planned, T3.1*).
+**Enforced by:** `handoff.py`'s reference step, which runs the package's cases on python-core (and rust-host when `rust/` changed) against the recorded old-client answers on each database the case names, with no stamp on a difference, and the review launch refusing a SHA without a stamp (*T3.0*); `contract/tools/differential.py` (*exists*, DuckDB only; T3.7 adds SQLite and Postgres, carried row P2-T2.16-4); the "Input axes" brief heading, checked by `scripts/rust_core/brief_check.py` (*T3.1*, run by the orchestrator).
 
 ### 7. A key's type belongs to the relationship, not the column (Phase 1; Phase 2 evidence added)
 
@@ -153,14 +155,14 @@ Lifting a refusal updates the census, its bound and the differential's class lis
 A refusal real data is likely to hit is lifted in the phase, not deferred inside a class.
 **Enforced by:** `tests/test_t21a_refusal_census.py` (*exists*), run by `handoff.py` whenever a change touches a file `scripts/rust_core/affected.py` maps to it (*T3.0*).
 
-### 10. A benchmark on generated data measures nothing (Phase 1)
+### 10. A benchmark on generated data measures nothing (Phase 1; wording only until T3.7)
 
 Phase 1's accuracy benchmark on generated data had control AUROCs of 0.59 and 0.51: the data had no signal, and only the owner noticed.
 Comparing what each route sent then showed the reference itself corrupts requests with null keys.
 It cost an owner-locked protocol reversed a day later and a discarded live run.
 **Lesson:** a model-quality or parity benchmark runs on real datasets with a sanity floor (near a trivial baseline, the result is "inconclusive"), and a difference between routes fails the run; generated data checks plumbing only.
 When the routes differ, compare what each sends before judging either.
-**Enforced by:** `scripts/live/real_data_benchmark.py` failing the run when the two routes send different requests (*planned, T3.6*, carried row G8); its sanity floor (*exists*).
+**Enforced by:** the sanity floor in `scripts/live/real_data_benchmark.py` (*exists*); a difference between the routes failing the run is *wording only* until T3.7 makes the benchmark fail on it (carried row G8).
 
 ### 11. Contract-version bumps collide across lanes (Phase 1 and Phase 2)
 
@@ -168,7 +170,7 @@ Two Phase 1 lanes each bumped the contract version and collided; the version was
 In Phase 2, T2.12 changed the contract under v26 after a mid-phase merge froze it and moved to v27 in its ninth fix, forcing re-merges in three packages.
 **Lesson:** a phase bumps the contract in one early package; a later bump is renumbered by whoever lands second and reviewed as the interaction only (a range-diff showing only the version changed).
 Tests read the version from the crate, never write it.
-**Enforced by:** `scripts/rust_core/contract_lock.py`, which refuses a contract change without a version bump (*exists*); the binding tests reading the version from the crate (*planned, T3.3*, carried row FX-6); "one bump per phase" itself is *wording only*, held by the design scheduling it in one package.
+**Enforced by:** `scripts/rust_core/contract_lock.py`, which refuses a contract change without a version bump (*exists*); the binding tests reading the version from the crate is carried row FX-6, which T3.4 does; "one bump per phase" itself is *wording only*, held by the design scheduling it in one package.
 
 ## What went wrong: the process
 
@@ -198,7 +200,7 @@ A judging change found later rides one tooling train at the front of the next st
 When the product cannot match exactly, the order is: fix the product, change the case, then the train; never a new package.
 Owner decision rows and CI config ride with the package that needs them, and package IDs are plain integers (T3.1, T3.2), with no sub-letters.
 A reference move is the phase's last landing before the gate.
-**Enforced by:** `scripts/rust_core/gate_dryrun.sh` over the design's case kinds (*T3.0*; Phase 3's are `docs/design/rust-core/phase-3/dryrun-plan.yaml`); `scripts/rust_core/judging-paths.txt` and `land.py` refusing a judging change outside the phase's first package or a train (*T3.0*); `lane.py start` refusing a package ID with a letter from Phase 3 on (*planned, T3.1*).
+**Enforced by:** `scripts/rust_core/gate_dryrun.sh` over the design's case kinds (*T3.0*; Phase 3's are `docs/design/rust-core/phase-3/dryrun-plan.yaml`); `scripts/rust_core/judging-paths.txt` and `land.py` refusing a judging change outside the phase's first package or a train (*T3.0*); integer package IDs are *wording only* until T3.2's tooling train makes `lane.py start` refuse an ID with a letter from Phase 3 on.
 
 ### 14. Landing throughput sets the phase's length: stack the queue, keep CI short, one environment per lane (first attempt to Phase 2)
 
@@ -229,7 +231,7 @@ Briefs stated no threat model, so reviewers spent rounds on forgery attacks agai
 **Lesson:** every package brief fills, before the test author starts: the threat model (honest mistakes unless the owner says otherwise); the reference code to port, with file and line; host or core; the input axes (lesson 6); the "when you change X, also update Y" list; the owner's words verbatim for every decision row; and every reader of every new or changed file, with the command that runs it.
 A design section that specifies an executable file is not reviewable until the file exists and its real reader has run on it.
 Owner questions are answered before the first review round.
-**Enforced by:** `docs/design/rust-core/orchestration/briefs/package.md` and `lane.py start --brief`, which refuses a brief missing one of its headings (*planned, T3.1*); the "executable file" rule is *wording only*, which Phase 3's design follows by running the locked-set reader and `gate_dryrun.sh` on its own files.
+**Enforced by:** the template `docs/design/rust-core/orchestration/briefs/package.md` and `scripts/rust_core/brief_check.py`, which names every heading a brief leaves out (*T3.1*); the orchestrator runs it before each launch, so it is *wording only* until T3.2's tooling train makes `lane.py start` refuse such a brief; the "executable file" rule is *wording only*, which Phase 3's design follows by running the locked-set reader and `gate_dryrun.sh` on its own files.
 
 ### 17. Two reviewers, one bar, reading the stamp and CI (Phase 1 and Phase 2)
 
@@ -258,7 +260,7 @@ Rules also contradicted each other ("match the reference", "only the owner relax
 Banned commands are blocked, not only watched.
 A rule decided during a phase reaches the repository's handbook and briefs at the next landing.
 "The lightest compliant route" is judged over the phase, not the package: a new package is never the light route.
-**Enforced by:** the command hook `scripts/rust_core/orchestration/guard_cmd.py`, wired in `.claude/settings.json`, which denies the banned commands for every Claude agent and names the alternative (*T3.0*; Codex panes keep the watcher, as the owner chose); `tests/test_learnings_enforced.py`, which fails when a lesson loses its "Enforced by" line or names a file that does not exist (*planned, T3.1*); "the next landing carries the rule" is *wording only*.
+**Enforced by:** the command hook `scripts/rust_core/orchestration/guard_cmd.py`, wired in `.claude/settings.json`, which denies the banned commands for every Claude agent and names the alternative (*T3.0*; Codex panes keep the watcher, as the owner chose); `tests/test_learnings_enforced.py`, which fails when a lesson loses its "Enforced by" line or names a file that does not exist (*T3.1*); "the next landing carries the rule" is *wording only*.
 
 ### 20. The owner reads it once, without context (Phase 1 and Phase 2; wording only in part)
 
@@ -269,7 +271,7 @@ The owner replied "explain simply" or "I don't understand" at least ten times, a
 Questions go on a readable page the moment they exist, all at once.
 An overnight decision is written that way when it is made and put to the owner in the morning, before the final candidate (the owner, 2026-10-21, RCA decision 8: "Yes").
 A decision row quotes the owner's words and says no more; nobody but the owner writes `approved_by: owner`.
-**Enforced by:** `register.py validate` refusing an `approved_by: owner` entry whose `decision_ref` names no row the owner approved (*planned, T3.2*); the message form is *wording only*.
+**Enforced by:** *wording only*: the message form, and `approved_by: owner` until T3.2's tooling train makes `scripts/rust_core/register.py` refuse an entry whose `decision_ref` names no row the owner approved.
 
 ## What held up and is worth keeping
 
@@ -299,6 +301,7 @@ The shared-PQL question was answered by Phase 1's E18: the parser is this client
 ## Where each earlier lesson went
 
 Lessons 1 to 22 were numbered before Phase 3; this table maps each to its lesson now.
+Code comments, register notes and earlier phases' documents still cite the old numbers; read them through this table.
 
 | Old | New | Old | New | Old | New |
 |---|---|---|---|---|---|

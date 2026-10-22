@@ -24,6 +24,11 @@
 #      the tools lack is a "java" runner and coverage over
 #      phase-0/scope-java.yaml, which T3.2 adds with a --java option here.
 # Stub ids start "dryrun." so they never collide with real cases.
+# The "reports" key lists the end-of-phase report commands the locked checks
+# need (design.md, "Locked acceptance checks"); gate_dryrun.sh reads only
+# "kinds", and the full dry run at lock runs each report's --help and dry
+# mode on T3.0's tree, recording in tracker.md which do not exist yet and
+# the package that builds each.
 shared:
   # What every stub has unless it says otherwise: base.binary's kind on the
   # shop base. gate_dryrun reads only "kinds"; this key holds the anchor.
@@ -46,7 +51,7 @@ kinds:
       <<: *case
       id: dryrun.leg.databricks-sql
       slice: S2
-      databases: [databricks-sql]
+      warehouses: [databricks-sql]
       paths: [schema.from-source/all-tables/databricks-sql, query.materialize/indices-binary/databricks-sql, client.predict/binary/databricks-sql]
       routes: [schema.from-source/all-tables/databricks-sql, query.materialize/indices-binary/databricks-sql, client.predict/binary/databricks-sql]
       why: base.binary's kind on a Databricks SQL warehouse, replayed from the reference's live capture
@@ -55,7 +60,7 @@ kinds:
       <<: *case
       id: dryrun.leg.databricks-spark
       slice: S2
-      databases: [databricks-spark]
+      warehouses: [databricks-spark]
       paths: [schema.from-source/all-tables/databricks-spark, query.materialize/indices-binary/databricks-spark, client.predict/binary/databricks-spark]
       routes: [schema.from-source/all-tables/databricks-spark, query.materialize/indices-binary/databricks-spark, client.predict/binary/databricks-spark]
       why: base.binary's kind through a notebook's Spark session, replayed
@@ -64,7 +69,7 @@ kinds:
       <<: *case
       id: dryrun.leg.snowflake
       slice: S2
-      databases: [snowflake]
+      warehouses: [snowflake]
       paths: [schema.from-source/all-tables/snowflake, query.materialize/indices-binary/snowflake, client.predict/binary/snowflake]
       routes: [schema.from-source/all-tables/snowflake, query.materialize/indices-binary/snowflake, client.predict/binary/snowflake]
       why: base.binary's kind on Snowflake, replayed
@@ -73,7 +78,7 @@ kinds:
       <<: *case
       id: dryrun.leg.lakebase
       slice: S2
-      databases: [lakebase]
+      warehouses: [lakebase]
       paths: [schema.from-source/all-tables/lakebase, query.materialize/indices-binary/lakebase, client.predict/binary/lakebase]
       routes: [schema.from-source/all-tables/lakebase, query.materialize/indices-binary/lakebase, client.predict/binary/lakebase]
       why: base.binary's kind on Lakebase (Postgres reached through the lakebase connect path), replayed
@@ -82,7 +87,7 @@ kinds:
       <<: *case
       id: dryrun.leg.ranking.databricks-sql
       slice: S2
-      databases: [databricks-sql]
+      warehouses: [databricks-sql]
       paths: [query.materialize/indices-ranking/databricks-sql, client.predict/ranking/databricks-sql]
       routes: [schema.from-source/all-tables/databricks-sql, query.materialize/indices-ranking/databricks-sql, client.predict/ranking/databricks-sql]
       input:
@@ -99,7 +104,7 @@ kinds:
       <<: *case
       id: dryrun.leg.forecast.snowflake
       slice: S2
-      databases: [snowflake]
+      warehouses: [snowflake]
       paths: [query.materialize/indices-forecast/snowflake, client.predict/forecast/snowflake]
       routes: [schema.from-source/all-tables/snowflake, query.materialize/indices-forecast/snowflake, client.predict/forecast/snowflake]
       input:
@@ -114,7 +119,7 @@ kinds:
       <<: *case
       id: dryrun.view.metric.from-source
       slice: S2
-      databases: [databricks-sql]
+      warehouses: [databricks-sql]
       paths: [schema.from-source/semantic-model/databricks-metric-view]
       routes: [schema.from-source/semantic-model/databricks-metric-view]
       cells: [int64/primary-key, utf8/feature]
@@ -143,7 +148,7 @@ kinds:
       <<: *case
       id: dryrun.view.metric.regression
       slice: S2
-      databases: [databricks-sql]
+      warehouses: [databricks-sql]
       paths: [query.materialize/indices-regression/databricks-metric-view, client.predict/regression/databricks-metric-view]
       routes: [schema.from-source/semantic-model/databricks-metric-view, query.materialize/indices-regression/databricks-metric-view, client.predict/regression/databricks-metric-view]
       input:
@@ -156,7 +161,7 @@ kinds:
       <<: *case
       id: dryrun.view.semantic.from-source
       slice: S2
-      databases: [snowflake]
+      warehouses: [snowflake]
       paths: [schema.from-source/semantic-model/snowflake-semantic-view]
       routes: [schema.from-source/semantic-model/snowflake-semantic-view]
       input:
@@ -184,7 +189,7 @@ kinds:
       <<: *case
       id: dryrun.view.semantic.binary
       slice: S2
-      databases: [snowflake]
+      warehouses: [snowflake]
       paths: [query.materialize/indices-binary/snowflake-semantic-view, client.predict/binary/snowflake-semantic-view]
       routes: [schema.from-source/semantic-model/snowflake-semantic-view, query.materialize/indices-binary/snowflake-semantic-view, client.predict/binary/snowflake-semantic-view]
       input:
@@ -196,7 +201,7 @@ kinds:
       <<: *case
       id: dryrun.connect.warehouse
       slice: S2
-      databases: [databricks-sql]
+      warehouses: [databricks-sql]
       paths: [source.connect-databricks/warehouse/databricks-sql, source.open/auto/databricks-sql]
       routes: [source.connect-databricks/warehouse/databricks-sql, source.open/auto/databricks-sql, schema.from-source/all-tables/databricks-sql]
       input:
@@ -210,7 +215,7 @@ kinds:
       <<: *case
       id: dryrun.connect.lakebase
       slice: S2
-      databases: [lakebase]
+      warehouses: [lakebase]
       paths: [source.connect-databricks/lakebase/lakebase, source.open/auto/lakebase]
       routes: [source.connect-databricks/lakebase/lakebase, source.open/auto/lakebase, schema.from-source/all-tables/lakebase]
       input:
@@ -225,7 +230,7 @@ kinds:
       <<: *case
       id: dryrun.value.decimal-key.databricks-sql
       slice: S2
-      databases: [databricks-sql]
+      warehouses: [databricks-sql]
       seam: keys
       paths: [schema.from-source/all-tables/databricks-sql]
       routes: [schema.from-source/all-tables/databricks-sql, query.materialize/indices-binary/databricks-sql, client.predict/binary/databricks-sql]
@@ -241,7 +246,7 @@ kinds:
       <<: *case
       id: dryrun.value.ltz-time.snowflake
       slice: S2
-      databases: [snowflake]
+      warehouses: [snowflake]
       seam: time
       paths: [schema.from-source/all-tables/snowflake]
       routes: [schema.from-source/all-tables/snowflake, query.materialize/indices-binary/snowflake, client.predict/binary/snowflake]
@@ -256,7 +261,7 @@ kinds:
       <<: *case
       id: dryrun.value.struct.databricks-sql
       slice: S2
-      databases: [databricks-sql]
+      warehouses: [databricks-sql]
       seam: nested
       paths: [schema.from-source/all-tables/databricks-sql]
       routes: [schema.from-source/all-tables/databricks-sql, query.materialize/indices-binary/databricks-sql, client.predict/binary/databricks-sql]
@@ -375,10 +380,122 @@ kinds:
       <<: *case
       id: dryrun.java.databricks-sql
       slice: S2
-      databases: [databricks-sql]
+      warehouses: [databricks-sql]
       paths: [schema.from-source/tables/databricks-sql, client.predict/multiclass/databricks-sql]
       routes: [schema.from-source/tables/databricks-sql, query.materialize/indices-multiclass/databricks-sql, client.predict/multiclass/databricks-sql]
       input:
         <<: *input
         pql: PREDICT users.country FOR EACH users.user_id
       why: a multiclass question through the Databricks JDBC driver on the Java host, replayed from the early capture (T3.12)
+  # --- A and C, added in round 2 ---------------------------------------------
+  - name: adventureworks-databricks-sql
+    case:
+      <<: *case
+      id: dryrun.leg.adventureworks.databricks-sql
+      slice: S2
+      warehouses: [databricks-sql]
+      paths: [schema.from-source/tables/databricks-sql, query.materialize/indices-regression/databricks-sql, client.predict/regression/databricks-sql]
+      routes: [schema.from-source/tables/databricks-sql, query.materialize/indices-regression/databricks-sql, client.predict/regression/databricks-sql]
+      cells: [int64/primary-key, int64/foreign-key, timestamp-us/time-column]
+      input:
+        base: adventureworks
+        from_source:
+          tables: {customers: adventureworks_customers, products: adventureworks_products, sales_order_headers: adventureworks_sales_order_headers, sales_order_details: adventureworks_sales_order_details}
+          primary_keys: {customers: CustomerID, products: ProductID, sales_order_details: SalesOrderDetailID}
+          time_columns: {sales_order_headers: OrderDate, sales_order_details: OrderDate}
+        pql: PREDICT SUM(sales_order_details.OrderQty, 0, 30, days) FOR EACH products.ProductID
+        materialize: {indices: [709]}
+      why: the deleted notebook's demand question on AdventureWorks loaded into a Databricks SQL warehouse
+  - name: three-part-name-databricks-sql
+    case:
+      <<: *case
+      id: dryrun.leg.three-part-name.databricks-sql
+      slice: S2
+      warehouses: [databricks-sql]
+      paths: [schema.from-source/tables/databricks-sql]
+      routes: [schema.from-source/tables/databricks-sql, query.materialize/indices-binary/databricks-sql, client.predict/binary/databricks-sql]
+      input:
+        <<: *input
+        from_source:
+          tables: {users: '{catalog}.{schema}.users', orders: '{catalog}.{schema}.orders'}
+      until: from_source
+      expect: {outcome: success, stage: from_source}
+      why: tables named with catalog, schema and table, each quoted alone, the catalog and schema placeholders the capture writes
+  - name: connect-databricks-spark
+    case:
+      <<: *case
+      id: dryrun.connect.spark
+      slice: S2
+      warehouses: [databricks-spark]
+      paths: [source.open/auto/databricks-spark, source.open/explicit/databricks-spark]
+      routes: [source.open/auto/databricks-spark, schema.from-source/all-tables/databricks-spark]
+      input:
+        <<: *input
+        connect: spark
+      until: from_source
+      expect: {outcome: success, stage: from_source}
+      why: the source opened over a notebook's own Spark session
+  - name: connect-snowpark
+    case:
+      <<: *case
+      id: dryrun.connect.snowpark
+      slice: S2
+      warehouses: [snowflake]
+      paths: [source.open/auto/snowflake, source.open/explicit/snowflake]
+      routes: [source.open/auto/snowflake, schema.from-source/all-tables/snowflake]
+      input:
+        <<: *input
+        connect: snowpark
+      until: from_source
+      expect: {outcome: success, stage: from_source}
+      why: the source opened over a Snowpark session's connection
+  - name: snowflake-decimal-key
+    case:
+      <<: *case
+      id: dryrun.value.decimal-key.snowflake
+      slice: S2
+      warehouses: [snowflake]
+      seam: keys
+      paths: [schema.from-source/all-tables/snowflake]
+      routes: [schema.from-source/all-tables/snowflake, query.materialize/indices-binary/snowflake, client.predict/binary/snowflake]
+      cells: [decimal128/primary-key, decimal128/foreign-key]
+      input:
+        <<: *input
+        setup:
+          - ALTER TABLE users ALTER user_id TYPE DECIMAL(38, 0)
+          - ALTER TABLE orders ALTER user_id TYPE DECIMAL(38, 0)
+      why: a NUMBER(38,0) key on both ends of a link, on Snowflake
+  - name: lakebase-schema-qualified
+    case:
+      <<: *case
+      id: dryrun.value.schema-qualified.lakebase
+      slice: S2
+      warehouses: [lakebase]
+      paths: [schema.from-source/tables/lakebase]
+      routes: [schema.from-source/tables/lakebase, query.materialize/indices-binary/lakebase, client.predict/binary/lakebase]
+      input:
+        <<: *input
+        from_source:
+          tables: {users: '{schema}.users', orders: '{schema}.orders'}
+      until: from_source
+      expect: {outcome: success, stage: from_source}
+      why: a two-part name read on Lakebase, qualified by its schema so a temporary or catalog relation cannot shadow it (P2-MID2-6)
+reports:
+  - check: 2
+    command: contract/tools/refusal_census.py --real-data --leg <leg>
+    builder: T3.2
+  - check: 6
+    command: contract/tools/differential.py --database <database> --seeds 200
+    builder: T3.7
+  - check: 11
+    command: contract/tools/l7.py --live --dry
+    builder: T3.7
+  - check: 1
+    command: scripts/rust_core/coverage.py --gate S2
+    builder: T3.2
+  - check: 1
+    command: scripts/rust_core/evidence.py --legs
+    builder: T3.7
+  - check: 13
+    command: scripts/live/<matrix runner> --dry
+    builder: T3.7
