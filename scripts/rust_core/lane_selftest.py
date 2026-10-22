@@ -838,6 +838,19 @@ def candidate(w: World, message: str = 'T1.11e: the work') -> str:
 
 
 def land_args(w: World, sha: str, title: str) -> list[str]:
+    # A landing stands on the candidate's handoff stamp (the owner's
+    # "2026-10-22 evening: CI off the landing path"; T3.2 fix 4).
+    common = Path(
+        w.git(
+            'rev-parse',
+            '--path-format=absolute',
+            '--git-common-dir',
+            cwd=w.worktree,
+        ).strip()
+    )
+    stamp = common / 'sdm-handoff' / f'{sha}.json'
+    stamp.parent.mkdir(parents=True, exist_ok=True)
+    stamp.write_text(json.dumps({'sha': sha, 'package': 'T1.11e', 'ok': True}))
     reviews = []
     for name in ('a', 'b'):
         path = w.tmp / f'review-{name}.txt'
