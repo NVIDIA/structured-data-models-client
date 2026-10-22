@@ -20,9 +20,9 @@ mod goldens;
 /// carries on SQLite, in order.
 const GOLDENS: goldens::Goldens = &[
     (
-        r##"{"columns":["user_id","age","country"],"key":["user_id"],"request":"lookup","seeds":{"attachment":2,"columns":[{"metadata":{"sdm:key_unique":"true"},"name":"key","nullable":true,"type":{"type":"utf8"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["users"]}}"##,
+        r##"{"columns":["user_id","age","country"],"key":["user_id"],"key_unique":true,"request":"lookup","seeds":{"attachment":2,"columns":[{"name":"key","nullable":true,"type":{"type":"utf8"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["users"]}}"##,
         &[
-            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"user_id\", t.\"age\", t.\"country\"\nFROM temp.\"__sdm_seeds_fd1845f2b944fb10__\" s\nJOIN \"users\" t\n  ON t.\"user_id\" = s.\"key\"",
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"user_id\", t.\"age\", t.\"country\"\nFROM temp.\"__sdm_seeds_cddf502625d78fab__\" s\nJOIN \"users\" t\n  ON t.\"user_id\" = s.\"key\"",
         ],
     ),
     (
@@ -348,27 +348,27 @@ const GOLDENS: goldens::Goldens = &[
         ],
     ),
     (
-        r##"{"columns": ["CustomerID", "PersonID", "StoreID", "TerritoryID", "AccountNumber", "ModifiedDate"], "key": ["CustomerID"], "request": "lookup", "seeds": {"attachment": 3, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"metadata": {"sdm:count_unread": "true"}, "name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["adventureworks_customers"]}}"##,
+        r##"{"columns": ["CustomerID", "PersonID", "StoreID", "TerritoryID", "AccountNumber", "ModifiedDate"], "count_unread": true, "key": ["CustomerID"], "request": "lookup", "seeds": {"attachment": 3, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["adventureworks_customers"]}}"##,
         &[
-            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"CustomerID\", t.\"PersonID\", t.\"StoreID\", t.\"TerritoryID\", t.\"AccountNumber\", t.\"ModifiedDate\"\nFROM temp.\"__sdm_seeds_b5005b990adfc5b8__\" s\nJOIN \"adventureworks_customers\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"adventureworks_customers\"\n    WHERE \"CustomerID\" == s.\"key\"\n    LIMIT 1\n)",
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"CustomerID\", t.\"PersonID\", t.\"StoreID\", t.\"TerritoryID\", t.\"AccountNumber\", t.\"ModifiedDate\"\nFROM temp.\"__sdm_seeds_696c6570906eb2a7__\" s\nJOIN \"adventureworks_customers\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"adventureworks_customers\"\n    WHERE \"CustomerID\" == s.\"key\"\n    LIMIT 1\n)",
         ],
     ),
     (
-        r##"{"columns": ["CustomerID", "PersonID", "StoreID", "TerritoryID", "AccountNumber", "ModifiedDate"], "key": ["CustomerID"], "request": "lookup", "seeds": {"attachment": 4, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"metadata": {"sdm:count_unread": "true"}, "name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["adventureworks_customers"]}}"##,
+        r##"{"columns": ["CustomerID", "PersonID", "StoreID", "TerritoryID", "AccountNumber", "ModifiedDate"], "count_unread": true, "key": ["CustomerID"], "request": "lookup", "seeds": {"attachment": 4, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["adventureworks_customers"]}}"##,
         &[
-            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"CustomerID\", t.\"PersonID\", t.\"StoreID\", t.\"TerritoryID\", t.\"AccountNumber\", t.\"ModifiedDate\"\nFROM temp.\"__sdm_seeds_d3486eae0a069df1__\" s\nJOIN \"adventureworks_customers\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"adventureworks_customers\"\n    WHERE \"CustomerID\" == s.\"key\"\n    LIMIT 1\n)",
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"CustomerID\", t.\"PersonID\", t.\"StoreID\", t.\"TerritoryID\", t.\"AccountNumber\", t.\"ModifiedDate\"\nFROM temp.\"__sdm_seeds_4ddc160b9eeb8b28__\" s\nJOIN \"adventureworks_customers\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"adventureworks_customers\"\n    WHERE \"CustomerID\" == s.\"key\"\n    LIMIT 1\n)",
         ],
     ),
     (
-        r##"{"columns": ["ProductID", "Name", "ProductNumber", "MakeFlag", "FinishedGoodsFlag", "Color", "SafetyStockLevel", "ReorderPoint", "StandardCost", "ListPrice", "Size", "SizeUnitMeasureCode", "WeightUnitMeasureCode", "Weight", "DaysToManufacture", "ProductLine", "Class", "Style", "ProductSubcategoryID", "ProductModelID", "SellStartDate", "SellEndDate", "DiscontinuedDate", "ModifiedDate"], "key": ["ProductID"], "request": "lookup", "seeds": {"attachment": 5, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"metadata": {"sdm:count_unread": "true"}, "name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["adventureworks_products"]}}"##,
+        r##"{"columns": ["ProductID", "Name", "ProductNumber", "MakeFlag", "FinishedGoodsFlag", "Color", "SafetyStockLevel", "ReorderPoint", "StandardCost", "ListPrice", "Size", "SizeUnitMeasureCode", "WeightUnitMeasureCode", "Weight", "DaysToManufacture", "ProductLine", "Class", "Style", "ProductSubcategoryID", "ProductModelID", "SellStartDate", "SellEndDate", "DiscontinuedDate", "ModifiedDate"], "count_unread": true, "key": ["ProductID"], "request": "lookup", "seeds": {"attachment": 5, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["adventureworks_products"]}}"##,
         &[
-            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"ProductID\", t.\"Name\", t.\"ProductNumber\", t.\"MakeFlag\", t.\"FinishedGoodsFlag\", t.\"Color\", t.\"SafetyStockLevel\", t.\"ReorderPoint\", t.\"StandardCost\", t.\"ListPrice\", t.\"Size\", t.\"SizeUnitMeasureCode\", t.\"WeightUnitMeasureCode\", t.\"Weight\", t.\"DaysToManufacture\", t.\"ProductLine\", t.\"Class\", t.\"Style\", t.\"ProductSubcategoryID\", t.\"ProductModelID\", t.\"SellStartDate\", t.\"SellEndDate\", t.\"DiscontinuedDate\", t.\"ModifiedDate\"\nFROM temp.\"__sdm_seeds_ca2778a1aa37b882__\" s\nJOIN \"adventureworks_products\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"adventureworks_products\"\n    WHERE \"ProductID\" == s.\"key\"\n    LIMIT 1\n)",
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"ProductID\", t.\"Name\", t.\"ProductNumber\", t.\"MakeFlag\", t.\"FinishedGoodsFlag\", t.\"Color\", t.\"SafetyStockLevel\", t.\"ReorderPoint\", t.\"StandardCost\", t.\"ListPrice\", t.\"Size\", t.\"SizeUnitMeasureCode\", t.\"WeightUnitMeasureCode\", t.\"Weight\", t.\"DaysToManufacture\", t.\"ProductLine\", t.\"Class\", t.\"Style\", t.\"ProductSubcategoryID\", t.\"ProductModelID\", t.\"SellStartDate\", t.\"SellEndDate\", t.\"DiscontinuedDate\", t.\"ModifiedDate\"\nFROM temp.\"__sdm_seeds_09efce25940cb4d5__\" s\nJOIN \"adventureworks_products\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"adventureworks_products\"\n    WHERE \"ProductID\" == s.\"key\"\n    LIMIT 1\n)",
         ],
     ),
     (
-        r##"{"columns": ["aid", "city", "tag"], "key": ["aid"], "request": "lookup", "seeds": {"attachment": 2, "columns": [{"metadata": {"sdm:key_unique": "true"}, "name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["addresses"]}}"##,
+        r##"{"columns": ["aid", "city", "tag"], "key": ["aid"], "key_unique": true, "request": "lookup", "seeds": {"attachment": 2, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["addresses"]}}"##,
         &[
-            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"aid\", t.\"city\", t.\"tag\"\nFROM temp.\"__sdm_seeds_8c86de7a897c4696__\" s\nJOIN \"addresses\" t\n  ON t.\"aid\" = s.\"key\"",
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"aid\", t.\"city\", t.\"tag\"\nFROM temp.\"__sdm_seeds_b7de870682e5c4a5__\" s\nJOIN \"addresses\" t\n  ON t.\"aid\" = s.\"key\"",
         ],
     ),
     (
@@ -396,27 +396,27 @@ const GOLDENS: goldens::Goldens = &[
         ],
     ),
     (
-        r##"{"columns": ["cid", "aid", "seg", "tag"], "key": ["cid"], "request": "lookup", "seeds": {"attachment": 4, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"metadata": {"sdm:count_unread": "true"}, "name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["buyers"]}}"##,
+        r##"{"columns": ["cid", "aid", "seg", "tag"], "count_unread": true, "key": ["cid"], "request": "lookup", "seeds": {"attachment": 4, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["buyers"]}}"##,
         &[
-            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"cid\", t.\"aid\", t.\"seg\", t.\"tag\"\nFROM temp.\"__sdm_seeds_1986c936fe713ad2__\" s\nJOIN \"buyers\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"buyers\"\n    WHERE \"cid\" == s.\"key\"\n    LIMIT 1\n)",
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"cid\", t.\"aid\", t.\"seg\", t.\"tag\"\nFROM temp.\"__sdm_seeds_f2b1669c0de4f065__\" s\nJOIN \"buyers\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"buyers\"\n    WHERE \"cid\" == s.\"key\"\n    LIMIT 1\n)",
         ],
     ),
     (
-        r##"{"columns": ["cid", "aid", "seg", "tag"], "key": ["cid"], "request": "lookup", "seeds": {"attachment": 4, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"metadata": {"sdm:count_unread": "true"}, "name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["customers"]}}"##,
+        r##"{"columns": ["cid", "aid", "seg", "tag"], "count_unread": true, "key": ["cid"], "request": "lookup", "seeds": {"attachment": 4, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["customers"]}}"##,
         &[
-            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"cid\", t.\"aid\", t.\"seg\", t.\"tag\"\nFROM temp.\"__sdm_seeds_4515f57e455ec979__\" s\nJOIN \"customers\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"customers\"\n    WHERE \"cid\" == s.\"key\"\n    LIMIT 1\n)",
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"cid\", t.\"aid\", t.\"seg\", t.\"tag\"\nFROM temp.\"__sdm_seeds_89c0c1804283a900__\" s\nJOIN \"customers\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"customers\"\n    WHERE \"cid\" == s.\"key\"\n    LIMIT 1\n)",
         ],
     ),
     (
-        r##"{"columns": ["cid", "aid", "seg", "tag"], "key": ["cid"], "request": "lookup", "seeds": {"attachment": 6, "columns": [{"metadata": {"sdm:key_unique": "true"}, "name": "key", "nullable": true, "type": {"type": "int64"}}, {"metadata": {"sdm:count_unread": "true"}, "name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["customers"]}}"##,
+        r##"{"columns": ["cid", "aid", "seg", "tag"], "count_unread": true, "key": ["cid"], "key_unique": true, "request": "lookup", "seeds": {"attachment": 6, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["customers"]}}"##,
         &[
-            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"cid\", t.\"aid\", t.\"seg\", t.\"tag\"\nFROM temp.\"__sdm_seeds_3294f14ccac0db3d__\" s\nJOIN \"customers\" t\n  ON t.\"cid\" = s.\"key\"",
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"cid\", t.\"aid\", t.\"seg\", t.\"tag\"\nFROM temp.\"__sdm_seeds_c8cf8e1dd7f958fd__\" s\nJOIN \"customers\" t\n  ON t.\"cid\" = s.\"key\"",
         ],
     ),
     (
-        r##"{"columns": ["cid", "aid", "seg", "tag"], "key": ["cid"], "request": "lookup", "seeds": {"attachment": 6, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"metadata": {"sdm:count_unread": "true"}, "name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["customers"]}}"##,
+        r##"{"columns": ["cid", "aid", "seg", "tag"], "count_unread": true, "key": ["cid"], "request": "lookup", "seeds": {"attachment": 6, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["customers"]}}"##,
         &[
-            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"cid\", t.\"aid\", t.\"seg\", t.\"tag\"\nFROM temp.\"__sdm_seeds_9542387fdea30ebb__\" s\nJOIN \"customers\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"customers\"\n    WHERE \"cid\" == s.\"key\"\n    LIMIT 1\n)",
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"cid\", t.\"aid\", t.\"seg\", t.\"tag\"\nFROM temp.\"__sdm_seeds_95560ce3f6d9818e__\" s\nJOIN \"customers\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"customers\"\n    WHERE \"cid\" == s.\"key\"\n    LIMIT 1\n)",
         ],
     ),
     (
@@ -426,9 +426,9 @@ const GOLDENS: goldens::Goldens = &[
         ],
     ),
     (
-        r##"{"columns": ["hid", "cid", "ts"], "key": ["hid"], "request": "lookup", "seeds": {"attachment": 6, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"metadata": {"sdm:count_unread": "true"}, "name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["headers"]}}"##,
+        r##"{"columns": ["hid", "cid", "ts"], "count_unread": true, "key": ["hid"], "request": "lookup", "seeds": {"attachment": 6, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["headers"]}}"##,
         &[
-            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"hid\", t.\"cid\", t.\"ts\"\nFROM temp.\"__sdm_seeds_a5f0d3ecaeb32cba__\" s\nJOIN \"headers\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"headers\"\n    WHERE \"hid\" == s.\"key\"\n    LIMIT 1\n)",
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"hid\", t.\"cid\", t.\"ts\"\nFROM temp.\"__sdm_seeds_e89381afa29f83dd__\" s\nJOIN \"headers\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"headers\"\n    WHERE \"hid\" == s.\"key\"\n    LIMIT 1\n)",
         ],
     ),
     (
@@ -438,15 +438,15 @@ const GOLDENS: goldens::Goldens = &[
         ],
     ),
     (
-        r##"{"columns": ["pid", "price", "tag"], "key": ["pid"], "request": "lookup", "seeds": {"attachment": 4, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"metadata": {"sdm:count_unread": "true"}, "name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["products"]}}"##,
+        r##"{"columns": ["pid", "price", "tag"], "count_unread": true, "key": ["pid"], "request": "lookup", "seeds": {"attachment": 4, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["products"]}}"##,
         &[
-            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"pid\", t.\"price\", t.\"tag\"\nFROM temp.\"__sdm_seeds_6871999bf17091cc__\" s\nJOIN \"products\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"products\"\n    WHERE \"pid\" == s.\"key\"\n    LIMIT 1\n)",
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"pid\", t.\"price\", t.\"tag\"\nFROM temp.\"__sdm_seeds_88a31a11f6528f13__\" s\nJOIN \"products\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"products\"\n    WHERE \"pid\" == s.\"key\"\n    LIMIT 1\n)",
         ],
     ),
     (
-        r##"{"columns": ["pid", "price", "tag"], "key": ["pid"], "request": "lookup", "seeds": {"attachment": 5, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"metadata": {"sdm:count_unread": "true"}, "name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["products"]}}"##,
+        r##"{"columns": ["pid", "price", "tag"], "count_unread": true, "key": ["pid"], "request": "lookup", "seeds": {"attachment": 5, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["products"]}}"##,
         &[
-            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"pid\", t.\"price\", t.\"tag\"\nFROM temp.\"__sdm_seeds_41ce1d0d69f89623__\" s\nJOIN \"products\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"products\"\n    WHERE \"pid\" == s.\"key\"\n    LIMIT 1\n)",
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"pid\", t.\"price\", t.\"tag\"\nFROM temp.\"__sdm_seeds_d9968538393bb6a6__\" s\nJOIN \"products\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"products\"\n    WHERE \"pid\" == s.\"key\"\n    LIMIT 1\n)",
         ],
     ),
     (
@@ -456,15 +456,15 @@ const GOLDENS: goldens::Goldens = &[
         ],
     ),
     (
-        r##"{"columns": ["sid", "size", "tag"], "key": ["sid"], "request": "lookup", "seeds": {"attachment": 5, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"metadata": {"sdm:count_unread": "true"}, "name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["stores"]}}"##,
+        r##"{"columns": ["sid", "size", "tag"], "count_unread": true, "key": ["sid"], "request": "lookup", "seeds": {"attachment": 5, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["stores"]}}"##,
         &[
-            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"sid\", t.\"size\", t.\"tag\"\nFROM temp.\"__sdm_seeds_a969a6fa56cbd2af__\" s\nJOIN \"stores\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"stores\"\n    WHERE \"sid\" == s.\"key\"\n    LIMIT 1\n)",
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"sid\", t.\"size\", t.\"tag\"\nFROM temp.\"__sdm_seeds_75c8355223e07dba__\" s\nJOIN \"stores\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"stores\"\n    WHERE \"sid\" == s.\"key\"\n    LIMIT 1\n)",
         ],
     ),
     (
-        r##"{"columns": ["uid", "age", "country"], "key": ["uid"], "request": "lookup", "seeds": {"attachment": 2, "columns": [{"metadata": {"sdm:key_unique": "true"}, "name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["users"]}}"##,
+        r##"{"columns": ["uid", "age", "country"], "key": ["uid"], "key_unique": true, "request": "lookup", "seeds": {"attachment": 2, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["users"]}}"##,
         &[
-            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"uid\", t.\"age\", t.\"country\"\nFROM temp.\"__sdm_seeds_4147eb4816a8d16e__\" s\nJOIN \"users\" t\n  ON t.\"uid\" = s.\"key\"",
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"uid\", t.\"age\", t.\"country\"\nFROM temp.\"__sdm_seeds_c213253e3cd7eaed__\" s\nJOIN \"users\" t\n  ON t.\"uid\" = s.\"key\"",
         ],
     ),
     (
@@ -1102,9 +1102,9 @@ const GOLDENS: goldens::Goldens = &[
     // T2.18 (KO2-36): the name.* cases, a column named with a dot, a
     // backtick or a line feed, each quoted alone as any name is.
     (
-        r##"{"columns":["a.b","age","country"],"key":["a.b"],"request":"lookup","seeds":{"attachment":2,"columns":[{"metadata":{"sdm:key_unique":"true"},"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["users"]}}"##,
+        r##"{"columns":["a.b","age","country"],"key":["a.b"],"key_unique":true,"request":"lookup","seeds":{"attachment":2,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["users"]}}"##,
         &[
-            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"a.b\", t.\"age\", t.\"country\"\nFROM temp.\"__sdm_seeds_49ee09cb323805e6__\" s\nJOIN \"users\" t\n  ON t.\"a.b\" = s.\"key\"",
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"a.b\", t.\"age\", t.\"country\"\nFROM temp.\"__sdm_seeds_b4fe7e90b6817475__\" s\nJOIN \"users\" t\n  ON t.\"a.b\" = s.\"key\"",
         ],
     ),
     (
@@ -1118,9 +1118,9 @@ const GOLDENS: goldens::Goldens = &[
         ],
     ),
     (
-        r##"{"columns":["a\nb","age","country"],"key":["a\nb"],"request":"lookup","seeds":{"attachment":2,"columns":[{"metadata":{"sdm:key_unique":"true"},"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["users"]}}"##,
+        r##"{"columns":["a\nb","age","country"],"key":["a\nb"],"key_unique":true,"request":"lookup","seeds":{"attachment":2,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["users"]}}"##,
         &[
-            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"a\nb\", t.\"age\", t.\"country\"\nFROM temp.\"__sdm_seeds_c8dc9e8151385582__\" s\nJOIN \"users\" t\n  ON t.\"a\nb\" = s.\"key\"",
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"a\nb\", t.\"age\", t.\"country\"\nFROM temp.\"__sdm_seeds_674b7a297ae1f369__\" s\nJOIN \"users\" t\n  ON t.\"a\nb\" = s.\"key\"",
         ],
     ),
     (
@@ -1134,9 +1134,9 @@ const GOLDENS: goldens::Goldens = &[
         ],
     ),
     (
-        r##"{"columns":["a`b","age","country"],"key":["a`b"],"request":"lookup","seeds":{"attachment":2,"columns":[{"metadata":{"sdm:key_unique":"true"},"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["users"]}}"##,
+        r##"{"columns":["a`b","age","country"],"key":["a`b"],"key_unique":true,"request":"lookup","seeds":{"attachment":2,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["users"]}}"##,
         &[
-            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"a`b\", t.\"age\", t.\"country\"\nFROM temp.\"__sdm_seeds_a1c410adc6da787a__\" s\nJOIN \"users\" t\n  ON t.\"a`b\" = s.\"key\"",
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"a`b\", t.\"age\", t.\"country\"\nFROM temp.\"__sdm_seeds_1a9180720ec1c7b1__\" s\nJOIN \"users\" t\n  ON t.\"a`b\" = s.\"key\"",
         ],
     ),
     (
@@ -1932,63 +1932,63 @@ const GOLDENS: goldens::Goldens = &[
         ],
     ),
     (
-        r##"{"columns":["user_id"],"key":["user_id"],"request":"lookup","seeds":{"attachment":1,"columns":[{"metadata":{"sdm:key_unique":"true"},"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["users"]}}"##,
+        r##"{"columns":["user_id"],"key":["user_id"],"key_unique":true,"request":"lookup","seeds":{"attachment":1,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["users"]}}"##,
         &[
-            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"user_id\"\nFROM temp.\"__sdm_seeds_a307dd1ead4b4efe__\" s\nJOIN \"users\" t\n  ON t.\"user_id\" = s.\"key\"",
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"user_id\"\nFROM temp.\"__sdm_seeds_59888db315e6e07d__\" s\nJOIN \"users\" t\n  ON t.\"user_id\" = s.\"key\"",
         ],
     ),
     (
-        r##"{"columns":["user_id"],"key":["user_id"],"request":"lookup","seeds":{"attachment":2,"columns":[{"metadata":{"sdm:key_unique":"true"},"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["users"]}}"##,
+        r##"{"columns":["user_id"],"key":["user_id"],"key_unique":true,"request":"lookup","seeds":{"attachment":2,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["users"]}}"##,
         &[
-            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"user_id\"\nFROM temp.\"__sdm_seeds_811f9786b52e9b1b__\" s\nJOIN \"users\" t\n  ON t.\"user_id\" = s.\"key\"",
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"user_id\"\nFROM temp.\"__sdm_seeds_59ba9701bbfef0ba__\" s\nJOIN \"users\" t\n  ON t.\"user_id\" = s.\"key\"",
         ],
     ),
     (
-        r##"{"columns":["user_id"],"key":["user_id"],"request":"lookup","seeds":{"attachment":3,"columns":[{"metadata":{"sdm:key_unique":"true"},"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["users"]}}"##,
+        r##"{"columns":["user_id"],"key":["user_id"],"key_unique":true,"request":"lookup","seeds":{"attachment":3,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["users"]}}"##,
         &[
-            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"user_id\"\nFROM temp.\"__sdm_seeds_351e9b7ce7d33864__\" s\nJOIN \"users\" t\n  ON t.\"user_id\" = s.\"key\"",
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"user_id\"\nFROM temp.\"__sdm_seeds_3b6dd87e6a5c68f7__\" s\nJOIN \"users\" t\n  ON t.\"user_id\" = s.\"key\"",
         ],
     ),
     (
-        r##"{"columns":["user_id"],"key":["user_id"],"request":"lookup","seeds":{"attachment":4,"columns":[{"metadata":{"sdm:key_unique":"true"},"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["users"]}}"##,
+        r##"{"columns":["user_id"],"key":["user_id"],"key_unique":true,"request":"lookup","seeds":{"attachment":4,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["users"]}}"##,
         &[
-            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"user_id\"\nFROM temp.\"__sdm_seeds_a946e984639054a1__\" s\nJOIN \"users\" t\n  ON t.\"user_id\" = s.\"key\"",
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"user_id\"\nFROM temp.\"__sdm_seeds_04e0b69a36de0fc4__\" s\nJOIN \"users\" t\n  ON t.\"user_id\" = s.\"key\"",
         ],
     ),
     (
-        r##"{"columns":["user_id"],"key":["user_id"],"request":"lookup","seeds":{"attachment":5,"columns":[{"metadata":{"sdm:key_unique":"true"},"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["users"]}}"##,
+        r##"{"columns":["user_id"],"key":["user_id"],"key_unique":true,"request":"lookup","seeds":{"attachment":5,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["users"]}}"##,
         &[
-            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"user_id\"\nFROM temp.\"__sdm_seeds_67490fd2b12732aa__\" s\nJOIN \"users\" t\n  ON t.\"user_id\" = s.\"key\"",
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"user_id\"\nFROM temp.\"__sdm_seeds_43e3d8a041ba0561__\" s\nJOIN \"users\" t\n  ON t.\"user_id\" = s.\"key\"",
         ],
     ),
     (
-        r##"{"columns":["user_id"],"key":["user_id"],"request":"lookup","seeds":{"attachment":6,"columns":[{"metadata":{"sdm:key_unique":"true"},"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["users"]}}"##,
+        r##"{"columns":["user_id"],"key":["user_id"],"key_unique":true,"request":"lookup","seeds":{"attachment":6,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["users"]}}"##,
         &[
-            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"user_id\"\nFROM temp.\"__sdm_seeds_9faad80325cd2667__\" s\nJOIN \"users\" t\n  ON t.\"user_id\" = s.\"key\"",
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"user_id\"\nFROM temp.\"__sdm_seeds_ccf14400005505fe__\" s\nJOIN \"users\" t\n  ON t.\"user_id\" = s.\"key\"",
         ],
     ),
     (
-        r##"{"columns":["user_id"],"key":["user_id"],"request":"lookup","seeds":{"attachment":7,"columns":[{"metadata":{"sdm:key_unique":"true"},"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["users"]}}"##,
+        r##"{"columns":["user_id"],"key":["user_id"],"key_unique":true,"request":"lookup","seeds":{"attachment":7,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["users"]}}"##,
         &[
-            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"user_id\"\nFROM temp.\"__sdm_seeds_296bfe05b70d74a0__\" s\nJOIN \"users\" t\n  ON t.\"user_id\" = s.\"key\"",
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"user_id\"\nFROM temp.\"__sdm_seeds_52beb14b3e4ceabb__\" s\nJOIN \"users\" t\n  ON t.\"user_id\" = s.\"key\"",
         ],
     ),
     (
-        r##"{"columns":["user_id"],"key":["user_id"],"request":"lookup","seeds":{"attachment":8,"columns":[{"metadata":{"sdm:key_unique":"true"},"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["users"]}}"##,
+        r##"{"columns":["user_id"],"key":["user_id"],"key_unique":true,"request":"lookup","seeds":{"attachment":8,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["users"]}}"##,
         &[
-            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"user_id\"\nFROM temp.\"__sdm_seeds_7d818d7bef1a5d5d__\" s\nJOIN \"users\" t\n  ON t.\"user_id\" = s.\"key\"",
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"user_id\"\nFROM temp.\"__sdm_seeds_93d037e4b64b7538__\" s\nJOIN \"users\" t\n  ON t.\"user_id\" = s.\"key\"",
         ],
     ),
     (
-        r##"{"columns":["user_id"],"key":["user_id"],"request":"lookup","seeds":{"attachment":9,"columns":[{"metadata":{"sdm:key_unique":"true"},"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["users"]}}"##,
+        r##"{"columns":["user_id"],"key":["user_id"],"key_unique":true,"request":"lookup","seeds":{"attachment":9,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["users"]}}"##,
         &[
-            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"user_id\"\nFROM temp.\"__sdm_seeds_17d87d3f7bbef856__\" s\nJOIN \"users\" t\n  ON t.\"user_id\" = s.\"key\"",
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"user_id\"\nFROM temp.\"__sdm_seeds_0345274a28cb0b65__\" s\nJOIN \"users\" t\n  ON t.\"user_id\" = s.\"key\"",
         ],
     ),
     (
-        r##"{"columns":["user_id"],"key":["user_id"],"request":"lookup","seeds":{"attachment":10,"columns":[{"metadata":{"sdm:key_unique":"true"},"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["users"]}}"##,
+        r##"{"columns":["user_id"],"key":["user_id"],"key_unique":true,"request":"lookup","seeds":{"attachment":10,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["users"]}}"##,
         &[
-            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"user_id\"\nFROM temp.\"__sdm_seeds_84652635a91e753c__\" s\nJOIN \"users\" t\n  ON t.\"user_id\" = s.\"key\"",
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"user_id\"\nFROM temp.\"__sdm_seeds_6df9281a33637f1f__\" s\nJOIN \"users\" t\n  ON t.\"user_id\" = s.\"key\"",
         ],
     ),
     (
@@ -2012,9 +2012,9 @@ const GOLDENS: goldens::Goldens = &[
         ],
     ),
     (
-        r##"{"columns":["user_id","region","age"],"key":["user_id"],"request":"lookup","seeds":{"attachment":2,"columns":[{"metadata":{"sdm:key_unique":"true"},"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["users"]}}"##,
+        r##"{"columns":["user_id","region","age"],"key":["user_id"],"key_unique":true,"request":"lookup","seeds":{"attachment":2,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["users"]}}"##,
         &[
-            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"user_id\", t.\"region\", t.\"age\"\nFROM temp.\"__sdm_seeds_5518bcefd93373da__\" s\nJOIN \"users\" t\n  ON t.\"user_id\" = s.\"key\"",
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"user_id\", t.\"region\", t.\"age\"\nFROM temp.\"__sdm_seeds_630afd8756589791__\" s\nJOIN \"users\" t\n  ON t.\"user_id\" = s.\"key\"",
         ],
     ),
     (
@@ -2174,9 +2174,9 @@ const GOLDENS: goldens::Goldens = &[
         ],
     ),
     (
-        r##"{"columns":["item_id","kind"],"key":["item_id"],"request":"lookup","seeds":{"attachment":5,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"metadata":{"sdm:count_unread":"true"},"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["items"]}}"##,
+        r##"{"columns":["item_id","kind"],"count_unread":true,"key":["item_id"],"request":"lookup","seeds":{"attachment":5,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["items"]}}"##,
         &[
-            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"item_id\", t.\"kind\"\nFROM temp.\"__sdm_seeds_223b081ff123b3b6__\" s\nJOIN \"items\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"items\"\n    WHERE \"item_id\" == s.\"key\"\n    LIMIT 1\n)",
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"item_id\", t.\"kind\"\nFROM temp.\"__sdm_seeds_53e68558f5c33a01__\" s\nJOIN \"items\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"items\"\n    WHERE \"item_id\" == s.\"key\"\n    LIMIT 1\n)",
         ],
     ),
     (
@@ -2204,9 +2204,9 @@ const GOLDENS: goldens::Goldens = &[
         ],
     ),
     (
-        r##"{"columns":["item_id","kind"],"key":["item_id"],"request":"lookup","seeds":{"attachment":10,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"metadata":{"sdm:count_unread":"true"},"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["items"]}}"##,
+        r##"{"columns":["item_id","kind"],"count_unread":true,"key":["item_id"],"request":"lookup","seeds":{"attachment":10,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["items"]}}"##,
         &[
-            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"item_id\", t.\"kind\"\nFROM temp.\"__sdm_seeds_9f21c8125139f814__\" s\nJOIN \"items\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"items\"\n    WHERE \"item_id\" == s.\"key\"\n    LIMIT 1\n)",
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"item_id\", t.\"kind\"\nFROM temp.\"__sdm_seeds_2f97016e1dac190b__\" s\nJOIN \"items\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"items\"\n    WHERE \"item_id\" == s.\"key\"\n    LIMIT 1\n)",
         ],
     ),
     (
@@ -2234,9 +2234,9 @@ const GOLDENS: goldens::Goldens = &[
         ],
     ),
     (
-        r##"{"columns":["item_id","kind"],"key":["item_id"],"request":"lookup","seeds":{"attachment":15,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"metadata":{"sdm:count_unread":"true"},"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["items"]}}"##,
+        r##"{"columns":["item_id","kind"],"count_unread":true,"key":["item_id"],"request":"lookup","seeds":{"attachment":15,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["items"]}}"##,
         &[
-            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"item_id\", t.\"kind\"\nFROM temp.\"__sdm_seeds_e2dc20944e8eecc7__\" s\nJOIN \"items\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"items\"\n    WHERE \"item_id\" == s.\"key\"\n    LIMIT 1\n)",
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"item_id\", t.\"kind\"\nFROM temp.\"__sdm_seeds_bec214d3cb6a3d62__\" s\nJOIN \"items\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"items\"\n    WHERE \"item_id\" == s.\"key\"\n    LIMIT 1\n)",
         ],
     ),
     (
@@ -2294,9 +2294,9 @@ const GOLDENS: goldens::Goldens = &[
         ],
     ),
     (
-        r##"{"columns":["item_id","kind"],"key":["item_id"],"request":"lookup","seeds":{"attachment":5,"columns":[{"name":"key","nullable":true,"type":{"type":"utf8"}},{"metadata":{"sdm:count_unread":"true"},"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["items"]}}"##,
+        r##"{"columns":["item_id","kind"],"count_unread":true,"key":["item_id"],"request":"lookup","seeds":{"attachment":5,"columns":[{"name":"key","nullable":true,"type":{"type":"utf8"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["items"]}}"##,
         &[
-            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"item_id\", t.\"kind\"\nFROM temp.\"__sdm_seeds_1c6ddefc26d75160__\" s\nJOIN \"items\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"items\"\n    WHERE \"item_id\" == s.\"key\"\n    LIMIT 1\n)",
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"item_id\", t.\"kind\"\nFROM temp.\"__sdm_seeds_c3f0dc05bf581bbf__\" s\nJOIN \"items\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"items\"\n    WHERE \"item_id\" == s.\"key\"\n    LIMIT 1\n)",
         ],
     ),
     (
@@ -2342,15 +2342,15 @@ const GOLDENS: goldens::Goldens = &[
     // T2.10: the ranking cases' fetches as rust-host makes them on SQLite
     // (its seeds differ from python-core's, so its statements are pinned too).
     (
-        r##"{"request":"lookup","table":{"source":["items"]},"key":["item_id"],"columns":["item_id","kind"],"seeds":{"attachment":10,"columns":[{"name":"key","type":{"type":"utf8"},"nullable":true},{"name":"batch","type":{"type":"int64"},"nullable":false,"metadata":{"sdm:count_unread":"true"}}]}}"##,
+        r##"{"request":"lookup","table":{"source":["items"]},"key":["item_id"],"columns":["item_id","kind"],"seeds":{"attachment":10,"columns":[{"name":"key","type":{"type":"utf8"},"nullable":true},{"name":"batch","type":{"type":"int64"},"nullable":false}]},"count_unread":true}"##,
         &[
-            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"item_id\", t.\"kind\"\nFROM temp.\"__sdm_seeds_46de4df10797471e__\" s\nJOIN \"items\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"items\"\n    WHERE \"item_id\" == s.\"key\"\n    LIMIT 1\n)",
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"item_id\", t.\"kind\"\nFROM temp.\"__sdm_seeds_88d71978f0a48779__\" s\nJOIN \"items\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"items\"\n    WHERE \"item_id\" == s.\"key\"\n    LIMIT 1\n)",
         ],
     ),
     (
-        r##"{"request":"lookup","table":{"source":["items"]},"key":["item_id"],"columns":["item_id","kind"],"seeds":{"attachment":15,"columns":[{"name":"key","type":{"type":"utf8"},"nullable":true},{"name":"batch","type":{"type":"int64"},"nullable":false,"metadata":{"sdm:count_unread":"true"}}]}}"##,
+        r##"{"request":"lookup","table":{"source":["items"]},"key":["item_id"],"columns":["item_id","kind"],"seeds":{"attachment":15,"columns":[{"name":"key","type":{"type":"utf8"},"nullable":true},{"name":"batch","type":{"type":"int64"},"nullable":false}]},"count_unread":true}"##,
         &[
-            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"item_id\", t.\"kind\"\nFROM temp.\"__sdm_seeds_0199e6d2ac9099b3__\" s\nJOIN \"items\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"items\"\n    WHERE \"item_id\" == s.\"key\"\n    LIMIT 1\n)",
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"item_id\", t.\"kind\"\nFROM temp.\"__sdm_seeds_35a2a1c4e098a8b6__\" s\nJOIN \"items\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"items\"\n    WHERE \"item_id\" == s.\"key\"\n    LIMIT 1\n)",
         ],
     ),
     (
@@ -2366,9 +2366,9 @@ const GOLDENS: goldens::Goldens = &[
         ],
     ),
     (
-        r##"{"request":"lookup","table":{"source":["items"]},"key":["i.d"],"columns":["i.d","kind"],"seeds":{"attachment":5,"columns":[{"name":"key","type":{"type":"int64"},"nullable":true,"metadata":{"sdm:key_unique":"true"}},{"name":"batch","type":{"type":"int64"},"nullable":false,"metadata":{"sdm:count_unread":"true"}}]}}"##,
+        r##"{"request":"lookup","table":{"source":["items"]},"key":["i.d"],"columns":["i.d","kind"],"seeds":{"attachment":5,"columns":[{"name":"key","type":{"type":"int64"},"nullable":true},{"name":"batch","type":{"type":"int64"},"nullable":false}]},"key_unique":true,"count_unread":true}"##,
         &[
-            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"i.d\", t.\"kind\"\nFROM temp.\"__sdm_seeds_ccac90451b77b75a__\" s\nJOIN \"items\" t\n  ON t.\"i.d\" = s.\"key\"",
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"i.d\", t.\"kind\"\nFROM temp.\"__sdm_seeds_1038fbad6087b08a__\" s\nJOIN \"items\" t\n  ON t.\"i.d\" = s.\"key\"",
         ],
     ),
     (
@@ -2390,9 +2390,9 @@ const GOLDENS: goldens::Goldens = &[
         ],
     ),
     (
-        r##"{"request":"lookup","table":{"source":["items"]},"key":["i.d"],"columns":["i.d","kind"],"seeds":{"attachment":10,"columns":[{"name":"key","type":{"type":"int64"},"nullable":true,"metadata":{"sdm:key_unique":"true"}},{"name":"batch","type":{"type":"int64"},"nullable":false,"metadata":{"sdm:count_unread":"true"}}]}}"##,
+        r##"{"request":"lookup","table":{"source":["items"]},"key":["i.d"],"columns":["i.d","kind"],"seeds":{"attachment":10,"columns":[{"name":"key","type":{"type":"int64"},"nullable":true},{"name":"batch","type":{"type":"int64"},"nullable":false}]},"key_unique":true,"count_unread":true}"##,
         &[
-            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"i.d\", t.\"kind\"\nFROM temp.\"__sdm_seeds_556e082174527488__\" s\nJOIN \"items\" t\n  ON t.\"i.d\" = s.\"key\"",
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"i.d\", t.\"kind\"\nFROM temp.\"__sdm_seeds_5f68ab8bd5ce2618__\" s\nJOIN \"items\" t\n  ON t.\"i.d\" = s.\"key\"",
         ],
     ),
     (
@@ -2414,9 +2414,9 @@ const GOLDENS: goldens::Goldens = &[
         ],
     ),
     (
-        r##"{"request":"lookup","table":{"source":["items"]},"key":["i.d"],"columns":["i.d","kind"],"seeds":{"attachment":15,"columns":[{"name":"key","type":{"type":"int64"},"nullable":true,"metadata":{"sdm:key_unique":"true"}},{"name":"batch","type":{"type":"int64"},"nullable":false,"metadata":{"sdm:count_unread":"true"}}]}}"##,
+        r##"{"request":"lookup","table":{"source":["items"]},"key":["i.d"],"columns":["i.d","kind"],"seeds":{"attachment":15,"columns":[{"name":"key","type":{"type":"int64"},"nullable":true},{"name":"batch","type":{"type":"int64"},"nullable":false}]},"key_unique":true,"count_unread":true}"##,
         &[
-            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"i.d\", t.\"kind\"\nFROM temp.\"__sdm_seeds_603ac94a26e3a211__\" s\nJOIN \"items\" t\n  ON t.\"i.d\" = s.\"key\"",
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"i.d\", t.\"kind\"\nFROM temp.\"__sdm_seeds_83941f147504ebc1__\" s\nJOIN \"items\" t\n  ON t.\"i.d\" = s.\"key\"",
         ],
     ),
     (
@@ -2640,9 +2640,9 @@ const GOLDENS: goldens::Goldens = &[
         ],
     ),
     (
-        r##"{"columns":["owner_id","tier"],"key":["owner_id"],"request":"lookup","seeds":{"attachment":3,"columns":[{"name":"key","nullable":true,"type":{"type":"utf8"}},{"metadata":{"sdm:count_unread":"true"},"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["owners"]}}"##,
+        r##"{"columns":["owner_id","tier"],"count_unread":true,"key":["owner_id"],"request":"lookup","seeds":{"attachment":3,"columns":[{"name":"key","nullable":true,"type":{"type":"utf8"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["owners"]}}"##,
         &[
-            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"owner_id\", t.\"tier\"\nFROM temp.\"__sdm_seeds_1b403d1f6013bd2c__\" s\nJOIN \"owners\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"owners\"\n    WHERE \"owner_id\" == s.\"key\"\n    LIMIT 1\n)",
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"owner_id\", t.\"tier\"\nFROM temp.\"__sdm_seeds_1c50b78e03b4bb73__\" s\nJOIN \"owners\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"owners\"\n    WHERE \"owner_id\" == s.\"key\"\n    LIMIT 1\n)",
         ],
     ),
     (
@@ -2692,9 +2692,9 @@ const GOLDENS: goldens::Goldens = &[
         ],
     ),
     (
-        r##"{"columns":["user_id","age","country"],"key":["user_id"],"request":"lookup","seeds":{"attachment":3,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"metadata":{"sdm:count_unread":"true"},"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["users"]}}"##,
+        r##"{"columns":["user_id","age","country"],"count_unread":true,"key":["user_id"],"request":"lookup","seeds":{"attachment":3,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["users"]}}"##,
         &[
-            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"user_id\", t.\"age\", t.\"country\"\nFROM temp.\"__sdm_seeds_c108693b46ce69f1__\" s\nJOIN \"users\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"users\"\n    WHERE \"user_id\" == s.\"key\"\n    LIMIT 1\n)",
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"user_id\", t.\"age\", t.\"country\"\nFROM temp.\"__sdm_seeds_2daf29afc9d9ef28__\" s\nJOIN \"users\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"users\"\n    WHERE \"user_id\" == s.\"key\"\n    LIMIT 1\n)",
         ],
     ),
     (
@@ -2842,15 +2842,15 @@ const GOLDENS: goldens::Goldens = &[
         ],
     ),
     (
-        r##"{"columns":["LocationID","RegionID"],"key":["LocationID"],"request":"lookup","seeds":{"attachment":3,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"metadata":{"sdm:count_unread":"true"},"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["Location"]}}"##,
+        r##"{"columns":["LocationID","RegionID"],"count_unread":true,"key":["LocationID"],"request":"lookup","seeds":{"attachment":3,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["Location"]}}"##,
         &[
-            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"LocationID\", t.\"RegionID\"\nFROM temp.\"__sdm_seeds_dee005b9b14e2062__\" s\nJOIN \"Location\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"Location\"\n    WHERE \"LocationID\" == s.\"key\"\n    LIMIT 1\n)",
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"LocationID\", t.\"RegionID\"\nFROM temp.\"__sdm_seeds_81d9ffd39d927a35__\" s\nJOIN \"Location\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"Location\"\n    WHERE \"LocationID\" == s.\"key\"\n    LIMIT 1\n)",
         ],
     ),
     (
-        r##"{"columns":["CategoryID","Level"],"key":["CategoryID"],"request":"lookup","seeds":{"attachment":4,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"metadata":{"sdm:count_unread":"true"},"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["Category"]}}"##,
+        r##"{"columns":["CategoryID","Level"],"count_unread":true,"key":["CategoryID"],"request":"lookup","seeds":{"attachment":4,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["Category"]}}"##,
         &[
-            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"CategoryID\", t.\"Level\"\nFROM temp.\"__sdm_seeds_eaf3fdb09a175673__\" s\nJOIN \"Category\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"Category\"\n    WHERE \"CategoryID\" == s.\"key\"\n    LIMIT 1\n)",
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"CategoryID\", t.\"Level\"\nFROM temp.\"__sdm_seeds_e321d74235b49776__\" s\nJOIN \"Category\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"Category\"\n    WHERE \"CategoryID\" == s.\"key\"\n    LIMIT 1\n)",
         ],
     ),
     (
@@ -2872,9 +2872,9 @@ const GOLDENS: goldens::Goldens = &[
         ],
     ),
     (
-        r##"{"columns":["SearchID","SearchDate"],"key":["SearchID"],"request":"lookup","seeds":{"attachment":8,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"metadata":{"sdm:count_unread":"true"},"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["SearchInfo"]}}"##,
+        r##"{"columns":["SearchID","SearchDate"],"count_unread":true,"key":["SearchID"],"request":"lookup","seeds":{"attachment":8,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["SearchInfo"]}}"##,
         &[
-            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"SearchID\", t.\"SearchDate\"\nFROM temp.\"__sdm_seeds_90600080a4a77fe7__\" s\nJOIN \"SearchInfo\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"SearchInfo\"\n    WHERE \"SearchID\" == s.\"key\"\n    LIMIT 1\n)",
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"SearchID\", t.\"SearchDate\"\nFROM temp.\"__sdm_seeds_776e5530f7d6af82__\" s\nJOIN \"SearchInfo\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"SearchInfo\"\n    WHERE \"SearchID\" == s.\"key\"\n    LIMIT 1\n)",
         ],
     ),
     (
@@ -2962,15 +2962,15 @@ const GOLDENS: goldens::Goldens = &[
         ],
     ),
     (
-        r##"{"columns":["Id","Reputation","CreationDate"],"key":["Id"],"request":"lookup","seeds":{"attachment":3,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"metadata":{"sdm:count_unread":"true"},"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["users"]}}"##,
+        r##"{"columns":["Id","Reputation","CreationDate"],"count_unread":true,"key":["Id"],"request":"lookup","seeds":{"attachment":3,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["users"]}}"##,
         &[
-            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"Id\", t.\"Reputation\", t.\"CreationDate\"\nFROM temp.\"__sdm_seeds_7722e2ffb0d5ccf4__\" s\nJOIN \"users\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"users\"\n    WHERE \"Id\" == s.\"key\"\n    LIMIT 1\n)",
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"Id\", t.\"Reputation\", t.\"CreationDate\"\nFROM temp.\"__sdm_seeds_f54756b0d9b7326b__\" s\nJOIN \"users\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"users\"\n    WHERE \"Id\" == s.\"key\"\n    LIMIT 1\n)",
         ],
     ),
     (
-        r##"{"columns":["Id","OwnerUserId","ParentId","PostTypeId","CreationDate"],"key":["Id"],"request":"lookup","seeds":{"attachment":4,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"metadata":{"sdm:count_unread":"true"},"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["posts"]}}"##,
+        r##"{"columns":["Id","OwnerUserId","ParentId","PostTypeId","CreationDate"],"count_unread":true,"key":["Id"],"request":"lookup","seeds":{"attachment":4,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["posts"]}}"##,
         &[
-            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"Id\", t.\"OwnerUserId\", t.\"ParentId\", t.\"PostTypeId\", t.\"CreationDate\"\nFROM temp.\"__sdm_seeds_b71af53ba13afdfa__\" s\nJOIN \"posts\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"posts\"\n    WHERE \"Id\" == s.\"key\"\n    LIMIT 1\n)",
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"Id\", t.\"OwnerUserId\", t.\"ParentId\", t.\"PostTypeId\", t.\"CreationDate\"\nFROM temp.\"__sdm_seeds_c9b3167c06f0ab1d__\" s\nJOIN \"posts\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"posts\"\n    WHERE \"Id\" == s.\"key\"\n    LIMIT 1\n)",
         ],
     ),
     (
@@ -2990,15 +2990,15 @@ const GOLDENS: goldens::Goldens = &[
         ],
     ),
     (
-        r##"{"columns":["Id","Reputation","CreationDate"],"key":["Id"],"request":"lookup","seeds":{"attachment":7,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"metadata":{"sdm:count_unread":"true"},"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["users"]}}"##,
+        r##"{"columns":["Id","Reputation","CreationDate"],"count_unread":true,"key":["Id"],"request":"lookup","seeds":{"attachment":7,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["users"]}}"##,
         &[
-            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"Id\", t.\"Reputation\", t.\"CreationDate\"\nFROM temp.\"__sdm_seeds_b1fe9741607a0390__\" s\nJOIN \"users\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"users\"\n    WHERE \"Id\" == s.\"key\"\n    LIMIT 1\n)",
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"Id\", t.\"Reputation\", t.\"CreationDate\"\nFROM temp.\"__sdm_seeds_ced3872e97842b2f__\" s\nJOIN \"users\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"users\"\n    WHERE \"Id\" == s.\"key\"\n    LIMIT 1\n)",
         ],
     ),
     (
-        r##"{"columns":["Id","OwnerUserId","ParentId","PostTypeId","CreationDate"],"key":["Id"],"request":"lookup","seeds":{"attachment":8,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"metadata":{"sdm:count_unread":"true"},"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["posts"]}}"##,
+        r##"{"columns":["Id","OwnerUserId","ParentId","PostTypeId","CreationDate"],"count_unread":true,"key":["Id"],"request":"lookup","seeds":{"attachment":8,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["posts"]}}"##,
         &[
-            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"Id\", t.\"OwnerUserId\", t.\"ParentId\", t.\"PostTypeId\", t.\"CreationDate\"\nFROM temp.\"__sdm_seeds_0b74635946ed4cde__\" s\nJOIN \"posts\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"posts\"\n    WHERE \"Id\" == s.\"key\"\n    LIMIT 1\n)",
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"Id\", t.\"OwnerUserId\", t.\"ParentId\", t.\"PostTypeId\", t.\"CreationDate\"\nFROM temp.\"__sdm_seeds_98694d5070f7b139__\" s\nJOIN \"posts\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"posts\"\n    WHERE \"Id\" == s.\"key\"\n    LIMIT 1\n)",
         ],
     ),
     (
@@ -3026,9 +3026,9 @@ const GOLDENS: goldens::Goldens = &[
         ],
     ),
     (
-        r##"{"columns":["Id","Reputation","CreationDate"],"key":["Id"],"request":"lookup","seeds":{"attachment":13,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"metadata":{"sdm:count_unread":"true"},"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["users"]}}"##,
+        r##"{"columns":["Id","Reputation","CreationDate"],"count_unread":true,"key":["Id"],"request":"lookup","seeds":{"attachment":13,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["users"]}}"##,
         &[
-            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"Id\", t.\"Reputation\", t.\"CreationDate\"\nFROM temp.\"__sdm_seeds_46aa759744fdc669__\" s\nJOIN \"users\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"users\"\n    WHERE \"Id\" == s.\"key\"\n    LIMIT 1\n)",
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"Id\", t.\"Reputation\", t.\"CreationDate\"\nFROM temp.\"__sdm_seeds_0d8605618c80e770__\" s\nJOIN \"users\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"users\"\n    WHERE \"Id\" == s.\"key\"\n    LIMIT 1\n)",
         ],
     ),
     (
@@ -3044,9 +3044,9 @@ const GOLDENS: goldens::Goldens = &[
         ],
     ),
     (
-        r##"{"columns":["user_id","age","country"],"key":["user_id"],"request":"lookup","seeds":{"attachment":2,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"metadata":{"sdm:count_unread":"true"},"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["users"]}}"##,
+        r##"{"columns":["user_id","age","country"],"count_unread":true,"key":["user_id"],"request":"lookup","seeds":{"attachment":2,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["users"]}}"##,
         &[
-            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"user_id\", t.\"age\", t.\"country\"\nFROM temp.\"__sdm_seeds_ad961ce4c4995cd2__\" s\nJOIN \"users\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"users\"\n    WHERE \"user_id\" == s.\"key\"\n    LIMIT 1\n)",
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"user_id\", t.\"age\", t.\"country\"\nFROM temp.\"__sdm_seeds_626c41cf1cabd665__\" s\nJOIN \"users\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"users\"\n    WHERE \"user_id\" == s.\"key\"\n    LIMIT 1\n)",
         ],
     ),
     (

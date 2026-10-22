@@ -141,6 +141,8 @@ fn seeds_hold_the_key_and_batch_columns() {
                 key: vec!["user_id".into()],
                 columns: vec![],
                 seeds: keys.clone(),
+                key_unique: false,
+                count_unread: false,
             },
             "seeds",
         );
@@ -272,6 +274,8 @@ fn every_request_has_its_contract_name() {
             key: vec!["user_id".into()],
             columns: vec![],
             seeds: seeds(&[]),
+            key_unique: false,
+            count_unread: false,
         },
     ] {
         let value = serde_json::to_value(&request).unwrap();

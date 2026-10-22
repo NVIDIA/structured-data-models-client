@@ -4479,6 +4479,14 @@
             "seeds": {
               "$ref": "#/$defs/KeySet"
             },
+            "key_unique": {
+              "description": "The source enforces `key` unique (the described column's\n`unique`): set by the core so a SQL layer whose reference reads\nsuch a key by a plain join, counting nothing, renders that join\n(SQLite's `_by_pkey`); a host provider may ignore it. Left out,\n`false` (contract v28; before it, the seed key column's\nmetadata `sdm:key_unique`).",
+              "type": "boolean"
+            },
+            "count_unread": {
+              "description": "The core does not read how many rows hold each seed's key\n([`MATCHES_COLUMN`]): set on the lookups of the walk, which the\nreference counts on none of its SQL sources but DuckDB; a\nprovider may still count. Left out, `false` (contract v28;\nbefore it, the seed batch column's metadata\n`sdm:count_unread`).",
+              "type": "boolean"
+            },
             "request": {
               "type": "string",
               "const": "lookup"

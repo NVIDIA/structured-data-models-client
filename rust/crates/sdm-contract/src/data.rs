@@ -163,22 +163,10 @@ pub const SEED_BATCH: &str = "batch";
 pub const BATCH_COLUMN: &str = "__kumo_batch__";
 /// The column of a `lookup` result counting the rows that hold the seed's
 /// key: the reference's own name. A dialect may leave it out of an answer
-/// whose seeds say the count is not read ([`SEED_COUNT_UNREAD`]) or that
-/// the source enforces the key unique ([`SEED_KEY_UNIQUE`]), each key then
-/// held by one row.
+/// to a `lookup` that says the count is not read (`count_unread`) or that
+/// the source enforces the key unique (`key_unique`), each key then held
+/// by one row.
 pub const MATCHES_COLUMN: &str = "__kumo_matches__";
-/// The metadata key, on a `lookup`'s seed [`SEED_KEY`] column, saying the
-/// source enforces the looked-up key unique (the described column's
-/// `unique`), with the value [`MARKED`]: set by the core so a SQL layer
-/// whose reference reads such a key by a plain join, counting nothing,
-/// renders that join (SQLite's `_by_pkey`); a host provider may ignore it.
-pub const SEED_KEY_UNIQUE: &str = "sdm:key_unique";
-/// The metadata key, on a `lookup`'s [`SEED_BATCH`] column, saying the
-/// core does not read how many rows hold each seed's key, with the value
-/// [`MARKED`]: set by the core on the lookups of the walk, which the
-/// reference counts on none of its SQL sources but DuckDB; a provider may
-/// still count.
-pub const SEED_COUNT_UNREAD: &str = "sdm:count_unread";
 /// The metadata key, on a window bound's seed column, holding one value
 /// of the window's column as the source stores it, as text, which the
 /// core read before the table's first windowed read (a `scan` of one
@@ -187,9 +175,6 @@ pub const SEED_COUNT_UNREAD: &str = "sdm:count_unread";
 /// ([`ProviderCapabilities::compares_stored_times`], SQLite's, which has
 /// no time type), so the layer spells each bound as that value is spelled.
 pub const SEED_STORED_TIME: &str = "sdm:stored_time";
-/// The value of a metadata flag the core sets ([`SEED_KEY_UNIQUE`],
-/// [`SEED_COUNT_UNREAD`]).
-pub const MARKED: &str = "true";
 
 /// A sample's seed as an integer, when the scalar it travels as is one:
 /// the narrowest exact scalar `materialize` writes, a `u64` or a decimal
@@ -681,6 +666,22 @@ pub enum DataRequest {
         key: Vec<String>,
         columns: Vec<String>,
         seeds: KeySet,
+        /// The source enforces `key` unique (the described column's
+        /// `unique`): set by the core so a SQL layer whose reference reads
+        /// such a key by a plain join, counting nothing, renders that join
+        /// (SQLite's `_by_pkey`); a host provider may ignore it. Left out,
+        /// `false` (contract v28; before it, the seed key column's
+        /// metadata `sdm:key_unique`).
+        #[serde(default, skip_serializing_if = "is_false")]
+        key_unique: bool,
+        /// The core does not read how many rows hold each seed's key
+        /// ([`MATCHES_COLUMN`]): set on the lookups of the walk, which the
+        /// reference counts on none of its SQL sources but DuckDB; a
+        /// provider may still count. Left out, `false` (contract v28;
+        /// before it, the seed batch column's metadata
+        /// `sdm:count_unread`).
+        #[serde(default, skip_serializing_if = "is_false")]
+        count_unread: bool,
     },
 }
 

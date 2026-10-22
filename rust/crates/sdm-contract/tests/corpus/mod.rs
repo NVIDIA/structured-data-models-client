@@ -259,6 +259,8 @@ pub fn messages() -> Vec<ControlMessage> {
                         key: vec!["user_id".into()],
                         columns: vec!["age".into()],
                         seeds: seeds(&[]),
+                        key_unique: false,
+                        count_unread: false,
                     },
                     plan: FetchPlan::Host {
                         expect: ExpectedSchema::Discover {},
