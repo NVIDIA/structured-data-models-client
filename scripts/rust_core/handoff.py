@@ -563,9 +563,17 @@ def step_fails_before(
             (tree / path).write_text(text, encoding='utf-8')
         failed: list[str] = []
         passed: list[str] = []
-        pytest_files = [
-            p for p in changed if judging.matches(affected.IS_TEST, p)
-        ]
+        # New test files first: with -x the first failure ends the run,
+        # and a new test is the likeliest to fail on the previous tree.
+        pytest_files = sorted(
+            (p for p in changed if judging.matches(affected.IS_TEST, p)),
+            key=lambda p: (
+                run(
+                    ['git', 'cat-file', '-e', f'{previous}:{p}'], root
+                ).returncode
+                == 0
+            ),
+        )
         if pytest_files:
             env = {**os.environ, 'PYTHONPATH': source_path(tree, python)}
             done = run(
