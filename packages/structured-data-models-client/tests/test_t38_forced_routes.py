@@ -46,9 +46,12 @@ decisions' and not the package's to change:
 Gating: ``t38-pending.json``'s ``pending`` names, as ``py:<scenario>@<db>``,
 the keys whose comparison failed when written. Each must still fail
 (strict); once one passes it fails, naming itself, until it is taken out.
-``pending`` stays within ``authored``, the test author's. Without
-``SDM_POSTGRES_TEST_DSN`` the Postgres keys skip, and with
-``SDM_REQUIRE_POSTGRES`` set they fail instead.
+``pending`` stays within ``authored``, the test author's. No test is
+marked or skipped (``scripts/rust_core/l0_scan.py``'s ``skips``): where
+``SDM_POSTGRES_TEST_DSN`` names no server and ``SDM_REQUIRE_POSTGRES`` is not
+set, a Postgres key has nothing to hold and returns without asserting
+(with it set, it fails), as ``contract/tests/test_t219_two_paths.py``'s do;
+so does a key that needs the old route where it is not installed.
 """
 
 from __future__ import annotations
@@ -65,9 +68,6 @@ from typing import Any
 import pytest
 
 from sdm_client import _routing
-
-pytest.importorskip('duckdb')
-pytest.importorskip('adbc_driver_sqlite.dbapi')
 
 HERE = Path(__file__).resolve().parent
 PENDING = HERE / 't38-pending.json'
@@ -114,18 +114,20 @@ def held(key: str, check: Any) -> None:
     )
 
 
-def _needs(database: str) -> None:
+def _runs(name: str, database: str, *, old_route: bool = False) -> bool:
+    r"""Whether ``name`` on ``database`` has what it needs here: a Postgres
+    server for a Postgres key (a missing one fails where
+    ``SDM_REQUIRE_POSTGRES`` is set), and the old route where the scenario
+    uses it."""
     if database == 'postgres' and not os.environ.get('SDM_POSTGRES_TEST_DSN'):
         if os.environ.get('SDM_REQUIRE_POSTGRES'):
             pytest.fail(
                 'SDM_REQUIRE_POSTGRES is set but SDM_POSTGRES_TEST_DSN is not'
             )
-        pytest.skip('SDM_POSTGRES_TEST_DSN is not set')
-
-
-def _needs_the_engine(name: str) -> None:
-    if not ENGINE and name.startswith('described.old-route.'):
-        pytest.skip('the old route is not installed')
+        return False
+    if not ENGINE and (old_route or name.startswith('described.old-route.')):
+        return False
+    return True
 
 
 def _examples_aside(value: Any, examples: list[str] | None) -> Any:
@@ -180,14 +182,13 @@ def test_the_core_answers_as_the_reference(
     r"""Exits 1 and 2: with every core route forced, each scenario's answer
     is the reference's (the family and input its ``covers`` line names)."""
     name, database = key.rsplit('@', 1)
-    _needs(database)
-    _needs_the_engine(name)
+    if not _runs(name, database):
+        return
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     found = R.SCENARIOS[name]
     held(key, lambda: _compare(key, R.observe(found, database, tmp_path)))
 
 
-@pytest.mark.skipif(not ENGINE, reason='the old route is not installed')
 @pytest.mark.parametrize('key', KEYS)
 def test_the_old_route_answers_as_recorded(
     key: str, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -195,7 +196,8 @@ def test_the_old_route_answers_as_recorded(
     r"""Control (exit 1's unforced run): the old route in this tree gives
     the recorded answer, so a difference above is the core's."""
     name, database = key.rsplit('@', 1)
-    _needs(database)
+    if not _runs(name, database, old_route=True):
+        return
     monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
     _compare(key, R.observe(R.SCENARIOS[name], database, tmp_path))
 
