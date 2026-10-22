@@ -601,3 +601,33 @@ def test_the_report_list_s_forms_run(tmp_path: Path) -> None:
             check=False,
         )
         assert done.returncode == 0, done.stdout + done.stderr
+
+
+GUARD = _module(
+    ROOT / 'scripts/rust_core/orchestration/guard_cmd.py', 't32_own_guard'
+)
+
+
+@pytest.mark.parametrize(
+    'command',
+    [
+        'git -c core.hooksPath=/dev/null commit -m x',
+        'X=1 git -c core.hooksPath=/dev/null commit -q --allow-empty -m x',
+        'git --config-env=core.hooksPath=HP commit -m x',
+        'git --config-env core.hooksPath=HP commit -m x',
+        "GIT_CONFIG_PARAMETERS=\"'core.hooksPath'='/dev/null'\" git commit -m x",
+        'GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null git push',
+        'env GIT_CONFIG_KEY_0=core.hooksPath git commit -m x',
+    ],
+)
+def test_the_guard_refuses_every_way_to_set_the_hooks_path(
+    command: str,
+) -> None:
+    verdict = GUARD.check_command(command, '.', None)
+    assert verdict is not None and 'hook' in verdict.rule
+
+
+def test_the_guard_lets_other_git_configuration_through() -> None:
+    assert (
+        GUARD.check_command('git -c user.name=x commit -m y', '.', None) is None
+    )

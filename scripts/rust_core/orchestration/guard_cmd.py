@@ -340,7 +340,14 @@ def unwrap(words: list[str]) -> tuple[list[str], dict[str, str], list[str]]:
 
 # --- the rules ------------------------------------------------------------------
 
-GIT_GLOBAL_WITH_VALUE = {'-C', '-c', '--git-dir', '--work-tree', '--namespace'}
+GIT_GLOBAL_WITH_VALUE = {
+    '-C',
+    '-c',
+    '--config-env',
+    '--git-dir',
+    '--work-tree',
+    '--namespace',
+}
 
 
 def git_split(argv: list[str]) -> tuple[list[str], str | None, list[str]]:
@@ -431,8 +438,14 @@ def push_targets(args: list[str], branch: str) -> list[str]:
 def check_git(argv: list[str], cwd: str = '.') -> Verdict | None:
     opts, sub, args = git_split(argv)
     for n, opt in enumerate(opts):
-        value = opts[n + 1] if opt == '-c' and n + 1 < len(opts) else ''
-        if opt.startswith('-c') and 'hookspath' in (value or opt).lower():
+        value = (
+            opts[n + 1]
+            if opt in ('-c', '--config-env') and n + 1 < len(opts)
+            else ''
+        )
+        if (
+            opt.startswith('-c') or opt.startswith('--config-env')
+        ) and 'hookspath' in (value or opt).lower():
             return Verdict(
                 'git -c core.hooksPath skips the hooks',
                 'let the hooks run; fix what they report',
@@ -835,6 +848,16 @@ def check_command(
                 )
         if not argv:
             continue
+        if os.path.basename(argv[0]) == 'git' and any(
+            name.startswith('GIT_CONFIG') and 'hookspath' in str(value).lower()
+            for name, value in env.items()
+        ):
+            # The hooks path set through git's configuration variables
+            # (GIT_CONFIG_PARAMETERS, GIT_CONFIG_KEY_<n>; T3.2).
+            return Verdict(
+                'git with core.hooksPath set in its environment skips the hooks',
+                'let the hooks run; fix what they report',
+            )
         if os.path.basename(argv[0]) == 'mkdir':
             claim(argv, cwd, session)
         if os.path.basename(argv[0]) == 'cd' and len(argv) > 1:
