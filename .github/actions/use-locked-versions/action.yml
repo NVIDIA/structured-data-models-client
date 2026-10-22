@@ -1,0 +1,28 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Holds every later `pip install` in the job, and every isolated build
+# environment pip sets up, to the versions uv.lock records: the packages'
+# dependencies, and through the root `ci` group the tools and build backends
+# CI installs. A pull request's checks then change when this repository does
+# and not when something upstream is released. `--locked` also refuses a lock
+# that no longer matches the metadata, so a dependency cannot change without
+# it. pip reads its build constraint separately from the install one.
+#
+# The scheduled run skips this and resolves the newest releases, which is what
+# a fresh install of the published packages gets.
+name: Use the locked versions
+description: Constrain pip to the versions uv.lock records.
+runs:
+  using: composite
+  steps:
+    - if: github.event_name != 'schedule'
+      shell: bash
+      run: |
+        python -m pip install --quiet 'uv==0.11.20'
+        uv export --locked --all-packages --all-extras --all-groups \
+          --no-emit-workspace --no-hashes --no-header --no-annotate --quiet \
+          --output-file "$RUNNER_TEMP/constraints.txt"
+        echo "PIP_CONSTRAINT=$RUNNER_TEMP/constraints.txt" >> "$GITHUB_ENV"
+        echo "PIP_BUILD_CONSTRAINT=$RUNNER_TEMP/constraints.txt" >> "$GITHUB_ENV"

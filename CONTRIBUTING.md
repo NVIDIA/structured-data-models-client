@@ -72,6 +72,26 @@ Two more gates run in CI and are quick to run first:
 .venv/bin/python scripts/mermaid_notices.py --check
 ```
 
+The required checks on a pull request install the versions `uv.lock` records
+rather than the newest ones, so an upstream release changes nothing there
+until a dependabot pull request moves the lock. That covers the tools they
+run and the build backends as well, through the `ci` group in the root
+`pyproject.toml`. To install the same versions, export them with the uv those
+checks use, point pip at the file, and bring pip itself to the locked version
+before the installs above:
+
+```bash
+.venv/bin/pip install 'uv==0.11.20'
+.venv/bin/uv export --locked --all-packages --all-extras --all-groups \
+  --no-emit-workspace --no-hashes -o .venv/constraints.txt
+export PIP_CONSTRAINT=.venv/constraints.txt PIP_BUILD_CONSTRAINT=.venv/constraints.txt
+.venv/bin/pip install --upgrade pip
+```
+
+A change to a package's dependencies, or to what the required checks
+install, runs `uv lock` in the same commit. They refuse a lock that no longer
+matches them.
+
 Changing anything a caller can observe, such as an exported name, signature,
 or wire request shape, requires recording a new snapshot in the same commit.
 This makes the change visible in review:

@@ -14,7 +14,17 @@ updates:
     directory: /
     schedule:
       interval: weekly
-  - package-ecosystem: pip
-    directory: /packages/structured-data-models-client
+  # The required checks install what uv.lock records, so a new release reaches
+  # them only through one of these; the nightly CI run resolves the newest
+  # releases on its own. `lockfile-only` moves the lock and never a package's
+  # own bounds, which say what a user may install and are changed by hand.
+  # Minor and patch releases come as one pull request a week; a major one
+  # alone.
+  - package-ecosystem: uv
+    directory: /
     schedule:
       interval: weekly
+    versioning-strategy: lockfile-only
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
