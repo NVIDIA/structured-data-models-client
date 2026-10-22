@@ -3,15 +3,15 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Land queued packages once CI on their exact candidate is green (owner-approved 2026-10-12).
+"""Land queued packages on their handoff stamp and two reviews (the owner's "2026-10-22
+evening: CI off the landing path"; first owner-approved 2026-10-12).
 
 Each file in <state>/land-queue/*.json describes one approved candidate:
   {"lane": "1a", "worktree": "...", "candidate": SHA, "reviews": [path, path],
    "title": "Land T1.x: ...", "checkpoint": SHA, "protected_paths": "a; b", "summary": "..."}
-land.py itself enforces every rule (both reviews approve the SHA, CI green, descends from
-the phase head, protected paths). This script only waits for CI, reruns jobs that failed on
-a Docker pull rate limit, and calls land.py (with --phase-branch <phase>). Prints one line
-per event:
+land.py itself enforces every rule (both reviews approve the SHA, the candidate's handoff
+stamp, descends from the phase head, protected paths). This script waits for no CI run: it
+calls land.py (with --phase-branch <phase>) at once. Prints one line per event:
   LANDED <title> <landing sha> | FAILED <title>: <reason> | (nothing while waiting)
 An entry it cannot read or process (bad JSON, a missing key) prints  FAILED <file>: <error>,
 becomes <pkg>.failed and the other entries are still processed.
@@ -35,38 +35,35 @@ Every run also prints  NEEDS-CONFIRM <pkg> ...  for each <pkg>.needs-confirm sti
 
 Topic branches (added 2026-10-14). An entry may carry "branch": "<phase>-<name>"
 (a topic branch, not a lane; "lane" may then be absent). It is used wherever a lane entry
-uses <phase>-lane-<lane>: the CI lookup, the auto-rebase's lease and push ref, and
-land.py's --topic-branch; its archive branch is <phase>-archive-<name>-<Pkg>-<old8>.
+uses <phase>-lane-<lane>: the auto-rebase's lease and push ref, and land.py's
+--topic-branch; its archive branch is <phase>-archive-<name>-<Pkg>-<old8>.
 Entries without "branch" behave as before.
 
 Moved over landing commits (CI3, land.py --moved-from; owner's decision E130, 2026-10-14:
-no reviewer re-run and no serial re-CI after a clean move). Opt-in per entry, "moved_ok": true.
+no reviewer re-run and no new handoff after a clean move). Opt-in per entry, "moved_ok": true.
   - A clean auto-rebase of a moved_ok entry archives and lease-pushes as above, then keeps the
     file as <pkg>.json with "moved_from" = X (the entry's existing moved_from, else the old
-    candidate: the commit with the green run and the reviews; "reviews" is not changed),
+    candidate: the commit with the stamp and the reviews; "reviews" is not changed),
     "candidate" = the new tip and "checkpoint" unchanged (the range-diff is written against X),
     and prints  MOVED <pkg> <old8> -> <new8> (lands on <X8>'s evidence)
-  - An entry with "moved_from" X is judged on X's CI run (runs_for(X, branch); the same
-    success / Docker-limit rerun / failure handling), and land.py gets --moved-from X, the
+  - An entry with "moved_from" X lands on X's stamp: land.py gets --moved-from X, the
     reviews as they are, and --checkpoint = git merge-base <candidate> <phase head> (land.py
     refuses any other checkpoint; the queued one, X's, is kept in the file and not passed).
     The ratchet's protected paths are read against that same merge base.
   - land.py refusing the move itself ("--moved-from <X>: not the same code / patches /
     moved over landing commits / only landing commits", CI3's check_moved) means the move was
     not over landing commits only: the file becomes <pkg>.needs-confirm without moved_from,
-    with "moved_refused" (the reason), rebased_from = X and checkpoint = that merge base, and
-    the candidate's own CI run is rerun if it was cancelled (cancel_superseded.sh cancels it
-    while X's run is the evidence). Any other refusal fails the entry as before.
+    with "moved_refused" (the reason), rebased_from = X and checkpoint = that merge base.
+    Any other refusal fails the entry as before.
 
 Stacks (T3.0, land.py --stack and stack-land; the owner's "every N packages before CI is
 mandatory", 2026-10-21). An entry with "stack": true is stacked at approval: land.py --stack
 makes its landing commit on the stack tail (its "checkpoint"; "train": true for the tooling
-train) with no CI wait, the file becomes <pkg>.stacked with "landing", and it prints
+train), the file becomes <pkg>.stacked with "landing", and it prints
   STACKED <title> <landing sha>
 An entry {"stack_tip": SHA, "worktree": ..., "title": ..., "branch" or "lane"} lands the stack up
-to SHA with land.py stack-land once the run on its top is green, printing LANDED as above; while
-that run is unfinished or missing it waits; a red run fails it with the implicated commits and
-the green prefix (FAILED <title>: RED ... | IMPLICATED ... | GREEN PREFIX ...).
+to SHA with land.py stack-land on its top's handoff stamp, printing LANDED as above; a refusal
+(no stamp on the top, for one) fails it (FAILED <title>: REFUSED ...).
 
 Environment:
   SDM_ORCH_STATE      state directory (default ~/.local/share/sdm-orchestration): holds
@@ -92,7 +89,6 @@ import re
 import subprocess
 import sys
 
-R = 'NVIDIA/structured-data-models-client'
 STATE = pathlib.Path(
     os.environ.get(
         'SDM_ORCH_STATE',
@@ -142,43 +138,6 @@ def git(wt, *a):
         *a,
         cwd=wt,
     )
-
-
-def runs_for(sha, branch):
-    out = (
-        sh(
-            'gh',
-            'run',
-            'list',
-            '-R',
-            R,
-            '--branch',
-            branch,
-            '--limit',
-            '20',
-            '--json',
-            'databaseId,headSha,status,conclusion',
-        ).stdout
-        or '[]'
-    )
-    return [r for r in json.loads(out) if r['headSha'] == sha]
-
-
-def infra_only(run_id):
-    jobs = json.loads(
-        sh('gh', 'run', 'view', str(run_id), '-R', R, '--json', 'jobs').stdout
-        or '{}'
-    ).get('jobs', [])
-    bad = [j for j in jobs if j.get('conclusion') == 'failure']
-    if not bad:
-        return False
-    for j in bad:
-        log = sh(
-            'gh', 'api', f'repos/{R}/actions/jobs/{j["databaseId"]}/logs'
-        ).stdout
-        if 'toomanyrequests' not in log:
-            return False
-    return True
 
 
 def write_as(f, q, suffix):
@@ -297,7 +256,7 @@ def auto_rebase(f, q, branch):
 
     rd_path = Q / f'{pkg}.rebased.rangediff'
     if q.get('moved_ok') is True:
-        # X keeps the green run and the reviews; land.py --moved-from decides the move was clean.
+        # X keeps the stamp and the reviews; land.py --moved-from decides the move was clean.
         x = q.get('moved_from') or old
         x_base = (
             git(wt, 'merge-base', x, base).stdout.strip()
@@ -323,7 +282,7 @@ def auto_rebase(f, q, branch):
         return (
             f"MOVED {pkg} {old[:8]} -> {new[:8]} (lands on {x[:8]}'s evidence)"
         )
-    # Not moved_ok: the confirmation reviews and the new SHA's own run are the evidence now.
+    # Not moved_ok: the confirmation reviews and the new SHA's own stamp are the evidence now.
     if 'moved_from' in q:
         q['moved_from_dropped'] = q.pop('moved_from')
     rd = git(
@@ -352,19 +311,6 @@ def move_refused(f, q, out, branch, checkpoint):
     at = next((i for i, ln in enumerate(lines) if MOVE_REFUSED.search(ln)), 0)
     reason = ' '.join(' '.join(lines[at:]).split())[:600]
     q.update(rebased_from=x, moved_refused=reason, checkpoint=checkpoint)
-    # The candidate's own run is now needed; cancel_superseded.sh cancels it while X is evidence.
-    own = runs_for(q['candidate'], branch)
-    if (
-        own
-        and own[0]['status'] == 'completed'
-        and own[0]['conclusion'] == 'cancelled'
-    ):
-        rr = sh('gh', 'run', 'rerun', str(own[0]['databaseId']), '-R', R)
-        q['ci_rerun'] = (
-            own[0]['databaseId']
-            if rr.returncode == 0
-            else f'rerun failed: {rr.stderr.strip()[:200]}'
-        )
     write_as(f, q, '.needs-confirm')
 
 
@@ -432,8 +378,8 @@ def land_py(q, *args):
 
 def process_stack(f, q, branch):
     """A "stack": true entry (T3.0): land.py --stack makes the package's
-    landing commit on the stack at once, with no CI wait; the stack lands
-    later, on its top's run, through a "stack_tip" entry."""
+    landing commit on the stack at once; the stack lands later, on its
+    top's handoff stamp, through a "stack_tip" entry."""
     named = protected_from_ratchet(q['worktree'], q['checkpoint'])
     if named is None:
         print(
@@ -469,9 +415,8 @@ def process_stack(f, q, branch):
 
 
 def process_stack_land(f, q, branch):
-    """A "stack_tip" entry (T3.0): land.py stack-land lands the stack once
-    the run on its top is green; while that run is unfinished or missing it
-    waits, and a red run fails the entry with the implicated commits."""
+    """A "stack_tip" entry (T3.0): land.py stack-land lands the stack on its
+    top's handoff stamp; a refusal fails the entry."""
     args = ['stack-land', '--tip', q['stack_tip']]
     if q.get('branch') or q.get('lane'):
         args += ['--topic-branch', branch]
@@ -481,24 +426,8 @@ def process_stack_land(f, q, branch):
     if landed:
         print(f'LANDED {q.get("title", f.stem)} {landed[0].split()[1]}')
         f.rename(f.with_suffix('.landed'))
-    elif 'not finished' in out or 'no CI run on the stack top' in out:
-        return
-    elif 'was cancelled' in out:
-        # Nothing failed: rerun the top's run once and wait for it.
-        found = re.search(r'gh run rerun (\d+)', out)
-        if found and int(q.get('stack_reruns', 0)) < 2:
-            sh('gh', 'run', 'rerun', found.group(1), '-R', R)
-            q['stack_reruns'] = int(q.get('stack_reruns', 0)) + 1
-            f.write_text(json.dumps(q, indent=1) + '\n')
-        return
     else:
-        lines = [
-            ln
-            for ln in out.splitlines()
-            if ln.startswith(
-                ('RED', 'IMPLICATED', 'PREFIX RUN', 'GREEN PREFIX', 'REFUSED')
-            )
-        ]
+        lines = [ln for ln in out.splitlines() if ln.startswith('REFUSED')]
         print(f'FAILED {q.get("title", f.stem)}: ' + ' | '.join(lines)[:600])
         f.rename(f.with_suffix('.failed'))
 
@@ -517,36 +446,9 @@ def process(f):
         return process_stack_land(f, q, branch)
     if q.get('stack') is True:
         return process_stack(f, q, branch)
-    # A moved candidate is judged on X's run (E130: no re-CI after a clean move).
+    # No CI wait (the owner, 2026-10-22: CI off the landing path): land.py
+    # lands on the candidate's handoff stamp, or a moved one on X's (E130).
     x = q.get('moved_from')
-    runs = runs_for(x or q['candidate'], branch)
-    if not runs:
-        return
-    run = runs[0]
-    if run['status'] != 'completed':
-        return
-    if run['conclusion'] != 'success':
-        if infra_only(run['databaseId']):
-            marker = f.with_suffix('.reruns')
-            n = int(marker.read_text()) if marker.exists() else 0
-            if n < 4:
-                sh(
-                    'gh',
-                    'run',
-                    'rerun',
-                    str(run['databaseId']),
-                    '-R',
-                    R,
-                    '--failed',
-                )
-                marker.write_text(str(n + 1))
-                return
-        on = f' on the moved-from commit {x[:12]}' if x else ''
-        print(
-            f'FAILED {q["title"]}: CI run {run["databaseId"]} {run["conclusion"]}{on} (not only a Docker limit)'
-        )
-        f.rename(f.with_suffix('.failed'))
-        return
     # The ratchet's own list of protected paths is authoritative (2026-10-14: two landings
     # went red because a hand-built list missed protected files). Union it with the queued one;
     # refuse to land if the ratchet can't be run.

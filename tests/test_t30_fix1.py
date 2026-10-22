@@ -591,13 +591,15 @@ def test_a_round_brief_without_its_candidate_line_is_refused(
     assert found is not None and 'candidate line' in found.rule
 
 
-def test_a_cancelled_stack_top_asks_for_a_rerun(tmp_path: Path) -> None:
+def test_a_stack_top_without_a_stamp_is_refused(tmp_path: Path) -> None:
+    # The owner's "2026-10-22 evening: CI off the landing path" (T3.2 fix 4):
+    # a stack lands on its top's handoff stamp, not on a CI run, which once
+    # asked for a rerun of a cancelled top.
     selftest = _module('t30_fix2_land_selftest', SCRIPTS / 'land_selftest.py')
     stack = selftest.t30_stacked(tmp_path, n=2)
-    stack.green(2, conclusion='cancelled')
     code = stack.stack_land(2)
     assert code == 2, stack.text
-    assert 'gh run rerun' in stack.text and 'IMPLICATED' not in stack.text
+    assert 'handoff.py' in stack.text, stack.text
     assert stack.remote_phase() == stack.h
 
 
@@ -622,35 +624,23 @@ def test_a_cancelled_job_is_implicated_in_nothing() -> None:
     assert report == []
 
 
-def test_auto_land_reruns_a_cancelled_stack_top_twice(
+def test_auto_land_fails_a_stack_tip_entry_land_py_refuses(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    # T3.2 fix 4: no CI wait and no reruns; a refusal fails the entry.
     monkeypatch.setenv('SDM_PHASE_BRANCH', 'rust-core-phase-3')
     auto = _module('t30_fix2_auto_land', SCRIPTS / 'orchestration/auto_land.py')
-    reruns: list[tuple[str, ...]] = []
-    refused = (
-        'REFUSED: the run on the stack top was cancelled (run 77 on x: '
-        'cancelled); nothing failed: rerun it (`gh run rerun 77`) and land again'
-    )
+    refused = 'REFUSED: no handoff stamp for cccccccccccc (handoff.py run on that SHA)'
     monkeypatch.setattr(
         auto,
         'land_py',
         lambda q, *a: subprocess.CompletedProcess(a, 2, refused, ''),
     )
-    monkeypatch.setattr(
-        auto,
-        'sh',
-        lambda *a, cwd=None: (
-            reruns.append(a) or subprocess.CompletedProcess(a, 0, '', '')
-        ),
-    )
     entry = tmp_path / 'stack.json'
     queued = {'stack_tip': 'c' * 40, 'worktree': str(tmp_path), 'title': 't'}
     entry.write_text(json.dumps(queued))
-    for _ in range(3):
-        auto.process_stack_land(entry, json.loads(entry.read_text()), 'b')
-    assert entry.exists(), 'the entry stays queued'
-    assert [a[:3] for a in reruns] == [('gh', 'run', 'rerun')] * 2
+    auto.process_stack_land(entry, json.loads(entry.read_text()), 'b')
+    assert not entry.exists() and entry.with_suffix('.failed').exists()
 
 
 def test_a_checker_fix_rides_the_train_and_product_data_stays_out() -> None:

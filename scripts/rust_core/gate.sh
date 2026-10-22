@@ -124,8 +124,10 @@
 #                                acceptance cases.
 #                   census, coverage-s1, l3, l7, ci
 #                                no step: they left the locked gate as
-#                                end-of-phase reports and land.py's
-#                                exact-SHA rule (KO2-76, T2.1s), so a half
+#                                end-of-phase reports and the full CI run
+#                                at the phase's end (KO2-76, T2.1s; the
+#                                owner, 2026-10-22: CI off the landing
+#                                path), so a half
 #                                naming one, or the limits or ci key they
 #                                read, is a usage error naming it;
 #                   main         (2a; T2.0f, locked check 7) the fetched
@@ -439,11 +441,12 @@ STEPS = set(COMMON) | {'l0'}
 # A half's own steps: Phase 1's, and Phase 2's main (T2.0f).
 OWN = {'seeded', 'wheel-smoke', 'inventory', 'main'}
 # The steps and keys that left the locked gate (KO2-76, T2.1s): the census,
-# coverage, L3, L7 and ci are end-of-phase reports and land.py's exact-SHA
-# rule, so a half naming one is refused by name.
+# coverage, L3, L7 and ci are end-of-phase reports and the phase-end CI run
+# (a landing stands on its handoff stamp since 2026-10-22), so a half naming
+# one is refused by name.
 GONE = {'census', 'coverage-s1', 'l3', 'l7', 'ci'}
 GONE_KEYS = {'limits', 'ci'}
-GONE_WHY = 'left the locked gate under KO2-76 (an end-of-phase report or land.py\'s exact-SHA rule)'
+GONE_WHY = 'left the locked gate under KO2-76 (an end-of-phase report, or the full CI run at the phase\'s end)'
 CASE = re.compile(r'[a-z0-9][a-z0-9._-]*')
 def fail(why):
     sys.exit(f'gate.sh: {why}')

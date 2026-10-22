@@ -57,6 +57,22 @@ PHASE = 'rust-core-phase-1'
 SIGNOFF = 'Signed-off-by: Test Person <test@example.com>'
 
 
+#: When the fixtures' handoff stamps were written.
+STAMP_TIME = '2026-10-22T20:00:00+00:00'
+
+
+def write_stamp(common: Path, sha: str) -> None:
+    """A passing handoff stamp for ``sha`` in the clone whose common git
+    directory is ``common``, as ``handoff.py run`` writes it."""
+    path = common / 'sdm-handoff' / f'{sha}.json'
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {'sha': sha, 'package': 'T1.99', 'ok': True, 'time': STAMP_TIME}
+        )
+    )
+
+
 @dataclass
 class Result:
     name: str
@@ -131,6 +147,10 @@ class Fake:
     moved_after_push: dict[str, str] = field(default_factory=dict)
     #: Runs a watch leaves as they are: still unfinished when it returns.
     stuck: set[int] = field(default_factory=set)
+    #: The commits with a passing handoff stamp, and the clone's common git
+    #: directory holding them (``Case`` writes them there).
+    stamped: set[str] = field(default_factory=lambda: {CAND})
+    common: Path | None = None
 
     def sha(self, rev: str) -> str | None:
         rev = rev.removesuffix('^{commit}')
@@ -189,6 +209,14 @@ class Fake:
             return land.Completed(
                 0, 'git@github.com:NVIDIA/structured-data-models-client.git\n'
             )
+        if args[:3] == [
+            'rev-parse',
+            '--path-format=absolute',
+            '--git-common-dir',
+        ]:
+            if self.common is None:
+                return land.Completed(1)
+            return land.Completed(0, f'{self.common}\n')
         if args[0] == 'rev-parse':
             value = self.rev(args[-1])
             return (
@@ -316,6 +344,9 @@ class Case:
     def __init__(self, tmp: Path, fake: Fake | None = None) -> None:
         self.tmp = tmp
         self.fake = fake or Fake()
+        self.fake.common = tmp / 'common'
+        for sha in self.fake.stamped:
+            write_stamp(self.fake.common, sha)
         self.lines: list[str] = []
         self.code: int | None = None
         self.calls: list[tuple[str, ...]] = []
@@ -411,14 +442,12 @@ def _(tmp: Path) -> tuple[bool, str]:
     return ok, 'landed' if ok else f'exit {c.code}, pushes {f.pushes}: {c.text}'
 
 
-@case('lands: the landing runs on both branches are printed')
+@case('lands: on its stamp alone, asking gh for no CI run')
 def _(tmp: Path) -> tuple[bool, str]:
-    c = Case(tmp).land()
-    ok = c.code == 0 and all(
-        re.search(rf'run  {branch}: \d+ https://', c.text)
-        for branch in (TOPIC, PHASE)
-    )
-    return ok, 'both printed' if ok else c.text
+    c = Case(tmp, Fake(runs={})).land()
+    asked = [call for call in c.calls if call[0] == 'gh']
+    ok = c.code == 0 and f'LANDED {LAND}' in c.text and not asked
+    return ok, 'landed, gh not asked' if ok else f'{asked}: {c.text}'
 
 
 @case("lands: the message has the earlier landing commits' form")
@@ -428,15 +457,16 @@ def _(tmp: Path) -> tuple[bool, str]:
     expected = (
         r'Land T1\.99: a test package\n\n'
         r'Both reviews approve the candidate c{7}\.\n\n'
-        rf'Candidate run 1 green at {CAND}; (?:[^\n]{{1,72}}\n)+\n'
+        rf'Handoff stamp of {CAND}\n(?:[^\n]{{1,72}}\n)+\n'
         r'Reviewed-by: independent reviewer \(fresh agent\) and Codex, T1\.99\n'
         r'Protected-paths: \.github/workflows/ci\.yml \(no gate removed\)\n'
         rf'Base-SHA: {BASE}\n'
         rf'Checkpoint-SHA: {BASE}\n'
+        rf'Handoff-stamp: {CAND} {re.escape(STAMP_TIME)}\n'
         rf'{re.escape(SIGNOFF)}\n'
     )
     ok = re.fullmatch(expected, message) is not None
-    return ok, 'subject, summary, four trailers, sign-off' if ok else message
+    return ok, 'subject, summary, five trailers, sign-off' if ok else message
 
 
 @case('lands: --reviewer and --summary are used as given')
@@ -839,15 +869,6 @@ def _(tmp: Path) -> tuple[bool, str]:
     return ok and not c.calls, detail
 
 
-@case("phase: only a run under the landing's phase is evidence")
-def _(tmp: Path) -> tuple[bool, str]:
-    # The candidate's only green run is on a Phase 1 lane: judged against
-    # Phase 1's checkpoint, so no evidence for a Phase 2 landing.
-    fake = Fake(branch=TOPIC_2, runs={CAND: [ci_run(CAND, TOPIC)]})
-    c = Case(tmp, fake).land('--topic-branch', TOPIC_2)
-    return refused_for_push_evidence(c)
-
-
 for archive in (f'{PHASE_2}-archive-a-T2.1-abc1234',):
 
     @case(f'phase: a Phase 2 archive branch is refused: {archive}')
@@ -903,174 +924,34 @@ def _(tmp: Path) -> tuple[bool, str]:
     return ok, 'landed' if ok else c.text
 
 
-# --- the candidate's CI run ---------------------------------------------------
+# --- the candidate's handoff stamp (the owner, 2026-10-22: CI off the landing path)
 
 
-@case('refused: no CI run on the candidate')
+@case('refused: no handoff stamp on the candidate, naming handoff.py')
 def _(tmp: Path) -> tuple[bool, str]:
-    return refused(Case(tmp, Fake(runs={})).land(), 'no CI run')
+    c = Case(tmp, Fake(stamped=set())).land()
+    return refused(c, 'handoff.py run')
 
 
-for state, conclusion in (
-    ('completed', 'cancelled'),
-    ('completed', 'failure'),
-    ('completed', 'skipped'),
-    ('in_progress', ''),
-    ('queued', ''),
-):
-
-    @case(f'refused: the candidate run is {conclusion or state}')
-    def _(
-        tmp: Path, state: str = state, conclusion: str = conclusion
-    ) -> tuple[bool, str]:
-        runs = {CAND: [ci_run(CAND, TOPIC, state, conclusion)]}
-        return refused(Case(tmp, Fake(runs=runs)).land(), 'not green')
-
-
-@case('refused: a green run, then a newer cancelled one on the same SHA')
+@case('refused: a stamp on another commit does not count')
 def _(tmp: Path) -> tuple[bool, str]:
-    runs = {
-        CAND: [
-            ci_run(CAND, TOPIC, run_id=1, created='2026-10-09T00:00:00Z'),
-            ci_run(
-                CAND,
-                TOPIC,
-                conclusion='cancelled',
-                run_id=2,
-                created='2026-10-09T00:05:00Z',
-            ),
-        ]
-    }
-    return refused(Case(tmp, Fake(runs=runs)).land(), 'cancelled')
+    c = Case(tmp, Fake(stamped={OTHER})).land()
+    return refused(c, 'no passing handoff stamp')
 
 
-@case('refused: a green run listed for another SHA does not count')
+@case('refused: a stamp that does not say ok')
 def _(tmp: Path) -> tuple[bool, str]:
-    return refused(
-        Case(tmp, Fake(runs={CAND: [ci_run(OTHER, TOPIC)]})).land(),
-        'no CI run',
-    )
+    c = Case(tmp)
+    path = tmp / 'common' / 'sdm-handoff' / f'{CAND}.json'
+    path.write_text(json.dumps({'sha': CAND, 'ok': False}))
+    return refused(c.land(), 'does not say ok')
 
 
-@case('lands: the newest run green after an older failure')
+@case('lands: a red CI run on the candidate does not hold back its stamp')
 def _(tmp: Path) -> tuple[bool, str]:
-    runs = {
-        CAND: [
-            ci_run(CAND, TOPIC, conclusion='failure', run_id=1),
-            ci_run(CAND, TOPIC, run_id=2, created='2026-10-09T00:09:00Z'),
-        ]
-    }
+    runs = {CAND: [ci_run(CAND, TOPIC, conclusion='failure')]}
     c = Case(tmp, Fake(runs=runs)).land()
     return c.code == 0, 'landed' if c.code == 0 else c.text
-
-
-# --- only a push run under the phase branch is evidence (T1.20 fix 1) --------
-#
-# CI's gate steps exit early on a pull_request run (ratchet.py names no base
-# there), so a green one never ran the checkpoint gate. Only a push run on
-# the phase branch or a branch under it (a lane, a task or an old topic
-# branch; never an archive branch) counts, for the candidate, the landing
-# run and verify.
-
-#: An archive branch: where an abandoned lane's tip is kept, never a topic.
-ARCHIVED = 'rust-core-phase-1-archive-lane-a-t1.99'
-#: A pull request's ref, as a run on it may name its branch.
-PR_REF = 'refs/pull/7/merge'
-#: Names the missing evidence as a push run.
-PUSH_RUN = re.compile(r'\bpush\b[^\n]*\brun|\brun[^\n]*\bpush\b', re.I)
-
-
-def refused_for_push_evidence(c: Case) -> tuple[bool, str]:
-    """Refused, nothing committed or pushed, naming a missing push run."""
-    ok = c.code == 2 and bool(PUSH_RUN.search(c.text)) and c.untouched()
-    return ok, (
-        'refused for want of a push run, nothing committed or pushed'
-        if ok
-        else f'exit {c.code}, committed {len(c.fake.committed)}, pushes '
-        f'{c.fake.pushes}: {c.text[-600:]}'
-    )
-
-
-for branch in (TOPIC, PR_REF):
-
-    @case(
-        f'refused: the only green run is a pull_request run (on {branch}), '
-        'naming the missing push run'
-    )
-    def _(tmp: Path, branch: str = branch) -> tuple[bool, str]:
-        runs = {CAND: [ci_run(CAND, branch, event='pull_request')]}
-        return refused_for_push_evidence(Case(tmp, Fake(runs=runs)).land())
-
-
-@case('refused: a green pull_request run newer than a failed push run')
-def _(tmp: Path) -> tuple[bool, str]:
-    runs = {
-        CAND: [
-            ci_run(CAND, TOPIC, conclusion='failure', run_id=1),
-            ci_run(
-                CAND,
-                TOPIC,
-                run_id=2,
-                created='2026-10-09T00:09:00Z',
-                event='pull_request',
-            ),
-        ]
-    }
-    return refused(Case(tmp, Fake(runs=runs)).land(), 'not green')
-
-
-@case('refused: the only green push run is on an archive branch')
-def _(tmp: Path) -> tuple[bool, str]:
-    runs = {CAND: [ci_run(CAND, ARCHIVED)]}
-    return refused_for_push_evidence(Case(tmp, Fake(runs=runs)).land())
-
-
-@case('refused: a green archive-branch push run newer than a failed lane run')
-def _(tmp: Path) -> tuple[bool, str]:
-    runs = {
-        CAND: [
-            ci_run(CAND, TOPIC, conclusion='failure', run_id=1),
-            ci_run(CAND, ARCHIVED, run_id=2, created='2026-10-09T00:09:00Z'),
-        ]
-    }
-    return refused(Case(tmp, Fake(runs=runs)).land(), 'not green')
-
-
-@case('refused: the only green push run is on a branch outside the phase')
-def _(tmp: Path) -> tuple[bool, str]:
-    runs = {CAND: [ci_run(CAND, 'main')]}
-    return refused_for_push_evidence(Case(tmp, Fake(runs=runs)).land())
-
-
-@case('lands: a green push run beside a newer red pull_request run')
-def _(tmp: Path) -> tuple[bool, str]:
-    # A pull_request run is no evidence either way.
-    runs = {
-        CAND: [
-            ci_run(CAND, TOPIC, run_id=1),
-            ci_run(
-                CAND,
-                TOPIC,
-                conclusion='failure',
-                run_id=2,
-                created='2026-10-09T00:09:00Z',
-                event='pull_request',
-            ),
-        ]
-    }
-    c = Case(tmp, Fake(runs=runs)).land()
-    ok = c.code == 0 and 'Candidate run 1 green' in ' '.join(
-        (c.fake.committed or [''])[0].split()
-    )
-    return ok, 'landed on the push run' if ok else c.text
-
-
-for branch in (PHASE, 'rust-core-phase-1-t1.19', 'rust-core-phase-1-lane-b'):
-
-    @case(f'lands: a green push run on {branch} counts')
-    def _(tmp: Path, branch: str = branch) -> tuple[bool, str]:
-        c = Case(tmp, Fake(runs={CAND: [ci_run(CAND, branch)]})).land()
-        return c.code == 0, 'landed' if c.code == 0 else c.text
 
 
 # --- the landing commit and the push ------------------------------------------
@@ -1117,29 +998,31 @@ def landed(tmp: Path, **faults: Any) -> Case:
     return c
 
 
-@case('verify: both runs green')
+@case('verify: a landing stands on the stamp it names, reading no CI run')
 def _(tmp: Path) -> tuple[bool, str]:
     c = landed(tmp).verify()
+    asked = [call for call in c.calls if call[0] == 'gh']
     ok = (
         c.code == 0
         and f'VERIFIED {LAND}' in c.text
-        and c.text.count('ok  ') >= 2
+        and 'handoff stamp of cccccccc1111' in c.text
+        and not asked
     )
-    return ok, 'verified' if ok else c.text
+    return ok, 'verified on the stamp' if ok else f'{asked}: {c.text}'
 
 
-@case('verify: a red phase run prints the revert and reverts nothing')
+@case('verify: the stamp gone, it fails, printing the revert')
 def _(tmp: Path) -> tuple[bool, str]:
-    c = landed(tmp, landing_conclusion={PHASE: 'failure'}).verify()
+    c = landed(tmp)
+    (tmp / 'common' / 'sdm-handoff' / f'{CAND}.json').unlink()
+    c.verify()
     ok = (
         c.code == 1
         and 'VERIFY FAILED' in c.text
+        and 'no handoff stamp' in c.text
         and 'Nothing was reverted' in c.text
-        and f'--force-with-lease=refs/heads/{PHASE}:{LAND}' in c.text
-        and f'{BASE}:refs/heads/{PHASE}' in c.text
         and f'git revert --no-edit {BASE}..{LAND}' in c.text
         and not c.fake.pushes
-        and not c.fake.committed[1:]
     )
     return ok, 'instructions only' if ok else c.text
 
@@ -1153,105 +1036,18 @@ def _(tmp: Path) -> tuple[bool, str]:
     return ok, 'reported' if ok else c.text
 
 
-@case('verify: a cancelled phase run beside a green topic run passes')
-def _(tmp: Path) -> tuple[bool, str]:
-    c = landed(tmp, landing_conclusion={PHASE: 'cancelled'}).verify()
-    ok = (
-        c.code == 0
-        and 'CANC' in c.text
-        and 'same tree is green' in c.text
-        and 'VERIFY FAILED' not in c.text
-    )
-    return ok, 'reported cancelled, passed' if ok else c.text
-
-
-@case('verify: both cancelled, the candidate green: passes on the tree')
-def _(tmp: Path) -> tuple[bool, str]:
-    c = landed(
-        tmp, landing_conclusion={PHASE: 'cancelled', TOPIC: 'cancelled'}
-    ).verify()
-    ok = c.code == 0 and f'at {CAND[:12]}' in c.text
-    return ok, "the candidate's run stands" if ok else c.text
-
-
-@case('verify: cancelled with no green run asks for a rerun, not a revert')
-def _(tmp: Path) -> tuple[bool, str]:
-    c = landed(tmp, landing_conclusion={PHASE: 'cancelled', TOPIC: 'cancelled'})
-    for run in c.fake.runs[CAND]:
-        run['conclusion'] = 'cancelled'
-    c.verify()
-    ok = (
-        c.code == 3
-        and 'VERIFY INCOMPLETE' in c.text
-        and 'gh run rerun' in c.text
-        and 'Nothing was reverted' not in c.text
-        and not c.fake.pushes
-    )
-    return ok, 'rerun asked' if ok else c.text
-
-
-@case('verify: a red pull_request run on the landing commit is no evidence')
+@case("verify: fails, the stamped commit's tree is not the landing's")
 def _(tmp: Path) -> tuple[bool, str]:
     c = landed(tmp)
-    c.fake.runs[LAND].append(
-        ci_run(
-            LAND,
-            TOPIC,
-            conclusion='failure',
-            run_id=98,
-            created='2026-10-09T02:00:00Z',
-            event='pull_request',
-        )
+    # The trailer names another stamped commit, of another tree.
+    message = c.fake.commits[LAND]['message']
+    c.fake.commits[LAND]['message'] = message.replace(
+        f'Handoff-stamp: {CAND}', f'Handoff-stamp: {OTHER}'
     )
+    write_stamp(tmp / 'common', OTHER)
     c.verify()
-    ok = c.code == 0 and f'VERIFIED {LAND}' in c.text
-    return ok, 'verified on the push runs' if ok else c.text
-
-
-@case('verify: a green pull_request run does not stand for a cancelled one')
-def _(tmp: Path) -> tuple[bool, str]:
-    c = landed(tmp, landing_conclusion={PHASE: 'cancelled', TOPIC: 'cancelled'})
-    for run in c.fake.runs[CAND]:
-        run['conclusion'] = 'cancelled'
-    c.fake.runs[CAND].append(
-        ci_run(
-            CAND,
-            TOPIC,
-            run_id=97,
-            created='2026-10-09T02:00:00Z',
-            event='pull_request',
-        )
-    )
-    c.fake.runs[LAND].append(
-        ci_run(
-            LAND,
-            TOPIC,
-            run_id=96,
-            created='2026-10-09T02:00:00Z',
-            event='pull_request',
-        )
-    )
-    c.verify()
-    ok = (
-        c.code == 3
-        and 'VERIFY INCOMPLETE' in c.text
-        and 'same tree is green' not in c.text
-        and not c.fake.pushes
-    )
-    return ok, 'rerun asked' if ok else c.text
-
-
-@case('verify: a green archive-branch run does not stand for a cancelled one')
-def _(tmp: Path) -> tuple[bool, str]:
-    c = landed(tmp, landing_conclusion={PHASE: 'cancelled', TOPIC: 'cancelled'})
-    for run in c.fake.runs[CAND]:
-        run['conclusion'] = 'cancelled'
-    c.fake.runs[CAND].append(
-        ci_run(CAND, ARCHIVED, run_id=95, created='2026-10-09T02:00:00Z')
-    )
-    c.verify()
-    ok = c.code == 3 and 'same tree is green' not in c.text
-    return ok, 'rerun asked' if ok else c.text
+    ok = c.code == 1 and 'no evidence for it' in c.text
+    return ok, 'reported' if ok else c.text
 
 
 # --- a lane carries one package -----------------------------------------------
@@ -1536,6 +1332,10 @@ class Repo:
     def git(self, *args: str) -> str:
         return self.run_git(self.work, *args).strip()
 
+    def stamp(self, sha: str) -> None:
+        """A passing handoff stamp for ``sha`` in this clone."""
+        write_stamp(self.work / '.git', sha)
+
     def commit(
         self, subject: str, files: dict[str, str | None] | None = None
     ) -> str:
@@ -1652,14 +1452,13 @@ class MovedCase:
         m: Moved,
         runs: dict[str, list[dict[str, Any]]] | None = None,
         name: str | None = None,
+        stamped: Sequence[str] | None = None,
     ) -> None:
         self.tmp = tmp
         self.m = m
-        self.runs = (
-            {m.x: [ci_run(m.x, MOVED_TOPIC, run_id=X_RUN)]}
-            if runs is None
-            else runs
-        )
+        self.runs = {} if runs is None else runs
+        for sha in [m.x] if stamped is None else stamped:
+            m.repo.stamp(sha)
         named = m.x if name is None else name
         self.reviews = [
             self.review('a.txt', f'APPROVE\n\nReviewed {named[:7]}.\n'),
@@ -1801,8 +1600,8 @@ def _(tmp: Path) -> tuple[bool, str]:
 
 
 @case(
-    'moved: the landing message names X, its green run, and the move, '
-    'with Moved-from and Moved-from-run trailers'
+    "moved: the landing message names X, X's stamp, and the move, "
+    'with Moved-from and Handoff-stamp trailers'
 )
 def _(tmp: Path) -> tuple[bool, str]:
     m = moved(tmp)
@@ -1812,17 +1611,20 @@ def _(tmp: Path) -> tuple[bool, str]:
     trailers = c.trailers() if c.code == 0 else {}
     ok = (
         m.x in flat
-        and re.search(rf'(?<!\d){X_RUN}(?!\d)', flat) is not None
+        and 'handoff stamp' in flat
         and re.search(r'\bmoved\b', flat) is not None
         and 'landing commits only' in flat
         and f'Base-SHA: {m.h}' in message
         and f'Checkpoint-SHA: {m.h}' in message
         and trailers.get('Moved-from') == m.x
-        and trailers.get('Moved-from-run') == str(X_RUN)
+        and trailers.get('Handoff-stamp') == f'{m.x} {STAMP_TIME}'
+        and 'Moved-from-run' not in trailers
     )
     return (
         ok,
-        'names X, its run, the move' if ok else f'{c.text[-300:]} | {message}',
+        'names X, its stamp, the move'
+        if ok
+        else f'{c.text[-300:]} | {message}',
     )
 
 
@@ -1869,54 +1671,19 @@ def _(tmp: Path) -> tuple[bool, str]:
     return refused_naming(c.land(), 'review', m.x[:12])
 
 
-@case("moved: refused, X's newest run failed after a green one")
+@case('moved: refused, X has no stamp, though C has one')
 def _(tmp: Path) -> tuple[bool, str]:
     m = moved(tmp)
-    runs = {
-        m.x: [
-            ci_run(m.x, MOVED_TOPIC, run_id=X_RUN),
-            ci_run(m.x, MOVED_TOPIC, conclusion='failure', run_id=X_RUN + 7,
-                   created='2026-10-09T05:00:00Z'),
-        ],
-        m.c: [ci_run(m.c, MOVED_TOPIC, run_id=X_RUN + 1)],
-    }  # fmt: skip
-    c = MovedCase(tmp, m, runs=runs).land()
-    return refused_naming(c, 'not green', str(X_RUN + 7))
+    c = MovedCase(tmp, m, stamped=[m.c]).land()
+    return refused_naming(c, 'no passing handoff stamp', m.x[:12])
 
 
-@case("moved: refused, X's run was cancelled")
+@case("moved: lands on X's stamp, though X's CI run failed")
 def _(tmp: Path) -> tuple[bool, str]:
     m = moved(tmp)
-    runs = {
-        m.x: [ci_run(m.x, MOVED_TOPIC, conclusion='cancelled', run_id=X_RUN)],
-        m.c: [ci_run(m.c, MOVED_TOPIC, run_id=X_RUN + 1)],
-    }
+    runs = {m.x: [ci_run(m.x, MOVED_TOPIC, conclusion='failure', run_id=X_RUN)]}
     c = MovedCase(tmp, m, runs=runs).land()
-    return refused_naming(c, 'not green', 'cancelled', str(X_RUN))
-
-
-@case("moved: refused, X's run is unfinished")
-def _(tmp: Path) -> tuple[bool, str]:
-    m = moved(tmp)
-    runs = {m.x: [ci_run(m.x, MOVED_TOPIC, status='in_progress', run_id=X_RUN)]}
-    c = MovedCase(tmp, m, runs=runs).land()
-    return refused_naming(c, 'not green', str(X_RUN))
-
-
-@case('moved: refused, X has no CI run, though C has a green one')
-def _(tmp: Path) -> tuple[bool, str]:
-    m = moved(tmp)
-    runs = {m.c: [ci_run(m.c, MOVED_TOPIC, run_id=X_RUN + 1)]}
-    c = MovedCase(tmp, m, runs=runs).land()
-    return refused_naming(c, 'no CI run', m.x[:12])
-
-
-@case("moved: refused, X's only green run is a pull request's")
-def _(tmp: Path) -> tuple[bool, str]:
-    m = moved(tmp)
-    runs = {m.x: [ci_run(m.x, MOVED_TOPIC, run_id=X_RUN, event='pull_request')]}
-    c = MovedCase(tmp, m, runs=runs).land()
-    return refused_naming(c, 'no CI run', m.x[:12])
+    return c.code == 0, 'landed' if c.code == 0 else c.text[-600:]
 
 
 # Condition 2: the same tree.
@@ -2285,23 +2052,21 @@ def _(tmp: Path) -> tuple[bool, str]:
 # Without --moved-from nothing changes.
 
 
-@case("unmoved: X's reviews and run do not land C without --moved-from")
+@case("unmoved: X's reviews and stamp do not land C without --moved-from")
 def _(tmp: Path) -> tuple[bool, str]:
     m = moved(tmp)
     c = MovedCase(tmp, m).land(moved_from=None)
     return refused_naming(c, f'does not name the candidate {m.c[:12]}')
 
 
-@case("unmoved: C's own reviews and run land it as before")
+@case("unmoved: C's own reviews and stamp land it as before")
 def _(tmp: Path) -> tuple[bool, str]:
     m = moved(tmp)
-    runs = {m.c: [ci_run(m.c, MOVED_TOPIC, run_id=X_RUN + 1)]}
-    c = MovedCase(tmp, m, runs=runs, name=m.c).land(moved_from=None)
+    c = MovedCase(tmp, m, name=m.c, stamped=[m.c]).land(moved_from=None)
     message = c.message() if c.code == 0 else ''
     ok = (
         c.code == 0
-        and f'Candidate run {X_RUN + 1} green at {m.c}'
-        in ' '.join(message.split())
+        and f'Handoff stamp of {m.c}' in ' '.join(message.split())
         and m.x not in message
         and 'landing commits only' not in ' '.join(message.split())
         and m.repo.remote(PHASE) == m.repo.git('rev-parse', 'HEAD')
@@ -2309,11 +2074,11 @@ def _(tmp: Path) -> tuple[bool, str]:
     return ok, 'landed as before' if ok else f'{c.text[-300:]} | {message}'
 
 
-@case("unmoved: C with no run of its own is refused though X's is green")
+@case('unmoved: C with no stamp of its own is refused though X has one')
 def _(tmp: Path) -> tuple[bool, str]:
     m = moved(tmp)
     c = MovedCase(tmp, m, name=m.c).land(moved_from=None)
-    return refused_naming(c, 'no CI run', m.c[:12])
+    return refused_naming(c, 'no passing handoff stamp', m.c[:12])
 
 
 # --- CI4: a landing is verified on its candidate's run (decision 30) -----------
@@ -2354,6 +2119,8 @@ def _(tmp: Path) -> tuple[bool, str]:
 #
 # The verify cases run git for real, as the moved cases do; gh is the fake.
 
+#: A refusal that names the missing push run.
+PUSH_RUN = re.compile(r'\bpush\b[^\n]*\brun|\brun[^\n]*\bpush\b', re.I)
 #: The candidate's green run, and a red or cancelled one newer than it.
 CAND_RUN = 3131
 NEWER_RUN = 5151
@@ -2808,38 +2575,38 @@ def wrapped_candidate(tmp: Path) -> tuple[Moved, str]:
 )
 def _(tmp: Path) -> tuple[bool, str]:
     m, u = wrapped_candidate(tmp)
-    c = MovedCase(tmp, m, runs={}, name=m.c).land(moved_from=None)
+    c = MovedCase(tmp, m, name=m.c, stamped=[]).land(moved_from=None)
     return refused_naming(c, u[:12])
 
 
 @case(
-    'CI4 land: a candidate that is an empty Land commit, only its own run green, is refused'
+    'CI4 land: a candidate that is an empty Land commit, only itself stamped, is refused'
 )
 def _(tmp: Path) -> tuple[bool, str]:
     m, u = wrapped_candidate(tmp)
-    runs = {m.c: [ci_run(m.c, MOVED_TOPIC, run_id=CAND_RUN)]}
-    c = MovedCase(tmp, m, runs=runs, name=m.c).land(moved_from=None)
+    c = MovedCase(tmp, m, name=m.c, stamped=[m.c]).land(moved_from=None)
     return refused_naming(c, u[:12])
 
 
 @case(
-    'CI4 land: a candidate that is an empty Land commit lands on the green run below it'
+    'CI4 land: a candidate that is an empty Land commit lands on the stamp below it'
 )
 def _(tmp: Path) -> tuple[bool, str]:
     m, u = wrapped_candidate(tmp)
-    runs = {u: [ci_run(u, MOVED_TOPIC, run_id=CAND_RUN)]}
-    c = MovedCase(tmp, m, runs=runs, name=m.c).land(moved_from=None)
+    c = MovedCase(tmp, m, name=m.c, stamped=[u]).land(moved_from=None)
     sha = m.repo.git('rev-parse', 'HEAD')
     ok = (
         c.code == 0
         and f'LANDED {sha}' in c.text
         and m.repo.git('rev-parse', 'HEAD^') == m.c
         and m.repo.remote(PHASE) == sha
-        and str(CAND_RUN) in c.message()
+        and f'Handoff-stamp: {u}' in c.message()
     )
     return (
         ok,
-        'landed on the run below' if ok else f'exit {c.code}: {c.text[-600:]}',
+        'landed on the stamp below'
+        if ok
+        else f'exit {c.code}: {c.text[-600:]}',
     )
 
 
@@ -2872,11 +2639,10 @@ for conclusion in ('success', 'cancelled'):
         )
 
 
-@case('CI4 land: a cancelled candidate run is refused without the old advice')
+@case('CI4 land: a candidate with no stamp is refused without the old advice')
 def _(tmp: Path) -> tuple[bool, str]:
-    runs = {CAND: [ci_run(CAND, TOPIC, conclusion='cancelled')]}
-    c = Case(tmp, Fake(runs=runs)).land()
-    ok, detail = refused(c, 'not green')
+    c = Case(tmp, Fake(stamped=set())).land()
+    ok, detail = refused(c, 'no passing handoff stamp')
     if ok and 'wait-for-landing-run' in c.text:
         return False, f'still suggests --wait-for-landing-run: {c.text[-600:]}'
     return ok, detail
@@ -3183,11 +2949,9 @@ class Stack:
             ]
         )  # fmt: skip
 
-    def green(self, k: int, run_id: int = TOP_RUN, **kw: Any) -> None:
-        sha = self.candidates[k]
-        self.gh.runs.setdefault(sha, []).insert(
-            0, ci_run(sha, t30_topic(k), run_id=run_id, **kw)
-        )
+    def green(self, k: int) -> None:
+        """Package k's candidate handed off: its stamp."""
+        self.r.stamp(self.candidates[k])
 
     @property
     def text(self) -> str:
@@ -3377,50 +3141,27 @@ def _(tmp: Path) -> tuple[bool, str]:
 
 
 @case(
-    'T3.0 stack: a red top names the implicated commit and the green '
-    'prefix, which then lands on its own run'
+    'T3.0 stack: a top with no stamp is refused, naming handoff.py; a '
+    'stamped prefix lands on its own stamp'
 )
 def _(tmp: Path) -> tuple[bool, str]:
-    s = t30_stacked(tmp, files={3: {RUST_FILE: 'pub fn demo() {}\n'}})
-    s.green(4, conclusion='failure')
-    s.gh.failing[TOP_RUN] = ['rust-test']
-    s.gh.logs[TOP_RUN] = (
-        'rust-test\tcargo test\t2026-10-22T01:02:03Z error[E0425]: cannot '
-        f'find value `x` in this scope\n --> {RUST_FILE}:1:16\n'
-    )
+    s = t30_stacked(tmp)
     code = s.stack_land(4)
-    lines = s.lines
-    implicated = [
-        line for line in lines if line.startswith('IMPLICATED rust-test:')
-    ]
-    prefix = [
-        line.split('--tip', 1)[1].split()[0]
-        for line in lines
-        if line.startswith('GREEN PREFIX:') and '--tip' in line
-    ]
     problems = []
-    if code != 1:
-        problems.append(f'exit {code}')
-    if not any(
-        'T1.93' in line or s.candidates[3][:7] in line for line in implicated
-    ):
-        problems.append(f'T1.93 not implicated by rust-test: {implicated}')
-    if not prefix or not s.landings[2].startswith(prefix[0]):
-        problems.append(f'green prefix {prefix}, not Land T1.92')
-    if not any(line.startswith('PREFIX RUN:') for line in lines):
-        problems.append('no PREFIX RUN line')
+    if code != 2 or 'handoff.py run' not in s.text.partition('REFUSED:')[2]:
+        problems.append(f'exit {code}, not refused naming handoff.py')
     if s.remote_phase() != s.h:
-        problems.append('something landed on a red run')
+        problems.append('something landed with no stamp')
     if problems:
         return False, '; '.join(problems) + ' | ' + s.text[-500:]
-    s.green(2, run_id=PREFIX_RUN)
+    s.green(2)
     code = s.stack_land(2)
     ok = (
         code == 0
         and f'LANDED {s.landings[2]}' in s.text
         and s.remote_phase() == s.landings[2]
     )
-    return t30_detail(s, ok, 'implicated T1.93; the prefix landed')
+    return t30_detail(s, ok, 'refused; the stamped prefix landed')
 
 
 @case(
@@ -3513,7 +3254,7 @@ def t30_moved_on(s: Stack, files: dict[str, str | None]) -> str:
 
 @case(
     'T3.0 restack: a stack moved onto a newer phase head keeps its reviews, '
-    'and lands on a new run on its top alone'
+    'and lands on a new stamp on its top alone'
 )
 def _(tmp: Path) -> tuple[bool, str]:
     s = t30_stacked(tmp, n=2)
@@ -3552,17 +3293,17 @@ def _(tmp: Path) -> tuple[bool, str]:
         ):
             problems.append(f'Land T1.9{k} trailers {trailers}')
         previous = sha
-    # The old top's green run is no evidence for the moved stack.
+    # The old top's stamp is no evidence for the moved stack.
     code = s.call(['stack-land', '--tip', tip, '--phase-branch', PHASE])
     if code == 0 or s.remote_phase() != newer:
-        problems.append(f'landed on the old run: exit {code}')
-    s.gh.runs[first] = [ci_run(first, t30_topic(2), run_id=PREFIX_RUN)]
+        problems.append(f'landed on the old stamp: exit {code}')
+    s.r.stamp(first)
     code = s.call(['stack-land', '--tip', tip, '--phase-branch', PHASE])
     if code != 0 or s.remote_phase() != tip:
-        problems.append(f'not landed on the new top run: exit {code}')
+        problems.append(f'not landed on the new top stamp: exit {code}')
     if problems:
         return False, '; '.join(problems) + ' | ' + s.text[-400:]
-    return True, 'moved with its reviews; landed on the new top run'
+    return True, 'moved with its reviews; landed on the new top stamp'
 
 
 @case('T3.0 restack: a stack whose patch changes on the new head is refused')
@@ -3580,8 +3321,8 @@ def _(tmp: Path) -> tuple[bool, str]:
 
 
 @case(
-    "T3.0 verify: a stacked landing stands on its stack top's green run, "
-    'and fails when that run is red'
+    "T3.0 verify: a stacked landing stands on its stack top's stamp, "
+    'and is not verified on it once that stamp is gone'
 )
 def _(tmp: Path) -> tuple[bool, str]:
     s = t30_stacked(tmp)
@@ -3592,10 +3333,10 @@ def _(tmp: Path) -> tuple[bool, str]:
     code = s.call(['verify', lower, '--phase-branch', PHASE])
     if code != 0 or f'VERIFIED {lower}' not in s.text:
         return t30_detail(s, False, '')
-    s.green(4, run_id=TOP_RUN + 10, conclusion='failure')
+    (s.r.work / '.git' / 'sdm-handoff' / f'{s.candidates[4]}.json').unlink()
     code = s.call(['verify', lower, '--phase-branch', PHASE])
-    ok = code == 1 and 'VERIFIED' not in s.text
-    return t30_detail(s, ok, 'verified on the top run; red fails')
+    ok = code != 0 and 'VERIFIED' not in s.text
+    return t30_detail(s, ok, 'verified on the top stamp; none fails')
 
 
 def t30_fix(s: Stack, k: int, message: str) -> str:

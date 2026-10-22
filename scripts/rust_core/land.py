@@ -5,13 +5,16 @@
 
 """Lands a reviewed package on the phase branch, so no one lands by hand.
 
-Decision E43 (b) and the design's "One gate run per work package": the
-only commit after approval is an empty landing commit carrying the
-trailers (E25), and the phase branch fast-forwards to it at once when its
-tree is the candidate's and the candidate's own exact-SHA CI run
-concluded success. CI skips the landing commit's own runs (decision E131):
-its tree was tested on the candidate's exact SHA, and ``land.py verify``
-stands on that run.
+Decision E43 (b): the only commit after approval is an empty landing
+commit carrying the trailers (E25), and the phase branch fast-forwards to
+it at once when its tree is the candidate's and the candidate has a
+passing handoff stamp (``handoff.py``, ``<git common dir>/sdm-handoff/
+<sha>.json`` in this clone) and two approving reviews. No CI run is
+required (the owner's "2026-10-22 evening: CI off the landing path"): the
+full CI matrix runs nightly on the phase head and at the end of the phase,
+and nothing waits on it. ``land.py verify`` stands on the stamp the landing
+names; a landing made before the rule, which names none, is verified on
+the CI run it landed on, as then.
 
     land.py --candidate SHA --topic-branch NAME --review FILE --review FILE \\
         --title 'T1.12: the S0 case corpus' --protected-paths TEXT \\
@@ -66,14 +69,10 @@ phase. Before it changes anything it refuses, naming the reason, unless:
   exactly ``APPROVE`` and which names the candidate by its full SHA or a
   prefix of at least seven characters that git resolves to the candidate
   and to nothing else;
-- the newest CI run ``gh`` reports on the candidate's exact SHA completed
-  with conclusion success; a cancelled, failed or unfinished run does not
-  count (T1.8b's candidate run was cancelled). Only a push run on the
-  phase branch or a topic branch under it (an archive branch never) counts
-  as evidence, here and in ``verify``: a run of another event (a pull
-  request's) skips the checkpoint's gate, which CI runs only on such
-  pushes (T1.20, Codex P2). A candidate whose run is not green is rerun or
-  waited on, then landed.
+- the candidate has a passing handoff stamp in this clone
+  (``handoff.stamp_problem``): ``handoff.py run --package <ID>`` on its
+  exact SHA wrote it. A candidate without one is refused, naming
+  ``handoff.py``.
 
 It then commits the landing commit (``git commit --allow-empty -s``) with
 ``Reviewed-by``, ``Protected-paths``, ``Base-SHA`` (the phase head) and
@@ -85,26 +84,31 @@ it to the topic branch and the phase branch in one atomic push, which the
 remote refuses if the phase branch moved. On a lane it then reads both
 branches back from the remote and reports, exiting 1, if the lane is not
 the phase head, since the lane's next package starts from there. It
-prints the landing SHA; it does not wait for the landing commit's runs,
-which CI skips.
+prints the landing SHA, and waits for no CI run.
 
-The landing commit's message names the CI evidence it lands on: the
-candidate's green run, by id and SHA.
+The landing commit's message names the evidence it lands on, and its
+``Handoff-stamp`` trailer the stamped SHA and the stamp's time.
 
 ``--wait-for-landing-run``, which pushed the landing commit to the topic
 branch and moved the phase branch only once that commit's own run was
-green, is refused as obsolete (E131): CI skips that run, so it would never
-come.
+green, is refused as obsolete (E131).
 
-A run CI left out tested nothing: wherever a run is evidence (the
-candidate's, the moved-from commit's, and in ``verify``), an empty landing
-commit (one parent, its parent's tree, a subject starting ``Land ``) is
-followed down to the first commit below it that is not one, whose run
+An empty landing commit (one parent, its parent's tree, a subject starting
+``Land ``) was never handed off: wherever a stamp is evidence (the
+candidate's, the moved-from commit's, a stack top's, and in ``verify``), it
+is followed down to the first commit below it that is not one, whose stamp
 stands for it (E131).
 
-``verify`` (decision E131) checks that the landing commit changes no file,
-carries its trailers and is in the phase branch on the remote, and stands
-on the run it landed on: the newest
+``verify`` of a landing with a ``Handoff-stamp`` trailer checks that the
+landing commit changes no file, carries its trailers and is in the phase
+branch on the remote, and that the stamped commit has a passing stamp here
+and the landing's tree. A stacked landing stands on its own candidate's
+stamp, else on the stamp of the stack top it landed with. No CI run is
+read. On a failure it prints how to revert the fast-forward.
+
+A landing made before the rule names no stamp, and ``verify`` reads CI
+for it as it did then (decision E131): it stands on the run it landed on,
+the newest
 gating run on the candidate (the landing commit's parent), or, for a moved
 landing, on its ``Moved-from`` commit, whose tree must be the landing's.
 That run must be green; a red one fails, and a cancelled or unfinished one
@@ -118,14 +122,13 @@ On a failure it prints how to revert the fast-forward and changes
 nothing: it never reverts by itself.
 
 ``--moved-from X`` (decision E130, the owner's of 2026-10-14) lands a
-candidate C on X's reviews and X's green run, with no reviewer re-run and
-no new CI, when C is X moved over landing commits only. Every check above
+candidate C on X's reviews and X's handoff stamp, with no reviewer re-run
+and no new handoff, when C is X moved over landing commits only. Every check above
 still applies to C (the branches, the lane and its commits' ownership,
 the worktree and HEAD, the descent from the phase head H, the checkpoint,
 and, at landing, the protected paths, the atomic push and the read-back),
-but the review and CI checks are made for X in C's place: two reviews
-naming X and the newest gating run on X's exact SHA green, checked
-first. Then, with B the merge base of X and H, it refuses, naming the
+but the review and stamp checks are made for X in C's place: two reviews
+naming X and a passing handoff stamp on X, checked first. Then, with B the merge base of X and H, it refuses, naming the
 condition, unless:
 
 - same code: C's tree is X's;
@@ -143,10 +146,10 @@ condition, unless:
 - no merge in ``B..X``, ``B..H`` or ``H..C``.
 
 X that is C itself, or is already in the phase branch, is refused. The
-landing commit names X, X's green run by id and SHA, and that C was moved
-over landing commits only, and adds the trailers ``Moved-from`` (X) and
-``Moved-from-run`` (the run's id); ``verify`` stands on X's newest gating
-run, which must be green, when X's tree is the landing's.
+landing commit names X, X's stamp, and that C was moved over landing
+commits only, and adds the trailers ``Moved-from`` (X) and
+``Handoff-stamp`` (X's); ``verify`` stands on X's stamp when X's tree is
+the landing's.
 
 ``--dry-run`` makes every check, prints the landing commit it would make,
 and commits and pushes nothing.
@@ -169,6 +172,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import commit_msg  # noqa: E402
+import handoff  # noqa: E402
 import judging  # noqa: E402
 from phases import (  # noqa: E402
     ENVIRONMENT,
@@ -830,55 +834,21 @@ def skip_shaped(tools: Tools, sha: str) -> bool:
 
 
 def tested_commit(tools: Tools, sha: str) -> str:
-    """``sha``, or, when CI leaves out its jobs, the first commit below it
-    whose jobs CI runs: the same tree, so its run is the evidence."""
+    """``sha``, or, when it is an empty landing commit, the first commit
+    below it that is none: the same tree, so its stamp (or, for a landing
+    made before the stamp rule, its run) is the evidence."""
     while skip_shaped(tools, sha):
         sha = tools.git('rev-parse', f'{sha}^').strip()
     return sha
 
 
 def below(sha: str, tested: str) -> str:
-    """How a refusal names the commit whose run stands for ``sha``."""
+    """How a refusal names the commit whose evidence stands for ``sha``."""
     if tested == sha:
         return ''
     return (
-        f' (the first commit below {sha[:12]} that is no empty landing '
-        'commit, whose runs CI leaves out)'
+        f' (the first commit below {sha[:12]} that is no empty landing commit)'
     )
-
-
-def check_candidate_ci(
-    tools: Tools, candidate: str, what: str = 'the candidate'
-) -> dict[str, object]:
-    """The newest gating run on ``candidate``'s exact SHA, when it is
-    green; ``what`` names the commit in a refusal (the moved-from commit,
-    under ``--moved-from``). An empty landing commit's run tested nothing
-    (E131), so for one the first commit below it that is none stands."""
-    tested = tested_commit(tools, candidate)
-    what = what + below(candidate, tested)
-    candidate = tested
-    runs = runs_on(tools, candidate)
-    if not runs:
-        raise Refusal(
-            f'no CI run on {what} {candidate[:12]} itself that is a '
-            'push to the phase branch or a topic branch under it (a pull '
-            "request's run skips the gate and does not count); push it and "
-            'let its run finish'
-        )
-    newest = runs[0]
-    if (
-        newest.get('status') != 'completed'
-        or newest.get('conclusion') != 'success'
-    ):
-        raise Refusal(
-            f'the newest CI run on {what} is not green ({describe(newest)}); '
-            'a cancelled, failed or unfinished run does not count. Wait for '
-            'or rerun it'
-        )
-    return newest
-
-
-# --- a candidate moved over landing commits (--moved-from) ------------------
 
 
 @dataclass
@@ -1184,10 +1154,55 @@ def watch(tools: Tools, run_id: object) -> dict[str, object]:
     return json.loads(out)
 
 
+# --- the handoff stamp (the owner, 2026-10-22: CI off the landing path) -----
+
+#: The trailer naming the stamp a landing stands on: ``<sha> <time>``.
+STAMP_TRAILER = 'Handoff-stamp'
+STAMP_RULE = 'the owner\'s "2026-10-22 evening: CI off the landing path"'
+
+
+def stamp_on(tools: Tools, sha: str) -> tuple[str | None, str]:
+    """Why ``sha`` has no passing handoff stamp in this clone, or None; and
+    the stamp's time."""
+    done = tools.attempt(
+        'git', 'rev-parse', '--path-format=absolute', '--git-common-dir'
+    )
+    if done.returncode != 0 or not done.stdout.strip():
+        return (
+            "this clone's git directory, which holds the stamps, is unreadable",
+            '',
+        )
+    common = Path(done.stdout.strip())
+    why = handoff.stamp_problem(common, sha)
+    if why is not None:
+        return why, ''
+    stamp = json.loads(handoff.stamp_path(common, sha).read_text('utf-8'))
+    return None, str(stamp.get('time') or '')
+
+
+def check_stamp(
+    tools: Tools, candidate: str, what: str = 'the candidate'
+) -> tuple[str, str]:
+    """The commit whose stamp stands for ``candidate`` (an empty landing
+    commit's is the first commit below it that is none, E131) and the
+    stamp's time; refused, naming ``handoff.py``, without one."""
+    tested = tested_commit(tools, candidate)
+    what = what + below(candidate, tested)
+    why, when = stamp_on(tools, tested)
+    if why is not None:
+        raise Refusal(
+            f'{what} {tested[:12]} has no passing handoff stamp ({why}): a '
+            f'landing stands on the stamp and two approving reviews '
+            f'({STAMP_RULE}); run `scripts/rust_core/handoff.py run --package '
+            '<ID>` on it in this clone'
+        )
+    return tested, when
+
+
 # --- stacks and trains (T3.0, items 1 and 2) --------------------------------
 
-#: How many packages one CI run may cover: the owner's "every N packages
-#: (e.g. 4 packages) before CI is mandatory" (2026-10-21, evening).
+#: How many packages one stack lands at once, on its top's stamp: the
+#: owner's "every N packages (e.g. 4 packages)" (2026-10-21, evening).
 STACK_MAX = 4
 STACK_MAX_ENV = 'SDM_STACK_MAX'
 #: The trailer naming the phase head a stack was built on.
@@ -1526,14 +1541,14 @@ def land(
         raise Refusal(
             '--wait-for-landing-run is obsolete (decision E131): CI skips an '
             "empty landing commit's own runs, so that run would never come. "
-            "A landing stands on the candidate's green exact-SHA run: wait "
-            "for or rerun the candidate's run, then land without the flag"
+            "A landing stands on the candidate's handoff stamp and two "
+            'approving reviews: land without the flag'
         )
     check_branches(args.phase_branch, args.topic_branch)
     if args.stack and args.moved_from is not None:
         raise Refusal(
             '--stack and --moved-from: a stacked package stands on the '
-            "stack top's run, not a moved-from commit's; restack a moved "
+            "stack top's stamp, not a moved-from commit's; restack a moved "
             'stack with land.py restack'
         )
     title = one_line(args.title, '--title')
@@ -1561,7 +1576,7 @@ def land(
         if len(chain) >= limit:
             raise Refusal(
                 f'the stack already holds {len(chain)} packages, the most one '
-                f'CI run covers ({limit}; --max-stack or {STACK_MAX_ENV}); '
+                f'stack lands at once ({limit}; --max-stack or {STACK_MAX_ENV}); '
                 'land it with land.py stack-land first'
             )
         tail = chain[-1].sha if chain else base
@@ -1622,7 +1637,8 @@ def land(
     if args.moved_from is not None:
         moved = resolve(tools, args.moved_from, 'the moved-from commit')
         check_moved_from(tools, moved, candidate, base, args.phase_branch)
-    # The evidence: the candidate's own, or, moved, the moved-from commit's.
+    # The evidence: the candidate's own stamp, or, moved, the moved-from
+    # commit's.
     evidenced = moved or candidate
     what = 'the moved-from commit' if moved else 'the candidate'
     check_reviews(tools, args.review, evidenced, what)
@@ -1631,9 +1647,9 @@ def land(
             args, tools, out, title, package, candidate, base, tail, chain
         )
     if moved:
-        # E130's order: X's evidence (its reviews, then its run), then the
+        # E130's order: X's evidence (its reviews, then its stamp), then the
         # same tree, the same patches and only landing commits in X..H.
-        green = check_candidate_ci(tools, moved, what)
+        stamped, when = check_stamp(tools, moved, what)
         move = check_moved(tools, moved, candidate, base, args.phase_branch)
     out(f'ok   worktree clean, HEAD is the candidate {candidate}')
     out(f'ok   the candidate descends from {args.phase_branch} at {base}')
@@ -1658,24 +1674,23 @@ def land(
         )
     out(f'ok   {len(args.review)} reviews approve {evidenced[:12]}')
     if moved:
-        out(f'ok   {describe(green)}, on {moved[:12]} itself')
+        out(f'ok   the handoff stamp of {stamped[:12]} ({when})')
         evidence = (
-            f'Moved from {moved}: its run {green.get("databaseId")} is green '
-            f'at {green.get("headSha")} and both reviews approve it. The '
-            f'candidate {candidate} is that commit moved over landing commits '
-            "only (each commit with its partner's tree in order, only "
-            'landing commits added), so it lands on that evidence (E130); '
-            'this commit changes no file, so the phase branch moves at once '
-            'and CI skips its own runs (E43 (b), E131).'
+            f'Moved from {moved}: it has the handoff stamp of {stamped} '
+            f'({when}) and both reviews approve it. The candidate {candidate} '
+            'is that commit moved over landing commits only (each commit '
+            "with its partner's tree in order, only landing commits added), "
+            'so it lands on that evidence (E130); this commit changes no '
+            'file, so the phase branch moves at once (E43 (b)).'
         )
     else:
-        green = check_candidate_ci(tools, candidate)
-        out(f'ok   {describe(green)}, on {candidate[:12]} itself')
+        stamped, when = check_stamp(tools, candidate)
+        out(f'ok   the handoff stamp of {stamped[:12]} ({when})')
         evidence = (
-            f'Candidate run {green.get("databaseId")} green at '
-            f'{green.get("headSha") or candidate}; '
-            'this commit changes no file, so the phase branch moves at once '
-            'and CI skips its own runs (E43 (b), E131).'
+            f'Handoff stamp of {stamped} ({when}) and two approving '
+            'reviews, with no CI run required (the owner, 2026-10-22: CI '
+            'off the landing path); this commit changes no file, so the '
+            'phase branch moves at once (E43 (b)).'
         )
     reviewer = one_line(
         args.reviewer
@@ -1696,14 +1711,10 @@ def land(
         checkpoint=checkpoint,
         summary=summary.strip(),
         evidence=evidence,
-        moved=(
-            {
-                'Moved-from': moved,
-                'Moved-from-run': str(green.get('databaseId')),
-            }
-            if moved
-            else {}
-        ),
+        moved={
+            **({'Moved-from': moved} if moved else {}),
+            STAMP_TRAILER: f'{stamped} {when}'.strip(),
+        },
     )
     if args.dry_run:
         out('dry run: every check passed; the landing commit would read:\n')
@@ -1740,18 +1751,6 @@ def land(
             status = 1
         else:
             out(f'ok   {args.topic_branch} equals {args.phase_branch} at {sha}')
-    # One look, no wait: CI skips the landing commit's runs (E131), so they
-    # are listed for their links only.
-    listed: dict[str, dict[str, object]] = {}
-    for run in runs_on(tools, sha):
-        listed.setdefault(str(run.get('headBranch')), run)
-    for branch in (args.topic_branch, args.phase_branch):
-        run = listed.get(branch)
-        out(
-            f'run  {branch}: {run.get("databaseId")} {run.get("url")}'
-            if run
-            else f'run  {branch}: not yet listed (CI skips it, E131)'
-        )
     out(f'next: land.py verify {sha}')
     return status
 
@@ -1769,8 +1768,8 @@ def stack_one(
 ) -> int:
     """``land.py --stack``: the package's landing commit, made on the
     candidate locally with the stack's tail as its Base-SHA and
-    Checkpoint-SHA, pushing nothing (T3.0, item 2). Its CI evidence is the
-    stack top's run, which ``stack-land`` checks."""
+    Checkpoint-SHA, pushing nothing (T3.0, item 2). Its evidence is the
+    stack top's handoff stamp, which ``stack-land`` checks."""
     out(f'ok   worktree clean, HEAD is the candidate {candidate}')
     out(
         f'ok   the candidate descends from {args.phase_branch} at {base}'
@@ -1802,8 +1801,8 @@ def stack_one(
         ).strip(),
         evidence=(
             f'Stacked on {tail} ({len(chain)} package(s) below it, on the phase '
-            f'head {base}): it lands with its stack, on the green run of the '
-            "stack's top (land.py stack-land, T3.0), whose tree holds this "
+            f'head {base}): it lands with its stack, on the handoff stamp of '
+            "the stack's top (land.py stack-land, T3.0), whose tree holds this "
             "one's; this commit changes no file."
         ),
         moved=extra,
@@ -1819,7 +1818,7 @@ def stack_one(
     out(f'STACKED {sha}')
     out(
         f'next: build the next package on {sha[:12]}, or land the stack with '
-        f'`land.py stack-land --tip {sha}` once the run on its top is green'
+        f'`land.py stack-land --tip {sha}` once its top has a handoff stamp'
     )
     return 0
 
@@ -1829,9 +1828,8 @@ def stack_land(
 ) -> int:
     """``land.py stack-land --tip SHA``: the stack from the phase head up to
     TIP, a landing commit made by ``--stack``, lands in one atomic push on
-    one green run: the newest gating run on TIP's tested commit, whose tree
-    holds every package below (T3.0, item 2). A red run is reported by the
-    commits its failed jobs implicate, with the green prefix to land."""
+    one handoff stamp: TIP's tested commit's, whose tree holds every package
+    below (T3.0, item 2; the owner's "CI off the landing path")."""
     if args.topic_branch:
         check_branches(args.phase_branch, args.topic_branch)
     tip = resolve(tools, args.tip, 'the stack tip')
@@ -1849,8 +1847,8 @@ def stack_land(
     limit = stack_max(args.max_stack)
     if len(chain) > limit:
         raise Refusal(
-            f'the stack holds {len(chain)} packages, more than one CI run '
-            f'covers ({limit}); land a prefix (--tip a lower landing)'
+            f'the stack holds {len(chain)} packages, more than one stack '
+            f'lands at once ({limit}); land a prefix (--tip a lower landing)'
         )
     rules = judging_rules(tools, base)
     earlier = phase_first_landing(tools, args.remote, base) if rules else None
@@ -1868,76 +1866,13 @@ def stack_land(
         raise Refusal(
             'the stack breaks a landing rule:\n- ' + '\n- '.join(refused)
         )
-    tested = tested_commit(tools, tip)
-    runs = runs_on(tools, tested)
-    if not runs:
-        raise Refusal(
-            f"no CI run on the stack top {tested[:12]} (the last package's "
-            'top) that is a push under the phase branch; push it, for '
-            f'example `git push {args.remote} {tested}:refs/heads/'
-            f'{args.phase_branch}-{chain[-1].package.lower()}-stack`, and '
-            'let its run finish'
-        )
-    newest = runs[0]
-    if newest.get('status') != 'completed':
-        raise Refusal(
-            f'the run on the stack top is not finished ({describe(newest)}); '
-            'wait for it'
-        )
-    if newest.get('conclusion') == 'cancelled':
-        # Cancelled says nothing about the tree (Claude r1 P2-6): rerun.
-        raise Refusal(
-            f'the run on the stack top was cancelled ({describe(newest)}); '
-            f'nothing failed: rerun it (`gh run rerun {newest.get("databaseId")}`) '
-            'and land again'
-        )
-    if newest.get('conclusion') != 'success':
-        out(
-            f'RED  {describe(newest)} {newest.get("url")}, on the stack top {tested[:12]}'
-        )
-        report = implicated(tools, newest, base, tested)
-        first_bad: int | None = None
-        for job, hits in report:
-            if not hits:
-                out(
-                    f'IMPLICATED {job}: no stack commit by path or area; read '
-                    f'`gh run view {newest.get("databaseId")} --log-failed`'
-                )
-            for sha, subject in hits:
-                out(f'IMPLICATED {job}: {sha[:12]} {subject}')
-                for n, link in enumerate(chain):
-                    if tools.git_ok(
-                        'merge-base', '--is-ancestor', sha, link.sha
-                    ):
-                        first_bad = (
-                            n if first_bad is None else min(first_bad, n)
-                        )
-                        break
-        if first_bad is None:
-            out(
-                'no package is implicated by path; if the failure is drift or a '
-                f'flake, rerun it (`gh run rerun {newest.get("databaseId")} '
-                '--failed`) and land again'
-            )
-        elif first_bad == 0:
-            out(
-                f'the first package, {chain[0].package}, is implicated: no green prefix'
-            )
-        else:
-            prefix = chain[first_bad - 1]
-            ptested = tested_commit(tools, prefix.sha)
-            out(
-                f'PREFIX RUN: git push {args.remote} {ptested}:refs/heads/'
-                f'{args.phase_branch}-{prefix.package.lower()}-prefix'
-            )
-            out(f'GREEN PREFIX: land.py stack-land --tip {prefix.sha}')
-        return 1
+    tested, when = check_stamp(tools, tip, 'the stack top')
     out(
         f'ok   the stack of {len(chain)} on {args.phase_branch} at {base[:12]} is sound'
     )
     for link in chain:
         out(f'ok   {link.sha[:12]} Land {link.package} on {link.below[:12]}')
-    out(f'ok   {describe(newest)}, on the stack top {tested[:12]}')
+    out(f'ok   the handoff stamp of the stack top {tested[:12]} ({when})')
     if args.dry_run:
         out('dry run: nothing pushed')
         return 0
@@ -1994,7 +1929,8 @@ def restack(
     ``--move-branches`` each package's Topic-branch, where the remote holds
     the package's old top, moves to its new top as ``auto_land.py`` moves a
     rebased lane: the old tip kept under an archive branch, the branch
-    pushed with a lease on the old tip. The new top needs its own CI run."""
+    pushed with a lease on the old tip. The new top needs its own handoff
+    stamp."""
     tip = resolve(tools, args.tip, 'the stack tip')
     base = phase_head(tools, args.remote, args.phase_branch)
     old_base = tools.git('merge-base', tip, base).strip()
@@ -2114,7 +2050,7 @@ def restack(
     new_tip = moved[-1][2]
     out(f'RESTACKED {new_tip}')
     out(
-        f'next: push the new top {moved[-1][1][:12]} for its CI run, then '
+        f'next: run handoff.py on the new top {moved[-1][1][:12]}, then '
         f'`land.py stack-land --tip {new_tip}`'
     )
     return 0
@@ -2127,8 +2063,8 @@ def push(tools: Tools, undo: str, *args: str) -> None:
     # (check_lane_branch), the worktree records the title's package
     # (check_lane_package), and that package owns every commit since the
     # phase head (check_lane_commits). The hook's other checks (cargo,
-    # clippy, the scans) are the candidate's own CI run, which land.py
-    # requires green or waits for.
+    # clippy, the scans) are the candidate's handoff stamp, which land.py
+    # requires.
     try:
         tools.git('push', '--quiet', '--no-verify', *args)
     except Refusal as why:
@@ -2178,12 +2114,73 @@ def evidence_problem(
     return f'the newest CI run on {what} is {describe(newest)}', newest
 
 
+def stamp_evidence(
+    tools: Tools,
+    sha: str,
+    trailers: dict[str, str],
+    tree: str,
+    head: str,
+    evidenced: str,
+) -> tuple[str, str, str] | str | None:
+    """The stamp landing ``sha`` stands on, as (stamped commit, what, time);
+    a problem, when it names one that does not hold; None when it names
+    none and finds none (a landing made before the rule)."""
+    if STAMP_TRAILER in trailers:
+        named = (trailers[STAMP_TRAILER].split() or [''])[0]
+        stamped = resolve_quiet(tools, named)
+        if stamped is None:
+            return (
+                f'its {STAMP_TRAILER} commit {named[:12]} is not in this '
+                'repository; fetch it'
+            )
+        if (
+            tools.git('rev-parse', stamped + '^{tree}').strip() != tree
+            and 'Restacked-from' not in trailers
+        ):
+            return (
+                f"{sha[:12]}'s tree is not its stamped commit "
+                f"{stamped[:12]}'s, so that stamp is no evidence for it"
+            )
+        why, when = stamp_on(tools, stamped)
+        if why is not None:
+            return f'the stamp it names on {stamped[:12]}: {why}'
+        return stamped, 'the stamped commit', when
+    if STACK_BASE not in trailers or not evidenced:
+        return None
+    why, when = stamp_on(tools, evidenced)
+    if why is None:
+        return evidenced, 'its candidate', when
+    later = tools.git(
+        'log', '--first-parent', '--reverse', '--format=%H%x00%s',
+        f'{sha}..{head}',
+    ).splitlines()  # fmt: skip
+    for line in later:
+        above, _, subject = line.partition('\0')
+        if not LANDING_SUBJECT.match(subject):
+            continue
+        if trailers_of(tools, above).get(STACK_BASE) != trailers[STACK_BASE]:
+            continue
+        top = tested_commit(tools, above)
+        why, when = stamp_on(tools, top)
+        if why is None:
+            return top, f'the stack top (landed with {above[:12]})', when
+    return None
+
+
 def verify(
     args: argparse.Namespace, tools: Tools, out: Callable[[str], None]
 ) -> int:
-    """A landing commit verified on the run it landed on (decision E131).
+    """A landing commit verified on what it landed on.
 
-    CI skips an empty landing commit's own runs: its tree is the
+    A landing with a ``Handoff-stamp`` trailer (the owner's "CI off the
+    landing path", 2026-10-22) stands on that stamp: the stamped commit
+    must have a passing stamp in this clone and the landing's tree (a
+    restacked landing's moved by patch-id). A stacked landing without one
+    stands on its own candidate's stamp, else on the stamp of a later
+    landing of its stack (whose tree holds its own). No CI run is read.
+
+    A landing made before the rule names no stamp and is verified on the
+    run it landed on (decision E131). CI skips an empty landing commit's own runs: its tree is the
     candidate's, which ran on its exact SHA. So the evidence is the
     candidate's newest gating run (the landing commit's parent), or, for a
     moved landing (E130), the newest gating run on its ``Moved-from``
@@ -2231,6 +2228,23 @@ def verify(
             f'{sha[:12]} is not in {args.phase_branch} (at {head[:12]}); '
             'verify checks a landing the phase branch holds'
         )
+    stamped = stamp_evidence(tools, sha, trailers, tree, head, evidenced)
+    if stamped is not None:
+        if isinstance(stamped, str):
+            problems.append(stamped)
+        if problems:
+            out('VERIFY FAILED:\n- ' + '\n- '.join(problems))
+            out(revert_instructions(sha, base, args.phase_branch, args.remote))
+            return 1
+        assert not isinstance(stamped, str)
+        out(
+            f'ok   the handoff stamp of {stamped[1]} {stamped[0][:12]} ({stamped[2]})'
+        )
+        out(
+            f'VERIFIED {sha}: it landed on the handoff stamp of '
+            f'{stamped[0][:12]}, and it changes no file'
+        )
+        return 0
     if evidenced and not problems and STACK_BASE in trailers:
         # A stacked landing (T3.0) stands on its stack top's run when its
         # own candidate has none green: the first later landing of the same
@@ -2432,14 +2446,14 @@ def parser_for(command: str) -> argparse.ArgumentParser:
         parser.add_argument(
             '--moved-from',
             metavar='SHA',
-            help="land on this commit's reviews and green run: the "
+            help="land on this commit's reviews and handoff stamp: the "
             'candidate is it moved over landing commits only (E130)',
         )
         parser.add_argument(
             '--stack',
             action='store_true',
             help='add the package to the stack: make its landing commit on '
-            'the stack tail locally, needing no CI run and pushing nothing; '
+            'the stack tail locally, pushing nothing; '
             'land.py stack-land lands the stack (T3.0)',
         )
         parser.add_argument(
