@@ -22,6 +22,9 @@ these packages. All five distributions share one version and one entry.
   emulated, and each is smoke-tested on the architecture it targets. The
   release no longer builds aarch64 under QEMU, which also takes a privileged
   container image out of the release path.
+- The `duckdb` extra holds `duckdb` below 2. The 2.0 release warns on the
+  Arrow fetch the relational engine reads DuckDB tables through, and this
+  release is tested against 1.5.
 
 ## 1.0.0 - 2026-10-15
 
