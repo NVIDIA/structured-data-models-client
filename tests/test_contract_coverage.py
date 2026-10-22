@@ -127,6 +127,13 @@ def build(repo: Path) -> tuple[Path, str]:
         if source.is_file():
             (repo / name).parent.mkdir(parents=True, exist_ok=True)
             (repo / name).write_bytes(source.read_bytes())
+    # The client tests the manifests claim a path by (``tests``, rule 4
+    # from T3.2), which the copy's tree must define as the candidate's does.
+    for manifest in (PYTHON, JAVA):
+        text = (ROOT / manifest).read_text(encoding='utf-8')
+        for name in sorted(set(re.findall(r'([\w./-]+\.py)::', text))):
+            (repo / name).parent.mkdir(parents=True, exist_ok=True)
+            (repo / name).write_bytes((ROOT / name).read_bytes())
     landed = commit(
         repo,
         'Land T1.14: the start',

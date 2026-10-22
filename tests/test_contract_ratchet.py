@@ -21,6 +21,7 @@ from __future__ import annotations
 import copy
 import importlib.util
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -131,6 +132,17 @@ def build(repo: Path) -> tuple[Path, str]:
         if source.is_file():
             (repo / name).parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, repo / name)
+    # The client tests the scope manifests claim a path by (``tests``,
+    # coverage's rule 4 from T3.2), which the copy's tree must define as the
+    # candidate's does.
+    for manifest in sorted(
+        repo.glob('docs/design/rust-core/phase-*/scope-*.yaml')
+    ):
+        text = manifest.read_text(encoding='utf-8')
+        for name in sorted(set(re.findall(r'([\w./-]+\.py)::', text))):
+            if (ROOT / name).is_file():
+                (repo / name).parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(ROOT / name, repo / name)
     ratchet_file = repo / 'scripts/rust_core/ratchet.py'
     kept = ratchet_file.read_bytes()
     ratchet_file.unlink()
