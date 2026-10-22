@@ -882,6 +882,21 @@ def _zone_problems(where: str, statements: list[str]) -> list[str]:
     ]
 
 
+#: A zoned timestamp in a statement: its values read in the session's zone.
+_ZONED = re.compile(
+    r'timestamptz|timestamp\s+with\s+time\s+zone', re.IGNORECASE
+)
+
+
+def _unzoned(where: str, statements: list[str]) -> list[str]:
+    r"""``where``, when its statements hold a zoned timestamp and none sets
+    the zone with ``SET GLOBAL TimeZone`` (C18, T3.2)."""
+    zoned = any(_ZONED.search(each) for each in statements)
+    if zoned and not any(_GLOBAL_ZONE.match(each) for each in statements):
+        return [f'{where}: zoned timestamps with no zone set']
+    return []
+
+
 def test_a_case_sets_its_time_zone_for_every_cursor() -> None:
     # The source reads through cursors, which take the process's local zone
     # unless the database's is set: a session SET applies to the setup's
@@ -911,8 +926,33 @@ def test_a_case_sets_its_time_zone_for_every_cursor() -> None:
                 problems += _zone_problems(
                     f'{path.name} {probe["id"]} {runner}', setup
                 )
+    # C18 (T3.2): a base setting the zone sets it for every cursor too, and
+    # a case holding zoned timestamps sets the zone, so its answers never
+    # depend on the recorder's.
+    bases = run_python.load_bases()
+    for name, statements in bases.items():
+        problems += _zone_problems(f'base {name}', statements)
+    for case, _ in run_python.load_cases([CASES]):
+        problems += _unzoned(
+            case['id'],
+            [*bases[case['input']['base']], *case['input'].get('setup', [])],
+        )
     assert problems == []
     assert named, 'no case names the zone: the check reads nothing'
+    assert any(
+        _ZONED.search(each)
+        for case, _ in run_python.load_cases([CASES])
+        for each in case['input'].get('setup', [])
+    ), 'no case holds zoned timestamps: the C18 rule reads nothing'
+    assert _unzoned('seed', ['ALTER TABLE orders ALTER ts TYPE TIMESTAMPTZ'])
+    assert _unzoned('seed', ["SELECT TIMESTAMP WITH TIME ZONE '2024-01-01'"])
+    assert not _unzoned(
+        'seed',
+        [
+            "SET GLOBAL TimeZone = 'UTC'",
+            'ALTER TABLE orders ALTER ts TYPE TIMESTAMPTZ',
+        ],
+    )
     # Seeded: every other way to name it fails, and the global form passes.
     for statement in (
         "SET TimeZone = 'America/New_York'",
