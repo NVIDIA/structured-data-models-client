@@ -9,13 +9,6 @@
   "rust:the_memory_provider_answers_column_ranges_over_every_row",
   "py:test_t33_l0_deps_passes_with_the_stand_in_in_the_workspace",
   "py:test_t33_ci_s_leg_jobs_run_and_judge_each_warehouse_leg",
-  "py:test_t33_the_numeric_spelling_cases_run_on_ci_s_postgres_service",
-  "py:test_t33_pytest_timeout_is_pinned_wherever_it_is_installed",
-  "py:test_t33_no_step_marks_the_test_kit_s_sources_newer",
-  "py:test_t33_the_engine_job_s_comments_say_what_happened",
-  "py:test_t33_the_skip_step_reads_only_push_runs",
-  "py:test_t33_the_phase_predicate_lets_only_phase_branches_through",
-  "py:test_t33_ci_sets_a_process_time_zone",
   "py:test_t33_no_vector_sets_its_zone_per_connection",
   "py:test_t33_a_difference_on_one_warehouse_leg_stops_the_stamp"
  ],
