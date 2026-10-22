@@ -457,17 +457,38 @@ def step_fails_before(
 
 
 def step_affected(root: Path, touched: list[str], python: str) -> Step:
+    """Every suite ``affected.py`` names: the pytest files in one run, two
+    workers a file each when pytest-xdist is there (the brief's ``-n 2``),
+    then each other suite in turn."""
     step = Step('affected')
     suites = affected.suites(touched)
     if not suites:
         step.notes.append('no suite reads the changed files')
-    for suite in suites:
+    prefix = affected.PYTEST
+    files = [s[len(prefix) :] for s in suites if s[: len(prefix)] == prefix]
+    others = [s for s in suites if s[: len(prefix)] != prefix]
+    batches: list[tuple[str, list[str]]] = []
+    if files:
+        flat = [f for group in files for f in group]
+        workers = (
+            ['-n', '2', '--dist', 'loadfile']
+            if run([python, '-c', 'import xdist'], root).returncode == 0
+            else []
+        )
+        batches.append(
+            (
+                f'pytest on {len(flat)} test file(s)',
+                [python, *prefix[1:], *workers, *flat],
+            )
+        )
+    for suite in others:
         argv = [
             python if part == 'python3' and n == 0 else part
             for n, part in enumerate(suite)
         ]
+        batches.append((' '.join(suite), argv))
+    for shown, argv in batches:
         done = run(argv, root)
-        shown = ' '.join(suite)
         if done.returncode != 0:
             step.problems.append(
                 f'{shown} failed:\n' + tail(done.stdout + done.stderr)

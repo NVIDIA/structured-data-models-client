@@ -1253,10 +1253,7 @@ def stack_chain(
     oldest first, and what is wrong with them as a stack: each one empty,
     with ``Reviewed-by`` and ``Protected-paths``, its ``Base-SHA`` and
     ``Checkpoint-SHA`` the landing before it (the phase head for the
-    first), and every commit between them owned by its package. An earlier
-    landing of the same package left on a lane (the obsolete
-    ``--wait-for-landing-run``), whose Base-SHA is in the phase branch
-    below ``base``, is not a stack's and is left to ``landing_problem``."""
+    first), and every commit between them owned by its package."""
     out = tools.git(*where, 'log', '--format=%H%x00%s%x1e', f'{base}..{tip}')
     listed = []
     for entry in out.split('\x1e'):
