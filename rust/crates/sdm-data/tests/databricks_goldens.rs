@@ -129,6 +129,82 @@ const GOLDENS: goldens::Goldens = &[
             "SELECT `user_id`\nFROM `main`.`shop`.`users`\nTABLESAMPLE (100.0 PERCENT) REPEATABLE (42)\nWHERE `user_id` IS NOT NULL\nLIMIT 10000",
         ],
     ),
+    (
+        r##"{"part":"tables","request":"describe","tables":[]}"##,
+        &[
+            "\n                    SELECT table_name\n                    FROM information_schema.tables\n                    WHERE table_schema = current_schema()\n                      AND table_type != 'METRIC_VIEW'\n                    ",
+        ],
+    ),
+    (
+        r##"{"part":"tables","request":"describe","tables":[{"source":["main","shop","users"]},{"source":["main","shop","Orders"]}]}"##,
+        &[
+            "SELECT t.table_name\nFROM `main`.information_schema.tables t\nWHERE t.table_schema = lower(?)\n  AND t.table_name = lower(?)\nUNION ALL\nSELECT t.table_name\nFROM `main`.information_schema.tables t\nWHERE t.table_schema = lower(?)\n  AND t.table_name = lower(?)",
+        ],
+    ),
+    (
+        r##"{"columns":["order_id","ts"],"filters":[{"column":"ts","filter":"not_null"}],"limit":null,"request":"scan","table":{"source":["main","shop","orders"]}}"##,
+        &["SELECT `order_id`, `ts` FROM `main`.`shop`.`orders` WHERE `ts` IS NOT NULL"],
+    ),
+    (
+        r##"{"columns":["user_id","age","country"],"key":["user_id"],"request":"lookup","seeds":{"attachment":2,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["main","shop","users"]}}"##,
+        &[
+            "WITH TMP AS (\n  SELECT pos AS __KUMO_BATCH__, col AS __KUMO_ID__\n  FROM posexplode(from_json(?, 'array<bigint>'))\n)\nSELECT TMP.__KUMO_BATCH__ AS `__kumo_batch__`, `user_id`, `age`, `country`, COUNT(*) OVER (PARTITION BY TMP.__KUMO_BATCH__) AS `__kumo_matches__`\nFROM TMP\nJOIN `main`.`shop`.`users`\n  ON `user_id` = TMP.__KUMO_ID__\nQUALIFY ROW_NUMBER() OVER (PARTITION BY TMP.__KUMO_BATCH__ ORDER BY `user_id`) = 1",
+        ],
+    ),
+    (
+        r##"{"columns":["order_id","user_id","price","ts"],"key":["user_id"],"order":[{"as_timestamp":true,"column":"ts","descending":true,"nulls_last":false},{"as_timestamp":false,"column":"order_id","descending":false,"nulls_last":false}],"per_seed":32,"request":"neighbors","seeds":{"attachment":3,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}},{"name":"time","nullable":false,"type":{"type":"timestamp","unit":"ns","zone":null}},{"name":"start","nullable":false,"type":{"type":"timestamp","unit":"ns","zone":null}}]},"table":{"source":["main","shop","orders"]},"window":{"column":"ts","lower":{"inclusive":false,"seed_column":"start"},"upper":{"inclusive":true,"seed_column":"time"}}}"##,
+        &[
+            "WITH TMP AS (\n  SELECT pos AS __KUMO_BATCH__, col.`key` AS __KUMO_ID__, col.`time` AS `__KUMO_TIME__`, col.`start` AS `__KUMO_START__`\n  FROM posexplode(from_json(?, 'array<struct<`key`:bigint,`time`:string,`start`:string>>'))\n)\nSELECT TMP.__KUMO_BATCH__ AS `__kumo_batch__`, `order_id`, `user_id`, `price`, `ts`\nFROM TMP\nJOIN `main`.`shop`.`orders`\n  ON `user_id` = TMP.__KUMO_ID__\n AND `ts` <= TMP.`__KUMO_TIME__`\n AND `ts` > TMP.`__KUMO_START__`\nWHERE `ts` <= (SELECT MAX(`__KUMO_TIME__`) FROM TMP)\n  AND `ts` > (SELECT MIN(`__KUMO_START__`) FROM TMP)\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY TMP.__KUMO_BATCH__\n  ORDER BY `ts` DESC, `order_id`\n) <= 32\nORDER BY TMP.__KUMO_BATCH__, `ts` DESC, `order_id`",
+        ],
+    ),
+    (
+        r##"{"columns":["ts"],"key":["user_id"],"order":null,"per_seed":null,"request":"neighbors","seeds":{"attachment":4,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}},{"name":"end","nullable":false,"type":{"type":"timestamp","unit":"ns","zone":null}},{"name":"start","nullable":false,"type":{"type":"timestamp","unit":"ns","zone":null}}]},"table":{"source":["main","shop","orders"]},"window":{"column":"ts","lower":{"inclusive":false,"seed_column":"start"},"upper":{"inclusive":true,"seed_column":"end"}}}"##,
+        &[
+            "WITH TMP AS (\n  SELECT pos AS __KUMO_BATCH__, col.`key` AS __KUMO_ID__, col.`end` AS `__KUMO_END__`, col.`start` AS `__KUMO_START__`\n  FROM posexplode(from_json(?, 'array<struct<`key`:bigint,`end`:string,`start`:string>>'))\n)\nSELECT TMP.__KUMO_BATCH__ AS `__kumo_batch__`, `ts`\nFROM TMP\nJOIN `main`.`shop`.`orders`\n  ON `user_id` = TMP.__KUMO_ID__\n AND `ts` <= TMP.`__KUMO_END__`\n AND `ts` > TMP.`__KUMO_START__`\nWHERE `ts` <= (SELECT MAX(`__KUMO_END__`) FROM TMP)\n  AND `ts` > (SELECT MIN(`__KUMO_START__`) FROM TMP)",
+        ],
+    ),
+    (
+        r##"{"columns":["user_id"],"filters":[{"column":"user_id","filter":"not_null"}],"key":["user_id"],"n":1,"request":"sample_entities","rows":30000000,"seed":{"t":"u64","v":"42"},"table":{"source":["main","shop","users"]}}"##,
+        &[
+            "SELECT `user_id`\nFROM `main`.`shop`.`users`\nTABLESAMPLE (9.999999999999999e-06 PERCENT) REPEATABLE (42)\nWHERE `user_id` IS NOT NULL\nLIMIT 1",
+        ],
+    ),
+    (
+        r##"{"columns":["user_id"],"filters":[{"column":"user_id","filter":"not_null"}],"key":["user_id"],"n":1,"request":"sample_entities","rows":1000,"seed":{"t":"u64","v":"42"},"table":{"source":["main","shop","users"]}}"##,
+        &[
+            "SELECT `user_id`\nFROM `main`.`shop`.`users`\nTABLESAMPLE (0.30000000000000004 PERCENT) REPEATABLE (42)\nWHERE `user_id` IS NOT NULL\nLIMIT 1",
+        ],
+    ),
+    (
+        r##"{"columns":["user_id"],"filters":[{"column":"user_id","filter":"not_null"}],"key":["user_id"],"n":5,"request":"sample_entities","rows":10,"seed":{"t":"u64","v":"42"},"table":{"source":["main","shop","users"]}}"##,
+        &[
+            "SELECT `user_id`\nFROM `main`.`shop`.`users`\nTABLESAMPLE (100.0 PERCENT) REPEATABLE (42)\nWHERE `user_id` IS NOT NULL\nLIMIT 5",
+        ],
+    ),
+    (
+        r##"{"columns":["user_id"],"filters":[{"column":"user_id","filter":"not_null"}],"key":["user_id"],"n":2,"request":"sample_entities","rows":100,"seed":{"t":"u64","v":"0"},"table":{"source":["main","shop","users"]}}"##,
+        &[
+            "SELECT `user_id`\nFROM `main`.`shop`.`users`\nTABLESAMPLE (6.0 PERCENT) REPEATABLE (0)\nWHERE `user_id` IS NOT NULL\nLIMIT 2",
+        ],
+    ),
+    (
+        r##"{"columns":["user_id"],"filters":[{"column":"user_id","filter":"not_null"}],"key":["user_id"],"n":2,"request":"sample_entities","rows":100,"seed":{"t":"i64","v":"-1"},"table":{"source":["main","shop","users"]}}"##,
+        &[
+            "SELECT `user_id`\nFROM `main`.`shop`.`users`\nTABLESAMPLE (6.0 PERCENT) REPEATABLE (-1)\nWHERE `user_id` IS NOT NULL\nLIMIT 2",
+        ],
+    ),
+    (
+        r##"{"columns":["user_id"],"filters":[{"column":"user_id","filter":"not_null"}],"key":["user_id"],"n":2,"request":"sample_entities","rows":100,"seed":{"t":"u64","v":"2147483649"},"table":{"source":["main","shop","users"]}}"##,
+        &[
+            "SELECT `user_id`\nFROM `main`.`shop`.`users`\nTABLESAMPLE (6.0 PERCENT) REPEATABLE (2147483649)\nWHERE `user_id` IS NOT NULL\nLIMIT 2",
+        ],
+    ),
+    (
+        r##"{"columns":["user_id"],"filters":[{"column":"user_id","filter":"not_null"}],"key":["user_id"],"n":7,"request":"sample_entities","rows":3,"seed":{"t":"u64","v":"42"},"table":{"source":["main","shop","users"]}}"##,
+        &[
+            "SELECT `user_id`\nFROM `main`.`shop`.`users`\nTABLESAMPLE (100.0 PERCENT) REPEATABLE (42)\nWHERE `user_id` IS NOT NULL\nLIMIT 7",
+        ],
+    ),
 ];
 
 /// The `databricks` dialect's choice, built from the contract's JSON so the
