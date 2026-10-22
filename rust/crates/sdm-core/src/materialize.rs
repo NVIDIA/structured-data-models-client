@@ -69,7 +69,7 @@ use arrow_array::types::{
 };
 use arrow_array::{Array, ArrayRef, RecordBatch, TimestampNanosecondArray, UInt32Array};
 use arrow_schema::{DataType, TimeUnit as ArrowUnit};
-use sdm_contract::catalog::{CatalogAnswer, IndexColumns};
+use sdm_contract::catalog::{CatalogAnswer, IndexCoverage};
 use sdm_contract::data::{
     AttachmentId, BATCH_COLUMN, DataRequest, DescribePart, Filter, IndexAdvice, KeySet,
     MATCHES_COLUMN, NullOrder, OptionalRequest, ProviderChoice, SEED_STORED_TIME, TableColumn,
@@ -1941,9 +1941,9 @@ async fn check_leading_columns(asker: &Asker, graph: &Graph) -> Result<(), CoreE
         };
         for index in indexes {
             let first = match index.columns {
-                IndexColumns::Resolved(columns) => columns.into_iter().next(),
-                IndexColumns::Unresolved => None,
-                IndexColumns::Named(name) => {
+                IndexCoverage::Resolved(columns) => columns.into_iter().next(),
+                IndexCoverage::Unresolved => None,
+                IndexCoverage::Named(name) => {
                     // The index is its table's schema's object.
                     let mut relation = table.source.clone();
                     if let Some(last) = relation.source.last_mut() {
@@ -2044,7 +2044,7 @@ async fn check_single_columns(asker: &Asker, graph: &Graph) -> Result<(), CoreEr
         // Only an index over exactly one column, resolved, serves a read;
         // one the reader could not resolve serves none, as the reference
         // reads no column from it.
-        let IndexColumns::Resolved(columns) = &index.columns else {
+        let IndexCoverage::Resolved(columns) = &index.columns else {
             continue;
         };
         let [column] = columns.as_slice() else {

@@ -1,7 +1,7 @@
 {
  "format": "sdm-contract-vectors/1",
  "contract": 26,
- "about": "Accept and refuse vectors of contract v26's table source (T2.1b; design choices 1 and 12): Relation { source: Vec<String> } in place of each data request's table string and each schema table's source string, and multi-column keys in neighbors and lookup. Each vector names the $defs definition it is an instance of. Both loaders read them: the Python one (tests/test_t21b_contract_v26.py) validates each against sdm-contract-26.json, and the Rust one (sdm-contract's tests) deserializes each into the type of that name, an accepted one round-tripping to an equal value. A vector marked v25 is a v25 message, valid under sdm-contract-25.json, which v26 no longer reads (host and core ship together, decision H25). How many parts a dialect takes is the dialect's to refuse by name (rule relation), not the contract's, so no vector here holds a relation of no part or of more than three.",
+ "about": "Accept and refuse vectors of contract v26's table source (T2.1b; design choices 1 and 12): Relation { source: Vec<String> } in place of each data request's table string and each schema table's source string, and multi-column keys in neighbors and lookup. Each vector names the $defs definition it is an instance of. Both loaders read them: the Python one (tests/test_t21b_contract_v26.py) validates each against sdm-contract-26.json, and the Rust one (sdm-contract's tests) deserializes each into the type of that name, an accepted one round-tripping to an equal value. A vector marked v25 is a v25 message, valid under sdm-contract-25.json, which v26 no longer reads (host and core ship together, decision H25). How many parts a dialect takes is the dialect's to refuse by name (rule relation), not the contract's, so no vector here holds a relation of no part or of more than three. From T3.4 (carried row P2-T2.1b-1) it also holds the index_columns part and the leading_column index advice, which v26 already reads, and v28's provider capabilities a built-in dialect alone declared before, refused through v27.",
  "accept": [
   {
    "name": "scan reads a one-part relation",
@@ -389,6 +389,34 @@
     "primary_key": [],
     "time_column": null
    }
+  },
+  {
+   "name": "describe asks one index's columns by a relation (index_columns)",
+   "definition": "DataRequest",
+   "value": {
+    "request": "describe",
+    "tables": [
+     {
+      "source": [
+       "orders_by_day"
+      ]
+     }
+    ],
+    "part": "index_columns"
+   }
+  },
+  {
+   "name": "a provider whose index advice reads an index's leading column",
+   "definition": "ProviderCapabilities",
+   "value": {
+    "optional": [],
+    "max_keys_per_request": null,
+    "sampling": "seeded_stable",
+    "max_seed": 9223372036854775807,
+    "text_times": null,
+    "null_order": "first",
+    "index_advice": "leading_column"
+   }
   }
  ],
  "refuse": [
@@ -760,6 +788,34 @@
     "columns": [],
     "primary_key": [],
     "time_column": null
+   }
+  },
+  {
+   "name": "an index advice no provider declares",
+   "definition": "ProviderCapabilities",
+   "value": {
+    "optional": [],
+    "max_keys_per_request": null,
+    "sampling": "seeded_stable",
+    "max_seed": 9223372036854775807,
+    "text_times": null,
+    "null_order": "first",
+    "index_advice": "leading_columns"
+   }
+  },
+  {
+   "name": "a provider declaring that it compares stored times (contract v28 adds it)",
+   "definition": "ProviderCapabilities",
+   "refused_through": 27,
+   "value": {
+    "optional": [],
+    "max_keys_per_request": null,
+    "sampling": "seeded_stable",
+    "max_seed": 9223372036854775807,
+    "text_times": null,
+    "null_order": "first",
+    "index_advice": "leading_column",
+    "compares_stored_times": true
    }
   }
  ]

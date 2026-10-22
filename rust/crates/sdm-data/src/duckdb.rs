@@ -45,7 +45,7 @@
 //! through [`Duckdb`]'s hooks (T3.18): only what is DuckDB's own is here.
 
 use arrow_array::RecordBatch;
-use sdm_contract::catalog::{CatalogAnswer, CatalogIndex, IndexColumns, KeyKind};
+use sdm_contract::catalog::{CatalogAnswer, CatalogIndex, IndexCoverage, KeyKind};
 use sdm_contract::data::{
     BATCH_COLUMN, DataRequest, DescribePart, Determinism, ExpectedSchema, IndexAdvice,
     MATCHES_COLUMN, NullOrder, ProviderCapabilities, Relation, SEED_BATCH, SEED_KEY_TYPE,
@@ -247,19 +247,19 @@ fn key_kind(constraint_type: &str) -> KeyKind {
 /// `['(COALESCE(b, \',\'))']`, `['"a,b"']`), so its pieces would be a
 /// guess, and the reference reads no column from it either. Text not in
 /// brackets is unresolved too, the reference reading none.
-pub(crate) fn indexed_columns(expressions: &str) -> IndexColumns {
+pub(crate) fn indexed_columns(expressions: &str) -> IndexCoverage {
     let expression = expressions.trim();
     let Some(inner) = expression
         .strip_prefix('[')
         .and_then(|e| e.strip_suffix(']'))
     else {
-        return IndexColumns::Unresolved;
+        return IndexCoverage::Unresolved;
     };
     let inner = inner.trim();
     if inner.contains(',') {
-        return IndexColumns::Unresolved;
+        return IndexCoverage::Unresolved;
     }
-    IndexColumns::Resolved(vec![unquoted(inner)])
+    IndexCoverage::Resolved(vec![unquoted(inner)])
 }
 
 /// One expression with its single quotes, then its double quotes, taken

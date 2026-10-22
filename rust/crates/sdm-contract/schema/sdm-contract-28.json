@@ -4737,7 +4737,7 @@
           "const": "indexes"
         },
         {
-          "description": "The columns of one index, named by a relation as a table is (an\nindex is its schema's object): one row per column, in the index's\norder, its name, null for an expression. Asked for an index whose\ncolumns the catalog's list of keys or indexes does not give\n(SQLite's `index_info`, as the reference reads it).",
+          "description": "The columns of one index, named by a relation as a table is (an\nindex is its schema's object): one row per column, in the index's\norder, its name, null for an expression. Asked for an index whose\ncolumns the catalog's list of keys or indexes does not give\n(SQLite's `index_info`, as the reference reads it). A host provider\nis never asked it: its `keys` and `indexes` answers give each key's\nand index's columns ([`catalog_columns`]), so no key or index it\nlists is read by its name.",
           "type": "string",
           "const": "index_columns"
         },
