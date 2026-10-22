@@ -440,6 +440,31 @@ def test_a_batched_part_is_worded_by_its_part_s_kind() -> None:
     assert 'one per step' in said('forecast')
 
 
+def test_the_unread_columns_are_named_table_dot_column() -> None:
+    # The core names each unread column by its table and its name apart
+    # (contract v28, carried row P2-MID2-3); the words join them as the
+    # reference does, in the order the core gives.
+    def texts(*values: str) -> list[dict[str, str]]:
+        return [{'t': 'utf8', 'v': value} for value in values]
+
+    warning = {
+        'code': 'COLUMNS_UNREAD',
+        'message': 'm',
+        'fields': {
+            'variant': {'t': 'utf8', 'v': 'several'},
+            'tables': texts('items', 'users'),
+            'columns': texts('note', 'bio'),
+            'stypes': texts('text'),
+        },
+    }
+    assert errors.said(warning) == (
+        'items.note, users.bio are typed text, which this model does not '
+        'read, so the request is answered without them and they contribute '
+        'nothing to the prediction. Type a column categorical if its values '
+        'are labels rather than prose, or leave it out to say so.'
+    )
+
+
 def test_a_failed_call_s_counts_reach_the_caller_s_exception() -> None:
     # A ranking's questions answered before a call failed are counted, never
     # kept (T2.8 fix 4): the count reaches whatever the transport raised,
