@@ -262,7 +262,8 @@ impl Asker {
     }
 
     /// Whether the run's provider compares a window's bounds with the
-    /// stored text of the window's column (`DataLayer::compares_stored_times`);
+    /// stored text of the window's column
+    /// (`ProviderCapabilities::compares_stored_times`);
     /// `false` for an operation that names no provider.
     pub fn compares_stored_times(&self) -> bool {
         self.data
@@ -271,7 +272,7 @@ impl Asker {
     }
 
     /// Whether the run's provider orders a seeded sample by the key's data
-    /// type (`DataLayer::samples_by_key_dtype`); `false` for an operation
+    /// type (`ProviderCapabilities::samples_by_key_dtype`); `false` for an operation
     /// that names no provider.
     pub fn samples_by_key_dtype(&self) -> bool {
         self.data
@@ -280,7 +281,8 @@ impl Asker {
     }
 
     /// Whether the reference reads the run's provider's floats with a NaN
-    /// missing and `-0.0` as `0.0` (`DataLayer::reads_nan_as_missing`);
+    /// missing and `-0.0` as `0.0`
+    /// (`ProviderCapabilities::reads_nan_as_missing`);
     /// `false` for an operation that names no provider.
     pub fn reads_nan_as_missing(&self) -> bool {
         self.data
@@ -613,9 +615,6 @@ pub struct Run {
     /// `None` once the run has finished, been cancelled or poisoned.
     body: Option<Body>,
     shared: Arc<Mutex<Shared>>,
-    /// The opaque vendor the run's provider hands over, as its data layer
-    /// declares it ([`DataAccess::opaque_vendor`]).
-    opaque_vendor: Option<&'static str>,
     /// The run's data access, which reads each admitted answer's values as
     /// the reference reads them (`DataAccess::conform`).
     data: Option<DataAccess>,
@@ -649,7 +648,6 @@ impl Run {
         F: Future<Output = Result<OperationResult, CoreError>> + Send + 'static,
     {
         let shared = Arc::new(Mutex::new(Shared::default()));
-        let opaque_vendor = data.as_ref().and_then(DataAccess::opaque_vendor);
         let access = data.clone();
         let body = make(Asker {
             shared: Arc::clone(&shared),
@@ -659,18 +657,17 @@ impl Run {
             state: State::Ready,
             body: Some(Box::pin(body)),
             shared,
-            opaque_vendor,
             data: access,
         }
     }
 
     /// The vendor of the opaque Arrow extension types the run's provider
-    /// hands over, as its data layer declares it; `None` for a provider
+    /// hands over, as it declares it; `None` for a provider
     /// that declares none, or an operation that names no provider. The host
     /// layer reads an opaque column by its vendor's layout only when the
     /// column names this vendor (register P1B-43).
-    pub fn opaque_vendor(&self) -> Option<&'static str> {
-        self.opaque_vendor
+    pub fn opaque_vendor(&self) -> Option<&str> {
+        self.data.as_ref().and_then(DataAccess::opaque_vendor)
     }
 
     /// The run's attachment numbering; see [`AttachmentIds`].

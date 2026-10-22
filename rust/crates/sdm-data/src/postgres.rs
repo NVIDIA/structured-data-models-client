@@ -198,6 +198,12 @@ pub(crate) fn capabilities() -> ProviderCapabilities {
         index_advice: None,
         // Every optional request is rendered: none falls back.
         fallback: None,
+        opaque_vendor: None,
+        compares_stored_times: false,
+        samples_by_key_dtype: false,
+        // The reference reads Postgres's rows as Python objects into
+        // NumPy-backed floats (T2.12).
+        reads_nan_as_missing: true,
     }
 }
 

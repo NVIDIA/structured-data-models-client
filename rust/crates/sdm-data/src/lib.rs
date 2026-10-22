@@ -144,35 +144,6 @@ impl DataLayer for Data {
         }
     }
 
-    fn opaque_vendor(&self, provider: &ProviderChoice) -> Option<&'static str> {
-        match provider {
-            ProviderChoice::Host { .. } => None,
-            ProviderChoice::Sql { dialect } => match rendered(dialect).ok()? {
-                Rendered::Duckdb => Some(duckdb::OPAQUE_VENDOR),
-                Rendered::Sqlite => None,
-                Rendered::Postgres | Rendered::Databricks => None,
-            },
-        }
-    }
-
-    fn compares_stored_times(&self, provider: &ProviderChoice) -> bool {
-        match provider {
-            ProviderChoice::Host { .. } => false,
-            ProviderChoice::Sql { dialect } => {
-                matches!(rendered(dialect), Ok(Rendered::Sqlite))
-            }
-        }
-    }
-
-    fn samples_by_key_dtype(&self, provider: &ProviderChoice) -> bool {
-        match provider {
-            ProviderChoice::Host { .. } => false,
-            ProviderChoice::Sql { dialect } => {
-                matches!(rendered(dialect), Ok(Rendered::Sqlite))
-            }
-        }
-    }
-
     fn conform(
         &self,
         provider: &ProviderChoice,
@@ -208,15 +179,6 @@ impl DataLayer for Data {
                 databricks::bound_keys(schema, batches)
             }
             _ => Ok(None),
-        }
-    }
-
-    fn reads_nan_as_missing(&self, provider: &ProviderChoice) -> bool {
-        match provider {
-            ProviderChoice::Host { .. } => false,
-            ProviderChoice::Sql { dialect } => {
-                matches!(rendered(dialect), Ok(Rendered::Postgres))
-            }
         }
     }
 

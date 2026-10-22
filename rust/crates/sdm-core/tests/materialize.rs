@@ -152,6 +152,10 @@ fn host() -> ProviderChoice {
             derived_relations: false,
             neighbor_lookback: false,
             sample_rows: false,
+            opaque_vendor: None,
+            compares_stored_times: false,
+            samples_by_key_dtype: false,
+            reads_nan_as_missing: false,
             optional: BTreeSet::from([
                 OptionalRequest::TimeBounds,
                 OptionalRequest::SampleEntities,

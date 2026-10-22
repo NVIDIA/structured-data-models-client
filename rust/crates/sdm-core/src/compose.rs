@@ -73,30 +73,30 @@ impl DataAccess {
     }
 
     /// The vendor of the opaque Arrow extension types the run's provider
-    /// hands over, as the data layer declares it for the provider
-    /// (`DataLayer::opaque_vendor`).
-    pub fn opaque_vendor(&self) -> Option<&'static str> {
-        self.layer.opaque_vendor(&self.provider)
+    /// hands over, as it declares it
+    /// ([`ProviderCapabilities::opaque_vendor`]).
+    pub fn opaque_vendor(&self) -> Option<&str> {
+        self.capabilities.opaque_vendor.as_deref()
     }
 
     /// Whether the run's provider compares a window's bounds with the
-    /// stored text of the window's column, as the data layer says for it
-    /// (`DataLayer::compares_stored_times`).
+    /// stored text of the window's column
+    /// ([`ProviderCapabilities::compares_stored_times`]).
     pub fn compares_stored_times(&self) -> bool {
-        self.layer.compares_stored_times(&self.provider)
+        self.capabilities.compares_stored_times
     }
 
     /// Whether the run's provider orders a seeded sample by the key's data
-    /// type, as the data layer says for it (`DataLayer::samples_by_key_dtype`).
+    /// type ([`ProviderCapabilities::samples_by_key_dtype`]).
     pub fn samples_by_key_dtype(&self) -> bool {
-        self.layer.samples_by_key_dtype(&self.provider)
+        self.capabilities.samples_by_key_dtype
     }
 
     /// Whether the reference reads the run's provider's floats with a NaN
-    /// missing and `-0.0` as `0.0`, as the data layer says for it
-    /// (`DataLayer::reads_nan_as_missing`).
+    /// missing and `-0.0` as `0.0`
+    /// ([`ProviderCapabilities::reads_nan_as_missing`]).
     pub fn reads_nan_as_missing(&self) -> bool {
-        self.layer.reads_nan_as_missing(&self.provider)
+        self.capabilities.reads_nan_as_missing
     }
 
     /// An admitted answer of the run's provider, its values read as the

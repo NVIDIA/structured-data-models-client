@@ -34,7 +34,7 @@
 //!
 //! SQLite stores a time as the text it was written as, and the reference
 //! compares a window's bounds with that text, spelled as one stored value
-//! is (`_time_spelling`): the layer says so ([`compares_stored_times`]),
+//! is (`_time_spelling`): its capabilities say so (`compares_stored_times`),
 //! the core reads the value and names it on each bound's seed column
 //! ([`SEED_STORED_TIME`]), and the rendering spells the bound from its
 //! ingested text the same way.
@@ -192,6 +192,14 @@ pub(crate) fn capabilities() -> ProviderCapabilities {
         index_advice: Some(IndexAdvice::LeadingColumn),
         // Every optional request is rendered: none falls back.
         fallback: None,
+        opaque_vendor: None,
+        // SQLite has no time type: the reference spells each window bound
+        // as one stored value is spelled (`_time_spelling`).
+        compares_stored_times: true,
+        // The reference's SQLite sampler hashes an integer key and the
+        // `rowid` otherwise.
+        samples_by_key_dtype: true,
+        reads_nan_as_missing: false,
     }
 }
 
