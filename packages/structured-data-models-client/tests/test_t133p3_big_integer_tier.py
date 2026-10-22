@@ -43,7 +43,7 @@ from sdm_client import (
     StructuredDataError,
     _routing,
 )
-from sdm_client._rust import schema as _rust_schema
+from sdm_client._rust import providers as _rust_providers
 
 ROOT = Path(__file__).resolve().parents[3]
 CORE = ','.join(_routing.FROM_SOURCE_DUCKDB + _routing.MATERIALIZE_DUCKDB)
@@ -130,7 +130,7 @@ def test_a_hugeint_widened_after_describe_is_refused_by_name() -> None:
     _refused_out_of_range(schema, 'f')
 
 
-class _FailingRanges(_rust_schema.DuckDBProvider):
+class _FailingRanges(_rust_providers.DuckDBProvider):
     r"""The DuckDB provider, failing every ``column_ranges`` it is asked."""
 
     asked: list[dict[str, Any]] = []
@@ -150,7 +150,7 @@ def test_a_failed_column_ranges_leaves_the_preview_s_tier_and_refuses_later(
     # and materialize reads the wide rows.
     assert _materialized(_described(_connection(witness)))._payloads
     _FailingRanges.asked = []
-    monkeypatch.setattr(_rust_schema, 'DuckDBProvider', _FailingRanges)
+    monkeypatch.setattr(_rust_providers, 'DuckDBProvider', _FailingRanges)
     schema = _described(_connection(witness))
     assert any('f' in r.get('columns', []) for r in _FailingRanges.asked), (
         _FailingRanges.asked

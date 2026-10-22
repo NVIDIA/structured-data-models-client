@@ -517,6 +517,7 @@ class PredictiveQuery:
             details = getattr(error, 'details', None) or {}
             if (
                 _alone(asked)
+                and asked.refusal is not None
                 and error.code == 'INVALID_REQUEST'
                 and details.get('rule') is None
                 and details.get('field') == 'query'
@@ -639,44 +640,51 @@ class PredictiveQuery:
         r"""Parse and validate the query.
 
         On the core route (S0, the private routing seam) the core decides
-        validity, and an accepted query is resolved by the old validator for
-        the old materializer, which also checks that the two agree.
+        validity (P2-MID2-1, design choice 9). A query it accepts that a
+        relational materialize gathers on the core is the core's to resolve
+        as it gathers it: :class:`~sdm_client._rust.materialize.Unresolved`,
+        the text alone, so the old validator is never reached on the core
+        route. Only where the old materializer gathers it is the accepted
+        query resolved by the old validator, for that materializer, which
+        also checks that the two agree.
 
-        Where a relational materialize runs on the core over a schema
-        holding a column the old validator's language cannot name (a dot, a
-        backtick or a line break in its name), a query the old validator
-        refuses is the core's to resolve as it gathers it (KO2-36, T2.18):
-        :class:`~sdm_client._rust.materialize.Unresolved`, holding the old
-        validator's refusal for a call only the old route answers.
+        On the old route the old validator decides. Where a relational
+        materialize runs on the core over a schema holding a column the
+        old validator's language cannot name (a dot, a backtick or a line
+        break in its name), a query the old validator refuses is the core's
+        to resolve as it gathers it (KO2-36, T2.18): ``Unresolved``, holding
+        the old validator's refusal for a call only the old route answers.
         """
-        from predictive_query import validate
-
         from sdm_client import _routing
+
+        core = _routing.route(_routing.S0) == 'core'
+        gathered_on_the_core = profile == RELATIONAL and _routing.on_the_core(
+            self.schema.source, _routing.MATERIALIZE
+        )
         from sdm_client.schema import (
             names_a_query_cannot_say,
             to_schema_definition,
         )
 
-        core = _routing.route(_routing.S0) == 'core'
         definition = to_schema_definition(self.schema)
-        alone = (
-            profile == RELATIONAL
-            and _routing.on_the_core(self.schema.source, _routing.MATERIALIZE)
-            and names_a_query_cannot_say(self.schema)
-        )
         if core:
             from sdm_client._rust import s0
 
             accepted, messages = s0.validate(self.text, definition, profile)
             if not accepted:
                 raise self._refusal(messages, profile)
-            if not alone:
-                return s0.shadow(self.text, definition, profile)
+            if gathered_on_the_core:
+                from sdm_client._rust.materialize import Unresolved
+
+                return Unresolved(self.text, None)
+            return s0.shadow(self.text, definition, profile)
+        from predictive_query import validate
+
         old, response = validate(self.text, definition, profile)
         if old is not None and response.ok:
             return old
         reasons = [error.message for error in response.errors]
-        if alone:
+        if gathered_on_the_core and names_a_query_cannot_say(self.schema):
             from sdm_client._rust.materialize import Unresolved
 
             return Unresolved(self.text, self._refusal(reasons, profile))

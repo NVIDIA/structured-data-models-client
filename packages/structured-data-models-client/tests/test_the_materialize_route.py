@@ -620,19 +620,62 @@ def test_tables_named_are_sampled_as_the_old_route_samples_them(
     assert core.task == old.task
 
 
-def test_a_schema_not_described_on_the_core_has_no_core_route(
+def test_a_schema_not_described_on_the_core_is_described_and_materialized(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # The reference materializes any Schema (T3.8, P2-T2.16-11): a schema
+    # the core has no description of is described on the core then, and
+    # asks what the same schema described on the core asks.
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
+        described = Schema.from_source(DuckDBSource(_connection()))
+        schema = described.snapshot()
+        # As a schema the old route described: no description of the core's.
+        schema._core_description = None
+        asked = [
+            PredictiveQuery(QUERY, held)
+            .materialize(indices=[0, 1], anchor_time=ANCHOR, random_seed=7)
+            ._payloads
+            for held in (schema, described)
+        ]
+    assert asked[0] == asked[1]
+    # The description made for the call is not kept: the schema is as built.
+    assert schema._core_description is None
+
+
+def test_on_the_core_route_the_core_chooses_the_validator(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # P2-MID2-1 (T3.8, design choice 9): with S0 and materialize on the
+    # core, the core validates a query and resolves it as it gathers it;
+    # the old validator is never asked, for a query accepted or refused.
+    import predictive_query
+
+    monkeypatch.setenv(_routing.ENVIRONMENT, ','.join([CORE, *_routing.S0]))
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
         schema = Schema.from_source(DuckDBSource(_connection()))
-    # As a schema the old route described: no description of the core's.
-    schema._core_description = None
-    with pytest.raises(_routing.RouteError):
-        PredictiveQuery(QUERY, schema).materialize(
-            indices=[0, 1], anchor_time=ANCHOR
+        control = PredictiveQuery(QUERY, schema).materialize(
+            indices=[0, 1], anchor_time=ANCHOR, random_seed=7
         )
+
+    def unreachable(*_: object) -> Any:
+        raise AssertionError('the old validator was asked on the core route')
+
+    monkeypatch.setattr(predictive_query, 'validate', unreachable)
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        asked = PredictiveQuery(QUERY, schema).materialize(
+            indices=[0, 1], anchor_time=ANCHOR, random_seed=7
+        )
+        with pytest.raises(StructuredDataError) as refused:
+            PredictiveQuery(
+                'PREDICT SUM(orders.nope, 0, 30, days) FOR EACH users.user_id',
+                schema,
+            ).materialize(indices=[0, 1], anchor_time=ANCHOR)
+    assert asked._payloads == control._payloads
+    assert refused.value.code == 'INVALID_REQUEST'
 
 
 def test_the_largest_declared_seed_reaches_the_core_exactly() -> None:

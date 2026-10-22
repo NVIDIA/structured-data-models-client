@@ -60,7 +60,7 @@ impl DataLayer for HostLayer {
     fn capabilities(&self, provider: &ProviderChoice) -> Result<ProviderCapabilities, CoreError> {
         match provider {
             ProviderChoice::Host { capabilities } => Ok(capabilities.clone()),
-            ProviderChoice::Sql { dialect } => Err(no_dialect(dialect)),
+            ProviderChoice::Sql { dialect, .. } => Err(no_dialect(dialect)),
         }
     }
 
@@ -73,7 +73,7 @@ impl DataLayer for HostLayer {
             ProviderChoice::Host { .. } => Ok(FetchPlan::Host {
                 expect: request.expected(),
             }),
-            ProviderChoice::Sql { dialect } => Err(no_dialect(dialect)),
+            ProviderChoice::Sql { dialect, .. } => Err(no_dialect(dialect)),
         }
     }
 
@@ -83,7 +83,7 @@ impl DataLayer for HostLayer {
         provider: &ProviderChoice,
         batches: &[RecordBatch],
     ) -> Result<CatalogAnswer, CoreError> {
-        if let ProviderChoice::Sql { dialect } = provider {
+        if let ProviderChoice::Sql { dialect, .. } = provider {
             return Err(no_dialect(dialect));
         }
         let DataRequest::Describe { part, .. } = request else {

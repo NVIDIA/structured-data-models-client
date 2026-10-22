@@ -50,10 +50,7 @@ import warnings
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
-from sdm_client._rust import codec
-from sdm_client._rust.providers.duckdb import DuckDBProvider
-from sdm_client._rust.providers.postgres import PostgresProvider
-from sdm_client._rust.providers.sqlite import SqliteProvider
+from sdm_client._rust import codec, providers
 from sdm_client._rust.run import run
 from sdm_client.errors import StructuredDataError
 
@@ -71,8 +68,34 @@ def from_source(
     relationships: Sequence[Relationship] | None,
     check_keys: bool,
 ) -> Schema:
-    r"""The schema of the tables named, or of every table, of the DuckDB
-    or SQLite ``source``, described on the core.
+    r"""The schema of the tables named, or of every table, of the DuckDB,
+    SQLite or Postgres ``source``, described on the core (:func:`describe`).
+    """
+    return build(
+        cls,
+        source,
+        describe(
+            source,
+            tables,
+            primary_keys=primary_keys,
+            time_columns=time_columns,
+            relationships=relationships,
+            check_keys=check_keys,
+        ),
+    )
+
+
+def describe(
+    source: Any,
+    tables: Mapping[str, str] | None,
+    *,
+    primary_keys: Mapping[str, str | Sequence[str]] | None,
+    time_columns: Mapping[str, str | None] | None,
+    relationships: Sequence[Relationship] | None,
+    check_keys: bool,
+) -> dict[str, Any]:
+    r"""The core's ``SourceDescription`` of the tables named, or of every
+    table, of the DuckDB, SQLite or Postgres ``source``.
 
     Each key and time column is written as the contract's ``Given``: a
     value the contract's type cannot hold (a number, a set, a mapping) as
@@ -135,20 +158,30 @@ def from_source(
             for link in links
         ]
         spec['relationships'] = given
-    choice, provider = _provider(source)
+    choice, provider = providers.for_source(source)
     operation = {
         'op': 'describe_source',
         'provider': choice,
         'source': 1,
         'check_keys': bool(check_keys),
     }
-    finished = run(
-        operation,
-        {1: codec.attachment(spec)},
-        provider=provider,
-    )
-    described = json.loads(finished.take(finished.result['description']))
-    return build(cls, source, described)
+    try:
+        finished = run(
+            operation,
+            {1: codec.attachment(spec)},
+            provider=provider,
+        )
+    except StructuredDataError as refused:
+        if (refused.details or {}).get('rule') != 'no_tables':
+            raise
+        # The source as the reference names it, which only this host holds
+        # (`engine_graph`'s refusal of a source with no table).
+        raise StructuredDataError(
+            f'{source!r} holds no table to describe',
+            code=refused.code,
+            details=refused.details,
+        ) from None
+    return json.loads(finished.take(finished.result['description']))
 
 
 def build(cls: type[Schema], source: Any, described: dict[str, Any]) -> Schema:
@@ -231,16 +264,3 @@ def build(cls: type[Schema], source: Any, described: dict[str, Any]) -> Schema:
     # received, whether it may be null, whether the source keys it.
     schema._core_description = described
     return schema
-
-
-def _provider(source: Any) -> tuple[dict[str, Any], Any]:
-    r"""The provider choice a run over ``source`` names, and the provider
-    answering its fetches: its backend's built-in SQL dialect, DuckDB's,
-    SQLite's (T2.2) or Postgres's (T2.3), on its connection."""
-    backend = source.backend
-    made = {
-        'duckdb': DuckDBProvider,
-        'sqlite': SqliteProvider,
-        'postgres': PostgresProvider,
-    }[backend]
-    return {'provider': 'sql', 'dialect': backend}, made(source.connection)

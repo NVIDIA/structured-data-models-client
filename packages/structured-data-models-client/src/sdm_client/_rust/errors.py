@@ -307,7 +307,62 @@ _SCHEMA_GIVEN = {
         'target_column)'
     ),
 }
+#: A key ``describe_source`` refuses (T3.8), in the reference's words
+#: (``_check_source_keys``: ``_not_unique_enough``, ``_a_key_missing_values``
+#: and ``_SKIP_THE_CHECK``), the key named as ``_the_key_of`` names it
+#: (:func:`_derived` fills ``key``, ``where``, ``them`` and
+#: ``backend``).
+_SKIP_THE_CHECK = (
+    'Name another key with primary_keys=, or pass check_keys=False to skip '
+    '(one full scan per table).'
+)
+_NOT_UNIQUE = (
+    '{key} is not unique enough to identify a row: {repeats:,} of {rows:,} '
+    'rows repeat a value already used, e.g. {example!r}. '
+)
+_MISSING_VALUES = (
+    '{key} has {missing:,} row(s) with no value{where} so those rows cannot '
+    'be identified; fill or drop them before using {them} as a primary key. '
+)
+#: Where the reference's engine says a table it cannot find is not
+#: (``TableNotFoundError``), by the database the core names.
+_DATABASES = {
+    'duckdb': 'DuckDB database',
+    'sqlite': 'SQLite database',
+    'postgres': 'PostgreSQL database',
+    'databricks': 'remote data backend',
+    'snowflake': 'remote data backend',
+}
+#: The reference's names of the databases (``_BACKEND_NAMES``), by the
+#: database the core names.
+_BACKEND_NAMES = {
+    'databricks': 'Databricks',
+    'snowflake': 'Snowflake',
+    'postgres': 'PostgreSQL',
+    'duckdb': 'DuckDB',
+    'sqlite': 'SQLite',
+}
 WORDED: dict[tuple[str, ...], str] = {
+    **{
+        ('INVALID_REQUEST', field, 'key_not_unique'): _NOT_UNIQUE
+        + _SKIP_THE_CHECK
+        for field in ('primary_keys', 'keys')
+    },
+    **{
+        ('INVALID_REQUEST', field, 'key_not_unique', 'declared_unenforced'): (
+            _NOT_UNIQUE + '{backend} does not enforce declared keys. '
+        )
+        + _SKIP_THE_CHECK
+        for field in ('primary_keys', 'keys')
+    },
+    # A table named that the source does not hold, as the reference's
+    # engine says it (`TableNotFoundError`), named as the source reads it.
+    ('INVALID_REQUEST', 'tables', 'no_such_table'): (
+        "Table '{shown_source}' does not exist in the {held_in}"
+    ),
+    ('INVALID_REQUEST', 'primary_keys', 'key_missing_values'): (
+        _MISSING_VALUES + _SKIP_THE_CHECK
+    ),
     **{
         ('INVALID_REQUEST', field, rule): said
         for field in _SCHEMA_FIELDS
@@ -564,6 +619,14 @@ WORDED: dict[tuple[str, ...], str] = {
         'to gather. An empty batch is still answered: build it as '
         'Request(predict=<no rows>) and predict() returns the empty result '
         'without sending'
+    ),
+    # An entity to score that more than one row holds, in the reference's
+    # words (`_refuse_an_id_scored_twice`), its values the first five.
+    ('INVALID_REQUEST', 'indices', 'held_by_several_rows'): (
+        "Cannot score {shown}{more}: more than one row of table '{table}' "
+        "holds {which} of '{key}', so which row is meant would be a guess. "
+        'The source does not enforce the key; keep one row per value, or key '
+        'the table on columns that identify a row.'
     ),
     ('INVALID_REQUEST', 'indices', 'not_in_table'): (
         '"The primary keys {keys!r} do not exist in the \'{table}\' table"'
@@ -948,17 +1011,6 @@ SAID: dict[str, dict[str | None, str]] = {
     # The client's notices of what a request leaves out, which the core
     # gives from T1.28a, in the client's words (SDMWarning, as the client
     # shows them).
-    # A ranking's candidates left out, unscored (T2.8): `predict` words it
-    # naming each candidate as the caller gave it; these words, by the
-    # candidates' positions among those given, are for a call that has no
-    # candidates to name.
-    'CANDIDATES_UNSCORED': {
-        None: (
-            'the candidates at positions {candidates!c} among those given are '
-            'left out of this ranking, unscored: the context sampled for each '
-            'holds one answer only.'
-        )
-    },
     'CONTEXT_CAPPED': {
         None: (
             '{cap:,} context examples were gathered, which is all this route '
@@ -1340,8 +1392,61 @@ def error_from_core(
         with contextlib.suppress(
             KeyError, IndexError, TypeError, ValueError, AttributeError
         ):
-            sentence = _Words().format(template, **details)
+            sentence = _Words().format(
+                template, **{**details, **_derived(details)}
+            )
     return _instance(cls, sentence, code, details)
+
+
+def _derived(details: dict[str, Any]) -> dict[str, Any]:
+    r"""What a refusal says beyond its fields, as the reference says it:
+    a table the source does not hold, by its name there and the source's
+    database; the entities to score that several rows hold, the first five and how
+    many more; and of a key ``describe_source`` refuses,
+    one column as ``table.column``, several as ``_the_key_of`` names them,
+    the columns missing a value (one key's column, or part of a composite
+    one), the repeated value of several columns as the tuple it shows, and
+    the source's database by name. Nothing for any other refusal."""
+    if details.get('rule') == 'no_such_table':
+        held_in = _DATABASES.get(str(details.get('database')))
+        if held_in is None:
+            return {}
+        return {
+            'shown_source': '.'.join(map(str, details.get('source') or ())),
+            'held_in': held_in,
+        }
+    if details.get('reason') == 'held_by_several_rows':
+        values = list(details.get('keys') or ())
+        return {
+            'shown': ', '.join(repr(value) for value in values[:5]),
+            'more': f' and {len(values) - 5:,} more' if len(values) > 5 else '',
+            'which': 'each of these values'
+            if len(values) > 1
+            else 'this value',
+        }
+    if details.get('rule') not in {'key_not_unique', 'key_missing_values'}:
+        return {}
+    table = details.get('table')
+    said: dict[str, Any] = {}
+    columns = details.get('columns')
+    if 'column' in details:
+        said['key'] = f'{table}.{details["column"]}'
+        said['where'] = f', in {details["column"]!r},'
+        said['them'] = 'it'
+    elif isinstance(columns, list):
+        said['key'] = (
+            f'the primary key of {table!r}, '
+            + _Words().convert_field(columns, 'l')
+            + ','
+        )
+        said['where'] = ' in part of it,'
+        said['them'] = 'them'
+    if isinstance(details.get('example'), list):
+        said['example'] = tuple(details['example'])
+    database = details.get('database')
+    if isinstance(database, str):
+        said['backend'] = _BACKEND_NAMES.get(database, database)
+    return said
 
 
 def _detail(value: Any) -> Any:

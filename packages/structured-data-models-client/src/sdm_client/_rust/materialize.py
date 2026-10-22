@@ -57,11 +57,7 @@ import math
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
-from sdm_client._routing import RouteError
-from sdm_client._rust import codec
-from sdm_client._rust.providers.duckdb import DuckDBProvider
-from sdm_client._rust.providers.postgres import PostgresProvider
-from sdm_client._rust.providers.sqlite import SqliteProvider
+from sdm_client._rust import codec, providers
 from sdm_client._rust.run import run
 from sdm_client.errors import StructuredDataError
 
@@ -130,18 +126,36 @@ def description(schema: Schema) -> tuple[dict[str, Any], dict[str, Any]]:
     a schema changed in a way it does not follow yet (``schema_edited``);
     this module checks none of it.
 
+    A schema the core has not described (built by hand, unpickled, or
+    described on the old route) is described now, its tables by their
+    source names with the keys and time columns it holds and no link
+    inferred or keys counted, since the schema as it stands decides those;
+    as the reference reads the source's catalog for any schema it
+    materializes (``query.py``'s ``materialize``). That description is not
+    kept: the schema is the caller's, as built.
+
     Raises:
-        RouteError: The schema was not described on the core, so what the
-            source said of its columns is not known here.
+        StructuredDataError: The core's refusal of a table the source does
+            not hold, as describing it refuses one.
     """
     from sdm_client.schema import _as_key_tuple
 
     described = getattr(schema, '_core_description', None)
+    # The data type of each column as the source holds it, for a schema
+    # described now: the reference reads each column of a table in place as
+    # the source holds it, whatever type the schema wrote for it
+    # (`_copy_for_one_gather`), so a type written by hand is no edit.
+    read: dict[tuple[str, str], str] = {}
     if described is None:
-        raise RouteError(
-            'materialize on the core needs a schema Schema.from_source '
-            'described on the core'
-        )
+        from sdm_client.materializers.sources import wire_dtype
+
+        described = _described_now(schema)
+        read = {
+            (described_table['name'], column['name']): dtype
+            for described_table in described['tables']
+            for column in described_table['columns']
+            if (dtype := wire_dtype(column['dtype'])) is not None
+        }
     tables = []
     for name, table in schema.tables.items():
         key = table.primary_key
@@ -152,7 +166,7 @@ def description(schema: Schema) -> tuple[dict[str, Any], dict[str, Any]]:
                 'columns': [
                     {
                         'name': column_name,
-                        'dtype': column.dtype,
+                        'dtype': read.get((name, column_name), column.dtype),
                         'stype': str(column.stype),
                         'stype_before_key': (
                             None
@@ -365,6 +379,36 @@ def _missing(value: Any) -> bool:
     )
 
 
+def _described_now(schema: Schema) -> dict[str, Any]:
+    r"""The core's description of ``schema``'s tables in its source, for a
+    schema the core has not described (:func:`description`)."""
+    import warnings
+
+    from sdm_client._rust.schema import describe
+
+    with warnings.catch_warnings():
+        # What describing says of the tables was said, or not, when the
+        # schema was built; the schema as it stands is what is asked.
+        warnings.simplefilter('ignore')
+        return describe(
+            schema.source,
+            {
+                name: getattr(table, 'source_name', name)
+                for name, table in schema.tables.items()
+            },
+            primary_keys={
+                name: table.primary_key
+                for name, table in schema.tables.items()
+                if table.primary_key is not None
+            },
+            time_columns={
+                name: table.time_column for name, table in schema.tables.items()
+            },
+            relationships=[],
+            check_keys=False,
+        )
+
+
 def gather(
     materializer: RelationalMaterializer,
     query: ValidatedPredictiveQuery,
@@ -399,7 +443,7 @@ def gather(
     schema = materializer.schema
     anchor = options.get('anchor_time')
     described, held = description(schema)
-    choice, provider = _provider(schema.source)
+    choice, provider = providers.for_source(schema.source)
     operation = {
         'op': 'materialize',
         'provider': choice,
@@ -516,15 +560,17 @@ def gather(
 
 
 class Unresolved:
-    r"""A query only the core resolves: one naming a column whose name holds
-    a dot, a backtick or a line break, which the old validator refuses and
-    the core holds apart from its table (KO2-36, T2.18). It is gathered as
-    the caller wrote it, and the core answers what it resolved of it
-    (``Materialized.query``, contract v26), a ranking's questions and a
-    forecast's steps among it (T2.8). ``refusal`` is the old validator's,
-    said of a query the core does not resolve either."""
+    r"""A query the core resolves as it gathers it: one the core validated
+    (S0 on the core, P2-MID2-1), or, on the old validator's route, one
+    naming a column whose name holds a dot, a backtick or a line break,
+    which the old validator refuses and the core holds apart from its
+    table (KO2-36, T2.18). It is gathered as the caller wrote it, and the
+    core answers what it resolved of it (``Materialized.query``, contract
+    v26), a ranking's questions and a forecast's steps among it (T2.8).
+    ``refusal`` is the old validator's, said of a query the core does not
+    resolve either; ``None`` where the old validator was not asked."""
 
-    def __init__(self, text: str, refusal: StructuredDataError) -> None:
+    def __init__(self, text: str, refusal: StructuredDataError | None) -> None:
         self.text = text
         self.refusal = refusal
 
@@ -544,16 +590,3 @@ def asked(state: dict[str, Any]) -> tuple[bool, str]:
             code='INTERNAL_ERROR',
         )
     return bool(facts['windowed']), str(facts['entity_table'])
-
-
-def _provider(source: Any) -> tuple[dict[str, Any], Any]:
-    r"""The provider choice a run over ``source`` names, and the provider
-    answering its fetches: its backend's built-in SQL dialect, DuckDB's,
-    SQLite's (T2.2) or Postgres's (T2.3), on its connection."""
-    backend = source.backend
-    made = {
-        'duckdb': DuckDBProvider,
-        'sqlite': SqliteProvider,
-        'postgres': PostgresProvider,
-    }[backend]
-    return {'provider': 'sql', 'dialect': backend}, made(source.connection)

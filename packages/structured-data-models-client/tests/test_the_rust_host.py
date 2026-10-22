@@ -762,10 +762,16 @@ def test_a_warning_the_table_cannot_word_is_shown_in_the_core_s_sentence() -> (
         assert text.endswith('the core says this naming nothing'), text
 
 
-#: The core's warnings this host does not word, each with why: none. Every
-#: code and variant the core gives (`_native.WARNING_CODES`) is worded from
-#: `errors.SAID` (T1.23 fix 1, subagent P2-1).
-CORE_WORDED: dict[tuple[str, str | None], str] = {}
+#: The core's warnings this host does not word from `errors.SAID`, each
+#: with why. Every other code and variant the core gives
+#: (`_native.WARNING_CODES`) is worded from `errors.SAID` (T1.23 fix 1,
+#: subagent P2-1).
+CORE_WORDED: dict[tuple[str, str | None], str] = {
+    ('CANDIDATES_UNSCORED', None): (
+        'only predict gives it, and words it naming each candidate as the '
+        'caller gave it (_rust/predict.py, run(words=...)); P2-WR-8'
+    ),
+}
 
 
 def test_every_warning_the_core_gives_is_worded_here() -> None:

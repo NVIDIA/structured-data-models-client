@@ -407,6 +407,7 @@ fn at_the_sample(
 fn duckdb() -> ProviderChoice {
     ProviderChoice::Sql {
         dialect: Dialect::new("duckdb"),
+        namespace: Vec::new(),
     }
 }
 

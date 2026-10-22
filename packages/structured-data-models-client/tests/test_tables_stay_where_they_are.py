@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import uuid
 import warnings
 from pathlib import Path
@@ -368,7 +369,11 @@ def test_a_foreign_key_to_a_unique_column_keys_a_keyless_table(
     assert schema.relationships == [
         Relationship('sale', 'region_code', 'region', 'code')
     ]
-    messages = [str(warning.message) for warning in caught]
+    # The words after the core route's leading `[CODE] ` (E41(i), E59(d)).
+    messages = [
+        re.sub(r'^\[[A-Z][A-Z0-9_]*\] ', '', str(warning.message))
+        for warning in caught
+    ]
     assert (
         "sale.store_ref refers to store.ref, but the primary key of 'store' "
         "is 'store_id'. A relationship joins to a primary key, so none was "

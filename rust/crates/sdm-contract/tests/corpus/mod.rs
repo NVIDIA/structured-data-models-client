@@ -121,6 +121,7 @@ pub fn messages() -> Vec<ControlMessage> {
         start(Operation::DescribeSource(DescribeSource {
             provider: sdm_contract::data::ProviderChoice::Sql {
                 dialect: Dialect::new("duckdb"),
+                namespace: Vec::new(),
             },
             source: AttachmentId(1),
             check_keys: true,
@@ -133,6 +134,7 @@ pub fn messages() -> Vec<ControlMessage> {
         start(Operation::Materialize(Materialize {
             provider: sdm_contract::data::ProviderChoice::Sql {
                 dialect: Dialect::new("duckdb"),
+                namespace: Vec::new(),
             },
             schema: AttachmentId(1),
             held: Some(AttachmentId(5)),

@@ -87,6 +87,16 @@ def _missing_one() -> pd.DataFrame:
     return pd.concat([USERS, row], ignore_index=True)
 
 
+#: The code the core's route puts before a warning's words (decisions
+#: E41(i), E59(d)); the two routes are compared on the words after it.
+CORE_CODE = re.compile(r'^\[[A-Z][A-Z0-9_]*\] ')
+
+
+def _bare(message: object) -> str:
+    r"""A warning's words, without the core route's leading ``[CODE] ``."""
+    return CORE_CODE.sub('', str(message))
+
+
 Build = Callable[..., Any]
 
 
@@ -240,7 +250,7 @@ class _Outcome:
                 self.repeats = schema['users'].duplicate_keys
         self.said = sorted(
             {
-                _plain(str(warning.message))
+                _plain(_bare(warning.message))
                 for warning in caught
                 if re.search(
                     r'identifies a row|named like a key|no value',

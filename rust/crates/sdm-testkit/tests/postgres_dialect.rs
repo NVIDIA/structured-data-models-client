@@ -38,6 +38,7 @@ fn contract() -> PathBuf {
 fn postgres() -> ProviderChoice {
     ProviderChoice::Sql {
         dialect: Dialect::new("postgres"),
+        namespace: Vec::new(),
     }
 }
 

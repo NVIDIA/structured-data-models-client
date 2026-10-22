@@ -114,6 +114,7 @@ USING SAMPLE reservoir(10000 ROWS) REPEATABLE (42)"#,
 fn each_request_of_the_decimal_family_renders_its_pinned_statement() {
     let duckdb = ProviderChoice::Sql {
         dialect: Dialect::new("duckdb"),
+        namespace: Vec::new(),
     };
     assert!(!PINS.is_empty());
     for (written, pinned) in PINS {

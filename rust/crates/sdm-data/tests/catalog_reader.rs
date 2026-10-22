@@ -28,6 +28,7 @@ use sdm_data::Data;
 fn duckdb() -> ProviderChoice {
     ProviderChoice::Sql {
         dialect: Dialect::new("duckdb"),
+        namespace: Vec::new(),
     }
 }
 
@@ -399,6 +400,7 @@ fn an_answer_not_in_its_checked_shape_is_refused_not_a_panic() {
             &columns,
             &ProviderChoice::Sql {
                 dialect: Dialect::new("snowflake"),
+                namespace: Vec::new(),
             },
             &[],
         )

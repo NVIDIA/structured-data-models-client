@@ -4,24 +4,24 @@
   "files": {
     "packages/structured-data-models-client/src/sdm_client/_rust/schema.py": {
       "<module>": {
-        "fingerprint": "41e68d23ef7a7284103925b99590cb191584d1d96b307479e86b265efe6e1c69"
-      },
-      "_provider": {
-        "fingerprint": "f7de874335fc52bea7172736813770ceb2b7627b582e476bfc86e4e3525838bf"
+        "fingerprint": "771afcaa3264022d96218e4c061131b4e2072146ce76cb1caf6e87b9aa930771"
       },
       "build": {
         "fingerprint": "95ed8ad11c346cecb8754adab7335008e8d2f10148cc59d665c4d8b81db3e574"
       },
+      "describe": {
+        "fingerprint": "dd95f00ba1c6cb745147bb00b49ab6f50a0c9abd36884b1950c40112affbd220"
+      },
       "from_source": {
-        "fingerprint": "d6915ec041e144f68278b3b52371510fe998f06d4fc4d7c3fc2d71d03c13cae0"
+        "fingerprint": "2fdda776512991d110e224f5f6fda3e8a22c9098eeb808b497160503144f626e"
       }
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py": {
       "<module>": {
-        "fingerprint": "18e09b632e68e118dfc9a6be15d360cd52cf8ca28517ee7ebd12d4c6e5ef1ac6"
+        "fingerprint": "20c2349812ad78399dafa1d05164f832ff0466394d6618eac797afe3c7ef125c"
       },
       "Unresolved.__init__": {
-        "fingerprint": "c0b3ba4e9b03529f042be0997a497d6e8f69c45ce50b92ec1c529c60dd27365c"
+        "fingerprint": "3f98315e57241584d9f0e00542aa3619b3c77380a47576c9c2bbb86b4a19e260"
       },
       "Unresolved.to_string": {
         "fingerprint": "9185d2b2710c88a77a9c10ef628a6c4717ea6d2a51719d5d811c404f5e255765"
@@ -35,6 +35,9 @@
       "_context_anchor": {
         "fingerprint": "c94d62a7d024f1a909501507ef1afdcaa05cebe6c750f2a6342de3206aab7c0b"
       },
+      "_described_now": {
+        "fingerprint": "dbd088688dc0e6cf72ec9f1a66721db74680a3aec17e471951faa95621ad9c52"
+      },
       "_indices": {
         "fingerprint": "5f823fd5a856df6d4b3f2ca28d0ee23fa11662360a6ea7bf1ca74ea76374fece"
       },
@@ -44,9 +47,6 @@
       "_missing": {
         "fingerprint": "466127ee6c502f180f36fbe6b1e4750b86ffbce40dad1d2a16b53b2d79c117a0"
       },
-      "_provider": {
-        "fingerprint": "f7de874335fc52bea7172736813770ceb2b7627b582e476bfc86e4e3525838bf"
-      },
       "_text": {
         "fingerprint": "32485edb4f50fd57ef9c965f6d5eebcfdb8b2f520cb1c260b9cd8596a91390d5"
       },
@@ -54,10 +54,10 @@
         "fingerprint": "27071d5d7c40c941fde88fbaae8edfd183a63525a82b2eb927fc02c7029f481e"
       },
       "description": {
-        "fingerprint": "e8a27ee5705c5728f41e932b7996380ab3143f341fc1effd626e89057231ff44"
+        "fingerprint": "3469978d39aa49a28538b75fbd6ed2b83c1ac3ff558816b1ea3c0f14fad12768"
       },
       "gather": {
-        "fingerprint": "be5eedead2141905e274d7889f7c0f2c5299c89735d98a9fd66623508b8e13c4"
+        "fingerprint": "212727a172f3b29b80381de57b1c0fb1705f4c9287025ea9b9e790f76930c4de"
       }
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py": {
@@ -215,13 +215,16 @@
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py": {
       "<module>": {
-        "fingerprint": "9102e46cf4f5379c305695fc470dd517bd6a2de8a8f66249f0bbc3316a1ae883"
+        "fingerprint": "adeb7ee90b7503b1cac875f8882a3d64902f21f2c7053e9a7dedf2c8f49941bb"
       },
       "_Words.convert_field": {
         "fingerprint": "eb6ac343d2114984bb9b64652349aea1b0c0de4ccde38f032ef0297837b857f7"
       },
       "_as_timestamp": {
         "fingerprint": "135f7e24f53bb042be4a6fe1d87bea031748a770c1f97157867e498fc94698a5"
+      },
+      "_derived": {
+        "fingerprint": "75a814f061edbf6120f5b3bcc19279e2d0b81495e037fb2a844fe113905190c7"
       },
       "_detail": {
         "fingerprint": "7b79f1ba54d421fd211bc5960ee81ffee1a259354ddf3c7a020e5e1a8b8819c7"
@@ -245,7 +248,7 @@
         "fingerprint": "bab16a5a2cbd4d84fe03f98df8253362575c847df116129ff6af886a8564000e"
       },
       "error_from_core": {
-        "fingerprint": "0f90410dc266a29fd456374cfd376601ec504fdefcad66e0a595ac8cbf51f3a8"
+        "fingerprint": "86082eafa2ae0c56c12085453573f1bae08b54569c69877a83ec2860974b21cc"
       },
       "numpy_warns_on_cast_overflow": {
         "fingerprint": "d152c028f851318aa7d29ee83b460d95e35eae190dfc5df59bbea6fc0df046ea"
@@ -362,7 +365,7 @@
         "fingerprint": "bfc5f58a968e98f9e32d32d0297d562d784a54b37a8edd770e69ccf4f45e484e"
       },
       "PredictiveQuery._resolve": {
-        "fingerprint": "c93a40a3e16d71f9c5346e2b2baf9706e45bc30ad04639e4d08ff80328824a7c"
+        "fingerprint": "301547d4e1ba7f2346810d46f02eb495bc2554de7e355aa29c4ca982e3160272"
       },
       "PredictiveQuery._validate_materialize_args": {
         "fingerprint": "53b6ffb85f7d3f3f909709f14e3c82765e9043f6c179c43f2573ae8f828c0718"

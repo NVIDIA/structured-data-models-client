@@ -877,11 +877,39 @@ impl Dialect {
 /// The composition root's choice: a built-in SQL provider by dialect, which
 /// compiles each request to SQL the host runs, or a host provider that
 /// answers the typed requests itself.
+///
+/// A SQL provider's `namespace` (contract v28) is where the source's tables
+/// are, as the source was given it: the name parts before a table's own,
+/// outermost first, a Postgres source's schema (`PostgresSource(schema=...)`),
+/// each `null` where the source names none, which is then the connection's
+/// current one. Every relation of one part a request names is read under
+/// it, and the source's tables are listed in it, as the reference
+/// qualifies each read by the schema it was given (`PostgresTable`). Left
+/// out, empty or all `null`, the connection's current one, as before v28.
+/// A dialect takes as many parts as a relation's parts before its table's,
+/// and refuses by name more, or a part given inside one left `null`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "provider", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ProviderChoice {
-    Sql { dialect: Dialect },
-    Host { capabilities: ProviderCapabilities },
+    Sql {
+        dialect: Dialect,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        namespace: Vec<Option<String>>,
+    },
+    Host {
+        capabilities: ProviderCapabilities,
+    },
+}
+
+impl ProviderChoice {
+    /// The built-in SQL provider of `dialect`, over the connection's
+    /// current namespace.
+    pub fn sql(dialect: impl Into<String>) -> Self {
+        ProviderChoice::Sql {
+            dialect: Dialect::new(dialect),
+            namespace: Vec::new(),
+        }
+    }
 }
 
 /// A statement's parameter: a scalar, or a key set the statement's text
@@ -1065,6 +1093,23 @@ pub trait DataLayer: Send + Sync {
     fn reads_nan_as_missing(&self, provider: &ProviderChoice) -> bool {
         let _ = provider;
         false
+    }
+
+    /// The database the run's provider reads, by the name its built-in
+    /// dialect has (`duckdb`, `sqlite`, `postgres`), which a host words a
+    /// refusal naming the source with (T3.8). `None`, the default and a
+    /// host provider's: no database is named.
+    fn source_database(&self, provider: &ProviderChoice) -> Option<&'static str> {
+        let _ = provider;
+        None
+    }
+
+    /// `relation` as the run's provider reads it: under the provider's
+    /// namespace where the layer reads one (contract v28), else as it is,
+    /// the default and a host provider's (T3.8).
+    fn read_as(&self, provider: &ProviderChoice, relation: &Relation) -> Relation {
+        let _ = provider;
+        relation.clone()
     }
 }
 

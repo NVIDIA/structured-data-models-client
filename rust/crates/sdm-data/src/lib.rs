@@ -104,7 +104,7 @@ impl DataLayer for Data {
     fn capabilities(&self, provider: &ProviderChoice) -> Result<ProviderCapabilities, CoreError> {
         match provider {
             ProviderChoice::Host { capabilities } => Ok(capabilities.clone()),
-            ProviderChoice::Sql { dialect } => match rendered(dialect)? {
+            ProviderChoice::Sql { dialect, .. } => match rendered(dialect)? {
                 Rendered::Duckdb => Ok(duckdb::capabilities()),
                 Rendered::Sqlite => Ok(sqlite::capabilities()),
                 Rendered::Postgres => Ok(postgres::capabilities()),
@@ -121,10 +121,19 @@ impl DataLayer for Data {
             ProviderChoice::Host { .. } => Ok(FetchPlan::Host {
                 expect: request.expected(),
             }),
-            ProviderChoice::Sql { dialect } => match rendered(dialect)? {
-                Rendered::Duckdb => duckdb::plan(request),
-                Rendered::Sqlite => sqlite::plan(request),
-                Rendered::Postgres => postgres::plan(request),
+            ProviderChoice::Sql { dialect, namespace } => match rendered(dialect)? {
+                Rendered::Duckdb => {
+                    no_namespace(request, &qualifying(request, namespace)?)?;
+                    duckdb::plan(request)
+                }
+                Rendered::Sqlite => {
+                    no_namespace(request, &qualifying(request, namespace)?)?;
+                    sqlite::plan(request)
+                }
+                Rendered::Postgres => {
+                    let namespace = qualifying(request, namespace)?;
+                    postgres::plan(&in_namespace(request, &namespace), &namespace)
+                }
             },
         }
     }
@@ -132,7 +141,7 @@ impl DataLayer for Data {
     fn opaque_vendor(&self, provider: &ProviderChoice) -> Option<&'static str> {
         match provider {
             ProviderChoice::Host { .. } => None,
-            ProviderChoice::Sql { dialect } => match rendered(dialect).ok()? {
+            ProviderChoice::Sql { dialect, .. } => match rendered(dialect).ok()? {
                 Rendered::Duckdb => Some(duckdb::OPAQUE_VENDOR),
                 Rendered::Sqlite => None,
                 Rendered::Postgres => None,
@@ -143,7 +152,7 @@ impl DataLayer for Data {
     fn compares_stored_times(&self, provider: &ProviderChoice) -> bool {
         match provider {
             ProviderChoice::Host { .. } => false,
-            ProviderChoice::Sql { dialect } => {
+            ProviderChoice::Sql { dialect, .. } => {
                 matches!(rendered(dialect), Ok(Rendered::Sqlite))
             }
         }
@@ -152,7 +161,7 @@ impl DataLayer for Data {
     fn samples_by_key_dtype(&self, provider: &ProviderChoice) -> bool {
         match provider {
             ProviderChoice::Host { .. } => false,
-            ProviderChoice::Sql { dialect } => {
+            ProviderChoice::Sql { dialect, .. } => {
                 matches!(rendered(dialect), Ok(Rendered::Sqlite))
             }
         }
@@ -166,7 +175,7 @@ impl DataLayer for Data {
         float_text: fn(f64) -> String,
     ) -> Result<Option<(arrow_schema::SchemaRef, Vec<RecordBatch>)>, CoreError> {
         match provider {
-            ProviderChoice::Sql { dialect }
+            ProviderChoice::Sql { dialect, .. }
                 if matches!(rendered(dialect), Ok(Rendered::Postgres)) =>
             {
                 pg_values::conform(schema, batches, float_text)
@@ -182,7 +191,7 @@ impl DataLayer for Data {
         batches: &[RecordBatch],
     ) -> Result<Option<(arrow_schema::SchemaRef, Vec<RecordBatch>)>, CoreError> {
         match provider {
-            ProviderChoice::Sql { dialect }
+            ProviderChoice::Sql { dialect, .. }
                 if matches!(rendered(dialect), Ok(Rendered::Postgres)) =>
             {
                 pg_values::bound_keys(schema, batches)
@@ -194,9 +203,42 @@ impl DataLayer for Data {
     fn reads_nan_as_missing(&self, provider: &ProviderChoice) -> bool {
         match provider {
             ProviderChoice::Host { .. } => false,
-            ProviderChoice::Sql { dialect } => {
+            ProviderChoice::Sql { dialect, .. } => {
                 matches!(rendered(dialect), Ok(Rendered::Postgres))
             }
+        }
+    }
+
+    fn source_database(&self, provider: &ProviderChoice) -> Option<&'static str> {
+        match provider {
+            ProviderChoice::Host { .. } => None,
+            ProviderChoice::Sql { dialect, .. } => match rendered(dialect).ok()? {
+                Rendered::Duckdb => Some(duckdb::NAME),
+                Rendered::Sqlite => Some(sqlite::NAME),
+                Rendered::Postgres => Some(postgres::NAME),
+            },
+        }
+    }
+
+    fn read_as(&self, provider: &ProviderChoice, relation: &Relation) -> Relation {
+        let parts = match provider {
+            ProviderChoice::Sql { namespace, .. } if relation.source.len() == 1 => {
+                // The parts given, as `qualifying` reads them; a namespace
+                // it refuses was refused before any relation was read.
+                namespace
+                    .iter()
+                    .skip_while(|part| part.is_none())
+                    .flatten()
+                    .cloned()
+                    .collect::<Vec<_>>()
+            }
+            _ => Vec::new(),
+        };
+        Relation {
+            source: parts
+                .into_iter()
+                .chain(relation.source.iter().cloned())
+                .collect(),
         }
     }
 
@@ -216,7 +258,7 @@ impl DataLayer for Data {
         };
         let answer = match provider {
             ProviderChoice::Host { .. } => read::host(*part, batches)?,
-            ProviderChoice::Sql { dialect } => match rendered(dialect)? {
+            ProviderChoice::Sql { dialect, .. } => match rendered(dialect)? {
                 Rendered::Duckdb => duckdb::read(*part, batches)?,
                 Rendered::Sqlite => sqlite::read(request, *part, batches)?,
                 Rendered::Postgres => postgres::read(*part, batches)?,
@@ -256,6 +298,76 @@ pub(crate) fn relation(
 
 /// The refusal of a SQL dialect this build renders nothing for, naming it
 /// when it is one this build knows by name.
+/// The parts a relation of one part is read under, of the provider's
+/// `namespace` (contract v28): the parts given, outermost first, those
+/// left `null` before them dropped, since a relation of fewer parts is
+/// read in the connection's current ones. A part given inside one left
+/// `null` cannot be written as a relation, and is refused by name.
+fn qualifying(
+    request: &DataRequest,
+    namespace: &[Option<String>],
+) -> Result<Vec<String>, CoreError> {
+    let given: Vec<&Option<String>> = namespace.iter().skip_while(|part| part.is_none()).collect();
+    if given.iter().any(|part| part.is_none()) {
+        return Err(CoreError::new(
+            ErrorKind::Unsupported,
+            ErrorCode::UnsupportedRequest,
+            "a namespace part left to the connection inside one given cannot qualify a relation",
+        )
+        .with_field("request", Detail::text(request.name()))
+        .with_field("field", Detail::text("namespace")));
+    }
+    Ok(given.into_iter().flatten().cloned().collect())
+}
+
+/// `request` with each relation of one part read under `namespace`, the
+/// parts [`qualifying`] gives: the namespace's parts, then the table's, as
+/// the reference qualifies each read of a Postgres source by the schema it
+/// was given (`PostgresTable._quoted_source_name`). A relation of several
+/// parts already names where it is, and is left as it is.
+fn in_namespace(request: &DataRequest, namespace: &[String]) -> DataRequest {
+    let mut request = request.clone();
+    if namespace.is_empty() {
+        return request;
+    }
+    let under = |relation: &mut Relation| {
+        if relation.source.len() == 1 {
+            relation.source.splice(0..0, namespace.iter().cloned());
+        }
+    };
+    match &mut request {
+        DataRequest::Describe { tables, .. } => tables.iter_mut().for_each(under),
+        DataRequest::KeyCounts { keys } => keys.iter_mut().for_each(|k| under(&mut k.table)),
+        DataRequest::TimeBounds { columns } => {
+            columns.iter_mut().for_each(|c| under(&mut c.table));
+        }
+        DataRequest::Scan { table, .. }
+        | DataRequest::Preview { table, .. }
+        | DataRequest::CountRows { table, .. }
+        | DataRequest::ColumnRanges { table, .. }
+        | DataRequest::RepeatedKey { table, .. }
+        | DataRequest::SampleEntities { table, .. }
+        | DataRequest::Neighbors { table, .. }
+        | DataRequest::Lookup { table, .. } => under(table),
+    }
+    request
+}
+
+/// Refuses a namespace given to a dialect whose sources have none to name
+/// (DuckDB's and SQLite's connectors take no namespace), by name.
+fn no_namespace(request: &DataRequest, namespace: &[String]) -> Result<(), CoreError> {
+    if namespace.is_empty() {
+        return Ok(());
+    }
+    Err(CoreError::new(
+        ErrorKind::Unsupported,
+        ErrorCode::UnsupportedRequest,
+        "this dialect's sources have no namespace to read under",
+    )
+    .with_field("request", Detail::text(request.name()))
+    .with_field("field", Detail::text("namespace")))
+}
+
 fn no_dialect(dialect: &Dialect) -> CoreError {
     let error = CoreError::new(
         ErrorKind::Unsupported,

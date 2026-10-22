@@ -32,6 +32,12 @@ pub const NEARLY_A_KEY: f64 = 0.9;
 /// The warning that a key kept has rows with no value for it
 /// (`_warn_a_key_has_no_value`).
 pub const KEY_NO_VALUE: &str = "KEY_NO_VALUE";
+/// The rule of a named key refused for rows with no value for it
+/// (`_a_key_missing_values`).
+pub const KEY_MISSING_VALUES: &str = "key_missing_values";
+/// The rule of a named or declared key refused for repeating in more rows
+/// than inference tolerates (`_too_many_repeats`, `_not_unique_enough`).
+pub const KEY_NOT_UNIQUE: &str = "key_not_unique";
 /// The warning that a key kept identifies a row more than once
 /// (`_warn_a_key_repeats`).
 pub const KEY_REPEATS: &str = "KEY_REPEATS";
@@ -184,6 +190,7 @@ pub fn hold(
             return Err(refused(
                 "a primary key named has rows with no value, so those rows cannot be identified",
             )
+            .with_field("rule", Detail::text(KEY_MISSING_VALUES))
             .with_field("missing", number(count.missing)));
         } else if repeats as f64 > count.rows as f64 * (1.0 - KEY_UNIQUENESS) {
             // Unique where the catalog declares a key over some of its
@@ -192,15 +199,20 @@ pub fn hold(
                 .unique
                 .iter()
                 .any(|set| !set.is_empty() && set.iter().all(|c| key.contains(c)));
-            return Err(
-                refused("a primary key is not unique enough to identify a row")
-                    .with_field("repeats", number(repeats))
-                    .with_field("example", shown(&count.example))
-                    .with_field(
-                        "declared_unenforced",
-                        Detail::Scalar(Scalar::Bool(declared && !enforced)),
-                    ),
-            );
+            let mut refusal = refused("a primary key is not unique enough to identify a row")
+                .with_field("rule", Detail::text(KEY_NOT_UNIQUE));
+            if declared && !enforced {
+                // The source declares the key and does not hold its rows to
+                // it, which the reference says of the source by name.
+                refusal = refusal.with_field("variant", Detail::text("declared_unenforced"));
+            }
+            return Err(refusal
+                .with_field("repeats", number(repeats))
+                .with_field("example", shown(&count.example))
+                .with_field(
+                    "declared_unenforced",
+                    Detail::Scalar(Scalar::Bool(declared && !enforced)),
+                ));
         }
         if count.missing > 0 {
             warnings.push(warning(

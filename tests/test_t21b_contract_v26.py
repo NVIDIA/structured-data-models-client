@@ -178,10 +178,11 @@ def test_v25_stays_locked_as_merged() -> None:
 
 def test_the_lock_holds_v26_locked_to_its_own_file() -> None:
     # Schema lock: v26, merged into rust-core mid-phase, is locked to its
-    # own file; v27 is the phase's working entry beside it (T2.12).
+    # own file; v27 (T2.12) merged after it, and v28 is Phase 3's working
+    # entry (T3.8's provider namespace, T3.4's relation fields).
     lock = _lock_module()
     entries = lock.parse_lock(LOCK.read_text(encoding='utf-8'))
-    assert max(entries) == 27
+    assert max(entries) == 28
     digest, file = entries[26]
     assert file == 'sdm-contract-26.json'
     assert lock.digest(V26.read_bytes()) == digest
@@ -189,15 +190,15 @@ def test_the_lock_holds_v26_locked_to_its_own_file() -> None:
     assert lock.main(['--no-base']) == 0
 
 
-def test_the_core_speaks_v27_and_refuses_a_v25_host_by_name() -> None:
-    # The binding on the bump: the native module is v27 (v26 with T2.12's
-    # key label), and a start written for v25 is refused by name, never
-    # read (decision H25).
+def test_the_core_speaks_v28_and_refuses_a_v25_host_by_name() -> None:
+    # The binding on the bump: the native module is v28 (v26 with T2.12's
+    # key label, then Phase 3's v28), and a start written for v25 is
+    # refused by name, never read (decision H25).
     from sdm_client._rust import codec, errors, facts
     from sdm_client._rust.run import native
 
     core = native()
-    assert core.CONTRACT_VERSION == 27
+    assert core.CONTRACT_VERSION == 28
     start = codec.encode(
         {
             'message': 'start',
