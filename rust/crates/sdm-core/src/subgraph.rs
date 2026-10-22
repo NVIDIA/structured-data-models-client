@@ -41,7 +41,7 @@ use std::sync::Arc;
 
 use arrow_array::{ArrayRef, RecordBatch, UInt32Array};
 use arrow_schema::{Field, Schema};
-use sdm_contract::data::NullOrder;
+use sdm_contract::data::{DataRequest, NullOrder};
 use sdm_contract::ops::Stype;
 use sdm_contract::types::ColumnType;
 use sdm_contract::{CoreError, CoreWarning, Detail, Scalar, Sentence};
@@ -125,6 +125,41 @@ pub(crate) struct Walk<'a> {
     /// the reference's sampler neither reads nor sends
     /// (`get_exclude_cols_dict`, `exclude_cols_dict`).
     pub excluded: &'a [(String, String)],
+    /// The look-back rate of each table referring to another, where the
+    /// provider's neighbor reads look back as the reference's warehouse
+    /// samplers do (`ProviderCapabilities::neighbor_lookback`); empty for
+    /// any other provider.
+    pub lookback: &'a [Lookback],
+}
+
+/// A table's rows per row of the table it refers to and second of its
+/// time column's span, which sizes how far back a neighbor read by its
+/// foreign key looks (`_by_fkey`'s `freq`).
+pub(crate) struct Lookback {
+    pub src: String,
+    pub dst: String,
+    pub rate: f64,
+}
+
+/// The most a neighbor read looks back, five years of seconds, as the
+/// reference bounds it.
+const LOOKBACK_MOST: f64 = 5.0 * 365.0 * 24.0 * 60.0 * 60.0;
+
+/// The seconds a neighbor read keeping `neighbors` rows per seed looks
+/// back over a table of `rate` (`_by_fkey`): five times the rows over the
+/// rate, rounded up, at most five years.
+#[allow(
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    reason = "the reference's float arithmetic and its whole seconds"
+)]
+pub(crate) fn lookback_seconds(neighbors: u64, rate: f64) -> i64 {
+    let seconds = ((5 * neighbors) as f64 / rate).ceil();
+    if seconds.is_nan() || seconds >= LOOKBACK_MOST {
+        LOOKBACK_MOST as i64
+    } else {
+        seconds as i64
+    }
 }
 
 /// The features of `table` the walk reads and sends: those `excluded`
@@ -438,22 +473,58 @@ impl Walk<'_> {
         let mut requests = Vec::with_capacity(referring.len());
         for (src, fkey) in &referring {
             let src_table = table_named(self.graph, src)?;
-            let seeds = sample::seeds(
-                Arc::clone(named(&frame, pkey_column)?),
-                if src_table.time_column.is_some() {
-                    vec![(SEED_TIME, times.clone())]
-                } else {
-                    vec![]
-                },
-            )?;
-            requests.push(sample::by_fkey(
+            // Where the provider looks back as the reference's warehouse
+            // samplers do, each seed's window starts that far before its
+            // anchor, exclusive (`_by_fkey`'s `start_time`); a missing
+            // anchor stays missing, and a start before the earliest time
+            // the reference holds is that time.
+            let lookback = src_table.time_column.as_ref().and_then(|_| {
+                self.lookback
+                    .iter()
+                    .find(|l| l.src == *src && l.dst == name)
+                    .map(|l| lookback_seconds(neighbors, l.rate))
+            });
+            let mut seed_times = Vec::new();
+            if src_table.time_column.is_some() {
+                seed_times.push((SEED_TIME, times.clone()));
+            }
+            if let Some(seconds) = lookback {
+                let span = i128::from(seconds) * 1_000_000_000;
+                let starts = times
+                    .iter()
+                    .map(|&t| {
+                        if t == sample::MISSING_ANCHOR {
+                            t
+                        } else {
+                            i64::try_from(i128::from(t) - span)
+                                .unwrap_or(-i64::MAX)
+                                .max(-i64::MAX)
+                        }
+                    })
+                    .collect();
+                seed_times.push((sample::SEED_START, starts));
+            }
+            let seeds = sample::seeds(Arc::clone(named(&frame, pkey_column)?), seed_times)?;
+            let mut request = sample::by_fkey(
                 src_table,
                 fkey,
                 sample_columns(self.graph, src_table, self.excluded),
                 key_set(self.asker, seeds)?,
                 neighbors,
                 self.nulls,
-            )?);
+            )?;
+            if lookback.is_some()
+                && let DataRequest::Neighbors {
+                    window: Some(window),
+                    ..
+                } = &mut request
+            {
+                window.lower = Some(sdm_contract::data::SeedBound {
+                    seed_column: sample::SEED_START.into(),
+                    inclusive: false,
+                });
+            }
+            requests.push(request);
         }
         // A source comparing a window's bounds with its stored text reads
         // one stored value of a table before its first windowed read, as
