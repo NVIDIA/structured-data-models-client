@@ -37,7 +37,6 @@ from __future__ import annotations
 import importlib.util
 import json
 import secrets
-import shutil
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -270,20 +269,22 @@ def test_t33_a_capture_of_an_unknown_version_is_refused_by_name(
     converter does not know is refused, naming the version."""
     assert FIXTURE.exists()
     target = tmp_path / FIXTURE.name
-    if FIXTURE.is_dir():
-        shutil.copytree(FIXTURE, target)
-        files = [found for found in target.rglob('*') if found.is_file()]
-    else:
-        shutil.copy(FIXTURE, target)
-        files = [target]
+    sources = (
+        [found for found in FIXTURE.rglob('*') if found.is_file()]
+        if FIXTURE.is_dir()
+        else [FIXTURE]
+    )
     changed = 0
-    for found in files:
-        data = found.read_bytes()
+    for source in sources:
+        found = (
+            target / source.relative_to(FIXTURE) if FIXTURE.is_dir() else target
+        )
+        found.parent.mkdir(parents=True, exist_ok=True)
+        data = source.read_bytes()
         if b'sdm-capture/1' in data:
-            found.write_bytes(
-                data.replace(b'sdm-capture/1', b'sdm-capture/999')
-            )
+            data = data.replace(b'sdm-capture/1', b'sdm-capture/999')
             changed += 1
+        found.write_bytes(data)
     assert changed
     with pytest.raises(Exception, match='sdm-capture/999'):
         _captures().read(target)
