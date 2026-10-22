@@ -471,7 +471,10 @@ pub enum DescribePart {
     /// index is its schema's object): one row per column, in the index's
     /// order, its name, null for an expression. Asked for an index whose
     /// columns the catalog's list of keys or indexes does not give
-    /// (SQLite's `index_info`, as the reference reads it).
+    /// (SQLite's `index_info`, as the reference reads it). A host provider
+    /// is never asked it: its `keys` and `indexes` answers give each key's
+    /// and index's columns ([`catalog_columns`]), so no key or index it
+    /// lists is read by its name.
     IndexColumns,
     /// The source's current namespace (contract v28): one row, the outer
     /// name parts the source reads a relation under when its name leaves
