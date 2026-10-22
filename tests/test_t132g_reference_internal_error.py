@@ -758,7 +758,12 @@ def test_the_register_still_refuses_an_entry_accepting_internal_error(
             'cases': [REAL_CASE],
             'status': 'approved',
             'approved_by': 'owner',
-            'decision_ref': None,
+            # An owner's entry names an owner-approved row (register.py,
+            # T3.2), so the one problem left is the one this test seeds.
+            'decision_ref': {
+                'file': 'docs/design/rust-core/phase-1/decisions.md',
+                'row': 'E1',
+            },
             'notes': 'Seeded: the reference outcome itself, owner-approved.',
             'case_outcomes': [
                 {
