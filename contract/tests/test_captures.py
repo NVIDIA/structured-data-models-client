@@ -319,7 +319,7 @@ def test_a_recording_mode_line_is_written_as_a_capture(tmp_path: Path) -> None:
 
     sql = 'SELECT * FROM `{catalog}`.`{schema}`.`users` TABLESAMPLE (12.5 PERCENT) REPEATABLE (7)'
     line = {
-        'format': 'sdm-capture/1',
+        'format': 'sdm-record/1',
         'case': 'c1@databricks-sql',
         'leg': 'databricks-sql',
         'input': '0' * 64,
@@ -365,3 +365,8 @@ def test_a_recording_mode_line_is_written_as_a_capture(tmp_path: Path) -> None:
     assert json.loads(manifest.read_text())['cases'] == {
         'c1@databricks-sql': {'input_hash': '0' * 64, 'capture': 'c1'}
     }
+
+
+def test_a_recording_line_of_another_format_is_refused_by_name() -> None:
+    with pytest.raises(captures.CaptureError, match='sdm-record/9'):
+        captures.from_recording({'format': 'sdm-record/9', 'leg': 'snowflake'})
