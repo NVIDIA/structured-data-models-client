@@ -47,7 +47,14 @@ never commands:
 - ``git branch -D`` (or ``--delete --force``);
 - ``gh run watch``;
 - ``git fetch --prune``/``-p``, ``git pull --prune``, ``git remote prune``;
-- ``prepush.sh --full``.
+- ``prepush.sh --full``;
+- heavy work outside ``heavy``, the slot wrapper (the owner's rule,
+  2026-10-22; T3.2 fix 4): ``cargo test``, ``cargo build`` and ``cargo
+  clippy``; pytest (``pytest``, ``py.test``, ``<python> -m pytest``, ``uv
+  run ... pytest``) over the whole ``tests`` or ``contract/tests``
+  directory; and ``gate.sh``. Behind ``heavy`` (``heavy CMD``, ``heavy
+  --priority CMD``, or ``heavy bash -c '...'``, whose commands inherit it)
+  they pass.
 
 An approval token lets an owner-approved one-off through: the simple command
 starts with ``SDM_APPROVED=<id>``, ``<id>`` the slug of a heading in an
@@ -260,11 +267,15 @@ def simple_commands(text: str, depth: int = 0) -> Iterator[list[str]]:
 ASSIGNMENT = re.compile(r'[A-Za-z_][A-Za-z0-9_]*=')
 
 
-def unwrap(words: list[str]) -> tuple[list[str], dict[str, str], list[str]]:
-    """The command behind its wrappers, the variables assigned before it, and
-    the strings a nested shell runs (``bash -c``, ``eval``)."""
+def unwrap(
+    words: list[str],
+) -> tuple[list[str], dict[str, str], list[str], bool]:
+    """The command behind its wrappers, the variables assigned before it,
+    the strings a nested shell runs (``bash -c``, ``eval``), and whether
+    ``heavy`` is among the wrappers."""
     env: dict[str, str] = {}
     nested: list[str] = []
+    heavy = False
     w = list(words)
     while w:
         head = os.path.basename(w[0])
@@ -284,8 +295,11 @@ def unwrap(words: list[str]) -> tuple[list[str], dict[str, str], list[str]]:
                     w = w[1:]
                 w = w[1:]
         elif head in ('nohup', 'time', 'command', 'builtin', 'exec', 'heavy'):
+            heavy = heavy or head == 'heavy'
             w = w[1:]
-            while w and w[0].startswith('-') and head in ('time', 'exec'):
+            while (
+                w and w[0].startswith('-') and head in ('time', 'exec', 'heavy')
+            ):
                 w = w[1:]
         elif head == 'nice':
             w = w[1:]
@@ -323,19 +337,19 @@ def unwrap(words: list[str]) -> tuple[list[str], dict[str, str], list[str]]:
                 ):
                     if n + 1 < len(rest):
                         nested.append(rest[n + 1])
-                    return [], env, nested
+                    return [], env, nested, heavy
                 if not word.startswith('-'):
                     # bash SCRIPT ARGS: the script is the command.
                     w = rest[n:]
                     break
             else:
-                return [], env, nested
+                return [], env, nested, heavy
         elif head == 'eval':
             nested.append(' '.join(w[1:]))
-            return [], env, nested
+            return [], env, nested, heavy
         else:
             break
-    return w, env, nested
+    return w, env, nested, heavy
 
 
 # --- the rules ------------------------------------------------------------------
@@ -770,6 +784,79 @@ def check_simple(
     return None
 
 
+#: The cargo commands that build the workspace (the owner's rule,
+#: 2026-10-22: heavy work only through ``heavy``).
+HEAVY_CARGO = ('test', 'build', 'clippy')
+#: The test directories a pytest run over is a broad suite.
+WHOLE_SUITES = ('tests', 'contract/tests')
+#: pytest options whose value is the next word.
+PYTEST_VALUED = {'-k', '-m', '-n', '-p', '-o', '-c', '--basetemp', '--rootdir'}
+
+
+def pytest_args(argv: list[str]) -> list[str] | None:
+    """The arguments of a pytest run (``pytest``, ``py.test``, ``<python>
+    -m pytest``, ``uv run ... pytest``), else None."""
+    head = os.path.basename(argv[0])
+    if head in ('pytest', 'py.test'):
+        return argv[1:]
+    if head.startswith('python'):
+        rest = argv[1:]
+        while rest and rest[0].startswith('-') and rest[0] != '-m':
+            rest = rest[2:] if rest[0] in ('-X', '-W') else rest[1:]
+        return rest[2:] if rest[:2] == ['-m', 'pytest'] else None
+    if head == 'uv' and argv[1:2] == ['run']:
+        for n, word in enumerate(argv[2:]):
+            name = os.path.basename(word)
+            if name in ('pytest', 'py.test') or name.startswith('python'):
+                return pytest_args(argv[2 + n :])
+    return None
+
+
+def whole_suite(args: list[str]) -> str | None:
+    """The broad test directory a pytest run's arguments name, if any."""
+    skip = False
+    for arg in args:
+        if skip:
+            skip = False
+            continue
+        if arg.startswith('-'):
+            skip = arg in PYTEST_VALUED
+            continue
+        path = arg.rstrip('/')
+        while path.startswith('./'):
+            path = path[2:]
+        if path in WHOLE_SUITES or (
+            path.startswith('/') and path.endswith('/tests')
+        ):
+            return arg
+    return None
+
+
+def check_heavy(argv: list[str]) -> Verdict | None:
+    """Heavy work run outside ``heavy`` (the owner's rule, 2026-10-22)."""
+    head = os.path.basename(argv[0])
+    what = None
+    if head == 'cargo':
+        words = [a for a in argv[1:] if not a.startswith(('+', '-'))]
+        if words[:1] and words[0] in HEAVY_CARGO:
+            what = f'cargo {words[0]}'
+    elif head == 'gate.sh':
+        what = 'gate.sh'
+    else:
+        args = pytest_args(argv)
+        suite = whole_suite(args) if args is not None else None
+        if suite is not None:
+            what = f'pytest over {suite}'
+    if what is None:
+        return None
+    return Verdict(
+        f'{what} outside heavy: heavy work runs only through the slot '
+        "wrapper (the owner's rule, 2026-10-22)",
+        '$SDM_ORCH_STATE/bin/heavy <command> (heavy --priority for the '
+        "critical path's jobs); or one test file at a time",
+    )
+
+
 # --- approval tokens --------------------------------------------------------------
 
 
@@ -833,14 +920,17 @@ def check_command(
             )
         return None
     tokens_cache: set[str] | None = None
-    queue = list(commands)
+    # Each command with whether it runs behind ``heavy`` (a nested shell's
+    # commands inherit it).
+    queue = [(words, False) for words in commands]
     while queue:
-        words = queue.pop(0)
-        argv, env, nested = unwrap(words)
+        words, inside = queue.pop(0)
+        argv, env, nested, wrapped = unwrap(words)
+        heavy = inside or wrapped
         argv = without_redirections(argv)
         for text in nested:
             try:
-                queue.extend(simple_commands(text))
+                queue.extend((w, heavy) for w in simple_commands(text))
             except ValueError:
                 return Verdict(
                     'a nested shell command the guard cannot parse',
@@ -865,6 +955,8 @@ def check_command(
             cwd = target if os.path.isabs(target) else os.path.join(cwd, target)
             continue
         verdict = check_simple(argv, cwd, session)
+        if verdict is None and not heavy:
+            verdict = check_heavy(argv)
         if verdict is None:
             continue
         token = env.get(TOKEN_VAR)

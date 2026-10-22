@@ -16,6 +16,7 @@ returns to the phase head when ``land.py`` lands them.
     lane.py [--phase-branch rust-core-phase-N] start --lane X --package ID
         --worktree PATH [--wait] [--dry-run]
     lane.py [--phase-branch rust-core-phase-N] status [--lane X]
+    lane.py [--phase-branch rust-core-phase-N] pause --lane X [--resume]
     lane.py check [--pushed-refs FILE]
 
 The phase branch is ``--phase-branch``, else ``SDM_PHASE_BRANCH``, else the
@@ -48,7 +49,17 @@ letters and digits (``1b``), the package an ID such as ``T1.11e`` or
 - the local lane branch holds commits the phase branch lacks, the worktree
   holding it has uncommitted changes or untracked files that are not
   ignored (they would carry into the next package), or the worktree path
-  is taken.
+  is taken;
+- ``MAX_LANES`` lanes are active already (the owner's rule, 2026-10-22: at
+  most three packages run at once on this machine; ``MAX_LANES`` in
+  ``orchestration/heavy.conf``, or ``$SDM_HEAVY_CONFIG``, default 3). An
+  active lane is a worktree on another lane of the phase whose recorded
+  package has no landing (``Land <ID>: ...``) in the phase head's history
+  and that is not paused. The refusal names them.
+
+``pause --lane X`` marks the lane's worktree paused (``sdm.paused`` in its
+own configuration, beside ``sdm.package``), which frees its slot;
+``--resume`` takes the mark away. ``start`` clears it for the next package.
 
 Otherwise it creates the remote lane at the phase head, or fast-forwards
 it there, each with a normal push (none when it is there already); makes
@@ -134,6 +145,12 @@ WAIT_ROUNDS = 10
 WAIT_SECONDS = 30
 WAIT_CAP = 600
 ZERO_SHA = '0' * 40
+#: The owner's rule (2026-10-22): at most this many packages run at once on
+#: this machine. heavy.conf's ``MAX_LANES`` sets it (T3.2 fix 4).
+HEAVY_CONF = Path(__file__).resolve().parent / 'orchestration' / 'heavy.conf'
+MAX_LANES = 3
+#: A lane's worktree marked paused frees its slot (``lane.py pause``).
+PAUSED_KEY = 'sdm.paused'
 
 Out = Callable[[str], None]
 
@@ -194,6 +211,63 @@ def brief_problems(brief: str | None) -> list[str]:
         '(briefs/package.md; brief_check.py)'
         for heading in lacking
     ]
+
+
+# --- the number of lanes ------------------------------------------------------
+
+
+def max_lanes(environ: dict[str, str] | None = None) -> int:
+    r"""``MAX_LANES`` from heavy.conf (``$SDM_HEAVY_CONFIG``, else the one
+    beside ``heavy``), else :data:`MAX_LANES`."""
+    environ = dict(os.environ) if environ is None else environ
+    path = Path(environ.get('SDM_HEAVY_CONFIG') or HEAVY_CONF)
+    try:
+        text = path.read_text(encoding='utf-8')
+    except OSError:
+        return MAX_LANES
+    for line in text.splitlines():
+        key, sep, value = line.partition('=')
+        if sep and key.strip() == 'MAX_LANES':
+            if not value.strip().isdigit() or int(value) < 1:
+                raise Refusal(
+                    f'{path}: MAX_LANES={value.strip()!r} is not a whole number '
+                    'of at least 1'
+                )
+            return int(value)
+    return MAX_LANES
+
+
+def paused(tools: Tools, path: str) -> bool:
+    done = tools.attempt(
+        'git', '-C', path, 'config', '--worktree', '--bool', '--get',
+        PAUSED_KEY,
+    )  # fmt: skip
+    return done.returncode == 0 and done.stdout.strip() == 'true'
+
+
+def active_lanes(
+    tools: Tools, phase: Phase, head: str, starting: str
+) -> list[tuple[str, str]]:
+    r"""The lanes of ``phase`` other than ``starting`` whose worktree records
+    a package not landed by ``head`` and is not paused, as (lane, package)."""
+    landed = tools.git('log', '--first-parent', '--format=%s', head)
+    subjects = landed.splitlines()
+    found = []
+    for tree in worktrees(tools):
+        branch = tree.branch.removeprefix('refs/heads/')
+        name = phase.lane_of(branch)
+        if name is None or branch == starting or tree.prunable:
+            continue
+        package = recorded_package(tools, tree.path)
+        if package is None or paused(tools, tree.path):
+            continue
+        if any(
+            s.startswith((f'Land {package}:', f'Land {package} '))
+            for s in subjects
+        ):
+            continue
+        found.append((name, package))
+    return found
 
 
 # --- the remote ---------------------------------------------------------------
@@ -508,6 +582,18 @@ def plan_start(
                 '(--phase-branch or SDM_PHASE_BRANCH)'
             )
 
+    # The owner's rule (2026-10-22): at most MAX_LANES packages at once.
+    limit = max_lanes()
+    busy = active_lanes(tools, phase_of_tools(tools), phase, branch)
+    if len(busy) >= limit:
+        raise Refusal(
+            f'{len(busy)} lane(s) are active, and at most {limit} packages run '
+            'at once on this machine (the owner, 2026-10-22; MAX_LANES in '
+            'heavy.conf): '
+            + ', '.join(f'lane {name} ({pkg})' for name, pkg in busy)
+            + '; land one, or free a slot with `lane.py pause --lane <x>`'
+        )
+
     if remote_lane is not None:
         active = [
             r for r in lane_runs(tools, branch) if r.get('status') in ACTIVE
@@ -715,6 +801,11 @@ def execute(
     tools.git(
         '-C', plan.path, 'config', '--worktree', PACKAGE_KEY, plan.package
     )
+    if paused(tools, plan.path):
+        # A new package runs: the pause was the previous one's.
+        tools.git(
+            '-C', plan.path, 'config', '--worktree', '--unset', PAUSED_KEY
+        )
     # Read back, as land.py and prepush.sh will read it.
     head = tools.git('-C', plan.path, 'rev-parse', 'HEAD').strip()
     on = tools.git('-C', plan.path, 'symbolic-ref', '--short', 'HEAD').strip()
@@ -806,6 +897,31 @@ def start(args: argparse.Namespace, tools: Tools, out: Out) -> int:
     execute(plan, args, tools, out)
     out(f'STARTED {plan.package} on {plan.branch} at {plan.phase}')
     out('\n'.join(next_steps(plan, args.remote)))
+    return 0
+
+
+# --- pause --------------------------------------------------------------------
+
+
+def pause(args: argparse.Namespace, tools: Tools, out: Out) -> int:
+    assert tools.phase is not None
+    branch = lane_branch(args.lane, tools.phase)
+    holder = next(
+        (t for t in worktrees(tools) if t.branch == f'refs/heads/{branch}'),
+        None,
+    )
+    if holder is None or recorded_package(tools, holder.path) is None:
+        raise Refusal(f'no worktree here holds {branch} with a package')
+    if args.resume:
+        if paused(tools, holder.path):
+            tools.git(
+                '-C', holder.path, 'config', '--worktree', '--unset',
+                PAUSED_KEY,
+            )  # fmt: skip
+        out(f'RESUMED lane {args.lane} ({holder.path})')
+    else:
+        tools.git('-C', holder.path, 'config', '--worktree', PAUSED_KEY, 'true')
+        out(f'PAUSED lane {args.lane} ({holder.path}): its slot is free')
     return 0
 
 
@@ -1026,6 +1142,13 @@ def parser() -> argparse.ArgumentParser:
         help=argparse.SUPPRESS,
     )  # fmt: skip
     begin.add_argument('--dry-run', action='store_true')
+    hold = sub.add_parser(
+        'pause', help="mark a lane's worktree paused, freeing its slot"
+    )
+    hold.add_argument('--lane', required=True)
+    hold.add_argument(
+        '--resume', action='store_true', help='take the mark away'
+    )
     show = sub.add_parser('status', help='show the lanes')
     show.add_argument('--lane')
     inspect = sub.add_parser(
@@ -1045,7 +1168,12 @@ def main(
 ) -> int:
     args = parser().parse_args(list(sys.argv[1:] if argv is None else argv))
     tools = tools or Tools()
-    command = {'start': start, 'status': status, 'check': check}[args.command]
+    command = {
+        'start': start,
+        'status': status,
+        'check': check,
+        'pause': pause,
+    }[args.command]
     try:
         # Names first, before gh is asked anything: the phase branch (the
         # branch checked out read from git), then the lane and package.
@@ -1068,9 +1196,9 @@ def main(
         if args.command == 'start':
             lane_branch(args.lane, tools.phase)
             package_id(args.package)
-        elif args.command == 'status' and args.lane:
+        elif args.command in ('status', 'pause') and args.lane:
             lane_branch(args.lane, tools.phase)
-        if args.command != 'check':
+        if args.command not in ('check', 'pause'):
             tools.repo = args.repo or tools.repo or repo_of(tools, args.remote)
         return command(args, tools, out)
     except Refusal as why:

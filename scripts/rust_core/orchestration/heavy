@@ -5,7 +5,7 @@
 
 # Runs a heavy command only when the machine can take it (T3.0, item 5):
 #
-#   heavy <command> [args...]
+#   heavy [--priority] <command> [args...]
 #
 # A heavy command (any gate.sh leg, a full pytest of contract/tests or tests,
 # a gate-machinery test file, cargo test/build/clippy of the workspace, a
@@ -21,6 +21,14 @@
 # memory than it has, more free disk than the disk holds) is refused at once,
 # exit 2 (the disk's after a clean-up). The command's own exit status is heavy's, whatever it is.
 #
+# A priority job (--priority, or SDM_HEAVY_PRIORITY=1: the critical path's,
+# as the orchestrator grants it) jumps the queue (T3.2 fix 4): while one
+# waits, holding a marker in $SDM_ORCH_STATE/heavy-priority/<pid>, no other
+# job takes a slot that comes free. A job admitted after waiting appends one
+# line to $SDM_ORCH_STATE/heavy-waits.log: the time, who ($SDM_LANE, else
+# the working directory's name), whether it had priority, the seconds it
+# waited and the command.
+#
 # The thresholds are one KEY=VALUE file: $SDM_HEAVY_CONFIG, else heavy.conf
 # beside this script. The state directory is $SDM_ORCH_STATE (default
 # ~/.local/share/sdm-orchestration); clean_tmp.sh is $SDM_CLEAN_TMP, else the
@@ -32,7 +40,12 @@ CONFIG=${SDM_HEAVY_CONFIG:-$HERE/heavy.conf}
 STATE=${SDM_ORCH_STATE:-$HOME/.local/share/sdm-orchestration}
 CLEAN=${SDM_CLEAN_TMP:-$HERE/clean_tmp.sh}
 
-[ $# -gt 0 ] || { sed -n '6,27p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+PRIORITY=${SDM_HEAVY_PRIORITY:-0}
+if [ "${1:-}" = --priority ]; then
+  PRIORITY=1
+  shift
+fi
+[ $# -gt 0 ] || { sed -n '6,35p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 
 SLOTS=2
 MIN_FREE_MEM_GB=6
@@ -46,6 +59,8 @@ if [ -f "$CONFIG" ]; then
       '' | \#*) continue ;;
       SLOTS | MIN_FREE_MEM_GB | MIN_FREE_DISK_GB | DISK | POLL | CLEAN_EVERY)
         printf -v "$key" '%s' "$value" ;;
+      # lane.py's limit on packages at once; heavy only accepts the key.
+      MAX_LANES) ;;
       *) echo "heavy: $CONFIG: unknown setting $key" >&2; exit 2 ;;
     esac
   done <"$CONFIG"
@@ -107,10 +122,58 @@ clean() {
 }
 
 said=''
+waited=0
 wait_for() { # $1 = why; said once per change
   [ "$1" = "$said" ] || echo "heavy: queued: $1 (looking again every ${POLL}s)"
   said=$1
+  waited=1
   sleep "$POLL"
+}
+
+# A priority job marks itself while it waits; the mark goes when it is
+# admitted, or when it ends waiting.
+PRIORITY_DIR=$STATE/heavy-priority
+marker=''
+if [ "$PRIORITY" = 1 ]; then
+  mkdir -p "$PRIORITY_DIR"
+  marker=$PRIORITY_DIR/$$
+  : >"$marker"
+  trap 'rm -f "$marker"' EXIT
+  trap 'exit 143' TERM
+  trap 'exit 130' INT
+  trap 'exit 129' HUP
+fi
+
+# Another priority job is waiting: a marker whose process lives (a stale one
+# is removed).
+priority_waiting() {
+  local file pid
+  for file in "$PRIORITY_DIR"/*; do
+    [ -e "$file" ] || continue
+    pid=${file##*/}
+    [ "$pid" != "$$" ] || continue
+    if kill -0 "$pid" 2>/dev/null; then
+      return 0
+    fi
+    rm -f "$file"
+  done
+  return 1
+}
+
+STARTED=$(date +%s)
+# Admitted: the wait, if there was one, goes to the log; then the command.
+admit() {
+  if [ -n "$marker" ]; then
+    rm -f "$marker"
+    trap - EXIT TERM INT HUP
+  fi
+  if [ "$waited" = 1 ]; then
+    local yes=no
+    [ "$PRIORITY" = 1 ] && yes=yes
+    printf '%s who=%s priority=%s waited=%ss command=%s\n' \
+      "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${SDM_LANE:-${PWD##*/}}" "$yes" \
+      "$(($(date +%s) - STARTED))" "$*" >>"$STATE/heavy-waits.log"
+  fi
 }
 
 while true; do
@@ -124,6 +187,10 @@ while true; do
     wait_for "$why"
     continue
   fi
+  if [ "$PRIORITY" != 1 ] && priority_waiting; then
+    wait_for "priority: a priority job waits for the next slot"
+    continue
+  fi
   slot=1
   while [ "$slot" -le "$SLOTS" ]; do
     lock=$STATE/heavy.lock
@@ -134,6 +201,7 @@ while true; do
       # memory or the disk.
       why=$(short)
       if [ -z "$why" ]; then
+        admit "$@"
         "$@"
         exit $?
       fi

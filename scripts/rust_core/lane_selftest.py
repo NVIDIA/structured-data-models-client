@@ -1254,6 +1254,42 @@ def _(w: World) -> tuple[bool, str]:
 # --- status -------------------------------------------------------------------
 
 
+@case(
+    'start: past MAX_LANES a lane is refused, naming the active one, until it pauses'
+)
+def _(w: World) -> tuple[bool, str]:
+    # The owner's rule (2026-10-22), T3.2 fix 4: at most MAX_LANES packages.
+    conf = w.tmp / 'heavy.conf'
+    conf.write_text('MAX_LANES=1\n')
+    w.env['SDM_HEAVY_CONFIG'] = str(conf)
+    second = w.tmp / 'lane-2c'
+
+    def start_second() -> Ran:
+        return w.lane(
+            'start', '--lane', '2c', '--package', 'T1.11g',
+            '--worktree', str(second),
+        )  # fmt: skip
+
+    first = w.start()
+    refused = start_second()
+    held = w.lane('pause', '--lane', '1b')
+    again = start_second()
+    ok = (
+        first.code == 0
+        and refused.code == 2
+        and 'lane 1b (T1.11e)' in refused.text
+        and 'lane.py pause --lane' in refused.text
+        and held.code == 0
+        and again.code == 0
+        and w.package(second) == 'T1.11g'
+    )
+    return verdict(
+        ok,
+        'refused past the limit, started once the first paused',
+        f'{refused.text} || {held.text} || {again.text}',
+    )
+
+
 @case('status: equal, behind, ahead with its package, and the latest run')
 def _(w: World) -> tuple[bool, str]:
     w.start()
