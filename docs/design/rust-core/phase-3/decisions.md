@@ -96,7 +96,7 @@ Each question is summarized in the Decision cell as it was asked.
 ## The design questions (2026-10-22, night)
 
 Source: the owner's answers on 2026-10-22 (night) to the design's open questions as the orchestrator sent them, simplified, recorded in `$SDM_ORCH_STATE/phase-3/owner-answers-2026-10-21.md`, section "2026-10-22 (night): the design questions, simplified".
-The questions are numbered as they were sent: Q5 to Q13 as numbered in the design at 8f9f4b1f, D5 as at 01d65a12, and G1 to G4 as at both; each Decision cell gives the question as asked and its recommendation.
+The questions are numbered as they were sent; their text, as sent, is recorded in the same file, section "Record: the simplified question list the owner answered on 2026-10-22 (night)"; each Decision cell gives the question as asked and its recommendation.
 
 | # | Decision | Owner's words | Status |
 |---|---|---|---|
@@ -129,7 +129,7 @@ Private names in the owner's words are replaced by a bracketed description; the 
 | KO3-54 | The Java packages as the design proposed them | "As for the Java packages - it looks good. I'm really hopeful that this can go by faster, since Python already did a lot of the work with interface planning." | approved by owner 2026-10-22 |
 | KO3-55 | Q12, a bigger build machine: no | "Bigger machine: no" | approved by owner 2026-10-22 |
 | KO3-56 | Q11, protecting `rust-core`: a pre-commit check or similar stops agents pushing it | "You should add pre-commit check or something to avoid pushing rust-core" | approved by owner 2026-10-22 |
-| KO3-57 | Q10 of the simplified list also asked to confirm Phase 2's overnight decisions (P2D-2 to P2D-5, P2G-4, P2G-5, KO2-89); they are confirmed under the owner's rule of parity or better | "10: Sure, although you might potentially find bugs in the old client. Ideally our new client has feature parity or is even better than old client. Better means better error or more support." | approved by owner 2026-10-22 |
+| KO3-57 | Q10 of the simplified list also listed "7 of my Phase 2 overnight decisions for you to confirm: error wording; Postgres key equality; the data time-range wording in errors; and four others"; the owner's answer confirms the three it named (the data time-range wording is KO2-89); the four it summarised as "four others" are not confirmed by these words and stand under the overnight delegation (KO2-88), listed for the owner's morning reading | "10: Sure, although you might potentially find bugs in the old client. Ideally our new client has feature parity or is even better than old client. Better means better error or more support." | approved by owner 2026-10-22 (the three named only) |
 | KO3-58 | The night's mandate: by the morning, T3.0 done and this design reviewed and approved with the Java work; Phase 3 may start in full if it looks good | "Ok - I'm going to bed. By the morning: ensure that T3.0 is done, the design doc is ready (after reviews and approval), includes the java work. In fact, you can even get started on phase 3 fully if it looks good. Add this to your memory. Any questions before I leave?" | approved by owner 2026-10-22 |
 
 ## Kickoff answers

@@ -20,7 +20,7 @@ So each lesson names what enforces it, in one of four states:
 A line names only what exists when T3.1 lands.
 
 A lesson whose main rule is wording only says so in its heading; there are three (lessons 10, 18 and 20), and where part of another lesson is wording only, its line says which part.
-T3.1's test `tests/test_learnings_enforced.py` reads this page: every lesson has one "Enforced by" line, every file it names exists, and at most three lessons are marked wording only.
+T3.1's test `tests/test_learnings_enforced.py` reads this page: every lesson has one "Enforced by" line, every file it names exists, and at most three lessons say "wording only" in their heading; the parts of other lessons that are wording only are named on their lines and not counted.
 
 ## The short version
 
@@ -132,7 +132,7 @@ T1.33 gave each big-integer column its own tier and joined seeds by comparing co
 Phase 2 met the same family: "real keys never join" on Postgres, numeric keys read as float64 past 2^53, keys named by the caller decided before the caller's own keys (which became package T2.21), and Postgres numeric keys spelled `1.0` and `1.00` breaking the graph walk, found only by the whole-phase review.
 **Lesson:** decide a key's representation per relationship, both ends together, joining in the joined key's declared type.
 Before review, run the matrix of every pair of key types a link allows, and every spelling of the same key value, on the real engine; a wrong row is P1.
-**Enforced by:** the key-pair cases each dialect package's test author writes (Phase 3: `DECIMAL(38,x)`, `BIGINT` and `STRING` keys on Databricks and Snowflake, in the replayed legs), run by `handoff.py` before review (*T3.0*) and held by the ratchet afterwards (*exists*).
+**Enforced by:** the key-pair cases each dialect package's test author writes (Phase 3: `DECIMAL(38,x)`, `BIGINT` and `STRING` keys on Databricks and Snowflake, on the stand-in legs and live), run by `handoff.py` before review (*T3.0*) and held by the ratchet afterwards (*exists*).
 
 ### 8. A fix ports the reference's rule, with a test over the whole family; the second hit stops for a short note (first attempt to Phase 2)
 
