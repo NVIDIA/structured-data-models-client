@@ -304,13 +304,15 @@ NOT_YET = re.compile(
 #: What an owner's approval's own qualifier may say, read by allowlist
 #: (U4, T3.2): where the approval was given or relayed, or what it covers,
 #: in the forms the decisions files write: a package or task ID ("T1.7b
-#: check-in"), a decision row it came with ("with KO3-17"), "relayed by the
-#: orchestrator", a checkpoint, a round, an answer or items, lettered parts
+#: check-in", "recorded at T1.16"), a decision row it came with ("with
+#: KO3-17"), "relayed by the orchestrator", a checkpoint, a round, an
+#: answer or items, lettered parts
 #: ("(a) to (c)"), the rows it covers ("P2G-4, P2G-5 and KO2-89 only"),
 #: "including ...", or the owner's own words ("the owner chose ..."). Any
 #: other qualifier is no approval, whatever it says.
 APPROVAL_NOTES = re.compile(
     r'(?:T\d+\.\d+[a-z]?\b'
+    r'|recorded at T\d+\.\d+[a-z]?\b'
     r'|with [A-Z][A-Z0-9]*-\d+'
     r'|relayed by the orchestrator\b'
     r'|checkpoint \d'
