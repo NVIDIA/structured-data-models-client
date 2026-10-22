@@ -1,0 +1,94 @@
+{
+  "format": "sdm-case/1",
+  "id": "java.databricks-sql.types",
+  "status": "acceptance",
+  "slice": "S2",
+  "warehouses": [
+    "databricks-sql"
+  ],
+  "paths": [
+    "source.open/explicit/databricks-sql",
+    "schema.from-source/tables/databricks-sql",
+    "query.materialize/indices-binary/databricks-sql",
+    "client.predict/binary/databricks-sql"
+  ],
+  "routes": [
+    "schema.from-source/tables/databricks-sql",
+    "schema.from-source/catalog-keys/databricks-sql",
+    "query.materialize/indices-binary/databricks-sql",
+    "query.materialize/indices-multiclass/databricks-sql",
+    "query.materialize/indices-regression/databricks-sql",
+    "query.materialize/indices-link-prediction/databricks-sql",
+    "query.materialize/indices-ranking/databricks-sql",
+    "query.materialize/indices-forecast/databricks-sql",
+    "client.predict/binary/databricks-sql",
+    "client.predict/multiclass/databricks-sql",
+    "client.predict/regression/databricks-sql",
+    "client.predict/link-prediction/databricks-sql",
+    "client.predict/ranking/databricks-sql",
+    "client.predict/forecast/databricks-sql"
+  ],
+  "cells": [
+    "int64/primary-key",
+    "int64/foreign-key",
+    "timestamp-us/time-column",
+    "int8/feature",
+    "int16/feature",
+    "int32/feature",
+    "int64/feature",
+    "float32/feature",
+    "float64/feature",
+    "decimal128/feature",
+    "utf8/feature",
+    "bool/feature",
+    "binary/feature",
+    "list/feature",
+    "date32/feature",
+    "timestamp-us-tz/feature",
+    "timestamp-us/feature"
+  ],
+  "input": {
+    "base": "shop",
+    "setup": [
+      "CREATE OR REPLACE TABLE users AS SELECT user_id, age, country, (CASE WHEN user_id = 6 THEN NULL ELSE user_id % 3 END)::TINYINT AS tier, (CASE WHEN user_id = 2 THEN NULL ELSE 100 * user_id END)::SMALLINT AS visits, (CASE WHEN user_id = 1 THEN NULL WHEN user_id = 7 THEN 9007199254740993 ELSE user_id * 1000 END)::BIGINT AS points, (CASE WHEN user_id = 7 THEN NULL ELSE user_id * 0.25 END)::FLOAT AS ratio, CASE WHEN user_id = 3 THEN 'NaN'::DOUBLE WHEN user_id = 5 THEN NULL ELSE user_id * 1.5 END AS score, (CASE WHEN user_id = 1 THEN NULL WHEN user_id = 6 THEN 12345678901234567890.123456 ELSE user_id * 1000 + 0.123456 END)::DECIMAL(38, 6) AS balance, CASE WHEN user_id = 4 THEN NULL ELSE user_id % 2 = 0 END AS active, CASE WHEN user_id = 5 THEN NULL ELSE encode('u' || user_id) END AS token, (CASE user_id % 4 WHEN 0 THEN [1, 2] WHEN 1 THEN [] WHEN 2 THEN NULL ELSE [3] END)::INTEGER[] AS tags FROM users",
+      "CREATE OR REPLACE TABLE orders AS SELECT order_id, user_id, price, ts, CASE WHEN order_id % 9 = 4 THEN NULL ELSE CAST(ts AS DATE) - 3 END AS placed_on, CASE WHEN order_id % 11 = 5 THEN NULL ELSE timezone('UTC', ts + INTERVAL 2 HOUR) END AS shipped_at, CASE WHEN order_id % 13 = 6 THEN NULL ELSE ts + INTERVAL 1 DAY END AS delivered_at FROM orders"
+    ],
+    "from_source": {
+      "tables": {
+        "users": "users",
+        "orders": "orders"
+      },
+      "primary_keys": {
+        "users": "user_id",
+        "orders": "order_id"
+      },
+      "time_columns": {
+        "orders": "ts"
+      },
+      "relationships": [
+        {
+          "source_table": "orders",
+          "source_column": "user_id",
+          "target_table": "users",
+          "target_column": "user_id"
+        }
+      ]
+    },
+    "pql": "PREDICT COUNT(orders.*, 0, 30, days) > 0 FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ],
+      "anchor_time": "2023-06-01"
+    }
+  },
+  "until": "predict",
+  "expect": {
+    "outcome": "success",
+    "stage": "predict",
+    "today": "read from the old client's code (the Databricks engine table's _to_dtype, wire_dtype and _describe_source_table): TINYINT, SMALLINT, INT and BIGINT read as int64, FLOAT, DOUBLE and DECIMAL(38,6) as float64, BOOLEAN as bool, DATE, TIMESTAMP and TIMESTAMP_NTZ as timestamp[us]; token (BINARY) and tags (ARRAY<INT>) left out with an SDMWarning, since a request carries one scalar per cell; task binary_classification; every other column in the payload with its nulls, the NaN read as a missing score, 9007199254740993 kept whole; the same inputs on DuckDB answer through predict at 43e55f4f"
+  },
+  "why": "T3.13's input axes (the JDBC types the Databricks JDBC driver returns): one table holding every scalar Databricks type of C-1's recorded tables as a feature (TINYINT, SMALLINT, INT, BIGINT past 2**53, FLOAT, DOUBLE with a NaN, DECIMAL(38,6) past a double's precision, STRING, BOOLEAN, DATE, TIMESTAMP in the session zone, TIMESTAMP_NTZ), each with a null where a JDBC getter of a primitive would read 0 or false, and a BINARY and an ARRAY<INT> column the old client leaves out. C-1 records the tables as the warehouse returns them, so T3.12's conversion table and T3.13's type tests have every type to read; the Java host's leg is judged on the stand-in against C-1's reference line, and live in E-7, which alone sees the JDBC driver's own types (B7). STRUCT and MAP read as unsupported types on Databricks (_to_dtype), which the engine refuses for the whole table, so they are left to T3.4's struct case and S1's nested cases",
+  "source": "written by T3.13's test author from the reference at 43e55f4f"
+}
