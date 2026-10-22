@@ -112,7 +112,7 @@ def _repo(tmp_path: Path, phase: bool = True) -> tuple[Path, dict[str, str]]:
         stub.write_text(f'#!/usr/bin/env bash\necho "{tool} $*" >>"{log}"\n')
         stub.chmod(0o755)
     env = {
-        **os.environ,
+        **{k: v for k, v in os.environ.items() if k != 'SDM_PHASE_BRANCH'},
         'PATH': f'{bin_dir}{os.pathsep}{os.environ["PATH"]}',
         'TMPDIR': str(tmp_path),
         'GIT_CONFIG_GLOBAL': os.devnull,
