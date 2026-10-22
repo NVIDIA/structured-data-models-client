@@ -560,7 +560,10 @@ def _real_outcome(case: dict[str, Any], database: str) -> dict[str, Any]:
 
 
 def _outcome_on(stand: Any, case: dict[str, Any], leg: str) -> dict[str, Any]:
-    r""":func:`_outcome` on a warehouse leg's stand-in session."""
+    r""":func:`_outcome` on a warehouse leg's stand-in session, its
+    forwarding provider plugged in for the calls (``Standin.plugged``), so
+    every fetch reaches the stand-in rather than the ordinary provider over
+    the offline connection, whose failure is no product refusal (Codex r1)."""
     import warnings
 
     import sdm_client
@@ -571,7 +574,7 @@ def _outcome_on(stand: Any, case: dict[str, Any], leg: str) -> dict[str, Any]:
     given = stand.case['input']
     stage = 'from_source'
     try:
-        with serve() as (url, _), warnings.catch_warnings():
+        with serve() as (url, _), stand.plugged(), warnings.catch_warnings():
             warnings.simplefilter('ignore')
             schema = Schema.from_source(
                 runner.warehouse_source(
@@ -604,6 +607,44 @@ def _outcome_on(stand: Any, case: dict[str, Any], leg: str) -> dict[str, Any]:
         }
 
 
+#: The client's refusals: a control refused with anything else (an import
+#: error, a harness failure, ``MissingExtraError`` for an extra the run
+#: lacks) proves nothing about the census (Claude r1, T3.2).
+PRODUCT_ERRORS = frozenset(
+    {
+        'StructuredDataError',
+        'UnsupportedRequestError',
+        'UnknownModelError',
+        'NimRequestError',
+    }
+)
+
+
+def control_problem(
+    seeded: dict[str, Any], found: dict[str, Any]
+) -> str | None:
+    r"""None when the control was refused as the product refuses: as its
+    case expects (``expect``'s error and code, when it expects a refusal),
+    else with one of :data:`PRODUCT_ERRORS`; else why not."""
+    if found.get('result') == 'success':
+        return 'answered: the census saw no refusal it was seeded with'
+    expect = seeded.get('expect')
+    if isinstance(expect, dict) and expect.get('outcome') == 'refusal':
+        wanted = (expect.get('error'), expect.get('code'))
+        if (found.get('error'), found.get('code')) != wanted:
+            return (
+                f'refused with {found.get("error")} {found.get("code")}, not '
+                f'the {wanted[0]} {wanted[1]} it is seeded with'
+            )
+        return None
+    if found.get('error') not in PRODUCT_ERRORS:
+        return (
+            f'refused with {found.get("error")} {found.get("code")}, which is '
+            'no refusal of the client: the harness failed, not the product'
+        )
+    return None
+
+
 def real_data(cases: Path, database: str, control: Path) -> dict[str, Any]:
     r"""The census's real-data mode on ``database``, one leg (locked check
     2): every real-data case under ``cases`` (a full-size dataset's cases,
@@ -627,10 +668,10 @@ def real_data(cases: Path, database: str, control: Path) -> dict[str, Any]:
         if found['result'] != 'success':
             key = found.get('rule') or f'code:{found.get("code")}'
             hits.setdefault(str(key), []).append(case['id'])
-    if outcomes[seeded['id']]['result'] == 'success':
+    problem = control_problem(seeded, outcomes[seeded['id']])
+    if problem is not None:
         raise CensusError(
-            f'the control {seeded["id"]} was answered on {database}: the '
-            'census saw no refusal it was seeded with'
+            f'the control {seeded["id"]} on {database}: {problem}'
         )
     return {
         'format': 'sdm-refusal-census-real/1',

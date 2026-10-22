@@ -96,6 +96,16 @@ while IFS='|' read -r cell py pins; do
   [ -n "$py" ] || { echo "ci.yml's $cell job gives no python-version" >&2; exit 3; }
 done <<<"$CELLS"
 
+# What every cell installs beside its pins and CI's cell recipe, as CI's
+# engine job installs it (Codex r1, T3.2): the engine's test extras (pooch,
+# pytest-mock and the rest its suites import), and Snowflake's driver at the
+# connectors' own snowflake pin, which the S2 tests import. Part of the key,
+# so a change here rebuilds every cell.
+ENGINE_EXTRAS=test
+SNOWFLAKE=$(git -C "$REPO" show "$COMMIT:packages/structured-data-models-connectors/pyproject.toml" \
+  | awk '/^snowflake = \[/ { f = 1; next } f && /^\]/ { exit } f && /"snowflake-connector-python/ { gsub(/"|[[:space:]]/, ""); sub(/,$/, ""); print }')
+[ -n "$SNOWFLAKE" ] || { echo "the connectors' pyproject.toml names no snowflake-connector-python pin" >&2; exit 3; }
+
 # The key: what the environment installs, never the commit as a whole.
 KEY=$(
   {
@@ -103,7 +113,8 @@ KEY=$(
     printf 'rust %s\n' "$(git -C "$REPO" rev-parse "$COMMIT:rust")"
     printf 'native_wheel.py %s\n' "$(git -C "$REPO" rev-parse "$COMMIT:scripts/rust_core/native_wheel.py")"
     git -C "$REPO" ls-tree -r "$COMMIT" -- packages | grep -Ev '/(tests|tests_[a-z_]+)/' || true
-    printf '%s\n' "$CELLS" "$DUCKDB" "$MATURIN"
+    printf '%s\n' "$CELLS" "$DUCKDB" "$MATURIN" \
+      "engine[$ENGINE_EXTRAS] $SNOWFLAKE"
   } | git hash-object --stdin
 )
 if [ "$PRINT_KEY" = 1 ]; then
@@ -202,7 +213,8 @@ while IFS='|' read -r cell py pins; do
     "structured-data-models-api @ file://$API" \
     "structured-data-models-pql @ file://$PQL" \
     "structured-data-models-connectors[duckdb,sqlite,postgres] @ file://$CONNECTORS" \
-    "structured-data-models-relational-engine @ file://$ENGINE" \
+    "structured-data-models-relational-engine[$ENGINE_EXTRAS] @ file://$ENGINE" \
+    "$SNOWFLAKE" \
     "structured-data-models-client[test] @ file://$CLIENT"
   "$V/bin/python" -I - "$SRC/contract/runners" "$cell" <<'PY'
 import importlib.metadata as metadata

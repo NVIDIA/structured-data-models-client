@@ -141,10 +141,26 @@ sockets=$(ss -xlH 2>/dev/null | awk '{print $5}')
 listens() { # $1 = path; true when a listening socket is inside it
   [ -n "$sockets" ] && printf '%s\n' "$sockets" | grep -q "^$1/"
 }
+# What a running process holds (Codex r1, T3.2): every file a process has
+# open (its /proc fd links), and every directory a process names as its
+# CARGO_TARGET_DIR or TMPDIR (an active lane's or agent's build and scratch
+# directories, idle as they may be between runs). A directory holding one, or
+# named by one, is in use however old its files are.
+held=$(find /proc/[0-9]*/fd -maxdepth 1 -type l -printf '%l\n' 2>/dev/null | grep '^/' | sort -u)
+claimed=$(for e in /proc/[0-9]*/environ; do
+  tr '\0' '\n' <"$e" 2>/dev/null | sed -n 's/^\(CARGO_TARGET_DIR\|TMPDIR\)=//p'
+done | sed 's:/*$::' | grep '^/' | sort -u)
+under() { # $1 = path; true when a line of standard input is $1 or under it
+  awk -v p="$1" 'index($0, p "/") == 1 || $0 == p { f = 1 } END { exit !f }'
+}
+active() { # $1 = path; true when an open file is inside it, or a claimed directory is it or inside it
+  { printf '%s\n' "$held"; printf '%s\n' "$claimed"; } | under "$1"
+}
 stale() { # $1 = path; stale if no file inside newer than AGE minutes and not a cwd prefix
   local p=$1
   echo "$busy" | grep -q "^$p" && { echo "skip busy $p"; return 1; }
   listens "$p" && { echo "skip listening $p"; return 1; }
+  active "$p" && { echo "skip in use $p"; return 1; }
   [ -z "$(find "$p" -mmin -"$AGE" -print -quit 2>/dev/null)" ]
 }
 CAP_GIB=${CAP_GIB:-15}
@@ -198,6 +214,7 @@ else
     [ "$(gib "$t")" -ge "$CAP_GIB" ] || continue
     [ -z "$(find "$t" -mmin -30 -print -quit 2>/dev/null)" ] || { echo "skip active $t ($(gib "$t") GiB)"; continue; }
     build_busy "$w" && { echo "skip busy $t ($(gib "$t") GiB)"; continue; }
+    active "$t" && { echo "skip in use $t ($(gib "$t") GiB)"; continue; }
     gone "$t"
   done
   for d in "$TMP_ROOT"/*; do
