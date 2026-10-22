@@ -37,7 +37,7 @@
 
 mod goldens;
 
-use sdm_contract::data::{DataLayer, DataRequest, Dialect, FetchPlan, ProviderChoice, SqlParam};
+use sdm_contract::data::{DataLayer, DataRequest, FetchPlan, ProviderChoice, SqlParam};
 use sdm_contract::scalar::Scalar;
 use sdm_data::Data;
 use serde_json::Value;
@@ -131,9 +131,26 @@ const GOLDENS: goldens::Goldens = &[
     ),
 ];
 
+/// The `databricks` dialect's choice, built from the contract's JSON so the
+/// test reads whatever optional fields the choice gains.
 fn databricks() -> ProviderChoice {
-    ProviderChoice::Sql {
-        dialect: Dialect::new("databricks"),
+    serde_json::from_str(r#"{"provider":"sql","dialect":"databricks"}"#).unwrap()
+}
+
+/// The choice naming the source's catalog and schema (T3.8's `namespace`),
+/// which a listing of the schema's tables reads, no table naming them
+/// (`{catalog}.information_schema.tables WHERE table_schema = ?`).
+fn databricks_in_main_shop() -> ProviderChoice {
+    serde_json::from_str(r#"{"provider":"sql","dialect":"databricks","namespace":["main","shop"]}"#)
+        .unwrap()
+}
+
+/// The choice a golden request is planned on: the namespaced one for a
+/// listing of the schema's tables, the plain one otherwise.
+fn choice_for(request: &DataRequest) -> ProviderChoice {
+    match request {
+        DataRequest::Describe { tables, .. } if tables.is_empty() => databricks_in_main_shop(),
+        _ => databricks(),
     }
 }
 
@@ -153,7 +170,7 @@ fn request(text: &str) -> DataRequest {
 
 /// The statements `request` plans on Databricks, with their parameters.
 fn planned(request: &DataRequest) -> Vec<(String, Vec<SqlParam>)> {
-    match Data::new().plan(request, &databricks()) {
+    match Data::new().plan(request, &choice_for(request)) {
         Ok(FetchPlan::Sql { statements, .. }) => statements
             .into_iter()
             .map(|statement| {
