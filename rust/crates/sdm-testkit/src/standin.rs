@@ -580,19 +580,29 @@ fn load_table(
         quoted(name)
     );
     if batch.num_rows() == 0 {
-        // The Arrow table function reads no schema from no rows: an empty
-        // table is created from its columns' DuckDB types, read from a
-        // one-row cast of nulls.
-        let columns = fetched
+        // The Arrow table function takes no batch of no rows: an empty
+        // table is created from one row of nulls of its columns' types,
+        // none of it kept.
+        let nulls = fetched
             .schema
             .fields()
             .iter()
-            .map(|field| quoted(field.name()))
+            .map(|field| duckdb::arrow::array::new_null_array(field.data_type(), 1))
             .collect::<Vec<_>>();
-        bail!(
-            "the recorded table {name} has no rows ({} columns): an empty table is not loaded",
-            columns.len()
-        );
+        let nullable = std::sync::Arc::new(duckdb::arrow::datatypes::Schema::new(
+            fetched
+                .schema
+                .fields()
+                .iter()
+                .map(|field| field.as_ref().clone().with_nullable(true))
+                .collect::<Vec<_>>(),
+        ));
+        let row = RecordBatch::try_new(nullable, nulls).map_err(|e| anyhow!("{name}: {e}"))?;
+        let params = arrow_recordbatch_to_query_params(row);
+        connection
+            .execute(&format!("{} LIMIT 0", sql), params)
+            .map_err(|e| anyhow!("{name}: {e}"))?;
+        return Ok(());
     }
     let params = arrow_recordbatch_to_query_params(batch);
     connection
@@ -645,14 +655,45 @@ impl StandIn {
         step: &FetchStep,
         keys: &BTreeMap<AttachmentId, Fetched>,
     ) -> std::result::Result<Answered, Refused> {
-        if let Some(answer) = self.replayed(&step.plan) {
+        let request = &step.request;
+        // What the request depends on is checked first, so a recorded
+        // table or draw the capture lacks is refused by name, never served
+        // by a replayed statement.
+        if let DataRequest::SampleEntities { table, .. } = request {
+            let name = table.source.last().cloned().unwrap_or_default();
+            if !self
+                .capture
+                .draws
+                .iter()
+                .any(|draw| last_part(&draw.table) == name)
+            {
+                return Err(refused(format!(
+                    "sample_entities: the capture of {} on {} holds no recorded draw of table {name}",
+                    self.capture.case, self.capture.leg
+                )));
+            }
+        }
+        for relation in relations(request) {
+            let name = relation.source.last().cloned().unwrap_or_default();
+            if !self.capture.tables.contains_key(&name) && !self.capture.derived.contains_key(&name)
+            {
+                return Err(refused(format!(
+                    "{}: the capture of {} on {} holds no recorded table {name}",
+                    request.name(),
+                    self.capture.case,
+                    self.capture.leg
+                )));
+            }
+        }
+        if !matches!(request, DataRequest::SampleEntities { .. })
+            && let Some(answer) = self.replayed(&step.plan)
+        {
             return Ok(Answered {
                 answer,
                 by: "replay",
                 flagged: Vec::new(),
             });
         }
-        let request = &step.request;
         for relation in relations(request) {
             let name = relation.source.last().cloned().unwrap_or_default();
             if let Some(None) = self.capture.derived.get(&name) {
@@ -804,11 +845,13 @@ impl StandIn {
             }
             FetchPlan::Host { .. } => None,
         };
-        let (fraction, written_seed) = match clause {
+        // The seed as the plan writes it: an unseeded draw (Snowflake's
+        // `SAMPLE ROW (n ROWS)`) asks none, whatever seed the request
+        // carries; a plan writing no sampling clause asks the request's.
+        let (fraction, asked_seed) = match clause {
             Some((fraction, seed)) => (Some(fraction), seed),
-            None => (None, None),
+            None => (None, seed_text(seed)),
         };
-        let asked_seed = written_seed.or_else(|| seed_text(seed));
         let recorded: Vec<&Draw> = self
             .capture
             .draws
