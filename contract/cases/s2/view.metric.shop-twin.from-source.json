@@ -1,0 +1,55 @@
+{
+  "format": "sdm-case/1",
+  "id": "view.metric.shop-twin.from-source",
+  "status": "acceptance",
+  "slice": "S2",
+  "warehouses": [
+    "databricks-sql",
+    "databricks-spark"
+  ],
+  "paths": [
+    "schema.from-source/semantic-model/databricks-metric-view"
+  ],
+  "routes": [
+    "schema.from-source/semantic-model/databricks-metric-view",
+    "query.materialize/indices-binary/databricks-metric-view",
+    "query.materialize/indices-multiclass/databricks-metric-view",
+    "query.materialize/indices-regression/databricks-metric-view",
+    "query.materialize/indices-link-prediction/databricks-metric-view",
+    "query.materialize/indices-ranking/databricks-metric-view",
+    "query.materialize/indices-forecast/databricks-metric-view",
+    "client.predict/binary/databricks-metric-view",
+    "client.predict/multiclass/databricks-metric-view",
+    "client.predict/regression/databricks-metric-view",
+    "client.predict/link-prediction/databricks-metric-view",
+    "client.predict/ranking/databricks-metric-view",
+    "client.predict/forecast/databricks-metric-view"
+  ],
+  "cells": [
+    "int64/primary-key",
+    "int64/foreign-key",
+    "timestamp-us/time-column"
+  ],
+  "input": {
+    "base": "shop",
+    "pql": "PREDICT COUNT(orders.*, 0, 30, days) > 0 FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ],
+      "anchor_time": "2024-03-01"
+    },
+    "view": {
+      "kind": "metric_view",
+      "name": "{shop_metric_view}"
+    }
+  },
+  "until": "from_source",
+  "expect": {
+    "outcome": "success",
+    "stage": "from_source"
+  },
+  "why": "The owner's existing metric view over a small shop dataset (KO3-21), the twin of the Snowflake semantic view of view.semantic.shop-twin.from-source, named by the {shop_metric_view} placeholder the capture resolves from the environment, its name private; described only, since its tables and dimensions are its own",
+  "source": "written by T3.5's test author from the reference at 43e55f4f"
+}
