@@ -51,7 +51,7 @@
     "base": "shop",
     "setup": [
       "CREATE OR REPLACE TABLE users AS SELECT user_id, age, country, (CASE WHEN user_id = 6 THEN NULL ELSE user_id % 3 END)::TINYINT AS tier, (CASE WHEN user_id = 2 THEN NULL ELSE 100 * user_id END)::SMALLINT AS visits, (CASE WHEN user_id = 1 THEN NULL WHEN user_id = 7 THEN 9007199254740993 ELSE user_id * 1000 END)::BIGINT AS points, (CASE WHEN user_id = 7 THEN NULL ELSE user_id * 0.25 END)::FLOAT AS ratio, CASE WHEN user_id = 3 THEN 'NaN'::DOUBLE WHEN user_id = 5 THEN NULL ELSE user_id * 1.5 END AS score, (CASE WHEN user_id = 1 THEN NULL WHEN user_id = 6 THEN 12345678901234567890.123456 ELSE user_id * 1000 + 0.123456 END)::DECIMAL(38, 6) AS balance, CASE WHEN user_id = 4 THEN NULL ELSE user_id % 2 = 0 END AS active, CASE WHEN user_id = 5 THEN NULL ELSE encode('u' || user_id) END AS token, (CASE user_id % 4 WHEN 0 THEN [1, 2] WHEN 1 THEN [] WHEN 2 THEN NULL ELSE [3] END)::INTEGER[] AS tags FROM users",
-      "CREATE OR REPLACE TABLE orders AS SELECT order_id, user_id, price, ts, CASE WHEN order_id % 9 = 4 THEN NULL ELSE CAST(ts AS DATE) - 3 END AS placed_on, CASE WHEN order_id % 11 = 5 THEN NULL ELSE timezone('UTC', ts + INTERVAL 2 HOUR) END AS shipped_at, CASE WHEN order_id % 13 = 6 THEN NULL ELSE ts + INTERVAL 1 DAY END AS delivered_at FROM orders"
+      "CREATE OR REPLACE TABLE orders AS SELECT order_id, user_id, price, ts, CASE WHEN order_id % 9 = 4 THEN NULL ELSE CAST(ts AS DATE) - 3 END AS placed_on, CASE WHEN order_id % 11 = 5 THEN NULL ELSE to_timestamp(epoch(ts) + 7200) END AS shipped_at, CASE WHEN order_id % 13 = 6 THEN NULL ELSE ts + INTERVAL 1 DAY END AS delivered_at FROM orders"
     ],
     "from_source": {
       "tables": {
