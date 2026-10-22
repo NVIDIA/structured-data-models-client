@@ -312,10 +312,16 @@ def test_t30_no_stamp_when_a_seeded_case_differs_from_the_old_client(
         f'{PACKAGE}: a package that touches the binary-classification case',
         {'docs/t399-probe.md': 'A probe for the handoff tests.\n'},
     )
+    # The case runs on Postgres too, which the handoff needs a server for
+    # (T3.0 fix 2): the stamp case needs one, the refusal holds without.
+    dsn = os.environ.get('SDM_POSTGRES_TEST_DSN', '')
+    if not seeded and not dsn:
+        pytest.skip('the stamp needs SDM_POSTGRES_TEST_DSN: the case runs on Postgres')
     env = _env(
         tmp_path,
         SDM_PHASE_BRANCH=PHASE,
         T30_CORE_PYTHON=core,
+        **({'SDM_POSTGRES_TEST_DSN': dsn} if dsn else {}),
         **({'T30_SEED_CASE': SEEDED_CASE} if seeded else {}),
     )
     done = _handoff(

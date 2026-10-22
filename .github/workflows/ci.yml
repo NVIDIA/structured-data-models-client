@@ -167,14 +167,17 @@ jobs:
       # The run's plan (T3.0), decided once, as the run starts, so a job
       # that starts an hour later decides alike. On a push to a branch under
       # a phase branch:
-      # - base: the phase head now (ratchet.py push-base), the base every
-      #   comparison of this run takes, so a landing while it runs, its own
-      #   candidate's included, cannot make one a self-comparison; a rerun
-      #   of failed jobs keeps it, and a rerun of every job after the
+      # - base: the phase head now (ratchet.py push-base), or, for a
+      #   candidate stacked on unlanded landings, the last of them, the base
+      #   every comparison of this run takes, so a landing while it runs,
+      #   its own candidate's included, cannot make one a self-comparison; a
+      #   rerun of failed jobs keeps it, and a rerun of every job after the
       #   candidate landed takes the head it landed on;
       # - tooling: whether the tests of the checking tools (the
       #   tooling marker) run, which they do when the change touches a
-      #   judging path or such a test (tooling_tests.py must-run);
+      #   judging path or such a test (tooling_tests.py must-run), the
+      #   change being the whole stack's, from the phase head
+      #   (push-base --stack-base), so a train below the top counts;
       # - full: false on a test author's branch (<topic>-tests, or
       #   <topic>-tests-<suffix>), whose tests fail by design until the
       #   code exists: the client tests on one Python, and no wheels for
@@ -194,7 +197,8 @@ jobs:
             if [ "$(git rev-parse --is-shallow-repository)" = true ]; then git fetch --quiet --unshallow origin; fi
             git fetch --quiet origin "refs/heads/$phase:refs/remotes/origin/$phase" || exit 1
             base=$(python3 scripts/rust_core/ratchet.py push-base) || exit 1
-            plan=$(python3 scripts/rust_core/tooling_tests.py must-run --base "$base") || exit 1
+            stacked=$(python3 scripts/rust_core/ratchet.py push-base --stack-base) || exit 1
+            plan=$(python3 scripts/rust_core/tooling_tests.py must-run --base "$stacked") || exit 1
             tooling=${plan%%$'\n'*}
             why=${plan#*$'\n'}
             if [[ "$GITHUB_REF_NAME" =~ -tests(-[^-]+)*$ ]]; then full=false; fi

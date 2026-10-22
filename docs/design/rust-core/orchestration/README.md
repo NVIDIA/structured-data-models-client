@@ -171,7 +171,7 @@ Up to 4 approved packages land on one green CI run, the run on the stack's top (
 What product packages change as normal work is left out: the bridge freeze and its seeds, `wheel_smoke.py`, the recorders and probes under `contract/tools/`, vectors, cases and `ci.yml`.
 `land.py` reads it from the phase head, so a package cannot take its own change off the list.
 Only the phase's first package may change a judging path outside a train.
-After it, every judging change found mid-phase goes into one train package, which changes judging paths, their tests and docs only, and lands at the front of the next stack: `land.py --stack --train ...` (its landing carries `Train: yes`).
+After it, every judging change found mid-phase goes into one train package, which changes judging paths, other checking tools (`scripts/rust_core/`, `contract/runners/`, `contract/tools/`), their tests and docs only, and lands at the front of the next stack: `land.py --stack --train ...` (its landing carries `Train: yes`).
 A package changing a judging path anywhere else is refused with a message naming that command.
 To collect a find into the train, cherry-pick its judging-only commits onto the train's branch under the train's ID, and drop them from the package.
 
@@ -180,14 +180,14 @@ To collect a find into the train, cherry-pick its judging-only commits onto the 
 Before an implementer or test author reports "ready", it runs `scripts/rust_core/handoff.py run --package <ID> [--python <lane environment python>] [--previous <last round's SHA>] [--case <id> ...]` with the tools' interpreter.
 On a clean worktree it runs:
 
-- the package's cases (changed or named) against the recorded old-client answers, on python-core and, when `rust/` changed, rust-host, on each database the case names (Postgres needs `SDM_POSTGRES_TEST_DSN`: without it a case on Postgres alone gets no stamp, and the stamp records Postgres as not run for the others);
-- in a fix round, the new or changed tests on the previous round's SHA, where at least one must fail: Python tests on the previous tree's package sources (the compiled core stays the installed one, so a Rust fix shows its failure through a Rust test), test files and changed `#[cfg(test)]` blocks with cargo on the previous tree;
-- every suite `scripts/rust_core/affected.py` names for the changed files;
-- lint (`ruff`, `cargo fmt`, `mypy` on changed packages).
+- the package's cases (changed or named) against the recorded old-client answers, on python-core and, when `rust/` changed, rust-host, on each database the case names (a case naming Postgres needs `SDM_POSTGRES_TEST_DSN`, a throwaway postgres:17 container as CI runs, or no stamp);
+- in a fix round, the new or changed tests on the previous round's SHA, where at least one must fail: a fix to Rust production code needs a Rust test (a crate test, or a `#[cfg(test)]` block spliced into the previous source) that fails there with cargo, and is refused with Python tests only; any other fix's Python tests run on the previous tree's package sources;
+- every suite `scripts/rust_core/affected.py` names for the changed files (the binding's tests on the lane's test-ops build, `SDM_KIT_PYTHON`);
+- lint (`ruff`, `cargo fmt`, and `mypy --python-executable <lane python>` on changed packages).
 
 It writes `<git common dir>/sdm-handoff/<SHA>.json` only when all pass; `handoff.py check SHA` reads it.
 `codex_pane.py review` and the Claude reviewer launch (the hook below, on any Agent prompt naming a round brief, `round-briefs/...`, or `briefs/reviewer.md`, for each SHA it or the brief names that is not landed yet) refuse a round on a SHA without a stamp.
-Reviewers read the code, the stamp and CI, and list every difference from the old client under `differences:` ([briefs/reviewer.md](briefs/reviewer.md)).
+Reviewers read the code, the stamp and CI, and list every difference from the old client under `differences:`, each better or worse; only a worse one blocks (the owner, G2; [briefs/reviewer.md](briefs/reviewer.md)).
 `affected.py --unmapped` fails when a tracked path under `contract/`, `scripts/rust_core/` or `rust/crates/` maps to no suite; add a row to its `MAP`.
 
 A fix commit (`<ID> fix <n>: ...`) that changes product code carries a line `Rule: <the old client's rule, one sentence>`.
@@ -196,7 +196,7 @@ A fix commit (`<ID> fix <n>: ...`) that changes product code carries a line `Rul
 ### The command hook (item 6)
 
 `.claude/settings.json` runs `scripts/rust_core/orchestration/guard_cmd.py` before every Bash and Agent call of a Claude agent started in the repository.
-It denies the banned commands, naming the rule and the alternative: `rm -r` (and `find -delete`) outside your scratch (the session's directory under `/tmp/claude-*`, a directory in `SDM_SCRATCH`, or a directory under `/mnt/localssd/tmp/` or `/mnt/localssd/target/` the session made itself with `mkdir`; another agent's needs the owner's token), `--force`, `-f`, `--force-with-lease` and `+` refspecs on `git push`, `git push --delete`, `git worktree remove --force`, `docker rm -f`, `--no-verify` and `git -c core.hooksPath`, `sudo`, `git config` (reads allowed), `git stash`, `git branch -D`, `gh run watch`, `git fetch --prune`, and `prepush.sh --full`.
+It denies the banned commands, naming the rule and the alternative: `rm -r` (and `find -delete`) outside your scratch (the session's directory under `/tmp/claude-*`, a directory in `SDM_SCRATCH`, or a directory under `/mnt/localssd/tmp/` or `/mnt/localssd/target/` the session made itself with `mkdir`; another agent's needs the owner's token), a `git push` that updates or deletes `rust-core`, `main` or `rust-core-reference` however it is spelled (the owner, Q14; the pre-push hook refuses it too), `--force`, `-f`, `--force-with-lease` and `+` refspecs on `git push`, `git push --delete`, `git clean -f`, `cargo clean`, `git worktree remove --force`, `docker rm -f`, `--no-verify` and `git -c core.hooksPath`, `sudo`, `git config` (reads allowed), `git stash`, `git branch -D`, `gh run watch`, `git fetch --prune`, and `prepush.sh --full`.
 An owner-approved one-off runs as `SDM_APPROVED=<id> <command>`, `<id>` the slug of the owner-answers heading that approves it (`guard_cmd.py --tokens` lists them); it is logged in `$SDM_ORCH_STATE/logs/approved-commands.log`, and every refusal in `guard-denied.log`.
 Codex panes keep `rule_watch.py`: the owner declined a Codex hook (2026-10-16) and kept the watcher for Codex (2026-10-21, decision 7).
 The orchestrator's own session gets the hook when it is started in a checkout holding `.claude/settings.json`.
@@ -242,10 +242,11 @@ The machine has 8 vCPUs, 30 GB of memory and 412 GB of fast disk at `/mnt/locals
 
 ### The dry run and the slip report (item 1)
 
-- **Before the design locks**, run `scripts/rust_core/gate_dryrun.sh kinds.yaml --python $SDM_LANE_ENV/current/cell-ref-pandas3/bin/python` over the design's planned case kinds (`kinds: [{name, case}]`, one stub case each).
+- **Before the design locks**, run `scripts/rust_core/gate_dryrun.sh kinds.yaml --python $SDM_LANE_ENV/current/cell-ref-pandas3/bin/python --gate <half>` over the design's planned case kinds (`kinds: [{name, case}]`, one stub case each).
   It judges each stub with the checkpoint's own case reader, `coverage.py`, `ratchet.py`, Python runner and `compare.py` (a worktree of the checkpoint, as the gate's harness judges) (and with `--rust` the test kit, with `--gate HALF` the locked gate) on a throwaway commit, and prints a `GAP <kind> (<case>): <tool>: ...` line for every refusal.
   Those lines are the first train's list (the front of the first stack, `land.py --stack --train`), found up front instead of one judging package at a time mid-phase.
   A tool that fails on no line naming a kind prints `INCOMPLETE` and the dry run exits 1: what it judged is unknown.
+  Without `--gate <half>` (the locked half the planned kinds fall in) the run is `INCOMPLETE` too, since the locked gate's refusals are part of the list.
 - **The slip report**: the heartbeat runs `scripts/rust_core/orchestration/phase_stats.py --phase-branch origin/$SDM_PHASE_BRANCH --no-ci --forecast <the design's forecast>`, a `{start, packages: [{id, hours}]}` file, and reads how many hours the phase is behind and the package or unplanned landings that caused most of it.
   It never blocks anything.
 

@@ -22,10 +22,21 @@ from collections.abc import Iterable
 
 #: The list, as a path in the tree.
 FILE = 'scripts/rust_core/judging-paths.txt'
-#: What a train may change besides judging paths: their tests and the docs.
-TRAIN_ALSO = ('tests/**', 'contract/tests/**', 'docs/**')
+#: What a train may change besides judging paths: their tests, the docs,
+#: and the other checking tools.
+TRAIN_ALSO = (
+    'tests/**',
+    'contract/tests/**',
+    'docs/**',
+    # The checking tools the list leaves out because product packages also
+    # edit their data (bridge_freeze.py, wheel_smoke.py, the recorders): a
+    # fix to their checking logic may ride the train (Codex r2).
+    'scripts/rust_core/**',
+    'contract/runners/**',
+    'contract/tools/**',
+)
 #: Changes that make a landing a product landing: anything outside these.
-NOT_PRODUCT = ('docs/**', 'tests/**', 'contract/tests/**')
+NOT_PRODUCT = ('docs/**', 'tests/**', 'contract/tests/**', '.github/**')
 
 Rules = list[tuple[bool, 're.Pattern[str]']]
 

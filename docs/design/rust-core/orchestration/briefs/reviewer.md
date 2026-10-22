@@ -16,7 +16,11 @@ The orchestrator's brief names: the package ID, its design row and decision rows
 **The report** (`land.py` reads its first two lines)
 - Line 1: exactly `APPROVE` or `CHANGES REQUIRED`.
 - Line 2: the full candidate SHA.
-- Then `differences:`, a list of every difference from the old client the change makes (an answer, a refusal kind or a message a user sees), each with its register entry id, or `none`. A listed difference without an approved register entry blocks, at least P2 (the owner's severity rule, 2026-10-21).
+- Then `differences:`, a list of every difference from the old client the change makes (an answer, a refusal kind or a message a user sees), each marked better or worse, with its register entry id, or `none`.
+  The owner's rule (2026-10-22, G2): "discrepancies are ok as long as our rust core does better".
+  - A difference blocks (at least P2) only when the core is worse: a wrong answer, a crash, support lost, or a worse error.
+  - A better difference (a better error, or more support) is registered as an improvement and does not block.
+  - A red CI job the change caused, or a decision row wider than the owner's words, still blocks.
 - Then the findings, each tagged P1 (wrong results, a crash, a check that passes when it shouldn't), P2 (a real defect that's less severe, or a missing required test) or P3 (minor). Only P1 and P2 block.
 - Each finding: a one-line issue with `file:line` and how to reproduce it, then a one-line suggested fix.
 - Then one short paragraph on what you verified and how.

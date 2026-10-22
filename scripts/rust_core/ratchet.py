@@ -2688,7 +2688,9 @@ def ci_base(environ: dict[str, str], repo: Path = Path('.')) -> str:
     return f'--base origin/{phase}'
 
 
-def push_base(environ: dict[str, str], repo: Path = Path('.')) -> str:
+def push_base(
+    environ: dict[str, str], repo: Path = Path('.'), stack: bool = True
+) -> str:
     r"""The phase head a CI run's candidate was pushed on (T3.0): what the
     landing job records once, as the run starts, and hands every job that
     judges as :data:`PUSH_BASE`, so ``where`` names the same base in every
@@ -2716,7 +2718,10 @@ def push_base(environ: dict[str, str], repo: Path = Path('.')) -> str:
     ).strip()
     head = git(repo, 'rev-parse', 'HEAD^{commit}').strip()
     if head == tip or git(repo, 'merge-base', head, tip).strip() != head:
-        return stack_tail(repo, tip, head)
+        # The judging checkpoint is the stack's tail; the base of what the
+        # whole stack changes (stack=False, CI's tooling filter) is the
+        # phase head (Codex r2).
+        return stack_tail(repo, tip, head) if stack else tip
     out = git(
         repo, 'log', '--reverse', '--ancestry-path', '--format=%H%x00%s',
         f'{head}..{tip}',
@@ -2796,6 +2801,11 @@ def main(argv: list[str] | None = None) -> int:
     spot.add_argument('--repo', type=Path, default=Path('.'))
     pushed = commands.add_parser('push-base')
     pushed.add_argument('--repo', type=Path, default=Path('.'))
+    pushed.add_argument(
+        '--stack-base',
+        action='store_true',
+        help='the phase head the whole stack is based on, not its tail',
+    )
     expect = commands.add_parser('effective')
     expect.add_argument('--repo', type=Path, default=Path('.'))
     among = expect.add_mutually_exclusive_group(required=True)
@@ -2816,7 +2826,11 @@ def main(argv: list[str] | None = None) -> int:
             print(ci_base(dict(os.environ), arguments.repo))
             return 0
         if arguments.command == 'push-base':
-            print(push_base(dict(os.environ), arguments.repo))
+            print(
+                push_base(
+                    dict(os.environ), arguments.repo, not arguments.stack_base
+                )
+            )
             return 0
         if arguments.command == 'checkpoint':
             found, problems = resolve(

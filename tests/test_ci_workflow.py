@@ -2634,6 +2634,50 @@ def test_t30_the_judging_tool_job_runs_only_when_its_paths_change(
         assert _evaluate(each, context) is runs, (job_name, each, context)
 
 
+def test_t30_a_train_below_the_top_runs_the_tooling_jobs_and_judges_the_top(
+    tmp_path: Path,
+) -> None:
+    # T3.0 fix 2 (Codex r2): the stack's top is pushed while the phase
+    # branch holds H; below it, a tooling train changed the comparator and
+    # was stacked (its landing L, not landed). The run judges the top
+    # against L (base) and runs the tooling jobs for the whole stack's
+    # change from H (tooling).
+    origin, repo = tmp_path / 'origin.git', tmp_path / 'repo'
+    subprocess.run(
+        ['git', 'clone', '-q', '--bare', '--shared', str(ROOT), str(origin)],
+        env={**os.environ, **GIT_ENV}, check=True, capture_output=True,
+    )  # fmt: skip
+    _git(tmp_path, 'clone', '-q', '--shared', str(origin), str(repo))
+    _git(
+        repo, 'checkout', '-q', '-B', T30_LANE, _git(ROOT, 'rev-parse', 'HEAD')
+    )
+    head = _git(repo, 'rev-parse', 'HEAD')
+    _git(repo, 'push', '-q', 'origin', f'{head}:refs/heads/{T30_PHASE}')
+    _git(repo, 'fetch', '-q', 'origin')
+    with (repo / 'scripts/rust_core/compare.py').open('a') as handle:
+        handle.write('\n')
+    _git(repo, 'commit', '-q', '-am', 'T3.98: the train')
+    _git(
+        repo, 'commit', '-q', '--allow-empty', '-m',
+        'Land T3.98: the train\n\nReviewed-by: r\nProtected-paths: none\n'
+        f'Base-SHA: {head}\nCheckpoint-SHA: {head}\nTrain: yes',
+    )  # fmt: skip
+    train = _git(repo, 'rev-parse', 'HEAD')
+    (repo / 'docs/t399.md').write_text('the product\n')
+    _git(repo, 'add', 'docs/t399.md')
+    _git(repo, 'commit', '-q', '-m', 'T3.99: the product above it')
+    values = {
+        'github.event.before': head,
+        'github.sha': _git(repo, 'rev-parse', 'HEAD'),
+        'github.ref_name': T30_LANE,
+        'github.ref': f'refs/heads/{T30_LANE}',
+        'github.event_name': 'push',
+        'github.repository': 'o/r',
+    }
+    assert _t30_output('landing', 'base', repo, tmp_path, values) == train
+    assert _t30_output('landing', 'tooling', repo, tmp_path, values) == 'true'
+
+
 def _t30_durations(tmp_path: Path, minutes: list[float]) -> Path:
     """Runs newest first: rust-test (timeout 120, 80% is 96 minutes) at
     these minutes, every other job at one minute."""

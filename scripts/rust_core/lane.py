@@ -89,6 +89,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 from collections import Counter
@@ -865,6 +866,31 @@ def check(args: argparse.Namespace, tools: Tools, out: Out) -> int:
     return 0
 
 
+#: The branches only the owner's merge pushes (the owner, Q14, 2026-10-22).
+PROTECTED_REFS = {
+    f'refs/heads/{name}'
+    for name in ('rust-core', 'main', 'rust-core-reference')
+}
+
+
+def protected_push(branch: str) -> None:
+    """Refuses a push that updates or deletes a protected branch, unless
+    ``SDM_APPROVED`` names an owner-answers section (guard_cmd.py's tokens),
+    which is logged."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent / 'orchestration'))
+    import guard_cmd  # noqa: PLC0415
+
+    token = os.environ.get(guard_cmd.TOKEN_VAR, '')
+    if token and token in guard_cmd.valid_tokens():
+        guard_cmd.log('approved-commands.log', f'pre-push {token} {branch}')
+        return
+    raise Refusal(
+        f"the push updates {branch}, which only the owner's merge pushes; "
+        f'run it as {guard_cmd.TOKEN_VAR}=<owner-answers id> git push ... '
+        'when the owner approved it'
+    )
+
+
 def check_pushed(
     args: argparse.Namespace, tools: Tools, out: Out, current: str
 ) -> int:
@@ -878,6 +904,8 @@ def check_pushed(
             continue
         _, sha, remote_ref, _ = fields
         branch = remote_ref.removeprefix('refs/heads/')
+        if remote_ref in PROTECTED_REFS:
+            protected_push(branch)
         under = (
             phase_of(branch) if remote_ref.startswith('refs/heads/') else None
         )

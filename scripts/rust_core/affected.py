@@ -12,7 +12,8 @@ Prints one command a line: every suite that reads one of ``FILES`` (or,
 with none given, the files changed since ``--base``, by default the merge
 base with the phase branch). ``handoff.py`` runs them before a package is
 reported ready. ``python3`` in a printed command stands for the interpreter
-the caller runs them with.
+the caller runs them with, and ``python3-kit`` the lane's test-ops interpreter
+(``SDM_KIT_PYTHON``).
 
 A path's suites come from :data:`MAP` (a path pattern, in
 ``contract/protected-paths.txt``'s syntax, and its suites), plus every test
@@ -56,6 +57,13 @@ RATCHET = (*PYTEST, 'tests/test_contract_ratchet.py')
 CI = (*PYTEST, 'tests/test_ci_workflow.py')
 LOADER = (*PYTEST, 'contract/tests/test_contract_loader.py')
 RUNNERS = (*PYTEST, 'contract/tests/test_runners.py')
+#: ``python3-kit`` stands for the lane's test-ops interpreter
+#: (``SDM_KIT_PYTHON``, cells.sh's ``kit``), which the binding's tests need.
+KIT = 'python3-kit'
+BINDING = (
+    KIT, '-m', 'pytest', '-q', '-p', 'no:cacheprovider',
+    'rust/bindings/sdm-py/tests', '--native-build', 'test-ops',
+)  # fmt: skip
 
 
 def cargo(crate: str) -> Suite:
@@ -98,8 +106,9 @@ MAP: tuple[tuple[str, tuple[Suite, ...]], ...] = (
     ('contract/**', (LOADER,)),
     # The crates: each one's own tests.
     ('rust/crates/*/**', (cargo('{crate}'),)),
-    # The binding: its Python tests, on the built wheel (CI's binding job).
-    ('rust/bindings/sdm-py/**', ((*PYTEST, 'rust/bindings/sdm-py/tests'),)),
+    # The binding: its Python tests on the test-ops build, as CI's binding
+    # job runs them (Codex r2).
+    ('rust/bindings/sdm-py/**', (BINDING,)),
     # Each Python package: its own tests, and the client's also the root
     # suites that drive it through the public routes.
     ('packages/*/**', ((*PYTEST, 'packages/{pkg}/tests'),)),

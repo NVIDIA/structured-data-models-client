@@ -22,9 +22,8 @@ default the same. The steps:
 
 - ``reference``: the package's cases (each case file it adds or changes,
   and each ``--case``) run on python-core, on each database the case names
-  (Postgres only with ``SDM_POSTGRES_TEST_DSN``; without it, a case that
-  runs on Postgres alone refuses the stamp, and the others record Postgres
-  as not run), and on rust-host (DuckDB and SQLite) when the package changes
+  (Postgres with ``SDM_POSTGRES_TEST_DSN``, which a case naming Postgres
+  needs, or no stamp), and on rust-host (DuckDB and SQLite) when the package changes
   ``rust/``, then ``compare.py`` holds them to the recorded old-client
   answers in ``contract/reference/`` (with the ratchet's effective
   expectations). No live old-client run, except for a case with no
@@ -32,14 +31,13 @@ default the same. The steps:
   ``SDM_REFERENCE_PYTHON`` (an interpreter holding the old client) and
   ``SDM_REFERENCE_REPO`` (its checkout) are set, and fails naming the case
   otherwise;
-- ``fails-before``: in a fix round (a commit ``<ID> fix <n>: ...`` since the
-  phase head) ``--previous`` is the previous round's SHA, and every new or
-  changed test (pytest files, ``*selftest.py``, the crates' ``tests/`` and
-  changed ``#[cfg(test)]`` blocks, spliced into the previous source) runs
-  on the previous tree: at least one must fail. Python tests run on the
-  previous tree's package sources, with the installed build's compiled
-  core linked in (the previous tree is not built), so a fix to the Rust
-  core shows its failure through a Rust test;
+- ``fails-before``: in a fix round (a commit ``<ID> fix <n>: ...`` of this
+  package since its base) ``--previous`` is the previous round's SHA, and
+  the round's new or changed tests run on the previous tree, where at least
+  one must fail. A fix to Rust production code needs a Rust test (a crate
+  test or a ``#[cfg(test)]`` block, spliced into the previous source) that
+  fails there with cargo, and is refused with Python tests only; any other
+  fix's Python tests run on the previous tree's package sources;
 - ``affected``: every suite ``affected.py`` names for the changed files;
 - ``lint``: ``ruff check`` and ``ruff format --check`` on the changed Python
   files, ``cargo fmt --check`` on the changed crates, and ``mypy`` on each
@@ -274,26 +272,12 @@ def step_reference(
         if database == 'postgres' and not os.environ.get(
             'SDM_POSTGRES_TEST_DSN'
         ):
-            # A case judged on no database at all is no handoff (Codex r1):
-            # one that names only Postgres needs the server here.
-            only = sorted(
-                case
-                for case, path in cases.items()
-                if set(
-                    json.loads(path.read_text()).get('databases') or DATABASES
-                )
-                == {'postgres'}
-            )
-            if only:
-                step.problems.append(
-                    f'{", ".join(only)} run(s) on Postgres alone, and '
-                    'SDM_POSTGRES_TEST_DSN is not set: point it at a server, '
-                    'or no stamp'
-                )
-            step.notes.append(
-                f'NOT RUN postgres (no SDM_POSTGRES_TEST_DSN) for '
-                f'{", ".join(sorted(cases))}: judged on its other databases '
-                'here, on Postgres by CI only'
+            # Every database a case names is judged here (Codex r2): no
+            # server, no stamp.
+            step.problems.append(
+                f'{", ".join(sorted(cases))} run(s) on Postgres, and '
+                'SDM_POSTGRES_TEST_DSN is not set: point it at a server (a '
+                'throwaway postgres:17 container, as CI runs), or no stamp'
             )
             continue
         files = [str(p) for p in cases.values()]
@@ -501,6 +485,39 @@ def source_path(tree: Path, python: str) -> str:
     return os.pathsep.join(paths)
 
 
+def without_tests(text: str) -> str:
+    """A Rust file's text without its ``#[cfg(test)]`` block."""
+    block = test_block(text)
+    return text if block is None else text[: block[0]] + text[block[1] :]
+
+
+def rust_production(root: Path, previous: str, diffed: list[str]) -> list[str]:
+    """The Rust files whose production code changed since ``previous``: any
+    change under ``rust/`` but a crate test file or a ``#[cfg(test)]`` block
+    alone."""
+    found = []
+    for path in diffed:
+        if not path.startswith('rust/') or CRATE_TEST.match(path):
+            continue
+        if not path.endswith('.rs'):
+            found.append(path)
+            continue
+        done = run(['git', 'show', f'{previous}:{path}'], root)
+        old = done.stdout if done.returncode == 0 else ''
+        new = (
+            (root / path).read_text(encoding='utf-8')
+            if (root / path).is_file()
+            else ''
+        )
+        # Whitespace alone (the blank lines around a test block) is no
+        # production change.
+        if ''.join(without_tests(old).split()) != ''.join(
+            without_tests(new).split()
+        ):
+            found.append(path)
+    return found
+
+
 def step_fails_before(
     root: Path,
     base: str,
@@ -509,12 +526,18 @@ def step_fails_before(
     scratch: Path,
     package: str | None = None,
 ) -> Step:
-    """A fix round's new or changed tests, on the previous round's tree:
-    Python tests on its sources (``source_path``: the previous tree's
-    packages ahead of the installed ones), self-tests and Rust tests
-    (``tests/*.rs`` files, and changed ``#[cfg(test)]`` blocks spliced into
-    the previous source) with cargo on the previous tree. At least one must
-    fail; pytest stops at the first failure."""
+    """A fix round's new or changed tests, on the previous round's tree; at
+    least one must fail there. Two rules, by what the fix changes (the
+    owner's stop-and-redesign rule after two rounds of patches):
+
+    - a fix to Rust production code comes with a Rust test, a crate test
+      (``tests/*.rs``) or a ``#[cfg(test)]`` block spliced into the
+      previous source, that fails there with cargo; Python tests cannot
+      show it, since the previous tree's core is not built, and a Rust fix
+      with Python tests only is refused, asking for a Rust test;
+    - any other fix: its Python tests run on the previous tree's package
+      sources (``source_path``) and its self-tests on the previous tree,
+      pytest stopping at the first failure."""
     step = Step('fails-before')
     subjects = git(root, 'log', '--format=%s', f'{base}..HEAD').splitlines()
     fixes = [
@@ -539,13 +562,23 @@ def step_fails_before(
         )
         if p
     ]
+    production = rust_production(root, previous, diffed)
     changed = [p for p in diffed if is_test(p) and (root / p).is_file()]
     spliced = {
         p: text
         for p in diffed
         if (text := inline_tests(root, previous, p)) is not None
     }
-    if not changed and not spliced:
+    crate_tests = [p for p in changed if CRATE_TEST.match(p)]
+    if production and not (crate_tests or spliced):
+        step.problems.append(
+            'the fix changes Rust production code ('
+            + ', '.join(production[:5])
+            + ') and adds no Rust test: add a #[cfg(test)] test or a crate test '
+            '(rust/crates/<crate>/tests/*.rs) that fails without the fix'
+        )
+        return step
+    if not production and not changed:
         step.problems.append(
             f'the fix round adds or changes no test since {previous[:12]}; a fix '
             'comes with a test that fails without it'
@@ -553,6 +586,8 @@ def step_fails_before(
         return step
     tree = scratch / 'previous'
     git(root, 'worktree', 'add', '--quiet', '--detach', str(tree), previous)
+    failed: list[str] = []
+    passed: list[str] = []
     try:
         for path in changed:
             target = tree / path
@@ -561,84 +596,71 @@ def step_fails_before(
         for path, text in spliced.items():
             (tree / path).parent.mkdir(parents=True, exist_ok=True)
             (tree / path).write_text(text, encoding='utf-8')
-        failed: list[str] = []
-        passed: list[str] = []
-        # New test files first: with -x the first failure ends the run,
-        # and a new test is the likeliest to fail on the previous tree.
-        pytest_files = sorted(
-            (p for p in changed if judging.matches(affected.IS_TEST, p)),
-            key=lambda p: (
-                run(
-                    ['git', 'cat-file', '-e', f'{previous}:{p}'], root
-                ).returncode
-                == 0
-            ),
-        )
-        if pytest_files:
-            env = {**os.environ, 'PYTHONPATH': source_path(tree, python)}
-            done = run(
-                [python, '-m', 'pytest', '-q', '-x', '-p', 'no:cacheprovider',
-                 *pytest_files],
-                tree,
-                env,
-            )  # fmt: skip
-            (failed if done.returncode in (1, 2) else passed).extend(
-                pytest_files
-            )
-            if done.returncode not in (0, 1, 2, 5):
-                step.problems.append(
-                    f'pytest could not run the tests on {previous[:12]}:\n'
-                    + tail(done.stdout + done.stderr)
-                )
-        for path in changed:
-            if path.endswith('selftest.py'):
-                done = run([python, path], tree)
-                (failed if done.returncode else passed).append(path)
-            match = CRATE_TEST.match(path)
-            if match:
+        if production:
+            for path in crate_tests:
+                match = CRATE_TEST.match(path)
+                assert match is not None
                 done = run(
                     ['cargo', 'test', '-q', '--manifest-path', 'rust/Cargo.toml',
                      '-p', match.group(1), '--test', match.group(2)],
                     tree,
                 )  # fmt: skip
                 (failed if done.returncode else passed).append(path)
-        for path in spliced:
-            crate = INLINE.match(path)
-            assert crate is not None
-            # One workspace holds the crates and the binding (rust/Cargo.toml).
-            done = run(
-                ['cargo', 'test', '-q', '--manifest-path', 'rust/Cargo.toml',
-                 '-p', crate.group(2), '--lib'],
-                tree,
-            )  # fmt: skip
-            (failed if done.returncode else passed).append(
-                f'{path} (#[cfg(test)])'
-            )
-        compiled = any(
-            p.startswith('rust/') and not is_test(p) and p not in spliced
-            for p in diffed
-        )
-        rust_tests = bool(spliced) or any(CRATE_TEST.match(p) for p in changed)
-        if not failed and not step.problems and compiled and not rust_tests:
-            # The previous tree is not built: its Python tests ran on the
-            # installed (fixed) core, so they cannot show a Rust fix. The
-            # lighter rule (Codex and Claude r1): noted, judged by CI.
-            step.notes.append(
-                f'NOT JUDGED: the fix changes the Rust core and its tests are '
-                f'Python only ({", ".join(passed)}), which ran on the installed '
-                'build; a Rust test (tests/*.rs or #[cfg(test)]) would show '
-                'the failure on the previous tree'
-            )
-        elif not failed and not step.problems:
-            step.problems.append(
-                f'every new or changed test passes on the previous round '
-                f'{previous[:12]}, so none shows the fix: ' + ', '.join(passed)
-            )
+            for path in spliced:
+                crate = INLINE.match(path)
+                assert crate is not None
+                # One workspace holds the crates and the binding.
+                done = run(
+                    ['cargo', 'test', '-q', '--manifest-path', 'rust/Cargo.toml',
+                     '-p', crate.group(2), '--lib'],
+                    tree,
+                )  # fmt: skip
+                (failed if done.returncode else passed).append(
+                    f'{path} (#[cfg(test)])'
+                )
         else:
-            step.notes.append(f'fails on {previous[:12]}: ' + ', '.join(failed))
+            # New test files first: with -x the first failure ends the run,
+            # and a new test is the likeliest to fail on the previous tree.
+            pytest_files = sorted(
+                (p for p in changed if judging.matches(affected.IS_TEST, p)),
+                key=lambda p: (
+                    run(
+                        ['git', 'cat-file', '-e', f'{previous}:{p}'], root
+                    ).returncode
+                    == 0
+                ),
+            )
+            if pytest_files:
+                env = {**os.environ, 'PYTHONPATH': source_path(tree, python)}
+                done = run(
+                    [python, '-m', 'pytest', '-q', '-x', '-p', 'no:cacheprovider',
+                     *pytest_files],
+                    tree,
+                    env,
+                )  # fmt: skip
+                (failed if done.returncode in (1, 2) else passed).extend(
+                    pytest_files
+                )
+                if done.returncode not in (0, 1, 2, 5):
+                    step.problems.append(
+                        f'pytest could not run the tests on {previous[:12]}:\n'
+                        + tail(done.stdout + done.stderr)
+                    )
+            for path in changed:
+                if path.endswith('selftest.py'):
+                    done = run([python, path], tree)
+                    (failed if done.returncode else passed).append(path)
     finally:
         shutil.rmtree(tree, ignore_errors=True)
         run(['git', 'worktree', 'prune'], root)
+    if failed:
+        step.notes.append(f'fails on {previous[:12]}: ' + ', '.join(failed))
+    elif not step.problems:
+        kind = 'Rust test' if production else 'test'
+        step.problems.append(
+            f'every new or changed {kind} passes on the previous round '
+            f'{previous[:12]}, so none shows the fix: ' + ', '.join(passed)
+        )
     return step
 
 
@@ -667,9 +689,18 @@ def step_affected(root: Path, touched: list[str], python: str) -> Step:
                 [python, *prefix[1:], *workers, *flat],
             )
         )
+    kit = os.environ.get('SDM_KIT_PYTHON', '')
     for suite in others:
+        if suite[0] == affected.KIT and not kit:
+            step.problems.append(
+                f"{' '.join(suite)}: set SDM_KIT_PYTHON to the lane's test-ops "
+                'interpreter (cells.sh prints it)'
+            )
+            continue
         argv = [
-            python if part == 'python3' and n == 0 else part
+            {'python3': python, affected.KIT: kit}.get(part, part)
+            if n == 0
+            else part
             for n, part in enumerate(suite)
         ]
         batches.append((' '.join(suite), argv))
@@ -698,16 +729,19 @@ def ruff() -> list[str] | None:
 
 
 def mypy(python: str, root: Path) -> list[str]:
-    """mypy: the lane's interpreter's when it has one, else the tools'
-    interpreter's, else uvx's (the lane environments install none; Claude
-    r1 P2-5)."""
-    for interpreter in (python, sys.executable):
+    """mypy judging the lane's installed packages, as CI's typecheck job
+    does: whichever interpreter has mypy (the tools', the lane's, else
+    uvx's) runs it with ``--python-executable`` the lane's interpreter, so
+    numpy, pandas and the client's other dependencies are the lane's
+    (Claude r2 P2-1)."""
+    target = ['--python-executable', python]
+    for interpreter in (sys.executable, python):
         if run([interpreter, '-c', 'import mypy'], root).returncode == 0:
-            return [interpreter, '-m', 'mypy']
+            return [interpreter, '-m', 'mypy', *target]
     uvx = shutil.which('uvx')
     if uvx:
-        return [uvx, '--quiet', 'mypy']
-    return [sys.executable, '-m', 'mypy']
+        return [uvx, '--quiet', 'mypy', *target]
+    return [sys.executable, '-m', 'mypy', *target]
 
 
 def step_lint(root: Path, touched: list[str], python: str) -> Step:

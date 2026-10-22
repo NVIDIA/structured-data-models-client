@@ -207,7 +207,9 @@ def test_a_postgres_only_case_gets_no_stamp_without_a_server(
         scratch,
     )
     assert not step.ok
-    assert any('Postgres alone' in p for p in step.problems), step.problems
+    assert any('SDM_POSTGRES_TEST_DSN' in p for p in step.problems), (
+        step.problems
+    )
 
 
 # --- finding 8: cancelled jobs in the timing history ------------------------------
@@ -401,3 +403,285 @@ def test_a_stacked_package_is_its_commits_above_the_stack(repo: Path) -> None:
     landing = _git(repo, 'rev-parse', 'HEAD')
     _commit(repo, {'c.txt': 'c\n'}, 'T3.99: the package')
     assert handoff.stack_floor(repo, base) == landing
+
+
+# --- fix round 2 ---------------------------------------------------------------------
+# The fails-before redesign, Postgres, mypy, the binding suite, the guard's
+# comments and briefs, protected pushes, a cancelled stack top, the train's
+# scope and the dry run's gate (Codex r2 and Claude r2, the owner's Q14).
+
+lane = _module('t30_fix2_lane', SCRIPTS / 'lane.py')
+land = _module('t30_fix2_land', SCRIPTS / 'land.py')
+
+
+def test_a_rust_fix_with_python_tests_only_is_refused(
+    repo: Path, tmp_path: Path
+) -> None:
+    path = 'rust/crates/demo/src/lag.rs'
+    base = _commit(repo, {'README.md': 'x\n'}, 'base')
+    previous = _commit(repo, {path: RUST_OLD}, 'T3.99: lag')
+    _commit(
+        repo,
+        {
+            path: RUST_OLD.replace('1', '2'),
+            'tests/test_lag.py': 'def test_lag() -> None:\n    assert True\n',
+        },
+        'T3.99 fix 1: lag is 2',
+    )
+    assert handoff.rust_production(repo, previous, [path]) == [path]
+    scratch = tmp_path / 'scratch'
+    scratch.mkdir()
+    step = handoff.step_fails_before(
+        repo, base, previous, sys.executable, scratch, 'T3.99'
+    )
+    assert not step.ok
+    assert any('adds no Rust test' in p for p in step.problems), step.problems
+    # A test block alone is no production change.
+    block = RUST_NEW[RUST_NEW.index('#[cfg(test)]') :]
+    _commit(repo, {path: RUST_OLD + '\n' + block}, 'T3.99 tests: lag')
+    assert handoff.rust_production(repo, previous, [path]) == []
+
+
+def test_a_case_naming_postgres_with_others_needs_the_server(
+    repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv('SDM_POSTGRES_TEST_DSN', raising=False)
+    case = {
+        'id': 's9.mixed',
+        'databases': ['sqlite', 'postgres'],
+        'exclusion': 'KO9-1',
+    }
+    base = _commit(
+        repo, {'contract/reference/r.jsonl': '{"case": "other"}\n'}, 'base'
+    )
+    _commit(
+        repo,
+        {'contract/cases/s9/s9.mixed.json': json.dumps(case)},
+        'T3.99: a mixed case',
+    )
+    scratch = tmp_path / 'scratch'
+    scratch.mkdir()
+    # A python that fails at once: no SQLite leg can pass here either way.
+    step = handoff.step_reference(
+        repo,
+        ['contract/cases/s9/s9.mixed.json'],
+        [],
+        '/bin/false',
+        base,
+        scratch,
+    )
+    assert any(
+        'Postgres' in p and 'SDM_POSTGRES_TEST_DSN' in p for p in step.problems
+    )
+
+
+def test_mypy_judges_the_lane_s_packages(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    lane_python = str(tmp_path / 'lane' / 'bin' / 'python')
+    monkeypatch.setattr(
+        handoff,
+        'run',
+        lambda argv, cwd, env=None: subprocess.CompletedProcess(
+            argv, 0 if argv[0] == sys.executable else 1, '', ''
+        ),
+    )
+    command = handoff.mypy(lane_python, tmp_path)
+    assert command[:3] == [sys.executable, '-m', 'mypy']
+    assert command[-2:] == ['--python-executable', lane_python]
+
+
+def test_the_binding_suite_runs_on_the_test_ops_build(tmp_path: Path) -> None:
+    kit = os.environ.get('SDM_KIT_PYTHON', '')
+    if not kit:
+        pytest.skip(
+            'the binding suite needs SDM_KIT_PYTHON, the test-ops build'
+        )
+    step = handoff.step_affected(ROOT, ['rust/bindings/sdm-py/src/lib.rs'], kit)
+    assert step.ok, step.problems
+    assert any('--native-build test-ops' in n for n in step.notes), step.notes
+
+
+@pytest.mark.parametrize(
+    'command',
+    [
+        '# Document `git config` reads\ngit status --short',
+        '# Do not use $(sudo true)\ngit status --short',
+    ],
+)
+def test_a_commented_example_is_no_command(command: str) -> None:
+    assert guard.check_command(command, '/home/user', None) is None
+
+
+@pytest.mark.parametrize(
+    'command',
+    [
+        'git push origin HEAD:rust-core',
+        'git push origin src:refs/heads/rust-core',
+        'git push origin +HEAD:refs/heads/main',
+        'git push origin --delete rust-core',
+        'git push origin :rust-core-reference',
+        'git push origin rust-core',
+        'git push origin main',
+        'git push --all origin',
+    ],
+)
+def test_a_push_to_a_protected_branch_is_refused(command: str) -> None:
+    found = guard.check_command(command, '/home/user', None)
+    assert found is not None and 'owner' in found.rule, found
+
+
+def test_the_owner_s_token_lets_a_protected_push_through(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    answers = tmp_path / 'owner-answers.md'
+    answers.write_text('## 2026-10-22: merge Phase 3\n', encoding='utf-8')
+    monkeypatch.setenv('SDM_OWNER_ANSWERS', str(answers))
+    monkeypatch.setattr(guard, 'STATE', tmp_path / 'state')
+    approved = 'SDM_APPROVED=2026-10-22-merge-phase-3 git push origin rust-core'
+    assert guard.check_command(approved, '/home/user', None) is None
+
+
+def test_the_pre_push_hook_refuses_a_protected_branch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    refs = tmp_path / 'refs'
+    for remote in ('refs/heads/rust-core', 'refs/heads/main'):
+        refs.write_text(f'refs/heads/x {"a" * 40} {remote} {"0" * 40}\n')
+        args = lane.argparse.Namespace(pushed_refs=str(refs), remote='origin')
+        with pytest.raises(lane.Refusal, match='only the owner'):
+            lane.check_pushed(args, None, print, 'x')
+    answers = tmp_path / 'owner-answers.md'
+    answers.write_text('## 2026-10-22: merge Phase 3\n', encoding='utf-8')
+    monkeypatch.setenv('SDM_OWNER_ANSWERS', str(answers))
+    monkeypatch.setenv('SDM_APPROVED', '2026-10-22-merge-phase-3')
+    monkeypatch.setenv('SDM_ORCH_STATE', str(tmp_path / 'state'))
+    assert lane.check_pushed(args, None, print, 'x') == 0
+
+
+def test_a_round_brief_is_read_and_its_short_sha_resolved(
+    repo: Path, tmp_path: Path
+) -> None:
+    sha = _commit(repo, {'a.txt': 'a\n'}, 'T3.99: the candidate')
+    missing = f'Read and follow the brief at {tmp_path}/round-briefs/none.md.'
+    assert guard.check_agent(missing, str(repo)) is not None
+    brief = tmp_path / 'round-briefs' / 'T3.99-r1.md'
+    brief.parent.mkdir()
+    brief.write_text('Review T3.99: nothing named.\n', encoding='utf-8')
+    prompt = f'Read and follow the brief at {brief}.'
+    assert guard.check_agent(prompt, str(repo)) is not None
+    brief.write_text(f'Candidate: {sha[:8]} on its lane.\n', encoding='utf-8')
+    found = guard.check_agent(prompt, str(repo))
+    assert found is not None and sha[:12] in found.rule
+    stamp = handoff.stamp_path(
+        Path(_git(repo, 'rev-parse', '--absolute-git-dir')), sha
+    )
+    stamp.parent.mkdir(parents=True)
+    stamp.write_text(json.dumps({'sha': sha, 'ok': True}), encoding='utf-8')
+    assert guard.check_agent(prompt, str(repo)) is None
+
+
+def test_a_cancelled_stack_top_asks_for_a_rerun(tmp_path: Path) -> None:
+    selftest = _module('t30_fix2_land_selftest', SCRIPTS / 'land_selftest.py')
+    stack = selftest.t30_stacked(tmp_path, n=2)
+    stack.green(2, conclusion='cancelled')
+    code = stack.stack_land(2)
+    assert code == 2, stack.text
+    assert 'gh run rerun' in stack.text and 'IMPLICATED' not in stack.text
+    assert stack.remote_phase() == stack.h
+
+
+def test_a_cancelled_job_is_implicated_in_nothing() -> None:
+    def run(argv: list[str]) -> Any:
+        if argv[:3] == ['gh', 'run', 'view'] and '--json' in argv:
+            jobs = [
+                {
+                    'name': 'rust-test',
+                    'conclusion': 'cancelled',
+                    'databaseId': 1,
+                }
+            ]
+            return land.Completed(0, json.dumps({'jobs': jobs}))
+        if argv[:2] == ['git', 'log']:
+            return land.Completed(0, 'a' * 40 + '\0T3.99: rust\n')
+        if argv[:2] == ['git', 'diff-tree']:
+            return land.Completed(0, 'rust/crates/x/src/lib.rs\0')
+        return land.Completed(0, '')
+
+    report = land.implicated(land.Tools(run=run), {'databaseId': 5}, 'b', 't')
+    assert report == []
+
+
+def test_auto_land_reruns_a_cancelled_stack_top_twice(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv('SDM_PHASE_BRANCH', 'rust-core-phase-3')
+    auto = _module('t30_fix2_auto_land', SCRIPTS / 'orchestration/auto_land.py')
+    reruns: list[tuple[str, ...]] = []
+    refused = (
+        'REFUSED: the run on the stack top was cancelled (run 77 on x: '
+        'cancelled); nothing failed: rerun it (`gh run rerun 77`) and land again'
+    )
+    monkeypatch.setattr(
+        auto,
+        'land_py',
+        lambda q, *a: subprocess.CompletedProcess(a, 2, refused, ''),
+    )
+    monkeypatch.setattr(
+        auto,
+        'sh',
+        lambda *a, cwd=None: (
+            reruns.append(a) or subprocess.CompletedProcess(a, 0, '', '')
+        ),
+    )
+    entry = tmp_path / 'stack.json'
+    queued = {'stack_tip': 'c' * 40, 'worktree': str(tmp_path), 'title': 't'}
+    entry.write_text(json.dumps(queued))
+    for _ in range(3):
+        auto.process_stack_land(entry, json.loads(entry.read_text()), 'b')
+    assert entry.exists(), 'the entry stays queued'
+    assert [a[:3] for a in reruns] == [('gh', 'run', 'rerun')] * 2
+
+
+def test_a_checker_fix_rides_the_train_and_product_data_stays_out() -> None:
+    checker = [
+        'scripts/rust_core/bridge_freeze.py',
+        'scripts/rust_core/compare.py',
+    ]
+    assert judging.not_train(RULES, checker) == []
+    assert (
+        judging.judging(RULES, ['scripts/rust_core/bridge_freeze.json']) == []
+    )
+
+
+def test_the_dry_run_without_its_gate_is_incomplete(tmp_path: Path) -> None:
+    import yaml
+
+    process = _module('t30_fix2_process', ROOT / 'tests/test_t30_process.py')
+    _, work, _ = process._clone(tmp_path)
+    template = json.loads(
+        next(
+            (work / 'contract/cases').rglob(f'{process.SEEDED_CASE}.json')
+        ).read_text(encoding='utf-8')
+    )
+    plan = tmp_path / 'kinds.yaml'
+    plan.write_text(
+        yaml.safe_dump({'kinds': [{'name': 'binary', 'case': template}]})
+    )
+    done = subprocess.run(
+        ['bash', str(work / 'scripts/rust_core/gate_dryrun.sh'), str(plan)],
+        cwd=work,
+        env=process._env(tmp_path, SDM_PHASE_BRANCH=process.PHASE),
+        capture_output=True,
+        text=True,
+        stdin=subprocess.DEVNULL,
+        timeout=3600,
+    )
+    said = done.stdout + done.stderr
+    assert done.returncode == 1, said[-2000:]
+    assert 'INCOMPLETE gate not run' in said, said[-2000:]
+
+
+@pytest.mark.parametrize('command', ['git clean -fdx', 'cargo clean'])
+def test_deleting_build_output_is_refused(command: str) -> None:
+    assert guard.check_command(command, '/home/user', None) is not None

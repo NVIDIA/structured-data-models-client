@@ -49,7 +49,8 @@ candidate:
   (cargo; heavy, run it through ``heavy``);
 - ``gate``, with ``--gate HALF``: ``gate.sh --base BASE --locked HALF``
   on the throwaway commit, its failing lines attributed to the kinds they
-  name (heavy too).
+  name (heavy too). Without ``--gate`` the run is ``INCOMPLETE`` (exit 1):
+  the locked gate's refusals are part of what the design must know.
 
 The checkpoint is ``ratchet.py checkpoint --base BASE`` (``BASE``: the
 phase branch's remote head, ``origin/<phase>``, as ``phases.py`` names it).
@@ -486,6 +487,13 @@ def dry_run(arguments: argparse.Namespace) -> int:
             ]
             kind.gaps.extend(
                 f'compare: {line}' for line in (told or lines[-1:])[:SHOWN]
+            )
+        if valid and not arguments.gate:
+            # The locked gate is part of the check (Codex r2): without the
+            # half the design's cases fall in, its refusals are unknown.
+            broken.append(
+                'gate not run: give --gate HALF, the locked half the planned '
+                "kinds fall in, so the checkpoint's locked gate judges them too"
             )
         if arguments.gate and valid:
             done = _run(

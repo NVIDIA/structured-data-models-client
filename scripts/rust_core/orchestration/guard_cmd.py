@@ -32,6 +32,8 @@ never commands:
   ``$SDM_ORCH_STATE/scratch-claims.json``); another agent's directory
   there needs the owner's token. A target with an unexpanded variable
   or a command substitution cannot be checked and is refused;
+- ``git push`` that updates or deletes ``rust-core``, ``main`` or
+  ``rust-core-reference``, however spelled (the owner, Q14);
 - ``git push`` with ``--force``, ``-f``, ``--force-with-lease``,
   ``--force-if-includes`` or a ``+`` refspec; ``git push --delete``,
   ``-d``, ``--prune`` or a ``:branch`` refspec;
@@ -41,7 +43,7 @@ never commands:
 - ``sudo``;
 - ``git config``, except its reads (``--get``, ``--get-all``,
   ``--get-regexp``, ``--list``/``-l``, ``git config get``/``list``);
-- ``git stash``;
+- ``git stash``, ``git clean -f``, ``cargo clean``;
 - ``git branch -D`` (or ``--delete --force``);
 - ``gh run watch``;
 - ``git fetch --prune``/``-p``, ``git pull --prune``, ``git remote prune``;
@@ -59,8 +61,10 @@ or the reviewer brief (``reviewer.md``, not ``design-reviewer.md``) starts
 a review round. Every full 40-character SHA it names, in the prompt or in
 the round brief it points at, that is not on the epic or a phase branch
 yet needs a passing handoff stamp (``handoff.py``) in the clone the hook
-runs in, else the launch is refused naming ``handoff.py run``. A prompt
-naming a brief and no SHA is docs work, and passes.
+runs in, else the launch is refused naming ``handoff.py run``; a short
+SHA git resolves here counts as its full SHA. A round brief that cannot be
+read, or names no SHA, is refused; a prompt naming only ``reviewer.md`` and
+no SHA is docs work, and passes.
 
 Refusals are appended to ``$SDM_ORCH_STATE/logs/guard-denied.log``. Codex
 panes have no PreToolUse hook; ``rule_watch.py`` keeps watching them.
@@ -235,7 +239,9 @@ def simple_commands(text: str, depth: int = 0) -> Iterator[list[str]]:
     Raises ValueError when the text cannot be parsed."""
     if depth > 8:
         raise ValueError('nested too deeply')
-    text = strip_heredocs(text)
+    # Comments go before substitutions are read (Codex r2): a commented
+    # `git config` or $(sudo ...) is text, not a command.
+    text = plain(strip_heredocs(text))
     for inner in substitutions(text):
         yield from simple_commands(inner, depth + 1)
     words: list[str] = []
@@ -365,7 +371,58 @@ def options(args: Iterable[str]) -> list[str]:
     return [a for a in out if a.startswith('-')]
 
 
-def check_git(argv: list[str]) -> Verdict | None:
+#: The branches only the owner's merge pushes (the owner, Q14).
+PROTECTED = ('rust-core', 'main', 'rust-core-reference')
+#: git push options that take a value as the next word.
+PUSH_VALUED = {'-o', '--push-option', '--repo', '--receive-pack', '--exec'}
+
+
+def current_branch(cwd: str, opts: list[str]) -> str:
+    where = cwd
+    if '-C' in opts and opts.index('-C') + 1 < len(opts):
+        given = opts[opts.index('-C') + 1]
+        where = given if os.path.isabs(given) else os.path.join(cwd, given)
+    try:
+        done = subprocess.run(
+            ['git', '-C', where, 'symbolic-ref', '--short', '-q', 'HEAD'],
+            capture_output=True, text=True, timeout=30,
+            stdin=subprocess.DEVNULL,
+        )  # fmt: skip
+    except (OSError, subprocess.TimeoutExpired):
+        return ''
+    return done.stdout.strip()
+
+
+def push_targets(args: list[str], branch: str) -> list[str]:
+    """The branch names a ``git push`` updates or deletes: each refspec's
+    destination (``src:dst``, ``+src:dst``, ``:dst``, ``refs/heads/x``),
+    a bare name, ``HEAD`` as the branch checked out, and, with no refspec,
+    the branch checked out; ``--all`` and ``--mirror`` push every branch."""
+    positional: list[str] = []
+    skip = False
+    for arg in args:
+        if skip:
+            skip = False
+        elif arg in PUSH_VALUED:
+            skip = True
+        elif not arg.startswith('-'):
+            positional.append(arg)
+    if '--all' in args or '--mirror' in args or '--branches' in args:
+        return list(PROTECTED)
+    refspecs = positional[1:]
+    if not refspecs:
+        return [branch] if branch else ['HEAD']
+    found = []
+    for spec in refspecs:
+        spec = spec.lstrip('+')
+        dst = spec.rpartition(':')[2] if ':' in spec else spec
+        if dst in ('HEAD', ''):
+            dst = branch or 'HEAD'
+        found.append(dst.removeprefix('refs/heads/'))
+    return found
+
+
+def check_git(argv: list[str], cwd: str = '.') -> Verdict | None:
     opts, sub, args = git_split(argv)
     for n, opt in enumerate(opts):
         value = opts[n + 1] if opt == '-c' and n + 1 < len(opts) else ''
@@ -384,6 +441,16 @@ def check_git(argv: list[str]) -> Verdict | None:
             'is the cheap tier (prepush.sh), never skipped',
         )
     if sub == 'push':
+        hit = sorted(
+            set(push_targets(args, current_branch(cwd, opts))) & set(PROTECTED)
+        )
+        if hit:
+            return Verdict(
+                f"git push to {', '.join(hit)}, which only the owner's merge "
+                'pushes (the owner, Q14)',
+                "push your phase, lane or topic branch; the owner's own merge "
+                f'push runs under {TOKEN_VAR}=<owner-answers id>',
+            )
         if any(
             f in ('--force', '--force-if-includes')
             or f.startswith('--force-with-lease')
@@ -422,6 +489,13 @@ def check_git(argv: list[str]) -> Verdict | None:
             'git worktree remove --force discards work',
             'commit or move the work, then `git worktree remove` without '
             '--force, or leave it for clean_tmp.sh',
+        )
+    if sub == 'clean' and any(
+        f in ('--force',) or short_cluster(f, 'f') for f in flags
+    ):
+        return Verdict(
+            'git clean -f deletes untracked files and build output',
+            'remove only your own scratch, written out, or ask the owner',
         )
     if sub == 'stash':
         return Verdict(
@@ -630,7 +704,7 @@ def check_simple(
     if head == 'rm':
         return check_rm(argv, cwd, session)
     if head == 'git':
-        return check_git(argv)
+        return check_git(argv, cwd)
     if head == 'find' and (
         '-delete' in argv
         or any(
@@ -662,6 +736,11 @@ def check_simple(
         return Verdict(
             'docker rm --force kills a running container',
             'stop it first, then docker rm without --force',
+        )
+    if head == 'cargo' and argv[1:2] == ['clean']:
+        return Verdict(
+            'cargo clean deletes a build other agents may share',
+            'leave the build; clean_tmp.sh removes stale targets after a dry run',
         )
     if head == 'prepush.sh' and '--full' in argv[1:]:
         return Verdict(
@@ -804,8 +883,8 @@ def git_common_dir(cwd: str) -> Path | None:
 ROUND_BRIEF = re.compile(r'[^\s`\'"()]*round-briefs/[^\s`\'"()]+')
 
 
-def brief_text(name: str) -> str:
-    """The round brief ``name`` names, read, or nothing."""
+def brief_text(name: str) -> str | None:
+    """The round brief ``name`` names, read, or None when it cannot be."""
     name = name.rstrip('.,;:')
     path = name.replace('${SDM_ORCH_STATE}', str(STATE)).replace(
         '$SDM_ORCH_STATE', str(STATE)
@@ -813,7 +892,31 @@ def brief_text(name: str) -> str:
     try:
         return Path(os.path.expanduser(path)).read_text(encoding='utf-8')
     except (OSError, ValueError):
-        return ''
+        return None
+
+
+#: An abbreviated SHA a brief may name ("Candidate: 674d7f25").
+SHORT = re.compile(r'(?<![0-9a-f])[0-9a-f]{7,39}(?![0-9a-f])')
+
+
+def named_shas(text: str, cwd: str) -> list[str]:
+    """The full SHAs ``text`` names, and its short ones git resolves to a
+    commit here (Claude r2 P2-2)."""
+    found = set(SHA.findall(text))
+    for short in set(SHORT.findall(text)):
+        try:
+            done = subprocess.run(
+                ['git', '-C', cwd, 'rev-parse', '--verify', '--quiet',
+                 f'{short}^{{commit}}'],
+                capture_output=True, text=True, timeout=30,
+                stdin=subprocess.DEVNULL,
+            )  # fmt: skip
+        except (OSError, subprocess.TimeoutExpired):
+            continue
+        full = done.stdout.strip()
+        if done.returncode == 0 and SHA.fullmatch(full):
+            found.add(full)
+    return sorted(found)
 
 
 def landed(sha: str, cwd: str) -> bool:
@@ -839,17 +942,32 @@ def check_agent(prompt: str, cwd: str) -> Verdict | None:
     """A review launch: a prompt naming a round brief (``round-briefs/``)
     or the reviewer brief (``briefs/reviewer.md``). The SHAs it names, in
     the prompt or in the round brief it points at, that are not landed yet
-    each need a passing stamp; a prompt naming a brief and no SHA is no
-    round (docs work on the brief), and passes."""
+    each need a passing stamp (a short SHA git resolves counts). A round
+    brief that cannot be read or names no SHA is refused; a prompt naming
+    only ``reviewer.md`` and no SHA is docs work on it, and passes."""
     briefs = ROUND_BRIEF.findall(prompt)
     if not briefs and not REVIEWER_BRIEF.search(prompt):
         return None
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     import handoff  # noqa: PLC0415
 
-    text = prompt + ''.join('\n' + brief_text(b) for b in briefs)
-    shas = sorted(set(SHA.findall(text)))
+    texts = [prompt]
+    for brief in briefs:
+        read = brief_text(brief)
+        if read is None:
+            return Verdict(
+                f'a review round whose brief {brief} cannot be read',
+                'write the round brief before launching the round, at a path '
+                'the hook can read',
+            )
+        texts.append(read)
+    shas = named_shas('\n'.join(texts), cwd)
     if not shas:
+        if briefs:
+            return Verdict(
+                'a review round whose brief names no SHA git knows here',
+                'write the full SHA under review in the round brief',
+            )
         return None
     common = git_common_dir(cwd)
     if common is None:
