@@ -3,8 +3,8 @@
 ## Status
 
 Draft for review round 2 (T3.1), written on 2026-10-22 from `origin/rust-core-phase-3` at 3ae4d1af (Phase 2 merged), against T3.0's process mechanisms as they stand at 36e0779f on T3.0's topic branch.
-Round 1's findings, the owner's Java answer and the owner's answers to the Java questions are applied ([tracker.md](tracker.md), "Design review rounds").
-The owner's answers so far are in [decisions.md](decisions.md), KO3-1 to KO3-35; the open questions are at the end of this page, all together, each with a recommendation, the day-1 ones first.
+Round 1's findings, the owner's Java answer, and the owner's answers to the Java questions and to the design questions are applied ([tracker.md](tracker.md), "Design review rounds").
+The owner's answers so far are in [decisions.md](decisions.md), KO3-1 to KO3-49; the open questions are at the end of this page, all together, each with a recommendation, the day-1 ones first.
 The acceptance checks below lock at T3.1's landing, after both reviewers approve one SHA and the day-1 questions are answered.
 T3.1 lands stacked on T3.0 (T3.0's "Stacked landings"), so everything this page names from T3.0 exists when T3.1 lands.
 Everything not stated here is as in [Phase 2's design](../phase-2/design.md) and [Phase 1's design](../phase-1/design.md); their decision rows stay in force unless a row here or an owner answer changes them.
@@ -35,7 +35,8 @@ The plan is 14 landings: T3.0 and this design, ten Python packages, three Java p
 The forecast from this design's landing is about 40 hours to the Python switch, which is also the phase's end: Java's packages land before it, and Java's live check runs in the same end campaign.
 It assumes one fix cycle in the live end campaign, without which the switch lands at about H32.
 The slip report compares the phase against the forecast as it runs and never stops work (KO3-12).
-Five questions block day 1, because the early run needs them: where test tables may be written on Databricks, starting the stopped Lakebase instance, Snowflake's test role, the serving endpoint's model version, and approving the offline judge for the warehouse legs.
+The owner approved the offline judge and answered the design's other questions (KO3-36 to KO3-49), including the rule for differences: the core matches the old client or does better, where better means a better error or more support, and only a worse difference blocks.
+Four questions still block day 1, because the early run needs them: where test tables may be written on Databricks, starting the stopped Lakebase instance, Snowflake's test role, and the serving endpoint's model version.
 
 ## Goal
 
@@ -80,7 +81,7 @@ Java follows Python and never holds it back (plan section 2, decision 1): Java's
 10. **The switch**: every S0, S1 and S2 default in `sdm_client/_routing.py` set to `core` in one commit (choice 8), the routing guard test changed with it, and the existing client test suites green on the default routes.
     `SDM_CORE_ROUTES` stays, test-only, until Phase 5 deletes the old engine.
 11. **What the switch needs from Phases 1 and 2** (the carried rows, next section): the 118 forced-route failures, S1 coverage, the 12 unregistered user-visible differences, L3 and H24 on every database, DuckDB 2.0.
-12. **The gate's live parts**: L6 on every warehouse leg, the job matrix, both notebooks, L7 live push-down timing (median of at least five interleaved runs, caches off, within 10% on Databricks and Snowflake; owner question Q4), and the held-out set's warehouse legs.
+12. **The gate's live parts**: L6 on every warehouse leg, the job matrix, both notebooks, L7 live push-down timing (median of at least five interleaved runs, caches off, within 10% on Databricks and Snowflake), run in the end campaign (KO3-39), and the held-out set's warehouse legs.
 13. **The phase-end chores**: `main` merged and the reference rerun if `main` has moved (it has not since 43e55f4f), with the warehouse reference lines re-recorded in the end campaign if it has (choice 2), register reconciliation, the evidence pack, the whole-phase review (handbook, "Ending a phase").
 
 ### Explicitly out
@@ -95,7 +96,7 @@ Java follows Python and never holds it back (plan section 2, decision 1): Java's
 Migration-plan.md section 8, "Carried into Phase 3", holds 142 rows naming 145 items.
 Every item ends in a package or a recorded "no" (lesson 18); a script compared the set of item IDs in the plan's table with the IDs below, and every ID is placed exactly once.
 The row text stays in the plan, and the package's tracker closes it.
-"No" items are the orchestrator's decision under KO2-52 (internal-tool hardening is P3 at most) and the owner's "product over gate machinery": they are reopened only when the dry run or a Phase 3 case hits them, and then go into T3.2 or the train (owner question G3).
+"No" items are accepted by the owner (KO3-48), under KO2-52 (internal-tool hardening is P3 at most) and the owner's "product over gate machinery": they are reopened only when the dry run or a Phase 3 case hits them, and then go into T3.2 or the train.
 Since T3.0's fix round, `scripts/rust_core/judging-paths.txt` lists only the gate, the ratchet, the comparator, coverage, the register check, `phases.py`, the L0 guards, the census, `land.py`, `lane.py`, `judging.py`, `run_python.py`, `capture_check.py`, the schemas and `sdm-testkit`'s `case.rs` and `observation.rs`; so `ci.yml`, the bridge declarations, the other runners and tools, vectors and fixtures ride with the package that needs them, and only those paths go into T3.2.
 
 | What | Items | Package |
@@ -115,7 +116,7 @@ Since T3.0's fix round, `scripts/rust_core/judging-paths.txt` lists only the gat
 | **Contract rows for v28**, and the interfaces a Java host sees | P2-MID2-2, P2-T2.2-1, P2-T2.1b-1, P2-T2.8c-2, P2-MID2-3, P2-MID2-5, FX-6, P2-MID2-4, P2-WR-6 | T3.4 |
 | Postgres reads qualified by the relation's schema part | P2-MID2-6 | T3.7 |
 | Expression columns and metric views (KO2-25, KO2-39) | OF-4 | T3.4 (the contract fields), T3.5 (the views) |
-| RS-6 on the warehouses | OF-3 | T3.4 and T3.6, after owner question Q6 |
+| RS-6 on the warehouses | OF-3 | T3.4 and T3.6, under KO3-41 |
 | The live benchmark's "different requests" result fails the run (a Phase 1 row the table does not list) | G8 | T3.7 |
 | The held-out set's stored-NaN and `key_name_order` cases | OF-6 | HO3 |
 | A bigger machine | OF-9 | Owner question Q12 |
@@ -145,7 +146,7 @@ Every new interface is held to KO2-46: only what this phase uses, as plain data 
 **Recommendation:** add four warehouse legs, `databricks-sql`, `databricks-spark`, `snowflake` and `lakebase`, keyed `<case>@<leg>` exactly as Phase 2 keyed `<case>@sqlite`.
 A case's data is still its base and setup (DuckDB statements), loaded into a dedicated test schema of each warehouse through Arrow by Phase 2's contract loader (`contract/runners/databases.py`), extended with a type map per engine: Databricks and Snowflake have no unsigned integers, no time-of-day type in tables, `DECIMAL` up to 38 digits and their own timestamp kinds; a type an engine cannot store is listed, and its cell is never counted as covered (KO2-47's rule).
 Every S1 acceptance case runs on every warehouse leg whose engine stores its data, by the same default that runs it on DuckDB, SQLite and Postgres, so no S1 case file changes (the owner, KO3-23: "Can we replicate whatever dataset/testing you've done in phase 2 here?").
-The two cases that build 100,001-row tables to test the core's call batching (`multicall.entities.100000` and `.100001`) are left off the warehouse legs, which add nothing to what they test; that is an exclusion, so it is in owner question D5.
+The two cases that build 100,001-row tables to test the core's call batching (`multicall.entities.100000` and `.100001`) are left off the warehouse legs, which add nothing to what they test; that is an exclusion, which the owner approved with the offline judge (KO3-45).
 An S2 case names its warehouse legs in a new `warehouses` field and runs only there, with no exclusion; the metric and semantic view cases carry a new `input.view` (the kind, the name and the YAML, or the name of an existing view), and the connect paths `input.connect` (`warehouse`, `spark`, `snowpark`, `lakebase`).
 AdventureWorks is loaded the same way, and its cases ask the quickstart notebook's 5 questions (3 binary, 1 multiclass, 1 binary through a metric view), the deleted notebook's 8 (regression twice, forecast, binary, ranking, multiclass, and two through a metric view), and a ranking and a forecast on each leg, since the quickstart alone "is not enough for testing" (KO3-23).
 Why: every S1 case already has reference lines and core observations on three databases, so a warehouse leg reuses the comparator, ratchet and coverage, and one case set covers offline and live.
@@ -164,12 +165,12 @@ Round 1 found that the first draft's judge, answering the core's SQL from a capt
   python-core uses `contract/runners/standin.py` and rust-host `sdm-testkit`'s stand-in, both built in T3.3.
 - **What gates offline**: the core's public outcome on the leg against C-1's reference line, field by field, under the same comparator and register as every other leg.
   On a stand-in leg the statement count and each statement's result are diagnostic, since the statements are the stand-in's, not the warehouse's; a different number of random draws than the old client made fails by name, because the draws decide the sample a user's answer comes from.
-  That narrows H9's statement rule on stand-in legs only, so it is owner question D5; H9 applies in full on every live leg.
+  That narrows H9's statement rule on stand-in legs only, which the owner approved (KO3-45); H9 applies in full on every live leg.
 - **The dialect's SQL** is judged by goldens per request kind, reviewed against the old client's recorded statement for the same request (a non-gating diff in the package's evidence), and executed once live in the end campaign (E-1), where H9 applies in full: the same answers, the same statement count, each statement's result.
 - **What this cannot judge before the end**: whether a warehouse accepts the dialect's SQL and returns what the stand-in returned; the end campaign judges it, as the owner chose (KO3-22), and the forecast holds one fix cycle for it.
   A false pass needs the stand-in and the dialect to differ from the warehouse in exactly compensating ways and survive E-1; a stand-in that answers differently from the warehouse shows as a difference from the old client's answers, which is a failure, not a pass.
 
-Rejected: matching the core's statements to recorded ones (the draft's choice: it cannot answer a statement the old client never sent, and the inherited Postgres dialect already sends one, `rust/crates/sdm-data/src/postgres.rs`'s relation-identity predicate); a warehouse emulator by transpiled SQL (it judges SQL nobody runs); a live check per dialect mid-phase (cheap, about 20 minutes per warehouse, but against KO3-22; offered as owner question D5's option b).
+Rejected: matching the core's statements to recorded ones (the draft's choice: it cannot answer a statement the old client never sent, and the inherited Postgres dialect already sends one, `rust/crates/sdm-data/src/postgres.rs`'s relation-identity predicate); a warehouse emulator by transpiled SQL (it judges SQL nobody runs); a live check per dialect mid-phase (cheap, about 20 minutes per warehouse, but against KO3-22; offered as option (b), and the owner chose (a), KO3-45).
 
 **When the capture runs and what it covers.**
 - C-1 runs once, from a SHA both reviewers approved in a review round on T3.2's and T3.3's recording and loader commits, so a finding on the recording format cannot invalidate the one capture every dialect package works from; a later format change converts captures offline with T3.3's converter, never re-records.
@@ -207,21 +208,21 @@ Backend detection learns to tell a SQL warehouse, a Spark session and a metric v
 ### 6. Views: a crate for YAML, a port for the rules
 
 **Recommendation:** each dialect retrieves a view's definition with the old client's statement (Databricks: `DESCRIBE TABLE EXTENDED`'s YAML; Snowflake: `SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW(?)`) and hands the text to `sdm-schema`, which parses it with a YAML crate (`yaml-rust2`, maintained and pure Rust) and interprets it into a view model with no dialect terms: tables, renamed and expression columns, joins as links, the filter, and measures or metrics as conversion notes.
-YAML values are read as the old client's PyYAML reads them (YAML 1.1: `yes`, `on` and `off` are booleans where PyYAML makes them so) for the keys the view model reads, by PyYAML's documented implicit-type rules ported as a defined algorithm over the crate's plain scalars (lesson 3; owner question Q5).
+YAML values are read as the old client's PyYAML reads them (YAML 1.1: `yes`, `on` and `off` are booleans where PyYAML makes them so) for the keys the view model reads, by PyYAML's documented implicit-type rules ported as a defined algorithm over the crate's plain scalars (lesson 3; KO3-40).
 The expression allow-list is a port of `view_expr.py` (1,744 lines), with `trust_expressions` as the old client has it; the first attempt's 2,150-line hand-written YAML reader is not ported.
 The existing metric view over AdventureWorks and the twin metric and semantic views over a small shop dataset (KO3-21; their names stay private) are recorded in C-1 and used as cases beside views the cases create in the test schema.
 A `phase-1/dependencies.md`-style row records the crate choice and its measured reason (lesson 3).
 
 ### 7. Sampling and session state on warehouses
 
-**Recommendation:** match the old client's SQL: Databricks `TABLESAMPLE (p PERCENT) REPEATABLE (seed)` with the percentage written as Python's `str(float)` writes it, Snowflake's sampling statement as the old client sends it, and `ORDER BY` and `QUALIFY ROW_NUMBER()` forms unchanged, so the same statement draws the same rows on the same table (owner question Q6, RS-6's coverage).
+**Recommendation:** match the old client's SQL: Databricks `TABLESAMPLE (p PERCENT) REPEATABLE (seed)` with the percentage written as Python's `str(float)` writes it, Snowflake's sampling statement as the old client sends it, and `ORDER BY` and `QUALIFY ROW_NUMBER()` forms unchanged, so the same statement draws the same rows on the same table (KO3-41, RS-6's coverage).
 The session time zone is fixed per capture and named in it; a zoned time column on a warehouse is a case of its own on each leg, crossing the UTC instant and the session wall clock (lesson 6's "every reading").
 
 ### 8. The switch, in one commit
 
 **Recommendation:** T3.10 sets every S0, S1 and S2 path's default to `core` in `_routing.py` at once, so no call mixes old and new code (plan section 4), and changes the guard test that holds the defaults (`test_the_routing_seam.py`) in the same commit.
-Inputs the core still refuses by name on a switched path are only the three KO2-94 keeps, if any of them is reachable from S0, S1 or S2 paths at all (T3.2's census measures it); they stay refused by name on the epic branch until Phase 4 lifts them, before the epic can merge into `main` (owner question Q1).
-Client tests that test old-engine internals rather than public behavior are marked to run on the old route only until Phase 5 deletes the engine, each listed in the evidence (owner question Q2); every other client test must pass on the default routes.
+Inputs the core still refuses by name on a switched path are only the three KO2-94 keeps, if any of them is reachable from S0, S1 or S2 paths at all (T3.2's census measures it); they stay refused by name on the epic branch until Phase 4 lifts them, before the epic can merge into `main` (KO3-36).
+Client tests that test old-engine internals rather than public behavior are marked to run on the old route only until Phase 5 deletes the engine, each listed in the evidence (KO3-37); every other client test must pass on the default routes.
 
 ### 9. Host-held rules in scope (lesson 4)
 
@@ -254,7 +255,7 @@ Rejected: a hand-written C interface with a Java FFM layer (plan section 3 chose
 
 ## The live-test plan
 
-Live work runs only under the owner's live rules: one-time jobs only, uploads only to the authorized volume, no existing notebook or cluster touched, only the Lakebase instance the owner names, and three live failures for non-product reasons stop live work (plan section 9; owner question G4).
+Live work runs only under the owner's live rules: one-time jobs only, uploads only to the authorized volume, no existing notebook or cluster touched, only the Lakebase instance the owner names, and three live failures for non-product reasons stop live work (plan section 9; a quota or capacity error is retried once and only a failure after the retry counts, KO3-49).
 The owner's shape (KO3-22): code against the offline judge, and run the live tests at the end.
 So there is one live run at the start (C-1) and one live campaign at the end (E-0 to E-7), run on the commit that lands.
 Nothing account-specific enters the repository: the profile, the volume, the catalog and schemas, the warehouses, the Lakebase instance, the endpoint and the views come from the environment and the orchestrator's private notes; Snowflake's credentials come from the owner's env file, loaded into the run's environment and never read or printed (KO3-24).
@@ -273,7 +274,7 @@ Wheels: C-1 and E-2's baseline pass install the reference's wheels; every other 
 | E-3 Both notebooks on the core | beside E-2 | `kumo_relational_quickstart.ipynb` and `lakebase_relational.ipynb` on the candidate's wheels | Two one-time jobs | about 1 h |
 | E-4 Live L7 timing | after E-2, on quiet warehouses | Push-down median over at least 5 interleaved runs per scenario, caches off (`use_cached_result` off on Databricks, `USE_CACHED_RESULT` off on Snowflake), the core against the old client | Sessions from this machine | about 1.5 h |
 | E-5 Held-out warehouse legs | inside E-1's window, once | HO3's warehouse cases: the old client and python-core live, recorded; rust-host on the stand-in loaded from E-5's own recording | One session or job per leg | about 1 h |
-| E-6 L3 on warehouses (if Q8 is yes) | inside E-2's window | 20 generated sources per warehouse, both routes | One session or job per warehouse | about 1 h |
+| E-6 L3 on warehouses (KO3-43) | inside E-2's window | 20 generated sources per warehouse, both routes | One session or job per warehouse | about 1 h |
 | E-7 Java on Databricks | inside E-2's window, on the same candidate | Phase 0's J2 questions, the four base questions and the two metric-view questions (KO3-35), through the Databricks JDBC driver on the SQL warehouse, compared with Python's answers on the same data in E-1 and E-2 | A session from this machine, and one job on DBR 17.3 (Java 17) running the JAR on x86_64 and on aarch64 | about 45 min |
 
 The end campaign's serial chain is E-0, E-1, E-2 with E-3, then E-4: about 5 hours.
@@ -302,7 +303,7 @@ Hours are implementation plus two review rounds, Phase 2's measured median for p
 | T3.6 | Snowflake | The `snowflake` dialect and catalog reader, the semantic view's retrieval, the provider (connector and Snowpark), routes | Every case's `snowflake` leg and every semantic-view case equal to C-1's reference lines on both hosts on the stand-in (the semantic-view cases once T3.5's interpreter is under it); goldens reviewed against the recorded statements; the key-type pair matrix and a session-zone case on Snowflake's recorded tables; the provider kit on the stand-in | T3.4; T3.5 for the semantic-view cases; C-1 | T3.6's | D | 2 | M, about 8 h |
 | T3.7 | Lakebase, the live runners and the phase-end reports | The `lakebase()` connect path and routes on the Postgres dialect; reads qualified by schema (P2-MID2-6); the matrix runner and job template, both notebooks' driver, installing the wheels under test on each cell; live timing in `contract/tools/l7.py --live`; G8; `differential.py`'s database axis and classes; `evidence.py`'s per-leg table; the local H24 tool; refusal maps citing quoted text | Every case's `lakebase` leg equal to C-1's reference lines on local Postgres; the matrix runner's dry mode prints 21 cells' job specs, and a cell installing a published wheel instead of the one under test fails; `l7.py --live --dry` prints the interleaved plan with caches off, and a seeded slow scenario fails its report; L3 runs on SQLite and Postgres; the per-case table shows every leg | T3.2, T3.3; C-1 | T3.7's | G | 2 | M, about 8 h |
 | T3.8 | Switch-ready: the forced-route failures | The 118 failures fixed in the core or the bridge's wording, each family ported from the old client's rule (the time-column warning, key counting and its refusals, Postgres refusals and the described-schema `RouteError`); the validator chosen in the core (P2-MID2-1); the bridge declarations its bridge edits need | `pytest packages/structured-data-models-client/tests` with every S0 and S1 route forced: 0 failures; a case per family on three databases | T3.1 | T3.8's | E | 1 | R, about 8 h |
-| T3.9 | Differences, coverage and DuckDB 2.0 | The 11 user-visible rows matched or registered; OF-5 per Q9 and Q10; acceptance cases for every S0 and S1 path and cell coverage still finds empty; the S1 test rows; P2G-1 widened; DuckDB 2.0 supported, its CI cell, and the `zip` exceptions dropped if its build allows; the interim edit gate retired; register tidy | `coverage.py` S1 rule (T3.2) with no empty path or cell; each row's case fails before and passes after; CI green on DuckDB 1.5 and 2.0 | T3.2 (coverage); T3.8 for the shared files | T3.9's | F | 2 | M, about 9 h |
+| T3.9 | Differences, coverage and DuckDB 2.0 | The 11 user-visible rows matched or registered; OF-5: the three overnight refusals lifted (KO3-44), the other overnight decisions per Q10; acceptance cases for every S0 and S1 path and cell coverage still finds empty; the S1 test rows; P2G-1 widened; DuckDB 2.0 supported, its CI cell, and the `zip` exceptions dropped if its build allows; the interim edit gate retired; register tidy | `coverage.py` S1 rule (T3.2) with no empty path or cell; each row's case fails before and passes after; CI green on DuckDB 1.5 and 2.0 | T3.2 (coverage); T3.8 for the shared files | T3.9's | F | 2 | M, about 9 h |
 | T3.10 | The switch and the switch gate | Choice 8's flip and guard test; the old-route-only list; the S2 case IDs added to half `3a` (the one planned change to the locked set); register reconciled; `main` merged if it moved; the locked run; the end-of-phase reports; the whole-phase review; the end campaign E-0 to E-7 on the final candidate; the core's live capture committed for rust-host and CI; HO3 once; the evidence pack; the packet | The locked checks below | all Python packages; the Java packages that have landed by its final candidate | T3.10's (the guard test and the switched suites) | A | alone | R, about 17 h on the critical path |
 | T3.11 | Java binding, API and Java S0 | `sdm-jni`; the Maven build and the JAR with natives for Linux x86_64 and aarch64 and macOS arm64 and x86_64; the Java API of choice 10 and its exception mapping; the SLF4J bridge; `contract/runners/run_java.py` and the Java runner program; CI jobs building the JAR and running the Java legs (JDK 17 and 21 on x86_64, JDK 21 on aarch64 and macOS); a panic test and a JAR-load test in a clean container | Every S0 case on the Java host equal to the reference; a panic inside the core reaches Java as an exception and leaves the JVM running; the JAR loads on every JDK and platform listed; L0 admits `jni` only in `sdm-jni` | T3.2 (the `java` runner name; stacked on its candidate) | T3.11's | J | 3 | N, about 9 h |
 | T3.12 | Java S1 through JDBC | JDBC providers for DuckDB, SQLite and Postgres; the JDBC-to-Arrow conversion table; L5 for Java; the model transport over `java.net.http` | Every S1 case on Java's 46 S1 paths equal to the reference on each database on the Java host; L5: the same tables through Java's and Python's drivers reach the core as identical Arrow, and a seeded unit or scale change in one JDBC path fails; `coverage.py`'s Java rule with no empty S0 or S1 path | T3.11 (stacked on its candidate); T3.8, T3.9 (the shared-core fixes) | T3.12's | J | 3 | M/N, about 9 h |
@@ -342,7 +343,7 @@ Before H0: T3.0's landing, this design's review rounds and the owner's day-1 ans
 This forecast misses the owner's one-day goal by about 16 hours.
 The round-1 draft's 28 hours double-booked build slots, under-counted the end campaign, and ran live evidence on a commit before the one that lands; this one does not.
 With the fifth lane, Java ends inside the phase rather than after it; with only four slots it would have ended about 3 hours after the switch.
-What would shorten it, in order: the end campaign passing on its first run with nothing for the whole-phase review to fix (8 hours); the mid-phase live check of each dialect's SQL (owner question D5, option b), which makes that first-run pass likelier; a bigger machine (Q12), which would remove the fifth lane's queueing (about an hour).
+What would shorten it, in order: the end campaign passing on its first run with nothing for the whole-phase review to fix (8 hours); a bigger machine (Q12), which would remove the fifth lane's queueing (about an hour).
 None of them moves scope out of Phase 3.
 
 ## Machine and lanes
@@ -389,7 +390,7 @@ As Phase 2's, on the final SHA, generated by the branch's own runs, plus:
 
 ### Merge rules
 
-As Phase 2's, with T3.0's mechanisms: packages land in stacks of up to four on one CI run (`land.py --stack`, `stack-land`; KO3-13), a cancelled run rerun as T3.0's rule says; judging changes only in T3.2 or one catch-up train; two reviewers on every product round, both approving the same SHA (KO2-9), starting only on a SHA with a handoff stamp; on docs-only fix rounds the reviewer who raised the finding confirms its fix, and rounds writing decision rows or register entries keep Claude (KO3-5); a finding family blocking twice gets a half-page rule note, not a redesign session (KO3-3).
+As Phase 2's, with T3.0's mechanisms: packages land in stacks of up to four on one CI run (`land.py --stack`, `stack-land`; KO3-13), a cancelled run rerun as T3.0's rule says; judging changes only in T3.2 or one catch-up train; two reviewers on every product round, both approving the same SHA (KO2-9), starting only on a SHA with a handoff stamp; a difference from the old client blocks only where the core is worse (a wrong answer, a crash, lost support, a worse error), while one where the core is better (a better error, or more support) is registered as an improvement, reviewer-approvable, and does not block; a red CI job the change caused, and a decision row wider than the owner's words, still block (KO3-41, KO3-47; `briefs/reviewer.md`); on docs-only fix rounds the reviewer who raised the finding confirms its fix, and rounds writing decision rows or register entries keep Claude (KO3-5); a finding family blocking twice gets a half-page rule note, not a redesign session (KO3-3).
 Package IDs are integers, T3.0 to T3.13; register IDs come from per-lane blocks (`P3A-` for lane A, `P3B-` for lane B, and so on); each package writes its own tracker file; decisions.md takes only the owner's rows.
 
 ### Locked acceptance checks
@@ -406,12 +407,12 @@ The rest is judged outside the gate, as Phase 2's KO2-76 set it: CI-green parts 
 | 3 | L4: SQL goldens executed on DuckDB, SQLite and Postgres (Lakebase's dialect is Postgres's); the Databricks and Snowflake goldens reviewed against the recorded statements, and executed live in E-1 with H9 in full | CI: `l4-goldens (<database>)`; report: E-1 | A dialect change with no golden update; a statement the engine refused or answered differently live |
 | 4 | L5: each warehouse driver's Arrow types, as recorded, reach the core without loss; the type maps list what each engine cannot store | CI: `l5-conversion*`; report | A unit or scale change in one driver's path |
 | 5 | The provider kit: every built-in provider, the three new ones on the stand-in and once live in E-1 | CI: `rust-test*`, `contract-python (ref-pandas3, <leg>)`; report: E-1 | A provider that truncates a page or fails a capability silently |
-| 6 | L3: about 200 generated sources on each of DuckDB, SQLite and Postgres, and 20 per warehouse if Q8 is yes, every divergence classified | Report: `differential.py` (T3.7), reference machine, and E-6 | An unclassified divergence |
+| 6 | L3: about 200 generated sources on each of DuckDB, SQLite and Postgres, and 20 per warehouse (KO3-43), every divergence classified | Report: `differential.py` (T3.7), reference machine, and E-6 | An unclassified divergence |
 | 7 | The reference and the phase branch at `main`'s head as of the gate run, the reference rerun, the warehouse reference lines re-recorded in E-0 if it moved, every changed line traced to a `main` commit | `ratchet.py`, the `main` step | `main` moved and not merged; a changed line with no commit |
-| 8 | The switch: every S0, S1 and S2 default is `core`; the client suites pass on the default routes, except tests listed old-route-only under Q2; rust-host runs every S0, S1 and S2 case; the host-held list matches choice 9 | CI: `test (3.x)`, `installed-wheel`, `cross-host (*)`; `rust-lint` (the bridge freeze) | One path left `old`; a client test failing on the default route; a test marked old-route-only that tests public behavior |
+| 8 | The switch: every S0, S1 and S2 default is `core`; the client suites pass on the default routes, except tests listed old-route-only under KO3-37; rust-host runs every S0, S1 and S2 case; the host-held list matches choice 9 | CI: `test (3.x)`, `installed-wheel`, `cross-host (*)`; `rust-lint` (the bridge freeze) | One path left `old`; a client test failing on the default route; a test marked old-route-only that tests public behavior |
 | 9 | Held-out (HO3) under H11's threshold on python-core and rust-host, warehouse legs included (E-5), and on the Java host for its Java cases | `phase_end.sh`'s held-out step and E-5, once | Before the one shot, two dummy bundles (a panic; differences over the threshold) each a no-go |
 | 10 | Boundary and packaging: L0 clean, no `pyo3` in the pure-Rust host's tree, `jni` only in `sdm-jni`, dialect words only in `sdm-data`, the wheel installing on x86_64, aarch64 and each runtime cell | CI: `rust-lint`, `rust-test*`, `wheel-smoke (*)`, `runtime-install (*)` | Phase 1's seeded L0 faults; a dialect word in `sdm-schema` |
-| 11 | L7: offline within KO2-29's limits on DuckDB, SQLite, Postgres and every warehouse leg's stand-in (client CPU, which the stand-in measures as well as a warehouse); live push-down median within 10% of the old client's on Databricks and Snowflake, at least 5 interleaved runs, caches off (Q4) | Report: `contract/tools/l7.py` offline, and `l7.py --live` (T3.7) in E-4 | A scenario past 1.1 times; a live median past 10%; the live report's control, a seeded slow scenario |
+| 11 | L7: offline within KO2-29's limits on DuckDB, SQLite, Postgres and every warehouse leg's stand-in (client CPU, which the stand-in measures as well as a warehouse); live push-down median within 10% of the old client's on Databricks and Snowflake, at least 5 interleaved runs, caches off, in the end campaign (KO3-39) | Report: `contract/tools/l7.py` offline, and `l7.py --live` (T3.7) in E-4 | A scenario past 1.1 times; a live median past 10%; the live report's control, a seeded slow scenario |
 | 12 | Every gate step the half runs passed | `gate.sh --locked 3a` | Any one step seeded to fail |
 | 13 | L6: every case live on each warehouse leg on the core equal to the old client's live answers (E-1 against E-0 and C-1, H9 in full); both notebooks on the core; the 21-cell job matrix on the core equal to its reference baseline, question by question, on x86_64 and aarch64 cells; all on the commit that lands | Report: E-1, E-2, E-3 | A question answered differently in one cell; a cell that does not install the wheels under test; evidence naming another commit |
 | 14 | Java (KO3-27): every S0 and S1 case on Java's paths on the Java host equal to the reference on DuckDB, SQLite and Postgres, and Java's `databricks-sql` legs on the stand-in; L5 for Java; the JAR loads on JDK 17 and 21 on Linux x86_64, and on JDK 21 on Linux aarch64 and macOS arm64 and x86_64 (KO3-32, KO3-34); E-7's answers equal to Python's on the same data, run with the flags of choice 10 (KO3-35). Judged for Java's packages and the phase's end; a Java-only failure never holds a Python package, and a shared-core defect a Java leg shows blocks the path it breaks (plan section 6) | CI: `java (<jdk>, <platform>, <database or leg>)`; report: L5 for Java, E-7 | A Java leg differing from the reference; a seeded unit change in one JDBC path; a JAR missing one architecture's native |
@@ -429,7 +430,7 @@ The rest is judged outside the gate, as Phase 2's KO2-76 set it: CI-green parts 
 | Risk | Guard | Lesson |
 |---|---|---|
 | A dialect fix needs a live run per bug | The stand-in judges answers offline (choice 2); live tests only at the end (KO3-22) | 6, 14 |
-| The end campaign finds real-engine problems all at once | Dialects port the old client's statements, which the engines ran in C-1; goldens reviewed against them; the recorded types feed the stand-in; one fix cycle and a second campaign run in the forecast; owner question D5's option b moves the SQL check earlier | 6, 12 |
+| The end campaign finds real-engine problems all at once | Dialects port the old client's statements, which the engines ran in C-1; goldens reviewed against them; the recorded types feed the stand-in; one fix cycle and a second campaign run in the forecast | 6, 12 |
 | The stand-in answers differently from the warehouse | The comparison is against the old client's answers from the warehouse, so a stand-in difference fails rather than passes; E-1 judges the real engine | 2, 6 |
 | The core grows driver or pandas behavior to match warehouse drivers | Providers hand Arrow to the core; differences go to the register; L5 from the recorded types | 1, 3 |
 | Copying the reference's warehouse accidents (sampling text, quoting) | Q6 on RS-6; registered keeps and drops | 2 |
@@ -452,7 +453,7 @@ The rest is judged outside the gate, as Phase 2's KO2-76 set it: CI-green parts 
 | A test schema, the Lakebase instance, Snowflake's role or the endpoint is not ready for C-1 | Day-1 questions D1 to D4; the discovery already found each candidate (privately) | 16 |
 | Tests run with Snowflake's account-admin role touch other teams' data | A least-privilege test role (D3); otherwise every statement confined to the test schema | 19 |
 | Private names or credentials leak into a committed capture or a log | Placeholders written before any file; the write fails on a name from the environment; Snowflake's env file loaded, never read or printed (KO3-24) | 19 |
-| Three non-product live failures stop live work | Quota and capacity errors retried once by the runner (G4) | 9 |
+| Three non-product live failures stop live work | Quota and capacity errors retried once by the runner (KO3-49) | 9 |
 | The Java lane slows the Python path on an 8-CPU machine | `heavy` admission; Java's builds share the Rust cache; the forecast counts an hour of queueing (KO3-28) | 14 |
 | The 118 forced-route failures hide more than three families | T3.8 starts on day 1 with the whole failing list; its exit is 0 failures | 6 |
 | An older Databricks runtime does not run on aarch64 nodes | C-1's aarch64 probes; owner question Q3 before E-2 | 14 |
@@ -461,7 +462,9 @@ The rest is judged outside the gate, as Phase 2's KO2-76 set it: CI-green parts 
 
 Each opens with what it means in plain words and a recommendation; IDs are footnotes.
 Work proceeds as recommended until an answer arrives, except where a question says it blocks.
-The live-access answers (KO3-18 to KO3-26) are recorded; the discovery run found a candidate for every resource they point to, and the names stay in the orchestrator's private notes.
+
+**Answered** (KO3-18 to KO3-49): live access; Java and its questions; and on 2026-10-22 (night) the switch all at once with KO2-94's refusals kept until Phase 4 (KO3-36), old-engine tests on the old route until Phase 5 (KO3-37), the job matrix's questions (KO3-38), live timing in the end campaign (KO3-39), view YAML read as PyYAML reads it (KO3-40), the old client's sampling SQL on the warehouses and the rule "parity or better", better meaning a better error or more support (KO3-41), the comparison on the old client's recorded data gating (KO3-42), L3 on the warehouses (KO3-43), the three overnight refusals lifted (KO3-44), the offline judge, option (a) (KO3-45), one standing register class for what a user cannot see, whose entry T3.9 writes (KO3-46), the severity rule: only a worse difference blocks (KO3-47), the "no" list (KO3-48), and one retry of a quota or capacity error before it counts as a live failure (KO3-49).
+The discovery run found a candidate for every resource the live-access answers point to; the names stay in the orchestrator's private notes.
 
 **Day 1 (they block C-1, the early capture, at about H5):**
 
@@ -477,41 +480,13 @@ The live-access answers (KO3-18 to KO3-26) are recorded; the discovery run found
 - **D4. The serving endpoint.**
   Your newest always-warm endpoint serves model version 24, while the registered model has versions up to 26 that no endpoint serves.
   Recommendation: test against that endpoint, so no run waits on a cold start.
-- **D5. The offline judge for the warehouse legs** (new acceptance infrastructure, plan section 9).
-  Before the end, a warehouse case is judged by running the core against a local database holding the exact tables the warehouse returned in C-1, with the warehouse's random samples replayed, and comparing its answers with the old client's recorded answers (choice 2); on those offline legs the SQL statements are the local stand-in's, so their count and per-statement results are only diagnostics, while every live run keeps H9's full statement rule; and the two 100,001-row batching cases stay off the warehouse legs.
-  (a) As described, the dialects' SQL first runs on a warehouse in the end campaign; (b) also one short live check of each dialect's SQL when its package is approved, about 20 minutes per warehouse, catching SQL a warehouse rejects about a day earlier.
-  Recommendation: (a), as you asked for live tests at the end; choose (b) if a late surprise worries you more than three short mid-phase runs.
 
-**Python and live questions:**
+**Other open questions:**
 
-- **Q1. The switch.**
-  Flip every S0, S1 and S2 path to the core at once, as the plan says?
-  And if one of the three refusals you kept until Phase 4 (a tabular model request, text times read by the client's own rules, `LIST_DISTINCT` over a foreign key) can be reached from a switched path, it refuses an input the old client answers.
-  Recommendation: flip all at once; keep any such input refused by name on the epic branch until Phase 4 lifts it, since the epic does not reach users before then; T3.2's census says whether any is reachable at all.
-- **Q2. Old-engine tests after the flip.**
-  Some client tests check the old engine's internals rather than what a user sees, and cannot pass on the core.
-  Recommendation: run those on the old route only until Phase 5 deletes the old engine, each listed in the evidence; every public-behavior test must pass on the core.
 - **Q3. aarch64 Databricks runtimes.**
   In your workspace only the newest runtime line has explicit aarch64 versions; whether DBR 14.3, 15.4 and 16.4 run on aarch64 nodes is unproven, and cells J02, J04 and J06 need them.
   Recommendation: C-1 probes it with tiny jobs; any runtime that cannot run on aarch64 there has its aarch64 cell run on the newest aarch64 runtime instead, recorded in the evidence.
-- **Q4. Live timing at the switch.**
-  The plan asks for live push-down timing at the switch; it costs about 1.5 hours of runs.
-  Recommendation: keep it at the switch, as written.
-- **Q5. How view YAML values are read.**
-  The old client reads view YAML with PyYAML, which reads `yes`, `on` and `off` as true and false (YAML 1.1); a strict YAML 1.2 reader keeps them as text.
-  Recommendation: read them as the old client does, so no answer changes.
-- **Q6. Warehouse sampling.**
-  RS-6 approved sending the old client's sampling SQL on Postgres; Phase 2 left open whether it covers the warehouses.
-  Recommendation: yes: the core sends the old client's sampling statements on Databricks and Snowflake, the percentage written as Python writes it, so the same rows are drawn.
-- **Q7. What the job matrix asks.**
-  You said to start from today's quickstart notebook, which is not enough for testing (KO3-23).
-  Recommendation: each of the 15 Unity Catalog cells asks the quickstart's 5 questions and the deleted notebook's 8 (with its ranking and forecast) on the cell's route, each of the 6 Lakebase cells the 6 base questions, and both notebooks run once on the core.
-- **Q8. L3 on the warehouses.**
-  The random-input comparison runs on DuckDB, SQLite and Postgres; on a warehouse it needs a live run.
-  Recommendation: 20 generated sources per warehouse, in the end campaign.
-- **Q9. Three refusals decided overnight in Phase 2** refuse inputs the old client answers: a NaN `lag_timesteps`, `num_neighbors` text that is not a number, and a negative `num_neighbors`.
-  Recommendation: match the old client (lift all three) in T3.9.
-- **Q10. The other Phase 2 overnight decisions, for your confirmation** (each was the orchestrator's under your delegation; each can be reversed):
+- **Q10. The other Phase 2 overnight decisions, for your confirmation** (each was the orchestrator's under your delegation; each can be reversed; each is the same as the old client or better under your rule, KO3-41):
   - a key or time column given as a value that is not a name, with a very long printed form, is refused with a shorter message than the old client's (P2D-2);
   - a Postgres JSON cell holding a broken character escape is refused by name, where the old client crashes (P2D-3);
   - a refusal of a key past the 64-bit range names the table, column and row but not the value read from the data (P2D-4);
@@ -525,21 +500,3 @@ The live-access answers (KO3-18 to KO3-26) are recorded; the discovery run found
 - **Q12. A bigger build machine.**
   Today's machine takes four Python packages and the Java lane, with about an hour of queueing.
   Recommendation: only if one is easy to get; the plan does not depend on it.
-
-**Java questions:** answered (KO3-28 to KO3-35): a fifth lane for Java; Python's API in Java's words; the SLF4J 2 API only; coordinates in Java's convention, built with Maven and published in Phase 5; Linux x86_64 and aarch64, with macOS on the runners Phase 2 already uses; Java 17 bytecode tested on JDK 17 and 21; the runtime flags documented and used in every test, with the Java consumer asked to confirm them.
-Their former numbers J1 to J7 (and Q16 to Q22 before round 2) are retired.
-
-**Process questions:**
-
-- **G1. The standing "match" class.**
-  You approved (KO3-7) that statement counts, warning repeat counts, tie order among equal scores and hash order are matched only when a user can see them, otherwise one register class you approve once.
-  Recommendation: T3.2 writes that one entry; approve its text when it lands.
-- **G2. One severity bar for both reviewers** (you asked "Has this really been a problem?").
-  Yes: on T2.14b, Claude rated rare mismatches with the old client as minor three rounds running while Codex blocked on them, and Codex approved decision and register wording Claude then found wrong (three packages and the design); each disagreement cost a round.
-  Recommendation: one bar: any measured difference from the old client on a public call, any red CI job the change caused, and any decision row wider than your words blocks; hardening internal tools stays minor (KO2-52).
-- **G3. The design's "no" list.**
-  About 45 carried checking-tool and test items are closed as "no" unless a Phase 3 case or the dry run hits them (the carried-rows table).
-  Recommendation: accept the list; any item hit later goes into T3.2 or the train.
-- **G4. Live failures for non-product reasons.**
-  Three such failures stop live work (plan section 9); quota and capacity errors are common on serverless and are not about the product.
-  Recommendation: the runner retries a quota or capacity error once, and only a failure after the retry counts.

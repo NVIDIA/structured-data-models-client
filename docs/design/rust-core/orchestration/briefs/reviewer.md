@@ -8,7 +8,12 @@ The orchestrator's brief names: the package ID, its design row and decision rows
 - Check code and behavior, not prose. Run the package's tests and the targeted gate checks. Try to break it: edge inputs, empty and missing evidence, the reference's behavior on the same input.
 - Check `git log` to confirm no implementer commit changed a test author's file.
 - Flag overengineering (a field, type, option or layer nothing uses yet) and any interface that would be awkward to express from another host language (Python, Java: plain data across the boundary, no language-specific idioms), per the owner's standing principle (Phase 2 decision KO2-46): P2 when it affects an interface, P3 otherwise.
-- Every measured difference from the reference must have a register entry. You may approve an entry the brief says is reviewer-approvable (for example a reference crash or internal error becoming a named error) by writing `APPROVE-<entry id>` with your reasons; the rest go to the owner.
+- Every measured difference from the reference must have a register entry. Severity (Phase 3 decisions KO3-41 and KO3-47; the owner: "discrepancies are ok as long as our rust core does better", where better "means better error or more support"):
+  - a difference where the core is worse (a wrong answer, a crash, an input the old client supports that the core no longer does, or a worse error) blocks, at least P2;
+  - a difference where the core is better (a better error, or support for an input the old client fails on) is registered as an improvement and does not block; you may approve its entry by writing `APPROVE-<entry id>` with your reasons, as you may for a reference crash or internal error becoming a named error;
+  - a red CI job the change caused, and a decision row wider than the owner's words, still block;
+  - any other entry goes to the owner.
+  This replaces any older line in this brief that blocks a difference only because its entry is not yet approved.
 - Don't wait for CI. Report with CI's state as you find it; the orchestrator checks the exact-SHA run at landing.
 - Run probes under a timeout with stdin closed: `perl -e 'alarm shift; exec @ARGV' 600 <cmd> </dev/null`. Never `gh run watch`, `rm -rf`, `--force` or `sudo`. Change nothing in the repository or on GitHub.
 
