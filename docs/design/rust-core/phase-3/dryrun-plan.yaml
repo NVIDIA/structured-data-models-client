@@ -1,0 +1,340 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Phase 3's planned case kinds (design.md, "The checking tools' dry run"),
+# one stub case each, for T3.0's dry run:
+#
+#   scripts/rust_core/gate_dryrun.sh docs/design/rust-core/phase-3/dryrun-plan.yaml \
+#     --python $SDM_LANE_ENV/current/cell-ref-pandas3/bin/python [--rust] [--gate 3a]
+#
+# Every GAP line it prints is a change to the checking tools that T3.2, the
+# phase's one up-front tooling train, makes before any product package
+# relies on it. A stub is not a test: it only has to be a case of its kind
+# as a test author would write it, so the tools show whether they can read
+# and judge that kind. The kinds are grouped as the design's scope is:
+#   A  S2 on a warehouse, as an existing S1 kind run on a new database leg;
+#   B  S2 cases only a warehouse has (metric and semantic views, connect paths);
+#   C  warehouse values (decimal keys, session time zones, nested types);
+#   D  the switch: S0 and S1 paths with no acceptance case today, and the
+#      forced-route failures' families;
+#   E  the endpoint and answer kinds the held-out runs found.
+# Stub ids start "dryrun." so they never collide with real cases.
+shared:
+  # What every stub has unless it says otherwise: base.binary's kind on the
+  # shop base. gate_dryrun reads only "kinds"; this key holds the anchor.
+  case: &case
+    format: sdm-case/1
+    status: acceptance
+    seam: baseline
+    cells: [int64/primary-key, timestamp-us/time-column]
+    input: &input
+      base: shop
+      pql: PREDICT COUNT(orders.*, 0, 30, days) > 0 FOR EACH users.user_id
+      materialize: {indices: [0, 1], anchor_time: '2024-03-01'}
+    until: predict
+    expect: {outcome: success, stage: predict}
+    source: Phase 3 design, dryrun-plan.yaml
+kinds:
+  # --- A: an S1 kind on each warehouse leg -----------------------------------
+  - name: leg-databricks-sql
+    case:
+      <<: *case
+      id: dryrun.leg.databricks-sql
+      slice: S2
+      databases: [databricks-sql]
+      paths: [schema.from-source/all-tables/databricks-sql, query.materialize/indices-binary/databricks-sql, client.predict/binary/databricks-sql]
+      routes: [schema.from-source/all-tables/databricks-sql, query.materialize/indices-binary/databricks-sql, client.predict/binary/databricks-sql]
+      why: base.binary's kind on a Databricks SQL warehouse, replayed from the reference's live capture
+  - name: leg-databricks-spark
+    case:
+      <<: *case
+      id: dryrun.leg.databricks-spark
+      slice: S2
+      databases: [databricks-spark]
+      paths: [schema.from-source/all-tables/databricks-spark, query.materialize/indices-binary/databricks-spark, client.predict/binary/databricks-spark]
+      routes: [schema.from-source/all-tables/databricks-spark, query.materialize/indices-binary/databricks-spark, client.predict/binary/databricks-spark]
+      why: base.binary's kind through a notebook's Spark session, replayed
+  - name: leg-snowflake
+    case:
+      <<: *case
+      id: dryrun.leg.snowflake
+      slice: S2
+      databases: [snowflake]
+      paths: [schema.from-source/all-tables/snowflake, query.materialize/indices-binary/snowflake, client.predict/binary/snowflake]
+      routes: [schema.from-source/all-tables/snowflake, query.materialize/indices-binary/snowflake, client.predict/binary/snowflake]
+      why: base.binary's kind on Snowflake, replayed
+  - name: leg-lakebase
+    case:
+      <<: *case
+      id: dryrun.leg.lakebase
+      slice: S2
+      databases: [lakebase]
+      paths: [schema.from-source/all-tables/lakebase, query.materialize/indices-binary/lakebase, client.predict/binary/lakebase]
+      routes: [schema.from-source/all-tables/lakebase, query.materialize/indices-binary/lakebase, client.predict/binary/lakebase]
+      why: base.binary's kind on Lakebase (Postgres reached through the lakebase connect path), replayed
+  - name: leg-ranking-databricks-sql
+    case:
+      <<: *case
+      id: dryrun.leg.ranking.databricks-sql
+      slice: S2
+      databases: [databricks-sql]
+      paths: [query.materialize/indices-ranking/databricks-sql, client.predict/ranking/databricks-sql]
+      routes: [schema.from-source/all-tables/databricks-sql, query.materialize/indices-ranking/databricks-sql, client.predict/ranking/databricks-sql]
+      input:
+        base: shop
+        setup:
+          - "CREATE TABLE items AS SELECT i::BIGINT AS item_id FROM range(4) t(i)"
+          - "CREATE TABLE buys AS SELECT i::BIGINT AS buy_id, (i % 8)::BIGINT AS user_id, ((i * 3) % 4)::BIGINT AS item_id, TIMESTAMP '2023-01-01' + to_days((i * 5)::INTEGER) AS ts FROM range(120) t(i)"
+        pql: PREDICT LIST_DISTINCT(buys.item_id, 0, 30, days) RANK TOP 2 FOR EACH users.user_id
+        materialize: {indices: [0, 1], anchor_time: '2023-06-01'}
+        probabilities: true
+      why: a ranking on a Databricks SQL warehouse, replayed
+  - name: leg-forecast-snowflake
+    case:
+      <<: *case
+      id: dryrun.leg.forecast.snowflake
+      slice: S2
+      databases: [snowflake]
+      paths: [query.materialize/indices-forecast/snowflake, client.predict/forecast/snowflake]
+      routes: [schema.from-source/all-tables/snowflake, query.materialize/indices-forecast/snowflake, client.predict/forecast/snowflake]
+      input:
+        base: shop
+        pql: PREDICT SUM(orders.price, 0, 7, days) FORECAST 2 TIMEFRAMES FOR EACH users.user_id
+        materialize: {indices: [0, 1], anchor_time: '2023-03-01'}
+        quantiles: true
+      why: a forecast on Snowflake, replayed
+  # --- B: what only a warehouse has --------------------------------------------
+  - name: metric-view-from-source
+    case:
+      <<: *case
+      id: dryrun.view.metric.from-source
+      slice: S2
+      databases: [databricks-sql]
+      paths: [schema.from-source/semantic-model/databricks-metric-view]
+      routes: [schema.from-source/semantic-model/databricks-metric-view]
+      cells: [int64/primary-key, utf8/feature]
+      input:
+        <<: *input
+        view:
+          kind: metric_view
+          name: orders_view
+          yaml: |
+            version: 0.1
+            source: orders
+            filter: price > 0
+            dimensions:
+              - name: user_id
+                expr: user_id
+              - name: price_band
+                expr: CASE WHEN price > 10 THEN 'high' ELSE 'low' END
+            measures:
+              - name: revenue
+                expr: SUM(price)
+      until: from_source
+      expect: {outcome: success, stage: from_source}
+      why: a metric view described through its YAML, with an expression column and a row filter
+  - name: metric-view-predict-regression
+    case:
+      <<: *case
+      id: dryrun.view.metric.regression
+      slice: S2
+      databases: [databricks-sql]
+      paths: [query.materialize/indices-regression/databricks-metric-view, client.predict/regression/databricks-metric-view]
+      routes: [schema.from-source/semantic-model/databricks-metric-view, query.materialize/indices-regression/databricks-metric-view, client.predict/regression/databricks-metric-view]
+      input:
+        <<: *input
+        view: {kind: metric_view, name: orders_view, yaml: "version: 0.1\nsource: orders\ndimensions:\n  - name: user_id\n    expr: user_id\n  - name: price\n    expr: price\n"}
+        pql: PREDICT SUM(orders_view.price, 0, 30, days) FOR EACH users.user_id
+      why: a regression through a metric view, as the frozen notebook's view questions ask
+  - name: semantic-view-from-source
+    case:
+      <<: *case
+      id: dryrun.view.semantic.from-source
+      slice: S2
+      databases: [snowflake]
+      paths: [schema.from-source/semantic-model/snowflake-semantic-view]
+      routes: [schema.from-source/semantic-model/snowflake-semantic-view]
+      input:
+        <<: *input
+        view:
+          kind: semantic_view
+          name: shop_view
+          yaml: |
+            name: shop_view
+            tables:
+              - name: users
+                base_table: {table: users}
+                primary_key: {columns: [user_id]}
+              - name: orders
+                base_table: {table: orders}
+                facts:
+                  - {name: price, expr: price}
+            relationships:
+              - {name: orders_users, left_table: orders, right_table: users, relationship_columns: [{left_column: user_id, right_column: user_id}]}
+      until: from_source
+      expect: {outcome: success, stage: from_source}
+      why: a Snowflake semantic view described through SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW
+  - name: semantic-view-predict-binary
+    case:
+      <<: *case
+      id: dryrun.view.semantic.binary
+      slice: S2
+      databases: [snowflake]
+      paths: [query.materialize/indices-binary/snowflake-semantic-view, client.predict/binary/snowflake-semantic-view]
+      routes: [schema.from-source/semantic-model/snowflake-semantic-view, query.materialize/indices-binary/snowflake-semantic-view, client.predict/binary/snowflake-semantic-view]
+      input:
+        <<: *input
+        view: {kind: semantic_view, name: shop_view, yaml: "name: shop_view\ntables:\n  - name: users\n    base_table: {table: users}\n    primary_key: {columns: [user_id]}\n"}
+      why: a binary question through a semantic view
+  - name: connect-databricks-warehouse
+    case:
+      <<: *case
+      id: dryrun.connect.warehouse
+      slice: S2
+      databases: [databricks-sql]
+      paths: [source.connect-databricks/warehouse/databricks-sql, source.open/auto/databricks-sql]
+      routes: [source.connect-databricks/warehouse/databricks-sql, source.open/auto/databricks-sql, schema.from-source/all-tables/databricks-sql]
+      input:
+        <<: *input
+        connect: warehouse
+      until: from_source
+      expect: {outcome: success, stage: from_source}
+      why: the source opened by sdm_connectors.databricks.warehouse() and found by auto detection
+  - name: connect-lakebase
+    case:
+      <<: *case
+      id: dryrun.connect.lakebase
+      slice: S2
+      databases: [lakebase]
+      paths: [source.connect-databricks/lakebase/lakebase, source.open/auto/lakebase]
+      routes: [source.connect-databricks/lakebase/lakebase, source.open/auto/lakebase, schema.from-source/all-tables/lakebase]
+      input:
+        <<: *input
+        connect: lakebase
+      until: from_source
+      expect: {outcome: success, stage: from_source}
+      why: the source opened by sdm_connectors.databricks.lakebase()
+  # --- C: warehouse values ---------------------------------------------------
+  - name: databricks-decimal-38-6-key
+    case:
+      <<: *case
+      id: dryrun.value.decimal-key.databricks-sql
+      slice: S2
+      databases: [databricks-sql]
+      seam: keys
+      paths: [schema.from-source/all-tables/databricks-sql]
+      routes: [schema.from-source/all-tables/databricks-sql, query.materialize/indices-binary/databricks-sql, client.predict/binary/databricks-sql]
+      cells: [decimal128/primary-key, decimal128/foreign-key]
+      input:
+        <<: *input
+        setup:
+          - ALTER TABLE users ALTER user_id TYPE DECIMAL(38, 6)
+          - ALTER TABLE orders ALTER user_id TYPE DECIMAL(38, 6)
+      why: a DECIMAL(38,6) key on both ends of a link, on Databricks
+  - name: snowflake-session-zone-time
+    case:
+      <<: *case
+      id: dryrun.value.ltz-time.snowflake
+      slice: S2
+      databases: [snowflake]
+      seam: time
+      paths: [schema.from-source/all-tables/snowflake]
+      routes: [schema.from-source/all-tables/snowflake, query.materialize/indices-binary/snowflake, client.predict/binary/snowflake]
+      cells: [int64/primary-key, timestamp-us-tz/time-column]
+      input:
+        <<: *input
+        setup:
+          - ALTER TABLE orders ALTER ts TYPE TIMESTAMPTZ
+      why: a zoned time column read in the warehouse session's time zone (TIMESTAMP_LTZ on Snowflake)
+  - name: databricks-struct-feature
+    case:
+      <<: *case
+      id: dryrun.value.struct.databricks-sql
+      slice: S2
+      databases: [databricks-sql]
+      seam: nested
+      paths: [schema.from-source/all-tables/databricks-sql]
+      routes: [schema.from-source/all-tables/databricks-sql, query.materialize/indices-binary/databricks-sql, client.predict/binary/databricks-sql]
+      cells: [int64/primary-key, struct/feature]
+      input:
+        <<: *input
+        setup:
+          - ALTER TABLE users ADD COLUMN profile STRUCT(age INTEGER, country VARCHAR)
+      why: a STRUCT feature on Databricks
+  # --- D: the switch ---------------------------------------------------------
+  - name: s1-database-legs-claim-their-paths
+    case:
+      <<: *case
+      id: dryrun.switch.database-paths
+      slice: S1
+      paths: [client.predict/binary/duckdb, client.predict/binary/sqlite, client.predict/binary/postgres]
+      routes: [schema.from-source/all-tables/duckdb, query.materialize/indices-binary/duckdb, client.predict/binary/duckdb]
+      why: an S1 case whose SQLite and Postgres legs claim their own database paths (carried row P2-T2.16-3)
+  - name: s1-schema-edit-set-stype
+    case:
+      <<: *case
+      id: dryrun.switch.edit-set-stype
+      slice: S1
+      paths: [schema.edit/set-stype/any]
+      routes: [schema.from-source/all-tables/duckdb, query.materialize/indices-binary/duckdb, client.predict/binary/duckdb]
+      input:
+        <<: *input
+        edits:
+          - {op: set_stype, table: users, column: country, stype: text}
+      why: a schema edit path with no acceptance case today (carried row P2-T2.16-3)
+  - name: s1-state-pickle-request
+    case:
+      <<: *case
+      id: dryrun.switch.pickle-request
+      slice: S1
+      paths: [state.pickle/request/any]
+      routes: [schema.from-source/all-tables/duckdb, query.materialize/indices-binary/duckdb, client.predict/binary/duckdb]
+      input:
+        <<: *input
+        pickle: request
+      why: a materialized request pickled and loaded again before predict, a path with no acceptance case today (carried row P2-T2.16-3)
+  - name: s1-key-repeating-once
+    case:
+      <<: *case
+      id: dryrun.switch.key-repeating
+      slice: S1
+      seam: keys
+      paths: [schema.from-source/all-tables/duckdb]
+      routes: [schema.from-source/all-tables/duckdb, query.materialize/indices-binary/duckdb, client.predict/binary/duckdb]
+      input:
+        <<: *input
+        setup:
+          - INSERT INTO users SELECT * FROM users LIMIT 1
+      until: from_source
+      expect: {outcome: success, stage: from_source}
+      why: an inferred key repeating once, the family of the 38 forced-route failures in test_a_key_is_counted_where_its_rows_are.py
+  - name: s0-validated-on-the-core
+    case:
+      format: sdm-case/1
+      id: dryrun.switch.s0-validate
+      status: acceptance
+      slice: S0
+      paths: [query.validate/refuse/any]
+      routes: [query.validate/accept/any, query.validate/refuse/any]
+      cells: []
+      input:
+        <<: *input
+        pql: PREDICT COUNT(orders.*, 0, 30, days) > 0 FOR EACH users.missing_column
+      until: materialize
+      expect: {outcome: refusal, stage: materialize, error: ValidationError, code: null}
+      why: a query the host's old validator refuses today, to be chosen and refused by the core (carried row P2-MID2-1)
+      source: Phase 3 design, dryrun-plan.yaml
+  # --- E: endpoint and answers ------------------------------------------------
+  - name: endpoint-refuses-the-only-call
+    case:
+      <<: *case
+      id: dryrun.endpoint.only-call-refused
+      slice: S1
+      paths: [client.predict/binary/duckdb]
+      routes: [schema.from-source/all-tables/duckdb, query.materialize/indices-binary/duckdb, client.predict/binary/duckdb]
+      input:
+        <<: *input
+        fail_call: 0
+      expect: {outcome: refusal, stage: predict, error: NimRequestError, code: null}
+      why: the endpoint refusing a request asked in one call (carried row P2-T2.16-13, register P2G-1)
