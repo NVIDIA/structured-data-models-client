@@ -33,7 +33,8 @@ selects is the tooling job's, whatever the detector finds.
 
 ``must-run`` is ``true`` when a file changed since ``git merge-base BASE
 HEAD`` matches ``scripts/rust_core/judging-paths.txt`` (protected-paths
-syntax, the one list of judging paths), is the workflow, the marker's
+syntax, the one list of judging paths), is under ``scripts/rust_core/``
+(the scripts those tests run), is the workflow, the marker's
 registration (``pyproject.toml``) or a suite's ``conftest.py``, or is a
 marked file or a module one loads; and when the list cannot be read or the
 base is no commit (fail closed: the jobs run).
@@ -197,6 +198,10 @@ def must_run(root: Path, base: str, head: str = 'HEAD') -> tuple[bool, str]:
             return True, f'{path} changed'
         if protects(rules, path):
             return True, f'{path} changed, a judging path ({JUDGING_PATHS})'
+        if path.startswith('scripts/rust_core/'):
+            # The brief's trigger: any of our checking and orchestration
+            # scripts, judging path or not (land.py, lane.py, handoff.py).
+            return True, f'{path} changed, one of the scripts the tests run'
         if path in loaded:
             return (
                 True,

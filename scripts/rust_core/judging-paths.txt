@@ -28,6 +28,8 @@ scripts/rust_core/emulation-allowlist.txt
 scripts/rust_core/judging-paths.txt
 # The runners and the case format: what reads a case and writes an observation.
 contract/runners/**
+# The comparison and checking tools under the contract.
+contract/tools/**
 contract/*.schema.json
 contract/compare-policy.yaml
 contract/protected-paths.txt

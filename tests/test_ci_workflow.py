@@ -2600,8 +2600,9 @@ def test_t30_the_judging_tool_job_runs_only_when_its_paths_change(
         env={**os.environ, **GIT_ENV}, check=True, capture_output=True,
     )  # fmt: skip
     _git(tmp_path, 'clone', '-q', '--shared', str(origin), str(repo))
+    # -B: run from lane a's own worktree, the clone already has that branch.
     _git(
-        repo, 'checkout', '-q', '-b', T30_LANE, _git(ROOT, 'rev-parse', 'HEAD')
+        repo, 'checkout', '-q', '-B', T30_LANE, _git(ROOT, 'rev-parse', 'HEAD')
     )
     base = _git(repo, 'rev-parse', 'HEAD')
     _git(repo, 'push', '-q', 'origin', f'{base}:refs/heads/{T30_PHASE}')
