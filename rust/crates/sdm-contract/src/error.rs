@@ -298,7 +298,7 @@ pub struct CoreError {
     /// T2.8c): the error keeps what was paid for, so the rest can be asked
     /// again. Absent for any other error.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub answered: Option<AnsweredParts>,
+    pub answered: Option<Box<AnsweredParts>>,
 }
 
 /// The answers a failed request had received ([`CoreError::answered`]),
@@ -438,7 +438,7 @@ impl CoreError {
     /// ([`CoreError::answered`]).
     #[must_use]
     pub fn answering(mut self, answered: AnsweredParts) -> Self {
-        self.answered = Some(answered);
+        self.answered = Some(Box::new(answered));
         self
     }
 
