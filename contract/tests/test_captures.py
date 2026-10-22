@@ -45,8 +45,8 @@ ENVIRON = {
     'SNOWFLAKE_USERNAME': 'jdoe_private',
     'SNOWFLAKE_URL': 'https://acme-xy123.example.invalid',
     'SNOWFLAKE_ACCESS_TOKEN': 'tok-SECRET-0001',
-    'SDM_LIVE_TEST_DATABASE': 'Real_Cat',
-    'SDM_LIVE_TEST_SCHEMA': 'Hidden_Schema',
+    'SDM_CAPTURE_CATALOG': 'Real_Cat',
+    'SDM_CAPTURE_SCHEMA': 'Hidden_Schema',
     'SDM_LIVE_SOMETHING_ELSE': 'other-resource',
     'HOME': '/home/someone',
 }
@@ -266,3 +266,42 @@ def test_a_table_whose_content_is_not_its_name_is_refused(
     (path / name).write_bytes(captures.table_bytes(pa.table({'id': [9]})))
     with pytest.raises(captures.CaptureError, match='not its name'):
         captures.read(path)
+
+
+def test_every_sdm_capture_variable_is_a_placeholder() -> None:
+    environ = {
+        'SDM_CAPTURE_CATALOG': 'Real_Cat',
+        'SDM_CAPTURE_SHOP_METRIC_VIEW': 'secret_view_x',
+        'SDM_CAPTURE_SOMETHING_NEW': 'other_name_y',
+    }
+    found, _ = captures.document(
+        _capture(
+            reference={
+                'message': 'Real_Cat secret_view_x OTHER_NAME_Y',
+            }
+        ),
+        environ,
+    )
+    assert found['reference'] == {
+        'message': '{catalog} {shop_metric_view} {SOMETHING_NEW}'
+    }
+
+
+def test_a_leg_s_manifest_lists_its_captures(tmp_path: Path) -> None:
+    leg = tmp_path / 'snowflake'
+    for case in ('c1', 'c2'):
+        captures.write(leg / case, _capture(case=case), environ={})
+    path = captures.write_manifest(leg)
+    manifest = json.loads(path.read_text())
+    assert manifest['format'] == captures.FORMAT
+    assert manifest['recording_commit'] == 'a' * 40
+    assert manifest['legs'] == {'snowflake': {'python': '3.12'}}
+    assert manifest['cases'] == {
+        'c1@snowflake': {'input_hash': '0' * 64, 'capture': 'c1'},
+        'c2@snowflake': {'input_hash': '0' * 64, 'capture': 'c2'},
+    }
+    captures.write(
+        leg / 'c3', _capture(case='c3', recording_commit='c' * 40), environ={}
+    )
+    with pytest.raises(captures.CaptureError, match='2 recordings'):
+        captures.write_manifest(leg)
