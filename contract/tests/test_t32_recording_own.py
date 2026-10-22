@@ -24,6 +24,7 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any
 
+import pyarrow as pa
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -44,8 +45,6 @@ def _load(name: str) -> ModuleType:
 
 run = _load('run_python')
 check = _load('capture_check')
-pa = pytest.importorskip('pyarrow')
-pytest.importorskip('duckdb')
 
 
 # --- fake warehouse drivers --------------------------------------------------------

@@ -19,10 +19,9 @@ from __future__ import annotations
 import pickle
 import warnings
 
+import duckdb
+import pandas as pd
 import pytest
-
-duckdb = pytest.importorskip('duckdb')
-pd = pytest.importorskip('pandas')
 
 
 def test_a_materialized_request_refuses_pickle_by_its_source() -> None:
