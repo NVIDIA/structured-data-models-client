@@ -137,13 +137,16 @@ class Workspace:
     r"""``cargo metadata``'s shape for the workspace as the design draws it,
     built without cargo: every first-party crate ``l0_deps.py`` classifies
     and finds in the tree, at its real manifest, on the first-party edges
-    its ``ALLOWED`` gives it."""
+    its ``ALLOWED`` gives it; ``without`` leaves a crate out, as if it
+    did not exist yet, so ``sdm-jni`` can be seeded whether or not the tree
+    holds it."""
 
-    def __init__(self, l0: ModuleType) -> None:
+    def __init__(self, l0: ModuleType, without: tuple[str, ...] = ()) -> None:
         crates = [
             name
             for name in sorted(l0.CLASSES)
-            if any(
+            if name not in without
+            and any(
                 (ROOT / parent / name / 'Cargo.toml').is_file()
                 for parent in ('rust/crates', 'rust/bindings')
             )
@@ -225,12 +228,12 @@ def test_t32_l0_deps_holds_sdm_jni_to_the_host_and_contract(
     l0 = _tool('l0_deps')
     assert l0.CLASSES.get('sdm-jni') == l0.BINDING
     assert l0.ALLOWED.get('sdm-jni') == frozenset({'sdm-host', 'sdm-contract'})
-    absent = Workspace(l0)
+    absent = Workspace(l0, without=('sdm-jni',))
     assert 'sdm-jni' not in [p['name'] for p in absent.data['packages']]
     assert _l0_problems(l0, absent) == []
 
     def with_jni(*extra: str) -> list[str]:
-        workspace = Workspace(l0)
+        workspace = Workspace(l0, without=('sdm-jni',))
         manifest = _binding(tmp_path / '-'.join(('jni', *extra)), 'sdm-jni')
         workspace.package('sdm-jni', manifest, True)
         for dep in ('sdm-host', 'sdm-contract', 'jni', *extra):
@@ -242,7 +245,7 @@ def test_t32_l0_deps_holds_sdm_jni_to_the_host_and_contract(
     assert any('sdm-jni reaches pyo3' in p for p in pyo3), pyo3
     core = with_jni('sdm-core')
     assert any('sdm-jni -> sdm-core' in p for p in core), core
-    other = Workspace(l0)
+    other = Workspace(l0, without=('sdm-jni',))
     other.package('sdm-rb', _binding(tmp_path / 'b', 'sdm-rb'), True)
     other.edge('sdm-rb', 'sdm-host')
     problems = _l0_problems(l0, other)
@@ -263,6 +266,11 @@ def test_t32_l0_scan_reads_sdm_jni_for_dialect_words_once_it_exists(
             tmp_path / parent,
             ignore=shutil.ignore_patterns('target', '__pycache__', '.venv'),
         )
+    # The copy without sdm-jni, whether or not the tree holds it yet: the
+    # check asks nothing of a crate that does not exist.
+    for parent in ('rust/crates', 'rust/bindings'):
+        if (tmp_path / parent / 'sdm-jni').exists():
+            shutil.rmtree(tmp_path / parent / 'sdm-jni')
     assert scan.check_dialects(tmp_path) == []
     source = tmp_path / 'rust/bindings/sdm-jni/src/lib.rs'
     source.parent.mkdir(parents=True)
