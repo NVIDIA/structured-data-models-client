@@ -223,23 +223,19 @@ fn every_operation_dispatches_to_a_run() {
         },
     };
     // A table named is read by its source name, with no listing of the
-    // source's tables first (T1.23): its columns and keys in one step.
+    // source's tables first (T1.23): its columns first, alone, since a
+    // catalog may answer the name it holds the table under, which the keys
+    // are then read by (T3.4, DB/table.py:262).
     let Step::Fetch { requests } = run_of(&root, describe(host)).unwrap().next().unwrap() else {
         panic!("describe_source did not ask for the table named");
     };
     let asked: Vec<&DataRequest> = requests.iter().map(|step| &step.request).collect();
     assert_eq!(
         asked,
-        [
-            &DataRequest::Describe {
-                tables: vec!["t".into()],
-                part: DescribePart::Columns,
-            },
-            &DataRequest::Describe {
-                tables: vec!["t".into()],
-                part: DescribePart::Keys,
-            },
-        ]
+        [&DataRequest::Describe {
+            tables: vec!["t".into()],
+            part: DescribePart::Columns,
+        }]
     );
 }
 
