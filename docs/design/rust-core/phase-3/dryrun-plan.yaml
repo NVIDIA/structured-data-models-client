@@ -21,8 +21,9 @@
 #   E  the endpoint and answer kinds the held-out runs found;
 #   F  Java (KO3-27): the same cases on the Java host, whose legs run when
 #      the candidate builds the JAR. The case files need nothing new; what
-#      the tools lack is a "java" runner and coverage over
-#      phase-0/scope-java.yaml, which T3.2 adds with a --java option here.
+#      the tools lack is the runner name "java", its per-provider admission
+#      and coverage over phase-0/scope-java.yaml, which T3.2 adds; the Java
+#      runner itself is T3.11's, so these kinds are judged once it exists.
 # Stub ids start "dryrun." so they never collide with real cases.
 # The "reports" key lists the end-of-phase report commands the locked checks
 # need (design.md, "Locked acceptance checks"); gate_dryrun.sh reads only
