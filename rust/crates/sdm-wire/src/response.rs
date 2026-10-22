@@ -395,12 +395,10 @@ pub fn mappings(value: &Value) -> Result<Vec<Value>, Refused> {
     }
 }
 
-/// A dict key as Python's equality holds it, which the reference's client
-/// keys a response's mappings by (`dict`), so two keys the reference holds
-/// one are one here, and only here: text by its text, null as
-/// itself, a boolean or a number by its exact value (an integer's digits, a
-/// whole double's digits, another double by its bits); every NaN one key.
-/// Two NaN objects are two keys to Python's `dict`, but the client reads a
+/// A dict key as Python's equality holds it ([`crate::key`]), which the
+/// reference's client keys a response's mappings by (`dict`), so two keys
+/// the reference holds one are one here: every NaN one key. Two NaN
+/// objects are two keys to Python's `dict`, but the client reads a
 /// response with `json.loads`, which gives every `NaN` token the same NaN
 /// object, and `dict` finds a key that is the same object before it
 /// compares, so the reference keeps one key for them all (T2.13: the
@@ -408,34 +406,13 @@ pub fn mappings(value: &Value) -> Result<Vec<Value>, Refused> {
 /// `{NaN: 2}`).
 fn key_of(key: &Value) -> Option<String> {
     match key {
-        Value::Text(text) => Some(format!("s{text}")),
-        Value::Null => Some("z".to_owned()),
-        Value::Bool(b) => Some(format!("n{}", u8::from(*b))),
-        Value::Number(token) if is_integer_token(token) => {
-            let digits = token.trim_start_matches('-').trim_start_matches('0');
-            let sign = if token.starts_with('-') && !digits.is_empty() {
-                "-"
-            } else {
-                ""
-            };
-            Some(format!(
-                "n{sign}{}",
-                if digits.is_empty() { "0" } else { digits }
-            ))
-        }
+        Value::Text(text) => Some(crate::key::text(text)),
+        Value::Null => Some(crate::key::MISSING.to_owned()),
+        Value::Bool(b) => Some(crate::key::boolean(*b)),
+        Value::Number(token) if is_integer_token(token) => Some(crate::key::exact(token)),
         Value::Number(token) => {
             let float: f64 = token.parse().ok()?;
-            if float.is_nan() {
-                Some("x".to_owned())
-            } else if float.is_finite() && float.fract() == 0.0 {
-                Some(if float == 0.0 {
-                    "n0".to_owned()
-                } else {
-                    format!("n{float:.0}")
-                })
-            } else {
-                Some(format!("f{:016x}", float.to_bits()))
-            }
+            Some(crate::key::float(float).unwrap_or_else(|| "x".to_owned()))
         }
         _ => None,
     }
