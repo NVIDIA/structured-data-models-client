@@ -841,6 +841,12 @@ def _ipc_text(text: str) -> Any:
     return pa.ipc.open_stream(io.BytesIO(base64.b64decode(text))).read_all()
 
 
+#: The recording mode's line format (``run_python.py --record``, T3.2),
+#: which :func:`from_recording` reads; its first lines carried the
+#: capture's own label before the recording took a name of its own.
+RECORDING_FORMATS = ('sdm-record/1', 'sdm-capture/1')
+
+
 def from_recording(
     line: Mapping[str, Any], null_order: str | None = None
 ) -> dict[str, Any]:
@@ -851,6 +857,11 @@ def from_recording(
     rows, each view-derived relation's warehouse-evaluated table (or the
     statement's error, its relation then served by exact replay alone),
     the session's zone, and the leg's NULL order (:data:`NULL_ORDER`)."""
+    if line.get('format') not in RECORDING_FORMATS:
+        raise CaptureError(
+            f'a recording line of format {line.get("format")!r} is not one of '
+            f'{RECORDING_FORMATS}'
+        )
     leg = line['leg']
     case = str(line['case']).rpartition('@')[0] or str(line['case'])
     recording = line.get('recording') or {}
