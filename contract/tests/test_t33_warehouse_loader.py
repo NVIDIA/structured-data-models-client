@@ -37,7 +37,7 @@ because nothing names it before the implementation:
 
 Each test names the brief line it proves. Each test listed in
 ``contract/tests/t33-pending.json``'s ``pending`` (as ``py:<function
-name>``) failed when written and is held to failing (``xfail``, strict)
+name>``) failed when written and is held to failing (``t33_gate.py``)
 until the implementer takes it out; ``pending`` stays within
 ``authored``, the test author's list.
 """
@@ -59,7 +59,6 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 RUNNERS = ROOT / 'contract/runners'
-PENDING_FILE = Path(__file__).with_name('t33-pending.json')
 #: The two engines the type map gains; Lakebase reads as Postgres.
 WAREHOUSE_ENGINES = ('databricks', 'snowflake')
 
@@ -79,23 +78,25 @@ def _module(name: str) -> ModuleType:
 databases = _module('databases')
 
 
-def _pending_names(key: str) -> set[str]:
-    return set(json.loads(PENDING_FILE.read_text(encoding='utf-8'))[key])
+def _gate() -> ModuleType:
+    key = 't33_gate'
+    if key not in sys.modules:
+        spec = importlib.util.spec_from_file_location(
+            key, Path(__file__).with_name('t33_gate.py')
+        )
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        sys.modules[key] = module
+    return sys.modules[key]
 
 
-def pending(test: Any) -> Any:
-    r"""Holds ``test`` to failing while ``t33-pending.json`` lists it."""
-    if f'py:{test.__name__}' in _pending_names('pending'):
-        return pytest.mark.xfail(
-            strict=True,
-            reason='T3.3: failing until implemented; once it passes, take '
-            f'py:{test.__name__} out of contract/tests/t33-pending.json',
-        )(test)
-    return test
+#: Runs a test through the gate: it must pass, or fail while pending.
+pending = _gate().gated
 
 
 def test_t33_the_pending_list_only_shrinks() -> None:
-    assert _pending_names('pending') <= _pending_names('authored')
+    assert _gate().only_shrinks() == []
 
 
 # --- helpers ---------------------------------------------------------------
@@ -477,25 +478,27 @@ def test_t33_every_s1_case_loads_or_is_refused_by_name(engine: str) -> None:
 # --- Lakebase, on a local Postgres -----------------------------------------
 
 
-def _postgres_dsn() -> str:
-    dsn = os.environ.get('SDM_POSTGRES_TEST_DSN')
-    if not dsn:
-        # Required (a Postgres job): that fails; elsewhere it is skipped,
-        # never passed.
-        assert not os.environ.get('SDM_REQUIRE_POSTGRES'), (
-            'SDM_REQUIRE_POSTGRES is set but SDM_POSTGRES_TEST_DSN is not'
-        )
-        pytest.skip('no Postgres server named (SDM_POSTGRES_TEST_DSN)')
-    return dsn
-
-
-@pending
 def test_t33_a_table_a_catalog_relation_shadows_loads_in_its_schema() -> None:
     r"""The brief's appended section: the loader qualifies its ``COPY`` by
     schema, or the ``pg_roles`` case (lakebase.name.shadowed-by-catalog)
     does not load: an unqualified ``pg_roles`` names ``pg_catalog``'s view
     first, whatever the search path."""
-    dsn = _postgres_dsn()
+    dsn = os.environ.get('SDM_POSTGRES_TEST_DSN')
+    if not dsn:
+        # Required (a Postgres job): that fails; elsewhere there is nothing
+        # to hold.
+        assert not os.environ.get('SDM_REQUIRE_POSTGRES'), (
+            'SDM_REQUIRE_POSTGRES is set but SDM_POSTGRES_TEST_DSN is not'
+        )
+        return
+    _gate().held(
+        'py:test_t33_a_table_a_catalog_relation_shadows_loads_in_its_schema',
+        lambda: _shadowed_table_loads(dsn),
+    )
+
+
+def _shadowed_table_loads(dsn: str) -> None:
+    r"""``pg_roles`` loaded into a schema of its own on ``dsn``."""
     import psycopg
     from psycopg.conninfo import make_conninfo
 

@@ -29,7 +29,7 @@ The binary is ``SDM_STANDIN`` when set, else built by Cargo from
 
 Each test listed in ``contract/tests/t33-pending.json``'s ``pending`` (as
 ``py:<function name>``) failed when written and is held to failing
-(``xfail``, strict) until the implementer takes it out.
+(``t33_gate.py``) until the implementer takes it out.
 """
 
 from __future__ import annotations
@@ -48,7 +48,6 @@ import pytest
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
-PENDING_FILE = HERE / 't33-pending.json'
 
 
 def _load(name: str, path: Path) -> ModuleType:
@@ -70,19 +69,21 @@ def _load(name: str, path: Path) -> ModuleType:
 fixtures = _load('fixtures', HERE / 't33_fixtures.py')
 
 
-def _pending_names(key: str) -> set[str]:
-    return set(json.loads(PENDING_FILE.read_text(encoding='utf-8'))[key])
+def _gate() -> ModuleType:
+    key = 't33_gate'
+    if key not in sys.modules:
+        spec = importlib.util.spec_from_file_location(
+            key, Path(__file__).with_name('t33_gate.py')
+        )
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        sys.modules[key] = module
+    return sys.modules[key]
 
 
-def pending(test: Any) -> Any:
-    r"""Holds ``test`` to failing while ``t33-pending.json`` lists it."""
-    if f'py:{test.__name__}' in _pending_names('pending'):
-        return pytest.mark.xfail(
-            strict=True,
-            reason='T3.3: failing until implemented; once it passes, take '
-            f'py:{test.__name__} out of contract/tests/t33-pending.json',
-        )(test)
-    return test
+#: Runs a test through the gate: it must pass, or fail while pending.
+pending = _gate().gated
 
 
 def _client() -> ModuleType:
@@ -135,14 +136,16 @@ def _binary() -> Path:
 @pytest.fixture
 def serve(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Any]:
     r"""``serve(capture)``: the capture written, and a stand-in serving it;
-    every stand-in started is closed after the test."""
-    captures = _captures()
-    for name in captures.PRIVATE:
-        monkeypatch.delenv(name, raising=False)
-    binary = _binary()
+    every stand-in started is closed after the test. The writer, the binary
+    and the client are reached in the test's body, where the gate holds
+    what fails before they exist."""
     opened: list[Any] = []
 
     def serve(found: dict[str, Any]) -> Any:
+        captures = _captures()
+        for name in captures.PRIVATE:
+            monkeypatch.delenv(name, raising=False)
+        binary = _binary()
         target = tmp_path / f'capture-{len(opened)}'
         captures.write(target, found)
         stand_in = _client().StandIn(target, binary=binary)
