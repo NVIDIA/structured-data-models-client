@@ -15,7 +15,7 @@ use arrow_array::builder::{ListBuilder, StringBuilder};
 use arrow_array::{ArrayRef, BooleanArray, Int32Array, Int64Array, RecordBatch, StringArray};
 use arrow_schema::{DataType, Field, Schema};
 use sdm_contract::catalog::{
-    CatalogAnswer, CatalogColumn, CatalogForeignKey, CatalogIndex, CatalogKey, IndexColumns,
+    CatalogAnswer, CatalogColumn, CatalogForeignKey, CatalogIndex, CatalogKey, IndexCoverage,
     KeyKind,
 };
 use sdm_contract::data::{
@@ -244,11 +244,11 @@ fn duckdb_s_catalog_and_a_host_s_read_to_the_same_answer() {
     let expected = CatalogAnswer::Indexes(vec![
         CatalogIndex {
             table: "orders".into(),
-            columns: IndexColumns::Resolved(vec!["user_id".into()]),
+            columns: IndexCoverage::Resolved(vec!["user_id".into()]),
         },
         CatalogIndex {
             table: "orders".into(),
-            columns: IndexColumns::Unresolved,
+            columns: IndexCoverage::Unresolved,
         },
     ]);
     let expressions = vec![
@@ -270,7 +270,7 @@ fn duckdb_s_catalog_and_a_host_s_read_to_the_same_answer() {
     let CatalogAnswer::Indexes(mut resolved) = expected else {
         unreachable!()
     };
-    resolved[1].columns = IndexColumns::Resolved(vec!["a".into(), "b".into()]);
+    resolved[1].columns = IndexCoverage::Resolved(vec!["a".into(), "b".into()]);
     assert_eq!(
         read(&indexes, &host(), &answer(&indexes, &host(), neutral)),
         CatalogAnswer::Indexes(resolved)
@@ -293,7 +293,7 @@ fn duckdb_s_catalog_and_a_host_s_read_to_the_same_answer() {
         read(&indexes, &host(), &answer(&indexes, &host(), with_null)),
         CatalogAnswer::Indexes(vec![CatalogIndex {
             table: "orders".into(),
-            columns: IndexColumns::Unresolved,
+            columns: IndexCoverage::Unresolved,
         }])
     );
 }
@@ -306,7 +306,7 @@ fn duckdb_s_catalog_and_a_host_s_read_to_the_same_answer() {
 #[test]
 fn duckdb_s_index_expressions_read_as_the_reference_reads_them() {
     let indexes = describe(DescribePart::Indexes);
-    let read_one = |expressions: &str| -> IndexColumns {
+    let read_one = |expressions: &str| -> IndexCoverage {
         let batches = answer(
             &indexes,
             &duckdb(),
@@ -317,7 +317,7 @@ fn duckdb_s_index_expressions_read_as_the_reference_reads_them() {
             other => panic!("{other:?}"),
         }
     };
-    let one = |name: &str| IndexColumns::Resolved(vec![name.into()]);
+    let one = |name: &str| IndexCoverage::Resolved(vec![name.into()]);
     assert_eq!(read_one("[user_id]"), one("user_id"));
     assert_eq!(read_one(" ['\"a\"\"b\"'] "), one("a\"b"));
     assert_eq!(read_one("['\"Q\"\"q\"']"), one("Q\"q"));
@@ -341,11 +341,11 @@ fn duckdb_s_index_expressions_read_as_the_reference_reads_them() {
         // `ON t((concat(a, b)))`, a function of two arguments
         "['(concat(a, b))']",
     ] {
-        assert_eq!(read_one(comma), IndexColumns::Unresolved, "{comma}");
+        assert_eq!(read_one(comma), IndexCoverage::Unresolved, "{comma}");
     }
     // Not a bracketed list: unresolved.
-    assert_eq!(read_one("a"), IndexColumns::Unresolved);
-    assert_eq!(read_one("[a"), IndexColumns::Unresolved);
+    assert_eq!(read_one("a"), IndexCoverage::Unresolved);
+    assert_eq!(read_one("[a"), IndexCoverage::Unresolved);
 }
 
 fn internal(err: &CoreError) -> (ErrorKind, ErrorCode) {
@@ -440,4 +440,27 @@ fn a_duckdb_plan_and_a_host_plan_expect_different_catalog_shapes() {
         );
         assert_ne!(duckdb.expect(), host.expect(), "{part:?}");
     }
+}
+
+/// An `index_columns` answer in the contract's shape, which no host
+/// provider is asked for today (its keys and indexes give their columns):
+/// read as the host reader reads it, each name in the index's order, an
+/// expression's null kept as `None`, never dropped or guessed (carried row
+/// P2-T2.1b-1).
+#[test]
+fn a_host_s_index_columns_answer_reads_each_name_in_order() {
+    let request = DataRequest::Describe {
+        tables: vec!["orders_by_day".into()],
+        part: DescribePart::IndexColumns,
+    };
+    let names = strings(&[Some("user_id"), None, Some("day")]);
+    assert_eq!(
+        read(&request, &host(), &answer(&request, &host(), vec![names])),
+        CatalogAnswer::IndexColumns(vec![Some("user_id".into()), None, Some("day".into())])
+    );
+    let none = strings(&[]);
+    assert_eq!(
+        read(&request, &host(), &answer(&request, &host(), vec![none])),
+        CatalogAnswer::IndexColumns(vec![])
+    );
 }
