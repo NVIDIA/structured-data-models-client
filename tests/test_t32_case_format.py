@@ -32,6 +32,7 @@ from __future__ import annotations
 import copy
 import importlib.util
 import json
+import re
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -215,3 +216,67 @@ def test_t32_the_dry_run_plan_names_java_s_packages_as_the_design_does() -> (
         'java-s1-jdbc-duckdb': '(T3.12)',
         'java-databricks-sql': '(T3.13)',
     }
+
+
+#: A statement naming the time zone, in any case and spacing, and the one
+#: form a case may set it in (``tests/test_contract_cases.py``'s check).
+_ZONE = re.compile(r'time\s*_?\s*zone', re.IGNORECASE)
+_GLOBAL_ZONE = re.compile(
+    r"^\s*SET\s+GLOBAL\s+TimeZone\s*(=|TO)\s*'[^']+'\s*;?\s*$",
+    re.IGNORECASE,
+)
+#: A zoned timestamp, as a type or a literal's type.
+_ZONED = re.compile(
+    r'\btimestamptz\b|\btimestamp\s+with\s+time\s+zone\b', re.IGNORECASE
+)
+
+
+def _zone_problems(where: str, base: list[str], setup: list[str]) -> list[str]:
+    r"""C18: a statement of the base or the setup naming the zone other
+    than as ``SET GLOBAL TimeZone``, or zoned timestamps made with no zone
+    set for the database, so the answer would be the recorder's TZ."""
+    statements = [*base, *setup]
+    problems = [
+        f'{where}: {statement!r} sets the zone for one connection'
+        for statement in statements
+        if _ZONE.search(_ZONED.sub('', statement))
+        and not _GLOBAL_ZONE.match(statement)
+    ]
+    zoned = any(_ZONED.search(statement) for statement in statements)
+    if zoned and not any(_GLOBAL_ZONE.match(s) for s in statements):
+        problems.append(f'{where}: zoned timestamps with no zone set')
+    return problems
+
+
+def test_t32_the_zone_check_covers_zoned_cases_and_the_bases() -> None:
+    r"""C18's static check, in T3.2's tests: every case making zoned
+    timestamps sets the zone with ``SET GLOBAL TimeZone``, and every zone
+    setting in ``contract/bases.yaml`` or a case's setup is that form; the
+    seeded faults show each part reads what it names."""
+    bases = yaml.safe_load(
+        (ROOT / 'contract/bases.yaml').read_text(encoding='utf-8')
+    )['bases']
+    problems = []
+    for name, statements in sorted(bases.items()):
+        problems += _zone_problems(f'base {name}', list(statements), [])
+    zoned = 0
+    for path in sorted((ROOT / 'contract/cases').rglob('*.json')):
+        case = json.loads(path.read_text(encoding='utf-8'))
+        base = list(bases.get(case['input']['base'], []))
+        setup = case['input'].get('setup', [])
+        zoned += any(_ZONED.search(s) for s in [*base, *setup])
+        problems += _zone_problems(case['id'], base, setup)
+    assert problems == [], problems
+    assert zoned, 'no case makes zoned timestamps: the check reads nothing'
+    made = "CREATE TABLE t AS SELECT TIMESTAMPTZ '2024-01-01 00:00:00+00' AS ts"
+    assert _zone_problems('seed', [], [made])
+    assert not _zone_problems('seed', [], ["SET GLOBAL TimeZone = 'UTC'", made])
+    assert not _zone_problems(
+        'seed', ["SET GLOBAL TimeZone = 'Asia/Tokyo'"], [made]
+    )
+    assert _zone_problems('seed', ["SET TimeZone = 'UTC'"], [])
+    assert _zone_problems(
+        'seed',
+        [],
+        ['ALTER TABLE orders ALTER ts TYPE TIMESTAMP WITH TIME ZONE'],
+    )
