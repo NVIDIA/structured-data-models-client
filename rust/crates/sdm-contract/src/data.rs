@@ -422,6 +422,15 @@ pub fn refuse_relation(
 /// the key's columns ([`SEED_KEY`] for a key of one column, `key_1` to
 /// `key_<n>` for a key of `n` columns), beside [`SEED_BATCH`] (design
 /// choice 1: multi-column keys in `neighbors` and `lookup`).
+///
+/// Groundwork (carried row P2-MID2-5): contract v26's vocabulary of
+/// sampling by a key of several columns (this naming, and a `key` of
+/// several columns in `sample_entities`, `neighbors` and `lookup`) is kept
+/// for the composite keys a later contract takes. The core refuses a
+/// schema keyed by several columns at materialize before it samples, as
+/// the reference does (`sdm-core`'s `refuse_composite_keys`; register
+/// P2E-5, decision KO2-68), so no sampler request names a key of more than
+/// one column yet.
 pub fn seed_key_columns(columns: usize) -> Vec<String> {
     match columns {
         1 => vec![SEED_KEY.to_owned()],
@@ -658,7 +667,8 @@ pub enum DataRequest {
     },
     /// The rows of `table` whose `key` equals a seed's key, `columns` in
     /// order after the seed's batch position (decision H15). `key` names the
-    /// table's key columns in order, one or several (design choice 1);
+    /// table's key columns in order, one or several (design choice 1; a key
+    /// of several is groundwork, [`seed_key_columns`]);
     /// `seeds` holds the key's columns ([`seed_key_columns`]), `batch` and
     /// the seed time columns `window` names. With `per_seed`, at most that many rows per seed, first in
     /// `order`, and the result is ordered by `(batch, order)`; without it,

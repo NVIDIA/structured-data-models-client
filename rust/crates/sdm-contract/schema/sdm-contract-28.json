@@ -4394,7 +4394,7 @@
           ]
         },
         {
-          "description": "The rows of `table` whose `key` equals a seed's key, `columns` in\norder after the seed's batch position (decision H15). `key` names the\ntable's key columns in order, one or several (design choice 1);\n`seeds` holds the key's columns ([`seed_key_columns`]), `batch` and\nthe seed time columns `window` names. With `per_seed`, at most that many rows per seed, first in\n`order`, and the result is ordered by `(batch, order)`; without it,\nthere is no `order` and the result is unordered.",
+          "description": "The rows of `table` whose `key` equals a seed's key, `columns` in\norder after the seed's batch position (decision H15). `key` names the\ntable's key columns in order, one or several (design choice 1; a key\nof several is groundwork, [`seed_key_columns`]);\n`seeds` holds the key's columns ([`seed_key_columns`]), `batch` and\nthe seed time columns `window` names. With `per_seed`, at most that many rows per seed, first in\n`order`, and the result is ordered by `(batch, order)`; without it,\nthere is no `order` and the result is unordered.",
           "type": "object",
           "properties": {
             "table": {
