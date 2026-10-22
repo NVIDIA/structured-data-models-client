@@ -1,13 +1,6 @@
 {
  "about": "T3.3's acceptance tests, written by the package's test author before the implementation: the loader's in contract/tests/test_t33_warehouse_loader.py as py:<function name>, and the rest as their files say (py: for Python, rust: for sdm-testkit's tests). Each key listed in 'pending' failed when written and is held to failing (strict) until it passes; the implementer then takes it out of 'pending' and changes nothing else: 'pending' stays within 'authored', which is the test author's. A parametrized test is pending as a whole.",
  "pending": [
-  "py:test_t33_a_dropped_recorded_table_fails_by_name",
-  "py:test_t33_a_dropped_random_draw_fails_by_name",
-  "py:test_t33_a_draw_asked_with_another_seed_or_fraction_text_fails_by_name",
-  "py:test_t33_an_exact_replay_statement_serves_its_recorded_result",
-  "rust:a_null_name_drops_only_that_name_from_a_key_list",
-  "rust:the_memory_provider_answers_column_ranges_over_every_row",
-  "py:test_t33_l0_deps_passes_with_the_stand_in_in_the_workspace",
   "py:test_t33_ci_s_leg_jobs_run_and_judge_each_warehouse_leg",
   "py:test_t33_a_difference_on_one_warehouse_leg_stops_the_stamp"
  ],
