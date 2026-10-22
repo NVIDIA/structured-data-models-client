@@ -25,6 +25,10 @@ these packages. All five distributions share one version and one entry.
 - The `duckdb` extra holds `duckdb` below 2. The 2.0 release warns on the
   Arrow fetch the relational engine reads DuckDB tables through, and this
   release is tested against 1.5.
+- `structured-data-models-client` and the relational engine hold `pandas`
+  below 3.1. The 3.1 release raises taking a date offset from the earliest
+  timestamp, which the engine does for every graph without a time column,
+  and this release is tested against 3.0.
 
 ## 1.0.0 - 2026-10-15
 
