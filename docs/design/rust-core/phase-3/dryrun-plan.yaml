@@ -18,7 +18,11 @@
 #   C  warehouse values (decimal keys, session time zones, nested types);
 #   D  the switch: S0 and S1 paths with no acceptance case today, and the
 #      forced-route failures' families;
-#   E  the endpoint and answer kinds the held-out runs found.
+#   E  the endpoint and answer kinds the held-out runs found;
+#   F  Java (KO3-27): the same cases on the Java host, whose legs run when
+#      the candidate builds the JAR. The case files need nothing new; what
+#      the tools lack is a "java" runner and coverage over
+#      phase-0/scope-java.yaml, which T3.2 adds with a --java option here.
 # Stub ids start "dryrun." so they never collide with real cases.
 shared:
   # What every stub has unless it says otherwise: base.binary's kind on the
@@ -338,3 +342,43 @@ kinds:
         fail_call: 0
       expect: {outcome: refusal, stage: predict, error: NimRequestError, code: null}
       why: the endpoint refusing a request asked in one call (carried row P2-T2.16-13, register P2G-1)
+  # --- F: Java ----------------------------------------------------------------
+  - name: java-s0-validate
+    case:
+      format: sdm-case/1
+      id: dryrun.java.s0-validate
+      status: acceptance
+      slice: S0
+      paths: [query.validate/accept/any]
+      routes: [query.validate/accept/any, query.validate/refuse/any]
+      cells: []
+      input:
+        <<: *input
+      until: materialize
+      expect: {outcome: success, stage: materialize}
+      why: an S0 validation on the Java host, Java's first leg (T3.10)
+      source: Phase 3 design, dryrun-plan.yaml
+  - name: java-s1-jdbc-duckdb
+    case:
+      <<: *case
+      id: dryrun.java.s1-duckdb
+      slice: S1
+      paths: [client.predict/regression/duckdb, result.read/regression/any]
+      routes: [schema.from-source/all-tables/duckdb, query.materialize/indices-regression/duckdb, client.predict/regression/duckdb]
+      cells: [int64/primary-key, decimal128/feature, timestamp-us/time-column]
+      input:
+        <<: *input
+        pql: PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id
+      why: a regression read through DuckDB's JDBC driver into Arrow on the Java host, a JDBC conversion-table kind (T3.11)
+  - name: java-databricks-sql
+    case:
+      <<: *case
+      id: dryrun.java.databricks-sql
+      slice: S2
+      databases: [databricks-sql]
+      paths: [schema.from-source/tables/databricks-sql, client.predict/multiclass/databricks-sql]
+      routes: [schema.from-source/tables/databricks-sql, query.materialize/indices-multiclass/databricks-sql, client.predict/multiclass/databricks-sql]
+      input:
+        <<: *input
+        pql: PREDICT users.country FOR EACH users.user_id
+      why: a multiclass question through the Databricks JDBC driver on the Java host, replayed from the early capture (T3.12)

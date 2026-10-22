@@ -3,7 +3,7 @@
 ## Status
 
 Draft for review (T3.1), written on 2026-10-22 from `origin/rust-core-phase-3` at 3ae4d1af (Phase 2 merged), with T3.0's process mechanisms on their topic branch and landing now.
-The owner's answers so far are in [decisions.md](decisions.md), KO3-1 to KO3-26, the live-access answers of 2026-10-22 included; the open questions are at the end of this page, all together, each with a recommendation.
+The owner's answers so far are in [decisions.md](decisions.md), KO3-1 to KO3-27, the live-access answers and the Java answer of 2026-10-22 included; the open questions are at the end of this page, all together, each with a recommendation.
 The acceptance checks below lock at T3.1's landing, after both reviewers approve one SHA and the day-1 questions are answered.
 Everything not stated here is as in [Phase 2's design](../phase-2/design.md) and [Phase 1's design](../phase-1/design.md); their decision rows stay in force unless a row here or an owner answer changes them.
 Choices marked "orchestrator's decision" are the orchestrator's, not the owner's; the owner sees them at the next check-in.
@@ -20,28 +20,32 @@ What gets built, in order:
 3. Snowflake, with its dialect and provider, and Lakebase (Databricks' managed Postgres), which reuses Phase 2's Postgres dialect.
 4. Ranking and forecasting on all of them, the same five question kinds as offline.
 5. The switch: every S0 (query validation), S1 (offline databases) and S2 (warehouse) path runs on the core by default, at once, after the 118 old-client tests that fail on the core today are fixed.
+6. Java, as the owner asked (KO3-27): a Java library on the same core, in three packages on its own lane: query validation (S0), then DuckDB, SQLite and Postgres through JDBC (S1), then Databricks through JDBC (S2), answering the same questions as Python on the same data. Java follows Python on the same test cases and never holds up the Python switch.
 
 How it is tested without re-testing on slow warehouses after every change (the owner, KO3-22): one short live run at the start records the old client on each warehouse, every SQL statement it sends and every result it gets back, over Phase 2's test cases and AdventureWorks loaded into each warehouse (KO3-23).
 All the coding is then done offline against that recording.
 One live campaign at the end runs the core for real: the warehouse cases, the 21-job Databricks matrix, the quickstart notebook, live timing and the held-out set.
 The early run is still needed because offline replay has nothing to compare against without it: the old client's answers on each warehouse, the statements it sends, the Arrow types each driver returns and each catalog's output exist only on the live engines.
 
-The plan is 10 landings, T3.0 to T3.9, in three stacks of up to four packages plus the phase-end package.
-The forecast from the design's landing to the switch gate is about 28 hours with four product packages building at once; the slip report compares the phase against it as it runs and never stops work.
+The plan is 13 landings, T3.0 to T3.12: ten for Python and the process, and three for Java, landing in stacks of up to four plus the switch-gate package.
+The forecast from the design's landing to the Python switch gate is about 28 hours with four Python packages building at once; Java runs beside them on a fifth lane and ends about 3 hours after the switch, at about H31, if the machine takes the fifth lane (owner question Q16; without it, Java ends about 14 hours later).
+The slip report compares the phase against the forecast as it runs and never stops work.
 The owner has answered the live-access questions (KO3-18 to KO3-26); what remains on day 1 is the orchestrator's: finding the sandbox catalog, schema, volume, Lakebase instance, metric views and serving endpoints the owner pointed to, which a discovery run is listing now in a private file.
-No open owner question blocks day 1.
-Java stays out of Phase 3 (KO2-34).
+No open owner question blocks day 1; Java's open choices (its package names, logging, runtime flags, JDBC drivers, JDKs) have recommendations the Java lane starts from.
 
 ## Goal
 
 Ship slice S2 for Python: `Schema.from_source` → `materialize` → `predict` live on Databricks (plain tables over a SQL warehouse and over Spark, and a metric view), Snowflake (plain tables and a semantic view) and Lakebase, including ranking and forecasting, with the Databricks job matrix across runtimes (migration-plan.md section 4, S2).
 Then switch Python's S0, S1 and S2 paths to the core together, on the epic branch (plan section 4: "S0 (PQL validation), S1 and S2 paths switch together after S2, in Phase 3, so no call mixes old and new code").
 Exit: the switch gate (plan section 7, "Python switch for a path"): S2's slice done, L6 green for its scenarios, the Databricks job matrix equal to the baseline, L7 within its limits with live timing; checked by the locked acceptance checks below.
+Start Java (KO3-27, replacing KO2-34): a Java library on the same core passing the same contract cases as Python on Java's scope (`phase-0/scope-java.yaml`, 66 paths: S0, S1 on DuckDB, SQLite and Postgres, and S2 on a Databricks SQL warehouse and a metric view, with binary, multiclass and regression questions), and agreeing with Python on the same Databricks data (plan section 4, S2; Phase 0 decision J2).
+Java follows Python and never holds it back (plan section 2, decision 1): Java's own checks block only Java's packages, while a shared-core defect a Java leg exposes blocks the path it breaks, as plan section 6 says.
 
 ## Order of work
 
-1. **Before the clock starts** (no product code): T3.0 lands; this design is reviewed and locked, with the owner's day-1 answers; the full dry run of the checking tools over [dryrun-plan.yaml](dryrun-plan.yaml) runs on the landed T3.0 and its gaps join T3.2's list; one brief per package from [briefs/package.md](../orchestration/briefs/package.md); the test authors of T3.2, T3.3, T3.7 and T3.8 start.
+1. **Before the clock starts** (no product code): T3.0 lands; this design is reviewed and locked, with the owner's day-1 answers; the full dry run of the checking tools over [dryrun-plan.yaml](dryrun-plan.yaml) runs on the landed T3.0 and its gaps join T3.2's list; one brief per package from [briefs/package.md](../orchestration/briefs/package.md); the test authors of T3.2, T3.3, T3.7, T3.8 and T3.10 start.
 2. **H0, four packages at once**: T3.2 (the tooling train, alone in lane A), T3.3 (Databricks), T3.7 (the forced-route failures) and T3.8 (the Python differences and coverage).
+   T3.10 (the Java binding) starts at the same time on the Java lane, a fifth package in flight (owner question Q16).
    T3.2 builds its recording mode and the warehouse loader first, so the orchestrator can run the phase's one early live capture, on all four warehouse legs at once, at about H3 while the rest of T3.2 is written.
    After it, no product package runs anything live (KO3-22).
 3. **Stack 1** (T3.2 at the front, T3.7, T3.8) lands on one CI run at about H11.
@@ -49,6 +53,7 @@ Exit: the switch gate (plan section 7, "Python switch for a path"): S2's slice d
 4. **Stack 2** (T3.3, T3.6) at about H14, **stack 3** (T3.4, T3.5) at about H17.
 5. **T3.9**, the switch and the switch gate: the flip, then the one live campaign at the end (the core on every warehouse case, the job matrix, the quickstart notebook, live timing, the held-out set's warehouse legs), the evidence pack and the whole-phase review, landing at about H28.
    The end-of-phase reports for S0 and S1 (L3, the census, offline L7) run beside stacks 2 and 3, as soon as stack 1 has landed.
+6. **The Java lane (H)** runs beside all of it from H0: T3.10 (the binding, the JAR and Java S0) lands in stack 2, T3.11 (Java S1 through JDBC) alone at about H21, and T3.12 (Java on Databricks) after the switch, at about H31, with its own short live check at the end (choice 10); the phase ends with T3.12.
 
 ## Scope
 
@@ -62,13 +67,14 @@ Exit: the switch gate (plan section 7, "Python switch for a path"): S2's slice d
    The DBR 14.3 install revalidation Phase 1 carried (T1.35, E154) is cells J01 and J02.
 8. **The switch**: every S0, S1 and S2 default in `sdm_client/_routing.py` set to `core` in one commit (owner question Q5), the routing guard test changed with it, and the existing client test suites green on the default routes.
    `SDM_CORE_ROUTES` stays, test-only, until Phase 5 deletes the old engine.
-9. **What the switch needs from Phases 1 and 2** (the carried rows, next section): the 118 forced-route failures, S1 coverage, the 12 unregistered user-visible differences, L3 and H24 on every database, DuckDB 2.0.
-10. **The gate's live parts**: L6 on every warehouse leg, the job matrix, L7 live push-down timing (median of at least five interleaved runs, caches off, within 10% on Databricks and Snowflake; owner question Q8), and the held-out set's warehouse legs.
-11. **The phase-end chores**: `main` merged and the reference rerun if `main` has moved (it has not since 43e55f4f), register reconciliation, the evidence pack, the whole-phase review (handbook, "Ending a phase").
+9. **Java** (KO3-27), choice 10: the `sdm-jni` binding and a JAR with natives for Linux x86_64 and aarch64 and macOS (Phase 0 decision G13), JDK 17 and 21; a Java runner for the contract cases; Java S0; Java S1 on DuckDB, SQLite and Postgres through JDBC with the JDBC-to-Arrow conversion table and L5 for Java; Java on a Databricks SQL warehouse and a metric view through the Databricks JDBC driver, answering Phase 0's J2 questions live at the end against the same data as Python.
+10. **What the switch needs from Phases 1 and 2** (the carried rows, next section): the 118 forced-route failures, S1 coverage, the 12 unregistered user-visible differences, L3 and H24 on every database, DuckDB 2.0.
+11. **The gate's live parts**: L6 on every warehouse leg, the job matrix, L7 live push-down timing (median of at least five interleaved runs, caches off, within 10% on Databricks and Snowflake; owner question Q8), and the held-out set's warehouse legs.
+12. **The phase-end chores**: `main` merged and the reference rerun if `main` has moved (it has not since 43e55f4f), register reconciliation, the evidence pack, the whole-phase review (handbook, "Ending a phase").
 
 ### Explicitly out
 
-- Java, including "Python and Java agree on the same Databricks data": deferred until S2 is switched for Python (KO2-34); its own track after this phase, unless the owner adds it (owner question G3). The Java host rows Phase 2 carried (P2-WR-2, P2-WR-5, P2-WR-6, P2-T2.14b-4, P2-MID2-4) go with it.
+- Java beyond Phase 0's scope: Snowflake, Lakebase, Spark, frames, ranking and forecasting in Java (J2), and publishing the JAR to a repository (Phase 5, owner question Q19). The Java host rows Phase 2 carried for ranking (P2-WR-2, P2-WR-5, P2-T2.14b-4) wait until the owner adds ranking to Java's scope.
 - S3: frames, files read from S3, link prediction, sessions, tabular requests, and the three refusals kept until Phase 4 (KO2-94); the fallback rows P2-T2.5-1 to -3 and FX-3 (Phase 4, placed there by owner rows).
 - Release work (Phase 5): `publish.yml`, the SBOM, macOS, Windows and musl wheels, signing; ASan and LSan (KO2-25).
 - `MEASURE()` and `SEMANTIC_VIEW()` queries: the old client never issues them (it reads a view's base tables), so the core does not either.
@@ -109,7 +115,8 @@ Every row ends in a package or a recorded "no" (lesson 18); the row text stays i
 | Covered by T3.0 | OF-1, P2-T2.1o-1, P2-T2.1n-1 (the tests' part), ENV-1, P2-T2.0b-3, P2-T2.0g-1 (the reviewer's part) | T3.0 |
 | Checked once in a lane environment, closed if they pass | ENV-2, ENV-3 | T3.2 |
 | **No**, until the dry run or a case hits them | FR P3-7, U3, U13, C2, C4, C5, C6, C7, C8, C9, C11, C22, G2, G4, G10, FX-2, M9, P2-WR-10, P2-WR-11, P2-T2.0-1, P2-T2.0b-1, P2-T2.0b-2, P2-T2.0b-4, P2-T2.0c-2, P2-T2.0e-1, P2-T2.0h-1, P2-T2.1a-1, P2-T2.1b-5, P2-T2.1b-7, P2-T2.1d-1, P2-T2.1e-1, P2-T2.1f-1, P2-T2.1g-1, P2-T2.1g-2, P2-T2.1h-1, P2-T2.1j-1, P2-T2.1j-2, P2-T2.1k-1, P2-T2.1k-2, P2-T2.1l-1, P2-T2.1m-1, P2-T2.4-1, P2-T2.7-3, P2-T2.11-3, P2-T2.21-1 | none |
-| Phase 4 or the Java track (placed there by owner rows or their reviewers) | P2-T2.5-1, P2-T2.5-2, P2-T2.5-3, FX-3, OF-8; P2-WR-2, P2-WR-5, P2-WR-6, P2-T2.14b-4, P2-MID2-4 | none in Phase 3 |
+| The interfaces a Java host sees: option values sent as typed values rather than the host's JSON text, so a Java host need not imitate Python's `repr` (P2-MID2-4); Python key equality written once (P2-WR-6) | P2-MID2-4, P2-WR-6 | T3.3 (in v28), since Java now starts in Phase 3 |
+| Phase 4, or Java's ranking once the owner adds it (placed there by owner rows or their reviewers) | P2-T2.5-1, P2-T2.5-2, P2-T2.5-3, FX-3, OF-8; P2-WR-2, P2-WR-5, P2-T2.14b-4 | none in Phase 3 |
 
 L3 and H24 on all databases: L3 (`contract/tools/differential.py`) runs about 200 generated sources on each of DuckDB, SQLite and Postgres (KO2-26) and, if the owner answers Q12 as recommended, 20 on each of Databricks and Snowflake inside one live job each; H24, the core fed the reference's own fetched data, runs on Postgres locally (P2-T2.16-7) and on every warehouse leg by construction, since the warehouse legs replay the reference's captured results (choice 2).
 
@@ -145,6 +152,7 @@ Rejected: a warehouse emulator (DuckDB with SQL transpiled) would judge SQL nobo
 - `Relation.columns`: each a schema name with either a source column or an SQL text expression; `Relation.filter`: an SQL text row filter;
 - the `derived_relations` provider capability; a provider without it refuses a derived relation by name;
 - `ProviderError.failure_class`, set by the provider from its driver's codes (for example SQLSTATE), never from message text;
+- typed option values instead of the host's JSON text echoed back (P2-MID2-4), which a Java host needs (choice 10);
 - the carried contract rows: the data layer's built-in-only flags folded into `ProviderCapabilities` (P2-MID2-2), seed meanings and answered parts as explicit fields rather than metadata strings (P2-T2.2-1, P2-T2.8c-2), the unread-text-columns warning with separate table and column (P2-MID2-3), `index_columns` documented with a vector (P2-T2.1b-1), the unused composite-key vocabulary recorded as groundwork or cut (P2-MID2-5), and the binding tests reading the version from the crate (FX-6).
 SQL text stays opaque to the core and is rendered only by `sdm-data`'s dialects; the core never matches error text.
 If a later package needs vocabulary, it rides in T3.3 before T3.3 lands, or the second package to land renumbers (lesson 11).
@@ -194,6 +202,19 @@ Client tests that test old-engine internals rather than public behavior are mark
 
 The rust-host leg runs every S0, S1 and S2 case, the warehouse legs on the core's captures, before the held-out run.
 
+### 10. Java: a thin binding, Python's API in Java's words, the same cases
+
+**Recommendation:** Java is a second host on the same core, built the way plan section 3 ("Bindings") describes, with no Java rule in the core:
+- **Binding.** A new crate `rust/bindings/sdm-jni` on `jni-rs`, over `sdm-host` exactly as `sdm-py` is: control messages as versioned JSON bytes, data as Arrow through Arrow Java's C Data module with no copy, a panic contained at each exported entry, one owner and an explicit release for every native resource; L0's dependency guard admits `jni` only in that crate.
+- **JAR.** One JAR holding the natives for Linux x86_64 and aarch64 (built where CI builds the wheels, `native-wheel` and its aarch64 job, KO2-40) and macOS (owner question Q20), loaded from the JAR at first use; JDK 17 and 21 (plan section 6, L8).
+- **API.** It mirrors Python's public API, with Java names and plain data: `Schema.fromSource(source, ...)`, `PredictiveQuery.parse(pql).materialize(...)`, `SdmClient.predict(request)`, sources built from a `java.sql.Connection` (`DuckDbSource`, `SqliteSource`, `PostgresSource`, `DatabricksSource`), results as Arrow `VectorSchemaRoot` with small values as Java records, options as builders, errors as one `StructuredDataException` carrying the contract's error code, as Python's `StructuredDataError` does. The names land in `phase-0/scope-java.yaml`'s `api` fields with T3.10.
+- **Data access.** JDBC to Arrow in the host, through a reviewed conversion table (plan section 3: "native types to Arrow ... JDBC types: host, as a reviewed table"), with Arrow Java's JDBC adapter where it agrees with the table and the table otherwise; L5 for Java checks the same tables reach the core as identical Arrow through Java's JDBC drivers and Python's drivers. The SQL is the core's own dialects', so Java sends the statements Python's core route sends; that is also why Java's Databricks leg replays the early capture C-1 with no capture of its own.
+- **Model calls.** The Java host sends the core's request bytes to the endpoint over `java.net.http` (and to a Databricks serving endpoint through its REST API), never parsing or re-encoding the body, as the Python host does since T2.14b.
+- **Logging.** `tracing` bridged to the SLF4J API, which the JAR declares and does not bind (owner question Q18).
+- **Tests.** A Java runner runs the contract cases on the Java host: the checkpoint's Python case reader (`contract/runners/`) reads each case and hands the Java program only the calls to make and the database to open, and the Java program writes an observation in `contract/observation.schema.json`'s shape, judged by the checkpoint's comparator; so the case format and the judging stay in the train (T3.2), and the Java runner program is product test code in T3.10, as rust-host's `sdm-testkit` host is.
+  A Java leg runs exactly when the candidate builds the JAR (Phase 2's staging rule), and once its baselines are admitted the ratchet's "baselined, and not observed" rule stops a later candidate dropping it.
+Rejected: a hand-written C interface with a Java FFM layer (plan section 3 chose `jni-rs`); generating Java from the Python API (Java idioms differ, and the Python API carries pandas).
+
 ## The live-test plan
 
 Live work runs only under the owner's live rules: one-time jobs only, uploads only to the authorized volume, no existing notebook or cluster touched, only the Lakebase instance the owner pointed to, and three live failures for non-product reasons stop live work (plan section 9).
@@ -229,9 +250,10 @@ It is one run, about 3 hours, all four legs in parallel, before any dialect exis
 | E-4 Live L7 timing | the end campaign, after E-1 | Push-down median over at least 5 interleaved runs, caches off, Databricks and Snowflake | Sessions from this machine | about 2 h |
 | E-5 Held-out warehouse legs | the end campaign, once | HO3's warehouse cases on both routes | One job or session per warehouse | about 1 h |
 | E-6 L3 on warehouses (if Q12 is yes) | the end campaign, beside E-2 | 20 generated sources per warehouse, both routes | One job or session per warehouse | about 1 h |
+| E-7 Java on Databricks | at the end of the phase, on T3.12's candidate (after the Python switch) | Phase 0's J2 questions (four base questions, and the two metric-view questions if owner question Q22 says yes) through the Databricks JDBC driver on the SQL warehouse, compared with Python's answers on the same data in E-1 and E-2 | A session from this machine, plus one one-time job on DBR 17.3 running the JAR, x86_64 and aarch64 | about 45 min |
 
 The end campaign's runs overlap: about 3.5 hours of wall clock, plus one forecast fix cycle (a fix, its offline replay, and a rerun of only the failing cases, about 2 hours).
-Cost: about 48 one-time jobs (2 for the capture, 42 for the matrix, 1 notebook, 2 to 3 held-out and L3), each 10 to 20 minutes on a single-node cluster or serverless; the authorized SQL warehouse for about 6 hours of sessions in all (auto-stopping); a Snowflake warehouse for about 4 hours; the existing serving endpoint while the matrix and the notebook run, about 2 to 3 hours, scaling to zero after.
+Cost: about 50 one-time jobs, E-7's two included, (2 for the capture, 42 for the matrix, 1 notebook, 2 to 3 held-out and L3), each 10 to 20 minutes on a single-node cluster or serverless; the authorized SQL warehouse for about 6 hours of sessions in all (auto-stopping); a Snowflake warehouse for about 4 hours; the existing serving endpoint while the matrix and the notebook run, about 2 to 3 hours, scaling to zero after.
 The orchestrator cannot see prices; the owner can turn these hours into money.
 
 ## Packages
@@ -255,8 +277,12 @@ Hours are implementation plus one or two review rounds, as Phase 2 measured its 
 | T3.7 | Switch-ready: the forced-route failures | The 118 failures fixed in the core or the bridge's wording, each family ported from the old client's rule (the time-column warning, key counting and its refusals, Postgres refusals and the described-schema `RouteError`); the validator chosen in the core (P2-MID2-1) | `pytest packages/structured-data-models-client/tests` with every S0 and S1 route forced: 0 failures; a case per family on three databases | T3.1 | T3.7's | E | 1 | R, about 8 h |
 | T3.8 | Differences, coverage and DuckDB 2.0 | The 11 user-visible rows matched or registered; OF-5 per Q13; acceptance cases for every S0 and S1 path and cell coverage still finds empty; the S1 test rows; P2G-1 widened; DuckDB 2.0 supported and the `zip` exceptions dropped if its build allows; the interim edit gate retired; register tidy; hygiene rows it touches | `coverage.py --gate S1` (T3.2) with no empty path or cell; each row's case fails before and passes after; CI green on DuckDB 1.5 and 2.0 | T3.1 | T3.8's | F | 1 | M, about 9 h |
 | T3.9 | The switch and the switch gate | Choice 8's flip and guard test; the old-route-only list; register reconciled; `main` merged if it moved; the locked run; the end-of-phase reports; the end campaign E-1 to E-6 and its one fix cycle; the core's capture committed for rust-host and CI; HO3 once; the evidence pack; the whole-phase review and its fixes; the packet | The locked checks below | all | T3.9's (the guard test and the switched suites) | A | alone | R, about 8 h after stack 3 |
+| T3.10 | Java binding and Java S0 | `sdm-jni`; the JAR with natives for Linux x86_64 and aarch64 (and macOS if Q20 says so); the Java API's S0 calls and its exception mapping; the Java runner program; CI jobs building the JAR and running the Java legs on JDK 17 and 21 (the job definitions are T3.2's); a panic test and a JAR-load test in a clean container | Every S0 case on the Java host equal to the reference; a panic inside the core reaches Java as an exception and leaves the JVM running; the JAR loads on JDK 17 and 21 on both Linux architectures; L0 admits `jni` only in `sdm-jni` | T3.2 (the Java leg's judging) | T3.10's | H | 2 | N, about 9 h |
+| T3.11 | Java S1 through JDBC | JDBC providers for DuckDB, SQLite and Postgres; the JDBC-to-Arrow conversion table; L5 for Java; the Java API for `fromSource`, `materialize`, `predict`, schema edits and inspection, results; the model transport over `java.net.http` | Every S1 case on Java's 46 S1 paths equal to the reference on each database, on the Java host; L5: the same tables through Java's JDBC drivers and Python's drivers reach the core as identical Arrow, and a seeded unit or scale change in one JDBC path fails; `coverage.py` on Java's manifest with no empty S0 or S1 path | T3.10; T3.7 and T3.8 (the shared-core fixes) | T3.11's | H | alone, about H21 | M/N, about 9 h |
+| T3.12 | Java on Databricks | The Databricks JDBC provider, the metric-view route through the same connection, the serving transport, Java's S2 routes | Every Java S2 case's `databricks-sql` leg replayed from C-1 equal to the reference on the Java host; E-7: Java's answers to the J2 questions equal to Python's on the same live data; the Java evidence; the review of Java's range since the switch landed | T3.11; T3.3 and T3.4 (the dialect and the views); T3.9 for its place in the queue | T3.12's | H | alone, last | M, about 7 h |
 | HO3 | The held-out set | About 40 cases: about 25 offline across the three databases, about 15 on the warehouse legs, with a stored-NaN case and a `key_name_order` case (OF-6); written by a held-out author who reads no implementation, kept outside the repository | Written beside the lanes, which do not wait for it; frozen before its one use in T3.9; its converter tested and two dummy bundles run through `heldout.py counts` | T3.2 (the case format) | – | orchestrator | not a landing | – |
 
+T3.2 also carries the Java leg's judging: the runner name `java` in the observation schema, the comparator and the ratchet, `contract/runners/run_java.py` handing a case's calls to the Java program, `coverage.py` reading `phase-0/scope-java.yaml` for the Java legs, and the CI job definitions `java (jdk17|jdk21, <database>)`, each running when the candidate builds the JAR; so Java's packages need no judging change of their own.
 T3.2 is the phase's one planned train; a judging change found later rides at most one catch-up train at the front of the next stack (T3.0's rule), and any further one goes to the owner (lesson 13).
 Owner decision rows and register entries ride with the package that needs them (KO3-1).
 
@@ -269,24 +295,30 @@ The forecast is the time from T3.1's landing (H0) to each landing, in landing or
 | Stack 1: T3.2, T3.7, T3.8 | H11 | 11 h | T3.2's 9 h of work and two review rounds; T3.7 and T3.8 are written beside it and approved by about H10 |
 | Stack 2: T3.3, T3.6 | H14 | 3 h | T3.3's dialect from H0, replayed against C-1 from about H6, review to about H13 |
 | Stack 3: T3.4, T3.5 | H17 | 3 h | T3.4 from about H6 on T3.3's candidate; T3.5 from about H7, its semantic-view cases on T3.4's candidate |
-| T3.9 | H28 | 11 h | The flip and the suites (2 h); the end campaign (3.5 h) and one fix cycle (2 h); the whole-phase review and its fixes (3.5 h); the evidence pack beside them |
+| Stack 2 also holds T3.10 (Java binding and S0) | H14 | 0 h | Written from H0 on the fifth lane, approved by about H12 |
+| T3.11 (Java S1), alone | H21 | 4 h | From about H9 on T3.10's candidate; it needs stack 1's shared-core fixes, landed at H11 |
+| T3.9 | H28 | 7 h | The flip and the suites (2 h); the end campaign (3.5 h) and one fix cycle (2 h); the whole-phase review and its fixes (3.5 h); the evidence pack beside them; it starts when stack 3 lands at H17, so it holds the queue 7 h after T3.11 |
+| T3.12 (Java on Databricks), alone, last | H31 | 3 h | From about H18 on T3.11's candidate, replaying C-1; E-7 at about H29; the review of Java's range since the switch |
 
-**Critical path:** T3.1 → T3.2's recording mode and loader (2.5 h) → C-1 (3 h) → T3.3 against the capture → stack 2 → T3.4's views on v28 → stack 3 → T3.9 with the end campaign: about 28 hours of wall clock from the design's landing.
+**Critical path:** T3.1 → T3.2's recording mode and loader (2.5 h) → C-1 (3 h) → T3.3 against the capture → stack 2 → T3.4's views on v28 → stack 3 → T3.9 with the end campaign: about 28 hours of wall clock from the design's landing to the Python switch.
+Java is off that path: its lane starts at H0 and its landings fit between the Python ones, except T3.12, which needs the Databricks dialect, the views and the shared-core fixes and so ends the phase about 3 hours after the switch, at about H31.
+That assumes Java has a fifth build slot from H0 (owner question Q16); with only four slots Java starts as Python's packages finish, at about H10, and the phase ends at about H45, though the Python switch still lands at H28.
 Before H0: T3.0's landing, this design's review rounds, the discovery of the owner's existing resources, the test authors' first cases and the dry run at lock.
 
-This forecast misses the owner's one-day goal by about 4 hours plus the prep.
+This forecast misses the owner's one-day goal by about 4 hours plus the prep for the Python switch, and by about 7 hours for the phase with Java.
 Putting all live testing at the end (KO3-22) moves about 2 hours of live runs out of the middle of the phase and into T3.9, where a real-engine surprise costs a fix cycle; the forecast holds one.
 What would shorten it, in order: starting C-1 from T3.2's recording mode before T3.1 lands (about 2 hours); a bigger machine (owner question Q15) for a fifth build slot (about 2 hours).
 None of them moves scope out of Phase 3.
 
 ## Machine and lanes
 
-At most four product packages build at once (KO3-16), each in its lane's environment (`cells.sh`), with `heavy` admitting builds and gate legs by CPU, memory and disk; test authors and reviewers run no heavy suites (KO3-15).
+At most four Python packages build at once (KO3-16), each in its lane's environment (`cells.sh`), with `heavy` admitting builds and gate legs by CPU, memory and disk; test authors and reviewers run no heavy suites (KO3-15).
+The Java lane is a fifth package in flight (owner question Q16): most of its work is Java code and Gradle builds against the shared Rust build cache, and `heavy` queues its heavy runs behind the others, so the forecast allows about an hour of extra queueing on the Python path; the lane environment for Java adds a JDK 17 and a JDK 21 (about 1 GB of disk).
 The orchestrator runs the two live campaigns and the reference machine's work; implementers never run live jobs.
 
 ## The checking tools' dry run
 
-[dryrun-plan.yaml](dryrun-plan.yaml) holds 21 stub cases in five groups: an S1 kind on each warehouse leg, what only a warehouse has (views, connect paths), warehouse values (`DECIMAL(38,6)` keys, a session-zone time column, a `STRUCT` feature), the switch (database legs claiming their paths, an uncovered edit path, a pickled request, the key-repeating family, S0 validation on the core) and the endpoint refusing a one-call request.
+[dryrun-plan.yaml](dryrun-plan.yaml) holds 24 stub cases in six groups: an S1 kind on each warehouse leg, what only a warehouse has (views, connect paths), warehouse values (`DECIMAL(38,6)` keys, a session-zone time column, a `STRUCT` feature), the switch (database legs claiming their paths, an uncovered edit path, a pickled request, the key-repeating family, S0 validation on the core), the endpoint refusing a one-call request, and Java (S0, S1 through JDBC, Databricks through JDBC).
 A first run of T3.0's `gate_dryrun.sh` from T3.0's topic branch, judged against Phase 2's last landing (the case reader, `coverage.py` and `ratchet.py`; no runners), found:
 
 | Gap | Kinds | Goes into |
@@ -298,6 +330,7 @@ A first run of T3.0's `gate_dryrun.sh` from T3.0's topic branch, judged against 
 | Coverage's rule 6 wants a reference observation of every claimed cell | the 5 S1 kinds | Expected for a stub with no reference line; not a gap |
 | `coverage.py --check` cannot see that a SQLite or Postgres leg covers a database path | (not reported: coverage S1 has no such rule yet) | T3.2 (P2-T2.16-3) |
 
+Three Java kinds (Java S0 validation, a Java S1 case on DuckDB through JDBC, a Java `databricks-sql` case) were added after this run; their cases are format-valid S0, S1 and S2 cases, and their gap is that no tool knows a `java` runner or reads `phase-0/scope-java.yaml` for coverage, which T3.2 adds.
 The full run, with the runners (`--python`), rust-host (`--rust`) and the locked gate (`--gate 3a`) on the landed T3.0, runs before the design locks; its GAP lines join T3.2's list, and the tracker records them.
 
 ## Owner check-ins
@@ -315,14 +348,15 @@ As Phase 2's, on the final SHA, generated by the branch's own runs, plus:
 - E-1 against C-1 per leg; the quickstart notebook's run; the job matrix's two passes, question by question; live L7; the held-out run;
 - the switch: the routing defaults, the client suites on the default routes, and the old-route-only list;
 - L3 per database, the census with real-data counts on every leg, offline L7, coverage S1 and S2;
-- the host-held list before and after (choice 9).
+- the host-held list before and after (choice 9);
+- Java: the per-case table on the Java host, L5 for Java, the JAR's load test per JDK and architecture, E-7's answers beside Python's.
 
 ## Gates
 
 ### Merge rules
 
 As Phase 2's, with T3.0's mechanisms: packages land in stacks of up to four on one CI run (`land.py --stack`, `stack-land`; KO3-13); judging changes only in T3.2 or a train; two reviewers on every product round, both approving the same SHA (KO2-9), starting only on a SHA with a handoff stamp and reading the stamp and CI rather than probing (KO3-15); on docs-only fix rounds the reviewer who raised the finding confirms its fix, and rounds writing decision rows or register entries keep Claude (KO3-5); a finding family blocking twice gets a half-page rule note, not a redesign session (KO3-3).
-Package IDs are integers, T3.0 to T3.9; register IDs come from per-lane blocks (`P3A-` for lane A, `P3B-` for lane B, and so on); each package writes its own tracker file; decisions.md takes only the owner's rows.
+Package IDs are integers, T3.0 to T3.12 (Java adds three at the owner's request, KO3-27, over KO3-1's 7 to 10); register IDs come from per-lane blocks (`P3A-` for lane A, `P3B-` for lane B, and so on); each package writes its own tracker file; decisions.md takes only the owner's rows.
 
 ### Locked acceptance checks
 
@@ -346,6 +380,7 @@ The rest is judged outside the gate, as Phase 2's KO2-76 set it: CI-green parts 
 | 11 | L7: offline within KO2-29's limits on DuckDB, SQLite and Postgres; live push-down median within 10% of the reference on Databricks and Snowflake (Q8) | Report: `contract/tools/l7.py`, E-4 | A scenario past 1.1 times; a live median past 10% |
 | 12 | Every gate step the half runs passed | `gate.sh --locked 3a` | Any one step seeded to fail |
 | 13 | L6: every case live on each warehouse leg on the core equal to the old client's live answers (E-1 against C-1); the quickstart notebook on the core; the 21-cell job matrix on the core equal to its reference baseline, question by question, on x86_64 and aarch64 cells | Report: E-1, E-2, E-3 | A question answered differently in one cell; a cell that does not install the candidate's wheels |
+| 14 | Java (KO3-27): every S0 and S1 case on Java's paths on the Java host equal to the reference on DuckDB, SQLite and Postgres, and Java's `databricks-sql` legs on C-1's replay; L5 for Java; the JAR loads on JDK 17 and 21 on Linux x86_64 and aarch64; E-7's answers equal to Python's on the same data. Judged for Java's packages and the phase end; a Java-only failure never holds a Python package, and a shared-core defect a Java leg shows blocks the path it breaks (plan section 6) | CI: `java (jdk17\|jdk21, <database>)`; report: L5 for Java, E-7 | A Java leg differing from the reference; a seeded unit change in one JDBC path; a JAR missing one architecture's native |
 
 ### Process rules that differ from Phase 2
 
@@ -363,7 +398,11 @@ The rest is judged outside the gate, as Phase 2's KO2-76 set it: CI-green parts 
 | The core grows driver or pandas behavior to match warehouse drivers | Providers hand Arrow to the core; differences go to the register; L5 from the captured types | 1, 3 |
 | Copying the reference's warehouse accidents (sampling text, quoting) | RS-6's question (Q10); registered keeps and drops | 2 |
 | A hand-written YAML reader or expression evaluator | A YAML crate; the allow-list ported from `view_expr.py` as a defined algorithm; a dependencies row | 3 |
-| A warehouse rule is left in the Python host and Java later lacks it | Choice 9's list; rust-host runs every warehouse leg on the core's captures | 4 |
+| A warehouse rule is left in the Python host and Java lacks it | Choice 9's list; rust-host runs every warehouse leg on the core's captures; Java's Databricks leg replays the same capture | 4 |
+| Java finds Python assumptions in the core (option values echoed as Python text, Python's `str()` of dates) | Typed option values in v28 (P2-MID2-4); Java runs the same cases from T3.10 on; a Java-found core defect is fixed in the core, never in the Java host | 1, 4 |
+| JNI misuse crashes the JVM | `jni-rs`; panics contained per entry; a crash test in a subprocess; one owner per native resource (plan section 3) | 1 |
+| Java's JDBC types reach the core differently from Python's drivers | The reviewed conversion table and L5 for Java on the same tables, before T3.11's review | 3, 5 |
+| The Java lane slows the Python switch on an 8-CPU machine | `heavy` admission; Java's builds share the Rust cache; Q16 lets the owner keep four slots instead | 14 |
 | Tests pin the mechanism (the replay) instead of the answer | Cases compare answers against the reference; a replay mismatch fails by name, never passes silently | 5 |
 | Warehouse keys (`DECIMAL(38,x)`, `BIGINT` against `STRING`) join wrong rows | The key-type pair matrix on each engine before review | 7 |
 | A fix makes the reviewer's example pass | `Rule:` lines, failing-first tests, the ratchet over every leg | 8 |
@@ -376,7 +415,7 @@ The rest is judged outside the gate, as Phase 2's KO2-76 set it: CI-green parts 
 | A capture judged against the wrong commit or a stale base | Captures name their commit; CI's push-time base | 15 |
 | Briefs leave the warehouse questions open (session zones, which side owns view YAML) | The package template's headings, refused by `lane.py start --brief` | 16 |
 | The owner's existing resources are not found, or a metric view differs from what the cases need | The discovery run before H0; C-1 records the existing metric view's YAML, and a case needing another view creates it in the sandbox schema | 16 |
-| Three non-product live failures stop live work | Quota and capacity errors retried once by the runner; owner question G5 | 9 |
+| Three non-product live failures stop live work | Quota and capacity errors retried once by the runner; owner question G4 | 9 |
 | The 118 forced-route failures hide more than three families | T3.7 starts on day 1 with the whole failing list; its exit is 0 failures | 6 |
 | Private names or credentials leak into a committed capture or a log | Placeholders written before any file; the write fails on a name from the environment; Snowflake's env file is loaded, never read or printed (KO3-24) | 19 |
 | A serving endpoint's cold start slows the matrix | Warm the owner's existing endpoint before each pass | 14 |
@@ -424,6 +463,27 @@ None of the questions below blocks day 1.
   The machine allows four packages building at once; a fifth would save about 2 hours.
   Recommendation: yes if one is available; the plan does not depend on it.
 
+**Java questions** (KO3-27; none blocks day 1, and the Java lane starts from each recommendation):
+
+- **Q16. A fifth lane for Java.**
+  Java on its own lane from the start keeps it off the Python switch's path and ends the phase about 3 hours after the switch; holding to four packages at once delays Java's end by about 14 hours, though not the switch.
+  Recommendation: the fifth lane, with `heavy` queueing its builds (about an hour of extra queueing forecast on the Python path).
+- **Q17. The Java API's shape.**
+  Recommendation: mirror Python's public API with Java names and plain data (choice 10): `Schema.fromSource`, `PredictiveQuery.parse(...).materialize(...)`, `SdmClient.predict(...)`, sources built from a `java.sql.Connection`, results as Arrow plus Java records, one exception class with the contract's error codes.
+- **Q18. Logging.**
+  The plan says the core's logs reach Java through SLF4J.
+  Recommendation: depend on the SLF4J 2 API only, bind nothing, and let the application choose its logger.
+- **Q19. Maven coordinates and publishing.**
+  Recommendation: name the artifact now under the project's group (for example `com.nvidia.sdm:structured-data-models-client`, your choice of group) and publish nothing in Phase 3: CI builds the JAR as an artifact; publishing joins Phase 5's release work.
+- **Q20. Platforms for the natives.**
+  Phase 0 promised Linux x86_64 and aarch64 plus macOS (G13); CI already builds Linux on both architectures.
+  Recommendation: Linux x86_64 and aarch64 built and tested in Phase 3; macOS natives built and load-tested on one macOS CI runner per architecture, also in Phase 3.
+- **Q21. JDBC drivers and JDKs in CI.**
+  Recommendation: test with DuckDB's (`org.duckdb:duckdb_jdbc`), SQLite's (`org.xerial:sqlite-jdbc`), Postgres's (`org.postgresql:postgresql`) and Databricks' (`com.databricks:databricks-jdbc`) official drivers, which users bring themselves; JDK 17 and 21 on Linux x86_64, and JDK 21 on aarch64.
+- **Q22. Runtime flags and Databricks questions.**
+  Java needs `--enable-native-access` (warned without it from JDK 24, refused later) and Arrow Java's `--add-opens=java.base/java.nio=ALL-UNNAMED`; Phase 0 asked to confirm both with the Java consumer (the Pyramid team).
+  Recommendation: document both, run every Java test with them, and ask the consumer to confirm; and include the two metric-view questions in E-7 beside J2's four base questions, since Java's scope lists the metric-view paths.
+
 **Process questions:**
 
 - **G1. The standing "match" class.**
@@ -432,12 +492,9 @@ None of the questions below blocks day 1.
 - **G2. One severity bar for both reviewers** (you asked "Has this really been a problem?").
   Yes: on T2.14b, Claude rated rare mismatches with the old client as minor three rounds running while Codex blocked on them, and Codex approved decision and register wording Claude then found wrong (three packages and the design); each disagreement cost a round.
   Recommendation: one bar: any measured difference from the old client on a public call, any red CI job the change caused, and any decision row wider than your words blocks; hardening internal tools stays minor (KO2-52).
-- **G3. When the Java track runs.**
-  Java is deferred until S2 is switched (KO2-34), which is this phase's exit.
-  Recommendation: as its own track right after Phase 3, about 12 to 15 packages.
-- **G4. The design's "no" list.**
+- **G3. The design's "no" list.**
   About 45 carried checking-tool and test rows are closed as "no" unless a Phase 3 case or the dry run hits them (the carried-rows table).
   Recommendation: accept the list; any row hit later goes into T3.2 or the train.
-- **G5. Live failures for non-product reasons.**
+- **G4. Live failures for non-product reasons.**
   Three such failures stop live work (plan section 9); quota and capacity errors are common on serverless and are not about the product.
   Recommendation: the runner retries a quota or capacity error once, and only a failure after the retry counts.

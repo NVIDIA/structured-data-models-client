@@ -17,6 +17,9 @@ The slip report (`phase_stats.py --forecast forecast.yaml`) gives the phase's la
 | T3.7 | Switch-ready: the forced-route failures | E | 1 | | not started |
 | T3.8 | Differences, coverage and DuckDB 2.0 | F | 1 | | not started |
 | T3.9 | The switch and the switch gate | A | alone | | not started |
+| T3.10 | Java binding and Java S0 | H | 2 | | not started |
+| T3.11 | Java S1 through JDBC | H | alone | | not started |
+| T3.12 | Java on Databricks | H | alone, last | | not started |
 | HO3 | The held-out set (not a landing) | orchestrator | – | | not started |
 
 ## Counters
@@ -25,9 +28,9 @@ Read at each check-in (learnings.md, lessons 8 and 12): round 4 of any package g
 
 | Counter | Value |
 |---|---|
-| Landings so far / forecast | 0 / 10 |
+| Landings so far / forecast | 0 / 13 |
 | Judging trains beyond T3.2 (at most one catch-up) | 0 |
-| Live campaigns run (two planned: the early capture, the end campaign) | 0 |
+| Live campaigns run (two planned: the early capture, the end campaign, with Java's E-7 at the phase's end) | 0 |
 | Live failures for non-product reasons (three stop live work) | 0 |
 | Packages at review round 4 or later | none |
 | Finding families blocking twice | none |
@@ -41,5 +44,5 @@ Read at each check-in (learnings.md, lessons 8 and 12): round 4 of any package g
 
 | Run | Base | Result |
 |---|---|---|
-| Draft (2026-10-22), from T3.0's topic branch, no runners | Phase 2's last landing | 20 of 21 kinds with gaps: see design.md, "The checking tools' dry run" |
+| Draft (2026-10-22), from T3.0's topic branch, no runners | Phase 2's last landing | 20 of 21 kinds with gaps (the three Java kinds added after): see design.md, "The checking tools' dry run" |
 | At lock, on the landed T3.0, with `--python`, `--rust` and `--gate 3a` | | |

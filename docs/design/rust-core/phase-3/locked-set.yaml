@@ -12,7 +12,7 @@
 # later change to the checks is the owner's. Its steps beyond the runners,
 # observations, ratchet, compare, coverage, l0 and l1 every locked run
 # makes, and its numbered checks that the gate judges, with the steps each
-# holds (12 is the every check). Checks 3, 4, 5, 6, 8, 9, 11 and 13 are
+# holds (12 is the every check). Checks 3, 4, 5, 6, 8, 9, 11, 13 and 14 are
 # judged outside the gate: by land.py's exact-SHA CI rule, as end-of-phase
 # reports read by both reviewers, or once at the phase end (the held-out
 # run and the live runs). Protected by the phase-*/locked-set.yaml glob in
