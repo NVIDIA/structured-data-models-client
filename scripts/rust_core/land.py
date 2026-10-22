@@ -1211,6 +1211,14 @@ def stack_max(given: int | None) -> int:
             raise Refusal(f'{STACK_MAX_ENV}={raw!r} is not a number') from None
     if value < 1:
         raise Refusal(f'the stack limit is {value}; it is at least 1')
+    if value > STACK_MAX:
+        # CI's ratchet holds a phase push to 4 landings (ratchet.py
+        # stack_limit, with no SDM_STACK_MAX in CI): more would land and
+        # turn the phase branch red (Claude r1 P3-7).
+        raise Refusal(
+            f'the stack limit is {value}; CI judges at most {STACK_MAX} '
+            'landings in one push'
+        )
     return value
 
 
@@ -1438,6 +1446,7 @@ JOB_AREAS = (
         'contract/**\nrust/**\npackages/**',
     ),
     (r'(test|engine|typecheck|runtime-install)', 'packages/**\ntests/**'),
+    (r'(tooling|timing guard)', 'scripts/**\ncontract/**\ntests/**'),
     (r'(lint|hygiene)', '**'),
 )
 
@@ -1456,7 +1465,7 @@ def implicated(
     failed = [
         j
         for j in jobs
-        if j.get('conclusion') in ('failure', 'timed_out', 'cancelled')
+        if j.get('conclusion') in ('failure', 'timed_out')
     ]
     commits = []
     for line in tools.git(
@@ -1877,6 +1886,13 @@ def stack_land(
             f'the run on the stack top is not finished ({describe(newest)}); '
             'wait for it'
         )
+    if newest.get('conclusion') == 'cancelled':
+        # Cancelled says nothing about the tree (Claude r1 P2-6): rerun.
+        raise Refusal(
+            f'the run on the stack top was cancelled ({describe(newest)}); '
+            f'nothing failed: rerun it (`gh run rerun {newest.get("databaseId")}`) '
+            'and land again'
+        )
     if newest.get('conclusion') != 'success':
         out(
             f'RED  {describe(newest)} {newest.get("url")}, on the stack top {tested[:12]}'
@@ -2048,6 +2064,9 @@ def restack(
                     'Base-SHA': current,
                     'Checkpoint-SHA': current,
                     STACK_BASE: base,
+                    # The audit trail (Claude r1 P3-9): the landing this one
+                    # replaces, whose reviews carry over by patch-id.
+                    'Restacked-from': link.sha,
                 },
             )
             note = Path(scratch / 'message.txt')

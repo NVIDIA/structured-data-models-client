@@ -33,8 +33,9 @@ selects is the tooling job's, whatever the detector finds.
 
 ``must-run`` is ``true`` when a file changed since ``git merge-base BASE
 HEAD`` matches ``scripts/rust_core/judging-paths.txt`` (protected-paths
-syntax, the one list of judging paths), is under ``scripts/rust_core/``
-(the scripts those tests run), is the workflow, the marker's
+syntax, the one list of judging paths), is under ``scripts/rust_core/``,
+``contract/tools/`` or ``contract/runners/`` (:data:`TRIGGERS`), is the
+workflow, the marker's
 registration (``pyproject.toml``) or a suite's ``conftest.py``, or is a
 marked file or a module one loads; and when the list cannot be read or the
 base is no commit (fail closed: the jobs run).
@@ -59,6 +60,9 @@ MARKER = 'tooling'
 MARKED = re.compile(rf'\bpytest\.mark\.{MARKER}\b')
 #: The one list of judging paths (owned by the tooling train, T3.0 item 1).
 JUDGING_PATHS = 'scripts/rust_core/judging-paths.txt'
+#: The tooling tests' own trigger, beyond the judging paths (T3.0 brief,
+#: item 3): changes under these run them.
+TRIGGERS = ('scripts/rust_core/', 'contract/tools/', 'contract/runners/')
 #: Paths that decide the split itself, beyond the judging paths.
 ALWAYS = (
     '.github/workflows/ci.yml',
@@ -198,10 +202,11 @@ def must_run(root: Path, base: str, head: str = 'HEAD') -> tuple[bool, str]:
             return True, f'{path} changed'
         if protects(rules, path):
             return True, f'{path} changed, a judging path ({JUDGING_PATHS})'
-        if path.startswith('scripts/rust_core/'):
-            # The brief's trigger: any of our checking and orchestration
-            # scripts, judging path or not (land.py, lane.py, handoff.py).
-            return True, f'{path} changed, one of the scripts the tests run'
+        if path.startswith(TRIGGERS):
+            # The brief's trigger, wider than the judging paths: any of our
+            # checking and orchestration scripts, the contract's tools and
+            # runners (recorders and data included).
+            return True, f'{path} changed, one of the tools the tests run'
         if path in loaded:
             return (
                 True,

@@ -20,4 +20,5 @@ You write the package's acceptance tests. You don't implement it, and you never 
 - Keep tests small and fast; no new framework.
 - Same hard rules as implementers: DCO sign-off only, no `rm -rf`, `--force` removals, `sudo`, `prepush.sh --full` or `gh run watch`; timeouts and closed stdin on every probe; nothing private in the repository; never open held-out data.
 - Before you report "ready", run `scripts/rust_core/handoff.py run --package <ID>` on your SHA; review rounds refuse a SHA without its stamp.
+  Tests that fail by design until the code exists go on the package's `*-pending.json` list, which holds them to failing (strict xfail), so the handoff's suites pass.
 - Report the test files you created and the exit each one covers.

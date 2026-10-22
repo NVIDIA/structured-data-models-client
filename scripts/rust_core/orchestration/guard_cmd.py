@@ -54,11 +54,13 @@ files ``SDM_OWNER_ANSWERS`` lists, colon-separated). The command and token
 are appended to ``$SDM_ORCH_STATE/logs/approved-commands.log``.
 ``guard_cmd.py --tokens`` prints the valid ids.
 
-The Agent rule: a prompt that names the reviewer brief (``reviewer.md``,
-not ``design-reviewer.md``) starts a review round, and the round needs a
-handoff stamp (``handoff.py``) for the exact SHA it reviews: at least one
-full 40-character SHA in the prompt must have a passing stamp in the clone
-the hook runs in, else the launch is refused naming ``handoff.py run``.
+The Agent rule: a prompt that names a round brief (``round-briefs/...``)
+or the reviewer brief (``reviewer.md``, not ``design-reviewer.md``) starts
+a review round. Every full 40-character SHA it names, in the prompt or in
+the round brief it points at, that is not on the epic or a phase branch
+yet needs a passing handoff stamp (``handoff.py``) in the clone the hook
+runs in, else the launch is refused naming ``handoff.py run``. A prompt
+naming a brief and no SHA is docs work, and passes.
 
 Refusals are appended to ``$SDM_ORCH_STATE/logs/guard-denied.log``. Codex
 panes have no PreToolUse hook; ``rule_watch.py`` keeps watching them.
@@ -160,13 +162,72 @@ def substitutions(text: str) -> Iterator[str]:
             i += 1
 
 
+def plain(text: str) -> str:
+    """``text`` with each comment dropped to the end of its own line and
+    each line end outside quotes made a ``;``, as the shell reads them
+    (Claude r1 P2-2: one comment hid every later line)."""
+    out: list[str] = []
+    i, single, double = 0, False, False
+    while i < len(text):
+        ch = text[i]
+        if single:
+            single = ch != "'"
+        elif double:
+            if ch == '\\':
+                out.append(text[i : i + 2])
+                i += 2
+                continue
+            double = ch != '"'
+        elif ch == '\\':
+            out.append(text[i : i + 2])
+            i += 2
+            continue
+        elif ch == "'":
+            single = True
+        elif ch == '"':
+            double = True
+        elif ch == '#' and (i == 0 or text[i - 1] in ' \t\n;&|()'):
+            end = text.find('\n', i)
+            i = len(text) if end < 0 else end
+            continue
+        elif ch == '\n':
+            out.append(' ; ')
+            i += 1
+            continue
+        out.append(ch)
+        i += 1
+    return ''.join(out)
+
+
 def tokens(text: str) -> list[str]:
-    lexer = shlex.shlex(
-        text.replace('\n', ' ; '), posix=True, punctuation_chars=';&|()'
-    )
+    lexer = shlex.shlex(plain(text), posix=True, punctuation_chars=';&|()')
     lexer.whitespace_split = True
-    lexer.commenters = '#'
+    lexer.commenters = ''
     return list(lexer)
+
+
+#: Shell keywords and grouping words a command may follow on its line.
+KEYWORDS = {'do', 'then', 'else', 'elif', 'if', 'while', 'until', '{', '}', '!'}
+#: A redirection word: ``>``, ``2>``, ``>>``, ``2>/dev/null``, ``<in``.
+REDIRECT = re.compile(r'[0-9]*(>>?|<)(.*)')
+
+
+def without_redirections(argv: list[str]) -> list[str]:
+    """``argv`` without its redirections, which name no argument (Claude r1
+    P2-3: ``rm -rf <scratch> 2>/dev/null`` read the redirection as a
+    target)."""
+    out: list[str] = []
+    skip = False
+    for word in argv:
+        if skip:
+            skip = False
+            continue
+        found = REDIRECT.fullmatch(word)
+        if found and out:
+            skip = not found.group(2)
+            continue
+        out.append(word)
+    return out
 
 
 def simple_commands(text: str, depth: int = 0) -> Iterator[list[str]]:
@@ -200,7 +261,9 @@ def unwrap(words: list[str]) -> tuple[list[str], dict[str, str], list[str]]:
     w = list(words)
     while w:
         head = os.path.basename(w[0])
-        if ASSIGNMENT.match(w[0]):
+        if w[0] in KEYWORDS:
+            w = w[1:]
+        elif ASSIGNMENT.match(w[0]):
             key, _, value = w[0].partition('=')
             env[key] = value
             w = w[1:]
@@ -253,8 +316,13 @@ def unwrap(words: list[str]) -> tuple[list[str], dict[str, str], list[str]]:
                 ):
                     if n + 1 < len(rest):
                         nested.append(rest[n + 1])
+                    return [], env, nested
+                if not word.startswith('-'):
+                    # bash SCRIPT ARGS: the script is the command.
+                    w = rest[n:]
                     break
-            return [], env, nested
+            else:
+                return [], env, nested
         elif head == 'eval':
             nested.append(' '.join(w[1:]))
             return [], env, nested
@@ -371,7 +439,22 @@ def check_git(argv: list[str]) -> Verdict | None:
             '--get-color',
             '--get-colorbool',
         }
-        if not (set(flags) & reads or args[:1] in (['get'], ['list'])):
+        writes = {
+            '--unset',
+            '--unset-all',
+            '--add',
+            '--replace-all',
+            '--edit',
+            '-e',
+            '--rename-section',
+            '--remove-section',
+        }
+        positional = [a for a in args if not a.startswith('-')]
+        # ``git config KEY`` alone reads it.
+        lone_key = len(positional) == 1 and not set(flags) & writes
+        if not (
+            set(flags) & reads or args[:1] in (['get'], ['list']) or lone_key
+        ):
             return Verdict(
                 'git config changes a configuration the clone shares',
                 'pass a one-off setting with `git -c key=value <command>`',
@@ -389,7 +472,10 @@ def check_git(argv: list[str]) -> Verdict | None:
             f'{TOKEN_VAR}=<owner-answers id>',
         )
     if sub in ('fetch', 'pull') and any(
-        f in ('--prune', '--prune-tags', '-p', '-P') for f in flags
+        f in ('--prune', '--prune-tags')
+        or short_cluster(f, 'p')
+        or short_cluster(f, 'P')
+        for f in flags
     ):
         return Verdict(
             f'git {sub} --prune deletes remote-tracking refs other '
@@ -652,6 +738,7 @@ def check_command(
     while queue:
         words = queue.pop(0)
         argv, env, nested = unwrap(words)
+        argv = without_redirections(argv)
         for text in nested:
             try:
                 queue.extend(simple_commands(text))
@@ -713,29 +800,73 @@ def git_common_dir(cwd: str) -> Path | None:
     return Path(out) if done.returncode == 0 and out else None
 
 
+#: A round brief the orchestrator writes for a review round.
+ROUND_BRIEF = re.compile(r'[^\s`\'"()]*round-briefs/[^\s`\'"()]+')
+
+
+def brief_text(name: str) -> str:
+    """The round brief ``name`` names, read, or nothing."""
+    name = name.rstrip('.,;:')
+    path = name.replace('${SDM_ORCH_STATE}', str(STATE)).replace(
+        '$SDM_ORCH_STATE', str(STATE)
+    )
+    try:
+        return Path(os.path.expanduser(path)).read_text(encoding='utf-8')
+    except (OSError, ValueError):
+        return ''
+
+
+def landed(sha: str, cwd: str) -> bool:
+    """Whether ``sha`` is on the epic or a phase branch as fetched: a base
+    the round names, not a candidate."""
+    try:
+        done = subprocess.run(
+            ['git', '-C', cwd, 'branch', '-r', '--contains', sha],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            stdin=subprocess.DEVNULL,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return done.returncode == 0 and any(
+        re.fullmatch(r'origin/rust-core(-phase-[0-9]+)?', line.strip())
+        for line in done.stdout.splitlines()
+    )
+
+
 def check_agent(prompt: str, cwd: str) -> Verdict | None:
-    if not REVIEWER_BRIEF.search(prompt):
+    """A review launch: a prompt naming a round brief (``round-briefs/``)
+    or the reviewer brief (``briefs/reviewer.md``). The SHAs it names, in
+    the prompt or in the round brief it points at, that are not landed yet
+    each need a passing stamp; a prompt naming a brief and no SHA is no
+    round (docs work on the brief), and passes."""
+    briefs = ROUND_BRIEF.findall(prompt)
+    if not briefs and not REVIEWER_BRIEF.search(prompt):
         return None
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     import handoff  # noqa: PLC0415
 
-    shas = sorted(set(SHA.findall(prompt)))
+    text = prompt + ''.join('\n' + brief_text(b) for b in briefs)
+    shas = sorted(set(SHA.findall(text)))
     if not shas:
-        return Verdict(
-            'a review round names no exact 40-character SHA',
-            'name the full SHA under review; it needs a handoff stamp',
-        )
+        return None
     common = git_common_dir(cwd)
     if common is None:
         return Verdict(
             f'a review round launched outside a git clone ({cwd})',
             'launch it from the clone holding the handoff stamps',
         )
-    if any(handoff.stamp_problem(common, sha) is None for sha in shas):
+    missing = [
+        sha
+        for sha in shas
+        if not landed(sha, cwd) and handoff.stamp_problem(common, sha)
+    ]
+    if not missing:
         return None
     return Verdict(
         'a review round on a SHA with no handoff stamp ('
-        + ', '.join(s[:12] for s in shas)
+        + ', '.join(s[:12] for s in missing)
         + ')',
         'the implementer or test author runs `scripts/rust_core/handoff.py '
         'run --package <ID>` on that SHA first, then reports ready',

@@ -148,8 +148,28 @@ def phase_base(root: Path, given: str | None) -> str:
     for ref in (f'refs/remotes/origin/{phase}', f'refs/heads/{phase}'):
         done = run(['git', 'merge-base', 'HEAD', ref], root)
         if done.returncode == 0:
-            return done.stdout.strip()
+            return stack_floor(root, done.stdout.strip())
     raise Failure(f'no {phase} here to diff against; fetch it or give --base')
+
+
+def stack_floor(root: Path, base: str) -> str:
+    """The newest landing commit between ``base`` and HEAD, else ``base``:
+    a package stacked on others' landings (``land.py --stack``) is its own
+    commits above them (Claude r1 P2-5), not the stack below."""
+    out = git(
+        root, 'log', '--first-parent', '--format=%H%x00%s', f'{base}..HEAD'
+    )
+    for line in out.splitlines():
+        sha, _, subject = line.partition('\0')
+        if not subject.startswith('Land '):
+            continue
+        tree = git(root, 'rev-parse', f'{sha}^{{tree}}').strip()
+        parent = run(
+            ['git', 'rev-parse', f'{sha}^^{{tree}}'], root
+        ).stdout.strip()
+        if tree == parent:
+            return sha
+    return base
 
 
 # --- the steps --------------------------------------------------------------------
@@ -482,7 +502,12 @@ def source_path(tree: Path, python: str) -> str:
 
 
 def step_fails_before(
-    root: Path, base: str, previous: str | None, python: str, scratch: Path
+    root: Path,
+    base: str,
+    previous: str | None,
+    python: str,
+    scratch: Path,
+    package: str | None = None,
 ) -> Step:
     """A fix round's new or changed tests, on the previous round's tree:
     Python tests on its sources (``source_path``: the previous tree's
@@ -492,7 +517,11 @@ def step_fails_before(
     fail; pytest stops at the first failure."""
     step = Step('fails-before')
     subjects = git(root, 'log', '--format=%s', f'{base}..HEAD').splitlines()
-    fixes = [s for s in subjects if FIX.match(s)]
+    fixes = [
+        s
+        for s in subjects
+        if (m := FIX.match(s)) and (package is None or m.group(1) == package)
+    ]
     if previous is None:
         if fixes:
             step.problems.append(
@@ -577,7 +606,22 @@ def step_fails_before(
             (failed if done.returncode else passed).append(
                 f'{path} (#[cfg(test)])'
             )
-        if not failed and not step.problems:
+        compiled = any(
+            p.startswith('rust/') and not is_test(p) and p not in spliced
+            for p in diffed
+        )
+        rust_tests = bool(spliced) or any(CRATE_TEST.match(p) for p in changed)
+        if not failed and not step.problems and compiled and not rust_tests:
+            # The previous tree is not built: its Python tests ran on the
+            # installed (fixed) core, so they cannot show a Rust fix. The
+            # lighter rule (Codex and Claude r1): noted, judged by CI.
+            step.notes.append(
+                f'NOT JUDGED: the fix changes the Rust core and its tests are '
+                f'Python only ({", ".join(passed)}), which ran on the installed '
+                'build; a Rust test (tests/*.rs or #[cfg(test)]) would show '
+                'the failure on the previous tree'
+            )
+        elif not failed and not step.problems:
             step.problems.append(
                 f'every new or changed test passes on the previous round '
                 f'{previous[:12]}, so none shows the fix: ' + ', '.join(passed)
@@ -645,6 +689,19 @@ def ruff() -> list[str] | None:
     return None
 
 
+def mypy(python: str, root: Path) -> list[str]:
+    """mypy: the lane's interpreter's when it has one, else the tools'
+    interpreter's, else uvx's (the lane environments install none; Claude
+    r1 P2-5)."""
+    for interpreter in (python, sys.executable):
+        if run([interpreter, '-c', 'import mypy'], root).returncode == 0:
+            return [interpreter, '-m', 'mypy']
+    uvx = shutil.which('uvx')
+    if uvx:
+        return [uvx, '--quiet', 'mypy']
+    return [sys.executable, '-m', 'mypy']
+
+
 def step_lint(root: Path, touched: list[str], python: str) -> Step:
     step = Step('lint')
     present = [p for p in touched if (root / p).is_file()]
@@ -694,7 +751,7 @@ def step_lint(root: Path, touched: list[str], python: str) -> Step:
         }
     )
     for source in packages:
-        done = run([python, '-m', 'mypy', source], root)
+        done = run([*mypy(python, root), source], root)
         if done.returncode != 0:
             step.problems.append(
                 f'mypy {source}:\n' + tail(done.stdout + done.stderr)
@@ -734,7 +791,9 @@ def cmd_run(args: argparse.Namespace) -> int:
     try:
         steps = [
             step_reference(root, touched, args.case, python, base, scratch),
-            step_fails_before(root, base, args.previous, python, scratch),
+            step_fails_before(
+                root, base, args.previous, python, scratch, args.package
+            ),
             step_affected(root, touched, python),
             step_lint(root, touched, python),
         ]

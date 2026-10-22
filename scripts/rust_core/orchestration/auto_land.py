@@ -483,6 +483,14 @@ def process_stack_land(f, q, branch):
         f.rename(f.with_suffix('.landed'))
     elif 'not finished' in out or 'no CI run on the stack top' in out:
         return
+    elif 'was cancelled' in out:
+        # Nothing failed: rerun the top's run once and wait for it.
+        found = re.search(r'gh run rerun (\d+)', out)
+        if found and int(q.get('stack_reruns', 0)) < 2:
+            sh('gh', 'run', 'rerun', found.group(1), '-R', R)
+            q['stack_reruns'] = int(q.get('stack_reruns', 0)) + 1
+            f.write_text(json.dumps(q, indent=1) + '\n')
+        return
     else:
         lines = [
             ln

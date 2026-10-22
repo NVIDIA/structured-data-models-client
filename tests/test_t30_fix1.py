@@ -269,3 +269,135 @@ def test_the_dry_run_counts_no_failed_tool_as_a_judgement() -> None:
     )
     # A failure naming no kind is unattributed, so the step is incomplete.
     assert loose and not kinds[0].gaps
+
+
+# --- Claude r1 P2-1: the judging list leaves product work alone -------------------
+
+judging = _module('t30_fix1_judging', SCRIPTS / 'judging.py')
+RULES = judging.patterns(
+    (SCRIPTS / 'judging-paths.txt').read_text(encoding='utf-8')
+)
+
+
+def test_what_product_packages_change_is_no_judging_path() -> None:
+    product_work = [
+        'scripts/rust_core/bridge_freeze.json',
+        'scripts/rust_core/bridge_changes.json',
+        'scripts/rust_core/bridge_freeze.py',
+        'scripts/rust_core/selftest.py',
+        'scripts/rust_core/wheel_smoke.py',
+        'contract/tools/forecast_record.py',
+        'contract/runners/databases.py',
+        'contract/t216-encoding-vectors.json',
+        '.github/workflows/ci.yml',
+    ]
+    assert judging.judging(RULES, product_work) == []
+    deciding = [
+        'scripts/rust_core/gate.sh',
+        'scripts/rust_core/ratchet.py',
+        'scripts/rust_core/compare.py',
+        'scripts/rust_core/coverage.py',
+        'scripts/rust_core/land.py',
+        'scripts/rust_core/lane.py',
+        'contract/tools/refusal_census.py',
+        'contract/case.schema.json',
+        'contract/runners/run_python.py',
+    ]
+    assert judging.judging(RULES, deciding) == sorted(deciding)
+
+
+def test_most_of_phase_2_s_landings_change_no_judging_path() -> None:
+    def git(*args: str) -> str:
+        return subprocess.run(
+            ['git', '-C', str(ROOT), *args], capture_output=True, text=True
+        ).stdout
+
+    phase = 'refs/remotes/origin/rust-core-phase-2'
+    if not git('rev-parse', '--verify', '--quiet', phase).strip():
+        pytest.skip('no origin/rust-core-phase-2 in this clone')
+    landings = []
+    for line in git(
+        'log', '--first-parent', '--format=%H%x00%s', phase
+    ).splitlines():
+        sha, _, subject = line.partition('\0')
+        if subject.startswith(('Land T2', 'Land CI')):
+            base = git(
+                'log', '-1', '--format=%(trailers:key=Base-SHA,valueonly)', sha
+            ).strip()
+            if base:
+                landings.append((base, sha))
+    assert len(landings) >= 40, len(landings)
+    touching = [
+        sha
+        for base, sha in landings
+        if judging.judging(
+            RULES,
+            [p for p in git('diff', '--name-only', base, sha).split('\n') if p],
+        )
+    ]
+    # Phase 2's judging packages (the T2.1 judging series, T2.0's tooling)
+    # touch the list; the product packages, mostly, do not.
+    assert len(touching) * 2 < len(landings), (len(touching), len(landings))
+
+
+# --- Claude r1 P2-2 to P2-4: the guard -----------------------------------------------
+
+guard = _module('t30_fix1_guard', SCRIPTS / 'orchestration/guard_cmd.py')
+
+
+@pytest.mark.parametrize(
+    'command',
+    [
+        '# clean the old build\nrm -rf /home/user/code/repo/rust/target',
+        'cd /home/user/code/repo  # the clone\ngit stash',
+        'echo start # note\ngit push origin +topic',
+        'for d in /home/user/old*; do rm -rf "$d"; done',
+        'if true; then sudo true; fi',
+        'git fetch -pq',
+        'bash scripts/rust_core/prepush.sh --full',
+    ],
+)
+def test_the_guard_reads_every_line_and_every_segment(command: str) -> None:
+    assert guard.check_command(command, '/home/user', None) is not None
+
+
+def test_a_redirection_is_no_rm_target(tmp_path: Path) -> None:
+    os.environ['SDM_SCRATCH'] = str(tmp_path)
+    try:
+        for command in (
+            f'rm -rf {tmp_path}/x 2>/dev/null',
+            f'rm -rf {tmp_path}/x > /dev/null 2>&1',
+        ):
+            assert guard.check_command(command, str(tmp_path), None) is None
+    finally:
+        del os.environ['SDM_SCRATCH']
+
+
+def test_a_round_brief_s_sha_needs_a_stamp(repo: Path, tmp_path: Path) -> None:
+    sha = _commit(repo, {'a.txt': 'a\n'}, 'T3.99: the candidate')
+    brief = tmp_path / 'round-briefs' / 'T3.99-r1.md'
+    brief.parent.mkdir()
+    brief.write_text(f'Review T3.99 at {sha}.\n', encoding='utf-8')
+    prompt = f'Read and follow the brief at {brief}.'
+    assert guard.check_agent(prompt, str(repo)) is not None
+    stamp = handoff.stamp_path(
+        Path(_git(repo, 'rev-parse', '--absolute-git-dir')), sha
+    )
+    stamp.parent.mkdir(parents=True)
+    stamp.write_text(json.dumps({'sha': sha, 'ok': True}), encoding='utf-8')
+    assert guard.check_agent(prompt, str(repo)) is None
+    # Docs work on the reviewer brief names no SHA, and passes.
+    edit = 'Tighten the wording of docs/design/rust-core/orchestration/briefs/reviewer.md'
+    assert guard.check_agent(edit, str(repo)) is None
+
+
+# --- Claude r1 P2-5: a stacked package's own commits -------------------------------
+
+
+def test_a_stacked_package_is_its_commits_above_the_stack(repo: Path) -> None:
+    base = _commit(repo, {'a.txt': 'a\n'}, 'Land T3.97: the head')
+    _commit(repo, {'b.txt': 'b\n'}, 'T3.98 fix 1: below')
+    _git(repo, 'commit', '-q', '--allow-empty', '-m', 'Land T3.98: below')
+    landing = _git(repo, 'rev-parse', 'HEAD')
+    _commit(repo, {'c.txt': 'c\n'}, 'T3.99: the package')
+    assert handoff.stack_floor(repo, base) == landing

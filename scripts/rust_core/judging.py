@@ -9,8 +9,8 @@ passes, in ``contract/protected-paths.txt``'s pattern syntax. ``land.py``
 reads it from the phase head (:func:`rules_at`), so a package cannot take
 its own change out of the list.
 
-A package that changes a judging path lands either before the phase's first
-product landing (the tooling found up front) or as a train: a package of
+A package that changes a judging path lands either as the phase's first
+package (T3.0 in Phase 3) or as a train: a package of
 judging-path changes only, with their tests and docs (:data:`TRAIN_ALSO`),
 at the front of a stack (``land.py --stack --train``).
 """
@@ -79,6 +79,10 @@ def product(rules: Rules, paths: Iterable[str]) -> list[str]:
     """The product paths among ``paths``: neither judging paths, nor tests,
     nor docs, nor the orchestration scripts."""
     other = patterns('\n'.join((*NOT_PRODUCT, 'scripts/**', '.claude/**')))
+    # The root's files (pyproject.toml, uv.lock, the Makefile) are the
+    # repository's, not a product's (Claude r1 P3-13).
     return sorted(
-        p for p in paths if not matches(rules, p) and not matches(other, p)
+        p
+        for p in paths
+        if '/' in p and not matches(rules, p) and not matches(other, p)
     )

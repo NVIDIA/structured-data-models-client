@@ -40,7 +40,7 @@ import judging  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 #: The roots every tracked path of which the map covers.
-COVERED = ('contract/', 'scripts/rust_core/', 'rust/crates/')
+COVERED = ('contract/', 'scripts/rust_core/', 'rust/crates/', 'rust/bindings/')
 #: A suite: an argv, ``python3`` standing for the caller's interpreter, run
 #: from the repository's root.
 Suite = tuple[str, ...]

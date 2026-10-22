@@ -2,38 +2,42 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# The judging paths (T3.0, item 1): the checking tools, the gate, the
-# ratchet, the comparator and the case-format readers, which decide whether a
-# candidate passes. land.py reads this file at the phase head, never at the
-# candidate. A package that changes one lands it in a tooling train
-# (land.py --stack --train) at the front of a stack, or before the phase's
-# first product landing; anywhere else land.py refuses it. Same pattern
-# syntax as contract/protected-paths.txt: "*" within a path segment, "**"
+# The judging paths (T3.0, item 1): the files that decide whether a
+# candidate passes or lands: the gate, the ratchet, the comparator, the
+# coverage and census checks, the landing tools, and the case and
+# observation readers and their schemas. land.py reads this file at the
+# phase head, never at the candidate. A package that changes one is the
+# phase's first package or a tooling train (land.py --stack --train) at the
+# front of a stack; anywhere else land.py refuses it.
+#
+# Not here, since product packages change them as normal work: the bridge
+# freeze (bridge_freeze.py declares what it covers; bridge_freeze.json and
+# bridge_changes.json), its seeds in selftest.py, wheel_smoke.py's
+# distributions, the recorders and probes under contract/tools/, the
+# vectors, the cases, and ci.yml (CI's config rides with the package that
+# needs it). CI's tooling jobs have their own, wider trigger
+# (tooling_tests.py must-run). Same pattern syntax as contract/protected-paths.txt: "*" within a path segment, "**"
 # across segments, "!" takes paths out of the patterns above it.
 
-# What gate.sh takes from the checkpoint (its "judging" list and overlay).
+# The gate and what it judges with.
 scripts/rust_core/gate.sh
 scripts/rust_core/ratchet.py
 scripts/rust_core/compare.py
 scripts/rust_core/coverage.py
 scripts/rust_core/register.py
 scripts/rust_core/phases.py
-scripts/rust_core/wheel_smoke.py
-scripts/rust_core/bridge_freeze.py
-scripts/rust_core/bridge_freeze.json
-scripts/rust_core/bridge_changes.json
 scripts/rust_core/l0_*.py
-scripts/rust_core/selftest.py
-scripts/rust_core/emulation-allowlist.txt
-scripts/rust_core/judging-paths.txt
-# The runners and the case format: what reads a case and writes an observation.
-contract/runners/**
-# The comparison and checking tools under the contract.
-contract/tools/**
-contract/*.schema.json
+contract/tools/refusal_census.py
 contract/compare-policy.yaml
 contract/protected-paths.txt
+# The landing tools, and this list.
+scripts/rust_core/land.py
+scripts/rust_core/lane.py
+scripts/rust_core/judging.py
+scripts/rust_core/judging-paths.txt
+# The case and observation readers and writers, and their schemas.
+contract/runners/run_python.py
+contract/runners/capture_check.py
+contract/*.schema.json
 rust/crates/sdm-testkit/src/case.rs
 rust/crates/sdm-testkit/src/observation.rs
-# CI, which runs all of them.
-.github/workflows/ci.yml

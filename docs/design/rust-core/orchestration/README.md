@@ -76,7 +76,7 @@ Work that doesn't depend on the design's scope may run while it's in review and 
 2. **Tests first.** Start the test author with [briefs/test-author.md](briefs/test-author.md). The implementer may start from the brief in parallel; it must not read the test author's work in progress, and the tests arrive before its first push.
 3. **Lane.** `scripts/rust_core/lane.py start --lane <x> --package <ID> --worktree <path> --wait`. Every commit subject starts with the package ID (`<ID>: ...`, `<ID> fix <n>: ...`, `<ID> tracker: ...`); `prepush.sh` and `land.py` refuse others.
 4. **Push.** The implementer runs `scripts/rust_core/prepush.sh` (the cheap tier only), then `handoff.py run` (see "The handoff stamp" below), pushes, reports the SHA and ends its turn.
-5. **Review and CI in parallel.** At push, start both reviewers with [briefs/reviewer.md](briefs/reviewer.md) and a background check of the exact SHA's CI run. Don't wait for CI before reviewing. Run `cancel_superseded.sh` after each push, since lane CI doesn't cancel superseded runs.
+5. **Review and CI in parallel.** At push, start both reviewers with [briefs/reviewer.md](briefs/reviewer.md) and a background check of the exact SHA's CI run. Don't wait for CI before reviewing. A newer push cancels the run in progress on the same lane or topic branch (T3.0), so `cancel_superseded.sh` is needed only for runs on other branches.
 6. **Fix rounds** until both reviewers approve the same SHA. Reviews block only on P1 and P2; P3s go to a carry-forward list. Later rounds review only the fix commits plus the earlier repros.
 7. **Stack it** with `land.py --stack` as soon as both reviewers approve the same SHA (or queue a `"stack": true` entry for `auto_land.py`), and land the stack with `land.py stack-land` once the run on its top is green (see "Stacked landings" below).
 8. **Start the lane's next package** on the package's landing commit as soon as it is stacked. Never sit idle on CI.
@@ -135,7 +135,8 @@ Three scripts in `scripts/rust_core/orchestration/` carry the mechanical part. E
 - **Stack on the landing commit**, never on a landed candidate. Phase 1 lost a cycle when the ratchet refused a merge base that wasn't a landing commit.
 - **Clean rebases are confirmed by script** (`mech_confirm.py`; decision E130). Reviewers look again only when the move changed something.
 - **Stacks, not chains.** Up to 4 approved packages land on one CI run (`land.py --stack`, then `stack-land`; "Stacked landings" below). `land_chain.sh`, which lands a chain one package and one run at a time, is for packages that already have their own runs.
-- **Judging-path changes ride the train.** `land.py` refuses a package that changes a path in `scripts/rust_core/judging-paths.txt` unless it is the phase's first package or the tooling train (`--train`, first in its stack); see "The tooling train" below. Every guard or gate change must also pass in its post-landing state.
+- **Judging-path changes ride the train.** `land.py` refuses a package that changes a path in `scripts/rust_core/judging-paths.txt` unless it is the phase's first package or the tooling train (`--train`, first in its stack); see "The tooling train" below.
+  Every guard or gate change must also pass in its post-landing state.
 
 ## The Phase 3 process mechanisms (T3.0)
 
@@ -147,9 +148,18 @@ Nothing here stops work because a time or count was reached.
 
 Up to 4 approved packages land on one green CI run, the run on the stack's top (the owner: "every N packages (e.g. 4 packages) before CI is mandatory").
 
-1. When both reviewers approve package P1's SHA, stack it from its worktree: `land.py --stack --candidate SHA --topic-branch <its branch> --review A --review B --title 'Land P1: ...' --protected-paths '...'`. It makes P1's empty landing commit locally (`Base-SHA` and `Checkpoint-SHA` the landing below it, or the phase head; `Stack-base` the phase head; `Topic-branch`), needs no CI run and pushes nothing. It prints `STACKED <sha>`.
-2. The next package is built (or rebased) on that landing commit, reviewed, and stacked the same way. `lane.py check` and the pre-push hook accept the stack below a lane's package; `--max-stack N` or `SDM_STACK_MAX` changes the limit of 4.
-3. Push the top package's commits for a CI run: its base is the stack's tail (`ratchet.py push-base`), so the top is judged with the harness of the landing below it, a train's included. Then `land.py stack-land --tip <the top landing> [--topic-branch <the top's branch>]`. It checks the whole chain again and fast-forwards the phase branch over every landing in one atomic push, on the green run of the top. Each landing's checkpoint stays the landing before it; the ratchet's phase-push check accepts such a push, and CI skips it as it skips one landing.
+1. When both reviewers approve package P1's SHA, stack it from its worktree: `land.py --stack --candidate SHA --topic-branch <its branch> --review A --review B --title 'Land P1: ...' --protected-paths '...'`.
+   It makes P1's empty landing commit locally: `Base-SHA` and `Checkpoint-SHA` the landing below it (or the phase head), `Stack-base` the phase head, and `Topic-branch`.
+   It needs no CI run and pushes nothing, and prints `STACKED <sha>`.
+2. The next package is built (or rebased) on that landing commit, reviewed, and stacked the same way.
+   `lane.py check` and the pre-push hook accept the stack below a lane's package.
+   `--max-stack N` or `SDM_STACK_MAX` lowers the limit of 4, which CI's ratchet holds.
+3. Push the top package's commits for a CI run.
+   Its base is the stack's tail (`ratchet.py push-base`), so the top is judged with the harness of the landing below it, a train's included.
+   Then run `land.py stack-land --tip <the top landing> [--topic-branch <the top's branch>]`.
+   It checks the whole chain again and fast-forwards the phase branch over every landing in one atomic push, on the green run of the top.
+   Each landing's checkpoint stays the landing before it; the ratchet's phase-push check accepts such a push, and CI skips it as it skips one landing.
+   A cancelled top run is no failure: `stack-land` asks for a rerun, and `auto_land.py` reruns it.
 4. If the top's run is red, `stack-land` prints `IMPLICATED <job>: <commit>` (the stack's commits the failed jobs' logs name, or that touch the job's area) and the green prefix: `PREFIX RUN: git push ...` for a run on the prefix's top, then `GREEN PREFIX: land.py stack-land --tip <landing>`.
 5. If the phase head moved under a stack, `land.py restack --tip <top landing> [--train-first] [--move-branches]` replays it on the new head in a scratch worktree. Each patch must be the same (patch-id, `move_confirm.py`'s rule), so the reviews carry over; only the new top needs a CI run. A conflict or a changed patch refuses, and that package needs a review round. A single approved package moved before stacking is still confirmed with `move_confirm.py`.
 
@@ -157,7 +167,8 @@ Up to 4 approved packages land on one green CI run, the run on the stack's top (
 
 ### The tooling train (item 1, land.py's part)
 
-`scripts/rust_core/judging-paths.txt` lists the judging paths: the checking tools, the gate, the ratchet, the comparator, the case-format readers and CI.
+`scripts/rust_core/judging-paths.txt` lists the judging paths: the files that decide pass or fail (the gate, the ratchet, the comparator, coverage, the census, `land.py` and `lane.py`, the case and observation readers and their schemas).
+What product packages change as normal work is left out: the bridge freeze and its seeds, `wheel_smoke.py`, the recorders and probes under `contract/tools/`, vectors, cases and `ci.yml`.
 `land.py` reads it from the phase head, so a package cannot take its own change off the list.
 Only the phase's first package may change a judging path outside a train.
 After it, every judging change found mid-phase goes into one train package, which changes judging paths, their tests and docs only, and lands at the front of the next stack: `land.py --stack --train ...` (its landing carries `Train: yes`).
@@ -175,7 +186,7 @@ On a clean worktree it runs:
 - lint (`ruff`, `cargo fmt`, `mypy` on changed packages).
 
 It writes `<git common dir>/sdm-handoff/<SHA>.json` only when all pass; `handoff.py check SHA` reads it.
-`codex_pane.py review` and the Claude reviewer launch (the hook below, on any Agent prompt naming `briefs/reviewer.md`) refuse a round on a SHA without a stamp.
+`codex_pane.py review` and the Claude reviewer launch (the hook below, on any Agent prompt naming a round brief, `round-briefs/...`, or `briefs/reviewer.md`, for each SHA it or the brief names that is not landed yet) refuse a round on a SHA without a stamp.
 Reviewers read the code, the stamp and CI, and list every difference from the old client under `differences:` ([briefs/reviewer.md](briefs/reviewer.md)).
 `affected.py --unmapped` fails when a tracked path under `contract/`, `scripts/rust_core/` or `rust/crates/` maps to no suite; add a row to its `MAP`.
 
@@ -233,17 +244,18 @@ The machine has 8 vCPUs, 30 GB of memory and 412 GB of fast disk at `/mnt/locals
 
 - **Before the design locks**, run `scripts/rust_core/gate_dryrun.sh kinds.yaml --python $SDM_LANE_ENV/current/cell-ref-pandas3/bin/python` over the design's planned case kinds (`kinds: [{name, case}]`, one stub case each).
   It judges each stub with the checkpoint's own case reader, `coverage.py`, `ratchet.py`, Python runner and `compare.py` (a worktree of the checkpoint, as the gate's harness judges) (and with `--rust` the test kit, with `--gate HALF` the locked gate) on a throwaway commit, and prints a `GAP <kind> (<case>): <tool>: ...` line for every refusal.
-  Those lines are the first package's tooling list, found up front instead of one judging package at a time mid-phase.
+  Those lines are the first train's list (the front of the first stack, `land.py --stack --train`), found up front instead of one judging package at a time mid-phase.
   A tool that fails on no line naming a kind prints `INCOMPLETE` and the dry run exits 1: what it judged is unknown.
 - **The slip report**: the heartbeat runs `scripts/rust_core/orchestration/phase_stats.py --phase-branch origin/$SDM_PHASE_BRANCH --no-ci --forecast <the design's forecast>`, a `{start, packages: [{id, hours}]}` file, and reads how many hours the phase is behind and the package or unplanned landings that caused most of it.
   It never blocks anything.
 
 ### After T3.0 lands: the orchestrator's one-time steps
 
-The private copies outside the repository would bypass the mechanisms above, so they become wrappers of the repository's tools:
+The private copies outside the repository would bypass the mechanisms above, so they become wrappers of the repository's tools.
+Until the phase merges into `rust-core`, the tools live on the phase branch, so the wrappers point at a worktree kept at the phase head: `git worktree add --detach ~/code/sdmc-phase-head origin/rust-core-phase-3` once, and `git -C ~/code/sdmc-phase-head checkout --detach origin/rust-core-phase-3` after each landing (`~/code/sdmc-rust-core` once the phase has merged).
 
-- `$SDM_ORCH_STATE/bin/heavy` becomes `exec ~/code/sdmc-rust-core/scripts/rust_core/orchestration/heavy "$@"`.
-- `$SDM_ORCH_STATE/bin/codex_pane.py` becomes `exec python3 ~/code/sdmc-rust-core/scripts/rust_core/orchestration/codex_pane.py "$@"`, so a review round needs the handoff stamp.
+- `$SDM_ORCH_STATE/bin/heavy` becomes `exec ~/code/sdmc-phase-head/scripts/rust_core/orchestration/heavy "$@"`.
+- `$SDM_ORCH_STATE/bin/codex_pane.py` becomes `exec python3 ~/code/sdmc-phase-head/scripts/rust_core/orchestration/codex_pane.py "$@"`, so a review round needs the handoff stamp.
 - Agents export `SDM_LANE_ENV` and `SDM_KIT_PYTHON` from `cells.sh`, since the runners refuse the shared `.venv` from then on, and pass the lane's cell python to `handoff.py run --python`.
 - Agents, the orchestrator included, start in a checkout holding `.claude/settings.json`, so the command hook runs for them.
 - A shell profile that exports an older phase's `SDM_PHASE_BRANCH` points every tool at that phase; export the current one, or none.
