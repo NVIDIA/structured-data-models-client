@@ -3,7 +3,7 @@
  "probes": {
   "no-inference-config": {
    "described": "4320c2f4b7e79be61f472576d3e4c6ac157bc6e3fbc2f1407effe2acb60ee2f8",
-   "warnings": "b52de4793e7622571a0454e7d6350f125f90f10dd4d47b3eb2287312f1ade1d6",
+   "warnings": "9feddbcf1692e2a0723ac2e08ea6753c933a543930cd0f4e35762712c2e70df4",
    "materialize_schema": "0969d39d9c30d85f9e544606e9494232ec4954612c793c0c33e0e0140187231b"
   },
   "no-text": {
@@ -13,12 +13,12 @@
   },
   "notebook": {
    "described": "4320c2f4b7e79be61f472576d3e4c6ac157bc6e3fbc2f1407effe2acb60ee2f8",
-   "warnings": "b52de4793e7622571a0454e7d6350f125f90f10dd4d47b3eb2287312f1ade1d6",
+   "warnings": "9feddbcf1692e2a0723ac2e08ea6753c933a543930cd0f4e35762712c2e70df4",
    "materialize_schema": "0969d39d9c30d85f9e544606e9494232ec4954612c793c0c33e0e0140187231b"
   },
   "one-hop": {
    "described": "0907ad6ec67a6e7c4728dab08ac8bc576d14da915c68cee5d2b07d61644e4f02",
-   "warnings": "a61d868f5ecc892fd21cdc5e34f9fd8729915b88fc5a5ca0e370b942cd28d344",
+   "warnings": "82461379f97bb5e6a9bf33f2f67abaab837371b6730eb014b4873ea2e46a176a",
    "materialize_schema": "ed7c30613cb5f32225e50717980eaf426d6289a12cf71592744d6d1930389a5e"
   }
  }
