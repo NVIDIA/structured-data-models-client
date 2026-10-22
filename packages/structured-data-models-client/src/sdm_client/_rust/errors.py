@@ -1280,6 +1280,13 @@ def said(warning: dict[str, Any]) -> str:
         fields.setdefault('column', '.'.join(map(str, fields['columns'])))
         if isinstance(fields.get('example'), list):
             fields['example'] = tuple(fields['example'])
+    if warning['code'] == 'COLUMNS_UNREAD' and 'tables' in fields:
+        # Each column the core names by its table and its name apart, which
+        # the reference joins (`table.column`).
+        fields['columns'] = [
+            f'{table}.{column}'
+            for table, column in zip(fields['tables'], fields['columns'])
+        ]
     template = (templates or {}).get(fields.get('variant'))
     if template is None:
         return str(warning['message'])

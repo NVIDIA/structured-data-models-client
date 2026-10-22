@@ -172,7 +172,10 @@ pub const TABLES_UNLINKED: &str = "TABLES_UNLINKED";
 /// the sampler read (`_warn_of_tables_left_out`).
 pub const TABLES_UNREACHED: &str = "TABLES_UNREACHED";
 /// The notice that columns the request sends are of a meaning the model
-/// does not read (`_warn_of_columns_the_model_does_not_read`).
+/// does not read (`_warn_of_columns_the_model_does_not_read`): `tables`
+/// and `columns` name each column by its table and its name, in step, in
+/// the order of the two joined by a dot, which a host joins so for its
+/// words.
 pub const COLUMNS_UNREAD: &str = "COLUMNS_UNREAD";
 /// The notice that context examples answering the question were taken out
 /// (`_drop_context_that_answers_the_question`).
@@ -2396,7 +2399,7 @@ fn notices(
             .into(),
         });
     }
-    let mut unread: Vec<String> = description
+    let mut unread: Vec<(&str, &str)> = description
         .tables
         .iter()
         .filter(|t| sent.contains(&t.name))
@@ -2409,10 +2412,13 @@ fn notices(
                         .iter()
                         .any(|(et, ec)| *et == t.name && *ec == c.name)
                 })
-                .map(move |c| format!("{}.{}", t.name, c.name))
+                .map(move |c| (t.name.as_str(), c.name.as_str()))
         })
         .collect();
-    unread.sort_unstable();
+    // In the order of `table.column`, as the reference sorts the names it
+    // joins so; the table and the column travel apart, each host joining
+    // them for its words (carried row P2-MID2-3).
+    unread.sort_by_cached_key(|(table, column)| format!("{table}.{column}"));
     if !unread.is_empty() {
         asker.warn(CoreWarning {
             code: COLUMNS_UNREAD.into(),
@@ -2420,8 +2426,12 @@ fn notices(
             fields: [
                 ("variant".to_owned(), Detail::text(several(unread.len()))),
                 (
+                    "tables".to_owned(),
+                    names(unread.iter().map(|(table, _)| *table)),
+                ),
+                (
                     "columns".to_owned(),
-                    names(unread.iter().map(String::as_str)),
+                    names(unread.iter().map(|(_, column)| *column)),
                 ),
                 ("stypes".to_owned(), names(["text"])),
             ]
