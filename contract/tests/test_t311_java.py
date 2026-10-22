@@ -17,7 +17,8 @@ What these run, from the environment, as the brief and choice 10 name it
 
 - ``SDM_JAVA_JAR``: the JAR under test, as ``mvn package`` builds it under
   ``java/target/``, or as CI assembles it with every platform's native.
-  Unset, these tests skip: only a job with a JAR can run them.
+  Unset, these tests have nothing to hold and return, unless
+  ``SDM_REQUIRE_JAVA`` says the job must have a JAR, when they fail.
 - ``JAVA_HOME``: the JDK ``run_java.py`` runs on; ``SDM_JAVA_HOMES``
   (``os.pathsep``-separated): every JDK the load test loads the JAR on,
   ``JAVA_HOME`` alone when unset.
@@ -40,14 +41,16 @@ ASSUMED until the implementer relays them (only this block changes then):
   ``java/src/test/java/com/nvidia/sdm/T311Names.java``), which the load
   probe starts a ``validate_query`` on, so the native is loaded and used.
 
-Each test named in ``contract/tests/t311-pending.json``'s ``pending``
-failed when written, before the implementation, and is held to failing
-(``xfail``, strict) until the implementer takes it out of ``pending``;
-``pending`` stays within ``authored``, the test author's list.
+Gating (``contract/tests/t311_gate.py``): each test named in
+``contract/tests/t311-pending.json``'s ``pending`` failed when written,
+before the implementation, and must still fail until the implementer takes
+it out of ``pending``; once it passes it fails, naming itself. ``pending``
+stays within ``authored``, the test author's list.
 """
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import platform
@@ -56,9 +59,9 @@ import subprocess
 import sys
 import zipfile
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 
-import pytest
 import tomllib
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -70,7 +73,6 @@ S0 = CASES / 's0'
 REFERENCE = next((ROOT / 'contract/reference').glob('*.jsonl'))
 REGISTER = ROOT / 'docs/design/rust-core/register.yaml'
 VECTORS = ROOT / 'contract/t311-java-vectors.json'
-PENDING_FILE = ROOT / 'contract/tests/t311-pending.json'
 #: ASSUMED: the binding's low-level run (T311Names.RUN).
 RUN_CLASS = 'com.nvidia.sdm.internal.Run'
 #: Choice 10's runtime flags, which every Java test runs with.
@@ -93,24 +95,36 @@ PLATFORM_TOKENS: dict[str, tuple[tuple[str, ...], tuple[str, ...], str]] = {
 JAVA_17_MAJOR = 61
 
 
-def _pending_names() -> set[str]:
-    return set(json.loads(PENDING_FILE.read_text(encoding='utf-8'))['pending'])
+def _module(name: str, path: Path) -> ModuleType:
+    spec = importlib.util.spec_from_file_location(name, path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
-def pending(test: Any) -> Any:
-    """Holds ``test`` to failing while ``t311-pending.json`` lists it."""
-    if test.__name__ in _pending_names():
-        return pytest.mark.xfail(
-            strict=True,
-            reason='T3.11: failing until implemented; once it passes, take '
-            'it out of contract/tests/t311-pending.json pending',
-        )(test)
-    return test
+G = _module('t311_gate', ROOT / 'contract/tests/t311_gate.py')
+
+
+def _java_job() -> bool:
+    r"""Whether this job has a JAR to test (``SDM_JAVA_JAR``); a job that
+    says it must (``SDM_REQUIRE_JAVA``) fails without one."""
+    if os.environ.get('SDM_JAVA_JAR'):
+        return True
+    assert not os.environ.get('SDM_REQUIRE_JAVA'), (
+        'SDM_REQUIRE_JAVA is set but SDM_JAVA_JAR names no JAR'
+    )
+    return False
+
+
+#: A test of the JAR, held by the gate, run where there is one.
+java = G.gated(_java_job)
+#: A test held by the gate that needs nothing more.
+held = G.gated()
 
 
 def test_t311_the_pending_list_only_shrinks() -> None:
-    document = json.loads(PENDING_FILE.read_text(encoding='utf-8'))
-    assert set(document['pending']) <= set(document['authored'])
+    assert G.only_shrinks() == []
 
 
 # --- helpers -----------------------------------------------------------------
@@ -118,16 +132,14 @@ def test_t311_the_pending_list_only_shrinks() -> None:
 
 def _jar() -> Path:
     given = os.environ.get('SDM_JAVA_JAR', '')
-    if not given:
-        pytest.skip('SDM_JAVA_JAR names no JAR: the Java jobs set it')
+    assert given, 'SDM_JAVA_JAR names no JAR'
     return Path(given)
 
 
 def _java_homes() -> list[Path]:
     given = os.environ.get('SDM_JAVA_HOMES') or os.environ.get('JAVA_HOME', '')
     homes = [Path(each) for each in given.split(os.pathsep) if each]
-    if not homes:
-        pytest.skip('neither SDM_JAVA_HOMES nor JAVA_HOME names a JDK')
+    assert homes, 'neither SDM_JAVA_HOMES nor JAVA_HOME names a JDK'
     return homes
 
 
@@ -320,7 +332,7 @@ def _probe(
 # --- exit 1: every S0 case on the Java host, and no S1 or S2 leg -------------
 
 
-@pending
+@java
 def test_t311_every_s0_case_on_the_java_host_equals_the_reference(
     tmp_path: Path,
 ) -> None:
@@ -350,9 +362,20 @@ def test_t311_every_s0_case_on_the_java_host_equals_the_reference(
         )
     }
     assert differing == {}
+    # The reference's lines of these cases alone, as handoff.py holds them:
+    # compare.py refuses a line of a case it was not given.
+    held = tmp_path / 'reference.jsonl'
+    held.write_text(
+        ''.join(
+            line + '\n'
+            for line in REFERENCE.read_text(encoding='utf-8').splitlines()
+            if line.strip() and json.loads(line)['case'] in cases
+        ),
+        encoding='utf-8',
+    )
     compared = subprocess.run(
         [sys.executable, str(COMPARE), '--cases', str(S0),
-         '--reference', str(REFERENCE), '--register', str(REGISTER),
+         '--reference', str(held), '--register', str(REGISTER),
          str(out)],
         cwd=ROOT,
         capture_output=True,
@@ -363,7 +386,7 @@ def test_t311_every_s0_case_on_the_java_host_equals_the_reference(
     assert compared.returncode == 0, (compared.stdout + compared.stderr)[-4000:]
 
 
-@pending
+@java
 def test_t311_no_s1_or_s2_java_leg_is_admitted(tmp_path: Path) -> None:
     # Exit 1's second half: no Java provider exists at T3.11, so the runner
     # runs an S0 case and leaves an S1 and an S2 case out, and no committed
@@ -402,7 +425,7 @@ def test_t311_no_s1_or_s2_java_leg_is_admitted(tmp_path: Path) -> None:
 # --- exit 4: the JAR on every JDK, in a clean environment ----------------------
 
 
-@pending
+@java
 def test_t311_the_jar_loads_on_each_jdk_in_a_clean_environment(
     tmp_path: Path,
 ) -> None:
@@ -424,7 +447,7 @@ def test_t311_the_jar_loads_on_each_jdk_in_a_clean_environment(
     assert set(majors) <= set(JDKS), majors
 
 
-@pending
+@java
 def test_t311_the_jar_is_java_17_bytecode() -> None:
     # Choice 10: Java 17 bytecode, so the one JAR runs on JDK 17 and 21.
     jar = _jar()
@@ -437,7 +460,7 @@ def test_t311_the_jar_is_java_17_bytecode() -> None:
     assert majors == {JAVA_17_MAJOR}
 
 
-@pending
+@java
 def test_t311_the_jar_holds_a_native_for_every_platform_named() -> None:
     # Exit 4 and check 14's control (a JAR missing one architecture's
     # native): each platform named holds exactly one native in the JAR.
@@ -456,7 +479,7 @@ def test_t311_the_jar_holds_a_native_for_every_platform_named() -> None:
     assert len(set(entries)) == len(entries), found
 
 
-@pending
+@java
 def test_t311_a_jar_without_this_platform_s_native_is_a_named_error(
     tmp_path: Path,
 ) -> None:
@@ -498,7 +521,7 @@ def test_t311_a_jar_without_this_platform_s_native_is_a_named_error(
 # --- the binding's edges (exit 5's crate rule, held on the real tree) ------------
 
 
-@pending
+@held
 def test_t311_sdm_jni_depends_on_sdm_host_and_sdm_contract_and_no_pyo3() -> (
     None
 ):
