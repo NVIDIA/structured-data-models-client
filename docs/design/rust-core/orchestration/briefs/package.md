@@ -1,7 +1,7 @@
 # Package brief template
 
 Every package brief is written from this template before its test author starts (learnings.md, lesson 16).
-`lane.py start --brief <file>` refuses a brief missing one of the `##` headings below, naming it (planned in T3.1, Phase 3's design).
+`scripts/rust_core/brief_check.py <file>` names every `##` heading below a brief leaves out (T3.1); the orchestrator runs it before each launch, and T3.2's tooling train makes `lane.py start --brief <file>` refuse such a brief.
 A heading may say "none" with a reason; it may not be left out.
 The standing rules of [implementer.md](implementer.md) and [test-author.md](test-author.md) are appended after it, as today.
 
