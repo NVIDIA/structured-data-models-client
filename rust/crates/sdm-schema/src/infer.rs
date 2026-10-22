@@ -271,15 +271,20 @@ impl InferredTable {
     /// Whether the source refuses both a repeated value of `key` and a row
     /// missing part of it, which leaves nothing to count.
     pub fn enforces(&self, key: &[String]) -> bool {
-        let names: BTreeSet<&String> = key.iter().collect();
-        let unique = self
-            .unique
-            .iter()
-            .any(|set| set.iter().all(|column| names.contains(column)));
+        let unique = self.keeps_unique(key);
         let never_null = key
             .iter()
             .all(|name| self.columns.iter().any(|c| &c.name == name && !c.nullable));
         unique && never_null
+    }
+
+    /// Whether the source keeps `key` unique: a declared primary or unique
+    /// key within it, whether or not its columns may hold a null.
+    pub fn keeps_unique(&self, key: &[String]) -> bool {
+        let names: BTreeSet<&String> = key.iter().collect();
+        self.unique
+            .iter()
+            .any(|set| set.iter().all(|column| names.contains(column)))
     }
 
     /// The column `name`, if the table has it.
@@ -535,6 +540,10 @@ pub fn preview_keyed(
         // one (SQLite's, as the reference types a column by it first,
         // whatever its values); any other, its values' type.
         let dtype = match declared.dtype {
+            // A declaration the reference reads as unsupported (Databricks'
+            // struct, map or interval, `_to_dtype`) is refused by name, as
+            // a struct or map the values give is (register P1B-10).
+            Some(Dtype::Unsupported) => return Err(not_yet("column_type")),
             Some(declared) => declared,
             None => dtype_of(field.data_type())?,
         };

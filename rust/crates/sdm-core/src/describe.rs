@@ -134,22 +134,43 @@ pub(crate) async fn run(
     let mut tables = Vec::with_capacity(names.len());
     // Each table's marked big integers' declared types (big_integer_types).
     let mut big_types = Vec::with_capacity(names.len());
-    for table in &names {
-        let one = || vec![table.source.clone()];
-        let asked = describe_all(
+    let mut names = names;
+    for table in &mut names {
+        // The columns first, then the keys, as the reference reads them: a
+        // catalog naming the table otherwise than it was asked (Unity
+        // Catalog's lower-cased names) names it so in every later read,
+        // the keys' included, as the reference adopts the names it reads
+        // back (`_get_source_columns`).
+        let asked = match describe(
             &asker,
-            [
-                DataRequest::Describe {
-                    tables: one(),
-                    part: DescribePart::Columns,
-                },
-                DataRequest::Describe {
-                    tables: one(),
-                    part: DescribePart::Keys,
-                },
-            ],
+            DataRequest::Describe {
+                tables: vec![table.source.clone()],
+                part: DescribePart::Columns,
+            },
         )
-        .await;
+        .await
+        {
+            Ok(columns) => {
+                if let CatalogAnswer::Columns(read) = &columns
+                    && let Some(canonical) = read.first().and_then(|c| c.canonical.clone())
+                    && !canonical.is_empty()
+                    && canonical.iter().all(|part| !part.is_empty())
+                {
+                    table.source = Relation::of(canonical);
+                }
+                describe(
+                    &asker,
+                    DataRequest::Describe {
+                        tables: vec![table.source.clone()],
+                        part: DescribePart::Keys,
+                    },
+                )
+                .await
+                .map(|keys| [columns, keys])
+            }
+            Err(failed) => Err(failed),
+        };
+        let table = &*table;
         let [columns, keys] = match asked {
             Ok(answers) => answers,
             // A table the caller named that the source does not hold: a
@@ -658,14 +679,12 @@ fn declared_links(
 ) -> Vec<Vec<ColumnRef>> {
     // Source name to the table described under it, the last one winning,
     // in the order each source name first appears. A relation of several
-    // parts names its table by them, which a foreign key's one name does
-    // not say: none refers to it (design choice 12; Phase 2's hosts give
-    // one part).
-    let mut by_source: Vec<(&str, &InferredTable)> = Vec::new();
+    // parts is named by its parts joined by dots, as the reference names a
+    // table (`source_name`) and a foreign key the table it refers to
+    // (Databricks' `catalog.schema.table`, contract v28).
+    let mut by_source: Vec<(String, &InferredTable)> = Vec::new();
     for described in tables {
-        let Some(name) = described.source.single() else {
-            continue;
-        };
+        let name = described.source.dotted();
         match by_source.iter_mut().find(|(source, _)| *source == name) {
             Some(slot) => slot.1 = described,
             None => by_source.push((name, described)),
@@ -691,7 +710,7 @@ fn declared_links(
         let exact = by_source
             .iter()
             .find(|(source, _)| *source == part.referenced_table);
-        let folded: Vec<&(&str, &InferredTable)> = by_source
+        let folded: Vec<&(String, &InferredTable)> = by_source
             .iter()
             .filter(|(source, _)| source.to_lowercase() == part.referenced_table.to_lowercase())
             .collect();
@@ -803,10 +822,12 @@ async fn count_keys(
         .iter()
         .enumerate()
         .map(|(at, &(i, label))| TableKey {
-            unique: false,
             table: tables[i].source.clone(),
             columns: tables[i].primary_key.clone(),
             label: (label != at as u64).then_some(label),
+            // A key the source keeps unique, counted as the reference
+            // counts one (`_key_count_sql`, carried row P2-T2.2-3).
+            unique: tables[i].keeps_unique(&tables[i].primary_key),
         })
         .collect();
     let answered = ask(
@@ -890,18 +911,6 @@ pub(crate) async fn describe(
 ) -> Result<CatalogAnswer, CoreError> {
     let data = ask(asker, request.clone()).await?;
     asker.read(&request, &data)
-}
-
-/// The catalog's answers to `requests`, asked together in one step, in
-/// order.
-async fn describe_all<const N: usize>(
-    asker: &Asker,
-    requests: [DataRequest; N],
-) -> Result<[CatalogAnswer; N], CoreError> {
-    let answers = describe_vec(asker, requests.into()).await?;
-    answers
-        .try_into()
-        .map_err(|_| internal("a step answered another number of requests"))
 }
 
 async fn describe_vec(
