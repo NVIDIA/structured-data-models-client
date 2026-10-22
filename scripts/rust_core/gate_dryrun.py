@@ -193,22 +193,44 @@ def stub_text(kind: Kind) -> str:
     )
 
 
+#: What a stub is expected to meet, noted, never a gap (T3.2, from the full
+#: dry run): no reference line until python-ref records it (the design,
+#: "The checking tools' dry run": coverage's rule 6 and compare's "no
+#: reference observation"), and the comparator's statement counts, which
+#: are information.
+EXPECTED = re.compile(r'no reference observation|statements per public call:')
+#: The words that make a line naming a kind a gap, read outside the kind's
+#: own names (an id such as ``dryrun.endpoint.only-call-refused`` holds
+#: one).
+FAILURE = re.compile(
+    r'fail|refus|not |no |missing|unknown|error|invalid|differ', re.I
+)
+
+
+def _without(text: str, names: set[str]) -> str:
+    r"""``text`` with each of ``names`` taken out, longest first."""
+    for name in sorted(names, key=len, reverse=True):
+        text = text.replace(name, ' ')
+    return text
+
+
 def attribute(
     step: str, output: str, kinds: list[Kind], failed: bool
 ) -> list[str]:
-    r"""Each line of a tool's output naming a kind becomes that kind's gap;
-    the lines of a failing tool that name none are returned."""
+    r"""Each line of a tool's output naming a kind becomes that kind's gap,
+    unless the stub is expected to meet it (:data:`EXPECTED`, a note); the
+    lines of a failing tool that name none are returned."""
     unclaimed = []
     for line in output.splitlines():
         text = line.strip()
         if not text:
             continue
         owners = [k for k in kinds if any(n in text for n in k.names())]
-        if owners and re.search(
-            r'fail|refus|not |no |missing|unknown|error|invalid|differ',
-            text,
-            re.I,
-        ):
+        named = set().union(*(k.names() for k in owners)) if owners else set()
+        if owners and EXPECTED.search(text):
+            for kind in owners:
+                kind.notes.append(f'{step}: {text}')
+        elif owners and FAILURE.search(_without(text, named)):
             for kind in owners:
                 kind.gaps.append(f'{step}: {text}')
         elif (
@@ -380,6 +402,10 @@ def dry_run(arguments: argparse.Namespace) -> int:
                     '.',
                     '--checkpoint',
                     checkpoint,
+                    # The stubs are the dry run's own change, named as a
+                    # landing would name it (T3.2).
+                    '--protected-paths',
+                    f'{STUBS}/**',
                 ],
             ),
         ]
@@ -483,8 +509,24 @@ def dry_run(arguments: argparse.Namespace) -> int:
                 line
                 for line in lines
                 if kind.id in line
-                or re.search(r'refus|cannot|unknown|not a', line, re.I)
+                or re.search(
+                    r'refus|cannot|unknown|not a',
+                    _without(line, kind.names()),
+                    re.I,
+                )
             ]
+            expected = [line for line in told if EXPECTED.search(line)]
+            kind.notes.extend(f'compare: {line}' for line in expected)
+            told = [line for line in told if not EXPECTED.search(line)]
+            differing = [line for line in told if line.startswith('DIFFERS')]
+            if (
+                expected
+                and not differing
+                and not [line for line in told if 'runner failure' in line]
+            ):
+                # Only what a stub is expected to meet: judged.
+                kind.judged.append('compare')
+                continue
             kind.gaps.extend(
                 f'compare: {line}' for line in (told or lines[-1:])[:SHOWN]
             )
@@ -498,7 +540,8 @@ def dry_run(arguments: argparse.Namespace) -> int:
         if arguments.gate and valid:
             done = _run(
                 ['bash', 'scripts/rust_core/gate.sh', '--base', base, '--locked', arguments.gate,
-                 '--run', 'python-core,python-old', '--out', str(scratch / 'gate')],
+                 '--run', 'python-core,python-old', '--out', str(scratch / 'gate'),
+                 '--protected-paths', f'{STUBS}/**'],
                 tree,
                 env={**os.environ, **({'PYTHON': arguments.python} if arguments.python else {})},
             )  # fmt: skip

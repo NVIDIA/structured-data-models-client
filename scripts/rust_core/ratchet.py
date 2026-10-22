@@ -844,7 +844,15 @@ def observations(paths: Iterable[Path]) -> dict[str, dict[str, Any]]:
     r"""Observations by runner and case, from their files."""
     found: dict[str, dict[str, Any]] = {}
     for path in paths:
-        lines = jsonl(path.read_text(encoding='utf-8'), path.name)
+        try:
+            text = path.read_text(encoding='utf-8')
+        except FileNotFoundError:
+            # A runner that failed wrote none (the gate's observations
+            # step names why); named here, never a traceback (T3.2).
+            raise Unreadable(
+                f'{path.name}: no observations written; the runner failed'
+            ) from None
+        lines = jsonl(text, path.name)
         if not lines:
             raise Unreadable(f'{path.name}: no observations')
         for line in lines:

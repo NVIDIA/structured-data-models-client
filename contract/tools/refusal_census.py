@@ -13,6 +13,7 @@ probe, and each probe run on both routes.
         --reference-python PYTHON [--database duckdb] --out FILE
     python contract/tools/refusal_census.py real-data --database LEG
         --cases DIR --control CASE --out FILE
+        (also --real-data --leg LEG ..., the report list's form)
 
 ``sites`` prints the sites of DIR's code as JSON, never written by hand:
 
@@ -652,6 +653,15 @@ def real_data(cases: Path, database: str, control: Path) -> dict[str, Any]:
 
 
 def main(argv: list[str] | None = None) -> int:
+    given = list(sys.argv[1:] if argv is None else argv)
+    if given[:1] == ['--real-data']:
+        # The form the locked checks' report list writes (dryrun-plan.yaml's
+        # reports, check 2): --real-data --leg LEG.
+        given = [
+            'real-data',
+            *('--database' if each == '--leg' else each for each in given[1:]),
+        ]
+    argv = given
     parser = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     commands = parser.add_subparsers(dest='command', required=True)
     for name in ('sites', 'check'):

@@ -105,8 +105,25 @@ def build(repo: Path) -> tuple[Path, str]:
         capture_output=True,
         check=True,
     ).stdout.split(b'\0')
+    # The seeded tests judge their own fixture: the corpus's cases the
+    # committed reference observes (rule 6's evidence), never a case added
+    # beside them without a reference line yet (a dry run's stubs, T3.2),
+    # whose rule 6 line every exact problem list would then carry.
+    recorded = {
+        json.loads(text)['case'].partition('@')[0]
+        for path in sorted((ROOT / REFERENCE).glob('*.jsonl'))
+        for text in path.read_text(encoding='utf-8').splitlines()
+        if text.strip()
+    }
     for name in filter(None, (item.decode() for item in listed)):
         source = ROOT / name
+        if (
+            name.startswith(CASES + '/')
+            and name.endswith('.json')
+            and json.loads(source.read_text(encoding='utf-8')).get('id')
+            not in recorded
+        ):
+            continue
         if source.is_file():
             (repo / name).parent.mkdir(parents=True, exist_ok=True)
             (repo / name).write_bytes(source.read_bytes())

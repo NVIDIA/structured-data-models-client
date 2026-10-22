@@ -1159,7 +1159,9 @@ def check(
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split('\n')[0])
-    parser.add_argument('--check', action='store_true', required=True)
+    # --check, or the report list's --gate SLICE alone (T3.2): the same
+    # check, gating the slices named.
+    parser.add_argument('--check', action='store_true')
     parser.add_argument('--repo', type=Path)
     parser.add_argument('--rev', default='HEAD')
     parser.add_argument('--checkpoint', required=True)
@@ -1171,9 +1173,14 @@ def main(argv: list[str] | None = None) -> int:
         'java:S1 (T3.2); default python:S0, the active slice',
     )
     arguments = parser.parse_args(argv)
+    if not arguments.check and not arguments.gate:
+        parser.error('give --check, --gate LANGUAGE:SLICE, or both')
     gates = []
     for given in arguments.gate or [':'.join(ACTIVE)]:
-        language, _, active = given.partition(':')
+        # A bare slice is Python's (the report list's --gate S2).
+        language, _, active = (
+            given.partition(':') if ':' in given else ('python', ':', given)
+        )
         if language not in MANIFESTS or active not in SLICES:
             parser.error(
                 f'--gate {given}: a language of {sorted(MANIFESTS)} and a slice of {SLICES}'

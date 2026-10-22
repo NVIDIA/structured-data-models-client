@@ -188,7 +188,19 @@ def _invalid(validate: Any, document: Any) -> str | None:
     if error is None:
         return None
     where = '/'.join(str(part) for part in error.absolute_path) or '(root)'
-    return f'{where} fails {error.validator!r}'
+    named = ''
+    if error.validator == 'additionalProperties' and isinstance(
+        error.instance, dict
+    ):
+        # The keys the format does not have, by name (a key is the format's
+        # word, never an input's value): the dry run's refusals named none.
+        allowed = set((error.schema or {}).get('properties') or {})
+        unknown = sorted(
+            str(key) for key in error.instance if key not in allowed
+        )
+        if unknown:
+            named = f' ({", ".join(unknown)} not a field there)'
+    return f'{where} fails {error.validator!r}{named}'
 
 
 #: Each item of a list, in a path into a document.
@@ -4749,9 +4761,11 @@ def _calls(
             raise
         except Exception as error:  # noqa: BLE001 - the call's outcome
             if _route_error(error):
+                # Its text names routes, the client's own words, never an
+                # input: which route was refused, and why (T3.2).
                 raise RunnerFailure(
                     f'{case["id"]}: the route was refused '
-                    f'({type(error).__name__})'
+                    f'({type(error).__name__}: {error})'
                 ) from None
             outcome = _outcome('refusal', stage, error)
         finally:

@@ -527,3 +527,77 @@ def test_java_like_rust_host_observes_no_stage_or_class() -> None:
         COMPARE._expectation(report, {'id': 'c', 'expect': expect}, who, seen)
         assert bool(report.failures) is failing, (who, report.texts)
     assert RATCHET.UNOBSERVED['java'] == RATCHET.UNOBSERVED['rust-host']
+
+
+# --- the full dry run's findings (fix 1) ------------------------------------------------
+
+
+DRYRUN = _module(ROOT / 'scripts/rust_core/gate_dryrun.py', 't32_own_dryrun')
+
+
+def _kind(case_id: str) -> Any:
+    return DRYRUN.Kind(name=case_id, case={'id': case_id})
+
+
+def test_the_dry_run_reads_failure_words_outside_a_kind_s_id() -> None:
+    refused = _kind('dryrun.endpoint.only-call-refused')
+    other = _kind('dryrun.switch.edit')
+    DRYRUN.attribute(
+        'gate',
+        'ok   dryrun.endpoint.only-call-refused judged\n'
+        'FAILS dryrun.switch.edit: a missing column\n',
+        [refused, other],
+        True,
+    )
+    assert refused.gaps == []
+    assert other.gaps == ['gate: FAILS dryrun.switch.edit: a missing column']
+
+
+def test_a_stub_s_missing_reference_line_is_noted_not_a_gap() -> None:
+    kind = _kind('dryrun.switch.edit')
+    DRYRUN.attribute(
+        'coverage',
+        'rule 6: case dryrun.switch.edit: claims int64/primary-key with no '
+        'reference observation of the case to hold them to\n'
+        'DIFFERS dryrun.switch.edit: no reference observation\n',
+        [kind],
+        True,
+    )
+    assert kind.gaps == [] and len(kind.notes) == 2
+
+
+def test_the_ratchet_names_a_runner_that_wrote_no_observations(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(RATCHET.Unreadable, match='no observations written'):
+        RATCHET.observations([tmp_path / 'python-core.jsonl'])
+
+
+def test_a_refused_case_names_the_field_the_format_does_not_have() -> None:
+    run = _module(ROOT / 'contract/runners/run_python.py', 't32_own_run_python')
+    case = json.loads((ROOT / 'contract/cases/s1/base.binary.json').read_text())
+    case['input']['pickle'] = 'request'
+    problem = run._invalid(run.validator('case'), case)
+    assert problem is not None and 'pickle not a field there' in problem
+
+
+def test_the_report_list_s_forms_run(tmp_path: Path) -> None:
+    for command in (
+        [
+            str(ROOT / 'contract/tools/refusal_census.py'),
+            '--real-data',
+            '--leg',
+            'snowflake',
+            '--help',
+        ],
+        [str(ROOT / 'scripts/rust_core/coverage.py'), '--gate', 'S2', '--help'],
+    ):
+        done = subprocess.run(
+            [sys.executable, *command],
+            capture_output=True,
+            text=True,
+            stdin=subprocess.DEVNULL,
+            timeout=120,
+            check=False,
+        )
+        assert done.returncode == 0, done.stdout + done.stderr
