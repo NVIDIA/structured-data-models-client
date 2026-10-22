@@ -2390,11 +2390,11 @@ def scan_cases(results: list[Result]) -> None:
 
     def jni(root: Path, text: str) -> None:
         source = root / 'rust/bindings/sdm-jni/src'
-        source.mkdir(parents=True)
+        source.mkdir(parents=True, exist_ok=True)
         (source / 'lib.rs').write_text(text)
 
     dialects(
-        "control: Java's binding, sdm-jni, absent until it exists",
+        "control: Java's binding, sdm-jni, as the tree holds it (absent until T3.11)",
         lambda r: None,
         None,
     )
