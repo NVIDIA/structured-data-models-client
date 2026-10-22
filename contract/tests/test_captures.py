@@ -370,3 +370,111 @@ def test_a_recording_mode_line_is_written_as_a_capture(tmp_path: Path) -> None:
 def test_a_recording_line_of_another_format_is_refused_by_name() -> None:
     with pytest.raises(captures.CaptureError, match='sdm-record/9'):
         captures.from_recording({'format': 'sdm-record/9', 'leg': 'snowflake'})
+
+
+def test_a_nested_field_s_metadata_holding_a_private_name_is_refused(
+    tmp_path: Path,
+) -> None:
+    # Review r1 P1-1: a struct child's metadata is searched too.
+    child = pa.field(
+        'child', pa.int64(), metadata={b'origin': b'tok-secret-0001'}
+    )
+    table = pa.table(
+        {'parent': pa.array([{'child': 1}], type=pa.struct([child]))}
+    )
+    with pytest.raises(captures.PrivateName, match='SNOWFLAKE_ACCESS_TOKEN'):
+        captures.write(
+            tmp_path / 'c', _capture(tables={'t': table}), environ=ENVIRON
+        )
+    assert not any(tmp_path.iterdir())
+    # A placeholder's value in a nested name or metadata is replaced.
+    named = pa.field(
+        'Hidden_Schema', pa.int64(), metadata={b'from': b'Real_Cat'}
+    )
+    held = pa.table(
+        {'p': pa.array([{'Hidden_Schema': 1}], type=pa.struct([named]))}
+    )
+    path = captures.write(
+        tmp_path / 'd', _capture(tables={'t': held}), environ=ENVIRON
+    )
+    back = captures.read(path)['tables']['t'].schema.field('p').type.field(0)
+    assert back.name == '{schema}' and back.metadata == {b'from': b'{catalog}'}
+
+
+def test_nested_types_keep_their_fields_through_write_and_read(
+    tmp_path: Path,
+) -> None:
+    # Review r1 P2-3: a child's name and nullability are the driver's.
+    element = pa.field('element', pa.int64(), nullable=False)
+    member = pa.field('x', pa.string(), nullable=False)
+    table = pa.table(
+        {
+            'l': pa.array([[1, 2], []], type=pa.list_(element)),
+            's': pa.array([{'x': 'a'}, {'x': 'b'}], type=pa.struct([member])),
+            'm': pa.array(
+                [[('k', 1)], []],
+                type=pa.map_(
+                    pa.string(), pa.field('v', pa.int32(), nullable=False)
+                ),
+            ),
+        }
+    )
+    for environ in ({}, {'SDM_CAPTURE_CATALOG': 'b'}):
+        path = captures.write(
+            tmp_path / f'c{len(environ)}',
+            _capture(tables={'t': table}),
+            environ=environ,
+        )
+        back = captures.read(path)['tables']['t']
+        for name in ('l', 's', 'm'):
+            got, want = (
+                back.schema.field(name).type,
+                table.schema.field(name).type,
+            )
+            assert got == want, (environ, name, got, want)
+            if name != 'm':
+                # Arrow's IPC names a map's entries key and value whatever
+                # they were (they are no part of its type's equality).
+                assert str(got) == str(want)
+
+
+def test_every_read_of_a_recorded_statement_is_kept(tmp_path: Path) -> None:
+    # Review r1 P2-4 and P3-5: a fetchmany then a fetchall are one result,
+    # every row kept; a named binding keeps its name.
+    import base64
+
+    def text(table: pa.Table) -> str:
+        return base64.b64encode(captures.table_bytes(table)).decode()
+
+    line = {
+        'format': 'sdm-record/1',
+        'case': 'c@databricks-sql',
+        'leg': 'databricks-sql',
+        'recording': {'commit': 'a' * 40, 'reference': 'b' * 40},
+        'versions': {},
+        'input': '0' * 64,
+        'zone': 'UTC',
+        'observation': {},
+        'tables': [],
+        'relations': [],
+        'draws': [],
+        'statements': [
+            {
+                'sql': 'SELECT x FROM t WHERE x = %(x)s',
+                'parameters': [
+                    {'name': 'x', 'type': 'builtins.int', 'value': '3'}
+                ],
+                'error': None,
+                'results': [
+                    {'arrow': text(pa.table({'x': [1]}))},
+                    {'arrow': text(pa.table({'x': [2]}))},
+                ],
+            }
+        ],
+    }
+    found = captures.from_recording(line)
+    assert found['statements'][0]['result'].to_pylist() == [{'x': 1}, {'x': 2}]
+    assert found['statements'][0]['parameters'] == [{'name': 'x', 'value': 3}]
+    line['statements'][0]['results'].append({'arrow': None})
+    with pytest.raises(captures.CaptureError, match='kept no table'):
+        captures.from_recording(line)
