@@ -33,7 +33,7 @@
       "moved": "T2.13: the result read as a table and its explanation taken from the schema's metadata, where the core puts the result's explanation (sdm-request predict's table); no rule added; T2.14b: the answer handed to the core as the bytes the endpoint sent (no re-encoding, no made-up too-deep body), and no host call counter: the refused part's forecast step and ranking candidate, and the parts answered, are the core's (MID2 P2-4)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_carry_the_answers": {
-      "moved": "T2.13: the carried answers' explanation, which the core puts on the result's schema with the model and metadata, handed to _result as the result's; no rule added"
+      "moved": "T2.13: the carried answers' explanation, which the core puts on the result's schema with the model and metadata, handed to _result as the result's; no rule added; T3.4: the model, request id, metadata and outputs are AnsweredParts' own fields (contract v28, carried row P2-T2.8c-2), read from the error the run gave (run.py's _answered) instead of the result's schema; the explanation stays on the schema; words unchanged, no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_result": {
       "moved": "T2.11: an answer's embeddings, which the core reads and lays out (sdm-wire response, sdm-request predict), handed into each PredictionItem as the tuple the bindings hold; no rule added"
@@ -267,7 +267,7 @@
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::said": {
-      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added; T3.4: COLUMNS_UNREAD names each column's table and name apart (contract v28, carried row P2-MID2-3), which said joins as table.column for the same words; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::warn_from_core": {
       "moved": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added; T2.14b fix 5 (KO2-88, the orchestrator's): FX-1's FLOAT32_OVERFLOW, which the core reports on every runtime, is shown as RuntimeWarning only where the installed NumPy warns of a float32 cast's overflow (1.24 or later), as the reference's NumPy shows it; how a warning is shown is the host's (KO2-32)"
