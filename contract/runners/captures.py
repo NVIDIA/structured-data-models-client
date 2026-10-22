@@ -84,6 +84,15 @@ VERSIONS = ('sdm-capture/1',)
 #: The legs a capture is for (design, choice 1).
 LEGS = ('databricks-sql', 'databricks-spark', 'snowflake', 'lakebase')
 
+#: Each leg's NULL order in an ascending sort, as its engine orders by
+#: default (Spark puts NULLs first; Snowflake and Postgres last).
+NULL_ORDER = {
+    'databricks-sql': 'nulls_first',
+    'databricks-spark': 'nulls_first',
+    'snowflake': 'nulls_last',
+    'lakebase': 'nulls_last',
+}
+
 #: A capture directory's document.
 DOCUMENT = 'capture.json'
 
@@ -800,6 +809,138 @@ def write_manifest(directory: Path) -> Path:
     return path
 
 
+# --- the recording mode's lines ------------------------------------------------------
+
+
+def _parameter(value: Any) -> Any:
+    r"""A parameter as the recording mode logged it (``{"type", "value"}``,
+    its type and ``repr``), as the JSON value the old client passed: a
+    built-in value read back from its ``repr``, anything else kept as
+    logged."""
+    import ast
+
+    if not isinstance(value, Mapping) or set(value) - {'type', 'value', 'name'}:
+        return value
+    if str(value.get('type', '')).startswith('builtins.'):
+        try:
+            read = ast.literal_eval(str(value['value']))
+        except (ValueError, SyntaxError):
+            return dict(value)
+        if read is None or isinstance(read, (bool, int, float, str)):
+            return read
+    return dict(value)
+
+
+def _ipc_text(text: str) -> Any:
+    r"""A table the recording mode wrote as the base64 text of an IPC
+    stream."""
+    import base64
+
+    import pyarrow as pa
+
+    return pa.ipc.open_stream(io.BytesIO(base64.b64decode(text))).read_all()
+
+
+def from_recording(
+    line: Mapping[str, Any], null_order: str | None = None
+) -> dict[str, Any]:
+    r"""One line of ``run_python.py --record`` (the recording mode, T3.2:
+    ``capture_line``, its private names already placeheld and every table
+    the base64 text of an IPC stream) as a capture :func:`write` takes:
+    each statement's first result its result, each draw its statement's
+    rows, each view-derived relation's warehouse-evaluated table (or the
+    statement's error, its relation then served by exact replay alone),
+    the session's zone, and the leg's NULL order (:data:`NULL_ORDER`)."""
+    leg = line['leg']
+    case = str(line['case']).rpartition('@')[0] or str(line['case'])
+    recording = line.get('recording') or {}
+
+    def table_of(value: Any) -> Any:
+        return None if value is None else _ipc_text(value)
+
+    statements = []
+    for statement in line.get('statements', []):
+        results = statement.get('results') or []
+        first = next((r for r in results if r.get('arrow') is not None), None)
+        entry: dict[str, Any] = {
+            'text': statement.get('sql') or '',
+            'parameters': [
+                _parameter(value) for value in statement.get('parameters') or []
+            ],
+            'result': table_of(first['arrow']) if first else None,
+        }
+        if statement.get('error') is not None:
+            entry['error'] = statement['error']
+        statements.append(entry)
+    draws = []
+    for draw in line.get('draws', []):
+        rows = statements[draw['statement']]['result']
+        if rows is None:
+            raise CaptureError(
+                f'{case}@{leg}: a draw whose statement kept no rows'
+            )
+        draws.append(
+            {
+                'table': draw['table'],
+                'seed': None if draw.get('seed') is None else int(draw['seed']),
+                'fraction': draw['fraction']
+                + (' ROWS' if draw.get('kind') == 'sample_rows' else ''),
+                'rows': rows,
+                'statement': statements[draw['statement']]['text'],
+            }
+        )
+    derived = []
+    for i, relation in enumerate(line.get('relations', [])):
+        derived.append(
+            {
+                'view': '',
+                'table': f'derived_{i}',
+                'columns': [],
+                'filter': relation.get('sql'),
+                'refused': [] if relation.get('table') else ['(refused)'],
+                'data': table_of(relation.get('table')),
+            }
+        )
+    return {
+        'case': case,
+        'leg': leg,
+        'recording_commit': recording.get('commit'),
+        'reference_commit': recording.get('reference'),
+        'versions': line.get('versions') or {},
+        'input_hash': line.get('input'),
+        'session': {
+            'time_zone': line.get('zone') or 'UTC',
+            'null_order': null_order or NULL_ORDER[leg],
+        },
+        'reference': line.get('observation') or {},
+        'tables': {
+            entry['name']: table_of(entry['arrow'])
+            for entry in line.get('tables', [])
+        },
+        'derived': derived,
+        'draws': draws,
+        'statements': statements,
+    }
+
+
+def import_recording(
+    path: Path, out: Path, environ: Mapping[str, str] | None = None
+) -> list[Path]:
+    r"""Every line of the recording mode's file ``path`` written as a
+    capture under ``out/<leg>/<case>/`` (:func:`write`: placeholders and
+    the private-name search again, so a name the recording missed still
+    fails here), then each leg's manifest; returns the manifests."""
+    legs: set[Path] = set()
+    for text in Path(path).read_text(encoding='utf-8').splitlines():
+        if not text.strip():
+            continue
+        capture = from_recording(json.loads(text))
+        directory = Path(out) / capture['leg']
+        write(directory / capture['case'], capture, environ=environ)
+        legs.add(directory)
+    return [write_manifest(directory) for directory in sorted(legs)]
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
     commands = parser.add_subparsers(dest='command', required=True)
@@ -815,7 +956,17 @@ def main(argv: list[str] | None = None) -> int:
         'manifest', help="write a leg directory's manifest.json"
     )
     listing.add_argument('directory', type=Path)
+    importing = commands.add_parser(
+        'import',
+        help="write each line of run_python.py --record's file as a capture",
+    )
+    importing.add_argument('recording', type=Path)
+    importing.add_argument('out', type=Path)
     arguments = parser.parse_args(argv)
+    if arguments.command == 'import':
+        for path in import_recording(arguments.recording, arguments.out):
+            print(f'wrote {path}')
+        return 0
     if arguments.command == 'manifest':
         print(f'wrote {write_manifest(arguments.directory)}')
         return 0
