@@ -536,6 +536,19 @@ def rust_production(root: Path, previous: str, diffed: list[str]) -> list[str]:
     return found
 
 
+def previous_cargo_env(
+    environ: dict[str, str] | os._Environ[str], root: Path
+) -> dict[str, str]:
+    r"""The environment the previous round's Rust tests build in: the
+    caller's, with a target directory of its own beside the caller's. Cargo
+    keys a workspace member's build by its name, not its directory, so the
+    previous tree built into the caller's target leaves artifacts newer
+    than the candidate's sources, which the next build takes as fresh (a
+    module the candidate adds then cannot be found)."""
+    target = environ.get('CARGO_TARGET_DIR') or str(root / 'rust' / 'target')
+    return {**environ, 'CARGO_TARGET_DIR': target.rstrip('/') + '-previous'}
+
+
 def step_fails_before(
     root: Path,
     base: str,
@@ -623,7 +636,7 @@ def step_fails_before(
                 done = run(
                     ['cargo', 'test', '-q', '--manifest-path', 'rust/Cargo.toml',
                      '-p', match.group(1), '--test', match.group(2)],
-                    tree,
+                    tree, previous_cargo_env(os.environ, root),
                 )  # fmt: skip
                 (failed if done.returncode else passed).append(path)
             for path in spliced:
@@ -633,7 +646,7 @@ def step_fails_before(
                 done = run(
                     ['cargo', 'test', '-q', '--manifest-path', 'rust/Cargo.toml',
                      '-p', crate.group(2), '--lib'],
-                    tree,
+                    tree, previous_cargo_env(os.environ, root),
                 )  # fmt: skip
                 (failed if done.returncode else passed).append(
                     f'{path} (#[cfg(test)])'
