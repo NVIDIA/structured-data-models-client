@@ -80,7 +80,7 @@ If not, the host computes it and the contract carries the result.
 In the first attempt, matching Python bit for bit meant copying behavior nobody designed, such as where CPython's sort leaves NaN scores, and Python itself answered differently on pandas 2 and 3 and across hash seeds.
 In Phase 2, the owner's "match the old client by default" was read literally: packages ported NumPy's quicksort for tie order, pydantic-core's integer parser, kept NaN sign bits apart, and added a comparator rule for how many identical warnings repeat.
 It cost rounds on T2.11, T2.12 and T2.13 and one judging rule.
-**Lesson:** "match" means the same answer, the same refusal kind and the same user-visible message.
+**Lesson:** "match" means the same answer, the same refusal kind and the same user-visible message, or better: a better error, or support for an input the old client fails on, registered as an improvement (the owner, KO3-41: "Ideally our new client has feature parity or is even better than old client. Better means better error or more support.").
 Statement counts, warning repeat counts, tie order among equal scores and hash order are matched only when a user can observe them; otherwise they fall in one standing register class the owner approves once (the owner, 2026-10-21, RCA decision 6: "Yes"; Phase 3 decision KO3-7).
 Keep a short register of quirks kept on purpose and drop the rest by explicit decision.
 **Enforced by:** `register.py validate` and the ratchet, which fail any changed outcome without an approved entry (*exists*); the reviewer report's `differences:` list, in which any difference without an approved entry blocks (*T3.0*: `docs/design/rust-core/orchestration/briefs/reviewer.md`).
@@ -240,9 +240,9 @@ But they used different bars: Claude rated rare reference mismatches P3 a round 
 Both wrote verdicts before CI finished and, after round 1, reviewed only the fix, so a census failure red on round 1 surfaced in round 5 and an encoding regression survived seven rounds.
 **Lesson:** both reviewers start from the same evidence: the handoff stamp, the previous round's finished CI, and the package's cases against the reference; they probe only when the code looks wrong.
 Every third round, and whenever a fix changes a shared mechanism, the whole range is re-read.
-One severity bar: any measured difference from the reference on a public call, any red gate or CI job the change caused, and any decision row wider than the owner's words is at least P2; attack-style hardening of internal tools stays P3 (Phase 2 decision KO2-52).
+One severity bar, the owner's (Phase 3 decisions KO3-41 and KO3-47: "discrepancies are ok as long as our rust core does better", better meaning "better error or more support"): a difference where the core is worse than the old client (a wrong answer, a crash, lost support, a worse error) blocks, at least P2; a difference where the core is better is registered as an improvement and does not block; a red gate or CI job the change caused, and a decision row wider than the owner's words, block; attack-style hardening of internal tools stays P3 (Phase 2 decision KO2-52).
 The reviewer who raised a finding on a docs-only fix round confirms its fix, and a round writing decision rows or register entries keeps Claude (the owner, 2026-10-21, RCA decision 4: "Sure...").
-**Enforced by:** `land.py` requiring two `APPROVE` reports naming the same SHA (*exists*); the review launch refusing a SHA without a handoff stamp, and the report's `differences:` list (*T3.0*); the severity bar itself is *wording only* in the reviewer brief, and the owner's answer on it is still open (Phase 3 owner question G2).
+**Enforced by:** `land.py` requiring two `APPROVE` reports naming the same SHA (*exists*); the review launch refusing a SHA without a handoff stamp, and the report's `differences:` list (*T3.0*); the severity bar itself is *wording only*, in `docs/design/rust-core/orchestration/briefs/reviewer.md`.
 
 ### 18. Every review comment ends as a plan item, a decision or an explicit no (first attempt and Phase 2; wording only in part)
 

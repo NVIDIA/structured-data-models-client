@@ -27,7 +27,7 @@ Each question is summarized in the Decision cell as it was asked; the RCA file h
 
 | # | Decision | Owner's words | Status |
 |---|---|---|---|
-| KO3-2 | RCA decision 1, one severity bar for both reviewers (any measured difference from the reference on a public call, any red gate or CI job the change caused, and any decision row wider than the owner's words is at least P2): not decided; the owner asked a question back | "1. Severity: Has this really been a problem?" | open: answered in design.md, owner question G2 |
+| KO3-2 | RCA decision 1, one severity bar for both reviewers (any measured difference from the reference on a public call, any red gate or CI job the change caused, and any decision row wider than the owner's words is at least P2): not decided; the owner asked a question back | "1. Severity: Has this really been a problem?" | answered by KO3-47 |
 | KO3-3 | RCA decision 2, stop and redesign: when the same family of finding blocks two rounds in a row, or a fix's own change causes a new blocking finding twice in a row, stop patching; without a large redesign session for a simple missed case | "2. Yes to Stop and redesign, but sometimes you might've just missed some dumb case so we shouldn't need a large redesign sesion for that..." | approved by owner 2026-10-21 |
 | KO3-4 | RCA decision 3, speed infrastructure (the stacked queue, the CI fix, environment and disk hygiene, the command hook) is schedule work built in Phase 3's first package, not "machinery" | "3. Yes please." | approved by owner 2026-10-21 |
 | KO3-5 | RCA decision 4, docs-only fix rounds: the reviewer who raised the finding confirms its fix; any round writing decision rows or register entries keeps Claude | "4. Sure..." | approved by owner 2026-10-21 |
@@ -92,6 +92,28 @@ Each question is summarized in the Decision cell as it was asked.
 | KO3-33 | Q21, JDKs in CI: the owner first leaned to JDK 21 only | "21: Maybe do Java 21, no need for 17 right? It's old." | superseded by KO3-34 |
 | KO3-34 | Q21's follow-up: build for Java 17 and test on JDK 17 and 21, as recommended | "Q21, ok do as you recommend and support 17" | approved by owner 2026-10-22 |
 | KO3-35 | Q22, runtime flags and Databricks questions: the orchestrator documents the flags, runs every Java test with them, asks the Java consumer to confirm, and includes the two metric-view questions in Java's live check | "22: Sure, you do it." | approved by owner 2026-10-22 |
+
+## The design questions (2026-10-22, night)
+
+Source: the owner's answers on 2026-10-22 (night) to the design's open questions as the orchestrator sent them, simplified, recorded in `$SDM_ORCH_STATE/phase-3/owner-answers-2026-10-21.md`, section "2026-10-22 (night): the design questions, simplified".
+The questions are numbered as they were sent: Q5 to Q13 as numbered in the design at 8f9f4b1f, D5 as at 01d65a12, and G1 to G4 as at both; each Decision cell gives the question as asked and its recommendation.
+
+| # | Decision | Owner's words | Status |
+|---|---|---|---|
+| KO3-36 | Q5, the switch: flip every S0, S1 and S2 path to the core at once; an input still refused by name on a switched path (one of KO2-94's three) stays refused on the epic branch until Phase 4 lifts it | "5: Yes." | approved by owner 2026-10-22 |
+| KO3-37 | Q6, old-engine tests after the flip: tests of old-engine internals run on the old route only until Phase 5, each listed in the evidence | "6: Sure." | approved by owner 2026-10-22 |
+| KO3-38 | Q7, the job matrix: the 21 cells ask the quickstart's questions and the deleted notebook's, and the notebooks run once on the core | "7: Sure." | approved by owner 2026-10-22 |
+| KO3-39 | Q8, live timing at the switch: kept, run at the end because it is slow | "8: Sure, but at the end probably since it's slow." | approved by owner 2026-10-22 |
+| KO3-40 | Q9, view YAML values read as the old client's PyYAML reads them (YAML 1.1) | "9: Sure." | approved by owner 2026-10-22 |
+| KO3-41 | Q10, the old client's sampling statements on Databricks and Snowflake (RS-6); and the owner's rule for differences: feature parity with the old client or better, where better means a better error or more support | "10: Sure, although you might potentially find bugs in the old client. Ideally our new client has feature parity or is even better than old client. Better means better error or more support." | approved by owner 2026-10-22 |
+| KO3-42 | Q11, comparing the core with the old client on the old client's own recorded data gates | "11: Sure." | approved by owner 2026-10-22 |
+| KO3-43 | Q12, L3 on the warehouses: 20 generated sources per warehouse | "12: Yes." | approved by owner 2026-10-22 |
+| KO3-44 | Q13, the three refusals decided overnight in Phase 2 that refuse input the old client answers (a NaN `lag_timesteps`, `num_neighbors` text that is not a number, a negative `num_neighbors`) are lifted to match the old client | "13: Ok." | approved by owner 2026-10-22 |
+| KO3-45 | D5, the offline judge for the warehouse legs, option (a): judged offline on the stand-in, statements diagnostic there, the dialects' SQL first run live in the end campaign; the two 100,001-row batching cases off the warehouse legs | "D5: Sure." | approved by owner 2026-10-22 |
+| KO3-46 | G1, one standing register class the owner approves once for statement counts, warning repeat counts, tie order and hash order a user cannot see | "G1: Sure." | approved by owner 2026-10-22 |
+| KO3-47 | G2, the severity bar, amended: a difference from the old client does not block a landing when the core does better, as KO3-41 defines better | "G2: I don't want to "block a landing" - discrepancies are ok as long as our rust core does better. Again, see above for my definition of "better"." | approved by owner 2026-10-22 |
+| KO3-48 | G3, the design's "no" list of carried items, reopened only when the dry run or a Phase 3 case hits one | "G3: Accepted." | approved by owner 2026-10-22 |
+| KO3-49 | G4, a quota or capacity error in a live run is retried once, and only a failure after the retry counts toward the stop rule | "G4: Sure." | approved by owner 2026-10-22 |
 
 ## Kickoff answers
 
