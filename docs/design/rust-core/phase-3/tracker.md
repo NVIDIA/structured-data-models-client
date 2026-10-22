@@ -7,19 +7,20 @@ The slip report (`phase_stats.py --forecast forecast.yaml`) gives the phase's la
 
 | ID | Package | Lane | Stack | Candidate | State |
 |---|---|---|---|---|---|
-| T3.0 | Process mechanisms | A | alone | | in review |
-| T3.1 | The design | A | alone | | in review |
+| T3.0 | Process mechanisms | A | 0 | | in review |
+| T3.1 | The design | A | 0 | | in review |
 | T3.2 | The tooling train | A | 1, front | | not started |
-| T3.3 | Databricks and contract v28 | B | 2 | | not started |
-| T3.4 | Views | C | 3 | | not started |
-| T3.5 | Snowflake | D | 3 | | not started |
-| T3.6 | Lakebase and the live runners | G | 2 | | not started |
-| T3.7 | Switch-ready: the forced-route failures | E | 1 | | not started |
-| T3.8 | Differences, coverage and DuckDB 2.0 | F | 1 | | not started |
-| T3.9 | The switch and the switch gate | A | alone | | not started |
-| T3.10 | Java binding and Java S0 | H | 2 | | not started |
-| T3.11 | Java S1 through JDBC | H | alone | | not started |
-| T3.12 | Java on Databricks | H | alone, last | | not started |
+| T3.3 | The warehouse harness | H | 1 | | not started |
+| T3.4 | Databricks and contract v28 | B | 2 | | not started |
+| T3.5 | Views | C | 3 | | not started |
+| T3.6 | Snowflake | D | 2 | | not started |
+| T3.7 | Lakebase, the live runners and the phase-end reports | G | 2 | | not started |
+| T3.8 | Switch-ready: the forced-route failures | E | 1 | | not started |
+| T3.9 | Differences, coverage and DuckDB 2.0 | F | 2 | | not started |
+| T3.10 | The switch and the switch gate | A | alone | | not started |
+| T3.11 | Java binding, API and Java S0 | J | 3 | | not started |
+| T3.12 | Java S1 through JDBC | J | 3 | | not started |
+| T3.13 | Java on Databricks | J | alone | | not started |
 | HO3 | The held-out set (not a landing) | orchestrator | – | | not started |
 
 ## Counters
@@ -28,9 +29,10 @@ Read at each check-in (learnings.md, lessons 8 and 12): round 4 of any package g
 
 | Counter | Value |
 |---|---|
-| Landings so far / forecast | 0 / 13 |
+| Landings so far / forecast | 0 / 14 |
 | Judging trains beyond T3.2 (at most one catch-up) | 0 |
-| Live campaigns run (two planned: the early capture, the end campaign, with Java's E-7 at the phase's end) | 0 |
+| Live runs (C-1 once; the end campaign, forecast twice) | 0 |
+| Warehouse cases pending live (added after C-1, recorded in E-0) | 0 |
 | Live failures for non-product reasons (three stop live work) | 0 |
 | Packages at review round 4 or later | none |
 | Finding families blocking twice | none |
@@ -39,10 +41,11 @@ Read at each check-in (learnings.md, lessons 8 and 12): round 4 of any package g
 
 | Round | SHA | Claude | Codex | Findings |
 |---|---|---|---|---|
+| 1 | 3c721a16 | CHANGES REQUIRED: 3 P1, 13 P2, 12 P3 | CHANGES REQUIRED: 4 P1, 2 P2 | Fixed in the round-2 commits: the offline judge (choice 2), the train's file list against T3.0's narrowed judging paths, the capture's timing and rules, a slot-consistent forecast, live evidence on the landing commit, T3.1's own checks, the report tools behind checks 2, 6 and 11, the carried items placed exactly once, the overnight decisions, Snowflake's prerequisites, Java (KO3-27 to KO3-35) |
 
 ## The checking tools' dry run
 
 | Run | Base | Result |
 |---|---|---|
-| Draft (2026-10-22), from T3.0's topic branch, no runners | Phase 2's last landing | 20 of 21 kinds with gaps (the three Java kinds added after): see design.md, "The checking tools' dry run" |
-| At lock, on the landed T3.0, with `--python`, `--rust` and `--gate 3a` | | |
+| Draft (2026-10-22), from T3.0's topic branch, no runners, the first 21 kinds | Phase 2's last landing | 20 of 21 kinds with gaps: see design.md, "The checking tools' dry run" |
+| At lock, on T3.0's tree, all 30 kinds and the reports list, with `--python`, `--rust` and `--gate 3a` | | |

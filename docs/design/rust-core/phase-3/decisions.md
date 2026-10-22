@@ -75,7 +75,23 @@ Source: the owner's message on 2026-10-22, recorded in `$SDM_ORCH_STATE/phase-3/
 
 | # | Decision | Owner's words | Status |
 |---|---|---|---|
-| KO3-27 | Java support starts in Phase 3; this replaces KO2-34's deferral of Java until S2 is switched for Python | "BTW side note - is it possible to begin the Java implementation as well? I'm looking at our migration-plan.md at https://github.com/NVIDIA/structured-data-models-client/blob/rust-core/docs/design/rust-core/migration-plan.md and it includes "Java follows on Databricks" so I'm wondering why you've not considered it here. I think we should start adding Java support as well in phase 3" | approved by owner 2026-10-22 |
+| KO3-27 | Start adding Java support in Phase 3 (Phase 2's KO2-34 had deferred Java until S2 is switched for Python) | "BTW side note - is it possible to begin the Java implementation as well? I'm looking at our migration-plan.md at https://github.com/NVIDIA/structured-data-models-client/blob/rust-core/docs/design/rust-core/migration-plan.md and it includes "Java follows on Databricks" so I'm wondering why you've not considered it here. I think we should start adding Java support as well in phase 3" | approved by owner 2026-10-22 |
+
+## The Java questions (2026-10-22)
+
+Source: the owner's answers on 2026-10-22 to the design's Java questions Q16 to Q22 (as numbered in the design at 8f9f4b1f; design.md numbers them J1 to J7 since round 2), and to the follow-up on JDK 17, recorded in `$SDM_ORCH_STATE/phase-3/owner-answers-2026-10-21.md`, sections "2026-10-22: Java questions Q16 to Q22" and "2026-10-22: Q21 follow-up (JDK 17)".
+Each question is summarized in the Decision cell as it was asked.
+
+| # | Decision | Owner's words | Status |
+|---|---|---|---|
+| KO3-28 | Q16, a fifth lane for Java: Java on its own lane from the start, a fifth package in flight, with `heavy` queueing its builds | "16: Yes" | approved by owner 2026-10-22 |
+| KO3-29 | Q17, the Java API's shape: mirror Python's public API with Java names and plain data | "17: Yes" | approved by owner 2026-10-22 |
+| KO3-30 | Q18, logging: depend on the SLF4J 2 API only, bind nothing | "18: Sure" | approved by owner 2026-10-22 |
+| KO3-31 | Q19, Maven coordinates and publishing: the orchestrator picks coordinates that follow Java's naming convention; the owner asks whether Maven is the right tool | "19: pick whatever makes sense and aligns with java naming convention. Side note - is Maven the right tool to be using, or something else?" | approved by owner 2026-10-22 |
+| KO3-32 | Q20, platforms for the natives: Linux x86_64 and aarch64 at least; macOS only if there is an easy way that Phase 2 also used | "20: Do linux x86 and ARM minimum, not sure how to test macOS. If there's an easy way (e.g. github actions) then sure, as long as we also did it in phase 2. If we didn't, don't worry about it" | approved by owner 2026-10-22 |
+| KO3-33 | Q21, JDKs in CI: the owner first leaned to JDK 21 only | "21: Maybe do Java 21, no need for 17 right? It's old." | superseded by KO3-34 |
+| KO3-34 | Q21's follow-up: build for Java 17 and test on JDK 17 and 21, as recommended | "Q21, ok do as you recommend and support 17" | approved by owner 2026-10-22 |
+| KO3-35 | Q22, runtime flags and Databricks questions: the orchestrator documents the flags, runs every Java test with them, asks the Java consumer to confirm, and includes the two metric-view questions in Java's live check | "22: Sure, you do it." | approved by owner 2026-10-22 |
 
 ## Kickoff answers
 
