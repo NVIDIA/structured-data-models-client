@@ -51,6 +51,7 @@ from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
 from sdm_client._rust import codec
+from sdm_client._rust.providers import databricks
 from sdm_client._rust.providers.duckdb import DuckDBProvider
 from sdm_client._rust.providers.postgres import PostgresProvider
 from sdm_client._rust.providers.sqlite import SqliteProvider
@@ -236,8 +237,12 @@ def build(cls: type[Schema], source: Any, described: dict[str, Any]) -> Schema:
 def _provider(source: Any) -> tuple[dict[str, Any], Any]:
     r"""The provider choice a run over ``source`` names, and the provider
     answering its fetches: its backend's built-in SQL dialect, DuckDB's,
-    SQLite's (T2.2) or Postgres's (T2.3), on its connection."""
+    SQLite's (T2.2) or Postgres's (T2.3), on its connection; or
+    Databricks' (T3.4), with the catalog and schema it reads, on a SQL
+    warehouse's connection or a Spark session's."""
     backend = source.backend
+    if backend == 'databricks':
+        return databricks.for_source(source)
     made = {
         'duckdb': DuckDBProvider,
         'sqlite': SqliteProvider,
