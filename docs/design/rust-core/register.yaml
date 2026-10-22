@@ -7490,6 +7490,68 @@ entries:
   - {case: target.aggregation.list-distinct@postgres, cell: ref-pandas3, runner: python-core, old: 'refusal - at predict (NimRequestError)', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', statements_differ: [materialize], summary: 'T2.10: LIST_DISTINCT link prediction refused by name until Phase 4 (KO2-75)'}
   - {case: target.aggregation.list-distinct@postgres, cell: ref-pandas3, runner: rust-host, old: 'refusal -', new: 'refusal UNSUPPORTED_REQUEST', statements_differ: [materialize], summary: 'T2.10: LIST_DISTINCT link prediction refused by name until Phase 4 (KO2-75)'}
 
+# --- lane E entries, Phase 3 (P3E-1..19) ---
+
+- id: P3E-1
+  title: A Postgres table a source without a schema lacks is named without the current schema
+  kind: change
+  old_behavior: >-
+    Schema.from_source over a PostgresSource given no schema reads
+    current_schema() first and names a table it cannot find by that
+    schema and the name asked for: "Table 'public.nope' does not exist in
+    the PostgreSQL database" (PostgresTable.source_name).
+  new_behavior: >-
+    The core never reads current_schema() (KO2-58), so it names the table
+    as it was asked for: "Table 'nope' does not exist in the PostgreSQL
+    database", the same refusal, code and class. A source given its schema
+    is named as the reference names it ("Table 'sales.nope' ..."), the
+    schema read from the provider's namespace (contract v28, T3.8).
+  affected_inputs: >-
+    Schema.from_source, and materialize of a schema the core did not
+    describe, over a PostgresSource given no schema, naming a table the
+    current schema does not hold, on the core route.
+  cases: [T3.8]
+  refs: [KO2-58, P2-T2.16-11]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Proposed by T3.8's implementer. Measured with the core route forced:
+    the refusal's code (INVALID_REQUEST), class (StructuredDataError) and
+    sentence match the reference's but for the schema before the table's
+    name. Matching it would take a current_schema() read on the error
+    path only.
+
+- id: P3E-2
+  title: A core warning's words follow its code in brackets
+  kind: change
+  old_behavior: >-
+    The reference shows each warning in its words alone, for example "Some
+    time columns were inferred, or refused, on a guess about what a column
+    holds: ...", of the class it raises (SDMWarning or UserWarning).
+  new_behavior: >-
+    On the core route each warning the core gives is shown as its code in
+    brackets, then the reference's words: "[TIME_COLUMNS_GUESSED] Some time
+    columns were inferred, ...", of the same class (decisions E41(i),
+    E59(d)). The words after the code are the reference's, and a caller can
+    filter on the code. An improvement: it adds the code and loses nothing
+    (KO3-41, KO3-47).
+  affected_inputs: >-
+    Every call on the core route that warns: Schema.from_source's notices
+    (time columns, keys, links, columns left out, time values), and
+    materialize's and predict's sampler and request notices.
+  cases: [T3.8]
+  refs: [E41, E59, KO3-41, KO3-47]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Proposed by T3.8's implementer on the orchestrator's decision
+    (2026-10-22) to keep the prefix: Phase 2's flip dry run counted it as a
+    failure in the client tests that compare the two routes' warnings, which
+    now compare the words after a leading [CODE] (T3.8's tests do the same).
+    No register entry recorded it before.
+
 # --- lane G entries (P2G-1..19) ---
 
 - id: P2G-1
