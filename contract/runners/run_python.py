@@ -4026,9 +4026,21 @@ class Standin:
             def chosen(source: Any) -> tuple[dict[str, Any], Any]:
                 held = getattr(source, 'connection', None)
                 # A Spark source wraps the session it was given.
-                if self.connection in (held, getattr(held, '_session', None)):
-                    return dict(choice), self.provider
-                return original(source)
+                if self.connection not in (
+                    held,
+                    getattr(held, '_session', None),
+                ):
+                    return original(source)
+                # The host's own choice, its namespace included (T3.8's
+                # field, the source's catalog and schema), so the dialect
+                # renders the old client's catalog statements; only the
+                # provider answering is the stand-in's. A host with no
+                # provider of the leg yet gives the leg's dialect alone.
+                try:
+                    made, _ = original(source)
+                except (KeyError, NotImplementedError):
+                    made = dict(choice)
+                return made, self.provider
 
             return chosen
 

@@ -821,3 +821,48 @@ def test_a_deep_or_wide_manifest_is_refused_by_name(
     wide.write_text(json.dumps({f'k{i}': i for i in range(200_000)}))
     assert check.main(['captures', '--cases', str(cases), str(wide)]) == 1
     assert 'is not sdm-capture/1' in capsys.readouterr().out
+
+
+def test_the_plugged_provider_keeps_the_host_s_choice_and_its_namespace(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    r"""Only the provider is the stand-in's: the host's choice for the
+    source, its namespace included, is kept (found by T3.4), so the
+    dialect renders the old client's catalog statements."""
+    import types
+
+    from sdm_client._rust import materialize, schema
+
+    def provider(step: Any, keys: Any) -> Any:
+        raise AssertionError('not asked here')
+
+    class Session:
+        names: dict[str, str] = {}
+
+        def __init__(self) -> None:
+            self.provider = provider
+
+        def verdict(self) -> dict[str, Any]:
+            return {'live_only': None, 'flagged': []}
+
+        def close(self) -> None:
+            pass
+
+    fake = types.ModuleType('standin_client')
+    fake.open = lambda leg, case, bases, captures: Session()  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, 'standin_client', fake)
+    host = {
+        'provider': 'sql',
+        'dialect': 'databricks',
+        'namespace': ['a_catalog', 'a_schema'],
+    }
+    for module in (schema, materialize):
+        monkeypatch.setattr(
+            module, '_provider', lambda source: (dict(host), object())
+        )
+    stand = run.Standin(_case(), run.load_bases(), 'databricks-sql')
+    source = types.SimpleNamespace(connection=stand.connection)
+    with stand.plugged():
+        for module in (schema, materialize):
+            choice, given = module._provider(source)
+            assert choice == host and given is provider
