@@ -225,3 +225,22 @@ def test_a_semantic_model_trusts_only_built_in_functions_by_default() -> None:
     source = DatabricksSource(_databricks(), catalog='main', schema='sales')
     assert source.semantic_model('m').trust_expressions is False
     assert source.semantic_model('m', trust_expressions=True).trust_expressions
+
+
+def test_a_databricks_source_is_told_apart_by_its_connection() -> None:
+    from sdm_connectors.source import _route_of
+
+    warehouse = DatabricksSource(_databricks(), catalog='main', schema='s')
+    spark = DatabricksSource(_spark_session(), schema='s')
+    snowflake = SnowflakeSource(_snowflake(), database='DB')
+    # Both report the backend; the route key tells them apart.
+    assert warehouse.backend == spark.backend == 'databricks'
+    assert _route_of(warehouse) == 'databricks-sql'
+    assert _route_of(spark) == 'databricks-spark'
+    assert _route_of(Source(_spark_session())) == 'databricks-spark'
+    # A metric view is its own kind, whichever connection keeps it.
+    assert _route_of(warehouse.semantic_model('m')) == 'databricks-metric-view'
+    assert _route_of(spark.semantic_model('m')) == 'databricks-metric-view'
+    assert _route_of(snowflake) == 'snowflake'
+    assert _route_of(snowflake.semantic_model('V')) == 'snowflake-semantic-view'
+    assert _route_of(PostgresSource(_postgres())) == 'postgres'

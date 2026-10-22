@@ -535,6 +535,35 @@ class SemanticModel(Source):
         return f'SemanticModel({self._name!r} in {self._source!r}{trusted})'
 
 
+def _route_of(source: Source) -> str:
+    r"""Which kind of source ``source`` is, finer than its backend, for the
+    client to route a call by (private, not API).
+
+    Both Databricks connections report the backend ``'databricks'``; here a
+    SQL warehouse connection is ``'databricks-sql'``, a Spark session
+    (wrapped in :class:`~sdm_connectors.backends.spark.SparkConnection`)
+    ``'databricks-spark'``, and a metric view (a :class:`SemanticModel` kept
+    in Databricks) ``'databricks-metric-view'``, whatever its connection. A
+    Snowflake semantic view is ``'snowflake-semantic-view'``. Any other
+    source is its backend.
+    """
+    if isinstance(source, SemanticModel):
+        return f'{source.backend}-{_SEMANTIC_KIND[source.backend]}'
+    if source.backend == 'databricks':
+        from sdm_connectors.backends.spark import SparkConnection
+
+        if isinstance(source.connection, SparkConnection):
+            return 'databricks-spark'
+        return 'databricks-sql'
+    return source.backend
+
+
+#: What a semantic model is called in each warehouse that keeps one.
+_SEMANTIC_KIND: Mapping[str, str] = {
+    'databricks': 'metric-view',
+    'snowflake': 'semantic-view',
+}
+
 _BY_BACKEND: Mapping[str, type[Source]] = {
     'databricks': DatabricksSource,
     'snowflake': SnowflakeSource,
