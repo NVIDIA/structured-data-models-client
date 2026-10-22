@@ -178,14 +178,20 @@ To collect a find into the train, cherry-pick its judging-only commits onto the 
 ### The handoff stamp (item 4)
 
 Before an implementer or test author reports "ready", it runs `scripts/rust_core/handoff.py run --package <ID> [--python <lane environment python>] [--previous <last round's SHA>] [--case <id> ...]` with the tools' interpreter.
-On a clean worktree it runs:
+On a clean worktree it runs these steps, cheapest first, printing each as it starts and ends with its time, and stops at the first that fails (the owner's "2026-10-22 evening: the five speed changes"; the broad suites are CI's, and `land.py` refuses a landing without a green CI run):
 
-- the package's cases (changed or named) against the recorded old-client answers, on python-core and, when `rust/` changed, rust-host, on each database the case names (a case naming Postgres needs `SDM_POSTGRES_TEST_DSN`, a throwaway postgres:17 container as CI runs, or no stamp);
-- in a fix round, the new or changed tests on the previous round's SHA, where at least one must fail: a fix to Rust production code needs a Rust test (a crate test, or a `#[cfg(test)]` block spliced into the previous source) that fails there with cargo, and is refused with Python tests only; any other fix's Python tests run on the previous tree's package sources;
-- every suite `scripts/rust_core/affected.py` names for the changed files (the binding's tests on the lane's test-ops build, `SDM_KIT_PYTHON`);
-- lint (`ruff`, `cargo fmt`, and `mypy --python-executable <lane python>` on changed packages).
+1. lint: `ruff`, `cargo fmt`, `mypy --python-executable <lane python>` on changed packages, and `l0_scan.py`;
+2. the package's cases (changed or named) against the recorded old-client answers, on python-core and, when `rust/` changed, rust-host, on each database the case names (a case naming Postgres needs `SDM_POSTGRES_TEST_DSN`, a throwaway postgres:17 container as CI runs, or no stamp);
+3. the package's own tests: each test file it adds or changes (a crate test by its own `--test`);
+4. in a fix round, the new or changed tests on the previous round's SHA, where at least one must fail: a fix to Rust production code needs a Rust test (a crate test, or a `#[cfg(test)]` block spliced into the previous source) that fails there with cargo, in a target directory of its own, and is refused with Python tests only; any other fix's Python tests run on the previous tree's package sources;
+5. the suites `scripts/rust_core/affected.py`'s map rows name for the changed files (the binding's tests on the lane's test-ops build, `SDM_KIT_PYTHON`), not every test that mentions a file's name.
 
+In a fix round whose `--previous` SHA has a stamp, steps 3 and 5 take only what changed since it.
+Every command it starts reads `--python` as `SDM_PYTHON`, so the Rust tests that load cases never fall back to a bare `python3`.
 It writes `<git common dir>/sdm-handoff/<SHA>.json` only when all pass; `handoff.py check SHA` reads it.
+Each start, stamp, failure and stop is a line of `<git common dir>/sdm-handoff/events.jsonl`, and `handoff.py wait SHA` returns the moment the SHA is stamped (exit 0) or its run fails or stops (exit 1): start both reviewers on its exit 0.
+While a run lives it holds `sdm-handoff/running/<ID>.json`; the pre-push hook refuses a push from the package's worktree until the run ends (`handoff.py running --package ID` names it), and a second run of the package is refused.
+New findings meanwhile go into a local next fix, pushed after the round's report.
 `codex_pane.py review` and the Claude reviewer launch (the hook below, on any Agent prompt naming a round brief, `round-briefs/...`, or `briefs/reviewer.md`: the SHA on the brief's `Candidate: <full SHA>` line, which every round brief carries) refuse a round on a SHA without a stamp.
 Reviewers read the code, the stamp and CI, and list every difference from the old client under `differences:`, each better or worse; only a worse one blocks (the owner, G2; [briefs/reviewer.md](briefs/reviewer.md)).
 `affected.py --unmapped` fails when a tracked path under `contract/`, `scripts/rust_core/` or `rust/crates/` maps to no suite; add a row to its `MAP`.
@@ -238,6 +244,13 @@ The machine has 8 vCPUs, 30 GB of memory and 412 GB of fast disk at `/mnt/locals
 - **`heavy` admits a job only when the machine can take it.**
   `$SDM_ORCH_STATE/bin/heavy` calls `scripts/rust_core/orchestration/heavy`, which starts a heavy command when a CPU slot, free memory and free disk all allow it (thresholds in `scripts/rust_core/orchestration/heavy.conf`, or `SDM_HEAVY_CONFIG`), runs `clean_tmp.sh --apply` first when the disk is short, and otherwise queues, saying what it waits for.
   Heavy means any `gate.sh` leg, a full `pytest` of `contract/tests` or `tests`, a `tooling` test file, `cargo test`, `build` or `clippy` of the workspace, and every wheel build.
+  The command hook refuses `cargo test`, `build` and `clippy`, a pytest over the whole `tests` or `contract/tests`, and `gate.sh` unless run behind `heavy` (the owner, 2026-10-22).
+  `heavy --priority` (or `SDM_HEAVY_PRIORITY=1`), for the critical path's jobs as the orchestrator grants it, takes the next free slot before any job without it; every job admitted after a wait appends who, whether it had priority, how long it waited and the command to `$SDM_ORCH_STATE/heavy-waits.log`.
+- **At most three packages at once** (the owner, 2026-10-22).
+  `lane.py start` refuses a fourth active lane, naming the active ones: a lane worktree whose recorded package has not landed and is not paused; the limit is `MAX_LANES` in `heavy.conf`.
+  `lane.py pause --lane <x>` frees a slot (`--resume` takes it back); a test author counts inside its package's lane.
+- **The watchdog.** The heartbeat runs `scripts/rust_core/orchestration/watchdog.py --phase <phase branch>` every 15 minutes.
+  It prints one line per problem and nothing when all is well: a lane worktree with no commit and no running process for 45 minutes (`IDLE`), the failed jobs of the newest finished CI run of each phase, lane and topic branch (`RED CI`), and a package more than 2 hours past `forecast.yaml` and not landed (`SLIP`).
 - **A lane's directories go when it ends**: `clean_tmp.sh --release <lane>` (dry run first, then `--apply`) removes its environment, target and tmp directories.
 
 ### The dry run and the slip report (item 1)
@@ -264,6 +277,7 @@ T3.2 taught the checking tools Phase 3's warehouse and Java legs.
 - **Runners.** `gate.sh --run` takes `java` (`run_java.py`, T3.11's) and `standin` (python-core on each warehouse leg through `standin_client.py`, T3.3's).
 - **Lanes.** `lane.py start --brief BRIEF` refuses a brief `brief_check.py` fails; from Phase 3 on it refuses a package ID with a letter, and it never starts a lane on a phase `rust-core` already holds.
 - **Coverage.** `coverage.py --check --gate LANGUAGE:SLICE` gates a slice's paths and cells (`python:S1`, `python:S2`, `java:S1`); each leg claims its own path, and a manifest path's `tests` (pytest node IDs) may claim a path the case format cannot express.
+- **Option C's sampled case.** `compare-policy.yaml`'s `sampled` section names the one sampled Snowflake case (`{leg, stage, statement, decision}`); on that leg its comparison holds only the sampling statement and the result's row count, besides the outcome, route, inputs, schema and warnings, and `capture_check.py` refuses a second case, another leg or another decision.
 - **The census's real-data mode.** `refusal_census.py real-data --database LEG --cases DIR --control CASE --out FILE`, one leg at a time, a warehouse leg on its stand-in, failing when its seeded control is not refused.
 
 ### After T3.0 lands: the orchestrator's one-time steps
