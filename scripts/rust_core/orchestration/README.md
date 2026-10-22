@@ -99,6 +99,9 @@ every check.
   directories (`SDM_LANE_WORKTREE_PREFIX` overrides the prefix). Lanes named
   in `$SDM_ORCH_STATE/lanes_done` are skipped. Example:
   `python3 lane_idle.py "$SDM_TASKS_DIR" 25`.
+- **`watchdog.py`**: the heartbeat's 15-minute check (T3.2 fix 4).
+  It prints one line per problem and nothing when all is well: `IDLE` for a lane worktree with no commit for 45 minutes and no process working in it, `RED CI` for a branch under the phase whose newest finished run failed (naming the failed jobs), and `SLIP` for a forecast package more than 2 hours past its forecast and not landed.
+  Example: `python3 watchdog.py --phase rust-core-phase-3`.
 - **`clean_tmp.sh`**: removes stale agent scratch from `/tmp`, from
   `$SDM_SCRATCH` (if set), and Cargo `target/` directories. It is a **dry run
   unless you pass `--apply`**. It never removes tracked files, a git

@@ -9,10 +9,11 @@
 #     docs/design/rust-core/phase-3/forecast.yaml
 # The packages in landing order, each with the hours it holds the landing
 # queue after the one before it; packages of one stack land together, so
-# all but the first of a stack hold 0 hours. start is H0, T3.1's landing:
-# the time below is a placeholder that T3.1's last commit sets to the time
-# the design is approved. The report never blocks anything (KO3-12).
-start: '2026-10-23T00:00:00Z'
+# all but the first of a stack hold 0 hours. start is H0, T3.1's landing
+# (d1e02d7c, pushed at the time below; the slowness review of 2026-10-22).
+# The report never blocks anything (KO3-12); the watchdog
+# (orchestration/watchdog.py) names a package more than 2 hours past it.
+start: '2026-10-22T08:04:31Z'
 packages:
   - {id: T3.2, hours: 12}
   - {id: T3.3, hours: 0}
