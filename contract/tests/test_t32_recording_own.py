@@ -9,7 +9,7 @@ a capture complete, and ``captures-only`` holding a captures commit to the
 final candidate. The acceptance tests are the test author's; these are the
 implementer's own.
 
-    python -m pytest contract/tests/test_t32_recording.py -q
+    python -m pytest contract/tests/test_t32_recording_own.py -q
 """
 
 from __future__ import annotations
