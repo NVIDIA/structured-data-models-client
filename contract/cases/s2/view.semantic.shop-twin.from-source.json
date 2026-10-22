@@ -1,0 +1,54 @@
+{
+  "format": "sdm-case/1",
+  "id": "view.semantic.shop-twin.from-source",
+  "status": "acceptance",
+  "slice": "S2",
+  "warehouses": [
+    "snowflake"
+  ],
+  "paths": [
+    "schema.from-source/semantic-model/snowflake-semantic-view"
+  ],
+  "routes": [
+    "schema.from-source/semantic-model/snowflake-semantic-view",
+    "query.materialize/indices-binary/snowflake-semantic-view",
+    "query.materialize/indices-multiclass/snowflake-semantic-view",
+    "query.materialize/indices-regression/snowflake-semantic-view",
+    "query.materialize/indices-link-prediction/snowflake-semantic-view",
+    "query.materialize/indices-ranking/snowflake-semantic-view",
+    "query.materialize/indices-forecast/snowflake-semantic-view",
+    "client.predict/binary/snowflake-semantic-view",
+    "client.predict/multiclass/snowflake-semantic-view",
+    "client.predict/regression/snowflake-semantic-view",
+    "client.predict/link-prediction/snowflake-semantic-view",
+    "client.predict/ranking/snowflake-semantic-view",
+    "client.predict/forecast/snowflake-semantic-view"
+  ],
+  "cells": [
+    "int64/primary-key",
+    "int64/foreign-key",
+    "timestamp-us/time-column"
+  ],
+  "input": {
+    "base": "shop",
+    "pql": "PREDICT COUNT(orders.*, 0, 30, days) > 0 FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ],
+      "anchor_time": "2024-03-01"
+    },
+    "view": {
+      "kind": "semantic_view",
+      "name": "{shop_semantic_view}"
+    }
+  },
+  "until": "from_source",
+  "expect": {
+    "outcome": "success",
+    "stage": "from_source"
+  },
+  "why": "The owner's existing semantic view over a small shop dataset (KO3-21), the twin of the metric view of view.metric.shop-twin.from-source, named by the {shop_semantic_view} placeholder the capture resolves from the environment, its name private; described only, since its tables and dimensions are its own",
+  "source": "written by T3.5's test author from the reference at 43e55f4f"
+}
