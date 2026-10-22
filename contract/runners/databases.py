@@ -35,8 +35,20 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-#: The databases a case's tables load into, beside DuckDB itself.
-TARGETS = ('sqlite', 'postgres')
+#: The databases a case's tables load into, beside DuckDB itself: the two
+#: local ones, and the warehouses' engines (T3.3), where Lakebase is a
+#: Postgres server in a schema of its own.
+TARGETS = ('sqlite', 'postgres', 'databricks', 'snowflake', 'lakebase')
+
+#: Each warehouse leg's engine, whose column of the type map it loads by:
+#: both Databricks legs read the same Unity Catalog tables, and Lakebase is
+#: Postgres 17 (design, choice 1).
+LEG_ENGINES = {
+    'databricks-sql': 'databricks',
+    'databricks-spark': 'databricks',
+    'snowflake': 'snowflake',
+    'lakebase': 'postgres',
+}
 
 #: The type map, by Arrow type family: DuckDB's type, and the type each
 #: engine declares; ``<engine>_value`` names the stored form of a type the
@@ -48,100 +60,173 @@ TARGETS = ('sqlite', 'postgres')
 #: refuses a float -0.0 on SQLite too, which SQLite stores as 0.0.
 #: ``(p,s)`` is the column's precision and scale; ``(n)`` the column's own
 #: composite type, created beside its table and named by
-#: :func:`composite_name`. A value past what the engine's
+#: :func:`composite_name`; ``(f)`` the fractional digits of the column's
+#: unit (0, 3, 6 or 9). A value past what the engine's
 #: type holds (a nanosecond on Postgres's microsecond times) is refused.
+#: ``<engine>_not_stored`` says why an engine stores no column of the type
+#: (Databricks and Snowflake have no unsigned integers, for one): a case
+#: holding one does not run on that engine's legs, and its cell is never
+#: counted as covered there (KO2-47; :func:`not_stored`).
 TYPE_MAP: dict[str, dict[str, str]] = {
     'boolean': {
         'duckdb': 'BOOLEAN',
         'sqlite': 'BOOLEAN',
         'postgres': 'boolean',
+        'databricks': 'BOOLEAN',
+        'snowflake': 'BOOLEAN',
     },
-    'int8': {'duckdb': 'TINYINT', 'sqlite': 'INTEGER', 'postgres': 'smallint'},
+    'int8': {
+        'duckdb': 'TINYINT',
+        'sqlite': 'INTEGER',
+        'postgres': 'smallint',
+        'databricks': 'TINYINT',
+        'snowflake': 'NUMBER(38,0)',
+    },
     'int16': {
         'duckdb': 'SMALLINT',
         'sqlite': 'INTEGER',
         'postgres': 'smallint',
+        'databricks': 'SMALLINT',
+        'snowflake': 'NUMBER(38,0)',
     },
-    'int32': {'duckdb': 'INTEGER', 'sqlite': 'INTEGER', 'postgres': 'integer'},
-    'int64': {'duckdb': 'BIGINT', 'sqlite': 'INTEGER', 'postgres': 'bigint'},
+    'int32': {
+        'duckdb': 'INTEGER',
+        'sqlite': 'INTEGER',
+        'postgres': 'integer',
+        'databricks': 'INT',
+        'snowflake': 'NUMBER(38,0)',
+    },
+    'int64': {
+        'duckdb': 'BIGINT',
+        'sqlite': 'INTEGER',
+        'postgres': 'bigint',
+        'databricks': 'BIGINT',
+        'snowflake': 'NUMBER(38,0)',
+    },
     'uint8': {
         'duckdb': 'UTINYINT',
         'sqlite': 'INTEGER',
         'postgres': 'smallint',
+        'databricks_not_stored': 'no unsigned integers',
+        'snowflake_not_stored': 'no unsigned integers',
     },
     'uint16': {
         'duckdb': 'USMALLINT',
         'sqlite': 'INTEGER',
         'postgres': 'integer',
+        'databricks_not_stored': 'no unsigned integers',
+        'snowflake_not_stored': 'no unsigned integers',
     },
-    'uint32': {'duckdb': 'UINTEGER', 'sqlite': 'INTEGER', 'postgres': 'bigint'},
+    'uint32': {
+        'duckdb': 'UINTEGER',
+        'sqlite': 'INTEGER',
+        'postgres': 'bigint',
+        'databricks_not_stored': 'no unsigned integers',
+        'snowflake_not_stored': 'no unsigned integers',
+    },
     'uint64': {
         'duckdb': 'UBIGINT',
         'sqlite': 'TEXT',
         'sqlite_value': 'digits',
         'postgres': 'numeric(20,0)',
+        'databricks_not_stored': 'no unsigned integers',
+        'snowflake_not_stored': 'no unsigned integers',
     },
     'float32': {
         'duckdb': 'FLOAT',
         'sqlite': 'REAL',
         'sqlite_refuses': 'NaN',
         'postgres': 'real',
+        'databricks': 'FLOAT',
+        'snowflake': 'FLOAT',
     },
     'float64': {
         'duckdb': 'DOUBLE',
         'sqlite': 'REAL',
         'sqlite_refuses': 'NaN',
         'postgres': 'double precision',
+        'databricks': 'DOUBLE',
+        'snowflake': 'FLOAT',
     },
     'decimal': {
         'duckdb': 'DECIMAL(p,s)',
         'sqlite': 'TEXT',
         'sqlite_value': 'canonical',
         'postgres': 'numeric(p,s)',
+        'databricks': 'DECIMAL(p,s)',
+        'snowflake': 'NUMBER(p,s)',
     },
-    'string': {'duckdb': 'VARCHAR', 'sqlite': 'TEXT', 'postgres': 'text'},
-    'binary': {'duckdb': 'BLOB', 'sqlite': 'BLOB', 'postgres': 'bytea'},
+    'string': {
+        'duckdb': 'VARCHAR',
+        'sqlite': 'TEXT',
+        'postgres': 'text',
+        'databricks': 'STRING',
+        'snowflake': 'VARCHAR',
+    },
+    'binary': {
+        'duckdb': 'BLOB',
+        'sqlite': 'BLOB',
+        'postgres': 'bytea',
+        'databricks': 'BINARY',
+        'snowflake': 'BINARY',
+    },
     'date': {
         'duckdb': 'DATE',
         'sqlite': 'DATE',
         'sqlite_value': 'iso',
         'postgres': 'date',
+        'databricks': 'DATE',
+        'snowflake': 'DATE',
     },
     'time': {
         'duckdb': 'TIME',
         'sqlite': 'TIME',
         'sqlite_value': 'iso',
         'postgres': 'time',
+        'databricks_not_stored': 'no time-of-day type in tables',
+        'snowflake': 'TIME(f)',
     },
     'timestamp': {
         'duckdb': 'TIMESTAMP',
         'sqlite': 'TIMESTAMP',
         'sqlite_value': 'iso',
         'postgres': 'timestamp',
+        'databricks': 'TIMESTAMP_NTZ',
+        'snowflake': 'TIMESTAMP_NTZ(f)',
     },
     'timestamptz': {
         'duckdb': 'TIMESTAMP WITH TIME ZONE',
         'sqlite': 'TIMESTAMPTZ',
         'sqlite_value': 'iso',
         'postgres': 'timestamp with time zone',
+        'databricks': 'TIMESTAMP',
+        'snowflake': 'TIMESTAMP_LTZ(f)',
     },
     'interval': {
         'duckdb': 'INTERVAL',
         'sqlite': 'INTERVAL',
         'sqlite_value': 'iso',
         'postgres': 'interval',
+        'databricks_not_stored': 'no interval type in tables',
+        'snowflake_not_stored': 'no interval type in tables',
     },
     'list': {
         'duckdb': 'T[] or T[n]',
         'sqlite': 'TEXT',
         'sqlite_value': 'json',
         'postgres': 'T[]',
+        'databricks': 'ARRAY<T>',
+        'snowflake': 'ARRAY',
+        'snowflake_value': 'json',
     },
     'struct': {
         'duckdb': 'STRUCT(...)',
         'sqlite': 'TEXT',
         'sqlite_value': 'json',
         'postgres': '(n)',
+        'databricks': 'STRUCT<...>',
+        'snowflake': 'OBJECT',
+        'snowflake_value': 'json',
     },
     'map': {
         'duckdb': 'MAP(VARCHAR, T)',
@@ -149,6 +234,9 @@ TYPE_MAP: dict[str, dict[str, str]] = {
         'sqlite_value': 'json',
         'postgres': 'jsonb',
         'postgres_value': 'json',
+        'databricks': 'MAP<K, V>',
+        'snowflake': 'OBJECT',
+        'snowflake_value': 'json',
     },
     'union': {
         'duckdb': 'UNION(...)',
@@ -156,6 +244,9 @@ TYPE_MAP: dict[str, dict[str, str]] = {
         'sqlite_value': 'json',
         'postgres': 'jsonb',
         'postgres_value': 'json',
+        'databricks_not_stored': 'no union type',
+        'snowflake': 'VARIANT',
+        'snowflake_value': 'json',
     },
 }
 
@@ -461,14 +552,14 @@ def composite_name(path: list[str]) -> str:
 
 
 def _postgres_type(
-    kind: Any, path: list[str], create: Callable[[str], Any]
+    kind: Any, path: list[str], create: Callable[[str], Any], schema: str
 ) -> str:
     r"""The Postgres type of an Arrow type at ``path`` (its table, column
     and members' names). A struct's is a composite type
-    (:func:`composite_name`), which ``create`` (a statement's runner)
-    creates after the composite types of its members, at any depth, so
-    every type a composite names exists before it; a list's element may be
-    any type but a list (Postgres arrays are not lists of lists)."""
+    (:func:`composite_name`) in ``schema``, which ``create`` (a statement's
+    runner) creates after the composite types of its members, at any depth,
+    so every type a composite names exists before it; a list's element may
+    be any type but a list (Postgres arrays are not lists of lists)."""
     import pyarrow as pa
 
     name = family(kind)
@@ -478,16 +569,16 @@ def _postgres_type(
         element = kind.value_type
         if family(element) == 'list':
             raise Unloadable(f'{".".join(path)}: a list of lists')
-        return _postgres_type(element, path, create) + '[]'
+        return _postgres_type(element, path, create, schema) + '[]'
     if name == 'struct':
         members = ', '.join(
             f'{quote(member.name)} '
-            + _postgres_type(member.type, [*path, member.name], create)
+            + _postgres_type(member.type, [*path, member.name], create, schema)
             for member in kind
         )
-        composite = composite_name(path)
-        create(f'CREATE TYPE {quote(composite)} AS ({members})')
-        return quote(composite)
+        composite = f'{quote(schema)}.{quote(composite_name(path))}'
+        create(f'CREATE TYPE {composite} AS ({members})')
+        return composite
     if name == 'time' and pa.types.is_time32(kind):
         return 'time'
     return TYPE_MAP[name]['postgres']
@@ -609,8 +700,12 @@ def _tables(duck: Any) -> list[str]:
     return ordered
 
 
-def _constraints(duck: Any, table: str) -> tuple[set[str], list[str]]:
-    r"""A table's ``NOT NULL`` columns, and its key and foreign-key clauses."""
+def _constraints(
+    duck: Any, table: str, prefix: str = ''
+) -> tuple[set[str], list[str]]:
+    r"""A table's ``NOT NULL`` columns, and its key and foreign-key clauses,
+    each referenced table's name after ``prefix`` (its quoted schema and a
+    dot, where the target qualifies it)."""
     not_null: set[str] = set()
     clauses: list[str] = []
     for kind, columns, target, targets in duck.execute(
@@ -629,7 +724,7 @@ def _constraints(duck: Any, table: str) -> tuple[set[str], list[str]]:
             clauses.append(f'UNIQUE ({listed})')
         elif kind == 'FOREIGN KEY':
             clauses.append(
-                f'FOREIGN KEY ({listed}) REFERENCES {quote(target)} ('
+                f'FOREIGN KEY ({listed}) REFERENCES {prefix}{quote(target)} ('
                 + ', '.join(quote(column) for column in targets)
                 + ')'
             )
@@ -760,14 +855,49 @@ def _load_sqlite(
         connection.commit()
 
 
-def _load_postgres(duck: Any, dsn: str) -> None:
+def _load_postgres(
+    duck: Any, target: Any, schema: str | None = None, replace: bool = False
+) -> list[str]:
+    r"""The tables into Postgres: ``target`` a libpq DSN, or an open psycopg
+    connection (Lakebase's, whose credential the host holds), committed
+    here. Every name is qualified by ``schema`` (by default the
+    connection's current schema, read from the server), so a case table
+    named as a catalog one (``pg_roles``) is the case's, never
+    ``pg_catalog``'s. With ``replace``, each table and composite type of
+    the case already in the schema is dropped first (Lakebase's one test
+    schema holds case after case). Returns the composite types created,
+    each qualified."""
     import psycopg
 
-    with psycopg.connect(dsn, connect_timeout=30) as connection:
-        for table in _tables(duck):
+    own = isinstance(target, str)
+    connection = psycopg.connect(target, connect_timeout=30) if own else target
+    try:
+        if schema is None:
+            row = connection.execute('SELECT current_schema()').fetchone()
+            if row is None or row[0] is None:
+                raise Unloadable('the connection has no current schema')
+            schema = str(row[0])
+        tables = _tables(duck)
+        if replace:
+            for table in reversed(tables):
+                connection.execute(
+                    f'DROP TABLE IF EXISTS {quote(schema)}.{quote(table)} '
+                    'CASCADE'
+                )
+
+        created: list[str] = []
+
+        def create(statement: str) -> None:
+            composite = statement.split(' AS (', 1)[0][len('CREATE TYPE ') :]
+            if replace:
+                connection.execute(f'DROP TYPE IF EXISTS {composite} CASCADE')
+            connection.execute(statement)
+            created.append(composite)
+
+        for table in tables:
             _lost(duck, table)
             data = _read(duck, table)
-            not_null, clauses = _constraints(duck, table)
+            not_null, clauses = _constraints(duck, table, f'{quote(schema)}.')
             columns, convert = [], []
             for field in data.schema:
                 where = f'{table}.{field.name}'
@@ -778,7 +908,7 @@ def _load_postgres(duck: Any, dsn: str) -> None:
                         f'{where}: the type map has no {field.type}'
                     ) from None
                 declared = _postgres_type(
-                    field.type, [table, field.name], connection.execute
+                    field.type, [table, field.name], create, schema
                 )
                 columns.append(
                     f'{quote(field.name)} {declared}'
@@ -796,30 +926,476 @@ def _load_postgres(duck: Any, dsn: str) -> None:
                             _postgres_text(value, n, w), w
                         )
                     )
+            qualified = f'{quote(schema)}.{quote(table)}'
             connection.execute(
-                f'CREATE TABLE {quote(table)} ('
+                f'CREATE TABLE {qualified} ('
                 + ', '.join(columns + clauses)
                 + ')'
             )
             with connection.cursor().copy(
-                f'COPY {quote(table)} FROM STDIN'
+                f'COPY {qualified} FROM STDIN'
             ) as copy:
                 for row in _rows(data, convert, table):
                     copy.write_row(row)
+        connection.commit()
+        return created
+    finally:
+        if own:
+            connection.close()
+
+
+# --- the warehouses (T3.3) ----------------------------------------------------------
+#
+# Databricks and Snowflake are loaded by SQL statements alone, run through
+# the caller's statement runner (a DB-API connection's cursor, Spark's
+# ``spark.sql``, or either wrapped in the live write guard, KO3-51), so the
+# loader needs no bulk API and every write names its table fully
+# qualified, as the guard requires. Each cell is written as a literal the
+# engine reads back exactly: text and bytes as hexadecimal, a decimal as
+# its canonical text cast to the column's type, a float as its shortest
+# round-trip text, a time as ISO text with its offset; Snowflake's
+# ``VALUES`` takes constants only, so its rows are text constants each
+# column's ``SELECT`` expression converts.
+
+#: What a warehouse leaves out of a table's constraints, beside its types:
+#: Databricks keeps primary and foreign keys only, a foreign key only when
+#: it references the other table's primary key.
+CONSTRAINTS_NOT_STORED = {
+    'databricks': 'UNIQUE, and a FOREIGN KEY not referencing a PRIMARY KEY',
+}
+
+#: Rows per ``INSERT``, and the most text one may hold, so a statement
+#: stays well within each engine's limit.
+_BATCH_ROWS = 500
+_BATCH_TEXT = 256 * 1024
+
+_FRACTION_DIGITS = {'s': 0, 'ms': 3, 'us': 6, 'ns': 9}
+
+#: The characters Delta reads as column-name syntax unless the table maps
+#: its columns by name.
+_DELTA_NAME_SYNTAX = set(' ,;{}()\n\t=')
+
+
+def backtick(name: str) -> str:
+    r"""An identifier quoted with backticks, as Databricks reads it."""
+    return '`' + name.replace('`', '``') + '`'
+
+
+def not_stored(engine: str, kind: Any, where: str = '') -> str | None:
+    r"""Why ``engine`` stores no column of the Arrow type ``kind`` (any
+    member of a nested type included), or ``None`` when it stores it."""
+    name = family(kind)
+    reason = TYPE_MAP[name].get(f'{engine}_not_stored')
+    if reason is not None:
+        return f'{where or name}: {kind}, and {engine} has {reason}'
+    if name == 'map':
+        return not_stored(engine, kind.key_type, where) or not_stored(
+            engine, kind.item_type, where
+        )
+    if name == 'list':
+        return not_stored(engine, kind.value_type, where)
+    if name == 'struct':
+        for member in kind:
+            found = not_stored(engine, member.type, where)
+            if found is not None:
+                return found
+    return None
+
+
+def unstored(duck: Any, leg: str) -> list[str]:
+    r"""Each column of ``duck``'s main schema that ``leg``'s engine stores
+    no column of (:func:`not_stored`), named with its reason: a case with
+    any does not run on the leg (KO2-47)."""
+    engine = LEG_ENGINES[leg]
+    found = []
+    for table in _tables(duck):
+        for field in _read(duck, table).schema:
+            try:
+                reason = not_stored(engine, field.type, f'{table}.{field.name}')
+            except KeyError:
+                reason = (
+                    f'{table}.{field.name}: the type map has no {field.type}'
+                )
+            if reason is not None:
+                found.append(reason)
+    return found
+
+
+def _unit_digits(kind: Any) -> int:
+    return _FRACTION_DIGITS[kind.unit]
+
+
+def _warehouse_type(engine: str, kind: Any, where: str) -> str:
+    r"""The type ``engine`` declares for the Arrow type ``kind``."""
+    reason = not_stored(engine, kind, where)
+    if reason is not None:
+        raise Unloadable(reason)
+    name = family(kind)
+    if name == 'decimal':
+        if kind.precision > 38:
+            raise Unloadable(
+                f'{where}: DECIMAL({kind.precision},{kind.scale}), past the '
+                f'38 digits {engine} holds'
+            )
+        base = 'DECIMAL' if engine == 'databricks' else 'NUMBER'
+        return f'{base}({kind.precision},{kind.scale})'
+    if engine == 'databricks':
+        if name == 'list':
+            return f'ARRAY<{_warehouse_type(engine, kind.value_type, where)}>'
+        if name == 'struct':
+            members = ', '.join(
+                f'{backtick(member.name)}: '
+                + _warehouse_type(engine, member.type, where)
+                for member in kind
+            )
+            return f'STRUCT<{members}>'
+        if name == 'map':
+            return (
+                f'MAP<{_warehouse_type(engine, kind.key_type, where)}, '
+                f'{_warehouse_type(engine, kind.item_type, where)}>'
+            )
+        return TYPE_MAP[name]['databricks']
+    declared = TYPE_MAP[name]['snowflake']
+    if declared.endswith('(f)'):
+        return declared[:-3] + f'({_unit_digits(kind)})'
+    return declared
+
+
+def _whole_micros_on(engine: str, value: Any, where: str) -> None:
+    r"""Databricks holds microseconds; a finer instant is refused by name."""
+    if engine == 'databricks':
+        _whole_micros(value[1], value[2], where)
+
+
+def _hex(data: bytes) -> str:
+    return data.hex().upper()
+
+
+def _float_text(value: float) -> str:
+    if math.isnan(value):
+        return 'NaN'
+    if math.isinf(value):
+        return 'Infinity' if value > 0 else '-Infinity'
+    return repr(float(value))
+
+
+def _databricks_literal(value: Any, kind: Any, where: str) -> str:
+    r"""A cell as a Databricks SQL literal of the column's type."""
+    declared = _warehouse_type('databricks', kind, where)
+    if value is None:
+        return f'CAST(NULL AS {declared})'
+    name = family(kind)
+    if name == 'boolean':
+        return 'TRUE' if value else 'FALSE'
+    if name in ('int8', 'int16', 'int32', 'int64'):
+        return f'CAST({int(value)} AS {declared})'
+    if name in ('float32', 'float64'):
+        return f"CAST('{_float_text(value)}' AS {declared})"
+    if name == 'decimal':
+        return f"CAST('{canonical_decimal_text(value)}' AS {declared})"
+    if name == 'string':
+        return f"CAST(X'{_hex(value.encode())}' AS STRING)"
+    if name == 'binary':
+        return f"X'{_hex(bytes(value))}'"
+    if name == 'date':
+        return f"DATE'{_iso(value)}'"
+    if name in ('timestamp', 'timestamptz'):
+        _whole_micros_on('databricks', value, where)
+        return f"CAST('{_iso(value)}' AS {declared})"
+    if name == 'list':
+        items = ', '.join(
+            _databricks_literal(item, kind.value_type, where) for item in value
+        )
+        return f'CAST(ARRAY({items}) AS {declared})'
+    if name == 'struct':
+        # A struct casts to a struct member by member in order, so the
+        # members' own names are the declared type's, whatever they hold.
+        members = ', '.join(
+            f"'f{i}', "
+            + _databricks_literal(value[member.name], member.type, where)
+            for i, member in enumerate(kind)
+        )
+        return f'CAST(NAMED_STRUCT({members}) AS {declared})'
+    if name == 'map':
+        keys = [key for key, _ in value]
+        if len(set(map(repr, keys))) != len(keys):
+            raise Unloadable(f'{where}: a map with a key twice')
+        entries = ', '.join(
+            _databricks_literal(key, kind.key_type, where)
+            + ', '
+            + _databricks_literal(item, kind.item_type, where)
+            for key, item in value
+        )
+        return f'CAST(MAP({entries}) AS {declared})'
+    raise Unloadable(f'{where}: {kind}, which the loader cannot write')
+
+
+def _snowflake_text(value: Any, name: str, where: str) -> str | None:
+    r"""A cell as the text constant Snowflake's ``SELECT`` converts
+    (:func:`_snowflake_reader`)."""
+    if value is None:
+        return None
+    if name == 'boolean':
+        return 'true' if value else 'false'
+    if name in ('int8', 'int16', 'int32', 'int64'):
+        return str(int(value))
+    if name in ('float32', 'float64'):
+        return {'NaN': 'NaN', 'Infinity': 'inf', '-Infinity': '-inf'}.get(
+            _float_text(value), _float_text(value)
+        )
+    if name == 'decimal':
+        return canonical_decimal_text(value)
+    if name == 'string':
+        return _hex(value.encode())
+    if name == 'binary':
+        return _hex(bytes(value))
+    if name in ('date', 'time', 'timestamp', 'timestamptz'):
+        return _iso(value)
+    if name in ('list', 'struct', 'map', 'union'):
+        return _hex(_json(value, where).encode())
+    raise Unloadable(f'{where}: a value of {name} the loader cannot write')
+
+
+def _snowflake_reader(name: str, declared: str, column: str) -> str:
+    r"""The expression reading a column of :func:`_snowflake_text`'s text
+    constants as ``declared``."""
+    if name == 'string':
+        return f'HEX_DECODE_STRING({column})'
+    if name == 'binary':
+        return f"TO_BINARY({column}, 'HEX')"
+    if name in ('list', 'struct', 'map', 'union'):
+        return f'PARSE_JSON(HEX_DECODE_STRING({column}))::{declared}'
+    return f'CAST({column} AS {declared})'
+
+
+def _sql_text(text: str | None) -> str:
+    r"""A text constant for Snowflake: every text :func:`_snowflake_text`
+    writes is digits, letters, signs, points, colons and spaces, so it
+    needs no escape; anything else is a fault here."""
+    if text is None:
+        return 'NULL'
+    if not all(c.isalnum() or c in '+-.: ' for c in text):
+        raise AssertionError(f'unexpected text constant {text!r}')
+    return f"'{text}'"
+
+
+def _qualified(engine: str, namespace: tuple[str, ...], table: str) -> str:
+    quoting = backtick if engine == 'databricks' else quote
+    return '.'.join(quoting(part) for part in (*namespace, table))
+
+
+def _warehouse_constraints(
+    engine: str, duck: Any, table: str, namespace: tuple[str, ...]
+) -> tuple[set[str], list[str], list[str]]:
+    r"""A table's ``NOT NULL`` columns, the key clauses ``engine`` stores
+    and a note for each it does not (:data:`CONSTRAINTS_NOT_STORED`)."""
+    quoting = backtick if engine == 'databricks' else quote
+    not_null: set[str] = set()
+    clauses: list[str] = []
+    notes: list[str] = []
+    primary: dict[str, tuple[str, ...]] = {}
+    for name, columns in duck.execute(
+        'SELECT table_name, constraint_column_names FROM duckdb_constraints() '
+        "WHERE schema_name = 'main' AND constraint_type = 'PRIMARY KEY'"
+    ).fetchall():
+        primary[name] = tuple(columns)
+    rows = duck.execute(
+        'SELECT constraint_type, constraint_column_names, referenced_table, '
+        'referenced_column_names FROM duckdb_constraints() '
+        "WHERE schema_name = 'main' AND table_name = ? "
+        'ORDER BY constraint_index',
+        [table],
+    ).fetchall()
+    for kind, columns, target, targets in rows:
+        listed = ', '.join(quoting(column) for column in columns)
+        if kind == 'NOT NULL':
+            not_null.update(columns)
+        elif kind == 'PRIMARY KEY':
+            not_null.update(columns)
+            clauses.append(
+                f'CONSTRAINT {quoting(table + "_pk")} PRIMARY KEY ({listed})'
+                if engine == 'databricks'
+                else f'PRIMARY KEY ({listed})'
+            )
+        elif kind == 'UNIQUE':
+            if engine == 'databricks':
+                notes.append(
+                    f'{table}: UNIQUE ({", ".join(columns)}) not stored'
+                )
+            else:
+                clauses.append(f'UNIQUE ({listed})')
+        elif kind == 'FOREIGN KEY':
+            if engine == 'databricks' and primary.get(target) != tuple(targets):
+                notes.append(
+                    f'{table}: FOREIGN KEY ({", ".join(columns)}) not stored, '
+                    'as it references no PRIMARY KEY'
+                )
+                continue
+            reference = (
+                f'FOREIGN KEY ({listed}) REFERENCES '
+                f'{_qualified(engine, namespace, target)} ('
+                + ', '.join(quoting(column) for column in targets)
+                + ')'
+            )
+            if engine == 'databricks':
+                index = sum(
+                    clause.startswith('CONSTRAINT') for clause in clauses
+                )
+                reference = (
+                    f'CONSTRAINT {quoting(f"{table}_fk{index}")} ' + reference
+                )
+            clauses.append(reference)
+    return not_null, clauses, notes
+
+
+def _batches(rows: list[str]) -> Iterator[list[str]]:
+    batch: list[str] = []
+    size = 0
+    for row in rows:
+        if batch and (
+            len(batch) >= _BATCH_ROWS or size + len(row) > _BATCH_TEXT
+        ):
+            yield batch
+            batch, size = [], 0
+        batch.append(row)
+        size += len(row)
+    if batch:
+        yield batch
+
+
+def warehouse_statements(
+    duck: Any, engine: str, namespace: tuple[str, ...]
+) -> tuple[list[str], list[str]]:
+    r"""The statements loading every table of ``duck``'s main schema into
+    ``engine``'s schema ``namespace`` (catalog or database, then schema),
+    each table dropped first, and a note for each constraint the engine
+    does not store. A column the engine stores no column of, or a value
+    its type cannot hold, is refused by name (:class:`Unloadable`)."""
+    if engine not in ('databricks', 'snowflake'):
+        raise ValueError(f'no warehouse engine {engine!r}')
+    if len(namespace) != 2 or not all(namespace):
+        raise ValueError('a warehouse schema is named by two parts')
+    quoting = backtick if engine == 'databricks' else quote
+    tables = _tables(duck)
+    statements = [
+        f'DROP TABLE IF EXISTS {_qualified(engine, namespace, table)}'
+        for table in reversed(tables)
+    ]
+    notes: list[str] = []
+    for table in tables:
+        _lost(duck, table)
+        data = _read(duck, table)
+        names = [field.name for field in data.schema]
+        not_null, clauses, left_out = _warehouse_constraints(
+            engine, duck, table, namespace
+        )
+        notes.extend(left_out)
+        declared, families = [], []
+        for field in data.schema:
+            where = f'{table}.{field.name}'
+            try:
+                families.append(family(field.type))
+            except KeyError:
+                raise Unloadable(
+                    f'{where}: the type map has no {field.type}'
+                ) from None
+            declared.append(_warehouse_type(engine, field.type, where))
+        columns = [
+            f'{quoting(name)} {kind}'
+            + (' NOT NULL' if name in not_null else '')
+            for name, kind in zip(names, declared, strict=True)
+        ]
+        qualified = _qualified(engine, namespace, table)
+        create = (
+            f'CREATE TABLE {qualified} (' + ', '.join(columns + clauses) + ')'
+        )
+        if engine == 'databricks' and any(
+            set(name) & _DELTA_NAME_SYNTAX for name in names
+        ):
+            create += " TBLPROPERTIES ('delta.columnMapping.mode' = 'name')"
+        statements.append(create)
+        if engine == 'databricks':
+            convert = [
+                lambda value, k=field.type, w=f'{table}.{field.name}': (
+                    _databricks_literal(value, k, w)
+                )
+                for field in data.schema
+            ]
+            rows = [
+                '(' + ', '.join(row) + ')'
+                for row in _rows(data, convert, table)
+            ]
+            listed = ', '.join(quoting(name) for name in names)
+            for batch in _batches(rows):
+                statements.append(
+                    f'INSERT INTO {qualified} ({listed}) VALUES '
+                    + ', '.join(batch)
+                )
+        else:
+            convert = [
+                lambda value, n=name, w=f'{table}.{field.name}': _sql_text(
+                    _snowflake_text(value, n, w)
+                )
+                for name, field in zip(families, data.schema, strict=True)
+            ]
+            rows = [
+                '(' + ', '.join(row) + ')'
+                for row in _rows(data, convert, table)
+            ]
+            listed = ', '.join(quoting(name) for name in names)
+            readers = ', '.join(
+                _snowflake_reader(name, kind, f'column{i + 1}')
+                for i, (name, kind) in enumerate(
+                    zip(families, declared, strict=True)
+                )
+            )
+            for batch in _batches(rows):
+                statements.append(
+                    f'INSERT INTO {qualified} ({listed}) SELECT {readers} '
+                    'FROM VALUES ' + ', '.join(batch)
+                )
+    return statements, notes
+
+
+def statement_runner(connection: Any) -> Callable[[str], Any]:
+    r"""A statement runner over a DB-API connection (Databricks SQL's, the
+    Snowflake connector's, either wrapped in the live write guard): each
+    statement on a cursor of its own."""
+
+    def run(statement: str) -> None:
+        cursor = connection.cursor()
+        try:
+            cursor.execute(statement)
+        finally:
+            cursor.close()
+
+    return run
 
 
 def load(
     duck: Any,
     database: str,
-    target: str | Path,
+    target: Any,
     *,
+    namespace: tuple[str, ...] | None = None,
     refuse_negative_zero: bool = True,
-) -> None:
-    r"""Every table of ``duck``'s main schema, loaded into ``database``
-    (``'sqlite'``: a new file at ``target``; ``'postgres'``: the libpq DSN
-    ``target``, the tables created in its current schema), each column
-    stored as the type map says; :class:`Unloadable` names a column the
-    target cannot hold.
+) -> list[str]:
+    r"""Every table of ``duck``'s main schema, loaded into ``database``,
+    each column stored as the type map says; :class:`Unloadable` names a
+    column the target cannot hold. Returns a note for each constraint the
+    target does not store (:data:`CONSTRAINTS_NOT_STORED`).
+
+    - ``'sqlite'``: a new file at ``target``;
+    - ``'postgres'``: the libpq DSN ``target``, the tables created in its
+      current schema;
+    - ``'lakebase'``: ``target`` a DSN or an open psycopg connection, the
+      tables created in ``namespace``'s one schema, replacing the case's
+      tables and types already there;
+    - ``'databricks'``, ``'snowflake'``: ``target`` a DB-API connection or a
+      statement runner (Spark's ``spark.sql``; the write guard's wrapped
+      connection), the tables created in ``namespace`` (catalog or
+      database, then schema), replacing the case's tables already there
+      (:func:`warehouse_statements`).
 
     A float -0.0, which SQLite stores as 0.0, is refused on SQLite unless
     ``refuse_negative_zero`` is false: a caller whose expected answers
@@ -828,10 +1404,86 @@ def load(
     holds, never does."""
     if database == 'sqlite':
         _load_sqlite(duck, Path(target), refuse_negative_zero)
-    elif database == 'postgres':
+        return []
+    if database == 'postgres':
         _load_postgres(duck, str(target))
-    else:
-        raise ValueError(f'no loader for {database!r}; it is one of {TARGETS}')
+        return []
+    if database == 'lakebase':
+        if namespace is None or len(namespace) != 1 or not namespace[0]:
+            raise ValueError('a Lakebase schema is named by one part')
+        _load_postgres(duck, target, namespace[0], replace=True)
+        return []
+    if database in ('databricks', 'snowflake'):
+        if namespace is None:
+            raise ValueError(f'a {database} load needs its schema')
+        statements, notes = warehouse_statements(duck, database, namespace)
+        run = target if callable(target) else statement_runner(target)
+        for statement in statements:
+            run(statement)
+        return notes
+    raise ValueError(f'no loader for {database!r}; it is one of {TARGETS}')
+
+
+class CaseSchema:
+    r"""One warehouse leg's test schema across a run's cases (C-1, E-0):
+    each :meth:`load` first drops every table (and Lakebase composite type)
+    the run loaded before, children first, so the schema holds exactly the
+    case's tables when the old client reads its catalog; :meth:`clear`
+    drops what is left. Only what this object loaded is ever dropped: the
+    schema's other objects (a view a case reads) are never touched.
+
+    ``target`` is what :func:`load` takes for ``database``: a statement
+    runner or DB-API connection for Databricks and Snowflake, an open
+    psycopg connection for Lakebase."""
+
+    def __init__(
+        self, database: str, target: Any, namespace: tuple[str, ...]
+    ) -> None:
+        if database not in ('databricks', 'snowflake', 'lakebase'):
+            raise ValueError(f'no warehouse schema on {database!r}')
+        self.database = database
+        self.target = target
+        self.namespace = tuple(namespace)
+        self.tables: list[str] = []
+        self.types: list[str] = []
+
+    def _run(self, statement: str) -> None:
+        if self.database == 'lakebase':
+            self.target.execute(statement)
+        elif callable(self.target):
+            self.target(statement)
+        else:
+            statement_runner(self.target)(statement)
+
+    def clear(self) -> None:
+        r"""Drops every table and type loaded so far, the last first."""
+        for table in reversed(self.tables):
+            if self.database == 'lakebase':
+                self._run(
+                    f'DROP TABLE IF EXISTS {quote(self.namespace[0])}.'
+                    f'{quote(table)} CASCADE'
+                )
+            else:
+                self._run(
+                    'DROP TABLE IF EXISTS '
+                    + _qualified(self.database, self.namespace, table)
+                )
+        for composite in reversed(self.types):
+            self._run(f'DROP TYPE IF EXISTS {composite} CASCADE')
+        if self.database == 'lakebase':
+            self.target.commit()
+        self.tables, self.types = [], []
+
+    def load(self, duck: Any) -> list[str]:
+        r"""The case's tables in the schema, alone; :func:`load`'s notes."""
+        self.clear()
+        self.tables = _tables(duck)
+        if self.database == 'lakebase':
+            self.types = _load_postgres(
+                duck, self.target, self.namespace[0], replace=True
+            )
+            return []
+        return load(duck, self.database, self.target, namespace=self.namespace)
 
 
 def non_native(database: str) -> list[str]:
