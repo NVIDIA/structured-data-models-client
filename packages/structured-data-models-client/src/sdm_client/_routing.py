@@ -24,6 +24,7 @@ imports ``sdm_client._native``, and only on a core route.
 from __future__ import annotations
 
 import os
+import sys
 
 #: The environment variable that forces paths onto the core, for tests.
 ENVIRONMENT = 'SDM_CORE_ROUTES'
@@ -333,28 +334,52 @@ FROM_SOURCE_POSTGRES_TABLES = _on(FROM_SOURCE_DUCKDB_TABLES, 'postgres')
 MATERIALIZE_POSTGRES = _on(MATERIALIZE_DUCKDB, 'postgres')
 PREDICT_POSTGRES = _on(PREDICT_DUCKDB, 'postgres')
 
-#: The backends whose sources the core reads, and each call's paths over
-#: each: ``Schema.from_source`` with no tables named and with tables
-#: named, ``PredictiveQuery.materialize`` and ``SDMClient.predict``.
+#: The same calls over a Databricks source (T3.4), routed as DuckDB's are:
+#: through a SQL warehouse connection, and through a notebook's Spark
+#: session, each its own paths (:func:`route_key` tells them apart).
+FROM_SOURCE_DATABRICKS_SQL = _on(FROM_SOURCE_DUCKDB, 'databricks-sql')
+FROM_SOURCE_DATABRICKS_SQL_TABLES = _on(
+    FROM_SOURCE_DUCKDB_TABLES, 'databricks-sql'
+)
+MATERIALIZE_DATABRICKS_SQL = _on(MATERIALIZE_DUCKDB, 'databricks-sql')
+PREDICT_DATABRICKS_SQL = _on(PREDICT_DUCKDB, 'databricks-sql')
+FROM_SOURCE_DATABRICKS_SPARK = _on(FROM_SOURCE_DUCKDB, 'databricks-spark')
+FROM_SOURCE_DATABRICKS_SPARK_TABLES = _on(
+    FROM_SOURCE_DUCKDB_TABLES, 'databricks-spark'
+)
+MATERIALIZE_DATABRICKS_SPARK = _on(MATERIALIZE_DUCKDB, 'databricks-spark')
+PREDICT_DATABRICKS_SPARK = _on(PREDICT_DUCKDB, 'databricks-spark')
+
+#: The kinds of source the core reads (:func:`route_key`), and each call's
+#: paths over each: ``Schema.from_source`` with no tables named and with
+#: tables named, ``PredictiveQuery.materialize`` and ``SDMClient.predict``.
 FROM_SOURCE = {
     'duckdb': FROM_SOURCE_DUCKDB,
     'sqlite': FROM_SOURCE_SQLITE,
     'postgres': FROM_SOURCE_POSTGRES,
+    'databricks-sql': FROM_SOURCE_DATABRICKS_SQL,
+    'databricks-spark': FROM_SOURCE_DATABRICKS_SPARK,
 }
 FROM_SOURCE_TABLES = {
     'duckdb': FROM_SOURCE_DUCKDB_TABLES,
     'sqlite': FROM_SOURCE_SQLITE_TABLES,
     'postgres': FROM_SOURCE_POSTGRES_TABLES,
+    'databricks-sql': FROM_SOURCE_DATABRICKS_SQL_TABLES,
+    'databricks-spark': FROM_SOURCE_DATABRICKS_SPARK_TABLES,
 }
 MATERIALIZE = {
     'duckdb': MATERIALIZE_DUCKDB,
     'sqlite': MATERIALIZE_SQLITE,
     'postgres': MATERIALIZE_POSTGRES,
+    'databricks-sql': MATERIALIZE_DATABRICKS_SQL,
+    'databricks-spark': MATERIALIZE_DATABRICKS_SPARK,
 }
 PREDICT = {
     'duckdb': PREDICT_DUCKDB,
     'sqlite': PREDICT_SQLITE,
     'postgres': PREDICT_POSTGRES,
+    'databricks-sql': PREDICT_DATABRICKS_SQL,
+    'databricks-spark': PREDICT_DATABRICKS_SPARK,
 }
 
 #: The paths this build can run on the core.
@@ -372,6 +397,14 @@ CORE_ROUTED = frozenset(
     + FROM_SOURCE_POSTGRES_TABLES
     + MATERIALIZE_POSTGRES
     + PREDICT_POSTGRES
+    + FROM_SOURCE_DATABRICKS_SQL
+    + FROM_SOURCE_DATABRICKS_SQL_TABLES
+    + MATERIALIZE_DATABRICKS_SQL
+    + PREDICT_DATABRICKS_SQL
+    + FROM_SOURCE_DATABRICKS_SPARK
+    + FROM_SOURCE_DATABRICKS_SPARK_TABLES
+    + MATERIALIZE_DATABRICKS_SPARK
+    + PREDICT_DATABRICKS_SPARK
 )
 
 
@@ -417,14 +450,33 @@ def route(paths: tuple[str, ...]) -> str:
     return taken.pop()
 
 
+def route_key(source: object) -> str | None:
+    r"""The kind of source ``source`` is, as its paths name it: a source of
+    ``sdm_connectors`` as its module tells it (a Databricks source as
+    ``'databricks-sql'``, ``'databricks-spark'`` or
+    ``'databricks-metric-view'``), anything else by its ``backend``, or
+    ``None`` with none.
+
+    ``sdm_connectors`` is not imported here: a source of it exists only once
+    it has been."""
+    backend = getattr(source, 'backend', None)
+    if not isinstance(backend, str):
+        return None
+    sources = sys.modules.get('sdm_connectors.source')
+    if sources is not None and isinstance(source, sources.Source):
+        return str(sources._route_of(source))
+    return backend
+
+
 def on_the_core(source: object, paths: dict[str, tuple[str, ...]]) -> bool:
-    r"""Whether a call over ``source`` that may end on ``paths[backend]``
-    runs on the core: a source of a backend the core reads, routed there.
+    r"""Whether a call over ``source`` that may end on ``paths[kind]``
+    runs on the core: a kind of source the core reads (:func:`route_key`),
+    routed there.
 
     Raises:
         RouteError: As :func:`route` does.
     """
-    backend = getattr(source, 'backend', None)
-    if not isinstance(backend, str) or backend not in paths:
+    kind = route_key(source)
+    if kind is None or kind not in paths:
         return False
-    return route(paths[backend]) == 'core'
+    return route(paths[kind]) == 'core'
