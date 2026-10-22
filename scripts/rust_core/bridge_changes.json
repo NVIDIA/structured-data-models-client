@@ -3,7 +3,7 @@
   "about": "Each change to frozen bridge code against the merge base, with one reason: moved (a rule moved into Rust, naming its task), refactor (behaviour kept), gone (an entry that left the freeze) or main (a change main made, merged by this change: the full SHA of the main commit, then its title). Entries the merge base already holds are spent and may be pruned.",
   "changes": {
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::<module>": {
-      "moved": "T2.11: the sampling options (context_anchor_time, exclude_cols_dict, max_pq_iterations, num_hops, num_neighbors, return_embeddings, use_prediction_time) join the options whose values the core reads (TAKEN, VALUED); their types, bounds and effects are the core's (sdm-request options, sdm-core materialize and subgraph); no rule added here; T2.14b: the candidate-repeat rule (MID2 P2-2) is the core's (sdm-request's ranking::distinct, Python's equality by key): the host passes each candidate as given, a value it cannot hash unreadable; T2.14b fix 1: imports datetime for _kind (MID2 P2-2); T2.14b fix 2: _kind replaced by _typed (MID2 P2-2); T2.14b fix 4: _typed replaced by _kind (MID2 P2-2)"
+      "refactor": "T3.4: the bridge imports the Databricks providers' module beside the others; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_indices": {
       "moved": "T1.32a: the cast to the key's type with pandas (pd.Series(indices, dtype=...)) and its INVALID_REQUEST and INTERNAL_ERROR split are the core's rule table; the bridge hands over the values as pyarrow infers them, or as their text where it infers no one type"
@@ -93,16 +93,16 @@
       "refactor": "T2.1b: a held table's source sent as contract v26 writes it, a relation of one part (codec.relation); no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::<module>": {
-      "refactor": "T2.3: imports the Postgres provider beside the DuckDB and SQLite providers; no rule added"
+      "refactor": "T3.4: the bridge imports the Databricks providers' module beside the others; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/client.py::_predicts_on_the_core": {
       "refactor": "T2.2: a request over a SQLite source routes as one over DuckDB (_routing.on_the_core with the backend's predict paths); no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::_provider": {
-      "refactor": "T2.3: picks Postgres's dialect and provider for a Postgres source, beside DuckDB's and SQLite's; no rule added"
+      "refactor": "T3.4: a Databricks source's provider choice and provider (providers.databricks.for_source): the databricks dialect, the catalog and schema the source names, and the warehouse or Spark provider on its connection; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_provider": {
-      "refactor": "T2.3: picks Postgres's dialect and provider for a Postgres source, beside DuckDB's and SQLite's; no rule added"
+      "refactor": "T3.4: a Databricks source's provider choice and provider (providers.databricks.for_source): the databricks dialect, the catalog and schema the source names, and the warehouse or Spark provider on its connection; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::asked": {
       "moved": "T2.18: whether a query's target moves with time and its entity table, as the core resolved them (Materialized.query) for a query only the core resolves (KO2-36), else as the old validator did; the core's facts are taken out of the state the request keeps; T2.14b: the target's windowing and entity table (MID2 P2-4) are the core's Materialized.query facts for every query, never the old validator's tree"
