@@ -47,9 +47,7 @@ def java_home() -> Path:
         value = os.environ.get(name)
         if value and (Path(value) / 'bin' / 'java').is_file():
             return Path(value)
-    raise Missing(
-        'no JDK: set SDM_JAVA_HOME (or JAVA_HOME) to a JDK 17 or 21'
-    )
+    raise Missing('no JDK: set SDM_JAVA_HOME (or JAVA_HOME) to a JDK 17 or 21')
 
 
 def maven() -> str:
@@ -79,10 +77,21 @@ def run(argv: list[str], **kwargs: object) -> None:
 def native() -> Path:
     """The native with the test-only operations, built in debug."""
     run(
-        ['cargo', 'build', '-q', '--locked', '-p', 'sdm-jni', '--features', 'test-ops'],
+        [
+            'cargo',
+            'build',
+            '-q',
+            '--locked',
+            '-p',
+            'sdm-jni',
+            '--features',
+            'test-ops',
+        ],
         cwd=ROOT / 'rust',
     )
-    target = Path(os.environ.get('CARGO_TARGET_DIR') or ROOT / 'rust' / 'target')
+    target = Path(
+        os.environ.get('CARGO_TARGET_DIR') or ROOT / 'rust' / 'target'
+    )
     built = target / 'debug' / native_name()
     if not built.is_file():
         raise SystemExit(f'java_build.py: cargo built no {built}')
