@@ -7521,6 +7521,11 @@ entries:
     sentence match the reference's but for the schema before the table's
     name. Matching it would take a current_schema() read on the error
     path only.
+    T3.8 fix 2 (Codex round 1 found it worse) has the core ask the source,
+    on that refusal's path only, for the namespace a one-part name is read
+    in (contract v28's describe part namespace: Postgres's current_schema(),
+    rendered by sdm-data), so the table is named as the reference names it
+    and no difference remains: for a reviewer to reject.
 
 - id: P3E-2
   title: A core warning's words follow its code in brackets
