@@ -152,6 +152,58 @@ This needs `pip install 'structured-data-models-client[databricks-serving]'`. A 
 answers one request at a time, so `fit()` is refused there; `predict()` sends
 the context with every call.
 
+## A model in this process
+
+The model can also run in your own Python process, with no NIM at all. The
+calls are the same; only how the client is opened differs:
+
+```python
+from sdm_client import KumoRelational, SDMClient
+
+with SDMClient.in_process() as client:
+    result = client.predict(request, model=KumoRelational())
+```
+
+Each model is loaded from its published weights on Hugging Face the first time
+it is asked for, on a GPU when there is one. A model you already loaded with
+structured-data-models is used as it is:
+
+```python
+import sdm
+
+relational = sdm.models.KumoRelational(device='cuda')
+with SDMClient.in_process(relational) as client:
+    result = client.predict(request, model=KumoRelational())
+```
+
+It answers as the NIM does. The request is prepared exactly as it is for a NIM,
+and the model is run on it directly, with no HTTP in between. The context is
+fitted with the NIM's seed and settings, and `fit()` holds its session in
+memory. On a GPU it computes as the NIM does, and with the published weights on
+the same GPU it gives the NIM's answers exactly.
+
+A request the model cannot answer is refused with a `StructuredDataError` whose
+`code` says why, from the codes a NIM uses, such as `UNSUPPORTED_OUTPUT`. It is
+not a `NimRequestError` and has no HTTP status, since nothing was sent. Inside
+a session the code is the reason's own, where a NIM files the refusal under
+`SESSION_CREATE_VALIDATION_FAILED` or `SESSION_PREDICT_SCHEMA_MISMATCH`. A
+request is checked for what the model needs to read it, not against every rule
+of the request contract: a name longer than the contract's 1,024 characters, or
+a key the contract does not name in a request built by hand and passed to
+`Request.materialized`, is answered here where a NIM refuses it with
+`VALIDATION_FAILED`.
+
+Two things differ by design. On a CPU it computes at full precision and draws
+its random numbers there, so its answers can differ from a GPU-hosted NIM's by
+more than rounding: in one comparison a class probability moved by 0.16. And
+the limits a deployment sets to protect a shared server are not applied, since
+none is shared here; see [limits](../reference/limits.md).
+
+This needs `pip install 'structured-data-models-client[in-process]'`, which
+brings PyTorch, on Python 3.11 or later. A relational request is still
+gathered by the relational engine, so for `KumoRelational` install both:
+`pip install 'structured-data-models-client[relational,in-process]'`.
+
 ## Which rows get scored
 
 A query says *what* to predict. It never says *which rows*.

@@ -9,6 +9,14 @@ these packages. All five distributions share one version and one entry.
 
 ### Added
 
+- `SDMClient.in_process()` runs `kumo-tabular` and `kumo-relational` in this
+  Python process with structured-data-models, through the same calls as a NIM:
+  predictions, fitted sessions, rankings and forecasts. It loads each model
+  from its published weights on first use, or uses one passed in. The request
+  is prepared as it is for a NIM and the model run on it directly, the context
+  fitted as the NIM fits it. A request the model cannot answer is refused with
+  a `StructuredDataError` whose code says why. Install it with the
+  `in-process` extra.
 - The relational engine publishes wheels for macOS (Apple silicon and Intel)
   and 64-bit Windows, and for CPython 3.14, alongside the `manylinux_2_28`
   x86-64 and aarch64 wheels it already built, so `structured-data-models-client[relational]`
@@ -22,9 +30,22 @@ these packages. All five distributions share one version and one entry.
   emulated, and each is smoke-tested on the architecture it targets. The
   release no longer builds aarch64 under QEMU, which also takes a privileged
   container image out of the release path.
+- A request's inference options are written in the types the contract
+  gives them before it is sent: `use_prediction_time` spelled `'no'` is sent
+  as `false`, a NumPy boolean or integer is sent as the value it holds, and a
+  value that cannot be read as its type, such as a `run_mode` that is not
+  text, is refused with `INVALID_REQUEST` before sending, where a NIM
+  answered `422 VALIDATION_FAILED`.
 - The `duckdb` extra holds `duckdb` below 2. The 2.0 release warns on the
   Arrow fetch the relational engine reads DuckDB tables through, and this
   release is tested against 1.5.
+
+### Fixed
+
+- A predictive query longer than 1,024 characters is answered. A relational
+  request carries the query in `metadata.source_query` for logging, which the
+  contract caps at 1,024 characters, so a NIM refused a longer one with
+  `VALIDATION_FAILED`. The logged copy is now cut to fit.
 
 ## 1.0.0 - 2026-10-15
 

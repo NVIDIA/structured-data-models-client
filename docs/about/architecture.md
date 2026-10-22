@@ -132,6 +132,7 @@ pip install structured-data-models-client                   # tabular, PQL, tran
 pip install 'structured-data-models-client[relational]'     # adds the native relational engine
 pip install 'structured-data-models-client[snowflake]'      # one backend (also duckdb/sqlite/postgres/databricks/s3)
 pip install 'structured-data-models-client[all]'            # relational + every backend
+pip install 'structured-data-models-client[in-process]'     # runs the models in this process
 ```
 
 `[explain]` and `[relbench]` are the engine's own extras, not the client's, so
@@ -673,7 +674,7 @@ serve.
 
 | Call | Answer |
 |---|---|
-| `client.models()` | Read from the endpoint's `/v1/models`. Endpoint truth. |
+| `client.models()` | Read from the endpoint's `/v1/models`. Endpoint truth. In process, the models the client can run. |
 | `client.capabilities(model)` | Local: what this client can build and send. Tagged `source="sdk"`. |
 
 `/v1/models` is a NIM runtime route and is **not** one of the contract's four

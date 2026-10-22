@@ -22,6 +22,7 @@ import pandas as pd
 import pytest
 
 from sdm_client import KumoTabular, Request, SDMClient
+from sdm_client.core.backend import NimBackend
 from sdm_client.result import PredictionResult
 
 
@@ -54,7 +55,7 @@ class _Endpoint:
 
 def _client_with(endpoint: _Endpoint) -> SDMClient:
     client = SDMClient('http://127.0.0.1:1', 'none', timeout=1.0, max_retries=0)
-    client._transport = endpoint
+    client._backend = NimBackend(endpoint)
     return client
 
 
