@@ -260,6 +260,21 @@ TYPE_MAP: dict[str, dict[str, str]] = {
 }
 
 
+#: The live write guard (KO3-51): a check every statement the loader
+#: writes with on a live warehouse passes before it runs, raising for a
+#: write outside the one test schema; the live runs set it
+#: (``scripts/live/capture_run.py``), and offline it is ``None``.
+WRITE_GUARD: Callable[[str], None] | None = None
+
+
+def guarded(statement: str) -> str:
+    r"""``statement``, once the live write guard, when one is set, has let
+    it through."""
+    if WRITE_GUARD is not None:
+        WRITE_GUARD(statement)
+    return statement
+
+
 class Unloadable(Exception):
     r"""A table the target cannot hold as the type map says, named by
     table and column; never a value."""
@@ -890,8 +905,10 @@ def _load_postgres(
         if replace:
             for table in reversed(tables):
                 connection.execute(
-                    f'DROP TABLE IF EXISTS {quote(schema)}.{quote(table)} '
-                    'CASCADE'
+                    guarded(
+                        f'DROP TABLE IF EXISTS {quote(schema)}.{quote(table)} '
+                        'CASCADE'
+                    )
                 )
 
         created: list[str] = []
@@ -899,8 +916,10 @@ def _load_postgres(
         def create(statement: str) -> None:
             composite = statement.split(' AS (', 1)[0][len('CREATE TYPE ') :]
             if replace:
-                connection.execute(f'DROP TYPE IF EXISTS {composite} CASCADE')
-            connection.execute(statement)
+                connection.execute(
+                    guarded(f'DROP TYPE IF EXISTS {composite} CASCADE')
+                )
+            connection.execute(guarded(statement))
             created.append(composite)
 
         for table in tables:
@@ -937,12 +956,14 @@ def _load_postgres(
                     )
             qualified = f'{quote(schema)}.{quote(table)}'
             connection.execute(
-                f'CREATE TABLE {qualified} ('
-                + ', '.join(columns + clauses)
-                + ')'
+                guarded(
+                    f'CREATE TABLE {qualified} ('
+                    + ', '.join(columns + clauses)
+                    + ')'
+                )
             )
             with connection.cursor().copy(
-                f'COPY {qualified} FROM STDIN'
+                guarded(f'COPY {qualified} FROM STDIN')
             ) as copy:
                 for row in _rows(data, convert, table):
                     copy.write_row(row)
@@ -1328,10 +1349,12 @@ def _sql_text(text: str | None) -> str:
 def _qualified(
     engine: str, namespace: tuple[str, ...], table: str, fold: bool = False
 ) -> str:
+    r"""``table`` in ``namespace``, quoted as ``engine`` reads names; a
+    table keeps its name as written whether its columns are folded or
+    not."""
+    del fold
     quoting = backtick if engine == 'databricks' else quote
-    return '.'.join(
-        quoting(part) for part in (*namespace, table.upper() if fold else table)
-    )
+    return '.'.join(quoting(part) for part in (*namespace, table))
 
 
 def _warehouse_constraints(
@@ -1429,9 +1452,10 @@ def warehouse_statements(
     each table dropped first, every value as :func:`stored` sends it, and
     a note for each constraint the engine does not store. A value the
     engine cannot hold is refused by name (:class:`Unloadable`). With
-    ``fold``, every table and column is named as Snowflake stores an
-    unquoted name, in upper case, so a semantic view's YAML, which names
-    them unquoted, reads them."""
+    ``fold``, every column is named as Snowflake stores an unquoted name,
+    in upper case, so a semantic view's YAML, which names columns unquoted
+    in its expressions, reads them; the tables keep their names, which the
+    view's YAML names quoted (:meth:`CaseSchema.create_view`)."""
     if engine not in WAREHOUSE_ENGINES:
         raise ValueError(f'no warehouse engine {engine!r}')
     if len(namespace) != 2 or not all(namespace):
@@ -1587,7 +1611,7 @@ def load(
         )
         run = target if callable(target) else statement_runner(target)
         for statement in statements:
-            run(statement)
+            run(guarded(statement))
         return notes
     raise ValueError(f'no loader for {database!r}; it is one of {TARGETS}')
 
@@ -1619,6 +1643,7 @@ class CaseSchema:
         self.views: list[tuple[str, str]] = []
 
     def _run(self, statement: str) -> None:
+        guarded(statement)
         if self.database == 'lakebase':
             self.target.execute(statement)
         elif callable(self.target):
@@ -1684,6 +1709,18 @@ class CaseSchema:
                     f'{name}: a semantic view YAML that is no mapping'
                 )
             document['name'] = name
+            # Each base table the case loaded named as it was created,
+            # quoted, so Snowflake reads it in its own case rather than
+            # upper-cased (its columns are created upper-cased, as the
+            # YAML's unquoted expressions read them).
+            loaded = {table.lower(): table for table in self.tables}
+            for entry in document.get('tables') or []:
+                base = (
+                    entry.get('base_table') if isinstance(entry, dict) else None
+                )
+                key = str((base or {}).get('table', '')).lower()
+                if isinstance(base, dict) and key in loaded:
+                    base['table'] = '"' + loaded[key].replace('"', '""') + '"'
             text = pyyaml.safe_dump(
                 document, sort_keys=False, allow_unicode=True
             )
@@ -1700,9 +1737,9 @@ class CaseSchema:
 
     def load(self, duck: Any, fold: bool = False) -> list[str]:
         r"""The case's tables in the schema, alone; :func:`load`'s notes;
-        with ``fold``, named as Snowflake stores unquoted names."""
+        with ``fold``, its columns named as Snowflake stores unquoted names."""
         self.clear()
-        self.tables = [name.upper() if fold else name for name in _tables(duck)]
+        self.tables = _tables(duck)
         if self.database == 'lakebase':
             self.types = _load_postgres(
                 duck, self.target, self.namespace[0], replace=True
@@ -1760,9 +1797,9 @@ def load_leg(duck: Any, leg: str, target: Any) -> list[str]:
         schema = _SCHEMAS[key] = CaseSchema(database, writer, namespace)
     schema.target = writer
     view = target.view
-    # A Snowflake semantic view's YAML names its tables and columns
-    # unquoted, which Snowflake reads in upper case: the case's tables are
-    # created so.
+    # A Snowflake semantic view's YAML names its columns unquoted, which
+    # Snowflake reads in upper case: the case's columns are created so, and
+    # the view's YAML names its tables quoted, as created.
     fold = bool(
         leg == 'snowflake'
         and view
