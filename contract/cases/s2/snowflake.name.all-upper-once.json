@@ -1,0 +1,44 @@
+{
+  "format": "sdm-case/1",
+  "id": "snowflake.name.all-upper-once",
+  "status": "acceptance",
+  "slice": "S2",
+  "warehouses": [
+    "snowflake"
+  ],
+  "paths": [
+    "schema.from-source/tables/snowflake"
+  ],
+  "routes": [
+    "schema.from-source/tables/snowflake",
+    "schema.from-source/catalog-keys/snowflake"
+  ],
+  "cells": [],
+  "input": {
+    "base": "shop",
+    "from_source": {
+      "tables": {
+        "users": "USERS",
+        "orders": "orders"
+      }
+    },
+    "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ],
+      "anchor_time": "2024-03-01"
+    }
+  },
+  "until": "from_source",
+  "expect": {
+    "outcome": "refusal",
+    "stage": "from_source",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "today": "an all-upper name equals its folded form, so DESCRIBE TABLE is tried once (SNOW/table.py:138); the table is stored as users, so it fails with errno 2003 and the old client raises TableNotFoundError (:154-158), which the client re-raises as INVALID_REQUEST (CL/materializers/sources.py, engine_graph)"
+  },
+  "why": "An all-upper name is tried once and never lower-cased: a table stored in lower case is not found by its upper-case name.",
+  "source": "written by T3.6's test author from the reference at 43e55f4f"
+}
