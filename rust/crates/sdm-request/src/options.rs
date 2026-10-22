@@ -193,10 +193,12 @@ fn mistyped(field: &str, reason: &'static str) -> CoreError {
     .with_field("reason", Detail::text(reason))
 }
 
-/// A value the caller gave, as the JSON text the host wrote it in, which a
-/// refusal names for the host's words (`given`).
-fn given_text(value: &Value) -> Detail {
-    Detail::text(String::from_utf8_lossy(&value.to_bytes()).into_owned())
+/// A value the caller gave, which a refusal names for the host's words
+/// (`given`): its JSON text as the core writes it ([`Value::canonical`]),
+/// never the spelling the host's writer chose, so every host reads back
+/// the same value written the same way (carried row P2-MID2-4).
+pub fn given_text(value: &Value) -> Detail {
+    Detail::text(String::from_utf8_lossy(&value.canonical().to_bytes()).into_owned())
 }
 
 /// An integer token's digits as decimal text, its sign apart.
@@ -1164,6 +1166,28 @@ mod tests {
             negative,
             magnitude,
         })
+    }
+
+    /// A value the caller gave is echoed as the core writes it, whatever
+    /// spelling the host's JSON writer chose (carried row P2-MID2-4): each
+    /// spelling of one value is echoed the same.
+    #[test]
+    fn a_given_value_is_echoed_in_the_core_s_spelling() {
+        let given = |text: &str| {
+            let refused = rows_per_call(&read(text)).unwrap_err();
+            refused.fields["given"].clone()
+        };
+        for (spellings, echoed) in [
+            (&["3.0", "3e0", "3.00", "0.3e1"][..], "3.0"),
+            (&["1e+16", "1E16", "10000000000000000.0"][..], "1e+16"),
+            (&["1e-05", "0.00001"][..], "0.00001"),
+            (&["\"3\"", "\"\\u0033\""][..], "\"3\""),
+            (&["[1, -0, 2.50]", "[1,0,2.5]"][..], "[1,0,2.5]"),
+        ] {
+            for spelling in spellings {
+                assert_eq!(given(spelling), Detail::text(echoed), "{spelling}");
+            }
+        }
     }
 
     #[test]

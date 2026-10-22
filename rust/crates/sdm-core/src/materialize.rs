@@ -3894,18 +3894,15 @@ fn excluded_by_caller(
             let Some(name) = name else {
                 let mut excludable: Vec<&str> = features.iter().map(|(n, _)| n.as_str()).collect();
                 excludable.sort_unstable();
-                // The column as the caller gave it, its JSON text, for the
-                // host's words.
+                // The column as the caller gave it, its JSON text as the
+                // core writes it, for the host's words.
                 return Err(invalid(
                     "a column the caller keeps out is not one of its table's features",
                     "exclude_cols_dict",
                 )
                 .with_field("reason", Detail::text("not_a_feature"))
                 .with_field("table", Detail::text(table_name))
-                .with_field(
-                    "given",
-                    Detail::text(String::from_utf8_lossy(&column.to_bytes()).into_owned()),
-                )
+                .with_field("given", sdm_request::options::given_text(column))
                 .with_field("columns", names(excludable)));
             };
             let pair = (table.name.clone(), name.to_owned());

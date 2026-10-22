@@ -219,82 +219,27 @@ fn answered_of(handle: &HostRun, out: &Outgoing) -> Result<Option<Value>> {
     })))
 }
 
-/// A JSON scalar a case wrote, as the Python host sends it on: read as
-/// Python's `json.loads` reads it, then written as its `json.dumps` writes
-/// it (`_rust/codec.py`'s `attachment`): text as its decoded characters
-/// (`"\u0033"` is `"3"`), `true` and `false` as themselves, a whole number
-/// as its digits of any size (`-0` is `0`), and a number with a fraction or
-/// an exponent as Python's `repr` of the double it reads as (`3.0`,
-/// `1e+16`). None for a number past a double's range, which Python reads as
-/// an infinity and its host refuses to send (INVALID_REQUEST).
-pub fn as_python_sends(written: &str) -> Result<Option<String>> {
+/// A JSON scalar a case wrote, as this host sends it on: as written, since
+/// the core reads the value whatever its spelling and echoes it in its own
+/// (`Value::canonical`), so no host imitates another's JSON writer (carried
+/// row P2-MID2-4). None for a number past a double's range, which the
+/// Python host reads as an infinity and refuses to send (INVALID_REQUEST),
+/// as this host refuses it.
+pub fn as_sent(written: &str) -> Result<Option<String>> {
     let text = written.trim();
     match text.as_bytes().first() {
         Some(b'"') => {
-            let decoded: String = serde_json::from_str(text)?;
-            Ok(Some(serde_json::to_string(&decoded)?))
+            let _: String = serde_json::from_str(text)?;
+            Ok(Some(text.to_owned()))
         }
         _ if text == "true" || text == "false" => Ok(Some(text.to_owned())),
-        Some(b'-' | b'0'..=b'9') if !text.contains(['.', 'e', 'E']) => {
-            let (negative, digits) = match text.strip_prefix('-') {
-                Some(digits) => (true, digits),
-                None => (false, text),
-            };
-            if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
-                bail!("rows_per_call is not a JSON number: {text}");
-            }
-            let zero = digits.bytes().all(|b| b == b'0');
-            Ok(Some(if negative && !zero {
-                text.to_owned()
-            } else {
-                digits.to_owned()
-            }))
-        }
         Some(b'-' | b'0'..=b'9') => {
             let read: f64 = text
                 .parse()
-                .map_err(|_| anyhow!("rows_per_call is not a JSON number: {text}"))?;
-            Ok(read.is_finite().then(|| python_repr(read)))
+                .map_err(|_| anyhow!("not a JSON number: {text}"))?;
+            Ok(read.is_finite().then(|| text.to_owned()))
         }
-        _ => bail!("rows_per_call is not a JSON scalar: {text}"),
-    }
-}
-
-/// A finite double as Python's `repr` writes it: the shortest digits that
-/// read back as it, positional from `1e-4` to below `1e16` (always with a
-/// fraction, `3.0`), and otherwise with an exponent of a sign and at least
-/// two digits (`1e+16`, `1e-05`).
-fn python_repr(value: f64) -> String {
-    let shortest = format!("{value:e}");
-    let (mantissa, exponent) = shortest
-        .split_once('e')
-        .map_or((shortest.as_str(), 0_i32), |(m, e)| {
-            (m, e.parse().unwrap_or(0))
-        });
-    let (negative, mantissa) = match mantissa.strip_prefix('-') {
-        Some(rest) => ("-", rest),
-        None => ("", mantissa),
-    };
-    let digits: String = mantissa.chars().filter(char::is_ascii_digit).collect();
-    if (-4..16).contains(&exponent) {
-        let point = i64::from(exponent) + 1;
-        let positional = if point <= 0 {
-            format!(
-                "0.{}{digits}",
-                "0".repeat(usize::try_from(-point).unwrap_or(0))
-            )
-        } else {
-            let point = usize::try_from(point).unwrap_or(0);
-            if digits.len() <= point {
-                format!("{digits}{}.0", "0".repeat(point - digits.len()))
-            } else {
-                format!("{}.{}", &digits[..point], &digits[point..])
-            }
-        };
-        format!("{negative}{positional}")
-    } else {
-        let sign = if exponent < 0 { '-' } else { '+' };
-        format!("{negative}{mantissa}e{sign}{:02}", exponent.unsigned_abs())
+        _ => bail!("not a JSON scalar: {text}"),
     }
 }
 
@@ -1593,14 +1538,13 @@ fn start_materialize(
         }
     }
     // `rows_per_call` as the case wrote it (T2.8c's cases), whatever JSON
-    // scalar it is, read as the Python host reads and hands the caller's
-    // value over (`as_python_sends`): the core holds its type and size to
-    // what the reference takes. Spliced in as text, so a whole number past
-    // 64 bits is not read through a double. A value the Python host cannot
+    // scalar it is (`as_sent`): the core holds its type and size to what
+    // the reference takes. Spliced in as text, so a whole number past 64
+    // bits is not read through a double. A value the Python host cannot
     // send as JSON (a number past a double's range, read as an infinity)
     // is refused before the run, as that host refuses it.
     if let Some(written) = &case.input.materialize.rows_per_call {
-        let Some(sent) = as_python_sends(&written.0)? else {
+        let Some(sent) = as_sent(&written.0)? else {
             observed.answer = Answer::Error {
                 kind: spelled(ErrorKind::InvalidRequest)?,
                 code: spelled(ErrorCode::InvalidRequest)?,
@@ -1628,12 +1572,11 @@ fn start_materialize(
         .map(|given| candidates_of(given))
         .transpose()?;
     // `lag_timesteps` as the case wrote it (T2.9's cases), as `rows_per_call`
-    // is, read as the Python host reads and hands the caller's value over
-    // (`as_python_sends`): the core holds its type and sign to what the
+    // is (`as_sent`): the core holds its type and sign to what the
     // reference's engine takes; one the Python host cannot send as JSON is
     // refused before the run naming the option, as that host refuses it.
     if let Some(written) = &case.input.materialize.lag_timesteps {
-        let Some(sent) = as_python_sends(&written.0)? else {
+        let Some(sent) = as_sent(&written.0)? else {
             observed.answer = Answer::Error {
                 kind: spelled(ErrorKind::InvalidRequest)?,
                 code: spelled(ErrorCode::InvalidRequest)?,
@@ -2278,38 +2221,28 @@ mod written_back_tests {
 
 #[cfg(test)]
 mod rows_per_call_tests {
-    use super::as_python_sends;
+    use super::as_sent;
 
-    /// What the Python host sends for each scalar a case may write, as
-    /// `json.loads` then `json.dumps` give it (T2.8c, its round 1 review).
+    /// Each scalar a case may write is sent as written, the core echoing
+    /// it in its own spelling; a number past a double's range is refused
+    /// before the run, as the Python host refuses it.
     #[test]
-    fn rows_per_call_is_sent_as_the_python_host_sends_it() {
+    fn rows_per_call_is_sent_as_written() {
         for (written, sent) in [
             (r#""3""#, Some(r#""3""#)),
-            (r#""\u0033""#, Some(r#""3""#)),
-            ("-0", Some("0")),
-            ("0", Some("0")),
-            ("-1", Some("-1")),
+            (r#""\u0033""#, Some(r#""\u0033""#)),
+            ("-0", Some("-0")),
             ("18446744073709551616", Some("18446744073709551616")),
-            ("3.0", Some("3.0")),
-            ("2.5", Some("2.5")),
-            ("3e0", Some("3.0")),
-            ("1E16", Some("1e+16")),
-            ("0.00001", Some("1e-05")),
-            ("-0.0", Some("-0.0")),
+            ("3e0", Some("3e0")),
+            ("1E16", Some("1E16")),
+            (" 2.5 ", Some("2.5")),
             ("true", Some("true")),
-            ("false", Some("false")),
-            // Past a double's range: Python reads an infinity, which its
-            // host refuses to send.
             ("1e400", None),
             ("-1e400", None),
         ] {
-            assert_eq!(
-                as_python_sends(written).unwrap().as_deref(),
-                sent,
-                "{written}"
-            );
+            assert_eq!(as_sent(written).unwrap().as_deref(), sent, "{written}");
         }
+        assert!(as_sent("[1]").is_err());
     }
 }
 
