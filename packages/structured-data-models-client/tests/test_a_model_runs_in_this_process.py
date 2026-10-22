@@ -17,11 +17,11 @@ import copy
 import subprocess
 import sys
 import threading
-import warnings
 
 import numpy as np
 import pandas as pd
 import pytest
+from sample_tables import graph, people
 
 from sdm_client import (
     KumoRelational,
@@ -33,82 +33,10 @@ from sdm_client import (
     StructuredDataError,
 )
 
+pytestmark = pytest.mark.filterwarnings('ignore')
+
 COUNT = 'PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id'
 BINARY = 'PREDICT COUNT(orders.*, 0, 30, days) > 2 FOR EACH users.user_id'
-
-
-@pytest.fixture(scope='module')
-def sdm():
-    return pytest.importorskip('sdm', reason='needs the in-process extra')
-
-
-@pytest.fixture(scope='module')
-def tabular(sdm):
-    import torch
-
-    torch.manual_seed(0)
-    return sdm.models.KumoTabular(size='small', pretrained=False, device='cpu')
-
-
-@pytest.fixture(scope='module')
-def relational(sdm):
-    pytest.importorskip('sdm_relational_engine', reason='needs [relational]')
-    import torch
-
-    torch.manual_seed(0)
-    return sdm.models.KumoRelational(pretrained=False, device='cpu')
-
-
-@pytest.fixture(autouse=True)
-def _quiet():
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore')
-        yield
-
-
-def people() -> pd.DataFrame:
-    frame = pd.DataFrame(
-        {
-            'person_id': range(60),
-            'age': [20.0 + (i * 7) % 40 for i in range(60)],
-            'segment': ['north' if i % 3 else 'south' for i in range(60)],
-            'visits': [(i * 5) % 11 for i in range(60)],
-        }
-    )
-    frame['churn'] = (frame['visits'] > 5).astype(int)
-    frame['plan'] = [
-        'pro' if age > 40 else 'plus' if visits > 3 else 'free'
-        for age, visits in zip(frame['age'], frame['visits'], strict=True)
-    ]
-    frame['spend'] = frame['age'] * 2.5 + frame['visits']
-    return frame
-
-
-def graph() -> dict[str, pd.DataFrame]:
-    users = pd.DataFrame(
-        {
-            'user_id': range(40),
-            'tier': [('gold', 'silver', 'bronze')[i % 3] for i in range(40)],
-            'age': [20.0 + (i * 7) % 30 for i in range(40)],
-        }
-    )
-    items = pd.DataFrame(
-        {'item_id': range(6), 'price': [5.0 + i for i in range(6)]}
-    )
-    rows = []
-    for user in range(40):
-        busy = user % 2 == 0
-        for k in range(40 if busy else 4):
-            rows.append(
-                {
-                    'order_id': len(rows),
-                    'user_id': user,
-                    'item_id': (user + k) % 6,
-                    'ts': pd.Timestamp('2024-01-01')
-                    + pd.Timedelta(days=(k * 5 if busy else k * 50) + user % 9),
-                }
-            )
-    return {'users': users, 'items': items, 'orders': pd.DataFrame(rows)}
 
 
 def refused(call) -> StructuredDataError:

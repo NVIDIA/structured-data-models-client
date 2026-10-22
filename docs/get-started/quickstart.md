@@ -197,7 +197,10 @@ Two things differ by design. On a CPU it computes at full precision and draws
 its random numbers there, so its answers can differ from a GPU-hosted NIM's by
 more than rounding: in one comparison a class probability moved by 0.16. And
 the limits a deployment sets to protect a shared server are not applied, since
-none is shared here; see [limits](../reference/limits.md).
+none is shared here; see [limits](../reference/limits.md). That includes a
+session's expiry: what `fit()` returns holds its fitted context, in GPU memory
+when the model is on a GPU, until it or the client is closed, so open it in a
+`with` block, as above, or call its `close()`.
 
 This needs `pip install 'structured-data-models-client[in-process]'`, which
 brings PyTorch, on Python 3.11 or later. A relational request is still

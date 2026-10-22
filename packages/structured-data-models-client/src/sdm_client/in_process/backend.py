@@ -144,13 +144,13 @@ class InProcessBackend:
                 answer,
                 fields,
             )
-            return adapter.answered(
-                items,
-                outputs,
-                payload,
-                model=served.model_id,
-                request_id=_request_id(payload),
-            )
+        return adapter.answered(
+            items,
+            outputs,
+            payload,
+            model=served.model_id,
+            request_id=_request_id(payload),
+        )
 
     def create_session(
         self, adapter: ModelAdapter, payload: dict[str, Any]
@@ -205,13 +205,13 @@ class InProcessBackend:
                 answer,
                 fields,
             )
-            return adapter.answered(
-                items,
-                outputs,
-                {**pinned, **payload},
-                model=served.model_id,
-                request_id=_request_id(payload),
-            )
+        return adapter.answered(
+            items,
+            outputs,
+            {**pinned, **payload},
+            model=served.model_id,
+            request_id=_request_id(payload),
+        )
 
     def delete_session(self, session_id: str) -> None:
         r"""Release a session. Releasing one that is gone is not an error."""
@@ -251,8 +251,13 @@ class InProcessBackend:
 
     @contextlib.contextmanager
     def _running(self) -> Iterator[None]:
-        r"""Run one call at a time, reporting a failure the client did not
-        foresee as one of its own errors, with the original as its cause.
+        r"""Run one call at a time, reporting a failure nobody foresaw as
+        ``INTERNAL_ERROR``, with the original as its cause.
+
+        It wraps what a NIM would do on its side: reading the request,
+        fitting and running the model, and reading what it returned. What the
+        client makes of that answer is the same code on both backends, so it
+        is left outside, and a fault there is raised as itself.
 
         Holds the run lock alone, so releasing a session or closing the
         client does not wait for a model to finish.
@@ -266,7 +271,8 @@ class InProcessBackend:
                 raise
             except Exception as error:
                 raise StructuredDataError(
-                    f'the model failed: {type(error).__name__}: {error}',
+                    f'answering in this process failed: '
+                    f'{type(error).__name__}: {error}',
                     code='INTERNAL_ERROR',
                 ) from error
 

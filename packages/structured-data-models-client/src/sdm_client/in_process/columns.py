@@ -97,17 +97,24 @@ def check_columns(
         (
             index
             for index, row in enumerate(rows)
-            if not isinstance(row, Sequence)
-            or isinstance(row, (str, bytes))
-            or len(row) != len(named)
+            if not isinstance(row, Sequence) or isinstance(row, (str, bytes))
         ),
+        None,
+    )
+    if odd is not None:
+        raise StructuredDataError(
+            f'{where} does not carry row {odd} as a list of cells',
+            code='VALIDATION_FAILED',
+        )
+    odd = next(
+        (index for index, row in enumerate(rows) if len(row) != len(named)),
         None,
     )
     if odd is not None:
         raise StructuredDataError(
             f'{where} row {odd} does not carry one cell for each of its '
             f'{len(named)} column(s)',
-            code='VALIDATION_FAILED',
+            code='INVALID_SCHEMA',
         )
     declared = set(schema.get('columns') or {})
     missing = sorted(declared - set(named) - unasked)

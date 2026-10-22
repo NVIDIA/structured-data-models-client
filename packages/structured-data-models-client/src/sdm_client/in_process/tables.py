@@ -53,25 +53,24 @@ def to_arrow(
 
     A numeric key is read as ``int64`` whatever its declared width, so both
     sides of a join agree. A fractional one is refused rather than truncated
-    onto another row.
+    onto another row. A cell that cannot be read as its column's type is
+    refused, key or not.
     """
     import pyarrow as pa
 
-    arrays = []
-    for column in columns:
-        cells = values(table, column)
-        dtype = dtypes[column]
-        if column in keys and dtype in _NUMBERS:
-            arrays.append(pa.array(_whole(cells, dtype, column), pa.int64()))
-        else:
-            arrays.append(_array(cells, dtype, column))
+    arrays = [
+        _array(values(table, column), dtypes[column], column, column in keys)
+        for column in columns
+    ]
     return pa.Table.from_arrays(arrays, names=list(columns))
 
 
-def _array(cells: list[Any], dtype: str, column: str) -> pa.Array:
+def _array(cells: list[Any], dtype: str, column: str, key: bool) -> pa.Array:
     import pyarrow as pa
 
     try:
+        if key and dtype in _NUMBERS:
+            return pa.array(_whole(cells, dtype, column), pa.int64())
         if dtype == 'timestamp[us]':
             zoned = pa.array(cells, pa.string()).cast(
                 pa.timestamp('us', tz='UTC')
@@ -79,7 +78,13 @@ def _array(cells: list[Any], dtype: str, column: str) -> pa.Array:
             return zoned.cast(pa.timestamp('us'))
         arrow_type = getattr(pa, _ARROW_TYPES[dtype])()
         return pa.array([read_cell(cell, dtype) for cell in cells], arrow_type)
-    except (KeyError, pa.ArrowException, TypeError, ValueError) as error:
+    except (
+        KeyError,
+        OverflowError,
+        pa.ArrowException,
+        TypeError,
+        ValueError,
+    ) as error:
         raise StructuredDataError(
             f'column {column!r} cannot be read as {dtype}',
             code='VALIDATION_FAILED',

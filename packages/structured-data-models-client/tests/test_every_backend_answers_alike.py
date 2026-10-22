@@ -21,11 +21,11 @@ from __future__ import annotations
 
 import copy
 import os
-import warnings
 
 import numpy as np
 import pandas as pd
 import pytest
+from sample_tables import graph, people
 
 from sdm_client import (
     KumoRelational,
@@ -37,6 +37,8 @@ from sdm_client import (
     StructuredDataError,
 )
 
+pytestmark = pytest.mark.filterwarnings('ignore')
+
 URLS = {
     'kumo-tabular': os.environ.get('SDM_TABULAR_URL'),
     'kumo-relational': os.environ.get('SDM_RELATIONAL_URL'),
@@ -47,30 +49,15 @@ BINARY = 'PREDICT COUNT(orders.*, 0, 30, days) > 2 FOR EACH users.user_id'
 MULTICLASS = 'PREDICT users.tier FOR EACH users.user_id'
 
 
-@pytest.fixture(scope='module')
-def models():
-    sdm = pytest.importorskip('sdm', reason='needs the in-process extra')
-    import torch
-
-    torch.manual_seed(0)
-    return {
-        'kumo-tabular': sdm.models.KumoTabular(
-            size='small', pretrained=False, device='cpu'
-        ),
-        'kumo-relational': sdm.models.KumoRelational(
-            pretrained=False, device='cpu'
-        ),
-    }
-
-
 @pytest.fixture(
     params=['in-process', pytest.param('nim', marks=pytest.mark.live_nim)]
 )
 def client_for(request):
     r"""Opens a client for one model, on this backend."""
     if request.param == 'in-process':
-        loaded = request.getfixturevalue('models')
-        return lambda model: SDMClient.in_process(loaded[model])
+        return lambda model: SDMClient.in_process(
+            request.getfixturevalue(model.removeprefix('kumo-'))
+        )
 
     def opened(model: str) -> SDMClient:
         if not URLS[model]:
@@ -78,54 +65,6 @@ def client_for(request):
         return SDMClient(url=URLS[model], timeout=300.0)
 
     return opened
-
-
-@pytest.fixture(autouse=True)
-def _quiet():
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore')
-        yield
-
-
-def people(start: int = 0) -> pd.DataFrame:
-    frame = pd.DataFrame(
-        {
-            'person_id': range(start, start + 60),
-            'age': [20.0 + (i * 7) % 40 for i in range(60)],
-            'segment': ['north' if i % 3 else 'south' for i in range(60)],
-            'visits': [(i * 5) % 11 for i in range(60)],
-        }
-    )
-    frame['churn'] = (frame['visits'] > 5).astype(int)
-    frame['spend'] = frame['age'] * 2.5 + frame['visits']
-    return frame
-
-
-def graph() -> dict[str, pd.DataFrame]:
-    users = pd.DataFrame(
-        {
-            'user_id': range(40),
-            'tier': [('gold', 'silver', 'bronze')[i % 3] for i in range(40)],
-            'age': [20.0 + (i * 7) % 30 for i in range(40)],
-        }
-    )
-    items = pd.DataFrame(
-        {'item_id': range(6), 'price': [5.0 + i for i in range(6)]}
-    )
-    rows = []
-    for user in range(40):
-        busy = user % 2 == 0
-        for k in range(40 if busy else 4):
-            rows.append(
-                {
-                    'order_id': len(rows),
-                    'user_id': user,
-                    'item_id': (user + k) % 6,
-                    'ts': pd.Timestamp('2024-01-01')
-                    + pd.Timedelta(days=(k * 5 if busy else k * 50) + user % 9),
-                }
-            )
-    return {'users': users, 'items': items, 'orders': pd.DataFrame(rows)}
 
 
 def asked(target: str, task: str, start: int = 0, **options) -> Request:
@@ -260,6 +199,22 @@ def test_an_inference_option_is_read_as_the_type_it_is(
     assert refused.value.code == code
 
 
+def test_a_fault_in_the_client_is_raised_as_itself(client_for, monkeypatch):
+    """What the client makes of an answer is the same code on both backends,
+    so a fault in it is raised as it is, not reported as the model's."""
+    from sdm_client.adapters.tabular import TabularAdapter
+
+    def broken(*args, **kwargs):
+        raise RuntimeError('broken')
+
+    monkeypatch.setattr(TabularAdapter, 'answered', broken)
+    with client_for('kumo-tabular') as client:
+        with pytest.raises(RuntimeError, match='broken'):
+            client.predict(
+                asked('churn', 'classification'), model=KumoTabular()
+            )
+
+
 def test_a_long_question_is_sent_within_the_contract_and_answered(client_for):
     from sdm_client.adapters.relational import RelationalAdapter
 
@@ -303,6 +258,16 @@ def _scored_without_its_key() -> Request:
         task='classification',
         schema=schema,
     )
+
+
+def _a_session_asked_for_prediction_time(client: SDMClient) -> None:
+    r"""A session is pinned with no inference options, so its context is
+    fitted without prediction time, and a prediction cannot ask for it."""
+    request = PredictiveQuery(BINARY, graph()).materialize(
+        indices=[0, 1], use_prediction_time=True
+    )
+    with client.fit(request, model=KumoRelational()) as fitted:
+        fitted.predict(request)
 
 
 def _text_schema() -> Schema:
@@ -393,6 +358,11 @@ def _text_schema() -> Schema:
             ),
             'INVALID_SCHEMA',
         ),
+        (
+            'kumo-relational',
+            _a_session_asked_for_prediction_time,
+            'INVALID_REQUEST',
+        ),
     ],
 )
 def test_a_request_the_model_cannot_answer_is_refused_with_the_same_code(
@@ -445,6 +415,23 @@ def _undeclared(payload: dict, name: str, column: str) -> None:
     for half in ('context', 'predict'):
         _without(holding(payload[half])[name], column)
     del holding(payload['schema'])[name]['columns'][column]
+
+
+def _first(table: dict, column: str, value: object) -> None:
+    table['rows'][0][table['columns'].index(column)] = value
+
+
+def _counted(payload: dict, value: object) -> None:
+    r"""``users.age`` declared ``int64``, with ``value`` in its first row."""
+    payload['schema']['related_tables']['users']['columns']['age']['dtype'] = (
+        'int64'
+    )
+    for half in ('context', 'predict'):
+        users = payload[half]['related_tables']['users']
+        position = users['columns'].index('age')
+        for row in users['rows']:
+            row[position] = int(row[position])
+    _first(payload['context']['related_tables']['users'], 'age', value)
 
 
 @pytest.mark.parametrize(
@@ -511,14 +498,27 @@ def _undeclared(payload: dict, name: str, column: str) -> None:
         ),
         (
             lambda p: p['context']['related_tables']['users']['rows'][0].pop(),
-            'VALIDATION_FAILED',
+            'INVALID_SCHEMA',
         ),
         (
             lambda p: p['context']['related_tables']['users']['rows'][0].append(
                 1.0
             ),
+            'INVALID_SCHEMA',
+        ),
+        (
+            lambda p: _first(
+                p['context']['related_tables']['orders'], 'user_id', 'abc'
+            ),
             'VALIDATION_FAILED',
         ),
+        (
+            lambda p: _first(
+                p['predict']['related_tables']['orders'], 'user_id', '9' * 30
+            ),
+            'VALIDATION_FAILED',
+        ),
+        (lambda p: _counted(p, '9' * 30), 'VALIDATION_FAILED'),
     ],
 )
 def test_a_request_built_by_hand_is_refused_where_it_states_another_question(

@@ -75,11 +75,6 @@ def regressed(
     The point prediction is the distribution's mean or median, and each
     quantile asked for is interpolated between the two predicted around it.
     """
-    if 'quantiles' in fields and not all(0.001 <= x <= 0.999 for x in levels):
-        raise StructuredDataError(
-            'quantile levels must be between 0.001 and 0.999',
-            code='UNSUPPORTED_OUTPUT',
-        )
     quantiles = _numbers(output)
     if quantiles.shape[1] != _QUANTILES:
         raise StructuredDataError(
