@@ -73,11 +73,11 @@ fn write_json(output: &mut impl Write, value: &Value) -> Result<()> {
     Ok(())
 }
 
+/// A fetch step and the key sets it binds, by attachment.
+type Request = (FetchStep, BTreeMap<AttachmentId, Fetched>);
+
 /// One request: the step and its key sets, or why it cannot be read.
-fn request(
-    input: &mut impl Read,
-    frame: &[u8],
-) -> Result<std::result::Result<(FetchStep, BTreeMap<AttachmentId, Fetched>), String>> {
+fn request(input: &mut impl Read, frame: &[u8]) -> Result<std::result::Result<Request, String>> {
     let message: Value = match serde_json::from_slice(frame) {
         Ok(message) => message,
         Err(_) => return Ok(Err("the frame is not a JSON request".to_owned())),
