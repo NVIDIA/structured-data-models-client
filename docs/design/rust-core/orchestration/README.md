@@ -190,25 +190,16 @@ An owner-approved one-off runs as `SDM_APPROVED=<id> <command>`, `<id>` the slug
 Codex panes keep `rule_watch.py`: the owner declined a Codex hook (2026-10-16) and kept the watcher for Codex (2026-10-21, decision 7).
 The orchestrator's own session gets the hook when it is started in a checkout holding `.claude/settings.json`.
 
-## CI
-
-- **The four container images are private copies on ghcr.io** (`ghcr.io/nvidia/structured-data-models-client/...`, same digests), pulled with the workflow token. Anonymous registry pulls caused about 57% of Phase 1's failed runs before the move.
-- **Every job has `timeout-minutes`.** A hung `rust-test` once ran 2h24m. The timing guard names a job that comes near it (see "CI's split, timing guard and base" below).
-- **Dependencies build at opt-level 1**, so a cold `rust-test` takes about 34 minutes (it was over 2 hours).
-- **Caches are branch-scoped.** A push restores caches only from its own branch and `main`, so a new topic branch starts cold. Prefer lanes. The Actions cache holds 10 GiB; `scripts/rust_core/prune_caches.py` prunes it, and pip caches save only on `main`.
-- **External dependencies drift.** snowflake-connector-python 5.0.0 turned CI red mid-phase. When an unrelated job fails, check the dependency versions first.
-- **Watch CI from the orchestrator only**, in the background: poll `gh run view <id> --json status,conclusion` under a timeout. Never `gh run watch`; it has hung agents.
-- **The binding tests hard-code the contract version** in `rust/bindings/sdm-py/tests/messages.py`. Phase 1 missed it at two contract bumps (Phase 2 row FX-6 derives it). Until FX-6 lands, every contract bump updates it.
-
-## CI's split, timing guard and base (T3.0)
+### CI's split, timing guard and base (item 3)
 
 These replace rules Phase 2 kept by hand; each is enforced by the workflow and held by `tests/test_ci_workflow.py`.
 
 - **The checking tools' own tests run once, and only when they can change.**
   A test that copies the checkout into a temporary repository and reruns the gate, the ratchet or the comparator carries the pytest marker `tooling` (`pytestmark = pytest.mark.tooling`, or on its copying tests alone when the file also checks the real tree).
   `scripts/rust_core/tooling_tests.py check` lists any such test without the marker, and `list` shows what it finds.
-  `test (3.x)`, `engine` and `contract-python (ref-pandas3)` deselect them; `tooling (contract)` and `tooling (root)` run them, on Python 3.12, only when the landing job's plan says a judging path (`scripts/rust_core/judging-paths.txt`), the workflow, or a marked test or a module one loads changed (`tooling_tests.py must-run`).
+  `test (3.x)`, `engine` and `contract-python (ref-pandas3)` deselect them; `tooling (contract)` and `tooling (root)` run them, on Python 3.12, only when the landing job's plan says a judging path (`scripts/rust_core/judging-paths.txt`), anything under `scripts/rust_core/`, the workflow, or a marked test or a module one loads changed (`tooling_tests.py must-run`).
   A product package that adds a case does not run them; a tooling change does.
+  Known gap, carried as a Phase 3 row: a change to the cases alone does not run them, so a case a tooling test reads can break it unseen until the next tooling change; a small fixed corpus for those tests would close it.
 - **The landing job plans the run once, as it starts.**
   It records the phase head the candidate was pushed on (`ratchet.py push-base`), and every judging job reads it as `SDM_PUSH_BASE` through `ratchet.py where` (and `rust-lint`'s bridge freeze), so a landing while the run goes on, the candidate's own included, cannot turn a comparison into a self-comparison.
   A rerun of failed jobs keeps it; a rerun of every job after the candidate landed takes the head it landed on.
@@ -220,7 +211,7 @@ These replace rules Phase 2 kept by hand; each is enforced by the workflow and h
   It never fails the run (no hard budgets).
   The heartbeat runs `ci_timing.py --pull`, which writes the newest run's items to `$SDM_ORCH_STATE/fix-items/ci-timing.md`; a named job gets a fix at its cause, not a higher limit.
 
-## Environments within the machine (T3.0)
+### Environments within the machine (item 5)
 
 The machine has 8 vCPUs, 30 GB of memory and 412 GB of fast disk at `/mnt/localssd`.
 
@@ -238,13 +229,33 @@ The machine has 8 vCPUs, 30 GB of memory and 412 GB of fast disk at `/mnt/locals
   Heavy means any `gate.sh` leg, a full `pytest` of `contract/tests` or `tests`, a `tooling` test file, `cargo test`, `build` or `clippy` of the workspace, and every wheel build.
 - **A lane's directories go when it ends**: `clean_tmp.sh --release <lane>` (dry run first, then `--apply`) removes its environment, target and tmp directories.
 
-## The dry run and the slip report (T3.0)
+### The dry run and the slip report (item 1)
 
 - **Before the design locks**, run `scripts/rust_core/gate_dryrun.sh kinds.yaml --python $SDM_LANE_ENV/current/cell-ref-pandas3/bin/python` over the design's planned case kinds (`kinds: [{name, case}]`, one stub case each).
   It judges each stub with the case reader, `coverage.py`, `ratchet.py`, both Python runners and `compare.py` (and with `--rust` the test kit, with `--gate HALF` the locked gate) on a throwaway commit, and prints a `GAP <kind> (<case>): <tool>: ...` line for every refusal.
   Those lines are the first package's tooling list, found up front instead of one judging package at a time mid-phase.
 - **The slip report**: the heartbeat runs `scripts/rust_core/orchestration/phase_stats.py --phase-branch origin/$SDM_PHASE_BRANCH --no-ci --forecast <the design's forecast>`, a `{start, packages: [{id, hours}]}` file, and reads how many hours the phase is behind and the package or unplanned landings that caused most of it.
   It never blocks anything.
+
+### After T3.0 lands: the orchestrator's one-time steps
+
+The private copies outside the repository would bypass the mechanisms above, so they become wrappers of the repository's tools:
+
+- `$SDM_ORCH_STATE/bin/heavy` becomes `exec ~/code/sdmc-rust-core/scripts/rust_core/orchestration/heavy "$@"`.
+- `$SDM_ORCH_STATE/bin/codex_pane.py` becomes `exec python3 ~/code/sdmc-rust-core/scripts/rust_core/orchestration/codex_pane.py "$@"`, so a review round needs the handoff stamp.
+- Agents export `SDM_LANE_ENV` and `SDM_KIT_PYTHON` from `cells.sh`, since the runners refuse the shared `.venv` from then on, and pass the lane's cell python to `handoff.py run --python`.
+- Agents, the orchestrator included, start in a checkout holding `.claude/settings.json`, so the command hook runs for them.
+- A shell profile that exports an older phase's `SDM_PHASE_BRANCH` points every tool at that phase; export the current one, or none.
+
+## CI
+
+- **The four container images are private copies on ghcr.io** (`ghcr.io/nvidia/structured-data-models-client/...`, same digests), pulled with the workflow token. Anonymous registry pulls caused about 57% of Phase 1's failed runs before the move.
+- **Every job has `timeout-minutes`.** A hung `rust-test` once ran 2h24m. The timing guard names a job that comes near it (see "CI's split, timing guard and base" above).
+- **Dependencies build at opt-level 1**, so a cold `rust-test` takes about 34 minutes (it was over 2 hours).
+- **Caches are branch-scoped.** A push restores caches only from its own branch and `main`, so a new topic branch starts cold. Prefer lanes. The Actions cache holds 10 GiB; `scripts/rust_core/prune_caches.py` prunes it, and pip caches save only on `main`.
+- **External dependencies drift.** snowflake-connector-python 5.0.0 turned CI red mid-phase. When an unrelated job fails, check the dependency versions first.
+- **Watch CI from the orchestrator only**, in the background: poll `gh run view <id> --json status,conclusion` under a timeout. Never `gh run watch`; it has hung agents.
+- **The binding tests hard-code the contract version** in `rust/bindings/sdm-py/tests/messages.py`. Phase 1 missed it at two contract bumps (Phase 2 row FX-6 derives it). Until FX-6 lands, every contract bump updates it.
 
 ## Watchdogs and stalls
 
