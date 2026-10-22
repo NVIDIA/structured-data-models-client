@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from collections.abc import Callable, Iterator
 from contextlib import closing
 from decimal import Decimal
@@ -1093,7 +1094,9 @@ def _stored_cell(value: Any, kind: Any, engine: str, where: str) -> Any:
     if name in ('timestamp', 'timestamptz', 'time', 'date'):
         if name != 'date' and engine == 'databricks':
             _whole_micros(value[1], value[2], where)
-        return _temporal(value, kind)
+        # A temporal cell's ticks (a date's days), which pyarrow builds
+        # the column from.
+        return value[1]
     if name == 'list':
         return [
             _stored_cell(item, kind.value_type, engine, where) for item in value
@@ -1112,13 +1115,6 @@ def _stored_cell(value: Any, kind: Any, engine: str, where: str) -> Any:
             for k, v in value
         ]
     return value
-
-
-def _temporal(value: tuple[Any, ...], kind: Any) -> Any:
-    r"""A temporal cell's ticks (a date's days), which pyarrow builds the
-    column from."""
-    del kind
-    return value[1]
 
 
 def _stored_array(cells: list[Any], kind: Any, stored: Any) -> Any:
@@ -1579,8 +1575,10 @@ class CaseSchema:
     each :meth:`load` first drops every table (and Lakebase composite type)
     the run loaded before, children first, so the schema holds exactly the
     case's tables when the old client reads its catalog; :meth:`clear`
-    drops what is left. Only what this object loaded is ever dropped: the
-    schema's other objects (a view a case reads) are never touched.
+    drops what is left. It drops what this object loaded, and a table of
+    the case's own name before creating it (:func:`warehouse_statements`):
+    the schema is the dedicated test schema (KO3-51), which
+    :func:`load_leg` checks holds nothing else.
 
     ``target`` is what :func:`load` takes for ``database``: a statement
     runner or DB-API connection for Databricks and Snowflake, an open
@@ -1610,13 +1608,14 @@ class CaseSchema:
         r"""Drops every view, table and type loaded so far, the last
         first."""
         for kind, name in reversed(self.views):
-            qualified = _qualified(
-                'postgres' if self.database == 'lakebase' else self.database,
-                self.namespace,
-                name,
-            )
-            what = 'SEMANTIC VIEW' if kind == 'semantic_view' else 'VIEW'
-            self._run(f'DROP {what} IF EXISTS {qualified}')
+            if kind == 'semantic_view':
+                # Unquoted, as the YAML named it, so Snowflake folds the
+                # name as it did when it created the view.
+                where = '.'.join(quote(part) for part in self.namespace)
+                self._run(f'DROP SEMANTIC VIEW IF EXISTS {where}.{name}')
+            else:
+                qualified = _qualified(self.database, self.namespace, name)
+                self._run(f'DROP VIEW IF EXISTS {qualified}')
         self.views = []
         for table in reversed(self.tables):
             if self.database == 'lakebase':
@@ -1636,11 +1635,12 @@ class CaseSchema:
         self.tables, self.types = [], []
 
     def create_view(self, kind: str, name: str, yaml: str) -> None:
-        r"""The case's view, created in the schema from its YAML: a
-        Databricks metric view (``CREATE VIEW ... WITH METRICS LANGUAGE
-        YAML``), or a Snowflake semantic view
-        (``SYSTEM$CREATE_SEMANTIC_VIEW_FROM_YAML``, the view named by the
-        YAML); dropped by the next :meth:`load` or :meth:`clear`."""
+        r"""The case's view, created in the schema from its YAML under the
+        name the case reads it by, ``name``: a Databricks metric view
+        (``CREATE VIEW ... WITH METRICS LANGUAGE YAML``), or a Snowflake
+        semantic view (``SYSTEM$CREATE_SEMANTIC_VIEW_FROM_YAML``, which
+        names the view by the YAML's ``name``, so that is set to ``name``);
+        dropped, by that name, by the next :meth:`load` or :meth:`clear`."""
         if '$$' in yaml:
             raise Unloadable(f'{name}: a view YAML holding $$')
         if kind == 'metric_view' and self.database == 'databricks':
@@ -1650,10 +1650,25 @@ class CaseSchema:
                 f'YAML AS $$\n{yaml}\n$$'
             )
         elif kind == 'semantic_view' and self.database == 'snowflake':
+            import yaml as pyyaml
+
+            if not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_$]*', name):
+                raise Unloadable(
+                    f'{name}: a semantic view name the YAML cannot give unquoted'
+                )
+            document = pyyaml.safe_load(yaml)
+            if not isinstance(document, dict):
+                raise Unloadable(
+                    f'{name}: a semantic view YAML that is no mapping'
+                )
+            document['name'] = name
+            text = pyyaml.safe_dump(
+                document, sort_keys=False, allow_unicode=True
+            )
             where = '.'.join(quote(part) for part in self.namespace)
             self._run(
                 'CALL SYSTEM$CREATE_SEMANTIC_VIEW_FROM_YAML('
-                f"'{where.replace(chr(39), chr(39) * 2)}', $$\n{yaml}\n$$)"
+                f"'{where.replace(chr(39), chr(39) * 2)}', $$\n{text}\n$$)"
             )
         else:
             raise Unloadable(
@@ -1719,7 +1734,64 @@ def load_leg(duck: Any, leg: str, target: Any) -> list[str]:
     view = target.view
     if view and view.get('yaml'):
         schema.create_view(view['kind'], view['name'], view['yaml'])
+    # The old client reads every table of the schema when a case names
+    # none: a table this case did not load (an earlier, killed run's; the
+    # other Databricks leg's, loading the same schema) is refused by name,
+    # never recorded.
+    expected = {
+        name.lower()
+        for name in (
+            *schema.tables,
+            *(view_name for _, view_name in schema.views),
+            *(value for key, value in names.items() if key.endswith('_view')),
+        )
+    }
+    others = sorted(
+        name
+        for name in held(leg, target.connection, namespace)
+        if name.lower() not in expected
+    )
+    if others:
+        raise Unloadable(
+            f'{leg}: the test schema holds {len(others)} relation(s) this case '
+            f'did not load ({", ".join(others)}): clear it, and load each leg '
+            'one at a time or into a schema of its own'
+        )
     return notes
+
+
+def held(leg: str, connection: Any, namespace: tuple[str, ...]) -> list[str]:
+    r"""The tables and views ``leg``'s test schema holds, as its catalog
+    lists them (the reads the old client lists a schema with:
+    ``SHOW TABLES`` on Databricks and Snowflake, ``information_schema`` on
+    Postgres)."""
+    if leg == 'lakebase':
+        rows = connection.execute(
+            'SELECT table_name FROM information_schema.tables '
+            'WHERE table_schema = %s',
+            [namespace[0]],
+        ).fetchall()
+        return [str(row[0]) for row in rows]
+    if leg == 'databricks-spark':
+        where = '.'.join(backtick(part) for part in namespace)
+        return [
+            str(row[1])
+            for row in connection.sql(f'SHOW TABLES IN {where}').collect()
+        ]
+    if leg == 'databricks-sql':
+        statement = 'SHOW TABLES IN ' + '.'.join(
+            backtick(part) for part in namespace
+        )
+    else:
+        statement = 'SHOW TABLES IN SCHEMA ' + '.'.join(
+            quote(part) for part in namespace
+        )
+    cursor = connection.cursor()
+    try:
+        cursor.execute(statement)
+        return [str(row[1]) for row in cursor.fetchall()]
+    finally:
+        cursor.close()
 
 
 def non_native(database: str) -> list[str]:

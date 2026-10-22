@@ -389,62 +389,148 @@ class _Target:
         self.view = view
 
 
+class _Warehouse:
+    r"""A DB-API connection that keeps the schema's relations as the
+    loader's statements create and drop them, and lists them for
+    ``SHOW TABLES``."""
+
+    def __init__(self, held=()) -> None:
+        self.ran: list[str] = []
+        self.held = set(held)
+
+    def cursor(self):
+        warehouse = self
+
+        class Cursor:
+            rows: list = []
+
+            def execute(self, statement: str) -> None:
+                warehouse.ran.append(statement)
+                name = re.findall(r'[`"]([^`"]+)[`"]', statement.split(' (')[0])
+                if statement.startswith(
+                    ('CREATE TABLE', 'CREATE OR REPLACE VIEW')
+                ):
+                    warehouse.held.add(name[-1])
+                elif statement.startswith('DROP'):
+                    last = statement.rsplit('.', 1)[-1].strip('`"')
+                    warehouse.held.discard(last)
+                elif statement.startswith('SHOW TABLES'):
+                    self.rows = [
+                        ('s', n, False) for n in sorted(warehouse.held)
+                    ]
+
+            def fetchall(self) -> list:
+                return self.rows
+
+            def close(self) -> None:
+                pass
+
+        return Cursor()
+
+
 def test_a_leg_s_schema_holds_one_case_at_a_time_through_its_target() -> None:
-    ran: list[str] = []
-
-    class Cursor:
-        def execute(self, statement: str) -> None:
-            ran.append(statement)
-
-        def close(self) -> None:
-            pass
-
-    class Connection:
-        def cursor(self) -> Cursor:
-            return Cursor()
-
     names = {'catalog': 'cat_t', 'schema': 'sch_t'}
+    first = _Warehouse()
     databases.load(
         _duck('CREATE TABLE a (i INTEGER)'),
         'databricks-sql',
         _Target(
-            Connection(),
+            first,
             names,
             {'kind': 'metric_view', 'name': 'mv', 'yaml': 'version: 1.1'},
         ),
     )
-    assert ran[-1].startswith(
-        'CREATE OR REPLACE VIEW `cat_t`.`sch_t`.`mv` WITH METRICS'
+    assert any(
+        s.startswith('CREATE OR REPLACE VIEW `cat_t`.`sch_t`.`mv` WITH METRICS')
+        for s in first.ran
     )
-    ran.clear()
-    # The next case, on a new connection: the earlier case's view and
-    # table are dropped first, then its own table is loaded.
+    # The next case, on a new connection to the same schema: the earlier
+    # case's view and table are dropped first, then its own is loaded.
+    second = _Warehouse(first.held)
     databases.load(
         _duck('CREATE TABLE b (i INTEGER)'),
         'databricks-sql',
-        _Target(Connection(), names),
+        _Target(second, names),
     )
-    assert ran[:2] == [
+    assert second.ran[:2] == [
         'DROP VIEW IF EXISTS `cat_t`.`sch_t`.`mv`',
         'DROP TABLE IF EXISTS `cat_t`.`sch_t`.`a`',
     ]
-    assert any(s.startswith('CREATE TABLE `cat_t`.`sch_t`.`b`') for s in ran)
+    assert second.held == {'b'}
 
+
+def test_a_table_the_case_did_not_load_is_refused_by_name() -> None:
+    # Review r1 (Claude) P2-1: a table left by a killed run, or loaded by
+    # the other Databricks leg into the same schema, never enters a case.
+    names = {
+        'catalog': 'cat_u',
+        'schema': 'sch_u',
+        'shop_metric_view': 'kept_view',
+    }
+    warehouse = _Warehouse({'stale_orders', 'kept_view'})
+    with pytest.raises(databases.Unloadable, match=r'1 relation.*stale_orders'):
+        databases.load(
+            _duck('CREATE TABLE c (i INTEGER)'),
+            'databricks-sql',
+            _Target(warehouse, names),
+        )
+
+
+def test_a_semantic_view_is_created_and_dropped_under_the_case_s_name() -> None:
+    # Review r1 (Claude) P1-1: the YAML's name is the case's view name.
+    names = {'catalog': 'DB_V', 'schema': 'SCH_V'}
+    warehouse = _Warehouse()
+    yaml = 'name: shop_semantics\ntables:\n- name: users\n'
+    databases.load(
+        _duck('CREATE TABLE users (i INTEGER)'),
+        'snowflake',
+        _Target(
+            warehouse,
+            names,
+            {
+                'kind': 'semantic_view',
+                'name': 'view_semantic_binary',
+                'yaml': yaml,
+            },
+        ),
+    )
+    (call,) = [s for s in warehouse.ran if s.startswith('CALL')]
+    assert 'name: view_semantic_binary' in call and 'shop_semantics' not in call
+    nxt = _Warehouse(warehouse.held)
+    databases.load(
+        _duck('CREATE TABLE users (i INTEGER)'),
+        'snowflake',
+        _Target(nxt, names),
+    )
+    assert (
+        nxt.ran[0]
+        == 'DROP SEMANTIC VIEW IF EXISTS "DB_V"."SCH_V".view_semantic_binary'
+    )
+
+
+def test_the_spark_leg_loads_through_its_session() -> None:
     class Spark:
+        def __init__(self) -> None:
+            self.ran: list[str] = []
+
         def sql(self, statement: str):
-            ran.append(statement)
+            self.ran.append(statement)
             return self
 
         def collect(self) -> list:
+            if self.ran[-1].startswith('SHOW TABLES'):
+                return [('s', 'c', False)]
             return []
 
-    ran.clear()
+    spark = Spark()
     databases.load(
         _duck('CREATE TABLE c (i INTEGER)'),
         'databricks-spark',
-        _Target(Spark(), names),
+        _Target(spark, {'catalog': 'cat_w', 'schema': 'sch_w'}),
     )
-    assert any(s.startswith('CREATE TABLE `cat_t`.`sch_t`.`c`') for s in ran)
+    assert any(
+        s.startswith('CREATE TABLE `cat_w`.`sch_w`.`c`') for s in spark.ran
+    )
 
 
 @pytest.mark.parametrize(
