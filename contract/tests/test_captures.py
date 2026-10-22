@@ -410,7 +410,9 @@ def test_nested_types_keep_their_fields_through_write_and_read(
     table = pa.table(
         {
             'l': pa.array([[1, 2], []], type=pa.list_(element)),
-            's': pa.array([{'x': 'a'}, {'x': 'b'}], type=pa.struct([member])),
+            's': pa.array(
+                [{'x': 'a'}, {'x': 'xq_name'}], type=pa.struct([member])
+            ),
             'm': pa.array(
                 [[('k', 1)], []],
                 type=pa.map_(
@@ -419,7 +421,7 @@ def test_nested_types_keep_their_fields_through_write_and_read(
             ),
         }
     )
-    for environ in ({}, {'SDM_CAPTURE_CATALOG': 'b'}):
+    for environ in ({}, {'SDM_CAPTURE_CATALOG': 'xq_name'}):
         path = captures.write(
             tmp_path / f'c{len(environ)}',
             _capture(tables={'t': table}),
@@ -477,4 +479,39 @@ def test_every_read_of_a_recorded_statement_is_kept(tmp_path: Path) -> None:
     assert found['statements'][0]['parameters'] == [{'name': 'x', 'value': 3}]
     line['statements'][0]['results'].append({'arrow': None})
     with pytest.raises(captures.CaptureError, match='kept no table'):
+        captures.from_recording(line)
+
+
+def test_a_private_name_inside_other_text_is_refused_never_rewritten(
+    tmp_path: Path,
+) -> None:
+    # Review r1 (Claude) P2-2: SDM_CAPTURE_CATALOG=main left `domain`
+    # written as `do{catalog}`.
+    environ = {'SDM_CAPTURE_CATALOG': 'main'}
+    found, _ = captures.document(
+        _capture(reference={'message': 'catalog main, MAIN.users'}), environ
+    )
+    assert found['reference'] == {
+        'message': 'catalog {catalog}, {CATALOG}.users'
+    }
+    table = pa.table({'domain': ['x']})
+    with pytest.raises(captures.PrivateName, match='SDM_CAPTURE_CATALOG'):
+        captures.write(
+            tmp_path / 'c', _capture(tables={'t': table}), environ=environ
+        )
+    assert not any(tmp_path.iterdir())
+
+
+def test_a_recording_line_without_a_session_zone_is_refused() -> None:
+    line = {
+        'format': 'sdm-record/1',
+        'case': 'c@snowflake',
+        'leg': 'snowflake',
+        'recording': {},
+        'statements': [],
+        'relations': [],
+        'draws': [],
+        'tables': [],
+    }
+    with pytest.raises(captures.CaptureError, match='time zone'):
         captures.from_recording(line)
