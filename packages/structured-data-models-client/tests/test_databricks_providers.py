@@ -36,9 +36,8 @@ from sdm_client._rust.providers.databricks import (
 )
 from sdm_client._rust.run import _driver
 
-connectors = pytest.importorskip('sdm_connectors')
-from sdm_connectors import DatabricksSource, Source  # noqa: E402
-from sdm_connectors.backends.spark import SparkConnection  # noqa: E402
+from sdm_connectors import DatabricksSource, Source
+from sdm_connectors.backends.spark import SparkConnection
 
 Answer = Any
 
