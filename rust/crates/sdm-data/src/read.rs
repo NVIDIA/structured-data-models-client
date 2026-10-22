@@ -17,7 +17,7 @@ use arrow_array::cast::AsArray;
 use arrow_array::types::Int64Type;
 use arrow_array::{Array, ArrayRef, BooleanArray, Int64Array, ListArray, RecordBatch, StringArray};
 use sdm_contract::catalog::{
-    CatalogAnswer, CatalogColumn, CatalogForeignKey, CatalogIndex, CatalogKey, IndexColumns,
+    CatalogAnswer, CatalogColumn, CatalogForeignKey, CatalogIndex, CatalogKey, IndexCoverage,
     KeyKind,
 };
 use sdm_contract::data::{DescribePart, catalog_columns as c};
@@ -100,14 +100,14 @@ pub(crate) fn names(lists: &ListArray, row: usize) -> Vec<String> {
 /// Row `row`'s index columns as a host provider gives them: resolved when
 /// the list and each name in it are given, unresolved where the list or a
 /// name is null, never the names left over.
-fn index_columns(lists: &ListArray, row: usize) -> IndexColumns {
+fn index_columns(lists: &ListArray, row: usize) -> IndexCoverage {
     if lists.is_null(row) {
-        return IndexColumns::Unresolved;
+        return IndexCoverage::Unresolved;
     }
     let items = lists.value(row);
     match items.as_string_opt::<i32>() {
-        Some(strings) if strings.null_count() == 0 => IndexColumns::Resolved(names(lists, row)),
-        _ => IndexColumns::Unresolved,
+        Some(strings) if strings.null_count() == 0 => IndexCoverage::Resolved(names(lists, row)),
+        _ => IndexCoverage::Unresolved,
     }
 }
 

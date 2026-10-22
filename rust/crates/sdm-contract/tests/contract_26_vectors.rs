@@ -14,7 +14,7 @@
     reason = "test code: reads the committed vectors"
 )]
 
-use sdm_contract::data::{DataRequest, Relation};
+use sdm_contract::data::{DataRequest, ProviderCapabilities, Relation};
 use sdm_contract::ops::{DescribedTable, HeldTable, NamedTable, SourceSpec};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -44,6 +44,7 @@ fn load(name: &str, value: &Value) -> Result<Value, String> {
     match name {
         "DataRequest" => round_trip::<DataRequest>(value),
         "Relation" => round_trip::<Relation>(value),
+        "ProviderCapabilities" => round_trip::<ProviderCapabilities>(value),
         "NamedTable" => round_trip::<NamedTable>(value),
         "SourceSpec" => round_trip::<SourceSpec>(value),
         "DescribedTable" => round_trip::<DescribedTable>(value),
