@@ -1463,9 +1463,7 @@ def implicated(
         tools.gh('run', 'view', run_id, '--json', 'jobs') or '{}'
     ).get('jobs', [])
     failed = [
-        j
-        for j in jobs
-        if j.get('conclusion') in ('failure', 'timed_out')
+        j for j in jobs if j.get('conclusion') in ('failure', 'timed_out')
     ]
     commits = []
     for line in tools.git(
