@@ -311,6 +311,78 @@ PLACEHOLDER_NAMES = (
 )
 
 
+class LakebaseSession:
+    r"""Lakebase's leg offline (design, choice 2): its local engine is the
+    local Postgres CI runs, so the core's own Postgres SQL runs there. The
+    case's tables are loaded by the contract loader into a database of the
+    session's own, under a schema named as the capture names Lakebase's
+    test schema (``{schema}``), exactly as C-1 loaded them on Lakebase;
+    ``provider`` is the Python host's Postgres provider over it."""
+
+    def __init__(self, case: dict[str, Any], bases: Any) -> None:
+        import importlib.util
+        import uuid
+
+        import psycopg
+        from psycopg.conninfo import make_conninfo
+
+        dsn = os.environ.get('SDM_POSTGRES_TEST_DSN')
+        if not dsn:
+            raise StandInFailure(
+                f'{case["id"]}@lakebase runs on the local Postgres: set '
+                'SDM_POSTGRES_TEST_DSN'
+            )
+        here = Path(__file__).resolve().parent
+
+        def sibling(name: str) -> Any:
+            spec = importlib.util.spec_from_file_location(
+                f'standin_client_{name}', here / f'{name}.py'
+            )
+            assert spec is not None and spec.loader is not None
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            return module
+
+        runner, loader = sibling('run_python'), sibling('databases')
+        self.names = {name: '{' + name + '}' for name in PLACEHOLDER_NAMES}
+        self._dsn = dsn
+        self._name = f'sdm_lakebase_{uuid.uuid4().hex[:16]}'
+        with psycopg.connect(dsn, autocommit=True) as admin:
+            admin.execute(f'CREATE DATABASE {self._name}')
+        try:
+            scoped = make_conninfo(dsn, dbname=self._name)
+            self._connection = psycopg.connect(scoped)
+            schema = self.names['schema']
+            self._connection.execute(f'CREATE SCHEMA {loader.quote(schema)}')
+            self._connection.commit()
+            duck = runner._connection(case, bases or runner.load_bases())
+            try:
+                loader.load(
+                    duck, 'lakebase', self._connection, namespace=(schema,)
+                )
+            finally:
+                duck.close()
+            from sdm_client._rust.providers.postgres import PostgresProvider
+
+            self.provider = PostgresProvider(self._connection)
+        except BaseException:
+            self.close()
+            raise
+
+    def verdict(self) -> dict[str, Any]:
+        return {'live_only': None, 'flagged': []}
+
+    def close(self) -> None:
+        import psycopg
+
+        connection = getattr(self, '_connection', None)
+        if connection is not None:
+            connection.close()
+            self._connection = None
+        with psycopg.connect(self._dsn, autocommit=True) as admin:
+            admin.execute(f'DROP DATABASE IF EXISTS {self._name} WITH (FORCE)')
+
+
 def open(  # noqa: A001 - the name run_python.py calls
     leg: str,
     case: dict[str, Any],
@@ -320,9 +392,12 @@ def open(  # noqa: A001 - the name run_python.py calls
     binary: Path | str | None = None,
 ) -> Session:
     r"""The stand-in serving ``case``'s capture on ``leg``
-    (``captures/<leg>/<case id>/``); :class:`StandInFailure` when the leg is
-    not the stand-in's or the case has no capture there (pending live)."""
-    del bases
+    (``captures/<leg>/<case id>/``), or, on ``lakebase``, the local
+    Postgres loaded with the case's data (:class:`LakebaseSession`);
+    :class:`StandInFailure` when the case has no capture on the leg
+    (pending live)."""
+    if leg == 'lakebase':
+        return LakebaseSession(case, bases)  # type: ignore[return-value]
     if leg not in LEGS:
         raise StandInFailure(
             f'{leg} is not served by the stand-in (it serves {", ".join(LEGS)})'

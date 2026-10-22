@@ -60,6 +60,7 @@ import sys
 import tempfile
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Any
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -261,12 +262,19 @@ def step_reference(
             + tail(done.stdout + done.stderr, 2)
         )
     rust = any(p.startswith('rust/') for p in touched)
+    runner = runner_module(root)
+    loaded = {
+        case: json.loads(path.read_text(encoding='utf-8'))
+        for case, path in chosen.items()
+    }
     for database in DATABASES:
+        # Each case's databases as the runner reads them: an S2 case's
+        # warehouses are no database here, so it never runs on DuckDB or
+        # SQLite.
         cases = {
             case: path
             for case, path in chosen.items()
-            if database
-            in (json.loads(path.read_text()).get('databases') or DATABASES)
+            if database in runner.case_databases(loaded[case])
         }
         if not cases:
             continue
@@ -355,7 +363,129 @@ def step_reference(
             step.notes.append(
                 f'{database}: {", ".join(sorted(cases))} match the old client'
             )
+    step_warehouses(step, root, chosen, loaded, runner, python, expect, scratch)
     return step
+
+
+def runner_module(root: Path) -> Any:
+    r"""The candidate's ``run_python.py``, for how it reads a case's legs."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        'handoff_run_python', root / 'contract/runners/run_python.py'
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def warehouse_references(
+    root: Path, case: str, leg: str, recorded: dict[str, str]
+) -> str | None:
+    r"""The old client's reference line for ``case`` on the warehouse leg
+    ``leg``: the line its capture holds (``contract/captures/<leg>/<case>``),
+    or, on Lakebase, which is Postgres and whose offline engine is the local
+    Postgres, the old client's recorded Postgres line, keyed for the leg,
+    until C-1's capture holds one; ``None`` where neither exists (pending
+    live)."""
+    capture = root / 'contract/captures' / leg / case / 'capture.json'
+    if capture.is_file():
+        found = json.loads(capture.read_text(encoding='utf-8'))
+        line = dict(found['reference'])
+        line['case'] = f'{case}@{leg}'
+        return json.dumps(line, sort_keys=True)
+    if leg == 'lakebase' and key(case, 'postgres') in recorded:
+        line = json.loads(recorded[key(case, 'postgres')])
+        line['case'] = f'{case}@{leg}'
+        return json.dumps(line, sort_keys=True)
+    return None
+
+
+def step_warehouses(
+    step: Step,
+    root: Path,
+    chosen: dict[str, Path],
+    loaded: dict[str, dict[str, Any]],
+    runner: Any,
+    python: str,
+    expect: list[str],
+    scratch: Path,
+) -> None:
+    r"""Each touched case's warehouse legs, from the case itself
+    (``case_warehouses``: an S2 case's ``warehouses``, an S1 case's every
+    leg), on python-core offline (the stand-in; Lakebase on the local
+    Postgres), held to the old client's reference line by ``compare.py``:
+    a difference on one leg alone stops the stamp. A case with no reference
+    on a leg yet is pending live, named and never passed (design, choice 2;
+    T3.3)."""
+    _, recorded = reference_lines(root)
+    for leg in runner.WAREHOUSES:
+        cases = {
+            case: path
+            for case, path in chosen.items()
+            if leg in runner.case_warehouses(loaded[case])
+        }
+        if not cases:
+            continue
+        lines = {}
+        for case in sorted(cases):
+            line = warehouse_references(root, case, leg, recorded)
+            if line is None:
+                step.notes.append(
+                    f'{case}@{leg}: pending live (no capture yet)'
+                )
+            else:
+                lines[case] = line
+        if not lines:
+            continue
+        if leg == 'lakebase' and not os.environ.get('SDM_POSTGRES_TEST_DSN'):
+            step.problems.append(
+                f'{", ".join(sorted(lines))} run(s) on lakebase, judged on the '
+                'local Postgres, and SDM_POSTGRES_TEST_DSN is not set'
+            )
+            continue
+        files = [str(cases[case]) for case in sorted(lines)]
+        out = scratch / f'{leg}-python-core.jsonl'
+        done = run(
+            [python, '-I', str(root / 'contract/runners/run_python.py'), '--mode',
+             'python-core', '--database', leg, '--out', str(out), *files],
+            root,
+        )  # fmt: skip
+        if done.returncode != 0:
+            step.problems.append(
+                f'python-core on {leg} failed for {", ".join(sorted(lines))}:\n'
+                + tail(done.stdout + done.stderr)
+            )
+            continue
+        held = scratch / f'{leg}-reference.jsonl'
+        held.write_text(
+            ''.join(lines[case] + '\n' for case in sorted(lines)),
+            encoding='utf-8',
+        )
+        done = run(
+            [sys.executable, str(root / 'scripts/rust_core/compare.py'),
+             *(arg for f in files for arg in ('--cases', f)),
+             '--database', leg, '--reference', str(held), *expect,
+             '--register', str(root / 'docs/design/rust-core/register.yaml'),
+             str(out)],
+            root,
+        )  # fmt: skip
+        if done.returncode != 0:
+            differs = [
+                line
+                for line in done.stdout.splitlines()
+                if line.startswith('DIFFERS')
+            ]
+            step.problems.append(
+                f'{leg}: the cases differ from the old client:\n'
+                + '\n'.join(differs[:40] or [tail(done.stdout + done.stderr)])
+            )
+        else:
+            step.notes.append(
+                f'{leg}: {", ".join(sorted(lines))} match the old client'
+            )
 
 
 def live_reference(
