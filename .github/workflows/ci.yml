@@ -584,11 +584,12 @@ jobs:
   # and the binding's tests run beside it, in native-test-ops and binding.
   native-wheel:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     needs: landing
     if: needs.landing.outputs.skip != 'true'
     env:
       NATIVE_ARGS: --out native
+      JAVA_NATIVE: shipped
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: rustup toolchain install
@@ -614,7 +615,7 @@ jobs:
           mkdir -p "$HOME/.cargo/registry" "$HOME/.cargo/git" "$home/.cargo/registry" "$home/.cargo/git"
           docker run --rm --user "$(id -u):$(id -g)" \
             -e HOME=/tmp/home -e CARGO_HOME=/tmp/home/.cargo -e RUSTUP_HOME=/tmp/home/.rustup \
-            -e NATIVE_ARGS \
+            -e NATIVE_ARGS -e JAVA_NATIVE \
             -v "$home:/tmp/home" -v "$PWD:/io" -w /io \
             -v "$HOME/.cargo/registry:/tmp/home/.cargo/registry" \
             -v "$HOME/.cargo/git:/tmp/home/.cargo/git" \
@@ -638,11 +639,26 @@ jobs:
               /tmp/home/maturin/bin/pip install --quiet maturin==1.15.0
               export PATH="/tmp/home/maturin/bin:$PATH"
               python scripts/rust_core/native_wheel.py $NATIVE_ARGS --manylinux
+              # The Java binding from the same build (T3.11): JAVA_NATIVE
+              # says which, and none when it is unset.
+              case "${JAVA_NATIVE:-}" in
+                shipped) (cd rust && cargo build --release --locked -p sdm-jni) ;;
+                test-ops) (cd rust && cargo build --release --locked -p sdm-jni --features test-ops) ;;
+              esac
             '
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: native-wheel
           path: native/
+      # The Java binding the JAR ships for this platform (T3.11).
+      - name: The Java binding, by platform
+        run: |
+          mkdir -p java-natives/linux-x86_64
+          cp rust/target/release/libsdm_jni.so java-natives/linux-x86_64/
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: java-native-linux-x86_64
+          path: java-natives/
 
   # The binding with its test-only operations, built beside native-wheel by
   # the same step and tested at the E16 floor: every file of the binding's
@@ -652,7 +668,7 @@ jobs:
   # builds or ships takes (E23).
   native-test-ops:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     needs: landing
     if: needs.landing.outputs.skip != 'true'
     # The pinned PostgreSQL service, required (H26), for the Postgres
@@ -664,6 +680,7 @@ jobs:
       postgres: *postgres-service
     env:
       NATIVE_ARGS: --out native-test-ops --test-ops
+      JAVA_NATIVE: test-ops
       SDM_POSTGRES_TEST_DSN: postgresql://postgres:postgres@localhost:5432/sdm_test
       SDM_REQUIRE_POSTGRES: '1'
     steps:
@@ -698,6 +715,12 @@ jobs:
         with:
           name: native-wheel-test-ops
           path: native-test-ops/
+      # The Java binding with the test-only operations, which java-test
+      # loads (T3.11).
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: java-test-ops-native
+          path: rust/target/release/libsdm_jni.so
 
   # The client wheel for aarch64 Linux (decision KO2-40), built natively on
   # an Arm runner by native-wheel's own steps, in PyPA's
@@ -710,7 +733,7 @@ jobs:
   native-wheel-aarch64:
     name: native-wheel (aarch64, ${{ matrix.build }})
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 30
+    timeout-minutes: 40
     needs: landing
     # Not on a test author's branch (the landing job's plan, T3.0), nor
     # its smoke after it.
@@ -722,12 +745,15 @@ jobs:
           - build: shipped
             args: --out native
             artifact: native-wheel-aarch64
+            java: shipped
           - build: test-ops
             args: --out native --test-ops
             artifact: native-wheel-test-ops-aarch64
+            java: ''
     env:
       MANYLINUX: ghcr.io/nvidia/structured-data-models-client/manylinux2014_aarch64:2026.09.14-1@sha256:d4c40df238d6ec0ee91213f4797ad26f05d7d82947bcb61c40d1fdc13d0e16d5
       NATIVE_ARGS: ${{ matrix.args }}
+      JAVA_NATIVE: ${{ matrix.java }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: rustup toolchain install
@@ -743,6 +769,16 @@ jobs:
         with:
           name: ${{ matrix.artifact }}
           path: native/
+      - name: The Java binding, by platform
+        if: matrix.java == 'shipped'
+        run: |
+          mkdir -p java-natives/linux-aarch64
+          cp rust/target/release/libsdm_jni.so java-natives/linux-aarch64/
+      - if: matrix.java == 'shipped'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: java-native-linux-aarch64
+          path: java-natives/
 
   # The binding's tests on the wheel that ships, at the E16 floor: the file
   # any build passes.
@@ -2230,11 +2266,253 @@ jobs:
   # the run, so no candidate is refused for a time limit (the owner: no
   # hard budgets); the guard's own failure (status 2) does, and an API that
   # does not answer judges nothing.
+  # The Java library (T3.11, design choice 10). Its macOS natives: sdm-jni
+  # on the runners the engine wheels use; Linux's are built beside the
+  # client's wheels, in native-wheel and native-wheel-aarch64. Not on a
+  # test author's branch (the landing job's plan, T3.0).
+  java-native:
+    name: java-native (${{ matrix.platform }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    needs: landing
+    if: needs.landing.outputs.skip != 'true' && needs.landing.outputs.full != 'false'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-aarch64
+            runner: macos-15
+          # x86_64 macOS ends with the macOS 15 image in autumn 2027, as the
+          # engine wheels' row does.
+          - platform: macos-x86_64
+            runner: macos-15-intel
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: rustup toolchain install
+        working-directory: rust
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: rust
+          key: java-${{ matrix.platform }}
+          save-if: ${{ env.SAVE_CACHES == 'true' }}
+      - name: Build sdm-jni
+        working-directory: rust
+        run: cargo build --release --locked -p sdm-jni
+      - name: The Java binding, by platform
+        run: |
+          mkdir -p "java-natives/${{ matrix.platform }}"
+          cp rust/target/release/libsdm_jni.dylib "java-natives/${{ matrix.platform }}/"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: java-native-${{ matrix.platform }}
+          path: java-natives/
+
+  # The one JAR, with every platform's native (the all-natives profile
+  # refuses a JAR missing one), and its runtime dependencies beside it.
+  java-jar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [landing, native-wheel, native-wheel-aarch64, java-native]
+    if: needs.landing.outputs.skip != 'true' && needs.landing.outputs.full != 'false'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: java-native-*
+          path: java/target/natives
+          merge-multiple: true
+      - name: Build the JAR
+        run: mvn -B -f java/pom.xml -Pall-natives -DskipTests package
+      - name: The JAR holds every platform's native
+        run: |
+          listed=$(unzip -Z1 java/target/structured-data-models-client-1.0.0.jar)
+          for native in linux-x86_64/libsdm_jni.so linux-aarch64/libsdm_jni.so \
+                        macos-aarch64/libsdm_jni.dylib macos-x86_64/libsdm_jni.dylib; do
+            grep -qx "com/nvidia/sdm/native/$native" <<<"$listed" \
+              || { echo "::error::the JAR holds no $native"; exit 1; }
+          done
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: java-jar
+          path: |
+            java/target/structured-data-models-client-1.0.0.jar
+            java/target/lib/
+
+  # Every Java test (mvn verify, with the runtime flags) on JDK 17 and 21,
+  # loading the native with the test-only operations: the binding's
+  # lifetimes, Arrow both ways, the panic test in a subprocess JVM.
+  java-test:
+    name: java-test (${{ matrix.jdk }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [landing, native-test-ops]
+    if: needs.landing.outputs.skip != 'true' && needs.landing.outputs.full != 'false'
+    strategy:
+      fail-fast: false
+      matrix:
+        jdk: ['17', '21']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.jdk }}
+          cache: maven
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: java-test-ops-native
+          path: native-test-ops
+      - run: mvn -B -f java/pom.xml verify "-Dsdm.native.library=$PWD/native-test-ops/libsdm_jni.so"
+
+  # The JAR-load test (exit 4 of T3.11, locked check 14): the JAR and its
+  # runtime dependencies alone, on each JDK and platform the JAR promises,
+  # where no Rust toolchain is: in a clean JDK container on Linux (Eclipse
+  # Temurin's image, pinned by digest, pulled anonymously from ECR Public),
+  # and on the runner on macOS, which runs no containers, with no Rust step.
+  java-load:
+    name: java-load (${{ matrix.jdk }}, ${{ matrix.platform }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    needs: [landing, java-jar]
+    if: needs.landing.outputs.skip != 'true' && needs.landing.outputs.full != 'false'
+    container: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - jdk: '17'
+            platform: linux-x86_64
+            runner: ubuntu-latest
+            image: public.ecr.aws/docker/library/eclipse-temurin:17-jdk@sha256:fe947d993c32dd9cf651a4353a6ed723c2370b3a9d034ea4cab4775404ea531a
+          - jdk: '21'
+            platform: linux-x86_64
+            runner: ubuntu-latest
+            image: public.ecr.aws/docker/library/eclipse-temurin:21-jdk@sha256:23cc5734ff46e776f51ce66eb9ee08444fd47caabec0a95b7eb6e94be2d3696d
+          # The same image index: the runner pulls its arm64 image.
+          - jdk: '21'
+            platform: linux-aarch64
+            runner: ubuntu-24.04-arm
+            image: public.ecr.aws/docker/library/eclipse-temurin:21-jdk@sha256:23cc5734ff46e776f51ce66eb9ee08444fd47caabec0a95b7eb6e94be2d3696d
+          - jdk: '21'
+            platform: macos-arm64
+            runner: macos-15
+            image: ''
+          - jdk: '21'
+            platform: macos-x86_64
+            runner: macos-15-intel
+            image: ''
+    env:
+      FLAGS: --enable-native-access=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: java/jar-load
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: java-jar
+          path: jar
+      - if: runner.os == 'macOS'
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.jdk }}
+      - name: The JAR loads
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = Linux ] && command -v rustc >/dev/null; then
+            echo "::error::a Rust toolchain is in the container"; exit 1
+          fi
+          java -version
+          java $FLAGS -cp "jar/structured-data-models-client-1.0.0.jar:jar/lib/*" java/jar-load/JarLoad.java
+
+  # Java's legs of the contract cases, on each JDK and platform the JAR
+  # promises (locked check 14): every S0 case on the Java host, judged
+  # against the old client's recorded answers, then T3.11's acceptance
+  # tests. No S1 or S2 Java leg runs yet: the Java host has no provider
+  # (run_java.py).
+  java:
+    name: java (${{ matrix.jdk }}, ${{ matrix.platform }}, s0)
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    needs: [landing, java-jar]
+    if: needs.landing.outputs.skip != 'true' && needs.landing.outputs.full != 'false'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - jdk: '17'
+            platform: linux-x86_64
+            runner: ubuntu-latest
+          - jdk: '21'
+            platform: linux-x86_64
+            runner: ubuntu-latest
+          - jdk: '21'
+            platform: linux-aarch64
+            runner: ubuntu-24.04-arm
+          - jdk: '21'
+            platform: macos-arm64
+            runner: macos-15
+          - jdk: '21'
+            platform: macos-x86_64
+            runner: macos-15-intel
+    env:
+      SDM_PUSH_BASE: ${{ needs.landing.outputs.base }}
+      FLAGS: --enable-native-access=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: java-jar
+          path: jar
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.jdk }}
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - name: The S0 cases on the Java host
+        run: |
+          pip install pytest pyyaml jsonschema
+          python contract/runners/run_java.py --jar jar/structured-data-models-client-1.0.0.jar \
+            --classpath jar/lib --out java.jsonl contract/cases/s0
+      - name: compare (java)
+        run: |
+          where=$(python scripts/rust_core/ratchet.py where) || { echo 'java: ratchet.py where failed'; exit 1; }
+          expect=()
+          if [ -n "$where" ]; then
+            python scripts/rust_core/ratchet.py effective $where --out effective.json || exit 1
+            expect=(--expect effective.json)
+          fi
+          python scripts/rust_core/compare.py --cases contract/cases/s0 \
+            --reference contract/reference/*.jsonl ${expect[@]+"${expect[@]}"} java.jsonl
+      # T3.11's acceptance tests on this JDK and platform: the S0 cases, the
+      # JAR on this JDK in a clean environment, Java 17 bytecode, and every
+      # platform's native in the JAR.
+      - name: The Java host's acceptance tests
+        env:
+          SDM_JAVA_JAR: jar/structured-data-models-client-1.0.0.jar
+          SDM_JAVA_JAR_PLATFORMS: linux-x86_64,linux-aarch64,macos-arm64,macos-x86_64
+        run: python -m pytest -q -p no:cacheprovider contract/tests/test_t311_java.py
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: observations-java-${{ matrix.jdk }}-${{ matrix.platform }}
+          path: java.jsonl
+          if-no-files-found: warn
+
   timing-guard:
     name: timing guard
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: [landing, lint, hygiene, rust-lint, rust-deny, rust-test, native-wheel, native-test-ops, native-wheel-aarch64, binding, wheel-smoke, wheel-smoke-aarch64, typecheck, test, engine, contract-python-ref-pandas3, tooling-contract, tooling-root, cross-host, contract-python-dbr17-pandas2, contract-python-floor-pandas2-2, contract-python-ref-pandas3-sqlite, contract-python-ref-pandas3-postgres, contract-python-dbr17-pandas2-sqlite, contract-python-dbr17-pandas2-postgres, contract-python-floor-pandas2-2-sqlite, contract-python-floor-pandas2-2-postgres, cross-host-sqlite, cross-host-postgres, l4-goldens, l5-conversion, build, engine-wheels, installed-wheel, runtime-install, sbom]
+    needs: [landing, lint, hygiene, rust-lint, rust-deny, rust-test, native-wheel, native-test-ops, native-wheel-aarch64, binding, wheel-smoke, wheel-smoke-aarch64, typecheck, test, engine, contract-python-ref-pandas3, tooling-contract, tooling-root, cross-host, contract-python-dbr17-pandas2, contract-python-floor-pandas2-2, contract-python-ref-pandas3-sqlite, contract-python-ref-pandas3-postgres, contract-python-dbr17-pandas2-sqlite, contract-python-dbr17-pandas2-postgres, contract-python-floor-pandas2-2-sqlite, contract-python-floor-pandas2-2-postgres, cross-host-sqlite, cross-host-postgres, l4-goldens, l5-conversion, build, engine-wheels, installed-wheel, runtime-install, sbom, java-native, java-jar, java-test, java-load, java]
     if: ${{ !cancelled() && needs.landing.outputs.skip != 'true' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

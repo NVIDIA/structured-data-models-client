@@ -953,13 +953,19 @@ def test_ci4_a_skip_condition_cannot_be_overridden(
 
 
 def _images() -> list[str]:
-    r"""Every registry image reference written in the workflow."""
+    r"""Every registry image reference written in the workflow; a Java
+    module path in a JVM flag (``--add-opens=java.base/java.nio=...``, the
+    Java jobs', T3.11) has an image's shape and is none."""
     text = CI.read_text(encoding='utf-8')
-    return re.findall(
-        r'(?<![\w./-])(?:[a-z0-9-]+\.)+[a-z]{2,}(?::\d+)?/[a-z0-9._/-]+'
-        r'(?::[\w.-]+)?(?:@sha256:[0-9a-f]+)?',
-        text,
-    )
+    return [
+        image
+        for image in re.findall(
+            r'(?<![\w./-])(?:[a-z0-9-]+\.)+[a-z]{2,}(?::\d+)?/[a-z0-9._/-]+'
+            r'(?::[\w.-]+)?(?:@sha256:[0-9a-f]+)?',
+            text,
+        )
+        if not image.startswith('java.base/')
+    ]
 
 
 def test_ci4_every_image_ci_names_is_pinned_by_digest(
@@ -977,10 +983,23 @@ def test_ci4_every_image_ci_names_is_pinned_by_digest(
             assert DIGEST.search(image), image
         env = workflow['env']
         aarch64 = workflow['jobs']['native-wheel-aarch64']['env']['MANYLINUX']
-        named = {env['POSTGRES_IMAGE'], env['MANYLINUX'], aarch64}
+        # The JAR-load jobs' clean JDK containers (T3.11), the only job
+        # containers: the runner pulls them, anonymously, from ECR Public.
+        load = workflow['jobs']['java-load']
+        jdks = {
+            entry['image']
+            for entry in load['strategy']['matrix']['include']
+            if entry['image']
+        }
+        assert load['container'] == '${{ matrix.image }}'
+        for image in jdks:
+            assert image.startswith(
+                'public.ecr.aws/docker/library/eclipse-temurin:'
+            ), image
+        named = {env['POSTGRES_IMAGE'], env['MANYLINUX'], aarch64, *jdks}
         assert set(images) == named, set(images) ^ named
         for name, job in workflow['jobs'].items():
-            assert 'container' not in job, name
+            assert name == 'java-load' or 'container' not in job, name
             for service in (job.get('services') or {}).values():
                 assert service['image'] == (
                     '${{ needs.landing.outputs.postgres-image }}'

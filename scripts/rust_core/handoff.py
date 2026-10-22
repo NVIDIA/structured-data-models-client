@@ -24,7 +24,11 @@ default the same. The steps:
   and each ``--case``) run on python-core, on each database the case names
   (Postgres with ``SDM_POSTGRES_TEST_DSN``, which a case naming Postgres
   needs, or no stamp), and on rust-host (DuckDB and SQLite) when the package changes
-  ``rust/``, then ``compare.py`` holds them to the recorded old-client
+  ``rust/``, and on their Java legs (T3.11: the cases ``run_java.py`` runs on
+  the Java host, S0's today) when ``SDM_JAVA_JAR`` names a JAR, or the
+  package changes the Java library (:data:`JAVA_PATHS`), on the JAR
+  ``java_build.py jar`` builds (a Java package with no JDK or Maven gets no
+  stamp), then ``compare.py`` holds them to the recorded old-client
   answers in ``contract/reference/`` (with the ratchet's effective
   expectations). No live old-client run, except for a case with no
   recorded answer on a database: that one runs python-ref live when
@@ -71,6 +75,15 @@ STAMPS = 'sdm-handoff'
 DATABASES = ('duckdb', 'sqlite', 'postgres')
 FIX = re.compile(rf'({PACKAGE_ID.pattern}) fix [0-9]+: ')
 CRATE_TEST = re.compile(r'rust/crates/([^/]+)/tests/([^/]+)\.rs$')
+#: What makes a package a Java one, whose cases' Java legs its handoff runs
+#: (T3.11); any other runs them only with ``SDM_JAVA_JAR`` set, so Java
+#: never holds a Python package (plan section 6).
+JAVA_PATHS = (
+    'java/',
+    'rust/bindings/sdm-jni/',
+    'contract/runners/run_java.py',
+    'contract/runners/java/',
+)
 
 
 class Failure(Exception):
@@ -261,6 +274,10 @@ def step_reference(
             + tail(done.stdout + done.stderr, 2)
         )
     rust = any(p.startswith('rust/') for p in touched)
+    java = bool(os.environ.get('SDM_JAVA_JAR')) or any(
+        p.startswith(JAVA_PATHS) for p in touched
+    )
+    built: list[str] = []
     for database in DATABASES:
         cases = {
             case: path
@@ -311,6 +328,13 @@ def step_reference(
                 )
             else:
                 observed.append(host)
+        legs: Path | None = None
+        if java and database == 'duckdb':
+            found = java_legs(root, python, list(cases.values()), scratch, built)
+            if isinstance(found, str):
+                step.problems.append(found)
+            else:
+                legs = found
         # The recorded answers of these cases on this database, and a live
         # old-client answer where none is recorded.
         lines = []
@@ -355,7 +379,83 @@ def step_reference(
             step.notes.append(
                 f'{database}: {", ".join(sorted(cases))} match the old client'
             )
+        if legs is not None:
+            # The Java legs judged on their own, so a difference only Java
+            # shows is named as Java's (T3.11, exit 2).
+            ran = sorted(
+                json.loads(line)['case']
+                for line in legs.read_text(encoding='utf-8').splitlines()
+                if line.strip()
+            )
+            done = run(
+                [sys.executable, str(root / 'scripts/rust_core/compare.py'),
+                 *(arg for f in files for arg in ('--cases', f)),
+                 '--reference', str(held), *expect,
+                 '--register', str(root / 'docs/design/rust-core/register.yaml'),
+                 str(legs)],
+                root,
+            )  # fmt: skip
+            if done.returncode != 0:
+                differs = [
+                    line
+                    for line in done.stdout.splitlines()
+                    if line.startswith('DIFFERS')
+                ]
+                step.problems.append(
+                    f'java: {", ".join(ran)} on the Java host differ from the '
+                    'old client:\n'
+                    + '\n'.join(
+                        differs[:40] or [tail(done.stdout + done.stderr)]
+                    )
+                )
+            else:
+                step.notes.append(
+                    f'java: {", ".join(ran)} on the Java host match the old client'
+                )
     return step
+
+
+def java_legs(
+    root: Path, python: str, files: list[Path], scratch: Path, built: list[str]
+) -> Path | str | None:
+    """The Java legs of the cases in ``files``, observed on the JAR
+    ``SDM_JAVA_JAR`` names, else the one ``java_build.py jar`` builds (once
+    per handoff, kept in ``built``): their observations' file, None when no
+    case has a Java leg, or why they could not run."""
+    given = os.environ.get('SDM_JAVA_JAR')
+    if given and not built:
+        built.extend([given, str(Path(given).parent / 'lib'), ''])
+    if not built:
+        done = run(
+            [sys.executable, str(root / 'scripts/rust_core/java_build.py'), 'jar'],
+            root,
+        )
+        if done.returncode != 0:
+            return 'the Java library did not build:\n' + tail(
+                done.stdout + done.stderr
+            )
+        paths = dict(
+            line.split(' ', 1)
+            for line in done.stdout.splitlines()
+            if line.startswith(('JAR ', 'LIB ', 'NATIVE '))
+        )
+        built.extend([paths['JAR'], paths['LIB'], paths['NATIVE']])
+    jar, lib, native = built
+    out = scratch / 'java.jsonl'
+    java_home = os.environ.get('SDM_JAVA_HOME') or os.environ.get('JAVA_HOME')
+    done = run(
+        [python, '-I', str(root / 'contract/runners/run_java.py'), '--jar', jar,
+         '--classpath', lib, *(['--native', native] if native else []),
+         '--out', str(out),
+         *(['--java', str(Path(java_home) / 'bin' / 'java')] if java_home else []),
+         *map(str, files)],
+        root,
+    )  # fmt: skip
+    if done.returncode != 0:
+        return 'java failed:\n' + tail(done.stdout + done.stderr)
+    if not out.read_text(encoding='utf-8').strip():
+        return None
+    return out
 
 
 def live_reference(
