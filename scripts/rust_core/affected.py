@@ -246,6 +246,13 @@ def suites(
         if not found and (ROOT / path).is_file():
             found.extend(syntax(path))
         for suite in found:
+            # The binding's tests run only under BINDING, which supplies
+            # --native-build and the test-ops interpreter (Codex r3).
+            if suite[: len(PYTEST)] == PYTEST and any(
+                part.startswith('rust/bindings/')
+                for part in suite[len(PYTEST) :]
+            ):
+                suite = BINDING
             if suite not in out:
                 out.append(suite)
     return out

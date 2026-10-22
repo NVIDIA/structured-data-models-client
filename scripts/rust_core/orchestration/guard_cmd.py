@@ -58,13 +58,14 @@ are appended to ``$SDM_ORCH_STATE/logs/approved-commands.log``.
 
 The Agent rule: a prompt that names a round brief (``round-briefs/...``)
 or the reviewer brief (``reviewer.md``, not ``design-reviewer.md``) starts
-a review round. Every full 40-character SHA it names, in the prompt or in
-the round brief it points at, that is not on the epic or a phase branch
-yet needs a passing handoff stamp (``handoff.py``) in the clone the hook
-runs in, else the launch is refused naming ``handoff.py run``; a short
-SHA git resolves here counts as its full SHA. A round brief that cannot be
-read, or names no SHA, is refused; a prompt naming only ``reviewer.md`` and
-no SHA is docs work, and passes.
+a review round. Its candidate, the SHA on a ``Candidate: <full SHA>``
+line in the prompt or the round brief it points at, needs a passing
+handoff stamp (``handoff.py``) in the clone the hook runs in, else the
+launch is refused naming ``handoff.py run``; other SHAs a brief names (the
+reference, the previous round) are context. A round brief that
+cannot be read or has none is refused. A prompt naming only ``reviewer.md``
+and no candidate line has its full SHAs not yet landed checked, and with
+none is docs work, and passes.
 
 Refusals are appended to ``$SDM_ORCH_STATE/logs/guard-denied.log``. Codex
 panes have no PreToolUse hook; ``rule_watch.py`` keeps watching them.
@@ -400,25 +401,30 @@ def push_targets(args: list[str], branch: str) -> list[str]:
     the branch checked out; ``--all`` and ``--mirror`` push every branch."""
     positional: list[str] = []
     skip = False
+    remote_given = False
     for arg in args:
         if skip:
             skip = False
         elif arg in PUSH_VALUED:
             skip = True
+            remote_given = remote_given or arg == '--repo'
+        elif arg.startswith('--repo='):
+            remote_given = True
         elif not arg.startswith('-'):
             positional.append(arg)
     if '--all' in args or '--mirror' in args or '--branches' in args:
         return list(PROTECTED)
-    refspecs = positional[1:]
+    # The remote is the first word, unless --repo gave it (Codex r3 P3).
+    refspecs = positional if remote_given else positional[1:]
     if not refspecs:
         return [branch] if branch else ['HEAD']
     found = []
     for spec in refspecs:
         spec = spec.lstrip('+')
         dst = spec.rpartition(':')[2] if ':' in spec else spec
-        if dst in ('HEAD', ''):
+        if dst in ('HEAD', '@', ''):
             dst = branch or 'HEAD'
-        found.append(dst.removeprefix('refs/heads/'))
+        found.append(dst.removeprefix('refs/').removeprefix('heads/'))
     return found
 
 
@@ -737,7 +743,8 @@ def check_simple(
             'docker rm --force kills a running container',
             'stop it first, then docker rm without --force',
         )
-    if head == 'cargo' and argv[1:2] == ['clean']:
+    cargo = [a for a in argv[1:] if not a.startswith('+')]
+    if head == 'cargo' and cargo[:1] == ['clean']:
         return Verdict(
             'cargo clean deletes a build other agents may share',
             'leave the build; clean_tmp.sh removes stale targets after a dry run',
@@ -895,33 +902,14 @@ def brief_text(name: str) -> str | None:
         return None
 
 
-#: An abbreviated SHA a brief may name ("Candidate: 674d7f25").
-SHORT = re.compile(r'(?<![0-9a-f])[0-9a-f]{7,39}(?![0-9a-f])')
-
-
-def named_shas(text: str, cwd: str) -> list[str]:
-    """The full SHAs ``text`` names, and its short ones git resolves to a
-    commit here (Claude r2 P2-2)."""
-    found = set(SHA.findall(text))
-    for short in set(SHORT.findall(text)):
-        try:
-            done = subprocess.run(
-                ['git', '-C', cwd, 'rev-parse', '--verify', '--quiet',
-                 f'{short}^{{commit}}'],
-                capture_output=True, text=True, timeout=30,
-                stdin=subprocess.DEVNULL,
-            )  # fmt: skip
-        except (OSError, subprocess.TimeoutExpired):
-            continue
-        full = done.stdout.strip()
-        if done.returncode == 0 and SHA.fullmatch(full):
-            found.add(full)
-    return sorted(found)
+#: The candidate line every round brief carries (Claude r3): the one SHA
+#: the round reviews, which needs the stamp. Other SHAs a brief names (the
+#: reference, the previous round, the base) are context.
+CANDIDATE = re.compile(r'^\W*Candidate:\W*([0-9a-f]{40})\b', re.MULTILINE)
 
 
 def landed(sha: str, cwd: str) -> bool:
-    """Whether ``sha`` is on the epic or a phase branch as fetched: a base
-    the round names, not a candidate."""
+    """Whether ``sha`` is on the epic or a phase branch as fetched."""
     try:
         done = subprocess.run(
             ['git', '-C', cwd, 'branch', '-r', '--contains', sha],
@@ -940,11 +928,12 @@ def landed(sha: str, cwd: str) -> bool:
 
 def check_agent(prompt: str, cwd: str) -> Verdict | None:
     """A review launch: a prompt naming a round brief (``round-briefs/``)
-    or the reviewer brief (``briefs/reviewer.md``). The SHAs it names, in
-    the prompt or in the round brief it points at, that are not landed yet
-    each need a passing stamp (a short SHA git resolves counts). A round
-    brief that cannot be read or names no SHA is refused; a prompt naming
-    only ``reviewer.md`` and no SHA is docs work on it, and passes."""
+    or the reviewer brief (``briefs/reviewer.md``). The candidate it
+    reviews is the SHA on a ``Candidate: <full SHA>`` line, in the prompt
+    or the round brief, and needs a passing stamp. A round brief that
+    cannot be read, or has no candidate line, is refused. A prompt naming
+    only ``reviewer.md`` with no candidate line has its full SHAs not yet
+    landed checked instead, and with none is docs work, and passes."""
     briefs = ROUND_BRIEF.findall(prompt)
     if not briefs and not REVIEWER_BRIEF.search(prompt):
         return None
@@ -961,13 +950,17 @@ def check_agent(prompt: str, cwd: str) -> Verdict | None:
                 'the hook can read',
             )
         texts.append(read)
-    shas = named_shas('\n'.join(texts), cwd)
-    if not shas:
-        if briefs:
-            return Verdict(
-                'a review round whose brief names no SHA git knows here',
-                'write the full SHA under review in the round brief',
-            )
+    candidates = sorted(set(CANDIDATE.findall('\n'.join(texts))))
+    if not candidates and briefs:
+        return Verdict(
+            'a review round whose brief has no candidate line',
+            "start the round brief with 'Candidate: <the full SHA under review>'",
+        )
+    if not candidates:
+        candidates = [
+            s for s in sorted(set(SHA.findall(prompt))) if not landed(s, cwd)
+        ]
+    if not candidates:
         return None
     common = git_common_dir(cwd)
     if common is None:
@@ -975,11 +968,7 @@ def check_agent(prompt: str, cwd: str) -> Verdict | None:
             f'a review round launched outside a git clone ({cwd})',
             'launch it from the clone holding the handoff stamps',
         )
-    missing = [
-        sha
-        for sha in shas
-        if not landed(sha, cwd) and handoff.stamp_problem(common, sha)
-    ]
+    missing = [s for s in candidates if handoff.stamp_problem(common, s)]
     if not missing:
         return None
     return Verdict(

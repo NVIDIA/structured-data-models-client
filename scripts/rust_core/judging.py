@@ -78,6 +78,23 @@ def judging(rules: Rules, paths: Iterable[str]) -> list[str]:
     return sorted(p for p in paths if matches(rules, p))
 
 
+#: The checkers left off the judging list because product packages edit
+#: their data in the same file: their checking logic is train-worthy on its
+#: own (Codex r3), though a change to them does not have to ride a train.
+CHECKERS = (
+    'scripts/rust_core/bridge_freeze.py',
+    'scripts/rust_core/wheel_smoke.py',
+    'scripts/rust_core/selftest.py',
+)
+
+
+def train_worthy(rules: Rules, paths: Iterable[str]) -> list[str]:
+    """The paths among ``paths`` a train exists for: judging paths and the
+    checkers."""
+    checkers = patterns('\n'.join(CHECKERS))
+    return sorted(p for p in paths if matches(rules, p) or matches(checkers, p))
+
+
 def not_train(rules: Rules, paths: Iterable[str]) -> list[str]:
     """The paths among ``paths`` a train may not change."""
     also = patterns('\n'.join(TRAIN_ALSO))

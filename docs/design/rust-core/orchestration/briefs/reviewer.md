@@ -1,6 +1,7 @@
 # Reviewer: standing rules (the same brief goes to both reviewers)
 
 The orchestrator's brief names: the package ID, its design row and decision rows, the exact `BASE..CANDIDATE` range, the round number, the findings already known or in progress (skip them), and the report file to write.
+Every round brief carries one line `Candidate: <full SHA>`, the SHA the round reviews: the reviewer launch checks that SHA's handoff stamp, and refuses a round brief without the line (`guard_cmd.py`).
 
 **How to review**
 - Review the fixed SHA, in a throwaway worktree or with `git show`, never the live lane worktree.

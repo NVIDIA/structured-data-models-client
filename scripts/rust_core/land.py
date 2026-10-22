@@ -1364,9 +1364,9 @@ def judging_problem(
         return None
     found = judging.judging(rules, paths)
     if train:
-        if not found:
+        if not judging.train_worthy(rules, paths):
             return (
-                f'{package} is landed as a train but changes no judging path; '
+                f'{package} is landed as a train but changes no judging path or checker; '
                 'land it without --train'
             )
         if not first:

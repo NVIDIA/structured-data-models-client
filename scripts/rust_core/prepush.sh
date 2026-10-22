@@ -43,8 +43,10 @@
 #
 # --install-hook makes this the pre-push hook of the current worktree only:
 # the hook, in the clone's shared hooks directory, runs the cheap tier for
-# the worktrees listed beside it and does nothing in any other. lane.py start
-# installs it in each lane worktree. The hook passes git's list of the refs
+# the worktrees listed beside it and does nothing more in any other; in
+# every worktree it first refuses a push to rust-core, main or
+# rust-core-reference without the owner's token (T3.0, the owner's Q14).
+# lane.py start installs it in each lane worktree. The hook passes git's list of the refs
 # being pushed on (--pushed-refs, read from standard input), so the lane check
 # looks at each lane ref pushed rather than at the branch checked out. It also
 # installs the commit-msg hook (commit_msg.py, T3.0): a fix commit changing
@@ -90,20 +92,63 @@ if [ "$install_hook" = 1 ]; then
     echo "prepush.sh: $hook exists and is not this hook; not replacing it" >&2
     exit 2
   fi
-  cat >"$hook" <<EOF
-#!/usr/bin/env bash
-$marker
-# Runs the cheap tier in the worktrees listed in prepush-worktrees beside
-# this file; in any other worktree of the clone it does nothing.
-top=\$(git rev-parse --show-toplevel) || exit 0
-grep -qxF "\$top" "\$(dirname "\$0")/prepush-worktrees" 2>/dev/null || exit 0
-if [ ! -x "\$top/scripts/rust_core/prepush.sh" ]; then
-  echo "pre-push: \$top has no scripts/rust_core/prepush.sh; not checking" >&2
+  {
+    printf '#!/usr/bin/env bash\n%s\n' "$marker"
+    cat <<'EOF'
+# In every worktree of the clone, registered or not (Claude r3 P2-2): no
+# push updates or deletes rust-core, main or rust-core-reference (the
+# owner, Q14), unless SDM_APPROVED names the heading of an owner-answers
+# file approving it (guard_cmd.py's slug). Self-contained, since the
+# checkout pushing may hold no scripts (rust-core before a phase merges).
+refs=$(cat)
+python3 - "$refs" <<'PY' || exit 1
+import glob, os, re, sys
+protected = {'refs/heads/rust-core', 'refs/heads/main', 'refs/heads/rust-core-reference'}
+lines = (line.split() for line in sys.argv[1].splitlines())
+hit = sorted({f[2] for f in lines if len(f) == 4 and f[2] in protected})
+if not hit:
+    sys.exit(0)
+state = os.environ.get('SDM_ORCH_STATE') or os.path.expanduser('~/.local/share/sdm-orchestration')
+files = [p for p in os.environ.get('SDM_OWNER_ANSWERS', '').split(':') if p]
+files = files or glob.glob(os.path.join(state, 'phase-*', 'owner-answers*.md'))
+
+
+def slug(heading):
+    text = re.sub(r'[^a-z0-9 -]', '', heading.lower().replace('–', '-'))
+    return re.sub(r'-+', '-', re.sub(r'\s+', '-', text.strip())).strip('-')
+
+
+valid = set()
+for path in files:
+    try:
+        text = open(path, encoding='utf-8').read()
+    except OSError:
+        continue
+    valid |= {slug(m.group(1)) for m in re.finditer(r'^#{1,6}\s+(.+)$', text, re.M)}
+token = os.environ.get('SDM_APPROVED', '')
+if token and token in valid:
+    sys.exit(0)
+names = ', '.join(ref[len('refs/heads/'):] for ref in hit)
+print(
+    f"pre-push: REFUSED: the push updates {names}, which only the owner's merge "
+    'pushes; run it as SDM_APPROVED=<owner-answers id> git push ... when the '
+    'owner approved it',
+    file=sys.stderr,
+)
+sys.exit(1)
+PY
+# The cheap tier runs in the worktrees listed in prepush-worktrees beside
+# this file; in any other worktree of the clone it does nothing more.
+top=$(git rev-parse --show-toplevel) || exit 0
+grep -qxF "$top" "$(dirname "$0")/prepush-worktrees" 2>/dev/null || exit 0
+if [ ! -x "$top/scripts/rust_core/prepush.sh" ]; then
+  echo "pre-push: $top has no scripts/rust_core/prepush.sh; not checking" >&2
   exit 0
 fi
-# Git gives the refs being pushed on standard input; exec passes it on.
-exec "\$top/scripts/rust_core/prepush.sh" --pushed-refs
+# Git gives the refs being pushed on standard input; pass them on.
+printf '%s\n' "$refs" | exec "$top/scripts/rust_core/prepush.sh" --pushed-refs
 EOF
+  } >"$hook"
   chmod +x "$hook"
   # The commit-msg hook (T3.0, item 4): a product fix names the old
   # client's rule. Same worktree list as the pre-push hook.

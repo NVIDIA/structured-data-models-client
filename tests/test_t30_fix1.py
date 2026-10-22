@@ -379,13 +379,26 @@ def test_a_redirection_is_no_rm_target(tmp_path: Path) -> None:
         del os.environ['SDM_SCRATCH']
 
 
-def test_a_round_brief_s_sha_needs_a_stamp(repo: Path, tmp_path: Path) -> None:
-    sha = _commit(repo, {'a.txt': 'a\n'}, 'T3.99: the candidate')
-    brief = tmp_path / 'round-briefs' / 'T3.99-r1.md'
+def test_a_round_brief_s_candidate_needs_a_stamp(
+    repo: Path, tmp_path: Path
+) -> None:
+    previous = _commit(repo, {'a.txt': 'a\n'}, 'T3.99: round 1')
+    sha = _commit(repo, {'a.txt': 'b\n'}, 'T3.99 fix 1: round 2')
+    brief = tmp_path / 'round-briefs' / 'T3.99-r2.md'
     brief.parent.mkdir()
-    brief.write_text(f'Review T3.99 at {sha}.\n', encoding='utf-8')
+    # A real brief's shape (T3.0-r3): the candidate, the previous round,
+    # the reference; only the candidate needs the stamp (Claude r3 P2-1).
+    brief.write_text(
+        f'Candidate: {sha}\n'
+        f'Round 2 of T3.99 at SHA {sha}.\n'
+        f'Review `{previous[:8]}..{sha[:8]}` against round 1.\n'
+        f'Scope: match the reference (python-ref at {"6298913c"}).\n',
+        encoding='utf-8',
+    )
     prompt = f'Read and follow the brief at {brief}.'
-    assert guard.check_agent(prompt, str(repo)) is not None
+    found = guard.check_agent(prompt, str(repo))
+    assert found is not None and sha[:12] in found.rule
+    assert previous[:12] not in found.rule
     stamp = handoff.stamp_path(
         Path(_git(repo, 'rev-parse', '--absolute-git-dir')), sha
     )
@@ -563,7 +576,7 @@ def test_the_pre_push_hook_refuses_a_protected_branch(
     assert lane.check_pushed(args, None, print, 'x') == 0
 
 
-def test_a_round_brief_is_read_and_its_short_sha_resolved(
+def test_a_round_brief_without_its_candidate_line_is_refused(
     repo: Path, tmp_path: Path
 ) -> None:
     sha = _commit(repo, {'a.txt': 'a\n'}, 'T3.99: the candidate')
@@ -571,18 +584,11 @@ def test_a_round_brief_is_read_and_its_short_sha_resolved(
     assert guard.check_agent(missing, str(repo)) is not None
     brief = tmp_path / 'round-briefs' / 'T3.99-r1.md'
     brief.parent.mkdir()
-    brief.write_text('Review T3.99: nothing named.\n', encoding='utf-8')
-    prompt = f'Read and follow the brief at {brief}.'
-    assert guard.check_agent(prompt, str(repo)) is not None
-    brief.write_text(f'Candidate: {sha[:8]} on its lane.\n', encoding='utf-8')
-    found = guard.check_agent(prompt, str(repo))
-    assert found is not None and sha[:12] in found.rule
-    stamp = handoff.stamp_path(
-        Path(_git(repo, 'rev-parse', '--absolute-git-dir')), sha
+    brief.write_text(f'Review T3.99 at {sha}.\n', encoding='utf-8')
+    found = guard.check_agent(
+        f'Read and follow the brief at {brief}.', str(repo)
     )
-    stamp.parent.mkdir(parents=True)
-    stamp.write_text(json.dumps({'sha': sha, 'ok': True}), encoding='utf-8')
-    assert guard.check_agent(prompt, str(repo)) is None
+    assert found is not None and 'candidate line' in found.rule
 
 
 def test_a_cancelled_stack_top_asks_for_a_rerun(tmp_path: Path) -> None:
@@ -688,4 +694,93 @@ def test_the_dry_run_without_its_gate_is_incomplete(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize('command', ['git clean -fdx', 'cargo clean'])
 def test_deleting_build_output_is_refused(command: str) -> None:
+    assert guard.check_command(command, '/home/user', None) is not None
+
+
+# --- fix round 3 ---------------------------------------------------------------------
+
+
+def test_a_push_to_rust_core_is_refused_from_an_unregistered_worktree(
+    tmp_path: Path,
+) -> None:
+    process = _module('t30_fix3_process', ROOT / 'tests/test_t30_process.py')
+    origin, work, head = process._clone(tmp_path)
+    env = {**os.environ, **GIT_ENV, 'SDM_ORCH_STATE': str(tmp_path / 'state')}
+    env.pop('SDM_APPROVED', None)
+    subprocess.run(
+        ['bash', 'scripts/rust_core/prepush.sh', '--install-hook'],
+        cwd=work, env=env, check=True, capture_output=True, text=True,
+    )  # fmt: skip
+    other = tmp_path / 'other'
+    _git(work, 'worktree', 'add', '-q', '-B', 'rust-core', str(other), head)
+    # A commit the remote lacks, so each push updates its branch.
+    _commit(other, {'t399.txt': 'x\n'}, 'T3.99: an unlanded commit')
+    for spec in ('rust-core', 'HEAD:refs/heads/main', ':rust-core-reference'):
+        done = subprocess.run(
+            ['git', '-C', str(other), 'push', '-q', 'origin', spec],
+            env=env, capture_output=True, text=True,
+        )  # fmt: skip
+        assert done.returncode != 0, (spec, done.stderr)
+        assert 'only the owner' in done.stderr, done.stderr
+    # A topic branch goes through the protected check (the cheap tier
+    # runs only in registered worktrees).
+    done = subprocess.run(
+        ['git', '-C', str(other), 'push', '-q', 'origin',
+         'HEAD:refs/heads/rust-core-phase-3-t3.99'],
+        env=env, capture_output=True, text=True,
+    )  # fmt: skip
+    assert done.returncode == 0, done.stderr
+
+
+def test_a_binding_source_and_test_change_runs_only_the_binding_command() -> (
+    None
+):
+    printed = [
+        ' '.join(s)
+        for s in affected.suites(
+            [
+                'rust/bindings/sdm-py/src/lib.rs',
+                'rust/bindings/sdm-py/tests/test_binding.py',
+            ]
+        )
+    ]
+    assert printed == [' '.join(affected.BINDING)], printed
+
+
+def test_a_python_fix_with_a_binding_test_is_no_rust_fix(repo: Path) -> None:
+    previous = _commit(repo, {'packages/p/src/p/a.py': 'A = 1\n'}, 'T3.99: a')
+    paths = ['packages/p/src/p/a.py', 'rust/bindings/sdm-py/tests/test_a.py']
+    assert handoff.rust_production(repo, previous, paths) == []
+
+
+def test_a_space_inside_a_rust_literal_is_a_production_change(
+    repo: Path,
+) -> None:
+    path = 'rust/crates/demo/src/text.rs'
+    previous = _commit(repo, {path: 'pub fn s() -> &str {\n    "ab"\n}\n'}, 'a')
+    _commit(repo, {path: 'pub fn s() -> &str {\n    "a b"\n}\n'}, 'b')
+    assert handoff.rust_production(repo, previous, [path]) == [path]
+
+
+def test_a_train_of_a_checker_fix_alone_is_allowed() -> None:
+    problem = land.judging_problem(
+        ['scripts/rust_core/bridge_freeze.py'], RULES, 'T3.98', True, True, None
+    )
+    assert problem is None, problem
+    # Its data stays product work: no judging path, no train needed.
+    assert (
+        judging.judging(RULES, ['scripts/rust_core/bridge_freeze.json']) == []
+    )
+
+
+@pytest.mark.parametrize(
+    'command',
+    [
+        'git push --repo=origin HEAD:rust-core',
+        'git push --repo origin HEAD:rust-core',
+        'git push origin heads/main',
+        'cargo +stable clean',
+    ],
+)
+def test_the_guard_s_round_3_spellings(command: str) -> None:
     assert guard.check_command(command, '/home/user', None) is not None

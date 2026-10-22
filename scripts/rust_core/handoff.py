@@ -491,13 +491,28 @@ def without_tests(text: str) -> str:
     return text if block is None else text[: block[0]] + text[block[1] :]
 
 
+#: Rust production code: a crate's or the binding's Rust source, its
+#: manifest and build script; never a test, a test helper, a vector or a
+#: Python file under ``rust/`` (Codex r3, Claude r3 P3-2).
+PRODUCTION = re.compile(
+    r'rust/(crates|bindings)/[^/]+/(src/.+\.rs|build\.rs|Cargo\.toml)$'
+)
+
+
+def code_lines(text: str) -> list[str]:
+    """The lines of Rust source that carry code: each stripped at its ends,
+    blank ones dropped, so a test block's surrounding blank lines change
+    nothing while a space inside a string literal does (Codex r3)."""
+    return [line.strip() for line in text.splitlines() if line.strip()]
+
+
 def rust_production(root: Path, previous: str, diffed: list[str]) -> list[str]:
-    """The Rust files whose production code changed since ``previous``: any
-    change under ``rust/`` but a crate test file or a ``#[cfg(test)]`` block
-    alone."""
+    """The Rust files whose production code changed since ``previous``: a
+    source file (its ``#[cfg(test)]`` block aside), a manifest or a build
+    script under a crate or the binding."""
     found = []
     for path in diffed:
-        if not path.startswith('rust/') or CRATE_TEST.match(path):
+        if not PRODUCTION.match(path):
             continue
         if not path.endswith('.rs'):
             found.append(path)
@@ -509,11 +524,7 @@ def rust_production(root: Path, previous: str, diffed: list[str]) -> list[str]:
             if (root / path).is_file()
             else ''
         )
-        # Whitespace alone (the blank lines around a test block) is no
-        # production change.
-        if ''.join(without_tests(old).split()) != ''.join(
-            without_tests(new).split()
-        ):
+        if code_lines(without_tests(old)) != code_lines(without_tests(new)):
             found.append(path)
     return found
 
@@ -578,7 +589,7 @@ def step_fails_before(
             '(rust/crates/<crate>/tests/*.rs) that fails without the fix'
         )
         return step
-    if not production and not changed:
+    if not production and not changed and not spliced:
         step.problems.append(
             f'the fix round adds or changes no test since {previous[:12]}; a fix '
             'comes with a test that fails without it'
@@ -596,7 +607,9 @@ def step_fails_before(
         for path, text in spliced.items():
             (tree / path).parent.mkdir(parents=True, exist_ok=True)
             (tree / path).write_text(text, encoding='utf-8')
-        if production:
+        # Rust tests run with cargo whenever there are any; for a Rust
+        # production fix they are the only judges.
+        if production or crate_tests or spliced:
             for path in crate_tests:
                 match = CRATE_TEST.match(path)
                 assert match is not None
@@ -618,7 +631,7 @@ def step_fails_before(
                 (failed if done.returncode else passed).append(
                     f'{path} (#[cfg(test)])'
                 )
-        else:
+        if not production:
             # New test files first: with -x the first failure ends the run,
             # and a new test is the likeliest to fail on the previous tree.
             pytest_files = sorted(
@@ -630,17 +643,35 @@ def step_fails_before(
                     == 0
                 ),
             )
-            if pytest_files:
-                env = {**os.environ, 'PYTHONPATH': source_path(tree, python)}
+            # The binding's tests need the test-ops build and its option
+            # (as affected.py's BINDING runs them); the rest plain pytest.
+            kit = os.environ.get('SDM_KIT_PYTHON', '')
+            binding = [
+                p for p in pytest_files if p.startswith('rust/bindings/')
+            ]
+            plain = [p for p in pytest_files if p not in binding]
+            batches = [(python, plain, [])]
+            if binding and not kit:
+                step.problems.append(
+                    "the binding tests need SDM_KIT_PYTHON, the lane's test-ops "
+                    'interpreter: ' + ', '.join(binding)
+                )
+            elif binding:
+                batches.append((kit, binding, ['--native-build', 'test-ops']))
+            for interpreter, files, extra in batches:
+                if not files:
+                    continue
+                env = {
+                    **os.environ,
+                    'PYTHONPATH': source_path(tree, interpreter),
+                }
                 done = run(
-                    [python, '-m', 'pytest', '-q', '-x', '-p', 'no:cacheprovider',
-                     *pytest_files],
+                    [interpreter, '-m', 'pytest', '-q', '-x', '-p',
+                     'no:cacheprovider', *files, *extra],
                     tree,
                     env,
                 )  # fmt: skip
-                (failed if done.returncode in (1, 2) else passed).extend(
-                    pytest_files
-                )
+                (failed if done.returncode in (1, 2) else passed).extend(files)
                 if done.returncode not in (0, 1, 2, 5):
                     step.problems.append(
                         f'pytest could not run the tests on {previous[:12]}:\n'
