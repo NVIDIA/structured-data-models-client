@@ -9,17 +9,30 @@ reviewer looks, and a stamp for the exact SHA that passed.
     handoff.py run --package ID [--previous SHA] [--case ID ...]
         [--python PY] [--base REV]
     handoff.py check SHA
+    handoff.py wait SHA [--timeout SECONDS]
+    handoff.py running --package ID
 
 ``run`` checks the committed ``HEAD`` of a clean worktree and, only when
 every step passes, writes ``<git common dir>/sdm-handoff/<sha>.json``
-(``{"sha", "package", "ok": true, "time", "previous", "steps"}``); a failed
-step exits 1 and writes no stamp. Implementers and test authors run it
-before they report "ready"; ``codex_pane.py review`` and the Claude reviewer
-launch (``guard_cmd.py``) refuse a round on a SHA without a stamp. Run it
-with the tools' interpreter (the one that runs ``compare.py``); ``--python``
-is the interpreter holding the candidate's client (the lane's environment),
-default the same. The steps:
+(``{"sha", "package", "ok": true, "time", "previous", "steps", "seconds"}``);
+a failed step exits 1 and writes no stamp. Implementers and test authors
+run it before they report "ready"; ``codex_pane.py review`` and the Claude
+reviewer launch (``guard_cmd.py``) refuse a round on a SHA without a stamp.
+Run it with the tools' interpreter (the one that runs ``compare.py``);
+``--python`` is the interpreter holding the candidate's client (the lane's
+environment), default the same, and every command the run starts sees it
+as ``SDM_PYTHON`` (the Rust tests that load cases run it, never a bare
+``python3``).
 
+The steps run cheapest first, each printed as it starts and ends with its
+time, and the run stops at the first failing step (the owner's
+"2026-10-22 evening: the five speed changes", change 1): the handoff is
+the package's own evidence, in about 15 minutes; the broad suites are CI's,
+and ``land.py`` already refuses a landing without a green CI run.
+
+- ``lint``: ``ruff check`` and ``ruff format --check`` on the changed Python
+  files, ``cargo fmt --check`` on the changed crates, ``mypy`` on each
+  changed package's ``src``, and ``l0_scan.py``;
 - ``reference``: the package's cases (each case file it adds or changes,
   and each ``--case``) run on python-core, on each database the case names
   (Postgres with ``SDM_POSTGRES_TEST_DSN``, which a case naming Postgres
@@ -31,17 +44,34 @@ default the same. The steps:
   ``SDM_REFERENCE_PYTHON`` (an interpreter holding the old client) and
   ``SDM_REFERENCE_REPO`` (its checkout) are set, and fails naming the case
   otherwise;
+- ``own tests``: the test files the package adds or changes (pytest files,
+  self-tests, and each crate test by its own ``--test``);
 - ``fails-before``: in a fix round (a commit ``<ID> fix <n>: ...`` of this
   package since its base) ``--previous`` is the previous round's SHA, and
   the round's new or changed tests run on the previous tree, where at least
   one must fail. A fix to Rust production code needs a Rust test (a crate
   test or a ``#[cfg(test)]`` block, spliced into the previous source) that
   fails there with cargo, and is refused with Python tests only; any other
-  fix's Python tests run on the previous tree's package sources;
-- ``affected``: every suite ``affected.py`` names for the changed files;
-- ``lint``: ``ruff check`` and ``ruff format --check`` on the changed Python
-  files, ``cargo fmt --check`` on the changed crates, and ``mypy`` on each
-  changed package's ``src``.
+  fix's Python tests run on the previous tree's package sources. The
+  previous tree's Rust builds in a target directory of its own;
+- ``affected``: the suites ``affected.py``'s map rows name for the changed
+  files, not every test that mentions a file's name (``affected.suites``
+  with ``naming=False``), less the own tests already run.
+
+In a fix round whose ``--previous`` has a passing stamp, ``own tests`` and
+``affected`` take the files changed since that stamp; the other steps take
+the package's whole change since its base.
+
+While it runs, ``run`` holds ``<git common dir>/sdm-handoff/running/<ID>.json``
+(its process, SHA and start), which ``running`` reads: it exits 1 naming a
+live run of the package, else 0. ``prepush.sh`` refuses a push from the
+package's worktree while one runs (change 2), and a second ``run`` of the
+package is refused. A signal (SIGTERM, SIGHUP) stops the run through its
+clean-up: the scratch, the previous round's worktree and the running file
+go. Each start, stamp, failure and stop is a line of
+``<git common dir>/sdm-handoff/events.jsonl``; ``wait SHA`` blocks until SHA
+is stamped (exit 0) or its run fails or stops (exit 1), so the reviewers
+start the moment the stamp is written (exit 3 after ``--timeout``).
 
 ``check SHA`` exits 0 when SHA has a passing stamp, else 1, naming why.
 """
@@ -58,6 +88,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import time
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -68,6 +99,8 @@ import judging  # noqa: E402
 from phases import PACKAGE_ID, PhaseError, phase_branch  # noqa: E402
 
 STAMPS = 'sdm-handoff'
+RUNNING = 'running'
+EVENTS = 'events.jsonl'
 DATABASES = ('duckdb', 'sqlite', 'postgres')
 FIX = re.compile(rf'({PACKAGE_ID.pattern}) fix [0-9]+: ')
 CRATE_TEST = re.compile(r'rust/crates/([^/]+)/tests/([^/]+)\.rs$')
@@ -100,6 +133,100 @@ def stamp_problem(common: Path, sha: str) -> str | None:
         return f'the stamp {path} names another SHA'
     if stamp.get('ok') is not True:
         return f'the stamp {path} does not say ok'
+    return None
+
+
+# --- the running file and the events ---------------------------------------------
+
+
+def now() -> str:
+    return datetime.datetime.now(datetime.timezone.utc).isoformat(
+        timespec='seconds'
+    )
+
+
+def running_path(common: Path, package: str) -> Path:
+    return Path(common) / STAMPS / RUNNING / f'{package}.json'
+
+
+def alive(pid: object) -> bool:
+    """Whether ``pid`` is a running handoff, not a process that reused it."""
+    if not isinstance(pid, int) or pid <= 0:
+        return False
+    try:
+        command = Path(f'/proc/{pid}/cmdline').read_bytes()
+    except OSError:
+        return False
+    return b'handoff.py' in command
+
+
+def running_problem(common: Path, package: str) -> str | None:
+    """None unless a handoff of ``package`` runs in this clone; else a line
+    naming it. A file left by a run that ended without its clean-up (a
+    SIGKILL) names a dead process and counts for nothing."""
+    path = running_path(common, package)
+    try:
+        held = json.loads(path.read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(held, dict) or not alive(held.get('pid')):
+        return None
+    return (
+        f'a handoff of {package} runs on {str(held.get("sha"))[:12]} '
+        f'(process {held.get("pid")}, since {held.get("started")}, in '
+        f'{held.get("worktree")}); a push now would start a new round under it: '
+        'wait for its stamp (handoff.py wait <sha>) or stop it first'
+    )
+
+
+def hold_running(common: Path, package: str, sha: str, root: Path) -> Path:
+    problem = running_problem(common, package)
+    if problem:
+        raise Failure(problem)
+    path = running_path(common, package)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {
+                'pid': os.getpid(),
+                'sha': sha,
+                'package': package,
+                'started': now(),
+                'worktree': str(root),
+            }
+        )
+        + '\n',
+        encoding='utf-8',
+    )
+    return path
+
+
+def event(
+    common: Path, kind: str, sha: str, package: str, **more: object
+) -> None:
+    """One line of ``events.jsonl``: what a waiter reads."""
+    path = Path(common) / STAMPS / EVENTS
+    path.parent.mkdir(parents=True, exist_ok=True)
+    line = json.dumps(
+        {'time': now(), 'event': kind, 'sha': sha, 'package': package, **more}
+    )
+    with open(path, 'a', encoding='utf-8') as handle:
+        handle.write(line + '\n')
+
+
+def last_event(common: Path, sha: str) -> dict[str, object] | None:
+    path = Path(common) / STAMPS / EVENTS
+    try:
+        lines = path.read_text(encoding='utf-8').splitlines()
+    except OSError:
+        return None
+    for line in reversed(lines):
+        try:
+            seen = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(seen, dict) and seen.get('sha') == sha:
+            return seen
     return None
 
 
@@ -179,6 +306,7 @@ class Step:
         self.name = name
         self.problems: list[str] = []
         self.notes: list[str] = []
+        self.seconds = 0.0
 
     @property
     def ok(self) -> bool:
@@ -715,14 +843,61 @@ def step_fails_before(
     return step
 
 
-def step_affected(root: Path, touched: list[str], python: str) -> Step:
-    """Every suite ``affected.py`` names: the pytest files in one run, two
-    workers a file each when pytest-xdist is there (the brief's ``-n 2``),
-    then each other suite in turn."""
-    step = Step('affected')
-    suites = affected.suites(touched)
+def own_suites(root: Path, touched: list[str]) -> list[affected.Suite]:
+    """The test files among ``touched`` as suites: a pytest file (the
+    binding's under ``affected.BINDING``), a self-test, a crate test by its
+    own ``--test``."""
+    found: list[affected.Suite] = []
+    for path in touched:
+        if not (root / path).is_file() or not is_test(path):
+            continue
+        crate = CRATE_TEST.match(path)
+        if crate:
+            suite: affected.Suite = (
+                'cargo', 'test', '--manifest-path', 'rust/Cargo.toml',
+                '-p', crate.group(1), '--test', crate.group(2),
+            )  # fmt: skip
+        elif path.endswith('selftest.py'):
+            suite = ('python3', path)
+        elif path.startswith('rust/bindings/'):
+            suite = affected.BINDING
+        else:
+            suite = (*affected.PYTEST, path)
+        if suite not in found:
+            found.append(suite)
+    return found
+
+
+def step_own_tests(root: Path, touched: list[str], python: str) -> Step:
+    step = Step('own tests')
+    suites = own_suites(root, touched)
     if not suites:
-        step.notes.append('no suite reads the changed files')
+        step.notes.append('the package adds or changes no test')
+        return step
+    return run_suites(step, root, suites, python)
+
+
+def step_affected(
+    root: Path, touched: list[str], python: str, own: list[str] | None = None
+) -> Step:
+    """The suites ``affected.py``'s map rows name for ``touched`` (not every
+    test naming a file: the broad suites are CI's), less the package's own
+    tests (``own``, the touched files those came from), already run."""
+    step = Step('affected')
+    ran = set(own_suites(root, own if own is not None else touched))
+    suites = [s for s in affected.suites(touched, naming=False) if s not in ran]
+    if not suites:
+        step.notes.append('no mapped suite beyond the own tests')
+        return step
+    return run_suites(step, root, suites, python)
+
+
+def run_suites(
+    step: Step, root: Path, suites: list[affected.Suite], python: str
+) -> Step:
+    """The pytest files in one run, two workers a file each when
+    pytest-xdist is there (the brief's ``-n 2``), then each other suite in
+    turn, stopping at the first that fails."""
     prefix = affected.PYTEST
     files = [s[len(prefix) :] for s in suites if s[: len(prefix)] == prefix]
     others = [s for s in suites if s[: len(prefix)] != prefix]
@@ -756,13 +931,17 @@ def step_affected(root: Path, touched: list[str], python: str) -> Step:
         ]
         batches.append((' '.join(suite), argv))
     for shown, argv in batches:
+        if step.problems:
+            break
+        begun = time.monotonic()
         done = run(argv, root)
+        took = f'{time.monotonic() - begun:.0f}s'
         if done.returncode != 0:
             step.problems.append(
-                f'{shown} failed:\n' + tail(done.stdout + done.stderr)
+                f'{shown} failed ({took}):\n' + tail(done.stdout + done.stderr)
             )
         else:
-            step.notes.append(f'{shown}: ok')
+            step.notes.append(f'{shown}: ok ({took})')
     return step
 
 
@@ -849,12 +1028,29 @@ def step_lint(root: Path, touched: list[str], python: str) -> Step:
             step.problems.append(
                 f'mypy {source}:\n' + tail(done.stdout + done.stderr)
             )
+    scan = root / 'scripts/rust_core/l0_scan.py'
+    if scan.is_file():
+        done = run([sys.executable, str(scan)], root)
+        if done.returncode != 0:
+            step.problems.append(
+                'l0_scan.py:\n' + tail(done.stdout + done.stderr)
+            )
     if not (python_files or crates):
         step.notes.append('no Python or Rust file changed')
     return step
 
 
 # --- the commands -----------------------------------------------------------------
+
+
+def changed(root: Path, since: str) -> list[str]:
+    return [
+        p
+        for p in git(root, 'diff', '--name-only', '-z', since, 'HEAD').split(
+            '\0'
+        )
+        if p
+    ]
 
 
 def cmd_run(args: argparse.Namespace) -> int:
@@ -869,62 +1065,121 @@ def cmd_run(args: argparse.Namespace) -> int:
         raise Failure(f'{args.package!r} is not a package ID')
     sha = git(root, 'rev-parse', 'HEAD').strip()
     base = phase_base(root, args.base)
-    touched = [
-        p
-        for p in git(root, 'diff', '--name-only', '-z', base, 'HEAD').split(
-            '\0'
-        )
-        if p
-    ]
+    touched = changed(root, base)
+    common = common_dir(root)
+    # A fix round on a stamped previous round tests what changed since it;
+    # the reference and lint steps still take the whole package.
+    since, recent = base, touched
+    if args.previous:
+        previous = git(root, 'rev-parse', f'{args.previous}^{{commit}}').strip()
+        if stamp_problem(common, previous) is None:
+            since, recent = previous, changed(root, previous)
     python = args.python or sys.executable
-    finish_on_signals()
-    scratch = Path(tempfile.mkdtemp(prefix='sdm-handoff-'))
-    print(
-        f'handoff of {args.package} at {sha} ({len(touched)} file(s) since {base[:12]})'
-    )
+    # Every command the run starts reads the lane's interpreter (the Rust
+    # tests that load cases run SDM_PYTHON, else a bare python3 that lacks
+    # the loader's packages; T3.3's fourth handoff).
+    if args.python:
+        os.environ['SDM_PYTHON'] = python
+    else:
+        os.environ.setdefault('SDM_PYTHON', python)
+    held = hold_running(common, args.package, sha, root)
+    started = time.monotonic()
+    steps: list[Step] = []
+    outcome = 'stopped'
     try:
-        steps = [
-            step_reference(root, touched, args.case, python, base, scratch),
-            step_fails_before(
-                root, base, args.previous, python, scratch, args.package
-            ),
-            step_affected(root, touched, python),
-            step_lint(root, touched, python),
-        ]
-    finally:
-        shutil.rmtree(scratch, ignore_errors=True)
-    for step in steps:
-        print(f'{"ok  " if step.ok else "FAIL"} {step.name}')
-        for note in step.notes:
-            print(f'     {note}')
-        for problem in step.problems:
-            print('     ' + problem.replace('\n', '\n     | '))
-    if not all(step.ok for step in steps):
+        finish_on_signals()
+        event(common, 'start', sha, args.package, pid=os.getpid())
         print(
-            'NO STAMP: fix the failing steps and run handoff.py again on the new SHA'
+            f'handoff of {args.package} at {sha} ({len(touched)} file(s) since '
+            f'{base[:12]}; own tests and affected on {len(recent)} since '
+            f'{since[:12]})',
+            flush=True,
         )
-        return 1
-    path = stamp_path(common_dir(root), sha)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(
-            {
-                'sha': sha,
-                'package': args.package,
-                'ok': True,
-                'time': datetime.datetime.now(datetime.timezone.utc).isoformat(
-                    timespec='seconds'
+        scratch = Path(tempfile.mkdtemp(prefix='sdm-handoff-'))
+        plan = [
+            ('lint', lambda: step_lint(root, touched, python)),
+            (
+                'reference',
+                lambda: step_reference(
+                    root, touched, args.case, python, base, scratch
                 ),
-                'previous': args.previous,
-                'steps': {s.name: s.notes for s in steps},
-            },
-            indent=1,
+            ),
+            ('own tests', lambda: step_own_tests(root, recent, python)),
+            (
+                'fails-before',
+                lambda: step_fails_before(
+                    root, base, args.previous, python, scratch, args.package
+                ),
+            ),
+            ('affected', lambda: step_affected(root, recent, python)),
+        ]
+        try:
+            for name, step_of in plan:
+                print(f'start {name} at {now()}', flush=True)
+                begun = time.monotonic()
+                step = step_of()
+                step.seconds = time.monotonic() - begun
+                steps.append(step)
+                show(step)
+                if not step.ok:
+                    break
+        finally:
+            shutil.rmtree(scratch, ignore_errors=True)
+        took = round(time.monotonic() - started)
+        if not all(step.ok for step in steps):
+            failed = next(s for s in steps if not s.ok)
+            outcome = 'failed'
+            event(
+                common,
+                'failed',
+                sha,
+                args.package,
+                step=failed.name,
+                seconds=took,
+            )
+            print(
+                f'NO STAMP ({took}s): {failed.name} failed, and the steps after '
+                'it did not run; fix it and run handoff.py again on the new SHA',
+                flush=True,
+            )
+            return 1
+        path = stamp_path(common, sha)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps(
+                {
+                    'sha': sha,
+                    'package': args.package,
+                    'ok': True,
+                    'time': now(),
+                    'previous': args.previous,
+                    'steps': {s.name: s.notes for s in steps},
+                    'seconds': {s.name: round(s.seconds) for s in steps},
+                },
+                indent=1,
+            )
+            + '\n',
+            encoding='utf-8',
         )
-        + '\n',
-        encoding='utf-8',
+        outcome = 'stamped'
+        event(common, 'stamped', sha, args.package, seconds=took)
+        print(f'STAMPED {sha} ({took}s): {path}', flush=True)
+        return 0
+    finally:
+        if outcome == 'stopped':
+            event(common, 'stopped', sha, args.package)
+        held.unlink(missing_ok=True)
+
+
+def show(step: Step) -> None:
+    print(
+        f'{"ok  " if step.ok else "FAIL"} {step.name} ({step.seconds:.0f}s)',
+        flush=True,
     )
-    print(f'STAMPED {sha}: {path}')
-    return 0
+    for note in step.notes:
+        print(f'     {note}', flush=True)
+    for problem in step.problems:
+        print('     ' + problem.replace('\n', '\n     | '), flush=True)
 
 
 class Stopped(BaseException):
@@ -962,6 +1217,40 @@ def cmd_check(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_wait(args: argparse.Namespace) -> int:
+    """Blocks until SHA is stamped (0), or its last run failed or stopped
+    (1), or ``--timeout`` seconds pass (3)."""
+    root = Path(git(Path.cwd(), 'rev-parse', '--show-toplevel').strip())
+    sha = git(root, 'rev-parse', f'{args.sha}^{{commit}}').strip()
+    common = common_dir(root)
+    deadline = time.monotonic() + args.timeout
+    while True:
+        if stamp_problem(common, sha) is None:
+            print(f'STAMPED {sha}', flush=True)
+            return 0
+        seen = last_event(common, sha)
+        if seen is not None and seen.get('event') in ('failed', 'stopped'):
+            print(
+                f'NO STAMP {sha}: the run {seen.get("event")}'
+                + (f' at {seen["step"]}' if seen.get('step') else ''),
+                flush=True,
+            )
+            return 1
+        if time.monotonic() >= deadline:
+            print(f'NO STAMP {sha} after {args.timeout:.0f}s', flush=True)
+            return 3
+        time.sleep(min(args.poll, max(deadline - time.monotonic(), 0.1)))
+
+
+def cmd_running(args: argparse.Namespace) -> int:
+    root = Path(git(Path.cwd(), 'rev-parse', '--show-toplevel').strip())
+    problem = running_problem(common_dir(root), args.package)
+    if problem:
+        print(problem)
+        return 1
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=__doc__.split('\n\n', 1)[0],
@@ -984,9 +1273,25 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     p = sub.add_parser('check', help='exit 0 when SHA has a passing stamp')
     p.add_argument('sha')
+    p = sub.add_parser(
+        'wait', help='block until SHA is stamped, or its run failed'
+    )
+    p.add_argument('sha')
+    p.add_argument('--timeout', type=float, default=4 * 3600)
+    p.add_argument('--poll', type=float, default=10, help=argparse.SUPPRESS)
+    p = sub.add_parser(
+        'running', help='exit 1 naming a live handoff of the package'
+    )
+    p.add_argument('--package', required=True)
     args = parser.parse_args(argv)
+    commands = {
+        'run': cmd_run,
+        'check': cmd_check,
+        'wait': cmd_wait,
+        'running': cmd_running,
+    }
     try:
-        return (cmd_run if args.command == 'run' else cmd_check)(args)
+        return commands[args.command](args)
     except Failure as error:
         print(f'REFUSED: {error}')
         return 2

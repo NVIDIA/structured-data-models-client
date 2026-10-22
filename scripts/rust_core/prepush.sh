@@ -53,6 +53,11 @@
 # product code needs a 'Rule:' line, in the same worktrees.
 # land.py and lane.py push with --no-verify: their own checks stand in.
 #
+# Under the hook (--pushed-refs), a push from a worktree whose package
+# (sdm.package) has a handoff running is refused at once, naming the run
+# (handoff.py running; the owner's 2026-10-22 speed change 2): wait for its
+# stamp, or stop it first.
+#
 # Every check runs even after one fails; the summary lists each, and the exit
 # status is non-zero if any failed.
 #
@@ -178,6 +183,19 @@ fi
 
 py=(uv run --quiet --no-project --python 3.12 python3)
 ruff=(uvx --quiet --from 'ruff==0.16.*' ruff)
+
+# No push while a handoff of this worktree's package runs (the owner's
+# 2026-10-22 speed change 2): the push would start a new round under it,
+# and the run's hours would be lost. Refused at once, before any check.
+if [ "$pushed_refs" = 1 ]; then
+  package=$(git config --worktree --get sdm.package 2>/dev/null || true)
+  if [ -n "$package" ] && [ -f scripts/rust_core/handoff.py ]; then
+    if ! running=$(python3 scripts/rust_core/handoff.py running --package "$package" 2>&1); then
+      echo "prepush: REFUSED: $running" >&2
+      exit 1
+    fi
+  fi
+fi
 
 names=()
 results=()
