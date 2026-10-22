@@ -481,6 +481,21 @@ kinds:
       until: from_source
       expect: {outcome: success, stage: from_source}
       why: a two-part name read on Lakebase, qualified by its schema so a temporary or catalog relation cannot shadow it (P2-MID2-6)
+  - name: mixed-key-types-databricks-sql
+    case:
+      <<: *case
+      id: dryrun.value.mixed-key.databricks-sql
+      slice: S2
+      warehouses: [databricks-sql]
+      seam: keys
+      paths: [schema.from-source/all-tables/databricks-sql]
+      routes: [schema.from-source/all-tables/databricks-sql, query.materialize/indices-binary/databricks-sql, client.predict/binary/databricks-sql]
+      cells: [int64/primary-key, utf8/foreign-key]
+      input:
+        <<: *input
+        setup:
+          - ALTER TABLE orders ALTER user_id TYPE VARCHAR
+      why: a BIGINT key linked from a STRING key, which the stand-in answers on the local engine and flags B4 (its observation's standin field), live-only only if it differs
 reports:
   - check: 2
     command: contract/tools/refusal_census.py --real-data --leg <leg>
