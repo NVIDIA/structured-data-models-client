@@ -78,7 +78,7 @@ Work that doesn't depend on the design's scope may run while it's in review and 
 4. **Push.** The implementer runs `scripts/rust_core/prepush.sh` (the cheap tier only), then `handoff.py run` (see "The handoff stamp" below), pushes, reports the SHA and ends its turn.
 5. **Review on the stamp.** At push, run `handoff.py run` and start both reviewers with [briefs/reviewer.md](briefs/reviewer.md) the moment `handoff.py wait <SHA>` returns 0. No CI runs on a lane or topic push (the owner's "2026-10-22 evening: CI off the landing path"); the full matrix runs nightly on the phase head and at the phase's end.
 6. **Fix rounds** until both reviewers approve the same SHA. Reviews block only on P1 and P2; P3s go to a carry-forward list. Later rounds review only the fix commits plus the earlier repros.
-7. **Stack it** with `land.py --stack` as soon as both reviewers approve the same SHA (or queue a `"stack": true` entry for `auto_land.py`), and land the stack with `land.py stack-land` on its top's handoff stamp (see "Stacked landings" below).
+7. **Stack it** with `land.py --stack` as soon as both reviewers approve the same SHA (or queue a `"stack": true` entry for `auto_land.py`), and land the stack with `land.py stack-land` on every package's own handoff stamp (see "Stacked landings" below).
 8. **Start the lane's next package** on the package's landing commit as soon as it is stacked.
 
 ## Ending a phase
@@ -134,7 +134,7 @@ Three scripts in `scripts/rust_core/orchestration/` carry the mechanical part. E
 - **Moved landings (`--moved-from X`)**: an approved, stamped X rebased over landing commits only (same tree, the same patches one to one) lands on X's reviews and stamp, with no re-review. A move over another package's product commits is not a moved landing: it needs its own stamp and a confirmation.
 - **Stack on the landing commit**, never on a landed candidate. Phase 1 lost a cycle when the ratchet refused a merge base that wasn't a landing commit.
 - **Clean rebases are confirmed by script** (`mech_confirm.py`; decision E130). Reviewers look again only when the move changed something.
-- **Stacks, not chains.** Up to 4 approved packages land together on the stamp of the stack's top (`land.py --stack`, then `stack-land`; "Stacked landings" below). `land_chain.sh` lands a chain one package at a time, each on its own stamp.
+- **Stacks, not chains.** Up to 4 approved packages land together, each on its own stamp (`land.py --stack`, then `stack-land`; "Stacked landings" below). `land_chain.sh` lands a chain one package at a time, each on its own stamp.
 - **Judging-path changes ride the train.** `land.py` refuses a package that changes a path in `scripts/rust_core/judging-paths.txt` unless it is the phase's first package or the tooling train (`--train`, first in its stack); see "The tooling train" below.
   Every guard or gate change must also pass in its post-landing state.
 
@@ -146,21 +146,21 @@ Nothing here stops work because a time or count was reached.
 
 ### Stacked landings (item 2)
 
-Up to 4 approved packages land together on the handoff stamp of the stack's top, which covers the stack (the owner's "2026-10-22 evening: CI off the landing path" replaced the green CI run on the top).
+Up to 4 approved packages land together, each on its own handoff stamp, made for that package (the owner's "2026-10-22 evening: CI off the landing path" replaced the green CI run on the top).
 
 1. When both reviewers approve package P1's SHA, stack it from its worktree: `land.py --stack --candidate SHA --topic-branch <its branch> --review A --review B --title 'Land P1: ...' --protected-paths '...'`.
    It makes P1's empty landing commit locally: `Base-SHA` and `Checkpoint-SHA` the landing below it (or the phase head), `Stack-base` the phase head, and `Topic-branch`.
-   It needs no CI run and pushes nothing, and prints `STACKED <sha>`.
+   It needs the package's own stamp, recorded as its `Handoff-stamp` trailer, and no CI run; it pushes nothing, and prints `STACKED <sha>`.
 2. The next package is built (or rebased) on that landing commit, reviewed, and stacked the same way.
    `lane.py check` and the pre-push hook accept the stack below a lane's package.
    `--max-stack N` or `SDM_STACK_MAX` lowers the limit of 4, which CI's ratchet holds.
-3. Run `handoff.py run` on the top package's candidate, then `land.py stack-land --tip <the top landing> [--topic-branch <the top's branch>]`.
-   It checks the whole chain again and fast-forwards the phase branch over every landing in one atomic push, on the top's stamp.
+3. Run `land.py stack-land --tip <the top landing> [--topic-branch <the top's branch>]`.
+   It checks the whole chain again, each package's stamp included, and fast-forwards the phase branch over every landing in one atomic push.
    Each landing's checkpoint stays the landing before it.
-4. If the top has no stamp, `stack-land` refuses naming `handoff.py run`; a prefix whose top is stamped lands with `land.py stack-land --tip <that landing>`.
-5. If the phase head moved under a stack, `land.py restack --tip <top landing> [--train-first] [--move-branches]` replays it on the new head in a scratch worktree. Each patch must be the same (patch-id, `move_confirm.py`'s rule), so the reviews carry over; only the new top needs a stamp. A conflict or a changed patch refuses, and that package needs a review round. A single approved package moved before stacking is still confirmed with `move_confirm.py`.
+4. If a package has no stamp, or a stamp made for another package, `stack-land` refuses naming it and `handoff.py run`; a prefix whose packages are stamped lands with `land.py stack-land --tip <that landing>`.
+5. If the phase head moved under a stack, `land.py restack --tip <top landing> [--train-first] [--move-branches]` replays it on the new head in a scratch worktree. Each patch must be the same (patch-id, `move_confirm.py`'s rule), so the reviews carry over; each moved package needs a new stamp, since `restack` drops the old trailer. A conflict or a changed patch refuses, and that package needs a review round. A single approved package moved before stacking is still confirmed with `move_confirm.py`.
 
-`land.py verify` of a stacked landing stands on its own stamp, else the stack top's. `auto_land.py` does steps 1 and 3 from queue entries: `"stack": true` and `{"stack_tip": SHA, ...}`.
+`land.py verify` of a stacked landing stands on its own stamp. `auto_land.py` does steps 1 and 3 from queue entries: `"stack": true` and `{"stack_tip": SHA, ...}`.
 
 ### The tooling train (item 1, land.py's part)
 
@@ -168,7 +168,7 @@ Up to 4 approved packages land together on the handoff stamp of the stack's top,
 What product packages change as normal work is left out: the bridge freeze and its seeds, `wheel_smoke.py`, the recorders and probes under `contract/tools/`, vectors, cases and `ci.yml`.
 `land.py` reads it from the phase head, so a package cannot take its own change off the list.
 Only the phase's first package may change a judging path outside a train.
-After it, every judging change found mid-phase goes into one train package, which changes judging paths, other checking tools (`scripts/rust_core/`, `contract/runners/`, `contract/tools/`), their tests and docs only, and lands at the front of the next stack: `land.py --stack --train ...` (its landing carries `Train: yes`).
+After it, every judging change found mid-phase goes into one train package, which changes judging paths, other checking tools (`scripts/rust_core/`, `contract/runners/`, `contract/tools/`), their tests and docs only (and `contract/reference/**` only by adding fields to the lines already there, which `judging.py` checks), and lands at the front of the next stack: `land.py --stack --train ...` (its landing carries `Train: yes`).
 A package changing a judging path anywhere else is refused with a message naming that command.
 To collect a find into the train, cherry-pick its judging-only commits onto the train's branch under the train's ID, and drop them from the package.
 

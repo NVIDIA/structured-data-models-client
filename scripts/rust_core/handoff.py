@@ -1246,6 +1246,27 @@ def cmd_run(args: argparse.Namespace) -> int:
                 flush=True,
             )
             return 1
+        # The steps read the live worktree: a stamp is for the SHA they ran
+        # on, so HEAD must still be it and the tree still clean (Claude r1
+        # P2-8).
+        moved = changed_under(root, sha)
+        if moved:
+            outcome = 'failed'
+            event(
+                common,
+                'failed',
+                sha,
+                args.package,
+                step='unchanged',
+                seconds=took,
+            )
+            print(
+                f'NO STAMP ({took}s): {moved} while the steps ran, so they did '
+                f'not test {sha[:12]} alone; run handoff.py again on a clean '
+                'worktree',
+                flush=True,
+            )
+            return 1
         path = stamp_path(common, sha)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(
@@ -1272,6 +1293,17 @@ def cmd_run(args: argparse.Namespace) -> int:
         if outcome == 'stopped':
             event(common, 'stopped', sha, args.package)
         held.unlink(missing_ok=True)
+
+
+def changed_under(root: Path, sha: str) -> str | None:
+    """What changed in the worktree at ``root`` since a run on ``sha``
+    began: HEAD moved, or the tree is no longer clean; None when neither."""
+    head = git(root, 'rev-parse', 'HEAD').strip()
+    if head != sha:
+        return f'HEAD moved to {head[:12]}'
+    if git(root, 'status', '--porcelain', '--untracked-files=all').strip():
+        return 'the worktree changed'
+    return None
 
 
 def show(step: Step) -> None:

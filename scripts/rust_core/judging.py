@@ -17,8 +17,10 @@ at the front of a stack (``land.py --stack --train``).
 
 from __future__ import annotations
 
+import json
 import re
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
+from typing import Any
 
 #: The list, as a path in the tree.
 FILE = 'scripts/rust_core/judging-paths.txt'
@@ -37,6 +39,10 @@ TRAIN_ALSO = (
     # The test kit's crate tests of the case loader and observation writer
     # (T3.2), which judge the judging paths case.rs and observation.rs.
     'rust/crates/sdm-testkit/tests/**',
+    # The CI workflow, whose triggers the owner moved off the landing path
+    # ("2026-10-22 evening: CI off the landing path"; T3.2 fix 4): it
+    # decides no pass or fail of a landing any more.
+    '.github/workflows/ci.yml',
 )
 #: Changes that make a landing a product landing: anything outside these.
 NOT_PRODUCT = ('docs/**', 'tests/**', 'contract/tests/**', '.github/**')
@@ -98,12 +104,66 @@ def train_worthy(rules: Rules, paths: Iterable[str]) -> list[str]:
     return sorted(p for p in paths if matches(rules, p) or matches(checkers, p))
 
 
-def not_train(rules: Rules, paths: Iterable[str]) -> list[str]:
-    """The paths among ``paths`` a train may not change."""
+#: The old client's recorded answers, which a train may change only by
+#: adding fields to lines already there (the owner, 2026-10-22: option 1 of
+#: the coordinator's question on T3.2's three text digests).
+REFERENCE = 'contract/reference/**'
+
+
+def not_train(
+    rules: Rules,
+    paths: Iterable[str],
+    read: Callable[[str], tuple[str, str]] | None = None,
+) -> list[str]:
+    """The paths among ``paths`` a train may not change. A reference file
+    rides only when ``read`` gives its text before and after and
+    :func:`additions_only` finds nothing else changed."""
     also = patterns('\n'.join(TRAIN_ALSO))
-    return sorted(
-        p for p in paths if not matches(rules, p) and not matches(also, p)
-    )
+    reference = patterns(REFERENCE)
+    found = []
+    for p in paths:
+        if matches(rules, p) or matches(also, p):
+            continue
+        if read is not None and matches(reference, p):
+            if additions_only(*read(p)) is None:
+                continue
+        found.append(p)
+    return sorted(found)
+
+
+def additions_only(old: str, new: str) -> str | None:
+    """None when ``new`` is ``old`` with fields added to its JSON lines
+    and nothing else: no line added, removed or reordered, no field
+    removed or changed; else the first change that is more."""
+    before = [line for line in old.splitlines() if line.strip()]
+    after = [line for line in new.splitlines() if line.strip()]
+    if len(before) != len(after):
+        return f'{len(after) - len(before):+d} line(s): a line added or removed'
+    for n, (a, b) in enumerate(zip(before, after, strict=True), 1):
+        try:
+            mine, theirs = json.loads(b), json.loads(a)
+        except ValueError:
+            return f'line {n}: not JSON'
+        if not isinstance(mine, dict) or not isinstance(theirs, dict):
+            return f'line {n}: not a JSON object'
+        problem = _added_only(theirs, mine, f'line {n}')
+        if problem is not None:
+            return problem
+    return None
+
+
+def _added_only(old: Any, new: Any, where: str) -> str | None:
+    if isinstance(old, dict) and isinstance(new, dict):
+        for key, value in old.items():
+            if key not in new:
+                return f'{where}: {key} removed'
+            problem = _added_only(value, new[key], f'{where}: {key}')
+            if problem is not None:
+                return problem
+        return None
+    if old != new or type(old) is not type(new):
+        return f'{where}: changed'
+    return None
 
 
 def product(rules: Rules, paths: Iterable[str]) -> list[str]:

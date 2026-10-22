@@ -1181,11 +1181,16 @@ def stamp_on(tools: Tools, sha: str) -> tuple[str | None, str]:
 
 
 def check_stamp(
-    tools: Tools, candidate: str, what: str = 'the candidate'
+    tools: Tools,
+    candidate: str,
+    what: str = 'the candidate',
+    package: str | None = None,
 ) -> tuple[str, str]:
     """The commit whose stamp stands for ``candidate`` (an empty landing
     commit's is the first commit below it that is none, E131) and the
-    stamp's time; refused, naming ``handoff.py``, without one."""
+    stamp's time; refused, naming ``handoff.py``, without one, or, given
+    ``package``, with one made for another package (whose run judged
+    another package's fix rounds, Claude r1 P2-7)."""
     tested = tested_commit(tools, candidate)
     what = what + below(candidate, tested)
     why, when = stamp_on(tools, tested)
@@ -1194,14 +1199,39 @@ def check_stamp(
             f'{what} {tested[:12]} has no passing handoff stamp ({why}): a '
             f'landing stands on the stamp and two approving reviews '
             f'({STAMP_RULE}); run `scripts/rust_core/handoff.py run --package '
-            '<ID>` on it in this clone'
+            f'{package or "<ID>"}` on it in this clone'
         )
+    if package is not None:
+        stamped = stamp_package(tools, tested)
+        if stamped != package:
+            raise Refusal(
+                f'{what} {tested[:12]} was stamped for {stamped or "no package"}, '
+                f'not {package}: run `scripts/rust_core/handoff.py run --package '
+                f'{package}` on it'
+            )
     return tested, when
+
+
+def stamp_package(tools: Tools, sha: str) -> str | None:
+    """The package the stamp of ``sha`` in this clone was made for."""
+    done = tools.attempt(
+        'git', 'rev-parse', '--path-format=absolute', '--git-common-dir'
+    )
+    try:
+        stamp = json.loads(
+            handoff.stamp_path(Path(done.stdout.strip()), sha).read_text(
+                'utf-8'
+            )
+        )
+    except (OSError, ValueError):
+        return None
+    found = stamp.get('package') if isinstance(stamp, dict) else None
+    return found if isinstance(found, str) else None
 
 
 # --- stacks and trains (T3.0, items 1 and 2) --------------------------------
 
-#: How many packages one stack lands at once, on its top's stamp: the
+#: How many packages one stack lands at once, each on its own stamp: the
 #: owner's "every N packages (e.g. 4 packages)" (2026-10-21, evening).
 STACK_MAX = 4
 STACK_MAX_ENV = 'SDM_STACK_MAX'
@@ -1363,6 +1393,23 @@ def phase_first_landing(
     return None
 
 
+def texts(
+    tools: Tools, below: str, sha: str
+) -> Callable[[str], tuple[str, str]]:
+    """A path's text at ``below`` and at ``sha`` (empty where absent)."""
+
+    def read(path: str) -> tuple[str, str]:
+        return tuple(  # type: ignore[return-value]
+            (done.stdout if done.returncode == 0 else '')
+            for done in (
+                tools.attempt('git', 'show', f'{rev}:{path}')
+                for rev in (below, sha)
+            )
+        )
+
+    return read
+
+
 def judging_problem(
     paths: Sequence[str],
     rules: judging.Rules | None,
@@ -1370,6 +1417,7 @@ def judging_problem(
     train: bool,
     first: bool,
     earlier: str | None,
+    read: Callable[[str], tuple[str, str]] | None = None,
 ) -> str | None:
     """Why a package changing ``paths`` may not land where it is (T3.0,
     item 1), or None. ``first``: it is the first package of its stack, on
@@ -1390,7 +1438,9 @@ def judging_problem(
                 'stack, on the phase head: restack it first (land.py restack '
                 '--train-first) or land it before the others'
             )
-        others = judging.not_train(rules, paths)
+        # A reference file rides when it only gains fields (``read`` gives
+        # its text below and at the package).
+        others = judging.not_train(rules, paths, read)
         if others:
             return (
                 f'{package} is a train, which changes judging paths, their '
@@ -1547,8 +1597,8 @@ def land(
     check_branches(args.phase_branch, args.topic_branch)
     if args.stack and args.moved_from is not None:
         raise Refusal(
-            '--stack and --moved-from: a stacked package stands on the '
-            "stack top's stamp, not a moved-from commit's; restack a moved "
+            '--stack and --moved-from: a stacked package stands on its own '
+            "candidate's stamp, not a moved-from commit's; restack a moved "
             'stack with land.py restack'
         )
     title = one_line(args.title, '--title')
@@ -1622,8 +1672,9 @@ def land(
             (f'{link.sha[:12]} Land {link.package}' for link in chain), None
         )
     why = judging_problem(
-        paths, rules, package, args.train, tail == base, earlier
-    )
+        paths, rules, package, args.train, tail == base, earlier,
+        texts(tools, tail, candidate),
+    )  # fmt: skip
     if why:
         raise Refusal(why)
     unruled = rule_problems(tools, tail, candidate, rules)
@@ -1649,7 +1700,7 @@ def land(
     if moved:
         # E130's order: X's evidence (its reviews, then its stamp), then the
         # same tree, the same patches and only landing commits in X..H.
-        stamped, when = check_stamp(tools, moved, what)
+        stamped, when = check_stamp(tools, moved, what, package)
         move = check_moved(tools, moved, candidate, base, args.phase_branch)
     out(f'ok   worktree clean, HEAD is the candidate {candidate}')
     out(f'ok   the candidate descends from {args.phase_branch} at {base}')
@@ -1684,7 +1735,7 @@ def land(
             'file, so the phase branch moves at once (E43 (b)).'
         )
     else:
-        stamped, when = check_stamp(tools, candidate)
+        stamped, when = check_stamp(tools, candidate, package=package)
         out(f'ok   the handoff stamp of {stamped[:12]} ({when})')
         evidence = (
             f'Handoff stamp of {stamped} ({when}) and two approving '
@@ -1768,8 +1819,8 @@ def stack_one(
 ) -> int:
     """``land.py --stack``: the package's landing commit, made on the
     candidate locally with the stack's tail as its Base-SHA and
-    Checkpoint-SHA, pushing nothing (T3.0, item 2). Its evidence is the
-    stack top's handoff stamp, which ``stack-land`` checks."""
+    Checkpoint-SHA, pushing nothing (T3.0, item 2). Its evidence is its
+    own handoff stamp, which ``stack-land`` checks again."""
     out(f'ok   worktree clean, HEAD is the candidate {candidate}')
     out(
         f'ok   the candidate descends from {args.phase_branch} at {base}'
@@ -1781,12 +1832,20 @@ def stack_one(
         )
     )
     out(f'ok   {len(args.review)} reviews approve {candidate[:12]}')
+    # Each package of a stack lands on its own stamp (Claude r1 P2-9): with
+    # no CI run, the top's stamp judged only the top's own change.
+    stamped, when = check_stamp(tools, candidate, package=package)
+    out(f'ok   the handoff stamp of {stamped[:12]} ({when})')
     reviewer = one_line(
         args.reviewer
         or f'independent reviewer (fresh agent) and Codex, {package}',
         '--reviewer',
     )
-    extra = {STACK_BASE: base, 'Topic-branch': args.topic_branch}
+    extra = {
+        STACK_BASE: base,
+        'Topic-branch': args.topic_branch,
+        STAMP_TRAILER: f'{stamped} {when}'.strip(),
+    }
     if args.train:
         extra[TRAIN] = 'yes'
     landing = Landing(
@@ -1801,9 +1860,9 @@ def stack_one(
         ).strip(),
         evidence=(
             f'Stacked on {tail} ({len(chain)} package(s) below it, on the phase '
-            f'head {base}): it lands with its stack, on the handoff stamp of '
-            "the stack's top (land.py stack-land, T3.0), whose tree holds this "
-            "one's; this commit changes no file."
+            f'head {base}): it lands with its stack (land.py stack-land, '
+            f'T3.0), on its own handoff stamp of {stamped} ({when}) and two '
+            'approving reviews; this commit changes no file.'
         ),
         moved=extra,
     )
@@ -1818,7 +1877,7 @@ def stack_one(
     out(f'STACKED {sha}')
     out(
         f'next: build the next package on {sha[:12]}, or land the stack with '
-        f'`land.py stack-land --tip {sha}` once its top has a handoff stamp'
+        f'`land.py stack-land --tip {sha}`'
     )
     return 0
 
@@ -1827,9 +1886,9 @@ def stack_land(
     args: argparse.Namespace, tools: Tools, out: Callable[[str], None]
 ) -> int:
     """``land.py stack-land --tip SHA``: the stack from the phase head up to
-    TIP, a landing commit made by ``--stack``, lands in one atomic push on
-    one handoff stamp: TIP's tested commit's, whose tree holds every package
-    below (T3.0, item 2; the owner's "CI off the landing path")."""
+    TIP, a landing commit made by ``--stack``, lands in one atomic push,
+    each package on its own handoff stamp, made for it (T3.0, item 2; the
+    owner's "CI off the landing path"; Claude r1 P2-9)."""
     if args.topic_branch:
         check_branches(args.phase_branch, args.topic_branch)
     tip = resolve(tools, args.tip, 'the stack tip')
@@ -1856,8 +1915,9 @@ def stack_land(
     for n, link in enumerate(chain):
         paths = changed_paths(tools, link.below, link.sha)
         why = judging_problem(
-            paths, rules, link.package, link.train, n == 0, earlier
-        )
+            paths, rules, link.package, link.train, n == 0, earlier,
+            texts(tools, link.below, link.sha),
+        )  # fmt: skip
         if why:
             refused.append(why)
         refused.extend(rule_problems(tools, link.below, link.sha, rules))
@@ -1866,13 +1926,17 @@ def stack_land(
         raise Refusal(
             'the stack breaks a landing rule:\n- ' + '\n- '.join(refused)
         )
-    tested, when = check_stamp(tools, tip, 'the stack top')
+    # Each package on its own stamp, made for it (Claude r1 P2-7, P2-9).
+    stamps = [
+        check_stamp(tools, link.sha, f'Land {link.package}', link.package)
+        for link in chain
+    ]
     out(
         f'ok   the stack of {len(chain)} on {args.phase_branch} at {base[:12]} is sound'
     )
-    for link in chain:
+    for link, (tested, when) in zip(chain, stamps, strict=True):
         out(f'ok   {link.sha[:12]} Land {link.package} on {link.below[:12]}')
-    out(f'ok   the handoff stamp of the stack top {tested[:12]} ({when})')
+        out(f'ok   the handoff stamp of {tested[:12]} ({when})')
     if args.dry_run:
         out('dry run: nothing pushed')
         return 0
@@ -1929,8 +1993,8 @@ def restack(
     ``--move-branches`` each package's Topic-branch, where the remote holds
     the package's old top, moves to its new top as ``auto_land.py`` moves a
     rebased lane: the old tip kept under an archive branch, the branch
-    pushed with a lease on the old tip. The new top needs its own handoff
-    stamp."""
+    pushed with a lease on the old tip. Each moved package needs a new
+    handoff stamp of its own (Claude r1 P2-9)."""
     tip = resolve(tools, args.tip, 'the stack tip')
     base = phase_head(tools, args.remote, args.phase_branch)
     old_base = tools.git('merge-base', tip, base).strip()
@@ -2002,6 +2066,13 @@ def restack(
                     # replaces, whose reviews carry over by patch-id.
                     'Restacked-from': link.sha,
                 },
+            )
+            # The old candidate's stamp judged the old tree: the moved
+            # package lands on a new stamp of its own (Claude r1 P2-9).
+            message = ''.join(
+                line
+                for line in message.splitlines(keepends=True)
+                if not line.startswith(f'{STAMP_TRAILER}: ')
             )
             note = Path(scratch / 'message.txt')
             note.write_text(message)

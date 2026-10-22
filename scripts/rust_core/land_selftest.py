@@ -61,14 +61,15 @@ SIGNOFF = 'Signed-off-by: Test Person <test@example.com>'
 STAMP_TIME = '2026-10-22T20:00:00+00:00'
 
 
-def write_stamp(common: Path, sha: str) -> None:
-    """A passing handoff stamp for ``sha`` in the clone whose common git
-    directory is ``common``, as ``handoff.py run`` writes it."""
+def write_stamp(common: Path, sha: str, package: str = 'T1.99') -> None:
+    """A passing handoff stamp for ``sha``, made for ``package``, in the
+    clone whose common git directory is ``common``, as ``handoff.py run``
+    writes it."""
     path = common / 'sdm-handoff' / f'{sha}.json'
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         json.dumps(
-            {'sha': sha, 'package': 'T1.99', 'ok': True, 'time': STAMP_TIME}
+            {'sha': sha, 'package': package, 'ok': True, 'time': STAMP_TIME}
         )
     )
 
@@ -346,7 +347,7 @@ class Case:
         self.fake = fake or Fake()
         self.fake.common = tmp / 'common'
         for sha in self.fake.stamped:
-            write_stamp(self.fake.common, sha)
+            write_stamp(self.fake.common, sha, self.fake.package or 'T1.99')
         self.lines: list[str] = []
         self.code: int | None = None
         self.calls: list[tuple[str, ...]] = []
@@ -1332,9 +1333,14 @@ class Repo:
     def git(self, *args: str) -> str:
         return self.run_git(self.work, *args).strip()
 
-    def stamp(self, sha: str) -> None:
-        """A passing handoff stamp for ``sha`` in this clone."""
-        write_stamp(self.work / '.git', sha)
+    def stamp(self, sha: str, package: str | None = None) -> None:
+        """A passing handoff stamp for ``sha`` in this clone, made for
+        ``package``, by default the package its subject starts with."""
+        if package is None:
+            subject = self.git('log', '-1', '--format=%s', sha)
+            found = re.match(r'(T[0-9]+\.[0-9]+[a-z]?|CI[0-9]+)\b', subject)
+            package = found.group(1) if found else 'T1.99'
+        write_stamp(self.work / '.git', sha, package)
 
     def commit(
         self, subject: str, files: dict[str, str | None] | None = None
@@ -2931,7 +2937,9 @@ class Stack:
 
     def stack(self, k: int, *extra: str) -> int | str | None:
         """``land.py --stack`` for package k, from its topic branch; on
-        ``STACKED`` the landing commit becomes the stack's tail."""
+        ``STACKED`` the landing commit becomes the stack's tail. Each
+        package is stacked on its own stamp (Claude r1 P2-9)."""
+        self.green(k)
         code = self.call(['--stack', *self.land_args(k, *extra)])
         head = self.r.git('rev-parse', 'HEAD')
         if code == 0 and f'STACKED {head}' in self.text:
@@ -3146,6 +3154,9 @@ def _(tmp: Path) -> tuple[bool, str]:
 )
 def _(tmp: Path) -> tuple[bool, str]:
     s = t30_stacked(tmp)
+    # Stacked on its stamp, the top lost it since (T3.2: each package is
+    # stacked on its own).
+    (s.r.work / '.git' / 'sdm-handoff' / f'{s.candidates[4]}.json').unlink()
     code = s.stack_land(4)
     problems = []
     if code != 2 or 'handoff.py run' not in s.text.partition('REFUSED:')[2]:
@@ -3254,7 +3265,7 @@ def t30_moved_on(s: Stack, files: dict[str, str | None]) -> str:
 
 @case(
     'T3.0 restack: a stack moved onto a newer phase head keeps its reviews, '
-    'and lands on a new stamp on its top alone'
+    'and lands once each moved package has a new stamp of its own'
 )
 def _(tmp: Path) -> tuple[bool, str]:
     s = t30_stacked(tmp, n=2)
@@ -3297,13 +3308,55 @@ def _(tmp: Path) -> tuple[bool, str]:
     code = s.call(['stack-land', '--tip', tip, '--phase-branch', PHASE])
     if code == 0 or s.remote_phase() != newer:
         problems.append(f'landed on the old stamp: exit {code}')
+    # The new top's stamp alone is not enough: each package stands on its
+    # own (Claude r1 P2-9).
     s.r.stamp(first)
     code = s.call(['stack-land', '--tip', tip, '--phase-branch', PHASE])
+    if code == 0 or 'Land T1.91' not in s.text or s.remote_phase() != newer:
+        problems.append(f'landed with the lower package unstamped: exit {code}')
+    if lands:
+        s.r.stamp(s.r.git('rev-parse', f'{lands[0]}^'))
+    code = s.call(['stack-land', '--tip', tip, '--phase-branch', PHASE])
     if code != 0 or s.remote_phase() != tip:
-        problems.append(f'not landed on the new top stamp: exit {code}')
+        problems.append(f'not landed on the new stamps: exit {code}')
     if problems:
         return False, '; '.join(problems) + ' | ' + s.text[-400:]
-    return True, 'moved with its reviews; landed on the new top stamp'
+    return True, 'moved with its reviews; landed on each new stamp'
+
+
+@case(
+    'T3.2 stack: stack-land refuses a stack whose lower package lost its stamp'
+)
+def _(tmp: Path) -> tuple[bool, str]:
+    s = t30_stacked(tmp, n=2)
+    (s.r.work / '.git' / 'sdm-handoff' / f'{s.candidates[1]}.json').unlink()
+    code = s.stack_land(2)
+    ok = (
+        code == 2
+        and 'Land T1.91' in s.text
+        and 'has no passing handoff stamp' in s.text
+        and s.remote_phase() == s.h
+    )
+    return t30_detail(s, ok, 'refused, naming the lower package')
+
+
+@case('T3.2 stack: --stack refuses a package with no stamp of its own')
+def _(tmp: Path) -> tuple[bool, str]:
+    s = Stack(tmp)
+    s.build(1)
+    code = s.call(['--stack', *s.land_args(1)])
+    ok = code == 2 and 'has no passing handoff stamp' in s.text
+    return t30_detail(s, ok, 'refused before any landing commit')
+
+
+@case('T3.2: a stamp made for another package does not land this one')
+def _(tmp: Path) -> tuple[bool, str]:
+    s = Stack(tmp)
+    s.build(1)
+    s.r.stamp(s.candidates[1], 'T1.98')
+    code = s.call(['--stack', *s.land_args(1)])
+    ok = code == 2 and 'stamped for T1.98, not T1.91' in s.text
+    return t30_detail(s, ok, 'refused, naming both packages')
 
 
 @case('T3.0 restack: a stack whose patch changes on the new head is refused')
@@ -3321,8 +3374,8 @@ def _(tmp: Path) -> tuple[bool, str]:
 
 
 @case(
-    "T3.0 verify: a stacked landing stands on its stack top's stamp, "
-    'and is not verified on it once that stamp is gone'
+    'T3.0 verify: a stacked landing stands on its own stamp (T3.2), '
+    'and is not verified once that stamp is gone'
 )
 def _(tmp: Path) -> tuple[bool, str]:
     s = t30_stacked(tmp)
@@ -3333,10 +3386,10 @@ def _(tmp: Path) -> tuple[bool, str]:
     code = s.call(['verify', lower, '--phase-branch', PHASE])
     if code != 0 or f'VERIFIED {lower}' not in s.text:
         return t30_detail(s, False, '')
-    (s.r.work / '.git' / 'sdm-handoff' / f'{s.candidates[4]}.json').unlink()
+    (s.r.work / '.git' / 'sdm-handoff' / f'{s.candidates[2]}.json').unlink()
     code = s.call(['verify', lower, '--phase-branch', PHASE])
     ok = code != 0 and 'VERIFIED' not in s.text
-    return t30_detail(s, ok, 'verified on the top stamp; none fails')
+    return t30_detail(s, ok, 'verified on its own stamp; none fails')
 
 
 def t30_fix(s: Stack, k: int, message: str) -> str:

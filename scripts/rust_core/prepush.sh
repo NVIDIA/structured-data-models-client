@@ -53,6 +53,9 @@
 # product code needs a 'Rule:' line, in the same worktrees.
 # land.py and lane.py push with --no-verify: their own checks stand in.
 #
+# In a worktree the hook does not list, a push to a lane ref is refused
+# outright: only the lane's own worktree runs the lane check.
+#
 # Under the hook (--pushed-refs), a push from a worktree whose package
 # (sdm.package) has a handoff running is refused at once, naming the run
 # (handoff.py running; the owner's 2026-10-22 speed change 2): wait for its
@@ -143,9 +146,21 @@ print(
 sys.exit(1)
 PY
 # The cheap tier runs in the worktrees listed in prepush-worktrees beside
-# this file; in any other worktree of the clone it does nothing more.
+# this file; in any other worktree of the clone it does nothing more, but a
+# push to a lane ref is refused there: the lane check (lane.py check, which
+# holds every lane commit to the lane's package) runs only in the lane's own
+# registered worktree, and a detached one let foreign subjects through
+# (T3.2 fix 5, Claude r1 P2-10).
 top=$(git rev-parse --show-toplevel) || exit 0
-grep -qxF "$top" "$(dirname "$0")/prepush-worktrees" 2>/dev/null || exit 0
+if ! grep -qxF "$top" "$(dirname "$0")/prepush-worktrees" 2>/dev/null; then
+  lanes=$(printf '%s\n' "$refs" | awk '{ print $3 }' \
+    | grep -E '^refs/heads/rust-core-phase-(0|[1-9][0-9]*)-lane-[a-z0-9]{1,16}$')
+  if [ -n "$lanes" ]; then
+    echo "pre-push: REFUSED: $(echo $lanes | sed 's#refs/heads/##g') is a lane; push it from the lane's own worktree (lane.py start registers it), where lane.py check runs, not from $top" >&2
+    exit 1
+  fi
+  exit 0
+fi
 if [ ! -x "$top/scripts/rust_core/prepush.sh" ]; then
   echo "pre-push: $top has no scripts/rust_core/prepush.sh; not checking" >&2
   exit 0

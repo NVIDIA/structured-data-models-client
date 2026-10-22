@@ -597,6 +597,10 @@ def test_a_stack_top_without_a_stamp_is_refused(tmp_path: Path) -> None:
     # asked for a rerun of a cancelled top.
     selftest = _module('t30_fix2_land_selftest', SCRIPTS / 'land_selftest.py')
     stack = selftest.t30_stacked(tmp_path, n=2)
+    # Each package is stacked on its own stamp (T3.2 fix 5); the top's is
+    # gone since.
+    common = stack.r.work / '.git' / 'sdm-handoff'
+    (common / f'{stack.candidates[2]}.json').unlink()
     code = stack.stack_land(2)
     assert code == 2, stack.text
     assert 'handoff.py' in stack.text, stack.text
