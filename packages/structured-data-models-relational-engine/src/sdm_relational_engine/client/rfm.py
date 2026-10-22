@@ -2,10 +2,12 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+from __future__ import annotations
+
 import logging
 import math
 from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import quote
 
 from sdm_api.endpoints import Endpoint, HTTPMethod
@@ -18,7 +20,11 @@ from sdm_api.generated.tfm_api import (
 from sdm_relational_engine.client.transport import RFMTransport
 from sdm_relational_engine.client.utils import raise_on_error
 from sdm_relational_engine.exceptions import InvalidResponseError
-from sdm_relational_engine.rfm.inference.requests import RFMPredictResponse
+
+if TYPE_CHECKING:
+    # Imported where a response is built: `sdm_relational_engine.rfm`
+    # imports this module, so importing it here first is a cycle.
+    from sdm_relational_engine.rfm.inference.requests import RFMPredictResponse
 
 
 def _path_segment(value: str) -> str:
@@ -205,6 +211,8 @@ def _prediction_response_to_rfm(
         instance_ids=instance_ids,
         anchor_times=anchor_times,
     )
+
+    from sdm_relational_engine.rfm.inference.requests import RFMPredictResponse
 
     columns: list[str] = []
     for row in rows:
