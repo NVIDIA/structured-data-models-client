@@ -2219,7 +2219,8 @@ jobs:
   # three runs on the Rust core's branches: a job over 80% of its
   # timeout-minutes on two of them is named, as an error annotation and in
   # a fix item the orchestrator's heartbeat pulls
-  # (scripts/rust_core/orchestration/ci_timing.py --pull); no issue is
+  # (scripts/rust_core/orchestration/ci_timing.py, run there to fetch the
+  # newest items); no issue is
   # opened. It needs every other job, so it runs last
   # (tests/test_ci_workflow.py holds it to that). A named job does not fail
   # the run, so no candidate is refused for a time limit (the owner: no
