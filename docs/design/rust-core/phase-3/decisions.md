@@ -51,6 +51,24 @@ Source: the owner's answers to the orchestrator's first proposal of five process
 | KO3-16 | Test environments must fit the machine's cores, memory and disk | "5. This "own test environment" thing will blow up ssd and memory, remember that we can't run too many jobs in parallel due to limited cpu cores, memory, and disk." | approved by owner 2026-10-21 (with KO3-17) |
 | KO3-17 | The revised five changes are built (T3.0), then Phase 3's design begins | "Yes, do these. After this is done, we will begin the phase 3 design doc" | approved by owner 2026-10-21 |
 
+## Live access (2026-10-22)
+
+Source: the owner's answers on 2026-10-22 to the orchestrator's nine live-access questions, recorded in `$SDM_ORCH_STATE/phase-3/owner-answers-2026-10-21.md`, section "2026-10-22: live access answers".
+The questions, as asked: 1 the Databricks CLI profile; 2 the catalog, schema and volume; 3 the SQL warehouse; 4 the metric view and GPU serving endpoint; 5 the job-run budget; 6 which notebook; 7 Snowflake access; 8 the Lakebase instance; 9 whether aarch64 is in scope.
+The repository is public, so private names in the owner's words are replaced by a bracketed description; the unredacted words stay in the state file.
+
+| # | Decision | Owner's words | Status |
+|---|---|---|---|
+| KO3-18 | The Databricks CLI profile for live work is the one the owner named | "1. [the owner's profile name]" | approved by owner 2026-10-22 |
+| KO3-19 | The catalog, schema and volume are the ones the owner has used before, found by the orchestrator | "2. Just whatever I have used in the past, find it. Might be some [workspace name] sandbox thing related to kumo relational" | approved by owner 2026-10-22 |
+| KO3-20 | A SQL warehouse may be used | "3. Yes" | approved by owner 2026-10-22 |
+| KO3-21 | Existing metric views and GPU serving endpoints the owner created are reused | "4. Yes, there should already be one or more that I have created" | approved by owner 2026-10-22 |
+| KO3-22 | Most of the implementation is written without incremental checks on Databricks; the live tests run at the end | "5. I suggest coding the majority of the implementation instead of running incremental checks in databricks. Then run the tests at the "end". Does that make sense? Databricks warehouse can be slow and we want to avoid spending a long time re-testing after every change" | approved by owner 2026-10-22 |
+| KO3-23 | Phase 2's datasets and testing are replicated on the warehouses, starting from the quickstart notebook, which alone is not enough for testing | "6. Can we replicate whatever dataset/testing you've done in phase 2 here? and yes there's already the quickstart for databricks in the https://github.com/NVIDIA/structured-data-models-client/blob/main/examples/databricks/kumo_relational_quickstart.ipynb that you can start with, but it's not enough for testing" | approved by owner 2026-10-22 |
+| KO3-24 | Snowflake is tested with the credentials in the owner's env file, which is not read directly | "7. I have added [a private env file] which contains three env vars: SNOWFLAKE_URL, SNOWFLAKE_USERNAME, SNOWFLAKE_ACCESS_TOKEN. Avoid reading it directly as it has credentials. You can use this for testing." | approved by owner 2026-10-22 |
+| KO3-25 | The Lakebase instance is one in the owner's workspace, found by the orchestrator | "8. You should be able to find another one in our [workspace name] workspace" | approved by owner 2026-10-22 |
+| KO3-26 | Both x86_64 and aarch64 are in scope | "9. Yes, both x86 and aarch64. I'm not sure you're right, I believe we support both, but double-check" | approved by owner 2026-10-22 |
+
 ## Kickoff answers
 
-None yet: the questions are in [design.md](design.md), "Owner questions", each with a recommendation.
+None yet beyond the rows above: the open questions are in [design.md](design.md), "Owner questions", each with a recommendation.
