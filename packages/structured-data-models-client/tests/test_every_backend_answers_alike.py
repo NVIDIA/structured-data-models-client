@@ -55,6 +55,7 @@ MULTICLASS = 'PREDICT users.tier FOR EACH users.user_id'
 def client_for(request):
     r"""Opens a client for one model, on this backend."""
     if request.param == 'in-process':
+        request.getfixturevalue('sdm')
         return lambda model: SDMClient.in_process(
             request.getfixturevalue(model.removeprefix('kumo-'))
         )
