@@ -407,6 +407,12 @@ def _described_now(schema: Schema) -> dict[str, Any]:
             },
             relationships=[],
             check_keys=False,
+            # Only the columns the schema keeps: one it leaves out is never
+            # read, as the reference reads only those (`_copy_for_one_gather`).
+            columns={
+                name: list(table.columns)
+                for name, table in schema.tables.items()
+            },
         )._core_description
     return described
 

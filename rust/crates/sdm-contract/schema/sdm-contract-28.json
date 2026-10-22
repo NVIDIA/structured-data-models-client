@@ -543,6 +543,16 @@
         },
         "source": {
           "$ref": "#/$defs/Relation"
+        },
+        "columns": {
+          "description": "The columns the schema keeps of the table (contract v28, T3.8), as a\nschema built column by column names them: only these are read and\ndescribed, as the reference reads only the columns a schema\ndescribes (`_copy_for_one_gather`). Left out, every column the\nsource holds.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
         }
       },
       "additionalProperties": false,
@@ -4426,6 +4436,11 @@
           "description": "The columns of one index, named by a relation as a table is (an\nindex is its schema's object): one row per column, in the index's\norder, its name, null for an expression. Asked for an index whose\ncolumns the catalog's list of keys or indexes does not give\n(SQLite's `index_info`, as the reference reads it).",
           "type": "string",
           "const": "index_columns"
+        },
+        {
+          "description": "The namespace a relation of one part is read in, as the source names\na table it holds: one row per part, outermost first, its name\n(contract v28, T3.8): a Postgres source's current schema, under\nwhich the reference names a table it cannot find; no row for a\nsource whose tables are named alone (DuckDB's, SQLite's). Asked only\nto name a table the source lacks.",
+          "type": "string",
+          "const": "namespace"
         }
       ]
     },

@@ -167,6 +167,7 @@ struct Rows {
     foreign_keys: Vec<CatalogForeignKey>,
     indexes: Vec<CatalogIndex>,
     index_columns: Vec<Option<String>>,
+    namespace: Vec<String>,
 }
 
 impl Rows {
@@ -223,6 +224,7 @@ impl Rows {
                 DescribePart::IndexColumns => {
                     self.index_columns.push(text(batch, c::NAME, row)?);
                 }
+                DescribePart::Namespace => self.namespace.extend(text(batch, c::NAME, row)?),
             }
         }
         Ok(())
@@ -236,6 +238,7 @@ impl Rows {
             DescribePart::ForeignKeys => CatalogAnswer::ForeignKeys(self.foreign_keys),
             DescribePart::Indexes => CatalogAnswer::Indexes(self.indexes),
             DescribePart::IndexColumns => CatalogAnswer::IndexColumns(self.index_columns),
+            DescribePart::Namespace => CatalogAnswer::Namespace(self.namespace),
         }
     }
 }

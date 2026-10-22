@@ -393,6 +393,13 @@ pub struct SourceSpec {
 pub struct NamedTable {
     pub name: String,
     pub source: Relation,
+    /// The columns the schema keeps of the table (contract v28, T3.8), as a
+    /// schema built column by column names them: only these are read and
+    /// described, as the reference reads only the columns a schema
+    /// describes (`_copy_for_one_gather`). Left out, every column the
+    /// source holds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub columns: Option<Vec<String>>,
 }
 
 /// `describe_source`'s result.

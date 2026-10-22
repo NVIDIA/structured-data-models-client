@@ -67,9 +67,12 @@ def from_source(
     time_columns: Mapping[str, str | None] | None,
     relationships: Sequence[Relationship] | None,
     check_keys: bool,
+    columns: Mapping[str, Sequence[str]] | None = None,
 ) -> Schema:
     r"""The schema of the tables named, or of every table, of the DuckDB,
-    SQLite or Postgres ``source``, described on the core.
+    SQLite or Postgres ``source``, described on the core; of a table
+    ``columns`` names, only the columns it keeps (contract v28), as the
+    reference reads only the columns a schema describes.
 
     Each key and time column is written as the contract's ``Given``: a
     value the contract's type cannot hold (a number, a set, a mapping) as
@@ -102,7 +105,15 @@ def from_source(
     # a dot (contract v26, design choice 12).
     spec = {
         'tables': [
-            {'name': name, 'source': codec.relation(named)}
+            {
+                'name': name,
+                'source': codec.relation(named),
+                **(
+                    {'columns': [str(c) for c in columns[name]]}
+                    if columns is not None and name in columns
+                    else {}
+                ),
+            }
             for name, named in (tables or {}).items()
         ],
         'primary_keys': {

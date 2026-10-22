@@ -94,6 +94,41 @@ fn a_provider_namespace_takes_names_and_null_parts() {
     }
 }
 
+/// A table named for describe_source keeps only the columns it lists
+/// (contract v28): left out, it reads as none and is written back left out,
+/// so a v27 table reads as it did; a list of names reads as given; anything
+/// else is refused.
+#[test]
+fn a_named_table_lists_the_columns_it_keeps_or_none() {
+    use sdm_contract::ops::NamedTable;
+    for (text, kept) in [
+        (
+            r#"{"name":"users","source":{"source":["app_users"]}}"#,
+            None,
+        ),
+        (
+            r#"{"name":"users","source":{"source":["app_users"]},"columns":["id","target"]}"#,
+            Some(vec!["id".to_owned(), "target".to_owned()]),
+        ),
+    ] {
+        let read: NamedTable = serde_json::from_str(text).unwrap();
+        assert_eq!(read.columns, kept, "{text}");
+        let written = serde_json::to_value(&read).unwrap();
+        let given: serde_json::Value = serde_json::from_str(text).unwrap();
+        assert_eq!(written, given, "{text}");
+    }
+    for refused in [
+        r#"{"name":"users","source":{"source":["app_users"]},"columns":"id"}"#,
+        r#"{"name":"users","source":{"source":["app_users"]},"columns":[1]}"#,
+        r#"{"name":"users","source":{"source":["app_users"]},"columns":[null]}"#,
+    ] {
+        assert!(
+            serde_json::from_str::<NamedTable>(refused).is_err(),
+            "{refused}"
+        );
+    }
+}
+
 /// The sampling policies a host provider declares (T1.26a), by their wire
 /// spelling; a provider leaving them out declares none, which the core
 /// reads as no null order (an ordered read refused, `null_order`) and no

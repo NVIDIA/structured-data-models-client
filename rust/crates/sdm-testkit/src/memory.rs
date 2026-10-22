@@ -460,6 +460,8 @@ impl Memory {
                 Field::new(c::NAME, DataType::Utf8, true),
                 Arc::new(StringArray::from(Vec::<Option<String>>::new())) as ArrayRef,
             )],
+            // A source in memory names its tables alone.
+            DescribePart::Namespace => vec![text(c::NAME, vec![])],
         };
         let (fields, arrays): (Vec<Field>, Vec<ArrayRef>) = columns.into_iter().unzip();
         RecordBatch::try_new(Arc::new(Schema::new(fields)), arrays).map_err(arrow_failed)

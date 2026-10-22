@@ -35,6 +35,9 @@ pub enum CatalogAnswer {
     /// `index_columns`: the columns of the one index asked for, in its
     /// order, `None` for an expression.
     IndexColumns(Vec<Option<String>>),
+    /// `namespace`: the parts a relation of one part is read under,
+    /// outermost first; none where the source names its tables alone.
+    Namespace(Vec<String>),
 }
 
 impl CatalogAnswer {
@@ -47,6 +50,7 @@ impl CatalogAnswer {
             CatalogAnswer::ForeignKeys(_) => DescribePart::ForeignKeys,
             CatalogAnswer::Indexes(_) => DescribePart::Indexes,
             CatalogAnswer::IndexColumns(_) => DescribePart::IndexColumns,
+            CatalogAnswer::Namespace(_) => DescribePart::Namespace,
         }
     }
 }

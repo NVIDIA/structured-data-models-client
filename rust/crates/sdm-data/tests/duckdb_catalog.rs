@@ -57,6 +57,8 @@ fn catalog_columns(part: DescribePart) -> &'static [&'static str] {
         DescribePart::Indexes => &["table_name", "expressions"],
         // DuckDB lists an index's columns with the index; never planned.
         DescribePart::IndexColumns => &[],
+        // The contract's own shape: DuckDB names a table alone (T3.8).
+        DescribePart::Namespace => &["name"],
     }
 }
 
