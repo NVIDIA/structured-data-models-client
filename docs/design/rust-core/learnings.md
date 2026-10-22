@@ -83,7 +83,7 @@ It cost rounds on T2.11, T2.12 and T2.13 and one judging rule.
 **Lesson:** "match" means the same answer, the same refusal kind and the same user-visible message, or better: a better error, or support for an input the old client fails on, registered as an improvement (the owner, KO3-41: "Ideally our new client has feature parity or is even better than old client. Better means better error or more support.").
 Statement counts, warning repeat counts, tie order among equal scores and hash order are matched only when a user can observe them; otherwise they fall in one standing register class the owner approves once (the owner, 2026-10-21, RCA decision 6: "Yes"; Phase 3 decision KO3-7).
 Keep a short register of quirks kept on purpose and drop the rest by explicit decision.
-**Enforced by:** `register.py validate` and the ratchet, which fail any changed outcome without an approved entry (*exists*); the reviewer report's `differences:` list, in which any difference without an approved entry blocks (*T3.0*: `docs/design/rust-core/orchestration/briefs/reviewer.md`).
+**Enforced by:** `register.py validate` and the ratchet, which fail any changed outcome without an approved entry (*exists*); the reviewer report's `differences:` list, in which a difference blocks only when the core is worse (a wrong answer, a crash, lost support or a worse error), a better one is registered as an improvement, and a red CI job the change caused or a decision row wider than the owner's words still blocks (*T3.0*: `docs/design/rust-core/orchestration/briefs/reviewer.md`, the owner's G2 rule, KO3-41 and KO3-47).
 
 ### 3. Port defined algorithms and use libraries; never port a library's type system (first attempt)
 
