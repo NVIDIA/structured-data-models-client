@@ -496,16 +496,24 @@ def test_a_semantic_view_is_created_and_dropped_under_the_case_s_name() -> None:
     )
     (call,) = [s for s in warehouse.ran if s.startswith('CALL')]
     assert 'name: view_semantic_binary' in call and 'shop_semantics' not in call
+    # The YAML names its tables and columns unquoted, which Snowflake reads
+    # in upper case: the case's tables are created so (review r2, Claude).
+    assert (
+        'CREATE TABLE "DB_V"."SCH_V"."USERS" ("I" NUMBER(38,0))'
+        in warehouse.ran
+    )
     nxt = _Warehouse(warehouse.held)
     databases.load(
         _duck('CREATE TABLE users (i INTEGER)'),
         'snowflake',
         _Target(nxt, names),
     )
-    assert (
-        nxt.ran[0]
-        == 'DROP SEMANTIC VIEW IF EXISTS "DB_V"."SCH_V".view_semantic_binary'
-    )
+    assert nxt.ran[:2] == [
+        'DROP SEMANTIC VIEW IF EXISTS "DB_V"."SCH_V".view_semantic_binary',
+        'DROP TABLE IF EXISTS "DB_V"."SCH_V"."USERS"',
+    ]
+    # A case with no semantic view keeps its names as written.
+    assert 'CREATE TABLE "DB_V"."SCH_V"."users" ("i" NUMBER(38,0))' in nxt.ran
 
 
 def test_the_spark_leg_loads_through_its_session() -> None:
