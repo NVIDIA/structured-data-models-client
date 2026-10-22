@@ -10,19 +10,33 @@
 # copy fails the build it ships in.
 name: CI
 
+# CI is off the landing path (the owner's "2026-10-22 evening: CI off the
+# landing path"): a package lands on its handoff stamp and two reviews, so
+# no push to a phase branch, lane or topic runs this workflow. main and the
+# epic branch rust-core still run it on every push, as before. Each phase
+# head runs the full matrix nightly, with fresh dependencies: the
+# `nightly` job below, on the schedule (which GitHub runs from the default
+# branch's copy of this file), dispatches this workflow on the head of
+# every rust-core-phase-N branch; until this file reaches the default
+# branch the orchestrator's watchdog (watchdog.py --dispatch) dispatches it
+# the same way. A dispatch (workflow_dispatch) runs every job on the ref
+# it names, and nothing waits on it: a red nightly is a fix item the
+# watchdog writes. The full matrix stays the phase-end gate. Every phase
+# alike (T2.0): no phase is named here.
 on:
   pull_request:
   push:
-    # The Rust core migration's epic branch and its phase branches run the
-    # same gates as main; the reference and archive branches deliberately
-    # do not, including a lane package's archive branch,
-    # rust-core-phase-N-archive-*, which keeps an abandoned tip (E43, CI2).
-    # Every phase alike (T2.0): no phase is named here.
     branches:
       - main
       - rust-core
-      - 'rust-core-phase-*'
-      - '!rust-core-phase-*-archive-*'
+  schedule:
+    - cron: '17 2 * * *'
+  workflow_dispatch:
+    inputs:
+      fresh:
+        description: 'Resolve dependencies fresh (the nightly): cargo update before the Rust jobs build'
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -70,6 +84,13 @@ env:
   # builds, which cost far more to redo. Every branch restores main's.
   SAVE_CACHES: ${{ github.event_name == 'push' && (contains(fromJSON('["main", "rust-core"]'), github.ref_name) || (startsWith(github.ref_name, 'rust-core-phase-') && contains(github.ref_name, '-lane-'))) }}
   SAVE_PIP_CACHES: ${{ github.event_name == 'push' && github.ref_name == 'main' }}
+  # The nightly's fresh dependencies: on a dispatch asking for them (the
+  # nightly's), the Rust jobs take each crate's latest compatible version
+  # (cargo update before they build), so a RustSec advisory or a crate's
+  # break shows within a day. The Python jobs that install unpinned resolve
+  # the latest release on every run already; a cell's pins are its
+  # definition and stay.
+  FRESH: ${{ github.event_name == 'workflow_dispatch' && inputs.fresh }}
   # The images CI pulls, each named here once and pinned by digest (E131),
   # but wheel-smoke's, which scripts/rust_core/wheel_smoke.py names. A pull
   # from ghcr.io logs in with GITHUB_TOKEN; any other is anonymous.
@@ -87,6 +108,30 @@ env:
   BINDING_FLOOR: pyarrow==14.0.1 pandas==2.2.2 numpy==1.23.5 duckdb==1.5.6
 
 jobs:
+  # The nightly (the schedule): dispatch this workflow, fresh, on the head
+  # of every phase branch, rust-core-phase-N for any N; every other job
+  # leaves itself out on the schedule (the landing job says skip).
+  nightly:
+    name: nightly dispatch
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Dispatch the full matrix on each phase head
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          heads=$(gh api "repos/$GITHUB_REPOSITORY/branches?per_page=100" --paginate --jq '.[].name' \
+            | grep -E '^rust-core-phase-(0|[1-9][0-9]*)$' || true)
+          [ -n "$heads" ] || { echo 'no phase branch'; exit 0; }
+          for head in $heads; do
+            gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref "$head" -f fresh=true
+            echo "dispatched on $head"
+          done
+
   # Decision E131 (the owner's of 2026-10-14): CI does not test an empty
   # landing commit again. land.py makes one per landing (one parent, no
   # file changed, a subject starting `Land `) and pushes it to the topic
@@ -142,6 +187,13 @@ jobs:
           skip=false
           why='not a push of an empty landing commit under a phase branch'
           phase=''
+          if [ "${GITHUB_EVENT_NAME:-}" = schedule ]; then
+            # The schedule only dispatches (the nightly job): the matrix
+            # runs on each phase head, not on the default branch here.
+            echo 'skip=true' >> "$GITHUB_OUTPUT"
+            echo 'every other job left out: true; the schedule dispatches each phase head instead'
+            exit 0
+          fi
           if [ "${GITHUB_EVENT_NAME:-}" = push ] &&
             [[ "${GITHUB_REF_NAME:-}" =~ ^(rust-core-phase-(0|[1-9][0-9]*))(-.+)?$ ]]; then
             phase=${BASH_REMATCH[1]}
@@ -349,6 +401,8 @@ jobs:
       - uses: taiki-e/install-action@9114bf4d891761788c546334fd37538eae1bf8b3 # v2.87.16
         with:
           tool: cargo-deny
+      - if: env.FRESH == 'true'
+        run: cargo update
       - run: cargo deny --locked check
 
   rust-test:
@@ -423,6 +477,8 @@ jobs:
           path: ~/.duckdb/extensions/v1.5.6
           key: duckdb-extensions-v1.5.6-icu-json-${{ runner.os }}-${{ runner.arch }}
       # The test kit's clippy, here on the DuckDB build this job makes (H3).
+      - if: env.FRESH == 'true'
+        run: cargo update
       - run: cargo clippy -p sdm-testkit --all-targets --locked -- -D warnings
       # Python, for the contract loader (contract/runners/databases.py),
       # which loads a case's tables into SQLite for sdm-contract-run

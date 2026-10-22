@@ -499,7 +499,10 @@ def test_every_job_is_left_out_when_the_landing_job_says_skip() -> None:
     jobs = _workflow()['jobs']
     assert 'landing' in jobs and not _needs(jobs['landing'])
     left_out: set[str] = set()
-    pending = [name for name in jobs if name != 'landing']
+    # The nightly dispatch runs on the schedule alone, whose landing job
+    # says skip (the owner's "2026-10-22 evening: CI off the landing path").
+    assert jobs['nightly']['if'] == "github.event_name == 'schedule'"
+    pending = [name for name in jobs if name not in ('landing', 'nightly')]
     while pending:
         progressed = False
         for name in list(pending):
@@ -848,7 +851,6 @@ def test_ci4_the_step_decides_alike_in_a_clone_of_depth_two(
         'pull_request_target',
         'workflow_dispatch',
         'merge_group',
-        'schedule',
         '',
     ],
 )
@@ -1110,7 +1112,12 @@ def test_ci4_the_token_goes_only_to_ghcr_io(
         steps = services = 0
         for name, job in workflow['jobs'].items():
             assert not re.search(TOKEN, str(job.get('env'))), name
-            assert 'permissions' not in job, name
+            # Only the nightly dispatch writes: it starts runs (Actions).
+            assert job.get('permissions') == (
+                {'actions': 'write', 'contents': 'read'}
+                if name == 'nightly'
+                else None
+            ), name
             assert 'container' not in job, name
             for step in job.get('steps', []):
                 assert not re.search(TOKEN, str(step.get('with'))), (name, step)
@@ -1121,8 +1128,9 @@ def test_ci4_the_token_goes_only_to_ghcr_io(
                     if name == 'landing' and step.get('id') == 'landing':
                         _api_only(key, value, str(step['run']))
                         continue
-                    # The timing guard reads the runs' jobs (T3.0).
-                    if name == 'timing-guard':
+                    # The timing guard reads the runs' jobs (T3.0), and the
+                    # nightly dispatches the workflow on each phase head.
+                    if name in ('timing-guard', 'nightly'):
                         _api_only(key, value, str(step['run']))
                         continue
                     steps += 1
@@ -1812,9 +1820,48 @@ LANE_2 = f'{PHASE_2}-lane-a'
 def test_t20_the_workflow_names_no_one_phase() -> None:
     text = CI.read_text(encoding='utf-8')
     assert not re.search(r'rust-core-phase-[0-9]', text)
-    branches = _workflow()[True]['push']['branches']
-    assert 'rust-core-phase-*' in branches
-    assert '!rust-core-phase-*-archive-*' in branches
+    # The nightly finds every phase head by its pattern, for any N.
+    run = str(_workflow()['jobs']['nightly']['steps'][0]['run'])
+    assert "'^rust-core-phase-(0|[1-9][0-9]*)$'" in run, run
+
+
+def test_t32_ci_runs_nightly_on_each_phase_head_not_on_each_push(
+    tmp_path: Path,
+) -> None:
+    r"""CI off the landing path (the owner, 2026-10-22): a push runs the
+    workflow on main and rust-core only, never on a phase branch, a lane or
+    a topic; the schedule dispatches it, fresh, on each phase head and runs
+    nothing itself; a dispatch runs every job, and asks for fresh
+    dependencies by default."""
+    triggers = _workflow()[True]
+    assert triggers['push']['branches'] == ['main', 'rust-core']
+    assert set(triggers) == {
+        'pull_request',
+        'push',
+        'schedule',
+        'workflow_dispatch',
+    }
+    assert triggers['schedule'] and triggers['workflow_dispatch']['inputs'][
+        'fresh'
+    ] == {
+        'description': triggers['workflow_dispatch']['inputs']['fresh'][
+            'description'
+        ],
+        'type': 'boolean',
+        'default': True,
+    }
+    run = str(_workflow()['jobs']['nightly']['steps'][0]['run'])
+    assert 'gh workflow run ci.yml' in run and '-f fresh=true' in run, run
+    repo = _repo(tmp_path)
+    _landing(repo)
+    for ref in (PHASE, LANE, 'main'):
+        assert _skip(repo, tmp_path, 'schedule', ref) == 'true', ref
+        assert _skip(repo, tmp_path, 'workflow_dispatch', ref) == 'false', ref
+    # The fresh switch reaches the Rust jobs that resolve crates.
+    text = CI.read_text(encoding='utf-8')
+    assert (
+        text.count("- if: env.FRESH == 'true'\n        run: cargo update") == 2
+    )
 
 
 @pytest.mark.parametrize(
