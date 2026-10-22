@@ -73,7 +73,7 @@ It cost eight fix rounds over about 14 hours until the host decided equality and
 **Lesson:** the core takes typed Arrow data and returns typed results and errors; each language turns its own types into that contract.
 Before a rule moves into the core, answer one question: can the core compute it from plain data without the host language's runtime?
 If not, the host computes it and the contract carries the result.
-**Enforced by:** the L0 guards and the emulation allowlist (*exists*: `scripts/rust_core/l0_scan.py`, `scripts/rust_core/l0_deps.py`, `scripts/rust_core/emulation-allowlist.txt`, in CI's `rust-lint`); the "Host or core" heading every package brief must fill (`docs/design/rust-core/orchestration/briefs/package.md`), which `scripts/rust_core/brief_check.py` checks before the brief's agents start (*T3.1*); the orchestrator runs it, so it is *wording only* until T3.2's tooling train makes `lane.py start` refuse a brief that fails it.
+**Enforced by:** the L0 guards and the emulation allowlist (*exists*: `scripts/rust_core/l0_scan.py`, `scripts/rust_core/l0_deps.py`, `scripts/rust_core/emulation-allowlist.txt`, in CI's `rust-lint`); the "Host or core" heading every package brief must fill (`docs/design/rust-core/orchestration/briefs/package.md`), which `scripts/rust_core/brief_check.py` checks before the brief's agents start (*T3.1*), and `scripts/rust_core/lane.py start --brief` refuses a brief that fails it (*T3.2*); passing `--brief` is the orchestrator's, *wording only*.
 
 ### 2. Write down what "match" means, or matching copies the reference's accidents (first attempt and Phase 2)
 
@@ -200,7 +200,7 @@ A judging change found later rides one tooling train at the front of the next st
 When the product cannot match exactly, the order is: fix the product, change the case, then the train; never a new package.
 Owner decision rows and CI config ride with the package that needs them, and package IDs are plain integers (T3.1, T3.2), with no sub-letters.
 A reference move is the phase's last landing before the gate.
-**Enforced by:** `scripts/rust_core/gate_dryrun.sh` over the design's case kinds (*T3.0*; Phase 3's are `docs/design/rust-core/phase-3/dryrun-plan.yaml`); `scripts/rust_core/judging-paths.txt` and `land.py` refusing a judging change outside the phase's first package or a train (*T3.0*); integer package IDs are *wording only* until T3.2's tooling train makes `lane.py start` refuse an ID with a letter from Phase 3 on.
+**Enforced by:** `scripts/rust_core/gate_dryrun.sh` over the design's case kinds (*T3.0*; Phase 3's are `docs/design/rust-core/phase-3/dryrun-plan.yaml`); `scripts/rust_core/judging-paths.txt` and `land.py` refusing a judging change outside the phase's first package or a train (*T3.0*); `scripts/rust_core/lane.py start` refusing a package ID with a letter from Phase 3 on (*T3.2*).
 
 ### 14. Landing throughput sets the phase's length: stack the queue, keep CI short, one environment per lane (first attempt to Phase 2)
 
@@ -231,7 +231,7 @@ Briefs stated no threat model, so reviewers spent rounds on forgery attacks agai
 **Lesson:** every package brief fills, before the test author starts: the threat model (honest mistakes unless the owner says otherwise); the reference code to port, with file and line; host or core; the input axes (lesson 6); the "when you change X, also update Y" list; the owner's words verbatim for every decision row; and every reader of every new or changed file, with the command that runs it.
 A design section that specifies an executable file is not reviewable until the file exists and its real reader has run on it.
 Owner questions are answered before the first review round.
-**Enforced by:** the template `docs/design/rust-core/orchestration/briefs/package.md` and `scripts/rust_core/brief_check.py`, which names every heading a brief leaves out (*T3.1*); the orchestrator runs it before each launch, so it is *wording only* until T3.2's tooling train makes `lane.py start` refuse such a brief; the "executable file" rule is *wording only*, which Phase 3's design follows by running the locked-set reader and `gate_dryrun.sh` on its own files.
+**Enforced by:** the template `docs/design/rust-core/orchestration/briefs/package.md` and `scripts/rust_core/brief_check.py`, which names every heading a brief leaves out (*T3.1*); the orchestrator runs it before each launch, and `scripts/rust_core/lane.py start --brief` refuses such a brief (*T3.2*), passing `--brief` being the orchestrator's, *wording only*; the "executable file" rule is *wording only*, which Phase 3's design follows by running the locked-set reader and `gate_dryrun.sh` on its own files.
 
 ### 17. Two reviewers, one bar, reading the stamp and CI (Phase 1 and Phase 2)
 
@@ -271,7 +271,7 @@ The owner replied "explain simply" or "I don't understand" at least ten times, a
 Questions go on a readable page the moment they exist, all at once.
 An overnight decision is written that way when it is made and put to the owner in the morning, before the final candidate (the owner, 2026-10-21, RCA decision 8: "Yes").
 A decision row quotes the owner's words and says no more; nobody but the owner writes `approved_by: owner`.
-**Enforced by:** *wording only*: the message form, and `approved_by: owner` until T3.2's tooling train makes `scripts/rust_core/register.py` refuse an entry whose `decision_ref` names no row the owner approved.
+**Enforced by:** `scripts/rust_core/register.py`, which refuses an entry `approved_by: owner` whose `decision_ref` names no row the owner approved, read by the ratchet's allowlist (*T3.2*); the message form is *wording only*.
 
 ## What held up and is worth keeping
 

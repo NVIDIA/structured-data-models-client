@@ -250,6 +250,22 @@ The machine has 8 vCPUs, 30 GB of memory and 412 GB of fast disk at `/mnt/locals
 - **The slip report**: the heartbeat runs `scripts/rust_core/orchestration/phase_stats.py --phase-branch origin/$SDM_PHASE_BRANCH --no-ci --forecast <the design's forecast>`, a `{start, packages: [{id, hours}]}` file, and reads how many hours the phase is behind and the package or unplanned landings that caused most of it.
   It never blocks anything.
 
+### The tooling train's tools (T3.2)
+
+T3.2 taught the checking tools Phase 3's warehouse and Java legs.
+
+- **Legs.** A case's `warehouses` (S2) names the legs it runs on, and only there; an S1 case runs on the three databases and every warehouse leg, but the two 100,001-row batching cases (`run_python.py`'s `case_legs`, `case.rs`'s `Case::warehouses`).
+  Observations are keyed `<case>@<leg>`.
+- **The recording mode, for C-1 and E-0.** `run_python.py --mode python-ref --reference DIR --database <leg> --record FILE` runs the old client live on the leg the live configuration opens (`SDM_LIVE_CONFIG`, a JSON file outside the repository: each leg's connect arguments, any value read from the environment as `{"env": NAME}`), with each placeholder's private name read from `SDM_CAPTURE_<NAME>` (`{catalog}` from `SDM_CAPTURE_CATALOG`).
+  Each case's tables are loaded by T3.3's `databases.load(duck, leg, WarehouseTarget)`; every driver call is captured, and the driver's statement log runs beside it as the capture's query log.
+  The output has each private name written back as its placeholder, and the write fails on any private value left; T3.3's writer turns it into the capture manifests.
+- **Captures.** `capture_check.py captures --cases DIR [--locked] MANIFEST...` lists each case and leg with no capture of its current input as `pending live: <case>@<leg>` (failing with `--locked`); `capture_check.py commit --candidate SHA [REV]` holds a captures-only commit to the final candidate; `contract/captures/**` is protected.
+- **Live only.** On a stand-in leg the core's observation carries the stand-in's verdict (`standin`); `compare.py` lists a live-only item (a code of `compare-policy.yaml`'s `standin` list) as `LIVE ONLY`, neither passed nor failed, and with `--verdicts MANIFEST... --candidate SHA` fails one without an E-1 verdict `equal` recorded on the final candidate; `gate.sh --locked` passes both, and runs `captures --locked` once `contract/captures/` exists.
+- **Runners.** `gate.sh --run` takes `java` (`run_java.py`, T3.11's) and `standin` (python-core on each warehouse leg through `standin_client.py`, T3.3's).
+- **Lanes.** `lane.py start --brief BRIEF` refuses a brief `brief_check.py` fails; from Phase 3 on it refuses a package ID with a letter, and it never starts a lane on a phase `rust-core` already holds.
+- **Coverage.** `coverage.py --check --gate LANGUAGE:SLICE` gates a slice's paths and cells (`python:S1`, `python:S2`, `java:S1`); each leg claims its own path, and a manifest path's `tests` (pytest node IDs) may claim a path the case format cannot express.
+- **The census's real-data mode.** `refusal_census.py real-data --database LEG --cases DIR --control CASE --out FILE`, one leg at a time, a warehouse leg on its stand-in, failing when its seeded control is not refused.
+
 ### After T3.0 lands: the orchestrator's one-time steps
 
 The private copies outside the repository would bypass the mechanisms above, so they become wrappers of the repository's tools.

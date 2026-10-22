@@ -3,35 +3,37 @@
 The design branch owns `tracker.md`; this file holds T3.2's section until it folds in.
 T3.1, the previous package on lane A, landed at d1e02d7c.
 
-## Part 1: the recording mode, its completeness check and the case format (reviewed before C-1)
+## Round 1
+
+The test author's three commits (`T3.2 tests: ...`) are on the lane unchanged; every test they authored passes, and `contract/tests/t32-pending.json` lists none pending.
+The implementer's own tests are `contract/tests/test_t32_recording_own.py` and `tests/test_t32_train_own.py`.
 
 ### The case format (both loaders)
 
-- `warehouses`: the warehouse legs an S2 case runs on, and only there; at least one, none twice; only on an S2 case, which must name them; never beside `databases`.
-- An S1 case without `databases` runs on every warehouse leg as well, except the two 100,001-row batching cases (KO3-45); `run_python.py`'s `case_legs` and `case.rs`'s `Case::warehouses` say the same.
-- `input.view`: `kind` (`metric_view` on the Databricks legs, `semantic_view` on `snowflake`), `name`, optional `yaml` and `trust_expressions`; only beside `warehouses`.
-- `input.connect`: `warehouse`, `spark`, `snowpark` or `lakebase`; the case names exactly that path's leg.
-- `materialize.num_context_samples`: passed as written, as the sampling options are.
-- P2-T2.1i-1: both loaders refuse `NaN` and `Infinity` (not JSON) and read a `fail_call` of `-0` as 0.
-- Placeholders (`{catalog}`, `{schema}`, an existing view's `{shop_metric_view}`) in `input.from_source`, `input.edits` and `input.view` are resolved on a warehouse leg from the live configuration; an unknown one fails the run by name.
-- Each rule has accept and refuse vectors in `contract/tests/malformed-cases.json` where one path can write it, and the rest in `contract/tests/test_t32_recording.py`.
+- `warehouses`, `input.view` (with `trust_expressions`), `input.connect` and `materialize.num_context_samples`, held by `contract/tests/t32-case-format-vectors.json` in both loaders.
+- `view` and `connect` only beside `warehouses`; a view's kind kept on each leg named; a connect path's case naming exactly its leg.
+- P2-T2.1i-1: both loaders refuse a `fail_call` of `-0` and `NaN` or `Infinity` anywhere.
 
-### The recording mode (`run_python.py --mode python-ref --database <leg> --record FILE`)
+### The recording mode
 
-- The live configuration is a JSON file outside the repository, named by `SDM_LIVE_CONFIG` (`sdm-live/1`): per leg, the placeholder names and how the connection opens (`driver`, `warehouse`, `lakebase`), any value read from the environment as `{"env": NAME}`.
-- Each case's tables are loaded by `databases.load(duck, leg, WarehouseTarget(connection, names, view))`, T3.3's warehouse loader, which also creates a view from its YAML.
-- The capture wraps every driver call the old client makes on each leg, per connection, never by patching a driver class: Databricks SQL (`execute`, `executemany`, `fetchall_arrow`, `fetchmany_arrow`, `fetchall`, `fetchone`, `fetchmany`), Spark (`spark.sql` and the frame's `toArrow`, `collect`, `first`, `toPandas`), Snowflake (`execute` under `qmark`, `fetch_arrow_all`, `fetch_pandas_all`) and psycopg (`execute`, `executemany`, `copy`, `stream`, P2-T2.1a-2, now the Postgres leg's capture too).
-- A read the driver lacks is never offered, since the old client's reader picks the first Arrow read the cursor has.
-- One `sdm-capture/1` line per case and leg: the reference line, every statement with its parameters and each result whole as Arrow IPC, every table as the warehouse returns it, each view-derived relation as the warehouse evaluates it (the read without its sample's `LIMIT`), every random draw (table, fraction and seed as written, and the rows it picked), the session zone, the versions, the recording and reference commits, and the case's input hash.
-- Before anything is written, each private name becomes its placeholder (whole names, in any case), and the write fails, naming the case and never the value, on any private value left in the line, its tables included.
+- `run_python.py --mode python-ref --reference DIR --database <leg> --record FILE`, the live configuration in `SDM_LIVE_CONFIG`, the placeholders' names in `SDM_CAPTURE_<NAME>`.
+- The capture and the statement log on each warehouse driver, per connection and per driver class, the log entered only in a `with` (P2-T2.1a-2).
+- Every private name written back as its placeholder; the write fails on any private value left, tables included.
+- T3.3's writer turns the output into the capture manifests `capture_check.py captures` reads; the loader interface is `databases.load(duck, leg, WarehouseTarget)`, and the stand-in's is `run_python.py`'s `Standin` over `standin_client.open(leg, case, bases, captures)`.
 
-### The completeness check (`capture_check.py captures` and `captures-only`)
+### The rest of the train
 
-- `captures --cases ... --capture ... [--leg ...] [--locked]`: each line complete (its statements the reference line's own, each result held whole, the draws exactly those its statements made, every table of the case's data once, each derived relation evaluated or refused, the versions, the zone and the commits); every case and leg without a capture of its current input listed as pending live, a failure with `--locked`.
-- `captures-only --final SHA [--commit SHA]`: the commits after the final candidate change only `contract/captures/**`, delete nothing, and every line they add or change names the final candidate as its recording commit.
-- `contract/captures/**` is a protected path.
+- `live_only` in the observation schema, `observation.rs`, `compare.py` (`--verdicts`, `--candidate`), the ratchet and `gate.sh`; the policy's `standin` codes and rules held to the owner's approval (KO3-45).
+- `java` as a runner; `sdm-jni` in `l0_deps.py` and `l0_scan.py`; `lane.py start --brief`, whole IDs from Phase 3, no lane on a finished phase.
+- Coverage's leg claims, manifest test claims and `--gate`; `register.py`'s owner rows with the allowlist (U4); the census's real-data mode per leg.
+- P2-MID2-7, P2-T2.0f-1, P2-T2.21-1, C18's static check, handoff's cleanup on a signal, clean_tmp's listening sockets, the dry-run plan's corrections.
 
 ### Probes
 
-- Outside JSON: a capture line and a case file are read by `json`, which refuses depth past its limit as `RecursionError`, caught and named by both readers.
-- Seeded faults: `test_an_incomplete_capture_fails_by_name` drops or retypes each piece of evidence the completeness check reads (a draw, its fraction, its seed, a table, a statement, a result, its Arrow, its row count, a relation, the zone, the driver's version, the commit, the format, the reference line) and each fails by name.
+- Outside JSON: deep and wide capture lines, manifests and verdict manifests are each refused by name or read (`test_deep_and_wide_capture_lines_are_refused_by_name`, `test_a_deep_or_wide_manifest_is_refused_by_name`, `test_a_live_only_item_needs_its_e1_verdict_on_the_final_candidate`).
+- Seeded faults: `test_an_incomplete_capture_fails_by_name` drops or retypes each piece of evidence the recording check reads; the live-only, verdict, owner-row and census tests each fail their rule with its evidence missing.
+
+### Not done in this round
+
+- `gate.sh` makes the stand-in and Java observations; judging them per leg against the captures' reference lines waits for T3.3's capture reader.
+- `key.past-2-53.catalog@postgres`'s reference line predates the text digest (P2-T2.21-1): the comparison names it until the orchestrator records it again.
