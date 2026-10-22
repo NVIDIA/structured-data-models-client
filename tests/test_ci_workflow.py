@@ -525,8 +525,10 @@ def test_every_job_is_left_out_when_the_landing_job_says_skip() -> None:
 #: (fix round 1, P2-5); the landing job, which every other job waits on,
 #: does no more than read a few commits; the client test matrix and the
 #: ref-pandas3 DuckDB route tests reached 57 to 60 minutes as Phase 2's
-#: corpus grew (T2.1o); the checking tools' tests, split out of those
-#: two (T3.0), are as long on their own.
+#: corpus grew (T2.1o); the engine job's pytest step alone takes 40
+#: minutes or more, and it reached its 60-minute limit on two runs
+#: (T2.11); the checking tools' tests, split out of those two (T3.0), are
+#: as long on their own.
 TIMEOUT_CEILINGS = {
     'landing': 10,
     'rust-test': 120,
@@ -1907,13 +1909,15 @@ def test_t20_a_multi_digit_phase_s_landing_skips_on_its_green_run(
     assert found == 'false'
 
 
-@pytest.mark.parametrize('ref', ['rust-core-phase-02', 'rust-core-phase-x1'])
+@pytest.mark.parametrize('ref', ['RUST-CORE-PHASE-3', 'Rust-Core-Phase-12'])
 def test_t20_a_name_the_expression_lets_through_fails_the_phase_check_by_name(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, ref: str
 ) -> None:
-    r"""Fix 2: a name under the prefix that ends in a digit but is no phase
-    branch passes the step's condition; the step itself then fails, naming
-    it, rather than on a missing argument."""
+    r"""Fix 2: a name the step's condition lets through but is no phase
+    branch (one in capitals, as Actions compares names ignoring case; since
+    OF-7 a letter, a dot or a leading zero in the number is not let
+    through) makes the step itself fail, naming it, rather than on a
+    missing argument."""
     _, step = _phase_check_step()
     context = {
         'github.event_name': 'push',
