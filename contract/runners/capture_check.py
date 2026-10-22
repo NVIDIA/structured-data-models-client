@@ -663,6 +663,9 @@ def check_files(
 CAPTURES = 'contract/captures/'
 #: The capture format this checker reads.
 CAPTURE_FORMAT = 'sdm-capture/1'
+#: The recording mode's lines (run_python.py's RECORD_FORMAT), which T3.3's
+#: captures.py import turns into the capture.
+RECORD_FORMAT = 'sdm-record/1'
 #: A commit's full SHA.
 SHA = re.compile(r'[0-9a-f]{40}')
 #: A statement that answers rows: one with no result read and no error
@@ -749,8 +752,8 @@ def capture_problems(
     run = runner()
     key = line.get('case')
     problems: list[str] = []
-    if line.get('format') != CAPTURE_FORMAT:
-        return [f'{key}: not {CAPTURE_FORMAT}']
+    if line.get('format') != RECORD_FORMAT:
+        return [f'{key}: not {RECORD_FORMAT}']
     leg = line.get('leg')
     if leg not in run.WAREHOUSES:
         return [f'{key}: leg {leg!r} is not a warehouse leg']

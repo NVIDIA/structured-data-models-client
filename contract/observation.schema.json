@@ -403,6 +403,8 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["runner", "cell", "platform", "commit", "reference", "native", "native_loaded", "operations", "contract", "versions", "inputs"],
+      "if": {"properties": {"runner": {"not": {"const": "java"}}}},
+      "then": {"properties": {"versions": {"required": ["duckdb"]}}},
       "properties": {
         "runner": {"description": "The runner: the reference, the candidate on the core or its old route, the pure-Rust host, or the Java host (Phase 3 design choice 10, T3.11's contract/runners/run_java.py).", "enum": ["python-ref", "python-core", "python-old", "rust-host", "java"]},
         "cell": {
@@ -449,14 +451,15 @@
         "contract": {"description": "The contract version of the core it ran, or null.", "type": ["integer", "null"]},
         "versions": {
           "type": "object",
+          "description": "The versions the runner ran with: DuckDB's, required of every runner but Java's, whose S0 leg opens no database; Java's host names its runtime's (java), and DuckDB's where its leg opens DuckDB (T3.2).",
           "additionalProperties": false,
-          "required": ["duckdb"],
           "properties": {
             "python": {"type": "string"},
             "pandas": {"type": "string"},
             "pyarrow": {"type": "string"},
             "numpy": {"type": "string"},
-            "duckdb": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+"}
+            "duckdb": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+"},
+            "java": {"type": "string", "minLength": 1}
           }
         },
         "inputs": {

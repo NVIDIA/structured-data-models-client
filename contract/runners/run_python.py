@@ -65,6 +65,7 @@ which maps each inventory case into the case format and back without loss.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import copy
 import functools
 import hashlib
@@ -2735,9 +2736,11 @@ PRIVATE_ENVIRONMENT = (
 #: The shortest value counted as a private name: a shorter one ("db",
 #: "1") would match ordinary words and refuse every capture.
 _PRIVATE_MIN = 4
-#: The capture format the recording mode writes (design choice 2), which
-#: ``capture_check.py captures`` reads.
-CAPTURE_FORMAT = 'sdm-capture/1'
+#: The recording mode's own format (design choice 2): one line per case
+#: and leg, the input T3.3's ``captures.py import`` turns into the capture
+#: (``sdm-capture/1``, the stand-in's), which ``capture_check.py
+#: recording`` holds complete.
+RECORD_FORMAT = 'sdm-record/1'
 #: A statement's random draw: Databricks' ``TABLESAMPLE (p PERCENT)
 #: [REPEATABLE (seed)]`` with the percentage as the old client printed it
 #: (RE/backend/databricks/sampler.py:255-262), and Snowflake's unseeded
@@ -3916,17 +3919,72 @@ class Live:
                 pass
 
 
+#: The core's SQL dialect each warehouse leg's provider renders (Phase 3
+#: design choice 2: the stand-in receives each request with the plan the
+#: leg's own dialect rendered for it).
+LEG_DIALECTS = {
+    'databricks-sql': 'databricks',
+    'databricks-spark': 'databricks',
+    'snowflake': 'snowflake',
+    'lakebase': 'postgres',
+}
+
+
+class _Offline:
+    r"""What a warehouse leg's source holds offline in place of a driver
+    connection: nothing runs through it (the stand-in's forwarding provider
+    answers every fetch), it only names the leg's driver to the source's
+    dispatch, as the real one would."""
+
+    version = '4.0.0'
+
+    def cursor(self) -> Any:
+        raise RunnerFailure('a stand-in leg runs nothing through its driver')
+
+    def sql(self, *arguments: Any, **keywords: Any) -> Any:
+        raise RunnerFailure('a stand-in leg runs nothing through its driver')
+
+    def close(self) -> None:
+        pass
+
+
+#: Each leg's offline connection class, under the driver's package the
+#: source dispatch reads (a Spark session by its class name).
+_OFFLINE = {
+    'databricks-sql': type(
+        'Connection', (_Offline,), {'__module__': 'databricks.sql.sdm_standin'}
+    ),
+    'databricks-spark': type(
+        'SparkSession', (_Offline,), {'__module__': 'pyspark.sql.sdm_standin'}
+    ),
+    'snowflake': type(
+        'SnowflakeConnection',
+        (_Offline,),
+        {'__module__': 'snowflake.connector.sdm_standin'},
+    ),
+    'lakebase': type(
+        'Connection', (_Offline,), {'__module__': 'psycopg.sdm_standin'}
+    ),
+}
+
+
 class Standin:
     r"""A warehouse leg served offline by the stand-in (Phase 3 design
-    choice 2; T3.3's ``sdm-standin``), through ``standin_client.py``'s
-    forwarding provider over the pipe protocol, for python-core: the core's
-    provider for the leg is handed the client's connection as the leg's
-    driver connection would be, and the run keeps the stand-in's verdict
-    for the observation's ``standin`` field. ``standin_client.py`` meets
-    this: ``open(leg, case, bases, captures)`` gives a session with
-    ``connection``, ``names`` (each placeholder's name offline), ``verdict()``
-    (``{"live_only": code or None, "flagged": [codes]}``) and ``close()``;
-    the captures are ``contract/captures/``."""
+    choice 2; T3.3's ``sdm-standin``) for python-core, through
+    ``standin_client.py``'s forwarding provider over the pipe protocol: the
+    stand-in needs each whole fetch step (the request and the plan the
+    leg's dialect rendered), so the session's provider is plugged in as the
+    leg's provider (:meth:`plugged`), answering every fetch the core asks,
+    and the source holds an offline connection that only names the leg's
+    driver (:class:`_Offline`). The run keeps the stand-in's verdict for
+    the observation's ``standin`` field.
+
+    ``standin_client.py`` meets this: ``open(leg, case, bases, captures)``
+    gives a session with ``provider(step, keys)`` (the host's provider
+    interface, ``sdm_client._rust.run.Provider``), ``names`` (each
+    placeholder's name offline), ``verdict()`` (``{"live_only": code or
+    None, "flagged": [codes]}``) and ``close()``; the captures are
+    ``contract/captures/``."""
 
     def __init__(
         self, case: dict[str, Any], bases: dict[str, list[str]], leg: str
@@ -3942,17 +4000,45 @@ class Standin:
             )
         client = _sibling('standin_client')
         self._session = client.open(leg, case, bases, CONTRACT / 'captures')
-        self.connection = self._session.connection
+        self.provider = self._session.provider
+        self.connection = _OFFLINE[leg]()
         self.names = dict(self._session.names)
         self.case = resolved(case, self.names)
 
     def captured(self, log: DriverLog) -> Any:
-        r"""The connection as the leg's capture hands it to the source: on
-        a stand-in leg the statements are the stand-in's, so they are
-        recorded, and only reported (KO3-45)."""
-        path = self.case['input'].get('connect')
-        kind = 'snowpark' if path == 'snowpark' else self.leg
-        return _WAREHOUSE_CAPTURES[kind](self.connection, log)
+        r"""The offline connection: nothing runs through it, so there is
+        no driver call to capture; the stand-in's statements are its own,
+        and only reported (KO3-45)."""
+        return self.connection
+
+    @contextlib.contextmanager
+    def plugged(self) -> Iterator[None]:
+        r"""The session's forwarding provider as the provider of every run
+        over this leg's offline connection, for the case's calls, restored
+        after: the Python host's ``_provider`` of ``describe_source`` and
+        ``materialize`` (test-only, as the capture is)."""
+        from sdm_client._rust import materialize, schema
+
+        choice = {'provider': 'sql', 'dialect': LEG_DIALECTS[self.leg]}
+        saved = [(module, module._provider) for module in (schema, materialize)]
+
+        def forwarding(original: Any) -> Any:
+            def chosen(source: Any) -> tuple[dict[str, Any], Any]:
+                held = getattr(source, 'connection', None)
+                # A Spark source wraps the session it was given.
+                if self.connection in (held, getattr(held, '_session', None)):
+                    return dict(choice), self.provider
+                return original(source)
+
+            return chosen
+
+        try:
+            for module, original in saved:
+                module._provider = forwarding(original)
+            yield
+        finally:
+            for module, original in saved:
+                module._provider = original
 
     def verdict(self) -> dict[str, Any]:
         found = self._session.verdict()
@@ -4006,7 +4092,7 @@ def capture_line(
         versions['runtime'] = runtime
     reference = observation['identity'].get('reference') or {}
     return {
-        'format': CAPTURE_FORMAT,
+        'format': RECORD_FORMAT,
         'case': observation['case'],
         'leg': live.leg,
         'input': input_hash(case, bases),
@@ -4585,7 +4671,15 @@ def _calls(
 
     serve = _sibling('scripted_endpoint').serve
     stage = 'from_source'
+    # On a stand-in leg, the stand-in's forwarding provider answers every
+    # fetch of the case's calls (Standin.plugged).
+    plugged = (
+        live.plugged()
+        if isinstance(live, Standin)
+        else contextlib.nullcontext()
+    )
     with (
+        plugged,
         # The scripted endpoint, failing the case's chosen call and
         # answering a classification with its probabilities (T2.8's ranking
         # cases), a regression with its quantiles (T2.9's forecast cases),

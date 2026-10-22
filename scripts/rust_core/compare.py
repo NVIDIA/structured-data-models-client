@@ -234,6 +234,10 @@ OUTCOME = ('result', 'stage', 'error', 'code')
 #: call, so it has no stage and no exception class. Every other runner
 #: observes both, and a null there is a defect, never a pass.
 UNOBSERVED_BY_RUST_HOST = ('stage', 'error')
+#: The runners that make no public call, so observe neither a stage nor an
+#: exception class: the pure-Rust host, and Java's host, whose S0 lines leave
+#: both null as rust-host's do (T3.2, found by T3.11).
+UNOBSERVING = ('rust-host', 'java')
 #: An endpoint's refusal of a call as the client raises it (decision E47):
 #: the endpoint's own text, under the client's class for it and no code of
 #: the client's. The core, told the endpoint's status, reports the same call
@@ -448,10 +452,10 @@ def _observations(
             continue
         if (
             isinstance(observation, dict)
-            and observation.get('format') == _capture_check().CAPTURE_FORMAT
+            and observation.get('format') == _capture_check().RECORD_FORMAT
         ):
-            # A warehouse leg's reference line is held in its capture
-            # (Phase 3 design choice 2), read from the capture whole.
+            # A warehouse leg's reference line held in the recording mode's
+            # line (Phase 3 design choice 2), read from it whole.
             observation = observation.get('observation')
         try:
             problem = runner._invalid(validate, observation)
@@ -610,7 +614,7 @@ def _expectation(
     }
     for field, value in wanted.items():
         seen = outcome[field]
-        if who == 'rust-host' and field in UNOBSERVED_BY_RUST_HOST:
+        if who in UNOBSERVING and field in UNOBSERVED_BY_RUST_HOST:
             continue
         if _rust_host_s_refusal(
             who, field, {'result': expect['outcome'], **wanted}, seen
@@ -629,7 +633,7 @@ def _against_reference(
 ) -> None:
     for field in OUTCOME:
         mine, theirs = outcome[field], reference['outcome'][field]
-        if who == 'rust-host' and field in UNOBSERVED_BY_RUST_HOST:
+        if who in UNOBSERVING and field in UNOBSERVED_BY_RUST_HOST:
             continue
         if _rust_host_s_refusal(who, field, reference['outcome'], mine):
             continue
@@ -669,7 +673,7 @@ def _effective(
     where = f'{case["id"]}: {who} against its effective expectation'
     effective = {field: wanted.get(field, base[field]) for field in OUTCOME}
     for field in OUTCOME:
-        if who == 'rust-host' and field in UNOBSERVED_BY_RUST_HOST:
+        if who in UNOBSERVING and field in UNOBSERVED_BY_RUST_HOST:
             continue
         value = effective[field]
         if _rust_host_s_refusal(who, field, effective, outcome[field]):
@@ -1481,7 +1485,7 @@ def _reach(
     where = f'{case["id"]}: {who}'
     outcome = observation['outcome']
     if outcome['result'] != 'success' or (
-        who != 'rust-host' and outcome['stage'] != stage
+        who not in UNOBSERVING and outcome['stage'] != stage
     ):
         report.fail(f'{where}: did not reach its result at {stage}', 'reach')
         return
@@ -3261,9 +3265,10 @@ def compare(
                         report, case['id'], who, stop, wanted
                     ),
                 )
-                theirs = ref['identity']['versions']['duckdb']
-                mine = observation['identity']['versions']['duckdb']
-                if mine != theirs and not offline:
+                theirs = ref['identity']['versions'].get('duckdb')
+                mine = observation['identity']['versions'].get('duckdb')
+                # Java's host opens DuckDB only where its leg does.
+                if mine != theirs and not offline and mine is not None:
                     # Offline, a warehouse leg's reference ran on the
                     # warehouse, and DuckDB is only the stand-in's engine.
                     _differ(

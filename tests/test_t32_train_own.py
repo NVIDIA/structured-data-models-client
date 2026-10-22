@@ -490,3 +490,40 @@ def test_the_census_real_data_mode_counts_hits_and_needs_its_control(
         census.real_data(
             cases, 'duckdb', ROOT / 'contract/cases/s1/base.binary.json'
         )
+
+
+# --- Java's lines (found by T3.11) ----------------------------------------------------
+
+
+def test_a_java_line_names_java_s_version_and_no_duckdb() -> None:
+    run = _module(ROOT / 'contract/runners/run_python.py', 't32_own_run_python')
+    validate = run.validator('observation')
+    reference = ROOT / 'contract/reference'
+    [path] = sorted(reference.glob('*.jsonl'))
+    line = json.loads(path.read_text().splitlines()[0])
+    java = copy.deepcopy(line)
+    java['identity'].update(runner='java', reference=None)
+    java['identity']['versions'] = {'java': '21.0.4'}
+    assert run._invalid(validate, java) is None
+    python = copy.deepcopy(line)
+    python['identity']['versions'] = {'java': '21.0.4'}
+    assert run._invalid(validate, python) is not None
+
+
+def test_java_like_rust_host_observes_no_stage_or_class() -> None:
+    expect = {
+        'outcome': 'refusal',
+        'stage': 'from_source',
+        'error': 'X',
+        'code': 'C',
+    }
+    seen = {'result': 'refusal', 'stage': None, 'error': None, 'code': 'C'}
+    for who, failing in (
+        ('java', False),
+        ('rust-host', False),
+        ('python-core', True),
+    ):
+        report = COMPARE.Report({'outcome': 'gate'})
+        COMPARE._expectation(report, {'id': 'c', 'expect': expect}, who, seen)
+        assert bool(report.failures) is failing, (who, report.texts)
+    assert RATCHET.UNOBSERVED['java'] == RATCHET.UNOBSERVED['rust-host']

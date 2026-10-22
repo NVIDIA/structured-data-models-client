@@ -476,7 +476,7 @@ def test_a_complete_capture_passes_and_holds_no_private_name() -> None:
             lambda line: line.update(incomplete=['fetchmany_arrow']),
             'could not record',
         ),
-        (lambda line: line.update(format='sdm-capture/9'), 'not sdm-capture/1'),
+        (lambda line: line.update(format='sdm-capture/9'), 'not sdm-record/1'),
         (lambda line: line.pop('observation'), 'no reference line'),
     ],
 )
@@ -752,19 +752,27 @@ def test_a_stale_installed_client_is_refused(tmp_path: Path) -> None:
     assert run.stale_client(0) is not None
 
 
-def test_python_core_on_a_warehouse_leg_carries_the_stand_in_s_verdict(
+def test_python_core_on_a_warehouse_leg_runs_through_the_forwarding_provider(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     r"""python-core on a warehouse leg runs offline through
-    ``standin_client.py`` (T3.3's, faked here by its interface) and its
-    observation carries the stand-in's verdict."""
+    ``standin_client.py`` (T3.3's, faked here by its interface): the
+    session's forwarding provider answers every fetch of a run over the
+    leg's offline connection, and the observation carries the verdict."""
     import types
+
+    from sdm_client._rust import materialize, schema
 
     closed = []
 
+    def provider(step: Any, keys: Any) -> Any:
+        raise AssertionError('not asked here')
+
     class Session:
-        connection = FakeConnection(_answers())
         names = {'catalog': 'offline_catalog', 'schema': 'offline_schema'}
+
+        def __init__(self) -> None:
+            self.provider = provider
 
         def verdict(self) -> dict[str, Any]:
             return {'live_only': 'B1', 'flagged': []}
@@ -779,6 +787,18 @@ def test_python_core_on_a_warehouse_leg_carries_the_stand_in_s_verdict(
     stand = run.Standin(case, run.load_bases(), 'databricks-sql')
     assert stand.verdict() == {'live_only': 'B1', 'flagged': []}
     assert stand.names['catalog'] == 'offline_catalog'
+    source = types.SimpleNamespace(
+        connection=stand.connection, backend='databricks'
+    )
+    other = types.SimpleNamespace(connection=object(), backend='duckdb')
+    before = schema._provider, materialize._provider
+    with stand.plugged():
+        for module in (schema, materialize):
+            choice, given = module._provider(source)
+            assert choice == {'provider': 'sql', 'dialect': 'databricks'}
+            assert given is provider
+            assert module._provider(other)[0]['dialect'] == 'duckdb'
+    assert (schema._provider, materialize._provider) == before
     stand.close()
     assert closed == [True]
     monkeypatch.delitem(sys.modules, 'standin_client')

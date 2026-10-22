@@ -1235,7 +1235,10 @@ MOVED = '@moved'
 STAGES = ('from_source', 'materialize', 'predict')
 #: The outcome fields a runner does not observe (``availability.yaml``):
 #: an entry's old outcome is not held to the reference's there.
-UNOBSERVED = {'rust-host': ('outcome.stage', 'outcome.error')}
+UNOBSERVED = {
+    'rust-host': ('outcome.stage', 'outcome.error'),
+    'java': ('outcome.stage', 'outcome.error'),
+}
 
 
 def _stated(text: Any, like: dict[str, Any]) -> dict[str, Any] | None:
