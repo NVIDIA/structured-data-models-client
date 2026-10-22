@@ -6,7 +6,7 @@
 r"""What needs the orchestrator now (T3.2 fix 4, the owner's speed change 4).
 
     watchdog.py [--phase BRANCH] [--repo PATH] [--forecast FILE]
-        [--idle-minutes 45] [--slip-hours 2] [--now TIME]
+        [--idle-minutes 45] [--slip-hours 2] [--now TIME] [--dispatch]
 
 The heartbeat runs it every 15 minutes. It prints one line per problem and
 nothing when all is well; it exits 0 either way (2 on a usage error), so the
@@ -21,6 +21,16 @@ heartbeat reads its output, not its status:
   branch under the phase (the phase, its lanes and topics) failed; the jobs
   named are the ones that failed. A ``gh`` failure prints one
   ``WATCHDOG gh failed: ...`` line instead;
+- ``NIGHTLY <phase> run <id>: <jobs>``: the newest finished nightly run
+  (scheduled or dispatched) of CI on the phase head failed; its failed jobs
+  are named, and the run becomes one fix item, once, in
+  ``$SDM_ORCH_STATE/phase-<N>/fix-items.md`` (``- [ ] nightly run <id> on
+  <phase> <sha12>: <jobs>``). Nothing waits on the nightly (the owner's
+  "2026-10-22 evening: CI off the landing path"). With ``--dispatch``, a
+  phase head with no nightly run started in the last 24 hours gets one
+  (``gh workflow run ci.yml --ref <phase> -f fresh=true``), printed as
+  ``NIGHTLY <phase>: dispatched``: GitHub runs the workflow's schedule from
+  the default branch's copy, which holds no nightly yet;
 - ``SLIP <package>: expected by <time>, not landed; <h> h behind``: a
   package of the forecast (``docs/design/rust-core/phase-3/forecast.yaml``
   by default; ``phase_stats.py`` reads it the same way) past its forecast
@@ -49,10 +59,18 @@ sys.path.insert(0, str(HERE))
 from phase_stats import StatsError, read_forecast  # noqa: E402
 
 ROOT = HERE.parents[2]
+STATE = Path(
+    os.environ.get('SDM_ORCH_STATE')
+    or Path.home() / '.local/share/sdm-orchestration'
+)
 FORECAST = 'docs/design/rust-core/phase-3/forecast.yaml'
 LANE = re.compile(r'[a-z0-9]{1,16}')
 GH_TIMEOUT = 120
-RUN_FIELDS = 'databaseId,headBranch,headSha,conclusion,status,createdAt,url'
+RUN_FIELDS = (
+    'databaseId,headBranch,headSha,conclusion,status,createdAt,url,event'
+)
+#: The events of a nightly run: the schedule's, or its dispatch.
+NIGHTLY_EVENTS = ('schedule', 'workflow_dispatch')
 #: A run's conclusion that is red.
 RED = ('failure', 'timed_out', 'startup_failure')
 
@@ -182,6 +200,8 @@ def red_ci(phase: str, gh: Gh) -> list[str]:
         branch = str(run.get('headBranch') or '')
         if not branch.startswith(phase) or run.get('status') != 'completed':
             continue
+        if run.get('event') in NIGHTLY_EVENTS:
+            continue  # the nightly's, which nightly() reads
         known = newest.get(branch)
         if known is None or str(run.get('createdAt')) > str(
             known.get('createdAt')
@@ -208,6 +228,95 @@ def red_ci(phase: str, gh: Gh) -> list[str]:
             + (', '.join(failed) or f'no failed job named ({run.get("url")})')
         )
     return lines
+
+
+# --- the nightly ------------------------------------------------------------
+
+
+def fix_items_path(phase: str, state: Path = STATE) -> Path:
+    match = re.fullmatch(r'rust-core-phase-([0-9]+)', phase)
+    folder = f'phase-{match.group(1)}' if match else phase
+    return state / folder / 'fix-items.md'
+
+
+def nightly(
+    phase: str,
+    gh: Gh,
+    items: Path,
+    now: dt.datetime,
+    dispatch: bool = False,
+) -> list[str]:
+    r"""The newest finished nightly run on the phase head: red, a line and
+    one fix item per run; with ``dispatch``, a run started when none began
+    in the last 24 hours."""
+    try:
+        runs = json.loads(
+            gh(['run', 'list', '--workflow', 'ci.yml', '--branch', phase,
+                '--limit', '20', '--json', RUN_FIELDS])
+        )  # fmt: skip
+    except (RuntimeError, ValueError) as error:
+        return [f'WATCHDOG gh failed: {error}']
+    ours = [r for r in runs if r.get('event') in NIGHTLY_EVENTS]
+    lines = []
+    if dispatch and not any(
+        now - _time(str(r.get('createdAt'))) < dt.timedelta(hours=24)
+        for r in ours
+    ):
+        try:
+            gh(
+                [
+                    'workflow',
+                    'run',
+                    'ci.yml',
+                    '--ref',
+                    phase,
+                    '-f',
+                    'fresh=true',
+                ]
+            )
+            lines.append(f'NIGHTLY {phase}: dispatched (none in 24 h)')
+        except RuntimeError as error:
+            lines.append(f'WATCHDOG gh failed: {error}')
+    done = [r for r in ours if r.get('status') == 'completed']
+    if not done:
+        return lines
+    run = max(done, key=lambda r: str(r.get('createdAt')))
+    if run.get('conclusion') not in RED:
+        return lines
+    number = str(run.get('databaseId'))
+    try:
+        jobs = json.loads(gh(['run', 'view', number, '--json', 'jobs']))
+    except (RuntimeError, ValueError) as error:
+        return [*lines, f'WATCHDOG gh failed: {error}']
+    failed = (
+        ', '.join(
+            str(job.get('name'))
+            for job in jobs.get('jobs', [])
+            if job.get('conclusion') in RED
+        )
+        or f'no failed job named ({run.get("url")})'
+    )
+    lines.append(f'NIGHTLY {phase} run {number}: {failed}')
+    item = (
+        f'- [ ] nightly run {number} on {phase} '
+        f'{str(run.get("headSha"))[:12]}: {failed}'
+    )
+    try:
+        known = items.read_text(encoding='utf-8') if items.is_file() else ''
+        if f'nightly run {number} ' not in known:
+            items.parent.mkdir(parents=True, exist_ok=True)
+            with open(items, 'a', encoding='utf-8') as handle:
+                handle.write(item + '\n')
+    except OSError as error:
+        lines.append(f'WATCHDOG fix items unwritable: {error}')
+    return lines
+
+
+def _time(text: str) -> dt.datetime:
+    try:
+        return dt.datetime.fromisoformat(text.replace('Z', '+00:00'))
+    except ValueError:
+        return dt.datetime.min.replace(tzinfo=dt.timezone.utc)
 
 
 # --- slip -------------------------------------------------------------------
@@ -257,15 +366,19 @@ def watch(
     slip_hours: float,
     gh: Gh,
     cwds: Callable[[], Iterable[str]],
+    items: Path | None = None,
+    dispatch: bool = False,
 ) -> list[str]:
     lines = idle_lanes(repo, phase, now, idle_minutes, cwds())
     lines += red_ci(phase, gh)
+    lines += nightly(phase, gh, items or fix_items_path(phase), now, dispatch)
     if forecast is not None:
         try:
             lines += slips(forecast, landed(repo, phase), now, slip_hours)
         except (OSError, StatsError) as error:
             lines.append(f'WATCHDOG forecast unreadable: {error}')
-    return lines
+    # One gh outage reads as one line, not one per check.
+    return list(dict.fromkeys(lines))
 
 
 def main(
@@ -283,6 +396,12 @@ def main(
     parser.add_argument('--idle-minutes', type=float, default=45)
     parser.add_argument('--slip-hours', type=float, default=2)
     parser.add_argument('--now', help='an ISO time (default: now)')
+    parser.add_argument(
+        '--dispatch',
+        action='store_true',
+        help='start the nightly on the phase head when none began in 24 h',
+    )
+    parser.add_argument('--fix-items', help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
     if not args.phase:
         print('watchdog.py: give --phase or set SDM_PHASE_BRANCH')
@@ -305,6 +424,8 @@ def main(
         args.slip_hours,
         gh,
         cwds,
+        Path(args.fix_items) if args.fix_items else None,
+        args.dispatch,
     ):
         print(line)
     return 0

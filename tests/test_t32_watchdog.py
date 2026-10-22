@@ -187,3 +187,57 @@ def test_a_lane_at_the_phase_head_with_no_package_is_not_idle(tmp_path, capsys):
     git(main, 'worktree', 'add', '-q', '-b', f'{PHASE}-lane-b',
         str(tmp_path / 'lane-b'))  # fmt: skip
     assert run(capsys, main) == []
+
+
+def test_a_red_nightly_is_one_fix_item_and_a_missing_one_is_dispatched(
+    repo, tmp_path, capsys
+):
+    calls: list[list[str]] = []
+
+    def nightly(args: Sequence[str]) -> str:
+        calls.append(list(args))
+        if list(args[:2]) == ['run', 'list'] and '--branch' in args:
+            return json.dumps(
+                [
+                    {'databaseId': 31, 'headBranch': PHASE, 'event': 'schedule',
+                     'headSha': 'a' * 40, 'status': 'completed',
+                     'conclusion': 'failure', 'createdAt': '2026-10-21T02:17:00Z'},
+                    {'databaseId': 30, 'headBranch': PHASE, 'event': 'push',
+                     'status': 'completed', 'conclusion': 'success',
+                     'createdAt': '2026-10-21T09:00:00Z'},
+                ]
+            )  # fmt: skip
+        if list(args[:2]) == ['run', 'list']:
+            return '[]'
+        if list(args[:2]) == ['workflow', 'run']:
+            return ''
+        assert list(args) == ['run', 'view', '31', '--json', 'jobs']
+        return json.dumps(
+            {'jobs': [{'name': 'engine', 'conclusion': 'failure'},
+                      {'name': 'lint', 'conclusion': 'success'}]}
+        )  # fmt: skip
+
+    items = tmp_path / 'state/phase-3/fix-items.md'
+    lane = [str(tmp_path / 'lane-a')]
+    for _ in range(2):
+        out = run(
+            capsys, repo, '--fix-items', str(items), '--dispatch',
+            gh=nightly, cwds=lane,
+        )  # fmt: skip
+        assert out == [
+            f'NIGHTLY {PHASE}: dispatched (none in 24 h)',
+            f'NIGHTLY {PHASE} run 31: engine',
+        ], out
+    # One item for the run, however often the watchdog reads it.
+    assert items.read_text().splitlines() == [
+        f'- [ ] nightly run 31 on {PHASE} {"a" * 12}: engine'
+    ]
+    assert [
+        'workflow',
+        'run',
+        'ci.yml',
+        '--ref',
+        PHASE,
+        '-f',
+        'fresh=true',
+    ] in calls
