@@ -707,6 +707,11 @@ def test_a_push_to_rust_core_is_refused_from_an_unregistered_worktree(
     origin, work, head = process._clone(tmp_path)
     env = {**os.environ, **GIT_ENV, 'SDM_ORCH_STATE': str(tmp_path / 'state')}
     env.pop('SDM_APPROVED', None)
+    # Every protected branch the pushes below update or delete exists on
+    # the remote first, so each push reaches the hook in any git version
+    # (CI's git refuses deleting a missing ref before the hook runs).
+    for name in ('rust-core', 'main', 'rust-core-reference'):
+        _git(origin, 'update-ref', f'refs/heads/{name}', head)
     subprocess.run(
         ['bash', 'scripts/rust_core/prepush.sh', '--install-hook'],
         cwd=work, env=env, check=True, capture_output=True, text=True,
