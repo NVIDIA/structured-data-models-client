@@ -41,7 +41,7 @@ def _module(path: Path, name: str) -> ModuleType:
 
 HANDOFF = _module(ROOT / 'scripts/rust_core/handoff.py', 't32_handoff_speed')
 AFFECTED = HANDOFF.affected
-ORDER = ['lint', 'reference', 'own tests', 'fails-before', 'affected']
+ORDER = ['lint', 'reference', 'own tests', 'fails-before', 'affected', 'wheel']
 GIT_ENV = {
     'GIT_AUTHOR_NAME': 't',
     'GIT_AUTHOR_EMAIL': 't@example.invalid',
@@ -86,6 +86,7 @@ def _fake_steps(
         'step_own_tests': 'own tests',
         'step_fails_before': 'fails-before',
         'step_affected': 'affected',
+        'step_wheel': 'wheel',
     }
     for function, name in names.items():
 
