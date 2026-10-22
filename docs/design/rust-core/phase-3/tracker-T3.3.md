@@ -56,3 +56,10 @@ Claude: semantic views created and dropped under the case's name, a leg's schema
 The stand-in checks a request's recorded tables and draw before exact replay, loads tables and draws of no rows, and serves Snowflake's unseeded draw as recorded; Lakebase is served on the local Postgres; the stand-in is built once in CI (`standin-binary`).
 A Snowflake case creating a semantic view from its YAML has its tables created as the YAML names them (unquoted, so upper case), and C-1's Snowflake plan creates that view first.
 From here the package is stacked on T3.2's candidate, on `rust-core-phase-3-topic-T3.3`.
+
+## Fix round 3 (reviews of e8cdee80)
+
+The stand-in serves a draw only for the request's own seed, and a recorded view read by exact replay.
+A Snowflake semantic-view case keeps its table names, its columns created upper-cased and its YAML's base tables quoted, so the recording's read-back resolves.
+C-1 and E-0 run the recording in process with every write through the live write guard, refused outside the one test schema; the jobs run the reference checkout's client and read their environment file.
+The guard module itself was at `/mnt/localssd/tmp/live-setup/write_guard.py`, which is gone from this machine: C-1 needs it restored (T3.7 brings it into the repository).
