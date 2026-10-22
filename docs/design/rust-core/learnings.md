@@ -79,7 +79,7 @@ In the first attempt, matching Python bit for bit meant copying behavior nobody 
 In Phase 2, the owner's "match the old client by default" was read literally: packages ported NumPy's quicksort for tie order, pydantic-core's integer parser, kept NaN sign bits apart, and added a comparator rule for how many identical warnings repeat.
 It cost rounds on T2.11, T2.12 and T2.13 and one judging rule.
 **Lesson:** "match" means the same answer, the same refusal kind and the same user-visible message.
-Statement counts, warning repeat counts, tie order among equal scores and hash order are matched only when a user can observe them; otherwise they fall in one standing register class the owner approves once (the owner, 2026-10-21, RCA decision 6: "Yes"; Phase 3 decision KO3-6).
+Statement counts, warning repeat counts, tie order among equal scores and hash order are matched only when a user can observe them; otherwise they fall in one standing register class the owner approves once (the owner, 2026-10-21, RCA decision 6: "Yes"; Phase 3 decision KO3-7).
 Keep a short register of quirks kept on purpose and drop the rest by explicit decision.
 **Enforced by:** `register.py validate` and the ratchet, which fail any changed outcome without an approved entry (*exists*); the reviewer report's `differences:` list, in which any difference without an approved entry blocks (*T3.0*: `docs/design/rust-core/orchestration/briefs/reviewer.md`).
 
