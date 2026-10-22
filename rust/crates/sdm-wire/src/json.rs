@@ -573,6 +573,40 @@ impl Value {
         }
     }
 
+    /// The value as the core writes it, whatever spelling the host that
+    /// wrote it chose (carried row P2-MID2-4): an integer by its digits
+    /// (`-0` is `0`), any other number as the shortest text that reads back
+    /// as its double (`3e0` and `3.00` are `3.0`, `1E16` is `1e+16`), and
+    /// text, booleans, null, arrays and objects, members in order, as they
+    /// are. A number past a double's range keeps its token. The core echoes
+    /// a value a host gave in this form, so every host reads back the same
+    /// value written the same way.
+    pub fn canonical(&self) -> Value {
+        match self {
+            Value::Number(token) if is_integer_token(token) => {
+                let digits = token.trim_start_matches('-').trim_start_matches('0');
+                Value::Number(match (digits.is_empty(), token.starts_with('-')) {
+                    (true, _) => "0".to_owned(),
+                    (false, true) => format!("-{digits}"),
+                    (false, false) => digits.to_owned(),
+                })
+            }
+            Value::Number(token) => token
+                .parse::<f64>()
+                .ok()
+                .and_then(Value::float)
+                .unwrap_or_else(|| self.clone()),
+            Value::Array(items) => Value::Array(items.iter().map(Value::canonical).collect()),
+            Value::Object(members) => Value::Object(
+                members
+                    .iter()
+                    .map(|(name, value)| (name.clone(), value.canonical()))
+                    .collect(),
+            ),
+            _ => self.clone(),
+        }
+    }
+
     /// The value's UTF-8 JSON text: compact, members in order, each number
     /// its token as read.
     pub fn to_bytes(&self) -> Vec<u8> {
