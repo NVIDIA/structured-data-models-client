@@ -21,6 +21,7 @@ Design: [design.md](design.md), choice 10, the Packages row T3.11, locked check 
 
 ## Choices made here
 
+- **No test-only data provider.** Java's S0 leg is the core's validation, as rust-host's is, so no S0 case needs data on the Java host (the orchestrator agreed).
 - **The S0 call.** Java's S0 leg is `PredictiveQuery.parse(text).validate(schema, profile)`, the core's `validate_query` through the public API, answered rather than thrown, as rust-host's leg is the core's answer as the route maps it.
   The Java host has no provider before T3.12, so `materialize` (which Python's S0 route goes through) arrives with T3.12 and validates first, as Python resolves in `materialize`.
   The observation leaves the stage and the exception class null, as rust-host's does.
@@ -32,7 +33,7 @@ Design: [design.md](design.md), choice 10, the Packages row T3.11, locked check 
   Validation crosses no Arrow and runs without either flag on JDK 17 and 21; `--enable-native-access` is asked for from JDK 24.
 - **The host facts** are read as the Python host reads them (`TZ`, `/etc/localtime`, Python's default `zoneinfo.TZPATH`, `sys.platform`'s names), so both hosts hand the core the same facts on one machine.
 - **The Linux natives are built in the wheels' jobs** (`native-wheel`, `native-wheel-aarch64`, `native-test-ops`), in their manylinux2014 images, from the same build, as choice 10 says; macOS's in `java-native` on the engine wheels' runners.
-  macOS is in because the design's locked check 14 names it; the core had not been built for macOS before.
+  macOS is in because the design's locked check 14 names it; the core had not been built for macOS before, and the orchestrator has asked the owner whether to keep it.
 - **The JAR-load jobs' containers.** Eclipse Temurin's JDK images from ECR Public, pinned by digest, the workflow's only job containers; `tests/test_ci_workflow.py` admits them by name.
 
 ## Probes
@@ -43,7 +44,8 @@ Design: [design.md](design.md), choice 10, the Packages row T3.11, locked check 
 ## Measured differences from the reference
 
 Java's S0 leg differs from the reference on the five diagnostic S0 cases exactly as rust-host's does, the core's answer being the same: `s0.boundary.date-long-field` and `date-packed` (DT-5), `escape-lone-surrogate` and `escape-surrogate-pair` (PQL-1), `depth-999` (PQL-2), all approved by the owner.
-No new register entry: whether those entries' per-runner rows extend to the `java` runner is the ratchet's admission of Java's legs (T3.2).
+No new register entry: the orchestrator decided the three entries extend to the `java` runner, and their texts say so from T3.11; the orchestrator lists it for the owner.
+None of the three has a per-runner row to add: their `case_outcomes` are the removed acceptance twins' transitions, and the five cases are diagnostic.
 
 ## Rounds
 

@@ -729,7 +729,8 @@ entries:
     them as the reference does from T1.6b to T1.6c.
   new_behavior: >-
     Refused by name; the reference reads via dateutil. On the core route
-    (python-core, rust-host) validate_query ends with INVALID_REQUEST,
+    (python-core, rust-host, and from T3.11 the Java host, runner java)
+    validate_query ends with INVALID_REQUEST,
     fields operation validate_query, rule date_literal_packed and the
     literal's span, never its text, before any field is read and needing no
     current year; on python-core the public call raises StructuredDataError
@@ -756,6 +757,10 @@ entries:
     since a changed case file no longer matches the identity its reference
     line records; T1.12's diagnostic pair of the same inputs is unchanged,
     and s0_cases.rs holds it to this refusal.
+    From T3.11 the entry covers the Java host's S0 leg (runner java), whose
+    answer is the core's validate_query answer, identical to rust-host's on
+    both diagnostic cases (the orchestrator's decision, listed for the
+    owner).
   case_outcomes:
   - {case: s0.accept.date-long-field, cell: ref-pandas3, runner: python-core, old: 'success at materialize', new: 'removed', summary: "the acceptance twin is removed: the core refuses its D8 literal by name, and T1.12's diagnostic case of the same input stays"}
   - {case: s0.accept.date-long-field, cell: ref-pandas3, runner: python-old, old: 'success at materialize', new: 'removed', summary: "the acceptance twin is removed: the core refuses its D8 literal by name, and T1.12's diagnostic case of the same input stays"}
@@ -4106,7 +4111,8 @@ entries:
     The core's escapes.rs joins an escaped pair into the character it
     encodes and reads a lone surrogate as U+FFFD, and validate_query
     accepts the query, so a core route that materializes would go on where
-    the reference refuses. Today only rust-host shows it: on the Python core
+    the reference refuses. Today only rust-host and, from T3.11, the Java
+    host (runner java) show it: on the Python core
     route the accepted query still goes through the shadow check and the
     old materializer, which refuse as the reference does.
   affected_inputs: >-
@@ -4126,6 +4132,9 @@ entries:
     code); (c) join valid pairs and refuse a lone surrogate by name. Both
     cases are diagnostic until the owner decides; the one that matches the
     decision then becomes acceptance. Approved by the owner on 2026-10-13, relayed by the orchestrator (E93): surrogates in PQL handled as proposed.
+    From T3.11 the entry covers the Java host's S0 leg (runner java), whose
+    answer is the core's validate_query answer, identical to rust-host's on
+    both cases (the orchestrator's decision, listed for the owner).
 
 - id: PQL-2
   title: PQL query depth past the reference's recursion limit
@@ -4165,6 +4174,10 @@ entries:
     at T1.12's last review; the two depth cases' texts still say about
     455, left as written, since changing a case file changes the digest
     its reference observation is held to. Approved by the owner on 2026-10-13, relayed by the orchestrator (E93): the core accepts PQL nested up to 999 levels, where the reference crashes.
+    From T3.11 the entry covers the Java host's S0 leg (runner java), which
+    accepts s0.boundary.depth-999 as rust-host does: its answer is the
+    core's validate_query answer (the orchestrator's decision, listed for
+    the owner).
 
 - id: PQL-3
   title: The day-first date literal warning given once per literal (D4)
