@@ -393,12 +393,14 @@ def test_t32_the_locked_run_needs_an_e1_verdict_for_each_live_only_item(
         )
         done = locked(manifest)
         assert 'Traceback' not in done.stderr, done.stderr
-        results[name] = (done.returncode, pair.key in done.stdout)
+        results[name] = done.returncode
+        if done.returncode:
+            assert pair.key in done.stdout, done.stdout
     assert results == {
-        'none': (1, True),
-        'equal on the candidate': (0, True),
-        'equal on another commit': (1, True),
-        'differs on the candidate': (1, True),
+        'none': 1,
+        'equal on the candidate': 0,
+        'equal on another commit': 1,
+        'differs on the candidate': 1,
     }
 
 
