@@ -37,7 +37,10 @@ back, a capture is plain data:
 On disk a capture is a directory: ``capture.json``, the capture with each
 table replaced by the name of its file, and ``tables/<sha256>.arrows``, each
 distinct table once, an uncompressed Arrow IPC stream. C-1's captures are
-``contract/captures/<leg>/<case>/``.
+``contract/captures/<leg>/<case>/``, and each leg's ``manifest.json``
+(:func:`write_manifest`) lists its cases, each one's input hash and its
+directory, with the run's commits and the leg's versions, which
+``capture_check.py`` (T3.2) reads.
 
 Private names never reach a file. Each value of a variable of
 :data:`PLACEHOLDERS` in the environment is replaced by its placeholder
@@ -46,7 +49,8 @@ the capture, the tables' cells, field names and metadata included, in each
 case form a warehouse folds it to (``MY_DB`` becomes ``{CATALOG}``), and a
 URL's host by ``{host}``; then the whole capture is searched,
 case-insensitively, for the value of every variable of :data:`PRIVATE` and
-every ``SDM_PRIVATE_*`` or ``SDM_LIVE_*`` variable, and the write fails by
+every ``SDM_PRIVATE_*``, ``SDM_LIVE_*`` or ``SDM_CAPTURE_*`` variable, and
+the write fails by
 the variable's name, never its value (:class:`PrivateName`), before any
 file is written.
 
@@ -88,33 +92,56 @@ ROOT = Path(__file__).resolve().parents[2]
 CAPTURES = ROOT / 'contract' / 'captures'
 
 #: Each environment variable whose value is a private name, and the
-#: placeholder written in its place. The live runs name their resources
-#: here and nowhere else: the test schema the write guard allows (KO3-51),
-#: the AdventureWorks schema and the existing views read (KO3-52, KO3-21),
-#: the hosts and the users.
+#: placeholder written in its place. A case names a private resource by a
+#: placeholder, which a live run resolves from ``SDM_CAPTURE_<NAME>``
+#: (``run_python.py``'s ``resolve_placeholders``, T3.2): the capture
+#: writes the placeholder back for that variable's value, so the case and
+#: its capture name it alike. Every ``SDM_CAPTURE_*`` variable is one
+#: (:func:`placeholder_variables`); those listed here are the ones the
+#: cases and live runs use: the test schema the write guard allows
+#: (KO3-51), the existing views read (KO3-52, KO3-21), the hosts and the
+#: users.
 PLACEHOLDERS = {
-    'SDM_LIVE_TEST_DATABASE': '{catalog}',
-    'SDM_LIVE_TEST_SCHEMA': '{schema}',
-    'SDM_LIVE_ADVENTUREWORKS_CATALOG': '{adventureworks_catalog}',
-    'SDM_LIVE_ADVENTUREWORKS_SCHEMA': '{adventureworks_schema}',
-    'SDM_LIVE_ADVENTUREWORKS_METRIC_VIEW': '{adventureworks_metric_view}',
-    'SDM_LIVE_SHOP_METRIC_VIEW': '{shop_metric_view}',
-    'SDM_LIVE_SHOP_SEMANTIC_VIEW': '{shop_semantic_view}',
+    'SDM_CAPTURE_CATALOG': '{catalog}',
+    'SDM_CAPTURE_SCHEMA': '{schema}',
+    'SDM_CAPTURE_ADVENTUREWORKS_METRIC_VIEW': '{adventureworks_metric_view}',
+    'SDM_CAPTURE_SHOP_METRIC_VIEW': '{shop_metric_view}',
+    'SDM_CAPTURE_SHOP_SEMANTIC_VIEW': '{shop_semantic_view}',
+    'SDM_CAPTURE_HOST': '{host}',
+    'SDM_CAPTURE_USER': '{user}',
     'DATABRICKS_HOST': '{host}',
     'DATABRICKS_SERVER_HOSTNAME': '{host}',
     'SNOWFLAKE_URL': '{host}',
     'PGHOST': '{host}',
-    'SDM_LIVE_USER': '{user}',
     'DATABRICKS_USER': '{user}',
     'SNOWFLAKE_USERNAME': '{user}',
     'PGUSER': '{user}',
 }
+#: The prefix of a placeholder's variable: ``SDM_CAPTURE_<NAME>`` stands
+#: for ``{<name>}``.
+PLACEHOLDER_PREFIX = 'SDM_CAPTURE_'
+
+
+def placeholder_variables(environ: Mapping[str, str]) -> dict[str, str]:
+    r"""Each variable of the environment with a placeholder, and the
+    placeholder: :data:`PLACEHOLDERS`', and ``{<name>}`` for every
+    ``SDM_CAPTURE_<NAME>``."""
+    found = dict(PLACEHOLDERS)
+    for name in environ:
+        rest = name[len(PLACEHOLDER_PREFIX) :]
+        if name.startswith(PLACEHOLDER_PREFIX) and re.fullmatch(
+            r'[A-Z][A-Z0-9_]*', rest
+        ):
+            found.setdefault(name, '{' + rest.lower() + '}')
+    return found
+
 
 #: Every environment variable whose value must never be written: the
 #: placeholders' and every credential or resource name a live run reads
 #: (the owner's Snowflake env file among them, KO3-24). Any variable named
-#: ``SDM_PRIVATE_*`` or ``SDM_LIVE_*`` is searched for too, so a live run
-#: names a resource of its own without changing this list.
+#: ``SDM_PRIVATE_*``, ``SDM_LIVE_*`` or ``SDM_CAPTURE_*`` is searched for
+#: too, so a live run names a resource of its own without changing this
+#: list.
 PRIVATE = tuple(
     sorted(
         {
@@ -143,7 +170,7 @@ PRIVATE = tuple(
         }
     )
 )
-PRIVATE_PREFIXES = ('SDM_PRIVATE_', 'SDM_LIVE_')
+PRIVATE_PREFIXES = ('SDM_PRIVATE_', 'SDM_LIVE_', PLACEHOLDER_PREFIX)
 
 #: The shortest value searched for or replaced when found by a prefix or
 #: as a URL's part: a shorter one would match ordinary words. A listed
@@ -238,9 +265,10 @@ class Placeholders:
 def placeholders(environ: Mapping[str, str] | None = None) -> Placeholders:
     r"""The placeholders of the environment's private names
     (:data:`PLACEHOLDERS`), a URL's host and first label as ``{host}``."""
+    environ = os.environ if environ is None else environ
     values = private_values(environ)
     names: dict[str, str] = {}
-    for variable, token in PLACEHOLDERS.items():
+    for variable, token in placeholder_variables(environ).items():
         for value in values.get(variable, []):
             names.setdefault(value, token)
     return Placeholders(names)
@@ -723,6 +751,55 @@ def convert(directory: Path) -> list[Path]:
     return changed
 
 
+#: A leg directory's list of its captures.
+MANIFEST = 'manifest.json'
+
+
+def write_manifest(directory: Path) -> Path:
+    r"""Writes ``directory/manifest.json``: every capture under it (each
+    ``*/capture.json``), all of one recording and one reference commit,
+    the versions of each leg, and each case's input hash and directory,
+    keyed ``<case>@<leg>``. A capture of another commit, two of one key, or
+    two versions of one leg are refused by name."""
+    directory = Path(directory)
+    commits: set[tuple[str, str]] = set()
+    legs: dict[str, Any] = {}
+    cases: dict[str, Any] = {}
+    for path in sorted(directory.rglob(DOCUMENT)):
+        found = read_document(path.parent)
+        commits.add((found['recording_commit'], found['reference_commit']))
+        leg = found['leg']
+        if legs.setdefault(leg, found['versions']) != found['versions']:
+            raise CaptureError(f'{path}: {leg} recorded with two versions')
+        key = f'{found["case"]}@{leg}'
+        if key in cases:
+            raise CaptureError(f'{path}: {key} captured twice')
+        cases[key] = {
+            'input_hash': found['input_hash'],
+            'capture': path.parent.relative_to(directory).as_posix(),
+        }
+    if len(commits) != 1:
+        raise CaptureError(
+            f'{directory}: captures of {len(commits)} recordings, where a '
+            'manifest lists one'
+        )
+    ((recording, reference),) = commits
+    path = directory / MANIFEST
+    path.write_text(
+        dumps(
+            {
+                'format': FORMAT,
+                'recording_commit': recording,
+                'reference_commit': reference,
+                'legs': legs,
+                'cases': cases,
+            }
+        ),
+        encoding='utf-8',
+    )
+    return path
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
     commands = parser.add_subparsers(dest='command', required=True)
@@ -734,7 +811,14 @@ def main(argv: list[str] | None = None) -> int:
         'scan', help='search captures for private names of the environment'
     )
     scanning.add_argument('directory', type=Path)
+    listing = commands.add_parser(
+        'manifest', help="write a leg directory's manifest.json"
+    )
+    listing.add_argument('directory', type=Path)
     arguments = parser.parse_args(argv)
+    if arguments.command == 'manifest':
+        print(f'wrote {write_manifest(arguments.directory)}')
+        return 0
     if arguments.command == 'convert':
         for path in convert(arguments.directory):
             print(f'converted {path}')
