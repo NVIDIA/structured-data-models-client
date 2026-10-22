@@ -492,6 +492,9 @@ fn held(relations: &[Relation]) -> String {
 /// among the rows holding all of it, and the rows missing part of it. A
 /// key of several columns counts its distinct values in a subquery, since
 /// SQLite counts one column distinct at a time (`_count_distinct`).
+/// A key the source keeps unique (`TableKey::unique`) counts its distinct
+/// values as the rows less those missing part of it, as the reference's
+/// `_key_count_sql` does.
 fn key_counts(request: &DataRequest, keys: &[TableKey]) -> Result<String, CoreError> {
     let tables = keys
         .iter()
@@ -509,7 +512,12 @@ fn key_counts(request: &DataRequest, keys: &[TableKey]) -> Result<String, CoreEr
                 .map(|c| format!("{c} IS NULL"))
                 .collect::<Vec<_>>()
                 .join(" OR ");
+            let nulls = format!("COUNT(CASE WHEN {missing} THEN 1 END)");
+            // A key the source keeps unique has one distinct value per row
+            // holding all of it, as the reference counts one
+            // (`_key_count_sql`).
             let distinct = match quoted.as_slice() {
+                _ if key.unique => format!("COUNT(*) - {nulls}"),
                 [one] => format!("COUNT(DISTINCT {one})"),
                 several => format!(
                     "(SELECT COUNT(*) FROM (SELECT DISTINCT {} FROM {table} WHERE {}))",
@@ -522,7 +530,7 @@ fn key_counts(request: &DataRequest, keys: &[TableKey]) -> Result<String, CoreEr
                 ),
             };
             format!(
-                "SELECT {position} AS k, COUNT(*) AS n, {distinct} AS d, COUNT(CASE WHEN {missing} THEN 1 END) AS z\nFROM {table}"
+                "SELECT {position} AS k, COUNT(*) AS n, {distinct} AS d, {nulls} AS z\nFROM {table}"
             )
         })
         .collect::<Vec<_>>()

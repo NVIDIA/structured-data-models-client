@@ -714,6 +714,9 @@ fn attribute_names(relation: &str, numbers: &str) -> String {
 /// (`_count_distinct` of its Postgres table: a row of several values is
 /// counted as not null when only part of it is, so those rows are left out
 /// by hand).
+/// A key the source keeps unique (`TableKey::unique`) counts its distinct
+/// values as the rows less those missing part of it, as the reference's
+/// `_key_count_sql` does.
 fn key_counts(request: &DataRequest, keys: &[TableKey]) -> Result<String, CoreError> {
     let tables = keys
         .iter()
@@ -731,7 +734,12 @@ fn key_counts(request: &DataRequest, keys: &[TableKey]) -> Result<String, CoreEr
                 .map(|c| format!("{c} IS NULL"))
                 .collect::<Vec<_>>()
                 .join(" OR ");
+            let nulls = format!("COUNT(CASE WHEN {missing} THEN 1 END)");
+            // A key the source keeps unique has one distinct value per row
+            // holding all of it, as the reference counts one
+            // (`_key_count_sql`).
             let distinct = match quoted.as_slice() {
+                _ if key.unique => format!("COUNT(*) - {nulls}"),
                 [one] => format!("COUNT(DISTINCT {one})"),
                 several => format!(
                     "COUNT(DISTINCT ({})) FILTER (WHERE {})",
@@ -744,7 +752,7 @@ fn key_counts(request: &DataRequest, keys: &[TableKey]) -> Result<String, CoreEr
                 ),
             };
             format!(
-                "SELECT {position} AS k, COUNT(*) AS n, {distinct} AS d, COUNT(CASE WHEN {missing} THEN 1 END) AS z\nFROM {table}"
+                "SELECT {position} AS k, COUNT(*) AS n, {distinct} AS d, {nulls} AS z\nFROM {table}"
             )
         })
         .collect::<Vec<_>>()
