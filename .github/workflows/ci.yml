@@ -2286,6 +2286,10 @@ jobs:
           # engine wheels' row does.
           - platform: macos-x86_64
             runner: macos-15-intel
+    # A Java job: the Java tests fail rather than pass without what they
+    # need (T3.11's gate).
+    env:
+      SDM_REQUIRE_JAVA: '1'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: rustup toolchain install
@@ -2314,6 +2318,8 @@ jobs:
     timeout-minutes: 20
     needs: [landing, native-wheel, native-wheel-aarch64, java-native]
     if: needs.landing.outputs.skip != 'true' && needs.landing.outputs.full != 'false'
+    env:
+      SDM_REQUIRE_JAVA: '1'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
@@ -2361,6 +2367,8 @@ jobs:
       fail-fast: false
       matrix:
         jdk: ['17', '21']
+    env:
+      SDM_REQUIRE_JAVA: '1'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
@@ -2415,6 +2423,7 @@ jobs:
             image: ''
     env:
       FLAGS: --enable-native-access=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED
+      SDM_REQUIRE_JAVA: '1'
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -2467,6 +2476,7 @@ jobs:
     env:
       SDM_PUSH_BASE: ${{ needs.landing.outputs.base }}
       FLAGS: --enable-native-access=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED
+      SDM_REQUIRE_JAVA: '1'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
