@@ -4,8 +4,8 @@
 
 Draft for review round 2 (T3.1), written on 2026-10-22 from `origin/rust-core-phase-3` at 3ae4d1af (Phase 2 merged), against T3.0's process mechanisms as they stand at 36e0779f on T3.0's topic branch.
 Round 1's findings, the owner's Java answer, and the owner's answers to the Java questions and to the design questions are applied ([tracker.md](tracker.md), "Design review rounds").
-The owner's answers so far are in [decisions.md](decisions.md), KO3-1 to KO3-49; the open questions are at the end of this page, all together, each with a recommendation, the day-1 ones first.
-The acceptance checks below lock at T3.1's landing, after both reviewers approve one SHA and the day-1 questions are answered.
+The owner's answers so far are in [decisions.md](decisions.md), KO3-1 to KO3-58; none is open ("Owner questions", at the end of this page).
+The acceptance checks below lock at T3.1's landing, after both reviewers approve one SHA.
 T3.1 lands stacked on T3.0 (T3.0's "Stacked landings"), so everything this page names from T3.0 exists when T3.1 lands.
 Everything not stated here is as in [Phase 2's design](../phase-2/design.md) and [Phase 1's design](../phase-1/design.md); their decision rows stay in force unless a row here or an owner answer changes them.
 Choices marked "orchestrator's decision" are the orchestrator's, not the owner's; the owner sees them at the next check-in.
@@ -36,7 +36,7 @@ The forecast from this design's landing is about 40 hours to the Python switch, 
 It assumes one fix cycle in the live end campaign, without which the switch lands at about H32.
 The slip report compares the phase against the forecast as it runs and never stops work (KO3-12).
 The owner approved the offline judge and answered the design's other questions (KO3-36 to KO3-49), including the rule for differences: the core matches the old client or does better, where better means a better error or more support, and only a worse difference blocks.
-Four questions still block day 1, because the early run needs them: where test tables may be written on Databricks, starting the stopped Lakebase instance, Snowflake's test role, and the serving endpoint's model version.
+No owner question is open, and nothing blocks day 1: the live resources the early run needs are ready (KO3-50 to KO3-53): the Lakebase instance is running, one dedicated test schema exists on Databricks and one on Snowflake, a write guard lets the tests write only there, and a warm serving endpoint for model version 26 is up.
 
 ## Goal
 
@@ -50,8 +50,9 @@ Java follows Python and never holds it back (plan section 2, decision 1): Java's
 ## Order of work
 
 1. **Before the clock starts** (no product code):
-   - T3.0 lands, and this design is reviewed and locked with the owner's day-1 answers; T3.1 lands stacked on T3.0;
+   - T3.0 lands, and this design is reviewed and locked; T3.1 lands stacked on T3.0;
    - the full dry run of the checking tools over [dryrun-plan.yaml](dryrun-plan.yaml) runs on T3.0's tree, with the runners, rust-host and the locked gate, and its gaps join T3.2's list;
+   - the live resources ready (done: KO3-50 to KO3-53);
    - one brief per package from [briefs/package.md](../orchestration/briefs/package.md), each passing `scripts/rust_core/brief_check.py`;
    - every warehouse test author (T3.4 to T3.7, and T3.13 for Java's Databricks cases) writes the input files of its S2 cases, so that every case kind in dryrun-plan.yaml has its cases before the early capture; S1's cases exist already.
 2. **H0, four Python packages and the Java lane at once**: T3.2 (the tooling train), T3.3 (the warehouse harness), T3.4 (Databricks) and T3.8 (the forced-route failures), and T3.11 (the Java binding) on its own lane (KO3-28).
@@ -73,8 +74,8 @@ Java follows Python and never holds it back (plan section 2, decision 1): Java's
 4. **Lakebase**: a `PostgresSource` over a Lakebase connection on Phase 2's Postgres dialect, the `sdm_connectors.databricks.lakebase()` connect path, the `lakebase` routes, and Postgres reads qualified by the relation's schema part (P2-MID2-6).
 5. **Ranking and forecasting on every warehouse leg**, through the decomposition Phase 2 moved into the core; nothing new in the core's operations.
 6. **The contract bump, v28, once** (lesson 11), in T3.4 (choice 3).
-7. **The job matrix**: the 21 cells of `phase-0/databricks-jobs.md` (J01 to J21: SQL warehouse, Spark and Lakebase; DBR 14.3 to 17.3 and serverless 1 to 6; x86_64 and aarch64, both in scope, KO3-26), each a one-time job installing the wheels under test (KO2-95's rule: the reference's for the baseline pass, the candidate's for the core pass), compared question by question against the owner's existing serving endpoint and metric views (KO3-21).
-   CI's `native-wheel` already builds the aarch64 wheel (KO2-40); which Databricks runtimes run on aarch64 nodes in this workspace is probed once in C-1 (owner question Q3).
+7. **The job matrix**: the 21 cells of `phase-0/databricks-jobs.md` (J01 to J21: SQL warehouse, Spark and Lakebase; DBR 14.3 to 17.3 and serverless 1 to 6; x86_64 and aarch64, both in scope, KO3-26), each a one-time job installing the wheels under test (KO2-95's rule: the reference's for the baseline pass, the candidate's for the core pass), compared question by question against the model-version-26 serving endpoint (KO3-53) and the owner's existing metric views (KO3-21).
+   CI's `native-wheel` already builds the aarch64 wheel (KO2-40); in this workspace only the newest long-term-support runtime line (18) offers aarch64 runtimes, so the aarch64 cells (J02, J04, J06 and J11) run on that line's aarch64 runtime and the older runtimes stay x86_64 only (the orchestrator's decision under the owner's overnight delegation, KO3-9, from the owner's "both x86 and aarch64", KO3-26; listed for the owner).
    The DBR 14.3 install revalidation Phase 1 carried (T1.35, E154) is cells J01 and J02.
 8. **Both Databricks notebooks on the core**: `kumo_relational_quickstart.ipynb` (the AdventureWorks notebook of E27 and E31, which replaced the deleted one) and `lakebase_relational.ipynb`, once each in the end campaign.
 9. **Java** (KO3-27), choice 10: the `sdm-jni` binding; a JAR built with Maven, with natives for Linux x86_64 and aarch64 and macOS arm64 and x86_64 (Phase 0 decision G13, KO3-32); Java 17 bytecode, tested on JDK 17 and 21 (KO3-34); a Java runner for the contract cases; Java S0; Java S1 on DuckDB, SQLite and Postgres through JDBC with the JDBC-to-Arrow conversion table and L5 for Java; Java on a Databricks SQL warehouse and a metric view through the Databricks JDBC driver, answering Phase 0's J2 questions live at the end against the same data as Python.
@@ -112,15 +113,15 @@ Since T3.0's fix round, `scripts/rust_core/judging-paths.txt` lists only the gat
 | P2G-1 widened to every call the endpoint refuses | P2-T2.16-13 | T3.9 |
 | **DuckDB 2.0** support and the `zip` advisory exceptions | P2-T2.16-12, OF-2 | T3.9 |
 | The interim edit gate's retirement | P2-T2.16-8 | T3.9 |
-| The overnight decisions the owner has not read: three refusals of input the reference answers (P2B-19, P2I-1, P2I-4) and P2D-2 to P2D-5, P2G-4, P2G-5, KO2-89 | OF-5 | T3.9, after owner questions Q9 and Q10 |
+| The overnight decisions the owner has now read: three refusals of input the reference answers, lifted (P2B-19, P2I-1, P2I-4; KO3-44), and P2D-2 to P2D-5, P2G-4, P2G-5, KO2-89, confirmed (KO3-57) | OF-5 | T3.9 |
 | **Contract rows for v28**, and the interfaces a Java host sees | P2-MID2-2, P2-T2.2-1, P2-T2.1b-1, P2-T2.8c-2, P2-MID2-3, P2-MID2-5, FX-6, P2-MID2-4, P2-WR-6 | T3.4 |
 | Postgres reads qualified by the relation's schema part | P2-MID2-6 | T3.7 |
 | Expression columns and metric views (KO2-25, KO2-39) | OF-4 | T3.4 (the contract fields), T3.5 (the views) |
 | RS-6 on the warehouses | OF-3 | T3.4 and T3.6, under KO3-41 |
 | The live benchmark's "different requests" result fails the run (a Phase 1 row the table does not list) | G8 | T3.7 |
 | The held-out set's stored-NaN and `key_name_order` cases | OF-6 | HO3 |
-| A bigger machine | OF-9 | Owner question Q12 |
-| Branch protection on `rust-core`; `ci.yml`'s phase predicate | OF-7 | Owner question Q11 (protection); T3.3 (the predicate) |
+| A bigger machine | OF-9 | Closed: no (KO3-55) |
+| Branch protection on `rust-core`; `ci.yml`'s phase predicate | OF-7 | T3.0 (KO3-56: its command hook and pre-push hook refuse an agent's push to `rust-core`); T3.3 (the predicate) |
 | Judging rows Phase 3's work hits: owner approvals read by allowlist; the statement log on psycopg copy and stream and the warehouse drivers; a stale installed wheel; a stale `origin/main`; result rows hashed as text so a case's predictions are compared again | U4, P2-T2.1a-2, P2-MID2-7, P2-T2.0f-1, P2-T2.21-1 | T3.2 |
 | Refusal maps citing quoted text, not line numbers (they broke four Phase 2 landings) | P2-T2.1b-6 | T3.7 |
 | Time zones set per session and process | C16, C18, M5 | T3.3 (`ci.yml`, the vectors); C18's static check in T3.2's tests |
@@ -259,6 +260,8 @@ Live work runs only under the owner's live rules: one-time jobs only, uploads on
 The owner's shape (KO3-22): code against the offline judge, and run the live tests at the end.
 So there is one live run at the start (C-1) and one live campaign at the end (E-0 to E-7), run on the commit that lands.
 Nothing account-specific enters the repository: the profile, the volume, the catalog and schemas, the warehouses, the Lakebase instance, the endpoint and the views come from the environment and the orchestrator's private notes; Snowflake's credentials come from the owner's env file, loaded into the run's environment and never read or printed (KO3-24).
+On Databricks the tests read the existing schema where AdventureWorks is loaded (KO3-52); on every warehouse they write only to the one dedicated test schema, through a write guard that refuses any other target (KO3-51): the client's own logic only reads.
+The guard exists as a tested script (about 50 tests) outside the repository, which C-1 uses; T3.7 brings it into `scripts/live/` with its tests, and every later live run goes through it.
 Wheels: C-1 and E-2's baseline pass install the reference's wheels; every other live run installs the candidate's own wheels, built by CI for x86_64 and aarch64 (KO2-40, KO3-26).
 
 **Offline, from C-1** (seconds per case, no account): every warehouse leg of every case on python-core and rust-host, on the stand-in (choice 2); the dialects' goldens with their diff against the recorded statements; view interpretation from the recorded YAML; the provider kit on the stand-in; Lakebase's whole data path on local Postgres; offline L7 over the stand-in legs.
@@ -267,20 +270,20 @@ Wheels: C-1 and E-2's baseline pass install the reference's wheels; every other 
 
 | Live run | When | What runs | Jobs or sessions | Wall time (forecast) |
 |---|---|---|---|---|
-| C-1 The early capture | once, about H5 to H8, from the reviewed recording SHA | Phase 2's bases and AdventureWorks loaded into each warehouse's test schema; every S1 acceptance case and every S2 case on the old client on each of the four legs, recorded (choice 2); the existing views' YAML; the provider kit's fixture; one small aarch64 job per runtime the matrix needs, installing nothing but Python, to learn which runtimes run on aarch64 nodes here (Q3) | SQL warehouse and Snowflake: sessions from this machine; Spark and Lakebase: one one-time job each; about 6 tiny aarch64 probe jobs | about 3 h, the legs in parallel |
+| C-1 The early capture | once, about H5 to H8, from the reviewed recording SHA | Phase 2's bases and AdventureWorks loaded into each warehouse's test schema; every S1 acceptance case and every S2 case on the old client on each of the four legs, recorded (choice 2); the existing views' YAML; the provider kit's fixture | SQL warehouse and Snowflake: sessions from this machine; Spark and Lakebase: one one-time job each | about 3 h, the legs in parallel |
 | E-0 Reference top-up | the end campaign, first | The old client on every case added or changed after C-1, and on every case if `main` moved | As C-1 | 0.5 h (2 h if `main` moved) |
 | E-1 The core on every warehouse case (L6) | after E-0 | Every case on python-core live on each leg, recorded as the core's capture, compared with E-0 and C-1 under H9 in full; the provider kit once live | As C-1 | about 2 h, in parallel |
-| E-2 The job matrix, both passes | after E-1 | 21 cells: the 15 Unity Catalog cells ask the quickstart's 5 questions and the deleted notebook's 8 (195 runs per pass), the 6 Lakebase cells the 6 base questions (36 runs); once on the reference's wheels, once on the candidate's; against the owner's existing endpoint and views | 42 one-time jobs, in parallel | about 1.5 h |
+| E-2 The job matrix, both passes | after E-1 | 21 cells: the 15 Unity Catalog cells ask the quickstart's 5 questions and the deleted notebook's 8 (195 runs per pass), the 6 Lakebase cells the 6 base questions (36 runs); once on the reference's wheels, once on the candidate's; against the model-version-26 endpoint (KO3-53) and the owner's existing views | 42 one-time jobs, in parallel | about 1.5 h |
 | E-3 Both notebooks on the core | beside E-2 | `kumo_relational_quickstart.ipynb` and `lakebase_relational.ipynb` on the candidate's wheels | Two one-time jobs | about 1 h |
 | E-4 Live L7 timing | after E-2, on quiet warehouses | Push-down median over at least 5 interleaved runs per scenario, caches off (`use_cached_result` off on Databricks, `USE_CACHED_RESULT` off on Snowflake), the core against the old client | Sessions from this machine | about 1.5 h |
 | E-5 Held-out warehouse legs | inside E-1's window, once | HO3's warehouse cases: the old client and python-core live, recorded; rust-host on the stand-in loaded from E-5's own recording | One session or job per leg | about 1 h |
 | E-6 L3 on warehouses (KO3-43) | inside E-2's window | 20 generated sources per warehouse, both routes | One session or job per warehouse | about 1 h |
-| E-7 Java on Databricks | inside E-2's window, on the same candidate | Phase 0's J2 questions, the four base questions and the two metric-view questions (KO3-35), through the Databricks JDBC driver on the SQL warehouse, compared with Python's answers on the same data in E-1 and E-2 | A session from this machine, and one job on DBR 17.3 (Java 17) running the JAR on x86_64 and on aarch64 | about 45 min |
+| E-7 Java on Databricks | inside E-2's window, on the same candidate | Phase 0's J2 questions, the four base questions and the two metric-view questions (KO3-35), through the Databricks JDBC driver on the SQL warehouse, compared with Python's answers on the same data in E-1 and E-2 | A session from this machine, and one job running the JAR on x86_64 (DBR 17.3, Java 17) and one on aarch64 (the newest runtime line's aarch64 runtime) | about 45 min |
 
 The end campaign's serial chain is E-0, E-1, E-2 with E-3, then E-4: about 5 hours.
 It runs twice in the forecast: once on the first switched candidate, beside the whole-phase review, and again on the final candidate after their fixes, since live evidence counts only for the commit that lands (lesson 15); any change after the final run under `rust/`, `packages/` or `contract/` runs it again.
 If the first run and the review find nothing, the first run is the evidence and the switch lands about 8 hours earlier.
-Cost: about 60 one-time jobs (2 for C-1, about 6 aarch64 probes, 84 matrix jobs over two campaign runs counted once if the first run is the evidence, 4 notebook runs, 2 to 3 for the held-out set and L3, 2 for Java), each 10 to 20 minutes on a single-node cluster or serverless; the authorized SQL warehouse for about 10 hours of sessions in all, auto-stopping; Snowflake's smallest warehouse for about 6 hours; the owner's always-warm endpoint during the matrix and notebook runs.
+Cost: about 55 one-time jobs (2 for C-1, 84 matrix jobs over two campaign runs counted once if the first run is the evidence, 4 notebook runs, 2 to 3 for the held-out set and L3, 2 for Java), each 10 to 20 minutes on a single-node cluster or serverless; the authorized SQL warehouse for about 10 hours of sessions in all, auto-stopping; Snowflake's smallest warehouse for about 6 hours; the warm model-version-26 endpoint during the matrix and notebook runs (KO3-53).
 The orchestrator cannot see prices; the owner can turn these hours into money.
 
 ## Packages
@@ -301,9 +304,9 @@ Hours are implementation plus two review rounds, Phase 2's measured median for p
 | T3.4 | Databricks and contract v28 | Choice 3's bump; the `databricks` dialect and catalog reader; the SQL-warehouse and Spark providers; routes and backend detection for `databricks-sql` and `databricks-spark`; RS-6's percentage text; U12, P2-T2.2-3 | Every case's `databricks-sql` and `databricks-spark` legs equal to C-1's reference lines on python-core and rust-host on the stand-in; the goldens of every request kind, with their diff against the recorded statements reviewed; the key-type pair matrix on Databricks' recorded tables; the provider kit on both providers on the stand-in; schema lock and both loaders at v28; pending-live cases listed | T3.2, T3.3 (stacked on their candidates); C-1 | T3.4's | B | 2 | M/R, about 10 h |
 | T3.5 | Views | The view model in `sdm-schema`, the YAML crate with PyYAML's 1.1 reading, the expression allow-list port, metric view retrieval and interpretation, semantic view interpretation; its dependencies row | Every metric-view case on `databricks-sql` and `databricks-spark` equal to C-1's reference lines on the stand-in; semantic-view interpretation from the recorded YAML equal to the old client's schema; YAML 1.1 value vectors (`yes`, `on`, `off`, `~`, octal-looking text) read as PyYAML reads them | T3.4 (v28's relation fields; stacked on its candidate) | T3.5's | C | 3 | M/R, about 9 h |
 | T3.6 | Snowflake | The `snowflake` dialect and catalog reader, the semantic view's retrieval, the provider (connector and Snowpark), routes | Every case's `snowflake` leg and every semantic-view case equal to C-1's reference lines on both hosts on the stand-in (the semantic-view cases once T3.5's interpreter is under it); goldens reviewed against the recorded statements; the key-type pair matrix and a session-zone case on Snowflake's recorded tables; the provider kit on the stand-in | T3.4; T3.5 for the semantic-view cases; C-1 | T3.6's | D | 2 | M, about 8 h |
-| T3.7 | Lakebase, the live runners and the phase-end reports | The `lakebase()` connect path and routes on the Postgres dialect; reads qualified by schema (P2-MID2-6); the matrix runner and job template, both notebooks' driver, installing the wheels under test on each cell; live timing in `contract/tools/l7.py --live`; G8; `differential.py`'s database axis and classes; `evidence.py`'s per-leg table; the local H24 tool; refusal maps citing quoted text | Every case's `lakebase` leg equal to C-1's reference lines on local Postgres; the matrix runner's dry mode prints 21 cells' job specs, and a cell installing a published wheel instead of the one under test fails; `l7.py --live --dry` prints the interleaved plan with caches off, and a seeded slow scenario fails its report; L3 runs on SQLite and Postgres; the per-case table shows every leg | T3.2, T3.3; C-1 | T3.7's | G | 2 | M, about 8 h |
+| T3.7 | Lakebase, the live runners and the phase-end reports | The `lakebase()` connect path and routes on the Postgres dialect; reads qualified by schema (P2-MID2-6); the write guard in `scripts/live/` with its tests, through which every live run writes only to the dedicated test schema (KO3-51); the matrix runner and job template, both notebooks' driver, installing the wheels under test on each cell; live timing in `contract/tools/l7.py --live`; G8; `differential.py`'s database axis and classes; `evidence.py`'s per-leg table; the local H24 tool; refusal maps citing quoted text | Every case's `lakebase` leg equal to C-1's reference lines on local Postgres; the write guard refuses a write outside the test schema on each warehouse's statement forms, and every live runner goes through it; the matrix runner's dry mode prints 21 cells' job specs, and a cell installing a published wheel instead of the one under test fails; `l7.py --live --dry` prints the interleaved plan with caches off, and a seeded slow scenario fails its report; L3 runs on SQLite and Postgres; the per-case table shows every leg | T3.2, T3.3; C-1 | T3.7's | G | 2 | M, about 8 h |
 | T3.8 | Switch-ready: the forced-route failures | The 118 failures fixed in the core or the bridge's wording, each family ported from the old client's rule (the time-column warning, key counting and its refusals, Postgres refusals and the described-schema `RouteError`); the validator chosen in the core (P2-MID2-1); the bridge declarations its bridge edits need | `pytest packages/structured-data-models-client/tests` with every S0 and S1 route forced: 0 failures; a case per family on three databases | T3.1 | T3.8's | E | 1 | R, about 8 h |
-| T3.9 | Differences, coverage and DuckDB 2.0 | The 11 user-visible rows matched or registered; OF-5: the three overnight refusals lifted (KO3-44), the other overnight decisions per Q10; acceptance cases for every S0 and S1 path and cell coverage still finds empty; the S1 test rows; P2G-1 widened; DuckDB 2.0 supported, its CI cell, and the `zip` exceptions dropped if its build allows; the interim edit gate retired; register tidy | `coverage.py` S1 rule (T3.2) with no empty path or cell; each row's case fails before and passes after; CI green on DuckDB 1.5 and 2.0 | T3.2 (coverage); T3.8 for the shared files | T3.9's | F | 2 | M, about 9 h |
+| T3.9 | Differences, coverage and DuckDB 2.0 | The 11 user-visible rows matched or registered; OF-5: the three overnight refusals lifted (KO3-44), the other overnight decisions' register entries pointed at KO3-57; acceptance cases for every S0 and S1 path and cell coverage still finds empty; the S1 test rows; P2G-1 widened; DuckDB 2.0 supported, its CI cell, and the `zip` exceptions dropped if its build allows; the interim edit gate retired; register tidy | `coverage.py` S1 rule (T3.2) with no empty path or cell; each row's case fails before and passes after; CI green on DuckDB 1.5 and 2.0 | T3.2 (coverage); T3.8 for the shared files | T3.9's | F | 2 | M, about 9 h |
 | T3.10 | The switch and the switch gate | Choice 8's flip and guard test; the old-route-only list; the S2 case IDs added to half `3a` (the one planned change to the locked set); register reconciled; `main` merged if it moved; the locked run; the end-of-phase reports; the whole-phase review; the end campaign E-0 to E-7 on the final candidate; the core's live capture committed for rust-host and CI; HO3 once; the evidence pack; the packet | The locked checks below | all Python packages; the Java packages that have landed by its final candidate | T3.10's (the guard test and the switched suites) | A | alone | R, about 17 h on the critical path |
 | T3.11 | Java binding, API and Java S0 | `sdm-jni`; the Maven build and the JAR with natives for Linux x86_64 and aarch64 and macOS arm64 and x86_64; the Java API of choice 10 and its exception mapping; the SLF4J bridge; `contract/runners/run_java.py` and the Java runner program; CI jobs building the JAR and running the Java legs (JDK 17 and 21 on x86_64, JDK 21 on aarch64 and macOS); a panic test and a JAR-load test in a clean container | Every S0 case on the Java host equal to the reference; a panic inside the core reaches Java as an exception and leaves the JVM running; the JAR loads on every JDK and platform listed; L0 admits `jni` only in `sdm-jni` | T3.2 (the `java` runner name; stacked on its candidate) | T3.11's | J | 3 | N, about 9 h |
 | T3.12 | Java S1 through JDBC | JDBC providers for DuckDB, SQLite and Postgres; the JDBC-to-Arrow conversion table; L5 for Java; the model transport over `java.net.http` | Every S1 case on Java's 46 S1 paths equal to the reference on each database on the Java host; L5: the same tables through Java's and Python's drivers reach the core as identical Arrow, and a seeded unit or scale change in one JDBC path fails; `coverage.py`'s Java rule with no empty S0 or S1 path | T3.11 (stacked on its candidate); T3.8, T3.9 (the shared-core fixes) | T3.12's | J | 3 | M/N, about 9 h |
@@ -338,12 +341,12 @@ The fifth lane's builds queue behind the others in `heavy`, which the forecast c
 
 **Critical path:** T3.1 → T3.2's and T3.3's recording commits and their review (4.5 h) → C-1 (3 h) → T3.4 on the stand-in → stack 2 → T3.5 → T3.10's flip, review and two end-campaign runs: about 40 hours to the Python switch, which ends the phase.
 Java is off that path: its lane runs beside the Python slots from H0, and its last package lands about 11 hours before the switch.
-Before H0: T3.0's landing, this design's review rounds and the owner's day-1 answers, the S2 test authors' case files, and the full dry run.
+Before H0: T3.0's landing, this design's review rounds, the S2 test authors' case files, and the full dry run.
 
 This forecast misses the owner's one-day goal by about 16 hours.
 The round-1 draft's 28 hours double-booked build slots, under-counted the end campaign, and ran live evidence on a commit before the one that lands; this one does not.
 With the fifth lane, Java ends inside the phase rather than after it; with only four slots it would have ended about 3 hours after the switch.
-What would shorten it, in order: the end campaign passing on its first run with nothing for the whole-phase review to fix (8 hours); a bigger machine (Q12), which would remove the fifth lane's queueing (about an hour).
+What would shorten it: the end campaign passing on its first run with nothing for the whole-phase review to fix (8 hours); the owner declined a bigger machine (KO3-55).
 None of them moves scope out of Phase 3.
 
 ## Machine and lanes
@@ -370,7 +373,7 @@ The full run, with the runners (`--python`), rust-host (`--rust`) and the locked
 
 ## Owner check-ins
 
-- Kickoff: the questions below, on a readable page, all at once; the day-1 questions first.
+- Kickoff: done; every design question is answered ("Owner questions").
 - Twice a day, a five-line check-in with the slip report's line, the pending-live count, the register entries reviewers cannot approve, and any overnight decision written plainly when made (KO3-9).
 - One design checkpoint when stack 2 has landed (half the planned landings), and the whole-phase review in T3.10, both by both reviewers.
 - End: the go or no-go packet (handbook, "Ending a phase", step 6), Java included.
@@ -450,53 +453,23 @@ The rest is judged outside the gate, as Phase 2's KO2-76 set it: CI-green parts 
 | CI slows or a landing waits on serial runs | Stacks of four; the timing guard; the leg jobs in parallel; captures about 20 MB | 14 |
 | A capture or live run judged on the wrong commit or reference | Captures name their commits and versions; live evidence on the landing commit; CI's push-time base | 15 |
 | Briefs leave the warehouse questions open | The package template, checked by `brief_check.py` before each launch | 16 |
-| A test schema, the Lakebase instance, Snowflake's role or the endpoint is not ready for C-1 | Day-1 questions D1 to D4; the discovery already found each candidate (privately) | 16 |
-| Tests run with Snowflake's account-admin role touch other teams' data | A least-privilege test role (D3); otherwise every statement confined to the test schema | 19 |
+| A live resource is not ready for C-1 | Done before H0: the test schemas exist, Lakebase is running, the v26 endpoint is up (KO3-50 to KO3-53) | 16 |
+| Tests run with Snowflake's account-admin role touch other teams' data | The write guard: tests write only to the dedicated test schema (KO3-51), and the client itself only reads | 19 |
 | Private names or credentials leak into a committed capture or a log | Placeholders written before any file; the write fails on a name from the environment; Snowflake's env file loaded, never read or printed (KO3-24) | 19 |
 | Three non-product live failures stop live work | Quota and capacity errors retried once by the runner (KO3-49) | 9 |
 | The Java lane slows the Python path on an 8-CPU machine | `heavy` admission; Java's builds share the Rust cache; the forecast counts an hour of queueing (KO3-28) | 14 |
 | The 118 forced-route failures hide more than three families | T3.8 starts on day 1 with the whole failing list; its exit is 0 failures | 6 |
-| An older Databricks runtime does not run on aarch64 nodes | C-1's aarch64 probes; owner question Q3 before E-2 | 14 |
+| An older Databricks runtime has no aarch64 build | The aarch64 cells run on the newest runtime line's aarch64 runtime; older runtimes stay x86_64 (the orchestrator's decision, listed for the owner) | 14 |
 
 ## Owner questions
 
-Each opens with what it means in plain words and a recommendation; IDs are footnotes.
-Work proceeds as recommended until an answer arrives, except where a question says it blocks.
-
-**Answered** (KO3-18 to KO3-49): live access; Java and its questions; and on 2026-10-22 (night) the switch all at once with KO2-94's refusals kept until Phase 4 (KO3-36), old-engine tests on the old route until Phase 5 (KO3-37), the job matrix's questions (KO3-38), live timing in the end campaign (KO3-39), view YAML read as PyYAML reads it (KO3-40), the old client's sampling SQL on the warehouses and the rule "parity or better", better meaning a better error or more support (KO3-41), the comparison on the old client's recorded data gating (KO3-42), L3 on the warehouses (KO3-43), the three overnight refusals lifted (KO3-44), the offline judge, option (a) (KO3-45), one standing register class for what a user cannot see, whose entry T3.9 writes (KO3-46), the severity rule: only a worse difference blocks (KO3-47), the "no" list (KO3-48), and one retry of a quota or capacity error before it counts as a live failure (KO3-49).
+**Answered** (KO3-18 to KO3-58): live access; Java and its questions; and on 2026-10-22 (night) the switch all at once with KO2-94's refusals kept until Phase 4 (KO3-36), old-engine tests on the old route until Phase 5 (KO3-37), the job matrix's questions (KO3-38), live timing in the end campaign (KO3-39), view YAML read as PyYAML reads it (KO3-40), the old client's sampling SQL on the warehouses and the rule "parity or better", better meaning a better error or more support (KO3-41), the comparison on the old client's recorded data gating (KO3-42), L3 on the warehouses (KO3-43), the three overnight refusals lifted (KO3-44), the offline judge, option (a) (KO3-45), one standing register class for what a user cannot see, whose entry T3.9 writes (KO3-46), the severity rule: only a worse difference blocks (KO3-47), the "no" list (KO3-48), and one retry of a quota or capacity error before it counts as a live failure (KO3-49).
 The discovery run found a candidate for every resource the live-access answers point to; the names stay in the orchestrator's private notes.
 
-**Day 1 (they block C-1, the early capture, at about H5):**
+**Live resources** (KO3-50 to KO3-53): Lakebase may be started and is running; on Databricks the tests read the existing AdventureWorks schema and write only to one dedicated test schema; on Snowflake they write only to one dedicated test schema, through a write guard, with the client's own logic read-only; the endpoint serves model version 26 and stays warm.
+Also answered: confirming Phase 2's overnight decisions under the rule of parity or better (KO3-57); protecting `rust-core` by a check that stops agents pushing it, which T3.0's command hook and pre-push hook gain (KO3-56); no bigger machine (KO3-55); and the Java packages as proposed (KO3-54).
 
-- **D1. Where the tests may write on Databricks.**
-  The tests create tables and a few views; your sandbox catalog has an empty schema marked safe to drop and the wheels volume from earlier runs.
-  Recommendation: a new dedicated Phase 3 schema in the sandbox catalog for tables and views, and a new folder in the existing wheels volume; nothing written anywhere else.
-- **D2. The Lakebase instance.**
-  The instance you created earlier for parity recordings is stopped.
-  Recommendation: start it for C-1 and the end campaign, and stop it after each.
-- **D3. Snowflake's test role.**
-  The credentials you gave reach Snowflake with the account's admin role, which could drop any team's data.
-  Recommendation: create a test role that can use the smallest warehouse, owns one new test schema (tables, views, semantic views) and can read the existing shop tables and semantic view; if you prefer not to, the tests run with the admin role but every statement stays in that one new schema.
-- **D4. The serving endpoint.**
-  Your newest always-warm endpoint serves model version 24, while the registered model has versions up to 26 that no endpoint serves.
-  Recommendation: test against that endpoint, so no run waits on a cold start.
+**No question is open.**
 
-**Other open questions:**
-
-- **Q3. aarch64 Databricks runtimes.**
-  In your workspace only the newest runtime line has explicit aarch64 versions; whether DBR 14.3, 15.4 and 16.4 run on aarch64 nodes is unproven, and cells J02, J04 and J06 need them.
-  Recommendation: C-1 probes it with tiny jobs; any runtime that cannot run on aarch64 there has its aarch64 cell run on the newest aarch64 runtime instead, recorded in the evidence.
-- **Q10. The other Phase 2 overnight decisions, for your confirmation** (each was the orchestrator's under your delegation; each can be reversed; each is the same as the old client or better under your rule, KO3-41):
-  - a key or time column given as a value that is not a name, with a very long printed form, is refused with a shorter message than the old client's (P2D-2);
-  - a Postgres JSON cell holding a broken character escape is refused by name, where the old client crashes (P2D-3);
-  - a refusal of a key past the 64-bit range names the table, column and row but not the value read from the data (P2D-4);
-  - a Postgres `json[]` column is left out of the schema with a notice, where the old client refuses the whole table (P2D-5);
-  - Postgres keys stored as numbers without a declared precision are compared as exact numbers, so `1.0` and `1.00` are one key, as the database itself compares them (P2G-4, P2G-5);
-  - warnings and refusals about the anchor and context times may name the time column's earliest and latest times, as the old client does (KO2-89).
-  Recommendation: confirm all of them.
-- **Q11. Branch protection on `rust-core`.**
-  Today any push could change it; only your merges should.
-  Recommendation: protect it so only you can push.
-- **Q12. A bigger build machine.**
-  Today's machine takes four Python packages and the Java lane, with about an hour of queueing.
-  Recommendation: only if one is easy to get; the plan does not depend on it.
+**The orchestrator's decisions, listed for the owner's reading** (under the owner's overnight delegation, KO3-9; each reversible):
+- aarch64 on Databricks: in this workspace only the newest long-term-support runtime line offers aarch64 runtimes, so the matrix's aarch64 cells run on it, and the older runtimes (14.3, 15.4, 16.4, 17.3) are tested on x86_64 only, from the owner's "both x86 and aarch64" (KO3-26).
