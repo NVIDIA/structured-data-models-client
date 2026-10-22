@@ -55,7 +55,7 @@ fn expected(name: &str) -> Value {
 
 fn the_case(id: &str) -> (Case, bases::Bases) {
     let contract = root().join("contract");
-    let loaded = case::load(&[contract.join("cases")]).unwrap();
+    let loaded = case::load_for(&[contract.join("cases")], case::Database::Duckdb).unwrap();
     let found = loaded
         .iter()
         .find(|l| l.case.id == id)

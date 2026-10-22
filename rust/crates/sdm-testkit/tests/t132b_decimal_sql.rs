@@ -80,7 +80,7 @@ fn gated(test: &str, check: impl FnOnce() + std::panic::UnwindSafe) {
 
 fn family_cases() -> (Vec<Case>, bases::Bases) {
     let contract = root().join("contract");
-    let loaded = case::load(&[contract.join("cases")]).unwrap();
+    let loaded = case::load_for(&[contract.join("cases")], case::Database::Duckdb).unwrap();
     let mut cases: Vec<Case> = loaded
         .into_iter()
         .map(|l| l.case)

@@ -71,7 +71,7 @@ fn family_maps() -> Vec<(String, Value)> {
 fn cases() -> &'static BTreeMap<String, (Case, Value)> {
     static CASES: OnceLock<BTreeMap<String, (Case, Value)>> = OnceLock::new();
     CASES.get_or_init(|| {
-        let loaded = case::load(&[contract().join("cases")]).unwrap();
+        let loaded = case::load_for(&[contract().join("cases")], case::Database::Duckdb).unwrap();
         loaded
             .into_iter()
             .map(|each| {

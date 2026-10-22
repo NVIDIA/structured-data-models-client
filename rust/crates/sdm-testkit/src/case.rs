@@ -938,6 +938,18 @@ fn json_files(directory: &Path, found: &mut Vec<PathBuf>) -> Result<()> {
     Ok(())
 }
 
+/// The cases named that run on `database`, each read whole as [`load`]
+/// reads it (a malformed case still fails the load): a case naming only
+/// warehouse legs (`warehouses`, Phase 3 design choice 1) is simply not one
+/// of a database's cases, so a walker over every case on DuckDB selects
+/// with this rather than skipping (T3.2).
+pub fn load_for(paths: &[PathBuf], database: Database) -> Result<Vec<Loaded>> {
+    Ok(load(paths)?
+        .into_iter()
+        .filter(|each| each.case.databases().contains(&database))
+        .collect())
+}
+
 /// The case files named, a directory standing for every `*.json` under it,
 /// in path order.
 pub fn case_files(paths: &[PathBuf]) -> Result<Vec<PathBuf>> {
@@ -997,4 +1009,38 @@ pub fn load(paths: &[PathBuf]) -> Result<Vec<Loaded>> {
         });
     }
     Ok(loaded)
+}
+
+#[cfg(test)]
+mod load_for_tests {
+    use super::*;
+
+    #[test]
+    fn a_warehouse_only_case_is_no_duckdb_case_and_still_loads() {
+        let contract = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../contract");
+        let vectors: Value = serde_json::from_slice(
+            &std::fs::read(contract.join("tests/t32-case-format-vectors.json")).unwrap(),
+        )
+        .unwrap();
+        let directory = std::env::temp_dir().join(format!("t32-load-for-{}", std::process::id()));
+        std::fs::create_dir_all(&directory).unwrap();
+        let s2 = directory.join("s2.json");
+        std::fs::write(&s2, serde_json::to_vec(&vectors["case"]).unwrap()).unwrap();
+        let s1 = contract.join("cases/s1/base.binary.json");
+        let paths = [s2.clone(), s1];
+        let all: Vec<String> = load(&paths)
+            .unwrap()
+            .into_iter()
+            .map(|each| each.case.id)
+            .collect();
+        let duckdb: Vec<String> = load_for(&paths, Database::Duckdb)
+            .unwrap()
+            .into_iter()
+            .map(|each| each.case.id)
+            .collect();
+        std::fs::remove_file(&s2).unwrap();
+        std::fs::remove_dir(&directory).unwrap();
+        assert_eq!(all, ["t32.format.s2", "base.binary"]);
+        assert_eq!(duckdb, ["base.binary"]);
+    }
 }

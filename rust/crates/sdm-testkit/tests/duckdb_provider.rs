@@ -965,7 +965,7 @@ fn every_payload_rust_host_materializes_is_the_locked_definition_s() {
     // T1.22: the request state's payload of each case the pure-Rust host
     // materializes, base.regression and the family cases among them,
     // against the contract's locked definition (`$defs/StatePayload`).
-    let loaded = case::load(&[contract().join("cases")]).unwrap();
+    let loaded = case::load_for(&[contract().join("cases")], case::Database::Duckdb).unwrap();
     let bases = bases::load(&contract().join("bases.yaml")).unwrap();
     let mut held = Vec::new();
     for one in &loaded {
