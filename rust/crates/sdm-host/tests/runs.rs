@@ -701,6 +701,7 @@ fn request_state_leaves_one_run_as_bytes_and_returns_under_the_host_s_id() {
         Operation::Materialize(Materialize {
             provider: ProviderChoice::Sql {
                 dialect: Dialect::new("duckdb"),
+                namespace: Vec::new(),
             },
             schema: AttachmentId(1),
             held: None,

@@ -1044,7 +1044,9 @@ def _named_on_the_core(
     columns when named."""
     from unittest import mock
 
-    from sdm_client._rust import schema as bridge
+    # The provider every core run over a source is made by (T3.8: written
+    # once, in the providers package, P2-T2.2-2).
+    from sdm_client._rust import providers as bridge
 
     provider = bridge.DuckDBProvider
     with (

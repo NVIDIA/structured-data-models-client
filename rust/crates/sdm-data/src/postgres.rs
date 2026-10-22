@@ -24,7 +24,10 @@
 //! The catalog answers are the reference's, read by [`read`] into the
 //! contract's catalog answer. A relation is found as the reference finds a
 //! table: a one-part name in `current_schema()` alone, two parts by schema
-//! and table, a view included; a name the source does not hold there
+//! and table, a view included; a source given its schema (the provider's
+//! namespace, contract v28) has each one-part name read as two parts under
+//! it and its tables listed in it, as the reference reads the schema it
+//! was given; a name the source does not hold there
 //! answers no columns, which the core refuses as the reference refuses a
 //! table it cannot find. A one-part `FROM` reads that table unless the
 //! search path finds a temporary or `pg_catalog` relation of the name
@@ -201,11 +204,11 @@ pub(crate) fn capabilities() -> ProviderCapabilities {
 /// The statements answering `request` on Postgres, with the schema the
 /// contract fixes for its answer (`DataRequest::expected`): the catalog's
 /// answers are in the contract's own shape.
-pub(crate) fn plan(request: &DataRequest) -> Result<FetchPlan, CoreError> {
+pub(crate) fn plan(request: &DataRequest, namespace: &[String]) -> Result<FetchPlan, CoreError> {
     let mut texts = vec![];
     let mut params = vec![];
     let text = match request {
-        DataRequest::Describe { tables, part } => describe(request, tables, *part)?,
+        DataRequest::Describe { tables, part } => describe(request, tables, *part, namespace)?,
         DataRequest::Preview {
             table,
             columns,
@@ -583,10 +586,27 @@ fn describe(
     request: &DataRequest,
     tables: &[Relation],
     part: DescribePart,
+    namespace: &[String],
 ) -> Result<String, CoreError> {
     for table in tables {
         from(request, "tables", table)?;
     }
+    // The schema the source's tables are listed in: the provider's
+    // namespace, the source's schema (contract v28), else the current one,
+    // as the reference lists the tables of the schema it was given or read.
+    let schema = match namespace {
+        [] => None,
+        [schema] => Some(text(schema)),
+        _ => {
+            return Err(CoreError::new(
+                ErrorKind::Unsupported,
+                ErrorCode::UnsupportedRequest,
+                "a Postgres source's namespace is one schema",
+            )
+            .with_field("request", Detail::text(request.name()))
+            .with_field("field", Detail::text("namespace")));
+        }
+    };
     let refused = |message: &str| {
         CoreError::new(
             ErrorKind::Unsupported,
@@ -608,7 +628,10 @@ fn describe(
         // but for the schema, which it binds after reading
         // `current_schema()` and the core names in place (KO2-58).
         DescribePart::Tables if tables.is_empty() => {
-            "SELECT table_name\nFROM information_schema.tables\nWHERE table_schema = current_schema()\n  AND table_type = 'BASE TABLE'\nORDER BY table_name".to_owned()
+            format!(
+                "SELECT table_name\nFROM information_schema.tables\nWHERE table_schema = {}\n  AND table_type = 'BASE TABLE'\nORDER BY table_name",
+                schema.as_deref().unwrap_or("current_schema()"),
+            )
         }
         DescribePart::Tables => {
             let mut selects = Vec::with_capacity(tables.len());
@@ -672,10 +695,16 @@ fn describe(
             if !tables.is_empty() {
                 return Err(refused("this part of the catalog is read whole"));
             }
-            // Each index of a table of the current schema, its columns in
+            // Each index of a table of the source's schema, its columns in
             // order, an expression's position a null name (unresolved).
+            let within = match &schema {
+                None => "current_schema()::regnamespace".to_owned(),
+                Some(schema) => format!(
+                    "(SELECT n.oid FROM pg_catalog.pg_namespace n WHERE n.nspname = {schema})"
+                ),
+            };
             format!(
-                "SELECT t.relname::text AS {table},\n       {columns} AS {names}\nFROM pg_catalog.pg_index i\nJOIN pg_catalog.pg_class t ON t.oid = i.indrelid\nWHERE t.relnamespace = current_schema()::regnamespace\nORDER BY t.relname, i.indexrelid",
+                "SELECT t.relname::text AS {table},\n       {columns} AS {names}\nFROM pg_catalog.pg_index i\nJOIN pg_catalog.pg_class t ON t.oid = i.indrelid\nWHERE t.relnamespace = {within}\nORDER BY t.relname, i.indexrelid",
                 table = identifier(c::TABLE),
                 columns = attribute_names("i.indrelid", "i.indkey::int2[]"),
                 names = identifier(c::COLUMNS),

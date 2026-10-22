@@ -112,7 +112,8 @@ pub(crate) async fn run(
                 ErrorCode::InvalidRequest,
                 "the source holds no table to describe",
             )
-            .with_field("field", Detail::text("tables")));
+            .with_field("field", Detail::text("tables"))
+            .with_field("rule", Detail::text("no_tables")));
         }
         // Each listed under its own name, which must be one the schema
         // may give a table.
@@ -163,7 +164,7 @@ pub(crate) async fn run(
                 // answer that does not read), since that says nothing of
                 // the table.
                 return Err(match holds(&asker, &table.source).await {
-                    Ok(false) => not_held(),
+                    Ok(false) => not_held(&asker, &table.source),
                     Ok(true) | Err(_) => failed,
                 });
             }
@@ -173,7 +174,7 @@ pub(crate) async fn run(
         if declared.is_empty() {
             // A table the source answers with no columns, as the reference
             // refuses one it cannot read.
-            return Err(not_held());
+            return Err(not_held(&asker, &table.source));
         }
         let constraints = key_columns(&asker, &table.source, declared_keys(keys)?).await?;
         let column_names: Vec<String> = declared.iter().map(|c| c.name.clone()).collect();
@@ -524,14 +525,26 @@ fn check_ranges(read: &ArrowData, asked: &[String], preview: &ArrowData) -> Resu
 
 /// The refusal of a table to describe that the source does not hold, or
 /// holds with no columns: `INVALID_REQUEST`, as the reference refuses a
-/// table it cannot read (its `TableNotFoundError`).
-fn not_held() -> CoreError {
-    CoreError::new(
+/// table it cannot read (its `TableNotFoundError`), naming the table as
+/// the source reads it (`source`, under the provider's namespace) and the
+/// database the source is (`database`), which the host words.
+fn not_held(asker: &Asker, table: &Relation) -> CoreError {
+    let read = asker.read_as(table);
+    let refused = CoreError::new(
         ErrorKind::InvalidRequest,
         ErrorCode::InvalidRequest,
         "a table to describe is not one the source holds, or has no columns there",
     )
     .with_field("field", Detail::text("tables"))
+    .with_field("rule", Detail::text("no_such_table"))
+    .with_field(
+        "source",
+        Detail::List(read.source.into_iter().map(Scalar::Utf8).collect()),
+    );
+    match asker.source_database() {
+        Some(database) => refused.with_field("database", Detail::text(database)),
+        None => refused,
+    }
 }
 
 /// Whether the source holds a relation, a table or a view, under `source`,
@@ -810,7 +823,16 @@ async fn count_keys(
         }
         counted.push((at, found));
     }
-    keys::hold(tables, &counted, stated, infer_links)
+    // A declared key the source does not hold its rows to is refused naming
+    // the source's database, as the reference names its backend.
+    keys::hold(tables, &counted, stated, infer_links).map_err(|refused| {
+        match asker.source_database() {
+            Some(database) if refused.fields.contains_key("variant") => {
+                refused.with_field("database", Detail::text(database))
+            }
+            _ => refused,
+        }
+    })
 }
 
 /// The data a request's answer holds, or the provider's error.

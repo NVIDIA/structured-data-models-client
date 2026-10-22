@@ -149,6 +149,16 @@ TIME_COLUMN_NOTICE = (
     'column holds:\n'
 )
 
+#: The code the core's route puts before a warning's words (decisions
+#: E41(i), E59(d)); the two routes are compared on the words after it.
+CORE_CODE = re.compile(r'^\[[A-Z][A-Z0-9_]*\] ')
+
+
+def _bare(message: object) -> str:
+    r"""A warning's words, without the core route's leading ``[CODE] ``."""
+    return CORE_CODE.sub('', str(message))
+
+
 Build = Callable[[dict[str, pd.DataFrame]], Any]
 
 
@@ -248,9 +258,9 @@ def _described(describe: Callable[[], Schema]) -> tuple[Schema, list[str]]:
         warnings.simplefilter('always')
         schema = describe()
     said = [
-        str(item.message)
+        _bare(item.message)
         for item in caught
-        if str(item.message).startswith(TIME_COLUMN_NOTICE)
+        if _bare(item.message).startswith(TIME_COLUMN_NOTICE)
     ]
     return schema, said
 
@@ -450,7 +460,7 @@ def test_a_column_the_whole_table_could_not_check_is_kept_and_named(
     assert schema['orders'].time_column == 'ordered'
     # Said once, by the schema, not again by the engine it reads through.
     said = [
-        str(item.message)
+        _bare(item.message)
         for item in caught
         if 'orders.ordered' in str(item.message)
     ]

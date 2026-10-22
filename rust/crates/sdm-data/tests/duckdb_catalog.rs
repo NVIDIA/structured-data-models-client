@@ -37,6 +37,7 @@ const REFERENCE: [&str; 12] = [
 fn duckdb() -> ProviderChoice {
     ProviderChoice::Sql {
         dialect: Dialect::new("duckdb"),
+        namespace: Vec::new(),
     }
 }
 

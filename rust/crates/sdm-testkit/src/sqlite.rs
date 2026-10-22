@@ -554,6 +554,7 @@ mod tests {
         .unwrap();
         let sqlite = ProviderChoice::Sql {
             dialect: Dialect::new("sqlite"),
+            namespace: Vec::new(),
         };
         let plan = sdm_host::default_root()
             .data_access(&sqlite)

@@ -63,6 +63,7 @@ fn start(request: &Value) -> HostRun {
         plan: None,
         provider: Some(ProviderChoice::Sql {
             dialect: Dialect::new("duckdb"),
+            namespace: Vec::new(),
         }),
         echo: true,
         undeclared: vec![],
@@ -500,6 +501,7 @@ fn keyed(connection: &Connection, request: &Value, keys: RecordBatch) -> (Record
         plan: None,
         provider: Some(ProviderChoice::Sql {
             dialect: Dialect::new("duckdb"),
+            namespace: Vec::new(),
         }),
         echo: true,
         undeclared: vec![],
@@ -888,6 +890,7 @@ fn columns_of(connection: &Connection, table: &str) -> (String, Vec<RecordBatch>
     };
     let duckdb = ProviderChoice::Sql {
         dialect: Dialect::new("duckdb"),
+        namespace: Vec::new(),
     };
     let FetchPlan::Sql { statements, .. } =
         default_root().data_layer().plan(&request, &duckdb).unwrap()

@@ -3,7 +3,7 @@
   "about": "Each change to frozen bridge code against the merge base, with one reason: moved (a rule moved into Rust, naming its task), refactor (behaviour kept), gone (an entry that left the freeze) or main (a change main made, merged by this change: the full SHA of the main commit, then its title). Entries the merge base already holds are spent and may be pruned.",
   "changes": {
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::<module>": {
-      "moved": "T2.11: the sampling options (context_anchor_time, exclude_cols_dict, max_pq_iterations, num_hops, num_neighbors, return_embeddings, use_prediction_time) join the options whose values the core reads (TAKEN, VALUED); their types, bounds and effects are the core's (sdm-request options, sdm-core materialize and subgraph); no rule added here; T2.14b: the candidate-repeat rule (MID2 P2-2) is the core's (sdm-request's ranking::distinct, Python's equality by key): the host passes each candidate as given, a value it cannot hash unreadable; T2.14b fix 1: imports datetime for _kind (MID2 P2-2); T2.14b fix 2: _kind replaced by _typed (MID2 P2-2); T2.14b fix 4: _typed replaced by _kind (MID2 P2-2)"
+      "moved": "T3.8: RouteError no longer raised here (a schema the core has not described is described now, P2-T2.16-11), and the provider choice from _rust/providers"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_indices": {
       "moved": "T1.32a: the cast to the key's type with pandas (pd.Series(indices, dtype=...)) and its INVALID_REQUEST and INTERNAL_ERROR split are the core's rule table; the bridge hands over the values as pyarrow infers them, or as their text where it infers no one type"
@@ -15,13 +15,13 @@
       "moved": "T1.32a: the bridge's key_type refusal, for a key type it had no cast for, is the core's (sdm_engine::keys::cast refuses a key type no rule casts to)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::gather": {
-      "moved": "T2.11: the call's values carry context_anchor_time as _context_anchor writes it; the context's anchor, its checks and warnings are sdm-core materialize's"
+      "refactor": "T3.8: the provider choice from _rust/providers.for_source"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_text": {
       "moved": "T1.36 fix 4 (the final review's P2-2): the host's half of the moved cast: a float in a mix written as the core now writes a float entity (sdm_engine::keys's float_text), the reference's text of it, pyarrow's cast of the float to text at its own width (1e16 is 1e+16), so the core reads back the number the host was given; a boolean as before"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::from_source": {
-      "refactor": "T2.1b: each table named is sent as contract v26 writes a source, a relation of one part (codec.relation), never split on a dot; T2.2: the provider choice and provider are the source's backend's (_provider), SQLite's beside DuckDB's; no rule added"
+      "refactor": "T3.8: builds the Schema from describe, which holds the run"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::<module>": {
       "moved": "T2.13: the module gains _table (the result attachment as a table, keeping its schema's metadata) and _explanation (the result's explanation, a forecast's under by_forecast_step, keyed by the step); each item's explanation and metadata, and the result's, are made the reference's dict by T2.8's _mapping, the one reader of a mapping the core gives as JSON text; reading each as dict(value) and choosing the result's explanation are the core's (sdm-wire response::mapping, sdm-request predict's Part.explanation); T2.14b: _encoded and _ENCODED_DEPTH gone (the core reads the answer's bytes); math no longer imported"
@@ -90,28 +90,28 @@
       "moved": "T2.18: the old route's column-name rule (SourceTable's check of each column's name for a dot, a backtick or a line break) no longer runs on the core route: each table is built with the columns the core described, whatever their names, which the core keeps as data and a query names apart from their table (KO2-36)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::description": {
-      "refactor": "T2.1b: a held table's source sent as contract v26 writes it, a relation of one part (codec.relation); no rule added"
+      "moved": "T3.8: a schema the core has not described (built by hand, unpickled, described on the old route) is described on the core, as the reference reads the catalog for any schema it materializes, in place of RouteError (P2-T2.16-11); each column's type the source's, as the reference reads a table in place (_copy_for_one_gather), so a type written by hand is no edit"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::<module>": {
-      "refactor": "T2.3: imports the Postgres provider beside the DuckDB and SQLite providers; no rule added"
+      "moved": "T3.8: describe split from from_source, and the provider choice from _rust/providers, which carries the source namespace (contract v28) the core reads each table and lists the tables under (P2-T2.16-11)"
     },
     "packages/structured-data-models-client/src/sdm_client/client.py::_predicts_on_the_core": {
       "refactor": "T2.2: a request over a SQLite source routes as one over DuckDB (_routing.on_the_core with the backend's predict paths); no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::_provider": {
-      "refactor": "T2.3: picks Postgres's dialect and provider for a Postgres source, beside DuckDB's and SQLite's; no rule added"
+      "gone": "T3.8: the provider choice written once, in _rust/providers (for_source), with the source namespace (P2-T2.2-2)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_provider": {
-      "refactor": "T2.3: picks Postgres's dialect and provider for a Postgres source, beside DuckDB's and SQLite's; no rule added"
+      "gone": "T3.8: the provider choice written once, in _rust/providers (for_source), with the source namespace (P2-T2.2-2)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::asked": {
       "moved": "T2.18: whether a query's target moves with time and its entity table, as the core resolved them (Materialized.query) for a query only the core resolves (KO2-36), else as the old validator did; the core's facts are taken out of the state the request keeps; T2.14b: the target's windowing and entity table (MID2 P2-4) are the core's Materialized.query facts for every query, never the old validator's tree"
     },
     "packages/structured-data-models-client/src/sdm_client/query.py::PredictiveQuery._resolve": {
-      "moved": "T2.18: where a relational materialize runs on the core over a schema holding a column the old validator's language cannot say, a query the old validator refuses is the core's to resolve as it gathers it (Unresolved, KO2-36), holding the old validator's refusal; every other query as before, the shadow check kept; the route is decided here, the interface unchanged"
+      "moved": "T3.8: the core chooses the validator (P2-MID2-1, design choice 9): on the core route the core validates, and a query the core gathers is resolved by the core alone (Unresolved), the old validator never asked; only an old-route materialize resolves the accepted query with the old validator"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::Unresolved.__init__": {
-      "moved": "T2.18: a query only the core resolves (KO2-36) holds its text and the old validator's refusal, for the one call the core does not answer (a ranking over candidates); no rule of the host's"
+      "moved": "T3.8: refusal None for a query the core validated (P2-MID2-1): the old validator is not asked on the core route"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::Unresolved.to_string": {
       "moved": "T2.18: such a query is sent to materialize as the caller wrote it; the core resolves it and writes it back"
@@ -231,7 +231,7 @@
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::<module>": {
-      "moved": "T2.11: the sampling options' three warnings (CONTEXT_AFTER_ANCHOR, CONTEXT_LEAKS, HOPS_IGNORED) added to WARNINGS, the class each is shown as, and to SAID, the engine's words over the fields the core gives; the rules that give them (when a context is anchored after the predictions or leaks into them, when num_hops is ignored) are sdm-core materialize's and sdm-request options'; the host only words them, as E59 has it word every core warning; T2.13b: FILTER_CHOSE_EXAMPLES added to SAID, the client's words for the notice that an entity filter chooses the labelled examples and not the entities scored (_warn_the_filter_chose_only_the_examples), and WORDED gains the words of a context no example was collected for, by the reason the core found (_diagnose_empty_sample's); whether to warn, and why a context is empty, are sdm-core materialize's (FILTER_CHOSE_EXAMPLES, empty_sample); the host only words them; T2.14b: the host wording rows G15, M4, FX-1 and FX-4 (KO2-32) and the generic refusals said as the reference says them: WORDED's and SAID's templates over the fields the core decides (rule, table, columns, value given, times), FLOAT32_OVERFLOW shown as RuntimeWarning; no rule beyond the tables; T2.14b fix 2: WORDED says VALUE_OUT_OF_RANGE text_not_utf8 (a Postgres JSON string with a lone surrogate, register P2D-3) by the column the core names; no rule added; T2.14b fix 5 (KO2-88, the orchestrator's): FX-1's FLOAT32_OVERFLOW, which the core reports on every runtime, is shown as RuntimeWarning only where the installed NumPy warns of a float32 cast's overflow (1.24 or later), as the reference's NumPy shows it; how a warning is shown is the host's (KO2-32)"
+      "moved": "T3.8: the words of the core's refusals of a key (rules key_not_unique and key_missing_values, the reference's _not_unique_enough, _a_key_missing_values and _SKIP_THE_CHECK), of a table the source does not hold (no_such_table, TableNotFoundError's) and of an entity several rows hold (held_by_several_rows, _refuse_an_id_scored_twice's), each rule the core's (P2-T2.16-10, P2-T2.16-11); the unreachable SAID['CANDIDATES_UNSCORED'] removed, predict words it (P2-WR-8)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_Words.convert_field": {
       "moved": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added; T2.14b: the conversions the reference's words need (!R, !G, !S, !N) over the core's fields; formatting only"
@@ -261,18 +261,12 @@
       "moved": "T2.14a: newly covered by the freeze (FR P3-2); T2.13b: the template of a context left empty chosen by the facts the core gives (later, the count of tables), as most_entities_parts is; no rule added; T2.14b: a template looked up by the core's variant beside its field and rule, as the one-class refusal names the target as the constant-context notice names it"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::error_from_core": {
-      "moved": "T2.14a: newly covered by the freeze (FR P3-2); T2.13b: a refusal's template filled by _Words, the conversions SAID's warnings use (a timestamp shown as the reference shows it, names listed), so a refusal names times and tables as the reference's does; no rule added"
+      "moved": "T3.8: a template filled from the fields and what _derived says of them"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::raise_from_core": {
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::said": {
-      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
-    },
-    "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::warn_from_core": {
-      "moved": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added; T2.14b fix 5 (KO2-88, the orchestrator's): FX-1's FLOAT32_OVERFLOW, which the core reports on every runtime, is shown as RuntimeWarning only where the installed NumPy warns of a float32 cast's overflow (1.24 or later), as the reference's NumPy shows it; how a warning is shown is the host's (KO2-32)"
-    },
-    "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::warn_held": {
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::<module>": {
@@ -451,6 +445,15 @@
     },
     "packages/structured-data-models-client/src/sdm_client/result.py::<module>": {
       "gone": "T2.14c: the file leaves the freeze, the core route entering none of its ledgered functions (measured: python-core on every case and database under coverage)"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::describe": {
+      "moved": "T3.8: from_source's run, its description returned for materialize to describe a schema the core has not (P2-T2.16-11); a source holding no table refused as the reference names it ({source!r} holds no table to describe), from the core's rule no_tables"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_described_now": {
+      "moved": "T3.8: the schema's tables described on the core by their source names, its keys and time columns, no link inferred, keys not counted; the description not kept (P2-T2.16-11)"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_derived": {
+      "moved": "T3.8: the key, the database and the entities as the reference names them in its words, from the core's fields (_the_key_of, _BACKEND_NAMES, TableNotFoundError, _refuse_an_id_scored_twice): the database by the core's field database"
     }
   }
 }

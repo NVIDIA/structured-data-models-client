@@ -135,6 +135,7 @@ fn the_swapped_layer_renders_no_sql_dialect() {
     let refused = HostLayer
         .capabilities(&ProviderChoice::Sql {
             dialect: Dialect::new("duckdb"),
+            namespace: Vec::new(),
         })
         .unwrap_err();
     assert_eq!(refused.code, ErrorCode::UnsupportedRequest);

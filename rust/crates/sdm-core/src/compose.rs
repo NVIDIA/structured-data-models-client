@@ -21,7 +21,7 @@ use arrow_array::RecordBatch;
 use sdm_contract::catalog::CatalogAnswer;
 use sdm_contract::data::{
     DataLayer, DataRequest, FallbackLimits, FetchPlan, ProviderCapabilities, ProviderChoice,
-    seed_integer,
+    Relation, seed_integer,
 };
 use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, Scalar};
 
@@ -97,6 +97,17 @@ impl DataAccess {
     /// (`DataLayer::reads_nan_as_missing`).
     pub fn reads_nan_as_missing(&self) -> bool {
         self.layer.reads_nan_as_missing(&self.provider)
+    }
+
+    /// The database the run's provider reads, by name
+    /// (`DataLayer::source_database`); `None` for a host provider.
+    pub fn source_database(&self) -> Option<&'static str> {
+        self.layer.source_database(&self.provider)
+    }
+
+    /// `relation` as the run's provider reads it (`DataLayer::read_as`).
+    pub fn read_as(&self, relation: &Relation) -> Relation {
+        self.layer.read_as(&self.provider, relation)
     }
 
     /// An admitted answer of the run's provider, its values read as the

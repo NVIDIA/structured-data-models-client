@@ -32,6 +32,7 @@ QUALIFY ROW_NUMBER() OVER (
 fn each_request_of_the_empty_null_family_renders_its_pinned_statement() {
     let duckdb = ProviderChoice::Sql {
         dialect: Dialect::new("duckdb"),
+        namespace: Vec::new(),
     };
     assert!(!PINS.is_empty());
     for (written, pinned) in PINS {

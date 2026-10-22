@@ -29,6 +29,7 @@ fn provider_choices_round_trip() {
     for choice in [
         ProviderChoice::Sql {
             dialect: Dialect::new("duckdb"),
+            namespace: Vec::new(),
         },
         ProviderChoice::Host {
             capabilities: ProviderCapabilities {
@@ -47,6 +48,48 @@ fn provider_choices_round_trip() {
         assert_eq!(
             serde_json::from_str::<ProviderChoice>(&text).unwrap(),
             choice
+        );
+    }
+}
+
+/// A SQL provider's namespace (contract v28): left out, it reads as none
+/// and is written back left out, so a v27 choice reads as it did; each
+/// part a name or `null`, the source's current one (a Databricks source
+/// given its catalog and not its schema); anything else refused.
+#[test]
+fn a_provider_namespace_takes_names_and_null_parts() {
+    for (text, namespace) in [
+        (r#"{"provider":"sql","dialect":"postgres"}"#, vec![]),
+        (
+            r#"{"provider":"sql","dialect":"postgres","namespace":["sales"]}"#,
+            vec![Some("sales".to_owned())],
+        ),
+        (
+            r#"{"provider":"sql","dialect":"databricks","namespace":["main",null]}"#,
+            vec![Some("main".to_owned()), None],
+        ),
+    ] {
+        let read: ProviderChoice = serde_json::from_str(text).unwrap();
+        let ProviderChoice::Sql {
+            namespace: held, ..
+        } = &read
+        else {
+            panic!("not a SQL provider: {text}");
+        };
+        assert_eq!(held, &namespace, "{text}");
+        let written: serde_json::Value = serde_json::to_value(&read).unwrap();
+        let given: serde_json::Value = serde_json::from_str(text).unwrap();
+        assert_eq!(written, given, "{text}");
+    }
+    for refused in [
+        r#"{"provider":"sql","dialect":"postgres","namespace":"sales"}"#,
+        r#"{"provider":"sql","dialect":"postgres","namespace":[1]}"#,
+        r#"{"provider":"host","capabilities":{"optional":[],"max_keys_per_request":null,
+            "sampling":"seeded_stable","max_seed":1,"text_times":null},"namespace":["sales"]}"#,
+    ] {
+        assert!(
+            serde_json::from_str::<ProviderChoice>(refused).is_err(),
+            "{refused}"
         );
     }
 }

@@ -3352,14 +3352,35 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
                     })?,
             ),
         };
-        for (row, &at) in positions.iter().enumerate() {
-            if at >= num_train && matches.is_some_and(|m| m.value(row) > 1) {
-                return Err(invalid(
-                    "an entity to predict for is held by more than one row, so which is meant \
-                     would be a guess",
-                    "indices",
-                ));
+        // Each entity to score that more than one row holds, in the order
+        // the caller gave them, each value once, as the reference names
+        // them (`_refuse_an_id_scored_twice`): the table, its key and the
+        // values, values of the caller's own call (KO2-86).
+        let mut repeated: Vec<usize> = positions
+            .iter()
+            .enumerate()
+            .filter(|&(row, &at)| at >= num_train && matches.is_some_and(|m| m.value(row) > 1))
+            .map(|(_, &at)| at)
+            .collect();
+        if !repeated.is_empty() {
+            repeated.sort_unstable();
+            repeated.dedup();
+            let mut keys: Vec<Scalar> = Vec::with_capacity(repeated.len());
+            for at in repeated {
+                let value = key_scalar(scored.as_ref(), at - num_train);
+                if !keys.contains(&value) {
+                    keys.push(value);
+                }
             }
+            return Err(invalid(
+                "an entity to predict for is held by more than one row, so which is meant \
+                 would be a guess",
+                "indices",
+            )
+            .with_field("reason", Detail::text("held_by_several_rows"))
+            .with_field("table", Detail::text(&entity.name))
+            .with_field("key", Detail::text(&key))
+            .with_field("keys", Detail::List(keys)));
         }
         if positions.len() != examples_total {
             // The table and the keys not found, in the order the caller gave

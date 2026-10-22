@@ -227,6 +227,7 @@ fn a_schema_changed_past_its_description_is_refused_by_name() {
         Operation::Materialize(Materialize {
             provider: ProviderChoice::Sql {
                 dialect: Dialect::new("duckdb"),
+                namespace: Vec::new(),
             },
             schema: AttachmentId(1),
             held: Some(AttachmentId(4)),

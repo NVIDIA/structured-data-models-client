@@ -632,9 +632,11 @@ impl Source<'_> {
             Source::Duck(_) => given,
             Source::Sqlite(_) => ProviderChoice::Sql {
                 dialect: Dialect::new(Database::Sqlite.name()),
+                namespace: Vec::new(),
             },
             Source::Replay(_) => ProviderChoice::Sql {
                 dialect: Dialect::new(Database::Postgres.name()),
+                namespace: Vec::new(),
             },
             // The non-SQL provider, a host provider, as it declares itself.
             Source::Memory(..) => ProviderChoice::Host {
@@ -990,7 +992,7 @@ fn describe_on(
     // Off DuckDB a case runs every call through its `until` (T2.1d).
     let off_duckdb = !matches!(
         &provider,
-        ProviderChoice::Sql { dialect } if dialect.name() == Database::Duckdb.name()
+        ProviderChoice::Sql { dialect, .. } if dialect.name() == Database::Duckdb.name()
     );
     let spec_given: SourceSpec = serde_json::from_value(spec.source.clone()).map_err(|_| {
         anyhow!(
@@ -1539,7 +1541,7 @@ fn start_materialize(
     // not parse is sent as the case gives it.
     let off_duckdb = !matches!(
         &provider,
-        ProviderChoice::Sql { dialect } if dialect.name() == Database::Duckdb.name()
+        ProviderChoice::Sql { dialect, .. } if dialect.name() == Database::Duckdb.name()
     );
     let query = if off_duckdb {
         written_back(&case.input.pql)

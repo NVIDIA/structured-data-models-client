@@ -30,6 +30,7 @@ use arrow_schema::SchemaRef;
 use sdm_contract::catalog::CatalogAnswer;
 use sdm_contract::data::{
     AttachmentId, DataRequest, ExpectedSchema, FetchPlan, ProviderCapabilities, ProviderError,
+    Relation,
 };
 use sdm_contract::ops::{OperationResult, SAMPLER_STATE_VERSION, SamplerMemo, SamplerState};
 use sdm_contract::run::{Endpoint, FetchStep, ModelCall, ReplyId};
@@ -286,6 +287,20 @@ impl Asker {
         self.data
             .as_ref()
             .is_some_and(DataAccess::reads_nan_as_missing)
+    }
+
+    /// The database the run's provider reads (`DataAccess::source_database`);
+    /// `None` for a host provider or an operation that names no provider.
+    pub fn source_database(&self) -> Option<&'static str> {
+        self.data.as_ref().and_then(DataAccess::source_database)
+    }
+
+    /// `relation` as the run's provider reads it (`DataAccess::read_as`);
+    /// as it is where the run names no provider.
+    pub fn read_as(&self, relation: &Relation) -> Relation {
+        self.data
+            .as_ref()
+            .map_or_else(|| relation.clone(), |data| data.read_as(relation))
     }
 
     /// The catalog answer `data` holds, the admitted answer to `request`,

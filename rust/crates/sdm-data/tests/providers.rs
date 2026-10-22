@@ -12,6 +12,7 @@ use sdm_data::{Data, PROVIDERS};
 fn sql(name: &str) -> ProviderChoice {
     ProviderChoice::Sql {
         dialect: Dialect::new(name),
+        namespace: Vec::new(),
     }
 }
 

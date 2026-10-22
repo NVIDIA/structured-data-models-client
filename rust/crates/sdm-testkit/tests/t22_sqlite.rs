@@ -548,6 +548,7 @@ fn every_statement_rust_host_ran_on_sqlite_is_a_golden() {
 fn sqlite() -> ProviderChoice {
     ProviderChoice::Sql {
         dialect: Dialect::new(DATABASE),
+        namespace: Vec::new(),
     }
 }
 
