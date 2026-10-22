@@ -2015,6 +2015,15 @@ def policy_relaxations(old: Any, new: Any) -> list[str]:
             for item in mine_standin.get(key) or []:
                 if item not in (theirs_standin.get(key) or []):
                     found.append(f'standin {what} {item} added')
+    # The sampled case's section (T3.2 fix 4, option C): a case added or
+    # its statement moved holds that case to less than every rule.
+    theirs_sampled = old.get('sampled')
+    if isinstance(theirs_sampled, dict):
+        for case, entry in (new.get('sampled') or {}).items():
+            if case not in theirs_sampled:
+                found.append(f'sampled {case} added')
+            elif theirs_sampled[case] != entry:
+                found.append(f'sampled {case} changed')
     return found
 
 

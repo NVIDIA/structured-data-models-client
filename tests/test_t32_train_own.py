@@ -672,3 +672,91 @@ def test_an_old_reference_line_without_the_text_digest_still_matches() -> None:
     report = COMPARE.Report(rules)
     COMPARE._host_fields(report, case, 'python-core', new, other)
     assert report.failures and 'text_digest' in report.texts[0]
+
+
+# --- the sampled Snowflake case (option C) --------------------------------------------
+
+OPTION_C = '2026-10-22 evening: Snowflake sampling, option C'
+SAMPLING = 'SELECT * FROM "orders" SAMPLE ROW (5 ROWS)'
+
+
+def _sampled_line(sampled_rows: int, result_rows: int) -> dict[str, Any]:
+    statements = [
+        {'stage': 'materialize', 'sql': 'SELECT 1', 'results': [{'rows': 1}]},
+        {
+            'stage': 'materialize',
+            'sql': SAMPLING,
+            'results': [{'rows': sampled_rows}],
+        },
+    ]
+    return {
+        'driver': {'capture': {'statements': statements, 'bindings': []}},
+        'public': {'result': {'rows': result_rows, 'digest': str(result_rows)}},
+    }
+
+
+def test_the_sampled_case_is_held_to_its_sampling_statement_and_row_count(
+    tmp_path: Path,
+) -> None:
+    entry = {
+        'leg': 'snowflake',
+        'stage': 'materialize',
+        'statement': 1,
+        'decision': OPTION_C,
+    }
+    document = yaml.safe_load(
+        (ROOT / 'contract/compare-policy.yaml').read_text()
+    )
+    assert document['sampled'] == {}
+    path = tmp_path / 'compare-policy.yaml'
+    for sampled, ok in (
+        ({'s.sampled': entry}, True),
+        ({'s.sampled': entry, 's.other': entry}, False),
+        ({'s.sampled': {**entry, 'leg': 'databricks-sql'}}, False),
+        ({'s.sampled': {**entry, 'decision': 'the implementer'}}, False),
+    ):
+        path.write_text(yaml.safe_dump({**document, 'sampled': sampled}))
+        if ok:
+            assert CHECK.policy(path)['sampled'] == sampled
+        else:
+            with pytest.raises(CHECK.PolicyError, match='sampled'):
+                CHECK.policy(path)
+    # A case added to the section is a relaxation the ratchet names.
+    assert RATCHET.policy_relaxations(
+        document, {**document, 'sampled': {'s.sampled': entry}}
+    ) == ['sampled s.sampled added']
+
+    rules = dict(CHECK.policy()['rules'])
+    reference = _sampled_line(5, 5)
+    report = COMPARE.Report(rules)
+    report.fail('rows differ as a multiset', 'sql.result')
+    report.fail('public.result/digest: differs', 'result')
+    report.fail('outcome differs', 'outcome')
+    COMPARE.sampled_judgment(
+        report, 0, 's.sampled@snowflake', entry,
+        {'python-core': _sampled_line(5, 5)}, reference,
+    )  # fmt: skip
+    # The sample's other rows are reported; the outcome still gates.
+    assert report.failures == [('outcome', 'outcome differs')], report.failures
+    assert any('rows differ as a multiset' in n for n in report.notes)
+    for line, rule in (
+        (_sampled_line(4, 5), 'sql.result'),
+        (_sampled_line(5, 6), 'result'),
+    ):
+        report = COMPARE.Report(rules)
+        COMPARE.sampled_judgment(
+            report, 0, 's.sampled@snowflake', entry, {'python-core': line},
+            reference,
+        )  # fmt: skip
+        assert [r for r, _ in report.failures] == [rule], report.failures
+
+
+def test_the_test_author_template_names_the_gate_module_pattern() -> None:
+    # Two test authors held pending tests with xfail and skip, which
+    # l0_scan.py refuses under contract/ (2026-10-22).
+    text = (
+        ROOT / 'docs/design/rust-core/orchestration/briefs/test-author.md'
+    ).read_text(encoding='utf-8')
+    assert 'contract/tests/t132g_gate.py' in text
+    assert 'held(group, name, check)' in text
+    assert 'as the orchestrator says' not in text and 'strict xfail' not in text

@@ -3000,6 +3000,82 @@ def _cell_pair(
         report.demote(since, keep=tuple(r for r in RULES if r != 'warnings'))
 
 
+#: The rules a sampled case is still held to in full (option C): those of
+#: its outcome, route, inputs, schema and warnings, which the sample's draw
+#: does not move.
+SAMPLED_KEEPS = ('outcome', 'route', 'inputs', 'reach', 'schema', 'warnings')
+_SAMPLES = re.compile(r'\bSAMPLE\b', re.IGNORECASE)
+
+
+def sampled_judgment(
+    report: Report,
+    since: int,
+    key: str,
+    sample: dict[str, Any],
+    observed: dict[str, dict[str, Any]],
+    reference: dict[str, Any] | None,
+) -> None:
+    r"""The sampled case's comparison (the owner's "2026-10-22 evening:
+    Snowflake sampling, option C"; ``sampled`` in the policy): its
+    failures since ``since`` under any rule but :data:`SAMPLED_KEEPS` (and
+    those naming no rule) are reported, since an unseeded sample draws other
+    rows each run; then each runner is held to the reference on the
+    sampling statement (at ``sample``'s stage and position, a statement that
+    samples and reads as many rows as the reference's, ``sql.result``) and
+    on the public result's row count (``result``)."""
+    kept = [
+        (rule, text)
+        for rule, text in report.failures[since:]
+        if rule is None or rule in SAMPLED_KEEPS
+    ]
+    for rule, text in report.failures[since:]:
+        if (rule, text) not in kept:
+            report.notes.append(f'diagnostic: {rule}: {text} (sampled)')
+    del report.failures[since:]
+    report.failures.extend(kept)
+    if reference is None:
+        return
+    stage, position = sample['stage'], sample['statement']
+    theirs = (_by_stage(reference) or {}).get(stage, [])
+    wanted = theirs[position] if position < len(theirs) else None
+    if wanted is None or not _SAMPLES.search(wanted['sql']):
+        report.fail(
+            f'{key}: python-ref: {stage} statement {position} is no sampling '
+            'statement, as the policy names it',
+            'sql.result',
+        )
+        return
+    for who, observation in sorted(observed.items()):
+        where = f'{key}: {who} against python-ref (sampled)'
+        grouped = _by_stage(observation)
+        if grouped is not None:
+            ours = grouped.get(stage, [])
+            mine = ours[position] if position < len(ours) else None
+            if mine is None or not _SAMPLES.search(mine['sql']):
+                report.fail(
+                    f'{where}: {stage} statement {position} does not sample',
+                    'sql.result',
+                )
+            elif [r.get('rows') for r in mine['results']] != [
+                r.get('rows') for r in wanted['results']
+            ]:
+                report.fail(
+                    f'{where}: {stage} statement {position} reads '
+                    f'{[r.get("rows") for r in mine["results"]]} rows, against '
+                    f'{[r.get("rows") for r in wanted["results"]]}',
+                    'sql.result',
+                )
+        mine_result = (observation.get('public') or {}).get('result')
+        theirs_result = (reference.get('public') or {}).get('result')
+        if isinstance(mine_result, dict) and isinstance(theirs_result, dict):
+            if mine_result.get('rows') != theirs_result.get('rows'):
+                report.fail(
+                    f'{where}: public.result: {mine_result.get("rows")} rows, '
+                    f'against {theirs_result.get("rows")}',
+                    'result',
+                )
+
+
 def compare(
     cases_dir: list[Path],
     reference_file: Path | None,
@@ -3110,7 +3186,9 @@ def compare(
     every = {
         case['id'] for case, _ in runner.load_cases([runner.CONTRACT / 'cases'])
     }
-    for name in sorted(set(policy['reach']) | set(policy['ordered'])):
+    for name in sorted(
+        set(policy['reach']) | set(policy['ordered']) | set(policy['sampled'])
+    ):
         if name not in every:
             report.fail(f'compare-policy.yaml: {name} is not a case')
     for case in cases:
@@ -3124,6 +3202,9 @@ def compare(
         gating = case['status'] == 'acceptance'
         reach = policy['reach'].get(case['id'])
         ordered = policy['ordered'].get(case['id'], {})
+        sample = policy['sampled'].get(case['id'])
+        if sample is not None and sample['leg'] != database:
+            sample = None
         # The case as this database's lines name it; its expect is
         # DuckDB's, so elsewhere the reference's line is the expectation.
         on_duckdb = database == 'duckdb'
@@ -3349,6 +3430,19 @@ def compare(
             # one side's answer there is the local engine's or none.
             _reported_rules(
                 report, paired, 'live only: ' + ', '.join(sorted(live_only))
+            )
+        if sample is not None:
+            sampled_judgment(
+                report,
+                before,
+                case['id'],
+                sample,
+                {
+                    who: by_case[case['id']]
+                    for who, by_case in observed.items()
+                    if case['id'] in by_case
+                },
+                ref,
             )
         if not gating:
             report.demote(before, keep=('reach',) if reach else ())

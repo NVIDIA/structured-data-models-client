@@ -135,6 +135,19 @@ standin:
   codes: [B1, B2, B4]
   diagnostic: [sql.count, sql.result]
 
+# The one sampled Snowflake case (the owner's "2026-10-22 evening: Snowflake
+# sampling, option C"): the core keeps the old client's unseeded
+# `SAMPLE ROW (n ROWS)`, so the rows a sample draws differ from run to run.
+# On its leg the case's comparison holds only the sampling statement (at the
+# call `stage`, position `statement`: it samples, and reads as many rows as
+# the reference's) and the result's row count, besides the outcome, the
+# route, the inputs, the schema and the warnings; every other difference
+# there is reported. Each entry is {leg, stage, statement, decision}, and
+# contract/runners/capture_check.py holds the section to the owner's approval
+# (APPROVED_SAMPLED: one case, on Snowflake). The case and its entry come with
+# the Snowflake package's cases.
+sampled: {}
+
 # The relaxations of this file the owner approved, each {change, decision}:
 # the change as the ratchet prints it, and the decisions.md row, at the
 # checkpoint, that approves it.

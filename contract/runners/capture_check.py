@@ -104,6 +104,7 @@ SECTIONS = (
     'baseline',
     'relaxations',
     'standin',
+    'sampled',
 )
 #: A field path of an observation, dotted (``outcome.code``).
 FIELD = re.compile(r'[a-z_]+(\.[a-z_]+)*')
@@ -129,6 +130,19 @@ APPROVED_EXCLUSIONS: dict[str, tuple[str, ...]] = {
 APPROVED_STANDIN = {
     'codes': ('B1', 'B2', 'B4'),
     'diagnostic': ('sql.count', 'sql.result'),
+}
+
+
+#: What the policy's ``sampled`` section may hold, by the owner's approval
+#: ("2026-10-22 evening: Snowflake sampling, option C"): one case, on the
+#: Snowflake leg, whose comparison holds only its sampling statement and the
+#: result's row count, since the core keeps the old client's unseeded
+#: ``SAMPLE ROW (n ROWS)``. A second case or another leg needs the owner and
+#: a review of this protected file.
+APPROVED_SAMPLED = {
+    'decision': '2026-10-22 evening: Snowflake sampling, option C',
+    'leg': 'snowflake',
+    'cases': 1,
 }
 
 
@@ -386,6 +400,30 @@ def policy(
         raise PolicyError(
             'standin: a diagnostic rule the owner did not approve (KO3-45)'
         )
+    sampled = loaded['sampled']
+    if (
+        not isinstance(sampled, dict)
+        or len(sampled) > APPROVED_SAMPLED['cases']
+    ):
+        raise PolicyError(
+            'sampled: more than the one Snowflake case the owner approved '
+            f'({APPROVED_SAMPLED["decision"]})'
+        )
+    for case, entry in sampled.items():
+        if (
+            not isinstance(entry, dict)
+            or set(entry) != {'leg', 'stage', 'statement', 'decision'}
+            or entry['leg'] != APPROVED_SAMPLED['leg']
+            or entry['decision'] != APPROVED_SAMPLED['decision']
+            or entry['stage'] not in STAGES
+            or not isinstance(entry['statement'], int)
+            or isinstance(entry['statement'], bool)
+            or entry['statement'] < 0
+        ):
+            raise PolicyError(
+                f'sampled: {case}: not a statement of a call on the Snowflake '
+                f'leg under the owner\'s "{APPROVED_SAMPLED["decision"]}"'
+            )
     return loaded
 
 
