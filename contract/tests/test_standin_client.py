@@ -87,4 +87,4 @@ def test_a_case_with_no_capture_is_pending_live(root: Path | None) -> None:
     with pytest.raises(client.StandInFailure, match='pending live'):
         client.open('databricks-sql', {'id': 'no.such.case'}, None, root)
     with pytest.raises(client.StandInFailure, match='not served'):
-        client.open('lakebase', {'id': 'x'}, None, root)
+        client.open('duckdb', {'id': 'x'}, None, root)
