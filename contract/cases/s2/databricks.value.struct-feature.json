@@ -1,0 +1,78 @@
+{
+  "format": "sdm-case/1",
+  "id": "databricks.value.struct-feature",
+  "status": "acceptance",
+  "slice": "S2",
+  "warehouses": [
+    "databricks-sql",
+    "databricks-spark"
+  ],
+  "paths": [
+    "source.open/explicit/databricks-sql",
+    "source.open/explicit/databricks-spark",
+    "schema.from-source/all-tables/databricks-sql",
+    "schema.from-source/all-tables/databricks-spark"
+  ],
+  "routes": [
+    "schema.from-source/all-tables/databricks-sql",
+    "schema.from-source/catalog-keys/databricks-sql",
+    "query.materialize/indices-binary/databricks-sql",
+    "query.materialize/indices-multiclass/databricks-sql",
+    "query.materialize/indices-regression/databricks-sql",
+    "query.materialize/indices-link-prediction/databricks-sql",
+    "query.materialize/indices-ranking/databricks-sql",
+    "query.materialize/indices-forecast/databricks-sql",
+    "client.predict/binary/databricks-sql",
+    "client.predict/multiclass/databricks-sql",
+    "client.predict/regression/databricks-sql",
+    "client.predict/link-prediction/databricks-sql",
+    "client.predict/ranking/databricks-sql",
+    "client.predict/forecast/databricks-sql",
+    "schema.from-source/all-tables/databricks-spark",
+    "schema.from-source/catalog-keys/databricks-spark",
+    "query.materialize/indices-binary/databricks-spark",
+    "query.materialize/indices-multiclass/databricks-spark",
+    "query.materialize/indices-regression/databricks-spark",
+    "query.materialize/indices-link-prediction/databricks-spark",
+    "query.materialize/indices-ranking/databricks-spark",
+    "query.materialize/indices-forecast/databricks-spark",
+    "client.predict/binary/databricks-spark",
+    "client.predict/multiclass/databricks-spark",
+    "client.predict/regression/databricks-spark",
+    "client.predict/link-prediction/databricks-spark",
+    "client.predict/ranking/databricks-spark",
+    "client.predict/forecast/databricks-spark"
+  ],
+  "seam": "nested",
+  "cells": [
+    "int64/primary-key",
+    "int64/foreign-key",
+    "timestamp-us/time-column",
+    "struct/feature"
+  ],
+  "input": {
+    "base": "shop",
+    "setup": [
+      "ALTER TABLE users ADD COLUMN profile STRUCT(age INTEGER, country VARCHAR)",
+      "UPDATE users SET profile = struct_pack(age := age, country := country)"
+    ],
+    "pql": "PREDICT COUNT(orders.*, 0, 30, days) > 0 FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ],
+      "anchor_time": "2024-03-01"
+    }
+  },
+  "until": "from_source",
+  "expect": {
+    "outcome": "refusal",
+    "stage": "from_source",
+    "error": "ValueError",
+    "code": null,
+    "today": "read from the reference: Encountered unsupported data type for column 'profile' in table 'users'"
+  },
+  "why": "A STRUCT feature, every row holding one, described from Unity Catalog (full_data_type, DB/table.py:212-246) on both Databricks legs, where the reference maps a struct type to its unsupported dtype (DB/table.py:493) and refuses the column by name (RE/base/table.py:272)",
+  "source": "written by T3.4's test author from the reference at 43e55f4f"
+}
