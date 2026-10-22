@@ -88,11 +88,12 @@ mvn -f java/pom.xml package
 `mvn -Pall-natives package` refuses to build a JAR missing any platform's native; CI builds the JAR that way, from the natives each platform's job built.
 `mvn package` also copies the runtime dependencies into `target/lib`, which the contract runner and the JAR-load test put on the class path.
 
-The tests load a library built with the test-only operations, named by `-Dsdm.native.library`:
+The tests load a library built with the test-only operations, packaged as the JAR packages its natives (or named by `-Dsdm.native.library`); `scripts/rust_core/java_build.py verify` builds it, puts it there, and runs every Java test:
 
 ```
 cargo build --manifest-path rust/Cargo.toml -p sdm-jni --features test-ops
-mvn -f java/pom.xml verify -Dsdm.native.library=$PWD/rust/target/debug/libsdm_jni.so
+cp rust/target/debug/libsdm_jni.so java/target/natives/linux-x86_64/
+mvn -f java/pom.xml verify
 ```
 
 The contract cases run on the Java host through `contract/runners/run_java.py`, which hands `contract/runners/java/ContractRunner.java` the calls to make and writes the observations the comparator judges.

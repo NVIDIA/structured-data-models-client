@@ -41,8 +41,8 @@
     <!-- Where the natives are copied before packaging: one directory per
          platform. -->
     <sdm.natives>${project.build.directory}/natives</sdm.natives>
-    <!-- The native library the tests load in place of the JAR's: the build
-         with the test-only operations (README.md). Empty loads the JAR's. -->
+    <!-- A native library the tests load in place of the one packaged from
+         ${sdm.natives} (README.md); empty loads the packaged one. -->
     <sdm.native.library></sdm.native.library>
     <!-- The runtime flags choice 10 names; every test runs with them. -->
     <sdm.java.flags>--enable-native-access=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED</sdm.java.flags>

@@ -5,14 +5,16 @@
 
 r"""Builds and tests the Java library locally (T3.11), as CI's Java jobs do.
 
-    java_build.py verify    the native with the test-only operations, then
-                            ``mvn verify`` loading it: every Java test, with
-                            the runtime flags (affected.py's suite for
-                            ``java/**`` and ``rust/bindings/sdm-jni/**``)
-    java_build.py jar       the same native and the JAR beside it, and
-                            prints ``JAR``, ``LIB`` and ``NATIVE`` lines, the
-                            arguments of ``contract/runners/run_java.py``
-                            (handoff.py's Java legs)
+    java_build.py verify    the native with the test-only operations, put
+                            where Maven packages it (``java/target/natives/
+                            <platform>/``), then ``mvn verify``: every Java
+                            test, with the runtime flags, loading it as the
+                            JAR does (affected.py's suite for ``java/**``
+                            and ``rust/bindings/sdm-jni/**``)
+    java_build.py jar       the same, then the JAR, and prints ``JAR``,
+                            ``LIB`` and ``NATIVE`` lines, the arguments of
+                            ``contract/runners/run_java.py`` (handoff.py's
+                            Java legs)
 
 The JDK is ``SDM_JAVA_HOME``, else ``JAVA_HOME``; Maven is ``SDM_MAVEN``,
 else ``mvn`` on the path. Either missing exits 2, naming it. Cargo builds
@@ -94,19 +96,24 @@ def maven_env(home: Path) -> dict[str, str]:
     return env
 
 
-def verify() -> None:
-    home, mvn, built = java_home(), maven(), native()
-    run(
-        [mvn, '-q', '-B', '-f', str(POM), 'verify', f'-Dsdm.native.library={built}'],
-        env=maven_env(home),
-    )
-
-
-def jar() -> tuple[Path, Path, Path]:
-    home, mvn, built = java_home(), maven(), native()
+def staged() -> Path:
+    """The test-ops native, built and put where Maven packages it."""
+    built = native()
     natives = JAVA / 'target' / 'natives' / platform_name()
     natives.mkdir(parents=True, exist_ok=True)
     shutil.copy2(built, natives / native_name())
+    return built
+
+
+def verify() -> None:
+    home, mvn = java_home(), maven()
+    staged()
+    run([mvn, '-q', '-B', '-f', str(POM), 'verify'], env=maven_env(home))
+
+
+def jar() -> tuple[Path, Path, Path]:
+    home, mvn = java_home(), maven()
+    built = staged()
     run(
         [mvn, '-q', '-B', '-f', str(POM), '-DskipTests', 'package'],
         env=maven_env(home),

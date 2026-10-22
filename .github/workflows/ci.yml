@@ -2363,11 +2363,13 @@ jobs:
           distribution: temurin
           java-version: ${{ matrix.jdk }}
           cache: maven
+      # Packaged as the JAR packages its natives, so the tests' own JVMs
+      # load it as a user's would.
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: java-test-ops-native
-          path: native-test-ops
-      - run: mvn -B -f java/pom.xml verify "-Dsdm.native.library=$PWD/native-test-ops/libsdm_jni.so"
+          path: java/target/natives/linux-x86_64
+      - run: mvn -B -f java/pom.xml verify
 
   # The JAR-load test (exit 4 of T3.11, locked check 14): the JAR and its
   # runtime dependencies alone, on each JDK and platform the JAR promises,
