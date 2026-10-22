@@ -32,7 +32,8 @@ and ``land.py`` already refuses a landing without a green CI run.
 
 - ``lint``: ``ruff check`` and ``ruff format --check`` on the changed Python
   files, ``cargo fmt --check`` on the changed crates, ``mypy`` on each
-  changed package's ``src``, and ``l0_scan.py``;
+  changed package's ``src``, ``l0_scan.py``, the hygiene check, and
+  ``cargo deny --locked check`` when ``rust/`` changed;
 - ``reference``: the package's cases (each case file it adds or changes,
   and each ``--case``) run on python-core, on each database the case names
   (Postgres with ``SDM_POSTGRES_TEST_DSN``, which a case naming Postgres
@@ -56,7 +57,13 @@ and ``land.py`` already refuses a landing without a green CI run.
   previous tree's Rust builds in a target directory of its own;
 - ``affected``: the suites ``affected.py``'s map rows name for the changed
   files, not every test that mentions a file's name (``affected.suites``
-  with ``naming=False``), less the own tests already run.
+  with ``naming=False``), less the own tests already run;
+- ``wheel``: the Linux x86 wheel, built as CI's native-wheel job builds it,
+  when ``rust/`` or the client's package changed.
+
+The stamp is the package's local check, and with the two reviews what a
+landing needs (the owner's "2026-10-22 evening: CI off the landing path");
+the full CI matrix runs nightly on the phase head and at the phase's end.
 
 In a fix round whose ``--previous`` has a passing stamp, ``own tests`` and
 ``affected`` take the files changed since that stamp; the other steps take
@@ -945,6 +952,41 @@ def run_suites(
     return step
 
 
+#: What the shipped wheel is built from: a change here builds it.
+WHEEL_SOURCES = ('rust/', 'packages/structured-data-models-client/')
+
+
+def step_wheel(root: Path, touched: list[str], scratch: Path) -> Step:
+    r"""The Linux x86 wheel, built as CI's native-wheel job builds it
+    (``native_wheel.py`` with its pinned maturin), when the package changes
+    what it is built from."""
+    step = Step('wheel')
+    if not any(p.startswith(WHEEL_SOURCES) for p in touched):
+        step.notes.append('nothing the wheel is built from changed')
+        return step
+    script = root / 'scripts/rust_core/native_wheel.py'
+    pinned = re.search(
+        r"^MATURIN = '([^']+)'", script.read_text(encoding='utf-8'), re.M
+    )
+    uv = shutil.which('uv')
+    if pinned is None or uv is None:
+        step.problems.append('no uv, or no MATURIN pin in native_wheel.py')
+        return step
+    done = run(
+        [uv, 'run', '--quiet', '--no-project', '--python', '3.12', '--with',
+         f'maturin=={pinned.group(1)}', 'python3', str(script),
+         '--out', str(scratch / 'wheel')],
+        root,
+    )  # fmt: skip
+    if done.returncode != 0:
+        step.problems.append(
+            'native_wheel.py:\n' + tail(done.stdout + done.stderr)
+        )
+    else:
+        step.notes.append('the Linux x86 wheel builds')
+    return step
+
+
 def ruff() -> list[str] | None:
     beside = Path(sys.executable).parent / 'ruff'
     if beside.is_file():
@@ -1028,13 +1070,28 @@ def step_lint(root: Path, touched: list[str], python: str) -> Step:
             step.problems.append(
                 f'mypy {source}:\n' + tail(done.stdout + done.stderr)
             )
-    scan = root / 'scripts/rust_core/l0_scan.py'
-    if scan.is_file():
-        done = run([sys.executable, str(scan)], root)
+    for script, args in (
+        ('scripts/rust_core/l0_scan.py', ()),
+        ('scripts/check_repo_hygiene.py', ('all',)),
+    ):
+        if (root / script).is_file():
+            done = run([sys.executable, str(root / script), *args], root)
+            if done.returncode != 0:
+                step.problems.append(
+                    f'{Path(script).name}:\n' + tail(done.stdout + done.stderr)
+                )
+    if any(p.startswith('rust/') for p in touched) and shutil.which(
+        'cargo-deny'
+    ):
+        done = run(['cargo', 'deny', '--locked', 'check'], root / 'rust')
         if done.returncode != 0:
             step.problems.append(
-                'l0_scan.py:\n' + tail(done.stdout + done.stderr)
+                'cargo deny --locked check:\n' + tail(done.stdout + done.stderr)
             )
+    elif any(p.startswith('rust/') for p in touched):
+        step.problems.append(
+            'the package changes rust/, and cargo-deny is not here'
+        )
     if not (python_files or crates):
         step.notes.append('no Python or Rust file changed')
     return step
@@ -1112,6 +1169,7 @@ def cmd_run(args: argparse.Namespace) -> int:
                 ),
             ),
             ('affected', lambda: step_affected(root, recent, python)),
+            ('wheel', lambda: step_wheel(root, touched, scratch)),
         ]
         try:
             for name, step_of in plan:
