@@ -20,9 +20,9 @@ packages:
   - {id: T3.4, hours: 8}
   - {id: T3.7, hours: 0}
   - {id: T3.9, hours: 0}
-  - {id: T3.5, hours: 3}
+  - {id: T3.5, hours: 5}
   - {id: T3.6, hours: 0}
   - {id: T3.11, hours: 0}
   - {id: T3.12, hours: 0}
-  - {id: T3.13, hours: 6}
+  - {id: T3.13, hours: 4}
   - {id: T3.10, hours: 12}
