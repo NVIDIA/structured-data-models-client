@@ -2336,12 +2336,17 @@ jobs:
             grep -qx "com/nvidia/sdm/native/$native" <<<"$listed" \
               || { echo "::error::the JAR holds no $native"; exit 1; }
           done
+      # The JAR, its runtime dependencies, and the JAR-load test's program,
+      # so the load jobs need no checkout.
+      - name: The JAR's artifact
+        run: |
+          mkdir -p java-jar
+          cp java/target/structured-data-models-client-1.0.0.jar java/jar-load/JarLoad.java java-jar/
+          cp -R java/target/lib java-jar/lib
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: java-jar
-          path: |
-            java/target/structured-data-models-client-1.0.0.jar
-            java/target/lib/
+          path: java-jar/
 
   # Every Java test (mvn verify, with the runtime flags) on JDK 17 and 21,
   # loading the native with the test-only operations: the binding's
@@ -2411,9 +2416,6 @@ jobs:
     env:
       FLAGS: --enable-native-access=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          sparse-checkout: java/jar-load
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: java-jar
@@ -2430,7 +2432,7 @@ jobs:
             echo "::error::a Rust toolchain is in the container"; exit 1
           fi
           java -version
-          java $FLAGS -cp "jar/structured-data-models-client-1.0.0.jar:jar/lib/*" java/jar-load/JarLoad.java
+          java $FLAGS -cp "jar/structured-data-models-client-1.0.0.jar:jar/lib/*" jar/JarLoad.java
 
   # Java's legs of the contract cases, on each JDK and platform the JAR
   # promises (locked check 14): every S0 case on the Java host, judged
