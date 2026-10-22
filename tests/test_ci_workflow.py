@@ -1130,7 +1130,11 @@ def test_ci4_the_token_goes_only_to_ghcr_io(
         for name, job in workflow['jobs'].items():
             assert not re.search(TOKEN, str(job.get('env'))), name
             assert 'permissions' not in job, name
-            assert 'container' not in job, name
+            # The JAR-load jobs' JDK containers (T3.11) are pulled
+            # anonymously: a container named with no credentials.
+            assert name == 'java-load' or 'container' not in job, name
+            if 'container' in job:
+                assert isinstance(job['container'], str), name
             for step in job.get('steps', []):
                 assert not re.search(TOKEN, str(step.get('with'))), (name, step)
                 assert not re.search(TOKEN, str(step.get('run'))), (name, step)
