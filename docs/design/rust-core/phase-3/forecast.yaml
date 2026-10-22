@@ -14,14 +14,15 @@
 # the design is approved. The report never blocks anything (KO3-12).
 start: '2026-10-23T00:00:00Z'
 packages:
-  - {id: T3.2, hours: 11}
-  - {id: T3.7, hours: 0}
+  - {id: T3.2, hours: 12}
+  - {id: T3.3, hours: 0}
   - {id: T3.8, hours: 0}
-  - {id: T3.3, hours: 3}
+  - {id: T3.4, hours: 8}
   - {id: T3.6, hours: 0}
-  - {id: T3.10, hours: 0}
-  - {id: T3.4, hours: 3}
-  - {id: T3.5, hours: 0}
-  - {id: T3.11, hours: 4}
-  - {id: T3.9, hours: 7}
-  - {id: T3.12, hours: 3}
+  - {id: T3.7, hours: 0}
+  - {id: T3.9, hours: 0}
+  - {id: T3.5, hours: 3}
+  - {id: T3.11, hours: 0}
+  - {id: T3.12, hours: 0}
+  - {id: T3.13, hours: 6}
+  - {id: T3.10, hours: 11}

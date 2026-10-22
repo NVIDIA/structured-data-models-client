@@ -4,19 +4,20 @@
 
 # Phase 3's locked acceptance checks (design.md, "Locked acceptance checks"),
 # as scripts/rust_core/gate.sh --locked 3a reads them from the judging
-# harness's tree. The half lists every S0 and S1 acceptance case at the
-# design's lock (24 and 290), each S1 case run on DuckDB, SQLite and
-# Postgres as its file says (KO2-19, KO2-65): the floor the switch must
-# hold. The S2 cases join the list once, in T3.2, the tooling train, from
-# the kinds of dryrun-plan.yaml (design.md, "Locked acceptance checks"); a
-# later change to the checks is the owner's. Its steps beyond the runners,
-# observations, ratchet, compare, coverage, l0 and l1 every locked run
-# makes, and its numbered checks that the gate judges, with the steps each
-# holds (12 is the every check). Checks 3, 4, 5, 6, 8, 9, 11, 13 and 14 are
-# judged outside the gate: by land.py's exact-SHA CI rule, as end-of-phase
-# reports read by both reviewers, or once at the phase end (the held-out
-# run and the live runs). Protected by the phase-*/locked-set.yaml glob in
-# contract/protected-paths.txt.
+# harness's tree. The half lists the 309 S0 and S1 acceptance cases at the
+# design's lock (19 of the 24 S0 cases and 290 of the 291 S1 cases; the
+# other six are diagnostic): the floor the switch must hold. Each S1 case
+# runs on every database and warehouse leg its file and its engines' type
+# maps give (KO2-19, KO2-65; design.md, choice 1). The S2 case IDs join the
+# list once, in T3.10, from the S2 case files then landed, of the kinds in
+# dryrun-plan.yaml; any other change to the checks is the owner's. Its steps
+# beyond the runners, observations, ratchet, compare, coverage, l0 and l1
+# every locked run makes, and its numbered checks that the gate judges, with
+# the steps each holds (12 is the every check). Checks 3, 4, 5, 6, 8, 9, 11,
+# 13 and 14 are judged outside the gate: by land.py's exact-SHA CI rule, as
+# end-of-phase reports read by both reviewers, or once at the phase end on
+# the commit that lands (the held-out run and the live runs). Protected by
+# the phase-*/locked-set.yaml glob in contract/protected-paths.txt.
 format: sdm-locked-set/1
 halves:
   3a:
