@@ -293,9 +293,6 @@ pub(crate) fn host(
 pub(crate) fn namespace(mut rows: Vec<Vec<Option<String>>>) -> Result<CatalogAnswer, CoreError> {
     match rows.len() {
         1 => Ok(CatalogAnswer::Namespace(rows.remove(0))),
-        _ => Err(unread(
-            c::PARTS,
-            "a namespace answer does not hold one row",
-        )),
+        _ => Err(unread(c::PARTS, "a namespace answer does not hold one row")),
     }
 }

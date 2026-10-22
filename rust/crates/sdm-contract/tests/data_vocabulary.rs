@@ -73,6 +73,8 @@ const IDENTIFIERS: &[&str] = &[
     // A relation's name parts, each quoted alone (design choice 12,
     // contract v26): the source a request reads, never text interpreted.
     "source",
+    // The name a derived relation gives a column (contract v28).
+    "name",
 ];
 
 /// The reviewed exceptions of contract v28 (Phase 3, design choice 3): a
@@ -218,11 +220,10 @@ impl Walk<'_> {
         if let Some(properties) = map.get("properties").and_then(Value::as_object) {
             for (property, child) in properties {
                 let at = format!("{path}/{property}");
-                if seen.last().is_some_and(|def| {
-                    OPAQUE_SQL
-                        .iter()
-                        .any(|(d, p)| d == def && p == property)
-                }) {
+                if seen
+                    .last()
+                    .is_some_and(|def| OPAQUE_SQL.iter().any(|(d, p)| d == def && p == property))
+                {
                     self.found.push(Finding::Identifier(at));
                     continue;
                 }

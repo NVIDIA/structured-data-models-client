@@ -169,7 +169,9 @@ fn pragma(
 /// What a SQLite source answers through this layer.
 pub(crate) fn capabilities() -> ProviderCapabilities {
     ProviderCapabilities {
-        derived_relations: false, neighbor_lookback: false, sample_rows: false,
+        derived_relations: false,
+        neighbor_lookback: false,
+        sample_rows: false,
         optional: RENDERED.iter().copied().collect::<BTreeSet<_>>(),
         max_keys_per_request: None,
         // The seeded draw of RS-2 repeats under a seed.

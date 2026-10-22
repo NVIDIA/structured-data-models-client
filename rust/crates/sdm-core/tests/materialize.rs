@@ -149,7 +149,9 @@ fn shop() -> SourceDescription {
 fn host() -> ProviderChoice {
     ProviderChoice::Host {
         capabilities: ProviderCapabilities {
-            derived_relations: false, neighbor_lookback: false, sample_rows: false,
+            derived_relations: false,
+            neighbor_lookback: false,
+            sample_rows: false,
             optional: BTreeSet::from([
                 OptionalRequest::TimeBounds,
                 OptionalRequest::SampleEntities,
