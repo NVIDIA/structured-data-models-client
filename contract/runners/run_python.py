@@ -4446,6 +4446,35 @@ def _origin(filename: str) -> str | None:
 # --- the run ---------------------------------------------------------------------
 
 
+#: Where the checkout declares its contract version.
+CONTRACT_SOURCE = REPO / 'rust/crates/sdm-contract/src/lib.rs'
+
+
+def stale_client(installed: Any, source: Path = CONTRACT_SOURCE) -> str | None:
+    r"""Why the installed client may not run this checkout's cases
+    (P2-MID2-7): its core's contract version is not the one the checkout
+    declares, so it is a wheel built from another tree; or None. A
+    checkout that declares none (a tree without the core) is not held."""
+    try:
+        text = source.read_text(encoding='utf-8')
+    except OSError:
+        return None
+    declared = re.findall(
+        r'^pub const CONTRACT_VERSION: u32 = (\d+);$', text, re.M
+    )
+    if len(declared) != 1:
+        return (
+            f'{source.name} declares {len(declared)} contract versions, not one'
+        )
+    if installed != int(declared[0]):
+        return (
+            f"the installed client's contract version {installed} is not the "
+            f"checkout's {declared[0]}: a stale wheel; rebuild the lane's "
+            'environment (scripts/rust_core/cells.sh)'
+        )
+    return None
+
+
 def _native_sha256() -> str | None:
     module = sys.modules.get('sdm_client._native')
     location = getattr(module, '__file__', None)
@@ -4525,6 +4554,12 @@ def run(
     versions = _versions()
     if 'duckdb' not in versions:
         raise RunnerFailure('duckdb is not installed')
+    if mode == 'python-core':
+        from sdm_client import _native
+
+        refused = stale_client(getattr(_native, 'CONTRACT_VERSION', None))
+        if refused is not None:
+            raise RunnerFailure(refused)
     if mode == 'python-core' and database != 'duckdb':
         from sdm_client import _native
 

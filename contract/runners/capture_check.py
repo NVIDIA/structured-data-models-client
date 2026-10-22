@@ -97,6 +97,7 @@ SECTIONS = (
     'reach',
     'baseline',
     'relaxations',
+    'standin',
 )
 #: A field path of an observation, dotted (``outcome.code``).
 FIELD = re.compile(r'[a-z_]+(\.[a-z_]+)*')
@@ -110,6 +111,18 @@ FIELD = re.compile(r'[a-z_]+(\.[a-z_]+)*')
 APPROVED_EXCLUSIONS: dict[str, tuple[str, ...]] = {
     # The request id the client draws at random (approved 2026-10-10).
     'E35': ('metadata', 'request_id'),
+}
+
+
+#: What the policy's ``standin`` section may hold, by the owner's
+#: approval: the stand-in's reason codes, exactly the design's blind-spot
+#: rows B1, B2 and B4 (Phase 3 design choice 2), and the rules only reported
+#: on a stand-in leg, H9's statement count and results (KO3-45, approved by
+#: owner 2026-10-22). Widening either needs the owner and a review of this
+#: protected file.
+APPROVED_STANDIN = {
+    'codes': ('B1', 'B2', 'B4'),
+    'diagnostic': ('sql.count', 'sql.result'),
 }
 
 
@@ -349,6 +362,24 @@ def policy(
         for item in loaded['relaxations']
     ):
         raise PolicyError('relaxations: not a list of changes and decisions')
+    standin = loaded['standin']
+    if not isinstance(standin, dict) or set(standin) != set(APPROVED_STANDIN):
+        raise PolicyError('standin: not its codes and diagnostic rules')
+    if list(standin['codes'] or []) != list(APPROVED_STANDIN['codes']):
+        raise PolicyError(
+            "standin: its codes are not the design's B1, B2 and B4"
+        )
+    diagnostic = standin['diagnostic']
+    if (
+        not isinstance(diagnostic, list)
+        or any(
+            rule not in APPROVED_STANDIN['diagnostic'] for rule in diagnostic
+        )
+        or any(rule not in rules for rule in diagnostic)
+    ):
+        raise PolicyError(
+            'standin: a diagnostic rule the owner did not approve (KO3-45)'
+        )
     return loaded
 
 
@@ -998,8 +1029,124 @@ def captures_only_main(argv: list[str]) -> int:
     return 1 if problems else 0
 
 
+#: A live-only item as compare.py prints it: ``LIVE ONLY <key>: <runner>:
+#: <code>``.
+LIVE_ONLY = re.compile(
+    r'LIVE ONLY (?P<case>[^:\s]+): (?P<runner>[a-z-]+): (?P<code>B[0-9]+)'
+)
+
+
+def accepted_recordings(repo: Path, head: str = 'HEAD') -> list[str]:
+    r"""The commits whose live campaign stands for ``head`` (design, "The
+    live-test plan"): ``head`` itself, and each first-parent ancestor
+    below a run of captures-only commits up to ``head``
+    (:func:`captures_only`), the final candidate those captures were
+    recorded from."""
+    try:
+        sha = _git_lines(repo, 'rev-parse', '--verify', f'{head}^{{commit}}')[0]
+    except (ValueError, IndexError):
+        return []
+    found = [sha]
+    for parent in _git_lines(repo, 'rev-list', '--first-parent', f'{sha}~1')[
+        :50
+    ]:
+        if captures_only(repo, parent, sha):
+            break
+        found.append(parent)
+    return found
+
+
+def verdicts(captures: Path) -> dict[tuple[str, str], list[dict[str, Any]]]:
+    r"""Every E-1 (or E-7) verdict the core's live captures hold, by case
+    key and runner: a line of ``captures/**/*.jsonl`` with a ``verdict``
+    (``{"runner": ..., "result": "pass" | "fail"}``) and its recording
+    commit."""
+    found: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for path in sorted(captures.rglob('*.jsonl')):
+        for text in path.read_text(encoding='utf-8').splitlines():
+            try:
+                line = json.loads(text)
+            except (ValueError, RecursionError):
+                continue
+            if not isinstance(line, dict) or not isinstance(
+                line.get('verdict'), dict
+            ):
+                continue
+            key = (str(line.get('case')), str(line['verdict'].get('runner')))
+            found.setdefault(key, []).append(
+                {
+                    'result': line['verdict'].get('result'),
+                    'commit': (line.get('recording') or {}).get('commit'),
+                }
+            )
+    return found
+
+
+def live_only_problems(
+    items: Iterable[str], captures: Path, recordings: list[str]
+) -> list[str]:
+    r"""Why the locked run fails on live-only items (Phase 3 design choice
+    2): each item (compare.py's ``LIVE ONLY`` line) needs an E-1 verdict of
+    its case and runner that passed, recorded from one of ``recordings``
+    (:func:`accepted_recordings`); one missing, one naming another commit,
+    or one that failed, fails by name."""
+    held = verdicts(captures)
+    problems = []
+    for item in items:
+        match = LIVE_ONLY.search(item)
+        if match is None:
+            problems.append(f'{item.strip()}: not a live-only item')
+            continue
+        key = (match['case'], match['runner'])
+        mine = [v for v in held.get(key, []) if v['commit'] in recordings]
+        where = (
+            f'{match["case"]}: {match["runner"]}: live only ({match["code"]})'
+        )
+        if not mine:
+            others = held.get(key, [])
+            problems.append(
+                f'{where}: no E-1 verdict for the final candidate'
+                + (' (only for another commit)' if others else '')
+            )
+        elif any(v['result'] != 'pass' for v in mine):
+            problems.append(f'{where}: its E-1 verdict did not pass')
+    return problems
+
+
+def live_only_main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(prog='capture_check.py live-only')
+    parser.add_argument('--items', type=Path, nargs='+', required=True)
+    parser.add_argument('--repo', type=Path, default=ROOT)
+    parser.add_argument('--head', default='HEAD')
+    arguments = parser.parse_args(argv)
+    try:
+        items = [
+            text
+            for path in arguments.items
+            for text in path.read_text(encoding='utf-8').splitlines()
+            if text.startswith('LIVE ONLY ')
+        ]
+    except OSError as error:
+        print(f'live-only: unreadable: {type(error).__name__}')
+        return 1
+    recordings = accepted_recordings(arguments.repo, arguments.head)
+    if not recordings:
+        print(f'live-only: {arguments.head} is not a commit')
+        return 1
+    problems = live_only_problems(items, arguments.repo / CAPTURES, recordings)
+    for problem in problems:
+        print(f'FAILS {problem}')
+    print(
+        f'live-only: {"FAILED" if problems else "ok"}; {len(items)} items, '
+        f'{len(items) - len(problems)} discharged by E-1'
+    )
+    return 1 if problems else 0
+
+
 def main(argv: list[str] | None = None) -> int:
     given = sys.argv[1:] if argv is None else argv
+    if given[:1] == ['live-only']:
+        return live_only_main(given[1:])
     if given[:1] == ['captures']:
         return captures_main(given[1:])
     if given[:1] == ['captures-only']:

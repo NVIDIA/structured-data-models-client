@@ -10,6 +10,16 @@
     "format": {"const": "sdm-observation/1"},
     "case": {"$ref": "#/$defs/key"},
     "identity": {"$ref": "#/$defs/identity"},
+    "standin": {
+      "description": "A warehouse leg judged offline only (Phase 3 design choice 2): the stand-in's verdict on the case, as the stand-in alone assigns it. live_only is the reason code (a row of the design's blind-spot table, one of contract/compare-policy.yaml's standin codes, which compare.py holds it to) when neither exact replay nor the local engine could answer, else null; flagged lists the codes of answers the local engine gave that the warehouse may give otherwise (B4: keys of different recorded types), a flagged case passing when its outcome equals the reference's and becoming live_only otherwise. Absent on every other leg and runner.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["live_only", "flagged"],
+      "properties": {
+        "live_only": {"type": ["string", "null"], "pattern": "^B[0-9]+$"},
+        "flagged": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^B[0-9]+$"}}
+      }
+    },
     "outcome": {
       "description": "Where the public call ended. For rust-host, which makes no public call, the outcome is the core's answer as the route maps it: an accepted query, a description or a materialized request is a success, a refused query INVALID_REQUEST, and a core error a refusal with its code.",
       "type": "object",
@@ -393,7 +403,7 @@
       "additionalProperties": false,
       "required": ["runner", "cell", "platform", "commit", "reference", "native", "native_loaded", "operations", "contract", "versions", "inputs"],
       "properties": {
-        "runner": {"enum": ["python-ref", "python-core", "python-old", "rust-host"]},
+        "runner": {"description": "The runner: the reference, the candidate on the core or its old route, the pure-Rust host, or the Java host (Phase 3 design choice 10, T3.11's contract/runners/run_java.py).", "enum": ["python-ref", "python-core", "python-old", "rust-host", "java"]},
         "cell": {
           "description": "The runtime cell (design, Runtime cells) whose versions the runner's environment has exactly, or null when it has none's.",
           "enum": ["ref-pandas3", "dbr17-pandas2", "floor-pandas2.2", null]

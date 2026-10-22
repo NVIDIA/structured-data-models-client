@@ -115,6 +115,26 @@ reach:
 # reference observations by this file's rules, not baselined.
 baseline: [outcome.result, outcome.stage, outcome.error, outcome.code]
 
+# A warehouse leg judged offline, on the stand-in (Phase 3 design choice 2).
+# `codes` are the stand-in's reason codes, the rows of the design's
+# blind-spot table it may assign: B1 (a statement the old client never sent,
+# over SQL the local engine cannot run), B2 (a view relation holding a column
+# the warehouse refused) and B4 (keys of different recorded types answered by
+# the local engine). A core runner's observation on a warehouse leg carries
+# the stand-in's verdict (observation.schema.json's `standin`): `live_only`,
+# one of these codes, makes the case and leg live only, neither passed nor
+# failed offline, until E-1's verdict on the final candidate discharges it;
+# a code not listed fails, and no case may mark itself live only. A case
+# `flagged` with a listed code passes when it equals the reference and is
+# live only when it differs. `diagnostic` are the rules only reported on a
+# stand-in leg, whose statements are mostly the stand-in's: H9 narrowed
+# there, and only there, by the owner (KO3-45); a live leg is judged by
+# every rule above. contract/runners/capture_check.py holds both lists to
+# the owner's approval (APPROVED_STANDIN).
+standin:
+  codes: [B1, B2, B4]
+  diagnostic: [sql.count, sql.result]
+
 # The relaxations of this file the owner approved, each {change, decision}:
 # the change as the ratchet prints it, and the decisions.md row, at the
 # checkpoint, that approves it.

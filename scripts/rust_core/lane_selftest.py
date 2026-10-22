@@ -1137,6 +1137,82 @@ def _(w: World) -> tuple[bool, str]:
     )
 
 
+PHASE_3 = 'rust-core-phase-3'
+
+
+def phase_3(w: World, headings: tuple[str, ...] | None = None) -> Path:
+    """A Phase 3 branch on the remote, cut from the Phase 1 head, the
+    tools pointed at it, and a brief holding the template's headings (all
+    of them, or ``headings``)."""
+    w.git('push', '--quiet', 'origin', f'{w.phase}:refs/heads/{PHASE_3}', cwd=w.seed)  # fmt: skip
+    w.env['SDM_PHASE_BRANCH'] = PHASE_3
+    import brief_check
+
+    wanted = brief_check.required(brief_check.TEMPLATE)
+    brief = w.tmp / 'brief.md'
+    brief.write_text(
+        '# T3.4: a brief\n\n'
+        + ''.join(
+            f'{heading}\n\nnone: a seeded brief.\n\n'
+            for heading in (wanted if headings is None else headings)
+        )
+    )
+    return brief
+
+
+@case('phase 3: a whole package ID and a full brief start the lane')
+def _(w: World) -> tuple[bool, str]:
+    brief = phase_3(w)
+    ran = w.start('T3.4', '--brief', str(brief))
+    ok = ran.code == 0 and w.package(w.worktree) == 'T3.4'
+    return verdict(ok, 'started', ran)
+
+
+@case('phase 3: a package ID with a letter is refused (T3.2)')
+def _(w: World) -> tuple[bool, str]:
+    brief = phase_3(w)
+    before = w.refs()
+    ran = w.start('T3.4a', '--brief', str(brief))
+    return verdict(
+        refused_untouched(w, ran, "the package 'T3.4a' has a letter", before),
+        'refused, nothing changed',
+        ran,
+    )
+
+
+@case('phase 3: a lane started with no brief is refused (T3.2)')
+def _(w: World) -> tuple[bool, str]:
+    phase_3(w)
+    before = w.refs()
+    ran = w.start('T3.4')
+    return verdict(
+        refused_untouched(w, ran, 'pass --brief FILE', before),
+        'refused, nothing changed',
+        ran,
+    )
+
+
+@case('phase 3: a brief missing a heading is refused, naming it (T3.2)')
+def _(w: World) -> tuple[bool, str]:
+    import brief_check
+
+    wanted = brief_check.required(brief_check.TEMPLATE)
+    brief = phase_3(w, tuple(wanted[1:]))
+    before = w.refs()
+    ran = w.start('T3.4', '--brief', str(brief))
+    return verdict(
+        refused_untouched(w, ran, f'lacks the heading {wanted[0][3:]}', before),
+        'refused, naming the heading',
+        ran,
+    )
+
+
+@case('phase 1: a lettered ID and no brief still start, as before T3.2')
+def _(w: World) -> tuple[bool, str]:
+    ran = w.start('T1.11e')
+    return verdict(ran.code == 0, 'started', ran)
+
+
 @case('phase: a phase name that is no phase branch is refused, by name')
 def _(w: World) -> tuple[bool, str]:
     before = w.refs()

@@ -382,7 +382,43 @@ def _main_half() -> str:
     )
 
 
+def _upstream(tree: Path) -> Path:
+    r"""The bare repository the tree's ``origin`` remote names, made the
+    first time: the main step fetches ``origin/main`` itself right before
+    it reads it (T3.2, P2-T2.0f-1), so a test sets main there."""
+    common = Path(git(tree, 'rev-parse', '--git-common-dir').strip())
+    if not common.is_absolute():
+        common = (tree / common).resolve()
+    bare = common.parent / 'upstream.git'
+    if not bare.exists():
+        subprocess.run(
+            ['git', 'init', '-q', '--bare', str(bare)],
+            capture_output=True,
+            check=True,
+        )
+    remotes = git(tree, 'remote').split()
+    if 'origin' not in remotes:
+        git(tree, 'remote', 'add', 'origin', str(bare))
+    return bare
+
+
 def _refs(tree: Path, origin_main: str | None, local_main: str | None) -> None:
+    bare = _upstream(tree)
+    if origin_main is None:
+        subprocess.run(
+            ['git', '-C', str(bare), 'update-ref', '-d', 'refs/heads/main'],
+            capture_output=True,
+            check=False,
+        )
+    else:
+        git(
+            tree,
+            'push',
+            '-q',
+            'origin',
+            f'{origin_main}:refs/heads/hold-{origin_main}',
+        )
+        git(bare, 'update-ref', 'refs/heads/main', origin_main)
     for ref, sha in ((ORIGIN_MAIN, origin_main), (LOCAL_MAIN, local_main)):
         if sha is None:
             subprocess.run(

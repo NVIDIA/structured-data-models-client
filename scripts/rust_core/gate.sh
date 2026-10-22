@@ -704,11 +704,24 @@ judge_compare() {
     "$PYTHON" "$here/scripts/rust_core/ratchet.py" effective --repo "$candidate" \
       "${where[@]}" "${epic[@]+"${epic[@]}"}" --out "$scratch/effective.json" || return 1
   fi
+  local status=0
   "$PYTHON" "$here/scripts/rust_core/compare.py" \
     --cases "$candidate/contract/cases" --bases "$candidate/contract/bases.yaml" \
     --reference "$(ls "$candidate"/contract/reference/*.jsonl)" \
     --expect "$scratch/effective.json" \
-    --register "$candidate/docs/design/rust-core/register.yaml" "${given[@]}"
+    --register "$candidate/docs/design/rust-core/register.yaml" "${given[@]}" \
+    >"$scratch/compare.out" || status=1
+  cat "$scratch/compare.out"
+  # A live-only item (Phase 3 design choice 2) is neither passed nor failed
+  # offline; the locked run fails while one has no passing E-1 verdict for
+  # the final candidate in the core's live capture (contract/captures/), the
+  # candidate itself or the final candidate a captures-only commit was
+  # recorded from (capture_check.py live-only).
+  if [ -n "$locked" ] && grep -q '^LIVE ONLY ' "$scratch/compare.out"; then
+    "$PYTHON" "$here/contract/runners/capture_check.py" live-only \
+      --items "$scratch/compare.out" --repo "$candidate" --head "$head" || status=1
+  fi
+  return $status
 }
 if want compare && { [ ${#given[@]} -gt 0 ] || [ -n "$only" ]; }; then
   step compare judge_compare
@@ -823,12 +836,18 @@ else:
     print(f'the {len(also)} locked cases are acceptance cases')
 EOF
 }
-# The main step (locked check 7): the fetched origin/main, never a local
-# main, is an ancestor of the candidate and of the reference commit the
-# candidate's contract/reference-env.txt names, so the phase branch and
+# The main step (locked check 7): origin/main, fetched by this step right
+# before it reads it (P2-T2.0f-1: an older fetch passed a stale main), never
+# a local main, is an ancestor of the candidate and of the reference commit
+# the candidate's contract/reference-env.txt names, so the phase branch and
 # the reference are both at main's head as of this run.
 main_merged() {
   local g=(git -C "$candidate") tip reference status=0
+  if ! GIT_TERMINAL_PROMPT=0 GH_PROMPT_DISABLED=1 timeout 300 \
+    "${g[@]}" fetch --quiet origin main </dev/null; then
+    echo 'could not fetch origin/main right before the run: main is judged as of now, never as last fetched'
+    return 1
+  fi
   tip=$("${g[@]}" rev-parse -q --verify 'refs/remotes/origin/main^{commit}') || {
     echo 'no fetched origin/main (refs/remotes/origin/main): fetch it; a local main is not read'
     return 1

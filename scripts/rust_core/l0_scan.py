@@ -1056,7 +1056,11 @@ DIALECT_FREE_CRATES = (
     'sdm-wire',
     'sdm-host',
     'sdm-py',
+    'sdm-jni',
 )
+# The crates of that list planned and not yet written (Java's binding,
+# Phase 3 design choice 10): scanned once their sources exist.
+PLANNED_CRATES = ('sdm-jni',)
 # The reviewed deny-list. A dialect's name, or its catalog's own: matched in
 # any case anywhere in an identifier or a literal's word, as no neutral name
 # holds one.
@@ -1117,6 +1121,8 @@ def check_dialects(root: Path) -> list[str]:
     for crate in DIALECT_FREE_CRATES:
         src = crate_dir(root, crate) / 'src'
         if not src.is_dir():
+            if crate in PLANNED_CRATES and not crate_dir(root, crate).exists():
+                continue
             problems.append(f'{src.relative_to(root)}: missing')
             continue
         tests = test_module_files(src)

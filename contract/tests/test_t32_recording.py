@@ -732,3 +732,16 @@ def test_a_deep_reference_line_is_refused_by_name() -> None:
     line['observation']['public']['schema'] = nested
     problems, _ = check.captures([case], [line], ['databricks-sql'])
     assert problems and all('base.binary@databricks-sql' in p for p in problems)
+
+
+def test_a_stale_installed_client_is_refused(tmp_path: Path) -> None:
+    r"""P2-MID2-7: python-core refuses a client whose contract version is
+    not the checkout's."""
+    source = tmp_path / 'lib.rs'
+    source.write_text('pub const CONTRACT_VERSION: u32 = 28;\n')
+    assert run.stale_client(28, source) is None
+    assert 'a stale wheel' in (run.stale_client(27, source) or '')
+    assert 'a stale wheel' in (run.stale_client(None, source) or '')
+    assert run.stale_client(27, tmp_path / 'none.rs') is None
+    # The checkout's own declaration is read: no contract is version 0.
+    assert run.stale_client(0) is not None

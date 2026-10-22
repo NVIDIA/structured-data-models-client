@@ -259,6 +259,8 @@ def deps_cases(results: list[Result], base: dict[str, Any]) -> None:
 
     def design_graph(m: Metadata) -> None:
         for crate, deps in l0_deps.ALLOWED.items():
+            if crate in l0_deps.PLANNED:
+                continue
             for dep in deps:
                 if not any(
                     d['pkg'] == m.ids[dep] for d in m.node(crate)['deps']
@@ -387,41 +389,59 @@ def deps_cases(results: list[Result], base: dict[str, Any]) -> None:
         'sdm-py reaches snowflake-connector-rs',
     )
 
-    # A future Java binding (sdm-jni) links jni, and no Python.
+    # Java's binding (sdm-jni, T3.2): classified before it exists, so a
+    # workspace without it passes, and once it exists it links jni, no
+    # Python and no driver, and reaches the core through sdm-host alone.
     with tempfile.TemporaryDirectory(prefix='sdm-l0-') as tmp:
         manifest = Path(tmp) / 'sdm-jni/Cargo.toml'
         manifest.parent.mkdir()
         manifest.write_text(
             '[package]\nname = "sdm-jni"\n\n[lints.rust]\nunsafe_code = "deny"\n'
         )
-        classes, allowed = dict(l0_deps.CLASSES), dict(l0_deps.ALLOWED)
-        l0_deps.CLASSES['sdm-jni'] = l0_deps.BINDING
-        l0_deps.ALLOWED['sdm-jni'] = frozenset({'sdm-host', 'sdm-contract'})
-        try:
+        assert l0_deps.CLASSES['sdm-jni'] == l0_deps.BINDING
 
-            def jni(m: Metadata, extra: str | None = None) -> None:
-                m.member('sdm-jni', manifest)
-                for dep in ('sdm-host', 'sdm-contract', 'jni'):
+        def jni(m: Metadata, extra: str | None = None, drop: str = '') -> None:
+            m.member('sdm-jni', manifest)
+            for dep in ('sdm-host', 'sdm-contract', 'jni'):
+                if dep != drop:
                     m.edge('sdm-jni', dep)
-                if extra:
-                    m.edge('sdm-jni', extra)
+            if extra:
+                m.edge('sdm-jni', extra)
 
-            case('control: a Java binding, sdm-jni, on jni', jni, None)
-            case(
-                'a Java binding on pyo3',
-                lambda m: jni(m, 'pyo3'),
-                'sdm-jni reaches pyo3',
-            )
-            case(
-                'a Java binding on duckdb',
-                lambda m: jni(m, 'duckdb'),
-                'sdm-jni reaches duckdb',
-            )
-        finally:
-            l0_deps.CLASSES.clear()
-            l0_deps.CLASSES.update(classes)
-            l0_deps.ALLOWED.clear()
-            l0_deps.ALLOWED.update(allowed)
+        case('control: a Java binding, sdm-jni, on jni', jni, None)
+        case(
+            'a Java binding on pyo3',
+            lambda m: jni(m, 'pyo3'),
+            'sdm-jni reaches pyo3',
+        )
+        case(
+            'a Java binding on duckdb',
+            lambda m: jni(m, 'duckdb'),
+            'sdm-jni reaches duckdb',
+        )
+        case(
+            'a Java binding on sdm-core',
+            lambda m: jni(m, 'sdm-core'),
+            'sdm-jni -> sdm-core',
+        )
+        case(
+            'a Java binding without sdm-contract (E21)',
+            lambda m: jni(m, drop='sdm-contract'),
+            'sdm-jni: does not depend on sdm-contract',
+        )
+        bound = Path(tmp) / 'sdm-other/Cargo.toml'
+        bound.parent.mkdir()
+        bound.write_text(
+            '[package]\nname = "sdm-other"\n\n[lints.rust]\nunsafe_code = "deny"\n'
+        )
+        case(
+            'an unclassified binding',
+            lambda m: (
+                m.member('sdm-other', bound),
+                m.edge('sdm-other', 'sdm-host'),
+            ),
+            'sdm-other: a workspace crate with no class',
+        )
 
     # The parser rule's source half, and the unsafe check: crates copied.
     def with_crate(
@@ -2366,6 +2386,27 @@ def scan_cases(results: list[Result]) -> None:
             '\nconst POSITION: &str = "cid";\n',
         ),
         '`cid` names a dialect (cid)',
+    )
+
+    def jni(root: Path, text: str) -> None:
+        source = root / 'rust/bindings/sdm-jni/src'
+        source.mkdir(parents=True)
+        (source / 'lib.rs').write_text(text)
+
+    dialects(
+        "control: Java's binding, sdm-jni, absent until it exists",
+        lambda r: None,
+        None,
+    )
+    dialects(
+        "another dialect's name in Java's binding, sdm-jni, once it exists",
+        lambda r: jni(r, 'const DIALECT: &str = "Snowflake";\n'),
+        '`Snowflake` names a dialect (snowflake)',
+    )
+    dialects(
+        "control: Java's binding with no dialect word",
+        lambda r: jni(r, 'const ANSWER: u8 = 42;\n'),
+        None,
     )
     dialects(
         "another dialect's name in the binding, sdm-py",

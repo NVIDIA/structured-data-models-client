@@ -149,12 +149,57 @@ def lane_branch(name: str, phase: Phase) -> str:
     return phase.lane_prefix + name
 
 
-def package_id(package: str) -> str:
+#: A package ID from Phase 3 on: an integer within its phase, no letter
+#: (T3.1's rule, learnings.md: few big packages; T2.14a1 broke landings).
+WHOLE_PACKAGE_ID = re.compile(r'T[0-9]+\.[0-9]+|CI[0-9]+')
+#: The first phase whose package IDs are whole and whose briefs are checked
+#: before a lane starts (T3.2).
+WHOLE_FROM = 3
+
+
+def package_id(package: str, phase: int | None = None) -> str:
     if not PACKAGE_ID.fullmatch(package):
         raise Refusal(
             f'the package {package!r} is not a package ID such as T1.11e or CI3'
         )
+    if (
+        phase is not None
+        and phase >= WHOLE_FROM
+        and not WHOLE_PACKAGE_ID.fullmatch(package)
+    ):
+        raise Refusal(
+            f'the package {package!r} has a letter: from Phase {WHOLE_FROM} '
+            'on a package ID is a whole number within its phase, such as '
+            'T3.4 (fewer, bigger packages)'
+        )
     return package
+
+
+def brief_problems(brief: str | None, phase: int) -> list[str]:
+    r"""Why the package's brief may not start a lane (T3.2; learnings.md,
+    lesson 16): from Phase 3 on a brief is given, and ``brief_check.py``
+    finds every heading of the brief template in it."""
+    if brief is None:
+        return (
+            [
+                f'from Phase {WHOLE_FROM} on a lane starts from its package '
+                'brief: pass --brief FILE, which brief_check.py checks'
+            ]
+            if phase >= WHOLE_FROM
+            else []
+        )
+    import brief_check
+
+    try:
+        headings = brief_check.required(brief_check.TEMPLATE)
+        lacking = brief_check.missing(Path(brief), headings)
+    except brief_check.Unreadable as error:
+        return [f'the brief cannot be read: {error}']
+    return [
+        f'the brief {brief} lacks the heading {heading[3:]} '
+        '(briefs/package.md; brief_check.py)'
+        for heading in lacking
+    ]
 
 
 # --- the remote ---------------------------------------------------------------
@@ -441,6 +486,13 @@ def plan_start(
     if phase_name not in tips:
         raise Refusal(f'{args.remote} has no {phase_name}')
     phase = tips[phase_name]
+    # From Phase 3 on (T3.2): whole package IDs, and the package's brief
+    # holding every heading of the template.
+    number = phase_of_tools(tools).number
+    package_id(package, number)
+    problems = brief_problems(getattr(args, 'brief', None), number)
+    if problems:
+        raise Refusal('\n'.join(problems))
     remote_lane = tips.get(branch)
     fetch_objects(tools, args.remote, *tips)
     out(f'ok   {phase_name} is at {phase}')
@@ -954,6 +1006,11 @@ def parser() -> argparse.ArgumentParser:
         '--worktree', required=True, help="the lane's worktree directory"
     )
     begin.add_argument('--wait', action='store_true')
+    begin.add_argument(
+        '--brief',
+        help="the package's brief, which brief_check.py must pass (required "
+        f'from Phase {WHOLE_FROM} on)',
+    )
     begin.add_argument(
         '--wait-seconds', type=float, default=WAIT_SECONDS,
         help=argparse.SUPPRESS,

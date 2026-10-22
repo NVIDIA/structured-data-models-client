@@ -73,7 +73,10 @@ INVENTORY = Path('docs/design/rust-core/phase-0/phase-1b-inventory.yaml')
 #: A task ID, the legacy form of a case: ``T0.6``, ``T1.7c``, ``T1.11f``.
 TASK = re.compile(r'T[0-9]+\.[0-9]+[a-z]?')
 #: A line's key on another database: the case, ``@``, the database.
-ON_DATABASE = re.compile(r'(?P<case>.+)@(?:sqlite|postgres)')
+ON_DATABASE = re.compile(
+    r'(?P<case>.+)@(?:sqlite|postgres'
+    r'|databricks-sql|databricks-spark|snowflake|lakebase)'
+)
 #: A projected outcome as ratchet.py writes it (the schema's pattern).
 OUTCOME = re.compile(
     r'(?P<result>success|refusal) ?(?P<code>[A-Z][A-Z0-9_]*|-)?'
@@ -121,6 +124,51 @@ def runner() -> ModuleType:
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def _sibling(name: str, path: Path) -> ModuleType:
+    spec = importlib.util.spec_from_file_location(name, path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    # Registered before it runs: its dataclasses look their module up.
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+@functools.cache
+def owner_approved() -> Any:
+    r"""This harness's reading of an owner's approval, ``ratchet.py``'s
+    allowlist (U4), and of a decisions file's rows with their statuses
+    (``capture_check.py``'s)."""
+    ratchet = _sibling('register_ratchet', REPO / 'scripts/rust_core/ratchet.py')
+    check = _sibling(
+        'register_capture_check', REPO / 'contract/runners/capture_check.py'
+    )
+    return ratchet.owner_approved, check.decision_rows
+
+
+def owner_row_problem(entry: dict[str, Any], root: Path) -> str | None:
+    r"""Why an entry approved by the owner names no row the owner approved
+    (T3.2): its ``decision_ref`` must name a row of its decisions file
+    whose status reads as the owner's approval (``ratchet.py``'s
+    ``owner_approved``, an allowlist), or nothing does."""
+    ref = entry.get('decision_ref')
+    if not isinstance(ref, dict):
+        return 'approved by the owner, with no decision_ref naming the row'
+    path = root / str(ref.get('file'))
+    try:
+        text = path.read_text(encoding='utf-8')
+    except (OSError, UnicodeDecodeError):
+        return None  # the decision_ref rule names the file
+    approved, rows = owner_approved()
+    row = rows(text).get(str(ref.get('row')))
+    if row is None or not approved(row[1]):
+        return (
+            f'approved by the owner, and its decision_ref {ref.get("row")} is '
+            "no row the owner approved"
+        )
+    return None
 
 
 def case_ids(root: Path) -> dict[str, dict[str, Any]]:
@@ -259,6 +307,20 @@ def problems(
             f'{entry_id}: removed, and an ID is never removed or reused'
             for entry_id in sorted(str(i) for i in before - set(ids))
         ]
+    # An entry the owner approves from the checkpoint on names the row
+    # holding the owner's approval (T3.2): new to the checkpoint's register,
+    # or approved by the owner only now; entries approved before are the
+    # checkpoint's, judged when they landed.
+    owner_before = (
+        {
+            entry.get('id'): entry.get('approved_by')
+            for entry in checkpoint['entries']
+            if isinstance(entry, dict)
+        }
+        if isinstance(checkpoint, dict)
+        and isinstance(checkpoint.get('entries'), list)
+        else None
+    )
     corpus = case_ids(root)
     inventory = inventory_ids(root)
     accepted = reference_outcomes(root)
@@ -275,6 +337,15 @@ def problems(
                     f'{where}: case {case}: not a corpus case, a task ID '
                     'or an inventory case'
                 )
+        if (
+            owner_before is not None
+            and entry.get('status') == 'approved'
+            and entry.get('approved_by') == 'owner'
+            and owner_before.get(where) != 'owner'
+        ):
+            problem = owner_row_problem(entry, root)
+            if problem is not None:
+                found.append(f'{where}: {problem}')
         ref = entry['decision_ref']
         if ref is not None:
             path = root / ref['file']

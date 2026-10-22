@@ -242,6 +242,10 @@ UNOBSERVED_BY_RUST_HOST = ('stage', 'error')
 ENDPOINT_REFUSAL = 'NimRequestError'
 INVALID_RESPONSE = 'INVALID_RESPONSE'
 PYTHON = ('python-ref', 'python-core', 'python-old')
+#: The runners that carry the stand-in's verdict on a warehouse leg judged
+#: offline (Phase 3 design choice 2): the core's, Python's, Rust's and
+#: Java's hosts.
+STANDIN_RUNNERS = ('python-core', 'rust-host', 'java')
 #: The runtime cell the reference is recorded in (design, "Runtime cells",
 #: H1). In another named cell the host rules compare ``python-core`` with
 #: ``python-old`` there and only report the reference's (T1.18).
@@ -377,6 +381,10 @@ class Report:
         #: The columns only the core keeps, by case (the bare ID) and
         #: table (:func:`core_only_columns`, T2.1f).
         self.core_only: dict[str, dict[str, frozenset[str]]] = {}
+        #: The live-only items of a stand-in run (Phase 3 design choice 2),
+        #: ``<key>: <runner>: <code>``: neither passed nor failed offline,
+        #: each discharged only by E-1's verdict on the final candidate.
+        self.live_only: list[str] = []
 
     def fail(self, text: str, rule: str | None = None) -> None:
         if rule is not None and self.rules.get(rule) == 'diagnostic':
@@ -437,6 +445,13 @@ def _observations(
             # Nested past the parser is refused by name, never a traceback.
             report.fail(f'{path.name}:{number}: runner failure: not JSON')
             continue
+        if (
+            isinstance(observation, dict)
+            and observation.get('format') == _capture_check().CAPTURE_FORMAT
+        ):
+            # A warehouse leg's reference line is held in its capture
+            # (Phase 3 design choice 2), read from the capture whole.
+            observation = observation.get('observation')
         try:
             problem = runner._invalid(validate, observation)
         except RecursionError:
@@ -457,6 +472,73 @@ def _observations(
     if len(runners) > 1:
         report.fail(f'{path.name}: observations of more than one runner')
     return (runners.pop() if len(runners) == 1 else None), by_case
+
+
+def _standin(
+    report: Report,
+    key: str,
+    who: str,
+    observation: dict[str, Any],
+    codes: tuple[str, ...],
+    offline: bool,
+) -> tuple[str | None, tuple[str, ...]]:
+    r"""The stand-in's verdict an observation carries (Phase 3 design
+    choice 2): its live-only code and its flags, each held to the policy's
+    ``standin`` codes. Only a core runner's observation of a warehouse leg
+    judged offline carries one, and it must; anywhere else one fails. A
+    code not listed, a live-only mark with no stand-in reason among them,
+    fails as any difference does, so no case marks itself live only."""
+    verdict = observation.get('standin')
+    if not offline or who not in STANDIN_RUNNERS:
+        if verdict is not None:
+            report.fail(
+                f'{key}: {who}: a stand-in verdict where no stand-in served '
+                'the case'
+            )
+        return None, ()
+    if verdict is None:
+        report.fail(
+            f"{key}: {who}: a stand-in leg without the stand-in's verdict"
+        )
+        return None, ()
+    code, flagged = verdict['live_only'], tuple(verdict['flagged'])
+    for each in (*([] if code is None else [code]), *flagged):
+        if each not in codes:
+            report.fail(
+                f'{key}: {who}: live-only mark {each} is no stand-in reason '
+                f'of compare-policy.yaml ({", ".join(codes)})'
+            )
+            return None, ()
+    return code, flagged
+
+
+def _live_only(
+    report: Report, key: str, who: str, code: str, since: int, why: str
+) -> None:
+    r"""``who``'s comparison of ``key`` since ``since`` made live only:
+    listed by its code, its differences under a rule reported, neither
+    passed nor failed offline. A failure under no rule (a runner failure,
+    a file's problem) still fails."""
+    report.live_only.append(f'{key}: {who}: {code}')
+    _reported_rules(report, since, f'live only, {code}: {why}')
+
+
+def _reported_rules(report: Report, since: int, why: str) -> None:
+    r"""The failures under a rule since ``since`` reported as notes, each
+    saying ``why``; a failure under no rule still fails."""
+    kept = []
+    for rule, text in report.failures[since:]:
+        if rule is None:
+            kept.append((rule, text))
+        else:
+            report.notes.append(f'reported ({why}): {rule}: {text}')
+    del report.failures[since:]
+    report.failures.extend(kept)
+
+
+def _differences(report: Report, since: int) -> bool:
+    r"""Whether a rule found a difference since ``since``."""
+    return any(rule is not None for rule, _ in report.failures[since:])
 
 
 def _differ(
@@ -2897,7 +2979,14 @@ def compare(
     register_file: Path = REGISTER,
     improvements: Path | None = None,
     database: str = 'duckdb',
+    live: bool = False,
 ) -> Report:
+    r"""The comparison of ``files``' observations on ``database``, a
+    database or a warehouse leg. A warehouse leg is judged offline, on the
+    stand-in, unless ``live`` (E-1, H9 in full): offline its core runners
+    carry the stand-in's verdict, the policy's ``standin`` rules are only
+    reported, and a live-only item is listed rather than passed or failed
+    (:func:`_standin`)."""
     check = _capture_check()
     try:
         policy = (
@@ -2930,12 +3019,21 @@ def compare(
     except runner.RunnerFailure as failure:
         report.fail(f'cases: {failure}')
         return report
-    if database not in runner.DATABASES:
-        report.fail(f'--database: {database} is not one of {runner.DATABASES}')
+    if database not in runner.LEGS:
+        report.fail(f'--database: {database} is not one of {runner.LEGS}')
         return report
-    cases = [
-        case for case, _ in loaded if database in runner.case_databases(case)
-    ]
+    offline = database in runner.WAREHOUSES and not live
+    codes = tuple(policy['standin']['codes'])
+    if offline:
+        # H9 narrowed on a stand-in leg, and only there (KO3-45).
+        report.rules = {
+            **report.rules,
+            **{rule: 'diagnostic' for rule in policy['standin']['diagnostic']},
+        }
+    elif live and database not in runner.WAREHOUSES:
+        report.fail(f'--live: {database} is not a warehouse leg')
+        return report
+    cases = [case for case, _ in loaded if database in runner.case_legs(case)]
     try:
         bases = runner.load_bases(bases_file or runner.BASES)
     except runner.RunnerFailure as failure:
@@ -3014,6 +3112,7 @@ def compare(
             }
         before = len(report.failures)
         ref = reference.get(case['id'])
+        live_only: dict[str, str] = {}
         stops: dict[str, str | None] = {}
         earliers: dict[str, str | None] = {}
         if reference_file is not None and ref is None:
@@ -3042,6 +3141,10 @@ def compare(
                     'reach' if reach is not None else None,
                 )
                 continue
+            since = len(report.failures)
+            code, flagged = _standin(
+                report, case['id'], who, observation, codes, offline
+            )
             _shape(report, case, who, observation)
             _inputs(report, case, who, observation, digests)
             wanted = effective.get(case['id'], {}).get(who)
@@ -3140,7 +3243,9 @@ def compare(
                 )
                 theirs = ref['identity']['versions']['duckdb']
                 mine = observation['identity']['versions']['duckdb']
-                if mine != theirs:
+                if mine != theirs and not offline:
+                    # Offline, a warehouse leg's reference ran on the
+                    # warehouse, and DuckDB is only the stand-in's engine.
                     _differ(
                         report,
                         f'{case["id"]}: {who}',
@@ -3149,6 +3254,29 @@ def compare(
                         mine,
                         rule='route',
                     )
+            if code is not None:
+                _live_only(
+                    report,
+                    case['id'],
+                    who,
+                    code,
+                    since,
+                    'the stand-in could not answer',
+                )
+                live_only[who] = code
+            elif flagged and _differences(report, since):
+                # A flagged answer that differs may be the local engine's
+                # casts, not the core's: live only. One that matches passes.
+                _live_only(
+                    report,
+                    case['id'],
+                    who,
+                    flagged[0],
+                    since,
+                    'a flagged answer differs from the reference',
+                )
+                live_only[who] = flagged[0]
+        paired = len(report.failures)
         python = observed.get('python-core', {}).get(case['id'])
         old = observed.get('python-old', {}).get(case['id'])
         # Past the reference's stop (E114): python-old held python-core
@@ -3184,6 +3312,12 @@ def compare(
                 ),
             )
             _sql_core(report, case, python, rust, ordered, large, database)
+        if live_only:
+            # The core runners' agreement on a live-only case is reported:
+            # one side's answer there is the local engine's or none.
+            _reported_rules(
+                report, paired, 'live only: ' + ', '.join(sorted(live_only))
+            )
         if not gating:
             report.demote(before, keep=('reach',) if reach else ())
     return report
@@ -3203,6 +3337,12 @@ def main(argv: list[str] | None = None) -> int:
         "more_exact fields (default: this tree's)",
     )
     parser.add_argument('--database', default='duckdb')
+    parser.add_argument(
+        '--live',
+        action='store_true',
+        help='a warehouse leg run live (E-1), judged by every rule, with no '
+        'stand-in verdict',
+    )
     parser.add_argument('observations', type=Path, nargs='*')
     arguments = parser.parse_args(argv)
     if not arguments.observations and arguments.reference is None:
@@ -3219,6 +3359,7 @@ def main(argv: list[str] | None = None) -> int:
         arguments.expect,
         improvements=arguments.register,
         database=arguments.database,
+        live=arguments.live,
     )
     for text in report.info:
         print(f'statements per public call: {text}')
@@ -3226,6 +3367,13 @@ def main(argv: list[str] | None = None) -> int:
         print(text)
     for text in report.texts:
         print(f'DIFFERS {text}')
+    for text in report.live_only:
+        print(f'LIVE ONLY {text}')
+    if report.live_only:
+        print(
+            f'compare: {len(report.live_only)} live-only items, neither passed '
+            'nor failed offline'
+        )
     if report.failures:
         print(f'compare: {len(report.failures)} differences')
         return 1

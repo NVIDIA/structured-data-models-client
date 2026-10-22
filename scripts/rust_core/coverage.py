@@ -372,20 +372,46 @@ def rule_2_3(language: str, manifest: dict[str, Any], report: Report) -> None:
         report.fail('rule 3', f'{language}: backend {backend} is in no path')
 
 
+def on_leg(path: str, leg: str) -> str:
+    r"""A case's DuckDB path as the same operation and mode on ``leg``'s
+    backend (``run_python.py``'s ``on_database``); any other is itself."""
+    head, _, backend = path.rpartition('/')
+    return f'{head}/{leg}' if backend == 'duckdb' else path
+
+
+def claims(case: dict[str, Any]) -> dict[str, set[str]]:
+    r"""What a case covers (T3.2; carried row P2-T2.16-3): its own paths and
+    cells, and each of its DuckDB paths on every other leg it runs on
+    (``run_python.py``'s ``case_legs``: SQLite, Postgres and the warehouse
+    legs), so a database or warehouse leg claims its own path."""
+    legs = _module('register').runner().case_legs(case)
+    return {
+        'paths': {on_leg(path, leg) for path in case['paths'] for leg in legs}
+        | set(case['paths']),
+        'cells': set(case['cells']),
+    }
+
+
 def generated(
     language: str, manifest: dict[str, Any], corpus: dict[str, dict[str, Any]]
 ) -> dict[str, dict[str, list[str]]]:
     r"""Each path's and cell's cases as the corpus says: the acceptance
-    cases naming it, by ID; none in Java until a Java runner observes."""
+    cases claiming it (:func:`claims`), by ID. Java runs the same case
+    files as Python (Phase 3 design choice 10), so a Java path's cases are
+    the cases claiming it; each Java leg is admitted where the Java host
+    reports its provider, which the ratchet's no-removal rule then holds."""
     out: dict[str, dict[str, list[str]]] = {'paths': {}, 'cells': {}}
+    claimed = {
+        case_id: claims(case)
+        for case_id, case in corpus.items()
+        if case['status'] == 'acceptance'
+    }
     for key in out:
         for name in _ids(manifest, key):
             out[key][name] = sorted(
                 case_id
-                for case_id, case in corpus.items()
-                if language == 'python'
-                and case['status'] == 'acceptance'
-                and name in case[key]
+                for case_id, held in claimed.items()
+                if name in held[key]
             )
     return out
 
@@ -436,10 +462,15 @@ def rule_5(
     manifests: dict[str, dict[str, Any]],
     corpus: dict[str, dict[str, Any]],
     report: Report,
+    gate: tuple[str, str] = ACTIVE,
+    tested: dict[str, list[str]] | None = None,
 ) -> list[str]:
-    r"""The active slice's paths, each with an acceptance case; the paths
-    covered are returned for the summary."""
-    language, active = ACTIVE
+    r"""The gated slice's paths, each with an acceptance case or a named
+    client test claiming it (``tested``, :func:`read_test_claims`), and
+    from S1 on every cell of an expected outcome with an acceptance case
+    (the S1, S2 and Java rules, T3.2); the paths covered are returned for
+    the summary."""
+    language, active = gate
     manifest = manifests.get(language)
     if manifest is None:
         return []
@@ -449,16 +480,92 @@ def rule_5(
     for item in manifest['paths']:
         if item['slice'] not in gated:
             continue
-        if made['paths'][str(item['id'])]:
-            covered.append(str(item['id']))
+        name = str(item['id'])
+        if made['paths'][name] or (tested or {}).get(name):
+            covered.append(name)
         else:
             report.fail(
                 'rule 5',
-                f'{language}: {active} path {item["id"]} has no acceptance case',
+                f'{language}: {item["slice"]} path {name} has no acceptance '
+                'case',
             )
+    if active != 'S0':
+        for item in manifest['cells']:
+            if item.get('expect') == 'unknown':
+                continue
+            if not made['cells'][str(item['id'])]:
+                report.fail(
+                    'rule 5',
+                    f'{language}: cell {item["id"]} has no acceptance case '
+                    f'({active})',
+                )
     if not covered and not report.problems:
         report.fail('rule 5', f'{language}: {active} has no path to gate')
     return covered
+
+
+#: The client tests that claim a path the case format cannot express
+#: (T3.2; P2-T2.16-3), such as a request pickled and loaded again: each a
+#: path of the Python manifest and a test the candidate's tree defines.
+TEST_CLAIMS = 'contract/test-claims.yaml'
+_TEST = re.compile(
+    r'(?P<file>[A-Za-z0-9_./-]+\.py)::(?P<name>test_[A-Za-z0-9_]+)'
+)
+
+
+def read_test_claims(
+    tree: Any, manifests: dict[str, dict[str, Any]], report: Report
+) -> dict[str, list[str]]:
+    r"""Each path a named client test claims, by path: ``test-claims.yaml``
+    (``format: sdm-test-claims/1``, ``claims: [{path, test, why}]``), each
+    claim's path a path of the Python manifest and its test, ``FILE::NAME``,
+    a test function the candidate's file defines; a claim that is not is
+    refused by name and claims nothing."""
+    text = (
+        _text(tree, TEST_CLAIMS) if tree.read(TEST_CLAIMS) is not None else None
+    )
+    if text is None:
+        return {}
+    try:
+        document = _yaml(text, TEST_CLAIMS)
+    except Unreadable as error:
+        report.fail('read', str(error))
+        return {}
+    if (
+        not isinstance(document, dict)
+        or document.get('format') != 'sdm-test-claims/1'
+        or not isinstance(document.get('claims'), list)
+    ):
+        report.fail('read', f'{TEST_CLAIMS}: not sdm-test-claims/1')
+        return {}
+    paths = set(_ids(manifests.get('python', {'paths': []}), 'paths'))
+    found: dict[str, list[str]] = {}
+    for item in document['claims']:
+        if not isinstance(item, dict) or set(item) != {'path', 'test', 'why'}:
+            report.fail(
+                'rule 5', f'{TEST_CLAIMS}: a claim not of path, test, why'
+            )
+            continue
+        test = _TEST.fullmatch(str(item['test']))
+        if item['path'] not in paths:
+            report.fail(
+                'rule 5',
+                f'{TEST_CLAIMS}: {item["path"]} is no path of the manifest',
+            )
+            continue
+        source = tree.read(test['file']) if test else None
+        if (
+            test is None
+            or source is None
+            or not re.search(rf'^\s*def {test["name"]}\(', source, re.M)
+        ):
+            report.fail(
+                'rule 5',
+                f'{TEST_CLAIMS}: {item["test"]} is no test the tree defines',
+            )
+            continue
+        found.setdefault(str(item['path']), []).append(str(item['test']))
+    return found
 
 
 # --- rule 6: the cells' claims, held to the reference ---------------------------
@@ -962,7 +1069,12 @@ def rule_8(
             drop('cell', name, 'turns unknown')
 
 
-def check(repo: Path, rev: str, checkpoint: str) -> tuple[Report, list[str]]:
+def check(
+    repo: Path,
+    rev: str,
+    checkpoint: str,
+    gates: tuple[tuple[str, str], ...] = (ACTIVE,),
+) -> tuple[Report, list[str]]:
     ratchet = _module('ratchet')
     report = Report()
     summary: list[str] = []
@@ -991,11 +1103,13 @@ def check(repo: Path, rev: str, checkpoint: str) -> tuple[Report, list[str]]:
         rule_6(corpus, reference, report)
     if corpus is not None and len(manifests) == len(MANIFESTS):
         rule_4(manifests, corpus, report)
-        covered = rule_5(manifests, corpus, report)
-        summary.append(
-            f'{ACTIVE[0]} {ACTIVE[1]}: {len(covered)} paths, each with an '
-            f'acceptance case; {len(corpus)} cases read'
-        )
+        tested = read_test_claims(candidate, manifests, report)
+        for gate in gates:
+            covered = rule_5(manifests, corpus, report, gate, tested)
+            summary.append(
+                f'{gate[0]} {gate[1]}: {len(covered)} paths, each with an '
+                f'acceptance case or a named test; {len(corpus)} cases read'
+            )
     for language, path in MANIFESTS.items():
         try:
             old_text = before.read(path)
@@ -1044,7 +1158,22 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--repo', type=Path)
     parser.add_argument('--rev', default='HEAD')
     parser.add_argument('--checkpoint', required=True)
+    parser.add_argument(
+        '--gate',
+        action='append',
+        metavar='LANGUAGE:SLICE',
+        help='a slice whose paths and cells gate, such as python:S1 or '
+        'java:S1 (T3.2); default python:S0, the active slice',
+    )
     arguments = parser.parse_args(argv)
+    gates = []
+    for given in arguments.gate or [':'.join(ACTIVE)]:
+        language, _, active = given.partition(':')
+        if language not in MANIFESTS or active not in SLICES:
+            parser.error(
+                f'--gate {given}: a language of {sorted(MANIFESTS)} and a slice of {SLICES}'
+            )
+        gates.append((language, active))
     repo = arguments.repo
     if repo is None:
         try:
@@ -1056,7 +1185,9 @@ def main(argv: list[str] | None = None) -> int:
         except _module('ratchet').Unreadable as error:
             print(f'coverage: {error}', file=sys.stderr)
             return 2
-    report, summary = check(repo, arguments.rev, arguments.checkpoint)
+    report, summary = check(
+        repo, arguments.rev, arguments.checkpoint, tuple(gates)
+    )
     for line in summary:
         print(f'coverage: {line}')
     for problem in report.problems:

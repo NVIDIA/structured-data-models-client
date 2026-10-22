@@ -238,10 +238,13 @@ KNOWN_DIFFERING = 'rust/crates/sdm-core/tests/pql/known-differing.json'
 #: "Runtime cells"). Their projection is platform-independent, so every cell
 #: is held to them.
 CELL = 'ref-pandas3'
-RUNNERS = ('python-ref', 'python-core', 'python-old', 'rust-host')
-#: The runners a SQLite or Postgres line is observed on: the core's
-#: (python-old, the old route, runs on DuckDB only; T2.1a fix 4).
-DATABASE_RUNNERS = ('python-core', 'rust-host')
+RUNNERS = ('python-ref', 'python-core', 'python-old', 'rust-host', 'java')
+#: The runners a SQLite, Postgres or warehouse line is observed on: the
+#: core's hosts (python-old, the old route, runs on DuckDB only; T2.1a fix
+#: 4), Java's among them (Phase 3 design choice 10), each leg admitted where
+#: its host reports the provider and then held by the no-removal rule
+#: ("baselined, and not observed").
+DATABASE_RUNNERS = ('python-core', 'rust-host', 'java')
 PYTHON = ('python-ref', 'python-core', 'python-old')
 #: The core operations that read data, whose case has a driver record on
 #: rust-host.
@@ -298,18 +301,47 @@ NOT_YET = re.compile(
 )
 
 
+#: What an owner's approval's own qualifier may say, read by allowlist
+#: (U4, T3.2): where the approval was given or relayed, or what it covers,
+#: in the forms the decisions files write: a package or task ID ("T1.7b
+#: check-in"), a decision row it came with ("with KO3-17"), "relayed by the
+#: orchestrator", a checkpoint, a round, an answer or items, lettered parts
+#: ("(a) to (c)"), the rows it covers ("P2G-4, P2G-5 and KO2-89 only"),
+#: "including ...", or the owner's own words ("the owner chose ..."). Any
+#: other qualifier is no approval, whatever it says.
+APPROVAL_NOTES = re.compile(
+    r'(?:T\d+\.\d+[a-z]?\b'
+    r'|with [A-Z][A-Z0-9]*-\d+'
+    r'|relayed by the orchestrator\b'
+    r'|checkpoint \d'
+    r'|round \d'
+    r'|answers? \d'
+    r'|items? \d'
+    r'|\([a-z]\b'
+    r'|[A-Z][A-Z0-9]*-\d+[a-z]?(?:\([a-z]\))?(?:, | and | only\b)'
+    r'|including '
+    r'|the owner chose '
+    r'|the request\b)'
+)
+
+
 def owner_approved(status: str) -> bool:
     r"""The status is the owner's approval, read from its start, never a
     substring of another status ("not approved by owner ..."); shared with
-    ``coverage.py``'s rule 8 (T1.15). The approval's own qualifier must not
-    take it back (U4): "approved by owner D (declined)", "..., pending" and
-    "(proposed ..., not yet answered)" are no approvals."""
+    ``coverage.py``'s rule 8 (T1.15). The approval's own qualifier is read
+    by allowlist (U4): it must be one of :data:`APPROVAL_NOTES`' forms, so
+    "approved by owner D (declined)", "..., pending" and "(proposed ...,
+    not yet answered)" are no approvals, nor is any qualifier the list
+    does not name; a note anywhere withdrawing it (:data:`WITHDRAWN`) or
+    saying it is not yet given (:data:`NOT_YET`) voids it too."""
     status = status.strip()
     if not OWNER.fullmatch(status) or WITHDRAWN.search(status):
         return False
     found = QUALIFIER.match(status)
     qualifier = (found.group(1) or found.group(2) or '') if found else ''
-    return not NOT_YET.search(qualifier)
+    if NOT_YET.search(qualifier):
+        return False
+    return not qualifier or APPROVAL_NOTES.match(qualifier) is not None
 
 
 class Unreadable(Exception):
@@ -857,6 +889,26 @@ def key_form() -> re.Pattern[str]:
         (REPO / 'contract/observation.schema.json').read_text(encoding='utf-8')
     )
     return re.compile(schema['$defs']['key']['pattern'])
+
+
+def standin_codes(policy: Any) -> tuple[str, ...]:
+    r"""The stand-in's reason codes a policy lists (T3.2's ``standin``
+    section), none for a policy without it."""
+    section = policy.get('standin') if isinstance(policy, dict) else None
+    codes = section.get('codes') if isinstance(section, dict) else None
+    return tuple(str(code) for code in codes or ())
+
+
+def live_only(observation: Any, codes: tuple[str, ...]) -> str | None:
+    r"""The live-only code an observation's stand-in verdict carries, when
+    it is one of ``codes`` (Phase 3 design choice 2): such an observation
+    is neither passed nor failed offline, so it is never held to a
+    baseline nor baselined; E-1 judges it."""
+    verdict = (
+        observation.get('standin') if isinstance(observation, dict) else None
+    )
+    code = verdict.get('live_only') if isinstance(verdict, dict) else None
+    return code if code in codes else None
 
 
 def case_of(key: str) -> str:
@@ -1941,6 +1993,16 @@ def policy_relaxations(old: Any, new: Any) -> list[str]:
     for name in old.get('baseline') or []:
         if name not in fields:
             found.append(f'baseline field {name} removed')
+    # The stand-in's section (T3.2): a reason code added admits a new way
+    # to be live only, and a rule made diagnostic on stand-in legs narrows
+    # H9 further; each is a relaxation of the section the checkpoint has.
+    theirs_standin = old.get('standin')
+    if isinstance(theirs_standin, dict):
+        mine_standin = new.get('standin') or {}
+        for key, what in (('codes', 'code'), ('diagnostic', 'diagnostic rule')):
+            for item in mine_standin.get(key) or []:
+                if item not in (theirs_standin.get(key) or []):
+                    found.append(f'standin {what} {item} added')
     return found
 
 
@@ -2242,6 +2304,7 @@ def check_baselines(
     gone: set[str],
     reference: dict[str, dict[str, Any]],
     ordered: dict[str, Any] | None,
+    codes: tuple[str, ...] = (),
 ) -> None:
     for runner, by_case in sorted(observed.items()):
         crashes = {
@@ -2259,6 +2322,14 @@ def check_baselines(
                 report.fail(
                     'baselines',
                     f'{case}: {runner}: baselined, and not observed',
+                )
+                continue
+            code = live_only(observation, codes)
+            if code is not None:
+                report.note(
+                    'baselines',
+                    f'{case}: {runner}: live only ({code}), judged by E-1, '
+                    'not by its baseline',
                 )
                 continue
             now = projection(observation, old_fields)
@@ -2292,6 +2363,13 @@ def check_baselines(
             if case_of(case) not in corpus:
                 continue  # a line of no case: check_keys names it
             observation = by_case.get(case)
+            if live_only(observation, codes) is not None:
+                report.fail(
+                    'baselines',
+                    f'{case}: {runner}: a proposed baseline of a live-only '
+                    'observation, which only E-1 judges',
+                )
+                continue
             if (
                 line['projection'].get('outcome.code') == PANIC
                 and case not in crashes
@@ -2316,6 +2394,8 @@ def check_baselines(
         # <case>@<database> on another).
         for case in sorted(by_case):
             spec = corpus.get(case_of(case), ({}, ''))[0]
+            if live_only(by_case[case], codes) is not None:
+                continue
             if spec.get('status') == 'acceptance' and case not in mine:
                 report.fail(
                     'baselines',
@@ -2493,6 +2573,7 @@ def check(
                 (new_policy or {}).get('ordered')
                 if isinstance(new_policy, dict)
                 else None,
+                standin_codes(old_policy),
             )
     except Unreadable as error:
         report.fail('read', str(error))
@@ -2555,7 +2636,9 @@ def accept(
         ref = reference.get(case)
         for runner, by_case in observed.items():
             observation = by_case.get(case)
-            if observation is None:
+            if observation is None or live_only(
+                observation, standin_codes(policy)
+            ):
                 continue
             want = expected.get(case, {}).get(runner)
             if want is None and ref is not None:
