@@ -1,0 +1,42 @@
+{
+ "about": "T3.2's acceptance tests (the package's test author's), written before the implementation: tests/test_t32_*.py and contract/tests/test_t32_*.py by function name (a parametrized test is pending as a whole), and sdm-testkit's tests/t32_*.rs as rust:<test>. Each test named in 'pending' failed when written; the files hold it to failing (xfail, strict, and in Rust a check that it still fails) until it passes, and then it fails, naming itself, until the implementer takes it out of 'pending'. The implementer changes nothing else: 'pending' stays within 'authored', the test author's list. rust:the_rust_loader_refuses_the_texts_json_cannot_hold passed when written (the Rust loader already refused those texts) and holds it there while the Python loader is aligned (P2-T2.1i-1).",
+ "pending": [
+  "rust:the_rust_loader_takes_and_refuses_the_warehouse_vectors",
+  "test_t32_an_s2_case_runs_on_its_warehouses_only",
+  "test_t32_capture_check_holds_a_captures_only_commit_to_the_final_candidate",
+  "test_t32_capture_check_lists_a_case_changed_or_missing_as_pending_live",
+  "test_t32_capture_check_refuses_an_unknown_capture_format",
+  "test_t32_captures_are_a_protected_path",
+  "test_t32_every_dry_run_stub_loads",
+  "test_t32_placeholders_resolve_from_the_environment",
+  "test_t32_the_capture_records_each_warehouse_driver",
+  "test_t32_the_dry_run_plan_names_java_s_packages_as_the_design_does",
+  "test_t32_the_input_hash_follows_the_input_and_base_only",
+  "test_t32_the_python_loader_refuses_the_texts_json_cannot_hold",
+  "test_t32_the_python_loader_takes_and_refuses_the_warehouse_vectors",
+  "test_t32_the_runner_refuses_a_client_of_another_contract_version",
+  "test_t32_the_statement_log_is_entered_only_as_a_context",
+  "test_t32_the_statement_log_logs_each_warehouse_driver",
+  "test_t32_the_statement_log_takes_psycopg_s_copy_and_stream"
+ ],
+ "authored": [
+  "rust:the_rust_loader_refuses_the_texts_json_cannot_hold",
+  "rust:the_rust_loader_takes_and_refuses_the_warehouse_vectors",
+  "test_t32_an_s2_case_runs_on_its_warehouses_only",
+  "test_t32_capture_check_holds_a_captures_only_commit_to_the_final_candidate",
+  "test_t32_capture_check_lists_a_case_changed_or_missing_as_pending_live",
+  "test_t32_capture_check_refuses_an_unknown_capture_format",
+  "test_t32_captures_are_a_protected_path",
+  "test_t32_every_dry_run_stub_loads",
+  "test_t32_placeholders_resolve_from_the_environment",
+  "test_t32_the_capture_records_each_warehouse_driver",
+  "test_t32_the_dry_run_plan_names_java_s_packages_as_the_design_does",
+  "test_t32_the_input_hash_follows_the_input_and_base_only",
+  "test_t32_the_python_loader_refuses_the_texts_json_cannot_hold",
+  "test_t32_the_python_loader_takes_and_refuses_the_warehouse_vectors",
+  "test_t32_the_runner_refuses_a_client_of_another_contract_version",
+  "test_t32_the_statement_log_is_entered_only_as_a_context",
+  "test_t32_the_statement_log_logs_each_warehouse_driver",
+  "test_t32_the_statement_log_takes_psycopg_s_copy_and_stream"
+ ]
+}
