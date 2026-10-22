@@ -1,0 +1,77 @@
+{
+  "format": "sdm-case/1",
+  "id": "java.databricks-sql.multiclass",
+  "status": "acceptance",
+  "slice": "S2",
+  "warehouses": [
+    "databricks-sql"
+  ],
+  "paths": [
+    "source.open/explicit/databricks-sql",
+    "schema.from-source/tables/databricks-sql",
+    "query.materialize/indices-multiclass/databricks-sql",
+    "client.predict/multiclass/databricks-sql"
+  ],
+  "routes": [
+    "schema.from-source/tables/databricks-sql",
+    "schema.from-source/catalog-keys/databricks-sql",
+    "query.materialize/indices-binary/databricks-sql",
+    "query.materialize/indices-multiclass/databricks-sql",
+    "query.materialize/indices-regression/databricks-sql",
+    "query.materialize/indices-link-prediction/databricks-sql",
+    "query.materialize/indices-ranking/databricks-sql",
+    "query.materialize/indices-forecast/databricks-sql",
+    "client.predict/binary/databricks-sql",
+    "client.predict/multiclass/databricks-sql",
+    "client.predict/regression/databricks-sql",
+    "client.predict/link-prediction/databricks-sql",
+    "client.predict/ranking/databricks-sql",
+    "client.predict/forecast/databricks-sql"
+  ],
+  "seam": "baseline",
+  "cells": [
+    "int64/primary-key",
+    "int64/foreign-key",
+    "timestamp-us/time-column",
+    "utf8/target"
+  ],
+  "input": {
+    "base": "shop",
+    "from_source": {
+      "tables": {
+        "users": "users",
+        "orders": "orders"
+      },
+      "primary_keys": {
+        "users": "user_id",
+        "orders": "order_id"
+      },
+      "time_columns": {
+        "orders": "ts"
+      },
+      "relationships": [
+        {
+          "source_table": "orders",
+          "source_column": "user_id",
+          "target_table": "users",
+          "target_column": "user_id"
+        }
+      ]
+    },
+    "pql": "PREDICT users.country FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ]
+    }
+  },
+  "until": "predict",
+  "expect": {
+    "outcome": "success",
+    "stage": "predict",
+    "today": "read from the old client's code (Schema.from_source with tables, keys, a time column and a link given; the Databricks engine table's _to_dtype): users keyed by user_id, with age and country; orders keyed by order_id, ts its time column, user_id linked to users; task multiclass_classification over country's three classes; the same inputs on DuckDB answer through predict at 43e55f4f"
+  },
+  "why": "dryrun-plan.yaml's java-databricks-sql kind (T3.13): a multiclass question on a Databricks SQL warehouse, the source opened explicitly over the warehouse connection (DatabricksSource, which the Java host builds from a java.sql.Connection through the Databricks JDBC driver) and described as Phase 0's J2 questions describe theirs: tables named, keys, a time column and a relationship given. Python's legs run it too; its databricks-sql reference line comes from C-1, and the Java host's leg is judged against it on the stand-in, then live in E-7",
+  "source": "written by T3.13's test author from the reference at 43e55f4f"
+}
