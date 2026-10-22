@@ -256,3 +256,14 @@ def test_the_suites_run_with_a_short_temporary_directory(
     assert not Path(seen[0]).exists()
     # pytest's base directly in it, not under pytest-of-<user>/pytest-<n>.
     assert f'{seen[0]}/p' in argvs[0], argvs
+
+
+def test_every_pytest_run_of_the_handoff_names_a_base_the_run_removes() -> None:
+    # pytest otherwise keeps three old bases under TMPDIR, and the gate
+    # tests' copies of the tree filled 121 GB of the local disk (T3.2).
+    import inspect
+
+    for function in (HANDOFF.run_suites, HANDOFF.step_fails_before):
+        source = inspect.getsource(function)
+        runs = source.count("'pytest'") + source.count('prefix[1:]')
+        assert runs and source.count("'--basetemp'") == runs, function

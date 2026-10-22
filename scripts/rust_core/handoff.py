@@ -839,13 +839,17 @@ def step_fails_before(
             for interpreter, files, extra in batches:
                 if not files:
                     continue
+                # pytest's base in the scratch, which goes with the run, so
+                # no copy of the gate's temporary trees piles up.
                 env = {
                     **os.environ,
                     'PYTHONPATH': source_path(tree, interpreter),
                 }
                 done = run(
                     [interpreter, '-m', 'pytest', '-q', '-x', '-p',
-                     'no:cacheprovider', *files, *extra],
+                     'no:cacheprovider', '--basetemp',
+                     str(scratch / f'pt-{len(failed) + len(passed)}'),
+                     *files, *extra],
                     tree,
                     env,
                 )  # fmt: skip
