@@ -2505,8 +2505,19 @@ jobs:
             python scripts/rust_core/ratchet.py effective $where --out effective.json || exit 1
             expect=(--expect effective.json)
           fi
+          # The reference's lines of the cases Java ran, as handoff.py holds them.
+          python - <<'EOF'
+          import glob, json
+          ran = {json.loads(line)['case'] for line in open('java.jsonl')}
+          (reference,) = glob.glob('contract/reference/*.jsonl')
+          with open('java-reference.jsonl', 'w') as out:
+              out.writelines(
+                  line for line in open(reference) if json.loads(line)['case'] in ran
+              )
+          EOF
           python scripts/rust_core/compare.py --cases contract/cases/s0 \
-            --reference contract/reference/*.jsonl ${expect[@]+"${expect[@]}"} java.jsonl
+            --reference java-reference.jsonl ${expect[@]+"${expect[@]}"} \
+            --register docs/design/rust-core/register.yaml java.jsonl
       # T3.11's acceptance tests on this JDK and platform: the S0 cases, the
       # JAR on this JDK in a clean environment, Java 17 bytecode, and every
       # platform's native in the JAR.
