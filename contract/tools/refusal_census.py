@@ -11,6 +11,8 @@ probe, and each probe run on both routes.
     python -I contract/tools/refusal_census.py check --root DIR
     python contract/tools/refusal_census.py run --reference DIR
         --reference-python PYTHON [--database duckdb] --out FILE
+    python contract/tools/refusal_census.py real-data --database LEG
+        --cases DIR --control CASE --out FILE
 
 ``sites`` prints the sites of DIR's code as JSON, never written by hand:
 
@@ -94,6 +96,15 @@ RULELESS = {
 NOT_YET = re.compile(r'\bnot_yet\(\s*"([a-z0-9_]+)"')
 FN = re.compile(r'\bfn\s+([A-Za-z_][A-Za-z0-9_]*)')
 DATABASES = ('duckdb', 'sqlite', 'postgres')
+#: The legs the real-data mode runs on (T3.2): the offline databases, and
+#: each warehouse leg on its stand-in (run_python.py's Standin).
+LEGS = (
+    *DATABASES,
+    'databricks-sql',
+    'databricks-spark',
+    'snowflake',
+    'lakebase',
+)
 #: The probes' case template: what the case format requires beside a
 #: probe's input, its routes every core route the corpus forces.
 TEMPLATE = {
@@ -526,6 +537,117 @@ def run(
     }
 
 
+# --- the real-data mode (T3.2; locked check 2) -----------------------------------------
+
+
+def _real_outcome(case: dict[str, Any], database: str) -> dict[str, Any]:
+    r"""One real-data case's public calls on python-core, every route of
+    its calls forced on ``database``: on a database through the contract
+    loader, as a probe runs; on a warehouse leg through the stand-in."""
+    runner = _runner()
+    os.environ['SDM_CORE_ROUTES'] = ','.join(runner.routes_on(case, database))
+    try:
+        if database in DATABASES:
+            return _outcome(case, database)
+        stand = runner.Standin(case, runner.load_bases(), database)
+        try:
+            return _outcome_on(stand, case, database)
+        finally:
+            stand.close()
+    finally:
+        os.environ.pop('SDM_CORE_ROUTES', None)
+
+
+def _outcome_on(stand: Any, case: dict[str, Any], leg: str) -> dict[str, Any]:
+    r""":func:`_outcome` on a warehouse leg's stand-in session."""
+    import warnings
+
+    import sdm_client
+    from sdm_client import PredictiveQuery, Schema, SDMClient
+
+    runner = _runner()
+    serve = runner._sibling('scripted_endpoint').serve
+    given = stand.case['input']
+    stage = 'from_source'
+    try:
+        with serve() as (url, _), warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            schema = Schema.from_source(
+                runner.warehouse_source(
+                    leg, stand.connection, stand.names, given
+                ),
+                **runner._from_source_arguments(given.get('from_source', {})),
+            )
+            runner._edit(schema, given.get('edits', []))
+            if case['until'] != 'from_source':
+                stage = 'materialize'
+                request = PredictiveQuery(given['pql'], schema).materialize(
+                    **runner._materialize_arguments(given['materialize'])
+                )
+            if case['until'] == 'predict':
+                stage = 'predict'
+                with SDMClient(url) as client:
+                    client.predict(request, model=sdm_client.KumoRelational())
+        return {'result': 'success', 'stage': stage}
+    except Exception as error:  # noqa: BLE001 - the case's outcome
+        details = getattr(error, 'details', None)
+        details = details if isinstance(details, dict) else {}
+        code = getattr(error, 'code', None)
+        rule = details.get('rule')
+        return {
+            'result': 'refusal',
+            'stage': stage,
+            'error': type(error).__name__,
+            'code': code if isinstance(code, str) else None,
+            'rule': rule if isinstance(rule, str) else None,
+        }
+
+
+def real_data(cases: Path, database: str, control: Path) -> dict[str, Any]:
+    r"""The census's real-data mode on ``database``, one leg (locked check
+    2): every real-data case under ``cases`` (a full-size dataset's cases,
+    such as AdventureWorks' or RelBench H&M's, or C-1's AdventureWorks
+    tables on a warehouse leg's stand-in) run on python-core with every
+    route forced, each refusal counted by its rule (or, ruleless, its
+    code), with the cases that hit it; and the control, a seeded refusal
+    on a real source (``control``, one case), which must be counted, or
+    the run fails: a census that sees nothing proves nothing."""
+    runner = _runner()
+    loaded = [case for case, _ in runner.load_cases([cases])]
+    chosen = [case for case in loaded if database in runner.case_legs(case)]
+    if not chosen:
+        raise CensusError(f'no real-data case runs on {database}')
+    [(seeded, _)] = runner.load_cases([control])
+    hits: dict[str, list[str]] = {}
+    outcomes = {}
+    for case in [*chosen, seeded]:
+        found = _real_outcome(case, database)
+        outcomes[case['id']] = found
+        if found['result'] != 'success':
+            key = found.get('rule') or f'code:{found.get("code")}'
+            hits.setdefault(str(key), []).append(case['id'])
+    if outcomes[seeded['id']]['result'] == 'success':
+        raise CensusError(
+            f'the control {seeded["id"]} was answered on {database}: the '
+            'census saw no refusal it was seeded with'
+        )
+    return {
+        'format': 'sdm-refusal-census-real/1',
+        'database': database,
+        'commit': runner._git(REPO),
+        'sources': len(chosen),
+        'hits': [
+            {
+                'key': key,
+                'count': len([c for c in ids if c != seeded['id']]),
+                'cases': sorted(ids),
+            }
+            for key, ids in sorted(hits.items())
+        ],
+        'control': {'case': seeded['id'], 'outcome': outcomes[seeded['id']]},
+    }
+
+
 # --- the command line --------------------------------------------------------------
 
 
@@ -540,6 +662,17 @@ def main(argv: list[str] | None = None) -> int:
     running.add_argument('--reference-python', required=True)
     running.add_argument('--database', choices=DATABASES, default='duckdb')
     running.add_argument('--out', type=Path, required=True)
+    real = commands.add_parser(
+        'real-data',
+        help='the real-data mode, one leg: ' + ', '.join(LEGS),
+        description='The census over the real datasets on one leg: '
+        + ', '.join(LEGS)
+        + ' (a warehouse leg on its stand-in).',
+    )
+    real.add_argument('--database', choices=LEGS, required=True)
+    real.add_argument('--cases', type=Path, required=True)
+    real.add_argument('--control', type=Path, required=True)
+    real.add_argument('--out', type=Path, required=True)
     routed = commands.add_parser('route')
     routed.add_argument('--reference', type=Path, required=True)
     routed.add_argument('--database', choices=DATABASES, default='duckdb')
@@ -556,6 +689,20 @@ def main(argv: list[str] | None = None) -> int:
                 print(f'FAILS census: {problem}')
             print(f'census: {"FAIL" if problems else "ok"}')
             return 1 if problems else 0
+        if arguments.command == 'real-data':
+            found = real_data(
+                arguments.cases, arguments.database, arguments.control
+            )
+            arguments.out.write_text(
+                json.dumps(found, indent=2, sort_keys=True) + '\n',
+                encoding='utf-8',
+            )
+            print(
+                f'census real-data: {found["sources"]} sources on '
+                f'{arguments.database}, {len(found["hits"])} refusals hit, '
+                'the control counted'
+            )
+            return 0
         if arguments.command == 'route':
             import sdm_client
 

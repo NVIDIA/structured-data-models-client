@@ -319,6 +319,7 @@ paths:
 - id: state.pickle/request/any
   slice: S1
   cases: []
+  tests: ['tests/test_t32_request_pickle.py::test_a_materialized_request_refuses_pickle_by_its_source']
 - id: state.pickle/reference-pickle/any
   slice: S1
   cases: []

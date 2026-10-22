@@ -398,14 +398,18 @@ def test_the_live_configuration_reads_the_environment_and_marks_it_private(
                 'private': ['a-workspace-host'],
                 'legs': {
                     'snowflake': {
-                        'names': {'catalog': 'privdb_z', 'schema': 'sch_test'},
                         'driver': {'account': {'env': 'SDM_TEST_ACCOUNT'}},
                     }
                 },
             }
         )
     )
-    environ = {'SDM_LIVE_CONFIG': str(where), 'SDM_TEST_ACCOUNT': 'acct-1234'}
+    environ = {
+        'SDM_LIVE_CONFIG': str(where),
+        'SDM_TEST_ACCOUNT': 'acct-1234',
+        'SDM_CAPTURE_CATALOG': 'privdb_z',
+        'SDM_CAPTURE_SCHEMA': 'sch_test',
+    }
     with pytest.MonkeyPatch.context() as patch:
         patch.setenv('SDM_TEST_ACCOUNT', 'acct-1234')
         spec, names, private = run.live_configuration('snowflake', environ)
@@ -486,17 +490,17 @@ def test_an_incomplete_capture_fails_by_name(fault: Any, named: str) -> None:
 
 def test_a_case_changed_after_its_capture_is_pending_live() -> None:
     case, line, _ = _capture()
-    problems, pending = check.captures([case], [line], ['databricks-sql'])
+    problems, pending = check.recordings([case], [line], ['databricks-sql'])
     assert problems == [] and pending == []
     changed = copy.deepcopy(case)
     changed['input']['materialize']['indices'] = [0]
-    problems, pending = check.captures([changed], [line], ['databricks-sql'])
+    problems, pending = check.recordings([changed], [line], ['databricks-sql'])
     assert pending == [
         'base.binary@databricks-sql: its input changed after its capture'
     ]
-    problems, pending = check.captures([case], [], ['databricks-sql'])
+    problems, pending = check.recordings([case], [], ['databricks-sql'])
     assert pending == ['base.binary@databricks-sql: no capture']
-    problems, _ = check.captures([case], [line, line], ['databricks-sql'])
+    problems, _ = check.recordings([case], [line, line], ['databricks-sql'])
     assert problems == ['base.binary@databricks-sql: captured twice']
 
 
@@ -683,14 +687,16 @@ def test_a_non_json_constant_is_refused(tmp_path: Path, constant: str) -> None:
         run.load_cases([tmp_path / 'case.json'])
 
 
-def test_a_negative_zero_call_is_call_zero(tmp_path: Path) -> None:
+def test_a_negative_zero_call_is_refused(tmp_path: Path) -> None:
+    r"""P2-T2.1i-1: ``fail_call`` is a whole number written as one; -0 is
+    refused by both loaders (the test author's reading)."""
     case = _case()
     case['input']['fail_call'] = 7
     (tmp_path / 'case.json').write_text(
         json.dumps(case).replace('"fail_call": 7', '"fail_call": -0')
     )
-    ((loaded, _),) = run.load_cases([tmp_path / 'case.json'])
-    assert loaded['input']['fail_call'] == 0
+    with pytest.raises(run.RunnerFailure, match='whole number'):
+        run.load_cases([tmp_path / 'case.json'])
 
 
 def test_deep_and_wide_capture_lines_are_refused_by_name(
@@ -707,7 +713,7 @@ def test_deep_and_wide_capture_lines_are_refused_by_name(
         deep.write_text('[' * depth + ']' * depth + '\n')
         assert (
             check.main(
-                ['captures', '--cases', str(cases), '--capture', str(deep)]
+                ['recording', '--cases', str(cases), '--capture', str(deep)]
             )
             == 1
         )
@@ -715,7 +721,7 @@ def test_deep_and_wide_capture_lines_are_refused_by_name(
     wide = tmp_path / 'wide.jsonl'
     wide.write_text(json.dumps({f'k{i}': i for i in range(200_000)}) + '\n')
     assert (
-        check.main(['captures', '--cases', str(cases), '--capture', str(wide)])
+        check.main(['recording', '--cases', str(cases), '--capture', str(wide)])
         == 1
     )
     assert (
@@ -730,7 +736,7 @@ def test_a_deep_reference_line_is_refused_by_name() -> None:
     for _ in range(50_000):
         nested = [nested]
     line['observation']['public']['schema'] = nested
-    problems, _ = check.captures([case], [line], ['databricks-sql'])
+    problems, _ = check.recordings([case], [line], ['databricks-sql'])
     assert problems and all('base.binary@databricks-sql' in p for p in problems)
 
 
@@ -780,3 +786,19 @@ def test_python_core_on_a_warehouse_leg_carries_the_stand_in_s_verdict(
     monkeypatch.setattr(run, 'HERE', tmp_path)
     with pytest.raises(run.RunnerFailure, match='standin_client.py is not'):
         run.Standin(case, run.load_bases(), 'snowflake')
+
+
+def test_a_deep_or_wide_manifest_is_refused_by_name(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    r"""The capture manifests are outside JSON too: deep past the parser,
+    or a wide object of no manifest's shape, each refused by name."""
+    cases = ROOT / 'contract' / 'cases' / 's1' / 'base.binary.json'
+    deep = tmp_path / 'deep.json'
+    deep.write_text('[' * 200_000 + ']' * 200_000)
+    assert check.main(['captures', '--cases', str(cases), str(deep)]) == 1
+    assert 'unreadable' in capsys.readouterr().out
+    wide = tmp_path / 'wide.json'
+    wide.write_text(json.dumps({f'k{i}': i for i in range(200_000)}))
+    assert check.main(['captures', '--cases', str(cases), str(wide)]) == 1
+    assert 'is not sdm-capture/1' in capsys.readouterr().out

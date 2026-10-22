@@ -115,6 +115,7 @@ from land import (  # noqa: E402
     repo_of,
 )
 from phases import (  # noqa: E402
+    EPIC,
     LANE_NAME,
     Phase,
     PhaseError,
@@ -175,19 +176,12 @@ def package_id(package: str, phase: int | None = None) -> str:
     return package
 
 
-def brief_problems(brief: str | None, phase: int) -> list[str]:
+def brief_problems(brief: str | None) -> list[str]:
     r"""Why the package's brief may not start a lane (T3.2; learnings.md,
-    lesson 16): from Phase 3 on a brief is given, and ``brief_check.py``
-    finds every heading of the brief template in it."""
+    lesson 16): ``brief_check.py`` finds a heading of the brief template
+    missing from it, each named."""
     if brief is None:
-        return (
-            [
-                f'from Phase {WHOLE_FROM} on a lane starts from its package '
-                'brief: pass --brief FILE, which brief_check.py checks'
-            ]
-            if phase >= WHOLE_FROM
-            else []
-        )
+        return []
     import brief_check
 
     try:
@@ -486,16 +480,33 @@ def plan_start(
     if phase_name not in tips:
         raise Refusal(f'{args.remote} has no {phase_name}')
     phase = tips[phase_name]
+    remote_lane = tips.get(branch)
+    fetch_objects(tools, args.remote, *tips)
+    out(f'ok   {phase_name} is at {phase}')
     # From Phase 3 on (T3.2): whole package IDs, and the package's brief
     # holding every heading of the template.
     number = phase_of_tools(tools).number
     package_id(package, number)
-    problems = brief_problems(getattr(args, 'brief', None), number)
+    problems = brief_problems(getattr(args, 'brief', None))
     if problems:
         raise Refusal('\n'.join(problems))
-    remote_lane = tips.get(branch)
-    fetch_objects(tools, args.remote, *tips)
-    out(f'ok   {phase_name} is at {phase}')
+    # A phase the epic branch holds is finished: no lane starts on it
+    # (T3.2; T3.8's run made a Phase 2 lane from the rust-core checkout).
+    # A phase just cut from the epic, its head the epic's own tip and no
+    # landing of its own, is not.
+    epic = remote_tips(tools, args.remote, EPIC).get(EPIC)
+    if epic is not None:
+        fetch_objects(tools, args.remote, EPIC)
+        subject = tools.git('log', '-1', '--format=%s', phase).strip()
+        own = subject.startswith(f'Land T{number}.') or subject.startswith(
+            'Land CI'
+        )
+        if is_ancestor(tools, phase, epic) and (epic != phase or own):
+            raise Refusal(
+                f'{phase_name} is finished: {EPIC} already holds its head '
+                f'{phase[:12]}; start the lane on the phase in progress '
+                '(--phase-branch or SDM_PHASE_BRANCH)'
+            )
 
     if remote_lane is not None:
         active = [
@@ -1008,8 +1019,7 @@ def parser() -> argparse.ArgumentParser:
     begin.add_argument('--wait', action='store_true')
     begin.add_argument(
         '--brief',
-        help="the package's brief, which brief_check.py must pass (required "
-        f'from Phase {WHOLE_FROM} on)',
+        help="the package's brief, which brief_check.py must pass",
     )
     begin.add_argument(
         '--wait-seconds', type=float, default=WAIT_SECONDS,

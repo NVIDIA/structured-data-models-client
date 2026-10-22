@@ -1180,13 +1180,22 @@ def _(w: World) -> tuple[bool, str]:
     )
 
 
-@case('phase 3: a lane started with no brief is refused (T3.2)')
+@case('phase 3: a lane started with no brief still starts')
 def _(w: World) -> tuple[bool, str]:
     phase_3(w)
-    before = w.refs()
     ran = w.start('T3.4')
+    return verdict(ran.code == 0, 'started', ran)
+
+
+@case('phase: a lane is never started on a finished phase (T3.2)')
+def _(w: World) -> tuple[bool, str]:
+    w.git('push', '--quiet', 'origin', f'{w.phase}:refs/heads/rust-core', cwd=w.seed)  # fmt: skip
+    w.commit(w.seed, 'Merge the phase')
+    w.git('push', '--quiet', 'origin', 'HEAD:refs/heads/rust-core', cwd=w.seed)  # fmt: skip
+    before = w.refs()
+    ran = w.start()
     return verdict(
-        refused_untouched(w, ran, 'pass --brief FILE', before),
+        refused_untouched(w, ran, f'{PHASE} is finished', before),
         'refused, nothing changed',
         ran,
     )

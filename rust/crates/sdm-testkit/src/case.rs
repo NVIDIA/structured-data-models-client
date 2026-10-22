@@ -494,17 +494,16 @@ fn some_warehouses<'de, D: Deserializer<'de>>(
     Ok(Some(legs))
 }
 
-/// `input.fail_call`, when given: a JSON integer literal from 0 to
-/// `2**64 - 1`, `-0` read as 0 as the Python loader reads it
-/// (P2-T2.1i-1); a fraction or an exponent, `1.0` included, is refused.
+/// `input.fail_call`, when given: a whole number from 0 to `2**64 - 1`
+/// written as one; `-0`, a fraction or an exponent, `1.0` included, is
+/// refused, as the Python loader refuses them (P2-T2.1i-1).
 fn some_call<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<u64>, D::Error> {
     let raw = Box::<RawValue>::deserialize(deserializer)?;
     let text = raw.get().trim();
-    if !is_integer_literal(text) {
-        return Err(D::Error::custom("fail_call is not a JSON integer literal"));
-    }
-    if text == "-0" {
-        return Ok(Some(0));
+    if !is_integer_literal(text) || text.starts_with('-') {
+        return Err(D::Error::custom(
+            "fail_call is not a whole number written as one",
+        ));
     }
     text.parse::<u64>()
         .map(Some)
@@ -656,9 +655,10 @@ pub struct Materialize {
     #[serde(default, deserialize_with = "present")]
     pub exclude_cols_dict: Option<AsWritten>,
     /// The most context examples materialize takes (Phase 3's quickstart
-    /// cases), kept as written as the sampling options are.
+    /// cases), kept as written as `rows_per_call` is: any JSON scalar but
+    /// `null`.
     #[serde(default, deserialize_with = "present")]
-    pub num_context_samples: Option<AsWritten>,
+    pub num_context_samples: Option<Written>,
 }
 
 /// Any JSON value, `null`, a list and an object included, kept as the

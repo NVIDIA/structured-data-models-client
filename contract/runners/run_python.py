@@ -367,12 +367,14 @@ def _indices(given: dict[str, Any]) -> str | None:
     spec = given['materialize']
     for key in ('indices', 'candidates'):
         for position, value in enumerate(spec.get(key, ())):
-            if type(value) not in (int, str):
+            if type(value) not in (int, NegativeZero, str):
                 return f'input/materialize/{key}/{position} is not an integer'
-    if 'top_k' in spec and type(spec['top_k']) is not int:
+    if 'top_k' in spec and type(spec['top_k']) not in (int, NegativeZero):
         return 'input/materialize/top_k is not an integer'
+    # A whole number as written: -0 is refused, as the Rust loader refuses
+    # it (P2-T2.1i-1).
     if 'fail_call' in given and type(given['fail_call']) is not int:
-        return 'input/fail_call is not an integer'
+        return 'input/fail_call is not a whole number written as one'
     return None
 
 
@@ -476,10 +478,11 @@ def check_legs(
 
 def case_databases(case: dict[str, Any]) -> tuple[str, ...]:
     r"""The databases a loaded case runs on, in :data:`DATABASES` order:
-    all three unless its ``databases`` (with its exclusion) narrows them,
-    and none for a case naming ``warehouses``, which runs only there."""
+    all three unless its ``databases`` (with its exclusion) narrows them;
+    for a case naming ``warehouses``, those legs, in :data:`WAREHOUSES`
+    order, and only those (design choice 1)."""
     if 'warehouses' in case:
-        return ()
+        return tuple(leg for leg in WAREHOUSES if leg in case['warehouses'])
     named = case.get('databases', DATABASES)
     return tuple(database for database in DATABASES if database in named)
 
@@ -506,6 +509,8 @@ def case_warehouses(case: dict[str, Any]) -> tuple[str, ...]:
 
 def case_legs(case: dict[str, Any]) -> tuple[str, ...]:
     r"""Every leg a loaded case runs on, in :data:`LEGS` order."""
+    if 'warehouses' in case:
+        return case_warehouses(case)
     return case_databases(case) + case_warehouses(case)
 
 
@@ -557,7 +562,9 @@ def load_cases(paths: Iterable[Path]) -> list[tuple[dict[str, Any], str]]:
         try:
             # NaN and Infinity are not JSON: refused, as the Rust loader
             # refuses them (P2-T2.1i-1).
-            case = json.loads(data, parse_constant=_not_json)
+            case = json.loads(
+                data, parse_constant=_not_json, parse_int=_json_int
+            )
         except (ValueError, RecursionError):
             # Not JSON, or nested past the parser's depth: refused by name,
             # as the Rust loader refuses it (T1.21c).
@@ -576,6 +583,17 @@ def load_cases(paths: Iterable[Path]) -> list[tuple[dict[str, Any], str]]:
         seen.add(case['id'])
         cases.append((case, digest(data)))
     return cases
+
+
+class NegativeZero(int):
+    r"""A JSON integer written ``-0``: zero, which the case format takes
+    where it takes an integer of any form (an index, ``top_k``), and
+    refuses where it takes a whole number as written (``fail_call``), as
+    sdm-testkit's loader does (P2-T2.1i-1)."""
+
+
+def _json_int(text: str) -> int:
+    return NegativeZero(0) if text == '-0' else int(text)
 
 
 def _not_json(constant: str) -> Any:
@@ -2250,9 +2268,22 @@ class _Captured:
 
     def execute(self, *arguments: Any, **keywords: Any) -> Any:
         # Bound as the driver binds them: execute(query, parameters=None).
-        query = keywords.get('query', arguments[0] if arguments else None)
-        parameters = keywords.get(
-            'parameters', arguments[1] if len(arguments) > 1 else None
+        query = keywords.get(
+            'query',
+            keywords.get(
+                'operation',
+                keywords.get('command', arguments[0] if arguments else None),
+            ),
+        )
+        # Bound by each driver's own name: DuckDB's and Databricks'
+        # parameters, Snowflake's params (qmark), Spark's args.
+        parameters = next(
+            (
+                keywords[name]
+                for name in ('parameters', 'params', 'args')
+                if name in keywords
+            ),
+            arguments[1] if len(arguments) > 1 else None,
         )
         statement: dict[str, Any] = {
             'handle': self._handle,
@@ -2515,32 +2546,93 @@ def query_log(connection: Any) -> list[str]:
 
 
 class StatementLog:
-    r"""The query log of a SQLite or Postgres run (T2.1a fix 4), DuckDB's
-    own log's twin: every statement the driver itself executes, by its
-    cursor's ``execute`` and ``executemany`` (ADBC's and psycopg's), in
-    order, with ``''`` for a relation bound by name (ADBC's
-    ``adbc_ingest``), whatever object called it, the capture's proxy or
-    not. It wraps the driver's own cursor class for one case, restored
-    after; test-only, as the capture is. :func:`_logged_texts` holds the
-    capture's statements to it, as to DuckDB's."""
+    r"""The query log of a run off DuckDB (T2.1a fix 4), DuckDB's own log's
+    twin: every statement the driver itself runs, in order, with ``''``
+    for a relation bound by name (ADBC's ``adbc_ingest``), whatever object
+    called it, the capture's proxy or not. It wraps the driver's own
+    classes for one case, restored after, and is entered only as a
+    context (``with``), so a case that fails leaves the driver as it was
+    (P2-T2.1a-2); test-only, as the capture is. :func:`_logged_texts`
+    holds the capture's statements to it, as to DuckDB's.
 
-    #: The driver's cursor class and the methods logged, per database.
-    TARGETS = {
-        'sqlite': ('adbc_driver_manager.dbapi', 'Cursor'),
-        'postgres': ('psycopg', 'Cursor'),
+    What it wraps, per leg: ADBC SQLite's cursor; psycopg's cursor on
+    Postgres and Lakebase, ``copy`` and ``stream`` with ``execute`` and
+    ``executemany`` (P2-T2.1a-2); the Databricks SQL connector's and
+    Snowflake connector's cursors (Phase 3); and a Spark session's ``sql``,
+    the classic session's and Spark Connect's, each that is importable."""
+
+    #: Each leg's driver classes (module, class) and the methods logged,
+    #: each method with whether it binds a relation rather than runs one.
+    TARGETS: dict[
+        str, tuple[tuple[str, str, tuple[tuple[str, bool], ...]], ...]
+    ] = {
+        'sqlite': (
+            (
+                'adbc_driver_manager.dbapi',
+                'Cursor',
+                (
+                    ('execute', False),
+                    ('executemany', False),
+                    ('adbc_ingest', True),
+                ),
+            ),
+        ),
+        'postgres': (
+            (
+                'psycopg',
+                'Cursor',
+                (
+                    ('execute', False),
+                    ('executemany', False),
+                    ('copy', False),
+                    ('stream', False),
+                ),
+            ),
+        ),
+        'lakebase': (
+            (
+                'psycopg',
+                'Cursor',
+                (
+                    ('execute', False),
+                    ('executemany', False),
+                    ('copy', False),
+                    ('stream', False),
+                ),
+            ),
+        ),
+        'databricks-sql': (
+            (
+                'databricks.sql.client',
+                'Cursor',
+                (('execute', False), ('executemany', False)),
+            ),
+        ),
+        'snowflake': (
+            (
+                'snowflake.connector.cursor',
+                'SnowflakeCursor',
+                (('execute', False), ('executemany', False)),
+            ),
+        ),
+        'databricks-spark': (
+            ('pyspark.sql.session', 'SparkSession', (('sql', False),)),
+            ('pyspark.sql.connect.session', 'SparkSession', (('sql', False),)),
+        ),
     }
+    #: The names a driver's method takes its statement by.
+    _QUERY = ('query', 'operation', 'command', 'statement', 'sqlQuery')
 
     def __init__(self, database: str) -> None:
         self.database = database
         self.texts: list[str] = []
-        self._saved: list[tuple[Any, str, Any]] = []
+        self._saved: list[tuple[Any, str, Any, bool]] = []
 
     def __enter__(self) -> StatementLog:
         import importlib
 
-        module, name = self.TARGETS[self.database]
-        cls = getattr(importlib.import_module(module), name)
         log = self.texts
+        found = 0
 
         def text(query: Any) -> str:
             # A statement composed by the driver's own SQL builder logs its
@@ -2549,44 +2641,62 @@ class StatementLog:
                 query if isinstance(query, str) else f'<{type(query).__name__}>'
             )
 
-        def wrap(method: str, binding: bool) -> None:
-            original = getattr(cls, method, None)
-            if original is None:
+        def wrap(cls: Any, method: str, binding: bool) -> None:
+            if not hasattr(cls, method):
                 return
+            own = method in cls.__dict__
+            original = cls.__dict__[method] if own else getattr(cls, method)
 
             def logged(self: Any, *arguments: Any, **keywords: Any) -> Any:
                 if binding:
                     log.append('')
                 else:
-                    query = keywords.get(
-                        'query',
-                        keywords.get(
-                            'operation',
-                            keywords.get(
-                                'statement', arguments[0] if arguments else None
-                            ),
+                    query = next(
+                        (
+                            keywords[k]
+                            for k in StatementLog._QUERY
+                            if k in keywords
                         ),
+                        arguments[0] if arguments else None,
                     )
                     log.append(text(query))
                 return original(self, *arguments, **keywords)
 
-            self._saved.append((cls, method, original))
+            self._saved.append((cls, method, original, own))
             setattr(cls, method, logged)
 
-        wrap('execute', False)
-        wrap('executemany', False)
-        if self.database == 'sqlite':
-            wrap('adbc_ingest', True)
-        else:
-            # psycopg's other ways to run a statement (P2-T2.1a-2).
-            wrap('copy', False)
-            wrap('stream', False)
+        try:
+            seen: set[int] = set()
+            for module, name, methods in self.TARGETS[self.database]:
+                try:
+                    cls = getattr(importlib.import_module(module), name)
+                except (ImportError, AttributeError):
+                    # Spark Connect or the classic session alone: each one
+                    # importable is logged.
+                    continue
+                if id(cls) in seen:
+                    continue
+                seen.add(id(cls))
+                found += 1
+                for method, binding in methods:
+                    wrap(cls, method, binding)
+            if not found:
+                raise RunnerFailure(
+                    f'the {self.database} driver is not installed: its '
+                    'statements cannot be logged'
+                )
+        except BaseException:
+            self.__exit__(None, None, None)
+            raise
         return self
 
     def __exit__(self, *exc: Any) -> None:
         while self._saved:
-            cls, method, original = self._saved.pop()
-            setattr(cls, method, original)
+            cls, method, original, own = self._saved.pop()
+            if own:
+                setattr(cls, method, original)
+            else:
+                delattr(cls, method)
 
 
 # --- warehouse legs and the recording mode (Phase 3, choice 2) -----------------------
@@ -2687,17 +2797,21 @@ def draws_of(sql: str | None) -> list[dict[str, Any]]:
     return found
 
 
-def input_hash(case: dict[str, Any], bases: dict[str, list[str]]) -> str:
-    r"""The hash of what a case asks the old client (design choice 2): its
-    ``input``, ``until``, legs and routes, and its base's statements, as
-    canonical JSON. A capture records it, so ``capture_check.py`` finds a
-    case changed after the capture mechanically; its ``why`` and ``source``
-    change nothing the client is asked."""
+def input_hash(
+    case: dict[str, Any], bases: dict[str, list[str]] | None = None
+) -> str:
+    r"""The hash of what the old client's answer to a case depends on
+    (design choice 2): its ``input``, its ``until`` and its base's
+    statements (``bases`` as :func:`load_bases` gives them, this
+    checkout's by default), as canonical JSON. A capture records it, so
+    ``capture_check.py`` finds a case changed after the capture
+    mechanically; its ``why``, paths, routes, status, expectation and
+    ``core`` change nothing the old client is asked, so a case given
+    ``core`` later keeps its capture (T3.4's brief)."""
+    bases = load_bases() if bases is None else bases
     asked = {
         'input': case['input'],
         'until': case['until'],
-        'warehouses': case.get('warehouses'),
-        'routes': case['routes'],
         'base': bases.get(case['input']['base']),
     }
     return digest(
@@ -2705,7 +2819,37 @@ def input_hash(case: dict[str, Any], bases: dict[str, list[str]]) -> str:
     )
 
 
-def resolved(case: dict[str, Any], names: Mapping[str, str]) -> dict[str, Any]:
+#: The environment variable each placeholder's private name is read from:
+#: ``{catalog}`` from ``SDM_CAPTURE_CATALOG``, ``{shop_metric_view}`` from
+#: ``SDM_CAPTURE_SHOP_METRIC_VIEW``.
+CAPTURE_NAME = 'SDM_CAPTURE_'
+
+
+def placeholder_names(environ: Mapping[str, str]) -> dict[str, str]:
+    r"""Each placeholder's private name the environment sets
+    (:data:`CAPTURE_NAME`), by placeholder."""
+    return {
+        key[len(CAPTURE_NAME) :].lower(): value
+        for key, value in environ.items()
+        if key.startswith(CAPTURE_NAME) and value
+    }
+
+
+def resolve_placeholders(
+    case: dict[str, Any], environ: Mapping[str, str] | None = None
+) -> dict[str, Any]:
+    r"""``case`` with each ``{name}`` in its ``input`` replaced by
+    ``environ['SDM_CAPTURE_' + NAME]`` (the S2 test authors' placeholders:
+    ``{catalog}``, ``{schema}`` and the existing views'), for a live run; a
+    placeholder with nothing set fails the run, named by its placeholder,
+    never by a value. The case given is not changed."""
+    environ = os.environ if environ is None else environ
+    return resolved(case, placeholder_names(environ), everywhere=True)
+
+
+def resolved(
+    case: dict[str, Any], names: Mapping[str, str], everywhere: bool = False
+) -> dict[str, Any]:
     r"""``case`` with every placeholder in the parts of its ``input`` that
     name warehouse objects (:data:`_RESOLVED_IN`) replaced by its private
     name from ``names``; a placeholder ``names`` lacks fails the run, named
@@ -2730,6 +2874,9 @@ def resolved(case: dict[str, Any], names: Mapping[str, str]) -> dict[str, Any]:
         return value
 
     out = copy.deepcopy(case)
+    if everywhere:
+        out['input'] = resolve(out['input'])
+        return out
     for key in _RESOLVED_IN:
         if key in out['input']:
             out['input'][key] = resolve(out['input'][key])
@@ -2770,9 +2917,12 @@ def live_configuration(
 
         {"format": "sdm-live/1",
          "private": ["<a host>", ...],
-         "legs": {"<leg>": {"names": {"catalog": ..., "schema": ...},
-                            "driver": {...}, "warehouse": {...},
+         "legs": {"<leg>": {"driver": {...}, "warehouse": {...},
                             "lakebase": {...}}}}
+
+    The placeholders' private names come from the environment
+    (``SDM_CAPTURE_CATALOG``, ``SDM_CAPTURE_SCHEMA``, an existing view's
+    ``SDM_CAPTURE_SHOP_METRIC_VIEW``; :func:`resolve_placeholders`).
 
     ``driver`` holds the keyword arguments of the leg's own driver connect
     (``databricks.sql.connect``, ``snowflake.connector.connect``);
@@ -2782,7 +2932,7 @@ def live_configuration(
     ``lakebase`` those of ``sdm_connectors.databricks.lakebase`` (with
     ``profile``), which every lakebase case opens through. Any value may be
     ``{"env": "NAME"}``, read from the environment (Snowflake's
-    credentials, KO3-24). Every text the file holds, names and connect
+    credentials, KO3-24). Every text the file holds, every placeholder's name, connect
     arguments alike, every private value read from the environment, and
     the values of :data:`PRIVATE_ENVIRONMENT` set at least
     :data:`_PRIVATE_MIN` long are private."""
@@ -2805,16 +2955,11 @@ def live_configuration(
         raise RunnerFailure(f'the live configuration has no {leg} leg')
     private: list[str] = []
     spec = _resolve_environment(spec, private)
-    names = spec.get('names') or {}
-    if not isinstance(names, dict) or not all(
-        isinstance(value, str) and value for value in names.values()
-    ):
-        raise RunnerFailure(
-            f"the live configuration's {leg} names are not texts"
-        )
+    # Each placeholder's private name, from the environment
+    # (resolve_placeholders), private wherever it appears.
+    names = placeholder_names(environ)
+    private.extend(names.values())
     _resolve_environment(document.get('private') or [], private)
-    for other in (document.get('legs') or {}).values():
-        _resolve_environment((other or {}).get('names') or {}, private)
     private.extend(
         environ[name] for name in PRIVATE_ENVIRONMENT if environ.get(name)
     )
@@ -3673,7 +3818,7 @@ class Live:
     ) -> None:
         self.leg = leg
         spec, self.names, self.private = live_configuration(leg)
-        self.case = resolved(case, self.names)
+        self.case = resolve_placeholders(case)
         given = self.case['input']
         duck = _connection(case, bases)
         self._undo: list[Any] = []
@@ -3945,6 +4090,15 @@ def written(line: dict[str, Any], held: Placeheld) -> str:
 # The Postgres leg's capture is psycopg's whole: copy, stream and
 # executemany recorded, never passed through unseen (P2-T2.1a-2).
 _CAPTURES['postgres'] = _CapturedPsycopg
+# Each warehouse leg's capture (Phase 3, choice 2), as capture() hands it.
+_CAPTURES.update(
+    {
+        'databricks-sql': _CapturedDatabricks,
+        'databricks-spark': _CapturedSpark,
+        'snowflake': _CapturedSnowflake,
+        'lakebase': _CapturedPsycopg,
+    }
+)
 
 
 # --- one case --------------------------------------------------------------------
@@ -4088,7 +4242,13 @@ def _materialize_arguments(spec: dict[str, Any]) -> dict[str, Any]:
         arguments['candidates'] = list(spec['candidates'])
     if 'top_k' in spec:
         arguments['top_k'] = spec['top_k']
-    for key in ('rows_per_call', 'lag_timesteps', *SAMPLING_OPTIONS):
+    for key in (
+        'rows_per_call',
+        'lag_timesteps',
+        # The quickstart's context size (Phase 3's S2 cases).
+        'num_context_samples',
+        *SAMPLING_OPTIONS,
+    ):
         if key in spec:
             # As written (T2.8c's, T2.9's and T2.11's cases): a value the
             # reference refuses is the case's input, and a null is None
@@ -4107,8 +4267,6 @@ SAMPLING_OPTIONS = (
     'use_prediction_time',
     'return_embeddings',
     'exclude_cols_dict',
-    # The quickstart's context size (Phase 3's S2 cases), as written too.
-    'num_context_samples',
 )
 
 
@@ -4304,10 +4462,6 @@ def _call(
     (:class:`Live`); with ``keep``, the recording mode's, every result is
     kept whole and ``keep`` gets the leg, the capture's log and the
     view-derived relations, read before the leg closes."""
-    from sdm_client import KumoRelational, PredictiveQuery, Schema, SDMClient
-
-    serve = _sibling('scripted_endpoint').serve
-
     offline = database in WAREHOUSES and keep is not None and 'standin' in keep
     live: Live | Standin | None = None
     if offline:
@@ -4331,15 +4485,14 @@ def _call(
     else:
         connection, cleanup, types = _open(case, bases, database)
     # Setup is everything run before the connection reaches the source; the
-    # query log (DuckDB's own, or the driver's statement log on SQLite and
-    # Postgres, entered inside the call's try so it is always left; a
-    # warehouse keeps none the run can read) and the capture start after it.
-    statements = None
+    # query log (DuckDB's own, or off DuckDB the driver's statement log,
+    # entered only in a with, so it is always left, P2-T2.1a-2; the
+    # stand-in's leg keeps none, its statements being the stand-in's) and
+    # the capture start after it.
+    logs = database != 'duckdb' and not isinstance(live, Standin)
     try:
         if database == 'duckdb':
             enable_query_log(connection)
-        elif live is None:
-            statements = StatementLog(database)
         log = DriverLog() if driver_capture else None
         if log is not None:
             log.type_names = types
@@ -4359,9 +4512,79 @@ def _call(
         cleanup()
         raise
     public: dict[str, Any] = {'schema': None, 'payloads': [], 'result': None}
-    stage = 'from_source'
     if log is not None:
-        log.stage = stage
+        log.stage = 'from_source'
+
+    def calls(statements: StatementLog | None) -> tuple[Any, ...]:
+        return _calls(
+            case,
+            database,
+            given,
+            arguments,
+            from_source,
+            given_to_source,
+            live,
+            log,
+            keep,
+            connection,
+            cleanup,
+            public,
+            statements,
+        )
+
+    if logs:
+        with StatementLog(database) as statements:
+            outcome, logged, shown = calls(statements)
+    else:
+        outcome, logged, shown = calls(None)
+    compared, differing = _logged_texts(log, logged)
+    driver = {
+        'capture': log.record() if log is not None else None,
+        # DuckDB's own query log, or off DuckDB the driver's statement log.
+        'query_log': {
+            'statements': sum(1 for text in logged if text),
+            'bindings': sum(1 for text in logged if not text),
+            'compared': compared,
+            'differing': differing,
+        },
+    }
+    return (
+        outcome,
+        [type(warning.message).__name__ for warning in shown],
+        driver,
+        public,
+        [
+            {
+                'class': type(warning.message).__name__,
+                'module': _origin(warning.filename),
+            }
+            for warning in shown
+        ],
+    )
+
+
+def _calls(
+    case: dict[str, Any],
+    database: str,
+    given: dict[str, Any],
+    arguments: dict[str, Any],
+    from_source: dict[str, Any],
+    given_to_source: Any,
+    live: Any,
+    log: DriverLog | None,
+    keep: dict[str, Any] | None,
+    connection: Any,
+    cleanup: Any,
+    public: dict[str, Any],
+    statements: StatementLog | None,
+) -> tuple[Any, ...]:
+    r"""The case's public calls (:func:`_call`'s), under the statement log
+    when there is one: the outcome, the statements logged and the
+    warnings shown."""
+    from sdm_client import KumoRelational, PredictiveQuery, Schema, SDMClient
+
+    serve = _sibling('scripted_endpoint').serve
+    stage = 'from_source'
     with (
         # The scripted endpoint, failing the case's chosen call and
         # answering a classification with its probabilities (T2.8's ranking
@@ -4381,8 +4604,6 @@ def _call(
     ):
         warnings.simplefilter('always')
         try:
-            if statements is not None:
-                statements.__enter__()
             source = (
                 warehouse_source(database, given_to_source, live.names, given)
                 if live is not None
@@ -4430,8 +4651,7 @@ def _call(
         finally:
             try:
                 if statements is not None:
-                    statements.__exit__(None, None, None)
-                    logged = statements.texts
+                    logged = list(statements.texts)
                 elif live is not None:
                     logged = []
                 else:
@@ -4448,30 +4668,7 @@ def _call(
             {'method': method, 'path': path, **_payload(body)}
             for method, path, body in received.requests
         ]
-    compared, differing = _logged_texts(log, logged)
-    driver = {
-        'capture': log.record() if log is not None else None,
-        # DuckDB's own query log, or off DuckDB the driver's statement log.
-        'query_log': {
-            'statements': sum(1 for text in logged if text),
-            'bindings': sum(1 for text in logged if not text),
-            'compared': compared,
-            'differing': differing,
-        },
-    }
-    return (
-        outcome,
-        [type(warning.message).__name__ for warning in shown],
-        driver,
-        public,
-        [
-            {
-                'class': type(warning.message).__name__,
-                'module': _origin(warning.filename),
-            }
-            for warning in shown
-        ],
-    )
+    return outcome, logged, shown
 
 
 def _origin(filename: str) -> str | None:
@@ -4509,6 +4706,13 @@ def _origin(filename: str) -> str | None:
 
 #: Where the checkout declares its contract version.
 CONTRACT_SOURCE = REPO / 'rust/crates/sdm-contract/src/lib.rs'
+
+
+def contract_refusal(installed: Any, root: Path = REPO) -> str | None:
+    r"""Why the installed client may not run the cases of the checkout at
+    ``root`` (P2-MID2-7): its contract version is not the one
+    ``rust/crates/sdm-contract`` declares there, naming both; or None."""
+    return stale_client(installed, root / 'rust/crates/sdm-contract/src/lib.rs')
 
 
 def stale_client(installed: Any, source: Path = CONTRACT_SOURCE) -> str | None:
@@ -4843,7 +5047,7 @@ def legs_main(argv: list[str]) -> int:
     :func:`check_legs` over the observations files, ``FILE`` the JSON
     object of each core leg's providers; exit 1 naming each problem."""
     parser = argparse.ArgumentParser(prog='run_python.py legs')
-    parser.add_argument('--database', choices=DATABASES, required=True)
+    parser.add_argument('--database', choices=LEGS, required=True)
     parser.add_argument('--providers', type=Path, required=True)
     parser.add_argument('observations', type=Path, nargs='*')
     arguments = parser.parse_args(argv)

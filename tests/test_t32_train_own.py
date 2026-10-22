@@ -146,7 +146,7 @@ def test_a_listed_code_makes_the_case_live_only_and_keeps_runner_failures() -> (
     report.fail('the outcome differs', 'outcome')
     report.fail('runner failure: no observation')
     COMPARE._live_only(report, 'c@lakebase', 'python-core', code, 0, 'why')
-    assert report.live_only == ['c@lakebase: python-core: B1']
+    assert report.live_only == {'c@lakebase': 'B1'}
     assert report.texts == ['runner failure: no observation']
 
 
@@ -191,25 +191,42 @@ def _git(repo: Path, *arguments: str) -> str:
     ).stdout.strip()
 
 
-def _verdicts(repo: Path, recorded: str, result: str = 'pass') -> None:
-    captures = repo / 'contract' / 'captures'
-    captures.mkdir(parents=True, exist_ok=True)
-    (captures / 'e1-databricks-sql.jsonl').write_text(
+def _manifest(path: Path, commit: str, verdict: str | None) -> Path:
+    path.write_text(
         json.dumps(
             {
-                'case': 'c@databricks-sql',
-                'recording': {'commit': recorded},
-                'verdict': {'runner': 'python-core', 'result': result},
+                'format': 'sdm-capture/1',
+                'recording_commit': commit,
+                'verdicts': {}
+                if verdict is None
+                else {'c@databricks-sql': verdict},
             }
         )
-        + '\n'
+    )
+    return path
+
+
+def test_a_live_only_item_needs_its_e1_verdict_on_the_final_candidate(
+    tmp_path: Path,
+) -> None:
+    final = 'f' * 40
+    live = {'c@databricks-sql': 'B1'}
+    none = _manifest(tmp_path / 'none.json', final, None)
+    assert 'no E-1 verdict' in COMPARE.verdict_problems(live, [none], final)[0]
+    other = _manifest(tmp_path / 'other.json', '0' * 40, 'equal')
+    assert 'another commit' in COMPARE.verdict_problems(live, [other], final)[0]
+    differs = _manifest(tmp_path / 'differs.json', final, 'differs')
+    assert 'differs' in COMPARE.verdict_problems(live, [differs], final)[0]
+    equal = _manifest(tmp_path / 'equal.json', final, 'equal')
+    assert COMPARE.verdict_problems(live, [equal], final) == []
+    deep = tmp_path / 'deep.json'
+    deep.write_text('[' * 200_000 + ']' * 200_000)
+    assert (
+        'unreadable' in COMPARE.verdict_problems(live, [deep, equal], final)[0]
     )
 
 
-ITEM = 'LIVE ONLY c@databricks-sql: python-core: B1'
-
-
-def test_a_live_only_item_passes_the_locked_run_only_with_its_e1_verdict(
+def test_a_captures_only_commit_stands_for_the_candidate_it_was_recorded_from(
     tmp_path: Path,
 ) -> None:
     repo = tmp_path / 'repo'
@@ -220,27 +237,11 @@ def test_a_live_only_item_passes_the_locked_run_only_with_its_e1_verdict(
     _git(repo, 'commit', '-q', '-m', 'final candidate')
     final = _git(repo, 'rev-parse', 'HEAD')
     captures = repo / 'contract' / 'captures'
-    assert CHECK.live_only_problems([ITEM], captures, [final]) == [
-        'c@databricks-sql: python-core: live only (B1): no E-1 verdict for '
-        'the final candidate'
-    ]
-    _verdicts(repo, '0' * 40)
-    assert (
-        'only for another commit'
-        in CHECK.live_only_problems([ITEM], captures, [final])[0]
-    )
-    _verdicts(repo, final, 'fail')
-    assert (
-        'did not pass' in CHECK.live_only_problems([ITEM], captures, [final])[0]
-    )
-    # The captures-only commit recorded from the final candidate: the
-    # locked run on it reads the verdicts of its parent.
-    _verdicts(repo, final)
+    captures.mkdir(parents=True)
+    _manifest(captures / 'e1.json', final, 'equal')
     _git(repo, 'add', '.')
     _git(repo, 'commit', '-q', '-m', 'captures')
-    recordings = CHECK.accepted_recordings(repo)
-    assert final in recordings
-    assert CHECK.live_only_problems([ITEM], captures, recordings) == []
+    assert final in CHECK.accepted_recordings(repo)
     (repo / 'README').write_text('y\n')
     _git(repo, 'add', '.')
     _git(repo, 'commit', '-q', '-m', 'a product change after the run')
@@ -467,3 +468,25 @@ def test_an_excused_result_digest_still_holds_the_rows_as_text() -> None:
     assert later.failures == [] and any(
         'record it again' in n for n in later.notes
     )
+
+
+def test_the_census_real_data_mode_counts_hits_and_needs_its_control(
+    tmp_path: Path,
+) -> None:
+    r"""Locked check 2's report: each refusal on a real source counted by
+    leg, and the run failing when its seeded control is not refused."""
+    census = _module(ROOT / 'contract/tools/refusal_census.py', 't32_census')
+    cases = tmp_path / 'real'
+    cases.mkdir()
+    (cases / 'base.binary.json').write_text(
+        (ROOT / 'contract/cases/s1/base.binary.json').read_text()
+    )
+    refused = ROOT / 'contract/cases/s1/decimal.compare-finer-eq.json'
+    found = census.real_data(cases, 'duckdb', refused)
+    assert found['sources'] == 1 and found['database'] == 'duckdb'
+    assert found['control']['outcome']['result'] == 'refusal'
+    assert any(refused.stem in hit['cases'] for hit in found['hits'])
+    with pytest.raises(census.CensusError, match='the control'):
+        census.real_data(
+            cases, 'duckdb', ROOT / 'contract/cases/s1/base.binary.json'
+        )

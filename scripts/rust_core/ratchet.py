@@ -318,6 +318,7 @@ APPROVAL_NOTES = re.compile(
     r'|answers? \d'
     r'|items? \d'
     r'|\([a-z]\b'
+    r'|[A-Z][A-Z0-9]*-?\d+[a-z]?(?:\([a-z]\))?$'
     r'|[A-Z][A-Z0-9]*-\d+[a-z]?(?:\([a-z]\))?(?:, | and | only\b)'
     r'|including '
     r'|the owner chose '

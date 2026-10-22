@@ -25,22 +25,28 @@ observation in ``--on`` fail. It holds, case by case:
   received, and the public result) and the same query-log counts, so the
   capture changed no value and no execution count.
 
-Two more checks read the warehouse captures of the recording mode (Phase
-3, design choice 2; ``run_python.py --record``):
+Three more read the warehouse legs' captures (Phase 3, design choice 2):
 
     python contract/runners/capture_check.py captures --cases PATH...
+        [--leg LEG]... [--locked] MANIFEST...
+    python contract/runners/capture_check.py recording --cases PATH...
         --capture FILE... [--leg LEG]... [--locked]
-    python contract/runners/capture_check.py captures-only --final SHA
-        [--commit SHA] [--repo DIR]
+    python contract/runners/capture_check.py commit --candidate SHA [REV]
 
-``captures`` holds every capture line complete (:func:`capture_problems`)
-and lists every case and leg the cases name with no capture of their
-current input as pending live (a case added or changed after the
-capture, found by its input hash); with ``--locked`` a pending case fails
-too. ``captures-only`` holds the commits from the final candidate to
-``--commit`` (default ``HEAD``) to changing only ``contract/captures/**``,
-each file they add or change naming the final candidate as the recording
-commit of every line (design, "The live-test plan").
+``captures`` reads the capture manifests T3.3's writer writes beside the
+recorded tables (``{"format": "sdm-capture/1", "recording_commit",
+"reference_commit", "legs", "cases": {"<case>@<leg>": {"input_hash",
+...}}}``): a manifest of another format version, or missing a part, is
+refused by name; each case and warehouse leg the cases run on with no
+capture of its current input (``run_python.input_hash``) is listed
+``pending live: <case>@<leg>``, and fails the run with ``--locked``
+(locked check 1). ``recording`` holds the recording mode's own output
+(``run_python.py --record``, one line per case and leg, the writer's
+input) complete (:func:`capture_problems`). ``commit`` holds a
+captures-only commit after the final run (design, "The live-test plan"):
+REV (default ``HEAD``) changes only ``contract/captures/**``, deletes
+nothing, and every manifest or capture line it adds or changes names the
+final candidate SHA as its recording commit.
 
 A payload is compared parsed. Only the value of ``metadata.request_id``,
 which the client draws at random for every request, is left out
@@ -862,7 +868,7 @@ def capture_problems(
     return problems
 
 
-def captures(
+def recordings(
     cases: list[dict[str, Any]],
     lines: Iterable[dict[str, Any]],
     legs: Iterable[str] | None = None,
@@ -913,8 +919,8 @@ def captures(
     return problems, pending
 
 
-def captures_main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog='capture_check.py captures')
+def recording_main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(prog='capture_check.py recording')
     parser.add_argument('--cases', type=Path, nargs='+', required=True)
     parser.add_argument('--capture', type=Path, nargs='*', default=[])
     parser.add_argument('--leg', action='append', default=None)
@@ -937,15 +943,115 @@ def captures_main(argv: list[str]) -> int:
     ):
         print(f'captures: --leg is one of {run.WAREHOUSES}')
         return 1
-    problems, pending = captures(cases, lines, arguments.leg)
+    problems, pending = recordings(cases, lines, arguments.leg)
     for problem in problems:
         print(f'FAILS {problem}')
     for item in pending:
         print(f'{"FAILS" if arguments.locked else "PENDING LIVE"} {item}')
     failed = bool(problems) or (arguments.locked and bool(pending))
     print(
-        f'captures: {"FAILED" if failed else "complete"}; '
-        f'{len(lines)} captured, {len(pending)} pending live'
+        f'recording: {"FAILED" if failed else "complete"}; '
+        f'{len(lines)} recorded, {len(pending)} pending live'
+    )
+    return 1 if failed else 0
+
+
+# --- the capture manifests (T3.3's writer; design choice 2) -------------------
+
+
+def manifest_problem(manifest: Any, name: str) -> str | None:
+    r"""Why a capture manifest is not one this checker reads, or None: a
+    JSON object of format :data:`CAPTURE_FORMAT` naming its recording and
+    reference commits, its legs, and its cases by key, each with its input
+    hash (``{"format", "recording_commit", "reference_commit", "legs":
+    {LEG: {...versions}}, "cases": {"<case>@<leg>": {"input_hash", ...}}}``,
+    the capture writer's, T3.3)."""
+    if not isinstance(manifest, dict):
+        return f'{name}: not a capture manifest'
+    if manifest.get('format') != CAPTURE_FORMAT:
+        return (
+            f'{name}: format {manifest.get("format")!r} is not '
+            f'{CAPTURE_FORMAT}, the version this checker reads'
+        )
+    for what in ('recording_commit', 'reference_commit'):
+        if not SHA.fullmatch(str(manifest.get(what))):
+            return f'{name}: no {what}'
+    legs, cases = manifest.get('legs'), manifest.get('cases')
+    if not isinstance(legs, dict) or not isinstance(cases, dict):
+        return f'{name}: no legs or cases'
+    for key, entry in cases.items():
+        if not isinstance(entry, dict) or not re.fullmatch(
+            r'[0-9a-f]{64}', str(entry.get('input_hash'))
+        ):
+            return f'{name}: {key} has no input hash'
+    return None
+
+
+def captures(
+    cases: list[dict[str, Any]],
+    manifests: list[tuple[str, Any]],
+    legs: Iterable[str] | None = None,
+) -> tuple[list[str], list[str]]:
+    r"""Every manifest refused (:func:`manifest_problem`), and every case
+    and warehouse leg (of ``legs``, default every one) the cases run on
+    with no capture of its current input (``run_python.input_hash``):
+    pending live, a case added or changed after the capture or a leg the
+    capture does not hold (design choice 2)."""
+    run = runner()
+    bases = run.load_bases()
+    legs = tuple(run.WAREHOUSES if legs is None else legs)
+    problems: list[str] = []
+    held: dict[str, str] = {}
+    for name, manifest in manifests:
+        problem = manifest_problem(manifest, name)
+        if problem is not None:
+            problems.append(problem)
+            continue
+        for key, entry in manifest['cases'].items():
+            held[str(key)] = str(entry['input_hash'])
+    pending = sorted(
+        run.case_key(case['id'], leg)
+        for case in cases
+        for leg in run.case_legs(case)
+        if leg in legs
+        and held.get(run.case_key(case['id'], leg))
+        != run.input_hash(case, bases)
+    )
+    return problems, pending
+
+
+def captures_main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(prog='capture_check.py captures')
+    parser.add_argument('--cases', type=Path, action='append', required=True)
+    parser.add_argument('--locked', action='store_true')
+    parser.add_argument('--leg', action='append', default=None)
+    parser.add_argument('manifests', type=Path, nargs='*')
+    arguments = parser.parse_args(argv)
+    run = runner()
+    try:
+        cases = [case for case, _ in run.load_cases(arguments.cases)]
+        manifests = [
+            (str(path), json.loads(path.read_text(encoding='utf-8')))
+            for path in arguments.manifests
+        ]
+    except (OSError, ValueError, RecursionError, run.RunnerFailure) as error:
+        print(f'captures: unreadable: {type(error).__name__}: {error}')
+        return 1
+    if arguments.leg and any(
+        leg not in run.WAREHOUSES for leg in arguments.leg
+    ):
+        print(f'captures: --leg is one of {run.WAREHOUSES}')
+        return 1
+    problems, pending = captures(cases, manifests, arguments.leg)
+    for problem in problems:
+        print(f'FAILS {problem}')
+    for key in pending:
+        print(f'pending live: {key}')
+    failed = bool(problems) or (arguments.locked and bool(pending))
+    print(
+        f'captures: {"FAILED" if failed else "ok"}; {len(manifests)} '
+        f'manifests read, {len(pending)} cases and legs waiting for a live run'
+        + (' (the locked run fails on any)' if arguments.locked else '')
     )
     return 1 if failed else 0
 
@@ -997,14 +1103,18 @@ def captures_only(repo: Path, final: str, commit: str = 'HEAD') -> list[str]:
         if status.startswith('D'):
             problems.append(f'{path}: deleted')
             continue
+        if not path.endswith(('.json', '.jsonl')):
+            continue  # a recorded table, named by its manifest
         text = '\n'.join(_git_lines(repo, 'show', f'{commit}:{path}'))
-        for number, raw in enumerate(text.splitlines(), 1):
+        documents = [text] if path.endswith('.json') else text.splitlines()
+        for number, raw in enumerate(documents, 1):
             try:
-                recorded = (json.loads(raw).get('recording') or {}).get(
-                    'commit'
-                )
+                document = json.loads(raw)
+                recorded = document.get('recording_commit') or (
+                    document.get('recording') or {}
+                ).get('commit')
             except (ValueError, AttributeError, RecursionError):
-                problems.append(f'{path}:{number}: not a capture line')
+                problems.append(f'{path}:{number}: not a capture')
                 continue
             if recorded != final:
                 problems.append(
@@ -1016,24 +1126,19 @@ def captures_only(repo: Path, final: str, commit: str = 'HEAD') -> list[str]:
     return problems
 
 
-def captures_only_main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog='capture_check.py captures-only')
-    parser.add_argument('--final', required=True)
-    parser.add_argument('--commit', default='HEAD')
-    parser.add_argument('--repo', type=Path, default=ROOT)
+def commit_main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(prog='capture_check.py commit')
+    parser.add_argument('--candidate', required=True)
+    parser.add_argument('commit', nargs='?', default='HEAD')
+    parser.add_argument('--repo', type=Path, default=Path.cwd())
     arguments = parser.parse_args(argv)
-    problems = captures_only(arguments.repo, arguments.final, arguments.commit)
+    problems = captures_only(
+        arguments.repo, arguments.candidate, arguments.commit
+    )
     for problem in problems:
         print(f'FAILS {problem}')
-    print(f'captures-only: {"FAILED" if problems else "ok"}')
+    print(f'commit: {"FAILED" if problems else "ok"}')
     return 1 if problems else 0
-
-
-#: A live-only item as compare.py prints it: ``LIVE ONLY <key>: <runner>:
-#: <code>``.
-LIVE_ONLY = re.compile(
-    r'LIVE ONLY (?P<case>[^:\s]+): (?P<runner>[a-z-]+): (?P<code>B[0-9]+)'
-)
 
 
 def accepted_recordings(repo: Path, head: str = 'HEAD') -> list[str]:
@@ -1056,101 +1161,15 @@ def accepted_recordings(repo: Path, head: str = 'HEAD') -> list[str]:
     return found
 
 
-def verdicts(captures: Path) -> dict[tuple[str, str], list[dict[str, Any]]]:
-    r"""Every E-1 (or E-7) verdict the core's live captures hold, by case
-    key and runner: a line of ``captures/**/*.jsonl`` with a ``verdict``
-    (``{"runner": ..., "result": "pass" | "fail"}``) and its recording
-    commit."""
-    found: dict[tuple[str, str], list[dict[str, Any]]] = {}
-    for path in sorted(captures.rglob('*.jsonl')):
-        for text in path.read_text(encoding='utf-8').splitlines():
-            try:
-                line = json.loads(text)
-            except (ValueError, RecursionError):
-                continue
-            if not isinstance(line, dict) or not isinstance(
-                line.get('verdict'), dict
-            ):
-                continue
-            key = (str(line.get('case')), str(line['verdict'].get('runner')))
-            found.setdefault(key, []).append(
-                {
-                    'result': line['verdict'].get('result'),
-                    'commit': (line.get('recording') or {}).get('commit'),
-                }
-            )
-    return found
-
-
-def live_only_problems(
-    items: Iterable[str], captures: Path, recordings: list[str]
-) -> list[str]:
-    r"""Why the locked run fails on live-only items (Phase 3 design choice
-    2): each item (compare.py's ``LIVE ONLY`` line) needs an E-1 verdict of
-    its case and runner that passed, recorded from one of ``recordings``
-    (:func:`accepted_recordings`); one missing, one naming another commit,
-    or one that failed, fails by name."""
-    held = verdicts(captures)
-    problems = []
-    for item in items:
-        match = LIVE_ONLY.search(item)
-        if match is None:
-            problems.append(f'{item.strip()}: not a live-only item')
-            continue
-        key = (match['case'], match['runner'])
-        mine = [v for v in held.get(key, []) if v['commit'] in recordings]
-        where = (
-            f'{match["case"]}: {match["runner"]}: live only ({match["code"]})'
-        )
-        if not mine:
-            others = held.get(key, [])
-            problems.append(
-                f'{where}: no E-1 verdict for the final candidate'
-                + (' (only for another commit)' if others else '')
-            )
-        elif any(v['result'] != 'pass' for v in mine):
-            problems.append(f'{where}: its E-1 verdict did not pass')
-    return problems
-
-
-def live_only_main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog='capture_check.py live-only')
-    parser.add_argument('--items', type=Path, nargs='+', required=True)
-    parser.add_argument('--repo', type=Path, default=ROOT)
-    parser.add_argument('--head', default='HEAD')
-    arguments = parser.parse_args(argv)
-    try:
-        items = [
-            text
-            for path in arguments.items
-            for text in path.read_text(encoding='utf-8').splitlines()
-            if text.startswith('LIVE ONLY ')
-        ]
-    except OSError as error:
-        print(f'live-only: unreadable: {type(error).__name__}')
-        return 1
-    recordings = accepted_recordings(arguments.repo, arguments.head)
-    if not recordings:
-        print(f'live-only: {arguments.head} is not a commit')
-        return 1
-    problems = live_only_problems(items, arguments.repo / CAPTURES, recordings)
-    for problem in problems:
-        print(f'FAILS {problem}')
-    print(
-        f'live-only: {"FAILED" if problems else "ok"}; {len(items)} items, '
-        f'{len(items) - len(problems)} discharged by E-1'
-    )
-    return 1 if problems else 0
-
-
 def main(argv: list[str] | None = None) -> int:
     given = sys.argv[1:] if argv is None else argv
-    if given[:1] == ['live-only']:
-        return live_only_main(given[1:])
-    if given[:1] == ['captures']:
-        return captures_main(given[1:])
-    if given[:1] == ['captures-only']:
-        return captures_only_main(given[1:])
+    commands = {
+        'captures': captures_main,
+        'recording': recording_main,
+        'commit': commit_main,
+    }
+    if given[:1] and given[0] in commands:
+        return commands[given[0]](given[1:])
     parser = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     parser.add_argument('--on', type=Path, required=True)
     parser.add_argument('--off', type=Path, required=True)

@@ -363,7 +363,8 @@
           "description": "The columns to leave out of the request, by table (T2.11), passed as written: any JSON value, an object as a dict and a list as a list, null as None, so a value the reference refuses is the case's input."
         },
         "num_context_samples": {
-          "description": "The most context examples materialize takes (Phase 3's quickstart cases), passed as written: any JSON value, null as None, so a value the reference refuses is the case's input."
+          "description": "The most context examples materialize takes (Phase 3's quickstart cases), passed as written as rows_per_call is: a JSON integer as an integer of any size, a number written with a fraction or an exponent as a float, true or false as a bool, a string as text, so a value the reference refuses is the case's input.",
+          "type": ["integer", "number", "boolean", "string"]
         }
       }
     },

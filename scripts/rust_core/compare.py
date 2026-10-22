@@ -382,9 +382,10 @@ class Report:
         #: table (:func:`core_only_columns`, T2.1f).
         self.core_only: dict[str, dict[str, frozenset[str]]] = {}
         #: The live-only items of a stand-in run (Phase 3 design choice 2),
-        #: ``<key>: <runner>: <code>``: neither passed nor failed offline,
-        #: each discharged only by E-1's verdict on the final candidate.
-        self.live_only: list[str] = []
+        #: each line's key with its code: neither passed nor failed
+        #: offline, each discharged only by E-1's verdict on the final
+        #: candidate (:func:`verdict_problems`).
+        self.live_only: dict[str, str] = {}
 
     def fail(self, text: str, rule: str | None = None) -> None:
         if rule is not None and self.rules.get(rule) == 'diagnostic':
@@ -519,7 +520,7 @@ def _live_only(
     listed by its code, its differences under a rule reported, neither
     passed nor failed offline. A failure under no rule (a runner failure,
     a file's problem) still fails."""
-    report.live_only.append(f'{key}: {who}: {code}')
+    report.live_only.setdefault(key, code)
     _reported_rules(report, since, f'live only, {code}: {why}')
 
 
@@ -3342,6 +3343,50 @@ def compare(
     return report
 
 
+def verdict_problems(
+    live_only: dict[str, str], manifests: list[Path], candidate: str
+) -> list[str]:
+    r"""Why the locked run fails on the live-only items (Phase 3 design
+    choice 2; locked check 1): each needs E-1's verdict ``equal`` for its
+    key in a capture manifest of the core's live run (``contract/captures/``,
+    ``{"recording_commit": SHA, "verdicts": {"<case>@<leg>": "equal" |
+    "differs"}}``) recorded on ``candidate``, the final candidate; none, one
+    recorded on another commit, or ``differs`` fails, naming the item."""
+    found: dict[str, list[tuple[str, str]]] = {}
+    problems = []
+    for path in manifests:
+        try:
+            manifest = json.loads(path.read_text(encoding='utf-8'))
+        except (OSError, ValueError, RecursionError) as error:
+            problems.append(f'{path.name}: unreadable ({type(error).__name__})')
+            continue
+        verdicts = (
+            manifest.get('verdicts') if isinstance(manifest, dict) else None
+        )
+        if not isinstance(verdicts, dict):
+            continue
+        commit = str(manifest.get('recording_commit'))
+        for key, verdict in verdicts.items():
+            found.setdefault(str(key), []).append((commit, str(verdict)))
+    for key, code in sorted(live_only.items()):
+        mine = [
+            verdict
+            for commit, verdict in found.get(key, [])
+            if commit == candidate
+        ]
+        if not mine:
+            problems.append(
+                f'{key}: live only ({code}), and no E-1 verdict for the final '
+                f'candidate {candidate}'
+                + (' (only for another commit)' if found.get(key) else '')
+            )
+        elif any(verdict != 'equal' for verdict in mine):
+            problems.append(
+                f'{key}: live only ({code}), and E-1 found it differs'
+            )
+    return problems
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     parser.add_argument('--cases', type=Path, action='append', required=True)
@@ -3361,6 +3406,19 @@ def main(argv: list[str] | None = None) -> int:
         action='store_true',
         help='a warehouse leg run live (E-1), judged by every rule, with no '
         'stand-in verdict',
+    )
+    parser.add_argument(
+        '--verdicts',
+        type=Path,
+        nargs='+',
+        default=[],
+        metavar='MANIFEST',
+        help="the core's live capture manifests (E-1), read with --candidate",
+    )
+    parser.add_argument(
+        '--candidate',
+        help='the final candidate: each live-only item needs an E-1 verdict '
+        'equal recorded on it (the locked run)',
     )
     parser.add_argument('observations', type=Path, nargs='*')
     arguments = parser.parse_args(argv)
@@ -3386,13 +3444,24 @@ def main(argv: list[str] | None = None) -> int:
         print(text)
     for text in report.texts:
         print(f'DIFFERS {text}')
-    for text in report.live_only:
-        print(f'LIVE ONLY {text}')
+    for key, code in sorted(report.live_only.items()):
+        print(f'LIVE ONLY {key}: {code}')
     if report.live_only:
         print(
             f'compare: {len(report.live_only)} live-only items, neither passed '
             'nor failed offline'
         )
+    if arguments.candidate is not None:
+        refused = verdict_problems(
+            report.live_only, arguments.verdicts, arguments.candidate
+        )
+        for text in refused:
+            print(f'NO VERDICT {text}')
+        if refused:
+            print(
+                f'compare: {len(refused)} live-only items E-1 has not discharged'
+            )
+            return 1
     if report.failures:
         print(f'compare: {len(report.failures)} differences')
         return 1

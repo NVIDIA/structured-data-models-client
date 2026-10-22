@@ -68,6 +68,13 @@
           },
           "slice": {"$ref": "#/$defs/slice"},
           "cases": {"$ref": "#/$defs/cases"},
+          "tests": {
+            "description": "The client tests claiming the path where the case format cannot express it (T3.2, P2-T2.16-3): pytest node IDs, <file>::<test>, each a test the tree defines (scripts/rust_core/coverage.py's rule 4).",
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {"type": "string", "pattern": "^[A-Za-z0-9_./-]+\\.py::test_[A-Za-z0-9_]+$"}
+          },
           "note": {"type": "string"}
         }
       }

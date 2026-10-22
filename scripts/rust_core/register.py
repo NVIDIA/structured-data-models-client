@@ -141,11 +141,67 @@ def owner_approved() -> Any:
     r"""This harness's reading of an owner's approval, ``ratchet.py``'s
     allowlist (U4), and of a decisions file's rows with their statuses
     (``capture_check.py``'s)."""
-    ratchet = _sibling('register_ratchet', REPO / 'scripts/rust_core/ratchet.py')
+    ratchet = _sibling(
+        'register_ratchet', REPO / 'scripts/rust_core/ratchet.py'
+    )
     check = _sibling(
         'register_capture_check', REPO / 'contract/runners/capture_check.py'
     )
     return ratchet.owner_approved, check.decision_rows
+
+
+#: The entries the owner approved before T3.2's rule, whose rows read
+#: otherwise: Phase 0's numbered rows (a plan section's decision, not a
+#: status cell), statuses written as "confirmed by owner" or naming the
+#: owner's answer in the row's text, and a row approving part of what it
+#: names. Each landed under the review of its time, and keeps its approval;
+#: every other entry approved by the owner names a row the owner approved.
+BEFORE_THE_ROW_RULE = frozenset(
+    {
+        'PK-1',
+        'PK-2',
+        'PK-3',
+        'PK-4',
+        'PK-6',
+        'PK-7',
+        'PK-8',
+        'PK-9',
+        'PD-1',
+        'PD-2',
+        'PD-3',
+        'PD-4',
+        'PD-5',
+        'PD-6',
+        'DF-2',
+        'RS-2',
+        'RS-4',
+        'RS-7',
+        'DT-1',
+        'DT-2',
+        'DT-3',
+        'DT-8',
+        'DT-16',
+        'DT-17',
+        'ORD-3',
+        'P1B-12',
+        'P1B-14',
+        'P1B-17',
+        'P1B-20',
+        'P1B-22',
+        'P1B-23',
+        'P1B-39',
+        'P1B-33',
+        'P1B-34',
+        'P1B-35',
+        'P1B-36',
+        'HOST-5',
+        'PQL-3',
+        'PQL-4',
+        'P1B-42',
+        'P2B-11',
+        'P2C-10',
+    }
+)
 
 
 def owner_row_problem(entry: dict[str, Any], root: Path) -> str | None:
@@ -166,7 +222,7 @@ def owner_row_problem(entry: dict[str, Any], root: Path) -> str | None:
     if row is None or not approved(row[1]):
         return (
             f'approved by the owner, and its decision_ref {ref.get("row")} is '
-            "no row the owner approved"
+            'no row the owner approved'
         )
     return None
 
@@ -307,20 +363,6 @@ def problems(
             f'{entry_id}: removed, and an ID is never removed or reused'
             for entry_id in sorted(str(i) for i in before - set(ids))
         ]
-    # An entry the owner approves from the checkpoint on names the row
-    # holding the owner's approval (T3.2): new to the checkpoint's register,
-    # or approved by the owner only now; entries approved before are the
-    # checkpoint's, judged when they landed.
-    owner_before = (
-        {
-            entry.get('id'): entry.get('approved_by')
-            for entry in checkpoint['entries']
-            if isinstance(entry, dict)
-        }
-        if isinstance(checkpoint, dict)
-        and isinstance(checkpoint.get('entries'), list)
-        else None
-    )
     corpus = case_ids(root)
     inventory = inventory_ids(root)
     accepted = reference_outcomes(root)
@@ -337,11 +379,12 @@ def problems(
                     f'{where}: case {case}: not a corpus case, a task ID '
                     'or an inventory case'
                 )
+        # An entry the owner approves names the row holding the owner's
+        # approval (T3.2), read by allowlist (ratchet.py's owner_approved).
         if (
-            owner_before is not None
-            and entry.get('status') == 'approved'
+            entry.get('status') == 'approved'
             and entry.get('approved_by') == 'owner'
-            and owner_before.get(where) != 'owner'
+            and where not in BEFORE_THE_ROW_RULE
         ):
             problem = owner_row_problem(entry, root)
             if problem is not None:

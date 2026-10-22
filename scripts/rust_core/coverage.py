@@ -416,10 +416,38 @@ def generated(
     return out
 
 
+#: A client test's pytest node ID: ``<file>::<test>``.
+_TEST = re.compile(
+    r'(?P<file>[A-Za-z0-9_./-]+\.py)::(?P<name>test_[A-Za-z0-9_]+)'
+)
+
+
+def _test_problem(test: str, root: Any) -> str | None:
+    r"""Why a claimed client test is no test the tree defines, or None:
+    ``root`` is the candidate's tree (its ``read``) or a directory."""
+    found = _TEST.fullmatch(test)
+    if found is None:
+        return 'not <file>::<test>'
+    if root is None:
+        root = HERE.parents[1]
+    try:
+        source = (
+            (root / found['file']).read_text(encoding='utf-8')
+            if isinstance(root, Path)
+            else root.read(found['file'])
+        )
+    except Exception:  # noqa: BLE001 - an unreadable file defines no test
+        source = None
+    if not source or not re.search(rf'^\s*def {found["name"]}\(', source, re.M):
+        return 'no test the tree defines'
+    return None
+
+
 def rule_4(
     manifests: dict[str, dict[str, Any]],
     corpus: dict[str, dict[str, Any]],
     report: Report,
+    root: Any = None,
 ) -> None:
     python = manifests.get('python')
     if python is not None:
@@ -439,6 +467,13 @@ def rule_4(
                             'Python manifest',
                         )
     for language, manifest in sorted(manifests.items()):
+        for path, tests in sorted(tested(manifest).items()):
+            for test in tests:
+                problem = _test_problem(test, root)
+                if problem is not None:
+                    report.fail(
+                        'rule 4', f'{language}: path {path}: {test}: {problem}'
+                    )
         made = generated(language, manifest, corpus)
         for key in ('paths', 'cells'):
             for item in manifest[key]:
@@ -458,30 +493,65 @@ def rule_4(
                     )
 
 
+def tested(manifest: dict[str, Any]) -> dict[str, list[str]]:
+    r"""Each path a client test claims (its ``tests``, pytest node IDs),
+    where the case format cannot express it (T3.2, P2-T2.16-3); rule 4
+    holds each to a test the tree defines."""
+    return {
+        str(item['id']): [str(test) for test in item.get('tests') or []]
+        for item in manifest.get('paths') or []
+        if item.get('tests')
+    }
+
+
+def uncovered(
+    manifests: dict[str, dict[str, Any]],
+    corpus: dict[str, dict[str, Any]],
+    language: str,
+    active: str,
+) -> list[str]:
+    r"""The paths of ``language``'s manifest in ``active`` and the slices
+    before it with no acceptance case claiming them on any leg
+    (:func:`generated`) and no client test (:func:`tested`): the S1, S2 and
+    Java rules' list (T3.2)."""
+    manifest = manifests.get(language)
+    if manifest is None:
+        return []
+    made = generated(language, manifest, corpus)
+    claimed = tested(manifest)
+    gated = SLICES[: SLICES.index(active) + 1]
+    return [
+        str(item['id'])
+        for item in manifest['paths']
+        if item['slice'] in gated
+        and not made['paths'][str(item['id'])]
+        and not claimed.get(str(item['id']))
+    ]
+
+
 def rule_5(
     manifests: dict[str, dict[str, Any]],
     corpus: dict[str, dict[str, Any]],
     report: Report,
     gate: tuple[str, str] = ACTIVE,
-    tested: dict[str, list[str]] | None = None,
 ) -> list[str]:
     r"""The gated slice's paths, each with an acceptance case or a named
-    client test claiming it (``tested``, :func:`read_test_claims`), and
-    from S1 on every cell of an expected outcome with an acceptance case
-    (the S1, S2 and Java rules, T3.2); the paths covered are returned for
-    the summary."""
+    client test claiming it (:func:`uncovered`), and from S1 on every cell
+    of an expected outcome with an acceptance case (the S1, S2 and Java
+    rules, T3.2); the paths covered are returned for the summary."""
     language, active = gate
     manifest = manifests.get(language)
     if manifest is None:
         return []
     made = generated(language, manifest, corpus)
+    empty = set(uncovered(manifests, corpus, language, active))
     gated = SLICES[: SLICES.index(active) + 1]
     covered = []
     for item in manifest['paths']:
         if item['slice'] not in gated:
             continue
         name = str(item['id'])
-        if made['paths'][name] or (tested or {}).get(name):
+        if name not in empty:
             covered.append(name)
         else:
             report.fail(
@@ -502,70 +572,6 @@ def rule_5(
     if not covered and not report.problems:
         report.fail('rule 5', f'{language}: {active} has no path to gate')
     return covered
-
-
-#: The client tests that claim a path the case format cannot express
-#: (T3.2; P2-T2.16-3), such as a request pickled and loaded again: each a
-#: path of the Python manifest and a test the candidate's tree defines.
-TEST_CLAIMS = 'contract/test-claims.yaml'
-_TEST = re.compile(
-    r'(?P<file>[A-Za-z0-9_./-]+\.py)::(?P<name>test_[A-Za-z0-9_]+)'
-)
-
-
-def read_test_claims(
-    tree: Any, manifests: dict[str, dict[str, Any]], report: Report
-) -> dict[str, list[str]]:
-    r"""Each path a named client test claims, by path: ``test-claims.yaml``
-    (``format: sdm-test-claims/1``, ``claims: [{path, test, why}]``), each
-    claim's path a path of the Python manifest and its test, ``FILE::NAME``,
-    a test function the candidate's file defines; a claim that is not is
-    refused by name and claims nothing."""
-    text = (
-        _text(tree, TEST_CLAIMS) if tree.read(TEST_CLAIMS) is not None else None
-    )
-    if text is None:
-        return {}
-    try:
-        document = _yaml(text, TEST_CLAIMS)
-    except Unreadable as error:
-        report.fail('read', str(error))
-        return {}
-    if (
-        not isinstance(document, dict)
-        or document.get('format') != 'sdm-test-claims/1'
-        or not isinstance(document.get('claims'), list)
-    ):
-        report.fail('read', f'{TEST_CLAIMS}: not sdm-test-claims/1')
-        return {}
-    paths = set(_ids(manifests.get('python', {'paths': []}), 'paths'))
-    found: dict[str, list[str]] = {}
-    for item in document['claims']:
-        if not isinstance(item, dict) or set(item) != {'path', 'test', 'why'}:
-            report.fail(
-                'rule 5', f'{TEST_CLAIMS}: a claim not of path, test, why'
-            )
-            continue
-        test = _TEST.fullmatch(str(item['test']))
-        if item['path'] not in paths:
-            report.fail(
-                'rule 5',
-                f'{TEST_CLAIMS}: {item["path"]} is no path of the manifest',
-            )
-            continue
-        source = tree.read(test['file']) if test else None
-        if (
-            test is None
-            or source is None
-            or not re.search(rf'^\s*def {test["name"]}\(', source, re.M)
-        ):
-            report.fail(
-                'rule 5',
-                f'{TEST_CLAIMS}: {item["test"]} is no test the tree defines',
-            )
-            continue
-        found.setdefault(str(item['path']), []).append(str(item['test']))
-    return found
 
 
 # --- rule 6: the cells' claims, held to the reference ---------------------------
@@ -1102,10 +1108,9 @@ def check(
     if corpus is not None and reference is not None:
         rule_6(corpus, reference, report)
     if corpus is not None and len(manifests) == len(MANIFESTS):
-        rule_4(manifests, corpus, report)
-        tested = read_test_claims(candidate, manifests, report)
+        rule_4(manifests, corpus, report, candidate)
         for gate in gates:
-            covered = rule_5(manifests, corpus, report, gate, tested)
+            covered = rule_5(manifests, corpus, report, gate)
             summary.append(
                 f'{gate[0]} {gate[1]}: {len(covered)} paths, each with an '
                 f'acceptance case or a named test; {len(corpus)} cases read'

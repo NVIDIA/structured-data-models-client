@@ -34,6 +34,9 @@ TRAIN_ALSO = (
     'scripts/rust_core/**',
     'contract/runners/**',
     'contract/tools/**',
+    # The test kit's crate tests of the case loader and observation writer
+    # (T3.2), which judge the judging paths case.rs and observation.rs.
+    'rust/crates/sdm-testkit/tests/**',
 )
 #: Changes that make a landing a product landing: anything outside these.
 NOT_PRODUCT = ('docs/**', 'tests/**', 'contract/tests/**', '.github/**')

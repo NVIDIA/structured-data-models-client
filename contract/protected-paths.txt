@@ -24,7 +24,6 @@ contract/refusal-maps/**
 contract/reference/**
 contract/reference-env.txt
 contract/captures/**
-contract/test-claims.yaml
 contract/baselines/**
 contract/compare-policy.yaml
 contract/availability.yaml

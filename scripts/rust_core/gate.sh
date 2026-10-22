@@ -37,7 +37,9 @@
 #
 #   observations  required: with neither --run nor --observations the gate
 #                 fails, since the tree checks alone judge no behaviour;
-#                 --run python-core,python-old,rust-host makes them here:
+#                 --run python-core,python-old,rust-host makes them here
+#                 (from T3.2 also java, the Java host's run_java.py, and
+#                 standin, python-core on each warehouse leg's stand-in):
 #                 the Python runners with $PYTHON (default python3, an
 #                 environment holding the candidate's client), rust-host with
 #                 cargo, each with the checkpoint's run_python.py and test
@@ -625,6 +627,20 @@ observe() {
         (cd "$tree/rust" && CARGO_TARGET_DIR="$target" cargo run -q \
           -p sdm-testkit --bin sdm-contract-run --locked -- \
           --out "$made/rust-host.jsonl" ../contract/cases) || return 1 ;;
+      java)
+        # The Java host's runner (Phase 3 design choice 10, T3.11's), on
+        # every leg it reports a provider for.
+        "$PYTHON" -I "$tree/contract/runners/run_java.py" \
+          --out "$made/java.jsonl" "$tree/contract/cases" || return 1 ;;
+      standin)
+        # Each warehouse leg on the stand-in (choice 2): python-core with
+        # --database the leg, its observations keyed <case>@<leg>.
+        local leg
+        for leg in databricks-sql databricks-spark snowflake lakebase; do
+          "$PYTHON" -I "$tree/contract/runners/run_python.py" --mode python-core \
+            --database "$leg" --out "$made/standin-$leg.jsonl" \
+            "$tree/contract/cases" || return 1
+        done ;;
       *) echo "no runner $runner"; return 1 ;;
     esac
     echo "$runner: $made/$runner.jsonl"
@@ -665,7 +681,13 @@ prepare() {
 want() { [ -z "$only" ] || [ "$only" = "$1" ]; }
 
 given=("${observations[@]+"${observations[@]}"}")
-for runner in ${runs//,/ }; do given+=("$made/$runner.jsonl"); done
+for runner in ${runs//,/ }; do
+  if [ "$runner" = standin ]; then
+    for leg in databricks-sql databricks-spark snowflake lakebase; do given+=("$made/standin-$leg.jsonl"); done
+  else
+    given+=("$made/$runner.jsonl")
+  fi
+done
 if [ -n "$locked" ] || [ "$only" = observations ] ||
   { [ -z "$only" ] && { [ -n "$runs" ] || [ ${#given[@]} -eq 0 ] || [ "$differs" = 1 ]; }; }; then
   step observations evidence_of
@@ -704,22 +726,40 @@ judge_compare() {
     "$PYTHON" "$here/scripts/rust_core/ratchet.py" effective --repo "$candidate" \
       "${where[@]}" "${epic[@]+"${epic[@]}"}" --out "$scratch/effective.json" || return 1
   fi
+  # A live-only item (Phase 3 design choice 2) is neither passed nor
+  # failed offline; the locked run fails while one has no E-1 verdict
+  # "equal" for the final candidate in the core's live capture manifests
+  # under contract/captures/ (compare.py --verdicts --candidate): the
+  # candidate itself, or the final candidate a captures-only commit on it
+  # was recorded from (capture_check.py commit).
+  local verdicts=() final=$head
+  if [ -n "$locked" ]; then
+    if "$PYTHON" "$here/contract/runners/capture_check.py" commit \
+      --repo "$candidate" --candidate "$head~1" "$head" >/dev/null 2>&1; then
+      final=$(git -C "$candidate" rev-parse "$head~1")
+    fi
+    while IFS= read -r -d '' manifest; do verdicts+=("$manifest"); done < <(
+      find "$candidate/contract/captures" -name '*.json' -print0 2>/dev/null)
+    verdicts=(--candidate "$final" ${verdicts[@]+--verdicts "${verdicts[@]}"} --)
+  fi
   local status=0
   "$PYTHON" "$here/scripts/rust_core/compare.py" \
     --cases "$candidate/contract/cases" --bases "$candidate/contract/bases.yaml" \
     --reference "$(ls "$candidate"/contract/reference/*.jsonl)" \
     --expect "$scratch/effective.json" \
-    --register "$candidate/docs/design/rust-core/register.yaml" "${given[@]}" \
-    >"$scratch/compare.out" || status=1
-  cat "$scratch/compare.out"
-  # A live-only item (Phase 3 design choice 2) is neither passed nor failed
-  # offline; the locked run fails while one has no passing E-1 verdict for
-  # the final candidate in the core's live capture (contract/captures/), the
-  # candidate itself or the final candidate a captures-only commit was
-  # recorded from (capture_check.py live-only).
-  if [ -n "$locked" ] && grep -q '^LIVE ONLY ' "$scratch/compare.out"; then
-    "$PYTHON" "$here/contract/runners/capture_check.py" live-only \
-      --items "$scratch/compare.out" --repo "$candidate" --head "$head" || status=1
+    --register "$candidate/docs/design/rust-core/register.yaml" \
+    "${verdicts[@]+"${verdicts[@]}"}" "${given[@]}" || status=1
+  # Locked check 1: no case pending live at the final run. From C-1's
+  # captures on (contract/captures/), every case and warehouse leg needs a
+  # capture of its current input (capture_check.py captures --locked).
+  if [ -n "$locked" ] && [ -d "$candidate/contract/captures" ]; then
+    local manifests=()
+    while IFS= read -r -d '' manifest; do manifests+=("$manifest"); done < <(
+      find "$candidate/contract/captures" -name '*.json' -print0)
+    "$PYTHON" "$here/contract/runners/capture_check.py" captures --locked \
+      --cases "$candidate/contract/cases" "${manifests[@]+"${manifests[@]}"}" || status=1
+  elif [ -n "$locked" ]; then
+    echo 'no contract/captures/ yet: the warehouse legs wait for C-1, and are not judged here'
   fi
   return $status
 }
