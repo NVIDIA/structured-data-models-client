@@ -1625,7 +1625,9 @@ mod tests {
         let (bound, batches) = bound_keys(&schema, &[batch]).unwrap().unwrap();
         let names: Vec<&str> = bound.fields().iter().map(|f| f.name().as_str()).collect();
         assert_eq!(names, [SEED_KEY, "time"]);
-        let keys = batches[0].column(0).as_primitive::<arrow_array::types::Int64Type>();
+        let keys = batches[0]
+            .column(0)
+            .as_primitive::<arrow_array::types::Int64Type>();
         assert_eq!(keys.values().to_vec(), [3, 4]);
         let times = batches[0].column(1).as_string::<i32>();
         assert_eq!(times.value(0), "2024-03-01 00:00:00");
