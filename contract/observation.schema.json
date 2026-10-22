@@ -140,6 +140,7 @@
       "additionalProperties": false,
       "required": ["schema", "payloads", "result"],
       "properties": {
+        "result_text": {"description": "The SHA-256 of the public result's rows with each value as its text, in order (T3.2, P2-T2.21-1), beside the result so every projection of result is as before: what a more_exact excuse of result.digest, which hashes each value's type, still holds equal; absent on a line recorded before it.", "$ref": "#/$defs/sha256"},
         "schema": {"type": ["object", "null"]},
         "payloads": {
           "type": "array",

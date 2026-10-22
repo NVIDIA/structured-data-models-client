@@ -1558,25 +1558,32 @@ def _host_fields(
             report.fail(f'{where}: host.warnings: differ', 'warnings')
     if stop is not None and stop != 'predict':
         return
+    # The rows as text (P2-T2.21-1): public.result_text, or a line's
+    # result.text_digest, compared where both lines hold one; a line
+    # recorded before it holds none and is not held to it, and where the
+    # typed digest is excused that is named.
     mine_result, theirs_result = mine['result'], theirs['result']
-    if (
-        isinstance(mine_result, dict)
-        and isinstance(theirs_result, dict)
-        and ('text_digest' in mine_result) != ('text_digest' in theirs_result)
-    ):
-        # A line recorded before T3.2 holds no text digest (P2-T2.21-1):
-        # the rest is compared, and an excused digest is named unheld.
+    texts = []
+    for public, result in ((mine, mine_result), (theirs, theirs_result)):
+        held = public.get('result_text')
+        if held is None and isinstance(result, dict):
+            held = result.get('text_digest')
+        texts.append(held)
+    if isinstance(mine_result, dict):
         mine_result = {
             k: v for k, v in mine_result.items() if k != 'text_digest'
         }
+    if isinstance(theirs_result, dict):
         theirs_result = {
             k: v for k, v in theirs_result.items() if k != 'text_digest'
         }
-        if 'public.result/digest' in excused:
-            report.note(
-                f'{where}: public.result/text_digest: not compared, one line '
-                'was recorded before it; record it again (P2-T2.21-1)'
-            )
+    if None not in texts and texts[0] != texts[1]:
+        report.fail(f'{where}: public.result/text_digest: differs', 'result')
+    elif None in texts and 'public.result/digest' in excused:
+        report.note(
+            f'{where}: public.result/text_digest: not compared, one line '
+            'was recorded before it; record it again (P2-T2.21-1)'
+        )
     found = (
         _path_of(mine_result, theirs_result, 'public.result', excused)
         if stop is None or theirs['result'] is not None

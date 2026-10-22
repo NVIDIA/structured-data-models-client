@@ -4550,12 +4550,20 @@ def _result_projection(result: Any) -> dict[str, Any]:
         ],
         'rows': len(rows),
         'digest': _rows_digest(rows),
-        # Each value as its text (P2-T2.21-1): a result whose digest an
-        # entry excuses for a value's type is still held to its values.
-        'text_digest': digest(
-            json.dumps([[str(value) for value in row] for row in rows]).encode()
-        ),
     }
+
+
+def _result_text(result: Any) -> str:
+    r"""The SHA-256 of the public result's rows with each value as its text
+    (P2-T2.21-1): a result whose digest an entry excuses for a value's
+    type is still held to its values. Beside the result, never in it, so
+    every projection of ``public.result`` is the one recorded before."""
+    frame = result.to_pandas()
+    rows = [
+        [str(value) for value in row]
+        for row in frame.itertuples(index=False, name=None)
+    ]
+    return digest(json.dumps(rows).encode())
 
 
 def _call(
@@ -4756,6 +4764,7 @@ def _calls(
                         request, model=KumoRelational(), **outputs
                     )
                 public['result'] = _result_projection(result)
+                public['result_text'] = _result_text(result)
             outcome = _outcome('success', stage)
         except RunnerFailure:
             raise

@@ -648,3 +648,27 @@ def test_a_leg_s_source_open_claim_follows_how_the_case_opens_it() -> None:
     assert 'source.open/auto/snowflake' in paths
     assert 'source.open/explicit/snowflake' not in paths
     assert 'source.open/explicit/duckdb' in COVERAGE.claims(case)['paths']
+
+
+def test_an_old_reference_line_without_the_text_digest_still_matches() -> None:
+    r"""The committed reference lines predate the text digest: a core line
+    holding public.result_text against one without it is compared on the
+    rest; two lines that both hold it are held to it (P2-T2.21-1)."""
+    case = {'id': 'k'}
+    rules = {
+        'result': 'gate',
+        'schema': 'gate',
+        'payload': 'gate',
+        'warnings': 'gate',
+    }
+    old = _public('b' * 64, None)
+    new = _public('b' * 64, None)
+    new['public']['result_text'] = 'c' * 64
+    report = COMPARE.Report(rules)
+    COMPARE._host_fields(report, case, 'python-core', new, old)
+    assert report.failures == []
+    other = _public('b' * 64, None)
+    other['public']['result_text'] = 'd' * 64
+    report = COMPARE.Report(rules)
+    COMPARE._host_fields(report, case, 'python-core', new, other)
+    assert report.failures and 'text_digest' in report.texts[0]
