@@ -288,13 +288,19 @@ fn a_failure_on_call_2_carries_the_answers_of_the_calls_before_it() {
     assert_eq!(answered.rows, 6);
     let result = arrow(&mut run, answered.result);
     assert_eq!(int64s(&result, "row_index"), (0..6).collect::<Vec<_>>());
-    // What `Predicted` names beside its result travels on the schema.
-    let named = result.schema().metadata().clone();
-    assert_eq!(named["model"], "kumo-relational");
-    assert_eq!(named["request_id"], "r0");
-    assert_eq!(named["outputs"], r#"["prediction"]"#);
-    let metadata: Value = serde_json::from_str(&named["metadata"]).unwrap();
+    // What `Predicted` names beside its result, as the error's own fields
+    // (contract v28), none of it on the result's schema.
+    assert_eq!(answered.model, "kumo-relational");
+    assert_eq!(answered.request_id, "r0");
+    assert_eq!(answered.outputs, ["prediction"]);
+    let Some(Attachment::Bytes(metadata)) =
+        run.take_attachment(answered.metadata.expect("the metadata is carried"))
+    else {
+        panic!("the metadata is attached");
+    };
+    let metadata: Value = serde_json::from_slice(&metadata).unwrap();
     assert_eq!(metadata["batches"], json!(2));
+    assert!(result.schema().metadata().is_empty());
 }
 
 #[test]

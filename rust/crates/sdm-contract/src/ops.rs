@@ -1317,6 +1317,8 @@ pub struct Attachments {
     pub ranking_part_query: String,
     #[schemars(rename = "Predicted.metadata")]
     pub predicted_metadata: EndpointMetadata,
+    #[schemars(rename = "AnsweredParts.metadata")]
+    pub answered_parts_metadata: EndpointMetadata,
 }
 
 /// [`RequestState`]'s payload: the prediction request as JSON, as

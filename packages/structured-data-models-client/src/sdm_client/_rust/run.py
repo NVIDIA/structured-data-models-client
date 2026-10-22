@@ -36,6 +36,7 @@ safe to show) cancels the run and is raised as it is.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable, Mapping
 from types import ModuleType
 from typing import Any
@@ -415,7 +416,9 @@ def _call(
 def _answered(handle: Any, failed: Any, error: StructuredDataError) -> None:
     r"""The answers the core carried on its error (``answered``, T2.8c),
     taken from the run and kept on ``error`` as ``_answered``: the Arrow
-    result and the rows it scores, which the predict bridge reads."""
+    result, the rows it scores, and what the result names beside its rows
+    (contract v28: the model, the request id, the answers' metadata and the
+    outputs), which the predict bridge reads."""
     try:
         message = codec.read(failed.control, failed.attachments)
         answered = message['error'].get('answered')
@@ -424,8 +427,20 @@ def _answered(handle: Any, failed: Any, error: StructuredDataError) -> None:
     if not isinstance(answered, dict):
         return
     stream = handle.take_attachment(answered['result'])
-    if stream is not None:
-        error._answered = (stream, answered['rows'])  # type: ignore[attr-defined]
+    if stream is None:
+        return
+    metadata = (
+        handle.take_attachment(answered['metadata'])
+        if 'metadata' in answered
+        else None
+    )
+    named = {
+        'model': answered['model'],
+        'request_id': answered['request_id'],
+        'metadata': json.loads(metadata) if metadata is not None else {},
+        'outputs': tuple(answered['outputs']),
+    }
+    error._answered = (stream, answered['rows'], named)  # type: ignore[attr-defined]
 
 
 #: The core's fields that say what a failed request had answered (T2.8c).

@@ -301,7 +301,8 @@ pub struct CoreError {
     pub answered: Option<AnsweredParts>,
 }
 
-/// The answers a failed request had received ([`CoreError::answered`]).
+/// The answers a failed request had received ([`CoreError::answered`]),
+/// with what a [`crate::ops::Predicted`] names beside its result.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct AnsweredParts {
@@ -310,6 +311,25 @@ pub struct AnsweredParts {
     pub result: crate::data::AttachmentId,
     /// The rows those answers score (`main`'s `rows_answered`).
     pub rows: u64,
+    /// The model that answered, as `Predicted.model` (contract v28; before
+    /// it, the result's schema metadata `model`).
+    #[serde(default)]
+    pub model: String,
+    /// The endpoint's id for the last call answered, as
+    /// `Predicted.request_id` (contract v28; before it, the result's schema
+    /// metadata `request_id`).
+    #[serde(default)]
+    pub request_id: String,
+    /// A bytes attachment of the answers' `metadata` object as JSON, as
+    /// `Predicted.metadata` (contract v28; before it, the result's schema
+    /// metadata `metadata`, as text). Left out with no attachment.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<crate::data::AttachmentId>,
+    /// The outputs the calls asked for, as `Predicted.outputs` (contract
+    /// v28; before it, the result's schema metadata `outputs`, as a JSON
+    /// list).
+    #[serde(default)]
+    pub outputs: Vec<String>,
 }
 
 impl CoreError {

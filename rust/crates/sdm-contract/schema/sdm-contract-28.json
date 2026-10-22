@@ -320,6 +320,9 @@
         },
         "Predicted.metadata": {
           "$ref": "#/$defs/EndpointMetadata"
+        },
+        "AnsweredParts.metadata": {
+          "$ref": "#/$defs/EndpointMetadata"
         }
       },
       "additionalProperties": false,
@@ -345,7 +348,8 @@
         "RequestBatch.payload",
         "RankingPart.payload",
         "RankingPart.query",
-        "Predicted.metadata"
+        "Predicted.metadata",
+        "AnsweredParts.metadata"
       ]
     },
     "QuerySchema": {
@@ -5435,7 +5439,7 @@
       ]
     },
     "AnsweredParts": {
-      "description": "The answers a failed request had received ([`CoreError::answered`]).",
+      "description": "The answers a failed request had received ([`CoreError::answered`]),\nwith what a [`crate::ops::Predicted`] names beside its result.",
       "type": "object",
       "properties": {
         "result": {
@@ -5447,6 +5451,35 @@
           "type": "integer",
           "format": "uint64",
           "minimum": 0
+        },
+        "model": {
+          "description": "The model that answered, as `Predicted.model` (contract v28; before\nit, the result's schema metadata `model`).",
+          "type": "string",
+          "default": ""
+        },
+        "request_id": {
+          "description": "The endpoint's id for the last call answered, as\n`Predicted.request_id` (contract v28; before it, the result's schema\nmetadata `request_id`).",
+          "type": "string",
+          "default": ""
+        },
+        "metadata": {
+          "description": "A bytes attachment of the answers' `metadata` object as JSON, as\n`Predicted.metadata` (contract v28; before it, the result's schema\nmetadata `metadata`, as text). Left out with no attachment.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AttachmentId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "outputs": {
+          "description": "The outputs the calls asked for, as `Predicted.outputs` (contract\nv28; before it, the result's schema metadata `outputs`, as a JSON\nlist).",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
         }
       },
       "additionalProperties": false,
