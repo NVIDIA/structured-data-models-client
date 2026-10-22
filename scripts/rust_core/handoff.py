@@ -330,7 +330,9 @@ def step_reference(
                 observed.append(host)
         legs: Path | None = None
         if java and database == 'duckdb':
-            found = java_legs(root, python, list(cases.values()), scratch, built)
+            found = java_legs(
+                root, python, list(cases.values()), scratch, built
+            )
             if isinstance(found, str):
                 step.problems.append(found)
             else:
@@ -427,7 +429,11 @@ def java_legs(
         built.extend([given, str(Path(given).parent / 'lib'), ''])
     if not built:
         done = run(
-            [sys.executable, str(root / 'scripts/rust_core/java_build.py'), 'jar'],
+            [
+                sys.executable,
+                str(root / 'scripts/rust_core/java_build.py'),
+                'jar',
+            ],
             root,
         )
         if done.returncode != 0:

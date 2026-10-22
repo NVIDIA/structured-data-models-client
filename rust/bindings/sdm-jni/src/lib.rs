@@ -97,7 +97,9 @@ fn panicked() -> Outgoing {
 /// with whatever the JVM raised making it left pending.
 fn throw_core(env: &mut Env<'_>, out: Outgoing) -> bool {
     let thrown = (|| -> Result<(), jni::errors::Error> {
-        let classes = CLASSES.get().ok_or(jni::errors::Error::NullPtr("classes"))?;
+        let classes = CLASSES
+            .get()
+            .ok_or(jni::errors::Error::NullPtr("classes"))?;
         let message = message_object(env, out)?;
         let error = env.new_object(
             &classes.error,
@@ -222,7 +224,9 @@ fn arrow_of<'a>(handle: jlong) -> Result<&'a ArrowData, Failure> {
 /// stream's own schema fails check (a); neither keeps any text (H17).
 fn read_stream(address: jlong) -> Result<Result<ArrowData, Unreadable>, Failure> {
     if address == 0 {
-        return Err(Failure::Usage("an Arrow attachment's stream address is null"));
+        return Err(Failure::Usage(
+            "an Arrow attachment's stream address is null",
+        ));
     }
     #[allow(unsafe_code)]
     // SAFETY: Java hands over the address of an `ArrowArrayStream` struct
@@ -302,7 +306,9 @@ fn attachment_object<'local>(
     Ok(match attachment {
         Attachment::Bytes(bytes) => env.byte_array_from_slice(&bytes)?.into(),
         Attachment::Arrow(data) => {
-            let classes = CLASSES.get().ok_or(jni::errors::Error::NullPtr("classes"))?;
+            let classes = CLASSES
+                .get()
+                .ok_or(jni::errors::Error::NullPtr("classes"))?;
             let handle = Box::into_raw(Box::new(data));
             match env.new_object(
                 &classes.arrow,
@@ -328,7 +334,9 @@ fn message_object<'local>(
     env: &mut Env<'local>,
     out: Outgoing,
 ) -> Result<JObject<'local>, jni::errors::Error> {
-    let classes = CLASSES.get().ok_or(jni::errors::Error::NullPtr("classes"))?;
+    let classes = CLASSES
+        .get()
+        .ok_or(jni::errors::Error::NullPtr("classes"))?;
     let control = env.byte_array_from_slice(&out.control)?;
     let count = out.attachments.len();
     let ids = env.new_int_array(count)?;
@@ -609,10 +617,8 @@ pub extern "system" fn Java_com_nvidia_sdm_internal_NativeCore_exportArrow<'call
 fn export_arrow(data: &ArrowData, target: *mut FFI_ArrowArrayStream) {
     let batches: Vec<Result<RecordBatch, ArrowError>> =
         data.batches.iter().cloned().map(Ok).collect();
-    let reader: Box<dyn RecordBatchReader + Send> = Box::new(RecordBatchIterator::new(
-        batches,
-        Arc::clone(&data.schema),
-    ));
+    let reader: Box<dyn RecordBatchReader + Send> =
+        Box::new(RecordBatchIterator::new(batches, Arc::clone(&data.schema)));
     #[allow(unsafe_code)]
     // SAFETY: `target` is the address of an `ArrowArrayStream` struct Java
     // allocated, empty (released), live for this call; writing over it

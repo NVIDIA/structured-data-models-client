@@ -162,7 +162,9 @@ def run_program(
         lines = answers.read_text(encoding='utf-8').splitlines()
     read = [json.loads(line) for line in lines]
     if [answer.get('case') for answer in read] != [c['case'] for c in calls]:
-        raise RunnerFailure('the Java program did not answer every call in order')
+        raise RunnerFailure(
+            'the Java program did not answer every call in order'
+        )
     return read
 
 
@@ -182,7 +184,12 @@ def observation(
             'code': error['code'],
         }
     elif answer['accepted']:
-        outcome = {'result': 'success', 'stage': None, 'error': None, 'code': None}
+        outcome = {
+            'result': 'success',
+            'stage': None,
+            'error': None,
+            'code': None,
+        }
     else:
         outcome = {
             'result': 'refusal',
@@ -257,7 +264,9 @@ def run(
         made = observation(case, digest, answer, commit)
         problem = run_python._invalid(validate, made)
         if problem is not None:
-            raise RunnerFailure(f'{case["id"]}: an invalid observation: {problem}')
+            raise RunnerFailure(
+                f'{case["id"]}: an invalid observation: {problem}'
+            )
         written.append(made)
     return written
 
@@ -273,10 +282,15 @@ def main(argv: list[str] | None = None) -> int:
     arguments = parser.parse_args(argv)
     arguments.out.unlink(missing_ok=True)
     jar = arguments.jar or (
-        Path(os.environ['SDM_JAVA_JAR']) if os.environ.get('SDM_JAVA_JAR') else None
+        Path(os.environ['SDM_JAVA_JAR'])
+        if os.environ.get('SDM_JAVA_JAR')
+        else None
     )
     if jar is None:
-        print('run_java.py: no JAR: pass --jar or set SDM_JAVA_JAR', file=sys.stderr)
+        print(
+            'run_java.py: no JAR: pass --jar or set SDM_JAVA_JAR',
+            file=sys.stderr,
+        )
         return 1
     paths = arguments.cases or [REPO / 'contract/cases/s0']
     try:
