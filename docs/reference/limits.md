@@ -26,7 +26,7 @@ Both endpoints enforce sizes, and most of these are the relational one's.
 | entities one question gathers | relational | 100,000, in at most 100 calls | at `materialize()`, and this client's own: the endpoint is never asked for more than one call's worth |
 | calls a question asked in parts makes | relational | 200, one per candidate or step | at `materialize()`, as `sdm_client.decompose.MOST_PARTS` |
 | request body | relational | 30 MiB per call | at `materialize()` |
-| request body | relational, through Databricks model serving | 16 MB per call, the gateway's own decimal limit | before sending, on the wrapped envelope |
+| request body | relational and tabular, through Databricks model serving | 16 MB per call, the gateway's own decimal limit | before sending, on the wrapped envelope |
 | an explanation | relational | exactly one entity | before sending |
 | an explanation | relational | only within the 1,000-row context budget | before sending |
 | hops | relational | 6 | at `materialize()` |
