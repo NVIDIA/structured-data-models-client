@@ -17,6 +17,8 @@
           "reference_dir": "<REFERENCE_DIR>",
           "wheel_dir": "<VOLUME_DIR>/reference-wheels/",
           "out_dir": "<VOLUME_DIR>/captures-<SHA7>/",
+          "guard_path": "<VOLUME_DIR>/write_guard.py",
+          "environment_file": "<VOLUME_DIR>/capture-environment-<LEG>.json",
           "commit": "<SHA>"
         }
       },

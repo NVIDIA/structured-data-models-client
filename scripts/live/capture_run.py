@@ -19,8 +19,11 @@ cannot hold listed by the loader's reason, never recorded, and the
 environment the run needs, by variable name only (no value is read for
 print). ``run`` records: the old client (``run_python.py --mode
 python-ref``, T3.2's recording mode) over the planned cases on the leg's
-live connection (``SDM_LIVE_CONFIG``), every write through the live write
-guard the configuration wraps the connection in (KO3-51), its lines
+live connection (``SDM_LIVE_CONFIG``), in this process, with every write
+the loader makes, and on the SQL warehouse and Snowflake every statement on
+the connection, through the live write guard (KO3-51; its module named by
+``SDM_LIVE_WRITE_GUARD`` or ``--guard``, without which the run does not
+start), refused outside the one test schema; its lines
 written to ``DIR/<leg>.record.jsonl``, then each written as a capture under
 ``DIR/<leg>/<case>/`` with the leg's manifest (``captures.py import``: the
 placeholders and the private-name search applied again). Nothing is
@@ -41,7 +44,6 @@ import argparse
 import importlib.util
 import json
 import os
-import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -70,6 +72,8 @@ ENVIRONMENT = {
         'SDM_LIVE_CONFIG',
         'SDM_CAPTURE_CATALOG',
         'SDM_CAPTURE_SCHEMA',
+        'SDM_LIVE_TEST_DATABASE',
+        'SDM_LIVE_TEST_SCHEMA',
     ),
     'snowflake': (
         'SDM_LIVE_CONFIG',
@@ -81,7 +85,11 @@ ENVIRONMENT = {
         'SNOWFLAKE_USERNAME',
         'SNOWFLAKE_ACCESS_TOKEN',
     ),
-    'lakebase': ('SDM_LIVE_CONFIG', 'SDM_CAPTURE_SCHEMA'),
+    'lakebase': (
+        'SDM_LIVE_CONFIG',
+        'SDM_CAPTURE_SCHEMA',
+        'SDM_LIVE_TEST_SCHEMA',
+    ),
 }
 
 
@@ -184,9 +192,93 @@ def plan(leg: str, e0: bool = False) -> dict[str, Any]:
     }
 
 
-def run(leg: str, reference: Path, out: Path, e0: bool = False) -> int:
-    r"""Records ``leg`` live (see the module's text); returns the exit
-    status."""
+#: The variable naming the live write guard's module (KO3-51; the owner's
+#: guard, which T3.7 brings into the repository): a run without it does
+#: not start.
+GUARD_VARIABLE = 'SDM_LIVE_WRITE_GUARD'
+
+
+def load_guard(path: Path | str | None) -> ModuleType:
+    r"""The live write guard's module at ``path``: its ``WriteGuard`` and
+    ``guard_connection``; a run without one refuses to start."""
+    if not path:
+        raise SystemExit(
+            f'no live write guard: name its module in {GUARD_VARIABLE} or '
+            '--guard; every live write goes through it (KO3-51)'
+        )
+    spec = importlib.util.spec_from_file_location('sdm_live_write_guard', path)
+    if spec is None or spec.loader is None or not Path(path).is_file():
+        raise SystemExit(f'the live write guard {path} cannot be read')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    for name in ('WriteGuard', 'guard_connection'):
+        if not hasattr(module, name):
+            raise SystemExit(f'the live write guard {path} has no {name}')
+    return module
+
+
+def _postgres_check(schema: str) -> Any:
+    r"""Lakebase's write check: a statement the loader writes names its
+    table or type in the one test schema, first after its verb."""
+    import re
+
+    loader = _module('databases')
+    allowed = re.compile(
+        r'^(?:DROP TABLE IF EXISTS|CREATE TABLE|DROP TYPE IF EXISTS|CREATE TYPE|COPY) '
+        + re.escape(loader.quote(schema) + '.')
+    )
+
+    def check(statement: str) -> None:
+        if not allowed.match(statement):
+            raise PermissionError(
+                'a Lakebase write outside the test schema, or of another form, '
+                'refused'
+            )
+
+    return check
+
+
+def install_guard(
+    leg: str, guard: ModuleType, runner: Any, loader: Any
+) -> None:
+    r"""Every live write of ``leg`` through ``guard``: the loader's
+    statements (``databases.WRITE_GUARD``), and on the SQL warehouse and
+    Snowflake every statement on the connection the runner opens
+    (``guard_connection``), each refused when it writes outside the one
+    test schema, ``SDM_LIVE_TEST_DATABASE`` and ``SDM_LIVE_TEST_SCHEMA``."""
+    schema = os.environ.get('SDM_LIVE_TEST_SCHEMA')
+    database = os.environ.get('SDM_LIVE_TEST_DATABASE')
+    if not schema or (leg != 'lakebase' and not database):
+        raise SystemExit(
+            'the write guard names no test schema (SDM_LIVE_TEST_*)'
+        )
+    if leg == 'lakebase':
+        loader.WRITE_GUARD = _postgres_check(schema)
+        return
+    dialect = 'snowflake' if leg == 'snowflake' else 'databricks'
+    check = guard.WriteGuard(dialect, database, schema)
+    loader.WRITE_GUARD = check.check
+    if leg == 'databricks-spark':
+        return
+    opened = runner.connect_leg
+
+    def connect_leg(*arguments: Any, **keywords: Any) -> Any:
+        connection, close = opened(*arguments, **keywords)
+        return guard.guard_connection(connection, check), close
+
+    runner.connect_leg = connect_leg
+
+
+def run(
+    leg: str,
+    reference: Path,
+    out: Path,
+    e0: bool = False,
+    guard_path: Path | str | None = None,
+) -> int:
+    r"""Records ``leg`` live (see the module's text), every write through
+    the live write guard; returns the exit status."""
+    guard = load_guard(guard_path or os.environ.get(GUARD_VARIABLE))
     planned = plan(leg, e0)
     missing = [
         name for name, held in planned['environment'].items() if not held
@@ -197,22 +289,97 @@ def run(leg: str, reference: Path, out: Path, e0: bool = False) -> int:
     if not planned['record']:
         print(f'{leg}: nothing to record')
         return 0
+    # The runner in this process, with the loader it loads (by the names
+    # its _sibling reads), so the guard holds every write it makes.
+    loader = _named('databases')
+    runner = _named('run_python')
+    install_guard(leg, guard, runner, loader)
     out.mkdir(parents=True, exist_ok=True)
     recording = out / f'{leg}.record.jsonl'
     observations = out / f'{leg}.python-ref.jsonl'
-    done = subprocess.run(
-        [sys.executable, '-I', str(RUNNERS / 'run_python.py'), '--mode',
-         'python-ref', '--reference', str(reference), '--database', leg,
-         '--record', str(recording), '--out', str(observations),
-         *planned['record']],
-        cwd=ROOT, stdin=subprocess.DEVNULL, check=False,
-    )  # fmt: skip
-    if done.returncode != 0:
-        print(f'{leg}: the recording failed (exit {done.returncode})')
+    try:
+        status = runner.main(
+            ['--mode', 'python-ref', '--reference', str(reference), '--database', leg,
+             '--record', str(recording), '--out', str(observations),
+             *planned['record']]
+        )  # fmt: skip
+    except runner.RunnerFailure as failure:
+        print(f'{leg}: the recording failed: {failure}')
+        return 1
+    if status:
+        print(f'{leg}: the recording failed (exit {status})')
         return 1
     for manifest in _module('captures').import_recording(recording, out):
         print(f'{leg}: wrote {manifest}')
     return 0
+
+
+def _named(name: str) -> ModuleType:
+    r"""``contract/runners/<name>.py`` loaded under its own name, as the
+    runner's ``_sibling`` loads its neighbours."""
+    if name in sys.modules:
+        return sys.modules[name]
+    spec = importlib.util.spec_from_file_location(name, RUNNERS / f'{name}.py')
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+#: The reference's client package, which the recording mode imports from
+#: the reference checkout itself (``run_python.py``'s
+#: ``_require_reference_client``), beside the reference's wheels.
+CLIENT_SOURCE = Path('packages/structured-data-models-client/src')
+
+
+def bootstrap_reference(reference: Path, site: Path) -> Path:
+    r"""Makes the interpreter whose site directory is ``site`` import
+    ``sdm_client`` from the reference checkout ``reference``: a ``.pth``
+    file naming the checkout's client source, written after the
+    reference's wheels are installed and its client wheel removed (the
+    serverless jobs' layout, ``capture_job.py``), so the client the
+    recording runs is the checkout's, as the runner requires; returns the
+    file."""
+    source = (Path(reference) / CLIENT_SOURCE).resolve()
+    if not (source / 'sdm_client' / '__init__.py').is_file():
+        raise SystemExit(f'{reference}: no reference client at {CLIENT_SOURCE}')
+    path = Path(site) / 'sdm-reference-client.pth'
+    path.write_text(f'{source}\n', encoding='utf-8')
+    return path
+
+
+#: The variables an environment file may set for a job's run: the
+#: placeholders' names, the live configuration and the write guard's
+#: schema, and the drivers' own.
+ENVIRONMENT_PREFIXES = (
+    'SDM_CAPTURE_',
+    'SDM_LIVE_',
+    'SNOWFLAKE_',
+    'DATABRICKS_',
+    'PG',
+)
+
+
+def load_environment(path: Path | str) -> list[str]:
+    r"""Sets the variables of the JSON file ``path`` (``{NAME: value}``) in
+    this process: what a one-time job's run reads (the live configuration,
+    the placeholders' private names, the write guard's schema), kept on
+    the authorized volume, never in the repository. A name outside
+    :data:`ENVIRONMENT_PREFIXES` is refused by name; no value is printed.
+    Returns the names set."""
+    document = json.loads(Path(path).read_text(encoding='utf-8'))
+    if not isinstance(document, dict) or not all(
+        isinstance(value, str) for value in document.values()
+    ):
+        raise SystemExit(f'{path}: not a map of names to text')
+    refused = sorted(
+        name for name in document if not name.startswith(ENVIRONMENT_PREFIXES)
+    )
+    if refused:
+        raise SystemExit(f'{path}: variables a run does not read: {refused}')
+    os.environ.update(document)
+    return sorted(document)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -226,11 +393,28 @@ def main(argv: list[str] | None = None) -> int:
     running.add_argument('--reference', type=Path, required=True)
     running.add_argument('--out', type=Path, required=True)
     running.add_argument('--e0', action='store_true')
+    running.add_argument('--guard', type=Path)
+    booting = commands.add_parser(
+        'bootstrap', help='import sdm_client from the reference checkout'
+    )
+    booting.add_argument('--reference', type=Path, required=True)
+    booting.add_argument('--site', type=Path, required=True)
     arguments = parser.parse_args(argv)
+    if arguments.command == 'bootstrap':
+        print(
+            f'wrote {bootstrap_reference(arguments.reference, arguments.site)}'
+        )
+        return 0
     if arguments.command == 'plan':
         print(json.dumps(plan(arguments.leg, arguments.e0), indent=1))
         return 0
-    return run(arguments.leg, arguments.reference, arguments.out, arguments.e0)
+    return run(
+        arguments.leg,
+        arguments.reference,
+        arguments.out,
+        arguments.e0,
+        arguments.guard,
+    )
 
 
 if __name__ == '__main__':
