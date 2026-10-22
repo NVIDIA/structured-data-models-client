@@ -976,17 +976,9 @@ def test_a_case_sets_its_time_zone_for_every_cursor() -> None:
 #: statement) under one of these keys, at any depth.
 _VECTOR_SETUP_KEYS = ('setup', 'witness')
 #: Per-connection zone statements still in a vector file, each named by
-#: file, vector id and statement. type-set-vectors.json's witnesses are
-#: read through the source's cursors, so they reach the process's zone,
-#: not the one named (another test author owns that file); drop an entry
-#: once its vector sets the zone with SET GLOBAL.
-_VECTOR_ZONE_PENDING = {
-    _zone_problems(f'type-set-vectors.json {vector}', [statement])[0]
-    for vector, statement in (
-        ('timestamp.us.utc', "SET TimeZone = 'UTC'"),
-        ('timestamp.us.named-zone', "SET TimeZone = 'America/Los_Angeles'"),
-    )
-}
+#: file, vector id and statement: none since T3.3 re-recorded
+#: type-set-vectors.json's two witnesses with SET GLOBAL (C16).
+_VECTOR_ZONE_PENDING: set[str] = set()
 
 
 #: A plain per-connection zone statement: the caller's connection alone.

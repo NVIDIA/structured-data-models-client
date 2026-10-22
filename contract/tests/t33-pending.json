@@ -9,7 +9,6 @@
   "rust:the_memory_provider_answers_column_ranges_over_every_row",
   "py:test_t33_l0_deps_passes_with_the_stand_in_in_the_workspace",
   "py:test_t33_ci_s_leg_jobs_run_and_judge_each_warehouse_leg",
-  "py:test_t33_no_vector_sets_its_zone_per_connection",
   "py:test_t33_a_difference_on_one_warehouse_leg_stops_the_stamp"
  ],
  "authored": [
