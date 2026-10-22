@@ -57,15 +57,17 @@ permissions:
 # land.py refuses a candidate whose newest run was cancelled, and land.py
 # verify asks for a rerun rather than a revert. Every phase alike (T2.0),
 # with no phase named: an expression has no pattern match, so a phase
-# branch is a name under rust-core-phase- that ends in a digit and holds
-# no digit followed by "-" (the prefix holds no digit, and every branch
-# under a phase, rust-core-phase-N-<name>, holds one). The phase check's
-# condition reads the phase branch alike, and fails by name on a name this
-# lets through that is no phase branch (a letter before its last digit, or
-# a leading zero).
+# branch is a name under rust-core-phase- whose rest is a number with no
+# leading zero, read as: not empty; no "phase-0" but at its end; no
+# character that the prefix lacks and a number never holds (b, d, ..., z,
+# a dot, "_", "/"); and no character the prefix holds (a letter of it, or
+# "-") first after it or after a digit (OF-7). Actions compares names
+# ignoring case, so a name in capitals is let through; the phase check's
+# condition reads the phase branch alike, and fails by name on a name
+# this lets through that is no phase branch.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: ${{ !(startsWith(github.ref_name, 'rust-core-phase-') && (endsWith(github.ref_name, '0') || endsWith(github.ref_name, '1') || endsWith(github.ref_name, '2') || endsWith(github.ref_name, '3') || endsWith(github.ref_name, '4') || endsWith(github.ref_name, '5') || endsWith(github.ref_name, '6') || endsWith(github.ref_name, '7') || endsWith(github.ref_name, '8') || endsWith(github.ref_name, '9')) && !(contains(github.ref_name, '0-') || contains(github.ref_name, '1-') || contains(github.ref_name, '2-') || contains(github.ref_name, '3-') || contains(github.ref_name, '4-') || contains(github.ref_name, '5-') || contains(github.ref_name, '6-') || contains(github.ref_name, '7-') || contains(github.ref_name, '8-') || contains(github.ref_name, '9-'))) }}
+  cancel-in-progress: ${{ !(startsWith(github.ref_name, 'rust-core-phase-') && !endsWith(github.ref_name, 'core-phase-') && !(contains(github.ref_name, 'phase-0') && !endsWith(github.ref_name, 'core-phase-0')) && !(contains(github.ref_name, 'b') || contains(github.ref_name, 'd') || contains(github.ref_name, 'f') || contains(github.ref_name, 'g') || contains(github.ref_name, 'i') || contains(github.ref_name, 'j') || contains(github.ref_name, 'k') || contains(github.ref_name, 'l') || contains(github.ref_name, 'm') || contains(github.ref_name, 'n') || contains(github.ref_name, 'q') || contains(github.ref_name, 'v') || contains(github.ref_name, 'w') || contains(github.ref_name, 'x') || contains(github.ref_name, 'y') || contains(github.ref_name, 'z') || contains(github.ref_name, '.') || contains(github.ref_name, '_') || contains(github.ref_name, '/') || startsWith(github.ref_name, 'rust-core-phase--') || startsWith(github.ref_name, 'rust-core-phase-a') || startsWith(github.ref_name, 'rust-core-phase-c') || startsWith(github.ref_name, 'rust-core-phase-e') || startsWith(github.ref_name, 'rust-core-phase-h') || startsWith(github.ref_name, 'rust-core-phase-o') || startsWith(github.ref_name, 'rust-core-phase-p') || startsWith(github.ref_name, 'rust-core-phase-r') || startsWith(github.ref_name, 'rust-core-phase-s') || startsWith(github.ref_name, 'rust-core-phase-t') || startsWith(github.ref_name, 'rust-core-phase-u') || contains(github.ref_name, '0-') || contains(github.ref_name, '0a') || contains(github.ref_name, '0c') || contains(github.ref_name, '0e') || contains(github.ref_name, '0h') || contains(github.ref_name, '0o') || contains(github.ref_name, '0p') || contains(github.ref_name, '0r') || contains(github.ref_name, '0s') || contains(github.ref_name, '0t') || contains(github.ref_name, '0u') || contains(github.ref_name, '1-') || contains(github.ref_name, '1a') || contains(github.ref_name, '1c') || contains(github.ref_name, '1e') || contains(github.ref_name, '1h') || contains(github.ref_name, '1o') || contains(github.ref_name, '1p') || contains(github.ref_name, '1r') || contains(github.ref_name, '1s') || contains(github.ref_name, '1t') || contains(github.ref_name, '1u') || contains(github.ref_name, '2-') || contains(github.ref_name, '2a') || contains(github.ref_name, '2c') || contains(github.ref_name, '2e') || contains(github.ref_name, '2h') || contains(github.ref_name, '2o') || contains(github.ref_name, '2p') || contains(github.ref_name, '2r') || contains(github.ref_name, '2s') || contains(github.ref_name, '2t') || contains(github.ref_name, '2u') || contains(github.ref_name, '3-') || contains(github.ref_name, '3a') || contains(github.ref_name, '3c') || contains(github.ref_name, '3e') || contains(github.ref_name, '3h') || contains(github.ref_name, '3o') || contains(github.ref_name, '3p') || contains(github.ref_name, '3r') || contains(github.ref_name, '3s') || contains(github.ref_name, '3t') || contains(github.ref_name, '3u') || contains(github.ref_name, '4-') || contains(github.ref_name, '4a') || contains(github.ref_name, '4c') || contains(github.ref_name, '4e') || contains(github.ref_name, '4h') || contains(github.ref_name, '4o') || contains(github.ref_name, '4p') || contains(github.ref_name, '4r') || contains(github.ref_name, '4s') || contains(github.ref_name, '4t') || contains(github.ref_name, '4u') || contains(github.ref_name, '5-') || contains(github.ref_name, '5a') || contains(github.ref_name, '5c') || contains(github.ref_name, '5e') || contains(github.ref_name, '5h') || contains(github.ref_name, '5o') || contains(github.ref_name, '5p') || contains(github.ref_name, '5r') || contains(github.ref_name, '5s') || contains(github.ref_name, '5t') || contains(github.ref_name, '5u') || contains(github.ref_name, '6-') || contains(github.ref_name, '6a') || contains(github.ref_name, '6c') || contains(github.ref_name, '6e') || contains(github.ref_name, '6h') || contains(github.ref_name, '6o') || contains(github.ref_name, '6p') || contains(github.ref_name, '6r') || contains(github.ref_name, '6s') || contains(github.ref_name, '6t') || contains(github.ref_name, '6u') || contains(github.ref_name, '7-') || contains(github.ref_name, '7a') || contains(github.ref_name, '7c') || contains(github.ref_name, '7e') || contains(github.ref_name, '7h') || contains(github.ref_name, '7o') || contains(github.ref_name, '7p') || contains(github.ref_name, '7r') || contains(github.ref_name, '7s') || contains(github.ref_name, '7t') || contains(github.ref_name, '7u') || contains(github.ref_name, '8-') || contains(github.ref_name, '8a') || contains(github.ref_name, '8c') || contains(github.ref_name, '8e') || contains(github.ref_name, '8h') || contains(github.ref_name, '8o') || contains(github.ref_name, '8p') || contains(github.ref_name, '8r') || contains(github.ref_name, '8s') || contains(github.ref_name, '8t') || contains(github.ref_name, '8u') || contains(github.ref_name, '9-') || contains(github.ref_name, '9a') || contains(github.ref_name, '9c') || contains(github.ref_name, '9e') || contains(github.ref_name, '9h') || contains(github.ref_name, '9o') || contains(github.ref_name, '9p') || contains(github.ref_name, '9r') || contains(github.ref_name, '9s') || contains(github.ref_name, '9t') || contains(github.ref_name, '9u'))) }}
 
 env:
   # Whether this run saves its caches: the Rust builds and the DuckDB
@@ -91,6 +93,10 @@ env:
   # the latest release on every run already; a cell's pins are its
   # definition and stay.
   FRESH: ${{ github.event_name == 'workflow_dispatch' && inputs.fresh }}
+  # The process's time zone, named for every job (M5): a test that sets
+  # only DuckDB's session zone, or reads the process's, reads this one,
+  # never the runner image's default, which may change under it.
+  TZ: UTC
   # The images CI pulls, each named here once and pinned by digest (E131),
   # but wheel-smoke's, which scripts/rust_core/wheel_smoke.py names. A pull
   # from ghcr.io logs in with GITHUB_TOKEN; any other is anonymous.
@@ -171,8 +177,9 @@ jobs:
       # job leaves out, so they are never evidence), has for its newest run
       # of this workflow on a push to the phase branch or a branch under it
       # (never an archive branch) one that completed with success, read
-      # with gh. No such run (none, failed, cancelled, unfinished, or the
-      # API unreadable) runs every job. The phase branch is the one the
+      # with gh, a push's run alone, as land.py reads one (C28). No such run
+      # (none, failed, cancelled, unfinished, or the API unreadable) runs
+      # every job. The phase branch is the one the
       # push is to or under, rust-core-phase-N for any N (T2.0).
       - id: landing
         name: An empty landing commit is not tested again
@@ -206,7 +213,7 @@ jobs:
                 tested=$(git rev-parse HEAD^)
                 while empty_landing "$tested"; do tested=$(git rev-parse "$tested^"); done
                 newest=$(gh api "repos/${GITHUB_REPOSITORY:-}/actions/workflows/ci.yml/runs?head_sha=$tested&event=push&per_page=100" \
-                  --jq '[.workflow_runs[] | select(.head_branch == "'"$phase"'" or ((.head_branch | startswith("'"$phase"'-")) and (.head_branch | startswith("'"$phase"'-archive-") | not)))]
+                  --jq '[.workflow_runs[] | select(.event == "push" and (.head_branch == "'"$phase"'" or ((.head_branch | startswith("'"$phase"'-")) and (.head_branch | startswith("'"$phase"'-archive-") | not))))]
                     | sort_by(.created_at) | last | if . == null then "none" else "\(.id) \(.status) \(.conclusion)" end') || newest=unreadable
                 case "$newest" in
                   *' completed success') skip=true; why="its tree is green in run ${newest%% *} at $tested" ;;
@@ -267,7 +274,7 @@ jobs:
       # without it a fork point is refused, by name. A phase branch as the
       # concurrency reads it, any N.
       - name: A push to the phase branch lands one package
-        if: github.event_name == 'push' && (startsWith(github.ref_name, 'rust-core-phase-') && (endsWith(github.ref_name, '0') || endsWith(github.ref_name, '1') || endsWith(github.ref_name, '2') || endsWith(github.ref_name, '3') || endsWith(github.ref_name, '4') || endsWith(github.ref_name, '5') || endsWith(github.ref_name, '6') || endsWith(github.ref_name, '7') || endsWith(github.ref_name, '8') || endsWith(github.ref_name, '9')) && !(contains(github.ref_name, '0-') || contains(github.ref_name, '1-') || contains(github.ref_name, '2-') || contains(github.ref_name, '3-') || contains(github.ref_name, '4-') || contains(github.ref_name, '5-') || contains(github.ref_name, '6-') || contains(github.ref_name, '7-') || contains(github.ref_name, '8-') || contains(github.ref_name, '9-')))
+        if: github.event_name == 'push' && (startsWith(github.ref_name, 'rust-core-phase-') && !endsWith(github.ref_name, 'core-phase-') && !(contains(github.ref_name, 'phase-0') && !endsWith(github.ref_name, 'core-phase-0')) && !(contains(github.ref_name, 'b') || contains(github.ref_name, 'd') || contains(github.ref_name, 'f') || contains(github.ref_name, 'g') || contains(github.ref_name, 'i') || contains(github.ref_name, 'j') || contains(github.ref_name, 'k') || contains(github.ref_name, 'l') || contains(github.ref_name, 'm') || contains(github.ref_name, 'n') || contains(github.ref_name, 'q') || contains(github.ref_name, 'v') || contains(github.ref_name, 'w') || contains(github.ref_name, 'x') || contains(github.ref_name, 'y') || contains(github.ref_name, 'z') || contains(github.ref_name, '.') || contains(github.ref_name, '_') || contains(github.ref_name, '/') || startsWith(github.ref_name, 'rust-core-phase--') || startsWith(github.ref_name, 'rust-core-phase-a') || startsWith(github.ref_name, 'rust-core-phase-c') || startsWith(github.ref_name, 'rust-core-phase-e') || startsWith(github.ref_name, 'rust-core-phase-h') || startsWith(github.ref_name, 'rust-core-phase-o') || startsWith(github.ref_name, 'rust-core-phase-p') || startsWith(github.ref_name, 'rust-core-phase-r') || startsWith(github.ref_name, 'rust-core-phase-s') || startsWith(github.ref_name, 'rust-core-phase-t') || startsWith(github.ref_name, 'rust-core-phase-u') || contains(github.ref_name, '0-') || contains(github.ref_name, '0a') || contains(github.ref_name, '0c') || contains(github.ref_name, '0e') || contains(github.ref_name, '0h') || contains(github.ref_name, '0o') || contains(github.ref_name, '0p') || contains(github.ref_name, '0r') || contains(github.ref_name, '0s') || contains(github.ref_name, '0t') || contains(github.ref_name, '0u') || contains(github.ref_name, '1-') || contains(github.ref_name, '1a') || contains(github.ref_name, '1c') || contains(github.ref_name, '1e') || contains(github.ref_name, '1h') || contains(github.ref_name, '1o') || contains(github.ref_name, '1p') || contains(github.ref_name, '1r') || contains(github.ref_name, '1s') || contains(github.ref_name, '1t') || contains(github.ref_name, '1u') || contains(github.ref_name, '2-') || contains(github.ref_name, '2a') || contains(github.ref_name, '2c') || contains(github.ref_name, '2e') || contains(github.ref_name, '2h') || contains(github.ref_name, '2o') || contains(github.ref_name, '2p') || contains(github.ref_name, '2r') || contains(github.ref_name, '2s') || contains(github.ref_name, '2t') || contains(github.ref_name, '2u') || contains(github.ref_name, '3-') || contains(github.ref_name, '3a') || contains(github.ref_name, '3c') || contains(github.ref_name, '3e') || contains(github.ref_name, '3h') || contains(github.ref_name, '3o') || contains(github.ref_name, '3p') || contains(github.ref_name, '3r') || contains(github.ref_name, '3s') || contains(github.ref_name, '3t') || contains(github.ref_name, '3u') || contains(github.ref_name, '4-') || contains(github.ref_name, '4a') || contains(github.ref_name, '4c') || contains(github.ref_name, '4e') || contains(github.ref_name, '4h') || contains(github.ref_name, '4o') || contains(github.ref_name, '4p') || contains(github.ref_name, '4r') || contains(github.ref_name, '4s') || contains(github.ref_name, '4t') || contains(github.ref_name, '4u') || contains(github.ref_name, '5-') || contains(github.ref_name, '5a') || contains(github.ref_name, '5c') || contains(github.ref_name, '5e') || contains(github.ref_name, '5h') || contains(github.ref_name, '5o') || contains(github.ref_name, '5p') || contains(github.ref_name, '5r') || contains(github.ref_name, '5s') || contains(github.ref_name, '5t') || contains(github.ref_name, '5u') || contains(github.ref_name, '6-') || contains(github.ref_name, '6a') || contains(github.ref_name, '6c') || contains(github.ref_name, '6e') || contains(github.ref_name, '6h') || contains(github.ref_name, '6o') || contains(github.ref_name, '6p') || contains(github.ref_name, '6r') || contains(github.ref_name, '6s') || contains(github.ref_name, '6t') || contains(github.ref_name, '6u') || contains(github.ref_name, '7-') || contains(github.ref_name, '7a') || contains(github.ref_name, '7c') || contains(github.ref_name, '7e') || contains(github.ref_name, '7h') || contains(github.ref_name, '7o') || contains(github.ref_name, '7p') || contains(github.ref_name, '7r') || contains(github.ref_name, '7s') || contains(github.ref_name, '7t') || contains(github.ref_name, '7u') || contains(github.ref_name, '8-') || contains(github.ref_name, '8a') || contains(github.ref_name, '8c') || contains(github.ref_name, '8e') || contains(github.ref_name, '8h') || contains(github.ref_name, '8o') || contains(github.ref_name, '8p') || contains(github.ref_name, '8r') || contains(github.ref_name, '8s') || contains(github.ref_name, '8t') || contains(github.ref_name, '8u') || contains(github.ref_name, '9-') || contains(github.ref_name, '9a') || contains(github.ref_name, '9c') || contains(github.ref_name, '9e') || contains(github.ref_name, '9h') || contains(github.ref_name, '9o') || contains(github.ref_name, '9p') || contains(github.ref_name, '9r') || contains(github.ref_name, '9s') || contains(github.ref_name, '9t') || contains(github.ref_name, '9u')))
         run: |
           if [ "$(git rev-parse --is-shallow-repository)" = true ]; then git fetch --quiet --unshallow origin; fi
           if git ls-remote --exit-code --heads origin rust-core >/dev/null; then
@@ -580,13 +587,10 @@ jobs:
           SDM_PYTHON: python
         run: |
           set -o pipefail
-          # A checkpoint's gate.sh before T2.16a builds the test kit, its
-          # observation writer overlaid, into this target directory, and
-          # Cargo, judging freshness by modification times, then takes that
-          # build as this tree's: the test kit's sources are marked newer,
-          # so this tree's host is built again (T2.16a; from T2.16a gate.sh
-          # builds the overlay into a target directory of its own).
-          find rust/crates/sdm-testkit/src -name '*.rs' -exec touch {} +
+          # Every checkpoint's gate.sh builds the test kit's overlay into a
+          # target directory of its own (T2.16a), so this tree's host is
+          # built here as Cargo judges it; no source is marked newer, which
+          # rebuilt the test kit on every run (P2-T2.16a-1).
           out=rust-host-sqlite
           mkdir -p "$out"
           reference=$(ls contract/reference/*.jsonl)
@@ -1012,9 +1016,9 @@ jobs:
       # ordinary connection keyword reached main reading as a pass. The
       # client is the native wheel's, the one abi3 build every interpreter
       # here installs; its test extra carries pytest-xdist, and
-      # pytest-timeout is for the run's --timeout.
+      # pytest-timeout==2.4.0 is for the run's --timeout.
       - run: |
-          pip install --upgrade pip 'ruff==0.16.*' pytest-timeout "tomli; python_version < '3.11'"
+          pip install --upgrade pip 'ruff==0.16.*' pytest-timeout==2.4.0 "tomli; python_version < '3.11'"
           pip install -e './packages/structured-data-models-api[test]' -e './packages/structured-data-models-pql[test]' \
             "$(ls native/*.whl)[test]" \
             -e './packages/structured-data-models-connectors[sqlite,duckdb,postgres,databricks,snowflake,s3,test]'
@@ -1038,7 +1042,7 @@ jobs:
   engine:
     runs-on: ubuntu-latest
     # 90, not 60: its pytest step alone takes 40 minutes or more, and the job
-    # reached its 60-minute limit on three runs (T2.11); the real cut is the
+    # reached its 60-minute limit on two runs (T2.11); the real cut is the
     # planned CI speed-up package.
     timeout-minutes: 90
     needs: [landing, native-wheel]
@@ -1086,11 +1090,11 @@ jobs:
       # backends, which skip whole modules without them; pyyaml reads the
       # semantic-view fixtures, and `explain` carries the SDK the explanation
       # tests fake around. jsonschema validates the contract's cases and
-      # observations, which the root suite checks. pytest-timeout is for
+      # observations, which the root suite checks. pytest-timeout==2.4.0 is for
       # the root suite's --timeout; the client's test extra, installed
       # below, carries pytest-xdist.
       - run: |
-          pip install --upgrade pip 'ruff==0.16.*' pytest-timeout
+          pip install --upgrade pip 'ruff==0.16.*' pytest-timeout==2.4.0
           pip install -e './packages/structured-data-models-api' -e './packages/structured-data-models-pql' \
             -e './packages/structured-data-models-connectors[sqlite,duckdb,databricks,snowflake,postgres]' \
             pyyaml jsonschema
@@ -1169,7 +1173,7 @@ jobs:
         run: |
           printf '%s\n' $CELL_PINS duckdb==1.5.6 > "$RUNNER_TEMP/cell.txt"
           pip install --upgrade pip
-          pip install -c "$RUNNER_TEMP/cell.txt" $CELL_PINS duckdb==1.5.6 pyyaml jsonschema pytest pytest-xdist pytest-timeout \
+          pip install -c "$RUNNER_TEMP/cell.txt" $CELL_PINS duckdb==1.5.6 pyyaml jsonschema pytest pytest-xdist pytest-timeout==2.4.0 \
             ./packages/structured-data-models-api ./packages/structured-data-models-pql \
             './packages/structured-data-models-connectors[duckdb,sqlite,postgres]' \
             ./packages/structured-data-models-relational-engine "$(ls native/*.whl)[test]"
@@ -1323,7 +1327,7 @@ jobs:
           path: native
       # engine's install, with the native wheel's test extra.
       - run: |
-          pip install --upgrade pip 'ruff==0.16.*' pytest-timeout
+          pip install --upgrade pip 'ruff==0.16.*' pytest-timeout==2.4.0
           pip install -e './packages/structured-data-models-api' -e './packages/structured-data-models-pql' \
             -e './packages/structured-data-models-connectors[sqlite,duckdb,databricks,snowflake,postgres]' \
             pyyaml jsonschema
@@ -1574,10 +1578,12 @@ jobs:
       # statement and joined row to the reference cell's. The provider's own
       # test needs the test-ops build, and runs in native-test-ops. T2.21's
       # exact-key vectors too: an unconstrained numeric keyed or linked by
-      # the caller, held to python-ref's catalog control on the service.
+      # the caller, held to python-ref's catalog control on the service; and
+      # T2.14c's numeric spellings, one number spelled two ways being one
+      # key (P2-T2.14c-1).
       - &contract-postgres-vectors
-        name: T2.3's Postgres regression and key vectors, and T2.21's exact-key vectors, on the service
-        run: python -m pytest contract/tests/test_t23_postgres_regressions.py contract/tests/test_t23_postgres_keys.py contract/tests/test_t221_exact_keys.py -q
+        name: T2.3's Postgres regression and key vectors, T2.21's exact-key vectors and T2.14c's numeric spellings, on the service
+        run: python -m pytest contract/tests/test_t23_postgres_regressions.py contract/tests/test_t23_postgres_keys.py contract/tests/test_t221_exact_keys.py contract/tests/test_t214c_numeric_spelling.py -q
       # T2.14b's Postgres JSON regressions (a document escaping a lone
       # surrogate kept as the reference keeps it), on the service, in the
       # reference cell (T2.14b fix 7).
