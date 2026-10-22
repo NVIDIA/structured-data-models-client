@@ -619,10 +619,24 @@ def test_an_infinite_id_is_not_something_to_move_past():
     ]
 
 
+def _pandas_holds(value: int) -> bool:
+    r"""Whether the installed pandas builds a frame around ``value``: pandas
+    3.0 raises ``OverflowError`` for an integer past what a float holds, and
+    from 3.1 holds it in a column of objects."""
+    try:
+        pd.DataFrame([[value]], columns=['instance_id'])
+    except OverflowError:
+        return False
+    return True
+
+
 def test_a_number_too_large_to_hold_is_not_a_description():
-    """Pandas raises building a frame around it. A description that cannot be
-    made is not worth failing the call for, so the envelope contributes
-    nothing and the readable one beside it is unaffected."""
+    """Where pandas raises building a frame around it, a description that
+    cannot be made is not worth failing the call for, so the envelope
+    contributes nothing and the readable one beside it is unaffected. Where
+    the installed pandas holds it (3.1 on), it is described as it is, an
+    id no shift can move, as the old client describes it under that pandas
+    (`_wire_frame`, unchanged from the reference)."""
     huge = {
         'context': {
             'instance_table': {
@@ -633,4 +647,5 @@ def test_a_number_too_large_to_hold_is_not_a_description():
     }
     context = _split_from((huge, keyed_envelope([], [0, 1])), 'context')
 
-    assert context.instance_table['instance_id'].tolist() == [0, 1]
+    expected = [10**400, 0, 1] if _pandas_holds(10**400) else [0, 1]
+    assert context.instance_table['instance_id'].tolist() == expected
