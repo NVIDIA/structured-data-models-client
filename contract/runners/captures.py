@@ -6,61 +6,68 @@ r"""The capture writer and reader (Phase 3 design, choice 2; T3.3).
 
 A capture is what the old client did and got on one warehouse leg for one
 case, recorded live in C-1 (or E-0) by ``run_python.py``'s recording mode
-(T3.2), and what the stand-in (``sdm-testkit``'s ``standin.rs``) answers
-the core's requests from offline. One leg's captures are a directory,
-``contract/captures/<leg>/``:
+(T3.2); the stand-in (``sdm-testkit``'s ``standin.rs``) answers the core's
+requests from it offline. As the writer takes it and :func:`read` gives it
+back, a capture is plain data:
 
-    <case id>.json          one case's capture (:data:`FORMAT`)
-    tables/<sha256>.arrows  each distinct Arrow table once, an IPC stream
-
-A case's file holds, beside its format, case, leg and the hash of the
-case's input:
-
-- ``recording_commit`` and ``reference_commit``: the commit whose harness
-  recorded it and the reference's commit;
-- ``runtime``: the leg's runtime, Python, pandas, pyarrow and driver
-  versions, as the recording read them;
-- ``session``: the session's time zone and NULL order, which the stand-in
-  sets on its local engine (B5);
+- ``case``, ``leg``: the case's id and its warehouse leg (:data:`LEGS`);
+- ``recording_commit``, ``reference_commit``: the commit whose harness
+  recorded it, and the reference's, each a full SHA;
+- ``versions``: the leg's runtime, Python, pandas and driver versions;
+- ``input_hash``: the hash of the case's input;
+- ``session``: the session's ``time_zone`` and ``null_order``
+  (``nulls_first`` or ``nulls_last`` for an ascending order), which the
+  stand-in sets on its local engine (B5);
 - ``reference``: the old client's reference line, the observation
   Phase 2's lines use;
-- ``loader``: the loader's notes, each constraint the engine did not store;
-- ``tables``: every table of the case as the warehouse returned it through
-  the leg's driver, by name;
-- ``views``: one entry per relation the old client derived from a view:
-  its columns and filter, the warehouse-evaluated table, or ``null`` and
-  the columns the warehouse refused;
-- ``draws``: every random draw: the table, the seed, the fraction as
-  written, and the rows picked;
-- ``statements``: every statement sent, in order, with its parameters and
-  its result (a table) or error.
+- ``tables``: each table of the case as the warehouse returned it through
+  the leg's driver, a ``pyarrow.Table`` by name;
+- ``derived``: each relation the old client derived from a view, evaluated
+  by the warehouse: ``view``, ``table``, ``columns``, ``filter``, ``data``
+  (a table, or ``None`` with the ``refused`` columns);
+- ``draws``: each random draw: ``table``, ``seed`` (``None`` where the
+  engine takes none), ``fraction`` (the sampling clause's argument as the
+  old client wrote it: ``12.5``, ``1e-05``, ``5 ROWS``) and ``rows``, the
+  rows picked, a table;
+- ``statements``: each statement sent, in order: ``text``, ``parameters``
+  (JSON values, as passed), and its ``result`` (a table) or ``error``;
+- ``loader``: the loader's notes, each constraint the engine did not
+  store (optional).
 
-Private names never reach a file. Every text in the capture, the tables'
-cells, field names and metadata included, has each private name the
-recording knows (the catalog, schema, host, user, and the view names)
-replaced by its placeholder (``{catalog}``, ``{schema}``, ...) before
-anything is written, in each case form a warehouse folds it to
-(``MY_DB`` becomes ``{CATALOG}``); then the whole capture is searched,
-case-insensitively, for every private name, both those placeholders
-stand for and every value of :data:`PRIVATE_VARIABLES` in the
-environment, and the write fails by the variable's name, never its
-value (:class:`PrivateName`), with no file written.
+On disk a capture is a directory: ``capture.json``, the capture with each
+table replaced by the name of its file, and ``tables/<sha256>.arrows``, each
+distinct table once, an uncompressed Arrow IPC stream. C-1's captures are
+``contract/captures/<leg>/<case>/``.
 
-The format is versioned. A later version is read through
-:data:`CONVERTERS`, one function per older version, so an old capture is
+Private names never reach a file. Each value of a variable of
+:data:`PLACEHOLDERS` in the environment is replaced by its placeholder
+(``{catalog}``, ``{schema}``, ``{host}``, ``{user}``, ...) in every text of
+the capture, the tables' cells, field names and metadata included, in each
+case form a warehouse folds it to (``MY_DB`` becomes ``{CATALOG}``), and a
+URL's host by ``{host}``; then the whole capture is searched,
+case-insensitively, for the value of every variable of :data:`PRIVATE` and
+every ``SDM_PRIVATE_*`` or ``SDM_LIVE_*`` variable, and the write fails by
+the variable's name, never its value (:class:`PrivateName`), before any
+file is written.
+
+The format is versioned. An older version is read through
+:data:`CONVERTERS`, one function per version, so an old capture is
 converted, never re-recorded (choice 2): ``captures.py convert DIR``
-rewrites every file of DIR in the current version.
+rewrites every capture under DIR in the current version.
 """
 
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import io
 import json
 import os
 import re
+import shutil
 import sys
+import tempfile
 from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
 from typing import Any
@@ -73,58 +80,89 @@ VERSIONS = ('sdm-capture/1',)
 #: The legs a capture is for (design, choice 1).
 LEGS = ('databricks-sql', 'databricks-spark', 'snowflake', 'lakebase')
 
-#: Each leg's NULL order in an ascending sort, as its engine orders by
-#: default (Spark puts NULLs first; Snowflake and Postgres last), written
-#: in a capture's session unless the recording read the session's own.
-NULL_ORDER = {
-    'databricks-sql': 'nulls_first',
-    'databricks-spark': 'nulls_first',
-    'snowflake': 'nulls_last',
-    'lakebase': 'nulls_last',
-}
+#: A capture directory's document.
+DOCUMENT = 'capture.json'
 
-#: Where the captures live, from the repository's root.
+#: Where C-1's captures live, from the repository's root.
 ROOT = Path(__file__).resolve().parents[2]
 CAPTURES = ROOT / 'contract' / 'captures'
 
-#: The environment variables naming a private resource or credential: each
-#: value present (and each part of a URL's host) is searched for in a
-#: capture before it is written. Any variable named ``SDM_PRIVATE_*`` or
-#: ``SDM_LIVE_*`` is searched for too, so a live run names a resource of
-#: its own without changing this list.
-PRIVATE_VARIABLES = (
-    'DATABRICKS_HOST',
-    'DATABRICKS_SERVER_HOSTNAME',
-    'DATABRICKS_HTTP_PATH',
-    'DATABRICKS_WAREHOUSE_ID',
-    'DATABRICKS_CLIENT_ID',
-    'DATABRICKS_TOKEN',
-    'DATABRICKS_CONFIG_PROFILE',
-    'DATABRICKS_USER',
-    'SNOWFLAKE_URL',
-    'SNOWFLAKE_ACCOUNT',
-    'SNOWFLAKE_USERNAME',
-    'SNOWFLAKE_USER',
-    'SNOWFLAKE_ACCESS_TOKEN',
-    'SNOWFLAKE_PASSWORD',
-    'SNOWFLAKE_WAREHOUSE',
-    'SNOWFLAKE_DATABASE',
-    'SNOWFLAKE_SCHEMA',
-    'SNOWFLAKE_ROLE',
-    'PGHOST',
-    'PGUSER',
-    'PGPASSWORD',
-    'PGDATABASE',
+#: Each environment variable whose value is a private name, and the
+#: placeholder written in its place. The live runs name their resources
+#: here and nowhere else: the test schema the write guard allows (KO3-51),
+#: the AdventureWorks schema and the existing views read (KO3-52, KO3-21),
+#: the hosts and the users.
+PLACEHOLDERS = {
+    'SDM_LIVE_TEST_DATABASE': '{catalog}',
+    'SDM_LIVE_TEST_SCHEMA': '{schema}',
+    'SDM_LIVE_ADVENTUREWORKS_CATALOG': '{adventureworks_catalog}',
+    'SDM_LIVE_ADVENTUREWORKS_SCHEMA': '{adventureworks_schema}',
+    'SDM_LIVE_ADVENTUREWORKS_METRIC_VIEW': '{adventureworks_metric_view}',
+    'SDM_LIVE_SHOP_METRIC_VIEW': '{shop_metric_view}',
+    'SDM_LIVE_SHOP_SEMANTIC_VIEW': '{shop_semantic_view}',
+    'DATABRICKS_HOST': '{host}',
+    'DATABRICKS_SERVER_HOSTNAME': '{host}',
+    'SNOWFLAKE_URL': '{host}',
+    'PGHOST': '{host}',
+    'SDM_LIVE_USER': '{user}',
+    'DATABRICKS_USER': '{user}',
+    'SNOWFLAKE_USERNAME': '{user}',
+    'PGUSER': '{user}',
+}
+
+#: Every environment variable whose value must never be written: the
+#: placeholders' and every credential or resource name a live run reads
+#: (the owner's Snowflake env file among them, KO3-24). Any variable named
+#: ``SDM_PRIVATE_*`` or ``SDM_LIVE_*`` is searched for too, so a live run
+#: names a resource of its own without changing this list.
+PRIVATE = tuple(
+    sorted(
+        {
+            *PLACEHOLDERS,
+            'DATABRICKS_HTTP_PATH',
+            'DATABRICKS_WAREHOUSE_ID',
+            'DATABRICKS_CLIENT_ID',
+            'DATABRICKS_CLIENT_SECRET',
+            'DATABRICKS_TOKEN',
+            'DATABRICKS_CONFIG_PROFILE',
+            'SNOWFLAKE_ACCOUNT',
+            'SNOWFLAKE_USER',
+            'SNOWFLAKE_ACCESS_TOKEN',
+            'SNOWFLAKE_PASSWORD',
+            'SNOWFLAKE_WAREHOUSE',
+            'SNOWFLAKE_DATABASE',
+            'SNOWFLAKE_SCHEMA',
+            'SNOWFLAKE_ROLE',
+            'PGPASSWORD',
+            'PGDATABASE',
+            'SDM_DBX_PROFILE',
+            'SDM_DBX_WORKSPACE_FOLDER',
+            'SDM_DBX_POLICY_ID',
+            'SDM_DBX_USER',
+            'SDM_DBX_VOLUME_DIR',
+        }
+    )
 )
 PRIVATE_PREFIXES = ('SDM_PRIVATE_', 'SDM_LIVE_')
 
-#: The shortest value searched for: a shorter one (a role ``dev``) would
-#: match ordinary words; a placeholder's own value is searched for at any
-#: length.
+#: The shortest value searched for or replaced when found by a prefix or
+#: as a URL's part: a shorter one would match ordinary words. A listed
+#: variable's whole value is searched for at any length.
 SHORTEST = 4
 
-#: A placeholder's name: lower-case letters, digits and underscores.
-_PLACEHOLDER = re.compile(r'[a-z][a-z0-9_]*')
+#: The keys of a capture, the required ones and those with a default.
+REQUIRED = (
+    'case',
+    'leg',
+    'recording_commit',
+    'reference_commit',
+    'versions',
+    'input_hash',
+    'session',
+    'reference',
+    'tables',
+)
+OPTIONAL = {'derived': [], 'draws': [], 'statements': [], 'loader': []}
 
 
 class CaptureError(Exception):
@@ -133,65 +171,63 @@ class CaptureError(Exception):
 
 class PrivateName(CaptureError):
     r"""A private name left in a capture: named by where it is and by the
-    placeholder or variable it is the value of, never by the value."""
+    variable it is the value of, never by the value."""
 
 
 # --- private names -------------------------------------------------------------------
 
 
-def private_names(environ: Mapping[str, str] | None = None) -> dict[str, str]:
-    r"""Every private value of the environment, by the variable holding
-    it: each of :data:`PRIVATE_VARIABLES` and every ``SDM_PRIVATE_*`` or
-    ``SDM_LIVE_*`` variable that is set, and a URL's host and each part of
-    it before the domain, at least :data:`SHORTEST` characters long."""
+def _url_parts(value: str) -> list[str]:
+    r"""A URL's host and the host's first label, when ``value`` is one."""
+    host = re.match(r'^[a-z][a-z0-9+.-]*://([^/:?#@]+)', value, re.I)
+    if not host:
+        return []
+    return [host.group(1), host.group(1).split('.')[0]]
+
+
+def private_values(
+    environ: Mapping[str, str] | None = None,
+) -> dict[str, list[str]]:
+    r"""Each private variable set in the environment and the values it
+    makes private: its value, and a URL's host and first label."""
     environ = os.environ if environ is None else environ
-    found: dict[str, str] = {}
+    found: dict[str, list[str]] = {}
     for name, value in sorted(environ.items()):
-        if name not in PRIVATE_VARIABLES and not name.startswith(
-            PRIVATE_PREFIXES
-        ):
+        listed = name in PRIVATE
+        if not listed and not name.startswith(PRIVATE_PREFIXES):
             continue
         value = value.strip()
-        if not value:
+        if not value or (not listed and len(value) < SHORTEST):
             continue
-        candidates = [value]
-        host = re.match(r'^[a-z][a-z0-9+.-]*://([^/:?#]+)', value, re.I)
-        if host:
-            candidates.append(host.group(1))
-            candidates.append(host.group(1).split('.')[0])
-        for i, candidate in enumerate(candidates):
-            if len(candidate) >= SHORTEST:
-                found[name if i == 0 else f'{name} (host part {i})'] = candidate
+        values = [value]
+        values += [part for part in _url_parts(value) if len(part) >= SHORTEST]
+        found[name] = values
     return found
 
 
 class Placeholders:
-    r"""Private names and the placeholders written for them: ``{name}``
-    for the value as given, and its upper- and lower-case forms for the
-    value's upper- and lower-case forms, so a name a warehouse folds keeps
-    its fold offline."""
+    r"""Each private value with a placeholder, replaced by it: the value as
+    set, and its upper- and lower-case forms by the placeholder's upper-
+    and lower-case forms, so a name a warehouse folds keeps its fold
+    offline."""
 
     def __init__(self, names: Mapping[str, str]) -> None:
-        for name, value in names.items():
-            if not _PLACEHOLDER.fullmatch(name):
-                raise CaptureError(f'the placeholder {name!r} is not a name')
-            if not value:
-                raise CaptureError(f'the placeholder {{{name}}} has no value')
-        self.names = dict(names)
         pairs: dict[str, str] = {}
-        for name, value in names.items():
-            token = '{' + name + '}'
-            pairs.setdefault(value, token)
-            pairs.setdefault(value.upper(), token.upper())
-            pairs.setdefault(value.lower(), token.lower())
+        for value, token in names.items():
+            for found, written in (
+                (value, token),
+                (value.upper(), token.upper()),
+                (value.lower(), token.lower()),
+            ):
+                pairs.setdefault(found, written)
         # Longest first, so a name holding another is replaced whole.
-        self._pairs = sorted(pairs.items(), key=lambda p: (-len(p[0]), p[0]))
+        ordered = sorted(pairs.items(), key=lambda p: (-len(p[0]), p[0]))
+        self._tokens = dict(ordered)
         self._pattern = (
-            re.compile('|'.join(re.escape(value) for value, _ in self._pairs))
-            if self._pairs
+            re.compile('|'.join(re.escape(value) for value, _ in ordered))
+            if ordered
             else None
         )
-        self._tokens = dict(self._pairs)
 
     def __call__(self, text: str) -> str:
         if self._pattern is None:
@@ -199,10 +235,21 @@ class Placeholders:
         return self._pattern.sub(lambda m: self._tokens[m.group(0)], text)
 
 
+def placeholders(environ: Mapping[str, str] | None = None) -> Placeholders:
+    r"""The placeholders of the environment's private names
+    (:data:`PLACEHOLDERS`), a URL's host and first label as ``{host}``."""
+    values = private_values(environ)
+    names: dict[str, str] = {}
+    for variable, token in PLACEHOLDERS.items():
+        for value in values.get(variable, []):
+            names.setdefault(value, token)
+    return Placeholders(names)
+
+
 def _searcher(private: Mapping[str, str]) -> Callable[[str], str | None]:
-    r"""A function naming the first private value a text holds, by its
-    label, case-insensitively."""
-    labels = {value.casefold(): label for label, value in private.items()}
+    r"""A function naming the variable of the first private value a text
+    holds, case-insensitively."""
+    labels = {value.casefold(): label for value, label in private.items()}
     if not labels:
         return lambda text: None
     pattern = re.compile(
@@ -214,6 +261,20 @@ def _searcher(private: Mapping[str, str]) -> Callable[[str], str | None]:
         return labels[found.group(0)] if found else None
 
     return search
+
+
+def searcher(
+    environ: Mapping[str, str] | None = None,
+) -> Callable[[str], str | None]:
+    r"""The search for every private value of the environment, naming the
+    variable holding it."""
+    return _searcher(
+        {
+            value: variable
+            for variable, values in private_values(environ).items()
+            for value in values
+        }
+    )
 
 
 # --- Arrow ---------------------------------------------------------------------------
@@ -378,207 +439,195 @@ def rows_table(columns: list[str], rows: list[Any]) -> Any:
 # --- the writer ----------------------------------------------------------------------
 
 
-class CaptureWriter:
-    r"""Writes one leg's captures under ``root/<leg>/``: every text through
-    the placeholders, then the whole capture searched for each private
-    name, and only then the files (:class:`PrivateName` otherwise)."""
+# --- the writer ----------------------------------------------------------------------
 
-    def __init__(
-        self,
-        root: Path,
-        leg: str,
-        *,
-        recording_commit: str,
-        reference_commit: str,
-        runtime: Mapping[str, Any],
-        session: Mapping[str, Any],
-        placeholders: Mapping[str, str],
-        environ: Mapping[str, str] | None = None,
-    ) -> None:
-        if leg not in LEGS:
-            raise CaptureError(f'no leg {leg!r}; it is one of {LEGS}')
-        for name, commit in (
-            ('recording', recording_commit),
-            ('reference', reference_commit),
-        ):
-            if not re.fullmatch(r'[0-9a-f]{40}', commit):
-                raise CaptureError(f'the {name} commit is not a full SHA')
-        session = {'null_order': NULL_ORDER[leg], **session}
-        if session['null_order'] not in ('nulls_first', 'nulls_last'):
-            raise CaptureError('a NULL order is nulls_first or nulls_last')
-        if not isinstance(session.get('time_zone'), str):
-            raise CaptureError("a capture's session names its time zone")
-        self.directory = Path(root) / leg
-        self.leg = leg
-        self.substitute = Placeholders(placeholders)
-        private = {
-            f'the value of {{{name}}}': value
-            for name, value in placeholders.items()
-        }
-        private.update(
-            (f'the value of {name}', value)
-            for name, value in private_names(environ).items()
-        )
-        self.search = _searcher(private)
-        self.head = {
-            'format': FORMAT,
-            'leg': leg,
-            'recording_commit': recording_commit,
-            'reference_commit': reference_commit,
-            'runtime': self._json(dict(runtime), 'runtime'),
-            'session': self._json(dict(session), 'session'),
-        }
 
-    # Every JSON value through the placeholders, then searched.
-    def _json(self, value: Any, where: str) -> Any:
+class _Scrub:
+    r"""Every text of a capture through the placeholders and the search,
+    and each table into its file's bytes."""
+
+    def __init__(self, environ: Mapping[str, str] | None) -> None:
+        self.substitute = placeholders(environ)
+        self.search = searcher(environ)
+        self.files: dict[str, bytes] = {}
+
+    def check(self, text: str, where: str) -> None:
+        variable = self.search(text)
+        if variable is not None:
+            raise PrivateName(f'{where} holds the value of {variable}')
+
+    def json(self, value: Any, where: str) -> Any:
         if isinstance(value, str):
             text = self.substitute(value)
-            self._check(text, where)
+            self.check(text, where)
             return text
-        if isinstance(value, dict):
+        if isinstance(value, Mapping):
             out = {}
             for k, v in value.items():
-                key = self._json(str(k), f'{where} (a key)')
-                out[key] = self._json(v, f'{where}.{k}')
+                key = self.json(str(k), f'{where} (a key)')
+                out[key] = self.json(v, f'{where}.{k}')
             return out
         if isinstance(value, (list, tuple)):
-            return [self._json(v, f'{where}[{i}]') for i, v in enumerate(value)]
+            return [self.json(v, f'{where}[{i}]') for i, v in enumerate(value)]
         if value is None or isinstance(value, (bool, int, float)):
             return value
         raise CaptureError(f'{where}: a {type(value).__name__} is not JSON')
 
-    def _check(self, text: str, where: str) -> None:
-        label = self.search(text)
-        if label is not None:
-            raise PrivateName(f'{where} holds {label}')
-
-    def _table(self, table: Any, where: str, files: dict[str, bytes]) -> str:
+    def table(self, table: Any, where: str) -> str:
+        if not hasattr(table, 'schema') or not hasattr(table, 'num_rows'):
+            raise CaptureError(f'{where}: not an Arrow table')
         table = scrubbed_table(table, self.substitute)
         for text in _table_texts(table):
-            self._check(text, where)
+            self.check(text, where)
         data = table_bytes(table)
         name = f'tables/{hashlib.sha256(data).hexdigest()}.arrows'
-        files[name] = data
+        self.files[name] = data
         return name
 
-    def document(
-        self, case: str, **parts: Any
-    ) -> tuple[dict[str, Any], dict[str, bytes]]:
-        r"""One case's capture and the table files it names, in memory,
-        every private name replaced and searched for; nothing written. A
-        value nested past what Python's recursion reads is refused by
-        name."""
-        try:
-            return self._document(case, **parts)
-        except RecursionError:
-            raise CaptureError(
-                f'{case}: a value nested too deep to write'
-            ) from None
+    def optional_table(self, table: Any, where: str) -> str | None:
+        return None if table is None else self.table(table, where)
 
-    def _document(
-        self,
-        case: str,
-        *,
-        input_hash: str,
-        reference: Mapping[str, Any],
-        tables: Mapping[str, Any],
-        views: Iterable[Mapping[str, Any]] = (),
-        draws: Iterable[Mapping[str, Any]] = (),
-        statements: Iterable[Mapping[str, Any]] = (),
-        loader: Iterable[str] = (),
-    ) -> tuple[dict[str, Any], dict[str, bytes]]:
-        files: dict[str, bytes] = {}
-        document = dict(self.head)
-        document['case'] = self._json(case, 'case')
-        document['input_hash'] = self._json(input_hash, 'input_hash')
-        document['reference'] = self._json(dict(reference), 'reference')
-        document['loader'] = self._json(list(loader), 'loader')
-        document['tables'] = [
+
+def _integer(value: Any, where: str, *, null: bool = True) -> Any:
+    if value is None and null:
+        return None
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise CaptureError(f'{where}: an integer, as recorded')
+    return value
+
+
+def document(
+    capture: Mapping[str, Any], environ: Mapping[str, str] | None = None
+) -> tuple[dict[str, Any], dict[str, bytes]]:
+    r"""A capture as its ``capture.json`` document and the table files it
+    names, in memory, every private name replaced and searched for;
+    nothing written. A value nested past what Python's recursion reads is
+    refused by name."""
+    try:
+        return _document(capture, environ)
+    except RecursionError:
+        raise CaptureError('a value nested too deep to write') from None
+
+
+def _document(
+    capture: Mapping[str, Any], environ: Mapping[str, str] | None
+) -> tuple[dict[str, Any], dict[str, bytes]]:
+    missing = [key for key in REQUIRED if key not in capture]
+    unknown = sorted(set(capture) - set(REQUIRED) - set(OPTIONAL) - {'format'})
+    if missing or unknown:
+        raise CaptureError(
+            f'a capture holds {", ".join(REQUIRED)} and may hold '
+            f'{", ".join(OPTIONAL)}: missing {missing}, unknown {unknown}'
+        )
+    if capture['leg'] not in LEGS:
+        raise CaptureError(f'no leg {capture["leg"]!r}; it is one of {LEGS}')
+    for key in ('recording_commit', 'reference_commit'):
+        if not re.fullmatch(r'[0-9a-f]{40}', str(capture[key])):
+            raise CaptureError(f'{key}: not a full SHA')
+    session = capture['session']
+    if not isinstance(session, Mapping) or not isinstance(
+        session.get('time_zone'), str
+    ):
+        raise CaptureError("a capture's session names its time zone")
+    if session.get('null_order') not in ('nulls_first', 'nulls_last'):
+        raise CaptureError(
+            "a session's null_order is nulls_first or nulls_last"
+        )
+    scrub = _Scrub(environ)
+    out: dict[str, Any] = {'format': FORMAT}
+    for key in REQUIRED:
+        if key != 'tables':
+            out[key] = scrub.json(capture[key], key)
+    tables = capture['tables']
+    if not isinstance(tables, Mapping):
+        raise CaptureError('tables: a table by name')
+    out['tables'] = [
+        {
+            'name': scrub.json(name, f'tables[{name!r}]'),
+            'data': scrub.table(table, f'tables[{name!r}]'),
+        }
+        for name, table in tables.items()
+    ]
+    out['derived'] = []
+    for i, entry in enumerate(capture.get('derived', [])):
+        where = f'derived[{i}]'
+        out['derived'].append(
             {
-                'name': self._json(name, f'tables[{name!r}]'),
-                'data': self._table(table, f'tables[{name!r}]', files),
-            }
-            for name, table in tables.items()
-        ]
-        document['views'] = []
-        for i, view in enumerate(views):
-            where = f'views[{i}]'
-            entry = {
-                'view': self._json(view['view'], f'{where}.view'),
-                'relation': self._json(view['relation'], f'{where}.relation'),
-                'columns': self._json(
-                    list(view['columns']), f'{where}.columns'
+                'view': scrub.json(entry['view'], f'{where}.view'),
+                'table': scrub.json(entry['table'], f'{where}.table'),
+                'columns': scrub.json(entry['columns'], f'{where}.columns'),
+                'filter': scrub.json(entry.get('filter'), f'{where}.filter'),
+                'refused': scrub.json(
+                    list(entry.get('refused', [])), f'{where}.refused'
                 ),
-                'filter': self._json(view.get('filter'), f'{where}.filter'),
-                'refused': self._json(list(view.get('refused', ())), where),
-                'data': None,
+                'data': scrub.optional_table(entry.get('data'), where),
             }
-            if view.get('table') is not None:
-                entry['data'] = self._table(view['table'], where, files)
-            document['views'].append(entry)
-        document['draws'] = []
-        for i, draw in enumerate(draws):
-            where = f'draws[{i}]'
-            seed = draw.get('seed')
-            if seed is not None and (
-                not isinstance(seed, int) or isinstance(seed, bool)
-            ):
-                raise CaptureError(f'{where}: a seed is an integer or null')
-            fraction = draw.get('fraction')
-            if fraction is not None and not isinstance(fraction, str):
-                raise CaptureError(f'{where}: a fraction is kept as written')
-            rows = draw.get('rows')
-            if rows is not None and (
-                not isinstance(rows, int) or isinstance(rows, bool)
-            ):
-                raise CaptureError(f'{where}: a row count is an integer')
-            document['draws'].append(
-                {
-                    'table': self._json(draw['table'], f'{where}.table'),
-                    'seed': seed,
-                    'fraction': fraction,
-                    'rows': rows,
-                    'statement': self._json(
-                        draw.get('statement'), f'{where}.statement'
-                    ),
-                    'data': self._table(draw['picked'], where, files),
-                }
-            )
-        document['statements'] = []
-        for i, statement in enumerate(statements):
-            where = f'statements[{i}]'
-            entry = {
-                'sql': self._json(statement['sql'], f'{where}.sql'),
-                'parameters': self._json(
-                    statement.get('parameters'), f'{where}.parameters'
-                ),
-                'data': None,
-                'error': self._json(statement.get('error'), f'{where}.error'),
-            }
-            if statement.get('result') is not None:
-                entry['data'] = self._table(statement['result'], where, files)
-            document['statements'].append(entry)
-        return document, files
+        )
+    out['draws'] = []
+    for i, draw in enumerate(capture.get('draws', [])):
+        where = f'draws[{i}]'
+        fraction = draw.get('fraction')
+        if not isinstance(fraction, str):
+            raise CaptureError(f'{where}: the fraction is text, as written')
+        entry = {
+            'table': scrub.json(draw['table'], f'{where}.table'),
+            'seed': _integer(draw.get('seed'), f'{where}.seed'),
+            'fraction': scrub.json(fraction, f'{where}.fraction'),
+            'rows': scrub.table(draw['rows'], f'{where}.rows'),
+        }
+        if draw.get('statement') is not None:
+            entry['statement'] = scrub.json(draw['statement'], where)
+        out['draws'].append(entry)
+    out['statements'] = []
+    for i, statement in enumerate(capture.get('statements', [])):
+        where = f'statements[{i}]'
+        entry = {
+            'text': scrub.json(statement['text'], f'{where}.text'),
+            'parameters': scrub.json(
+                statement.get('parameters'), f'{where}.parameters'
+            ),
+            'result': scrub.optional_table(
+                statement.get('result'), f'{where}.result'
+            ),
+        }
+        if statement.get('error') is not None:
+            entry['error'] = scrub.json(statement['error'], f'{where}.error')
+        out['statements'].append(entry)
+    out['loader'] = scrub.json(list(capture.get('loader', [])), 'loader')
+    return out, scrub.files
 
-    def write(self, case: str, **parts: Any) -> Path:
-        r"""Writes one case's capture (:meth:`document`'s parts), its table
-        files first, only once all of it is free of private names."""
-        document, files = self.document(case, **parts)
-        if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]*', case):
-            raise CaptureError(f'{case!r} is not a case id a file can be named')
+
+def dumps(found: Mapping[str, Any]) -> str:
+    return json.dumps(found, indent=1, ensure_ascii=False) + '\n'
+
+
+def write(
+    path: Path,
+    capture: Mapping[str, Any],
+    *,
+    environ: Mapping[str, str] | None = None,
+) -> Path:
+    r"""Writes ``capture`` as the directory ``path`` (which must not exist):
+    first every text through the placeholders and the whole capture
+    searched for private names (:class:`PrivateName`), then the files, into
+    a directory beside ``path`` renamed into place, so a failed write
+    leaves nothing at ``path``."""
+    path = Path(path)
+    found, files = document(capture, environ)
+    if path.exists():
+        raise CaptureError(f'{path}: a capture is written once')
+    path.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix='.capture-', dir=path.parent))
+    try:
         for name, data in files.items():
-            path = self.directory / name
-            path.parent.mkdir(parents=True, exist_ok=True)
-            if not path.exists():
-                path.write_bytes(data)
-        path = self.directory / f'{case}.json'
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(dumps(document))
-        return path
-
-
-def dumps(document: Mapping[str, Any]) -> str:
-    return json.dumps(document, indent=1, ensure_ascii=False) + '\n'
+            (staging / name).parent.mkdir(parents=True, exist_ok=True)
+            (staging / name).write_bytes(data)
+        (staging / DOCUMENT).write_text(dumps(found), encoding='utf-8')
+        staging.rename(path)
+    except BaseException:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
+    return path
 
 
 # --- the reader and converter --------------------------------------------------------
@@ -589,10 +638,10 @@ def dumps(document: Mapping[str, Any]) -> str:
 CONVERTERS: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {}
 
 
-def upgrade(document: dict[str, Any]) -> dict[str, Any]:
-    r"""A capture in the current version, converted from any version in
-    :data:`VERSIONS`; an unknown version is refused by name."""
-    version = document.get('format')
+def upgrade(found: dict[str, Any]) -> dict[str, Any]:
+    r"""A capture document in the current version, converted from any
+    version in :data:`VERSIONS`; an unknown version is refused by name."""
+    version = found.get('format')
     seen = set()
     while version != FORMAT:
         if version not in VERSIONS or version not in CONVERTERS:
@@ -600,28 +649,31 @@ def upgrade(document: dict[str, Any]) -> dict[str, Any]:
         if version in seen:
             raise CaptureError(f'the converters loop at {version!r}')
         seen.add(version)
-        document = CONVERTERS[version](document)
-        version = document.get('format')
-    return document
+        found = CONVERTERS[version](copy.deepcopy(found))
+        version = found.get('format')
+    return found
 
 
-def read(path: Path) -> dict[str, Any]:
-    r"""One case's capture, in the current version."""
+def read_document(path: Path) -> dict[str, Any]:
+    r"""The ``capture.json`` of the capture at ``path``, in the current
+    version, its tables still named by file."""
+    path = Path(path)
+    source = path / DOCUMENT if path.is_dir() else path
     try:
-        document = json.loads(Path(path).read_text())
+        found = json.loads(source.read_text(encoding='utf-8'))
     except (OSError, ValueError, RecursionError) as error:
         raise CaptureError(
-            f'{path}: not a capture ({type(error).__name__})'
+            f'{source}: not a capture ({type(error).__name__})'
         ) from None
-    if not isinstance(document, dict):
-        raise CaptureError(f'{path}: not a capture')
-    return upgrade(document)
+    if not isinstance(found, dict):
+        raise CaptureError(f'{source}: not a capture')
+    return upgrade(found)
 
 
 def table(directory: Path, name: str) -> Any:
     r"""A table a capture in ``directory`` names, its content checked
     against its name."""
-    if not re.fullmatch(r'tables/[0-9a-f]{64}\.arrows', name):
+    if not re.fullmatch(r'tables/[0-9a-f]{64}\.arrows', str(name)):
         raise CaptureError(f'{name!r} is not a capture table')
     data = (Path(directory) / name).read_bytes()
     if f'tables/{hashlib.sha256(data).hexdigest()}.arrows' != name:
@@ -629,15 +681,44 @@ def table(directory: Path, name: str) -> Any:
     return read_table(data)
 
 
+def read(path: Path) -> dict[str, Any]:
+    r"""The capture at ``path`` (its directory), in the current version and
+    the shape :func:`write` takes, ``format`` added: each table read."""
+    path = Path(path)
+    found = read_document(path)
+    directory = path if path.is_dir() else path.parent
+
+    def load(name: str | None) -> Any:
+        return None if name is None else table(directory, name)
+
+    back = {key: found[key] for key in REQUIRED if key != 'tables'}
+    back['format'] = found['format']
+    back['tables'] = {
+        entry['name']: load(entry['data']) for entry in found['tables']
+    }
+    back['derived'] = [
+        {**entry, 'data': load(entry['data'])} for entry in found['derived']
+    ]
+    back['draws'] = [
+        {**draw, 'rows': load(draw['rows'])} for draw in found['draws']
+    ]
+    back['statements'] = [
+        {**statement, 'result': load(statement['result'])}
+        for statement in found['statements']
+    ]
+    back['loader'] = found['loader']
+    return back
+
+
 def convert(directory: Path) -> list[Path]:
     r"""Rewrites each capture under ``directory`` in an older version in
-    the current one; returns the files rewritten."""
+    the current one; returns the documents rewritten."""
     changed = []
-    for path in sorted(Path(directory).rglob('*.json')):
-        document = json.loads(path.read_text())
-        if document.get('format') == FORMAT:
+    for path in sorted(Path(directory).rglob(DOCUMENT)):
+        found = json.loads(path.read_text(encoding='utf-8'))
+        if found.get('format') == FORMAT:
             continue
-        path.write_text(dumps(upgrade(document)))
+        path.write_text(dumps(upgrade(found)), encoding='utf-8')
         changed.append(path)
     return changed
 
@@ -649,30 +730,28 @@ def main(argv: list[str] | None = None) -> int:
         'convert', help='rewrite older captures in the current version'
     )
     converting.add_argument('directory', type=Path)
-    checking = commands.add_parser(
+    scanning = commands.add_parser(
         'scan', help='search captures for private names of the environment'
     )
-    checking.add_argument('directory', type=Path)
+    scanning.add_argument('directory', type=Path)
     arguments = parser.parse_args(argv)
     if arguments.command == 'convert':
         for path in convert(arguments.directory):
             print(f'converted {path}')
         return 0
-    search = _searcher(
-        {f'the value of {k}': v for k, v in private_names().items()}
-    )
+    search = searcher()
     problems = 0
     for path in sorted(arguments.directory.rglob('*')):
         if path.suffix == '.json':
-            texts: Iterable[str] = [path.read_text()]
+            texts: Iterable[str] = [path.read_text(encoding='utf-8')]
         elif path.suffix == '.arrows':
             texts = _table_texts(read_table(path.read_bytes()))
         else:
             continue
         for text in texts:
-            label = search(text)
-            if label is not None:
-                print(f'{path}: holds {label}')
+            variable = search(text)
+            if variable is not None:
+                print(f'{path}: holds the value of {variable}')
                 problems += 1
                 break
     return 1 if problems else 0

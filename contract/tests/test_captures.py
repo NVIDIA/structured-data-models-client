@@ -7,8 +7,7 @@ design, choice 2): placeholders written for every private name, in each
 case form, in the capture's text and its tables' cells, names and
 metadata; the write failing, with no file written, on any private name
 the environment holds, named by its variable, never its value; the
-version-1 fixture (``contract/fixtures/captures/v1``) read; an unknown
-version refused; the converter's chain. The acceptance tests are the test
+converter's chain; a table read back only when its content is its name. The acceptance tests are the test
 author's.
 """
 
@@ -24,7 +23,7 @@ import pyarrow as pa
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-FIXTURE = ROOT / 'contract/fixtures/captures/v1'
+FIXTURE = ROOT / 'contract/tests/t33-capture-v1'
 
 
 def _module(name: str) -> ModuleType:
@@ -46,47 +45,43 @@ ENVIRON = {
     'SNOWFLAKE_USERNAME': 'jdoe_private',
     'SNOWFLAKE_URL': 'https://acme-xy123.example.invalid',
     'SNOWFLAKE_ACCESS_TOKEN': 'tok-SECRET-0001',
+    'SDM_LIVE_TEST_DATABASE': 'Real_Cat',
     'SDM_LIVE_TEST_SCHEMA': 'Hidden_Schema',
+    'SDM_LIVE_SOMETHING_ELSE': 'other-resource',
     'HOME': '/home/someone',
 }
 
 
-def _writer(root: Path, **overrides):
-    arguments = {
+def _capture(**overrides):
+    found = {
+        'case': 'c1',
+        'leg': 'snowflake',
         'recording_commit': 'a' * 40,
         'reference_commit': 'b' * 40,
-        'runtime': {'python': '3.12'},
-        'session': {'time_zone': 'UTC'},
-        'placeholders': {'catalog': 'Real_Cat', 'schema': 'Hidden_Schema'},
-        'environ': ENVIRON,
-    }
-    arguments.update(overrides)
-    return captures.CaptureWriter(root, 'snowflake', **arguments)
-
-
-def _parts(**overrides):
-    parts = {
-        'input_hash': 'sha256:' + '0' * 64,
+        'versions': {'python': '3.12'},
+        'input_hash': '0' * 64,
+        'session': {'time_zone': 'UTC', 'null_order': 'nulls_last'},
         'reference': {'outcome': 'ok'},
         'tables': {'users': pa.table({'id': [1, 2]})},
     }
-    parts.update(overrides)
-    return parts
+    found.update(overrides)
+    return found
 
 
-def test_private_names_are_read_from_the_environment() -> None:
-    found = captures.private_names(ENVIRON)
-    assert found['SNOWFLAKE_USERNAME'] == 'jdoe_private'
-    assert 'acme-xy123.example.invalid' in found.values()
-    assert 'acme-xy123' in found.values()
-    assert found['SDM_LIVE_TEST_SCHEMA'] == 'Hidden_Schema'
+def test_private_values_are_read_from_the_environment() -> None:
+    found = captures.private_values(ENVIRON)
+    assert found['SNOWFLAKE_USERNAME'] == ['jdoe_private']
+    assert found['SNOWFLAKE_URL'][1:] == [
+        'acme-xy123.example.invalid',
+        'acme-xy123',
+    ]
+    assert found['SDM_LIVE_SOMETHING_ELSE'] == ['other-resource']
     assert 'HOME' not in found
 
 
 def test_every_text_has_its_placeholder_in_each_case_form(
     tmp_path: Path,
 ) -> None:
-    writer = _writer(tmp_path)
     table = pa.table(
         {
             'TABLE_CATALOG': ['REAL_CAT', 'real_cat', 'Real_Cat', None],
@@ -96,30 +91,30 @@ def test_every_text_has_its_placeholder_in_each_case_form(
                 {'name': 'x'},
                 {'name': None},
             ],
-            'listed': [['HIDDEN_SCHEMA'], [], None, ['a']],
+            'listed': [['HIDDEN_SCHEMA'], [], None, ['acme-xy123']],
         }
     ).replace_schema_metadata({'origin': 'Real_Cat'})
-    document, files = writer.document(
-        'c1',
-        **_parts(
+    found, files = captures.document(
+        _capture(
             reference={'message': 'no table Real_Cat.Hidden_Schema.users'},
             tables={'users': table},
             statements=[
                 {
-                    'sql': 'DESCRIBE TABLE "REAL_CAT"."HIDDEN_SCHEMA"."users"',
+                    'text': 'DESCRIBE TABLE "REAL_CAT"."HIDDEN_SCHEMA"."users"',
                     'parameters': ['hidden_schema'],
                     'result': table,
                 }
             ],
         ),
+        ENVIRON,
     )
-    assert document['reference'] == {
+    assert found['reference'] == {
         'message': 'no table {catalog}.{schema}.users'
     }
-    statement = document['statements'][0]
-    assert statement['sql'] == 'DESCRIBE TABLE "{CATALOG}"."{SCHEMA}"."users"'
+    statement = found['statements'][0]
+    assert statement['text'] == 'DESCRIBE TABLE "{CATALOG}"."{SCHEMA}"."users"'
     assert statement['parameters'] == ['{schema}']
-    stored = captures.read_table(files[document['tables'][0]['data']])
+    stored = captures.read_table(files[found['tables'][0]['data']])
     assert stored.column('TABLE_CATALOG').to_pylist() == [
         '{CATALOG}',
         '{catalog}',
@@ -133,116 +128,118 @@ def test_every_text_has_its_placeholder_in_each_case_form(
         ['{SCHEMA}'],
         [],
         None,
-        ['a'],
+        ['{host}'],
     ]
     assert stored.schema.metadata == {b'origin': b'{catalog}'}
 
 
 @pytest.mark.parametrize(
     'where',
-    ['reference', 'cell', 'field', 'statement', 'binary', 'host', 'token'],
+    ['reference', 'cell', 'field', 'statement', 'binary', 'token', 'prefix'],
 )
 def test_a_private_name_left_fails_the_write_and_writes_nothing(
     tmp_path: Path, where: str
 ) -> None:
-    writer = _writer(tmp_path)
-    parts = _parts()
+    found = _capture()
     if where == 'reference':
-        parts['reference'] = {'message': 'user JDOE_PRIVATE has no grant'}
+        found['reference'] = {'message': 'grant TOK-SECRET-0001'}
     elif where == 'cell':
-        parts['tables'] = {'users': pa.table({'who': ['jdoe_private']})}
+        found['tables'] = {'users': pa.table({'who': ['tok-secret-0001']})}
     elif where == 'field':
-        parts['tables'] = {'users': pa.table({'by_jdoe_private': [1]})}
+        found['tables'] = {'users': pa.table({'by_tok-secret-0001': [1]})}
     elif where == 'statement':
-        parts['statements'] = [{'sql': "SELECT 'jdoe_private'"}]
+        found['statements'] = [{'text': "SELECT 'tok-secret-0001'"}]
     elif where == 'binary':
-        parts['tables'] = {'users': pa.table({'b': [b'xx jdoe_private']})}
-    elif where == 'host':
-        parts['reference'] = {'message': 'reached acme-xy123'}
+        found['tables'] = {'users': pa.table({'b': [b'xx tok-secret-0001']})}
+    elif where == 'token':
+        found['draws'] = [
+            {
+                'table': 'users',
+                'seed': 1,
+                'fraction': '1.0',
+                'rows': pa.table({'t': ['TOK-secret-0001']}),
+            }
+        ]
     else:
-        parts['reference'] = {'message': 'tok-secret-0001'}
+        found['reference'] = {'message': 'reached OTHER-RESOURCE'}
     with pytest.raises(captures.PrivateName) as raised:
-        writer.write('c1', **parts)
+        captures.write(tmp_path / 'capture', found, environ=ENVIRON)
     message = str(raised.value)
-    assert 'the value of SNOWFLAKE_' in message
+    assert 'the value of S' in message
     for value in ENVIRON.values():
         assert value.lower() not in message.lower()
-    assert not any(tmp_path.rglob('*'))
+    assert not any(tmp_path.iterdir())
 
 
 def test_a_written_capture_reads_back(tmp_path: Path) -> None:
-    writer = _writer(tmp_path)
     draw = {
         'table': 'users',
         'seed': 2**40 + 3,
         'fraction': '1e-05',
-        'statement': 'SELECT 1',
-        'picked': pa.table({'id': [2]}),
+        'rows': pa.table({'id': [2]}),
     }
-    path = writer.write('case.one', **_parts(draws=[draw]))
-    document = captures.read(path)
-    assert document['format'] == captures.FORMAT
-    assert document['session'] == {
-        'null_order': 'nulls_last',
-        'time_zone': 'UTC',
-    }
-    assert document['draws'][0]['seed'] == 2**40 + 3
-    assert document['draws'][0]['fraction'] == '1e-05'
-    picked = captures.table(path.parent, document['draws'][0]['data'])
-    assert picked.to_pylist() == [{'id': 2}]
-    users = captures.table(path.parent, document['tables'][0]['data'])
-    assert users.column('id').to_pylist() == [1, 2]
+    path = captures.write(tmp_path / 'c', _capture(draws=[draw]), environ={})
+    back = captures.read(path)
+    assert back['format'] == captures.FORMAT
+    assert back['draws'][0]['seed'] == 2**40 + 3
+    assert back['draws'][0]['fraction'] == '1e-05'
+    assert back['draws'][0]['rows'].to_pylist() == [{'id': 2}]
+    assert back['tables']['users'].column('id').to_pylist() == [1, 2]
+    with pytest.raises(captures.CaptureError, match='written once'):
+        captures.write(path, _capture(), environ={})
 
 
 @pytest.mark.parametrize(
-    ('draw', 'message'),
+    ('change', 'message'),
     [
-        ({'seed': 1.5}, 'seed'),
-        ({'seed': True}, 'seed'),
-        ({'fraction': 10.0}, 'as written'),
-        ({'rows': '5'}, 'row count'),
+        (
+            {
+                'draws': [
+                    {'table': 't', 'seed': 1.5, 'fraction': '1', 'rows': None}
+                ]
+            },
+            'integer',
+        ),
+        (
+            {
+                'draws': [
+                    {'table': 't', 'seed': 1, 'fraction': 10.0, 'rows': None}
+                ]
+            },
+            'as written',
+        ),
+        ({'recording_commit': 'abc1234'}, 'full SHA'),
+        ({'session': {'time_zone': 'UTC'}}, 'null_order'),
+        ({'leg': 'duckdb'}, 'no leg'),
+        ({'extra': 1}, 'unknown'),
     ],
 )
-def test_a_draw_keeps_its_seed_and_fraction_as_given(
-    tmp_path: Path, draw: dict, message: str
+def test_a_capture_is_refused_by_name_where_it_breaks_the_format(
+    tmp_path: Path, change: dict, message: str
 ) -> None:
-    entry = {'table': 't', 'picked': pa.table({'id': [1]}), **draw}
     with pytest.raises(captures.CaptureError, match=message):
-        _writer(tmp_path).document('c1', **_parts(draws=[entry]))
+        captures.document(_capture(**change), {})
 
 
-def test_a_commit_is_a_full_sha(tmp_path: Path) -> None:
-    with pytest.raises(captures.CaptureError, match='full SHA'):
-        _writer(tmp_path, recording_commit='abc1234')
-    with pytest.raises(captures.CaptureError, match='time zone'):
-        _writer(tmp_path, session={})
+def test_a_value_nested_past_recursion_is_refused_by_name(
+    tmp_path: Path,
+) -> None:
+    deep: dict = {}
+    cursor = deep
+    for _ in range(5000):
+        cursor['a'] = {}
+        cursor = cursor['a']
+    with pytest.raises(captures.CaptureError, match='too deep'):
+        captures.document(_capture(reference=deep), {})
+    (tmp_path / 'capture.json').write_text('[' * 100000 + ']' * 100000)
+    with pytest.raises(captures.CaptureError, match='RecursionError'):
+        captures.read(tmp_path)
 
 
-def test_the_version_1_fixture_reads() -> None:
-    for leg in ('databricks-sql', 'snowflake'):
-        directory = FIXTURE / leg
-        document = captures.read(directory / 'fixture.standin.json')
-        assert document['format'] == 'sdm-capture/1'
-        assert document['leg'] == leg
-        names = [entry['name'] for entry in document['tables']]
-        assert names == ['users', 'orders']
-        for entry in document['tables'] + document['statements']:
-            if entry['data'] is not None:
-                captures.table(directory, entry['data'])
-        assert document['draws'][0]['seed'] == 2**33 + 1
-        assert document['views'][1]['refused'] == ['odd']
-
-
-def test_an_unknown_version_is_refused_and_a_converter_chain_is_read(
+def test_a_converter_chain_is_read_and_a_directory_converted(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    document = json.loads(
-        (FIXTURE / 'snowflake/fixture.standin.json').read_text()
-    )
-    with pytest.raises(captures.CaptureError, match='unknown'):
-        captures.upgrade({**document, 'format': 'sdm-capture/9'})
-    # A later version: version 1 read through its converter, and the
-    # directory rewritten by `convert`.
+    found = json.loads((FIXTURE / 'capture.json').read_text())
     monkeypatch.setattr(captures, 'FORMAT', 'sdm-capture/2')
     monkeypatch.setattr(
         captures, 'VERSIONS', ('sdm-capture/1', 'sdm-capture/2')
@@ -252,22 +249,20 @@ def test_an_unknown_version_is_refused_and_a_converter_chain_is_read(
         'sdm-capture/1',
         lambda old: {**old, 'format': 'sdm-capture/2', 'added': True},
     )
-    upgraded = captures.upgrade(dict(document))
+    upgraded = captures.upgrade(dict(found))
     assert upgraded['format'] == 'sdm-capture/2' and upgraded['added']
-    (tmp_path / 'snowflake').mkdir()
-    (tmp_path / 'snowflake/c.json').write_text(json.dumps(document))
-    assert captures.convert(tmp_path) == [tmp_path / 'snowflake/c.json']
-    assert captures.read(tmp_path / 'snowflake/c.json')['added'] is True
+    (tmp_path / 'leg/case').mkdir(parents=True)
+    (tmp_path / 'leg/case/capture.json').write_text(json.dumps(found))
+    assert captures.convert(tmp_path) == [tmp_path / 'leg/case/capture.json']
+    assert captures.read_document(tmp_path / 'leg/case')['added'] is True
     assert captures.convert(tmp_path) == []
 
 
 def test_a_table_whose_content_is_not_its_name_is_refused(
     tmp_path: Path,
 ) -> None:
-    path = _writer(tmp_path).write('c1', **_parts())
-    name = captures.read(path)['tables'][0]['data']
-    (path.parent / name).write_bytes(
-        captures.table_bytes(pa.table({'id': [9]}))
-    )
+    path = captures.write(tmp_path / 'c', _capture(), environ={})
+    name = captures.read_document(path)['tables'][0]['data']
+    (path / name).write_bytes(captures.table_bytes(pa.table({'id': [9]})))
     with pytest.raises(captures.CaptureError, match='not its name'):
-        captures.table(path.parent, name)
+        captures.read(path)

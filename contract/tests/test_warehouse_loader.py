@@ -61,13 +61,9 @@ def test_the_warehouse_columns_are_the_vector_file_s() -> None:
     vectors = json.loads((ROOT / 'contract/type-map-vectors.json').read_text())
     assert vectors['map'] == databases.TYPE_MAP
     for name, entry in databases.TYPE_MAP.items():
-        for engine in ('databricks', 'snowflake'):
-            # Each type is either stored, or says why it is not.
-            assert (engine in entry) != (f'{engine}_not_stored' in entry), (
-                name,
-                engine,
-            )
-    assert set(databases.LEG_ENGINES) == {
+        for engine in databases.WAREHOUSE_ENGINES:
+            assert engine in entry, (name, engine)
+    assert set(databases.ENGINE) == {
         'databricks-sql',
         'databricks-spark',
         'snowflake',
@@ -75,36 +71,23 @@ def test_the_warehouse_columns_are_the_vector_file_s() -> None:
     }
 
 
-@pytest.mark.parametrize(
-    ('column', 'databricks', 'snowflake'),
-    [
-        ('UTINYINT', 'unsigned', 'unsigned'),
-        ('UBIGINT', 'unsigned', 'unsigned'),
-        ('TIME', 'time-of-day', None),
-        ('INTERVAL', 'interval', 'interval'),
-        ('UNION(a INTEGER, b VARCHAR)', 'union', None),
-        ('STRUCT(a UINTEGER)', 'unsigned', 'unsigned'),
-        ('INTEGER[]', None, None),
-        ('DECIMAL(38,10)', None, None),
-    ],
-)
-def test_a_type_an_engine_stores_no_column_of_is_named(
-    column: str, databricks: str | None, snowflake: str | None
-) -> None:
-    duck = _duck(f'CREATE TABLE t (c {column})')
-    for leg, word in (('databricks-sql', databricks), ('snowflake', snowflake)):
-        found = databases.unstored(duck, leg)
-        if word is None:
-            assert found == [], (leg, found)
-        else:
-            assert len(found) == 1 and word in found[0], (leg, found)
-            assert found[0].startswith('t.c: ')
-            with pytest.raises(databases.Unloadable, match=r't\.c'):
-                databases.warehouse_statements(
-                    duck,
-                    databases.LEG_ENGINES[leg],
-                    DATABRICKS if leg != 'snowflake' else SNOWFLAKE,
-                )
+def test_nested_members_take_their_stored_forms_on_databricks() -> None:
+    duck = _duck(
+        'CREATE TABLE t (s STRUCT(a UINTEGER, t TIME), l UBIGINT[])',
+        "INSERT INTO t VALUES ({a: 4294967295, t: '01:02:03'}, [18446744073709551615])",
+    )
+    data = databases._read(duck, 't')
+    assert [
+        databases.column_type(f.type, 'databricks', f't.{f.name}')
+        for f in data.schema
+    ] == ['STRUCT<`a`: BIGINT, `t`: STRING>', 'ARRAY<DECIMAL(20,0)>']
+    statements, _ = databases.warehouse_statements(
+        duck, 'databricks', DATABRICKS
+    )
+    insert = statements[-1]
+    assert 'CAST(4294967295 AS BIGINT)' in insert
+    assert f"CAST(X'{b'01:02:03'.hex().upper()}' AS STRING)" in insert
+    assert "CAST('18446744073709551615' AS DECIMAL(20,0))" in insert
 
 
 def _every_name_qualified(statements: list[str], quote: str, ns: tuple) -> None:
@@ -264,7 +247,7 @@ def _cases() -> list[Path]:
 
 def test_every_s1_case_is_written_or_named_on_each_warehouse() -> None:
     # Every S1 case's tables either load on each warehouse engine or are
-    # named by what the engine does not store: never an unnamed failure.
+    # refused by name: never an unnamed failure.
     bases = runner.load_bases()
     loaded = {'databricks': 0, 'snowflake': 0}
     for case, _ in runner.load_cases(_cases()):
@@ -274,17 +257,15 @@ def test_every_s1_case_is_written_or_named_on_each_warehouse() -> None:
                 ('databricks', DATABRICKS),
                 ('snowflake', SNOWFLAKE),
             ):
-                leg = 'databricks-sql' if engine == 'databricks' else engine
-                if databases.unstored(duck, leg):
-                    continue
                 try:
                     databases.warehouse_statements(duck, engine, namespace)
-                except databases.Unloadable:
+                except databases.Unloadable as refused:
+                    assert re.match(r'\S+\.\S+: ', str(refused)), refused
                     continue
                 loaded[engine] += 1
         finally:
             duck.close()
-    assert loaded['databricks'] > 200 and loaded['snowflake'] > 200, loaded
+    assert loaded['databricks'] > 250 and loaded['snowflake'] > 250, loaded
 
 
 DSN = os.environ.get('SDM_POSTGRES_TEST_DSN')

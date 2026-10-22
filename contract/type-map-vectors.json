@@ -1,6 +1,6 @@
 {
   "format": "sdm-type-map-vectors/1",
-  "about": "T2.1a's type map (design, choice 2), written by the package's independent test author before the implementation, recorded by contract/tools/type_map_record.py: the one definition of a decimal's canonical text (plain positional notation, no exponent, no trailing fractional zeros, no trailing point, -0 written 0), which the Python loader and the Rust key binders each implement and both run; a SQLite decimal stored in a column declared TEXT as that text, since a column declared DECIMAL takes numeric affinity and rounds what it stores (sqlite_distinct_keys, KO2-35); and equal keys of different scales that must still join on every engine (join_across_scales, lesson 19). `map` is the stored type per engine, with Databricks' and Snowflake's added by T3.3 (design, choice 1): `<engine>_not_stored` names why an engine stores no column of a type, and a case holding one does not run on that engine's legs (KO2-47); Lakebase is Postgres; the rest of the type set's entries are the implementer's, added here under review.",
+  "about": "T2.1a's type map (design, choice 2), written by the package's independent test author before the implementation, recorded by contract/tools/type_map_record.py: the one definition of a decimal's canonical text (plain positional notation, no exponent, no trailing fractional zeros, no trailing point, -0 written 0), which the Python loader and the Rust key binders each implement and both run; a SQLite decimal stored in a column declared TEXT as that text, since a column declared DECIMAL takes numeric affinity and rounds what it stores (sqlite_distinct_keys, KO2-35); and equal keys of different scales that must still join on every engine (join_across_scales, lesson 19). `map` is the stored type per engine, with Databricks' and Snowflake's added by T3.3 (design, choice 1): an unsigned integer declared in a type holding its range, and a type an engine has no column type for stored in a form of its own (`<engine>_value`), listed and never counted as covered (KO2-47); Lakebase is Postgres; the rest of the type set's entries are the implementer's, added here under review.",
   "map": {
     "boolean": {
       "duckdb": "BOOLEAN",
@@ -41,30 +41,30 @@
       "duckdb": "UTINYINT",
       "sqlite": "INTEGER",
       "postgres": "smallint",
-      "databricks_not_stored": "no unsigned integers",
-      "snowflake_not_stored": "no unsigned integers"
+      "databricks": "SMALLINT",
+      "snowflake": "NUMBER(38,0)"
     },
     "uint16": {
       "duckdb": "USMALLINT",
       "sqlite": "INTEGER",
       "postgres": "integer",
-      "databricks_not_stored": "no unsigned integers",
-      "snowflake_not_stored": "no unsigned integers"
+      "databricks": "INT",
+      "snowflake": "NUMBER(38,0)"
     },
     "uint32": {
       "duckdb": "UINTEGER",
       "sqlite": "INTEGER",
       "postgres": "bigint",
-      "databricks_not_stored": "no unsigned integers",
-      "snowflake_not_stored": "no unsigned integers"
+      "databricks": "BIGINT",
+      "snowflake": "NUMBER(38,0)"
     },
     "uint64": {
       "duckdb": "UBIGINT",
       "sqlite": "TEXT",
       "sqlite_value": "digits",
       "postgres": "numeric(20,0)",
-      "databricks_not_stored": "no unsigned integers",
-      "snowflake_not_stored": "no unsigned integers"
+      "databricks": "DECIMAL(20,0)",
+      "snowflake": "NUMBER(38,0)"
     },
     "float32": {
       "duckdb": "FLOAT",
@@ -117,7 +117,8 @@
       "sqlite": "TIME",
       "sqlite_value": "iso",
       "postgres": "time",
-      "databricks_not_stored": "no time-of-day type in tables",
+      "databricks": "STRING",
+      "databricks_value": "iso",
       "snowflake": "TIME(f)"
     },
     "timestamp": {
@@ -141,8 +142,10 @@
       "sqlite": "INTERVAL",
       "sqlite_value": "iso",
       "postgres": "interval",
-      "databricks_not_stored": "no interval type in tables",
-      "snowflake_not_stored": "no interval type in tables"
+      "databricks": "STRING",
+      "databricks_value": "iso",
+      "snowflake": "VARCHAR",
+      "snowflake_value": "iso"
     },
     "list": {
       "duckdb": "T[] or T[n]",
@@ -178,7 +181,8 @@
       "sqlite_value": "json",
       "postgres": "jsonb",
       "postgres_value": "json",
-      "databricks_not_stored": "no union type",
+      "databricks": "STRING",
+      "databricks_value": "json",
       "snowflake": "VARIANT",
       "snowflake_value": "json"
     }
