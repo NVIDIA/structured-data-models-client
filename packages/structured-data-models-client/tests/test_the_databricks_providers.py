@@ -35,9 +35,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+import pyarrow as pa
 import pytest
-
-pa = pytest.importorskip('pyarrow')
 
 ROOT = Path(__file__).resolve().parents[3]
 CAPTURE = ROOT / 'contract' / 'fixtures' / 'databricks' / 'capture.json'
