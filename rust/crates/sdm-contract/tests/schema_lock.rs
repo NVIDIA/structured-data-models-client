@@ -439,7 +439,7 @@ fn unaccounted(schema: &Value) -> Result<(), String> {
 
 /// The fields whose attachment is JSON of the contract's, with the entry of
 /// `$defs/Attachments` that locks it.
-const JSON: [(&str, &str); 22] = [
+const JSON: [(&str, &str); 23] = [
     ("Operation/validate_query.query", "ValidateQuery.query"),
     ("Operation/validate_query.schema", "ValidateQuery.schema"),
     ("Operation/describe_source.source", "DescribeSource.source"),
@@ -464,6 +464,7 @@ const JSON: [(&str, &str); 22] = [
         "DescribedSource.description",
     ),
     ("OperationResult/predict.metadata", "Predicted.metadata"),
+    ("AnsweredParts.metadata", "AnsweredParts.metadata"),
     ("SamplerState.memo", "SamplerState.memo"),
 ];
 

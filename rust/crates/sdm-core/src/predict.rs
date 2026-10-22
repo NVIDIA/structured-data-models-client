@@ -245,10 +245,9 @@ fn carry_steps(
 }
 
 /// Answers received, laid out as a result and attached, with the rows
-/// they score. What `Predicted` names beside its result travels on the
-/// result's schema, as text: `model` and `request_id` as the endpoint
-/// named them, `metadata` as the JSON of the answers' metadata, and
-/// `outputs` as the JSON list of the outputs asked for.
+/// they score and what `Predicted` names beside its result: `model` and
+/// `request_id` as the endpoint named them, `metadata` the answers'
+/// metadata attached as JSON, and `outputs` those asked for.
 fn carried(
     asker: &Asker,
     merged: &Part,
@@ -256,32 +255,13 @@ fn carried(
     rows: usize,
 ) -> Result<AnsweredParts, CoreError> {
     let laid = table(merged)?;
-    // The result's schema's own map, with these keys; the order of a map
-    // of text is no part of what the host reads.
-    let mut named = laid.schema().metadata().clone();
-    for (key, value) in [
-        ("model", merged.model.clone()),
-        ("request_id", merged.request_id.clone()),
-        (
-            "metadata",
-            String::from_utf8(merged.metadata.to_bytes())
-                .map_err(|_| internal("an answer's metadata is not text"))?,
-        ),
-        (
-            "outputs",
-            String::from_utf8(Value::texts(outputs.iter().map(String::as_str)).to_bytes())
-                .map_err(|_| internal("the outputs are not text"))?,
-        ),
-    ] {
-        named.insert(key.to_owned(), value);
-    }
-    let schema = std::sync::Arc::new(laid.schema().as_ref().clone().with_metadata(named));
-    let laid = laid
-        .with_schema(std::sync::Arc::clone(&schema))
-        .map_err(|_| internal("a result does not take its own schema"))?;
     Ok(AnsweredParts {
-        result: asker.attach(Attachment::Arrow(ArrowData::new(schema, vec![laid])))?,
+        result: asker.attach(Attachment::Arrow(ArrowData::new(laid.schema(), vec![laid])))?,
         rows: u64::try_from(rows).unwrap_or(u64::MAX),
+        model: merged.model.clone(),
+        request_id: merged.request_id.clone(),
+        metadata: Some(asker.attach(Attachment::Bytes(merged.metadata.to_bytes()))?),
+        outputs: outputs.to_vec(),
     })
 }
 

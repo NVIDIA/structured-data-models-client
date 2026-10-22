@@ -604,26 +604,23 @@ def _carry_the_answers(error: Exception, by_step: bool) -> None:
     if carried is None:
         return
     delattr(error, '_answered')
-    stream, rows = carried
+    stream, rows, named = carried
     table = pa.RecordBatchReader._import_from_c_capsule(
         stream.__arrow_c_stream__()
     ).read_all()
-    # What the result names beside its rows travels on its schema, as text
-    # (``sdm_core::predict``'s ``carried``).
-    named = {
-        key.decode(): value.decode()
-        for key, value in (table.schema.metadata or {}).items()
-    }
+    # The result's explanation travels on its schema, as a predicted
+    # result's does (``sdm_request::predict::table``).
+    explanation = (table.schema.metadata or {}).get(b'explanation')
     held = getattr(error, 'details', None)
     details = held if isinstance(held, dict) else {}
     details['answered'] = _result(
         table.to_pylist(),
-        model=named.get('model', ''),
-        request_id=named.get('request_id', ''),
-        metadata=json.loads(named.get('metadata', '{}')),
-        outputs=tuple(json.loads(named.get('outputs', '[]'))),
+        model=named['model'],
+        request_id=named['request_id'],
+        metadata=named['metadata'],
+        outputs=named['outputs'],
         by_step=by_step,
-        explanation=named.get('explanation'),
+        explanation=None if explanation is None else explanation.decode(),
     )
     if not by_step:
         details['rows_answered'] = rows
