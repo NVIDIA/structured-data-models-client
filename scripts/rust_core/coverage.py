@@ -385,9 +385,17 @@ def claims(case: dict[str, Any]) -> dict[str, set[str]]:
     (``run_python.py``'s ``case_legs``: SQLite, Postgres and the warehouse
     legs), so a database or warehouse leg claims its own path."""
     legs = _module('register').runner().case_legs(case)
+    # How the case's source is opened on each leg (the orchestrator's
+    # decision, T3.2): with the leg's source class (DatabricksSource,
+    # SnowflakeSource, PostgresSource, DuckDBSource, SQLiteSource),
+    # source.open/explicit; a connect case's raw connection or session,
+    # found by detection, source.open/auto.
+    mode = 'auto' if 'connect' in (case.get('input') or {}) else 'explicit'
+    opened = {f'source.open/{mode}/{leg}' for leg in legs}
     return {
         'paths': {on_leg(path, leg) for path in case['paths'] for leg in legs}
-        | set(case['paths']),
+        | set(case['paths'])
+        | opened,
         'cells': set(case['cells']),
     }
 

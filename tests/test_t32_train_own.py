@@ -335,7 +335,8 @@ def test_a_leg_claims_its_own_path() -> None:
         'paths': ['schema.from-source/all-tables/snowflake'],
     }
     assert COVERAGE.claims(s2)['paths'] == {
-        'schema.from-source/all-tables/snowflake'
+        'schema.from-source/all-tables/snowflake',
+        'source.open/explicit/snowflake',
     }
 
 
@@ -631,3 +632,19 @@ def test_the_guard_lets_other_git_configuration_through() -> None:
     assert (
         GUARD.check_command('git -c user.name=x commit -m y', '.', None) is None
     )
+
+
+def test_a_leg_s_source_open_claim_follows_how_the_case_opens_it() -> None:
+    case = json.loads((ROOT / 'contract/cases/s1/base.binary.json').read_text())
+    s2 = {
+        **case,
+        'slice': 'S2',
+        'warehouses': ['snowflake'],
+        'paths': ['schema.from-source/all-tables/snowflake'],
+    }
+    assert 'source.open/explicit/snowflake' in COVERAGE.claims(s2)['paths']
+    connected = {**s2, 'input': {**s2['input'], 'connect': 'snowpark'}}
+    paths = COVERAGE.claims(connected)['paths']
+    assert 'source.open/auto/snowflake' in paths
+    assert 'source.open/explicit/snowflake' not in paths
+    assert 'source.open/explicit/duckdb' in COVERAGE.claims(case)['paths']
