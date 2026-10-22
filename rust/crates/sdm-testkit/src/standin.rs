@@ -43,7 +43,7 @@
 //! which the Python host reads directly; this module serves the SQL
 //! warehouse, Spark and Snowflake legs.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
@@ -151,6 +151,8 @@ struct NamedTable {
 
 #[derive(Deserialize)]
 struct DerivedEntry {
+    #[serde(default)]
+    view: Option<String>,
     table: String,
     #[serde(default)]
     refused: Vec<String>,
@@ -201,6 +203,11 @@ pub struct Capture {
     pub derived: BTreeMap<String, Option<Fetched>>,
     pub draws: Vec<Draw>,
     pub sent: Vec<Sent>,
+    /// The views the old client read, by last name part: each named by a
+    /// view's own read it sent (Databricks' `DESCRIBE TABLE EXTENDED`,
+    /// Snowflake's `SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW`), or by a derived
+    /// relation's entry.
+    pub views: BTreeSet<String>,
     pub directory: PathBuf,
 }
 
@@ -319,6 +326,16 @@ impl Capture {
                 answer,
             });
         }
+        let mut views: BTreeSet<String> = document
+            .derived
+            .iter()
+            .filter_map(|entry| entry.view.as_deref())
+            .filter(|view| !view.is_empty())
+            .map(last_part)
+            .collect();
+        for statement in &document.statements {
+            views.extend(view_read(&statement.text));
+        }
         Ok(Capture {
             case: document.case,
             leg: document.leg,
@@ -327,6 +344,7 @@ impl Capture {
             derived,
             draws,
             sent,
+            views,
             directory,
         })
     }
@@ -425,6 +443,24 @@ fn last_part(name: &str) -> String {
     }
     parts.push(current);
     parts.pop().unwrap_or_default()
+}
+
+/// The view a statement reads as a view (Databricks' `DESCRIBE TABLE
+/// EXTENDED <view>`, Snowflake's `SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW('<view>')`),
+/// by its last name part.
+fn view_read(text: &str) -> Option<String> {
+    let upper = text.to_ascii_uppercase();
+    if let Some(at) = upper.find("SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW") {
+        let rest = &text[at..];
+        let open = rest.find('\'')? + 1;
+        let close = rest[open..].find('\'')? + open;
+        return Some(last_part(&rest[open..close]));
+    }
+    let at = upper.find("DESCRIBE TABLE EXTENDED")?;
+    let name = text[at + "DESCRIBE TABLE EXTENDED".len()..]
+        .split_whitespace()
+        .next()?;
+    Some(last_part(name))
 }
 
 /// The sampling clause a plan's statements write: the old client's
@@ -675,7 +711,11 @@ impl StandIn {
         }
         for relation in relations(request) {
             let name = relation.source.last().cloned().unwrap_or_default();
-            if !self.capture.tables.contains_key(&name) && !self.capture.derived.contains_key(&name)
+            // A view the old client read is no recorded table: its reads
+            // are served by exact replay of its recorded statements alone.
+            if !self.capture.tables.contains_key(&name)
+                && !self.capture.derived.contains_key(&name)
+                && !self.capture.views.contains(&name)
             {
                 return Err(refused(format!(
                     "{}: the capture of {} on {} holds no recorded table {name}",
@@ -699,6 +739,18 @@ impl StandIn {
             if let Some(None) = self.capture.derived.get(&name) {
                 return Ok(Answered {
                     answer: Answer::LiveOnly(B2),
+                    by: "live_only",
+                    flagged: Vec::new(),
+                });
+            }
+            if self.capture.views.contains(&name)
+                && !self.capture.tables.contains_key(&name)
+                && !self.capture.derived.contains_key(&name)
+            {
+                // A view read the old client never sent: only the
+                // warehouse evaluates the view.
+                return Ok(Answered {
+                    answer: Answer::LiveOnly(B1),
                     by: "live_only",
                     flagged: Vec::new(),
                 });
@@ -845,13 +897,16 @@ impl StandIn {
             }
             FetchPlan::Host { .. } => None,
         };
-        // The seed as the plan writes it: an unseeded draw (Snowflake's
-        // `SAMPLE ROW (n ROWS)`) asks none, whatever seed the request
-        // carries; a plan writing no sampling clause asks the request's.
-        let (fraction, asked_seed) = match clause {
-            Some((fraction, seed)) => (Some(fraction), seed),
-            None => (None, seed_text(seed)),
+        // A seeded draw is served for the request's own seed, which the
+        // plan, where it writes one, writes too; an unseeded draw
+        // (Snowflake's `SAMPLE ROW (n ROWS)`) only for a plan writing an
+        // unseeded clause, whatever seed the request carries.
+        let requested = seed_text(seed);
+        let (fraction, written, clause_written) = match clause {
+            Some((fraction, seed)) => (Some(fraction), seed, true),
+            None => (None, None, false),
         };
+        let asked_seed = written.clone().or_else(|| requested.clone());
         let recorded: Vec<&Draw> = self
             .capture
             .draws
@@ -865,7 +920,14 @@ impl StandIn {
             )));
         }
         let Some(draw) = recorded.iter().find(|draw| {
-            draw.seed == asked_seed
+            let seeds = match &draw.seed {
+                Some(recorded) => {
+                    requested.as_deref() == Some(recorded.as_str())
+                        && written.as_deref().is_none_or(|w| w == recorded)
+                }
+                None => clause_written && written.is_none(),
+            };
+            seeds
                 && fraction
                     .as_deref()
                     .is_none_or(|fraction| fraction == draw.fraction)
@@ -882,9 +944,10 @@ impl StandIn {
                 .collect::<Vec<_>>()
                 .join("; ");
             return Err(refused(format!(
-                "sample_entities: a draw of table {name} asked with seed {} and fraction {:?}, \
-                 where the old client drew with {held}",
+                "sample_entities: a draw of table {name} asked with seed {} (the request's \
+                 {}) and fraction {:?}, where the old client drew with {held}",
                 asked_seed.as_deref().unwrap_or("none"),
+                requested.as_deref().unwrap_or("none"),
                 fraction.as_deref().unwrap_or("(none written)")
             )));
         };

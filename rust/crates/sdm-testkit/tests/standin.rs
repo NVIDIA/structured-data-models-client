@@ -263,3 +263,83 @@ fn an_empty_recorded_table_and_an_unseeded_draw_are_served() {
     assert_eq!(drawn.by, "draw");
     assert_eq!(keys(&drawn.answer), [2, 5]);
 }
+
+#[test]
+fn a_draw_asked_with_another_request_seed_is_refused_whatever_the_plan_writes() {
+    // Review r3 (Codex P1): the request's own seed is matched, not only the
+    // seed the plan's sampling clause writes.
+    let stand_in = StandIn::open(capture()).unwrap();
+    let asked = step(
+        json!({"request": "sample_entities", "table": {"source": ["users"]},
+               "key": ["user_id"], "n": 2, "seed": {"t": "u64", "v": "2147483656"},
+               "columns": ["user_id"], "filters": []}),
+        sql(
+            &format!(
+                "SELECT `user_id` FROM {USERS} TABLESAMPLE (12.5 PERCENT) REPEATABLE (2147483655) LIMIT 2"
+            ),
+            json!([]),
+        ),
+    );
+    let refused = stand_in.fetch(&asked, &BTreeMap::new()).err().unwrap();
+    assert!(refused.to_string().contains("2147483656"), "{refused}");
+}
+
+#[test]
+fn a_view_read_is_served_by_exact_replay_and_otherwise_live_only() {
+    // Review r3 (Claude P2): a view is no recorded table; its read, which
+    // the old client sent, is replayed, and the dropped-table refusal stays.
+    use duckdb::arrow::array::{ArrayRef, Int64Array};
+    use duckdb::arrow::datatypes::{DataType, Field, Schema};
+    use duckdb::arrow::record_batch::RecordBatch;
+    use std::sync::Arc;
+
+    let schema = Arc::new(Schema::new(vec![Field::new(
+        "user_id",
+        DataType::Int64,
+        true,
+    )]));
+    let rows = sdm_testkit::duck::Fetched {
+        schema: schema.clone(),
+        batches: vec![
+            RecordBatch::try_new(
+                schema,
+                vec![Arc::new(Int64Array::from(vec![7_i64, 9])) as ArrayRef],
+            )
+            .unwrap(),
+        ],
+    };
+    let view = "`{catalog}`.`{schema}`.`shop_view`";
+    let capture = edited(|document, directory| {
+        let name = table_file(directory, &rows);
+        let statements = document["statements"].as_array_mut().unwrap();
+        statements.push(
+            json!({"text": format!("DESCRIBE TABLE EXTENDED {view} AS JSON"),
+                               "parameters": [], "result": null}),
+        );
+        statements.push(json!({"text": format!("SELECT `user_id` FROM {view}"),
+                               "parameters": [], "result": name}));
+    });
+    let stand_in = StandIn::open(capture).unwrap();
+    let read = |text: String| {
+        step(
+            json!({"request": "scan", "table": {"source": ["shop_view"]}, "columns": ["user_id"],
+                   "filters": [], "limit": null}),
+            sql(&text, json!([])),
+        )
+    };
+    let replayed = stand_in
+        .fetch(
+            &read(format!("SELECT `user_id` FROM {view}")),
+            &BTreeMap::new(),
+        )
+        .unwrap();
+    assert_eq!(replayed.by, "replay");
+    assert_eq!(keys(&replayed.answer), [7, 9]);
+    let other = stand_in
+        .fetch(
+            &read(format!("SELECT `user_id` FROM {view} LIMIT 1")),
+            &BTreeMap::new(),
+        )
+        .unwrap();
+    assert!(matches!(other.answer, Answer::LiveOnly(code) if code == B1));
+}
