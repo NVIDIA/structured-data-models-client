@@ -56,6 +56,8 @@ fn catalog_columns(part: DescribePart) -> &'static [&'static str] {
         DescribePart::Indexes => &["table_name", "expressions"],
         // DuckDB lists an index's columns with the index; never planned.
         DescribePart::IndexColumns => &[],
+        // DuckDB reads no namespace (contract v28); never planned.
+        DescribePart::Namespace => &[],
     }
 }
 
@@ -112,11 +114,13 @@ fn each_catalog_request_renders_the_reference_statement() {
         DataRequest::KeyCounts {
             keys: vec![
                 TableKey {
+                    unique: false,
                     table: "orders".into(),
                     columns: vec!["order_id".into()],
                     label: None,
                 },
                 TableKey {
+                    unique: false,
                     table: "users".into(),
                     columns: vec!["user_id".into()],
                     label: None,
@@ -163,6 +167,7 @@ fn names_are_quoted_with_their_quotes_doubled() {
 fn a_composite_key_counts_only_rows_holding_all_of_it() {
     let text = rendered(&DataRequest::KeyCounts {
         keys: vec![TableKey {
+            unique: false,
             table: "t".into(),
             columns: vec!["a".into(), "b".into()],
             label: None,
@@ -334,6 +339,7 @@ fn a_host_provider_is_held_to_the_contract_s_shapes() {
         describe(&["t"], DescribePart::Columns),
         DataRequest::KeyCounts {
             keys: vec![TableKey {
+                unique: false,
                 table: "t".into(),
                 columns: vec!["k".into()],
                 label: None,

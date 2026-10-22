@@ -33,6 +33,7 @@
 #![forbid(unsafe_code)]
 
 mod blake2b;
+mod databricks;
 mod duckdb;
 mod keys;
 mod mt19937;
@@ -48,7 +49,7 @@ use arrow_array::RecordBatch;
 use sdm_contract::catalog::CatalogAnswer;
 use sdm_contract::data::{
     DataLayer, DataRequest, Dialect, FetchPlan, ProviderCapabilities, ProviderChoice, Relation,
-    refuse_relation,
+    refuse_derived, refuse_relation,
 };
 use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind};
 
@@ -60,7 +61,7 @@ const KNOWN: &[&str] = &[
     duckdb::NAME,
     sqlite::NAME,
     postgres::NAME,
-    "databricks",
+    databricks::NAME,
     "snowflake",
 ];
 
@@ -71,13 +72,14 @@ const KNOWN: &[&str] = &[
 /// native module reports it as `PROVIDERS`, and a database's core legs run
 /// exactly when it is listed. A dialect's package adds its name with its
 /// rendering.
-pub const PROVIDERS: &[&str] = &[duckdb::NAME, sqlite::NAME, postgres::NAME];
+pub const PROVIDERS: &[&str] = &[duckdb::NAME, sqlite::NAME, postgres::NAME, databricks::NAME];
 
 /// A dialect this build renders.
 enum Rendered {
     Duckdb,
     Sqlite,
     Postgres,
+    Databricks,
 }
 
 /// The dialect `dialect` names, if this build renders it.
@@ -86,6 +88,7 @@ fn rendered(dialect: &Dialect) -> Result<Rendered, CoreError> {
         duckdb::NAME => Ok(Rendered::Duckdb),
         sqlite::NAME => Ok(Rendered::Sqlite),
         postgres::NAME => Ok(Rendered::Postgres),
+        databricks::NAME => Ok(Rendered::Databricks),
         _ => Err(no_dialect(dialect)),
     }
 }
@@ -108,6 +111,7 @@ impl DataLayer for Data {
                 Rendered::Duckdb => Ok(duckdb::capabilities()),
                 Rendered::Sqlite => Ok(sqlite::capabilities()),
                 Rendered::Postgres => Ok(postgres::capabilities()),
+                Rendered::Databricks => Ok(databricks::capabilities()),
             },
         }
     }
@@ -125,6 +129,9 @@ impl DataLayer for Data {
                 Rendered::Duckdb => duckdb::plan(request),
                 Rendered::Sqlite => sqlite::plan(request),
                 Rendered::Postgres => postgres::plan(request),
+                // The namespace a one-part relation is read under comes
+                // with the provider choice (contract v28, T3.8).
+                Rendered::Databricks => databricks::plan(request, &[]),
             },
         }
     }
@@ -135,7 +142,7 @@ impl DataLayer for Data {
             ProviderChoice::Sql { dialect } => match rendered(dialect).ok()? {
                 Rendered::Duckdb => Some(duckdb::OPAQUE_VENDOR),
                 Rendered::Sqlite => None,
-                Rendered::Postgres => None,
+                Rendered::Postgres | Rendered::Databricks => None,
             },
         }
     }
@@ -187,6 +194,11 @@ impl DataLayer for Data {
             {
                 pg_values::bound_keys(schema, batches)
             }
+            ProviderChoice::Sql { dialect }
+                if matches!(rendered(dialect), Ok(Rendered::Databricks)) =>
+            {
+                databricks::bound_keys(schema, batches)
+            }
             _ => Ok(None),
         }
     }
@@ -220,6 +232,7 @@ impl DataLayer for Data {
                 Rendered::Duckdb => duckdb::read(*part, batches)?,
                 Rendered::Sqlite => sqlite::read(request, *part, batches)?,
                 Rendered::Postgres => postgres::read(*part, batches)?,
+                Rendered::Databricks => databricks::read(request, *part, batches)?,
             },
         };
         debug_assert_eq!(answer.part(), *part);
@@ -246,12 +259,29 @@ pub(crate) fn relation(
     if let Some(refusal) = refuse_relation(request, field, relation, most) {
         return Err(refusal);
     }
+    // A derived relation is read only by a dialect that renders one
+    // itself, around this rendering of its source (contract v28).
+    if let Some(refusal) = refuse_derived(request, field, relation, false) {
+        return Err(refusal);
+    }
     Ok(relation
         .source
         .iter()
         .map(|part| quote(part))
         .collect::<Vec<_>>()
         .join("."))
+}
+
+/// The refusal of a `describe` of the source's namespace by a dialect that
+/// reads none: its relations are read as they are named.
+pub(crate) fn no_namespace(request: &DataRequest) -> CoreError {
+    CoreError::new(
+        ErrorKind::Unsupported,
+        ErrorCode::UnsupportedRequest,
+        "this dialect reads no namespace of its source",
+    )
+    .with_field("request", Detail::text(request.name()))
+    .with_field("field", Detail::text("part"))
 }
 
 /// The refusal of a SQL dialect this build renders nothing for, naming it

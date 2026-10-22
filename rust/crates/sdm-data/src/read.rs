@@ -148,6 +148,7 @@ pub(crate) fn columns(
         for row in 0..batch.num_rows() {
             if let Some(name) = text(name, row) {
                 found.push(CatalogColumn {
+                    canonical: None,
                     name,
                     declared_type: text(declared_type, row).unwrap_or_default(),
                     not_null: flag(not_null, row),
@@ -272,5 +273,29 @@ pub(crate) fn host(
             }
             Ok(CatalogAnswer::IndexColumns(found))
         }
+        DescribePart::Namespace => {
+            let mut rows = Vec::new();
+            for batch in batches {
+                let lists = lists(batch, c::PARTS)?;
+                for row in 0..batch.num_rows() {
+                    let parts = lists.value(row);
+                    let parts = parts.as_string::<i32>();
+                    rows.push((0..parts.len()).map(|at| text(parts, at)).collect());
+                }
+            }
+            namespace(rows)
+        }
+    }
+}
+
+/// The source's current namespace from the rows of its answer, which must
+/// be one: an answer of another count of rows is not the namespace.
+pub(crate) fn namespace(mut rows: Vec<Vec<Option<String>>>) -> Result<CatalogAnswer, CoreError> {
+    match rows.len() {
+        1 => Ok(CatalogAnswer::Namespace(rows.remove(0))),
+        _ => Err(unread(
+            c::PARTS,
+            "a namespace answer does not hold one row",
+        )),
     }
 }

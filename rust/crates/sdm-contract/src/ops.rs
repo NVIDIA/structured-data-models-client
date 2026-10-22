@@ -871,6 +871,22 @@ pub struct SamplerMemo {
     /// where none was read.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub stored_times: Vec<MemoStoredTime>,
+    /// Each table's rows, read once where the provider's sampling is sized
+    /// by them ([`crate::data::ProviderCapabilities::sample_rows`],
+    /// `neighbor_lookback`; contract v28), as the reference's warehouse
+    /// samplers count every table's rows as they are built; left out where
+    /// none was read.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub rows: Vec<MemoRows>,
+}
+
+/// One table's rows, as counted.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct MemoRows {
+    /// The table, as the schema names it.
+    pub table: String,
+    pub rows: u64,
 }
 
 /// One table's stored time value, as read: the text of one non-null value

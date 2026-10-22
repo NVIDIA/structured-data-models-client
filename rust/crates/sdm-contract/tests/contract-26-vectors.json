@@ -580,6 +580,7 @@
   {
    "name": "a relation with a row filter (Phase 3 adds it)",
    "definition": "Relation",
+   "refused_through": 27,
    "value": {
     "source": [
      "t"
@@ -590,6 +591,7 @@
   {
    "name": "a relation with columns (Phase 3 adds them)",
    "definition": "Relation",
+   "refused_through": 27,
    "value": {
     "source": [
      "t"

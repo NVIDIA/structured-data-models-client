@@ -317,6 +317,7 @@ fn table(column: ArrayRef) -> ArrowData {
 fn fetching_run() -> Run {
     let host = ProviderChoice::Host {
         capabilities: ProviderCapabilities {
+            derived_relations: false, neighbor_lookback: false, sample_rows: false,
             optional: Default::default(),
             max_keys_per_request: None,
             max_seed: u64::MAX,
@@ -399,6 +400,7 @@ fn fetched_data_is_admitted_and_host_ids_are_scoped_to_their_message() {
     // ...and may name other data 1 in the next; the first id means nothing
     // now.
     let error = ProviderError {
+        refuses_expression: false,
         kind: ErrorKind::DataSource,
         retryable: false,
         sqlstate: None,

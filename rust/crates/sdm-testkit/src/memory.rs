@@ -143,6 +143,7 @@ fn not_read() -> ProviderError {
 
 fn failed(kind: ErrorKind) -> ProviderError {
     ProviderError {
+        refuses_expression: false,
         kind,
         retryable: false,
         sqlstate: None,
@@ -163,6 +164,7 @@ impl Memory {
     /// advice (it has no index) and no fallback.
     pub fn capabilities() -> ProviderCapabilities {
         ProviderCapabilities {
+            derived_relations: false, neighbor_lookback: false, sample_rows: false,
             optional: DECLARED.iter().copied().collect(),
             max_keys_per_request: None,
             sampling: Determinism::SeededStable,
@@ -460,6 +462,14 @@ impl Memory {
                 Field::new(c::NAME, DataType::Utf8, true),
                 Arc::new(StringArray::from(Vec::<Option<String>>::new())) as ArrayRef,
             )],
+            // The source has no namespace: one row of none.
+            DescribePart::Namespace => {
+                let list = DataType::List(Arc::new(Field::new(c::LIST_ITEM, DataType::Utf8, true)));
+                vec![(
+                    Field::new(c::PARTS, list.clone(), false),
+                    arrow_array::new_empty_array(&list),
+                )]
+            }
         };
         let (fields, arrays): (Vec<Field>, Vec<ArrayRef>) = columns.into_iter().unzip();
         RecordBatch::try_new(Arc::new(Schema::new(fields)), arrays).map_err(arrow_failed)

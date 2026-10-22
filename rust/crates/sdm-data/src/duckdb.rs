@@ -146,6 +146,7 @@ const IN_CURRENT_SCHEMA: &str =
 /// What a DuckDB source answers through this layer.
 pub(crate) fn capabilities() -> ProviderCapabilities {
     ProviderCapabilities {
+        derived_relations: false, neighbor_lookback: false, sample_rows: false,
         optional: RENDERED.iter().copied().collect::<BTreeSet<_>>(),
         max_keys_per_request: None,
         // DuckDB's reservoir sampling repeats under a seed (REPEATABLE).
@@ -317,6 +318,7 @@ pub(crate) fn expected(request: &DataRequest) -> ExpectedSchema {
         item: Box::new(field(c::LIST_ITEM, Utf8, true)),
     };
     let fields = match part {
+        DescribePart::Namespace => return request.expected(),
         DescribePart::Tables => vec![field(c::TABLE_NAME, Utf8, false)],
         DescribePart::Columns => vec![
             field(c::CID, Int32, false),
@@ -354,6 +356,7 @@ pub(crate) fn read(
 ) -> Result<CatalogAnswer, CoreError> {
     use catalog as c;
     match part {
+        DescribePart::Namespace => read::host(part, batches),
         DescribePart::Tables => read::tables(batches, c::TABLE_NAME),
         DescribePart::Columns => read::columns(
             batches,
@@ -692,6 +695,7 @@ fn describe(
         }
     };
     Ok(match part {
+        DescribePart::Namespace => return Err(crate::no_namespace(request)),
         DescribePart::Tables if tables.is_empty() => format!(
             "SELECT table_name FROM duckdb_tables() WHERE NOT temporary AND NOT internal AND {IN_CURRENT_SCHEMA}"
         ),

@@ -11,10 +11,36 @@ so a test reads as the messages it exchanges.
 from __future__ import annotations
 
 import json
+import re
+from pathlib import Path
 from typing import Any
 
-#: The contract version these messages are written for.
-CONTRACT = 27
+#: The crate that defines the contract version.
+_CONTRACT_SOURCE = (
+    Path(__file__).resolve().parents[3]
+    / 'crates'
+    / 'sdm-contract'
+    / 'src'
+    / 'lib.rs'
+)
+
+
+def _crate_version() -> int:
+    r"""The contract version ``sdm-contract`` speaks, read from its
+    ``CONTRACT_VERSION`` (carried row FX-6), so a contract bump needs no
+    edit here."""
+    found = re.search(
+        r'^pub const CONTRACT_VERSION: u32 = (\d+);$',
+        _CONTRACT_SOURCE.read_text(),
+        re.MULTILINE,
+    )
+    if found is None:
+        raise RuntimeError(f'no CONTRACT_VERSION in {_CONTRACT_SOURCE}')
+    return int(found.group(1))
+
+
+#: The contract version these messages are written for: the crate's.
+CONTRACT = _crate_version()
 
 FACTS: dict[str, Any] = {
     'now': {'t': 'ts', 'unit': 'us', 'zone': 'UTC', 'v': '1767225600000000'},
