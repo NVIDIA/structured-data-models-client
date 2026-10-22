@@ -286,12 +286,30 @@ OUTCOME_FIELDS = (
 )
 
 
+#: The approval's own qualifier: the parenthesis right after its date, or
+#: the clause after ``; `` or ``, ``.
+QUALIFIER = re.compile(
+    r'approved by owner \d{4}-\d{2}-\d{2}(?: \(([^)]*)\)|[;,] ([^;,]*))?'
+)
+#: A qualifier that says the owner has not approved yet (U4): declined,
+#: pending, proposed, not yet answered.
+NOT_YET = re.compile(
+    r'declin|pending|propos|not yet|unanswered|awaiting', re.IGNORECASE
+)
+
+
 def owner_approved(status: str) -> bool:
     r"""The status is the owner's approval, read from its start, never a
     substring of another status ("not approved by owner ..."); shared with
-    ``coverage.py``'s rule 8 (T1.15)."""
+    ``coverage.py``'s rule 8 (T1.15). The approval's own qualifier must not
+    take it back (U4): "approved by owner D (declined)", "..., pending" and
+    "(proposed ..., not yet answered)" are no approvals."""
     status = status.strip()
-    return bool(OWNER.fullmatch(status)) and not WITHDRAWN.search(status)
+    if not OWNER.fullmatch(status) or WITHDRAWN.search(status):
+        return False
+    found = QUALIFIER.match(status)
+    qualifier = (found.group(1) or found.group(2) or '') if found else ''
+    return not NOT_YET.search(qualifier)
 
 
 class Unreadable(Exception):

@@ -1326,6 +1326,31 @@ def test_a_push_that_lands_a_stack_is_judged_against_the_landing_below(
     assert found is None
 
 
+@pytest.mark.parametrize(
+    ('status', 'approved'),
+    [
+        ('approved by owner 2026-10-12', True),
+        ('approved by owner 2026-10-12 (T1.7b check-in)', True),
+        (
+            'approved by owner 2026-10-12 (T1.7b check-in), no longer marked pending',
+            True,
+        ),
+        ('approved by owner 2026-10-12 (declined)', False),
+        ('approved by owner 2026-10-12, pending', False),
+        (
+            'approved by owner 2026-10-12 (proposed 2026-10-13, not yet answered)',
+            False,
+        ),
+    ],
+)
+def test_u4_an_approval_its_own_qualifier_takes_back_is_none(
+    status: str, approved: bool
+) -> None:
+    # U4 (carried into Phase 3): the qualifier right after the owner's date
+    # decides; a declined, pending or unanswered one is no approval.
+    assert ratchet.owner_approved(status) is approved
+
+
 def test_a_package_above_an_unlanded_train_is_judged_by_the_train(
     repo: Path,
 ) -> None:
