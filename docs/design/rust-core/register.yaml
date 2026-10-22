@@ -8850,6 +8850,38 @@ entries:
   - {case: sample.num-neighbors.minus-one@postgres, cell: ref-pandas3, runner: rust-host, old: 'refusal INTERNAL_ERROR', new: 'refusal INVALID_REQUEST', summary: 'num_neighbors=[-1] refused by name, where the reference''s Postgres fails INTERNAL_ERROR'}
   - {case: sample.num-neighbors.minus-one@postgres, cell: ref-pandas3, runner: java, old: 'refusal INTERNAL_ERROR', new: 'refusal INVALID_REQUEST', summary: 'num_neighbors=[-1] refused by name, where the reference''s Postgres fails INTERNAL_ERROR'}
 
+# --- Phase 3 lane B entries (P3B-1..19) ---
+- id: P3B-1
+  title: A Databricks column whose declared type the reference reads as unsupported is refused by name on the core route where the reference raises an unnamed ValueError
+  kind: change
+  old_behavior: >-
+    The reference's Schema.from_source over a Databricks table holding a
+    STRUCT, MAP, INTERVAL, VARIANT or other column its _to_dtype reads as
+    Dtype.unsupported (DB/table.py:442-497) raises an unnamed ValueError
+    ("Encountered unsupported data type for column 'profile' in table
+    'users'", RE/base/table.py:272).
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build, the
+    same call is refused at from_source with UnsupportedRequestError, code
+    UNSUPPORTED_REQUEST, fields operation describe_source and rule
+    column_type, as P1B-10 refuses a DuckDB struct or map: the databricks
+    dialect's catalog reader types the column by its declaration as
+    _to_dtype does, and sdm-schema refuses a declared unsupported type by
+    name. The default route is unchanged.
+  affected_inputs: >-
+    A Databricks table (SQL warehouse or Spark session) holding a column of
+    a type _to_dtype reads as unsupported, under a forced core route.
+  cases: [databricks.value.struct-feature, T3.4]
+  refs: [T3.4, P1B-10, E66]
+  status: proposed
+  approved_by: null
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E66}
+  notes: >-
+    Proposed by T3.4's implementer, never self-approved: a named refusal
+    where the reference gives an unnamed error, the class E66(b) covers
+    (KO3-41's better error). Measured offline on the stand-in once T3.3's
+    stand-in serves the case's catalog by exact replay; live in E-1.
+
 # --- lane o entries (P2O-1..9) ---
 
 - id: P2O-1
