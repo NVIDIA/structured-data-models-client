@@ -46,7 +46,7 @@ use arrow_array::cast::AsArray;
 use arrow_array::types::Int64Type;
 use arrow_array::{Array, RecordBatch};
 use sdm_contract::catalog::{
-    CatalogAnswer, CatalogColumn, CatalogForeignKey, CatalogIndex, CatalogKey, IndexColumns,
+    CatalogAnswer, CatalogColumn, CatalogForeignKey, CatalogIndex, CatalogKey, IndexCoverage,
     KeyKind,
 };
 use sdm_contract::data::{
@@ -830,7 +830,7 @@ fn read(
                 for name in texts(batch, c::NAME)?.into_iter().flatten() {
                     found.push(CatalogIndex {
                         table: table.clone(),
-                        columns: IndexColumns::Named(name),
+                        columns: IndexCoverage::Named(name),
                     });
                 }
             }

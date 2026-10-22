@@ -26,7 +26,7 @@ use arrow_array::cast::AsArray;
 use arrow_array::types::Int64Type;
 use arrow_array::{Array, ArrayRef, RecordBatch};
 use sdm_contract::catalog::{
-    CatalogAnswer, CatalogColumn, CatalogForeignKey, CatalogIndex, CatalogKey, IndexColumns,
+    CatalogAnswer, CatalogColumn, CatalogForeignKey, CatalogIndex, CatalogKey, IndexCoverage,
     KeyKind,
 };
 use sdm_contract::data::{
@@ -236,7 +236,7 @@ impl Rows {
                         self.indexes.push(CatalogIndex {
                             table,
                             columns: names(batch, c::COLUMNS, row)?
-                                .map_or(IndexColumns::Unresolved, IndexColumns::Resolved),
+                                .map_or(IndexCoverage::Unresolved, IndexCoverage::Resolved),
                         });
                     }
                 }
