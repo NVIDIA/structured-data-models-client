@@ -22,6 +22,8 @@ from typing import Any
 
 import pyarrow as pa
 import pytest
+from sdm_connectors import DatabricksSource, Source
+from sdm_connectors.backends.spark import SparkConnection
 
 from sdm_client import _routing
 from sdm_client._rust import materialize as core_materialize
@@ -35,9 +37,6 @@ from sdm_client._rust.providers.databricks import (
     PlanNotRun,
 )
 from sdm_client._rust.run import _driver
-
-from sdm_connectors import DatabricksSource, Source
-from sdm_connectors.backends.spark import SparkConnection
 
 Answer = Any
 
