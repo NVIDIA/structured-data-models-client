@@ -255,7 +255,8 @@ def test_the_suites_run_with_a_short_temporary_directory(
     assert seen[0].startswith('/tmp/sdmh-') and len(seen[0]) < 30, seen
     assert not Path(seen[0]).exists()
     # pytest's base directly in it, not under pytest-of-<user>/pytest-<n>.
-    assert f'{seen[0]}/p' in argvs[0], argvs
+    base = argvs[0][argvs[0].index('--basetemp') + 1]
+    assert base.startswith(f'{seen[0]}/p'), argvs
 
 
 def test_every_pytest_run_of_the_handoff_names_a_base_the_run_removes() -> None:
@@ -267,3 +268,31 @@ def test_every_pytest_run_of_the_handoff_names_a_base_the_run_removes() -> None:
         source = inspect.getsource(function)
         runs = source.count("'pytest'") + source.count('prefix[1:]')
         assert runs and source.count("'--basetemp'") == runs, function
+
+
+def test_two_packages_same_named_test_files_run_in_sessions_of_their_own(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # In one session they fail collection, "import file mismatch" (T3.8).
+    ran: list[list[str]] = []
+
+    def fake(
+        argv: list[str], cwd: Path, env: dict[str, str] | None = None
+    ) -> object:
+        if argv[1:3] != ['-c', 'import xdist']:
+            ran.append(argv)
+        return subprocess.CompletedProcess(argv, 0, '', '')
+
+    monkeypatch.setattr(HANDOFF, 'run', fake)
+    client = 'packages/structured-data-models-client/tests/test_x.py'
+    engine = 'packages/structured-data-models-relational-engine/tests/client/test_x.py'
+    suites = [
+        (*AFFECTED.PYTEST, client),
+        (*AFFECTED.PYTEST, engine),
+        (*AFFECTED.PYTEST, 'tests/test_y.py'),
+    ]
+    step = HANDOFF.run_suites(HANDOFF.Step('affected'), ROOT, suites, 'py')
+    assert step.ok
+    runs = [{a for a in argv if a.endswith('.py')} for argv in ran]
+    assert {client} in runs and {engine} in runs and {'tests/test_y.py'} in runs
+    assert len(ran) == 3, ran

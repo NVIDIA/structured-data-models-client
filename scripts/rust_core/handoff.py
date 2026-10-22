@@ -926,6 +926,22 @@ def step_affected(
     return run_suites(step, root, suites, python)
 
 
+def sessions(files: list[str]) -> list[tuple[str, list[str]]]:
+    """``files`` by the test root each runs from in CI: a package's
+    (``packages/<name>/``), ``contract/``, ``tests/``, else the root."""
+    grouped: dict[str, list[str]] = {}
+    for path in files:
+        parts = path.split('/')
+        if parts[0] == 'packages' and len(parts) > 2:
+            where = '/'.join(parts[:2]) + '/'
+        elif len(parts) > 1 and parts[0] in ('contract', 'tests'):
+            where = parts[0] + '/'
+        else:
+            where = './'
+        grouped.setdefault(where, []).append(path)
+    return sorted(grouped.items())
+
+
 def run_suites(
     step: Step, root: Path, suites: list[affected.Suite], python: str
 ) -> Step:
@@ -949,19 +965,24 @@ def run_suites(
             if run([python, '-c', 'import xdist'], root).returncode == 0
             else []
         )
-        batches.append(
-            (
-                f'pytest on {len(flat)} test file(s)',
-                [
-                    python,
-                    *prefix[1:],
-                    *workers,
-                    '--basetemp',
-                    str(short / 'p'),
-                    *flat,
-                ],  # fmt: skip
+        # One session per test root, as CI runs them: two packages' test
+        # files of one name fail collection together ("import file
+        # mismatch", the client's and the engine's
+        # test_credential_redaction.py; T3.8).
+        for n, (where, group) in enumerate(sessions(flat)):
+            batches.append(
+                (
+                    f'pytest on {len(group)} test file(s) under {where}',
+                    [
+                        python,
+                        *prefix[1:],
+                        *workers,
+                        '--basetemp',
+                        str(short / f'p{n}'),
+                        *group,
+                    ],
+                )  # fmt: skip
             )
-        )
     kit = os.environ.get('SDM_KIT_PYTHON', '')
     for suite in others:
         if suite[0] == affected.KIT and not kit:
