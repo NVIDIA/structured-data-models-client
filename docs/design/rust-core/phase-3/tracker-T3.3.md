@@ -50,3 +50,9 @@ Lane H, stack 1. Brief: the orchestrator's `phase-3/briefs/T3.3.md`; design row 
 
 Codex: nested field metadata searched and kept, nested types kept through write and read, every read of a statement kept, empty nested columns loaded, named parameters kept.
 Claude: semantic views created and dropped under the case's name, a leg's schema holding only the case (refused by name otherwise), placeholders replacing whole names only.
+
+## Fix round 2 (reviews of 6f8ac662)
+
+The stand-in checks a request's recorded tables and draw before exact replay, loads tables and draws of no rows, and serves Snowflake's unseeded draw as recorded; Lakebase is served on the local Postgres; the stand-in is built once in CI (`standin-binary`).
+A Snowflake case creating a semantic view from its YAML has its tables created as the YAML names them (unquoted, so upper case), and C-1's Snowflake plan creates that view first.
+From here the package is stacked on T3.2's candidate, on `rust-core-phase-3-topic-T3.3`.
