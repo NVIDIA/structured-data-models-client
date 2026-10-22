@@ -10,7 +10,9 @@ leg (Phase 3 design, "The live-test plan"; T3.3).
     capture_run.py run --leg LEG --reference CHECKOUT --out DIR [--e0]
 
 ``plan`` is the dry mode, run anywhere, reaching nothing: the cases the
-leg records, in order (C-1: every case that runs on the leg; with
+leg records, in order (on Snowflake a case creating a semantic view from
+its YAML first, its statements shown, so a statement the engine refuses
+shows before anything is recorded; C-1: every case that runs on the leg; with
 ``--e0``, only those pending live, with no capture on the leg or one whose
 input hash is not the case's), each case whose tables the leg's engine
 cannot hold listed by the loader's reason, never recorded, and the
@@ -131,12 +133,49 @@ def plan(leg: str, e0: bool = False) -> dict[str, Any]:
             finally:
                 duck.close()
         if reason is None:
-            record.append(str(path.relative_to(ROOT)))
+            record.append(str(path))
         else:
             refused.append(f'{case["id"]}: {reason}')
+    first: dict[str, Any] | None = None
+    if leg == 'snowflake':
+        # A semantic view created from a case's YAML first: a statement the
+        # live engine refuses shows before any case is recorded.
+        viewed = [
+            path
+            for path in record
+            if (
+                json.loads((ROOT / path).read_text())
+                .get('input', {})
+                .get('view')
+                or {}
+            ).get('yaml')
+        ]
+        record = viewed + [path for path in record if path not in viewed]
+        if viewed:
+            ((case, _),) = runner.load_cases([Path(viewed[0])])
+            ran: list[str] = []
+            schema = loader.CaseSchema(
+                'snowflake', ran.append, ('{catalog}', '{schema}')
+            )
+            duck = runner._connection(case, bases)
+            try:
+                schema.load(duck, fold=True)
+            finally:
+                duck.close()
+            view = case['input']['view']
+            schema.create_view(view['kind'], view['name'], view['yaml'])
+            first = {
+                'case': case['id'],
+                'statements': [
+                    statement[:160] + (' ...' if len(statement) > 160 else '')
+                    for statement in ran
+                    if not statement.startswith('INSERT')
+                ],
+            }
     return {
         'leg': leg,
         'campaign': 'E-0' if e0 else 'C-1',
+        'first': first,
         'order': list(ORDER),
         'record': record,
         'refused_by_the_loader': refused,
@@ -165,7 +204,7 @@ def run(leg: str, reference: Path, out: Path, e0: bool = False) -> int:
         [sys.executable, '-I', str(RUNNERS / 'run_python.py'), '--mode',
          'python-ref', '--reference', str(reference), '--database', leg,
          '--record', str(recording), '--out', str(observations),
-         *(str(ROOT / path) for path in planned['record'])],
+         *planned['record']],
         cwd=ROOT, stdin=subprocess.DEVNULL, check=False,
     )  # fmt: skip
     if done.returncode != 0:

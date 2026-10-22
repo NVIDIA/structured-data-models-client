@@ -88,3 +88,27 @@ def test_the_job_template_fills_and_passes_the_runs_check() -> None:
     dbx_runs.check(payload, values['FOLDER'], 'unused-policy')
     parameters = payload['tasks'][0]['notebook_task']['base_parameters']
     assert parameters['leg'] == 'lakebase' and parameters['campaign'] == 'c1'
+
+
+def test_snowflake_s_plan_creates_a_semantic_view_first(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Review r2 (Claude): a semantic view created from a case's YAML comes
+    # first, its statements shown, its tables named as the YAML reads them.
+    cases = tmp_path / 'cases'
+    (cases / 's2').mkdir(parents=True)
+    (cases / 's2/view.semantic.binary.json').write_text(
+        (ROOT / 'tests/t33-semantic-view-case.json').read_text()
+    )
+    (cases / 's1').mkdir()
+    (cases / 's1/base.regression.json').write_text(
+        (ROOT / 'contract/cases/s1/base.regression.json').read_text()
+    )
+    monkeypatch.setattr(capture_run, 'CASES', cases)
+    planned = capture_run.plan('snowflake')
+    assert planned['record'][0].endswith('view.semantic.binary.json')
+    first = planned['first']
+    assert first['case'] == 'view.semantic.binary'
+    statements = '\n'.join(first['statements'])
+    assert 'CREATE TABLE "{catalog}"."{schema}"."USERS"' in statements
+    assert 'SYSTEM$CREATE_SEMANTIC_VIEW_FROM_YAML' in statements
