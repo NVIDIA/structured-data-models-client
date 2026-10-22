@@ -83,6 +83,9 @@ PROBLEM = re.compile(r'^(rule [1-8]|schema|read):')
 CLAIMING = 'base.regression'
 #: An S1 path no case names, and a cell no case names.
 PATH = 'source.open/explicit/duckdb'
+#: An S1 path no case claims: from T3.2 every DuckDB case claims ``PATH``,
+#: the explicit opening of its source (coverage.py's ``claims``).
+UNCLAIMED = 'source.open/auto/duckdb'
 CELL = 'int8/feature'
 #: An accepted cell no case names.
 ACCEPTED_CELL = 'float64/feature'
@@ -661,8 +664,8 @@ def test_a_path_moved_into_s0_without_an_acceptance_case_fails(
     r"""Moving a slice earlier is allowed by rule 8, and the path then needs
     S0's coverage."""
     landed = git(repo, 'rev-parse', 'HEAD')
-    commit(repo, edit=manifest(PYTHON, update('paths', PATH, slice='S0')))
-    found = failing(check(repo, landed), 'rule 5', PATH)
+    commit(repo, edit=manifest(PYTHON, update('paths', UNCLAIMED, slice='S0')))
+    found = failing(check(repo, landed), 'rule 5', UNCLAIMED)
     assert rules(found) == {'rule 5'}, found
 
 
