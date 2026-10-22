@@ -1,0 +1,56 @@
+{
+  "format": "sdm-case/1",
+  "id": "databricks.connect.spark",
+  "status": "acceptance",
+  "slice": "S2",
+  "warehouses": [
+    "databricks-spark"
+  ],
+  "paths": [
+    "source.open/auto/databricks-spark",
+    "schema.from-source/all-tables/databricks-spark",
+    "query.materialize/indices-binary/databricks-spark",
+    "client.predict/binary/databricks-spark"
+  ],
+  "routes": [
+    "source.open/auto/databricks-spark",
+    "schema.from-source/all-tables/databricks-spark",
+    "schema.from-source/catalog-keys/databricks-spark",
+    "query.materialize/indices-binary/databricks-spark",
+    "query.materialize/indices-multiclass/databricks-spark",
+    "query.materialize/indices-regression/databricks-spark",
+    "query.materialize/indices-link-prediction/databricks-spark",
+    "query.materialize/indices-ranking/databricks-spark",
+    "query.materialize/indices-forecast/databricks-spark",
+    "client.predict/binary/databricks-spark",
+    "client.predict/multiclass/databricks-spark",
+    "client.predict/regression/databricks-spark",
+    "client.predict/link-prediction/databricks-spark",
+    "client.predict/ranking/databricks-spark",
+    "client.predict/forecast/databricks-spark"
+  ],
+  "cells": [
+    "int64/primary-key",
+    "int64/foreign-key",
+    "timestamp-us/time-column"
+  ],
+  "input": {
+    "base": "shop",
+    "pql": "PREDICT COUNT(orders.*, 0, 30, days) > 0 FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ],
+      "anchor_time": "2024-03-01"
+    },
+    "connect": "spark"
+  },
+  "until": "predict",
+  "expect": {
+    "outcome": "success",
+    "stage": "predict"
+  },
+  "why": "base.binary's question over the notebook's own Spark session handed to Schema.from_source as is, so it is detected as a Spark session (CN/source.py:72, :97-107) and wrapped in SparkConnection, whose fetch is toArrow() on DBR 17.3 or later or serverless environment 4 or later (CN/backends/spark.py:84-91, :132); sampled through it to predict",
+  "source": "written by T3.4's test author from the reference at 43e55f4f"
+}
