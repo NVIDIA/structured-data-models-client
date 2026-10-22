@@ -144,3 +144,122 @@ fn whitespace_outside_quotes_is_normalised() {
         "SELECT `a  b` FROM `{catalog}`.`t` LIMIT ?"
     );
 }
+
+/// The version-1 capture copied, its `capture.json` changed by `edit`.
+fn edited(edit: impl FnOnce(&mut Value, &std::path::Path)) -> Capture {
+    let source =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../contract/tests/t33-capture-v1");
+    let target = std::env::temp_dir().join(format!(
+        "sdm-standin-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(target.join("tables")).unwrap();
+    for entry in std::fs::read_dir(source.join("tables")).unwrap() {
+        let entry = entry.unwrap();
+        std::fs::copy(entry.path(), target.join("tables").join(entry.file_name())).unwrap();
+    }
+    let mut document: Value =
+        serde_json::from_str(&std::fs::read_to_string(source.join("capture.json")).unwrap())
+            .unwrap();
+    edit(&mut document, &target);
+    std::fs::write(
+        target.join("capture.json"),
+        serde_json::to_vec(&document).unwrap(),
+    )
+    .unwrap();
+    Capture::read(&target).unwrap()
+}
+
+/// `fetched` written as a capture table under `directory`, its name.
+fn table_file(directory: &std::path::Path, fetched: &sdm_testkit::duck::Fetched) -> String {
+    let bytes = sdm_testkit::standin::encode(fetched).unwrap();
+    let name = format!("tables/{}.arrows", sdm_testkit::case::sha256(&bytes));
+    std::fs::write(directory.join(&name), bytes).unwrap();
+    name
+}
+
+#[test]
+fn a_replayable_statement_over_a_dropped_table_is_refused_by_name() {
+    // Review r2 P1: the request's tables are checked before replay.
+    let capture = edited(|document, _| {
+        let tables = document["tables"].as_array_mut().unwrap();
+        tables.retain(|table| table["name"] != "users");
+    });
+    let stand_in = StandIn::open(capture).unwrap();
+    let preview = step(
+        json!({"request": "preview", "table": {"source": ["users"]},
+               "columns": ["user_id"], "limit": 3}),
+        sql(
+            &format!("SELECT `user_id`\nFROM {USERS}\nLIMIT ?"),
+            json!([{"param": "value", "value": {"t": "i64", "v": "3"}}]),
+        ),
+    );
+    let refused = stand_in.fetch(&preview, &BTreeMap::new()).err().unwrap();
+    assert!(refused.to_string().contains("users"), "{refused}");
+}
+
+#[test]
+fn an_empty_recorded_table_and_an_unseeded_draw_are_served() {
+    // Review r2 P2: a table of no rows loads; Snowflake's unseeded
+    // `SAMPLE ROW (n ROWS)` draw is served as recorded.
+    use duckdb::arrow::array::{ArrayRef, Int64Array};
+    use duckdb::arrow::datatypes::{DataType, Field, Schema};
+    use duckdb::arrow::record_batch::RecordBatch;
+    use std::sync::Arc;
+
+    let schema = Arc::new(Schema::new(vec![Field::new(
+        "order_id",
+        DataType::Int64,
+        true,
+    )]));
+    let empty = sdm_testkit::duck::Fetched {
+        schema: schema.clone(),
+        batches: vec![
+            RecordBatch::try_new(
+                schema,
+                vec![Arc::new(Int64Array::from(Vec::<i64>::new())) as ArrayRef],
+            )
+            .unwrap(),
+        ],
+    };
+    let capture = edited(|document, directory| {
+        let name = table_file(directory, &empty);
+        for table in document["tables"].as_array_mut().unwrap() {
+            if table["name"] == "orders" {
+                table["data"] = json!(name);
+            }
+        }
+        let draw = &mut document["draws"][0];
+        draw["seed"] = Value::Null;
+        draw["fraction"] = json!("2 ROWS");
+    });
+    let stand_in = StandIn::open(capture).unwrap();
+    let scan = step(
+        json!({"request": "scan", "table": {"source": ["orders"]}, "columns": ["order_id"],
+               "filters": [], "limit": null}),
+        sql(
+            "SELECT `order_id` FROM `{catalog}`.`{schema}`.`orders`",
+            json!([]),
+        ),
+    );
+    let Answer::Data(rows) = stand_in.fetch(&scan, &BTreeMap::new()).unwrap().answer else {
+        panic!("the empty table was not served");
+    };
+    assert_eq!(rows.batches.iter().map(|b| b.num_rows()).sum::<usize>(), 0);
+    let sample = step(
+        json!({"request": "sample_entities", "table": {"source": ["users"]},
+               "key": ["user_id"], "n": 2, "seed": {"t": "u64", "v": "7"},
+               "columns": ["user_id"], "filters": []}),
+        sql(
+            "SELECT \"user_id\" FROM \"{CATALOG}\".\"{SCHEMA}\".\"users\" SAMPLE ROW (2 ROWS)",
+            json!([]),
+        ),
+    );
+    let drawn = stand_in.fetch(&sample, &BTreeMap::new()).unwrap();
+    assert_eq!(drawn.by, "draw");
+    assert_eq!(keys(&drawn.answer), [2, 5]);
+}
