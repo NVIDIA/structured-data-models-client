@@ -325,9 +325,9 @@
   },
   "$defs": {
     "key": {
-      "description": "The case a line is of, and the database it ran on (design choice 2, T2.0f): a DuckDB line is keyed by the bare case ID (case.schema.json's id), a SQLite or Postgres line by <case>@sqlite or <case>@postgres. Observations, reference lines and baselines use the same keys.",
+      "description": "The case a line is of, and the database or warehouse leg it ran on (design choice 2, T2.0f; Phase 3 design choice 1): a DuckDB line is keyed by the bare case ID (case.schema.json's id), a SQLite or Postgres line by <case>@sqlite or <case>@postgres, and a warehouse leg's by <case>@<leg> (databricks-sql, databricks-spark, snowflake, lakebase). Observations, reference lines, captures and baselines use the same keys.",
       "type": "string",
-      "pattern": "^[a-z0-9][a-z0-9._-]*(@(sqlite|postgres))?$"
+      "pattern": "^[a-z0-9][a-z0-9._-]*(@(sqlite|postgres|databricks-sql|databricks-spark|snowflake|lakebase))?$"
     },
     "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "typed": {

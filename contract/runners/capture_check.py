@@ -25,6 +25,23 @@ observation in ``--on`` fail. It holds, case by case:
   received, and the public result) and the same query-log counts, so the
   capture changed no value and no execution count.
 
+Two more checks read the warehouse captures of the recording mode (Phase
+3, design choice 2; ``run_python.py --record``):
+
+    python contract/runners/capture_check.py captures --cases PATH...
+        --capture FILE... [--leg LEG]... [--locked]
+    python contract/runners/capture_check.py captures-only --final SHA
+        [--commit SHA] [--repo DIR]
+
+``captures`` holds every capture line complete (:func:`capture_problems`)
+and lists every case and leg the cases name with no capture of their
+current input as pending live (a case added or changed after the
+capture, found by its input hash); with ``--locked`` a pending case fails
+too. ``captures-only`` holds the commits from the final candidate to
+``--commit`` (default ``HEAD``) to changing only ``contract/captures/**``,
+each file they add or change naming the final candidate as the recording
+commit of every line (design, "The live-test plan").
+
 A payload is compared parsed. Only the value of ``metadata.request_id``,
 which the client draws at random for every request, is left out
 (:data:`RANDOM_PATHS`): the field must be present or absent in both runs
@@ -602,7 +619,391 @@ def check_files(
     return problems, summaries
 
 
+# --- the warehouse captures (Phase 3, design choice 2) ------------------------------
+
+#: Where the captures are committed: a protected path (contract/protected-
+#: paths.txt), changed only in a landing whose trailer names it.
+CAPTURES = 'contract/captures/'
+#: The capture format this checker reads.
+CAPTURE_FORMAT = 'sdm-capture/1'
+#: A commit's full SHA.
+SHA = re.compile(r'[0-9a-f]{40}')
+#: A statement that answers rows: one with no result read and no error
+#: lost its result.
+_QUERY = re.compile(r'\s*(SELECT|WITH|DESCRIBE|SHOW|VALUES|CALL|TABLE)\b', re.I)
+#: The versions every capture names, beside each leg's driver's
+#: (run_python.py's ``_DRIVERS``, one at least).
+_VERSIONS = ('python', 'pandas', 'pyarrow')
+
+
+def runner() -> Any:
+    r"""``run_python.py``, beside this file: the one definition of the
+    case format, the legs, the input hash and the draws."""
+    import importlib.util
+
+    if 'run_python' in sys.modules:
+        return sys.modules['run_python']
+    spec = importlib.util.spec_from_file_location(
+        'run_python', Path(__file__).resolve().parent / 'run_python.py'
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules['run_python'] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _table(text: Any, where: str, problems: list[str]) -> Any:
+    r"""The Arrow table a capture holds as IPC text, or None with the
+    problem named."""
+    if not isinstance(text, str):
+        problems.append(f'{where}: no Arrow table')
+        return None
+    try:
+        return runner().read_arrow_ipc(text)
+    except Exception as error:  # noqa: BLE001 - named, never raised
+        problems.append(f'{where}: not an Arrow table ({type(error).__name__})')
+        return None
+
+
+def _duck_tables(
+    case: dict[str, Any], bases: dict[str, list[str]]
+) -> list[str]:
+    r"""The tables of ``case``'s DuckDB data, as the recording mode reads
+    them back through each leg's driver."""
+    import duckdb
+
+    connection = duckdb.connect()
+    try:
+        for statement in [
+            *bases[case['input']['base']],
+            *case['input'].get('setup', []),
+        ]:
+            connection.execute(statement)
+        return [
+            str(row[0])
+            for row in connection.execute(
+                'SELECT table_name FROM information_schema.tables '
+                "WHERE table_schema = 'main' ORDER BY table_name"
+            ).fetchall()
+        ]
+    finally:
+        connection.close()
+
+
+def capture_problems(
+    line: dict[str, Any],
+    case: dict[str, Any],
+    tables: list[str] | None = None,
+) -> list[str]:
+    r"""Why one capture line is not the complete capture of ``case`` on its
+    leg (design choice 2), each problem named; ``tables`` are the case's
+    tables (:func:`_duck_tables`), read when not given. Complete is: its
+    format, case key, leg and recording and reference commits; the
+    versions of the runtime and the leg's driver; the session zone; a
+    valid python-ref reference line of the same key whose capture recorded
+    everything it saw; every statement that capture saw, in order, each
+    with its text and every result read, each held whole as Arrow of the
+    rows it counted, and a query neither read nor failed counted as lost;
+    every random draw its statements made (:func:`run_python.draws_of`),
+    no other, each with the rows its statement picked; every table of the
+    case's data once and no other; and each view-derived relation a
+    statement read, evaluated or refused."""
+    run = runner()
+    key = line.get('case')
+    problems: list[str] = []
+    if line.get('format') != CAPTURE_FORMAT:
+        return [f'{key}: not {CAPTURE_FORMAT}']
+    leg = line.get('leg')
+    if leg not in run.WAREHOUSES:
+        return [f'{key}: leg {leg!r} is not a warehouse leg']
+    if key != run.case_key(case['id'], leg):
+        problems.append(f'{key}: not the key of {case["id"]} on {leg}')
+    if leg not in run.case_legs(case):
+        problems.append(f'{key}: {case["id"]} does not run on {leg}')
+    recording = line.get('recording') or {}
+    for what in ('commit', 'reference'):
+        if not SHA.fullmatch(str(recording.get(what))):
+            problems.append(f'{key}: no {what} commit recorded')
+    versions = line.get('versions') or {}
+    missing = [name for name in _VERSIONS if not versions.get(name)]
+    if missing:
+        problems.append(f'{key}: no {missing} version recorded')
+    if not any(versions.get(name) for name in run._DRIVERS[leg]):
+        problems.append(f"{key}: no version of {leg}'s driver recorded")
+    if not isinstance(line.get('zone'), str) or not line['zone']:
+        problems.append(f'{key}: no session zone recorded')
+    observation = line.get('observation')
+    validate = run.validator('observation')
+    if not isinstance(observation, dict):
+        return [*problems, f'{key}: no reference line']
+    invalid = run._invalid(validate, observation)
+    if invalid is not None:
+        return [*problems, f'{key}: its reference line is not valid: {invalid}']
+    if observation['case'] != key:
+        problems.append(
+            f'{key}: its reference line is of {observation["case"]}'
+        )
+    if observation['identity']['runner'] != 'python-ref':
+        problems.append(f"{key}: its reference line is not python-ref's")
+    captured = observation['driver']['capture']
+    if captured is None:
+        return [*problems, f'{key}: recorded with the capture off']
+    for what in [*captured['incomplete'], *(line.get('incomplete') or [])]:
+        problems.append(f'{key}: could not record: {what}')
+    statements = line.get('statements')
+    if not isinstance(statements, list):
+        return [*problems, f'{key}: no statements']
+    if [s.get('sql') for s in statements] != [
+        s['sql'] for s in captured['statements']
+    ]:
+        problems.append(
+            f'{key}: its statements are not the {len(captured["statements"])} '
+            'its reference line captured'
+        )
+    expected_draws = []
+    for position, statement in enumerate(statements):
+        where = f'{key}: statement {position}'
+        if not isinstance(statement.get('sql'), str):
+            problems.append(f'{where}: no text')
+            continue
+        results = statement.get('results') or []
+        if (
+            not results
+            and statement.get('error') is None
+            and _QUERY.match(statement['sql'])
+        ):
+            problems.append(f'{where}: a query with no result read')
+        for read, result in enumerate(results):
+            table = _table(
+                result.get('arrow'), f'{where} read {read}', problems
+            )
+            if table is not None and table.num_rows != result.get('rows'):
+                problems.append(
+                    f'{where} read {read}: {table.num_rows} rows held, '
+                    f'{result.get("rows")} read'
+                )
+        for draw in run.draws_of(statement['sql']):
+            expected_draws.append({'statement': position, **draw})
+            if not results and statement.get('error') is None:
+                problems.append(f'{where}: a random draw without its rows')
+    if (line.get('draws') or []) != expected_draws:
+        problems.append(
+            f'{key}: its draws are not the {len(expected_draws)} its '
+            'statements made'
+        )
+    want = sorted(
+        _duck_tables(case, run.load_bases()) if tables is None else tables
+    )
+    held = [item.get('name') for item in line.get('tables') or []]
+    if sorted(held) != want:
+        problems.append(f'{key}: its tables are {sorted(held)}, not {want}')
+    for item in line.get('tables') or []:
+        _table(item.get('arrow'), f'{key}: table {item.get("name")}', problems)
+    derived = [
+        position
+        for position, statement in enumerate(statements)
+        if isinstance(statement.get('sql'), str)
+        and statement.get('error') is None
+        and not statement.get('parameters')
+        and run._DERIVED.search(statement['sql'])
+        and run._LIMIT.search(statement['sql'])
+    ]
+    relations = {
+        item.get('statement'): item for item in line.get('relations') or []
+    }
+    seen: set[str] = set()
+    for position in derived:
+        whole = run._LIMIT.sub('', statements[position]['sql'])
+        if whole in seen:
+            continue
+        seen.add(whole)
+        relation = relations.get(position)
+        if relation is None:
+            problems.append(
+                f'{key}: statement {position} read a view-derived relation '
+                'the capture did not evaluate'
+            )
+        elif 'error' not in relation:
+            _table(
+                relation.get('table'), f'{key}: relation {position}', problems
+            )
+    return problems
+
+
+def captures(
+    cases: list[dict[str, Any]],
+    lines: Iterable[dict[str, Any]],
+    legs: Iterable[str] | None = None,
+) -> tuple[list[str], list[str]]:
+    r"""Every problem with the capture lines over ``cases`` (each line
+    complete, no case and leg twice, none of a case or leg not named), and
+    every case and leg, of ``legs`` (default every warehouse leg), with no
+    capture of its current input: pending live, the first a capture's own
+    failure and the second a listing (design choice 2)."""
+    run = runner()
+    bases = run.load_bases()
+    legs = tuple(run.WAREHOUSES if legs is None else legs)
+    by_key = {
+        run.case_key(case['id'], leg): case
+        for case in cases
+        for leg in run.case_legs(case)
+        if leg in legs
+    }
+    problems: list[str] = []
+    found: dict[str, str] = {}
+    for line in lines:
+        if not isinstance(line, dict):
+            problems.append(f'a capture line is a JSON {type(line).__name__}')
+            continue
+        key = line.get('case')
+        if key in found:
+            problems.append(f'{key}: captured twice')
+            continue
+        case = by_key.get(key)
+        if case is None:
+            problems.append(f'{key}: no case of these runs on that leg')
+            continue
+        try:
+            problems.extend(capture_problems(line, case))
+        except RecursionError:
+            problems.append(f'{key}: nested past what can be read')
+        found[key] = line.get('input')
+    pending = sorted(
+        f'{key}: '
+        + (
+            'no capture'
+            if key not in found
+            else 'its input changed after its capture'
+        )
+        for key, case in by_key.items()
+        if found.get(key) != run.input_hash(case, bases)
+    )
+    return problems, pending
+
+
+def captures_main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(prog='capture_check.py captures')
+    parser.add_argument('--cases', type=Path, nargs='+', required=True)
+    parser.add_argument('--capture', type=Path, nargs='*', default=[])
+    parser.add_argument('--leg', action='append', default=None)
+    parser.add_argument('--locked', action='store_true')
+    arguments = parser.parse_args(argv)
+    run = runner()
+    try:
+        cases = [case for case, _ in run.load_cases(arguments.cases)]
+        lines = [
+            json.loads(text)
+            for path in arguments.capture
+            for text in path.read_text(encoding='utf-8').splitlines()
+            if text.strip()
+        ]
+    except (OSError, ValueError, RecursionError, run.RunnerFailure) as error:
+        print(f'captures: unreadable: {type(error).__name__}: {error}')
+        return 1
+    if arguments.leg and any(
+        leg not in run.WAREHOUSES for leg in arguments.leg
+    ):
+        print(f'captures: --leg is one of {run.WAREHOUSES}')
+        return 1
+    problems, pending = captures(cases, lines, arguments.leg)
+    for problem in problems:
+        print(f'FAILS {problem}')
+    for item in pending:
+        print(f'{"FAILS" if arguments.locked else "PENDING LIVE"} {item}')
+    failed = bool(problems) or (arguments.locked and bool(pending))
+    print(
+        f'captures: {"FAILED" if failed else "complete"}; '
+        f'{len(lines)} captured, {len(pending)} pending live'
+    )
+    return 1 if failed else 0
+
+
+def _git_lines(repo: Path, *arguments: str) -> list[str]:
+    import subprocess
+
+    done = subprocess.run(
+        ['git', '-C', str(repo), *arguments],
+        capture_output=True,
+        text=True,
+        check=False,
+        stdin=subprocess.DEVNULL,
+    )
+    if done.returncode != 0:
+        raise ValueError(f'git {arguments[0]} failed')
+    return [line for line in done.stdout.splitlines() if line]
+
+
+def captures_only(repo: Path, final: str, commit: str = 'HEAD') -> list[str]:
+    r"""Why the commits from ``final`` to ``commit`` are not a captures-only
+    change recorded from ``final`` (design, "The live-test plan": E-0's
+    reference lines and the core's live capture committed on the final
+    candidate run no new campaign): ``final`` an ancestor of ``commit``,
+    at least one commit between, every path they change under
+    :data:`CAPTURES`, none deleted, and every line of every file they add
+    or change naming ``final`` as its recording commit."""
+    try:
+        final = _git_lines(
+            repo, 'rev-parse', '--verify', f'{final}^{{commit}}'
+        )[0]
+        commit = _git_lines(
+            repo, 'rev-parse', '--verify', f'{commit}^{{commit}}'
+        )[0]
+        _git_lines(repo, 'merge-base', '--is-ancestor', final, commit)
+    except (ValueError, IndexError):
+        return [f'{final} is not a commit below {commit}']
+    if final == commit:
+        return ['no commit after the final candidate']
+    problems = []
+    changes = _git_lines(
+        repo, 'diff', '--no-renames', '--name-status', final, commit
+    )
+    for change in changes:
+        status, _, path = change.partition('\t')
+        if not path.startswith(CAPTURES):
+            problems.append(f'{path}: changed outside {CAPTURES}')
+            continue
+        if status.startswith('D'):
+            problems.append(f'{path}: deleted')
+            continue
+        text = '\n'.join(_git_lines(repo, 'show', f'{commit}:{path}'))
+        for number, raw in enumerate(text.splitlines(), 1):
+            try:
+                recorded = (json.loads(raw).get('recording') or {}).get(
+                    'commit'
+                )
+            except (ValueError, AttributeError, RecursionError):
+                problems.append(f'{path}:{number}: not a capture line')
+                continue
+            if recorded != final:
+                problems.append(
+                    f'{path}:{number}: recorded from {recorded}, not the final '
+                    f'candidate {final}'
+                )
+    if not changes:
+        problems.append('the commits change nothing')
+    return problems
+
+
+def captures_only_main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(prog='capture_check.py captures-only')
+    parser.add_argument('--final', required=True)
+    parser.add_argument('--commit', default='HEAD')
+    parser.add_argument('--repo', type=Path, default=ROOT)
+    arguments = parser.parse_args(argv)
+    problems = captures_only(arguments.repo, arguments.final, arguments.commit)
+    for problem in problems:
+        print(f'FAILS {problem}')
+    print(f'captures-only: {"FAILED" if problems else "ok"}')
+    return 1 if problems else 0
+
+
 def main(argv: list[str] | None = None) -> int:
+    given = sys.argv[1:] if argv is None else argv
+    if given[:1] == ['captures']:
+        return captures_main(given[1:])
+    if given[:1] == ['captures-only']:
+        return captures_only_main(given[1:])
     parser = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     parser.add_argument('--on', type=Path, required=True)
     parser.add_argument('--off', type=Path, required=True)

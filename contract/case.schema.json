@@ -7,6 +7,18 @@
   "additionalProperties": false,
   "required": ["format", "id", "status", "slice", "paths", "routes", "cells", "input", "until", "expect", "why", "source"],
   "dependentRequired": {"databases": ["exclusion"], "exclusion": ["databases"]},
+  "allOf": [
+    {
+      "description": "warehouses only on an S2 case, and never beside databases (Phase 3 design choice 1).",
+      "if": {"required": ["warehouses"]},
+      "then": {"properties": {"slice": {"const": "S2"}}, "not": {"anyOf": [{"required": ["databases"]}, {"required": ["exclusion"]}]}}
+    },
+    {
+      "description": "An S2 case names the warehouse legs it runs on.",
+      "if": {"required": ["slice"], "properties": {"slice": {"const": "S2"}}},
+      "then": {"required": ["warehouses"]}
+    }
+  ],
   "properties": {
     "format": {"const": "sdm-case/1"},
     "id": {"$ref": "#/$defs/id"},
@@ -27,6 +39,13 @@
       "description": "The decision row (KO<phase>-<n>) whose owner approval lets databases leave a database out; only beside databases.",
       "type": "string",
       "pattern": "^KO[0-9]+-[0-9]+$"
+    },
+    "warehouses": {
+      "description": "The warehouse legs an S2 case runs on, and only there (Phase 3 design choice 1): at least one, none twice. Only on an S2 case, which must name them, and never beside databases. A case without it runs on the databases, and an S1 case without databases on every warehouse leg as well (run_python.py's case_legs).",
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/warehouse"}
     },
     "paths": {
       "description": "The scope-python.yaml paths this case covers.",
@@ -85,6 +104,22 @@
         "embeddings": {
           "description": "Whether the scripted endpoint answers a call asking for embeddings with one on each item, as a model answers the vector it holds of each entity (contract/runners/scripted_endpoint.py; T2.11's cases): a JSON boolean; absent, the rule answers none.",
           "type": "boolean"
+        },
+        "view": {
+          "description": "The semantic model the case's source is (Phase 3 design choice 1): a Databricks metric view (metric_view, on the Databricks legs only) or a Snowflake semantic view (semantic_view, on the snowflake leg only), passed to the source's semantic_model by name with trust_expressions as written. With yaml, the view is created in the test schema from it before the run; without, it is an existing view, named by a placeholder the run resolves ({shop_metric_view}). Only on a case naming warehouses.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "name"],
+          "properties": {
+            "kind": {"enum": ["metric_view", "semantic_view"]},
+            "name": {"type": "string", "minLength": 1},
+            "yaml": {"type": "string", "minLength": 1},
+            "trust_expressions": {"type": "boolean"}
+          }
+        },
+        "connect": {
+          "description": "The connect path the case's connection is opened through, handed to Schema.from_source as it is and found by detection (Phase 3 design choice 1): warehouse (sdm_connectors.databricks.warehouse(), databricks-sql), spark (a notebook's Spark session, databricks-spark), snowpark (a Snowpark session, snowflake) or lakebase (sdm_connectors.databricks.lakebase(), lakebase). The case's warehouses are exactly that leg.",
+          "enum": ["warehouse", "spark", "snowpark", "lakebase"]
         }
       }
     },
@@ -148,6 +183,7 @@
   "$defs": {
     "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$"},
     "name": {"type": "string", "pattern": "^[a-z][a-z0-9_-]*$"},
+    "warehouse": {"enum": ["databricks-sql", "databricks-spark", "snowflake", "lakebase"]},
     "path_ids": {
       "type": "array",
       "uniqueItems": true,
@@ -325,6 +361,9 @@
         },
         "exclude_cols_dict": {
           "description": "The columns to leave out of the request, by table (T2.11), passed as written: any JSON value, an object as a dict and a list as a list, null as None, so a value the reference refuses is the case's input."
+        },
+        "num_context_samples": {
+          "description": "The most context examples materialize takes (Phase 3's quickstart cases), passed as written: any JSON value, null as None, so a value the reference refuses is the case's input."
         }
       }
     },

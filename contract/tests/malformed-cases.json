@@ -1,5 +1,5 @@
 {
-  "about": "Changes to base.adventureworks's case that both case loaders must refuse, and ones both must take: contract/runners/run_python.py's validator (tests/test_contract_cases.py) and sdm-testkit's case::load (tests/s0_cases.rs). Each refused or accepted change sets the value at path, and each omitted one removes the key at path (which both must take), a list of keys and positions into the case (T1.21b; from T1.21c the schema's minProperties, minItems and minLength, core.materialize.seed required, and expect's if/then/else; from T1.21d core.materialize naming a schema, refused; from T1.24b the edits set_primary_key, set_time_column, set_stype and set_relationships; from T2.1a materialize's candidates and top_k; from T2.8c's test author materialize's rows_per_call, any JSON scalar but null, and input.fail_call, a whole number from 0 to 2**64 - 1, from T2.1j input.probabilities, a boolean, and from T2.9's test author input.quantiles, a boolean, input.outputs, a list of texts, and materialize's lag_timesteps, any JSON scalar but null, from T2.13's test author input.explanation and input.item_metadata, each a boolean, and from T2.11's test author input.embeddings, a boolean, materialize's context_anchor_time, written as anchor_time is, anchor_time's literal entity, and the sampling options random_seed, num_hops, num_neighbors, max_pq_iterations, use_prediction_time, return_embeddings and exclude_cols_dict, any JSON value, null included, while a databases or exclusion change, which needs its partner, is held in tests/test_t21a_case_format.py through both keys).",
+  "about": "Changes to base.adventureworks's case that both case loaders must refuse, and ones both must take: contract/runners/run_python.py's validator (tests/test_contract_cases.py) and sdm-testkit's case::load (tests/s0_cases.rs). Each refused or accepted change sets the value at path, and each omitted one removes the key at path (which both must take), a list of keys and positions into the case (T1.21b; from T1.21c the schema's minProperties, minItems and minLength, core.materialize.seed required, and expect's if/then/else; from T1.21d core.materialize naming a schema, refused; from T1.24b the edits set_primary_key, set_time_column, set_stype and set_relationships; from T2.1a materialize's candidates and top_k; from T2.8c's test author materialize's rows_per_call, any JSON scalar but null, and input.fail_call, a whole number from 0 to 2**64 - 1, from T2.1j input.probabilities, a boolean, and from T2.9's test author input.quantiles, a boolean, input.outputs, a list of texts, and materialize's lag_timesteps, any JSON scalar but null, from T2.13's test author input.explanation and input.item_metadata, each a boolean, and from T2.11's test author input.embeddings, a boolean, materialize's context_anchor_time, written as anchor_time is, anchor_time's literal entity, and the sampling options random_seed, num_hops, num_neighbors, max_pq_iterations, use_prediction_time, return_embeddings and exclude_cols_dict, any JSON value, null included, while a databases or exclusion change, which needs its partner, is held in tests/test_t21a_case_format.py through both keys; from T3.2 the warehouse fields: warehouses only on an S2 case, which must name them, input.view and input.connect only beside warehouses, each read as the format says, input.fail_call -0 read as 0, and materialize's num_context_samples, any JSON value, null included; a change naming the S2 slice and its legs together, which this file's one path per change cannot write, is held in contract/tests/test_t32_recording.py, and NaN and Infinity, which no JSON file holds, there too).",
   "case": "contract/cases/s1/base.adventureworks.json",
   "refused": [
     {
@@ -1200,6 +1200,118 @@
       "value": [
         "2024-01-01"
       ]
+    },
+    {
+      "why": "warehouses on a case that is not S2",
+      "path": [
+        "warehouses"
+      ],
+      "value": [
+        "databricks-sql"
+      ]
+    },
+    {
+      "why": "warehouses empty",
+      "path": [
+        "warehouses"
+      ],
+      "value": []
+    },
+    {
+      "why": "warehouses naming a leg that is not one",
+      "path": [
+        "warehouses"
+      ],
+      "value": [
+        "bigquery"
+      ]
+    },
+    {
+      "why": "an S2 case naming no warehouses",
+      "path": [
+        "slice"
+      ],
+      "value": "S2"
+    },
+    {
+      "why": "input.view on a case naming no warehouses",
+      "path": [
+        "input",
+        "view"
+      ],
+      "value": {
+        "kind": "metric_view",
+        "name": "v"
+      }
+    },
+    {
+      "why": "input.view of a kind the format does not have",
+      "path": [
+        "input",
+        "view"
+      ],
+      "value": {
+        "kind": "cube",
+        "name": "v"
+      }
+    },
+    {
+      "why": "input.view without its name",
+      "path": [
+        "input",
+        "view"
+      ],
+      "value": {
+        "kind": "metric_view"
+      }
+    },
+    {
+      "why": "input.view with a key it does not take",
+      "path": [
+        "input",
+        "view"
+      ],
+      "value": {
+        "kind": "metric_view",
+        "name": "v",
+        "sql": "SELECT 1"
+      }
+    },
+    {
+      "why": "input.view trust_expressions that is not a boolean",
+      "path": [
+        "input",
+        "view"
+      ],
+      "value": {
+        "kind": "metric_view",
+        "name": "v",
+        "trust_expressions": 1
+      }
+    },
+    {
+      "why": "input.connect on a case naming no warehouses",
+      "path": [
+        "input",
+        "connect"
+      ],
+      "value": "warehouse"
+    },
+    {
+      "why": "input.connect naming a path the format does not have",
+      "path": [
+        "input",
+        "connect"
+      ],
+      "value": "jdbc"
+    },
+    {
+      "why": "input.fail_call minus one",
+      "path": [
+        "input",
+        "fail_call"
+      ],
+      "value": -1
     }
   ],
   "accepted": [
@@ -1937,6 +2049,32 @@
         "input",
         "materialize",
         "exclude_cols_dict"
+      ],
+      "value": null
+    },
+    {
+      "why": "input.fail_call written -0, read as 0 by both loaders (P2-T2.1i-1)",
+      "path": [
+        "input",
+        "fail_call"
+      ],
+      "value": -0
+    },
+    {
+      "why": "num_context_samples as written, a whole number",
+      "path": [
+        "input",
+        "materialize",
+        "num_context_samples"
+      ],
+      "value": 1000
+    },
+    {
+      "why": "num_context_samples as written, null",
+      "path": [
+        "input",
+        "materialize",
+        "num_context_samples"
       ],
       "value": null
     }
