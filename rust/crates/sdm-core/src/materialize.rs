@@ -76,7 +76,7 @@ use sdm_contract::data::{
     TextTimes,
 };
 use sdm_contract::ops::{
-    ColumnRef, ForecastStep, Materialized, MemoBounds, MemoStoredTime, OperationResult,
+    ColumnRef, ForecastStep, Materialized, MemoBounds, MemoRows, MemoStoredTime, OperationResult,
     ProfileName, ProfileSpec, QueryColumn, QueryFacts, QuerySchema, QueryTable, RequestBatch,
     RequestState, SamplerMemo, Seed, SourceDescription,
 };
@@ -1718,6 +1718,156 @@ fn sampling_capabilities(asker: &Asker) -> Result<NullOrder, CoreError> {
 /// memo says it was made skips it, as the reference builds its sampler,
 /// and checks, once; a run that makes it keeps that in its memo, warning
 /// given or not.
+/// Each table's rows, counted once for a materializer where the provider
+/// sizes its sampling by them (`ProviderCapabilities::sample_rows`,
+/// `neighbor_lookback`; contract v28), as the reference's warehouse
+/// samplers count every table of the graph, in its order, as they are
+/// built (`num_rows_dict`); kept in the memo, so a later run counts none
+/// again. A provider declaring neither is asked nothing.
+async fn table_rows(memo: &mut Memo<'_>, graph: &Graph) -> Result<(), CoreError> {
+    let capabilities = memo.asker.capabilities()?;
+    if !(capabilities.sample_rows || capabilities.neighbor_lookback) {
+        return Ok(());
+    }
+    let mut counted = false;
+    for table in &graph.tables {
+        if memo.memo.rows.iter().any(|r| r.table == table.name) {
+            continue;
+        }
+        let answer = ask(
+            memo.asker,
+            DataRequest::CountRows {
+                table: table.source.clone(),
+                filters: vec![],
+            },
+        )
+        .await?;
+        memo.memo.rows.push(MemoRows {
+            table: table.name.clone(),
+            rows: row_count(&answer)?,
+        });
+        counted = true;
+    }
+    if counted {
+        memo.keep();
+    }
+    Ok(())
+}
+
+/// The rows a `count_rows` answer counts: its one row's first column, an
+/// integer of any width not below zero.
+fn row_count(answer: &ArrowData) -> Result<u64, CoreError> {
+    let batch = one_batch(answer)?;
+    let unread = || {
+        crate::run::schema_mismatch(
+            "expected",
+            None,
+            "a row count is not one row of one count",
+        )
+    };
+    if batch.num_rows() != 1 || batch.num_columns() == 0 {
+        return Err(unread());
+    }
+    let column = batch.column(0);
+    if column.is_null(0) {
+        return Err(unread());
+    }
+    let count: i128 = if let Some(values) = column.as_primitive_opt::<Int64Type>() {
+        values.value(0).into()
+    } else if let Some(values) = column.as_primitive_opt::<Int32Type>() {
+        values.value(0).into()
+    } else if let Some(values) = column.as_primitive_opt::<arrow_array::types::UInt64Type>() {
+        values.value(0).into()
+    } else if let Some(values) = column.as_primitive_opt::<arrow_array::types::Decimal128Type>() {
+        values.value(0)
+    } else {
+        return Err(unread());
+    };
+    u64::try_from(count).map_err(|_| unread())
+}
+
+/// The rows the memo counted of `table`, if it counted them.
+fn rows_of(memo: &SamplerMemo, table: &str) -> Option<u64> {
+    memo.rows.iter().find(|r| r.table == table).map(|r| r.rows)
+}
+
+/// The rate of rows per referenced row and second of each table with a
+/// time column referring to another, for a provider whose neighbor reads
+/// look back no further than the reference's warehouse samplers do
+/// (`ProviderCapabilities::neighbor_lookback`, `_by_fkey`): the table's
+/// rows over the referenced table's, over the seconds its time column
+/// spans (at least one), each step a double as the reference's arithmetic
+/// rounds it, the span its `Timedelta.total_seconds()` (whole microseconds
+/// over a million). None for any other provider, and none for a table
+/// whose times or counts are not known.
+async fn lookbacks(
+    memo: &mut Memo<'_>,
+    times: &Times,
+    graph: &Graph,
+) -> Result<Vec<crate::subgraph::Lookback>, CoreError> {
+    if !memo.asker.capabilities()?.neighbor_lookback {
+        return Ok(vec![]);
+    }
+    let mut timed: Vec<&Table> = Vec::new();
+    for table in &graph.tables {
+        if table.time_column.is_some()
+            && graph
+                .tables
+                .iter()
+                .any(|dst| graph.referring(&dst.name).iter().any(|(src, _)| *src == table.name))
+        {
+            timed.push(table);
+        }
+    }
+    if timed.is_empty() {
+        return Ok(vec![]);
+    }
+    // Every bound read in one request, as the reference reads its
+    // sampler's bounds together.
+    time_bounds(memo, times, &timed).await?;
+    let mut out = Vec::new();
+    for dst in &graph.tables {
+        for (src, _) in graph.referring(&dst.name) {
+            let Some(src_table) = timed.iter().find(|t| t.name == src) else {
+                continue;
+            };
+            let bounds = time_bounds(memo, times, &[*src_table]).await?;
+            let (Some(facts), Some(entities)) = (
+                rows_of(&memo.memo, src),
+                rows_of(&memo.memo, &dst.name),
+            ) else {
+                continue;
+            };
+            if entities == 0 || bounds.min > bounds.max {
+                continue;
+            }
+            let micros = (i128::from(bounds.max) - i128::from(bounds.min)).div_euclid(1_000);
+            #[allow(
+                clippy::cast_precision_loss,
+                reason = "integers to the nearest double, as the reference computes them"
+            )]
+            let (span, rate) = {
+                let span = micros as f64 / 1e6;
+                let rate = facts as f64 / entities as f64;
+                (span, rate)
+            };
+            let span = if span < 1.0 { 1.0 } else { span };
+            if out
+                .iter()
+                .any(|l: &crate::subgraph::Lookback| l.src == src && l.dst == dst.name)
+            {
+                continue;
+            }
+            out.push(crate::subgraph::Lookback {
+                src: src.to_owned(),
+                dst: dst.name.clone(),
+                rate: rate / span,
+            });
+        }
+    }
+    Ok(out)
+}
+
 async fn missing_indexes(
     memo: &mut Memo<'_>,
     graph: &Graph,
@@ -2766,6 +2916,9 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // errors may be refused for another of them than the reference's first
     // (decision E41(k)(i)).
     missing_indexes(&mut memo, &graph, asker.capabilities()?.index_advice).await?;
+    // Each table's rows, where the provider sizes its sampling by them,
+    // as the reference's warehouse sampler counts them as it is built.
+    table_rows(&mut memo, &graph).await?;
     // The context's anchor and the candidates per example, read with the
     // task (`_get_task_table`).
     let (context_anchor, max_pq_iterations) = options::task_table(&deferred)?;
@@ -2941,6 +3094,13 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
                         .samples_by_key_dtype()
                         .then(|| entity.column(&key).map(|c| c.dtype))
                         .flatten(),
+                    // The table's rows, for a provider sizing its draw by
+                    // them (the reference's sampled percentage).
+                    rows: if asker.capabilities()?.sample_rows {
+                        rows_of(&memo.memo, &entity.name)
+                    } else {
+                        None
+                    },
                 },
             )
             .await?,
@@ -3264,6 +3424,9 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // then the names `sample_subgraph` checks.)
     let exclude_cols = options::excluded(&deferred)?;
     let walk_hops = options::neighbors(&deferred, mode)?;
+    // Each fact table's look-back rate, where the provider's neighbor
+    // reads look back no further than the reference's warehouse samplers.
+    let lookback = lookbacks(&mut memo, &read_times, &graph).await?;
     let hops_ignored = options::hops_ignored(&deferred);
     // The engine says it ignores `num_hops` where `num_neighbors` is given
     // (`_resolve_options`), once the task is labelled.
@@ -3420,6 +3583,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
             entity,
             neighbors: &walk_hops,
             excluded: &excluded,
+            lookback: &lookback,
         }
         .run(entity_rows)
         .await?;
