@@ -72,7 +72,15 @@ const KNOWN: &[&str] = &[
 /// native module reports it as `PROVIDERS`, and a database's core legs run
 /// exactly when it is listed. A dialect's package adds its name with its
 /// rendering.
-pub const PROVIDERS: &[&str] = &[duckdb::NAME, sqlite::NAME, postgres::NAME, databricks::NAME];
+pub const PROVIDERS: &[&str] = &[
+    duckdb::NAME,
+    sqlite::NAME,
+    postgres::NAME,
+    // Databricks' two legs, a SQL warehouse and a Spark session, which
+    // both run the one `databricks` dialect (T3.4).
+    "databricks-sql",
+    "databricks-spark",
+];
 
 /// A dialect this build renders.
 enum Rendered {
