@@ -3771,6 +3771,55 @@ class Live:
                 pass
 
 
+class Standin:
+    r"""A warehouse leg served offline by the stand-in (Phase 3 design
+    choice 2; T3.3's ``sdm-standin``), through ``standin_client.py``'s
+    forwarding provider over the pipe protocol, for python-core: the core's
+    provider for the leg is handed the client's connection as the leg's
+    driver connection would be, and the run keeps the stand-in's verdict
+    for the observation's ``standin`` field. ``standin_client.py`` meets
+    this: ``open(leg, case, bases, captures)`` gives a session with
+    ``connection``, ``names`` (each placeholder's name offline), ``verdict()``
+    (``{"live_only": code or None, "flagged": [codes]}``) and ``close()``;
+    the captures are ``contract/captures/``."""
+
+    def __init__(
+        self, case: dict[str, Any], bases: dict[str, list[str]], leg: str
+    ) -> None:
+        self.leg = leg
+        if (
+            'standin_client' not in sys.modules
+            and not (HERE / 'standin_client.py').is_file()
+        ):
+            raise RunnerFailure(
+                f'{case["id"]}: {leg} runs offline on the stand-in, and '
+                'standin_client.py is not beside the runner'
+            )
+        client = _sibling('standin_client')
+        self._session = client.open(leg, case, bases, CONTRACT / 'captures')
+        self.connection = self._session.connection
+        self.names = dict(self._session.names)
+        self.case = resolved(case, self.names)
+
+    def captured(self, log: DriverLog) -> Any:
+        r"""The connection as the leg's capture hands it to the source: on
+        a stand-in leg the statements are the stand-in's, so they are
+        recorded, and only reported (KO3-45)."""
+        path = self.case['input'].get('connect')
+        kind = 'snowpark' if path == 'snowpark' else self.leg
+        return _WAREHOUSE_CAPTURES[kind](self.connection, log)
+
+    def verdict(self) -> dict[str, Any]:
+        found = self._session.verdict()
+        return {
+            'live_only': found.get('live_only'),
+            'flagged': list(found.get('flagged') or []),
+        }
+
+    def close(self) -> None:
+        self._session.close()
+
+
 def capture_line(
     live: Live,
     case: dict[str, Any],
@@ -4259,7 +4308,12 @@ def _call(
 
     serve = _sibling('scripted_endpoint').serve
 
-    live = Live(case, bases, database) if database in WAREHOUSES else None
+    offline = database in WAREHOUSES and keep is not None and 'standin' in keep
+    live: Live | Standin | None = None
+    if offline:
+        live = Standin(case, bases, database)
+    elif database in WAREHOUSES:
+        live = Live(case, bases, database)
     given = (live.case if live is not None else case)['input']
     # The call's arguments are the harness's to build: an input it cannot
     # build is a runner failure, never the case's outcome.
@@ -4382,7 +4436,9 @@ def _call(
                     logged = []
                 else:
                     logged = query_log(connection)
-                if keep is not None and live is not None and log is not None:
+                if isinstance(live, Standin):
+                    keep['standin'] = live.verdict()
+                elif keep is not None and live is not None and log is not None:
                     keep.update(
                         live=live, log=log, relations=live.relations(log)
                     )
@@ -4527,13 +4583,10 @@ def run(
             'the recording mode runs python-ref on a warehouse leg, with the '
             'driver capture'
         )
-    if database in WAREHOUSES and mode != 'python-ref':
-        # The stand-in serves a warehouse leg offline (T3.3's sdm-standin,
-        # through standin_client.py); until it is wired here, a core leg
-        # does not run there.
+    if database in WAREHOUSES and mode == 'python-old':
         raise RunnerFailure(
-            f'{mode} on {database} runs on the stand-in, which this runner '
-            'does not serve yet'
+            f'python-old runs on DuckDB only; the {database} reference side '
+            "is the capture's reference line"
         )
     if mode == 'python-old' and database != 'duckdb':
         # The orchestrator's decision (T2.1a fix 4): off DuckDB the
@@ -4575,6 +4628,7 @@ def run(
             )
     recorded = []
     kept: list[dict[str, Any]] = []
+    standins: list[dict[str, Any] | None] = []
     for case, case_digest in cases:
         capture = boundary.reset() if boundary is not None else None
         if capture is not None:
@@ -4582,14 +4636,18 @@ def run(
         if mode == 'python-core':
             os.environ['SDM_CORE_ROUTES'] = ','.join(routes_on(case, database))
         keep: dict[str, Any] | None = {} if record is not None else None
+        if mode == 'python-core' and database in WAREHOUSES:
+            # Offline on the stand-in (choice 2): its verdict is kept.
+            keep = {'standin': None}
         try:
             outcome, shown, driver, public, origins = _call(
                 case, bases, driver_capture, database, keep
             )
         finally:
             os.environ.pop('SDM_CORE_ROUTES', None)
-        if keep is not None:
+        if keep is not None and record is not None:
             kept.append(keep)
+        standins.append(None if keep is None else keep.get('standin'))
         recorded.append(
             (
                 case,
@@ -4628,7 +4686,7 @@ def run(
         driver,
         public,
         origins,
-    ) in recorded:
+    ), standin in zip(recorded, standins, strict=True):
         observation = {
             'format': 'sdm-observation/1',
             'case': case_key(case['id'], database),
@@ -4660,13 +4718,16 @@ def run(
             'driver': driver,
             'public': public,
         }
+        if standin is not None:
+            # The stand-in's verdict on a warehouse leg judged offline.
+            observation['standin'] = standin
         problem = _invalid(validate, observation)
         if problem is not None:
             raise RunnerFailure(
                 f'{case["id"]}: its observation is not valid: {problem}'
             )
         observations.append(observation)
-    if database in WAREHOUSES:
+    if database in WAREHOUSES and mode == 'python-ref':
         observations = _held_observations(
             observations, cases, bases, kept, record
         )

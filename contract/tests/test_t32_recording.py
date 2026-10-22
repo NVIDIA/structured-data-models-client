@@ -745,3 +745,38 @@ def test_a_stale_installed_client_is_refused(tmp_path: Path) -> None:
     assert run.stale_client(27, tmp_path / 'none.rs') is None
     # The checkout's own declaration is read: no contract is version 0.
     assert run.stale_client(0) is not None
+
+
+def test_python_core_on_a_warehouse_leg_carries_the_stand_in_s_verdict(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""python-core on a warehouse leg runs offline through
+    ``standin_client.py`` (T3.3's, faked here by its interface) and its
+    observation carries the stand-in's verdict."""
+    import types
+
+    closed = []
+
+    class Session:
+        connection = FakeConnection(_answers())
+        names = {'catalog': 'offline_catalog', 'schema': 'offline_schema'}
+
+        def verdict(self) -> dict[str, Any]:
+            return {'live_only': 'B1', 'flagged': []}
+
+        def close(self) -> None:
+            closed.append(True)
+
+    fake = types.ModuleType('standin_client')
+    fake.open = lambda leg, case, bases, captures: Session()  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, 'standin_client', fake)
+    case = _case()
+    stand = run.Standin(case, run.load_bases(), 'databricks-sql')
+    assert stand.verdict() == {'live_only': 'B1', 'flagged': []}
+    assert stand.names['catalog'] == 'offline_catalog'
+    stand.close()
+    assert closed == [True]
+    monkeypatch.delitem(sys.modules, 'standin_client')
+    monkeypatch.setattr(run, 'HERE', tmp_path)
+    with pytest.raises(run.RunnerFailure, match='standin_client.py is not'):
+        run.Standin(case, run.load_bases(), 'snowflake')
