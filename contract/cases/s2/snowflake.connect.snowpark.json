@@ -1,0 +1,56 @@
+{
+  "format": "sdm-case/1",
+  "id": "snowflake.connect.snowpark",
+  "status": "acceptance",
+  "slice": "S2",
+  "warehouses": [
+    "snowflake"
+  ],
+  "paths": [
+    "source.open/auto/snowflake",
+    "schema.from-source/all-tables/snowflake",
+    "query.materialize/indices-binary/snowflake",
+    "client.predict/binary/snowflake"
+  ],
+  "routes": [
+    "schema.from-source/all-tables/snowflake",
+    "schema.from-source/catalog-keys/snowflake",
+    "query.materialize/indices-binary/snowflake",
+    "query.materialize/indices-multiclass/snowflake",
+    "query.materialize/indices-regression/snowflake",
+    "query.materialize/indices-link-prediction/snowflake",
+    "query.materialize/indices-ranking/snowflake",
+    "query.materialize/indices-forecast/snowflake",
+    "client.predict/binary/snowflake",
+    "client.predict/multiclass/snowflake",
+    "client.predict/regression/snowflake",
+    "client.predict/link-prediction/snowflake",
+    "client.predict/ranking/snowflake",
+    "client.predict/forecast/snowflake"
+  ],
+  "seam": "baseline",
+  "cells": [
+    "int64/primary-key",
+    "timestamp-us/time-column"
+  ],
+  "input": {
+    "base": "shop",
+    "connect": "snowpark",
+    "pql": "PREDICT COUNT(orders.*, 0, 30, days) > 0 FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ],
+      "anchor_time": "2024-03-01"
+    }
+  },
+  "until": "predict",
+  "expect": {
+    "outcome": "success",
+    "stage": "predict",
+    "today": "Source(session) detects a Snowpark session by its class (CN/source.py:80-85, _backend_of at :97-107), and SnowflakeSource replaces it by session.connection (:367-368), so every later statement and fetch_arrow_all runs on the session's own connector connection"
+  },
+  "why": "The source opened over a Snowpark session, as a Snowflake notebook passes it: Source(session), the auto open, rather than the connector connection the leg uses by default. Unsampled: the old client asks SAMPLE ROW for at least 1,000 rows (max_pq_iterations 10 times a context of at least 100, RE/rfm.py:2303), and every table here is smaller, so the draw is the whole table",
+  "source": "written by T3.6's test author from the reference at 43e55f4f"
+}

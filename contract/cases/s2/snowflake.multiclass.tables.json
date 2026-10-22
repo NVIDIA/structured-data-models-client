@@ -1,0 +1,58 @@
+{
+  "format": "sdm-case/1",
+  "id": "snowflake.multiclass.tables",
+  "status": "acceptance",
+  "slice": "S2",
+  "warehouses": [
+    "snowflake"
+  ],
+  "paths": [
+    "schema.from-source/tables/snowflake",
+    "query.materialize/indices-multiclass/snowflake",
+    "client.predict/multiclass/snowflake"
+  ],
+  "routes": [
+    "schema.from-source/tables/snowflake",
+    "schema.from-source/catalog-keys/snowflake",
+    "query.materialize/indices-binary/snowflake",
+    "query.materialize/indices-multiclass/snowflake",
+    "query.materialize/indices-regression/snowflake",
+    "query.materialize/indices-link-prediction/snowflake",
+    "query.materialize/indices-ranking/snowflake",
+    "query.materialize/indices-forecast/snowflake",
+    "client.predict/binary/snowflake",
+    "client.predict/multiclass/snowflake",
+    "client.predict/regression/snowflake",
+    "client.predict/link-prediction/snowflake",
+    "client.predict/ranking/snowflake",
+    "client.predict/forecast/snowflake"
+  ],
+  "seam": "baseline",
+  "cells": [
+    "utf8/target"
+  ],
+  "input": {
+    "base": "shop",
+    "from_source": {
+      "tables": {
+        "users": "users",
+        "orders": "orders"
+      }
+    },
+    "pql": "PREDICT users.country FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ]
+    }
+  },
+  "until": "predict",
+  "expect": {
+    "outcome": "success",
+    "stage": "predict",
+    "today": "DESCRIBE TABLE on each name as given resolves at the first try, so the upper-cased form is never asked (SNOW/table.py:138-153); classes as base.multiclass"
+  },
+  "why": "Tables named in lower case, which the loader stores quoted, so Snowflake keeps the case: the old client finds each only as given, since no USERS or ORDERS exists; the multiclass kind on the leg, through the tables mode. Unsampled: the old client asks SAMPLE ROW for at least 1,000 rows (max_pq_iterations 10 times a context of at least 100, RE/rfm.py:2303), and every table here is smaller, so the draw is the whole table",
+  "source": "written by T3.6's test author from the reference at 43e55f4f"
+}

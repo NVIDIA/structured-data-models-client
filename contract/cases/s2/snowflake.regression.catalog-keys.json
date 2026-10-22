@@ -1,0 +1,56 @@
+{
+  "format": "sdm-case/1",
+  "id": "snowflake.regression.catalog-keys",
+  "status": "acceptance",
+  "slice": "S2",
+  "warehouses": [
+    "snowflake"
+  ],
+  "paths": [
+    "schema.from-source/all-tables/snowflake",
+    "schema.from-source/catalog-keys/snowflake",
+    "query.materialize/indices-regression/snowflake",
+    "client.predict/regression/snowflake"
+  ],
+  "routes": [
+    "schema.from-source/all-tables/snowflake",
+    "schema.from-source/catalog-keys/snowflake",
+    "query.materialize/indices-binary/snowflake",
+    "query.materialize/indices-multiclass/snowflake",
+    "query.materialize/indices-regression/snowflake",
+    "query.materialize/indices-link-prediction/snowflake",
+    "query.materialize/indices-ranking/snowflake",
+    "query.materialize/indices-forecast/snowflake",
+    "client.predict/binary/snowflake",
+    "client.predict/multiclass/snowflake",
+    "client.predict/regression/snowflake",
+    "client.predict/link-prediction/snowflake",
+    "client.predict/ranking/snowflake",
+    "client.predict/forecast/snowflake"
+  ],
+  "seam": "keys",
+  "cells": [
+    "int32/primary-key",
+    "int32/foreign-key",
+    "float64/target"
+  ],
+  "input": {
+    "base": "declared",
+    "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.uid",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ],
+      "anchor_time": "2024-03-01"
+    }
+  },
+  "until": "predict",
+  "expect": {
+    "outcome": "success",
+    "stage": "predict",
+    "today": "the primary keys from DESCRIBE TABLE's primary key column (SNOW/table.py:160-168) and the link buyer -> uid from SHOW IMPORTED KEYS (:174-189), its target matched as database.schema.table (CL/schema.py, _declared_links); a declared key on a standard table is not enforced, so SHOW TABLES IN SCHEMA is asked for hybrid tables (:238-285) and the keys are counted"
+  },
+  "why": "The catalog-keys mode on Snowflake: keys and the link come only from the catalog, since the names alone (uid, buyer) would not infer buyer -> uid; it reads DESCRIBE TABLE, SHOW IMPORTED KEYS and SHOW TABLES, the three catalog statements. Unsampled: the old client asks SAMPLE ROW for at least 1,000 rows (max_pq_iterations 10 times a context of at least 100, RE/rfm.py:2303), and every table here is smaller, so the draw is the whole table",
+  "source": "written by T3.6's test author from the reference at 43e55f4f"
+}
