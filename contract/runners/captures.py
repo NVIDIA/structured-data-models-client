@@ -242,10 +242,13 @@ def private_values(
 
 
 class Placeholders:
-    r"""Each private value with a placeholder, replaced by it: the value as
-    set, and its upper- and lower-case forms by the placeholder's upper-
-    and lower-case forms, so a name a warehouse folds keeps its fold
-    offline."""
+    r"""Each private value with a placeholder, replaced by it where it is a
+    whole name (no letter, digit or underscore either side, as T3.2's
+    recording mode reads a name): the value as set, and its upper- and
+    lower-case forms by the placeholder's upper- and lower-case forms, so a
+    name a warehouse folds keeps its fold offline. A value inside other
+    text (``main`` in ``domain``) is left for the search, which fails the
+    write: data is never changed to hide a name."""
 
     def __init__(self, names: Mapping[str, str]) -> None:
         pairs: dict[str, str] = {}
@@ -260,7 +263,11 @@ class Placeholders:
         ordered = sorted(pairs.items(), key=lambda p: (-len(p[0]), p[0]))
         self._tokens = dict(ordered)
         self._pattern = (
-            re.compile('|'.join(re.escape(value) for value, _ in ordered))
+            re.compile(
+                r'(?<![A-Za-z0-9_])(?:'
+                + '|'.join(re.escape(value) for value, _ in ordered)
+                + r')(?![A-Za-z0-9_])'
+            )
             if ordered
             else None
         )
@@ -522,20 +529,6 @@ def read_table(data: bytes) -> Any:
     return pa.ipc.open_stream(io.BytesIO(data)).read_all()
 
 
-def rows_table(columns: list[str], rows: list[Any]) -> Any:
-    r"""A statement's rows read through ``fetchall`` (a catalog read), as
-    an Arrow table: each column's values as pyarrow infers their type."""
-    import pyarrow as pa
-
-    return pa.Table.from_arrays(
-        [pa.array([row[i] for row in rows]) for i in range(len(columns))],
-        names=list(columns),
-    )
-
-
-# --- the writer ----------------------------------------------------------------------
-
-
 # --- the writer ----------------------------------------------------------------------
 
 
@@ -658,6 +651,11 @@ def _document(
                     list(entry.get('refused', [])), f'{where}.refused'
                 ),
                 'data': scrub.optional_table(entry.get('data'), where),
+                **{
+                    key: scrub.json(entry[key], f'{where}.{key}')
+                    for key in ('statement', 'sql', 'error')
+                    if entry.get(key) is not None
+                },
             }
         )
     out['draws'] = []
@@ -989,15 +987,28 @@ def from_recording(
         )
     derived = []
     for i, relation in enumerate(line.get('relations', [])):
+        # What the recording mode keeps of a view-derived relation: the
+        # statement that read it, its SQL whole, and the warehouse's table
+        # of it, or the error the warehouse refused it with (served by
+        # exact replay alone, B2). Its columns and filter are the SQL's.
         derived.append(
             {
                 'view': '',
                 'table': f'derived_{i}',
                 'columns': [],
-                'filter': relation.get('sql'),
-                'refused': [] if relation.get('table') else ['(refused)'],
+                'filter': None,
+                'statement': relation.get('statement'),
+                'sql': relation.get('sql'),
+                'error': relation.get('error'),
+                'refused': [] if relation.get('table') else ['(all)'],
                 'data': table_of(relation.get('table')),
             }
+        )
+    zone = line.get('zone')
+    if not zone:
+        raise CaptureError(
+            f'{case}@{leg}: the recording names no session time zone, which '
+            'the stand-in sets (B5)'
         )
     return {
         'case': case,
@@ -1007,7 +1018,7 @@ def from_recording(
         'versions': line.get('versions') or {},
         'input_hash': line.get('input'),
         'session': {
-            'time_zone': line.get('zone') or 'UTC',
+            'time_zone': zone,
             'null_order': null_order or NULL_ORDER[leg],
         },
         'reference': line.get('observation') or {},
