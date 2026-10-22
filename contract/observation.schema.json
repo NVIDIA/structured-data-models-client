@@ -170,7 +170,8 @@
               }
             },
             "rows": {"type": "integer", "minimum": 0},
-            "digest": {"$ref": "#/$defs/sha256"}
+            "digest": {"$ref": "#/$defs/sha256"},
+            "text_digest": {"description": "The SHA-256 of the rows with each value as its text (str), in order (T3.2, P2-T2.21-1): what a more_exact excuse of digest, which hashes each value's type, still holds equal; absent on a line recorded before it.", "$ref": "#/$defs/sha256"}
           }
         }
       }

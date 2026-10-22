@@ -1553,8 +1553,27 @@ def _host_fields(
             report.fail(f'{where}: host.warnings: differ', 'warnings')
     if stop is not None and stop != 'predict':
         return
+    mine_result, theirs_result = mine['result'], theirs['result']
+    if (
+        isinstance(mine_result, dict)
+        and isinstance(theirs_result, dict)
+        and ('text_digest' in mine_result) != ('text_digest' in theirs_result)
+    ):
+        # A line recorded before T3.2 holds no text digest (P2-T2.21-1):
+        # the rest is compared, and an excused digest is named unheld.
+        mine_result = {
+            k: v for k, v in mine_result.items() if k != 'text_digest'
+        }
+        theirs_result = {
+            k: v for k, v in theirs_result.items() if k != 'text_digest'
+        }
+        if 'public.result/digest' in excused:
+            report.note(
+                f'{where}: public.result/text_digest: not compared, one line '
+                'was recorded before it; record it again (P2-T2.21-1)'
+            )
     found = (
-        _path_of(mine['result'], theirs['result'], 'public.result', excused)
+        _path_of(mine_result, theirs_result, 'public.result', excused)
         if stop is None or theirs['result'] is not None
         else None
     )

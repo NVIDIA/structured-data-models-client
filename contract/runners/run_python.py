@@ -4233,6 +4233,11 @@ def _result_projection(result: Any) -> dict[str, Any]:
         ],
         'rows': len(rows),
         'digest': _rows_digest(rows),
+        # Each value as its text (P2-T2.21-1): a result whose digest an
+        # entry excuses for a value's type is still held to its values.
+        'text_digest': digest(
+            json.dumps([[str(value) for value in row] for row in rows]).encode()
+        ),
     }
 
 

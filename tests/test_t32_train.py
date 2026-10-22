@@ -410,3 +410,60 @@ def test_clean_tmp_keeps_a_directory_a_daemon_listens_in(
         server.close()
     assert f'skip listening {live}' in done.stdout, done.stdout
     assert f'would remove {dead}' in done.stdout, done.stdout
+
+
+# --- P2-T2.21-1: an excused digest still holds the values -------------------------------
+
+
+def _public(digest: str, text: str | None) -> dict[str, Any]:
+    result: dict[str, Any] = {'columns': [], 'rows': 1, 'digest': digest}
+    if text is not None:
+        result['text_digest'] = text
+    return {
+        'public': {'schema': None, 'payloads': [], 'result': result},
+        'host': {'warnings': []},
+    }
+
+
+def test_an_excused_result_digest_still_holds_the_rows_as_text() -> None:
+    report = COMPARE.Report(
+        {
+            'result': 'gate',
+            'schema': 'gate',
+            'payload': 'gate',
+            'warnings': 'gate',
+        }
+    )
+    case = {'id': 'k@postgres'}
+    report.more_exact = {
+        ('k@postgres', 'python-core'): ('public.result/digest',)
+    }
+    COMPARE._host_fields(
+        report,
+        case,
+        'python-core',
+        _public('a' * 64, 'c' * 64),
+        _public('b' * 64, 'c' * 64),
+    )
+    assert report.failures == []
+    COMPARE._host_fields(
+        report,
+        case,
+        'python-core',
+        _public('a' * 64, 'c' * 64),
+        _public('b' * 64, 'd' * 64),
+    )
+    assert report.failures and 'text_digest' in report.texts[0]
+    # A line recorded before the text digest: named, not compared.
+    later = COMPARE.Report({'result': 'gate'})
+    later.more_exact = report.more_exact
+    COMPARE._host_fields(
+        later,
+        case,
+        'python-core',
+        _public('a' * 64, 'c' * 64),
+        _public('b' * 64, None),
+    )
+    assert later.failures == [] and any(
+        'record it again' in n for n in later.notes
+    )
