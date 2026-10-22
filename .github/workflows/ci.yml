@@ -966,7 +966,7 @@ jobs:
     runs-on: ubuntu-latest
     # 90, not 60: the job reached 58 minutes on GitHub's runners as Phase 2's
     # three-database corpus grew (T2.1o); the cause is being cut separately.
-    timeout-minutes: 90
+    timeout-minutes: 60
     needs: [landing, native-wheel]
     strategy:
       fail-fast: false
@@ -1041,10 +1041,10 @@ jobs:
 
   engine:
     runs-on: ubuntu-latest
-    # 90, not 60: its pytest step alone takes 40 minutes or more, and the job
-    # reached its 60-minute limit on two runs (T2.11); the real cut is the
-    # planned CI speed-up package.
-    timeout-minutes: 90
+    # 60 again (P2-T2.16-14, P2-T2.1o-1): it reached its 60-minute limit on
+    # two runs in Phase 2 (T2.11), and since T3.0's split, which runs the
+    # checking tools' tests apart, it takes about 16 minutes.
+    timeout-minutes: 60
     needs: [landing, native-wheel]
     # A real server for the PostgreSQL reads and the PostgreSQL sampler, which
     # only a PostgreSQL can say it accepts. SDM_REQUIRE_POSTGRES turns a
@@ -1143,7 +1143,7 @@ jobs:
     # 120: the job took 80 to 90 minutes on Phase 2's last candidates and
     # one run on T2.16's ran past 90 (T2.1o first raised it from 60); the
     # cause is carried into Phase 3 (P2-T2.16-14).
-    timeout-minutes: 120
+    timeout-minutes: 60
     needs: [landing, native-wheel, native-test-ops]
     env:
       SDM_PUSH_BASE: ${{ needs.landing.outputs.base }}

@@ -525,19 +525,20 @@ def test_every_job_is_left_out_when_the_landing_job_says_skip() -> None:
 
 
 #: The longest a job may run, in minutes: rust-test took 80.7 at most
-#: (fix round 1, P2-5); the landing job, which every other job waits on,
-#: does no more than read a few commits; the client test matrix and the
-#: ref-pandas3 DuckDB route tests reached 57 to 60 minutes as Phase 2's
-#: corpus grew (T2.1o); the engine job's pytest step alone takes 40
-#: minutes or more, and it reached its 60-minute limit on two runs
-#: (T2.11); the checking tools' tests, split out of those two (T3.0), are
-#: as long on their own.
+#: (fix round 1, P2-5), about 31 now that its dependencies build at
+#: opt-level 1 (a cold build more), and the timing guard's own test holds
+#: its 120; the landing job, which every other job waits on,
+#: does no more than read a few commits; the client test matrix, the
+#: ref-pandas3 DuckDB route tests and the engine job (whose pytest step
+#: took 40 minutes and reached its 60-minute limit on two runs, T2.11) take
+#: 14 to 17 minutes since T3.0's split, so 60 (P2-T2.16-14, P2-T2.1o-1);
+#: the checking tools' tests, split out of those (T3.0), take about 43.
 TIMEOUT_CEILINGS = {
     'landing': 10,
     'rust-test': 120,
-    'test': 90,
-    'contract-python-ref-pandas3': 120,
-    'engine': 90,
+    'test': 60,
+    'contract-python-ref-pandas3': 60,
+    'engine': 60,
     'tooling-contract': 90,
     'tooling-root': 90,
 }
