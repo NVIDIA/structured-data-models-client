@@ -44,14 +44,16 @@ Interfaces assumed (T3.2 defines them; this file is their first reader):
   ``digest`` is excused.
 
 Each test listed in ``contract/tests/t32-pending.json`` failed when written,
-before the implementation, and is held to failing (``xfail``, strict) until
-the implementer takes it out of ``pending``; ``pending`` stays within
+before the implementation, and is held to failing (the ``pending``
+decorator, as T2.10's ``held``) until the implementer takes it out of
+``pending``; ``pending`` stays within
 ``authored``, the test author's list.
 """
 
 from __future__ import annotations
 
 import copy
+import functools
 import hashlib
 import importlib.util
 import json
@@ -81,15 +83,26 @@ def _pending_names(key: str) -> set[str]:
 
 def pending(test: Any) -> Any:
     """Holds ``test`` to failing while ``contract/tests/t32-pending.json``
-    lists it."""
+    lists it, as T2.10's ``held`` does: a pending test passes only by
+    failing, and once it passes it fails, naming itself, until the
+    implementer takes it out of ``pending``."""
     assert test.__name__ in _pending_names('authored'), test.__name__
-    if test.__name__ in _pending_names('pending'):
-        return pytest.mark.xfail(
-            strict=True,
-            reason='T3.2: failing until implemented; once it passes, take '
-            'it out of contract/tests/t32-pending.json pending',
-        )(test)
-    return test
+
+    @functools.wraps(test)
+    def held(*arguments: Any, **keywords: Any) -> None:
+        if test.__name__ not in _pending_names('pending'):
+            test(*arguments, **keywords)
+            return
+        try:
+            test(*arguments, **keywords)
+        except Exception:  # noqa: BLE001 - pending: failing, as when written
+            return
+        raise AssertionError(
+            f'{test.__name__} passes now: take it out of '
+            'contract/tests/t32-pending.json pending'
+        )
+
+    return held
 
 
 def _module(name: str, path: Path) -> ModuleType:
