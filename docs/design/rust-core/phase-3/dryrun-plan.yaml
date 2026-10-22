@@ -51,6 +51,8 @@ shared:
   routes: &duckdb_routes ["schema.from-source/all-tables/duckdb", "schema.from-source/catalog-keys/duckdb", "query.materialize/indices-binary/duckdb", "query.materialize/indices-multiclass/duckdb", "query.materialize/indices-regression/duckdb", "query.materialize/indices-link-prediction/duckdb", "query.materialize/indices-ranking/duckdb", "query.materialize/indices-forecast/duckdb", "client.predict/binary/duckdb", "client.predict/multiclass/duckdb", "client.predict/regression/duckdb", "client.predict/link-prediction/duckdb", "client.predict/ranking/duckdb", "client.predict/forecast/duckdb"]
   core: &binary_core {"describe_source": {"provider": {"provider": "sql", "dialect": "duckdb"}, "source": {"tables": [], "primary_keys": {}, "time_columns": {}}, "check_keys": true}, "materialize": {"provider": {"provider": "sql", "dialect": "duckdb"}, "indices": [{"t": "i64", "v": "0"}, {"t": "i64", "v": "1"}], "anchor_time": {"t": "ts", "v": "1709251200000000000", "unit": "ns", "zone": null}, "seed": null}, "predict": {"model": "kumo-relational"}}
   # The S0 corpus's core inputs for the shop base (s0.accept.binary-classification).
+  # A stub that stops at from_source starts describe_source alone.
+  describe_core: &describe_core {"describe_source": {"provider": {"provider": "sql", "dialect": "duckdb"}, "source": {"tables": [], "primary_keys": {}, "time_columns": {}}, "check_keys": true}}
   s0_core: &s0_core {"validate_query": {"profile": {"name": "RELATIONAL", "model": null}, "schema": {"tables": [{"name": "orders", "columns": [{"name": "order_id", "dtype": "int", "stype": "ID"}, {"name": "user_id", "dtype": "int", "stype": "ID"}, {"name": "price", "dtype": "float", "stype": "numerical"}, {"name": "ts", "dtype": "time", "stype": "timestamp"}], "primary_key": "order_id", "time_column": "ts", "end_time_column": null}, {"name": "users", "columns": [{"name": "user_id", "dtype": "int", "stype": "ID"}, {"name": "age", "dtype": "int", "stype": "numerical"}, {"name": "country", "dtype": "string", "stype": "categorical"}], "primary_key": "user_id", "time_column": null, "end_time_column": null}], "links": [[{"column": "user_id", "table": "orders"}, {"column": "user_id", "table": "users"}]]}}}
 kinds:
   # --- A: an S1 kind on each warehouse leg -----------------------------------
@@ -319,7 +321,7 @@ kinds:
       seam: keys
       paths: [schema.from-source/all-tables/duckdb]
       routes: *duckdb_routes
-      core: *binary_core
+      core: *describe_core
       input:
         <<: *input
         setup:

@@ -78,6 +78,9 @@ sys.path.insert(0, str(HERE))
 import phases  # noqa: E402
 
 STUBS = 'contract/cases/dryrun'
+#: The stand-in's forwarding client a warehouse kind's legs run through
+#: (T3.3).
+STANDIN_CLIENT = 'contract/runners/standin_client.py'
 IDENTITY = [
     '-c',
     'user.name=gate dry run',
@@ -416,7 +419,12 @@ def dry_run(arguments: argparse.Namespace) -> int:
             gapped = any(
                 g.startswith(f'{step}:') for kind in valid for g in kind.gaps
             )
-            if failed and (loose or not gapped):
+            # A failure explained wholly by what the stubs are expected to
+            # meet (EXPECTED, noted) is judged, not incomplete (T3.2).
+            noted = any(
+                g.startswith(f'{step}:') for kind in valid for g in kind.notes
+            )
+            if failed and (loose or not (gapped or noted)):
                 # A failure no kind explains: nothing was judged by it.
                 broken.append(
                     f'{step} failed (exit {done.returncode}): '
@@ -449,7 +457,28 @@ def dry_run(arguments: argparse.Namespace) -> int:
             shutil.copy2(stub, alone / stub.name)
             made = []
             runs: list[tuple[str, list[str], Path]] = []
-            if arguments.python:
+            legs = list(kind.case.get('warehouses') or [])
+            if legs and not (tree / STANDIN_CLIENT).is_file():
+                # A warehouse kind runs only on its legs, offline on the
+                # stand-in (T3.3's standin_client.py): judged once it
+                # exists, as the design says, not a gap of the tools (T3.2).
+                kind.notes.append(
+                    'observe and compare: the warehouse legs wait for the '
+                    'stand-in (contract/runners/standin_client.py, T3.3)'
+                )
+                continue
+            if arguments.python and legs:
+                for leg in legs:
+                    out = observations / f'{kind.id}.{leg}.python-core.jsonl'
+                    runs.append(
+                        (
+                            f'observe (python-core, {leg})',
+                            [arguments.python, '-I', str(judge / 'contract/runners/run_python.py'),
+                             '--mode', 'python-core', '--database', leg, '--out', str(out), str(stub)],
+                            out,
+                        )
+                    )  # fmt: skip
+            elif arguments.python:
                 for mode in ('python-core', 'python-old'):
                     out = observations / f'{kind.id}.{mode}.jsonl'
                     runs.append(
@@ -490,17 +519,30 @@ def dry_run(arguments: argparse.Namespace) -> int:
                     kind.judged.append(step)
             if not made:
                 continue
-            done = _run(
+            # A warehouse kind is compared on each of its legs (T3.2).
+            for_legs = [
                 [
-                    python,
-                    str(judge / 'scripts/rust_core/compare.py'),
-                    '--cases',
-                    str(alone),
-                    *map(str, made),
-                ],
-                tree,
-            )
-            said = done.stdout + done.stderr
+                    '--database',
+                    leg,
+                    *(str(o) for o in made if f'.{leg}.' in o.name),
+                ]
+                for leg in legs
+            ] or [[*map(str, made)]]
+            said, code = '', 0
+            for given in for_legs:
+                done = _run(
+                    [
+                        python,
+                        str(judge / 'scripts/rust_core/compare.py'),
+                        '--cases',
+                        str(alone),
+                        *given,
+                    ],
+                    tree,
+                )
+                said += done.stdout + done.stderr
+                code = code or done.returncode
+            done = subprocess.CompletedProcess(done.args, code, said, '')
             if done.returncode == 0:
                 kind.judged.append('compare')
                 continue
