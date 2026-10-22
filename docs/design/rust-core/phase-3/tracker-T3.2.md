@@ -28,6 +28,11 @@ The implementer's own tests are `contract/tests/test_t32_recording_own.py` and `
 - Coverage's leg claims, manifest test claims and `--gate`; `register.py`'s owner rows with the allowlist (U4); the census's real-data mode per leg.
 - P2-MID2-7, P2-T2.0f-1, P2-T2.21-1, C18's static check, handoff's cleanup on a signal, clean_tmp's listening sockets, the dry-run plan's corrections.
 
+### Answers to the brief's appended items
+
+- The auto/explicit claims the Snowflake and Lakebase test author chose are confirmed: a leg's default source is built with its class (`DatabricksSource`, `SnowflakeSource`, `PostgresSource`), so it claims `source.open/explicit`, and a connect case hands `Schema.from_source` the raw connection or session, found by detection, so it claims `source.open/auto` (`run_python.py`'s `warehouse_source`, as the old client reads them, CN/source.py:97-107).
+- `lane.py` started from the `rust-core` checkout: it now refuses a phase `rust-core` already holds, naming it.
+
 ### Probes
 
 - Outside JSON: deep and wide capture lines, manifests and verdict manifests are each refused by name or read (`test_deep_and_wide_capture_lines_are_refused_by_name`, `test_a_deep_or_wide_manifest_is_refused_by_name`, `test_a_live_only_item_needs_its_e1_verdict_on_the_final_candidate`).
