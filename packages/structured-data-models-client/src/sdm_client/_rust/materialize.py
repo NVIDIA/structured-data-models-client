@@ -384,13 +384,14 @@ def _described_now(schema: Schema) -> dict[str, Any]:
     schema the core has not described (:func:`description`)."""
     import warnings
 
-    from sdm_client._rust.schema import describe
+    from sdm_client._rust.schema import from_source
 
     with warnings.catch_warnings():
         # What describing says of the tables was said, or not, when the
         # schema was built; the schema as it stands is what is asked.
         warnings.simplefilter('ignore')
-        return describe(
+        described: dict[str, Any] = from_source(
+            type(schema),
             schema.source,
             {
                 name: getattr(table, 'source_name', name)
@@ -406,7 +407,8 @@ def _described_now(schema: Schema) -> dict[str, Any]:
             },
             relationships=[],
             check_keys=False,
-        )
+        )._core_description
+    return described
 
 
 def gather(

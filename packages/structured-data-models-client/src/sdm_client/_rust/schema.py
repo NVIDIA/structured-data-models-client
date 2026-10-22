@@ -69,33 +69,7 @@ def from_source(
     check_keys: bool,
 ) -> Schema:
     r"""The schema of the tables named, or of every table, of the DuckDB,
-    SQLite or Postgres ``source``, described on the core (:func:`describe`).
-    """
-    return build(
-        cls,
-        source,
-        describe(
-            source,
-            tables,
-            primary_keys=primary_keys,
-            time_columns=time_columns,
-            relationships=relationships,
-            check_keys=check_keys,
-        ),
-    )
-
-
-def describe(
-    source: Any,
-    tables: Mapping[str, str] | None,
-    *,
-    primary_keys: Mapping[str, str | Sequence[str]] | None,
-    time_columns: Mapping[str, str | None] | None,
-    relationships: Sequence[Relationship] | None,
-    check_keys: bool,
-) -> dict[str, Any]:
-    r"""The core's ``SourceDescription`` of the tables named, or of every
-    table, of the DuckDB, SQLite or Postgres ``source``.
+    SQLite or Postgres ``source``, described on the core.
 
     Each key and time column is written as the contract's ``Given``: a
     value the contract's type cannot hold (a number, a set, a mapping) as
@@ -107,7 +81,8 @@ def describe(
         StructuredDataError: The core's refusal, as :mod:`.errors` maps it,
             ``UNSUPPORTED_REQUEST`` naming the rule for an input it does not
             describe yet; ``INVALID_REQUEST`` for a relationship that is not
-            a ``Relationship``, which the contract cannot carry.
+            a ``Relationship``, which the contract cannot carry; a source
+            holding no table, named as the reference names it.
     """
     from sdm_client.schema import Relationship
 
@@ -172,16 +147,15 @@ def describe(
             provider=provider,
         )
     except StructuredDataError as refused:
-        if (refused.details or {}).get('rule') != 'no_tables':
-            raise
-        # The source as the reference names it, which only this host holds
-        # (`engine_graph`'s refusal of a source with no table).
-        raise StructuredDataError(
-            f'{source!r} holds no table to describe',
-            code=refused.code,
-            details=refused.details,
-        ) from None
-    return json.loads(finished.take(finished.result['description']))
+        if (refused.details or {}).get('rule') == 'no_tables':
+            # The core's refusal, said naming the source as the reference
+            # names it, which only this host holds (`engine_graph`'s refusal
+            # of a source with no table).
+            refused.message = f'{source!r} holds no table to describe'
+            refused.args = (refused.message,)
+        raise
+    described = json.loads(finished.take(finished.result['description']))
+    return build(cls, source, described)
 
 
 def build(cls: type[Schema], source: Any, described: dict[str, Any]) -> Schema:

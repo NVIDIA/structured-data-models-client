@@ -664,7 +664,7 @@
           ],
           "anchor_time": "2024-03-01",
           "inference_config": {
-            "num_estimators": Infinity
+            "num_estimators": 1e400
           }
         }
       },
@@ -709,7 +709,7 @@
       "until": "predict"
     },
     {
-      "site": "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::describe#1",
+      "site": "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::from_source#1",
       "why": "primary_keys keyed by a table that is not a string; the case format's keys are strings, so not reached by a probe input",
       "input": {
         "base": "shop",
@@ -730,7 +730,7 @@
       "until": "from_source"
     },
     {
-      "site": "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::describe#2",
+      "site": "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::from_source#2",
       "why": "a relationship that is not a Relationship; the runner builds each as one, so not reached by a probe input",
       "input": {
         "base": "shop",
@@ -744,22 +744,6 @@
             }
           ]
         },
-        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
-        "materialize": {
-          "indices": [
-            0,
-            1
-          ],
-          "anchor_time": "2024-03-01"
-        }
-      },
-      "until": "from_source"
-    },
-    {
-      "site": "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::describe#3",
-      "why": "the core's refusal of a source holding no table, said with the source as the reference names it; the case format's bases hold tables, so not reached by a probe input",
-      "input": {
-        "base": "shop",
         "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
         "materialize": {
           "indices": [
