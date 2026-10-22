@@ -180,31 +180,21 @@ fn fixed_point(text: &str) -> Option<(Number, i32)> {
 
 impl Candidate {
     /// A key equal for two candidates Python's `dict.fromkeys` holds as
-    /// one: a number by its exact value, whatever its type (`1`, `1.0`,
-    /// `True` and `Decimal('1.00')` are one), text by its text, a missing
-    /// value one key; none for a NaN or a value of another type, which no
-    /// other equals.
+    /// one ([`sdm_wire::key`]): a number by its exact value, whatever its
+    /// type (`1`, `1.0`, `True` and `Decimal('1.00')` are one), text by its
+    /// text, a missing value one key; none for a NaN or a value of another
+    /// type, which no other equals.
     fn key(&self) -> Option<String> {
-        let trimmed = |text: String| -> String {
-            let text = if text.contains('.') {
-                text.trim_end_matches('0').trim_end_matches('.').to_owned()
-            } else {
-                text
-            };
-            if text == "-0" { "0".to_owned() } else { text }
-        };
+        use sdm_wire::key;
         match self {
-            Candidate::Missing => Some("z".to_owned()),
-            Candidate::Bool(b) => Some(format!("n{}", u8::from(*b))),
-            Candidate::Int(n) => Some(format!("n{}", n.whole_text())),
-            Candidate::Float(f) if !f.is_finite() => {
-                (!f.is_nan()).then(|| format!("i{}", f.is_sign_negative()))
-            }
-            Candidate::Float(f) => Some(format!("n{}", trimmed(format!("{f:.1100}")))),
+            Candidate::Missing => Some(key::MISSING.to_owned()),
+            Candidate::Bool(b) => Some(key::boolean(*b)),
+            Candidate::Int(n) => Some(key::exact(&n.whole_text())),
+            Candidate::Float(f) => key::float(*f),
             Candidate::Decimal { unscaled, scale } => {
-                Some(format!("n{}", trimmed(decimal_text(unscaled, *scale))))
+                Some(key::exact(&decimal_text(unscaled, *scale)))
             }
-            Candidate::Text(text) => Some(format!("s{text}")),
+            Candidate::Text(text) => Some(key::text(text)),
             Candidate::Typed { text, kind } => Some(format!("t{kind:?}\u{0}{text}")),
             Candidate::Spelled(_)
             | Candidate::Repeat
