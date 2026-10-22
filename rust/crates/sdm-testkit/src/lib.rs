@@ -24,7 +24,11 @@
 //! `rusqlite` provider. [`kit`] runs the provider conformance kit on its
 //! providers (T2.5). [`memory`] is the minimal non-SQL test provider, and
 //! [`layer`] the second data layer, for host providers alone, swapped in
-//! at the composition root (T2.7).
+//! at the composition root (T2.7). [`standin`] is the stand-in provider
+//! of the warehouse legs (T3.3): exact replay of the old client's
+//! statements from the early capture, then a DuckDB loaded with its
+//! tables, then a reason the step is judged live only; the `sdm-standin`
+//! binary serves it over a pipe to the Python and Java harnesses.
 
 /// The databases the pure-Rust host has a provider for (rust-host's marker
 /// for the staging rule, `contract/runners/run_python.py`'s `check_legs`;
@@ -48,4 +52,5 @@ pub mod observation;
 pub mod pre_given;
 pub mod replay;
 pub mod sqlite;
+pub mod standin;
 pub mod values;
