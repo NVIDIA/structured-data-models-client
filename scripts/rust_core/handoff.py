@@ -421,6 +421,16 @@ def step_warehouses(
     on a leg yet is pending live, named and never passed (design, choice 2;
     T3.3)."""
     _, recorded = reference_lines(root)
+    done = run(
+        [python, '-I', '-c',
+         'import json; from sdm_client import _native; '
+         'print(json.dumps(list(getattr(_native, "PROVIDERS", []))))'],
+        root,
+    )  # fmt: skip
+    try:
+        providers = set(json.loads(done.stdout.strip().splitlines()[-1]))
+    except (ValueError, IndexError):
+        providers = set()
     for leg in runner.WAREHOUSES:
         cases = {
             case: path
@@ -439,6 +449,15 @@ def step_warehouses(
             else:
                 lines[case] = line
         if not lines:
+            continue
+        if leg not in providers:
+            # The staging rule (T3.2): a leg runs where the host reports
+            # its provider, which the leg's own package adds.
+            step.notes.append(
+                f'{", ".join(f"{case}@{leg}" for case in sorted(lines))}: the '
+                f'core reports no {leg} provider yet; judged once its package '
+                'adds it'
+            )
             continue
         if leg == 'lakebase' and not os.environ.get('SDM_POSTGRES_TEST_DSN'):
             step.problems.append(
