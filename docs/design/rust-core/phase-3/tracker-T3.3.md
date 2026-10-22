@@ -32,3 +32,21 @@ Lane H, stack 1. Brief: the orchestrator's `phase-3/briefs/T3.3.md`; design row 
 - The loader over every case of `contract/cases`: each case's tables are written for both engines or refused by name (`test_every_s1_case_is_written_or_named_on_each_warehouse`, and the test author's), and every statement passes the live write guard's check offline (run once from the guard outside the repository).
 - Outside JSON: a capture nested 100,000 levels is refused by name (`not a capture (RecursionError)`); an object 200,000 keys wide reads; a reference line nested past Python's recursion is refused by name at write time.
 - The private-name check, seeded: a name left in the reference line, a cell, a field name, a statement, a binary cell, a URL's host and a token each fail the write with no file written (`contract/tests/test_captures.py`).
+
+## The stand-in, the harness and the carried rows
+
+- The stand-in (`sdm-testkit`'s `standin.rs`, `sdm-standin`, `standin_client.py`): exact replay, then the DuckDB local engine with the capture's NULL order and zone, a draw served only as recorded, a missing table or draw refused by name, B1, B2 and B4; `standin_client.open` gives `run_python.py` the forwarding provider `provider(step, keys)`, and serves Lakebase on the local Postgres, the case's tables loaded under the capture's `{schema}`.
+- `handoff.py` reads each case's legs as `run_python.py` does: an S2 case never runs on DuckDB, SQLite or Postgres; each touched case's warehouse legs run on python-core offline where the core reports the leg's provider, held to the capture's reference line (Lakebase's to the Postgres line until its capture exists); a leg with no reference is named pending live.
+  Exit 5's test (a difference on Lakebase alone stops the stamp) passes once the core reports a Lakebase provider (T3.7); until then the leg is named, not judged.
+- `sdm-contract-run` reads the cases of the database it runs on (`case::load_for`): a warehouse-only case never runs on DuckDB.
+- The per-leg CI jobs, `contract-python (ref-pandas3, <leg>)` and `cross-host (<leg>)`, judge the cases with a reference on the leg where the core or rust-host reports its provider, and list the rest.
+- C-1 and E-0: `scripts/live/capture_run.py` (`plan`, the dry mode; `run`), `capture.job.template.json` and its notebook `capture_job.py` for the Spark and Lakebase legs; the two Databricks legs run one after the other.
+- Carried rows closed: P2-T2.7-1 (`layer.rs`), P2-T2.7-2 (`memory.rs`), P2-T2.14c-1, P2-T2.1a-3, P2-T2.16a-1, P2-T2.11-4, C28, OF-7's predicate, M5, C16's rest, P2-T2.16-14 and P2-T2.1o-1 (the slowest job is now `tooling`, about 43 minutes; `test`, `contract-python-ref-pandas3` and `engine` back at 60).
+  ENV-2: `test_contract_loader.py`'s Postgres statement-capture tests pass in lane H's environment; closed.
+  ENV-3: the prepush replay self-test passed on each of this package's pushes; closed.
+- `handoff.py` builds the previous round's Rust tests in a target directory of their own: built into the caller's, their artifacts were newer than the candidate's sources and the next build took them as fresh.
+
+## Fix round 1 (reviews of 5bfb59e2)
+
+Codex: nested field metadata searched and kept, nested types kept through write and read, every read of a statement kept, empty nested columns loaded, named parameters kept.
+Claude: semantic views created and dropped under the case's name, a leg's schema holding only the case (refused by name otherwise), placeholders replacing whole names only.
