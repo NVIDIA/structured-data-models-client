@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import importlib.util
 import json
 import os
 import shutil
@@ -193,8 +194,24 @@ def _executable(path: Path, text: str) -> None:
     path.chmod(path.stat().st_mode | stat.S_IXUSR)
 
 
+def _phase() -> str:
+    r"""The phase branch this checkout is under, as ``phases.py`` names it
+    (CI's branch, else the branch checked out, else the phase in progress):
+    a branch the remote holds, which Phase 1's no longer is."""
+    path = ROOT / 'scripts/rust_core/phases.py'
+    spec = importlib.util.spec_from_file_location('cross_host_phases', path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    # Its dataclasses look their module up by name.
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    branch = os.environ.get('GITHUB_REF_NAME') or module.checked_out()
+    found: str = module.phase_branch(branch=branch, environ=os.environ)
+    return found
+
+
 #: What ``ratchet.py where`` prints on a lane of the phase branch.
-LANE = '--base origin/rust-core-phase-1'
+LANE = f'--base origin/{_phase()}'
 
 
 def _run(
