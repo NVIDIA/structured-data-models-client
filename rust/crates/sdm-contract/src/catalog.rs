@@ -140,12 +140,15 @@ pub struct CatalogForeignKey {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CatalogIndex {
     pub table: String,
-    pub columns: IndexColumns,
+    pub columns: IndexCoverage,
 }
 
-/// The columns an index covers, as the dialect's reader resolves them.
+/// The columns an index covers, as the dialect's reader resolves them
+/// (named apart from the `index_columns` part, [`DescribePart::IndexColumns`],
+/// which reads a [`IndexCoverage::Named`] index's columns, and its answer,
+/// [`CatalogAnswer::IndexColumns`]).
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum IndexColumns {
+pub enum IndexCoverage {
     /// The columns, in order, each resolved; one for an index over exactly
     /// one.
     Resolved(Vec<String>),
