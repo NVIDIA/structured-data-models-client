@@ -41,7 +41,10 @@ classifiers = [
 dependencies = [
     "structured-data-models-api==1.0.0",
     "structured-data-models-pql==1.0.0",
-    "pandas>=2.2.2",
+    # 3.1 builds a frame around an integer past the float range where earlier
+    # releases refused one, and a request's description relies on that
+    # refusal to leave out the table carrying it.
+    "pandas>=2.2.2,<3.1",
     "numpy>=1.23",
     "requests>=2.28",
     "urllib3>=1.26",
