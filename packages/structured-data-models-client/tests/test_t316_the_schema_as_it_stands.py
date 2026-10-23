@@ -552,3 +552,31 @@ def test_a_meaning_the_caller_s_type_cannot_carry_is_refused_in_the_old_client_s
 
     outcomes = _both(monkeypatch, act)
     assert outcomes['core'] == outcomes['old']
+
+
+@pytest.mark.parametrize('dtype', ['string'])
+def test_a_linked_column_retyped_then_sampled_is_refused_in_the_old_client_s_words(
+    dtype: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Claude's review round 3 of 9c061237 (P1): a link's foreign key retyped
+    # by the caller after the link was made; the old client's
+    # check_consistent refuses at materialize, naming the link and both
+    # types, as the relationships edit refuses it.
+    def act() -> Any:
+        schema = _described()
+        schema['orders']['user_id'].dtype = dtype
+        from sdm_client import PredictiveQuery
+
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore')
+                PredictiveQuery(QUERY, schema).materialize(
+                    indices=[0, 1], anchor_time=pd.Timestamp('2024-03-01')
+                )
+        except StructuredDataError as refused:
+            return _said(refused)
+        return 'sampled'
+
+    outcomes = _both(monkeypatch, act)
+    assert outcomes['core'] == outcomes['old']
+    assert 'cannot match' in outcomes['old'][2]
