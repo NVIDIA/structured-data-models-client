@@ -595,6 +595,12 @@ class WriteGuard:
                     and _upper(before) not in RESERVED
                 )
                 or (
+                    # The old client's join onto a derived table:
+                    # JOIN (SELECT ...) ON ....
+                    word == 'JOIN'
+                    and [_upper(t) for t in items[i + 2 : i + 3]] == ['SELECT']
+                )
+                or (
                     # The old client's sampled derived table:
                     # FROM (SELECT ...) TABLESAMPLE (...).
                     word == 'TABLESAMPLE'
