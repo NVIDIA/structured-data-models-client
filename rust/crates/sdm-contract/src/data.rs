@@ -374,6 +374,22 @@ pub fn refuse_derived(
             "a derived relation is asked of a provider that does not read one",
         );
     }
+    // The columns a catalog found are its columns, each by its own name,
+    // with no filter: a relation marked so that renames, computes or filters
+    // contradicts itself, and is refused rather than read as the table.
+    if relation.found
+        && (relation.filter.is_some()
+            || relation
+                .columns
+                .iter()
+                .any(|c| c.expression.is_some() || c.column.as_ref() != Some(&c.name)))
+    {
+        return refusal(
+            ErrorKind::InvalidRequest,
+            ErrorCode::InvalidRequest,
+            "a relation of the columns its catalog found renames, computes or filters them",
+        );
+    }
     let mut names = BTreeSet::new();
     for column in &relation.columns {
         let reads = usize::from(column.column.is_some()) + usize::from(column.expression.is_some());
@@ -1318,6 +1334,18 @@ pub trait DataLayer: Send + Sync {
     fn settled(&self, provider: &ProviderChoice, parts: Vec<String>) -> ProviderChoice {
         let _ = parts;
         provider.clone()
+    }
+
+    /// Whether `parts`, a namespace a table was read under earlier
+    /// ([`crate::ops::SourceFacts::namespace`]), is one `provider` reads it
+    /// under: as many parts as its dialect's namespace, each part the
+    /// provider gives equal to the one at its place (innermost aligned,
+    /// compared as the dialect compares names), each part it leaves to the
+    /// connection any. `false`, the default and a host provider's: no
+    /// earlier namespace is read again (T3.4).
+    fn keeps(&self, provider: &ProviderChoice, parts: &[String]) -> bool {
+        let _ = (provider, parts);
+        false
     }
 
     /// `relation` as the run's provider reads it: under the provider's

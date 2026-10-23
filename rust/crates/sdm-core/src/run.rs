@@ -157,6 +157,9 @@ struct Shared {
     /// The namespace the run settled its provider's under
     /// ([`Asker::with_access`]).
     settled: Option<Vec<String>>,
+    /// Each table of one part read under a namespace of its own, by the
+    /// relation the run names it by ([`Asker::pin`]).
+    pinned: BTreeMap<Relation, Relation>,
 }
 
 fn lock(shared: &Mutex<Shared>) -> MutexGuard<'_, Shared> {
@@ -197,20 +200,31 @@ impl Asker {
             && !relation.is_derived()
             && !columns.is_empty()
         {
-            lock(&self.shared).guarded.insert(relation.clone(), columns);
+            // A guard from the catalog stands: one from a schema's columns,
+            // which may be fewer, never replaces it.
+            lock(&self.shared)
+                .guarded
+                .entry(relation.clone())
+                .or_insert(columns);
         }
     }
 
-    /// `request` with each table it reads whole read as the columns the
+    /// `request` with each table it names read where the run pinned it
+    /// ([`Asker::pin`]), and each it reads whole read as the columns the
     /// catalog read for it ([`Asker::guard`]).
     fn guarded(&self, mut request: DataRequest) -> DataRequest {
         let shared = lock(&self.shared);
-        // A catalog read names the table itself.
-        if shared.guarded.is_empty() || matches!(request, DataRequest::Describe { .. }) {
-            return request;
-        }
+        let catalog = matches!(request, DataRequest::Describe { .. });
         for relation in request.relations_mut() {
-            if let Some(columns) = shared.guarded.get(relation) {
+            let named = relation.clone();
+            if let Some(pinned) = shared.pinned.get(&named) {
+                relation.source = pinned.source.clone();
+            }
+            // A catalog read names the table itself.
+            if catalog {
+                continue;
+            }
+            if let Some(columns) = shared.guarded.get(&named) {
                 relation.found = true;
                 relation.columns = columns
                     .iter()
@@ -223,6 +237,15 @@ impl Asker {
             }
         }
         request
+    }
+
+    /// Reads the table `relation`, of one part, names under `parts` on every
+    /// later read, where it was read before, whatever namespace the run's
+    /// provider reads other tables under.
+    pub(crate) fn pin(&self, relation: &Relation, parts: Vec<String>) {
+        let mut pinned = relation.clone();
+        pinned.source.splice(0..0, parts);
+        lock(&self.shared).pinned.insert(relation.clone(), pinned);
     }
 
     /// The asker with `data` its run's data access from here on, its

@@ -192,6 +192,19 @@ impl DataLayer for Data {
                         expect: dialect.expected(request),
                     });
                 }
+                // A request of a dialect that reads every table under its
+                // full namespace, whose every relation names it in full (a
+                // table the core reads where it was described), reads none
+                // of the parts the provider leaves to the connection (T3.4).
+                let under = request.relations();
+                if dialect.settles_namespace()
+                    && !under.is_empty()
+                    && under
+                        .iter()
+                        .all(|(_, r)| r.source.len() == dialect.namespace_depth() + 1)
+                {
+                    return sql::plan(dialect, request, &[]);
+                }
                 let namespace = qualifying(request, namespace)?;
                 deeper(request, &namespace, dialect.namespace_depth())?;
                 sql::plan(dialect, &in_namespace(request, &namespace), &namespace)
@@ -249,6 +262,30 @@ impl DataLayer for Data {
             },
             ProviderChoice::Host { .. } => provider.clone(),
         }
+    }
+
+    fn keeps(&self, provider: &ProviderChoice, parts: &[String]) -> bool {
+        let ProviderChoice::Sql { dialect, namespace } = provider else {
+            return false;
+        };
+        let Some(dialect) = sql::dialect(dialect.name()) else {
+            return false;
+        };
+        let depth = dialect.namespace_depth();
+        if !dialect.settles_namespace() || parts.len() != depth || namespace.len() > depth {
+            return false;
+        }
+        let same = |given: &str, read: &str| match dialect.name_case() {
+            sql::NameCase::Insensitive => given.to_lowercase() == read.to_lowercase(),
+            _ => given == read,
+        };
+        // The provider's parts, innermost aligned with those read.
+        let offset = depth - namespace.len();
+        namespace.iter().enumerate().all(|(at, given)| {
+            given
+                .as_deref()
+                .is_none_or(|given| same(given, &parts[offset + at]))
+        })
     }
 
     fn read_as(&self, provider: &ProviderChoice, relation: &Relation) -> Relation {
