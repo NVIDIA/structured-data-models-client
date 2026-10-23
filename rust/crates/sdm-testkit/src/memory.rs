@@ -144,6 +144,7 @@ fn not_read() -> ProviderError {
 
 fn failed(kind: ErrorKind) -> ProviderError {
     ProviderError {
+        refuses_expression: false,
         kind,
         retryable: false,
         sqlstate: None,
@@ -164,6 +165,7 @@ impl Memory {
     /// advice (it has no index) and no fallback.
     pub fn capabilities() -> ProviderCapabilities {
         ProviderCapabilities {
+            derived_relations: false, neighbor_lookback: false, sample_rows: false,
             optional: DECLARED.iter().copied().collect(),
             max_keys_per_request: None,
             sampling: Determinism::SeededStable,

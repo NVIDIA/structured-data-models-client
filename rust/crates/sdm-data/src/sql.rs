@@ -26,16 +26,33 @@ use sdm_contract::catalog::CatalogAnswer;
 use sdm_contract::data::{
     BATCH_COLUMN, DataRequest, DescribePart, Dialect, ExpectedSchema, FetchPlan, Filter, KeySet,
     OptionalRequest, ProviderCapabilities, Relation, SEED_BATCH, SqlParam, SqlStatement,
-    TableColumn, TableKey, TieBreak, TieTerm, Window, refuse_relation, refused, seed_key_columns,
+    TableColumn, TableKey, TieBreak, TieTerm, Window, refuse_derived, refuse_relation, refused,
+    seed_key_columns,
 };
 use sdm_contract::ops::Dtype;
 use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 
-use crate::{duckdb, postgres, quote, sqlite};
+use crate::{databricks, duckdb, postgres, quote, sqlite};
 
 /// The dialects this build renders, in the order `PROVIDERS` names them.
-pub(crate) static DIALECTS: &[&dyn SqlDialect] =
-    &[&duckdb::Duckdb, &sqlite::Sqlite, &postgres::Postgres];
+pub(crate) static DIALECTS: &[&dyn SqlDialect] = &[
+    &duckdb::Duckdb,
+    &sqlite::Sqlite,
+    &postgres::Postgres,
+    &databricks::Databricks,
+];
+
+/// How a dialect's source compares the names of its namespace and
+/// relations (design fix C): as written, without regard to case (Unity
+/// Catalog's, which stores them in lower case), or upper-cased when
+/// unquoted (Snowflake's, T3.6).
+#[allow(dead_code, reason = "Snowflake's rule, T3.6")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum NameCase {
+    AsWritten,
+    Insensitive,
+    UpperWhenUnquoted,
+}
 
 /// The dialect of `name`, if this build renders it.
 pub(crate) fn dialect(name: &str) -> Option<&'static dyn SqlDialect> {
@@ -84,13 +101,28 @@ pub(crate) trait SqlDialect: Sync {
         quote::identifier(name)
     }
 
-    /// Whether a source of this dialect is read under the provider's
-    /// namespace (contract v28): each relation of one part read under it,
-    /// and the namespace handed to [`SqlDialect::describe`]. Otherwise a
-    /// namespace given is refused by name, the dialect's sources having
-    /// none to name.
-    fn takes_namespace(&self) -> bool {
-        false
+    /// How many namespace parts a source of this dialect takes, outermost
+    /// first (design fix C), apart from the parts a relation may have
+    /// ([`SqlDialect::most_parts`]): DuckDB and SQLite none, Postgres a
+    /// schema, Databricks a catalog and a schema. Each relation of one part
+    /// is read under the provider's namespace (contract v28), and the
+    /// namespace handed to [`SqlDialect::describe`]; a namespace of more
+    /// parts is refused by name.
+    fn namespace_depth(&self) -> usize {
+        0
+    }
+
+    /// How the source compares names (design fix C): as written.
+    fn name_case(&self) -> NameCase {
+        NameCase::AsWritten
+    }
+
+    /// A derived relation's `FROM` (contract v28), `source` the rendering
+    /// of the relation it reads; `None` for a dialect that reads none, where
+    /// a derived relation is refused by name (`derived_relations` is false
+    /// in its capabilities).
+    fn derived(&self, _relation: &Relation, _source: &str) -> Option<String> {
+        None
     }
 
     // --- key sets: names, binding and joins --------------------------------
@@ -141,6 +173,16 @@ pub(crate) trait SqlDialect: Sync {
     }
 
     // --- statement shapes that differ -------------------------------------------
+
+    /// The row count of `table` (rendered) where `filtered` holds (the
+    /// `WHERE` clause, opened by a space, or nothing): its one column named
+    /// `rows`, unless the dialect writes the reference's own statement.
+    fn count_rows(&self, table: &str, filtered: &str) -> String {
+        format!(
+            "SELECT COUNT(*) AS {} FROM {table}{filtered}",
+            self.identifier("rows")
+        )
+    }
 
     /// What follows a preview's `FROM` before its `LIMIT`: nothing, unless
     /// the dialect reads the first rows in an order of its own.
@@ -303,12 +345,21 @@ pub(crate) fn from(
     if let Some(refusal) = refuse_relation(request, field, relation, dialect.most_parts()) {
         return Err(refusal);
     }
-    Ok(relation
+    let renders = dialect.capabilities().derived_relations;
+    if let Some(refusal) = refuse_derived(request, field, relation, renders) {
+        return Err(refusal);
+    }
+    let source = relation
         .source
         .iter()
         .map(|part| dialect.identifier(part))
         .collect::<Vec<_>>()
-        .join("."))
+        .join(".");
+    if !relation.is_derived() {
+        return Ok(source);
+    }
+    // A dialect declaring derived relations renders them (contract v28).
+    Ok(dialect.derived(relation, &source).unwrap_or(source))
 }
 
 /// The one table a part of the catalog read one table at a time names, or
@@ -362,6 +413,9 @@ pub(crate) struct Sample<'a> {
     pub projected: String,
     pub filtered: String,
     pub key_dtype: Option<Dtype>,
+    /// The table's rows, where the core counted them for a dialect sizing
+    /// its draw by them (`ProviderCapabilities::sample_rows`).
+    pub rows: Option<u64>,
 }
 
 /// A read of a table against a key set (`neighbors`, `lookup`), as the
@@ -535,6 +589,7 @@ pub(crate) fn plan(
             columns,
             filters,
             key_dtype,
+            rows,
         } => {
             let rendered = from(d, request, "table", table)?;
             if columns.is_empty() {
@@ -557,6 +612,7 @@ pub(crate) fn plan(
                 projected: identifiers(d, columns),
                 filtered: conditions(d, request, filters, "\n")?,
                 key_dtype: *key_dtype,
+                rows: *rows,
             });
             let sample = statements.pop().unwrap_or_default();
             before = statements;
@@ -614,11 +670,9 @@ pub(crate) fn plan(
             }
             text
         }
-        DataRequest::CountRows { table, filters } => format!(
-            "SELECT COUNT(*) AS {} FROM {}{}",
-            d.identifier("rows"),
-            from(d, request, "table", table)?,
-            conditions(d, request, filters, " ")?
+        DataRequest::CountRows { table, filters } => d.count_rows(
+            &from(d, request, "table", table)?,
+            &conditions(d, request, filters, " ")?,
         ),
     };
     let statement = |text: String, params: Vec<SqlParam>| SqlStatement {
@@ -698,12 +752,17 @@ fn key_counts(
                 .map(|c| format!("{c} IS NULL"))
                 .collect::<Vec<_>>()
                 .join(" OR ");
+            let nulls = format!("COUNT(CASE WHEN {missing} THEN 1 END)");
+            // A key the source keeps unique has one distinct value per row
+            // holding all of it, so the reference counts only its nulls
+            // (`_key_count_sql`, carried row P2-T2.2-3).
             let distinct = match quoted.as_slice() {
+                _ if key.unique => format!("COUNT(*) - {nulls}"),
                 [one] => format!("COUNT(DISTINCT {one})"),
                 several => d.distinct_keys(several, &table),
             };
             format!(
-                "SELECT {position} AS k, COUNT(*) AS n, {distinct} AS d, COUNT(CASE WHEN {missing} THEN 1 END) AS z\nFROM {table}"
+                "SELECT {position} AS k, COUNT(*) AS n, {distinct} AS d, {nulls} AS z\nFROM {table}"
             )
         })
         .collect::<Vec<_>>()

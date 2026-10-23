@@ -73,7 +73,17 @@ const IDENTIFIERS: &[&str] = &[
     // A relation's name parts, each quoted alone (design choice 12,
     // contract v26): the source a request reads, never text interpreted.
     "source",
+    // The name a derived relation gives a column (contract v28).
+    "name",
 ];
+
+/// The reviewed exceptions of contract v28 (Phase 3, design choice 3): a
+/// derived relation's filter and expression columns, SQL text of the
+/// source's own that the core carries opaque, never reading or writing it,
+/// which only `sdm-data`'s dialects render and only for a provider
+/// declaring `derived_relations`. Each is allowed only as that property of
+/// that definition.
+const OPAQUE_SQL: &[(&str, &str)] = &[("Relation", "filter"), ("RelationColumn", "expression")];
 
 /// Definitions that are reviewed typed values, not request structure: their
 /// text is a scalar's encoded value, a field's name, type or Arrow metadata.
@@ -210,6 +220,14 @@ impl Walk<'_> {
         if let Some(properties) = map.get("properties").and_then(Value::as_object) {
             for (property, child) in properties {
                 let at = format!("{path}/{property}");
+                if seen.last().is_some_and(|def| {
+                    OPAQUE_SQL
+                        .iter()
+                        .any(|(d, p)| d == def && p == property)
+                }) {
+                    self.found.push(Finding::Identifier(at));
+                    continue;
+                }
                 if denied(property, false) {
                     self.found.push(Finding::Denied(at.clone()));
                 }

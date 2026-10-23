@@ -85,6 +85,7 @@ fn limits(max_rows: u64, max_bytes: u64) -> FallbackLimits {
 fn host(optional: &[OptionalRequest], fallback: Option<FallbackLimits>) -> ProviderChoice {
     ProviderChoice::Host {
         capabilities: ProviderCapabilities {
+            derived_relations: false, neighbor_lookback: false, sample_rows: false,
             optional: optional.iter().copied().collect::<BTreeSet<_>>(),
             max_keys_per_request: None,
             max_seed: u64::MAX,
@@ -427,11 +428,13 @@ fn key_counts_count_rows_distinct_keys_and_rows_missing_one() {
     let request = DataRequest::KeyCounts {
         keys: vec![
             TableKey {
+                unique: false,
                 table: "events".into(),
                 columns: vec!["user".into()],
                 label: None,
             },
             TableKey {
+                unique: false,
                 table: "events".into(),
                 columns: vec!["user".into(), "v".into()],
                 label: None,
@@ -551,6 +554,7 @@ fn a_count_reads_the_rows_its_filters_keep() {
 
 fn sample(n: u64, seed: u64) -> DataRequest {
     DataRequest::SampleEntities {
+        rows: None,
         table: "events".into(),
         key: vec!["user".into()],
         n,
@@ -678,6 +682,7 @@ fn a_scan_the_provider_fails_is_the_requests_failure() {
         None,
         |_| {
             FetchResult::Error(ProviderError {
+                refuses_expression: false,
                 kind: ErrorKind::DataSource,
                 retryable: true,
                 sqlstate: Some("08006".into()),
