@@ -158,10 +158,10 @@ def _bound(
             raise PlanNotRun('a parameter of an unknown kind')
         if at is not None:
             raise PlanNotRun('a statement binding more than one key set')
-        attachment = providers.key_set(param, keys)
+        attachment, stream = providers.key_set(param, keys)
         at = len(values)
         if attachment not in read:
-            read[attachment] = _rows(arrow_table(keys[attachment]))
+            read[attachment] = _rows(arrow_table(stream))
         rows = read[attachment]
         values.append(None)
     if at is None:

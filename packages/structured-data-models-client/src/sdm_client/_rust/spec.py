@@ -66,7 +66,7 @@ def held_schema(schema: Schema) -> dict[str, Any]:
     held_schema: dict[str, Any] = {'tables': tables, 'links': _links(schema)}
     # Where the schema read each table's relation it read (T3.4), for the
     # tables it holds now, whichever schema each table came from.
-    read_under = getattr(schema, '_read_under', None) or {}
+    read_under = schema._read_under
     named = {
         getattr(table, 'source_name', name)
         for name, table in schema.tables.items()
