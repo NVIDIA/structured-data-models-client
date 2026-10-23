@@ -965,12 +965,18 @@ class _ArmedWarehouse(_CompletingWarehouse):
     the warehouse does not hold."""
 
     fail_on: str | None = None
+    #: The parameter the armed statement binds last, where one is named.
+    fail_with: str | None = None
     failure: type[BaseException] = RuntimeError
 
     def answer(self, operation: str, parameters: list[Any]) -> pa.Table:
         if '`main`.`missing`.' in operation:
             raise RuntimeError('[TABLE_OR_VIEW_NOT_FOUND] SQLSTATE: 42P01')
-        if self.fail_on is not None and self.fail_on in operation:
+        if (
+            self.fail_on is not None
+            and self.fail_on in operation
+            and (self.fail_with is None or parameters[-1:] == [self.fail_with])
+        ):
             self.fail_on = None
             raise self.failure('an armed failure')
         return super().answer(operation, parameters)
@@ -989,21 +995,14 @@ def _rebuilt(connection: Any) -> Schema:
     return Schema(described.tables, described.relationships, source=source)
 
 
-#: Where each route first reads each table, and its first read after it
-#: has read them all: the old route's engine reads a table's catalog and
-#: preview, the core counts its rows; then the old route samples, and the
-#: core reads the time bounds.
+#: The same statement on both routes at each moment of a first run: the
+#: catalog read of each table the run reads anew (each route's engine reads
+#: a table's catalog before it keeps it), and the first count of rows (each
+#: route's sampler counts a table's rows once its tables are kept).
 _PHASES = {
-    'old': {
-        'first_table': 'FROM `main`.`shop`.`orders` LIMIT 1000',
-        'second_table': 'FROM `main`.`shop`.`users` LIMIT 1000',
-        'after_reading': 'SELECT COUNT(*) FROM `main`.`shop`.`orders`',
-    },
-    'core': {
-        'first_table': 'SELECT COUNT(*) FROM `main`.`shop`.`orders`',
-        'second_table': 'SELECT COUNT(*) FROM `main`.`shop`.`users`',
-        'after_reading': 'as min_date',
-    },
+    'first_table': ('information_schema.columns', 'orders'),
+    'second_table': ('information_schema.columns', 'users'),
+    'after_reading': ('SELECT COUNT(*) FROM `main`.`shop`.`orders`', None),
 }
 
 
@@ -1019,15 +1018,15 @@ _PHASES = {
 def test_a_retry_after_an_early_failure_reads_where_the_old_route_reads(
     route: str, phase: str, kept: bool, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    r"""A first ``materialize`` that fails before it has read every table it
-    reads anew keeps none of them, and one that fails after keeps them all,
-    as the old route keeps its engine's reading only once its engine read
-    every table: a retry after the session moved reads ``other`` or ``shop``
-    accordingly (round 7's P0, Claude's early failure)."""
+    r"""A first ``materialize`` failing at the same statement on both routes
+    keeps its tables exactly when the old route does: none where it failed
+    reading a table's catalog, all once its tables were read and its
+    sampler's count failed; a retry after the session moved reads
+    ``other`` or ``shop`` accordingly (round 7's and round 8's P0)."""
     _route(route, monkeypatch)
     connection = _ArmedConnection()
     schema = _rebuilt(connection)
-    connection.fail_on = _PHASES[route][phase]
+    connection.fail_on, connection.fail_with = _PHASES[phase]
     with pytest.raises(Exception):  # noqa: B017, PT011 - any failure
         _materialized(schema)
     assert connection.fail_on is None, 'the failure was not reached'
@@ -1090,3 +1089,117 @@ def test_an_interrupted_first_run_keeps_the_readings_it_made(
         _materialized(schema)
     connection.schema = 'other'
     assert _where_read(schema, connection) == {('main', 'shop')}
+
+
+class _ReservedWarehouse(_CompletingWarehouse):
+    r"""The completing warehouse whose ``users`` also holds a column named as
+    a request names its own, ``instance_id``."""
+
+    def answer(self, operation: str, parameters: list[Any]) -> pa.Table:
+        text = _normal(operation)
+        if '`instance_id`' in text:
+            found = super().answer(
+                operation.replace(', `instance_id`', ''), parameters
+            )
+            return found.append_column(
+                'instance_id', pa.array(range(found.num_rows), pa.int64())
+            )
+        found = super().answer(operation, parameters)
+        if 'information_schema.columns' in text and parameters[-1:] == [
+            'users'
+        ]:
+            extra = {
+                name: [found[name][0].as_py()] for name in found.schema.names
+            }
+            extra['column_name'] = ['instance_id']
+            extra['full_data_type'] = ['bigint']
+            found = pa.concat_tables(
+                [found, pa.table(extra, schema=found.schema)]
+            )
+        return found
+
+
+_ReservedConnection = type(
+    'Connection', (_ReservedWarehouse,), {'__module__': 'databricks.sql.client'}
+)
+
+
+@pytest.mark.parametrize('refusal', ['no_indices', 'reserved_column'])
+@pytest.mark.parametrize('route', ['core', 'old'])
+def test_a_refused_first_run_reads_nothing_and_leaves_no_engine_reading(
+    route: str, refusal: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""A first ``materialize`` refused before it reads (no entities, a
+    column named as a request names its own) reads nothing and leaves the
+    schema no engine reading, so a snapshot taken then reads its tables
+    where its session says, not where the original's later run read them
+    (round 8's P0, both reviewers)."""
+    import pandas as pd
+
+    from sdm_client import PredictiveQuery
+
+    _route(route, monkeypatch)
+    connection = (
+        _ReservedConnection()
+        if refusal == 'reserved_column'
+        else _CompletingConnection()
+    )
+    schema = _rebuilt(connection)
+    if refusal == 'reserved_column':
+        assert 'instance_id' in schema['users'].columns
+    mark = len(connection.calls)
+    with pytest.raises(Exception):  # noqa: B017, PT011 - refused
+        PredictiveQuery(
+            'PREDICT COUNT(orders.*, 0, 30, days) > 0 FOR EACH users.user_id',
+            schema,
+        ).materialize(
+            indices=[] if refusal == 'no_indices' else [0, 1],
+            anchor_time=pd.Timestamp('2024-03-01'),
+        )
+    assert connection.calls[mark:] == []
+    assert schema._engine_tables is None
+    if refusal == 'reserved_column':
+        del schema['users'].columns['instance_id']
+    snapshot = schema.snapshot()
+    assert _where_read(schema, connection) == {('main', 'shop')}
+    connection.schema = 'other'
+    assert _where_read(snapshot, connection) == {('main', 'other')}
+
+
+@pytest.mark.parametrize('route', ['core', 'old'])
+def test_a_metric_view_read_as_a_table_is_refused_in_the_old_client_s_words(
+    route: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""A metric view named as a table is refused with the old client's
+    words and its advice to read it as a semantic model (round 8's P2)."""
+    from sdm_client.errors import StructuredDataError
+
+    class _MetricViews(_CompletingWarehouse):
+        def answer(self, operation: str, parameters: list[Any]) -> pa.Table:
+            found = super().answer(operation, parameters)
+            if 'information_schema.columns' in operation:
+                at = found.schema.get_field_index('table_type')
+                found = found.set_column(
+                    at,
+                    found.schema.field(at),
+                    pa.array(
+                        ['METRIC_VIEW'] * found.num_rows,
+                        found.schema.field(at).type,
+                    ),
+                )
+            return found
+
+    _route(route, monkeypatch)
+    connection = type(
+        'Connection', (_MetricViews,), {'__module__': 'databricks.sql.client'}
+    )()
+    with pytest.raises(StructuredDataError) as refused:
+        Schema.from_source(
+            DatabricksSource(connection, catalog='main', schema='shop'),
+            tables={'orders': 'orders'},
+        )
+    assert str(refused.value) == (
+        "[INVALID_REQUEST] 'orders' is a metric view, not a table: its "
+        'measures are aggregations with no value per row. Read it as a '
+        "semantic model instead, with source.semantic_model('orders')."
+    )

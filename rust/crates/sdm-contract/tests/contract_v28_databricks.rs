@@ -170,33 +170,26 @@ fn a_found_relation_is_its_catalog_s_columns_or_refused() {
     }
 }
 
-/// A fetch step's request names where the run reads the tables it reads
-/// anew, once that request is answered (`FetchStep::read_under`): the
-/// readings a host keeps at the moment the reference keeps them, a failed
-/// or interrupted read keeping none (round 7's P0); absent from the JSON
-/// when none.
+/// A run says, as steps of their own that ask nothing, when it builds its
+/// graph (the host then makes the schema's engine reading) and when it has
+/// read every table it reads anew (the host then keeps where it read them),
+/// the two moments the reference's materializer writes its engine reading
+/// (round 8's P0).
 #[test]
-fn a_request_carries_where_the_run_read_its_tables_once_answered() {
-    use sdm_contract::run::FetchStep;
-    let step: FetchStep = serde_json::from_value(serde_json::json!({
-        "id": 1,
-        "request": {"request": "count_rows", "table": {"source": ["users"]}, "filters": []},
-        "plan": {"plan": "host", "expect": {"expect": "discover"}},
+fn a_run_says_when_it_builds_its_graph_and_when_its_tables_are_read() {
+    use sdm_contract::run::Step;
+    let built: Step = serde_json::from_value(serde_json::json!({"step": "graph_built"})).unwrap();
+    assert_eq!(built, Step::GraphBuilt);
+    let read: Step = serde_json::from_value(serde_json::json!({
+        "step": "tables_initialized",
         "read_under": [{"relation": {"source": ["orders"]}, "namespace": ["main", "shop"]}]
     }))
     .unwrap();
-    assert_eq!(step.read_under.len(), 1);
-    assert_eq!(
-        step.read_under[0].namespace,
-        vec!["main".to_owned(), "shop".to_owned()]
-    );
-    let plain = FetchStep {
-        read_under: Vec::new(),
-        ..step
+    let Step::TablesInitialized { read_under } = read else {
+        panic!("not the tables' step");
     };
-    assert!(
-        !serde_json::to_string(&plain)
-            .unwrap()
-            .contains("read_under")
+    assert_eq!(
+        read_under[0].namespace,
+        vec!["main".to_owned(), "shop".to_owned()]
     );
 }
