@@ -143,6 +143,14 @@ impl SqlDialect for Databricks {
         NAMESPACE_DEPTH
     }
 
+    /// Each part read, as the reference reads `current_catalog()` and
+    /// `current_schema()` for those a source leaves out and names every
+    /// table in full, as Unity Catalog names a table a foreign key refers
+    /// to.
+    fn settles_namespace(&self) -> bool {
+        true
+    }
+
     /// Unity Catalog matches a name without regard to case and stores its
     /// catalogs, schemas and tables in lower case.
     fn name_case(&self) -> NameCase {
@@ -164,12 +172,7 @@ impl SqlDialect for Databricks {
     /// Databricks reads, quoted or not, as the session's value once the
     /// column is dropped or renamed; otherwise the source by its name.
     fn derived(&self, relation: &Relation, source: &str) -> Option<String> {
-        let found = relation.filter.is_none()
-            && relation
-                .columns
-                .iter()
-                .all(|c| c.expression.is_none() && c.column.as_ref() == Some(&c.name));
-        if found
+        if relation.found
             && !relation
                 .columns
                 .iter()

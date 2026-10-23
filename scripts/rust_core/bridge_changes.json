@@ -87,7 +87,7 @@
       "refactor": "T2.2: a SQLite source routes as a DuckDB one (_routing.on_the_core with the backend's from-source paths); no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::build": {
-      "moved": "T3.16 (fix A): the Schema is written as the core answered it, field by field, each column with what the source said of it (Column._source), so the old route's setters and their checks, which ask the old PQL package, are not run again on the core route (rule 11); the time columns the setters marked as declared are marked so still"
+      "refactor": "T3.4 fix 2: each column's source facts keep the namespace the description was read under (SourceDescription.namespace), which the core answered; no rule here"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::description": {
       "gone": "T3.16 (fix A): the schema is handed over as plain data by _rust/spec.py's held_schema; no saved description, no merge (sdm_schema::edit::read_held is gone)"
