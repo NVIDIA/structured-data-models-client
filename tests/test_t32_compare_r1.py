@@ -4,15 +4,14 @@
 
 r"""compare.py's fixes of T3.2's first review round (Codex r1, 4 to 6):
 
-- a live-only verdict reports every rule's difference of the runner's
-  comparison, the outcome's included, not only those after the host fields;
+- a refusal on a warehouse leg fails on the outcome, as on any database
+  (the live-only verdict it once covered went with the stand-in, B-lite);
 - Java's prediction payload is held to the reference as rust-host's is, and
   Java agrees with python-core on the core fields;
 - live H9 admits the warehouse drivers' reads the recording mode records,
   judged by their own evidence (the Arrow schema, or the rows);
-- a live-only item is still held to its inputs, route and reach (Claude
-  P2-3), and a line whose typed result digest is excused and which holds no
-  text digest fails until recorded again (Claude P2-4).
+- a line whose typed result digest is excused and which holds no text
+  digest fails until recorded again (Claude P2-4).
 """
 
 from __future__ import annotations
@@ -57,41 +56,22 @@ REFUSED = {
     'result': 'refusal',
     'stage': 'from_source',
     'error': 'StructuredDataError',
-    'code': 'LIVE_ONLY',
+    'code': 'INVALID_REQUEST',
 }
 
 
-# --- 4: a live-only verdict covers the outcome --------------------------------------
+# --- 4: a refusal on a warehouse leg fails as anywhere -----------------------------
 
 
-def _refused(pair: Any, standin: dict[str, Any]) -> Any:
-    line = pair.answered(standin)
+def test_a_refusal_on_a_warehouse_leg_fails(tmp_path: Path) -> None:
+    r"""A warehouse leg is judged against its recorded reference by every
+    rule (B-lite): a refusal where the old client answered fails on the
+    outcome."""
+    pair = LIVE.Pair(tmp_path, 'databricks-sql')
+    line = pair.answered(None)
     line['outcome'] = dict(REFUSED)
     line['public'] = {'schema': None, 'payloads': [], 'result': None}
-    return pair.judge(line)
-
-
-@pytest.mark.parametrize(
-    'standin',
-    [
-        {'live_only': 'B1', 'flagged': []},
-        {'live_only': 'B2', 'flagged': []},
-        {'live_only': None, 'flagged': ['B4']},
-    ],
-)
-def test_a_live_only_refusal_leaves_no_blocking_difference(
-    tmp_path: Path, standin: dict[str, Any]
-) -> None:
-    pair = LIVE.Pair(tmp_path, 'databricks-sql')
-    report = _refused(pair, standin)
-    assert pair.key in report.live_only, report.texts
-    assert [r for r, _ in report.failures if r is not None] == [], report.texts
-
-
-def test_an_unflagged_refusal_still_fails(tmp_path: Path) -> None:
-    pair = LIVE.Pair(tmp_path, 'databricks-sql')
-    report = _refused(pair, {'live_only': None, 'flagged': []})
-    assert not report.live_only
+    report = pair.judge(line)
     assert 'outcome' in [r for r, _ in report.failures], report.texts
 
 
@@ -216,23 +196,6 @@ def test_a_warehouse_arrow_read_without_its_schema_fails() -> None:
         ('python-core', 'python-ref'), database='snowflake',
     )  # fmt: skip
     assert any('no Arrow schema' in text for _, text in report.failures)
-
-
-# --- Claude P2-3: a live-only item keeps its inputs, route and reach ----------------
-
-
-def test_a_live_only_item_with_a_stale_input_still_fails(
-    tmp_path: Path,
-) -> None:
-    pair = LIVE.Pair(tmp_path, 'databricks-sql')
-    line = pair.answered({'live_only': 'B1', 'flagged': []})
-    line['outcome'] = dict(REFUSED)
-    line['public'] = {'schema': None, 'payloads': [], 'result': None}
-    line['identity']['inputs']['case'] = '0' * 64
-    report = pair.judge(line)
-    assert pair.key in report.live_only, report.texts
-    assert 'inputs' in [r for r, _ in report.failures], report.texts
-    assert 'outcome' not in [r for r, _ in report.failures], report.texts
 
 
 # --- Claude P2-4: an excused typed digest needs the text digest ----------------------

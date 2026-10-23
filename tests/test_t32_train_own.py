@@ -5,11 +5,9 @@
 r"""The tooling train's own checks (T3.2), the implementer's; the
 acceptance tests are the test author's.
 
-- the ``live_only`` outcome: the policy's ``standin`` section held to the
-  owner's approval, a live-only mark with no stand-in reason refused, a
-  flagged case passing when it matches and live only when it differs, the
-  ratchet leaving a live-only line to E-1, and the locked run's verdict
-  check;
+- the runner ``java`` in the ratchet, and a captures-only commit standing
+  for the candidate it was recorded from (the stand-in's ``live_only``
+  checks went with the stand-in, B-lite, 2026-10-23);
 - the owner's approval read by allowlist (U4), and an entry approved by
   the owner naming a row the owner approved;
 - coverage: a leg claims its own path, a named client test may claim one.
@@ -48,127 +46,12 @@ RATCHET = _module(ROOT / 'scripts/rust_core/ratchet.py', 't32_ratchet')
 REGISTER = _module(ROOT / 'scripts/rust_core/register.py', 't32_register')
 COVERAGE = _module(ROOT / 'scripts/rust_core/coverage.py', 't32_coverage')
 CHECK = _module(ROOT / 'contract/runners/capture_check.py', 't32_capture_check')
-CODES = ('B1', 'B2', 'B4')
-
-
-# --- the policy's stand-in section ----------------------------------------------------
-
-
-def _policy(tmp_path: Path, standin: Any) -> Path:
-    document = yaml.safe_load(
-        (ROOT / 'contract/compare-policy.yaml').read_text()
-    )
-    document['standin'] = standin
-    path = tmp_path / 'compare-policy.yaml'
-    path.write_text(yaml.safe_dump(document))
-    return path
-
-
-def test_the_policy_holds_the_owner_s_stand_in_codes_and_rules() -> None:
-    policy = CHECK.policy()
-    assert policy['standin'] == {
-        'codes': ['B1', 'B2', 'B4'],
-        'diagnostic': ['sql.count', 'sql.result'],
-    }
-
-
-@pytest.mark.parametrize(
-    'standin',
-    [
-        {'codes': ['B1', 'B2', 'B3', 'B4'], 'diagnostic': ['sql.count']},
-        {'codes': ['B1', 'B2', 'B4'], 'diagnostic': ['outcome']},
-        {'codes': ['B1', 'B2', 'B4']},
-        None,
-    ],
-)
-def test_a_stand_in_section_past_the_owner_s_approval_is_refused(
-    tmp_path: Path, standin: Any
-) -> None:
-    with pytest.raises(CHECK.PolicyError, match='standin'):
-        CHECK.policy(_policy(tmp_path, standin))
-
-
-def test_a_stand_in_code_or_rule_added_is_a_relaxation() -> None:
-    old = {'standin': {'codes': ['B1'], 'diagnostic': ['sql.count']}}
-    new = {
-        'standin': {
-            'codes': ['B1', 'B2'],
-            'diagnostic': ['sql.count', 'sql.result'],
-        }
-    }
-    assert RATCHET.policy_relaxations(old, new) == [
-        'standin code B2 added',
-        'standin diagnostic rule sql.result added',
-    ]
-    assert RATCHET.policy_relaxations(new, old) == []
-
-
-# --- the comparator's live_only -------------------------------------------------------
-
-
-def _verdict(live_only: str | None, flagged: list[str]) -> dict[str, Any]:
-    return {'standin': {'live_only': live_only, 'flagged': flagged}}
-
-
-def test_a_live_only_mark_with_no_stand_in_reason_fails() -> None:
-    report = COMPARE.Report()
-    code, flagged = COMPARE._standin(
-        report,
-        'c@databricks-sql',
-        'python-core',
-        _verdict('B9', []),
-        CODES,
-        True,
-    )
-    assert code is None and report.failures
-    assert 'no stand-in reason' in report.texts[0]
-
-
-def test_a_stand_in_leg_without_the_verdict_fails_and_elsewhere_one_fails() -> (
-    None
-):
-    report = COMPARE.Report()
-    COMPARE._standin(report, 'c@snowflake', 'rust-host', {}, CODES, True)
-    COMPARE._standin(
-        report, 'c', 'python-core', _verdict(None, []), CODES, False
-    )
-    assert len(report.failures) == 2
-
-
-def test_a_listed_code_makes_the_case_live_only_and_keeps_runner_failures() -> (
-    None
-):
-    report = COMPARE.Report({'outcome': 'gate'})
-    code, _ = COMPARE._standin(
-        report, 'c@lakebase', 'python-core', _verdict('B1', []), CODES, True
-    )
-    assert code == 'B1'
-    report.fail('the outcome differs', 'outcome')
-    report.fail('runner failure: no observation')
-    COMPARE._live_only(report, 'c@lakebase', 'python-core', code, 0, 'why')
-    assert report.live_only == {'c@lakebase': 'B1'}
-    assert report.texts == ['runner failure: no observation']
-
-
-def test_a_flagged_answer_passes_when_equal_and_is_live_only_when_not() -> None:
-    report = COMPARE.Report({'outcome': 'gate'})
-    _, flagged = COMPARE._standin(
-        report, 'c@snowflake', 'rust-host', _verdict(None, ['B4']), CODES, True
-    )
-    assert flagged == ('B4',) and not COMPARE._differences(report, 0)
-    report.fail('the outcome differs', 'outcome')
-    assert COMPARE._differences(report, 0)
 
 
 # --- the ratchet and the locked run -----------------------------------------------------
 
 
-def test_the_ratchet_leaves_a_live_only_line_to_e1() -> None:
-    line = _verdict('B2', [])
-    assert RATCHET.live_only(line, CODES) == 'B2'
-    assert RATCHET.live_only(line, ()) is None
-    assert RATCHET.live_only(_verdict(None, ['B4']), CODES) is None
-    assert RATCHET.standin_codes(CHECK.policy()) == CODES
+def test_java_is_a_ratchet_runner_on_every_leg() -> None:
     assert 'java' in RATCHET.RUNNERS and 'java' in RATCHET.DATABASE_RUNNERS
 
 
@@ -204,26 +87,6 @@ def _manifest(path: Path, commit: str, verdict: str | None) -> Path:
         )
     )
     return path
-
-
-def test_a_live_only_item_needs_its_e1_verdict_on_the_final_candidate(
-    tmp_path: Path,
-) -> None:
-    final = 'f' * 40
-    live = {'c@databricks-sql': 'B1'}
-    none = _manifest(tmp_path / 'none.json', final, None)
-    assert 'no E-1 verdict' in COMPARE.verdict_problems(live, [none], final)[0]
-    other = _manifest(tmp_path / 'other.json', '0' * 40, 'equal')
-    assert 'another commit' in COMPARE.verdict_problems(live, [other], final)[0]
-    differs = _manifest(tmp_path / 'differs.json', final, 'differs')
-    assert 'differs' in COMPARE.verdict_problems(live, [differs], final)[0]
-    equal = _manifest(tmp_path / 'equal.json', final, 'equal')
-    assert COMPARE.verdict_problems(live, [equal], final) == []
-    deep = tmp_path / 'deep.json'
-    deep.write_text('[' * 200_000 + ']' * 200_000)
-    assert (
-        'unreadable' in COMPARE.verdict_problems(live, [deep, equal], final)[0]
-    )
 
 
 def test_a_captures_only_commit_stands_for_the_candidate_it_was_recorded_from(
@@ -378,8 +241,12 @@ def test_clean_tmp_keeps_a_directory_a_daemon_listens_in(
     in use however old its files are; an old one holding none is stale."""
     import os
     import socket
+    import tempfile
 
-    root = tmp_path / 'tmp-root'
+    # A Unix socket's path holds at most 107 bytes, which a deep pytest
+    # temporary directory passes: the root is a short one of /tmp's.
+    short = tempfile.TemporaryDirectory(prefix='t32-')
+    root = Path(short.name) / 'r'
     live, dead = root / 'daemon', root / 'old'
     live.mkdir(parents=True)
     dead.mkdir()
@@ -410,6 +277,7 @@ def test_clean_tmp_keeps_a_directory_a_daemon_listens_in(
         )
     finally:
         server.close()
+        short.cleanup()
     assert f'skip listening {live}' in done.stdout, done.stdout
     assert f'would remove {dead}' in done.stdout, done.stdout
 
