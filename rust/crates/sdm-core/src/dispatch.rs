@@ -85,8 +85,9 @@ pub fn start(
             let access = root.data_access(&request.provider)?;
             let check_keys = request.check_keys;
             let zones = Arc::clone(&zones);
-            Run::with_data(access, move |asker| {
-                crate::describe::run(asker, source, check_keys, facts, zones)
+            Run::with_data(access, move |asker| async move {
+                let asker = crate::describe::settled(asker).await?;
+                crate::describe::run(asker, source, check_keys, facts, zones).await
             })
         }
         Operation::EditSchema(request) => {
@@ -391,8 +392,20 @@ pub(crate) fn materialize(
                 #[cfg(feature = "test-ops")]
                 labels_only,
             };
-            Ok(Run::with_data(access, move |asker| {
-                crate::materialize::run(asker, inputs)
+            Ok(Run::with_data(access, move |asker| async move {
+                let asker = crate::describe::settled(asker).await?;
+                // Each table read as the columns its description holds.
+                for table in &inputs.description.tables {
+                    asker.guard(
+                        &table.source,
+                        table
+                            .columns
+                            .iter()
+                            .map(|column| column.name.clone())
+                            .collect(),
+                    );
+                }
+                crate::materialize::run(asker, inputs).await
             }))
         }
         _ => Err(internal("a materialize run of another operation")),

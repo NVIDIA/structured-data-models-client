@@ -132,6 +132,7 @@ impl SqlDialect for Postgres {
             samples_by_key_dtype: false,
             derived_relations: false,
             neighbor_lookback: false,
+            keys_optional: false,
             sample_rows: false,
             optional: sql::rendered(),
             max_keys_per_request: None,
@@ -463,7 +464,6 @@ fn read(part: DescribePart, batches: &[RecordBatch]) -> Result<CatalogAnswer, Co
                 let declared = crate::read::strings(batch, k::FORMAT_TYPE)?;
                 for row in 0..batch.num_rows() {
                     found.push(CatalogColumn {
-                        canonical: None,
                         name: crate::read::text(names, row).unwrap_or_default(),
                         declared_type: crate::read::text(declared, row).unwrap_or_default(),
                         not_null: crate::read::text(nullable, row).as_deref() == Some("NO"),
@@ -605,18 +605,9 @@ fn describe(
 ) -> Result<String, CoreError> {
     // The schema the source's tables are listed in: the provider's
     // namespace, the source's schema (contract v28), else the current one,
-    // as the reference lists the tables of the schema it was given or read.
-    let schema = match namespace {
-        [] => None,
-        [schema] => Some(text(schema)),
-        _ => {
-            return Err(sql::not_taken(
-                request,
-                "namespace",
-                "a Postgres source's namespace is one schema",
-            ));
-        }
-    };
+    // as the reference lists the tables of the schema it was given or read
+    // (a namespace deeper than the schema is refused before, by `deeper`).
+    let schema = namespace.first().map(|schema| text(schema));
     let one = || regclass(request, "tables", sql::one_table(request, tables)?);
     Ok(match part {
         // The reference's listing (`PostgresTable`'s, `information_schema`

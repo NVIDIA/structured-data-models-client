@@ -265,6 +265,25 @@ pub(crate) trait SqlDialect: Sync {
         namespace: &[String],
     ) -> Result<(String, Vec<SqlParam>), CoreError>;
 
+    /// The read of the source's namespace, `request` a `describe` of it,
+    /// where the provider's `namespace` leaves a part to the connection
+    /// inside one it gives (a Databricks source naming its catalog and not
+    /// its schema): each part given, or the session's current one, so the
+    /// core can read every later relation under the parts it answers. The
+    /// default refuses it by name, as no relation could be read under it.
+    fn current_namespace(
+        &self,
+        request: &DataRequest,
+        namespace: &[Option<String>],
+    ) -> Result<(String, Vec<SqlParam>), CoreError> {
+        let _ = namespace;
+        Err(not_taken(
+            request,
+            "namespace",
+            "a namespace part left to the connection inside one given cannot qualify a relation",
+        ))
+    }
+
     /// The schema the dialect's answer to `request` has.
     fn expected(&self, request: &DataRequest) -> ExpectedSchema;
 
@@ -342,8 +361,18 @@ pub(crate) fn from(
     if !relation.is_derived() {
         return Ok(source);
     }
-    // A dialect declaring derived relations renders them (contract v28).
-    Ok(dialect.derived(relation, &source).unwrap_or(source))
+    // A dialect declaring derived relations renders them (contract v28);
+    // one that declares them and renders none is this build's fault, never
+    // a read of the source with the relation's columns or filter dropped.
+    dialect.derived(relation, &source).ok_or_else(|| {
+        CoreError::new(
+            ErrorKind::Internal,
+            ErrorCode::InternalError,
+            "a dialect declaring derived relations rendered none",
+        )
+        .with_field("request", Detail::text(request.name()))
+        .with_field("field", Detail::text(field))
+    })
 }
 
 /// The one table a part of the catalog read one table at a time names, or

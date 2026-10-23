@@ -572,7 +572,7 @@
           }
         },
         "columns": {
-          "description": "The relation's columns, in order, where it is derived; empty, the\nsource's own columns under their own names.",
+          "description": "The relation's columns, in order, where it is derived; empty, the\nsource's own columns under their own names. Columns that each read\nthe source's column of their own name, with no filter, are the\nsource's columns a catalog read found, which a provider may read\nthrough the source so that a column since dropped or renamed fails\nthe read rather than reading anything else by its name (the\nreference's Databricks reads, `_quoted_source_name`; T3.4).",
           "type": "array",
           "items": {
             "$ref": "#/$defs/RelationColumn"
@@ -3573,6 +3573,10 @@
         },
         "neighbor_lookback": {
           "description": "The provider's neighbor reads by a foreign key over a table with a\ntime column look back no further than the reference's warehouse\nsamplers do (`_by_fkey`): from each seed's anchor back by five\ntimes the rows asked over the table's rate of rows per referenced\nrow and second, at most five years, the seconds rounded up. The\ncore counts the table's and the referenced table's rows, reads the\ntable's time bounds, and bounds each such read from below by that\nlook-back, exclusive (contract v28). Left out, `false`: no lower\nbound.",
+          "type": "boolean"
+        },
+        "keys_optional": {
+          "description": "The provider's catalog may fail to read a table's declared keys and\nforeign keys where it reads its columns (Unity Catalog's\n`table_constraints` on an older runtime or without the privilege):\nthe core then reads a table's columns and its keys apart, and reads\na failed key or foreign-key read as no declared keys, as the\nreference's Databricks reader carries on without them\n(`DatabricksTable`'s key reads; contract v28). Left out, `false`: a\nfailed key read fails the description.",
           "type": "boolean"
         },
         "opaque_vendor": {

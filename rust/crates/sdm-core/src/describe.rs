@@ -134,43 +134,38 @@ pub(crate) async fn run(
     let mut tables = Vec::with_capacity(names.len());
     // Each table's marked big integers' declared types (big_integer_types).
     let mut big_types = Vec::with_capacity(names.len());
-    let mut names = names;
-    for table in &mut names {
-        // The columns first, then the keys, as the reference reads them: a
-        // catalog naming the table otherwise than it was asked (Unity
-        // Catalog's lower-cased names) names it so in every later read,
-        // the keys' included, as the reference adopts the names it reads
-        // back (`_get_source_columns`).
-        let asked = match describe(
-            &asker,
-            DataRequest::Describe {
-                tables: vec![table.source.clone()],
-                part: DescribePart::Columns,
-            },
-        )
-        .await
-        {
-            Ok(columns) => {
-                if let CatalogAnswer::Columns(read) = &columns
-                    && let Some(canonical) = read.first().and_then(|c| c.canonical.clone())
-                    && !canonical.is_empty()
-                    && canonical.iter().all(|part| !part.is_empty())
-                {
-                    table.source = Relation::of(canonical);
-                }
-                describe(
-                    &asker,
-                    DataRequest::Describe {
-                        tables: vec![table.source.clone()],
-                        part: DescribePart::Keys,
-                    },
-                )
-                .await
-                .map(|keys| [columns, keys])
-            }
-            Err(failed) => Err(failed),
+    // Whether a failed read of a table's keys or foreign keys is read as
+    // none, as the reference reads Unity Catalog's informational
+    // constraints (`DatabricksTable`, DB/table.py:271-303, :318-352).
+    let keys_optional = asker.capabilities()?.keys_optional;
+    for table in &names {
+        let one = || vec![table.source.clone()];
+        let columns = DataRequest::Describe {
+            tables: one(),
+            part: DescribePart::Columns,
         };
-        let table = &*table;
+        let keys = DataRequest::Describe {
+            tables: one(),
+            part: DescribePart::Keys,
+        };
+        let asked = if keys_optional {
+            // The columns first, then the keys, a failure of which is read
+            // as no keys.
+            match describe(&asker, columns).await {
+                Ok(columns) => {
+                    let keys = match describe(&asker, keys).await {
+                        Err(failed) if failed.code == ErrorCode::ProviderError => {
+                            CatalogAnswer::Keys(Vec::new())
+                        }
+                        other => other?,
+                    };
+                    Ok([columns, keys])
+                }
+                Err(failed) => Err(failed),
+            }
+        } else {
+            describe_all(&asker, [columns, keys]).await
+        };
         let [columns, keys] = match asked {
             Ok(answers) => answers,
             // A table the caller named that the source does not hold: a
@@ -198,6 +193,11 @@ pub(crate) async fn run(
             // refuses one it cannot read.
             return Err(not_held(&asker, &table.source).await);
         }
+        // Every later read of the table reads these columns of it.
+        asker.guard(
+            &table.source,
+            declared.iter().map(|column| column.name.clone()).collect(),
+        );
         let mut keys = declared_keys(keys)?;
         if let Some(kept) = &table.columns {
             // Only the columns the schema keeps are read, and only the keys
@@ -320,20 +320,43 @@ pub(crate) async fn run(
         asker.warn(warning);
     }
 
-    let foreign = describe_vec(
-        &asker,
-        names
-            .iter()
-            .map(|table| DataRequest::Describe {
-                tables: vec![table.source.clone()],
-                part: DescribePart::ForeignKeys,
-            })
-            .collect(),
-    )
-    .await?;
+    let asking: Vec<DataRequest> = names
+        .iter()
+        .map(|table| DataRequest::Describe {
+            tables: vec![table.source.clone()],
+            part: DescribePart::ForeignKeys,
+        })
+        .collect();
+    let foreign = if keys_optional {
+        // Each table's foreign keys alone, a failure read as none.
+        let mut answers = Vec::with_capacity(asking.len());
+        for request in asking {
+            answers.push(match describe(&asker, request).await {
+                Err(failed) if failed.code == ErrorCode::ProviderError => {
+                    CatalogAnswer::ForeignKeys(Vec::new())
+                }
+                other => other?,
+            });
+        }
+        answers
+    } else {
+        describe_vec(&asker, asking).await?
+    };
+    // Each table's name as its source's catalog writes the table a foreign
+    // key refers to: its relation read under the source's namespace, its
+    // parts joined by dots (Databricks's `catalog.schema.table`).
+    let qualified: Vec<String> = tables
+        .iter()
+        .map(|t| asker.read_as(&t.source).dotted())
+        .collect();
     let mut declared = Vec::new();
     for (table, answer) in tables.iter().zip(foreign) {
-        declared.extend(declared_links(table, &foreign_keys(answer)?, &tables));
+        declared.extend(declared_links(
+            table,
+            &foreign_keys(answer)?,
+            &tables,
+            &qualified,
+        ));
     }
     let given = spec.relationships.as_deref();
     if given.is_none() {
@@ -676,18 +699,24 @@ fn declared_links(
     table: &InferredTable,
     parts: &[CatalogForeignKey],
     tables: &[InferredTable],
+    qualified: &[String],
 ) -> Vec<Vec<ColumnRef>> {
     // Source name to the table described under it, the last one winning,
-    // in the order each source name first appears. A relation of several
-    // parts is named by its parts joined by dots, as the reference names a
-    // table (`source_name`) and a foreign key the table it refers to
-    // (Databricks' `catalog.schema.table`, contract v28).
-    let mut by_source: Vec<(String, &InferredTable)> = Vec::new();
-    for described in tables {
-        let name = described.source.dotted();
-        match by_source.iter_mut().find(|(source, _)| *source == name) {
-            Some(slot) => slot.1 = described,
-            None => by_source.push((name, described)),
+    // in the order each source name first appears: a relation of one part
+    // by that part, and each relation also by its name read under the
+    // source's namespace, as a catalog names a referenced table
+    // (`qualified`, Databricks's `catalog.schema.table`, T3.4).
+    let mut by_source: Vec<(&str, &InferredTable)> = Vec::new();
+    for (described, dotted) in tables.iter().zip(qualified) {
+        let names =
+            described.source.single().into_iter().chain(
+                (Some(dotted.as_str()) != described.source.single()).then_some(dotted.as_str()),
+            );
+        for name in names {
+            match by_source.iter_mut().find(|(source, _)| *source == name) {
+                Some(slot) => slot.1 = described,
+                None => by_source.push((name, described)),
+            }
         }
     }
     let mut keys: Vec<(&String, &CatalogForeignKey)> = Vec::new();
@@ -710,7 +739,7 @@ fn declared_links(
         let exact = by_source
             .iter()
             .find(|(source, _)| *source == part.referenced_table);
-        let folded: Vec<&(String, &InferredTable)> = by_source
+        let folded: Vec<&(&str, &InferredTable)> = by_source
             .iter()
             .filter(|(source, _)| source.to_lowercase() == part.referenced_table.to_lowercase())
             .collect();
@@ -903,6 +932,26 @@ pub(crate) async fn ask(asker: &Asker, request: DataRequest) -> Result<ArrowData
     data(asker.fetch(request)?.await, name)
 }
 
+/// The run's asker, its provider's namespace settled first where it leaves
+/// a part to the connection inside one it gives (`DataAccess::unsettled`):
+/// the source's current parts read once (`describe` of its namespace) and
+/// every later relation read under them, as the reference reads a
+/// Databricks source naming its catalog alone under the session's current
+/// schema (`SELECT current_catalog(), current_schema()`, T3.4).
+pub(crate) async fn settled(asker: Asker) -> Result<Asker, CoreError> {
+    let Some(data) = asker.data().filter(|data| data.unsettled()).cloned() else {
+        return Ok(asker);
+    };
+    let asked = DataRequest::Describe {
+        tables: vec![],
+        part: DescribePart::Namespace,
+    };
+    match describe(&asker, asked).await? {
+        CatalogAnswer::Namespace(parts) => Ok(asker.with_access(data.settled(parts))),
+        _ => Err(another_part()),
+    }
+}
+
 /// The catalog's answer to `request`, a `describe`: fetched, admitted,
 /// then read by the run's data layer (decision E54).
 pub(crate) async fn describe(
@@ -911,6 +960,18 @@ pub(crate) async fn describe(
 ) -> Result<CatalogAnswer, CoreError> {
     let data = ask(asker, request.clone()).await?;
     asker.read(&request, &data)
+}
+
+/// The catalog's answers to `requests`, asked together in one step, in
+/// order.
+async fn describe_all<const N: usize>(
+    asker: &Asker,
+    requests: [DataRequest; N],
+) -> Result<[CatalogAnswer; N], CoreError> {
+    let answers = describe_vec(asker, requests.into()).await?;
+    answers
+        .try_into()
+        .map_err(|_| internal("a step answered another number of requests"))
 }
 
 async fn describe_vec(
