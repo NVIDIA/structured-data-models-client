@@ -110,7 +110,9 @@ class TabularAdapter:
     ) -> Iterator[dict[str, Any]]:
         declared = _declared_by(pinned)
         try:
-            envelope = self._envelope(request, outputs, declared)
+            envelope = self._envelope(
+                request, outputs, declared, include_context=False
+            )
         except Exception as error:
             # Writing the rows to the pinned schema is what makes the call
             # legible to the endpoint, and it is also the only thing that can
@@ -167,6 +169,8 @@ class TabularAdapter:
         request: Request,
         outputs: tuple[str, ...],
         pinned_dtypes: Mapping[str, str] | None = None,
+        *,
+        include_context: bool = True,
     ) -> dict[str, Any]:
         if request.payloads is not None:
             raise UnsupportedRequestError(
@@ -266,11 +270,16 @@ class TabularAdapter:
                 },
             },
             'schema': {'instance_table': instance_schema},
-            'context': {'instance_table': encode_table(context, dtypes)},
             'predict': {'instance_table': encode_table(predict, dtypes)},
             'output': {'fields': list(outputs)},
             'metadata': {'request_id': _request_id()},
         }
+        # Cached scoring keeps the schema checks above, but the context is
+        # already on the server. Do not encode rows that will not be sent.
+        if include_context:
+            envelope['context'] = {
+                'instance_table': encode_table(context, dtypes)
+            }
         if request.inference:
             envelope['inference'] = json_ready(request.inference)
         return envelope

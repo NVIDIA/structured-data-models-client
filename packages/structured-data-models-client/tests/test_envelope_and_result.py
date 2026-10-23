@@ -141,6 +141,38 @@ def test_a_session_pins_the_context_and_scoring_sends_only_the_rows():
     assert 'context' not in scoring
 
 
+@pytest.mark.parametrize('task', ['classification', 'regression'])
+@pytest.mark.parametrize('with_pinned_schema', [False, True])
+def test_session_scoring_does_not_encode_the_context(
+    monkeypatch, task, with_pinned_schema
+):
+    from sdm_client.adapters import tabular
+
+    adapter = TabularAdapter()
+    request = request_for(task, inference={'num_context_samples': 500})
+    outputs = ('prediction',)
+    full = next(adapter.prediction_plan(request, outputs))
+    pinned = adapter.session_plan(request, outputs)
+    expected = {key: full[key] for key in ('predict', 'output', 'inference')}
+    encode = tabular.encode_table
+    encoded_rows = []
+
+    def encode_scoring_rows(frame, dtypes):
+        assert frame is not request.context.instance_table
+        encoded_rows.append(len(frame))
+        return encode(frame, dtypes)
+
+    monkeypatch.setattr(tabular, 'encode_table', encode_scoring_rows)
+    actual = next(
+        adapter.session_prediction_plan(
+            request, outputs, pinned if with_pinned_schema else None
+        )
+    )
+    assert encoded_rows == [len(request.predict.instance_table)]
+    assert actual.pop('metadata')['request_id'].startswith('sdm-')
+    assert actual == expected
+
+
 def test_every_request_carries_an_id_that_correlates_it_with_server_logs():
     assert envelope()['metadata']['request_id'].startswith('sdm-')
 
