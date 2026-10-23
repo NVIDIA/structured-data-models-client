@@ -688,6 +688,65 @@ pub(crate) async fn settled(asker: Asker) -> Result<Asker, CoreError> {
     }
 }
 
+/// The run's graph build, as the reference's materializer builds its
+/// graph (`relational.py:555`), past every refusal of the request and before
+/// it reads anything: said to the host ([`Asker::graph_built`]); then each
+/// table the schema holds no reading of read where the session says (its
+/// namespace read once, each table pinned under it, and its catalog read,
+/// a table the source does not hold refused by name, as the reference's
+/// engine reads each table it keeps), and said read with where
+/// ([`Asker::tables_initialized`]), before anything is sampled, as the
+/// reference's engine keeps its tables (`EngineTables.keep`). Once a run.
+pub(crate) async fn initialize(asker: &Asker) -> Result<(), CoreError> {
+    asker.graph_built();
+    let Some(anew) = asker.uninitialized() else {
+        return Ok(());
+    };
+    if anew.is_empty() {
+        asker.tables_initialized(Vec::new());
+        return Ok(());
+    }
+    let asked = DataRequest::Describe {
+        tables: vec![],
+        part: DescribePart::Namespace,
+    };
+    let parts = match describe(asker, asked).await? {
+        CatalogAnswer::Namespace(parts) => parts,
+        _ => return Err(another_part()),
+    };
+    for relation in &anew {
+        asker.pin(relation, parts.clone());
+    }
+    let read = describe_vec(
+        asker,
+        anew.iter()
+            .map(|relation| DataRequest::Describe {
+                tables: vec![relation.clone()],
+                part: DescribePart::Columns,
+            })
+            .collect(),
+    )
+    .await?;
+    for (relation, answer) in anew.iter().zip(read) {
+        match answer {
+            CatalogAnswer::Columns(columns) if !columns.is_empty() => {}
+            CatalogAnswer::Columns(_) => {
+                return Err(crate::discover::not_held(asker, relation).await);
+            }
+            _ => return Err(another_part()),
+        }
+    }
+    asker.tables_initialized(
+        anew.into_iter()
+            .map(|relation| sdm_contract::ops::ReadUnder {
+                relation,
+                namespace: parts.clone(),
+            })
+            .collect(),
+    );
+    Ok(())
+}
+
 /// The catalog's answer to `request`, a `describe`: fetched, admitted,
 /// then read by the run's data layer (decision E54).
 pub(crate) async fn describe(

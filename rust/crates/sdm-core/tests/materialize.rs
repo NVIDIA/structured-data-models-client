@@ -226,6 +226,7 @@ fn materialize_start(
         most_calls: None,
         candidates: None,
         sampler_state: None,
+        progress: false,
     });
     let indices = RecordBatch::try_new(
         Arc::new(Schema::new(vec![Field::new(

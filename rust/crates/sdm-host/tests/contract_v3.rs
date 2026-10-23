@@ -266,7 +266,6 @@ fn fetch_step(fetch: &TestFetch) -> ControlMessage {
             request: fetch.request.clone(),
             plan: fetch.plan.clone().expect("the test fetch's own plan"),
             continuation: None,
-            read_under: Vec::new(),
         }],
     })
 }

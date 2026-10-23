@@ -160,28 +160,17 @@ struct Shared {
     /// Each table of one part read under a namespace of its own, by the
     /// relation the run names it by ([`Asker::pin`]).
     pinned: BTreeMap<Relation, Relation>,
-    /// The tables the run reads anew not read yet, by their source's parts,
-    /// and where the run reads them all ([`Asker::reads_anew`]).
-    unread: BTreeSet<Vec<String>>,
-    readings: Vec<sdm_contract::ops::ReadUnder>,
-}
-
-/// Where the run reads the tables it reads anew, for the request `request`
-/// when it reads the last of them first (`FetchStep::read_under`); none
-/// otherwise, and none for a catalog read, which names a table it may not
-/// find.
-fn first_reads(shared: &mut Shared, request: &DataRequest) -> Vec<sdm_contract::ops::ReadUnder> {
-    if shared.unread.is_empty() || matches!(request, DataRequest::Describe { .. }) {
-        return Vec::new();
-    }
-    for (_, relation) in request.relations() {
-        shared.unread.remove(&relation.source);
-    }
-    if shared.unread.is_empty() {
-        mem::take(&mut shared.readings)
-    } else {
-        Vec::new()
-    }
+    /// The tables of one part the schema holds no reading of, read anew by
+    /// this run ([`Asker::reads_anew`]).
+    anew: Vec<Relation>,
+    /// Whether the run said it built its graph, and that it read its tables
+    /// ([`Asker::graph_built`], [`Asker::tables_initialized`]).
+    graph_built: bool,
+    initialized: bool,
+    /// The steps the run said and the host has not been given, in order,
+    /// said only where the host takes them ([`Asker::says_progress`]).
+    progress: Vec<Step>,
+    says_progress: bool,
 }
 
 fn lock(shared: &Mutex<Shared>) -> MutexGuard<'_, Shared> {
@@ -261,13 +250,46 @@ impl Asker {
         request
     }
 
-    /// Names `readings`, where the run reads the tables it reads anew, for
-    /// the request that reads the last of them first to carry
-    /// (`FetchStep::read_under`).
-    pub(crate) fn reads_anew(&self, readings: Vec<sdm_contract::ops::ReadUnder>) {
+    /// Names `anew`, the tables of one part the schema holds no reading of,
+    /// which the run reads under the parts the session gives
+    /// ([`Asker::tables_initialized`]).
+    pub(crate) fn reads_anew(&self, anew: Vec<Relation>) {
+        lock(&self.shared).anew = anew;
+    }
+
+    /// The tables this run reads anew, where it has not said it read them.
+    pub(crate) fn uninitialized(&self) -> Option<Vec<Relation>> {
+        let shared = lock(&self.shared);
+        (!shared.initialized).then(|| shared.anew.clone())
+    }
+
+    /// Has the run say its graph and tables to the host, which takes those
+    /// steps (`Materialize::progress`).
+    pub(crate) fn says_progress(&self) {
+        lock(&self.shared).says_progress = true;
+    }
+
+    /// Says, once, that the run builds its graph ([`Step::GraphBuilt`]).
+    pub(crate) fn graph_built(&self) {
         let mut shared = lock(&self.shared);
-        shared.unread = readings.iter().map(|r| r.relation.source.clone()).collect();
-        shared.readings = readings;
+        if !shared.graph_built {
+            shared.graph_built = true;
+            if shared.says_progress {
+                shared.progress.push(Step::GraphBuilt);
+            }
+        }
+    }
+
+    /// Says, once, that the run read every table it reads anew, under
+    /// `read_under` ([`Step::TablesInitialized`]).
+    pub(crate) fn tables_initialized(&self, read_under: Vec<sdm_contract::ops::ReadUnder>) {
+        let mut shared = lock(&self.shared);
+        if !shared.initialized {
+            shared.initialized = true;
+            if shared.says_progress {
+                shared.progress.push(Step::TablesInitialized { read_under });
+            }
+        }
     }
 
     /// Reads the table `relation`, of one part, names under `parts` on every
@@ -652,13 +674,11 @@ impl Future for Ask {
                 match asked {
                     Asked::Fetch(asked) => {
                         let (request, plan) = (*asked).clone();
-                        let read_under = first_reads(&mut shared, &request);
                         shared.fetches.push(FetchStep {
                             id,
                             request,
                             plan,
                             continuation: None,
-                            read_under,
                         });
                         fetch = Some(asked);
                     }
@@ -720,7 +740,6 @@ impl Future for Ask {
                         request,
                         plan,
                         continuation: Some(continuation),
-                        read_under: Vec::new(),
                     });
                     this.state = AskState::Asked {
                         id: next,
@@ -766,6 +785,11 @@ pub struct Run {
     /// The run's data access, which reads each admitted answer's values as
     /// the reference reads them (`DataAccess::conform`).
     data: Option<DataAccess>,
+    /// The steps the body said ([`Step::GraphBuilt`],
+    /// [`Step::TablesInitialized`]) not given yet, each before the step the
+    /// same poll made, which waits in `after`.
+    said: std::collections::VecDeque<Step>,
+    after: Option<Result<Step, CoreError>>,
 }
 
 fn protocol(sentence: Sentence, message: impl Into<String>) -> CoreError {
@@ -811,6 +835,8 @@ impl Run {
             shared,
             opaque_vendor,
             data: access,
+            said: std::collections::VecDeque::new(),
+            after: None,
         }
     }
 
@@ -862,6 +888,25 @@ impl Run {
     // The run protocol names this call `next`; a run is not an iterator.
     #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> Result<Step, CoreError> {
+        // What the body said comes first, in order, then the step the same
+        // poll made.
+        if let Some(said) = self.said.pop_front() {
+            return Ok(said);
+        }
+        if let Some(after) = self.after.take() {
+            return after;
+        }
+        let step = self.step();
+        let said = mem::take(&mut lock(&self.shared).progress);
+        if said.is_empty() {
+            return step;
+        }
+        self.said = said.into();
+        self.after = Some(step);
+        Ok(self.said.pop_front().expect("said is not empty"))
+    }
+
+    fn step(&mut self) -> Result<Step, CoreError> {
         if let Some(err) = self.terminal() {
             return Err(err);
         }

@@ -744,7 +744,6 @@ fn two_key_sets_bound_to_one_name_are_refused() {
             expect: sdm_contract::data::ExpectedSchema::Discover {},
         },
         continuation: None,
-        read_under: Vec::new(),
     };
     let keys = |values: &[&str]| {
         let batch = seeds_of(&serde_json::json!({"type": "int64"}), values);
