@@ -16,10 +16,10 @@ the exact SHA that passed (T3.0, item 4; cut back by the owner,
 both steps pass and HEAD and the tree are unchanged after them, writes
 ``<git common dir>/sdm-handoff/<sha>.json`` (``{"sha", "package", "ok":
 true, "time", "previous", "steps", "seconds"}``); a failed step exits 1 and
-writes no stamp. The one stamp starts both reviewers (``codex_pane.py
-review`` and the Claude reviewer launch, ``guard_cmd.py``) and is what
-``land.py``, its ``stack-land`` and ``auto_land.py`` need, beside the two
-APPROVE reports; the broad suites are the nightly CI run's and the phase
+writes no stamp. It runs once, on the SHA both reviewers approve; reviews
+start at push and need no stamp (the owner's "2026-10-23 stamp only at
+landing"). The stamp is what ``land.py``, its ``stack-land`` and
+``auto_land.py`` need, beside the two APPROVE reports; the broad suites are the nightly CI run's and the phase
 end's. Run it with the tools' interpreter; ``--python`` is the lane's
 (default the same), and every command the run starts sees it as
 ``SDM_PYTHON``. The steps, each printed as it starts and ends with its
@@ -43,7 +43,7 @@ runs, and a second ``run`` of the package is refused. A signal (SIGTERM,
 SIGHUP) stops the run through its clean-up. Each start, stamp, failure and
 stop is a line of ``<git common dir>/sdm-handoff/events.jsonl``; ``wait
 SHA`` blocks until SHA is stamped (exit 0) or its run fails or stops (exit
-1), so the reviewers start the moment the stamp is written (exit 3 after
+1), so the landing follows the moment the stamp is written (exit 3 after
 ``--timeout``).
 
 ``check SHA`` exits 0 when SHA has a passing stamp, else 1, naming why.

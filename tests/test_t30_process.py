@@ -3,8 +3,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """T3.0's process changes, each shown to block or to work: the handoff
-stamp and what withholds it, the commit-msg ``Rule:`` check, the review
-launches that need a stamp, the banned-command hook, the per-lane
+stamp and what withholds it, the commit-msg ``Rule:`` check, the
+banned-command hook, the per-lane
 environments, ``heavy``'s admission, the runners' refusal of the shared
 ``.venv``, the dry run's judging gaps and the slip report.
 
@@ -25,14 +25,12 @@ The interfaces tested, as T3.0's first implementer gives them:
 - ``scripts/rust_core/commit_msg.py MSGFILE``: a ``<ID> fix <n>:`` subject
   whose commit touches ``rust/crates/**`` or ``packages/**`` needs a
   ``Rule: ...`` line;
-- ``codex_pane.py review`` exits 2 on a SHA with no stamp;
 - ``scripts/rust_core/orchestration/guard_cmd.py``, the PreToolUse hook for
-  Bash and Agent, reads the hook JSON on stdin; a deny prints the
+  Bash, reads the hook JSON on stdin; a deny prints the
   ``permissionDecision: deny`` JSON with ``<rule>; instead: <alternative>``
   and exits 0, an allow prints nothing; ``SDM_APPROVED=<slug> <cmd>`` passes
   and is logged to ``$SDM_ORCH_STATE/logs/approved-commands.log``;
-  ``guard_cmd.py --tokens`` lists the slugs; an Agent prompt naming
-  ``briefs/reviewer.md`` with an unstamped SHA is denied.
+  ``guard_cmd.py --tokens`` lists the slugs.
 
 And, as named in :data:`ASSUMED` until the second implementer's names are
 relayed: ``cells.sh --print-key [--rev REV]`` prints the lane environment's
@@ -54,7 +52,6 @@ implementer takes it out of ``pending``; ``pending`` stays within
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import os
 import re
@@ -64,7 +61,6 @@ import sys
 import tempfile
 import uuid
 from pathlib import Path
-from types import ModuleType
 from typing import Any
 
 import pytest
@@ -77,7 +73,6 @@ HANDOFF = 'scripts/rust_core/handoff.py'
 AFFECTED = RUST_CORE / 'affected.py'
 COMMIT_MSG = RUST_CORE / 'commit_msg.py'
 GUARD = ORCH / 'guard_cmd.py'
-CODEX_PANE = ORCH / 'codex_pane.py'
 SETTINGS = ROOT / '.claude/settings.json'
 PHASE = 'rust-core-phase-3'
 PACKAGE = 'T3.99'
@@ -216,13 +211,6 @@ def _clone(tmp_path: Path) -> tuple[Path, Path, str]:
     return origin, work, head
 
 
-def _stamp(work: Path, sha: str) -> Path:
-    common = Path(_git(work, 'rev-parse', '--git-common-dir'))
-    if not common.is_absolute():
-        common = work / common
-    return common / 'sdm-handoff' / f'{sha}.json'
-
-
 def _handoff(
     work: Path, env: dict[str, str], *args: str, timeout: float = 3600
 ) -> subprocess.CompletedProcess[str]:
@@ -354,65 +342,6 @@ def test_t30_the_commit_msg_check_wants_a_rule_on_a_product_fix(
         assert done.returncode == 0, said
 
 
-def _module(name: str, path: Path) -> ModuleType:
-    spec = importlib.util.spec_from_file_location(name, path)
-    assert spec and spec.loader
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-@pending
-def test_t30_codex_pane_refuses_a_round_on_an_unstamped_sha(
-    tmp_path: Path,
-) -> None:
-    fake = _module('codex_pane_selftest', ORCH / 'codex_pane_selftest.py').FAKE
-    origin, repo = tmp_path / 'origin.git', tmp_path / 'repo'
-    _git(tmp_path, 'init', '-q', '--bare', str(origin))
-    _git(tmp_path, 'clone', '-q', str(origin), str(repo))
-    _commit(repo, 'one', {'a.txt': 'one\n'})
-    _git(repo, 'push', '-q', 'origin', 'HEAD:rust-core')
-    sha = _commit(repo, 'T3.99: two', {'a.txt': 'two\n'})
-    _git(repo, 'push', '-q', 'origin', f'HEAD:{TOPIC}')
-    _git(repo, 'fetch', '-q', 'origin')
-    herdr = tmp_path / 'herdr'
-    herdr.write_text(fake)
-    herdr.chmod(0o755)
-    brief = tmp_path / 'brief.md'
-    brief.write_text('Review it.\n')
-    env = _env(
-        tmp_path,
-        SDM_REPO=str(repo),
-        SDM_HERDR=str(herdr),
-        FAKE_STATE=str(tmp_path / 'fake.json'),
-        SDM_CODEX_POLL='0.05',
-        SDM_CODEX_GRACE='0',
-    )
-
-    def tool(*args: str) -> subprocess.CompletedProcess[str]:
-        return subprocess.run(
-            [sys.executable, str(CODEX_PANE), *args],
-            env=env,
-            capture_output=True,
-            text=True,
-            stdin=subprocess.DEVNULL,
-            timeout=120,
-        )
-
-    opened = tool('open', '--package', PACKAGE)
-    assert opened.returncode == 0, opened.stdout + opened.stderr
-    done = tool(
-        'review', '--package', PACKAGE, '--sha', sha, '--brief', str(brief)
-    )
-    said = done.stdout + done.stderr
-    assert done.returncode == 2, said
-    assert 'SENT' not in said
-    assert 'stamp' in said or 'handoff' in said, said
-    world = json.loads((tmp_path / 'fake.json').read_text())
-    assert not [c for c in world['log'] if c[:2] == ['agent', 'prompt']]
-    assert not _stamp(repo, sha).exists()
-
-
 # --- 6. the banned-command hook ----------------------------------------------
 
 #: A session with no directory of its own, and where a Bash call runs:
@@ -479,19 +408,16 @@ def _hook(
 
 
 @pending
-def test_t30_the_guard_is_the_repository_s_pretooluse_hook_for_bash_and_agent() -> (
-    None
-):
+def test_t30_the_guard_is_the_repository_s_pretooluse_hook_for_bash() -> None:
     settings = json.loads(SETTINGS.read_text(encoding='utf-8'))
     matched: dict[str, str] = {}
     for entry in settings['hooks']['PreToolUse']:
         for hook in entry['hooks']:
             if 'guard_cmd.py' in hook.get('command', ''):
-                for tool in ('Bash', 'Agent'):
-                    # A matcher is a regular expression on the tool's name.
-                    if re.fullmatch(entry.get('matcher', ''), tool):
-                        matched[tool] = hook['command']
-    assert set(matched) == {'Bash', 'Agent'}, matched
+                # A matcher is a regular expression on the tool's name.
+                if re.fullmatch(entry.get('matcher', ''), 'Bash'):
+                    matched['Bash'] = hook['command']
+    assert set(matched) == {'Bash'}, matched
 
 
 BANNED = [
@@ -636,29 +562,6 @@ def test_t30_an_approval_token_lets_a_one_off_through_and_is_logged(
     # A token no owner-answers section has is no approval.
     decision, _, _ = _hook(tmp_path, f'SDM_APPROVED=not-a-section {command}')
     assert decision == 'deny'
-
-
-@pending
-def test_t30_a_reviewer_launch_on_an_unstamped_sha_is_denied(
-    tmp_path: Path,
-) -> None:
-    repo = tmp_path / 'repo'
-    repo.mkdir()
-    _git(repo, 'init', '-q', '-b', TOPIC)
-    sha = _commit(repo, 'T3.99: the candidate', {'a.txt': 'a\n'})
-    prompt = (
-        'Review round 1 of T3.99 at commit '
-        f'{sha}. Read $SDM_ORCH_STATE/phase-3/briefs/reviewer.md in full.'
-    )
-    decision, why, done = _hook(
-        tmp_path,
-        '',
-        tool='Agent',
-        cwd=repo,
-        tool_input={'description': 'Review T3.99', 'prompt': prompt},
-    )
-    assert decision == 'deny', done.stdout + done.stderr
-    assert 'stamp' in why or 'handoff' in why, why
 
 
 # --- 5. environments within the machine's limits ----------------------------

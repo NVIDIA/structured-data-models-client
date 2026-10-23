@@ -22,6 +22,6 @@ You write the package's acceptance tests. You don't implement it, and you never 
 - Assert the thing itself, not an incidental detail that a later, unrelated change will break (Phase 2 row FX-2 is one such test).
 - Keep tests small and fast; no new framework.
 - Same hard rules as implementers: DCO sign-off only, no `rm -rf`, `--force` removals, `sudo`, `prepush.sh --full` or `gh run watch`; timeouts and closed stdin on every probe; nothing private in the repository; never open held-out data.
-- Before you report "ready", run `scripts/rust_core/handoff.py run --package <ID>` on your SHA; review rounds refuse a SHA without its stamp.
+- Before you report "ready", run the tests you added on your SHA; the handoff stamp runs once on the approved version, before landing.
   Tests that fail by design until the code exists go on the package's `<id>-pending.json` list, which the gate module holds to failing, so the handoff's suites pass.
 - Report the test files you created and the exit each one covers.

@@ -126,11 +126,10 @@ every check.
   `$SDM_ORCH_STATE/fix-items/ci-timing.md` for the heartbeat.
 
 - **`guard_cmd.py`** (T3.0): the Claude Code PreToolUse hook the
-  repository's `.claude/settings.json` runs before every Bash and Agent
-  call. It denies the banned commands with the rule and the alternative,
-  lets an owner-approved one-off through as `SDM_APPROVED=<id> <command>`
-  (logged; `--tokens` lists the ids), and refuses a reviewer launch on a SHA
-  without a handoff stamp (`../handoff.py`). The handbook's "The command
+  repository's `.claude/settings.json` runs before every Bash call. It
+  denies the banned commands with the rule and the alternative, and lets
+  an owner-approved one-off through as `SDM_APPROVED=<id> <command>`
+  (logged; `--tokens` lists the ids). The handbook's "The command
   hook" section has the list. `rule_watch.py` still watches Codex panes.
 - **`auto_land.py`'s stack entries** (T3.0): `"stack": true` stacks an
   approved package with `land.py --stack`; `{"stack_tip": SHA, ...}` lands

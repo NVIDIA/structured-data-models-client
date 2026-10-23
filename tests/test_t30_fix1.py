@@ -296,37 +296,6 @@ def test_a_redirection_is_no_rm_target(tmp_path: Path) -> None:
         del os.environ['SDM_SCRATCH']
 
 
-def test_a_round_brief_s_candidate_needs_a_stamp(
-    repo: Path, tmp_path: Path
-) -> None:
-    previous = _commit(repo, {'a.txt': 'a\n'}, 'T3.99: round 1')
-    sha = _commit(repo, {'a.txt': 'b\n'}, 'T3.99 fix 1: round 2')
-    brief = tmp_path / 'round-briefs' / 'T3.99-r2.md'
-    brief.parent.mkdir()
-    # A real brief's shape (T3.0-r3): the candidate, the previous round,
-    # the reference; only the candidate needs the stamp (Claude r3 P2-1).
-    brief.write_text(
-        f'Candidate: {sha}\n'
-        f'Round 2 of T3.99 at SHA {sha}.\n'
-        f'Review `{previous[:8]}..{sha[:8]}` against round 1.\n'
-        f'Scope: match the reference (python-ref at {"6298913c"}).\n',
-        encoding='utf-8',
-    )
-    prompt = f'Read and follow the brief at {brief}.'
-    found = guard.check_agent(prompt, str(repo))
-    assert found is not None and sha[:12] in found.rule
-    assert previous[:12] not in found.rule
-    stamp = handoff.stamp_path(
-        Path(_git(repo, 'rev-parse', '--absolute-git-dir')), sha
-    )
-    stamp.parent.mkdir(parents=True)
-    stamp.write_text(json.dumps({'sha': sha, 'ok': True}), encoding='utf-8')
-    assert guard.check_agent(prompt, str(repo)) is None
-    # Docs work on the reviewer brief names no SHA, and passes.
-    edit = 'Tighten the wording of docs/design/rust-core/orchestration/briefs/reviewer.md'
-    assert guard.check_agent(edit, str(repo)) is None
-
-
 # --- Claude r1 P2-5: a stacked package's own commits -------------------------------
 
 
@@ -419,21 +388,6 @@ def test_the_pre_push_hook_refuses_a_protected_branch(
     monkeypatch.setenv('SDM_APPROVED', '2026-10-22-merge-phase-3')
     monkeypatch.setenv('SDM_ORCH_STATE', str(tmp_path / 'state'))
     assert lane.check_pushed(args, None, print, 'x') == 0
-
-
-def test_a_round_brief_without_its_candidate_line_is_refused(
-    repo: Path, tmp_path: Path
-) -> None:
-    sha = _commit(repo, {'a.txt': 'a\n'}, 'T3.99: the candidate')
-    missing = f'Read and follow the brief at {tmp_path}/round-briefs/none.md.'
-    assert guard.check_agent(missing, str(repo)) is not None
-    brief = tmp_path / 'round-briefs' / 'T3.99-r1.md'
-    brief.parent.mkdir()
-    brief.write_text(f'Review T3.99 at {sha}.\n', encoding='utf-8')
-    found = guard.check_agent(
-        f'Read and follow the brief at {brief}.', str(repo)
-    )
-    assert found is not None and 'candidate line' in found.rule
 
 
 def test_a_stack_top_without_a_stamp_is_refused(tmp_path: Path) -> None:

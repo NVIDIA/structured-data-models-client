@@ -162,15 +162,6 @@ def main() -> int:
         )
         second = run('git', 'rev-parse', 'HEAD', cwd=repo)
         run('git', 'fetch', '--quiet', 'origin', cwd=repo)
-        # The handoff stamps a review needs (T3.0), as handoff.py writes
-        # them, for the two SHAs reviewed below. A SHA with none is refused
-        # (tests/test_t30_process.py holds that).
-        stamps = repo / '.git' / 'sdm-handoff'
-        stamps.mkdir()
-        for sha in (first, second):
-            (stamps / f'{sha}.json').write_text(
-                json.dumps({'sha': sha, 'package': 'T2.3', 'ok': True})
-            )
         fake = root / 'herdr'
         fake.write_text(FAKE)
         fake.chmod(0o755)

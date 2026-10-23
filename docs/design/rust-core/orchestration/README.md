@@ -75,10 +75,10 @@ Work that doesn't depend on the design's scope may run while it's in review and 
 1. **Brief.** One file per package: scope, exits, the design row, decision rows, known findings to skip, and the standing rules from [briefs/implementer.md](briefs/implementer.md). Name every judging-path file it touches (see Landing).
 2. **Tests first.** Start the test author with [briefs/test-author.md](briefs/test-author.md). The implementer may start from the brief in parallel; it must not read the test author's work in progress, and the tests arrive before its first push.
 3. **Lane.** `scripts/rust_core/lane.py start --lane <x> --package <ID> --worktree <path> --wait`. Every commit subject starts with the package ID (`<ID>: ...`, `<ID> fix <n>: ...`, `<ID> tracker: ...`); `prepush.sh` and `land.py` refuse others.
-4. **Push.** The implementer runs `scripts/rust_core/prepush.sh` (the cheap tier only), then `handoff.py run` (see "The handoff stamp" below), pushes, reports the SHA and ends its turn.
-5. **Review on the stamp.** At push, run `handoff.py run` and start both reviewers with [briefs/reviewer.md](briefs/reviewer.md) the moment `handoff.py wait <SHA>` returns 0. No CI runs on a lane or topic push (the owner's "2026-10-22 evening: CI off the landing path"); the full matrix runs nightly on the phase head and at the phase's end.
+4. **Push.** The implementer runs its package's own tests and `scripts/rust_core/prepush.sh` (the cheap tier only), pushes, reports the SHA and ends its turn.
+5. **Review at push.** Start both reviewers with [briefs/reviewer.md](briefs/reviewer.md) the moment the implementer reports the SHA; a review needs no handoff stamp (the owner's "2026-10-23 stamp only at landing"). No CI runs on a lane or topic push (the owner's "2026-10-22 evening: CI off the landing path"); the full matrix runs nightly on the phase head and at the phase's end.
 6. **Fix rounds** until both reviewers approve the same SHA. Reviews block only on P1 and P2; P3s go to a carry-forward list. Later rounds review only the fix commits plus the earlier repros.
-7. **Stack it** with `land.py --stack` as soon as both reviewers approve the same SHA (or queue a `"stack": true` entry for `auto_land.py`), and land the stack with `land.py stack-land` on every package's own handoff stamp (see "Stacked landings" below).
+7. **Stamp and stack it.** As soon as both reviewers approve the same SHA, run `handoff.py run` on it once (see "The handoff stamp" below), then stack it with `land.py --stack` when `handoff.py wait <SHA>` returns 0 (or queue a `"stack": true` entry for `auto_land.py`), and land the stack with `land.py stack-land` on every package's own handoff stamp (see "Stacked landings" below).
 8. **Start the lane's next package** on the package's landing commit as soon as it is stacked.
 
 ## Ending a phase
@@ -174,23 +174,24 @@ To collect a find into the train, cherry-pick its judging-only commits onto the 
 
 ### The handoff stamp (item 4)
 
-Before an implementer or test author reports "ready", it runs `scripts/rust_core/handoff.py run --package <ID> [--python <lane environment python>] [--previous <last round's SHA>]` with the tools' interpreter.
+Implementers and test authors run their package's own tests before pushing; reviews start at push, with no stamp.
+Once both reviewers approve the same SHA, `scripts/rust_core/handoff.py run --package <ID> [--python <lane environment python>] [--previous <last round's SHA>]` runs on it once, in the lane worktree, with the tools' interpreter (the owner's "2026-10-23 stamp only at landing").
 On a clean worktree it runs two steps, printing each as it starts and ends with its time, and stops at the first that fails (the owner's "2026-10-23 cut the tooling back"):
 
 1. lint: `ruff`, `cargo fmt`, `mypy --python-executable <lane python>` on changed packages, `l0_scan.py`, the hygiene check, and `cargo deny --locked check` when `rust/` changed;
 2. the package's own tests: each test file it adds or changes, one pytest session per test root as CI runs them (a crate test by its own `--test`).
 
-The one stamp starts both reviewers, and with their two APPROVE reports is what a landing needs; no CI run on the candidate is required (the owner's "2026-10-22 evening: CI off the landing path").
+The stamp, with the two APPROVE reports, is what a landing needs; no CI run on the candidate is required (the owner's "2026-10-22 evening: CI off the landing path").
 The full CI matrix runs nightly on the phase head with fresh dependencies, the client's suite with every route forced onto the core among it, its failures becoming fix items, and at the phase's end as its final gate, debugged from the lowest module up.
 
 In a fix round whose `--previous` SHA has a stamp, step 2 takes only what changed since it.
 Every command it starts reads `--python` as `SDM_PYTHON`.
 It writes `<git common dir>/sdm-handoff/<SHA>.json` only when both pass and HEAD and the tree are unchanged; `handoff.py check SHA` reads it.
-Each start, stamp, failure and stop is a line of `<git common dir>/sdm-handoff/events.jsonl`, and `handoff.py wait SHA` returns the moment the SHA is stamped (exit 0) or its run fails or stops (exit 1): start both reviewers on its exit 0.
+Each start, stamp, failure and stop is a line of `<git common dir>/sdm-handoff/events.jsonl`, and `handoff.py wait SHA` returns the moment the SHA is stamped (exit 0) or its run fails or stops (exit 1): stack the package on its exit 0; a failure is a fix round.
 While a run lives it holds `sdm-handoff/running/<ID>.json`; the pre-push hook refuses a push from the package's worktree until the run ends (`handoff.py running --package ID` names it), and a second run of the package is refused.
 New findings meanwhile go into a local next fix, pushed after the round's report.
-`codex_pane.py review` and the Claude reviewer launch (the hook below, on any Agent prompt naming a round brief, `round-briefs/...`, or `briefs/reviewer.md`: the SHA on the brief's `Candidate: <full SHA>` line, which every round brief carries) refuse a round on a SHA without a stamp.
-Reviewers read the code, the stamp and CI, and list every difference from the old client under `differences:`, each better or worse; only a worse one blocks (the owner, G2; [briefs/reviewer.md](briefs/reviewer.md)).
+`land.py`, `land.py stack-land` and `auto_land.py` refuse a SHA without a stamp; `codex_pane.py review` and Claude reviewer launches need none.
+Reviewers read the code, and list every difference from the old client under `differences:`, each better or worse; only a worse one blocks (the owner, G2; [briefs/reviewer.md](briefs/reviewer.md)).
 `affected.py --unmapped` fails when a tracked path under `contract/`, `scripts/rust_core/` or `rust/crates/` maps to no suite; add a row to its `MAP`.
 
 A fix commit (`<ID> fix <n>: ...`) that changes product code carries a line `Rule: <the old client's rule, one sentence>`.
@@ -198,7 +199,7 @@ A fix commit (`<ID> fix <n>: ...`) that changes product code carries a line `Rul
 
 ### The command hook (item 6)
 
-`.claude/settings.json` runs `scripts/rust_core/orchestration/guard_cmd.py` before every Bash and Agent call of a Claude agent started in the repository.
+`.claude/settings.json` runs `scripts/rust_core/orchestration/guard_cmd.py` before every Bash call of a Claude agent started in the repository.
 It denies the banned commands, naming the rule and the alternative: `rm -r` (and `find -delete`) outside your scratch (the session's directory under `/tmp/claude-*`, a directory in `SDM_SCRATCH`, or a directory under `/mnt/localssd/tmp/` or `/mnt/localssd/target/` the session made itself with `mkdir`; another agent's needs the owner's token), a `git push` that updates or deletes `rust-core`, `main` or `rust-core-reference` however it is spelled (the owner, Q14; the pre-push hook refuses it too, in every worktree of the clone, registered or not), `--force`, `-f`, `--force-with-lease` and `+` refspecs on `git push`, `git push --delete`, `git clean -f`, `cargo clean`, `git worktree remove --force`, `docker rm -f`, `--no-verify` and `git -c core.hooksPath`, `sudo`, `git config` (reads allowed), `git stash`, `git branch -D`, `gh run watch`, `git fetch --prune`, and `prepush.sh --full`.
 An owner-approved one-off runs as `SDM_APPROVED=<id> <command>`, `<id>` the slug of the owner-answers heading that approves it (`guard_cmd.py --tokens` lists them); it is logged in `$SDM_ORCH_STATE/logs/approved-commands.log`, and every refusal in `guard-denied.log`.
 Codex panes keep `rule_watch.py`: the owner declined a Codex hook (2026-10-16) and kept the watcher for Codex (2026-10-21, decision 7).
@@ -284,7 +285,7 @@ The private copies outside the repository would bypass the mechanisms above, so 
 Until the phase merges into `rust-core`, the tools live on the phase branch, so the wrappers point at a worktree kept at the phase head: `git worktree add --detach ~/code/sdmc-phase-head origin/rust-core-phase-3` once, and `git -C ~/code/sdmc-phase-head checkout --detach origin/rust-core-phase-3` after each landing (`~/code/sdmc-rust-core` once the phase has merged).
 
 - `$SDM_ORCH_STATE/bin/heavy` becomes `exec ~/code/sdmc-phase-head/scripts/rust_core/orchestration/heavy "$@"`.
-- `$SDM_ORCH_STATE/bin/codex_pane.py` becomes `exec python3 ~/code/sdmc-phase-head/scripts/rust_core/orchestration/codex_pane.py "$@"`, so a review round needs the handoff stamp.
+- `$SDM_ORCH_STATE/bin/codex_pane.py` becomes `exec python3 ~/code/sdmc-phase-head/scripts/rust_core/orchestration/codex_pane.py "$@"`, so the panes run the repository's version.
 - Agents export `SDM_LANE_ENV` and `SDM_KIT_PYTHON` from `cells.sh`, since the runners refuse the shared `.venv` from then on, and pass the lane's cell python to `handoff.py run --python`.
 - Agents, the orchestrator included, start in a checkout holding `.claude/settings.json`, so the command hook runs for them.
 - A shell profile that exports an older phase's `SDM_PHASE_BRANCH` points every tool at that phase; export the current one, or none.

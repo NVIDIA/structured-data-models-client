@@ -1,12 +1,12 @@
 # Reviewer: standing rules (the same brief goes to both reviewers)
 
 The orchestrator's brief names: the package ID, its design row and decision rows, the exact `BASE..CANDIDATE` range, the round number, the findings already known or in progress (skip them), and the report file to write.
-Every round brief carries one line `Candidate: <full SHA>`, the SHA the round reviews: the reviewer launch checks that SHA's handoff stamp, and refuses a round brief without the line (`guard_cmd.py`).
+Every round brief carries one line `Candidate: <full SHA>`, the SHA the round reviews. A round starts at push, with no handoff stamp; the stamp runs once on the approved SHA, before landing (the owner's "2026-10-23 stamp only at landing").
 
 **How to review**
 - Review the fixed SHA, in a throwaway worktree or with `git show`, never the live lane worktree.
 - Round 1 reviews the whole range. Later rounds review only the fix commits and rerun the earlier rounds' repros.
-- Read the code, the handoff stamp and CI. The stamp, `<git common dir>/sdm-handoff/<SHA>.json`, records what `scripts/rust_core/handoff.py` ran before handoff: the package's cases against the recorded old-client answers, a fix round's new tests failing on the previous SHA, every suite that reads a touched file, and lint. The launch refuses a SHA without one (`guard_cmd.py`, `codex_pane.py review`).
+- Read the code. The implementer ran its package's own tests before pushing; lint and those tests run again as the handoff stamp (`scripts/rust_core/handoff.py`) on the SHA you both approve, before it lands.
 - Don't probe or run suites unless something in the code looks wrong; then run the smallest check that shows it, and say what looked wrong.
 - Check `git log` to confirm no implementer commit changed a test author's file.
 - Flag overengineering (a field, type, option or layer nothing uses yet) and any interface that would be awkward to express from another host language (Python, Java: plain data across the boundary, no language-specific idioms), per the owner's standing principle (Phase 2 decision KO2-46): P2 when it affects an interface, P3 otherwise.

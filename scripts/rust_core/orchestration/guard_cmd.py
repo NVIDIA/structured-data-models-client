@@ -3,11 +3,10 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Blocks the banned commands before they run (T3.0, item 6), and a reviewer
-launched on a SHA with no handoff stamp (item 4).
+"""Blocks the banned commands before they run (T3.0, item 6).
 
 A Claude Code PreToolUse hook, wired in the repository's
-``.claude/settings.json`` for the Bash and Agent tools. It reads the hook's
+``.claude/settings.json`` for the Bash tool. It reads the hook's
 JSON on standard input. When the call is allowed it prints nothing and
 exits 0; when it is refused it prints
 
@@ -63,17 +62,6 @@ files ``SDM_OWNER_ANSWERS`` lists, colon-separated). The command and token
 are appended to ``$SDM_ORCH_STATE/logs/approved-commands.log``.
 ``guard_cmd.py --tokens`` prints the valid ids.
 
-The Agent rule: a prompt that names a round brief (``round-briefs/...``)
-or the reviewer brief (``reviewer.md``, not ``design-reviewer.md``) starts
-a review round. Its candidate, the SHA on a ``Candidate: <full SHA>``
-line in the prompt or the round brief it points at, needs a passing
-handoff stamp (``handoff.py``) in the clone the hook runs in, else the
-launch is refused naming ``handoff.py run``; other SHAs a brief names (the
-reference, the previous round) are context. A round brief that
-cannot be read or has none is refused. A prompt naming only ``reviewer.md``
-and no candidate line has its full SHAs not yet landed checked, and with
-none is docs work, and passes.
-
 Refusals are appended to ``$SDM_ORCH_STATE/logs/guard-denied.log``. Codex
 panes have no PreToolUse hook; ``rule_watch.py`` keeps watching them.
 """
@@ -101,8 +89,6 @@ SEPARATORS = {';', '&&', '||', '|', '&', '|&', '(', ')', ';;', '\n'}
 SHELLS = {'bash', 'sh', 'zsh', 'dash'}
 #: The roots under which a directory is some agent's build or temp scratch.
 SCRATCH_ROOTS = ('/mnt/localssd/tmp', '/mnt/localssd/target')
-SHA = re.compile(r'(?<![0-9a-f])[0-9a-f]{40}(?![0-9a-f])')
-REVIEWER_BRIEF = re.compile(r'(?<![\w-])reviewer\.md\b')
 
 
 @dataclass
@@ -979,122 +965,6 @@ def check_command(
     return None
 
 
-def git_common_dir(cwd: str) -> Path | None:
-    try:
-        done = subprocess.run(
-            [
-                'git',
-                '-C',
-                cwd,
-                'rev-parse',
-                '--path-format=absolute',
-                '--git-common-dir',
-            ],
-            capture_output=True,
-            text=True,
-            timeout=30,
-            stdin=subprocess.DEVNULL,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        return None
-    out = done.stdout.strip()
-    return Path(out) if done.returncode == 0 and out else None
-
-
-#: A round brief the orchestrator writes for a review round.
-ROUND_BRIEF = re.compile(r'[^\s`\'"()]*round-briefs/[^\s`\'"()]+')
-
-
-def brief_text(name: str) -> str | None:
-    """The round brief ``name`` names, read, or None when it cannot be."""
-    name = name.rstrip('.,;:')
-    path = name.replace('${SDM_ORCH_STATE}', str(STATE)).replace(
-        '$SDM_ORCH_STATE', str(STATE)
-    )
-    try:
-        return Path(os.path.expanduser(path)).read_text(encoding='utf-8')
-    except (OSError, ValueError):
-        return None
-
-
-#: The candidate line every round brief carries (Claude r3): the one SHA
-#: the round reviews, which needs the stamp. Other SHAs a brief names (the
-#: reference, the previous round, the base) are context.
-CANDIDATE = re.compile(r'^\W*Candidate:\W*([0-9a-f]{40})\b', re.MULTILINE)
-
-
-def landed(sha: str, cwd: str) -> bool:
-    """Whether ``sha`` is on the epic or a phase branch as fetched."""
-    try:
-        done = subprocess.run(
-            ['git', '-C', cwd, 'branch', '-r', '--contains', sha],
-            capture_output=True,
-            text=True,
-            timeout=30,
-            stdin=subprocess.DEVNULL,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        return False
-    return done.returncode == 0 and any(
-        re.fullmatch(r'origin/rust-core(-phase-[0-9]+)?', line.strip())
-        for line in done.stdout.splitlines()
-    )
-
-
-def check_agent(prompt: str, cwd: str) -> Verdict | None:
-    """A review launch: a prompt naming a round brief (``round-briefs/``)
-    or the reviewer brief (``briefs/reviewer.md``). The candidate it
-    reviews is the SHA on a ``Candidate: <full SHA>`` line, in the prompt
-    or the round brief, and needs a passing stamp. A round brief that
-    cannot be read, or has no candidate line, is refused. A prompt naming
-    only ``reviewer.md`` with no candidate line has its full SHAs not yet
-    landed checked instead, and with none is docs work, and passes."""
-    briefs = ROUND_BRIEF.findall(prompt)
-    if not briefs and not REVIEWER_BRIEF.search(prompt):
-        return None
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    import handoff  # noqa: PLC0415
-
-    texts = [prompt]
-    for brief in briefs:
-        read = brief_text(brief)
-        if read is None:
-            return Verdict(
-                f'a review round whose brief {brief} cannot be read',
-                'write the round brief before launching the round, at a path '
-                'the hook can read',
-            )
-        texts.append(read)
-    candidates = sorted(set(CANDIDATE.findall('\n'.join(texts))))
-    if not candidates and briefs:
-        return Verdict(
-            'a review round whose brief has no candidate line',
-            "start the round brief with 'Candidate: <the full SHA under review>'",
-        )
-    if not candidates:
-        candidates = [
-            s for s in sorted(set(SHA.findall(prompt))) if not landed(s, cwd)
-        ]
-    if not candidates:
-        return None
-    common = git_common_dir(cwd)
-    if common is None:
-        return Verdict(
-            f'a review round launched outside a git clone ({cwd})',
-            'launch it from the clone holding the handoff stamps',
-        )
-    missing = [s for s in candidates if handoff.stamp_problem(common, s)]
-    if not missing:
-        return None
-    return Verdict(
-        'a review round on a SHA with no handoff stamp ('
-        + ', '.join(s[:12] for s in missing)
-        + ')',
-        'the implementer or test author runs `scripts/rust_core/handoff.py '
-        'run --package <ID>` on that SHA first, then reports ready',
-    )
-
-
 def decide(event: dict) -> Verdict | None:
     tool = event.get('tool_name')
     data = event.get('tool_input') or {}
@@ -1103,8 +973,6 @@ def decide(event: dict) -> Verdict | None:
         return check_command(
             str(data.get('command') or ''), cwd, event.get('session_id')
         )
-    if tool in ('Agent', 'Task'):
-        return check_agent(str(data.get('prompt') or ''), cwd)
     return None
 
 
