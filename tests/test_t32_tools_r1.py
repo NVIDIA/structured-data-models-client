@@ -4,9 +4,8 @@
 
 r"""T3.2 fix 5, Codex round 1, findings 7 to 9:
 
-- the warehouse census's calls go through the stand-in's forwarding
-  provider (``Standin.plugged``), not the ordinary provider over the
-  offline connection;
+- (the warehouse census through the stand-in's forwarding provider went
+  with the stand-in, B-lite, and its test with it);
 - ``clean_tmp.sh`` keeps a directory a process holds a file open in, or
   names as its ``CARGO_TARGET_DIR`` or ``TMPDIR`` (an active lane's), and
   still lists a stale one;
@@ -23,7 +22,6 @@ import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType
-from typing import Any
 
 import pytest
 
@@ -47,91 +45,6 @@ def _census() -> ModuleType:
     sys.modules[name] = module
     spec.loader.exec_module(module)
     return module
-
-
-# --- 7. the census through the stand-in's provider -------------------------------------
-
-#: A one-table warehouse as a stand-in would answer it: table ``t``, one
-#: bigint column ``id`` of three distinct rows, no keys.
-ANSWERS: dict[str, list[dict[str, Any]]] = {
-    'tables': [{'table_name': 't'}],
-    'columns': [
-        {
-            'column_name': 'id',
-            'data_type': 'bigint',
-            'udt_name': 'int8',
-            'numeric_scale': 0,
-            'is_nullable': 'NO',
-            'table_schema': 'main',
-            'table_name': 't',
-            'format_type': 'bigint',
-        }
-    ],
-    'key_counts': [{'k': 0, 'n': 3, 'd': 3, 'z': 0}],
-}
-
-
-def _forwarding(
-    answers: dict[str, list[dict[str, Any]]], seen: list[str]
-) -> Any:
-    import pyarrow as pa
-
-    types = {'utf8': pa.string(), 'int32': pa.int32(), 'int64': pa.int64()}
-
-    def provider(step: dict[str, Any], keys: Any = None) -> Any:
-        request = step['request']
-        seen.append(request['request'])
-        if request['request'] == 'preview':
-            return pa.table({'id': pa.array([1, 2, 3], pa.int64())})
-        rows = answers.get(request.get('part') or request['request'], [])
-        fields = step['plan']['expect']['fields']
-        schema = pa.schema(
-            [
-                pa.field(f['name'], types[f['type']['type']], f['nullable'])
-                for f in fields
-            ]
-        )
-        return pa.Table.from_arrays(
-            [
-                pa.array(
-                    [row[f['name']] for row in rows], types[f['type']['type']]
-                )
-                for f in fields
-            ],
-            schema=schema,
-        )
-
-    return provider
-
-
-@pytest.mark.parametrize('seeded', [False, True])
-def test_the_warehouse_census_runs_through_the_stand_in_s_provider(
-    seeded: bool, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    census = _census()
-    runner = census._runner()
-    case, _ = runner.load_cases([ROOT / 'contract/cases/s1/base.binary.json'])[
-        0
-    ]
-    case['until'] = 'from_source'
-    seen: list[str] = []
-    # The seeded refusal: the stand-in answers a warehouse with no table,
-    # which the core refuses.
-    answers = {**ANSWERS, 'tables': []} if seeded else ANSWERS
-    stand = runner.Standin.__new__(runner.Standin)
-    stand.leg, stand.case, stand.names = 'lakebase', case, {'schema': 'main'}
-    stand.connection = runner._OFFLINE['lakebase']()
-    stand.provider = _forwarding(answers, seen)
-    monkeypatch.setenv(
-        'SDM_CORE_ROUTES', ','.join(runner.routes_on(case, 'postgres'))
-    )
-    outcome = census._outcome_on(stand, case, 'lakebase')
-    assert seen, 'no fetch reached the stand-in'
-    if seeded:
-        assert outcome['result'] == 'refusal', outcome
-        assert outcome['code'] == 'INVALID_REQUEST', outcome
-    else:
-        assert outcome == {'result': 'success', 'stage': 'from_source'}, outcome
 
 
 # --- 8. clean_tmp.sh keeps what a process holds ---------------------------------------
