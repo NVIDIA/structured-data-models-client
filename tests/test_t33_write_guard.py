@@ -387,8 +387,11 @@ def _fake_drivers(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     it."""
     seen: list[str] = []
 
-    class SnowflakeCursor:
-        def execute(self, command: str, *a: Any, **k: Any) -> SnowflakeCursor:
+    # As the connector (4.x) has them: every entry point on
+    # SnowflakeCursorBase, SnowflakeCursor and DictCursor siblings below it
+    # (Claude r5).
+    class SnowflakeCursorBase:
+        def execute(self, command: str, *a: Any, **k: Any) -> Any:
             seen.append(command)
             return self
 
@@ -399,7 +402,10 @@ def _fake_drivers(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
             seen.append(command)
             return {'queryId': 'q'}
 
-    class DictCursor(SnowflakeCursor):
+    class SnowflakeCursor(SnowflakeCursorBase):
+        pass
+
+    class DictCursor(SnowflakeCursorBase):
         pass
 
     class OwnCursor(SnowflakeCursor):
@@ -449,7 +455,12 @@ def _fake_drivers(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
             seen.append('createTable')
 
     for module, classes in {
-        'snowflake.connector.cursor': [SnowflakeCursor, DictCursor, OwnCursor],
+        'snowflake.connector.cursor': [
+            SnowflakeCursorBase,
+            SnowflakeCursor,
+            DictCursor,
+            OwnCursor,
+        ],
         'snowflake.connector.connection': [SnowflakeConnection],
         'snowflake.snowpark.session': [Session],
         'databricks.sql.client': [Cursor],
@@ -462,7 +473,8 @@ def _fake_drivers(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
             setattr(fake, cls.__name__, cls)
         monkeypatch.setitem(sys.modules, module, fake)
     return {'seen': seen, **{c.__name__: c for c in (
-        SnowflakeCursor, DictCursor, OwnCursor, SnowflakeConnection, Session,
+        SnowflakeCursorBase, SnowflakeCursor, DictCursor, OwnCursor,
+        SnowflakeConnection, Session,
         Cursor, SparkSession, DataFrame, Catalog,
     )}}  # fmt: skip
 
@@ -492,6 +504,8 @@ def test_every_snowflake_entry_point_is_guarded(installed: Any) -> None:
         lambda: connection.cursor().executemany(OUTSIDE, [()]),
         lambda: connection.cursor().execute_async(OUTSIDE),
         lambda: d['DictCursor']().execute(OUTSIDE),
+        lambda: d['DictCursor']().executemany(OUTSIDE, [()]),
+        lambda: d['DictCursor']().execute_async(OUTSIDE),
         lambda: d['OwnCursor']().execute(OUTSIDE),
         lambda: connection.execute_string(OUTSIDE),
         lambda: connection.execute_stream(None),
@@ -534,7 +548,7 @@ def test_install_is_undone_and_a_dialect_with_no_schema_refuses_all(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     d = _fake_drivers(monkeypatch)
-    original = d['SnowflakeCursor'].__dict__['execute']
+    original = d['SnowflakeCursorBase'].__dict__['execute']
     undo = wg.install({'snowflake': None})
     try:
         with pytest.raises(wg.WriteRefused, match='no snowflake test schema'):
@@ -543,7 +557,7 @@ def test_install_is_undone_and_a_dialect_with_no_schema_refuses_all(
             wg.install(GUARDS)
     finally:
         undo()
-    assert d['SnowflakeCursor'].__dict__['execute'] is original
+    assert d['SnowflakeCursorBase'].__dict__['execute'] is original
     assert 'execute' not in d['DictCursor'].__dict__
     d['SnowflakeCursor']().execute('SELECT 1')
     # A driver module whose class moved stops the install, undoing it.
@@ -552,7 +566,7 @@ def test_install_is_undone_and_a_dialect_with_no_schema_refuses_all(
     )
     with pytest.raises(RuntimeError, match='no class Cursor'):
         wg.install(GUARDS)
-    assert d['SnowflakeCursor'].__dict__['execute'] is original
+    assert d['SnowflakeCursorBase'].__dict__['execute'] is original
 
 
 def test_psycopgs_own_classes_are_guarded() -> None:
@@ -707,7 +721,12 @@ def test_every_statement_the_old_client_recorded_on_postgres_passes() -> None:
                 continue
             capture = (record.get('driver') or {}).get('capture') or {}
             for statement in capture.get('statements') or []:
-                guard.check(statement['sql'])
+                try:
+                    guard.check(statement['sql'])
+                except wg.WriteRefused as refused:
+                    # The name-quoting cases, by the strict name rule only.
+                    assert record['case'].startswith(QUOTE_CASES), refused
+                    assert 'quoted name' in str(refused), refused
                 checked += 1
     assert checked > 1000, checked
 
@@ -830,3 +849,62 @@ def test_a_driver_subclass_made_after_the_install_is_guarded(
         Later().execute('DROP TABLE OTHER_DB.PUBLIC.T')
     Later().execute('SELECT 1')
     assert seen == ['later:SELECT 1']
+
+
+class _Command:
+    r"""A Spark Connect command as its protobuf reads: its kind, and a SQL
+    command's text."""
+
+    def __init__(self, kind: str, text: str = '') -> None:
+        self.kind = kind
+        relation = types.SimpleNamespace(
+            sql=types.SimpleNamespace(query=text, named_arguments={})
+        )
+        self.sql_command = types.SimpleNamespace(
+            input=relation, sql='', HasField=lambda name: name == 'input'
+        )
+
+    def WhichOneof(self, group: str) -> str:  # noqa: N802 - protobuf's name
+        return self.kind
+
+
+def test_spark_connect_admits_only_checked_sql_commands(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Claude r5 P1: every command a Connect session sends passes one entry
+    # point; only a SQL command, its text checked, goes through.
+    seen: list[Any] = []
+
+    class SparkConnectClient:
+        def execute_command(
+            self, command: Any, observations: Any = None
+        ) -> Any:
+            seen.append(command.kind)
+            return None, {}, None
+
+        def execute_command_as_iterator(self, command: Any) -> Any:
+            seen.append(command.kind)
+            return iter(())
+
+    fake = types.ModuleType('pyspark.sql.connect.client.core')
+    fake.SparkConnectClient = SparkConnectClient
+    monkeypatch.setitem(sys.modules, 'pyspark.sql.connect.client.core', fake)
+    undo = wg.install(GUARDS)
+    try:
+        client = SparkConnectClient()
+        for command in (
+            _Command('write_operation'),
+            _Command('write_operation_v2'),
+            _Command('create_dataframe_view'),
+            _Command('sql_command', 'DROP TABLE `other`.s.t'),
+        ):
+            for call in (
+                client.execute_command,
+                client.execute_command_as_iterator,
+            ):
+                with pytest.raises(wg.WriteRefused):
+                    call(command)
+        client.execute_command(_Command('sql_command', 'SELECT 1'))
+        assert seen == ['sql_command']
+    finally:
+        undo()
