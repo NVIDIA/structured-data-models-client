@@ -78,16 +78,9 @@ impl Operation {
         match self {
             Operation::ValidateQuery(v) => vec![(v.query, Bytes), (v.schema, Bytes)],
             Operation::DescribeSource(d) => vec![(d.source, Bytes)],
-            Operation::EditSchema(e) => {
-                let mut named = vec![(e.schema, Bytes)];
-                named.extend(e.held.map(|id| (id, Bytes)));
-                named.push((e.edit, Bytes));
-                named
-            }
+            Operation::EditSchema(e) => vec![(e.schema, Bytes), (e.edit, Bytes)],
             Operation::Materialize(m) => {
-                let mut named = vec![(m.schema, Bytes)];
-                named.extend(m.held.map(|id| (id, Bytes)));
-                named.push((m.query, Bytes));
+                let mut named = vec![(m.schema, Bytes), (m.query, Bytes)];
                 named.extend(m.indices.map(|id| (id, Arrow)));
                 named.extend(m.candidates.map(|id| (id, Bytes)));
                 named.extend(m.sampler_state.as_ref().map(|s| (s.memo, Bytes)));
@@ -515,21 +508,18 @@ pub enum ExactNumber {
 
 // --- edit_schema ------------------------------------------------------------------
 
-/// Check one edit to a schema the core described and make it, as the
-/// reference client's setters check and make it (decision E67): the
-/// schema the host holds, and the edit; the result is the schema with the
-/// edit made, or the refusal the reference gives at the assignment.
+/// Check one edit to a schema and make it, as the reference client's
+/// setters check and make it (decision E67): the schema the host holds, as
+/// plain data, and the edit; the result is the schema with the edit made,
+/// or the refusal the reference gives at the assignment (contract v28,
+/// T3.16: the schema alone, with what the source said of each column on
+/// the column, never a description the core answered earlier).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct EditSchema {
-    /// A bytes attachment of a [`SourceDescription`] as JSON: the
-    /// description the core last answered of the schema,
-    /// `describe_source`'s or the last `edit_schema`'s.
-    pub schema: AttachmentId,
     /// A bytes attachment of a [`HeldSchema`] as JSON: the host's schema as
-    /// it stands; left out, the host holds `schema` as it is.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub held: Option<AttachmentId>,
+    /// it stands.
+    pub schema: AttachmentId,
     /// A bytes attachment of a [`SchemaEdit`] as JSON.
     pub edit: AttachmentId,
 }
@@ -538,9 +528,10 @@ pub struct EditSchema {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct SchemaEdited {
-    /// A bytes attachment of a [`SourceDescription`] as JSON: the schema
-    /// with the edit made, which the host holds from now on as the
-    /// description the core last answered.
+    /// A bytes attachment of a [`HeldSchema`] as JSON: the schema with the
+    /// edit made, which the host holds from now on: each column's data
+    /// type, meanings and source facts, each table's key, time column and
+    /// repeated keys, and the links.
     pub schema: AttachmentId,
     /// The column the edit gave a meaning the caller chose (the reference's
     /// `Column.stype_declared`): the column whose meaning was assigned, or
@@ -549,16 +540,13 @@ pub struct SchemaEdited {
     pub declared: Option<ColumnRef>,
 }
 
-/// A schema as a host holds it, beside the description the core last
-/// answered of it (decision E67): the host's schema may have been changed
-/// since in ways no edit the core takes says (a table or column added, a
-/// column retyped, a table mapped to another source table, a table or
-/// column dropped from its dictionary). `edit_schema` and `materialize`
-/// read the description as the host holds it: its tables, columns,
-/// meanings, keys, time columns and links the host's, what the source said
-/// of each column the description's; a table or column the description
-/// lacks, a column of another data type, or a table of another source is
-/// refused by name (`schema_edited`).
+/// A schema as a host holds it, as plain data (contract v28, T3.16): its
+/// tables, columns, meanings, keys, time columns and links as they stand,
+/// however the host came to hold them (described, built by hand, edited,
+/// copied or unpickled), and, on each column the source was asked of,
+/// what the source said of it ([`SourceFacts`]). `edit_schema` and
+/// `materialize` read it as it is; `materialize` asks the source for the
+/// facts of a column that carries none, as `describe_source` reads them.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct HeldSchema {
@@ -581,6 +569,12 @@ pub struct HeldTable {
     pub columns: Vec<HeldColumn>,
     pub primary_key: Vec<String>,
     pub time_column: Option<String>,
+    /// Rows sharing a key value, as the host holds it
+    /// ([`DescribedTable::duplicate_keys`]): a `u64` scalar, or none.
+    /// `edit_schema` sets it as a key edit does; `materialize` does not
+    /// read it. Absent from the JSON when none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duplicate_keys: Option<Scalar>,
 }
 
 /// One column as the host holds it.
@@ -595,6 +589,46 @@ pub struct HeldColumn {
     /// What the column meant before the schema joined on it, as the host
     /// holds it ([`DescribedColumn::stype_before_key`]).
     pub stype_before_key: Option<Stype>,
+    /// What the source said of the column when it was described or last
+    /// edited, as the core answered it; absent from the JSON for a column
+    /// the source was never asked of (built by hand). A column with none,
+    /// or with facts of another relation than its table's, is one whose
+    /// facts `materialize` reads from the source, and which `edit_schema`
+    /// edits by its data type, as the reference's setters do.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<SourceFacts>,
+}
+
+/// What the source said of one column ([`DescribedColumn`]'s facts), which
+/// a host keeps on the column and hands back whole (contract v28, T3.16).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SourceFacts {
+    /// The relation of the source the facts were read from: a column of a
+    /// table the host points at another relation since holds facts of none
+    /// of it, and is read afresh, as one with none is.
+    pub relation: Relation,
+    /// The data type the source's catalog and values give the column
+    /// ([`DescribedColumn::dtype`]), which tells a date from a time of day
+    /// where the wire's name does not.
+    pub dtype: Dtype,
+    /// The type the provider handed over, after admission
+    /// ([`DescribedColumn::received`]).
+    #[serde(
+        serialize_with = "crate::types::checked_column_type",
+        deserialize_with = "crate::types::strict_column_type"
+    )]
+    pub received: ColumnType,
+    /// [`DescribedColumn::nullable`].
+    pub nullable: bool,
+    /// [`DescribedColumn::unique`].
+    pub unique: bool,
+    /// [`DescribedColumn::declared_type`]; absent from the JSON when none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub declared_type: Option<String>,
+    /// [`DescribedColumn::exact_number`]; absent from the JSON when none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exact_number: Option<ExactNumber>,
 }
 
 /// One edit to a schema, as the caller made it to the host's schema, each
@@ -750,15 +784,9 @@ pub enum TypedKind {
 #[serde(deny_unknown_fields)]
 pub struct Materialize {
     pub provider: ProviderChoice,
-    /// A bytes attachment of a [`SourceDescription`] as JSON: the
-    /// description the core last answered of the schema, or the schema to
-    /// sample.
+    /// A bytes attachment of a [`HeldSchema`] as JSON: the schema to
+    /// sample, as the host holds it (contract v28, T3.16).
     pub schema: AttachmentId,
-    /// A bytes attachment of a [`HeldSchema`] as JSON: the host's schema as
-    /// it stands, which the core reads beside `schema` (decision E67); left
-    /// out, the host holds `schema` as it is.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub held: Option<AttachmentId>,
     /// The query text: a bytes attachment of a JSON string.
     pub query: AttachmentId,
     /// The entities to predict for: an Arrow attachment of one column.
@@ -1285,17 +1313,13 @@ pub struct Attachments {
     #[schemars(rename = "DescribedSource.description")]
     pub described_source_description: SourceDescription,
     #[schemars(rename = "EditSchema.schema")]
-    pub edit_schema_schema: SourceDescription,
-    #[schemars(rename = "EditSchema.held")]
-    pub edit_schema_held: HeldSchema,
+    pub edit_schema_schema: HeldSchema,
     #[schemars(rename = "EditSchema.edit")]
     pub edit_schema_edit: SchemaEdit,
     #[schemars(rename = "SchemaEdited.schema")]
-    pub schema_edited_schema: SourceDescription,
+    pub schema_edited_schema: HeldSchema,
     #[schemars(rename = "Materialize.schema")]
-    pub materialize_schema: SourceDescription,
-    #[schemars(rename = "Materialize.held")]
-    pub materialize_held: HeldSchema,
+    pub materialize_schema: HeldSchema,
     #[schemars(rename = "Materialize.query")]
     pub materialize_query: String,
     #[schemars(rename = "Materialize.values")]

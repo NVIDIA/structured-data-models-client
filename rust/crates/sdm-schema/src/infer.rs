@@ -20,7 +20,7 @@ use std::collections::BTreeSet;
 use arrow_array::RecordBatch;
 use arrow_schema::{DataType, Field, Schema};
 use sdm_contract::data::{EXACT_NUMBER_MARKED, EXACT_NUMBER_MARKER, Relation};
-use sdm_contract::ops::{Dtype, ExactNumber, Stype};
+use sdm_contract::ops::{Dtype, ExactNumber, SourceFacts, Stype};
 use sdm_contract::{ColumnType, CoreError, Detail, ErrorCode, ErrorKind, Scalar, Unit};
 
 use crate::names;
@@ -473,6 +473,100 @@ pub fn preview(
     )
 }
 
+/// The single-column keys a table's catalog declares, as inference reads
+/// them: its primary key's, and the columns the source keeps unique.
+struct Keyed {
+    /// The one column of each declared primary key of one column.
+    primary: BTreeSet<String>,
+    /// The one column of each primary, unique or partial unique key of one
+    /// column, and each column the source keeps unique by itself.
+    unique: BTreeSet<String>,
+}
+
+impl Keyed {
+    fn of(catalog: &[CatalogColumn], constraints: &[CatalogKey]) -> Keyed {
+        let single = |kinds: &[KeyKind]| -> BTreeSet<String> {
+            constraints
+                .iter()
+                .filter(|c| kinds.contains(&c.kind) && c.columns.len() == 1)
+                .map(|c| c.columns[0].clone())
+                .collect()
+        };
+        // A column the source keeps unique by itself (a SQLite rowid alias)
+        // is unique as a key of its own is; a partial unique index keeps its
+        // one column unique as the reference reads it (SQLite's
+        // `unique_keys`), but makes no key of several.
+        let mut unique = single(&[KeyKind::Primary, KeyKind::Unique, KeyKind::PartialUnique]);
+        unique.extend(catalog.iter().filter(|c| c.unique).map(|c| c.name.clone()));
+        Keyed {
+            primary: single(&[KeyKind::Primary]),
+            unique,
+        }
+    }
+
+    /// What the source says of `declared`, whose preview returned `field`
+    /// (T3.16: one reading for `describe_source` and `materialize`): the type
+    /// its declaration fixes, where the catalog reads one (SQLite's, as the
+    /// reference types a column by it first, whatever its values), else its
+    /// values' type; the type admitted; whether it may hold no value (a
+    /// primary key holds none, but where the source lets one, SQLite's not
+    /// its rowid alias, as its catalog says); whether a key of it alone
+    /// keeps it unique; and whether it is a column of exact numbers.
+    fn facts(
+        &self,
+        relation: &Relation,
+        declared: &CatalogColumn,
+        field: &Field,
+        constraints: &[CatalogKey],
+    ) -> Result<SourceFacts, CoreError> {
+        let dtype = match declared.dtype {
+            Some(declared) => declared,
+            None => dtype_of(field.data_type())?,
+        };
+        let is_primary = declared.primary_key || self.primary.contains(&declared.name);
+        Ok(SourceFacts {
+            relation: relation.clone(),
+            dtype,
+            received: ColumnType::from_arrow(&declared.name, field.data_type())?,
+            nullable: !declared.not_null && (!is_primary || declared.key_nullable),
+            unique: self.unique.contains(&declared.name),
+            declared_type: None,
+            exact_number: exact_number(field, constraints),
+        })
+    }
+}
+
+/// What the source says of each column of a table whose catalog declares
+/// `catalog` and `constraints` and whose preview returned `schema`, in the
+/// catalog's order, as [`preview_keyed`] reads it, with no inference: the
+/// facts `materialize` reads of a column the host's schema holds none of
+/// (T3.16). The declared type of a big integer is the caller's to set.
+pub fn source_facts(
+    relation: &Relation,
+    catalog: &[CatalogColumn],
+    constraints: &[CatalogKey],
+    schema: &Schema,
+) -> Result<Vec<(String, SourceFacts)>, CoreError> {
+    if schema.fields().len() != catalog.len() {
+        return Err(CoreError::new(
+            ErrorKind::Internal,
+            ErrorCode::InternalError,
+            "a preview holds another number of columns than its catalog",
+        ));
+    }
+    let keyed = Keyed::of(catalog, constraints);
+    catalog
+        .iter()
+        .zip(schema.fields())
+        .map(|(declared, field)| {
+            Ok((
+                declared.name.clone(),
+                keyed.facts(relation, declared, field, constraints)?,
+            ))
+        })
+        .collect()
+}
+
 /// [`preview`], where `key_stated` says whether the caller names the
 /// table's key (`primary_keys=`, or a schema's own key): the key inference
 /// would take then never decides anything, so one of a type no key takes is
@@ -498,21 +592,9 @@ pub fn preview_keyed(
         // The reference refuses an empty table as a RuntimeError.
         return Err(invalid_request(not_yet("empty_table")));
     }
-    let single = |kinds: &[KeyKind]| -> BTreeSet<String> {
-        constraints
-            .iter()
-            .filter(|c| kinds.contains(&c.kind) && c.columns.len() == 1)
-            .map(|c| c.columns[0].clone())
-            .collect()
-    };
-    let declared_primary = single(&[KeyKind::Primary]);
-    // A column the source keeps unique by itself (a SQLite rowid alias) is
-    // unique as a key of its own is.
+    let keyed = Keyed::of(catalog, constraints);
+    let declared_primary = &keyed.primary;
     let kept_unique = catalog.iter().filter(|c| c.unique).map(|c| c.name.clone());
-    // A partial unique index keeps its one column unique as the reference
-    // reads it (SQLite's `unique_keys`), but makes no key of several.
-    let mut declared_unique = single(&[KeyKind::Primary, KeyKind::Unique, KeyKind::PartialUnique]);
-    declared_unique.extend(kept_unique.clone());
     let unique = constraints
         .iter()
         .filter(|c| matches!(c.kind, KeyKind::Primary | KeyKind::Unique))
@@ -531,13 +613,8 @@ pub fn preview_keyed(
     let mut primary = Vec::new();
     for (index, declared) in catalog.iter().enumerate() {
         let field = schema.field(index);
-        // The type the column's declaration fixes, where the catalog reads
-        // one (SQLite's, as the reference types a column by it first,
-        // whatever its values); any other, its values' type.
-        let dtype = match declared.dtype {
-            Some(declared) => declared,
-            None => dtype_of(field.data_type())?,
-        };
+        let facts = keyed.facts(source, declared, field, constraints)?;
+        let dtype = facts.dtype;
         if matches!(
             dtype,
             Dtype::Intlist
@@ -582,12 +659,10 @@ pub fn preview_keyed(
             dtype,
             stype,
             stype_before_key: None,
-            received: ColumnType::from_arrow(&declared.name, field.data_type())?,
-            // A primary key holds no null, but where the source lets one
-            // (SQLite's, not its rowid alias): its catalog says.
-            nullable: !declared.not_null && (!is_primary || declared.key_nullable),
-            unique: declared_unique.contains(&declared.name),
-            exact_number: exact_number(field, constraints),
+            received: facts.received,
+            nullable: facts.nullable,
+            unique: facts.unique,
+            exact_number: facts.exact_number,
         });
         let text_time = dtype == Dtype::String && stype == Stype::Timestamp;
         instants.push(if dtype == Dtype::Time {
@@ -637,7 +712,7 @@ pub fn preview_keyed(
     let unique_columns: Vec<&String> = catalog
         .iter()
         .map(|c| &c.name)
-        .filter(|n| declared_unique.contains(*n))
+        .filter(|n| keyed.unique.contains(*n))
         .filter(held)
         .collect();
     let (key, tied_keys) = match (primary.as_slice(), unique_columns.as_slice()) {

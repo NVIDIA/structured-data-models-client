@@ -32,7 +32,6 @@ deployment can answer would be worse than letting the other say no.
 
 from __future__ import annotations
 
-from predictive_query import RELATIONAL, TABULAR
 from sdm_api import TFM_MODEL_KUMO_RELATIONAL, TFM_MODEL_KUMO_TABULAR
 
 from sdm_client.base import ModelSpec, RuntimeContract
@@ -93,7 +92,7 @@ TABULAR_LIMITS = {
 
 KUMO_TABULAR = ModelSpec(
     model_id=TFM_MODEL_KUMO_TABULAR,
-    profile=TABULAR,
+    profile='TABULAR',
     runtime=RuntimeContract(
         # The endpoint takes the coarse kind only and decides binary versus
         # multiclass itself, so this client never narrows it here.
@@ -105,7 +104,7 @@ KUMO_TABULAR = ModelSpec(
 
 KUMO_RELATIONAL = ModelSpec(
     model_id=TFM_MODEL_KUMO_RELATIONAL,
-    profile=RELATIONAL,
+    profile='RELATIONAL',
     runtime=RuntimeContract(
         tasks=frozenset(
             {

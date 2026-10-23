@@ -1969,21 +1969,74 @@ fn warn(asker: &Asker, code: &str, message: &str) {
 /// schema joins on keeps its identifier's meaning); and each link able to
 /// join. Before anything else of the call is read, as the reference asks
 /// it before the gathering starts.
+/// Refuses a schema whose column means what its data type cannot carry,
+/// before anything else of the call is read, as the reference refuses it
+/// (T3.16): with `types`, as the caller holds it, as its `check_consistent`
+/// reads the caller's schema, a column named by no data type the client
+/// knows let through; without, as the source gave it, as its engine refuses
+/// a column of an incompatible semantic type when it reads the table in
+/// place.
+pub(crate) fn meanings_carried(
+    description: &SourceDescription,
+    types: Option<&sdm_schema::assemble::HostTypes>,
+) -> Result<(), CoreError> {
+    let mut marked = description.clone();
+    sdm_schema::assemble::mark_keys(&mut marked);
+    for table in &marked.tables {
+        for column in &table.columns {
+            let unknown = types.is_some_and(|t| t.is_unknown(&table.name, &column.name));
+            if unknown || crate::edit::supports(column.stype, column.dtype) {
+                continue;
+            }
+            let stype = name_of(serde_json::to_value(column.stype));
+            return Err(match types {
+                // As `check_consistent` says it, quoting the type the
+                // caller's schema holds.
+                Some(types) => not_carried(&table.name, &column.name)
+                    .with_field("reason", Detail::text("meaning_not_carried"))
+                    .with_field(
+                        "dtype",
+                        Detail::text(types.name(&table.name, &column.name, column.dtype)),
+                    )
+                    .with_field("stype", Detail::text(stype)),
+                // As the reference's engine says it when it reads the table
+                // in place, naming the source's type in the language's
+                // name.
+                None => not_carried(&table.name, &column.name)
+                    .with_field("reason", Detail::text("incompatible_semantic_type"))
+                    .with_field(
+                        "dtype",
+                        Detail::text(name_of(serde_json::to_value(column.dtype))),
+                    )
+                    .with_field("stype", Detail::text(stype)),
+            });
+        }
+    }
+    Ok(())
+}
+
+/// A contract enum's name, as its JSON spells it.
+fn name_of(value: Result<serde_json::Value, serde_json::Error>) -> String {
+    value
+        .ok()
+        .and_then(|v| v.as_str().map(str::to_owned))
+        .unwrap_or_default()
+}
+
+fn not_carried(table: &str, column: &str) -> CoreError {
+    invalid(
+        "a column's meaning is not one its values can carry",
+        "schema",
+    )
+    .with_field("table", Detail::text(table))
+    .with_field("column", Detail::text(column))
+}
+
 fn consistent(description: &mut SourceDescription) -> Result<(), CoreError> {
     sdm_schema::assemble::mark_keys(description);
     for table in &description.tables {
-        for column in &table.columns {
-            // As the language answers it, as an edit's meaning is held.
-            let supported = crate::edit::supports(column.stype, column.dtype);
-            if !supported {
-                return Err(invalid(
-                    "a column's meaning is not one its values can carry",
-                    "schema",
-                )
-                .with_field("table", Detail::text(&table.name))
-                .with_field("column", Detail::text(&column.name)));
-            }
-        }
+        // Each column's meaning was held to what its values can carry before
+        // the run (`meanings_carried`, from dispatch).
         // The engine's table takes a time column only of the timestamp
         // meaning (`Column.__setattr__`): one the schema joins on keeps
         // its identifier's, and the reference refuses the request.
@@ -2000,7 +2053,7 @@ fn consistent(description: &mut SourceDescription) -> Result<(), CoreError> {
             );
         }
     }
-    sdm_schema::assemble::check_links(description)
+    sdm_schema::assemble::check_links(description, &sdm_schema::assemble::HostTypes::default())
 }
 
 /// The names of options the host passes without their values

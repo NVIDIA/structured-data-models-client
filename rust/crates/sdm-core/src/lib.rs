@@ -11,6 +11,7 @@ pub mod attached;
 pub mod big_integer;
 pub mod compose;
 mod describe;
+mod discover;
 pub mod dispatch;
 mod edit;
 pub mod exact_number;
@@ -28,6 +29,7 @@ mod test_ops;
 
 pub use compose::{CompositionRoot, DataAccess};
 pub use dispatch::start;
+pub use edit::{dtype_names, meanings};
 pub use run::{
     ArrowData, Ask, Asker, Attachment, AttachmentIds, Attachments, FetchResult, ModelResult, Reply,
     Run, RunState,

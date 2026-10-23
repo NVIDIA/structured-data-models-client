@@ -37,15 +37,17 @@
 //!   its primary key and its time column.
 //! - [`assemble`] assembles the tables into the schema, and holds the
 //!   schema `materialize` is handed to it.
-//! - [`edit`] checks and makes an edit to a schema the core described, as
-//!   the reference's setters do, and reads a schema as a host holds it
-//!   (decision E67, T1.24b).
+//! - [`edit`] checks and makes an edit to a schema, as the reference's
+//!   setters do (decision E67, T1.24b).
+//! - [`held`] reads the schema as a host holds it, as plain data, and
+//!   writes it back (T3.16).
 
 #![forbid(unsafe_code)]
 
 pub mod assemble;
 pub mod catalog;
 pub mod edit;
+pub mod held;
 pub mod infer;
 pub mod keys;
 mod names;

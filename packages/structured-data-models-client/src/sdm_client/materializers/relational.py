@@ -19,11 +19,6 @@ from numbers import Integral
 from typing import TYPE_CHECKING, Any
 
 import pandas as pd
-from predictive_query.ast import Filter
-from predictive_query.validator.model_validator import (
-    MAX_TOP_K as _MAX_TOP_K,
-)
-from predictive_query.validator.utils import table_name
 
 from sdm_client.core import dates
 from sdm_client.core.warnings import SDMWarning, caller_stacklevel
@@ -55,6 +50,8 @@ if TYPE_CHECKING:
         MaterializedPredictionRequest,
         TaskTable,
     )
+
+    from sdm_client._rust.results import CoreRequest
 
 
 def _warn_of_a_context_the_default_mode_capped(
@@ -291,18 +288,23 @@ class RelationalMaterializer:
         # gathering the core's (T1.28a); the old route holds its own.
         from sdm_client import _routing
 
-        core = _routing.on_the_core(self.schema.source, _routing.MATERIALIZE)
-        if core:
+        kept: CoreRequest | None = None
+        if _routing.on_the_core(self.schema.source, _routing.MATERIALIZE):
             from sdm_client._rust import materialize as on_the_core
 
-            payloads, core_state = on_the_core.gather(
+            payloads, facts, kept = on_the_core.gather(
                 self, query, indices, num_context_samples, options, candidates
             )
-            windowed, entity_table = on_the_core.asked(core_state)
+            # Whether the target moves with time, and its entity table, as
+            # the core resolved them, for every query (T2.14b).
+            windowed, entity_table = facts.windowed, facts.entity_table
         else:
             windowed = (
                 getattr(query.target_ast, 'date_offset_range', None) is not None
             )
+            # The old route's reading of the query, the old PQL package's.
+            from predictive_query.validator.utils import table_name
+
             entity_table = table_name(query.entity_column)
             if len(indices) == 0:
                 raise StructuredDataError(
@@ -320,7 +322,7 @@ class RelationalMaterializer:
             self._warn_two_whole_numbers_are_being_asked_as_quantities(query)
             _warn_the_filter_chose_only_the_examples(query, indices)
             _warn_of_relationships_that_join_nothing(self.schema)
-            payloads, core_state = self._gather(
+            payloads = self._gather(
                 query, indices, num_context_samples, options
             )
             if statistic is not None:
@@ -347,10 +349,9 @@ class RelationalMaterializer:
                 )
             },
         )
-        if core_state is not None:
-            # Gathered on the core (T1.11d): the request state's version,
-            # which predict on the core hands back with the payload.
-            request._core_state = core_state
+        # Gathered on the core (T1.11d): what predict on the core hands back
+        # with the payload, a typed value (T3.16); none on the old route.
+        request._core = kept
         return request
 
     def _gather(
@@ -359,10 +360,10 @@ class RelationalMaterializer:
         indices: Sequence[Any],
         num_context_samples: int | None,
         options: dict[str, Any],
-    ) -> tuple[tuple[dict[str, Any], ...], dict[str, Any] | None]:
+    ) -> tuple[dict[str, Any], ...]:
         r"""Sample and encode using the engine's own materializer: the
-        payloads, and no request state (the core route's, from T1.11d, is
-        its own, :func:`sdm_client._rust.materialize.materialize`).
+        payloads (the core route's, from T1.11d, are its own,
+        :func:`sdm_client._rust.materialize.gather`).
 
         More entities than one call scores are gathered as several payloads
         of at most that many, which `predict()` sends one at a time and
@@ -438,7 +439,7 @@ class RelationalMaterializer:
             )
         for part in parts:
             self._check_limits(part, RELATIONAL_LIMITS)
-        return tuple(part.payload for part in parts), None
+        return tuple(part.payload for part in parts)
 
     def _get_model(self) -> KumoRelational:
         if self._model is None:
@@ -1332,6 +1333,10 @@ def _candidates_to_rank(
             f'{type(given).__name__}',
             code='INVALID_REQUEST',
         )
+    from predictive_query.validator.model_validator import (
+        MAX_TOP_K as _MAX_TOP_K,
+    )
+
     if not 1 <= int(given) <= _MAX_TOP_K:
         raise StructuredDataError(
             f'top_k is {given}, and this model ranks between 1 and '
@@ -1807,6 +1812,8 @@ def _warn_the_filter_chose_only_the_examples(
     Naming the condition is what the caller needs to act, either by narrowing
     the indices or by dropping the filter.
     """
+    from predictive_query.ast import Filter
+
     if not indices or not isinstance(query.entity_ast, Filter):
         return
     warnings.warn(
