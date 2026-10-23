@@ -135,3 +135,37 @@ fn a_relation_marks_the_columns_its_catalog_found() {
             .contains("found")
     );
 }
+
+/// A relation marked `found` holds the columns a catalog found, each read by
+/// its own name, with no filter; one marked so that renames a column, reads
+/// an expression or filters its rows is refused by name, never read as the
+/// bare table (round 3's Codex P2-1).
+#[test]
+fn a_found_relation_is_its_catalog_s_columns_or_refused() {
+    use sdm_contract::data::{DataRequest, Relation, refuse_derived};
+    let scan = |table: serde_json::Value| -> (DataRequest, Relation) {
+        let relation: Relation = serde_json::from_value(table).unwrap();
+        let request: DataRequest = serde_json::from_value(serde_json::json!({
+            "request": "scan", "table": relation, "columns": ["age"], "filters": [], "limit": null
+        }))
+        .unwrap();
+        (request, relation)
+    };
+    let (request, found) = scan(serde_json::json!({
+        "source": ["users"], "found": true, "columns": [{"name": "age", "column": "age"}]
+    }));
+    assert!(refuse_derived(&request, "table", &found, true).is_none());
+    for contradicting in [
+        serde_json::json!({"source": ["users"], "found": true,
+            "columns": [{"name": "age", "column": "age"}], "filter": "age > 30"}),
+        serde_json::json!({"source": ["users"], "found": true,
+            "columns": [{"name": "years", "column": "age"}]}),
+        serde_json::json!({"source": ["users"], "found": true,
+            "columns": [{"name": "age", "expression": "age + 1"}]}),
+    ] {
+        let (request, relation) = scan(contradicting);
+        let refused = refuse_derived(&request, "table", &relation, true)
+            .expect("a found relation that is not its catalog's columns is refused");
+        assert_eq!(refused.code, sdm_contract::ErrorCode::InvalidRequest);
+    }
+}

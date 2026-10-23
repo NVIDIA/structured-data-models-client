@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 import sys
 import types
 from collections.abc import Iterator
@@ -108,6 +109,8 @@ class _Warehouse:
         self._recorded = _recorded()
         self._fail_constraints = fail_constraints
         self.asked: list[str] = []
+        #: Each statement asked with its parameters.
+        self.calls: list[tuple[str, list[Any]]] = []
         #: The session's current schema, which a caller may switch.
         self.schema = 'shop'
 
@@ -120,6 +123,7 @@ class _Warehouse:
     def answer(self, operation: str, parameters: list[Any]) -> pa.Table:
         text = _normal(operation)
         self.asked.append(text)
+        self.calls.append((text, list(parameters)))
         if (
             self._fail_constraints
             and 'information_schema.table_constraints' in text
@@ -422,3 +426,130 @@ def test_materialize_reads_the_tables_described_whatever_the_session_s_schema_is
     ]
     assert read, connection.asked[described:]
     assert all('`main`.`shop`.' in text for text in read), read
+
+
+def _route(route: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    if route == 'core':
+        monkeypatch.setenv(
+            _routing.ENVIRONMENT,
+            ','.join(
+                _routing.FROM_SOURCE_DATABRICKS_SQL
+                + _routing.MATERIALIZE_DATABRICKS_SQL
+            ),
+        )
+
+
+_TABLES = ('orders', 'users', 'new_orders')
+
+
+def _reads(schema: Schema, *connections: Any) -> list[tuple[str, str, str]]:
+    r"""Where materializing ``schema`` reads each table on ``connections``
+    before it stops (not every sampling statement of either route is
+    recorded): ``(catalog, schema, table)`` of each catalog read (its
+    ``information_schema``'s catalog, the schema and table bound) and each
+    read of a table's rows."""
+    import pandas as pd
+
+    from sdm_client import PredictiveQuery
+
+    marks = [len(connection.calls) for connection in connections]
+    try:
+        PredictiveQuery(
+            'PREDICT COUNT(orders.*, 0, 30, days) > 0 FOR EACH users.user_id',
+            schema,
+        ).materialize(indices=[0, 1], anchor_time=pd.Timestamp('2024-03-01'))
+    except Exception:  # noqa: BLE001, S110 - the reads are what is held
+        pass
+    found = []
+    for connection, mark in zip(connections, marks, strict=True):
+        for text, parameters in connection.calls[mark:]:
+            catalog = re.search(r'`(\w+)`\.information_schema', text)
+            if catalog and parameters[-1:] and parameters[-1] in _TABLES:
+                found.append((catalog.group(1), parameters[0], parameters[-1]))
+                continue
+            found.extend(re.findall(r'`(\w+)`\.`(\w+)`\.`(\w+)`', text))
+    return [read for read in found if read[2] in _TABLES]
+
+
+@pytest.mark.parametrize('route', ['core', 'old'])
+def test_a_described_schema_rebuilt_on_another_catalog_reads_that_catalog(
+    route: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""A schema built anew from a described schema's tables on a source
+    naming another catalog reads that catalog's tables, as the old route
+    reads a new schema's tables afresh (round 3's P0, Claude's case)."""
+    _route(route, monkeypatch)
+    connection = _Connection()
+    described = Schema.from_source(DatabricksSource(connection))
+    rebuilt = Schema(
+        described.tables,
+        described.relationships,
+        source=DatabricksSource(connection, catalog='other'),
+    )
+    read = _reads(rebuilt, connection)
+    assert read, connection.asked
+    assert all(where[:2] == ('other', 'shop') for where in read), read
+
+
+@pytest.mark.parametrize('route', ['core', 'old'])
+def test_a_described_schema_rebuilt_on_another_connection_reads_its_session(
+    route: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""A schema built anew on another connection, whose session's schema is
+    ``other``, reads ``other``'s tables (round 3's P0, Claude's case)."""
+    _route(route, monkeypatch)
+    described = Schema.from_source(DatabricksSource(_Connection()))
+    elsewhere = _Connection()
+    elsewhere.schema = 'other'
+    rebuilt = Schema(
+        described.tables,
+        described.relationships,
+        source=DatabricksSource(elsewhere),
+    )
+    read = _reads(rebuilt, elsewhere)
+    assert read, elsewhere.asked
+    assert all(where[:2] == ('main', 'other') for where in read), read
+
+
+@pytest.mark.parametrize('route', ['core', 'old'])
+def test_a_table_retargeted_after_the_session_moved_is_read_under_the_session(
+    route: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""A described table pointed at another source table after the session
+    moved to ``other`` is read under ``other``, as the old route reads a
+    table it has not read yet; a table left as described is read where it
+    was described (round 3's P0, Codex's case)."""
+    _route(route, monkeypatch)
+    connection = _Connection()
+    schema = Schema.from_source(DatabricksSource(connection, catalog='main'))
+    connection.schema = 'other'
+    schema['orders'].source_name = 'new_orders'
+    read = _reads(schema, connection)
+    retargeted = [where for where in read if where[2] == 'new_orders']
+    assert retargeted, read
+    assert all(where[:2] == ('main', 'other') for where in retargeted), read
+    kept = [where for where in read if where[2] == 'users']
+    assert all(where[:2] == ('main', 'shop') for where in kept), read
+
+
+@pytest.mark.parametrize('route', ['core', 'old'])
+def test_a_schema_mixing_two_descriptions_reads_the_session_it_is_built_in(
+    route: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""A schema built from tables of two descriptions, one under ``shop``
+    and one under ``other``, is a new schema, read under its source's
+    session as the old route reads it (round 3's P0)."""
+    _route(route, monkeypatch)
+    connection = _Connection()
+    under_shop = Schema.from_source(DatabricksSource(connection))
+    connection.schema = 'other'
+    under_other = Schema.from_source(DatabricksSource(_Connection()))
+    connection.schema = 'shop'
+    mixed = Schema(
+        {'orders': under_shop['orders'], 'users': under_other['users']},
+        under_shop.relationships,
+        source=DatabricksSource(connection),
+    )
+    read = _reads(mixed, connection)
+    assert read, connection.asked
+    assert all(where[:2] == ('main', 'shop') for where in read), read
