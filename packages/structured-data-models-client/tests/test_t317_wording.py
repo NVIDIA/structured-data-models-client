@@ -21,7 +21,9 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import string
+import subprocess
 import sys
 import tempfile
 import warnings
@@ -124,6 +126,8 @@ def test_every_host_owned_sentence_has_this_host_s_library_words() -> None:
 
 def _value(name: str, conversion: str | None, spec: str) -> Any:
     r"""A value a placeholder of ``conversion`` and ``spec`` reads."""
+    if conversion == 'I':
+        return '1234'
     if spec == ',':
         return 1234
     if spec in ('place', 'backend'):
@@ -156,6 +160,10 @@ def _fields(template: str) -> tuple[dict[str, Any], dict[str, Any]]:
                 fields.setdefault(argument, ['a', 'b'])
             continue
         base = name.split('.', 1)[0].split('[', 1)[0]
+        if (spec or '').startswith('to('):
+            fields.setdefault(base, ['a', 'b'])
+            fields[spec[3:-1]] = ['c', 'd']
+            continue
         value = _value(base, conversion, spec or '')
         if '[' in name and not isinstance(value, list):
             value = [value, 'second']
@@ -298,7 +306,9 @@ def test_unscored_candidates_are_named_as_the_caller_gave_them() -> None:
 
     several = _warning('candidates_unscored_several', candidates=[1, 3])
     one = _warning('candidates_unscored_one', candidates=[2])
-    assert _shown(several, one, host={'candidates': named}) == [
+    with errors.holding(candidates=named):
+        shown = _shown(several, one)
+    assert shown == [
         "[CANDIDATES_UNSCORED] candidates 'gold' and 'bronze' are left out of "
         'this ranking, unscored: the context sampled for each holds one '
         'answer only, nearly always because no entity in it linked to the '
@@ -470,3 +480,322 @@ def test_no_refusal_on_the_census_s_core_route_says_a_generic_sentence(
         said = str(error).split('] ', 1)[1]
         assert said not in GENERIC, (error.code, error.details)
         assert error._sentence in _sentences(), error.code
+
+
+#: The reference checkout and its interpreter, as the recorders name them.
+REFERENCE = Path.home() / 'code/sdmc-reference'
+#: Each census probe whose refusal, in a sentence of the core's, the core
+#: route says in other words than the reference's, with the register entry
+#: that records why: each one where the reference refuses otherwise, by
+#: another code or class or by failing, so its words cannot be the core's.
+#: Every other probe both routes refuse says the reference's words.
+DIFFERS: dict[str, str] = {
+    'rule:column_type': 'P1B-10: refused by name where the reference fails',
+    'rule:text_time_zones': 'DT-11: mixed offsets refused by name',
+    'rule:seed_size': 'RS-7: a seed past the range refused by name where the '
+    'reference fails INTERNAL_ERROR',
+    'rule:target_type': 'P1B-3: a rule the core does not hold yet',
+    'rule:text_time': "DT-12: the provider's error where the reference "
+    'fails INTERNAL_ERROR',
+    'rule:text_time_order': "DT-12: the provider's error where the "
+    'reference fails INTERNAL_ERROR',
+    'rule:wire_dtype': 'HOST-2: an interval refused by name where the '
+    'reference fails unnamed',
+    'rust/crates/sdm-contract/src/types.rs::from_arrow::unsupported_type#1': (
+        'HOST-2: an interval refused by name where the reference fails unnamed'
+    ),
+    'rust/crates/sdm-contract/src/types.rs::from_arrow_unchecked::'
+    'unsupported_type#1': 'HOST-2: an interval refused by name where the '
+    'reference fails unnamed',
+    'rust/crates/sdm-host/src/admission.rs::admitted_field::admission::'
+    'unsupported#1': 'P1B-47: a list of intervals refused by name where the '
+    'reference fails unnamed',
+    'rust/crates/sdm-host/src/admission.rs::convert_type::admission::'
+    'unsupported#2': 'P1B-47: a struct holding an interval refused by name '
+    'where the reference fails unnamed',
+}
+
+
+def _routed(
+    census: Any, probes: list[dict[str, Any]], python: str | None
+) -> list[dict[str, Any]]:
+    r"""Each probe's outcome with its words, on the core route in this
+    interpreter (``python`` None) or on the reference's interpreter."""
+    routes = census._routes()
+    with tempfile.TemporaryDirectory(prefix='sdm-t317-') as scratch:
+        cases = Path(scratch)
+        for number, probe in enumerate(probes):
+            (cases / f'{number}.json').write_text(
+                json.dumps(
+                    {
+                        'case': census._case(probe, number, routes),
+                        'options': probe.get('options', {}),
+                        'model': probe.get('model', 'KumoRelational'),
+                    }
+                )
+            )
+        out = cases / 'out.json'
+        if python is None:
+            census.route(cases, out, 'duckdb', core=True)
+        else:
+            subprocess.run(
+                [
+                    python,
+                    '-I',
+                    str(ROOT / 'contract/tools/refusal_census.py'),
+                    'route',
+                    '--reference',
+                    str(REFERENCE),
+                    '--database',
+                    'duckdb',
+                    '--cases',
+                    str(cases),
+                    '--out',
+                    str(out),
+                ],
+                stdin=subprocess.DEVNULL,
+                capture_output=True,
+                text=True,
+                timeout=1200,
+                env={
+                    **{
+                        k: v for k, v in os.environ.items() if k != 'PYTHONPATH'
+                    },
+                    census.MESSAGES: '1',
+                },
+                check=True,
+            )
+        found: list[dict[str, Any]] = json.loads(out.read_text())
+        return found
+
+
+def test_the_census_s_refusals_say_the_old_client_s_words_or_a_registered_difference(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Every census probe on DuckDB, on the core route and on the old client:
+    # where both refuse, the core route says the old client's words, unless
+    # the probe's difference is registered; and no refusal says the defect
+    # a sentence with fields missing would (T3.17 review r1, P2-1).
+    python = REFERENCE / '.venv/bin/python'
+    # The reference's interpreter is the comparison's other side.
+    assert python.is_file(), f'no reference interpreter at {python}'
+    census = _census()
+    monkeypatch.setenv(census.MESSAGES, '1')
+    probes = [
+        probe
+        for probe in census.probes(ROOT)
+        if 'duckdb' in probe.get('databases', census.DATABASES)
+    ]
+    core = _routed(census, probes, None)
+    old = _routed(census, probes, str(python))
+    defect = errors.DEFECT.split('{sentence!r}')[1]
+    differs = {}
+
+    def words(outcome: dict[str, Any]) -> str:
+        # The message without its code's prefix: the code is the census's
+        # to compare, the words are this test's.
+        said = outcome['message']
+        return said.split('] ', 1)[1] if said.startswith('[') else said
+
+    for probe, mine, theirs in zip(probes, core, old, strict=True):
+        assert defect not in mine.get('message', ''), (probe['site'], mine)
+        if mine['result'] != 'refusal' or theirs['result'] != 'refusal':
+            continue
+        # Only the core's sentences are this package's: a refusal the host
+        # raises itself says its own words.
+        if mine['sentence'] is not None and words(mine) != words(theirs):
+            differs[probe['site']] = (words(mine), words(theirs))
+    assert {
+        site: said for site, said in differs.items() if site not in DIFFERS
+    } == {}
+    # Each registered difference is still one.
+    assert set(DIFFERS) <= set(differs)
+
+
+# --- T3.17 fix 1: values only this host holds, and the old client's words ---
+
+
+def _refusal(sentence: str, **fields: Any) -> bytes:
+    def encoded(value: Any) -> Any:
+        if isinstance(value, list):
+            return [encoded(item) for item in value]
+        if isinstance(value, int):
+            return {'t': 'u64', 'v': str(value)}
+        return {'t': 'utf8', 'v': value}
+
+    entry = _sentences()[sentence]
+    error = {
+        'kind': 'invalid_request'
+        if entry['code'] == 'INVALID_REQUEST'
+        else 'unsupported',
+        'code': entry['code'],
+        'sentence': sentence,
+        'message': 'm',
+        'fields': {name: encoded(value) for name, value in fields.items()},
+    }
+    return json.dumps({'message': 'error', 'error': error}).encode()
+
+
+def test_a_candidate_is_named_as_the_caller_gave_it_never_by_its_position() -> (
+    None
+):
+    # The core names a candidate by its position; the sentence names the
+    # candidate as given, a value only the host holds (review r1, P1-1).
+    for name in (
+        'candidate_not_whole',
+        'candidate_unwritable',
+        'candidate_type',
+        'candidate_not_exact',
+        'candidate_unreadable',
+    ):
+        assert '{candidate' not in _sentences()[name]['template'], name
+    given = [1.5, 'a,b']
+
+    def candidate(fields: dict[str, Any]) -> Any:
+        return given[fields['candidate']]
+
+    with errors.holding(
+        candidate=candidate,
+        candidate_type=lambda fields: type(candidate(fields)).__name__,
+    ):
+        whole = errors.error_from_core(
+            _refusal('candidate_not_whole', field='candidates', candidate=0),
+            {},
+        )
+        unwritable = errors.error_from_core(
+            _refusal('candidate_unwritable', field='candidates', candidate=1),
+            {},
+        )
+    assert str(whole) == '[INVALID_REQUEST] 1.5 cannot name a row to rank'
+    assert str(unwritable) == (
+        "[INVALID_REQUEST] the candidate 'a,b' cannot be written into a "
+        'query: a key holding a quote, a comma, a bracket or nothing at all '
+        'would read as part of the question rather than as the row it names'
+    )
+
+
+def test_a_source_with_no_table_is_named_as_the_caller_gave_it(
+    core: None,
+) -> None:
+    source = DuckDBSource(duckdb.connect())
+    with pytest.raises(StructuredDataError) as raised:
+        Schema.from_source(source)
+    assert str(raised.value) == (
+        f'[INVALID_REQUEST] {source!r} holds no table to describe'
+    )
+
+
+def _users() -> Schema:
+    connection = duckdb.connect()
+    for statement in (
+        'CREATE TABLE users (user_id INTEGER PRIMARY KEY, age INTEGER)',
+        'INSERT INTO users SELECT i, i % 50 FROM range(40) t(i)',
+        'CREATE TABLE orders (order_id INTEGER PRIMARY KEY, user_id INTEGER '
+        'REFERENCES users (user_id), ts TIMESTAMP)',
+        "INSERT INTO orders SELECT i, i % 40, TIMESTAMP '2020-01-01' + i * "
+        'INTERVAL 1 DAY FROM range(200) t(i)',
+    ):
+        connection.execute(statement)
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        return Schema.from_source(DuckDBSource(connection))
+
+
+def test_the_context_size_refused_is_named_as_the_caller_gave_it(
+    core: None,
+) -> None:
+    # The old client's words, with the value as given, however large
+    # (review r1, P1-2 and P1-3).
+    query = PredictiveQuery(
+        'PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id', _users()
+    )
+    with pytest.raises(StructuredDataError) as past:
+        query.materialize(indices=[1], num_context_samples=10_001)
+    assert str(past.value).split('] ', 1)[1] == (
+        'num_context_samples is 10,001, and the endpoint accepts at most '
+        '10,000 context rows'
+    )
+    with pytest.raises(StructuredDataError) as below:
+        query.materialize(indices=[1], num_context_samples=-(10**100))
+    assert str(below.value).split('] ', 1)[1] == (
+        'num_context_samples must be at least 1; a model predicts from '
+        f'labelled examples, and {-(10**100)} leaves it none'
+    )
+
+
+def test_no_shared_template_spells_a_python_value() -> None:
+    # A value a host writes in its own language is its advice or its own
+    # library's words, never the shared template's (review r1, P1-4).
+    import re
+
+    for name, entry in _sentences().items():
+        if entry['owner'] != 'shared':
+            continue
+        # A class an endpoint spells "True" is its data, not a value.
+        found = re.search(
+            r"(?<![\"'])\b(?:None|True|False)\b(?![\"'])|'NaT'",
+            entry['template'],
+        )
+        assert found is None, name
+
+
+def test_several_reserved_columns_are_said_as_the_old_client_says_them() -> (
+    None
+):
+    assert errors.render(
+        'wire_reserved_several',
+        {
+            'tables': ['a', 'b'],
+            'columns': ['instance_id', '__kumo_anchor_time'],
+            'reserved': ['a.instance_id', 'b.__kumo_anchor_time'],
+            'renamed': [
+                'instance_id_from_the_data',
+                'kumo_anchor_time_from_the_data',
+            ],
+        },
+    ) == (
+        'a.instance_id and b.__kumo_anchor_time use names this client needs '
+        'for the request it builds, so they cannot also be columns of the '
+        "data. Rename them, for instance 'instance_id' to "
+        "'instance_id_from_the_data', '__kumo_anchor_time' to "
+        "'kumo_anchor_time_from_the_data'."
+    )
+
+
+def test_a_ranking_s_candidates_are_refused_in_the_old_client_s_words(
+    core: None,
+) -> None:
+    # Through the public calls, as the old client says each (review r1,
+    # P1-1): the candidate as given and the question as written are the
+    # values only the host holds, which the core's sentences name.
+    sys.path.insert(0, str(ROOT / 'contract/tools'))
+    import ranking_record
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        with ranking_record.source({}) as source:
+            schema = Schema.from_source(source)
+            said = []
+            for candidates, text in (
+                ([1.5], ranking_record.RANK),
+                (["a'b"], ranking_record.RANK),
+                (
+                    [1, 2],
+                    'PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id',
+                ),
+            ):
+                with pytest.raises(StructuredDataError) as raised:
+                    PredictiveQuery(text, schema).materialize(
+                        indices=[1], candidates=candidates
+                    )
+                said.append(str(raised.value))
+    assert said == [
+        '[INVALID_REQUEST] 1.5 cannot name a row to rank',
+        '[INVALID_REQUEST] the candidate "a\'b" cannot be written into a '
+        'query: a key holding a quote, a comma, a bracket or nothing at all '
+        'would read as part of the question rather than as the row it names',
+        '[INVALID_REQUEST] candidates are the rows a ranking is over, and '
+        "'PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id' does "
+        'not rank anything. Ask it without candidates, or rank with "RANK TOP '
+        'k", which is the question they are for',
+    ]

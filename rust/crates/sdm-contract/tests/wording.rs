@@ -25,10 +25,22 @@ struct Placeholder {
 }
 
 /// The conversions the placeholder grammar names (`wording` module docs).
-const CONVERSIONS: &[char] = &['r', 'l', 'j', 'c', 'R', 't', 'T', 'G', 'S', 'N', 'p', 'd'];
-/// The specs a field may carry: a count with its thousands grouped, and a
-/// database by the names the table gives it.
+const CONVERSIONS: &[char] = &[
+    'r', 'l', 'a', 'j', 'c', 'R', 't', 'T', 'G', 'S', 'N', 'I', 'p', 'd',
+];
+/// The specs a field may carry: a count with its thousands grouped, a
+/// database by the names the table gives it, and a list paired with
+/// another field's (`to(<field>)`).
 const SPECS: &[&str] = &[",", "place", "backend"];
+
+/// Whether `spec` is one a field may carry.
+fn known_spec(spec: &str) -> bool {
+    SPECS.contains(&spec)
+        || spec
+            .strip_prefix("to(")
+            .and_then(|rest| rest.strip_suffix(')'))
+            .is_some_and(|field| !field.is_empty())
+}
 
 /// The placeholders of `text`, `{{` and `}}` read as braces, or why it
 /// does not parse.
@@ -160,7 +172,7 @@ fn every_sentence_has_a_template_that_renders() {
                 assert!(CONVERSIONS.contains(&conversion), "{at}: !{conversion}");
             }
             if let Some(spec) = &placeholder.spec {
-                assert!(SPECS.contains(&spec.as_str()), "{at}: :{spec}");
+                assert!(known_spec(spec), "{at}: :{spec}");
             }
             let base = placeholder
                 .name
