@@ -8565,12 +8565,15 @@ entries:
   affected_inputs: >-
     A Databricks table (SQL warehouse or Spark session) holding a column of
     a type _to_dtype reads as unsupported, under a forced core route.
-  cases: [databricks.value.struct-feature, T3.4]
+  cases: [T3.4]
   refs: [T3.4, P1B-10, E66]
   status: proposed
   approved_by: null
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E66}
   notes: >-
+    Its case, databricks.value.struct-feature, lands with C-1's Databricks
+    recording (rust-core-phase-3-topic-T3.4-cases); T3.4's tests hold the
+    refusal meanwhile (t34_declared_types.rs).
     Proposed by T3.4's implementer, never self-approved: a named refusal
     where the reference gives an unnamed error, the class E66(b) covers
     (KO3-41's better error). Measured offline on the stand-in once T3.3's
