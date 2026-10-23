@@ -518,9 +518,13 @@ def test_a_plan_leaves_the_not_live_cases_out_by_name(leg: str) -> None:
 def test_a_failed_case_is_recorded_and_the_rest_continue(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # Claude r9 P1-2: one case's failure ends that case alone; the others
-    # are recorded and imported, the failure written with its reason.
-    paths = [str(tmp_path / f'{name}.json') for name in ('a', 'b', 'c')]
+    # Claude r9 P1-2, r10 P1 and P2s: one case's failure ends that case
+    # alone, written with its real reason (the runner's failure, any other
+    # error, or a guard refusal of a statement the old client sent, which
+    # its call would otherwise record as the reference's answer); the
+    # others are recorded and imported, and the run exits 1.
+    names = ('a', 'b', 'c', 'd', 'e')
+    paths = [str(tmp_path / f'{name}.json') for name in names]
     monkeypatch.setattr(
         capture_run,
         'plan',
@@ -530,22 +534,35 @@ def test_a_failed_case_is_recorded_and_the_rest_continue(
         },
     )
     monkeypatch.setattr(capture_run, 'install_guard', lambda *a: lambda: None)
+    guard = capture_run.load_guard()
     imported: list[list[str]] = []
 
     class Failure(Exception):
         pass
 
-    def main(argv: list[str]) -> int:
-        case = Path(argv[-1]).stem
+    def load_cases(given: list[Path]) -> list[tuple[dict[str, Any], str]]:
+        return [({'id': Path(given[0]).stem}, 'digest')]
+
+    def run(mode: str, cases: Any, reference: Any, **options: Any) -> list[Any]:
+        case = cases[0][0]['id']
         if case == 'b':
             raise Failure(
                 'lakebase could not be opened or loaded (WriteRefused)'
             )
-        record = Path(argv[argv.index('--record') + 1])
-        record.write_text(json.dumps({'case': case}) + '\n')
-        return 0
+        if case == 'c':
+            raise ValueError('a driver error outside the runner')
+        if case == 'd':
+            # The guard refuses one of the old client's own reads; its call
+            # turns that into the case's refusal outcome, and the run goes on.
+            guard.REFUSALS.append(
+                'SELECT SETSEED: SETSEED(), a function on no list'
+            )
+        options['record'].write_text(json.dumps({'case': case}) + '\n')
+        return [{'case': case}]
 
-    runner = types.SimpleNamespace(main=main, RunnerFailure=Failure)
+    runner = types.SimpleNamespace(
+        run=run, load_cases=load_cases, RunnerFailure=Failure
+    )
     monkeypatch.setattr(
         capture_run,
         '_named',
@@ -553,6 +570,7 @@ def test_a_failed_case_is_recorded_and_the_rest_continue(
             runner if name == 'run_python' else types.SimpleNamespace()
         ),
     )
+    monkeypatch.setattr(capture_run, 'load_guard', lambda *a: guard)
     captures = capture_run._module('captures')
 
     def import_recording(path: Path, out: Path) -> list[Path]:
@@ -567,8 +585,10 @@ def test_a_failed_case_is_recorded_and_the_rest_continue(
     monkeypatch.setattr(captures, 'import_recording', import_recording)
     status = capture_run.run('lakebase', tmp_path, tmp_path / 'out')
     assert status == 1
-    assert imported == [['a', 'c']]
+    assert imported == [['a', 'e']]
     failed = json.loads((tmp_path / 'out' / 'lakebase.failed.json').read_text())
     assert failed == {
-        'b': 'lakebase could not be opened or loaded (WriteRefused)'
+        'b': 'lakebase could not be opened or loaded (WriteRefused)',
+        'c': 'ValueError: a driver error outside the runner',
+        'd': 'the write guard refused: SELECT SETSEED: SETSEED(), a function on no list',
     }

@@ -1197,3 +1197,17 @@ def test_spark_global_and_temporary_views_are_refused(
         assert seen == []
     finally:
         undo()
+
+
+def test_every_refusal_of_an_installed_guard_is_kept(installed: Any) -> None:
+    # Claude r10 P1: a refusal the caller swallows (the old client's call
+    # makes it the case's outcome) is still seen: install keeps each one.
+    assert wg.REFUSALS == []
+    try:
+        installed['SnowflakeConnection']().cursor().execute(OUTSIDE)
+    except wg.WriteRefused:
+        pass  # what the old client's call does with it
+    with pytest.raises(wg.WriteRefused):
+        _ = installed['DataFrame']().write
+    assert len(wg.REFUSALS) == 2
+    assert 'outside the test schema' in wg.REFUSALS[0]
