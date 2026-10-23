@@ -2885,3 +2885,18 @@ def test_t30_comparison_jobs_take_the_base_recorded_at_push_time(
         said = point.stdout + point.stderr
         assert point.returncode == 0, f'{name}: {where.stdout} {said}'
         assert point.stdout.split()[0] == pushed_on, f'{name}: {said}'
+
+
+def test_t32_the_nightly_runs_the_client_suite_with_every_route_forced() -> (
+    None
+):
+    # The owner's "2026-10-23 early: nightly forced-route run": the Phase 2
+    # flip dry run, every path the build routes onto the core forced there.
+    job = _workflow()['jobs']['forced-routes']
+    assert (
+        job['if'] == "github.event_name == 'workflow_dispatch' && inputs.fresh"
+    )
+    script = '\n'.join(step.get('run', '') for step in job['steps'])
+    assert 'CORE_ROUTED' in script and 'export SDM_CORE_ROUTES' in script
+    assert 'packages/structured-data-models-client/tests' in script
+    assert '-rf' in script, 'the watchdog names failing tests from FAILED lines'

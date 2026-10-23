@@ -278,6 +278,20 @@ def nightly(
         except RuntimeError as error:
             lines.append(f'WATCHDOG gh failed: {error}')
     done = [r for r in ours if r.get('status') == 'completed']
+    # A nightly that did not run or report is a fix item too (the owner,
+    # "2026-10-23 early: nightly forced-route run").
+    if not any(
+        now - _time(str(r.get('createdAt'))) < dt.timedelta(hours=MISSING_HOURS)
+        for r in done
+    ):
+        lines.append(f'NIGHTLY {phase}: none finished in {MISSING_HOURS} h')
+        _add_item(
+            items,
+            f'- [ ] nightly on {phase} missing {now:%Y-%m-%d}: none finished '
+            f'in {MISSING_HOURS} h',
+            f'nightly on {phase} missing {now:%Y-%m-%d}',
+            lines,
+        )
     if not done:
         return lines
     run = max(done, key=lambda r: str(r.get('createdAt')))
@@ -296,20 +310,58 @@ def nightly(
         )
         or f'no failed job named ({run.get("url")})'
     )
-    lines.append(f'NIGHTLY {phase} run {number}: {failed}')
-    item = (
+    tests = failing_tests(gh, jobs)
+    named = f'{failed}; failing tests: {", ".join(tests)}' if tests else failed
+    lines.append(f'NIGHTLY {phase} run {number}: {named}')
+    _add_item(
+        items,
         f'- [ ] nightly run {number} on {phase} '
-        f'{str(run.get("headSha"))[:12]}: {failed}'
+        f'{str(run.get("headSha"))[:12]}: {named}',
+        f'nightly run {number} ',
+        lines,
     )
+    return lines
+
+
+#: Hours with no finished nightly before the watchdog calls it missing.
+MISSING_HOURS = 26
+FAILED_TEST = re.compile(r'\bFAILED (\S+::\S+)')
+
+
+def failing_tests(gh: Gh, jobs: dict[str, object], most: int = 20) -> list[str]:
+    """The failing pytest node IDs the red jobs' logs name."""
+    found: list[str] = []
+    for job in jobs.get('jobs', []) or []:  # type: ignore[union-attr]
+        if not isinstance(job, dict) or job.get('conclusion') not in RED:
+            continue
+        try:
+            log = gh(
+                [
+                    'run',
+                    'view',
+                    '--job',
+                    str(job.get('databaseId')),
+                    '--log-failed',
+                ]
+            )
+        except RuntimeError:
+            continue
+        for match in FAILED_TEST.finditer(log):
+            if match.group(1) not in found:
+                found.append(match.group(1))
+    return found[:most]
+
+
+def _add_item(items: Path, item: str, key: str, lines: list[str]) -> None:
+    """``item`` appended to the fix items once, ``key`` naming it."""
     try:
         known = items.read_text(encoding='utf-8') if items.is_file() else ''
-        if f'nightly run {number} ' not in known:
+        if key not in known:
             items.parent.mkdir(parents=True, exist_ok=True)
             with open(items, 'a', encoding='utf-8') as handle:
                 handle.write(item + '\n')
     except OSError as error:
         lines.append(f'WATCHDOG fix items unwritable: {error}')
-    return lines
 
 
 def _time(text: str) -> dt.datetime:

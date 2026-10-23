@@ -88,6 +88,9 @@ def green(args: Sequence[str]) -> str:
                 {'databaseId': 7, 'headBranch': f'{PHASE}-lane-a',
                  'status': 'completed', 'conclusion': 'success',
                  'createdAt': '2026-10-22T11:00:00Z'},
+                {'databaseId': 8, 'headBranch': PHASE, 'event': 'schedule',
+                 'status': 'completed', 'conclusion': 'success',
+                 'createdAt': '2026-10-22T02:17:00Z'},
             ]
         )  # fmt: skip
     raise AssertionError(f'unexpected gh {args}')
@@ -142,6 +145,9 @@ def test_a_red_run_names_its_failed_jobs(repo, tmp_path, capsys):
                     {'databaseId': 5, 'headBranch': 'rust-core-phase-2-lane-e',
                      'status': 'completed', 'conclusion': 'failure',
                      'createdAt': '2026-10-22T11:40:00Z'},
+                    {'databaseId': 4, 'headBranch': PHASE, 'event': 'schedule',
+                     'status': 'completed', 'conclusion': 'success',
+                     'createdAt': '2026-10-22T02:17:00Z'},
                 ]
             )  # fmt: skip
         assert list(args) == ['run', 'view', '9', '--json', 'jobs']
@@ -211,10 +217,16 @@ def test_a_red_nightly_is_one_fix_item_and_a_missing_one_is_dispatched(
             return '[]'
         if list(args[:2]) == ['workflow', 'run']:
             return ''
+        if list(args[:3]) == ['run', 'view', '--job']:
+            assert args[3] == '9' and args[4] == '--log-failed', args
+            return (
+                'engine\tpytest\tFAILED packages/c/tests/test_x.py::test_y - x\n'
+                'engine\tpytest\tFAILED packages/c/tests/test_x.py::test_y - x\n'
+            )
         assert list(args) == ['run', 'view', '31', '--json', 'jobs']
         return json.dumps(
-            {'jobs': [{'name': 'engine', 'conclusion': 'failure'},
-                      {'name': 'lint', 'conclusion': 'success'}]}
+            {'jobs': [{'name': 'engine', 'conclusion': 'failure', 'databaseId': 9},
+                      {'name': 'lint', 'conclusion': 'success', 'databaseId': 10}]}
         )  # fmt: skip
 
     items = tmp_path / 'state/phase-3/fix-items.md'
@@ -224,13 +236,18 @@ def test_a_red_nightly_is_one_fix_item_and_a_missing_one_is_dispatched(
             capsys, repo, '--fix-items', str(items), '--dispatch',
             gh=nightly, cwds=lane,
         )  # fmt: skip
+        # Red names its failing tests; none finished in 26 h is missing
+        # (the owner, "2026-10-23 early: nightly forced-route run").
+        tests = 'engine; failing tests: packages/c/tests/test_x.py::test_y'
         assert out == [
             f'NIGHTLY {PHASE}: dispatched (none in 24 h)',
-            f'NIGHTLY {PHASE} run 31: engine',
+            f'NIGHTLY {PHASE}: none finished in 26 h',
+            f'NIGHTLY {PHASE} run 31: {tests}',
         ], out
-    # One item for the run, however often the watchdog reads it.
+    # One item each, however often the watchdog reads them.
     assert items.read_text().splitlines() == [
-        f'- [ ] nightly run 31 on {PHASE} {"a" * 12}: engine'
+        f'- [ ] nightly on {PHASE} missing 2026-10-22: none finished in 26 h',
+        f'- [ ] nightly run 31 on {PHASE} {"a" * 12}: {tests}',
     ]
     assert [
         'workflow',
