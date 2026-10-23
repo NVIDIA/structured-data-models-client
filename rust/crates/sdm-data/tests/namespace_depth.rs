@@ -147,3 +147,23 @@ fn a_databricks_source_leaving_any_part_to_the_connection_is_settled_first() {
         choice("databricks", json!(["main", "shop"]))
     );
 }
+
+/// A table the core reads under a namespace of its own, named in full, is
+/// read so whatever parts the provider leaves to the connection (round 3:
+/// a table read where it was described).
+#[test]
+fn a_table_named_in_full_is_read_whatever_the_provider_leaves_out() {
+    let request: DataRequest = serde_json::from_value(json!({
+        "request": "count_rows", "table": {"source": ["main", "shop", "orders"]}, "filters": []
+    }))
+    .unwrap();
+    let Ok(FetchPlan::Sql { statements, .. }) =
+        Data::new().plan(&request, &choice("databricks", json!(["main", null])))
+    else {
+        panic!("a table named in full is read");
+    };
+    assert_eq!(
+        statements.last().unwrap().text,
+        "SELECT COUNT(*) FROM `main`.`shop`.`orders`"
+    );
+}
