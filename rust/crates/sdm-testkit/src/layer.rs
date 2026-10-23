@@ -200,6 +200,7 @@ impl Rows {
                 DescribePart::Columns => {
                     if let Some(name) = text(batch, c::NAME, row)? {
                         self.columns.push(CatalogColumn {
+                            canonical: None,
                             name,
                             declared_type: text(batch, c::TYPE, row)?.unwrap_or_default(),
                             not_null: flag(batch, c::NOT_NULL, row)?,

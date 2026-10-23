@@ -230,6 +230,7 @@ impl Replay<'_> {
                 return Ok(Replayed {
                     statements: &[],
                     answer: Err(ProviderError {
+                        refuses_expression: false,
                         kind: ErrorKind::DataSource,
                         retryable: false,
                         sqlstate: None,

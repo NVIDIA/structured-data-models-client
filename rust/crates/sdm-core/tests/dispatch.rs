@@ -211,6 +211,7 @@ fn every_operation_dispatches_to_a_run() {
 
     let host = ProviderChoice::Host {
         capabilities: ProviderCapabilities {
+            derived_relations: false, neighbor_lookback: false, sample_rows: false,
             optional: BTreeSet::new(),
             max_keys_per_request: None,
             max_seed: u64::MAX,
@@ -276,6 +277,7 @@ impl DataLayer for Fake {
 
 fn capabilities(optional: &[OptionalRequest]) -> ProviderCapabilities {
     ProviderCapabilities {
+        derived_relations: false, neighbor_lookback: false, sample_rows: false,
         optional: optional.iter().copied().collect(),
         max_keys_per_request: None,
         max_seed: u64::MAX,
@@ -617,6 +619,7 @@ fn materialize(seed: Option<Seed>) -> Operation {
     Operation::Materialize(Materialize {
         provider: ProviderChoice::Host {
             capabilities: ProviderCapabilities {
+                derived_relations: false, neighbor_lookback: false, sample_rows: false,
                 optional: BTreeSet::new(),
                 max_keys_per_request: None,
                 max_seed: u64::MAX,

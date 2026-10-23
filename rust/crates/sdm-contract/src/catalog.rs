@@ -84,6 +84,13 @@ pub struct CatalogColumn {
     /// `None` where the values' type is the column's (another declaration,
     /// an `INTERVAL` by the owner's KO2-62, every other source).
     pub dtype: Option<Dtype>,
+    /// The table's relation as the catalog names it, where the catalog
+    /// answers the name it holds the table under rather than the one asked
+    /// (Unity Catalog's lower-cased catalog, schema and table, which the
+    /// reference reads back and names the table by in every later
+    /// statement); the same on each column of one answer. `None` where the
+    /// relation asked is the source's name for it.
+    pub canonical: Option<Vec<String>>,
 }
 
 /// What a key the catalog declares is.

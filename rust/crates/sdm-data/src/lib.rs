@@ -38,6 +38,7 @@
 #![forbid(unsafe_code)]
 
 mod blake2b;
+mod databricks;
 mod duckdb;
 mod keys;
 mod mt19937;
@@ -68,7 +69,7 @@ const KNOWN: &[&str] = &[
     duckdb::NAME,
     sqlite::NAME,
     postgres::NAME,
-    "databricks",
+    databricks::NAME,
     "snowflake",
 ];
 
@@ -79,7 +80,15 @@ const KNOWN: &[&str] = &[
 /// native module reports it as `PROVIDERS`, and a database's core legs run
 /// exactly when it is listed. A dialect's package adds its name with its
 /// rendering.
-pub const PROVIDERS: &[&str] = &[duckdb::NAME, sqlite::NAME, postgres::NAME];
+pub const PROVIDERS: &[&str] = &[
+    duckdb::NAME,
+    sqlite::NAME,
+    postgres::NAME,
+    // Databricks's two legs, a SQL warehouse and a Spark session, which
+    // both run the one `databricks` dialect (T3.4).
+    "databricks-sql",
+    "databricks-spark",
+];
 
 /// The dialect `dialect` names, if this build renders it.
 fn rendered(dialect: &Dialect) -> Result<&'static dyn SqlDialect, CoreError> {
@@ -125,12 +134,8 @@ impl DataLayer for Data {
             ProviderChoice::Sql { dialect, namespace } => {
                 let dialect = rendered(dialect)?;
                 let namespace = qualifying(request, namespace)?;
-                if dialect.takes_namespace() {
-                    sql::plan(dialect, &in_namespace(request, &namespace), &namespace)
-                } else {
-                    no_namespace(request, &namespace)?;
-                    sql::plan(dialect, request, &[])
-                }
+                deeper(request, &namespace, dialect.namespace_depth())?;
+                sql::plan(dialect, &in_namespace(request, &namespace), &namespace)
             }
         }
     }
@@ -189,12 +194,12 @@ impl DataLayer for Data {
             }
             _ => Vec::new(),
         };
-        Relation {
-            source: parts
+        Relation::of(
+            parts
                 .into_iter()
                 .chain(relation.source.iter().cloned())
                 .collect(),
-        }
+        )
     }
 
     fn read(
@@ -284,17 +289,28 @@ fn in_namespace(request: &DataRequest, namespace: &[String]) -> DataRequest {
     request
 }
 
-/// Refuses a namespace given to a dialect whose sources have none to name
-/// (DuckDB's and SQLite's connectors take no namespace), by name.
-fn no_namespace(request: &DataRequest, namespace: &[String]) -> Result<(), CoreError> {
-    if namespace.is_empty() {
+/// Refuses, by name, a namespace of more parts than the dialect's sources
+/// take (design fix C): any for DuckDB's and SQLite's, which have none to
+/// name, more than a schema for Postgres's, more than a catalog and a
+/// schema for Databricks's.
+fn deeper(request: &DataRequest, namespace: &[String], depth: usize) -> Result<(), CoreError> {
+    if namespace.len() <= depth {
         return Ok(());
+    }
+    if depth == 0 {
+        return Err(sql::not_taken(
+            request,
+            "namespace",
+            "this dialect's sources have no namespace to read under",
+        ));
     }
     Err(sql::not_taken(
         request,
         "namespace",
-        "this dialect's sources have no namespace to read under",
-    ))
+        "a namespace of more parts than this dialect's sources take",
+    )
+    .with_field("parts", Detail::Scalar(sdm_contract::Scalar::UInt64(namespace.len() as u64)))
+    .with_field("most", Detail::Scalar(sdm_contract::Scalar::UInt64(depth as u64))))
 }
 
 /// The refusal of a SQL dialect this build renders nothing for, naming it
