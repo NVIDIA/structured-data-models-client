@@ -19,11 +19,6 @@ from numbers import Integral
 from typing import TYPE_CHECKING, Any
 
 import pandas as pd
-from predictive_query.ast import Filter
-from predictive_query.validator.model_validator import (
-    MAX_TOP_K as _MAX_TOP_K,
-)
-from predictive_query.validator.utils import table_name
 
 from sdm_client.core import dates
 from sdm_client.core.warnings import SDMWarning, caller_stacklevel
@@ -307,6 +302,9 @@ class RelationalMaterializer:
             windowed = (
                 getattr(query.target_ast, 'date_offset_range', None) is not None
             )
+            # The old route's reading of the query, the old PQL package's.
+            from predictive_query.validator.utils import table_name
+
             entity_table = table_name(query.entity_column)
             if len(indices) == 0:
                 raise StructuredDataError(
@@ -1335,6 +1333,10 @@ def _candidates_to_rank(
             f'{type(given).__name__}',
             code='INVALID_REQUEST',
         )
+    from predictive_query.validator.model_validator import (
+        MAX_TOP_K as _MAX_TOP_K,
+    )
+
     if not 1 <= int(given) <= _MAX_TOP_K:
         raise StructuredDataError(
             f'top_k is {given}, and this model ranks between 1 and '
@@ -1810,6 +1812,8 @@ def _warn_the_filter_chose_only_the_examples(
     Naming the condition is what the caller needs to act, either by narrowing
     the indices or by dropping the filter.
     """
+    from predictive_query.ast import Filter
+
     if not indices or not isinstance(query.entity_ast, Filter):
         return
     warnings.warn(

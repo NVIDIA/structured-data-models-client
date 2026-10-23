@@ -39,6 +39,27 @@ pub struct Read {
     /// each read by its data type ([`by_data_type`]); [`held`] writes them
     /// back with none.
     pub unfacted: BTreeSet<ColumnAt>,
+    /// The data type the source gave each column the host holds as another
+    /// (a column the caller retyped): the schema is read by the host's, as
+    /// the old client's checks read it, and the source's is what its data
+    /// is read as ([`Read::by_the_source`]).
+    pub retyped: BTreeMap<ColumnAt, Dtype>,
+}
+
+impl Read {
+    /// The schema with each column of the data type the source gave it:
+    /// the one the reference's engine reads a table in place by.
+    pub fn by_the_source(&self) -> SourceDescription {
+        let mut description = self.description.clone();
+        for table in &mut description.tables {
+            for column in &mut table.columns {
+                if let Some(dtype) = self.retyped.get(&(table.name.clone(), column.name.clone())) {
+                    column.dtype = *dtype;
+                }
+            }
+        }
+        description
+    }
 }
 
 /// The facts `column` of `table` holds of its table's relation: none where
@@ -71,8 +92,9 @@ pub fn lacking_facts(held: &HeldSchema) -> Vec<(&HeldTable, Vec<&str>)> {
 
 /// What the edits of the schema read of a column the source was never asked
 /// of: its data type as the host names it, as the reference's setters read
-/// a column's `dtype` (an unknown name is a type no meaning other than its
-/// own supports), held nullable and not unique, of no exact numbers or
+/// a column's `dtype` ([`wire_dtype`]; a name no data type has is
+/// [`Dtype::Unsupported`], which an edit lets through as the old client's
+/// checks do), held nullable and not unique, of no exact numbers or
 /// declared type. `received` is not read for such a column: only a column
 /// of exact numbers is retyped by its role ([`crate::assemble::read_exact_numbers`]).
 pub fn by_data_type(relation: &Relation, dtype: &str) -> SourceFacts {
@@ -87,25 +109,66 @@ pub fn by_data_type(relation: &Relation, dtype: &str) -> SourceFacts {
     }
 }
 
-/// The data type a wire name names, as inference gives it
-/// ([`Dtype::wire_name`]'s inverse, a date for `timestamp[us]`, an integer
-/// for `int64` and a float for `float64`); [`Dtype::Unsupported`] for a name
-/// no data type has.
+/// Every data type name a host may give a column, and the data type it
+/// names (T3.16): the client's wire names, as the old client maps them to
+/// the language's (`int64` and `int32` an integer, `float64` and `float32`
+/// a float, a timestamp of any unit a time), then the language's own names,
+/// which the old client passes through. The one table of them: the Python
+/// client reads it from the core (`sdm_client._native.DTYPE_NAMES`) for its
+/// own checks of a column's meaning.
+pub const DTYPE_NAMES: [(&str, Dtype); 22] = [
+    ("int64", Dtype::Int),
+    ("int32", Dtype::Int),
+    ("float64", Dtype::Float),
+    ("float32", Dtype::Float),
+    ("timestamp[s]", Dtype::Time),
+    ("timestamp[ms]", Dtype::Time),
+    ("timestamp[us]", Dtype::Time),
+    ("timestamp[ns]", Dtype::Time),
+    ("bool", Dtype::Bool),
+    ("int", Dtype::Int),
+    ("byte", Dtype::Byte),
+    ("int16", Dtype::Int16),
+    ("float", Dtype::Float),
+    ("string", Dtype::String),
+    ("binary", Dtype::Binary),
+    ("date", Dtype::Date),
+    ("time", Dtype::Time),
+    ("timedelta", Dtype::Timedelta),
+    ("floatlist", Dtype::Floatlist),
+    ("intlist", Dtype::Intlist),
+    ("stringlist", Dtype::Stringlist),
+    ("unsupported", Dtype::Unsupported),
+];
+
+/// The data type a host names a column by ([`DTYPE_NAMES`]); `None` for a
+/// name no data type has, which the old client's checks let through.
+pub fn named_dtype(name: &str) -> Option<Dtype> {
+    DTYPE_NAMES
+        .iter()
+        .find(|(given, _)| *given == name)
+        .map(|(_, dtype)| *dtype)
+}
+
+/// [`named_dtype`], a name no data type has read as [`Dtype::Unsupported`],
+/// which an edit lets through as the old client does
+/// ([`crate::edit::edit`]).
 pub fn wire_dtype(name: &str) -> Dtype {
-    match name {
-        "bool" => Dtype::Bool,
-        "int64" => Dtype::Int,
-        "int32" => Dtype::Int32,
-        "float64" => Dtype::Float,
-        "float32" => Dtype::Float32,
-        "string" => Dtype::String,
-        "timestamp[us]" => Dtype::Date,
-        "binary" => Dtype::Binary,
-        "timedelta" => Dtype::Timedelta,
-        "floatlist" => Dtype::Floatlist,
-        "intlist" => Dtype::Intlist,
-        "stringlist" => Dtype::Stringlist,
-        _ => Dtype::Unsupported,
+    named_dtype(name).unwrap_or(Dtype::Unsupported)
+}
+
+/// The data type the schema reads `column` by, of which the source said
+/// `facts`: the one the host holds, as the old client's checks read the
+/// caller's schema, where it names another than the source's (a column the
+/// caller retyped, or one named by no data type, which the old client's
+/// checks let through, [`Dtype::Unsupported`]); the source's, which tells a
+/// date from a time of day, where the two name one type on the wire.
+fn held_dtype(column: &HeldColumn, facts: &SourceFacts) -> Dtype {
+    let held = wire_dtype(&column.dtype);
+    if held.wire_name() == facts.dtype.wire_name() {
+        facts.dtype
+    } else {
+        held
     }
 }
 
@@ -125,6 +188,7 @@ pub fn read(
 ) -> Result<Read, CoreError> {
     let mut tables = Vec::with_capacity(held.tables.len());
     let mut unfacted = BTreeSet::new();
+    let mut retyped = BTreeMap::new();
     let links = held.links;
     let mut names = BTreeSet::new();
     for table in held.tables {
@@ -143,16 +207,20 @@ pub fn read(
                 None => match found.get(&at) {
                     Some(facts) => facts.clone(),
                     None if by_type => {
-                        unfacted.insert(at);
+                        unfacted.insert(at.clone());
                         by_data_type(&table.source, &column.dtype)
                     }
                     None => continue,
                 },
             };
+            let dtype = held_dtype(column, &facts);
+            if dtype != facts.dtype && !unfacted.contains(&at) {
+                retyped.insert(at, facts.dtype);
+            }
             columns.push(DescribedColumn {
                 name: column.name.clone(),
+                dtype,
                 received: facts.received,
-                dtype: facts.dtype,
                 stype: column.stype,
                 stype_before_key: column.stype_before_key,
                 nullable: facts.nullable,
@@ -174,14 +242,20 @@ pub fn read(
     Ok(Read {
         description: SourceDescription { tables, links },
         unfacted,
+        retyped,
     })
 }
 
 /// `description` as a host holds it: each column's data type by its wire
 /// name, its meanings, and its facts, but for the columns of `unfacted`,
-/// which carry none still; each table's key, time column and repeated
+/// which carry none still, the data type of those of `retyped` the source's
+/// ([`Read::retyped`]); each table's key, time column and repeated
 /// keys; the links.
-pub fn held(description: &SourceDescription, unfacted: &BTreeSet<ColumnAt>) -> HeldSchema {
+pub fn held(
+    description: &SourceDescription,
+    unfacted: &BTreeSet<ColumnAt>,
+    retyped: &BTreeMap<ColumnAt, Dtype>,
+) -> HeldSchema {
     HeldSchema {
         tables: description
             .tables
@@ -192,7 +266,7 @@ pub fn held(description: &SourceDescription, unfacted: &BTreeSet<ColumnAt>) -> H
                 columns: table
                     .columns
                     .iter()
-                    .map(|column| held_column(table, column, unfacted))
+                    .map(|column| held_column(table, column, unfacted, retyped))
                     .collect(),
                 primary_key: table.primary_key.clone(),
                 time_column: table.time_column.clone(),
@@ -207,14 +281,24 @@ fn held_column(
     table: &DescribedTable,
     column: &DescribedColumn,
     unfacted: &BTreeSet<ColumnAt>,
+    retyped: &BTreeMap<ColumnAt, Dtype>,
 ) -> HeldColumn {
-    let lacking = unfacted.contains(&(table.name.clone(), column.name.clone()));
+    let at = (table.name.clone(), column.name.clone());
+    let lacking = unfacted.contains(&at);
     HeldColumn {
         name: column.name.clone(),
         dtype: column.dtype.wire_name().to_owned(),
         stype: column.stype,
         stype_before_key: column.stype_before_key,
-        source: (!lacking).then(|| facts_of(&table.source, column)),
+        source: (!lacking).then(|| {
+            // The source's data type of a column the caller retyped, which
+            // the facts keep as the source gave it.
+            let mut facts = facts_of(&table.source, column);
+            if let Some(dtype) = retyped.get(&at) {
+                facts.dtype = *dtype;
+            }
+            facts
+        }),
     }
 }
 

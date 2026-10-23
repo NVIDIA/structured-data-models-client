@@ -23,6 +23,80 @@ pub(crate) fn supports(stype: Stype, dtype: Dtype) -> bool {
     crate::pql::parser_stype(stype).supports_dtype(crate::pql::parser_dtype(dtype))
 }
 
+/// Whether a column the schema reads as of `dtype` may mean `stype`, as the
+/// old client's checks answer it (`schema.supports_dtype`): as the language
+/// answers it ([`supports`]), and any meaning for a column named by no data
+/// type the client knows ([`Dtype::Unsupported`], T3.16), which those checks
+/// let through.
+pub(crate) fn admits(stype: Stype, dtype: Dtype) -> bool {
+    dtype == Dtype::Unsupported || supports(stype, dtype)
+}
+
+/// Every data type name a host may give a column, and the contract's name
+/// of the data type it names (`sdm_schema::held::DTYPE_NAMES`): the one
+/// table of them, which the Python client reads for its own checks (T3.16).
+pub fn dtype_names() -> Vec<(&'static str, String)> {
+    sdm_schema::held::DTYPE_NAMES
+        .iter()
+        .map(|(name, dtype)| {
+            let named = serde_json::to_value(dtype).unwrap_or_default();
+            (*name, named.as_str().unwrap_or_default().to_owned())
+        })
+        .collect()
+}
+
+/// Every meaning a column of each data type can carry, as the language
+/// answers it ([`supports`]), each pair by the contract's names (`Stype`'s
+/// and `Dtype`'s): plain data a host reads in place of the old PQL
+/// package's `Stype.supports_dtype` (T3.16, the structure design's rule
+/// 11).
+pub fn meanings() -> Vec<(String, String)> {
+    const STYPES: [Stype; 9] = [
+        Stype::Numerical,
+        Stype::Categorical,
+        Stype::Multicategorical,
+        Stype::Id,
+        Stype::Text,
+        Stype::Timestamp,
+        Stype::Sequence,
+        Stype::Image,
+        Stype::Unsupported,
+    ];
+    const DTYPES: [Dtype; 18] = [
+        Dtype::Bool,
+        Dtype::Int,
+        Dtype::Byte,
+        Dtype::Int16,
+        Dtype::Int32,
+        Dtype::Int64,
+        Dtype::Float,
+        Dtype::Float32,
+        Dtype::Float64,
+        Dtype::String,
+        Dtype::Binary,
+        Dtype::Date,
+        Dtype::Time,
+        Dtype::Timedelta,
+        Dtype::Floatlist,
+        Dtype::Intlist,
+        Dtype::Stringlist,
+        Dtype::Unsupported,
+    ];
+    let name = |value: serde_json::Value| value.as_str().unwrap_or_default().to_owned();
+    let mut pairs = Vec::new();
+    for stype in STYPES {
+        for dtype in DTYPES {
+            if supports(stype, dtype) {
+                pairs.push((
+                    name(serde_json::to_value(stype).unwrap_or_default()),
+                    name(serde_json::to_value(dtype).unwrap_or_default()),
+                ));
+            }
+        }
+    }
+    pairs
+}
+
 /// The body of an `edit_schema` run.
 pub(crate) async fn run(
     asker: Asker,
@@ -32,11 +106,11 @@ pub(crate) async fn run(
     // Edits read no data: a column the source was never asked of is edited
     // by its data type, as the reference's setters edit any column.
     let read = sdm_schema::held::read(held, &BTreeMap::new(), true)?;
-    let edited = sdm_schema::edit::edit(read.description, &edit, &supports)?;
+    let edited = sdm_schema::edit::edit(read.description, &edit, &admits)?;
     for warning in edited.warnings {
         asker.warn(warning);
     }
-    let answer = sdm_schema::held::held(&edited.description, &read.unfacted);
+    let answer = sdm_schema::held::held(&edited.description, &read.unfacted, &read.retyped);
     let bytes = serde_json::to_vec(&answer)
         .map_err(|_| internal("the schema edited does not write as JSON"))?;
     let schema = asker.attach(Attachment::Bytes(bytes))?;

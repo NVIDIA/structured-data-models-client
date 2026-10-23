@@ -497,7 +497,7 @@ fn a_schema_held_with_its_facts_reads_as_the_description() {
     // T3.16: the schema a host holds, each column with its facts, is the
     // schema the edits work on, whatever the core answered of it before.
     let shop = shop();
-    let held = sdm_schema::held::held(&shop, &BTreeSet::new());
+    let held = sdm_schema::held::held(&shop, &BTreeSet::new(), &BTreeMap::new());
     let read = sdm_schema::held::read(held, &BTreeMap::new(), false).unwrap();
     assert!(read.unfacted.is_empty());
     let mut expected = shop;

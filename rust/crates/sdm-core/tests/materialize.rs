@@ -147,7 +147,11 @@ fn shop() -> SourceDescription {
 
 /// `description` as a host holds it, each column with its facts (T3.16).
 fn held_of(description: &SourceDescription) -> sdm_contract::ops::HeldSchema {
-    sdm_schema::held::held(description, &BTreeSet::new())
+    sdm_schema::held::held(
+        description,
+        &BTreeSet::new(),
+        &std::collections::BTreeMap::new(),
+    )
 }
 
 /// A host provider declaring the requests materialize asks.

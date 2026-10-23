@@ -35,7 +35,7 @@ import re
 import warnings
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
@@ -45,6 +45,9 @@ from sdm_client.errors import StructuredDataError, UnsupportedRequestError
 from sdm_client.schema import Schema, supports_dtype
 from sdm_client.wire import UNTYPED, infer_tfm_dtype, is_container
 from sdm_client.wire.keys import key_dtypes, keys_from_a_frame
+
+if TYPE_CHECKING:
+    from sdm_client._rust.results import CoreRequest
 
 # Task kinds the contract carries. A model narrows this further: a tabular
 # model takes only the coarse 'classification', and its adapter says so.
@@ -324,7 +327,7 @@ class Request:
     # (``sdm_client._rust.results.CoreRequest``, T3.16): ``None`` for one
     # the core did not materialize, which predict on the core refuses by
     # name, asking for it to be materialized again.
-    _core: Any = None
+    _core: CoreRequest | None = None
 
     def __init__(
         self,

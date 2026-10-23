@@ -394,7 +394,13 @@ pub(crate) fn materialize(
                 // Each column's facts, the host's or, for a column with none,
                 // the source's, read before anything else of the run.
                 let found = crate::discover::facts(&asker, &held).await?;
-                let description = sdm_schema::held::read(held, &found, false)?.description;
+                let read = sdm_schema::held::read(held, &found, false)?;
+                // The schema as the caller holds it first, as the reference's
+                // `check_consistent` reads it; then as its engine reads the
+                // source (T3.16 review round 1).
+                crate::materialize::meanings_carried(&read.description, false)?;
+                let description = read.by_the_source();
+                crate::materialize::meanings_carried(&description, true)?;
                 let source = crate::materialize::fingerprint(&provider, &description)?;
                 crate::materialize::run(asker, inputs(description, source)).await
             }))

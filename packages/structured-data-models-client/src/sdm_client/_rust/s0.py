@@ -33,24 +33,20 @@ from sdm_client.errors import StructuredDataError
 SHADOWED = frozenset({'DATE_LITERAL_DAY_FIRST'})
 
 if TYPE_CHECKING:
-    from predictive_query import Profile, ValidatedPredictiveQuery
+    from predictive_query import ValidatedPredictiveQuery
 
     from sdm_client._rust.results import QueryFacts
 
 
-def _profile(profile: Profile) -> dict[str, Any]:
-    r"""A profile as the contract's ``ProfileSpec``: one of the named five."""
-    import predictive_query.profiles as named
+#: The language's named profiles, which the core validates a query for.
+PROFILES = ('FINE_TUNING', 'RELATIONAL', 'TABULAR', 'TIMESERIES', 'ANOMALY')
 
-    for name in (
-        'FINE_TUNING',
-        'RELATIONAL',
-        'TABULAR',
-        'TIMESERIES',
-        'ANOMALY',
-    ):
-        if getattr(named, name) == profile:
-            return {'name': name, 'model': None}
+
+def _profile(profile: str) -> dict[str, Any]:
+    r"""A profile, named, as the contract's ``ProfileSpec``: one of the
+    named five, with no object of the old PQL package (T3.16, rule 11)."""
+    if profile in PROFILES:
+        return {'name': profile, 'model': None}
     raise StructuredDataError(
         'the core validates a query for one of the named profiles only',
         code='INTERNAL_ERROR',
@@ -58,7 +54,7 @@ def _profile(profile: Profile) -> dict[str, Any]:
 
 
 def validate(
-    text: str, schema: dict[str, Any], profile: Profile
+    text: str, schema: dict[str, Any], profile: str
 ) -> tuple[bool, list[str], list[dict[str, Any]], QueryFacts | None]:
     r"""The core's answer over ``schema``, the contract's ``QuerySchema``
     (:func:`~sdm_client._rust.spec.query_schema`, written with no object of
@@ -113,7 +109,7 @@ def validate(
 
 
 def shadow(
-    text: str, definition: Any, profile: Profile
+    text: str, definition: Any, profile: str
 ) -> ValidatedPredictiveQuery:
     r"""The old validator's resolved query for a query the core accepted.
 
@@ -122,7 +118,9 @@ def shadow(
     """
     from predictive_query import validate as old
 
-    resolved, response = old(text, definition, profile)
+    from sdm_client.base import language_profile
+
+    resolved, response = old(text, definition, language_profile(profile))
     if resolved is None or not response.ok:
         raise StructuredDataError(
             'the core accepted a query the old validator refuses; this is a '

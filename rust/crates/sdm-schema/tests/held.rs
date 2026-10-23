@@ -70,12 +70,15 @@ fn facts_held_are_read_as_handed_and_written_back_whole() {
     assert_eq!(key.stype_before_key, Some(Stype::Numerical));
     // A column with no facts is read by its data type, and written back
     // with none.
-    assert_eq!(users.columns[1].dtype, Dtype::Date);
+    assert_eq!(users.columns[1].dtype, Dtype::Time);
     assert_eq!(
         read.unfacted,
         BTreeSet::from([("users".to_owned(), "seen".to_owned())])
     );
-    assert_eq!(held::held(&read.description, &read.unfacted), schema());
+    assert_eq!(
+        held::held(&read.description, &read.unfacted, &read.retyped),
+        schema()
+    );
 }
 
 #[test]
@@ -94,7 +97,7 @@ fn facts_the_source_gave_fill_a_column_that_held_none() {
     // The source's data type, which tells a time of day from a date where
     // the wire's name does not.
     assert_eq!(read.description.tables[0].columns[1].dtype, Dtype::Time);
-    let written = held::held(&read.description, &read.unfacted);
+    let written = held::held(&read.description, &read.unfacted, &read.retyped);
     assert_eq!(
         written.tables[0].columns[1]
             .source
@@ -117,16 +120,18 @@ fn a_column_the_source_gave_nothing_for_is_left_out_where_none_is_read_by_type()
 
 #[test]
 fn a_data_type_no_name_gives_is_one_no_meaning_but_its_own_supports() {
-    assert_eq!(held::wire_dtype("timestamp[us]"), Dtype::Date);
+    assert_eq!(held::wire_dtype("timestamp[us]"), Dtype::Time);
     assert_eq!(held::wire_dtype("int64"), Dtype::Int);
     assert_eq!(held::wire_dtype("float64"), Dtype::Float);
     assert_eq!(held::wire_dtype("decimal(9, 2)"), Dtype::Unsupported);
+    // A 32-bit integer or float is the language's integer or float, as the
+    // old client maps it; every other wire name reads back as itself.
+    assert_eq!(held::wire_dtype("int32"), Dtype::Int);
+    assert_eq!(held::wire_dtype("float32"), Dtype::Float);
     for dtype in [
         Dtype::Bool,
         Dtype::Int,
-        Dtype::Int32,
         Dtype::Float,
-        Dtype::Float32,
         Dtype::String,
         Dtype::Date,
     ] {
@@ -174,6 +179,13 @@ fn the_data_type_the_host_holds_is_the_one_its_schema_is_read_by() {
     let key = &read.description.tables[0].columns[0];
     assert_eq!(key.dtype, Dtype::String);
     assert_eq!(key.received, ColumnType::Int64);
+    // The source's type is the one its data is read as, and the one the
+    // facts written back keep.
+    assert_eq!(read.by_the_source().tables[0].columns[0].dtype, Dtype::Int);
+    let written = held::held(&read.description, &read.unfacted, &read.retyped);
+    let column = &written.tables[0].columns[0];
+    assert_eq!(column.dtype, "string");
+    assert_eq!(column.source.as_ref().map(|f| f.dtype), Some(Dtype::Int));
     // Held as the source gave it, the source's more exact type stands.
     let read = held::read(schema(), &BTreeMap::new(), true).unwrap();
     assert_eq!(read.description.tables[0].columns[0].dtype, Dtype::Int);

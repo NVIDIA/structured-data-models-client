@@ -438,11 +438,11 @@ def predict(
     if ranking is not None:
         # The core's rows are ordered by row_index; a ranking's items keep
         # the order the answers named them in.
-        rows = sorted(
+        ranked = sorted(
             _rows(finished.take(answered.result)),
             key=lambda row: row['answer_index'],
         )
-        return _ranked(answered, rows, metadata, given)
+        return _ranked(answered, ranked, metadata, given)
     table = _table(finished.take(answered.result))
     # The result's explanation, on the result's schema (T2.13).
     explained = (table.schema.metadata or {}).get(b'explanation')

@@ -752,11 +752,13 @@ pub enum Unjoinable {
 }
 
 /// What has to agree across a join: a number matches a number, a time a
-/// time (`_join_family`).
+/// time (`_join_family`). A number is a type whose name starts `int` or
+/// `float`, as the client's `_join_family` reads a name, so a byte, which
+/// only a host names a column by (`byte`), matches only a byte (T3.16).
 fn family(dtype: Dtype) -> u8 {
     match dtype {
+        Dtype::Byte => 10,
         Dtype::Int
-        | Dtype::Byte
         | Dtype::Int16
         | Dtype::Int32
         | Dtype::Int64

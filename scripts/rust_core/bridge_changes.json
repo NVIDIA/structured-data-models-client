@@ -42,7 +42,7 @@
       "refactor": "T3.16 (fix D): reads Request._core, a typed CoreRequest"
     },
     "packages/structured-data-models-client/src/sdm_client/query.py::<module>": {
-      "refactor": "T3.16 (fix A): imports for the query schema written by _rust/spec.py and the warning filter around the shadow definition"
+      "refactor": "T3.16: imports for the query schema written by _rust/spec.py and the warning filter around the shadow definition; profiles named (RELATIONAL, TABULAR), the old PQL package no longer imported at module level (T3.16 fix 1, rule 11)"
     },
     "packages/structured-data-models-client/src/sdm_client/query.py::PredictiveQuery.materialize": {
       "moved": "T2.8: on the core route the question goes to the core whole: the ranking's decomposition and refusals, and the forecast's top_k and MOST_PARTS refusals, are the core's (parts_of is not run there), task= refused first as for any relational query"
@@ -63,7 +63,7 @@
       "main": "1fc5a68632c760568416ac64a7f499d235b620b8 Gather more entities than one call scores as several calls (#36)"
     },
     "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::<module>": {
-      "refactor": "T3.16 (fix D): CoreRequest for typing"
+      "refactor": "T3.16 (fix D): CoreRequest for typing; fix 1 (rule 11): the old PQL package imported only in the old route's functions"
     },
     "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::RelationalMaterializer._check_entity_count": {
       "main": "1fc5a68632c760568416ac64a7f499d235b620b8 Gather more entities than one call scores as several calls (#36)"
@@ -75,13 +75,13 @@
       "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
     },
     "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::RelationalMaterializer.materialize": {
-      "moved": "T3.16 (fix D): the core's gathering kept as Request._core, a typed CoreRequest, and the query's facts read typed"
+      "moved": "T3.16 (fix D): the core's gathering kept as Request._core, a typed CoreRequest, and the query's facts read typed; fix 1 (rule 11): the old PQL package's table_name imported on the old route only"
     },
     "packages/structured-data-models-client/src/sdm_client/query.py::PredictiveQuery._in_parts": {
       "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
     },
     "packages/structured-data-models-client/src/sdm_client/schema.py::<module>": {
-      "moved": "T3.16 (fix A): Column._source (out of repr and equality, copied by _copy_column), _described_on_the_core, say_a_composite_key_is_dropped shared with _rust/spec.py, WIRE_TO_PQL_DTYPE named; Schema._core_description gone, and dropped from an older pickle's state"
+      "moved": "T3.16 (fix A): Column._source (out of repr and equality, copied by _copy_column), _described_on_the_core, say_a_composite_key_is_dropped shared with _rust/spec.py, WIRE_TO_PQL_DTYPE named; Schema._core_description gone, and dropped from an older pickle's state; fix 1 (rule 11): supports_dtype reads the core's table of the language's meanings (_native.MEANINGS), the old PQL package only in a client without the core, and its time-column rule imported where a schema of frames is inferred; the data type name a column holds read by language_dtype, the core's one table of them (_native.DTYPE_NAMES), and query_schema, the one translation of a schema into the query language's (moved here from _rust/spec.py, which reads it), to_schema_definition built from it (T3.16 fix 1, review round 1)"
     },
     "packages/structured-data-models-client/src/sdm_client/schema.py::Schema.from_source": {
       "refactor": "T2.2: a SQLite source routes as a DuckDB one (_routing.on_the_core with the backend's from-source paths); no rule added"
@@ -108,7 +108,7 @@
       "gone": "T3.16 (fix D): what the core resolved of the query is the typed QueryFacts gather returns"
     },
     "packages/structured-data-models-client/src/sdm_client/query.py::PredictiveQuery._resolve": {
-      "moved": "T3.16 (fix A): on the core route the query's schema is _rust/spec.py's query_schema, written with no object of the old PQL package (rule 11), the old definition built only for the shadow check; T3.16 (fix D): the core's validation read typed"
+      "moved": "T3.16 (fix A): on the core route the query's schema is _rust/spec.py's query_schema, written with no object of the old PQL package (rule 11), the old definition built only for the shadow check; (fix D) the core's validation read typed; fix 1: the profile by name, the old PQL package's object made only for the old validator"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::Unresolved.__init__": {
       "gone": "T3.8 fix 3: Unresolved replaced by the dataclass CoreQuery"
@@ -463,6 +463,9 @@
     },
     "packages/structured-data-models-client/src/sdm_client/schema.py::_TableShape.__setattr__": {
       "refactor": "T3.16 (fix A): the core's edit gate reads the columns' source facts"
+    },
+    "packages/structured-data-models-client/src/sdm_client/query.py::PredictiveQuery._refusal": {
+      "refactor": "T3.16 fix 1 (rule 11): the profile's model words from base.PROFILE_MODELS, not the old PQL package's object"
     }
   }
 }
