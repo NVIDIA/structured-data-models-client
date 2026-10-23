@@ -245,7 +245,8 @@ def test_clean_tmp_keeps_a_directory_a_daemon_listens_in(
 
     # A Unix socket's path holds at most 107 bytes, which a deep pytest
     # temporary directory passes: the root is a short one of /tmp's.
-    short = tempfile.TemporaryDirectory(prefix='t32-')
+    # Under /tmp itself, whatever TMPDIR names.
+    short = tempfile.TemporaryDirectory(prefix='t32-', dir='/tmp')
     root = Path(short.name) / 'r'
     live, dead = root / 'daemon', root / 'old'
     live.mkdir(parents=True)
@@ -456,7 +457,7 @@ def test_the_report_list_s_forms_run(tmp_path: Path) -> None:
             str(ROOT / 'contract/tools/refusal_census.py'),
             '--real-data',
             '--leg',
-            'snowflake',
+            'sqlite',
             '--help',
         ],
         [str(ROOT / 'scripts/rust_core/coverage.py'), '--gate', 'S2', '--help'],

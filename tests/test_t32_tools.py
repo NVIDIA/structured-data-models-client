@@ -498,8 +498,9 @@ def test_t32_an_owner_s_approval_is_read_by_allowlist() -> None:
 
 @pending
 def test_t32_the_census_s_real_data_mode_takes_each_leg() -> None:
-    r"""Check 2: the census's real-data mode runs per leg, the three
-    offline databases and each warehouse leg's stand-in."""
+    r"""Check 2: the census's real-data mode runs per leg on the three
+    offline databases; a warehouse leg runs live only (B-lite), so none is
+    one of its choices."""
     done = subprocess.run(
         [
             sys.executable,
@@ -514,8 +515,9 @@ def test_t32_the_census_s_real_data_mode_takes_each_leg() -> None:
         timeout=120,
     )
     assert done.returncode == 0, done.stdout + done.stderr
-    for leg in ('duckdb', 'sqlite', 'postgres', *WAREHOUSES):
-        assert leg in done.stdout, leg
+    choices = re.search(r'--database \{([^}]*)\}', done.stdout)
+    assert choices, done.stdout
+    assert set(choices.group(1).split(',')) == {'duckdb', 'sqlite', 'postgres'}
 
 
 def _function(name: str) -> str:
