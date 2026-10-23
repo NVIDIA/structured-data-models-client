@@ -1729,13 +1729,8 @@ async fn table_rows(memo: &mut Memo<'_>, graph: &Graph) -> Result<(), CoreError>
 /// integer of any width not below zero.
 fn row_count(answer: &ArrowData) -> Result<u64, CoreError> {
     let batch = one_batch(answer)?;
-    let unread = || {
-        crate::run::schema_mismatch(
-            "expected",
-            None,
-            "a row count is not one row of one count",
-        )
-    };
+    let unread =
+        || crate::run::schema_mismatch("expected", None, "a row count is not one row of one count");
     if batch.num_rows() != 1 || batch.num_columns() == 0 {
         return Err(unread());
     }
@@ -1782,10 +1777,12 @@ async fn lookbacks(
     let mut timed: Vec<&Table> = Vec::new();
     for table in &graph.tables {
         if table.time_column.is_some()
-            && graph
-                .tables
-                .iter()
-                .any(|dst| graph.referring(&dst.name).iter().any(|(src, _)| *src == table.name))
+            && graph.tables.iter().any(|dst| {
+                graph
+                    .referring(&dst.name)
+                    .iter()
+                    .any(|(src, _)| *src == table.name)
+            })
         {
             timed.push(table);
         }
@@ -1803,10 +1800,9 @@ async fn lookbacks(
                 continue;
             };
             let bounds = time_bounds(memo, times, &[*src_table]).await?;
-            let (Some(facts), Some(entities)) = (
-                rows_of(&memo.memo, src),
-                rows_of(&memo.memo, &dst.name),
-            ) else {
+            let (Some(facts), Some(entities)) =
+                (rows_of(&memo.memo, src), rows_of(&memo.memo, &dst.name))
+            else {
                 continue;
             };
             if entities == 0 || bounds.min > bounds.max {

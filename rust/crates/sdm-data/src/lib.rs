@@ -173,9 +173,6 @@ impl DataLayer for Data {
         }
     }
 
-
-
-
     fn conform(
         &self,
         provider: &ProviderChoice,
@@ -200,7 +197,6 @@ impl DataLayer for Data {
             None => Ok(None),
         }
     }
-
 
     fn source_database(&self, provider: &ProviderChoice) -> Option<&'static str> {
         Some(sql_dialect(provider)?.name())
@@ -329,8 +325,14 @@ fn deeper(request: &DataRequest, namespace: &[String], depth: usize) -> Result<(
         "namespace",
         "a namespace of more parts than this dialect's sources take",
     )
-    .with_field("parts", Detail::Scalar(sdm_contract::Scalar::UInt64(namespace.len() as u64)))
-    .with_field("most", Detail::Scalar(sdm_contract::Scalar::UInt64(depth as u64))))
+    .with_field(
+        "parts",
+        Detail::Scalar(sdm_contract::Scalar::UInt64(namespace.len() as u64)),
+    )
+    .with_field(
+        "most",
+        Detail::Scalar(sdm_contract::Scalar::UInt64(depth as u64)),
+    ))
 }
 
 /// The refusal of a SQL dialect this build renders nothing for, naming it

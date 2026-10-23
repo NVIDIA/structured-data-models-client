@@ -9,10 +9,10 @@
 //! error saying the source refused an expression. Each optional, so a v27
 //! message reads the same.
 
+use sdm_contract::Detail;
 use sdm_contract::data::{
     DERIVED_RULE, DataRequest, ProviderCapabilities, ProviderError, Relation, refuse_derived,
 };
-use sdm_contract::Detail;
 use serde_json::json;
 
 fn read<T: serde::de::DeserializeOwned>(value: serde_json::Value) -> T {
@@ -83,7 +83,13 @@ fn the_warehouse_samplers_fields_are_optional_and_round_trip() {
         "request": "sample_entities", "table": {"source": ["t"]}, "key": ["k"], "n": 2,
         "seed": {"t": "u64", "v": "1"}, "columns": ["k"], "filters": [], "rows": 100
     }));
-    assert!(matches!(sample, DataRequest::SampleEntities { rows: Some(100), .. }));
+    assert!(matches!(
+        sample,
+        DataRequest::SampleEntities {
+            rows: Some(100),
+            ..
+        }
+    ));
     let error: ProviderError = read(json!({
         "kind": "data_source", "retryable": false, "sqlstate": "42703",
         "vendor_code": null, "refuses_expression": true
