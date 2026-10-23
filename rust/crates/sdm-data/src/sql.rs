@@ -279,25 +279,9 @@ pub(crate) trait SqlDialect: Sync {
 
     // --- what the core asks of a provider (`DataLayer`) -------------------------
 
-    /// The vendor the dialect's driver names in its opaque Arrow types.
-    fn opaque_vendor(&self) -> Option<&'static str> {
-        None
-    }
 
-    /// Whether the source stores a time as text, compared as stored.
-    fn compares_stored_times(&self) -> bool {
-        false
-    }
 
-    /// Whether the seeded sample orders by the key's data type.
-    fn samples_by_key_dtype(&self) -> bool {
-        false
-    }
 
-    /// Whether the dialect's driver reads a NaN as missing.
-    fn reads_nan_as_missing(&self) -> bool {
-        false
-    }
 
     /// The answer's values conformed to the reference's reading, if the
     /// dialect changes any (`DataLayer::conform`).
