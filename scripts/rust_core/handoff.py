@@ -77,6 +77,9 @@ RUNNING = 'running'
 SHORT_TMP = '/tmp'
 EVENTS = 'events.jsonl'
 CRATE_TEST = re.compile(r'rust/crates/([^/]+)/tests/([^/]+)\.rs$')
+#: A crate's or the binding's Rust source, whose ``#[cfg(test)]`` tests
+#: run with its crate's ``--lib``.
+INLINE = re.compile(r'rust/(?:crates|bindings)/([^/]+)/src/.+\.rs$')
 
 
 class Failure(Exception):
@@ -301,14 +304,28 @@ def is_test(path: str) -> bool:
 def own_suites(root: Path, touched: list[str]) -> list[affected.Suite]:
     """The test files among ``touched`` as suites: a pytest file (the
     binding's under ``affected.BINDING``), a self-test, a crate test by its
-    own ``--test``."""
+    own ``--test``, and a crate's or the binding's source file holding
+    ``#[cfg(test)]`` unit tests by its crate's ``--lib`` (Codex r3 P1-2)."""
     found: list[affected.Suite] = []
     for path in touched:
-        if not (root / path).is_file() or not is_test(path):
+        if not (root / path).is_file():
+            continue
+        inline = INLINE.match(path)
+        if inline and '#[cfg(test)]' in (root / path).read_text(
+            encoding='utf-8', errors='replace'
+        ):
+            suite: affected.Suite = (
+                'cargo', 'test', '--manifest-path', 'rust/Cargo.toml',
+                '-p', inline.group(1), '--lib',
+            )  # fmt: skip
+            if suite not in found:
+                found.append(suite)
+            continue
+        if not is_test(path):
             continue
         crate = CRATE_TEST.match(path)
         if crate:
-            suite: affected.Suite = (
+            suite = (
                 'cargo', 'test', '--manifest-path', 'rust/Cargo.toml',
                 '-p', crate.group(1), '--test', crate.group(2),
             )  # fmt: skip

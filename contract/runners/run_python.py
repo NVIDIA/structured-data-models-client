@@ -4131,6 +4131,12 @@ def capture_line(
                 table = None
             elif isinstance(kept, tuple):
                 table = rows_table(*kept)
+                if not same_rows(table, kept[1]):
+                    raise RunnerFailure(
+                        f'{observation["case"]}: statement {position} read '
+                        f'{read} kept a table that is not the rows read; '
+                        'nothing is written'
+                    )
             else:
                 table = kept
             results.append({**result, 'arrow': table})
@@ -4182,25 +4188,48 @@ def saved_digest(result: dict[str, Any], table: Any) -> str:
     return result_values(names, None, rows, duckdb_types=False)['ordered']
 
 
+def same_rows(table: Any, rows: list[tuple[Any, ...]]) -> bool:
+    r"""Whether ``table`` holds ``rows``, value for value: a row read's
+    table types its columns as Arrow infers them, so a decimal's scale may
+    change (``Decimal('1.0')`` kept as ``1.00``) while its value does not
+    (Codex r3 P1-1); NaN equals NaN."""
+    columns = [column.to_pylist() for column in table.columns]
+    kept = list(zip(*columns, strict=True)) if columns else []
+    if len(kept) != len(rows):
+        return False
+
+    def same(a: Any, b: Any) -> bool:
+        if isinstance(a, float) and isinstance(b, float) and a != a and b != b:
+            return True
+        return bool(a == b) and (a is None) == (b is None)
+
+    return all(
+        len(mine) == len(theirs)
+        and all(same(a, b) for a, b in zip(mine, theirs, strict=True))
+        for mine, theirs in zip(kept, rows, strict=True)
+    )
+
+
 def _hold_reads(line: dict[str, Any], held: Placeheld) -> None:
     r"""Each kept result checked against its read before it is written
-    (a kept table that is not the rows read is refused, naming the case),
-    and given ``held``, the digest of its placeheld table, where
-    placeholders change its rows: a recorded digest is of the private
-    values, which the written table no longer holds."""
+    (a kept Arrow table that is not the rows read is refused, naming the
+    case; a row read's table was held to its rows, value for value, when
+    it was made), and given ``held``, the digest of its placeheld table,
+    where that is not the read's digest: placeholders change its rows, and
+    a row read's inferred types may change their text, not their values."""
     for position, statement in enumerate(line.get('statements') or []):
         for read, result in enumerate(statement.get('results') or []):
             table = result.get('arrow')
             if not (hasattr(table, 'schema') and hasattr(table, 'num_rows')):
                 continue
-            digest = saved_digest(result, table)
-            if digest != (result.get('values') or {}).get('ordered'):
+            recorded = (result.get('values') or {}).get('ordered')
+            if 'schema' in result and saved_digest(result, table) != recorded:
                 raise RunnerFailure(
                     f'{line["case"]}: statement {position} read {read} kept '
                     'a table that is not the rows read; nothing is written'
                 )
             placeheld = saved_digest(result, held.table(table))
-            if placeheld != digest:
+            if placeheld != recorded:
                 result['held'] = placeheld
 
 
