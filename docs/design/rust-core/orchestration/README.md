@@ -244,8 +244,8 @@ The machine has 8 vCPUs, 30 GB of memory and 412 GB of fast disk at `/mnt/locals
   Heavy means any `gate.sh` leg, a full `pytest` of `contract/tests` or `tests`, a `tooling` test file, `cargo test`, `build` or `clippy` of the workspace, and every wheel build.
   The command hook refuses `cargo test`, `build` and `clippy`, a pytest over the whole `tests` or `contract/tests`, and `gate.sh` unless run behind `heavy` (the owner, 2026-10-22).
   `heavy --priority` (or `SDM_HEAVY_PRIORITY=1`), for the critical path's jobs as the orchestrator grants it, takes the next free slot before any job without it; every job admitted after a wait appends who, whether it had priority, how long it waited and the command to `$SDM_ORCH_STATE/heavy-waits.log`.
-- **One package at a time** (the owner, "2026-10-23 cut the tooling back"; three from 2026-10-22).
-  `lane.py start` refuses a second active lane, naming the active one: a lane worktree whose recorded package has not landed and is not paused; the limit is `MAX_LANES` in `heavy.conf`.
+- **Two packages at once** (the owner, "2026-10-23 overnight plan"; one from "2026-10-23 cut the tooling back", three from 2026-10-22).
+  `lane.py start` refuses a third active lane, naming the active ones: a lane worktree whose recorded package has not landed and is not paused; the limit is `MAX_LANES` in `heavy.conf`.
   `lane.py pause --lane <x>` frees a slot (`--resume` takes it back); a test author counts inside its package's lane.
 - **The watchdog.** The heartbeat runs `scripts/rust_core/orchestration/watchdog.py --phase <phase branch> --dispatch` every 15 minutes.
   It prints one line per problem and nothing when all is well: a lane worktree with no commit and no running process for 45 minutes (`IDLE`), the failed jobs of the newest finished CI run of each branch under the phase (`RED CI`), the failed jobs of the newest nightly run on the phase head (`NIGHTLY`, also appended once per run to `$SDM_ORCH_STATE/phase-<N>/fix-items.md`), and a package more than 2 hours past `forecast.yaml` and not landed (`SLIP`).
