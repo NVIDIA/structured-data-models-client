@@ -204,7 +204,12 @@ def build(cls: type[Schema], source: Any, described: dict[str, Any]) -> Schema:
                 ('untyped', False),
                 ('stype_declared', column['name'] in timed),
                 ('_stype_before_key', column['stype_before_key']),
-                ('_source', SourceFacts.of_described(column, table['source'])),
+                (
+                    '_source',
+                    SourceFacts.of_described(
+                        column, table['source'], described.get('namespace')
+                    ),
+                ),
             ):
                 object.__setattr__(made, field, value)
             columns[column['name']] = made
