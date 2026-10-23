@@ -264,4 +264,9 @@ def build(cls: type[Schema], source: Any, described: dict[str, Any]) -> Schema:
         warnings.simplefilter('ignore', SDMWarning)
         schema = cls(built, links, source=source)
     schema._engine_tables = EngineTables()
+    # The namespace the core read the tables under, which this schema, the
+    # one that read them, keeps (T3.4).
+    from sdm_client.schema import _keep_namespaces
+
+    _keep_namespaces(schema._tables, built)
     return schema
