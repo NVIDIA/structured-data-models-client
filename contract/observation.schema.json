@@ -294,7 +294,7 @@
           }
         },
         "edits": {
-          "description": "From T1.24b, beside inputs, whose shape a gate's checkpoint fixes: each edit_schema's start (the description the core last answered, the schema as the host holds it, the edit) and materialize's held schema, in order. A runner of an earlier checkpoint records none.",
+          "description": "From T1.24b, beside inputs, whose shape a gate's checkpoint fixes: each edit_schema's start (the description the core last answered, the schema as the host holds it, the edit) and materialize's held schema, in order; from T3.16 each edit_schema's start is the schema as the host holds it, as plain data, and the edit, and materialize's schema is its input's. A runner of an earlier checkpoint records none.",
           "type": "array",
           "minItems": 1,
           "items": {
@@ -307,6 +307,16 @@
                   "op": {"const": "edit_schema"},
                   "schema": {"description": "The contract's SourceDescription.", "type": "object"},
                   "held": {"description": "The contract's HeldSchema.", "type": "object"},
+                  "edit": {"description": "The contract's SchemaEdit.", "type": "object"}
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["op", "schema", "edit"],
+                "properties": {
+                  "op": {"const": "edit_schema"},
+                  "schema": {"description": "The contract's HeldSchema (T3.16).", "type": "object"},
                   "edit": {"description": "The contract's SchemaEdit.", "type": "object"}
                 }
               },
