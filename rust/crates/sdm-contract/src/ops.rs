@@ -925,6 +925,12 @@ pub struct Materialize {
     /// first run.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sampler_state: Option<SamplerState>,
+    /// Whether the host takes the run's steps that ask nothing
+    /// ([`crate::run::Step::GraphBuilt`], [`crate::run::Step::TablesInitialized`]),
+    /// to keep the schema's engine reading as the reference keeps it
+    /// (contract v28, T3.4). Left out, `false`: the run says neither.
+    #[serde(default, skip_serializing_if = "crate::data::is_false")]
+    pub progress: bool,
 }
 
 /// The version of [`SamplerState`]'s format this build writes and reads;

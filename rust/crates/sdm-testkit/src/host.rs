@@ -863,6 +863,8 @@ fn drive(
         };
         match read(&out).map_err(|_| anyhow!("an unreadable step"))? {
             ControlMessage::Step(Step::Done { result }) => return Ok(Ok(result)),
+            // What the run says of its graph and tables asks nothing.
+            ControlMessage::Step(Step::GraphBuilt | Step::TablesInitialized { .. }) => {}
             ControlMessage::Step(Step::Fetch { requests }) => {
                 for step in &requests {
                     observed
@@ -1682,6 +1684,7 @@ fn start_materialize(
                     version: *version,
                     memo: AttachmentId(4),
                 }),
+            progress: false,
         }),
     }));
     let message = encode(&start).map_err(|_| anyhow!("{}: its start does not encode", case.id))?;

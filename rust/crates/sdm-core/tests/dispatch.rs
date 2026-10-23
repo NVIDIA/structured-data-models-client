@@ -666,6 +666,7 @@ fn materialize(seed: Option<Seed>) -> Operation {
         most_calls: None,
         candidates: None,
         sampler_state: None,
+        progress: false,
     })
 }
 

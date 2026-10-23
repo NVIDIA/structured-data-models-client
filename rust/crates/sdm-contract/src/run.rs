@@ -59,6 +59,20 @@ pub enum Step {
     Done {
         result: OperationResult,
     },
+    /// The run builds its graph, past every refusal of the request and
+    /// before it reads anything of the source: the host makes the schema's
+    /// engine reading where it has none, as the reference's materializer
+    /// makes it (`relational.py:555`). Nothing to answer; the host asks for
+    /// the next step (contract v28, T3.4).
+    GraphBuilt,
+    /// The run has read every table it reads anew (a relation of the schema
+    /// with no reading, under the parts the session gave), before it
+    /// samples: the host keeps where it read each, a source name it holds a
+    /// reading of left as it is, as the reference's engine keeps its tables
+    /// (`EngineTables.keep`). Nothing to answer (contract v28, T3.4).
+    TablesInitialized {
+        read_under: Vec<crate::ops::ReadUnder>,
+    },
 }
 
 /// One data request of a fetch step, with how the run's provider answers
@@ -75,16 +89,6 @@ pub struct FetchStep {
     /// it; left out on a request's first fetch (design choice 1, paging).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub continuation: Option<String>,
-    /// Where the run reads the tables it reads anew (relations of the
-    /// schema with no reading, under the parts the session gave), which hold
-    /// once this request, and every request before it in its step, is
-    /// answered with data: carried by the request that reads the last of
-    /// them first, so a host keeps them at that moment, as the reference
-    /// keeps the tables its engine read (`EngineTables.keep`), and keeps
-    /// none where any of those reads fails or is interrupted (contract v28,
-    /// T3.4). Absent from the JSON when none.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub read_under: Vec<crate::ops::ReadUnder>,
 }
 
 /// Which model endpoint a call goes to.

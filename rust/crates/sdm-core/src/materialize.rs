@@ -3003,6 +3003,10 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // this core's own order, not the reference's: an input with several
     // errors may be refused for another of them than the reference's first
     // (decision E41(k)(i)).
+    // The graph built, every refusal of the request made, and the tables
+    // the schema holds no reading of read, before anything is sampled, as
+    // the reference builds its graph and its engine reads its tables.
+    crate::describe::initialize(asker).await?;
     missing_indexes(&mut memo, &graph, asker.capabilities()?.index_advice).await?;
     // Each table's rows, where the provider sizes its sampling by them,
     // as the reference's warehouse sampler counts them as it is built.
