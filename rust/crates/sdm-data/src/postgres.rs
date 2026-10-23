@@ -127,8 +127,12 @@ impl SqlDialect for Postgres {
     /// What a Postgres source answers through this layer.
     fn capabilities(&self) -> ProviderCapabilities {
         ProviderCapabilities {
-            compares_stored_times: false, opaque_vendor: None, samples_by_key_dtype: false,
-            derived_relations: false, neighbor_lookback: false, sample_rows: false,
+            compares_stored_times: false,
+            opaque_vendor: None,
+            samples_by_key_dtype: false,
+            derived_relations: false,
+            neighbor_lookback: false,
+            sample_rows: false,
             optional: sql::rendered(),
             max_keys_per_request: None,
             // `setseed` before `ORDER BY random()` repeats the draw on one
@@ -313,7 +317,6 @@ impl SqlDialect for Postgres {
     ) -> Result<CatalogAnswer, CoreError> {
         read(part, batches)
     }
-
 
     fn conform(
         &self,

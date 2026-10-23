@@ -56,9 +56,9 @@ use arrow_array::{Array, ArrayRef, Float64Array, Int64Array, RecordBatch, String
 use arrow_schema::{DataType, Field as ArrowField, Schema, SchemaRef};
 use sdm_contract::catalog::{CatalogAnswer, CatalogColumn, CatalogForeignKey, CatalogKey, KeyKind};
 use sdm_contract::data::{
-    DataRequest, DescribePart, Determinism, ExpectedSchema, MARKED,
-    MATCHES_COLUMN, NullOrder, ProviderCapabilities, Relation, SEED_BATCH, SEED_COUNT_UNREAD,
-    SEED_KEY, SEED_KEY_UNIQUE, SqlParam, TextTimes, TieTerm, refused, seed_integer,
+    DataRequest, DescribePart, Determinism, ExpectedSchema, MARKED, MATCHES_COLUMN, NullOrder,
+    ProviderCapabilities, Relation, SEED_BATCH, SEED_COUNT_UNREAD, SEED_KEY, SEED_KEY_UNIQUE,
+    SqlParam, TextTimes, TieTerm, refused, seed_integer,
 };
 use sdm_contract::ops::Dtype;
 use sdm_contract::types::ColumnType;
@@ -100,7 +100,10 @@ impl SqlDialect for Databricks {
     /// What a Databricks source answers through this layer.
     fn capabilities(&self) -> ProviderCapabilities {
         ProviderCapabilities {
-            opaque_vendor: None, compares_stored_times: false, samples_by_key_dtype: false, reads_nan_as_missing: false,
+            opaque_vendor: None,
+            compares_stored_times: false,
+            samples_by_key_dtype: false,
+            reads_nan_as_missing: false,
             optional: sql::rendered(),
             // The provider splits a key set past the warehouse's parameter
             // size into several statements itself, as the reference's
@@ -462,7 +465,9 @@ fn describe(
             let mut parts = Vec::new();
             for (at, current) in ["current_catalog()", "current_schema()"].iter().enumerate() {
                 if given(at) {
-                    params.push(text_param(&namespace[namespace.len() + at - NAMESPACE_DEPTH]));
+                    params.push(text_param(
+                        &namespace[namespace.len() + at - NAMESPACE_DEPTH],
+                    ));
                     parts.push(format!("SELECT {at} AS o, ? AS n"));
                 } else {
                     parts.push(format!("SELECT {at} AS o, {current} AS n"));
@@ -571,7 +576,11 @@ fn seed_cte(d: &Databricks, read: &SeedRead<'_>) -> Result<String, CoreError> {
         ));
     };
     let Some(key) = read.seeds.columns.iter().find(|c| c.name == SEED_KEY) else {
-        return Err(refused(read.request, "seeds", "the seeds lack a key column"));
+        return Err(refused(
+            read.request,
+            "seeds",
+            "the seeds lack a key column",
+        ));
     };
     let element = element_type(&key.column_type);
     let times: Vec<&str> = read
@@ -604,10 +613,7 @@ fn seed_cte(d: &Databricks, read: &SeedRead<'_>) -> Result<String, CoreError> {
         )
     } else {
         let mut fields = vec![format!("{}:{element}", d.identifier(SEED_KEY))];
-        let mut selects = vec![
-            batch,
-            format!("col.{0} AS {0}", d.identifier(SEED_KEY)),
-        ];
+        let mut selects = vec![batch, format!("col.{0} AS {0}", d.identifier(SEED_KEY))];
         for time in &times {
             fields.push(format!("{}:string", d.identifier(time)));
             selects.push(format!("col.{0} AS {0}", d.identifier(time)));
@@ -1333,4 +1339,3 @@ mod tests {
         assert_eq!(wall_clock_text(-1), "1969-12-31 23:59:59");
     }
 }
-

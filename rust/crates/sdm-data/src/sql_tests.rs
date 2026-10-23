@@ -28,7 +28,8 @@ fn dialect(name: &str) -> &'static dyn SqlDialect {
 
 fn relation(parts: &[&str]) -> Relation {
     Relation {
-        columns: Vec::new(), filter: None,
+        columns: Vec::new(),
+        filter: None,
         source: parts.iter().map(|p| (*p).to_owned()).collect(),
     }
 }
@@ -48,7 +49,13 @@ fn each_dialect_is_found_by_its_name_and_only_those() {
     // (Databricks's SQL warehouse and Spark session run one dialect).
     assert_eq!(
         PROVIDERS,
-        ["duckdb", "sqlite", "postgres", "databricks-sql", "databricks-spark"]
+        [
+            "duckdb",
+            "sqlite",
+            "postgres",
+            "databricks-sql",
+            "databricks-spark"
+        ]
     );
     for name in ["snowflake", "DuckDB", "", "nope"] {
         assert!(sql::dialect(name).is_none(), "{name}");
@@ -153,7 +160,10 @@ fn each_dialect_declares_its_quirks() {
             c.reads_nan_as_missing,
         )
     };
-    assert_eq!(quirks("duckdb"), (Some("DuckDB".to_owned()), false, false, false));
+    assert_eq!(
+        quirks("duckdb"),
+        (Some("DuckDB".to_owned()), false, false, false)
+    );
     assert_eq!(quirks("sqlite"), (None, true, true, false));
     assert_eq!(quirks("postgres"), (None, false, false, true));
     assert_eq!(quirks("databricks"), (None, false, false, false));
@@ -170,8 +180,13 @@ impl SqlDialect for Plain {
 
     fn capabilities(&self) -> ProviderCapabilities {
         ProviderCapabilities {
-            opaque_vendor: None, compares_stored_times: false, samples_by_key_dtype: false, reads_nan_as_missing: false,
-            derived_relations: false, neighbor_lookback: false, sample_rows: false,
+            opaque_vendor: None,
+            compares_stored_times: false,
+            samples_by_key_dtype: false,
+            reads_nan_as_missing: false,
+            derived_relations: false,
+            neighbor_lookback: false,
+            sample_rows: false,
             optional: Default::default(),
             max_keys_per_request: None,
             sampling: Determinism::SeededStable,

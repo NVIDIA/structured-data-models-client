@@ -279,10 +279,6 @@ pub(crate) trait SqlDialect: Sync {
 
     // --- what the core asks of a provider (`DataLayer`) -------------------------
 
-
-
-
-
     /// The answer's values conformed to the reference's reading, if the
     /// dialect changes any (`DataLayer::conform`).
     fn conform(
