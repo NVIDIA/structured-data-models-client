@@ -128,7 +128,6 @@ pub fn messages() -> Vec<ControlMessage> {
         })),
         start(Operation::EditSchema(EditSchema {
             schema: AttachmentId(1),
-            held: Some(AttachmentId(2)),
             edit: AttachmentId(3),
         })),
         start(Operation::Materialize(Materialize {
@@ -137,7 +136,6 @@ pub fn messages() -> Vec<ControlMessage> {
                 namespace: Vec::new(),
             },
             schema: AttachmentId(1),
-            held: Some(AttachmentId(5)),
             query: AttachmentId(2),
             indices: Some(AttachmentId(3)),
             anchor_time: None,

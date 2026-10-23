@@ -23,7 +23,6 @@ from typing import Any
 
 import pandas as pd
 import pytest
-from predictive_query import RELATIONAL
 
 from sdm_client import (
     PredictiveQuery,
@@ -32,6 +31,7 @@ from sdm_client import (
     _routing,
 )
 from sdm_client._rust import s0
+from sdm_client.query import RELATIONAL
 
 CORE = ','.join(_routing.S0)
 

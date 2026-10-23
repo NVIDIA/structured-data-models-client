@@ -37,7 +37,6 @@ import pytest
 pytest.importorskip('sdm_relational_engine.relationallib')
 duckdb = pytest.importorskip('duckdb')
 
-from predictive_query import RELATIONAL  # noqa: E402
 from sdm_connectors import DuckDBSource  # noqa: E402
 
 from sdm_client import (  # noqa: E402
@@ -49,6 +48,7 @@ from sdm_client import (  # noqa: E402
     StructuredDataError,
     _routing,
 )
+from sdm_client.query import RELATIONAL  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[3]
 MATERIALIZE = ','.join(

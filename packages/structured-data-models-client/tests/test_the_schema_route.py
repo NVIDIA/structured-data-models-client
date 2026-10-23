@@ -36,6 +36,7 @@ from sdm_connectors import DuckDBSource
 from sdm_client import Relationship, Schema, StructuredDataError, _routing
 from sdm_client._rust import providers
 from sdm_client._rust.providers.duckdb import DuckDBProvider
+from sdm_client.schema import _described_on_the_core
 
 ROOT = Path(__file__).resolve().parents[3]
 CORE = ','.join(_routing.FROM_SOURCE_DUCKDB)
@@ -161,7 +162,7 @@ def test_the_route_takes_every_table_and_the_catalog_s_keys_together(
     )
     assert list(schema.tables) == ['people']
     assert schema['people'].source_name == 'users'
-    assert schema._core_description is not None
+    assert _described_on_the_core(schema)
 
 
 def test_base_regression_s_schema_on_the_core_is_the_reference_s(
@@ -963,7 +964,7 @@ def test_keys_and_time_columns_named_are_applied_as_the_old_route_does(
 ) -> None:
     setup, arguments = NAMED[name]
     core, said, schema = _from_source(monkeypatch, setup, CORE_ANY, arguments)
-    assert schema._core_description is not None
+    assert _described_on_the_core(schema)
     for table, key in arguments.get('primary_keys', {}).items():
         assert schema[table].primary_key == (
             key if isinstance(key, str) else tuple(key)
@@ -1067,7 +1068,7 @@ def _named_on_the_core(
     ):
         warnings.simplefilter('always')
         schema = Schema.from_source(DuckDBSource(connection), tables)
-        assert schema._core_description is not None
+        assert _described_on_the_core(schema)
     said = [
         (type(w.message).__name__, str(w.message).split('] ', 1)[1])
         for w in _said(shown)
