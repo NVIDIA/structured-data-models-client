@@ -405,8 +405,7 @@ pub(crate) fn materialize(
                     crate::describe::settled(asker).await?
                 };
                 // Where this run reads each relation the schema has not read,
-                // under the parts the session gave: answered for the host to
-                // keep (`Materialized::read_under`).
+                // under the parts the session gave (`FetchStep::read_under`).
                 let first_read: Vec<sdm_contract::ops::ReadUnder> = match asker.settled_namespace()
                 {
                     Some(namespace) => held
@@ -449,18 +448,10 @@ pub(crate) fn materialize(
                             .collect(),
                     );
                 }
-                // Where this run read the tables it read anew, answered done
-                // or failed, as the reference keeps the tables a run read
-                // before anything after can fail.
-                match crate::materialize::run(asker, inputs(description, source)).await {
-                    Ok(mut result) => {
-                        if let OperationResult::Materialize(materialized) = &mut result {
-                            materialized.read_under = first_read;
-                        }
-                        Ok(result)
-                    }
-                    Err(failed) => Err(failed),
-                }
+                // Where this run reads the tables it reads anew, carried by the
+                // request that reads the last of them first.
+                asker.reads_anew(first_read);
+                crate::materialize::run(asker, inputs(description, source)).await
             }))
         }
         _ => Err(internal("a materialize run of another operation")),
