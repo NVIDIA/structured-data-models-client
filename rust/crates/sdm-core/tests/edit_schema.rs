@@ -297,3 +297,35 @@ fn an_edit_s_attachments_deep_wide_or_retyped_are_refused_by_name() {
         assert_eq!(attachment_named(&error), 2);
     }
 }
+
+/// Where the schema read each relation (`HeldSchema::read_under`) comes back
+/// from an edit as it was handed, a relation the schema never read left
+/// out, so a host holding the schema the edit answers reads the same tables
+/// (round 5's Codex P1).
+#[test]
+fn an_edit_answers_where_the_schema_read_each_relation_as_it_was() {
+    let mut given = held(&described());
+    given.read_under = vec![sdm_contract::ops::ReadUnder {
+        relation: given.tables[0].source.clone(),
+        namespace: vec!["main".into(), "shop".into()],
+    }];
+    let mut run = start(
+        edit_op(),
+        Attachments::from([
+            (AttachmentId(1), json(&given)),
+            (AttachmentId(2), json(&stype("categorical"))),
+        ]),
+    )
+    .unwrap();
+    let Step::Done {
+        result: OperationResult::EditSchema(edited),
+    } = run.next().unwrap()
+    else {
+        panic!("edit_schema did not finish with its result");
+    };
+    let Attachment::Bytes(bytes) = run.take_attachment(edited.schema).unwrap() else {
+        panic!("the schema edited is not attached");
+    };
+    let answer: HeldSchema = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(answer.read_under, given.read_under);
+}
