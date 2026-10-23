@@ -89,3 +89,8 @@ Tests first again.
 A table's columns are each a name and a built-in type the loader writes (on Postgres also a composite type in the test schema) or a key constraint referencing the test schema; `LIKE`, a domain or another schema's type, `INHERITS`, `PARTITION OF` and `OF` are refused, and inside a cast `AS` names a type, never an alias's column list.
 Codex's round 7, tests first: no keyword or type exemption admits a qualified name or a call, names are plain ASCII outside strings, a cast names only a built-in type, Spark Connect is guarded at its execution boundary (every plan a read or a SQL command, every SQL text in it checked), and Spark's global temporary views are refused.
 
+## Fix round 8 (re-grade of b7c36db7 under the corrected scope)
+
+The guard is a safety net against accidental writes by our own code; crafted bypasses are P3, for the owner's restricted database roles.
+Tests first: the recorder's own statements pass each leg's guard (its Lakebase zone read needed `current_setting`), each leg's plan leaves out by name the ten cases whose names hold a backtick or a line break (`capture_run.NOT_LIVE`), and the run records case by case, a failed case written with its reason to `<leg>.failed.json` while the others are recorded and imported.
+
