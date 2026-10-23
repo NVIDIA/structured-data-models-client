@@ -135,8 +135,30 @@ fn flag(batch: &RecordBatch, name: &str, row: usize) -> Result<bool, CoreError> 
     Ok(flags.is_valid(row) && flags.value(row))
 }
 
+/// Row `row` of the list-of-names column `name`: its names in order, a
+/// null name dropped and the others kept, none where the list is null, as
+/// `sdm-data`'s catalog reader reads a key's and a foreign key's columns
+/// (P2-T2.7-1).
+fn kept_names(batch: &RecordBatch, name: &str, row: usize) -> Result<Vec<String>, CoreError> {
+    let lists = column(batch, name)?
+        .as_list_opt::<i32>()
+        .ok_or_else(|| unread_answer().with_field("column", Detail::text(name)))?;
+    if lists.is_null(row) {
+        return Ok(Vec::new());
+    }
+    let items = lists.value(row);
+    let strings = items
+        .as_string_opt::<i32>()
+        .ok_or_else(|| unread_answer().with_field("column", Detail::text(name)))?;
+    Ok((0..strings.len())
+        .filter(|&i| strings.is_valid(i))
+        .map(|i| strings.value(i).to_owned())
+        .collect())
+}
+
 /// Row `row` of the list-of-names column `name`: its names in order, or
-/// `None` where the list, or any name in it, is null.
+/// `None` where the list, or any name in it, is null, as `sdm-data` reads
+/// an index's columns (unresolved, never the names left over).
 fn names(batch: &RecordBatch, name: &str, row: usize) -> Result<Option<Vec<String>>, CoreError> {
     let lists = column(batch, name)?
         .as_list_opt::<i32>()
@@ -195,7 +217,7 @@ impl Rows {
                         Some(c::KIND_FOREIGN) => KeyKind::Foreign,
                         _ => KeyKind::Other,
                     },
-                    columns: names(batch, c::COLUMNS, row)?.unwrap_or_default(),
+                    columns: kept_names(batch, c::COLUMNS, row)?,
                     index: None,
                 }),
                 DescribePart::ForeignKeys => {
@@ -207,9 +229,8 @@ impl Rows {
                         key,
                         referenced_table: text(batch, c::REFERENCED_TABLE, row)?
                             .unwrap_or_default(),
-                        columns: names(batch, c::COLUMNS, row)?.unwrap_or_default(),
-                        referenced_columns: names(batch, c::REFERENCED_COLUMNS, row)?
-                            .unwrap_or_default(),
+                        columns: kept_names(batch, c::COLUMNS, row)?,
+                        referenced_columns: kept_names(batch, c::REFERENCED_COLUMNS, row)?,
                     });
                 }
                 DescribePart::Indexes => {
