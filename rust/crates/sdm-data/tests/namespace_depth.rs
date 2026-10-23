@@ -114,3 +114,36 @@ fn a_catalog_alone_reads_its_namespace_with_the_session_s_current_schema() {
             .is_err()
     );
 }
+
+/// A Databricks source leaving any part to the connection, a leading one
+/// included, has its namespace read first, as the reference reads
+/// `current_catalog()` and `current_schema()` and names every table in
+/// full, as its catalog names a table a foreign key refers to (round 2's
+/// Claude P0-1); a dialect whose relations need no part given is left as
+/// it is.
+#[test]
+fn a_databricks_source_leaving_any_part_to_the_connection_is_settled_first() {
+    let data = Data::new();
+    for namespace in [
+        json!([]),
+        json!([null, null]),
+        json!([null, "shop"]),
+        json!(["shop"]),
+    ] {
+        assert!(
+            data.unsettled(&choice("databricks", namespace.clone())),
+            "{namespace}"
+        );
+    }
+    assert!(data.unsettled(&choice("databricks", json!(["main", null]))));
+    assert!(!data.unsettled(&choice("databricks", json!(["main", "shop"]))));
+    assert!(!data.unsettled(&choice("postgres", json!([]))));
+    assert!(!data.unsettled(&choice("duckdb", json!([]))));
+    assert_eq!(
+        data.settled(
+            &choice("databricks", json!([null, "shop"])),
+            vec!["main".into(), "shop".into()]
+        ),
+        choice("databricks", json!(["main", "shop"]))
+    );
+}

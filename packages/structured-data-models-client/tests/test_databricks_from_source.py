@@ -90,7 +90,9 @@ class _Cursor:
 
     def fetchall(self) -> list[tuple[Any, ...]]:
         assert self._result is not None
-        return [tuple(row.values()) for row in self._result.to_pylist()]
+        # By position: a catalog answer may name two columns alike.
+        columns = [column.to_pylist() for column in self._result.columns]
+        return list(zip(*columns, strict=True))
 
     def fetchone(self) -> tuple[Any, ...] | None:
         rows = self.fetchall()
@@ -293,3 +295,79 @@ def test_a_column_named_like_a_session_word_is_read_through_the_table(
         'FROM (SELECT source.`user_id`, source.`age`, source.`country`, '
         'source.`user` FROM `main`.`shop`.`users` AS source)'
     ) in previews[0]
+
+
+class _DeclaredKeyWarehouse(_Warehouse):
+    r"""base.binary's warehouse whose ``orders.user_id`` is named ``buyer``
+    and declared a foreign key to ``main.shop.users.user_id``, a link name
+    inference would not find; each statement naming ``buyer`` is answered
+    as the recorded one naming ``user_id``, the column renamed back."""
+
+    def answer(self, operation: str, parameters: list[Any]) -> pa.Table:
+        text = _normal(operation)
+        renamed = '`buyer`' in text
+        found = super().answer(
+            operation.replace('`buyer`', '`user_id`'), parameters
+        )
+        if renamed:
+            return found.rename_columns(
+                ['buyer' if c == 'user_id' else c for c in found.column_names]
+            )
+        if 'information_schema.columns' in text and parameters[-1:] == [
+            'orders'
+        ]:
+            names = [
+                'buyer' if c == 'user_id' else c
+                for c in found['column_name'].to_pylist()
+            ]
+            return found.set_column(
+                found.schema.get_field_index('column_name'),
+                found.schema.field('column_name'),
+                pa.array(names, found.schema.field('column_name').type),
+            )
+        if "constraint_type = 'FOREIGN KEY'" in text and parameters[-1:] == [
+            'orders'
+        ]:
+            row = ['fk_buyer', 'buyer', 'main', 'shop', 'users', 'user_id']
+            return pa.Table.from_arrays(
+                [
+                    pa.array([value], field.type)
+                    for value, field in zip(row, found.schema, strict=True)
+                ],
+                schema=found.schema,
+            )
+        return found
+
+
+_DeclaredKeyConnection = type(
+    'Connection',
+    (_DeclaredKeyWarehouse,),
+    {'__module__': 'databricks.sql.client'},
+)
+
+
+@pytest.mark.parametrize(
+    'namespace',
+    [
+        {},
+        {'schema': 'shop'},
+        {'catalog': 'main'},
+        {'catalog': 'main', 'schema': 'shop'},
+    ],
+    ids=['none', 'schema', 'catalog', 'both'],
+)
+def test_a_declared_foreign_key_is_linked_whatever_namespace_the_source_names(
+    namespace: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""A declared foreign key names its table in full (catalog, schema,
+    table); the parts the source leaves to the connection are read
+    (``current_catalog()``, ``current_schema()``), so the link is kept as
+    the old client keeps it (round 2's Claude P0-1)."""
+    core_schema, old_schema = _both(
+        lambda: DatabricksSource(_DeclaredKeyConnection(), **namespace),
+        monkeypatch,
+    )
+    assert _projection(core_schema) == _projection(old_schema)
+    assert ['orders', 'buyer', 'users', 'user_id'] in _projection(core_schema)[
+        'links'
+    ]
