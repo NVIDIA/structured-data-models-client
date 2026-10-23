@@ -169,3 +169,33 @@ fn a_found_relation_is_its_catalog_s_columns_or_refused() {
         assert_eq!(refused.code, sdm_contract::ErrorCode::InvalidRequest);
     }
 }
+
+/// A failed run carries where it read the tables the schema had not read
+/// (`CoreError::read_under`), as a successful one answers them, so a host
+/// keeps them as the reference keeps the tables a failed run read (round
+/// 6's P0); absent from the JSON when none.
+#[test]
+fn a_failed_run_carries_where_it_read_each_table() {
+    use sdm_contract::CoreError;
+    let failed: CoreError = serde_json::from_value(serde_json::json!({
+        "kind": "data_source", "code": "PROVIDER_ERROR", "message": "the data source failed",
+        "read_under": [{"relation": {"source": ["orders"]}, "namespace": ["main", "shop"]}]
+    }))
+    .unwrap();
+    let read = failed.read_under.as_deref().expect("the readings carried");
+    assert_eq!(read.len(), 1);
+    assert_eq!(
+        read[0].namespace,
+        vec!["main".to_owned(), "shop".to_owned()]
+    );
+    let plain = CoreError::new(
+        sdm_contract::ErrorKind::Internal,
+        sdm_contract::ErrorCode::InternalError,
+        "x",
+    );
+    assert!(
+        !serde_json::to_string(&plain)
+            .unwrap()
+            .contains("read_under")
+    );
+}

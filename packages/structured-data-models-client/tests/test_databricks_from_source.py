@@ -748,7 +748,7 @@ class _CompletingWarehouse(_SessionWarehouse):
                 count=1,
             )
             text = re.sub(r'`main`\.`\w+`\.', '', text).replace('`', '"')
-            found = self._db.execute(text).fetch_arrow_table()
+            found = self._db.execute(text).to_arrow_table()
             self.calls[-1] = (_normal(operation), list(parameters))
         if (
             '`main`.`other`.`users`' in operation
@@ -846,3 +846,113 @@ def test_a_table_added_to_a_described_schema_keeps_where_it_was_first_read(
     second = _materialized(schema)
     assert {w[:2] for w in _read_since(connection, mark)} == {('main', 'shop')}
     assert 'OTHER' not in repr(second.payloads)
+
+
+class _FailingOnceWarehouse(_CompletingWarehouse):
+    r"""The completing warehouse, whose first neighbor read fails once where
+    ``fail_once`` is set, as a transient warehouse failure does."""
+
+    fail_once = False
+
+    def answer(self, operation: str, parameters: list[Any]) -> pa.Table:
+        if self.fail_once and 'WITH TMP AS' in operation:
+            self.fail_once = False
+            raise RuntimeError('a transient warehouse failure')
+        return super().answer(operation, parameters)
+
+
+_FailingOnceConnection = type(
+    'Connection',
+    (_FailingOnceWarehouse,),
+    {'__module__': 'databricks.sql.client'},
+)
+
+
+def _where_read(schema: Schema, connection: Any) -> set[tuple[str, str]]:
+    r"""Where a completed ``materialize`` of ``schema`` read its tables,
+    asserting the request holds no row of ``other``'s ``users``."""
+    mark = len(connection.calls)
+    request = _materialized(schema)
+    read = {where[:2] for where in _read_since(connection, mark)}
+    assert read, connection.calls[mark:]
+    if read == {('main', 'shop')}:
+        assert 'OTHER' not in repr(request.payloads)
+    return read
+
+
+@pytest.mark.parametrize('route', ['core', 'old'])
+def test_a_retry_after_a_failure_partway_reads_where_the_failed_run_read(
+    route: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""A schema built anew whose first ``materialize`` fails after reading
+    its tables reads them there again when retried after the session moved,
+    as the old route keeps the tables a run read before it failed (round
+    6's P0, Codex's ``retry``)."""
+    _route(route, monkeypatch)
+    connection = _FailingOnceConnection()
+    source = DatabricksSource(connection, catalog='main')
+    described = Schema.from_source(source)
+    schema = Schema(described.tables, described.relationships, source=source)
+    connection.fail_once = True
+    with pytest.raises(Exception):  # noqa: B017, PT011 - any failure
+        _materialized(schema)
+    assert not connection.fail_once
+    connection.schema = 'other'
+    assert _where_read(schema, connection) == {('main', 'shop')}
+
+
+@pytest.mark.parametrize('route', ['core', 'old'])
+def test_a_table_removed_edited_around_and_restored_is_read_where_it_was(
+    route: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""A described table taken out of the schema, an edit made meanwhile,
+    then put back, is read where the schema read it, after the session
+    moved, as the old route keeps every table it read (round 6's P0,
+    Codex's ``remove_edit_restore``)."""
+    _route(route, monkeypatch)
+    connection = _CompletingConnection()
+    schema = Schema.from_source(DatabricksSource(connection, catalog='main'))
+    links = list(schema.relationships)
+    schema.relationships = []
+    users = schema.tables.pop('users')
+    schema['orders']['price'].stype = 'numerical'
+    schema.tables['users'] = users
+    schema.relationships = links
+    connection.schema = 'other'
+    assert _where_read(schema, connection) == {('main', 'shop')}
+
+
+@pytest.mark.parametrize('first', ['original', 'snapshot'])
+@pytest.mark.parametrize('route', ['core', 'old'])
+def test_a_snapshot_shares_the_tables_its_original_reads_later(
+    route: str, first: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""A schema and a snapshot of it share the tables either reads after
+    the snapshot was taken, as the old route shares its engine reading: a
+    table the one reads first is read there by the other after the session
+    moved, whichever reads first (round 6's P0, Codex's ``snapshot``)."""
+    from sdm_client import Relationship
+
+    _route(route, monkeypatch)
+    connection = _CompletingConnection()
+    source = DatabricksSource(connection, catalog='main')
+    described = Schema.from_source(source)
+    schema = Schema.from_source(
+        source, tables={'orders': 'orders'}, check_keys=False
+    )
+    snapshot = schema.snapshot()
+
+    def add_users(target: Schema) -> None:
+        target.tables['users'] = described['users']
+        target.relationships = [
+            Relationship('orders', 'user_id', 'users', 'user_id')
+        ]
+
+    earlier, later = (
+        (schema, snapshot) if first == 'original' else (snapshot, schema)
+    )
+    add_users(earlier)
+    assert _where_read(earlier, connection) == {('main', 'shop')}
+    connection.schema = 'other'
+    add_users(later)
+    assert _where_read(later, connection) == {('main', 'shop')}
