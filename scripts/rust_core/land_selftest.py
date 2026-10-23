@@ -2654,7 +2654,7 @@ def _(tmp: Path) -> tuple[bool, str]:
     return ok, detail
 
 
-# --- T3.0: stacks of packages on one CI run, and the tooling train ------------
+# --- T3.0: stacks of packages on one CI run ------------------------------------
 #
 # The interfaces, as T3.0's implementer gives them:
 #
@@ -2672,11 +2672,9 @@ def _(tmp: Path) -> tuple[bool, str]:
 # - ``ratchet.py checkpoint --phase-push`` accepts a stack pushed at once, as
 #   a Base-SHA chain; a plain ``land.py`` on a candidate stacked on unlanded
 #   landings is refused, naming stack-land.
-# - The train: ``scripts/rust_core/judging-paths.txt`` (protected-paths
-#   syntax). A package changing a judging path is refused, naming ``land.py
-#   --stack --train``, once the phase is past its first package. With
-#   ``--train`` every changed file is a judging path and the package is
-#   first in its stack; its landing carries ``Train: yes``.
+# - ``scripts/rust_core/judging-paths.txt`` (protected-paths syntax) lists
+#   the judging paths. A package may change them and product code together
+#   and land normally: the train rule is gone (T3.24, the owner, 2026-10-23).
 # - ``land.py restack --tip SHA`` moves a stack onto a newer phase head,
 #   keeping its reviews when every patch is the same, and prints
 #   ``RESTACKED <new tip>``; only the new top needs a CI run.
@@ -2698,7 +2696,7 @@ T30_ROOT = Path(__file__).resolve().parents[2]
 #: The top's green run, and the prefix's.
 TOP_RUN = 9301
 PREFIX_RUN = 9302
-#: The phase's earlier landing in the train cases: a product change and a
+#: The phase's earlier landing in the T3.24 case: a product change and a
 #: judging-path change, so the phase is past its first package however
 #: "the first package" is read (its first landing, or its first product
 #: landing).
@@ -3173,83 +3171,6 @@ def _(tmp: Path) -> tuple[bool, str]:
         and s.remote_phase() == s.landings[2]
     )
     return t30_detail(s, ok, 'refused; the stamped prefix landed')
-
-
-@case(
-    'T3.0 train: a judging-path change outside the train is refused, naming '
-    'land.py --stack --train'
-)
-def _(tmp: Path) -> tuple[bool, str]:
-    s = Stack(tmp, earlier=T30_EARLIER)
-    s.build(1, {JUDGING_FILE: '# the comparator, changed\n'})
-    s.green(1)
-    code = s.call(s.land_args(1))
-    why = s.text.partition('REFUSED:')[2]
-    ok = (
-        code == 2
-        and 'land.py --stack --train' in ' '.join(why.split())
-        and s.remote_phase() == s.h
-        and s.r.git('rev-parse', 'HEAD') == s.candidates[1]
-    )
-    return t30_detail(s, ok, 'refused, naming the train')
-
-
-@case(
-    'T3.0 train: a judging-only package first in its stack lands as the '
-    'train, with Train: yes, before the product package'
-)
-def _(tmp: Path) -> tuple[bool, str]:
-    s = Stack(tmp, earlier=T30_EARLIER)
-    s.build(1, {JUDGING_FILE: '# the comparator, changed\n'})
-    if s.stack(1, '--train') != 0 or 1 not in s.landings:
-        return t30_detail(s, False, '')
-    s.build(2)
-    if s.stack(2) != 0 or 2 not in s.landings:
-        return t30_detail(s, False, '')
-    s.green(2)
-    code = s.stack_land(2)
-    ok = (
-        code == 0
-        and s.remote_phase() == s.landings[2]
-        and s.trailers(s.landings[1]).get('Train') == 'yes'
-        and 'Train' not in s.trailers(s.landings[2])
-        and s.trailers(s.landings[2]).get('Base-SHA') == s.landings[1]
-    )
-    return t30_detail(s, ok, 'the train landed first')
-
-
-@case('T3.0 train: a --train package not first in its stack is refused')
-def _(tmp: Path) -> tuple[bool, str]:
-    s = Stack(tmp, earlier=T30_EARLIER)
-    s.build(1)
-    if s.stack(1) != 0 or 1 not in s.landings:
-        return t30_detail(s, False, '')
-    s.build(2, {JUDGING_FILE: '# the comparator, changed\n'})
-    code = s.stack(2, '--train')
-    ok = (
-        code == 2
-        and 'REFUSED' in s.text
-        and 2 not in s.landings
-        and s.r.git('rev-parse', 'HEAD') == s.candidates[2]
-    )
-    return t30_detail(s, ok, 'refused')
-
-
-@case('T3.0 train: a --train package changing a product file is refused')
-def _(tmp: Path) -> tuple[bool, str]:
-    s = Stack(tmp, earlier=T30_EARLIER)
-    s.build(
-        1,
-        {JUDGING_FILE: '# the comparator, changed\n', 'notes/p1.txt': 'p1\n'},
-    )
-    code = s.stack(1, '--train')
-    ok = (
-        code == 2
-        and 'REFUSED' in s.text
-        and 1 not in s.landings
-        and s.r.git('rev-parse', 'HEAD') == s.candidates[1]
-    )
-    return t30_detail(s, ok, 'refused')
 
 
 @case(

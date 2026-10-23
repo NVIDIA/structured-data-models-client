@@ -58,8 +58,8 @@ no reviewer re-run and no new handoff after a clean move). Opt-in per entry, "mo
 
 Stacks (T3.0, land.py --stack and stack-land; the owner's "every N packages before CI is
 mandatory", 2026-10-21). An entry with "stack": true is stacked at approval: land.py --stack
-makes its landing commit on the stack tail (its "checkpoint"; "train": true for the tooling
-train), the file becomes <pkg>.stacked with "landing", and it prints
+makes its landing commit on the stack tail (its "checkpoint"), the file becomes
+<pkg>.stacked with "landing", and it prints
   STACKED <title> <landing sha>
 An entry {"stack_tip": SHA, "worktree": ..., "title": ..., "branch" or "lane"} lands the stack up
 to SHA with land.py stack-land on its top's handoff stamp, printing LANDED as above; a refusal
@@ -397,8 +397,6 @@ def process_stack(f, q, branch):
         '--protected-paths', '; '.join(sorted(set(queued) | set(named))) or 'none',
         '--summary', q['summary'],
     ]  # fmt: skip
-    if q.get('train') is True:
-        args.append('--train')
     for r in q['reviews']:
         args += ['--review', r]
     res = land_py(q, *args)

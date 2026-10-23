@@ -1052,7 +1052,7 @@ class Landing:
     summary: str
     evidence: str
     #: ``Moved-from`` and ``Moved-from-run`` for a moved candidate (E130);
-    #: ``Stack-base``, ``Topic-branch`` and ``Train`` for a stacked one.
+    #: ``Stack-base`` and ``Topic-branch`` for a stacked one.
     moved: dict[str, str] = field(default_factory=dict)
 
     def message(self) -> str:
@@ -1229,7 +1229,7 @@ def stamp_package(tools: Tools, sha: str) -> str | None:
     return found if isinstance(found, str) else None
 
 
-# --- stacks and trains (T3.0, items 1 and 2) --------------------------------
+# --- stacks (T3.0, item 2) ------------------------------------------------
 
 #: How many packages one stack lands at once, each on its own stamp: the
 #: owner's "every N packages (e.g. 4 packages)" (2026-10-21, evening).
@@ -1237,10 +1237,6 @@ STACK_MAX = 4
 STACK_MAX_ENV = 'SDM_STACK_MAX'
 #: The trailer naming the phase head a stack was built on.
 STACK_BASE = 'Stack-base'
-#: The trailer a train's landing carries.
-TRAIN = 'Train'
-#: The epic branch, whose merge base with the phase head is the phase's start.
-EPIC = 'rust-core'
 
 
 def stack_max(given: int | None) -> int:
@@ -1276,10 +1272,6 @@ class Stacked:
     package: str
     below: str
     trailers: dict[str, str]
-
-    @property
-    def train(self) -> bool:
-        return self.trailers.get(TRAIN, '').lower() == 'yes'
 
 
 def landing_shaped(tools: Tools, sha: str, *where: str) -> bool:
@@ -1352,117 +1344,13 @@ def stack_chain(
     return chain, problems
 
 
-def changed_paths(tools: Tools, old: str, new: str, *where: str) -> list[str]:
-    out = tools.git(*where, 'diff', '--name-only', '-z', old, new)
-    return [p for p in out.split('\0') if p]
-
-
 def judging_rules(tools: Tools, base: str, *where: str) -> judging.Rules | None:
     """The judging paths as the phase head lists them, or None before the
-    list exists (T3.0 lands it)."""
+    list exists (T3.0 lands it): the commit-msg rule's product paths."""
     done = tools.attempt('git', *where, 'show', f'{base}:{judging.FILE}')
     if done.returncode != 0:
         return None
     return judging.patterns(done.stdout)
-
-
-def phase_first_landing(
-    tools: Tools, remote: str, base: str, *where: str
-) -> str | None:
-    """The phase's first landing (up to ``base``), as ``<sha> <subject>``,
-    or None while the phase holds none. The phase starts at its merge base
-    with the epic branch as the remote holds it."""
-    if (
-        tools.attempt(
-            'git', *where, 'fetch', '--quiet', remote, f'refs/heads/{EPIC}'
-        ).returncode
-        == 0
-    ):
-        epic = f'refs/remotes/{remote}/{EPIC}'
-        start = tools.attempt('git', *where, 'merge-base', base, epic)
-    else:
-        start = Completed(1)
-    rng = f'{start.stdout.strip()}..{base}' if start.returncode == 0 else base
-    out = tools.git(
-        *where, 'log', '--first-parent', '--reverse', '--format=%H%x00%s', rng
-    )
-    for line in out.splitlines():
-        sha, _, subject = line.partition('\0')
-        if LANDING_SUBJECT.match(subject):
-            return f'{sha[:12]} {subject}'
-    return None
-
-
-def texts(
-    tools: Tools, below: str, sha: str
-) -> Callable[[str], tuple[str, str]]:
-    """A path's text at ``below`` and at ``sha`` (empty where absent)."""
-
-    def read(path: str) -> tuple[str, str]:
-        return tuple(  # type: ignore[return-value]
-            (done.stdout if done.returncode == 0 else '')
-            for done in (
-                tools.attempt('git', 'show', f'{rev}:{path}')
-                for rev in (below, sha)
-            )
-        )
-
-    return read
-
-
-def judging_problem(
-    paths: Sequence[str],
-    rules: judging.Rules | None,
-    package: str,
-    train: bool,
-    first: bool,
-    earlier: str | None,
-    read: Callable[[str], tuple[str, str]] | None = None,
-) -> str | None:
-    """Why a package changing ``paths`` may not land where it is (T3.0,
-    item 1), or None. ``first``: it is the first package of its stack, on
-    the phase head; ``earlier``: a landing of the phase before it, so it is
-    not the phase's first package."""
-    if rules is None:
-        return None
-    found = judging.judging(rules, paths)
-    if train:
-        if not judging.train_worthy(rules, paths):
-            return (
-                f'{package} is landed as a train but changes no judging path or checker; '
-                'land it without --train'
-            )
-        if not first:
-            return (
-                f'{package} is a train, and a train lands at the front of a '
-                'stack, on the phase head: restack it first (land.py restack '
-                '--train-first) or land it before the others'
-            )
-        # A reference file rides when it only gains fields (``read`` gives
-        # its text below and at the package).
-        others = judging.not_train(rules, paths, read)
-        if others:
-            return (
-                f'{package} is a train, which changes judging paths, their '
-                'tests and docs only; it also changes '
-                + ', '.join(others[:8])
-                + (' ...' if len(others) > 8 else '')
-                + '; move those into a product package'
-            )
-        return None
-    if not found or earlier is None:
-        return None
-    return (
-        f'{package} changes judging paths ('
-        + ', '.join(found[:8])
-        + (' ...' if len(found) > 8 else '')
-        + f") and is not the phase's first package ({earlier} landed "
-        'before it). Judging changes found mid-phase ride one tooling train: '
-        'move them '
-        'into the train package and land it at the front of the next stack '
-        'with `land.py --stack --train --candidate <train> ...`, then stack '
-        'this package on it'
-    )
 
 
 def rule_problems(
@@ -1657,26 +1545,11 @@ def land(
         checkpoint = checkpoint_of(tools, candidate, base, args.checkpoint)
         if on_lane:
             check_lane_commits(tools, base, candidate, package, args.remote)
-    # The judging-path rule (T3.0, item 1) and the fix rule (item 4), from
-    # the phase head's list on (none before T3.0 lands it).
+    # The fix rule (T3.0, item 4), from the phase head's judging list on
+    # (none before T3.0 lands it). A package may change judging paths and
+    # product code together: the train rule (item 1) is gone (T3.24, the
+    # owner, 2026-10-23).
     rules = judging_rules(tools, base)
-    paths = changed_paths(tools, tail, candidate) if rules is not None else []
-    if args.train and rules is None:
-        raise Refusal(
-            f'the head of {args.phase_branch} has no {judging.FILE}, so no '
-            'train: land without --train'
-        )
-    earlier = None
-    if rules is not None and judging.judging(rules, paths) and not args.train:
-        earlier = phase_first_landing(tools, args.remote, base) or next(
-            (f'{link.sha[:12]} Land {link.package}' for link in chain), None
-        )
-    why = judging_problem(
-        paths, rules, package, args.train, tail == base, earlier,
-        texts(tools, tail, candidate),
-    )  # fmt: skip
-    if why:
-        raise Refusal(why)
     unruled = rule_problems(tools, tail, candidate, rules)
     if unruled:
         raise Refusal(
@@ -1846,8 +1719,6 @@ def stack_one(
         'Topic-branch': args.topic_branch,
         STAMP_TRAILER: f'{stamped} {when}'.strip(),
     }
-    if args.train:
-        extra[TRAIN] = 'yes'
     landing = Landing(
         title=title,
         reviewer=reviewer,
@@ -1910,18 +1781,9 @@ def stack_land(
             f'lands at once ({limit}); land a prefix (--tip a lower landing)'
         )
     rules = judging_rules(tools, base)
-    earlier = phase_first_landing(tools, args.remote, base) if rules else None
     refused: list[str] = []
-    for n, link in enumerate(chain):
-        paths = changed_paths(tools, link.below, link.sha)
-        why = judging_problem(
-            paths, rules, link.package, link.train, n == 0, earlier,
-            texts(tools, link.below, link.sha),
-        )  # fmt: skip
-        if why:
-            refused.append(why)
+    for link in chain:
         refused.extend(rule_problems(tools, link.below, link.sha, rules))
-        earlier = earlier or f'{link.sha[:12]} Land {link.package}'
     if refused:
         raise Refusal(
             'the stack breaks a landing rule:\n- ' + '\n- '.join(refused)
@@ -1985,8 +1847,8 @@ def restack(
     """``land.py restack --tip SHA``: moves a stack onto the phase head as
     it is now, keeping its reviews when every patch is the same (T3.0,
     item 2; move_confirm.py's rule, by patch-id). Each package's commits
-    are cherry-picked in a scratch worktree, in order (the train first with
-    ``--train-first``), each new commit's patch-id must be its old one's,
+    are cherry-picked in a scratch worktree, in order, each new commit's
+    patch-id must be its old one's,
     and each landing commit is made again with the new Base-SHA,
     Checkpoint-SHA and Stack-base. A conflict or a changed patch refuses and
     changes nothing: that package needs a review round. With
@@ -2007,17 +1869,13 @@ def restack(
         raise Refusal(f'{tip[:12]} is not the top landing commit of a stack')
     if problems:
         raise Refusal('the stack is not sound:\n- ' + '\n- '.join(problems))
-    order = list(chain)
-    if args.train_first:
-        trains = [link for link in order if link.train]
-        order = trains + [link for link in order if not link.train]
     scratch = Path(tempfile.mkdtemp(prefix='sdm-restack-'))
     where = str(scratch / 'tree')
     tools.git('worktree', 'add', '--quiet', '--detach', where, base)
     moved: list[tuple[Stacked, str, str]] = []
     try:
         current = base
-        for link in order:
+        for link in chain:
             olds = tools.git(
                 'rev-list',
                 '--reverse',
@@ -2480,11 +2338,6 @@ def parser_for(command: str) -> argparse.ArgumentParser:
             parser.add_argument('--dry-run', action='store_true')
         else:
             parser.add_argument(
-                '--train-first',
-                action='store_true',
-                help='move the train package to the front of the stack',
-            )
-            parser.add_argument(
                 '--move-branches',
                 action='store_true',
                 help="move each package's Topic-branch to its new top",
@@ -2526,12 +2379,6 @@ def parser_for(command: str) -> argparse.ArgumentParser:
             help='add the package to the stack: make its landing commit on '
             'the stack tail locally, pushing nothing; '
             'land.py stack-land lands the stack (T3.0)',
-        )
-        parser.add_argument(
-            '--train',
-            action='store_true',
-            help='the package is the tooling train: judging paths, their '
-            'tests and docs only, first in its stack (T3.0)',
         )
         parser.add_argument(
             '--max-stack',

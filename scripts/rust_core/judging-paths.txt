@@ -6,9 +6,9 @@
 # candidate passes or lands: the gate, the ratchet, the comparator, the
 # coverage and census checks, the landing tools, and the case and
 # observation readers and their schemas. land.py reads this file at the
-# phase head, never at the candidate. A package that changes one is the
-# phase's first package or a tooling train (land.py --stack --train) at the
-# front of a stack; anywhere else land.py refuses it.
+# phase head, never at the candidate. A package may change one together
+# with product code and land normally (T3.24, the owner, 2026-10-23: the
+# train rule is gone); commit_msg.py reads the list to tell product code.
 #
 # Not here, since product packages change them as normal work: the bridge
 # freeze (bridge_freeze.py declares what it covers; bridge_freeze.json and
