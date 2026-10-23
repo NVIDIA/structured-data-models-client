@@ -348,6 +348,33 @@ class Gathered:
 
     state: GatheredState
     query: QueryFacts | None
+    #: Where the run read each table the schema had not read, by source
+    #: name (the contract's ``Materialized.read_under``, T3.4).
+    read_under: dict[str, tuple[str, ...]] = dataclasses.field(
+        default_factory=dict
+    )
+
+
+def read_under(value: Any) -> dict[str, tuple[str, ...]]:
+    r"""The contract's ``read_under`` entries, each relation of one part by
+    its name, with the namespace it was read under."""
+    found: dict[str, tuple[str, ...]] = {}
+    for each in _list(value, 'read_under'):
+        entry = _fields(each, 'a relation read', ('relation', 'namespace'))
+        relation = _fields(
+            entry['relation'],
+            'a relation',
+            ('source',),
+            ('columns', 'filter', 'found'),
+        )
+        parts = _list(relation['source'], 'source')
+        if len(parts) != 1:
+            raise CodecError('a relation read is not of one part')
+        found[_text(parts[0], 'source')] = tuple(
+            _text(part, 'namespace')
+            for part in _list(entry['namespace'], 'namespace')
+        )
+    return found
 
 
 def _state(value: Any) -> GatheredState:
@@ -472,13 +499,18 @@ _RESULTS: dict[str, tuple[tuple[str, ...], tuple[str, ...], Any]] = {
     'edit_schema': (('schema',), ('declared',), _edited),
     'materialize': (
         ('state',),
-        ('query',),
+        ('query', 'read_under'),
         lambda read: Gathered(
             state=_state(read['state']),
             query=(
                 None
                 if read['query'] is None
                 else QueryFacts.from_contract(read['query'])
+            ),
+            read_under=(
+                {}
+                if read['read_under'] is None
+                else read_under(read['read_under'])
             ),
         ),
     ),
