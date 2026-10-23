@@ -56,6 +56,7 @@ use sdm_contract::{ColumnType, CoreError, Detail, ErrorCode, ErrorKind, Scalar};
 use crate::quote::{identifier, text};
 use crate::read::{self, ColumnNames, ForeignKeyNames};
 use crate::sql::{self, Sample, SeedRead, SqlDialect};
+use sdm_contract::data::SqlParam;
 
 /// The dialect's name on the wire.
 pub(crate) const NAME: &str = "duckdb";
@@ -409,8 +410,8 @@ impl SqlDialect for Duckdb {
         tables: &[Relation],
         part: DescribePart,
         _namespace: &[String],
-    ) -> Result<String, CoreError> {
-        describe(request, tables, part)
+    ) -> Result<(String, Vec<SqlParam>), CoreError> {
+        Ok((describe(request, tables, part)?, vec![]))
     }
 
     fn expected(&self, request: &DataRequest) -> ExpectedSchema {

@@ -75,6 +75,7 @@ use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, Scalar};
 use crate::pg_values;
 use crate::quote::identifier;
 use crate::sql::{self, Sample, SeedRead, SqlDialect};
+use sdm_contract::data::SqlParam;
 
 /// The dialect's name on the wire.
 pub(crate) const NAME: &str = "postgres";
@@ -291,8 +292,8 @@ impl SqlDialect for Postgres {
         tables: &[Relation],
         part: DescribePart,
         namespace: &[String],
-    ) -> Result<String, CoreError> {
-        describe(request, tables, part, namespace)
+    ) -> Result<(String, Vec<SqlParam>), CoreError> {
+        Ok((describe(request, tables, part, namespace)?, vec![]))
     }
 
     fn expected(&self, request: &DataRequest) -> ExpectedSchema {

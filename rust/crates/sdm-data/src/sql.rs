@@ -211,14 +211,17 @@ pub(crate) trait SqlDialect: Sync {
 
     /// One part of the catalog for `tables`, each already read through
     /// the dialect's depth; `namespace` the provider's, where the dialect
-    /// takes one.
+    /// takes one. The statement's text and the parameters it binds, in its
+    /// placeholders' order: none for a dialect that writes each name in
+    /// place, as DuckDB, SQLite and Postgres do; a warehouse's catalog read
+    /// binds the names it looks for (Databricks's `lower(?)`, T3.4).
     fn describe(
         &self,
         request: &DataRequest,
         tables: &[Relation],
         part: DescribePart,
         namespace: &[String],
-    ) -> Result<String, CoreError>;
+    ) -> Result<(String, Vec<SqlParam>), CoreError>;
 
     /// The schema the dialect's answer to `request` has.
     fn expected(&self, request: &DataRequest) -> ExpectedSchema;
@@ -480,7 +483,9 @@ pub(crate) fn plan(
             for table in tables {
                 from(d, request, "tables", table)?;
             }
-            d.describe(request, tables, *part, namespace)?
+            let (text, bound) = d.describe(request, tables, *part, namespace)?;
+            params = bound;
+            text
         }
         DataRequest::Preview {
             table,
