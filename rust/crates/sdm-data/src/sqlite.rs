@@ -56,7 +56,7 @@ use sdm_contract::data::{
     seed_key_columns,
 };
 use sdm_contract::ops::Dtype;
-use sdm_contract::{ColumnType, CoreError, Detail, ErrorCode, ErrorKind, Scalar};
+use sdm_contract::{ColumnType, CoreError, Detail, Scalar, Sentence};
 
 use crate::mt19937::{HASH_PRIME, coefficients};
 use crate::quote::{identifier, text};
@@ -664,8 +664,7 @@ fn declared_dtype(declared: &str) -> Option<Dtype> {
 // --- reading the catalog's answers -------------------------------------------------
 
 fn unread(name: &str, message: &str) -> CoreError {
-    CoreError::new(ErrorKind::Internal, ErrorCode::InternalError, message)
-        .with_field("column", Detail::text(name))
+    CoreError::new(Sentence::Internal, message).with_field("column", Detail::text(name))
 }
 
 /// The column `name` of `batch`, which SQLite's driver types by its values:

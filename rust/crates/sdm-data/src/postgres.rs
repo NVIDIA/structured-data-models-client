@@ -70,7 +70,7 @@ use sdm_contract::data::{
     catalog_columns as c, field, seed_integer, seed_key_columns,
 };
 use sdm_contract::types::ColumnType;
-use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, Scalar};
+use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 
 use crate::pg_values;
 use crate::quote::identifier;
@@ -348,8 +348,7 @@ fn regclass(request: &DataRequest, field: &str, relation: &Relation) -> Result<S
         [schema, table] => (text(schema), text(table)),
         _ => {
             return Err(CoreError::new(
-                ErrorKind::Internal,
-                ErrorCode::InternalError,
+                Sentence::Internal,
                 "a relation past the parts the dialect takes reached its catalog read",
             ));
         }
@@ -371,8 +370,7 @@ fn schema_and_name(
         [table] => Ok(("current_schema()".to_owned(), text(table))),
         [schema, table] => Ok((text(schema), text(table))),
         _ => Err(CoreError::new(
-            ErrorKind::Internal,
-            ErrorCode::InternalError,
+            Sentence::Internal,
             "a relation past the parts the dialect takes reached its catalog read",
         )),
     }
@@ -564,8 +562,7 @@ fn read(part: DescribePart, batches: &[RecordBatch]) -> Result<CatalogAnswer, Co
 type ColumnPair = (i32, String, String);
 
 fn unread(at: usize, message: &str) -> CoreError {
-    CoreError::new(ErrorKind::Internal, ErrorCode::InternalError, message)
-        .with_field("position", Detail::text(at.to_string()))
+    CoreError::new(Sentence::Internal, message).with_field("position", Detail::text(at.to_string()))
 }
 
 /// The text column at `at` of `batch`.

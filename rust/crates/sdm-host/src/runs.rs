@@ -42,7 +42,7 @@ use sdm_contract::data::ProviderError;
 use sdm_contract::facts::LocalZone;
 use sdm_contract::ops::AttachmentKind;
 use sdm_contract::run::{FetchOutcome, ModelOutcome};
-use sdm_contract::{ControlMessage, CoreError, Detail, ErrorCode, ErrorKind, Scalar};
+use sdm_contract::{ControlMessage, CoreError, Detail, ErrorKind, Scalar, Sentence};
 use sdm_core::attached::check_attachments;
 use sdm_core::run::schema_mismatch;
 use sdm_core::{
@@ -128,8 +128,7 @@ pub fn contain<T>(call: impl FnOnce() -> Result<T, CoreError>) -> Result<T, Fail
                 .unwrap_or_else(|| "an unknown location".to_owned());
             Err(Failure {
                 error: CoreError::new(
-                    ErrorKind::Internal,
-                    ErrorCode::InternalError,
+                    Sentence::Internal,
                     "the core panicked; the run can no longer be used",
                 )
                 .with_field("panic", Detail::Scalar(Scalar::Bool(true)))
@@ -193,7 +192,7 @@ fn unreadable_error(id: AttachmentId, failure: Unreadable) -> CoreError {
 }
 
 fn invalid(message: impl Into<String>) -> CoreError {
-    CoreError::protocol(ErrorCode::InvalidMessage, message)
+    CoreError::protocol(Sentence::InvalidMessage, message)
 }
 
 /// The error of a `start` that made no run, as a control message; there is
@@ -217,8 +216,7 @@ fn check_local_zone(zone: Option<&LocalZone>) -> Result<(), CoreError> {
         && !is_posix_zone(text)
     {
         return Err(CoreError::new(
-            ErrorKind::InvalidRequest,
-            ErrorCode::InvalidRequest,
+            Sentence::LocalZoneUnread,
             "the host's local zone is not a POSIX TZ string",
         )
         .with_field("field", Detail::text("facts.local_zone")));
@@ -301,7 +299,7 @@ impl HostRun {
             Ok(guard) => guard,
             Err(TryLockError::WouldBlock) => {
                 return Err(self.error(&CoreError::protocol(
-                    ErrorCode::RunBusy,
+                    Sentence::RunBusy,
                     "another call is in this run; a run takes one call at a time",
                 )));
             }

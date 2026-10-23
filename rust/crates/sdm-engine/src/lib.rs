@@ -29,15 +29,14 @@ pub mod sample;
 pub mod time;
 pub mod words;
 
-use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind};
+use sdm_contract::{CoreError, Detail, Sentence};
 
 /// The refusal of a `materialize` input that takes a rule this build does
 /// not port yet, naming the rule, never a value or a name the input holds
 /// (decision H17).
 pub fn not_yet(rule: &'static str) -> CoreError {
     CoreError::new(
-        ErrorKind::Unsupported,
-        ErrorCode::UnsupportedRequest,
+        Sentence::NotYetMaterialize,
         "materializing this request takes a rule this core does not hold yet",
     )
     .with_field("operation", Detail::text("materialize"))

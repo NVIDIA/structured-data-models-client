@@ -34,7 +34,7 @@ use sdm_contract::data::{
 };
 use sdm_contract::ops::{OperationResult, SAMPLER_STATE_VERSION, SamplerMemo, SamplerState};
 use sdm_contract::run::{Endpoint, FetchStep, ModelCall, ReplyId};
-use sdm_contract::{ColumnType, CoreError, CoreWarning, Detail, ErrorCode, ErrorKind, Step};
+use sdm_contract::{ColumnType, CoreError, CoreWarning, Detail, ErrorKind, Sentence, Step};
 
 use crate::compose::{DataAccess, Route};
 
@@ -636,8 +636,8 @@ pub struct Run {
     data: Option<DataAccess>,
 }
 
-fn protocol(code: ErrorCode, message: impl Into<String>) -> CoreError {
-    CoreError::protocol(code, message)
+fn protocol(sentence: Sentence, message: impl Into<String>) -> CoreError {
+    CoreError::protocol(sentence, message)
 }
 
 impl Run {
@@ -709,14 +709,13 @@ impl Run {
     /// The error a run in a terminal state answers every call with.
     fn terminal(&self) -> Option<CoreError> {
         match self.state {
-            State::Finished => Some(protocol(ErrorCode::RunFinished, "the run has finished")),
+            State::Finished => Some(protocol(Sentence::RunFinished, "the run has finished")),
             State::Cancelled => Some(CoreError::new(
-                ErrorKind::Cancelled,
-                ErrorCode::RunCancelled,
+                Sentence::RunCancelled,
                 "the run was cancelled",
             )),
             State::Poisoned => Some(protocol(
-                ErrorCode::RunPoisoned,
+                Sentence::RunPoisoned,
                 "the run panicked and can no longer be used",
             )),
             _ => None,
@@ -734,13 +733,13 @@ impl Run {
         match &self.state {
             State::AwaitingFetch(ids) => {
                 return Err(protocol(
-                    ErrorCode::ReplyMissing,
+                    Sentence::ReplyMissing,
                     format!("{} fetches have no reply yet", ids.len()),
                 ));
             }
             State::AwaitingModel(id) => {
                 return Err(protocol(
-                    ErrorCode::ReplyMissing,
+                    Sentence::ReplyMissing,
                     format!("model call {} has no reply yet", id.0),
                 ));
             }
@@ -854,7 +853,7 @@ impl Run {
                 Ok(())
             }
             State::AwaitingModel(call) if *call == id => Err(protocol(
-                ErrorCode::WrongReply,
+                Sentence::WrongReply,
                 format!("{} is a model call, not a fetch", id.0),
             )),
             _ => Err(unknown(id)),
@@ -873,7 +872,7 @@ impl Run {
                 Ok(())
             }
             State::AwaitingFetch(pending) if pending.contains_key(&id) => Err(protocol(
-                ErrorCode::WrongReply,
+                Sentence::WrongReply,
                 format!("{} is a fetch, not a model call", id.0),
             )),
             _ => Err(unknown(id)),
@@ -949,8 +948,7 @@ impl Run {
 /// attachment's schema) or `expected` (the data against its request's).
 pub fn schema_mismatch(check: &str, column: Option<&str>, reason: &str) -> CoreError {
     let mut error = CoreError::new(
-        ErrorKind::DataSource,
-        ErrorCode::ProviderSchemaMismatch,
+        Sentence::ProviderSchemaMismatch,
         format!("the provider's data does not match the {check} schema: {reason}"),
     )
     .with_field("check", Detail::text(check))
@@ -1007,7 +1005,7 @@ fn check_expected(expect: &ExpectedSchema, data: &ArrowData) -> Result<(), CoreE
 
 fn unknown(id: ReplyId) -> CoreError {
     protocol(
-        ErrorCode::UnknownReply,
+        Sentence::UnknownReply,
         format!(
             "the run is not waiting on {}: it is unknown, stale or already answered",
             id.0
@@ -1016,7 +1014,7 @@ fn unknown(id: ReplyId) -> CoreError {
 }
 
 pub(crate) fn internal(message: &str) -> CoreError {
-    CoreError::new(ErrorKind::Internal, ErrorCode::InternalError, message)
+    CoreError::new(Sentence::Internal, message)
 }
 
 #[cfg(test)]

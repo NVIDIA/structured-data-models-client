@@ -83,8 +83,8 @@ use sdm_contract::ops::{
 use sdm_contract::ops::{Dtype, Stype};
 use sdm_contract::pql::{Aggregation, ConditionOp, NodeKind, PqlLiteral, PqlNode, ValidatedQuery};
 use sdm_contract::{
-    ColumnType, CoreError, CoreWarning, Detail, ErrorCode, ErrorKind, Field, HostFacts, Scalar,
-    Unit,
+    ColumnType, CoreError, CoreWarning, Detail, Field, HostFacts, Scalar, Sentence, Unit,
+    WarningCode,
 };
 use sdm_engine::graph::{Edge, Graph, Table};
 use sdm_engine::keys;
@@ -103,22 +103,11 @@ use crate::profiles::Profile;
 use crate::run::{ArrowData, Asker, Attachment, internal};
 
 /// The warning that indices the sampler's reads would use are missing.
-pub const MISSING_INDICES: &str = "MISSING_INDICES";
-/// The notice that an entity filter chooses the labelled examples the
-/// model learns from, and not the entities scored (T2.13b).
-pub const FILTER_CHOSE_EXAMPLES: &str = "FILTER_CHOSE_EXAMPLES";
-/// The warning that the context reaches back before the data.
-pub const CONTEXT_BEFORE_DATA: &str = "CONTEXT_BEFORE_DATA";
-/// The warning that the anchor time is after the data.
-pub const ANCHOR_AFTER_DATA: &str = "ANCHOR_AFTER_DATA";
-/// The warning that a double past float32's range was cast to float32, an
-/// infinity, as the reference's executor casts a float target (NumPy's
-/// `RuntimeWarning`, FX-1).
-pub const FLOAT32_OVERFLOW: &str = "FLOAT32_OVERFLOW";
+pub const MISSING_INDICES: &str = WarningCode::MissingIndices.as_str();
 /// The warning that a large entity table gave fewer than half the context
 /// examples asked for, which the reference gives once in a process
 /// (`_coverage_warned`).
-pub const CONTEXT_COVERAGE: &str = "CONTEXT_COVERAGE";
+pub const CONTEXT_COVERAGE: &str = WarningCode::ContextCoverage.as_str();
 
 /// The warnings the reference gives once in a process: a host gives each
 /// once in its process (decision E52), `sdm-host` for every binding, so
@@ -126,57 +115,21 @@ pub const CONTEXT_COVERAGE: &str = "CONTEXT_COVERAGE";
 /// meets it.
 pub const ONCE_PER_PROCESS: &[&str] = &[CONTEXT_COVERAGE];
 
-/// The sampler's warnings, each with the variants it gives (none: one
-/// sentence), which a host words (decision E59(d)).
-pub const WARNINGS: &[(&str, &[&str])] = &[
-    (
-        MISSING_INDICES,
-        &[
-            "index_table",
-            "index_tables",
-            "indices_table",
-            "indices_tables",
-        ],
-    ),
-    (CONTEXT_BEFORE_DATA, &[]),
-    (ANCHOR_AFTER_DATA, &[]),
-    (FLOAT32_OVERFLOW, &[]),
-    (CONTEXT_AFTER_ANCHOR, &[]),
-    (CONTEXT_LEAKS, &[]),
-    (HOPS_IGNORED, &[]),
-    (CONTEXT_COVERAGE, &[]),
-    (CONTEXT_CAPPED, &[]),
-    (TABLES_UNLINKED, &["one", "several"]),
-    (TABLES_UNREACHED, &["one", "several"]),
-    (COLUMNS_UNREAD, &["one", "several"]),
-    (CONTEXT_ANSWERS, &["windowed", "static"]),
-    (crate::subgraph::NULL_KEYS_LEFT_OUT, &[]),
-    (FILTER_CHOSE_EXAMPLES, &[]),
-];
 /// The notice that the default run mode gathered as many context examples
 /// as it takes (the client's `_warn_of_a_context_the_default_mode_capped`).
-pub const CONTEXT_CAPPED: &str = "CONTEXT_CAPPED";
-/// The warning that the context is anchored after the predictions
-/// (`_validate_time`, T2.11).
-pub const CONTEXT_AFTER_ANCHOR: &str = "CONTEXT_AFTER_ANCHOR";
-/// The warning that a temporal context's window reaches past the
-/// predictions' anchor (`_validate_time`, T2.11).
-pub const CONTEXT_LEAKS: &str = "CONTEXT_LEAKS";
-/// The warning that `num_hops` is ignored for `num_neighbors`
-/// (`_resolve_options`, T2.11).
-pub const HOPS_IGNORED: &str = "HOPS_IGNORED";
+pub const CONTEXT_CAPPED: &str = WarningCode::ContextCapped.as_str();
 /// The notice that tables of the schema no relationship connects to the
 /// entity table are not in the request (`_warn_of_tables_left_out`).
-pub const TABLES_UNLINKED: &str = "TABLES_UNLINKED";
+pub const TABLES_UNLINKED: &str = WarningCode::TablesUnlinked.as_str();
 /// The notice that tables linked into the schema were reached by no row
 /// the sampler read (`_warn_of_tables_left_out`).
-pub const TABLES_UNREACHED: &str = "TABLES_UNREACHED";
+pub const TABLES_UNREACHED: &str = WarningCode::TablesUnreached.as_str();
 /// The notice that columns the request sends are of a meaning the model
 /// does not read (`_warn_of_columns_the_model_does_not_read`).
-pub const COLUMNS_UNREAD: &str = "COLUMNS_UNREAD";
+pub const COLUMNS_UNREAD: &str = WarningCode::ColumnsUnread.as_str();
 /// The notice that context examples answering the question were taken out
 /// (`_drop_context_that_answers_the_question`).
-pub const CONTEXT_ANSWERS: &str = "CONTEXT_ANSWERS";
+pub const CONTEXT_ANSWERS: &str = WarningCode::ContextAnswers.as_str();
 /// The seed the reference samples with when none is given.
 const DEFAULT_SEED: u128 = 42;
 /// How many times as many candidates as examples a run tries
@@ -306,18 +259,31 @@ pub fn check_memo(memo: &SamplerMemo) -> Result<(), CoreError> {
         return Ok(());
     }
     Err(invalid(
+        Sentence::SamplerStateUnread,
         "the sampler state is not one a run left",
         "sampler_state",
     ))
 }
 
-fn invalid(message: &str, field: &str) -> CoreError {
-    CoreError::new(
-        ErrorKind::InvalidRequest,
-        ErrorCode::InvalidRequest,
-        message,
-    )
-    .with_field("field", Detail::text(field))
+/// `error`, said of the forecast's step it happened in, `step` of `steps`
+/// (`forecast_step`, `forecast_steps`): with the remedy of asking for fewer
+/// steps where the step's window outran the data (`window_outran_the_data`),
+/// as the client says each part's refusal (`about_the_part`, T3.17 fix 2).
+pub(crate) fn in_step(error: CoreError, step: u32, steps: u32) -> CoreError {
+    let outran =
+        error.fields.get("window_outran_the_data") == Some(&Detail::Scalar(Scalar::Bool(true)));
+    error
+        .with_field("forecast_step", Detail::Scalar(Scalar::UInt32(step)))
+        .with_field("forecast_steps", Detail::Scalar(Scalar::UInt32(steps)))
+        .in_part(if outran {
+            Sentence::PartForecastStepOutran
+        } else {
+            Sentence::PartForecastStep
+        })
+}
+
+fn invalid(sentence: Sentence, message: &str, field: &str) -> CoreError {
+    CoreError::new(sentence, message).with_field("field", Detail::text(field))
 }
 
 fn count(n: usize) -> Detail {
@@ -787,16 +753,12 @@ fn constant(literal: &PqlLiteral) -> Result<Option<labels::Constant>, CoreError>
 /// cannot compare with times that have none (the query's grammar writes
 /// none).
 fn time_constant(value: &str, offset: Option<i32>) -> Result<i64, CoreError> {
-    let refused = |message: &str| {
-        CoreError::new(
-            ErrorKind::InvalidRequest,
-            ErrorCode::InvalidRequest,
-            message,
-        )
-        .with_field("field", Detail::text("query"))
+    let refused = |sentence, message: &str| {
+        CoreError::new(sentence, message).with_field("field", Detail::text("query"))
     };
     if offset.is_some() {
         return Err(refused(
+            Sentence::TimeConstantOffset,
             "a time constant with a UTC offset cannot be compared with times that have none",
         ));
     }
@@ -816,7 +778,12 @@ fn time_constant(value: &str, offset: Option<i32>) -> Result<i64, CoreError> {
     i64::try_from(Instant::from_civil(&civil, 0).nanos())
         .ok()
         .filter(|nanos| *nanos != i64::MIN)
-        .ok_or_else(|| refused("a time constant past what a timestamp of nanoseconds holds"))
+        .ok_or_else(|| {
+            refused(
+                Sentence::TimeConstantPast,
+                "a time constant past what a timestamp of nanoseconds holds",
+            )
+        })
 }
 
 /// One batch of a fetch's answer, all its rows.
@@ -1213,8 +1180,6 @@ impl Times {
                 }
                 if unread > 0 {
                     asker.warn(CoreWarning {
-                        code: sdm_schema::assemble::TIME_VALUES_UNREAD.into(),
-                        message: "a time column's values were read as no time and dropped".into(),
                         fields: [
                             ("table".to_owned(), Detail::text(&table.name)),
                             ("column".to_owned(), Detail::text(name)),
@@ -1223,6 +1188,10 @@ impl Times {
                             ("examples".to_owned(), Detail::List(examples)),
                         ]
                         .into(),
+                        ..CoreWarning::new(
+                            Sentence::TimeValuesUnread,
+                            "a time column's values were read as no time and dropped",
+                        )
                     });
                 }
                 let nanos = read
@@ -1279,8 +1248,6 @@ fn times_of_day_unread(asker: &Asker, table: &Table, name: &str, array: &ArrayRe
     let unread = array.len() - array.null_count();
     if unread > 0 {
         asker.warn(CoreWarning {
-            code: sdm_schema::assemble::TIME_VALUES_UNREAD.into(),
-            message: "a time of day's values were read as no time and dropped".into(),
             fields: [
                 ("table".to_owned(), Detail::text(&table.name)),
                 ("column".to_owned(), Detail::text(name)),
@@ -1289,6 +1256,10 @@ fn times_of_day_unread(asker: &Asker, table: &Table, name: &str, array: &ArrayRe
                 ("examples".to_owned(), Detail::List(examples)),
             ]
             .into(),
+            ..CoreWarning::new(
+                Sentence::TimeValuesUnread,
+                "a time of day's values were read as no time and dropped",
+            )
         });
     }
 }
@@ -1381,7 +1352,7 @@ fn warn_float32_overflow(asker: &Asker) {
     }
     warn(
         asker,
-        FLOAT32_OVERFLOW,
+        Sentence::Float32Overflow,
         "a double past float32's range was cast to float32, as an infinity",
     );
 }
@@ -1749,21 +1720,23 @@ async fn check_indexes(
 fn warn_missing(asker: &Asker, indexes: usize, tables: usize) {
     // Which of the reference's sentences, by its two counts' number
     // (decision E59(d)).
-    let variant = match (indexes == 1, tables == 1) {
-        (true, true) => "index_table",
-        (true, false) => "index_tables",
-        (false, true) => "indices_table",
-        (false, false) => "indices_tables",
+    let (variant, sentence) = match (indexes == 1, tables == 1) {
+        (true, true) => ("index_table", Sentence::MissingIndexTable),
+        (true, false) => ("index_tables", Sentence::MissingIndexTables),
+        (false, true) => ("indices_table", Sentence::MissingIndicesTable),
+        (false, false) => ("indices_tables", Sentence::MissingIndicesTables),
     };
     asker.warn(CoreWarning {
-        code: MISSING_INDICES.into(),
-        message: "indices the sampler's reads would use are missing".into(),
         fields: [
             ("indices".to_owned(), count(indexes)),
             ("tables".to_owned(), count(tables)),
             ("variant".to_owned(), Detail::text(variant)),
         ]
         .into(),
+        ..CoreWarning::new(
+            sentence,
+            "indices the sampler's reads would use are missing",
+        )
     });
 }
 
@@ -1950,12 +1923,8 @@ async fn check_single_columns(asker: &Asker, graph: &Graph) -> Result<(), CoreEr
     Ok(())
 }
 
-fn warn(asker: &Asker, code: &str, message: &str) {
-    asker.warn(CoreWarning {
-        code: code.to_owned(),
-        message: message.to_owned(),
-        fields: Default::default(),
-    });
+fn warn(asker: &Asker, sentence: Sentence, message: &str) {
+    asker.warn(CoreWarning::new(sentence, message));
 }
 
 /// Holds the schema `materialize` is handed as the reference holds a
@@ -1992,7 +1961,7 @@ pub(crate) fn meanings_carried(
             return Err(match types {
                 // As `check_consistent` says it, quoting the type the
                 // caller's schema holds.
-                Some(types) => not_carried(&table.name, &column.name)
+                Some(types) => not_carried(Sentence::MeaningNotCarried, &table.name, &column.name)
                     .with_field("reason", Detail::text("meaning_not_carried"))
                     .with_field(
                         "dtype",
@@ -2002,13 +1971,17 @@ pub(crate) fn meanings_carried(
                 // As the reference's engine says it when it reads the table
                 // in place, naming the source's type in the language's
                 // name.
-                None => not_carried(&table.name, &column.name)
-                    .with_field("reason", Detail::text("incompatible_semantic_type"))
-                    .with_field(
-                        "dtype",
-                        Detail::text(name_of(serde_json::to_value(column.dtype))),
-                    )
-                    .with_field("stype", Detail::text(stype)),
+                None => not_carried(
+                    Sentence::IncompatibleSemanticType,
+                    &table.name,
+                    &column.name,
+                )
+                .with_field("reason", Detail::text("incompatible_semantic_type"))
+                .with_field(
+                    "dtype",
+                    Detail::text(name_of(serde_json::to_value(column.dtype))),
+                )
+                .with_field("stype", Detail::text(stype)),
             });
         }
     }
@@ -2023,8 +1996,9 @@ fn name_of(value: Result<serde_json::Value, serde_json::Error>) -> String {
         .unwrap_or_default()
 }
 
-fn not_carried(table: &str, column: &str) -> CoreError {
+fn not_carried(sentence: Sentence, table: &str, column: &str) -> CoreError {
     invalid(
+        sentence,
         "a column's meaning is not one its values can carry",
         "schema",
     )
@@ -2046,11 +2020,13 @@ fn consistent(description: &mut SourceDescription) -> Result<(), CoreError> {
                 .iter()
                 .any(|c| c.name == *time && c.stype != Stype::Timestamp)
         {
-            return Err(
-                invalid("a table's time column does not mean a time", "time_column")
-                    .with_field("table", Detail::text(&table.name))
-                    .with_field("column", Detail::text(time)),
-            );
+            return Err(invalid(
+                Sentence::TimeColumnNotATime,
+                "a table's time column does not mean a time",
+                "time_column",
+            )
+            .with_field("table", Detail::text(&table.name))
+            .with_field("column", Detail::text(time)));
         }
     }
     sdm_schema::assemble::check_links(description, &sdm_schema::assemble::HostTypes::default())
@@ -2066,6 +2042,7 @@ fn options_taken(inputs: &Inputs) -> Result<(), CoreError> {
         return Ok(());
     }
     Err(invalid(
+        Sentence::OptionsWithoutValues,
         "an option named is not one of the sampling options",
         "options",
     ))
@@ -2133,8 +2110,8 @@ const FOLDED_NAME_MOST: usize = 200;
 /// refusals of that code; the core makes no such read, one statement fewer
 /// (KO2-68). `Ok` for a schema with no such key.
 fn refuse_composite_keys(description: &SourceDescription) -> Result<(), CoreError> {
-    let refused = |table: &str, key: &[String], message: &str| {
-        invalid(message, "schema")
+    let refused = |sentence, table: &str, key: &[String], message: &str| {
+        invalid(sentence, message, "schema")
             .with_field("table", Detail::text(table))
             .with_field(
                 "columns",
@@ -2154,6 +2131,7 @@ fn refuse_composite_keys(description: &SourceDescription) -> Result<(), CoreErro
         });
         if float {
             return Err(refused(
+                Sentence::CompositeKeyFloat,
                 &table.name,
                 key,
                 "a float cannot be part of a key of several columns: its text is not reproducible",
@@ -2162,6 +2140,7 @@ fn refuse_composite_keys(description: &SourceDescription) -> Result<(), CoreErro
         let name = sdm_engine::graph::folded_name(key);
         if name.len() > FOLDED_NAME_MOST {
             return Err(refused(
+                Sentence::CompositeKeyNameLong,
                 &table.name,
                 key,
                 "a key of several columns needs a folded column's name longer than a source takes",
@@ -2169,6 +2148,7 @@ fn refuse_composite_keys(description: &SourceDescription) -> Result<(), CoreErro
         }
         if table.columns.iter().any(|c| c.name == name) {
             return Err(refused(
+                Sentence::CompositeKeyNameTaken,
                 &table.name,
                 key,
                 "a column holds the name a key of several columns is folded into",
@@ -2180,6 +2160,7 @@ fn refuse_composite_keys(description: &SourceDescription) -> Result<(), CoreErro
         None => Ok(()),
         Some((table, key)) => Err(sdm_engine::graph::with_reserved(
             refused(
+                Sentence::ReservedName,
                 &table,
                 &key,
                 "a table keyed by several columns cannot be sampled: the SQL samplers fold its key into a column of the name they reserve",
@@ -2216,13 +2197,44 @@ fn reserved(description: &SourceDescription) -> Result<(), CoreError> {
                 .collect(),
         )
     };
+    // Each named as `table.column`, and a name for it that the request does
+    // not need (`_unreserved`), for the host's words.
+    let unreserved = |column: &str| {
+        let suggested = format!("{}_from_the_data", column.trim_start_matches('_'));
+        if RESERVED.contains(&suggested.as_str()) {
+            format!("{column}_")
+        } else {
+            suggested
+        }
+    };
     Err(CoreError::new(
-        ErrorKind::InvalidRequest,
-        ErrorCode::InvalidSchema,
+        if taken.len() > 1 {
+            Sentence::WireReservedSeveral
+        } else {
+            Sentence::WireReservedOne
+        },
         "a column of the schema has a name the request needs for its own",
     )
     .with_field("tables", list(taken.iter().map(|(t, _)| *t).collect()))
-    .with_field("columns", list(taken.iter().map(|(_, c)| *c).collect())))
+    .with_field("columns", list(taken.iter().map(|(_, c)| *c).collect()))
+    .with_field(
+        "reserved",
+        Detail::List(
+            taken
+                .iter()
+                .map(|(t, c)| Scalar::Utf8(format!("{t}.{c}")))
+                .collect(),
+        ),
+    )
+    .with_field(
+        "renamed",
+        Detail::List(
+            taken
+                .iter()
+                .map(|(_, c)| Scalar::Utf8(unreserved(c)))
+                .collect(),
+        ),
+    ))
 }
 
 /// A list of names as a warning's field.
@@ -2279,8 +2291,6 @@ fn notices(
     let several = |n: usize| if n > 1 { "several" } else { "one" };
     if !unlinked.is_empty() {
         asker.warn(CoreWarning {
-            code: TABLES_UNLINKED.into(),
-            message: "tables of the schema no relationship connects are not in the request".into(),
             fields: [
                 ("variant".to_owned(), Detail::text(several(unlinked.len()))),
                 ("tables".to_owned(), names(unlinked.iter().copied())),
@@ -2290,17 +2300,31 @@ fn notices(
                 ),
             ]
             .into(),
+            ..CoreWarning::new(
+                if unlinked.len() > 1 {
+                    Sentence::TablesUnlinkedSeveral
+                } else {
+                    Sentence::TablesUnlinkedOne
+                },
+                "tables of the schema no relationship connects are not in the request",
+            )
         });
     }
     if !unreached.is_empty() {
         asker.warn(CoreWarning {
-            code: TABLES_UNREACHED.into(),
-            message: "tables linked into the schema were reached by no row sampled".into(),
             fields: [
                 ("variant".to_owned(), Detail::text(several(unreached.len()))),
                 ("tables".to_owned(), names(unreached.iter().copied())),
             ]
             .into(),
+            ..CoreWarning::new(
+                if unreached.len() > 1 {
+                    Sentence::TablesUnreachedSeveral
+                } else {
+                    Sentence::TablesUnreachedOne
+                },
+                "tables linked into the schema were reached by no row sampled",
+            )
         });
     }
     let mut unread: Vec<String> = description
@@ -2322,8 +2346,6 @@ fn notices(
     unread.sort_unstable();
     if !unread.is_empty() {
         asker.warn(CoreWarning {
-            code: COLUMNS_UNREAD.into(),
-            message: "columns the request sends are of a meaning the model does not read".into(),
             fields: [
                 ("variant".to_owned(), Detail::text(several(unread.len()))),
                 (
@@ -2333,12 +2355,18 @@ fn notices(
                 ("stypes".to_owned(), names(["text"])),
             ]
             .into(),
+            ..CoreWarning::new(
+                if unread.len() > 1 {
+                    Sentence::ColumnsUnreadSeveral
+                } else {
+                    Sentence::ColumnsUnreadOne
+                },
+                "columns the request sends are of a meaning the model does not read",
+            )
         });
     }
     if answering > 0 {
         asker.warn(CoreWarning {
-            code: CONTEXT_ANSWERS.into(),
-            message: "context examples answering the question were taken out".into(),
             fields: [
                 (
                     "variant".to_owned(),
@@ -2347,6 +2375,14 @@ fn notices(
                 ("examples".to_owned(), count(answering)),
             ]
             .into(),
+            ..CoreWarning::new(
+                if windowed {
+                    Sentence::ContextAnswersWindowed
+                } else {
+                    Sentence::ContextAnswersStatic
+                },
+                "context examples answering the question were taken out",
+            )
         });
     }
 }
@@ -2429,24 +2465,20 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
         .is_some_and(|values| values.get("top_k").is_some())
     {
         return Err(CoreError::new(
-            ErrorKind::InvalidRequest,
-            ErrorCode::InvalidRequest,
+            Sentence::ForecastTopK,
             "top_k is a ranking's, and a forecast ranks nothing",
         )
-        .with_field("field", Detail::text("top_k"))
-        .with_field("rule", Detail::text("forecast_top_k")));
+        .with_field("field", Detail::text("top_k")));
     }
     // The host's limit is checked against the plan's count before any step
     // is written, so nothing grows with a count past it (T1.36 fix 23).
     let most = inputs.most_parts.unwrap_or(MOST_PARTS);
     if steps.count > u64::from(most) {
         return Err(CoreError::new(
-            ErrorKind::InvalidRequest,
-            ErrorCode::InvalidRequest,
+            Sentence::TooManySteps,
             "a forecast asks for more steps than the host's limit, one call each",
         )
         .with_field("field", Detail::text("query"))
-        .with_field("rule", Detail::text("too_many_parts"))
         .with_field("steps", Detail::Scalar(Scalar::UInt64(steps.count)))
         .with_field("limit", Detail::Scalar(Scalar::UInt32(most))));
     }
@@ -2465,12 +2497,10 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
     let entities = u64::try_from(entities).unwrap_or(u64::MAX);
     if entities > per_call {
         return Err(CoreError::new(
-            ErrorKind::Unsupported,
-            ErrorCode::UnsupportedRequest,
+            Sentence::BatchedPartForecast,
             "a forecast over more entities than one call scores would batch each step",
         )
         .with_field("field", Detail::text("indices"))
-        .with_field("rule", Detail::text("batched_part"))
         .with_field("part_kind", Detail::text("forecast"))
         .with_field("entities", Detail::Scalar(Scalar::UInt64(entities)))
         .with_field("parts", Detail::Scalar(Scalar::UInt64(steps.count)))
@@ -2488,8 +2518,7 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
         let mut asked = inputs.clone();
         asked.query = steps.step(u64::from(step));
         asked.memo = None;
-        let tagged =
-            |e: CoreError| e.with_field("forecast_step", Detail::Scalar(Scalar::UInt32(step)));
+        let tagged = |e: CoreError| in_step(e, step, bound);
         let done = one(&asker, asked).await;
         asker.keep(handed.clone());
         match done.map_err(tagged)? {
@@ -2554,12 +2583,14 @@ pub(crate) fn refuse_entities(
         return Ok(());
     }
     Err(CoreError::new(
-        ErrorKind::Unsupported,
-        ErrorCode::UnsupportedRequest,
+        if times == 1 {
+            Sentence::MostEntities
+        } else {
+            Sentence::MostEntitiesParts
+        },
         "more entities were asked for than one materialize holds at once",
     )
     .with_field("field", Detail::text("indices"))
-    .with_field("rule", Detail::text("most_entities"))
     .with_field("entities", Detail::Scalar(Scalar::UInt64(entities)))
     .with_field("gathered_times", Detail::Scalar(Scalar::UInt64(times)))
     .with_field("total", Detail::Scalar(Scalar::UInt64(total)))
@@ -2639,7 +2670,10 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // faults may be refused here for another of them than the client
     // names, which the core does not claim to match (decision E41(k)(iii)).
     let asked_values = options::values(inputs.values.as_ref())?;
-    let mode = options::run_mode(asked_values.num_context_samples)?;
+    let mode = options::run_mode(
+        asked_values.num_context_samples,
+        asked_values.num_context_samples_given.as_deref(),
+    )?;
     // The hops the sampling options ask, bounded as the client bounds them,
     // before the options this core does not take are refused by name.
     options::hops(asked_values.num_hops, asked_values.num_neighbors)?;
@@ -2658,14 +2692,12 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     };
     options_taken(&inputs)?;
     if seed.as_ref().is_some_and(Seed::is_negative) {
-        return Err(CoreError::new(
-            ErrorKind::InvalidRequest,
-            ErrorCode::InvalidRequest,
-            "a sampling seed cannot be negative",
-        )
-        .with_field("field", Detail::text("seed"))
-        .with_field("reason", Detail::text("negative"))
-        .with_field("given", Detail::text(seed_text(seed.as_ref()))));
+        return Err(
+            CoreError::new(Sentence::SeedNegative, "a sampling seed cannot be negative")
+                .with_field("field", Detail::text("seed"))
+                .with_field("reason", Detail::text("negative"))
+                .with_field("given", Detail::text(seed_text(seed.as_ref()))),
+        );
     }
     #[cfg(feature = "test-ops")]
     let labels_only = inputs.labels_only;
@@ -2721,6 +2753,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
 
     let indices = indices.ok_or_else(|| {
         invalid(
+            Sentence::IndicesAbsent,
             "materialize names the entities to predict for, and none were given",
             "indices",
         )
@@ -2728,14 +2761,19 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     let indices = one_batch(&indices)?;
     if indices.num_columns() != 1 {
         return Err(invalid(
+            Sentence::IndicesNotOneColumn,
             "the entities to predict for are one column",
             "indices",
         ));
     }
     let indices = Arc::clone(indices.column(0));
     if indices.is_empty() {
-        return Err(invalid("the entities to predict for are none", "indices")
-            .with_field("reason", Detail::text("empty")));
+        return Err(invalid(
+            Sentence::IndicesEmpty,
+            "the entities to predict for are none",
+            "indices",
+        )
+        .with_field("reason", Detail::text("empty")));
     }
     // More entities than one call scores are gathered as several calls
     // (`main`'s 1fc5a686), up to a population the host's limit holds,
@@ -2797,14 +2835,15 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // filter's condition and the entities' count the host words.
     if let Some(condition) = &validation.entity_filter {
         asker.warn(CoreWarning {
-            code: FILTER_CHOSE_EXAMPLES.into(),
-            message: "the entity filter chooses the labelled examples, not the entities scored"
-                .into(),
             fields: [
                 ("condition".to_owned(), Detail::text(condition.as_str())),
                 ("entities".to_owned(), count(indices.len())),
             ]
             .into(),
+            ..CoreWarning::new(
+                Sentence::FilterChoseExamples,
+                "the entity filter chooses the labelled examples, not the entities scored",
+            )
         });
     }
     // What the sampler needs of its provider, refused before anything is
@@ -2823,7 +2862,11 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // task (`_get_task_table`).
     let (context_anchor, max_pq_iterations) = options::task_table(&deferred)?;
     if keys::missing(&indices) {
-        return Err(invalid("an entity to predict for is missing", "indices"));
+        return Err(invalid(
+            Sentence::IndexMissing,
+            "an entity to predict for is missing",
+            "indices",
+        ));
     }
     // A seed past what its scalar carries (10**38 or more) is past every
     // largest seed a provider can declare (a `u64`), which every provider
@@ -2907,6 +2950,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     let (anchor, context_anchor, earliest) = if anchor_entity {
         if span.is_some() {
             return Err(invalid(
+                Sentence::AnchorEntityNotStatic,
                 "an anchor at each entity's own time is for a static query only",
                 "anchor_time",
             )
@@ -2914,6 +2958,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         }
         if entity.time_column.is_none() {
             return Err(invalid(
+                Sentence::AnchorEntityNoTimeColumn,
                 "an anchor at each entity's own time needs the entity table to have a time column",
                 "anchor_time",
             )
@@ -2949,6 +2994,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         .trials(context_examples, span.is_some())
         .ok_or_else(|| {
             invalid(
+                Sentence::IterationsWholeForWindow,
                 "max_pq_iterations is a whole number for a query over a window",
                 "max_pq_iterations",
             )
@@ -3000,7 +3046,12 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         )?,
     )?;
     if sampled.num_rows() == 0 {
-        return Err(invalid("the entity table holds no row to sample", "query"));
+        return Err(invalid(
+            Sentence::EntityTableEmpty,
+            "the entity table holds no row to sample",
+            "query",
+        )
+        .with_field("table", Detail::text(&entity.name)));
     }
     // One entity per key value: `1.0` and `1.00` of a column of numbers
     // handed over as their text are one key (`subgraph::key_values`).
@@ -3071,6 +3122,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         && examples.index.iter().any(|i| nan_key.contains(i))
     {
         return Err(invalid(
+            Sentence::EntityKeyMissing,
             "an entity sampled has no value for its table's primary key",
             "query",
         )
@@ -3163,13 +3215,15 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         // that meets it, and once in a process by the host
         // ([`ONCE_PER_PROCESS`], decision E52).
         asker.warn(CoreWarning {
-            code: CONTEXT_COVERAGE.into(),
-            message: "fewer than half the context examples asked for were collected".into(),
             fields: [
                 ("examples".to_owned(), count(context_examples)),
                 ("candidates".to_owned(), count(trials)),
             ]
             .into(),
+            ..CoreWarning::new(
+                Sentence::ContextCoverage,
+                "fewer than half the context examples asked for were collected",
+            )
         });
     }
     // The target's own past as features (`lag_timesteps`, T2.9), where the
@@ -3232,8 +3286,6 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // said, as the client says it, the caller having chosen no size.
     if num_context_samples.is_none() && gathered >= options::RunMode::Fast.context_examples() {
         asker.warn(CoreWarning {
-            code: CONTEXT_CAPPED.into(),
-            message: "the default run mode gathered as many context examples as it takes".into(),
             fields: [
                 (
                     "cap".to_owned(),
@@ -3245,6 +3297,10 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
                 ),
             ]
             .into(),
+            ..CoreWarning::new(
+                Sentence::ContextCapped,
+                "the default run mode gathered as many context examples as it takes",
+            )
         });
     }
     // Then narrowed to the size asked for (`_narrow_context`).
@@ -3276,12 +3332,10 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     let most = most_calls.unwrap_or(MOST_CALLS);
     if calls > most as usize {
         return Err(CoreError::new(
-            ErrorKind::Unsupported,
-            ErrorCode::UnsupportedRequest,
+            Sentence::MostCalls,
             "the entities asked for are gathered as more calls than one materialize holds at once",
         )
         .with_field("field", Detail::text("indices"))
-        .with_field("rule", Detail::text("most_calls"))
         .with_field("entities", count(num_test))
         .with_field("calls", count(calls))
         .with_field("rows_per_call", count(per_call))
@@ -3305,6 +3359,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     for (_, column) in &excluded {
         if !graph.features(entity).iter().any(|(n, _)| n == column) {
             return Err(invalid(
+                Sentence::TargetNotAFeature,
                 "the column a static target reads is not one of its table's features",
                 "query",
             ));
@@ -3322,14 +3377,17 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // (`_resolve_options`), once the task is labelled.
     if let Some(num_hops) = hops_ignored {
         asker.warn(CoreWarning {
-            code: HOPS_IGNORED.into(),
-            message: "num_hops is ignored where num_neighbors is given".into(),
             fields: [("num_hops".to_owned(), Detail::text(&num_hops))].into(),
+            ..CoreWarning::new(
+                Sentence::HopsIgnored,
+                "num_hops is ignored where num_neighbors is given",
+            )
         });
     }
     excluded_by_caller(&graph, &exclude_cols, &mut excluded)?;
     if num_train > TABLE_ROWS {
         return Err(invalid(
+            Sentence::ContextPastRows,
             "the context holds more rows than a request takes",
             "query",
         ));
@@ -3425,15 +3483,29 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
                     keys.push(value);
                 }
             }
-            return Err(invalid(
+            // Said of the first five, and how many more, as the reference
+            // says them (`_refuse_an_id_scored_twice`).
+            let (sentence, more) = match keys.len() {
+                1 => (Sentence::HeldBySeveralRowsOne, 0),
+                2..=5 => (Sentence::HeldBySeveralRows, 0),
+                n => (Sentence::HeldBySeveralRowsMany, n - 5),
+            };
+            let mut refused = invalid(
+                sentence,
                 "an entity to predict for is held by more than one row, so which is meant \
                  would be a guess",
                 "indices",
-            )
-            .with_field("reason", Detail::text("held_by_several_rows"))
-            .with_field("table", Detail::text(&entity.name))
-            .with_field("key", Detail::text(&key))
-            .with_field("keys", Detail::List(keys)));
+            );
+            if more > 0 {
+                refused = refused
+                    .with_field("shown", Detail::List(keys[..5].to_vec()))
+                    .with_field("more", count(more));
+            }
+            return Err(refused
+                .with_field("reason", Detail::text("held_by_several_rows"))
+                .with_field("table", Detail::text(&entity.name))
+                .with_field("key", Detail::text(&key))
+                .with_field("keys", Detail::List(keys)));
         }
         if positions.len() != examples_total {
             // The table and the keys not found, in the order the caller gave
@@ -3445,6 +3517,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
                 .map(|at| key_scalar(scored.as_ref(), at - num_train))
                 .collect();
             return Err(invalid(
+                Sentence::NotInTable,
                 "an entity to predict for is not in the entity table",
                 "indices",
             )
@@ -3503,6 +3576,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         // (`_get_context`).
         if walked.tables.len() > SUBGRAPH_TABLES {
             return Err(invalid(
+                Sentence::SubgraphPastTables,
                 "the request's subgraph carries more tables than the endpoint reads",
                 "tables",
             )
@@ -3593,16 +3667,21 @@ fn unresolved(query: &str, diagnostics: &[sdm_contract::ops::PqlDiagnostic]) -> 
         .filter(|d| d.severity == sdm_contract::ops::Severity::Error)
         .map(|d| Scalar::Utf8(d.message.clone()))
         .collect();
-    invalid("the query does not resolve against the schema", "query")
-        .with_field("reason", Detail::text("unresolved"))
-        .with_field("query", Detail::text(query))
-        .with_field("reasons", Detail::List(reasons))
+    invalid(
+        Sentence::Unresolved,
+        "the query does not resolve against the schema",
+        "query",
+    )
+    .with_field("reason", Detail::text("unresolved"))
+    .with_field("query", Detail::text(query))
+    .with_field("reasons", Detail::List(reasons))
 }
 
 /// The refusal of anchors set apart where one is each entity's own time
 /// (`_get_task_table`'s "needs to be shared").
 fn shared_anchor() -> CoreError {
     invalid(
+        Sentence::AnchorEntityNotShared,
         "an anchor at each entity's own time is shared by the context and the predictions",
         "context_anchor_time",
     )
@@ -3644,7 +3723,11 @@ async fn anchors_checked(
                 .ok_or_else(|| sample::out_of_range("anchor_time"))?,
         },
         Some(_) => {
-            return Err(invalid("an anchor time is a ts scalar", "anchor_time"));
+            return Err(invalid(
+                Sentence::AnchorNotATime,
+                "an anchor time is a ts scalar",
+                "anchor_time",
+            ));
         }
     };
     let context_anchor = match context_given {
@@ -3671,6 +3754,7 @@ async fn anchors_checked(
         };
         if anchor < bounds.min {
             return Err(invalid(
+                Sentence::AnchorBeforeData,
                 "the anchor time is before the earliest time in the data",
                 "anchor_time",
             )
@@ -3680,6 +3764,7 @@ async fn anchors_checked(
         }
         if context_anchor < bounds.min {
             return Err(invalid(
+                Sentence::ContextBeforeDataRefused,
                 "the context's anchor time is before the earliest time in the data",
                 "anchor_time",
             )
@@ -3706,33 +3791,29 @@ async fn anchors_checked(
                 value,
             })
         };
-        let timed = |code: &str, message: &str, fields: [(&str, i64); 2]| {
-            asker.warn(CoreWarning {
-                code: code.into(),
-                message: message.into(),
-                fields: fields
-                    .into_iter()
-                    .map(|(name, value)| (name.to_owned(), at(value)))
-                    .collect(),
-            });
+        let timed = |sentence: Sentence, message: &str, fields: [(&str, i64); 2]| {
+            asker.warn(
+                CoreWarning::new(sentence, message)
+                    .with_fields(fields.map(|(name, value)| (name, at(value)))),
+            );
         };
-        let anchored = |code: &str, message: &str| {
+        let anchored = |sentence: Sentence, message: &str| {
             timed(
-                code,
+                sentence,
                 message,
                 [("context_anchor", context_anchor), ("anchor", anchor)],
             );
         };
         if context_anchor > anchor {
             anchored(
-                CONTEXT_AFTER_ANCHOR,
+                Sentence::ContextAfterAnchor,
                 "the context's anchor time is after the predictions' anchor time",
             );
         } else if let Some(end) = end
             && reaches(end, context_anchor)? > i128::from(anchor)
         {
             anchored(
-                CONTEXT_LEAKS,
+                Sentence::ContextLeaks,
                 "the context's window reaches past the predictions' anchor time",
             );
         } else if let Some(end) = end
@@ -3743,13 +3824,13 @@ async fn anchors_checked(
             // the data (M4): a reach past what a time holds names neither.
             match i64::try_from(back) {
                 Ok(back) => timed(
-                    CONTEXT_BEFORE_DATA,
+                    Sentence::ContextBeforeData,
                     "the context reaches back before the data",
                     [("back_to", back), ("earliest", bounds.min)],
                 ),
                 Err(_) => warn(
                     asker,
-                    CONTEXT_BEFORE_DATA,
+                    Sentence::ContextBeforeDataUntimed,
                     "the context reaches back before the data",
                 ),
             }
@@ -3757,7 +3838,7 @@ async fn anchors_checked(
         if i128::from(anchor) > i128::from(bounds.max) + DAY_NS {
             // The anchor and the latest time of the data (M4).
             timed(
-                ANCHOR_AFTER_DATA,
+                Sentence::AnchorAfterData,
                 "the anchor time is after the data",
                 [("anchor", anchor), ("latest", bounds.max)],
             );
@@ -3783,6 +3864,7 @@ fn excluded_by_caller(
             let mut tables: Vec<&str> = graph.tables.iter().map(|t| t.name.as_str()).collect();
             tables.sort_unstable();
             invalid(
+                Sentence::ExcludedUnknownTable,
                 "a table the caller keeps columns of is not in the graph",
                 "exclude_cols_dict",
             )
@@ -3801,6 +3883,7 @@ fn excluded_by_caller(
                 // The column as the caller gave it, its JSON text, for the
                 // host's words.
                 return Err(invalid(
+                    Sentence::ExcludedNotAFeature,
                     "a column the caller keeps out is not one of its table's features",
                     "exclude_cols_dict",
                 )
@@ -3863,6 +3946,7 @@ fn null_compared(target: &Shape, mask: &[bool]) -> Result<(), CoreError> {
     }
     if !batch.contains(&true) {
         return Err(invalid(
+            Sentence::NullComparedNowhere,
             "no example's window holds a value to compare with NULL",
             "query",
         ));
@@ -3901,12 +3985,14 @@ async fn empty_sample(
     anchor: Option<i64>,
     condition: Option<&str>,
 ) -> CoreError {
-    let refused = |reason: &str| {
-        invalid("no context example was collected", "anchor_time")
+    let refused = |sentence: Sentence, reason: &str| {
+        invalid(sentence, "no context example was collected", "anchor_time")
             .with_field("reason", Detail::text(reason))
     };
+    let too_restrictive = || refused(Sentence::ContextTooRestrictive, "too_restrictive");
+    let several = aggregated.len() > 1;
     let Some(anchor) = anchor else {
-        return refused("too_restrictive");
+        return too_restrictive();
     };
     let at = |value: i64| {
         Detail::Scalar(Scalar::Timestamp {
@@ -3939,7 +4025,12 @@ async fn empty_sample(
             .filter(|&min| min != TIME_MAX && min > anchor);
         if let Some(earliest) = earliest {
             let later = bounds.as_ref().is_some_and(|b| fits(earliest, b.max));
-            return refused("no_entity_at_anchor")
+            let sentence = if later {
+                Sentence::NoEntityAtAnchorLater
+            } else {
+                Sentence::NoEntityAtAnchor
+            };
+            return refused(sentence, "no_entity_at_anchor")
                 .with_field("entity_table", Detail::text(entity.name.as_str()))
                 .with_field("column", Detail::text(column.as_str()))
                 .with_field("anchor", at(anchor))
@@ -3948,7 +4039,7 @@ async fn empty_sample(
         }
     }
     let Some(bounds) = bounds else {
-        return refused("too_restrictive");
+        return too_restrictive();
     };
     let facts = |error: CoreError| {
         error
@@ -3960,12 +4051,23 @@ async fn empty_sample(
     if fits(anchor, bounds.max) {
         return match condition {
             Some(condition) => {
-                facts(refused("no_entity_passed")).with_field("condition", Detail::text(condition))
+                let sentence = if several {
+                    Sentence::NoEntityPassedSeveral
+                } else {
+                    Sentence::NoEntityPassed
+                };
+                facts(refused(sentence, "no_entity_passed"))
+                    .with_field("condition", Detail::text(condition))
             }
-            None => refused("too_restrictive"),
+            None => too_restrictive(),
         };
     }
-    facts(refused("anchor_too_late"))
+    let sentence = if several {
+        Sentence::AnchorTooLateSeveral
+    } else {
+        Sentence::AnchorTooLate
+    };
+    facts(refused(sentence, "anchor_too_late"))
 }
 
 /// One aggregated table's read of the rows the target's aggregations of it
@@ -4003,6 +4105,7 @@ fn fetches<'g>(
             [one] => (*one).clone(),
             _ => {
                 return Err(invalid(
+                    Sentence::NoUniqueForeignKey,
                     "no unique foreign key leads from the aggregated table to the entity table",
                     "query",
                 ));
@@ -4510,6 +4613,7 @@ fn key_scalar(array: &dyn Array, row: usize) -> Scalar {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sdm_contract::ErrorCode;
     use sdm_contract::pql::TimeUnit;
 
     /// A filter over an unsigned 64-bit key whose values pass int64

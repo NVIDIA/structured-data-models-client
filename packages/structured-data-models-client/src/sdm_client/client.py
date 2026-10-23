@@ -40,7 +40,6 @@ from sdm_client.core.warnings import SDMWarning, caller_stacklevel
 from sdm_client.decompose import (
     RANKING,
     Decomposition,
-    _reworded,
     about_the_part,
 )
 from sdm_client.errors import (
@@ -871,16 +870,23 @@ def _said_of_the_part(
     part it happened in, as :meth:`SDMClient._answer_in_parts` says each
     part's: a forecast's step (the core's ``forecast_step``), or a
     ranking's candidate (the core's ``ranking_candidate``), named as the
-    caller gave it; a ranking's
-    refusal naming candidates by their position among those given names
-    them as given."""
+    caller gave it; a ranking's refusal naming candidates by their position
+    among those given names them as given in its details. A refusal of the
+    core says its part in the core's own sentences already, naming the
+    candidates as given from the values the predict route holds (T3.17 fix
+    2), so only its details change; one this client raised itself, which
+    the core never saw, is said of its part here."""
     rewritten = request._decomposition
     assert rewritten is not None
     details = getattr(error, 'details', None)
     if not isinstance(details, dict):
         details = {}
+    of_the_core = error._sentence is not None
     if rewritten.kind != RANKING:
         step = details.pop('forecast_step', None)
+        details.pop('forecast_steps', None)
+        if of_the_core:
+            return error
         return about_the_part(error, rewritten, step or 1)
     ranking = None if request._core is None else request._core.ranking
     positions = () if ranking is None else ranking.positions
@@ -897,54 +903,9 @@ def _said_of_the_part(
         )
     position = details.pop('ranking_candidate', None)
     details.pop('ranking_parts', None)
-    if position is not None:
+    if position is not None and not of_the_core:
         return about_the_part(error, rewritten, by_position[position])
-    said = _ranking_said(details)
-    return error if said is None else _reworded(error, said)
-
-
-def _ranking_said(details: dict[str, Any]) -> str | None:
-    r"""The words of a ranking's refusal the core gave at predict, by its
-    rule or field, as the client says it (its candidates already named as
-    given); none for any other."""
-    rule = details.get('rule')
-    if rule == 'ranking_outputs':
-        unknown = details.get('unsupported') or []
-        if not unknown:
-            return 'outputs must name at least one field'
-        return (
-            f'a ranking gives back {", ".join(_RANKING_OUTPUTS)}, and '
-            f'{", ".join(repr(name) for name in unknown)} '
-            f'{"are" if len(unknown) > 1 else "is"} not among them. The '
-            f'per-candidate questions it is asked as are classifications; ask '
-            f'one of those directly for the fields a classification gives.'
-        )
-    if rule == 'ranking_unscored':
-        cold = list(details.get('candidates') or [])
-        if not cold:
-            return None
-        named = ', '.join(repr(candidate) for candidate in cold[:-1])
-        which = (
-            f'the contexts gathered for candidates {named} and '
-            f'{cold[-1]!r} each hold'
-            if len(cold) > 1
-            else f'the context gathered for candidate {cold[0]!r} holds'
-        )
-        return (
-            f'{which} one answer only, and a classification needs at least '
-            f'two classes to learn from, so there is nothing to rank and '
-            f'nothing was sent. {_SCORE_THE_UNSCORED}'
-        )
-    if details.get('field') == 'probabilities' and 'candidate' in details:
-        given = details.get('classes') or []
-        return (
-            f'the endpoint answered the question about candidate '
-            f'{details["candidate"]!r} without saying how sure it was, and a '
-            f'ranking is only the order of those. It gave back '
-            f'{sorted(given) or "no probabilities"}, and this client knows a '
-            f'positive class spelled "true", "True", "TRUE" or "1".'
-        )
-    return None
+    return error
 
 
 def _numbered_across_calls(

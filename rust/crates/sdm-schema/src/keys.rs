@@ -13,10 +13,10 @@
 //! with a repeated value read for each key that repeats (`repeated_key`),
 //! as the reference reads one to show it.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use arrow_array::RecordBatch;
-use sdm_contract::{CoreError, CoreWarning, Detail, ErrorCode, ErrorKind, Scalar};
+use sdm_contract::{CoreError, CoreWarning, Detail, Scalar, Sentence};
 
 use crate::infer::InferredTable;
 use crate::values;
@@ -28,27 +28,6 @@ pub const KEY_UNIQUENESS: f64 = 0.99;
 /// Under this share of distinct values a declined key's repeats are the
 /// ordinary many-to-one shape, not a key that missed (`_NEARLY_A_KEY`).
 pub const NEARLY_A_KEY: f64 = 0.9;
-
-/// The warning that a key kept has rows with no value for it
-/// (`_warn_a_key_has_no_value`).
-pub const KEY_NO_VALUE: &str = "KEY_NO_VALUE";
-/// The rule of a named key refused for rows with no value for it
-/// (`_a_key_missing_values`).
-pub const KEY_MISSING_VALUES: &str = "key_missing_values";
-/// The rule of a named or declared key refused for repeating in more rows
-/// than inference tolerates (`_too_many_repeats`, `_not_unique_enough`).
-pub const KEY_NOT_UNIQUE: &str = "key_not_unique";
-/// The warning that a key kept identifies a row more than once
-/// (`_warn_a_key_repeats`).
-pub const KEY_REPEATS: &str = "KEY_REPEATS";
-/// The warning that a column named like a key, which another table names
-/// too, was declined for its repeats (`_warn_a_key_was_declined`).
-pub const KEY_DECLINED: &str = "KEY_DECLINED";
-
-/// The key rules' warnings, each with its variants (none: one sentence),
-/// which a host words (decision E59(d)).
-pub const WARNINGS: &[(&str, &[&str])] =
-    &[(KEY_NO_VALUE, &[]), (KEY_REPEATS, &[]), (KEY_DECLINED, &[])];
 
 /// One key's count over every row (the reference's `KeyCount`).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -122,15 +101,13 @@ fn named(key: &[String]) -> (&'static str, Detail) {
     }
 }
 
-fn warning(code: &str, message: &str, fields: Vec<(&str, Detail)>) -> CoreWarning {
-    CoreWarning {
-        code: code.to_owned(),
-        message: message.to_owned(),
-        fields: fields
-            .into_iter()
-            .map(|(k, v)| (k.to_owned(), v))
-            .collect::<BTreeMap<_, _>>(),
-    }
+fn warning(sentence: Sentence, message: &str, fields: Vec<(&str, Detail)>) -> CoreWarning {
+    CoreWarning::new(sentence, message).with_fields(fields)
+}
+
+/// The sentence of `one` for a key of one column, else `several`'s.
+fn by_columns(key: &[String], one: Sentence, several: Sentence) -> Sentence {
+    if key.len() == 1 { one } else { several }
 }
 
 /// Holds each table's key to the reference's rules, in table order,
@@ -164,20 +141,16 @@ pub fn hold(
         let declared = !is_stated
             && matches!(key.as_slice(), [one] if table.column(one).is_some_and(|c| c.unique));
         let name = table.name.clone();
-        let refused = |message: &'static str| {
+        let refused = |sentence: Sentence, message: &'static str| {
             let (field, columns) = named(&key);
-            CoreError::new(
-                ErrorKind::InvalidRequest,
-                ErrorCode::InvalidRequest,
-                message,
-            )
-            .with_field(
-                "field",
-                Detail::text(if is_stated { "primary_keys" } else { "keys" }),
-            )
-            .with_field("table", Detail::text(&name))
-            .with_field(field, columns)
-            .with_field("rows", number(count.rows))
+            CoreError::new(sentence, message)
+                .with_field(
+                    "field",
+                    Detail::text(if is_stated { "primary_keys" } else { "keys" }),
+                )
+                .with_field("table", Detail::text(&name))
+                .with_field(field, columns)
+                .with_field("rows", number(count.rows))
         };
         if !is_stated && !declared {
             // Inferred: declined as inference over a frame declines it.
@@ -188,9 +161,13 @@ pub fn hold(
             }
         } else if count.missing > 0 && is_stated {
             return Err(refused(
+                by_columns(
+                    &key,
+                    Sentence::KeyMissingValuesColumn,
+                    Sentence::KeyMissingValuesColumns,
+                ),
                 "a primary key named has rows with no value, so those rows cannot be identified",
             )
-            .with_field("rule", Detail::text(KEY_MISSING_VALUES))
             .with_field("missing", number(count.missing)));
         } else if repeats as f64 > count.rows as f64 * (1.0 - KEY_UNIQUENESS) {
             // Unique where the catalog declares a key over some of its
@@ -199,11 +176,23 @@ pub fn hold(
                 .unique
                 .iter()
                 .any(|set| !set.is_empty() && set.iter().all(|c| key.contains(c)));
-            let mut refusal = refused("a primary key is not unique enough to identify a row")
-                .with_field("rule", Detail::text(KEY_NOT_UNIQUE));
-            if declared && !enforced {
+            let unenforced = declared && !enforced;
+            let sentence = if unenforced {
                 // The source declares the key and does not hold its rows to
                 // it, which the reference says of the source by name.
+                Sentence::KeyNotUniqueUnenforced
+            } else {
+                by_columns(
+                    &key,
+                    Sentence::KeyNotUniqueColumn,
+                    Sentence::KeyNotUniqueColumns,
+                )
+            };
+            let mut refusal = refused(
+                sentence,
+                "a primary key is not unique enough to identify a row",
+            );
+            if unenforced {
                 refusal = refusal.with_field("variant", Detail::text("declared_unenforced"));
             }
             return Err(refusal
@@ -212,7 +201,11 @@ pub fn hold(
         }
         if count.missing > 0 {
             warnings.push(warning(
-                KEY_NO_VALUE,
+                by_columns(
+                    &key,
+                    Sentence::KeyNoValueColumn,
+                    Sentence::KeyNoValueColumns,
+                ),
                 "a key has rows with no value for it",
                 vec![
                     ("table", Detail::text(&table.name)),
@@ -223,7 +216,11 @@ pub fn hold(
         }
         if repeats > 0 {
             warnings.push(warning(
-                KEY_REPEATS,
+                by_columns(
+                    &key,
+                    Sentence::KeyRepeatsColumn,
+                    Sentence::KeyRepeatsColumns,
+                ),
                 "a key identifies a row more than once",
                 vec![
                     ("table", Detail::text(&table.name)),
@@ -256,7 +253,7 @@ pub fn hold(
                 continue;
             }
             warnings.push(warning(
-                KEY_DECLINED,
+                Sentence::KeyDeclined,
                 "a column named like a key repeats, so its table gets no key",
                 vec![
                     ("table", Detail::text(&tables[*at].name)),

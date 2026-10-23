@@ -25,7 +25,7 @@
 use sdm_contract::ops::{
     ColumnRef, DescribedTable, Dtype, Given, SchemaEdit, SourceDescription, Stype,
 };
-use sdm_contract::{CoreError, CoreWarning, Detail, Scalar};
+use sdm_contract::{CoreError, CoreWarning, Detail, Scalar, Sentence};
 
 use crate::assemble::{
     HostTypes, Link, can_identify, checked, empty_key, invalid, key_cannot_identify,
@@ -272,22 +272,30 @@ fn stype_of(
     let Some(meaning) = meaning else {
         // Not a semantic type (`_check_stype`): the text given, or the
         // host's text of another value, and the types a caller may name.
-        let refused = named(
-            invalid("a column's meaning given is not a semantic type", "stype"),
-            table,
-            column,
-        )
-        .with_field(
-            "stypes",
-            sorted_names(SEMANTIC_TYPES.iter().map(|(n, _)| *n)),
-        );
+        let refused = |sentence| {
+            named(
+                invalid(
+                    sentence,
+                    "a column's meaning given is not a semantic type",
+                    "stype",
+                ),
+                table,
+                column,
+            )
+            .with_field(
+                "stypes",
+                sorted_names(SEMANTIC_TYPES.iter().map(|(n, _)| *n)),
+            )
+        };
         return Err(match stype {
-            Given::Value(text) => refused
+            Given::Value(text) => refused(Sentence::NotASemanticType)
                 .with_field("reason", Detail::text("not_a_semantic_type"))
                 .with_field("given_text", Detail::text(text)),
-            Given::Spelled(text) => with_given(refused, Some(text))
-                .with_field("reason", Detail::text("not_a_semantic_type_spelled")),
-            Given::Unreadable => refused,
+            Given::Spelled(text) => {
+                with_given(refused(Sentence::NotASemanticTypeGiven), Some(text))
+                    .with_field("reason", Detail::text("not_a_semantic_type_spelled"))
+            }
+            Given::Unreadable => refused(Sentence::NotASemanticTypeUnread),
         });
     };
     assign(description, at, column, meaning, supports, "stype", types)
@@ -351,20 +359,26 @@ fn leave_out(
 ) -> Result<(), CoreError> {
     let at = table_at(description, table, "column")?;
     let Given::Value(name) = column else {
-        let refused = invalid("a column named is not its table's", "column")
-            .with_field("table", Detail::text(table));
+        let refused = |sentence| {
+            invalid(sentence, "a column named is not its table's", "column")
+                .with_field("table", Detail::text(table))
+        };
         return Err(match column.spelled() {
-            Some(_) => with_given(refused, column.spelled())
+            Some(_) => with_given(refused(Sentence::ColumnNotANameGiven), column.spelled())
                 .with_field("reason", Detail::text("column_not_a_name"))
                 .with_field("columns", sorted_names(columns_of(&description.tables[at]))),
-            None => refused,
+            None => refused(Sentence::ColumnNotAName),
         });
     };
     let shape = &mut description.tables[at];
     let index = column_at(shape, name, "column")?;
     if shape.primary_key.contains(name) {
         return Err(named(
-            invalid("a column left out is its table's primary key", "column"),
+            invalid(
+                Sentence::LeftOutKey,
+                "a column left out is its table's primary key",
+                "column",
+            ),
             table,
             name,
         )
@@ -372,7 +386,11 @@ fn leave_out(
     }
     if shape.time_column.as_deref() == Some(name.as_str()) {
         return Err(named(
-            invalid("a column left out is its table's time column", "column"),
+            invalid(
+                Sentence::LeftOutTimeColumn,
+                "a column left out is its table's time column",
+                "column",
+            ),
             table,
             name,
         )
@@ -403,14 +421,17 @@ fn relationships(
     let mut given = Vec::with_capacity(links.len());
     for link in links {
         let Given::Value(link) = link else {
-            let refused = invalid(
-                "a relationship given is not a relationship",
-                "relationships",
-            );
+            let refused = |sentence| {
+                invalid(
+                    sentence,
+                    "a relationship given is not a relationship",
+                    "relationships",
+                )
+            };
             return Err(match link.spelled() {
-                Some(_) => with_given(refused, link.spelled())
+                Some(_) => with_given(refused(Sentence::NotARelationshipGiven), link.spelled())
                     .with_field("reason", Detail::text("not_a_relationship")),
-                None => refused,
+                None => refused(Sentence::NotARelationship),
             });
         };
         checked(&description.tables, link, types)?;

@@ -23,7 +23,7 @@ use arrow_array::{ArrayRef, Float64Array, RecordBatch};
 use arrow_schema::{DataType, Field, Schema};
 use sdm_contract::catalog::CatalogKey;
 use sdm_contract::ops::ExactNumber;
-use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind};
+use sdm_contract::{CoreError, Detail, Sentence};
 
 use crate::ArrowData;
 
@@ -49,8 +49,7 @@ fn doubles(name: &str, array: &ArrayRef) -> Result<ArrayRef, CoreError> {
                 .map(|text| {
                     text.parse::<f64>().map_err(|_| {
                         CoreError::new(
-                            ErrorKind::DataSource,
-                            ErrorCode::ProviderSchemaMismatch,
+                            Sentence::ValueNotANumber,
                             format!("column {name:?} holds a value that is not a number"),
                         )
                         .with_field("column", Detail::text(name))
@@ -127,8 +126,7 @@ pub fn settle(preview: ArrowData, keys: &[CatalogKey]) -> Result<ArrowData, Core
 
 fn internal() -> CoreError {
     CoreError::new(
-        ErrorKind::Internal,
-        ErrorCode::InternalError,
+        Sentence::Internal,
         "a column of numbers read as doubles does not fit its batch",
     )
 }
@@ -154,6 +152,7 @@ pub fn conform(
 #[cfg(test)]
 mod tests {
     use arrow_array::{Array, StringArray};
+    use sdm_contract::ErrorCode;
     use sdm_contract::catalog::KeyKind;
 
     use super::*;

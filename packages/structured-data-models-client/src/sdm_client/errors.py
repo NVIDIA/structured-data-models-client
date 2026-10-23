@@ -76,6 +76,11 @@ class StructuredDataError(Exception):
     #: itself (T1.28b, register P1B-22). Read by nothing else; the error's
     #: class, code and message are as on any other answer that is not JSON.
     _response_too_deep: bool = False
+    #: The name of the core's sentence an error of the core route says
+    #: (T3.17), set by ``sdm_client._rust.errors``; ``None`` on an error
+    #: this client raises itself. Read by the census's tests, never branched
+    #: on: what a caller branches on is ``code`` and ``details``.
+    _sentence: str | None = None
 
     def __init__(
         self,

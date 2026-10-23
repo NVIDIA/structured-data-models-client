@@ -23,7 +23,7 @@ use sdm_contract::ops::{
     DescribedColumn, DescribedTable, Dtype, HeldColumn, HeldSchema, HeldTable, SourceDescription,
     SourceFacts,
 };
-use sdm_contract::{ColumnType, CoreError};
+use sdm_contract::{ColumnType, CoreError, Detail, Sentence};
 
 use crate::assemble::invalid;
 
@@ -198,13 +198,24 @@ pub fn read(
     let mut names = BTreeSet::new();
     for table in held.tables {
         if !names.insert(table.name.clone()) {
-            return Err(invalid("the schema holds a table twice", "schema"));
+            return Err(invalid(
+                Sentence::SchemaTableTwice,
+                "the schema holds a table twice",
+                "schema",
+            )
+            .with_field("table", Detail::text(&table.name)));
         }
         let mut seen = BTreeSet::new();
         let mut columns = Vec::with_capacity(table.columns.len());
         for column in &table.columns {
             if !seen.insert(column.name.clone()) {
-                return Err(invalid("a table holds a column twice", "schema"));
+                return Err(invalid(
+                    Sentence::SchemaColumnTwice,
+                    "a table holds a column twice",
+                    "schema",
+                )
+                .with_field("table", Detail::text(&table.name))
+                .with_field("column", Detail::text(&column.name)));
             }
             let at = (table.name.clone(), column.name.clone());
             let facts = match facts_held(&table, column) {

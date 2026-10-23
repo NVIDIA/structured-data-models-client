@@ -50,7 +50,7 @@ use arrow_array::{
     Array, ArrayRef, BooleanArray, Float64Array, Int64Array, RecordBatch, StringArray,
 };
 use arrow_schema::{DataType, Field, Schema};
-use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, Scalar};
+use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 use sdm_wire::json::{Value, is_integer_token};
 use sdm_wire::response::{PredictionResponse, Refused, integer_text, numeric_text};
 
@@ -111,18 +111,6 @@ const ENTITY_REF: &str = "__kumo_entity_ref";
 /// What the wire calls the column a row is answered under.
 const INSTANCE_ID: &str = "instance_id";
 
-/// The notice of a regression whose every context row has the same answer
-/// (the adapter's `_check_target_varies`), worded by the host.
-pub const CONTEXT_CONSTANT: &str = "CONTEXT_CONSTANT";
-
-/// The notice of an output the caller named that the answer left out
-/// (`_report_absent`), worded by the host.
-pub const OUTPUTS_ABSENT: &str = "OUTPUTS_ABSENT";
-
-/// The notice of a forecast whose steps were explained but not every one
-/// (`_warn_of_steps_that_carry_no_explanation`, T2.13), worded by the host.
-pub const STEPS_UNEXPLAINED: &str = "STEPS_UNEXPLAINED";
-
 /// The shapes a request may need of a model (`SHAPE_CAPABILITIES`), in the
 /// reference's order.
 const SHAPES: [&str; 6] = [
@@ -179,8 +167,7 @@ const KUMO_TABULAR: Spec = Spec {
 /// port yet, naming the rule, never a value (decision H17).
 pub fn not_yet(rule: &'static str) -> CoreError {
     CoreError::new(
-        ErrorKind::Unsupported,
-        ErrorCode::UnsupportedRequest,
+        Sentence::NotYetPredict,
         "predicting this request takes a rule this core does not hold yet",
     )
     .with_field("operation", Detail::text("predict"))
@@ -190,13 +177,15 @@ pub fn not_yet(rule: &'static str) -> CoreError {
 /// The model cannot answer the request, as the client refuses it before
 /// anything is sent (`UnsupportedRequestError`): the model named, never a
 /// value of the request.
-fn unsupported(model: &str, message: &str) -> CoreError {
-    CoreError::new(
-        ErrorKind::Unsupported,
-        ErrorCode::UnsupportedRequest,
-        message,
-    )
-    .with_field("model", Detail::text(model))
+fn unsupported(sentence: Sentence, model: &str, message: &str) -> CoreError {
+    CoreError::new(sentence, message).with_field("model", Detail::text(model))
+}
+
+/// `values` in order, as the reference's refusals list them (`sorted`).
+fn sorted<'a>(values: &[&'a str]) -> Vec<&'a str> {
+    let mut sorted = values.to_vec();
+    sorted.sort_unstable();
+    sorted
 }
 
 fn texts<'a>(values: impl IntoIterator<Item = &'a str>) -> Detail {
@@ -216,8 +205,7 @@ fn count(n: usize) -> Detail {
 /// why, never a value.
 fn bad_payload(reason: &'static str) -> CoreError {
     CoreError::new(
-        ErrorKind::InvalidRequest,
-        ErrorCode::InvalidRequest,
+        Sentence::StateUnread,
         "the request state's payload is not one materialize writes",
     )
     .with_field("field", Detail::text("state.payload"))
@@ -227,9 +215,13 @@ fn bad_payload(reason: &'static str) -> CoreError {
 /// The endpoint's answer, not one the contract describes or not the
 /// answer to this request: the field and why, never a value.
 pub fn bad_response(field: &'static str, reason: &'static str) -> CoreError {
+    let sentence = match (field, reason) {
+        ("prediction.explanation", "not_a_mapping") => Sentence::ExplanationNotAMapping,
+        ("prediction.metadata", "not_a_mapping") => Sentence::MetadataNotAMapping,
+        _ => Sentence::ResponseUnread,
+    };
     CoreError::new(
-        ErrorKind::ModelEndpoint,
-        ErrorCode::InvalidResponse,
+        sentence,
         "the model endpoint's answer is not one this request can read",
     )
     .with_field("field", Detail::text(field))
@@ -305,8 +297,7 @@ pub fn call_starts(payloads: &[Value]) -> Result<Vec<usize>, CoreError> {
         .any(Option::is_none)
     {
         return Err(CoreError::new(
-            ErrorKind::Internal,
-            ErrorCode::InternalError,
+            Sentence::Internal,
             "a call of a request sent in several calls has rows that cannot be counted",
         ));
     }
@@ -356,19 +347,14 @@ pub fn prepare(
     defaulted: bool,
 ) -> Result<Vec<String>, CoreError> {
     let Some(payload) = payloads.first() else {
-        return Err(CoreError::new(
-            ErrorKind::Internal,
-            ErrorCode::InternalError,
-            "a request of no call",
-        ));
+        return Err(CoreError::new(Sentence::Internal, "a request of no call"));
     };
     let spec = match model {
         RELATIONAL => &KUMO_RELATIONAL,
         TABULAR => &KUMO_TABULAR,
         _ => {
             return Err(CoreError::new(
-                ErrorKind::NotFound,
-                ErrorCode::UnknownModel,
+                Sentence::UnknownModel,
                 "the model named is not one the contract carries",
             )
             .with_field("field", Detail::text("model")));
@@ -385,8 +371,7 @@ pub fn prepare(
     };
     if outputs.is_empty() {
         return Err(CoreError::new(
-            ErrorKind::InvalidRequest,
-            ErrorCode::InvalidRequest,
+            Sentence::OutputsNone,
             "outputs must name at least one field",
         )
         .with_field("field", Detail::text("outputs")));
@@ -403,8 +388,21 @@ pub fn prepare(
         Some(Value::Object(related)) => related.len(),
         _ => 0,
     };
-    let anchored = instance_table(payload, "predict")
-        .is_some_and(|(names, _)| names.contains(&"__kumo_anchor_time"));
+    // Temporal as the reference's `required_capabilities` reads it: the
+    // task's options naming an anchor time column, or a forecast or a link
+    // prediction (T3.17, where the shapes a refusal names became visible).
+    let anchored = payload
+        .get("task")
+        .and_then(|task| task.get("options"))
+        .and_then(|options| options.get("anchor_time_column"))
+        .is_some_and(|column| match column {
+            Value::Null | Value::Bool(false) => false,
+            Value::Text(text) => !text.is_empty(),
+            Value::Number(token) => token.parse::<f64>().is_ok_and(|n| n != 0.0),
+            Value::Array(items) => !items.is_empty(),
+            Value::Object(members) => !members.is_empty(),
+            Value::Bool(true) => true,
+        });
     let temporal = anchored || matches!(kind, "forecasting" | "temporal_link_prediction");
     let needed = |shape: &str| match shape {
         "relationships" => linked,
@@ -421,17 +419,21 @@ pub fn prepare(
         .collect();
     lacking.sort_unstable();
     if !lacking.is_empty() {
-        return Err(
-            unsupported(spec.id, "the model cannot answer a request of this shape")
-                .with_field("unsupported", texts(lacking)),
-        );
+        return Err(unsupported(
+            Sentence::ModelLacksShape,
+            spec.id,
+            "the model cannot answer a request of this shape",
+        )
+        .with_field("unsupported", texts(lacking)));
     }
     if !spec.tasks.contains(&kind) {
-        return Err(
-            unsupported(spec.id, "the model does not serve the task's kind")
-                .with_field("task", Detail::text(kind))
-                .with_field("supported", texts(spec.tasks.iter().copied())),
-        );
+        return Err(unsupported(
+            Sentence::ModelLacksTask,
+            spec.id,
+            "the model does not serve the task's kind",
+        )
+        .with_field("task", Detail::text(kind))
+        .with_field("supported", texts(sorted(spec.tasks))));
     }
     let mut unknown: Vec<&str> = outputs
         .iter()
@@ -441,11 +443,13 @@ pub fn prepare(
     if !unknown.is_empty() {
         unknown.sort_unstable();
         unknown.dedup();
-        return Err(
-            unsupported(spec.id, "the model does not produce an output asked for")
-                .with_field("unsupported_outputs", texts(unknown))
-                .with_field("supported_outputs", texts(spec.outputs.iter().copied())),
-        );
+        return Err(unsupported(
+            Sentence::ModelLacksOutputs,
+            spec.id,
+            "the model does not produce an output asked for",
+        )
+        .with_field("unsupported_outputs", texts(unknown))
+        .with_field("supported_outputs", texts(sorted(spec.outputs))));
     }
     let rows = payloads
         .iter()
@@ -454,6 +458,7 @@ pub fn prepare(
         .unwrap_or(0);
     if spec.id == RELATIONAL && rows > CONTEXT_ROWS_MAX {
         return Err(unsupported(
+            Sentence::ContextPastModel,
             spec.id,
             "the request's context is larger than the model reads",
         )
@@ -487,10 +492,14 @@ pub fn nothing_to_score(payload: &Value) -> bool {
     instance_table(payload, "predict").is_some_and(|(_, rows)| rows.is_empty())
 }
 
-/// A notice the run gives: its code and fields, worded by the host.
+/// A notice the run gives: its sentence and fields, worded by the host: a
+/// regression whose every context row has the same answer (the adapter's
+/// `_check_target_varies`), an output the caller named that the answer
+/// left out (`_report_absent`), a forecast whose steps were explained but
+/// not every one (`_warn_of_steps_that_carry_no_explanation`, T2.13).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Notice {
-    pub code: &'static str,
+    pub sentence: Sentence,
     pub message: &'static str,
     pub fields: Vec<(&'static str, Detail)>,
 }
@@ -551,7 +560,8 @@ pub fn preflight(
             && rows.is_empty()
         {
             return Err(
-                unsupported(model, "no context rows are left").with_field("context_rows", count(0))
+                unsupported(Sentence::NoContextRows, model, "no context rows are left")
+                    .with_field("context_rows", count(0)),
             );
         }
     }
@@ -568,11 +578,13 @@ pub fn preflight(
         if let Some(values) = target_values(payload, column) {
             let labels: BTreeSet<String> = values.iter().map(|v| member(v)).collect();
             if labels.len() > CLASSES_MAX {
-                return Err(
-                    unsupported(model, "the target has more classes than the model takes")
-                        .with_field("classes", count(labels.len()))
-                        .with_field("limit", count(CLASSES_MAX)),
-                );
+                return Err(unsupported(
+                    Sentence::TooManyClasses,
+                    model,
+                    "the target has more classes than the model takes",
+                )
+                .with_field("classes", count(labels.len()))
+                .with_field("limit", count(CLASSES_MAX)));
             }
         }
     }
@@ -602,7 +614,13 @@ pub fn preflight(
         if classifies(kind) {
             // Named as the notice names the target, for the host's words
             // (the adapter's `_how_to_name_the_target`).
-            let mut error = unsupported(model, "every context row has the same answer")
+            let sentence = match constant.sentence {
+                Sentence::ContextConstantColumn => Sentence::OneClassColumn,
+                Sentence::ContextConstantPredicted => Sentence::OneClassPredicted,
+                Sentence::ContextConstantQuestion => Sentence::OneClassQuestion,
+                _ => Sentence::OneClassAnswer,
+            };
+            let mut error = unsupported(sentence, model, "every context row has the same answer")
                 .with_field("field", Detail::text("context"))
                 .with_field("reason", Detail::text("one_class"));
             for (name, value) in constant.fields {
@@ -619,18 +637,24 @@ pub fn preflight(
     let scored: usize = payloads.iter().map(|p| rows_of(p, "predict")).sum();
     if scored != EXPLANATION_PREDICT_ROWS {
         // The output and what to change, for the host's words (T2.13).
-        return Err(unsupported(model, "an explanation covers one entity")
-            .with_field("field", Detail::text("outputs"))
-            .with_field("remedy", Detail::text("one_entity"))
-            .with_field("scored", count(scored)));
+        return Err(unsupported(
+            Sentence::ExplanationOneEntity,
+            model,
+            "an explanation covers one entity",
+        )
+        .with_field("field", Detail::text("outputs"))
+        .with_field("remedy", Detail::text("one_entity"))
+        .with_field("scored", count(scored)));
     }
     if asks_for_the_larger_context(payloads) {
-        return Err(
-            unsupported(model, "an explanation is given only in the fast run mode")
-                .with_field("field", Detail::text("outputs"))
-                .with_field("remedy", Detail::text("smaller_context"))
-                .with_field("context_rows_fast", count(CONTEXT_ROWS_FAST)),
-        );
+        return Err(unsupported(
+            Sentence::ExplanationFastMode,
+            model,
+            "an explanation is given only in the fast run mode",
+        )
+        .with_field("field", Detail::text("outputs"))
+        .with_field("remedy", Detail::text("smaller_context"))
+        .with_field("context_rows_fast", count(CONTEXT_ROWS_FAST)));
     }
     Ok(notices)
 }
@@ -666,20 +690,20 @@ fn asks_for_the_larger_context(payloads: &[Value]) -> bool {
 /// question itself (`question`).
 fn constant_context(column: &str, query: &str) -> Notice {
     let mut fields = vec![("target", Detail::text(column))];
-    let variant = if column != WIRE_TARGET {
-        "column"
+    let (variant, sentence) = if column != WIRE_TARGET {
+        ("column", Sentence::ContextConstantColumn)
     } else if let Some(predicted) = predicted_column(query) {
         fields.push(("predicted", Detail::text(predicted)));
-        "predicted"
+        ("predicted", Sentence::ContextConstantPredicted)
     } else if query.is_empty() {
-        "answer"
+        ("answer", Sentence::ContextConstantAnswer)
     } else {
         fields.push(("question", Detail::text(query)));
-        "question"
+        ("question", Sentence::ContextConstantQuestion)
     };
     fields.push(("variant", Detail::text(variant)));
     Notice {
-        code: CONTEXT_CONSTANT,
+        sentence,
         message: "every context row has the same answer",
         fields,
     }
@@ -816,8 +840,11 @@ pub fn body(
                         "drop"
                     };
                     return Err(CoreError::new(
-                        ErrorKind::Unsupported,
-                        ErrorCode::UnsupportedRequest,
+                        if remedy == "drop" {
+                            Sentence::OptionsUnread
+                        } else {
+                            Sentence::OptionsUnreadStatistic
+                        },
                         "the model does not read an inference option the call set",
                     )
                     .with_field("field", Detail::text("inference_config"))
@@ -868,8 +895,7 @@ pub fn call_bytes(call: &Value) -> Result<Vec<u8>, CoreError> {
     let bytes = call.to_bytes();
     if bytes.len() > crate::payload::PAYLOAD_BYTES {
         return Err(CoreError::new(
-            ErrorKind::InvalidRequest,
-            ErrorCode::InvalidRequest,
+            Sentence::CallPastEndpoint,
             "the call is larger than the endpoint takes",
         )
         .with_field("field", Detail::text("call"))
@@ -1358,8 +1384,7 @@ fn as_written(response: &PredictionResponse) -> Result<Vec<(i64, Entity, Option<
 /// parts) and `batch_request_ids` (each part's id), parts of different
 /// models refused (`INTERNAL_ERROR`).
 pub fn merge(parts: Vec<Part>) -> Result<Part, CoreError> {
-    let internal =
-        |message: &str| CoreError::new(ErrorKind::Internal, ErrorCode::InternalError, message);
+    let internal = |message: &str| CoreError::new(Sentence::Internal, message);
     let mut parts = parts.into_iter();
     let Some(first) = parts.next() else {
         return Err(internal("no parts to merge"));
@@ -1411,8 +1436,7 @@ pub fn by_step(steps: Vec<(u32, Part)>) -> Result<Part, CoreError> {
     let mut steps = steps.into_iter();
     let Some((step, first)) = steps.next() else {
         return Err(CoreError::new(
-            ErrorKind::Internal,
-            ErrorCode::InternalError,
+            Sentence::Internal,
             "a forecast with no step to put together",
         ));
     };
@@ -1498,7 +1522,7 @@ pub fn absent(part: &Part, named: &[String]) -> Vec<String> {
 /// The notice of the outputs [`absent`] found, naming the model asked.
 pub fn absent_notice(model: &str, absent: &[String]) -> Notice {
     Notice {
-        code: OUTPUTS_ABSENT,
+        sentence: Sentence::OutputsAbsent,
         message: "the answer left out outputs the request asked for",
         fields: vec![
             ("model", Detail::text(model)),
@@ -1526,7 +1550,7 @@ pub fn steps_unexplained(model: &str, named: &[String], steps: &[(u32, &Part)]) 
         return None;
     }
     Some(Notice {
-        code: STEPS_UNEXPLAINED,
+        sentence: Sentence::StepsUnexplained,
         message: "a forecast's steps were explained, but not every one",
         fields: vec![
             ("model", Detail::text(model)),
@@ -1996,11 +2020,7 @@ fn regression_integers(rows: &[&Row]) -> bool {
 }
 
 fn internal_layout() -> CoreError {
-    CoreError::new(
-        ErrorKind::Internal,
-        ErrorCode::InternalError,
-        "the result does not lay out",
-    )
+    CoreError::new(Sentence::Internal, "the result does not lay out")
 }
 
 /// The dtype of the column the entity reference stands for: the column
@@ -2118,6 +2138,7 @@ fn instance_text(value: &Value, float_text: fn(f64) -> String) -> Option<String>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sdm_contract::ErrorCode;
 
     #[test]
     fn the_predicted_column_is_read_as_the_adapter_reads_it() {
