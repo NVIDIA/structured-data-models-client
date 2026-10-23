@@ -114,12 +114,16 @@ pub(crate) async fn run(
 ) -> Result<OperationResult, CoreError> {
     // Edits read no data: a column the source was never asked of is edited
     // by its data type, as the reference's setters edit any column.
+    // Where the schema read each relation, a fact of the schema no edit
+    // changes (`HeldSchema::read_under`), answered as it was handed.
+    let read_under = held.read_under.clone();
     let read = sdm_schema::held::read(held, &BTreeMap::new(), true)?;
     let edited = sdm_schema::edit::edit(read.description, &edit, &supports, &read.types)?;
     for warning in edited.warnings {
         asker.warn(warning);
     }
-    let answer = sdm_schema::held::held(&edited.description, &read.unfacted, &read.retyped);
+    let mut answer = sdm_schema::held::held(&edited.description, &read.unfacted, &read.retyped);
+    answer.read_under = read_under;
     let bytes = serde_json::to_vec(&answer)
         .map_err(|_| internal("the schema edited does not write as JSON"))?;
     let schema = asker.attach(Attachment::Bytes(bytes))?;

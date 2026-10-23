@@ -419,7 +419,11 @@ pub fn messages() -> Vec<ControlMessage> {
             }),
         }),
         ControlMessage::Step(Step::Done {
-            result: OperationResult::Materialize(Materialized { state, query: None }),
+            result: OperationResult::Materialize(Materialized {
+                state,
+                query: None,
+                read_under: Vec::new(),
+            }),
         }),
         ControlMessage::Step(Step::Done {
             result: OperationResult::Predict(Predicted {

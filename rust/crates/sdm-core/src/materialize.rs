@@ -2592,6 +2592,7 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
                         ranking: None,
                     },
                     query: facts,
+                    read_under: Vec::new(),
                 }))
             }
         };
@@ -2698,6 +2699,7 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
             ranking: None,
         },
         query: facts,
+        read_under: Vec::new(),
     }))
 }
 
