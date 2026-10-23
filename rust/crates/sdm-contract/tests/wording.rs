@@ -397,3 +397,30 @@ fn the_sentences_the_hosts_choose_between_today_are_the_core_s() {
     assert_eq!(table["advice"].as_array().unwrap().len(), Advice::ALL.len());
     assert_eq!(table["groups"].as_array().unwrap().len(), Group::ALL.len());
 }
+
+#[test]
+fn the_part_a_refusal_happened_in_is_a_sentence_of_the_core_s() {
+    // A forecast's step, with the remedy where the step's window outran
+    // the data, and a ranking's candidate: sentences said after an error's
+    // own, of any code (T3.17 review r2).
+    let parts: BTreeSet<&str> = Sentence::ALL
+        .iter()
+        .filter(|s| s.code() == Code::Part)
+        .map(|s| s.as_str())
+        .collect();
+    assert_eq!(
+        parts,
+        BTreeSet::from([
+            "part_forecast_step",
+            "part_forecast_step_outran",
+            "part_ranking_candidate",
+        ])
+    );
+    let error = CoreError::new(Sentence::AnchorBeforeData, "m")
+        .in_part(Sentence::PartForecastStep);
+    assert_eq!(error.part, Some(Sentence::PartForecastStep));
+    assert!(error.holds_to_table());
+    let mut crossed = error.clone();
+    crossed.part = Some(Sentence::Internal);
+    assert!(!crossed.holds_to_table());
+}

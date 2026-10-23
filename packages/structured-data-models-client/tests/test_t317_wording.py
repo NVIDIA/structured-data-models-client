@@ -21,9 +21,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
-import os
 import string
-import subprocess
 import sys
 import tempfile
 import warnings
@@ -87,11 +85,14 @@ def test_the_binding_exports_the_core_s_table() -> None:
     assert len(sentences) == len(table['sentences']) >= 150
     for name, entry in sentences.items():
         assert entry['template'], name
-        assert entry['kind'] in ('error', 'warning'), name
+        assert entry['kind'] in ('error', 'warning', 'part'), name
         if entry['kind'] == 'error':
             assert entry['code'] in _native.ERROR_CODES, name
-        else:
+        elif entry['kind'] == 'warning':
             assert entry['code'] == entry['code'].upper(), name
+        else:
+            # A part's sentence follows an error's of any code.
+            assert entry['code'] is None, name
         assert entry['owner'] in (
             'shared',
             'host_dates',
@@ -482,15 +483,19 @@ def test_no_refusal_on_the_census_s_core_route_says_a_generic_sentence(
         assert error._sentence in _sentences(), error.code
 
 
-#: The reference checkout and its interpreter, as the recorders name them.
-REFERENCE = Path.home() / 'code/sdmc-reference'
+#: The old client's words for each census probe on DuckDB, recorded once
+#: from the reference checkout by ``contract/tools/census_words_record.py``
+#: (one line a probe: its site, outcome and message), so the comparison
+#: runs wherever the suite does (T3.17 review r2, P1).
+WORDS = ROOT / 'contract/reference/census-words/duckdb.jsonl'
 #: Each census probe whose refusal, in a sentence of the core's, the core
 #: route says in other words than the reference's, with the register entry
 #: that records why: each one where the reference refuses otherwise, by
 #: another code or class or by failing, so its words cannot be the core's.
 #: Every other probe both routes refuse says the reference's words.
 DIFFERS: dict[str, str] = {
-    'rule:column_type': 'P1B-10: refused by name where the reference fails',
+    'rule:column_type': 'P1B-2: a rule the core does not hold yet, where '
+    'the reference refuses in its own words',
     'rule:text_time_zones': 'DT-11: mixed offsets refused by name',
     'rule:seed_size': 'RS-7: a seed past the range refused by name where the '
     'reference fails INTERNAL_ERROR',
@@ -508,7 +513,7 @@ DIFFERS: dict[str, str] = {
     'unsupported_type#1': 'HOST-2: an interval refused by name where the '
     'reference fails unnamed',
     'rust/crates/sdm-host/src/admission.rs::admitted_field::admission::'
-    'unsupported#1': 'P1B-47: a list of intervals refused by name where the '
+    'unsupported#1': 'P1B-51: a list of intervals refused by name where the '
     'reference fails unnamed',
     'rust/crates/sdm-host/src/admission.rs::convert_type::admission::'
     'unsupported#2': 'P1B-47: a struct holding an interval refused by name '
@@ -516,11 +521,8 @@ DIFFERS: dict[str, str] = {
 }
 
 
-def _routed(
-    census: Any, probes: list[dict[str, Any]], python: str | None
-) -> list[dict[str, Any]]:
-    r"""Each probe's outcome with its words, on the core route in this
-    interpreter (``python`` None) or on the reference's interpreter."""
+def _routed(census: Any, probes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    r"""Each probe's outcome with its words, on the core route."""
     routes = census._routes()
     with tempfile.TemporaryDirectory(prefix='sdm-t317-') as scratch:
         cases = Path(scratch)
@@ -535,36 +537,7 @@ def _routed(
                 )
             )
         out = cases / 'out.json'
-        if python is None:
-            census.route(cases, out, 'duckdb', core=True)
-        else:
-            subprocess.run(
-                [
-                    python,
-                    '-I',
-                    str(ROOT / 'contract/tools/refusal_census.py'),
-                    'route',
-                    '--reference',
-                    str(REFERENCE),
-                    '--database',
-                    'duckdb',
-                    '--cases',
-                    str(cases),
-                    '--out',
-                    str(out),
-                ],
-                stdin=subprocess.DEVNULL,
-                capture_output=True,
-                text=True,
-                timeout=1200,
-                env={
-                    **{
-                        k: v for k, v in os.environ.items() if k != 'PYTHONPATH'
-                    },
-                    census.MESSAGES: '1',
-                },
-                check=True,
-            )
+        census.route(cases, out, 'duckdb', core=True)
         found: list[dict[str, Any]] = json.loads(out.read_text())
         return found
 
@@ -572,13 +545,11 @@ def _routed(
 def test_the_census_s_refusals_say_the_old_client_s_words_or_a_registered_difference(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # Every census probe on DuckDB, on the core route and on the old client:
+    # Every census probe on DuckDB, on the core route and as the old client
+    # answered it (the recording):
     # where both refuse, the core route says the old client's words, unless
     # the probe's difference is registered; and no refusal says the defect
     # a sentence with fields missing would (T3.17 review r1, P2-1).
-    python = REFERENCE / '.venv/bin/python'
-    # The reference's interpreter is the comparison's other side.
-    assert python.is_file(), f'no reference interpreter at {python}'
     census = _census()
     monkeypatch.setenv(census.MESSAGES, '1')
     probes = [
@@ -586,8 +557,16 @@ def test_the_census_s_refusals_say_the_old_client_s_words_or_a_registered_differ
         for probe in census.probes(ROOT)
         if 'duckdb' in probe.get('databases', census.DATABASES)
     ]
-    core = _routed(census, probes, None)
-    old = _routed(census, probes, str(python))
+    core = _routed(census, probes)
+    recorded = {
+        line['site']: line
+        for line in map(
+            json.loads, WORDS.read_text(encoding='utf-8').splitlines()
+        )
+    }
+    # The recording holds every probe, and only the probes.
+    assert set(recorded) == {probe['site'] for probe in probes}
+    old = [recorded[probe['site']] for probe in probes]
     defect = errors.DEFECT.split('{sentence!r}')[1]
     differs = {}
 
@@ -798,4 +777,120 @@ def test_a_ranking_s_candidates_are_refused_in_the_old_client_s_words(
         "'PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id' does "
         'not rank anything. Ask it without candidates, or rank with "RANK TOP '
         'k", which is the question they are for',
+    ]
+
+
+# --- T3.17 fix 2: the part a refusal happened in is the core's sentence ---
+
+
+def test_a_part_s_context_is_a_sentence_of_the_core_s() -> None:
+    # The part of a question asked in parts a refusal happened in is said by
+    # a sentence the core picks, after the refusal's own: a forecast's step,
+    # with the remedy where the step's window outran the data, and a
+    # ranking's candidate (review r2, P1).
+    parts = {
+        name: entry
+        for name, entry in _sentences().items()
+        if entry['kind'] == 'part'
+    }
+    assert set(parts) == {
+        'part_forecast_step',
+        'part_forecast_step_outran',
+        'part_ranking_candidate',
+    }
+    error = {
+        'kind': 'invalid_request',
+        'code': 'INVALID_REQUEST',
+        'sentence': 'anchor_entity_not_static',
+        'part': 'part_forecast_step_outran',
+        'message': 'm',
+        'fields': {
+            'forecast_step': {'t': 'u32', 'v': '10'},
+            'forecast_steps': {'t': 'u32', 'v': '40'},
+        },
+    }
+    made = errors.error_from_core(
+        json.dumps({'message': 'error', 'error': error}).encode(), {}
+    )
+    assert str(made) == (
+        "[INVALID_REQUEST] Anchor time 'entity' is only valid for static "
+        'predictive queries. This is forecast step 10 of 40. The window '
+        "named above is that step's rather than the one written; ask for "
+        'fewer than 10 steps if the data does not reach that far.'
+    )
+
+
+def _buys() -> Schema:
+    connection = duckdb.connect()
+    connection.execute(
+        'CREATE TABLE users AS SELECT i::BIGINT AS uid FROM range(20) t(i)'
+    )
+    connection.execute(
+        'CREATE TABLE buys AS SELECT i::BIGINT AS bid, (i % 20)::BIGINT AS '
+        "uid, TIMESTAMP '2025-06-01' + i * INTERVAL 1 DAY AS stamp "
+        'FROM range(300) t(i)'
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        return Schema.from_source(
+            DuckDBSource(connection),
+            primary_keys={'users': 'uid', 'buys': 'bid'},
+            time_columns={'buys': 'stamp'},
+        )
+
+
+def test_a_forecast_s_and_a_ranking_s_refusal_name_their_part_as_the_old_client(
+    core: None,
+) -> None:
+    # Through the public calls, word for word as the old client says them,
+    # each refusal and its part the core's sentences.
+    import pandas as pd
+
+    sys.path.insert(0, str(ROOT / 'contract/tools'))
+    import ranking_record
+
+    said = []
+    schema = _buys()
+    for text, more in (
+        (
+            'PREDICT COUNT(buys.*, 0, 30, days) FORECAST 40 TIMEFRAMES FOR '
+            'EACH users.uid',
+            {},
+        ),
+        (
+            'PREDICT COUNT(buys.*, 0, 30, days) FORECAST 3 TIMEFRAMES FOR '
+            'EACH users.uid',
+            {'anchor_time': pd.Timestamp('1900-01-01')},
+        ),
+    ):
+        with pytest.raises(StructuredDataError) as raised:
+            PredictiveQuery(text, schema).materialize(indices=[1, 2], **more)
+        assert raised.value._sentence is not None
+        said.append(str(raised.value))
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        with ranking_record.source({}) as source:
+            ranked = Schema.from_source(source)
+            with pytest.raises(StructuredDataError) as raised:
+                PredictiveQuery(ranking_record.RANK, ranked).materialize(
+                    indices=[1],
+                    candidates=[1, 2],
+                    anchor_time=pd.Timestamp('1900-01-01'),
+                )
+            said.append(str(raised.value))
+    assert said == [
+        '[INVALID_REQUEST] Context anchor timestamp is too early or '
+        'aggregation time range is too large. To make this prediction, we '
+        "would need data back to '2025-05-31 00:00:00', however, your data "
+        "only contains data back to '2025-06-01 00:00:00'. This is forecast "
+        "step 10 of 40. The window named above is that step's rather than "
+        'the one written; ask for fewer than 10 steps if the data does not '
+        'reach that far.',
+        "[INVALID_REQUEST] Anchor timestamp '1900-01-01 00:00:00' is before "
+        "the earliest timestamp '2025-06-01 00:00:00' in the data. This is "
+        'forecast step 1 of 3.',
+        "[INVALID_REQUEST] Anchor timestamp '1900-01-01 00:00:00' is before "
+        "the earliest timestamp '2023-01-01 00:00:00' in the data. This is "
+        'the question asked for candidate 1, one of 2 this ranking is asked '
+        'as.',
     ]
