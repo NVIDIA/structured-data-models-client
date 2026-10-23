@@ -955,3 +955,74 @@ REFUSED_R6 = {
 def test_round_6_column_functions_are_refused(dialect: str, sql: str) -> None:
     with pytest.raises(wg.WriteRefused):
         GUARDS[dialect].check(sql)
+
+
+# Round 7: a table takes nothing from another object, and its columns only
+# built-in types (or Postgres' composite types in the test schema).
+
+REFUSED_R7 = {
+    'postgres': [
+        # Claude r7 P0: LIKE copies another table's defaults and checks.
+        'CREATE TABLE live_tests.t (LIKE prod.orders INCLUDING ALL)',
+        'CREATE TABLE live_tests.t (LIKE prod.orders INCLUDING DEFAULTS)',
+        'CREATE TABLE live_tests.t (a int, LIKE prod.orders INCLUDING CONSTRAINTS)',
+        'CREATE TABLE live_tests.t (a int) INHERITS (prod.orders)',
+        'CREATE TABLE live_tests.t PARTITION OF prod.orders FOR VALUES IN (1)',
+        'CREATE TABLE live_tests.t OF prod.row_type',
+        # A domain or user type from another schema can carry a CHECK.
+        'CREATE TABLE live_tests.t (a prod.positive_int)',
+        'CREATE TABLE live_tests.t ("a" "prod"."positive_int")',
+        'CREATE TABLE live_tests.t (a positive_int)',
+        'CREATE TABLE live_tests.t (a public.positive_int[])',
+        'CREATE TYPE live_tests.t AS (a prod.positive_int)',
+    ],
+    'databricks': [
+        'CREATE TABLE `review-catalog`.live_tests.t (a prod_type)',
+        'CREATE TABLE `review-catalog`.live_tests.t (a `prod`.`s`.`t`)',
+        'CREATE TABLE `review-catalog`.live_tests.t (LIKE `other`.s.t)',
+    ],
+    'snowflake': [
+        'CREATE TABLE REVIEW_DB.LIVE_TESTS.T (A OTHER.S.DOM)',
+        'CREATE TABLE REVIEW_DB.LIVE_TESTS.T (A MYTYPE)',
+        'CREATE TABLE REVIEW_DB.LIVE_TESTS.T LIKE OTHER.S.T',
+    ],
+}
+
+ALLOWED_R7 = {
+    'postgres': [
+        'CREATE TABLE "live_tests"."t" ("a" "live_tests"."t_a", "b" bigint[], '
+        '"c" double precision NOT NULL, "d" timestamp with time zone, '
+        '"e" numeric(20, 0), "f" jsonb)',
+    ],
+    'databricks': [
+        'CREATE TABLE `review-catalog`.`live_tests`.`t` (`a` STRUCT<`x`: INT, '
+        '`y`: ARRAY<STRING>>, `b` MAP<STRING, BIGINT>, `c` DECIMAL(20,0) NOT NULL)',
+    ],
+}
+
+
+@pytest.mark.parametrize(
+    ('dialect', 'sql'),
+    [(d, sql) for d, texts in REFUSED_R7.items() for sql in texts],
+)
+def test_round_7_tables_take_nothing_from_elsewhere(
+    dialect: str, sql: str
+) -> None:
+    with pytest.raises(wg.WriteRefused):
+        GUARDS[dialect].check(sql)
+
+
+@pytest.mark.parametrize(
+    ('dialect', 'sql'),
+    [(d, sql) for d, texts in ALLOWED_R7.items() for sql in texts],
+)
+def test_the_loaders_column_types_pass(dialect: str, sql: str) -> None:
+    GUARDS[dialect].check(sql)
+
+
+def test_cmd_query_by_keyword_is_refused_by_the_rule(installed: Any) -> None:
+    # Claude r7 P3-2: the statement given by keyword is read and judged.
+    connection = installed['SnowflakeConnection']()
+    with pytest.raises(wg.WriteRefused, match='outside the test schema'):
+        connection.cmd_query(sql=OUTSIDE, sequence_counter=1, request_id=None)
+    assert installed['seen'] == []
