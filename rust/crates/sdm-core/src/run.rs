@@ -154,6 +154,9 @@ struct Shared {
     /// Each table's columns as the source's catalog read them, by the
     /// relation the run names the table by ([`Asker::guard`]).
     guarded: BTreeMap<Relation, Vec<String>>,
+    /// The namespace the run settled its provider's under
+    /// ([`Asker::with_access`]).
+    settled: Option<Vec<String>>,
 }
 
 fn lock(shared: &Mutex<Shared>) -> MutexGuard<'_, Shared> {
@@ -208,6 +211,7 @@ impl Asker {
         }
         for relation in request.relations_mut() {
             if let Some(columns) = shared.guarded.get(relation) {
+                relation.found = true;
                 relation.columns = columns
                     .iter()
                     .map(|name| RelationColumn {
@@ -221,10 +225,18 @@ impl Asker {
         request
     }
 
-    /// The asker with `data` its run's data access from here on.
-    pub(crate) fn with_access(mut self, data: DataAccess) -> Asker {
+    /// The asker with `data` its run's data access from here on, its
+    /// provider's namespace settled as `parts` ([`Asker::settled_namespace`]).
+    pub(crate) fn with_access(mut self, data: DataAccess, parts: Vec<String>) -> Asker {
         self.data = Some(data);
+        lock(&self.shared).settled = Some(parts);
         self
+    }
+
+    /// The namespace the run settled its provider's under, where it read
+    /// parts the provider left to the connection.
+    pub(crate) fn settled_namespace(&self) -> Option<Vec<String>> {
+        lock(&self.shared).settled.clone()
     }
 
     /// The answer to one data request, planned by the run's data layer for

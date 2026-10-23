@@ -86,7 +86,7 @@ pub fn start(
             let check_keys = request.check_keys;
             let zones = Arc::clone(&zones);
             Run::with_data(access, move |asker| async move {
-                let asker = crate::describe::settled(asker).await?;
+                let asker = crate::describe::settled(asker, None).await?;
                 crate::describe::run(asker, source, check_keys, facts, zones).await
             })
         }
@@ -392,7 +392,16 @@ pub(crate) fn materialize(
                 labels_only,
             };
             Ok(Run::with_data(access, move |asker| async move {
-                let asker = crate::describe::settled(asker).await?;
+                // The namespace the schema's columns were read under, where a
+                // run read parts the provider left to the connection: the
+                // same tables read again, whatever the session's current
+                // parts are now (`SourceFacts::namespace`).
+                let known = held
+                    .tables
+                    .iter()
+                    .flat_map(|table| &table.columns)
+                    .find_map(|column| column.source.as_ref()?.namespace.clone());
+                let asker = crate::describe::settled(asker, known).await?;
                 // Each column's facts, the host's or, for a column with none,
                 // the source's, read before anything else of the run.
                 let found = crate::discover::facts(&asker, &held).await?;
