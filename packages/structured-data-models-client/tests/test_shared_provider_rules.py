@@ -48,7 +48,8 @@ def test_a_key_set_not_handed_over_is_refused_by_name() -> None:
     param = {'param': 'key_set', 'keys': {'attachment': 3}, 'relation': 'k'}
     with pytest.raises(shared.PlanNotRun, match='not handed over'):
         shared.key_set(param, {})
-    assert shared.key_set(param, {3: object()}) == 3
+    handed = object()
+    assert shared.key_set(param, {3: handed}) == (3, handed)
     with pytest.raises(shared.PlanNotRun, match='scalar'):
         shared.key_set({'param': 'value', 'value': {}}, {})
 

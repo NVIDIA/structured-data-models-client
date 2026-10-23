@@ -147,8 +147,8 @@ class PostgresProvider:
             if not params:
                 bound.append(None)
                 continue
-            attachment = providers.key_set(params[0], keys)
-            bound.append(_bound_text(arrow_table(keys[attachment])))
+            _, stream = providers.key_set(params[0], keys)
+            bound.append(_bound_text(arrow_table(stream)))
         connection = self._connection
         with _own_transaction(connection), connection.cursor() as cursor:
             for statement, text in zip(statements, bound, strict=True):
