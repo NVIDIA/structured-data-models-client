@@ -2715,6 +2715,13 @@ def _arrow_types(
     # DuckDB's names too (which the type check compares), its schema is
     # held to the row read's names as the Arrow types DuckDB reads them as.
     arrow, rows = (a, b) if sa is not None else (b, a)
+    if database in _runner().WAREHOUSES:
+        # A warehouse driver's row read carries its own type names
+        # (Databricks' description, none on a Spark Row), with no Arrow
+        # names to hold an Arrow read's schema to: the two reads of one
+        # result are held to their columns, rows and values, and their
+        # types only where both read Arrow (Codex r2 P1-2).
+        return
     schema, types = arrow['schema'], rows['values']['types']
     if types is None:
         report.fail(f'{at}: neither read records its types', 'sql.result')
