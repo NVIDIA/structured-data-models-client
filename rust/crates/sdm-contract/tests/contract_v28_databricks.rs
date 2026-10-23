@@ -170,29 +170,30 @@ fn a_found_relation_is_its_catalog_s_columns_or_refused() {
     }
 }
 
-/// A failed run carries where it read the tables the schema had not read
-/// (`CoreError::read_under`), as a successful one answers them, so a host
-/// keeps them as the reference keeps the tables a failed run read (round
-/// 6's P0); absent from the JSON when none.
+/// A fetch step's request names where the run reads the tables it reads
+/// anew, once that request is answered (`FetchStep::read_under`): the
+/// readings a host keeps at the moment the reference keeps them, a failed
+/// or interrupted read keeping none (round 7's P0); absent from the JSON
+/// when none.
 #[test]
-fn a_failed_run_carries_where_it_read_each_table() {
-    use sdm_contract::CoreError;
-    let failed: CoreError = serde_json::from_value(serde_json::json!({
-        "kind": "data_source", "code": "PROVIDER_ERROR", "message": "the data source failed",
+fn a_request_carries_where_the_run_read_its_tables_once_answered() {
+    use sdm_contract::run::FetchStep;
+    let step: FetchStep = serde_json::from_value(serde_json::json!({
+        "id": 1,
+        "request": {"request": "count_rows", "table": {"source": ["users"]}, "filters": []},
+        "plan": {"plan": "host", "expect": {"expect": "discover"}},
         "read_under": [{"relation": {"source": ["orders"]}, "namespace": ["main", "shop"]}]
     }))
     .unwrap();
-    let read = failed.read_under.as_deref().expect("the readings carried");
-    assert_eq!(read.len(), 1);
+    assert_eq!(step.read_under.len(), 1);
     assert_eq!(
-        read[0].namespace,
+        step.read_under[0].namespace,
         vec!["main".to_owned(), "shop".to_owned()]
     );
-    let plain = CoreError::new(
-        sdm_contract::ErrorKind::Internal,
-        sdm_contract::ErrorCode::InternalError,
-        "x",
-    );
+    let plain = FetchStep {
+        read_under: Vec::new(),
+        ..step
+    };
     assert!(
         !serde_json::to_string(&plain)
             .unwrap()

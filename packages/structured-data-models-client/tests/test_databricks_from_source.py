@@ -956,3 +956,137 @@ def test_a_snapshot_shares_the_tables_its_original_reads_later(
     connection.schema = 'other'
     add_users(later)
     assert _where_read(later, connection) == {('main', 'shop')}
+
+
+class _ArmedWarehouse(_CompletingWarehouse):
+    r"""The completing warehouse, with one failure armed: the first statement
+    naming ``fail_on`` raises ``failure`` (a transient error, or an
+    interrupt); and a table read under schema ``missing`` fails as a table
+    the warehouse does not hold."""
+
+    fail_on: str | None = None
+    failure: type[BaseException] = RuntimeError
+
+    def answer(self, operation: str, parameters: list[Any]) -> pa.Table:
+        if '`main`.`missing`.' in operation:
+            raise RuntimeError('[TABLE_OR_VIEW_NOT_FOUND] SQLSTATE: 42P01')
+        if self.fail_on is not None and self.fail_on in operation:
+            self.fail_on = None
+            raise self.failure('an armed failure')
+        return super().answer(operation, parameters)
+
+
+_ArmedConnection = type(
+    'Connection', (_ArmedWarehouse,), {'__module__': 'databricks.sql.client'}
+)
+
+
+def _rebuilt(connection: Any) -> Schema:
+    r"""A schema built anew from a description of ``connection``'s source
+    under ``shop``: it has read none of its tables yet."""
+    source = DatabricksSource(connection, catalog='main')
+    described = Schema.from_source(source)
+    return Schema(described.tables, described.relationships, source=source)
+
+
+#: Where each route first reads each table, and its first read after it
+#: has read them all: the old route's engine reads a table's catalog and
+#: preview, the core counts its rows; then the old route samples, and the
+#: core reads the time bounds.
+_PHASES = {
+    'old': {
+        'first_table': 'FROM `main`.`shop`.`orders` LIMIT 1000',
+        'second_table': 'FROM `main`.`shop`.`users` LIMIT 1000',
+        'after_reading': 'SELECT COUNT(*) FROM `main`.`shop`.`orders`',
+    },
+    'core': {
+        'first_table': 'SELECT COUNT(*) FROM `main`.`shop`.`orders`',
+        'second_table': 'SELECT COUNT(*) FROM `main`.`shop`.`users`',
+        'after_reading': 'as min_date',
+    },
+}
+
+
+@pytest.mark.parametrize(
+    ('phase', 'kept'),
+    [
+        ('first_table', False),
+        ('second_table', False),
+        ('after_reading', True),
+    ],
+)
+@pytest.mark.parametrize('route', ['core', 'old'])
+def test_a_retry_after_an_early_failure_reads_where_the_old_route_reads(
+    route: str, phase: str, kept: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""A first ``materialize`` that fails before it has read every table it
+    reads anew keeps none of them, and one that fails after keeps them all,
+    as the old route keeps its engine's reading only once its engine read
+    every table: a retry after the session moved reads ``other`` or ``shop``
+    accordingly (round 7's P0, Claude's early failure)."""
+    _route(route, monkeypatch)
+    connection = _ArmedConnection()
+    schema = _rebuilt(connection)
+    connection.fail_on = _PHASES[route][phase]
+    with pytest.raises(Exception):  # noqa: B017, PT011 - any failure
+        _materialized(schema)
+    assert connection.fail_on is None, 'the failure was not reached'
+    connection.schema = 'other'
+    expected = ('main', 'shop') if kept else ('main', 'other')
+    assert _where_read(schema, connection) == {expected}
+
+
+@pytest.mark.parametrize('route', ['core', 'old'])
+def test_a_first_run_in_the_wrong_schema_keeps_nothing_and_the_fixed_retry_runs(
+    route: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""A first ``materialize`` with the session in a schema that holds no
+    such table fails and keeps no reading, so a retry once the session is
+    fixed reads ``shop`` (round 7's P0 and P1, Claude's wrong session)."""
+    _route(route, monkeypatch)
+    connection = _ArmedConnection()
+    schema = _rebuilt(connection)
+    connection.schema = 'missing'
+    with pytest.raises(Exception):  # noqa: B017, PT011 - the table is not held
+        _materialized(schema)
+    connection.schema = 'shop'
+    assert _where_read(schema, connection) == {('main', 'shop')}
+
+
+@pytest.mark.parametrize('route', ['core', 'old'])
+def test_a_snapshot_after_an_early_failure_shares_the_retry_s_readings(
+    route: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""A first ``materialize`` failing at its namespace read leaves the
+    schema an engine reading of its own, empty, which a snapshot taken then
+    shares, so the original's retry's readings reach the snapshot (round 7's
+    P0, Codex's early failure)."""
+    _route(route, monkeypatch)
+    connection = _ArmedConnection()
+    schema = _rebuilt(connection)
+    connection.fail_on = 'current_schema()'
+    with pytest.raises(Exception):  # noqa: B017, PT011 - any failure
+        _materialized(schema)
+    assert connection.fail_on is None
+    snapshot = schema.snapshot()
+    assert _where_read(schema, connection) == {('main', 'shop')}
+    connection.schema = 'other'
+    assert _where_read(snapshot, connection) == {('main', 'shop')}
+
+
+@pytest.mark.parametrize('route', ['core', 'old'])
+def test_an_interrupted_first_run_keeps_the_readings_it_made(
+    route: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""A first ``materialize`` interrupted while it samples, after it read
+    its tables, keeps where it read them, so a retry after the session
+    moved reads them there (round 7's P0, Codex's interrupt)."""
+    _route(route, monkeypatch)
+    connection = _ArmedConnection()
+    schema = _rebuilt(connection)
+    connection.fail_on = 'WITH TMP AS'
+    connection.failure = KeyboardInterrupt
+    with pytest.raises(KeyboardInterrupt):
+        _materialized(schema)
+    connection.schema = 'other'
+    assert _where_read(schema, connection) == {('main', 'shop')}
