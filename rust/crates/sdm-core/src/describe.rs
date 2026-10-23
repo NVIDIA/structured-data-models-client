@@ -552,6 +552,7 @@ async fn count_keys(
         .iter()
         .enumerate()
         .map(|(at, &(i, label))| TableKey {
+            unique: false,
             table: tables[i].source.clone(),
             columns: tables[i].primary_key.clone(),
             label: (label != at as u64).then_some(label),

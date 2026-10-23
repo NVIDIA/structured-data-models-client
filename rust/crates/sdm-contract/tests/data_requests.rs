@@ -176,11 +176,13 @@ fn the_reference_s_union_reads_name_what_they_read() {
     let keys = DataRequest::KeyCounts {
         keys: vec![
             TableKey {
+                unique: false,
                 table: "orders".into(),
                 columns: vec!["order_id".into()],
                 label: None,
             },
             TableKey {
+                unique: false,
                 table: "users".into(),
                 columns: vec!["user_id".into()],
                 label: None,
@@ -192,6 +194,7 @@ fn the_reference_s_union_reads_name_what_they_read() {
     refused(
         &DataRequest::KeyCounts {
             keys: vec![TableKey {
+                unique: false,
                 table: "orders".into(),
                 columns: vec![],
                 label: None,

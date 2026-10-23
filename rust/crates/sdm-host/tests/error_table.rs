@@ -205,6 +205,7 @@ fn a_provider_s_kind_outside_its_code_s_set_ends_the_fetch_as_internal() {
             id: ReplyId(1),
             outcome: FetchOutcome::Error {
                 error: ProviderError {
+                    refuses_expression: false,
                     kind,
                     retryable: true,
                     sqlstate: None,

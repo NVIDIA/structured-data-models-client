@@ -245,6 +245,7 @@ pub fn answer_logged(
     log: &mut DriverLog,
 ) -> Result<Fetched, ProviderError> {
     let failed = || ProviderError {
+        refuses_expression: false,
         kind: ErrorKind::DataSource,
         retryable: false,
         sqlstate: None,

@@ -236,21 +236,74 @@ pub struct KeySet {
 /// accepts, by name (rule `relation`); a host provider refuses one it
 /// cannot read the same way. Two schema tables over one source are two
 /// equal relations.
+///
+/// A relation may be derived (contract v28, design choice 3 of Phase 3):
+/// `columns`, where given, are the relation's columns, each a name with
+/// the source column it reads or an SQL text expression over the source's
+/// columns, and `filter` an SQL text condition every row read holds, as a
+/// view's definition gives them. Both are text of the source's own SQL,
+/// opaque to the core, which never reads or writes them: only a provider
+/// declaring [`ProviderCapabilities::derived_relations`] is asked for a
+/// derived relation, and the core refuses one for any other by name (rule
+/// [`DERIVED_RULE`]).
 #[derive(
     Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
 )]
 #[serde(deny_unknown_fields)]
 pub struct Relation {
     pub source: Vec<String>,
+    /// The relation's columns, in order, where it is derived; empty, the
+    /// source's own columns under their own names.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub columns: Vec<RelationColumn>,
+    /// The condition, in the source's SQL, every row of the relation holds;
+    /// left out, every row of the source is the relation's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub filter: Option<String>,
+}
+
+/// One column of a derived relation: the name the relation gives it, and
+/// what it reads, exactly one of a column of the source (`column`) or an
+/// expression in the source's SQL over its columns (`expression`).
+#[derive(
+    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(deny_unknown_fields)]
+pub struct RelationColumn {
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub column: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expression: Option<String>,
 }
 
 impl Relation {
     /// The relation of one part, `name`, as a host that names a table by a
     /// string gives it.
     pub fn named(name: impl Into<String>) -> Self {
+        Relation::of(vec![name.into()])
+    }
+
+    /// The relation of the name parts `source`, read whole.
+    pub fn of(source: Vec<String>) -> Self {
         Relation {
-            source: vec![name.into()],
+            source,
+            columns: Vec::new(),
+            filter: None,
         }
+    }
+
+    /// Whether the relation is derived: it names its columns or a filter.
+    pub fn is_derived(&self) -> bool {
+        !self.columns.is_empty() || self.filter.is_some()
+    }
+
+    /// The relation's name as the source's catalog writes a table's name,
+    /// its parts joined by dots, as the reference names a table it reads
+    /// (`source_name`), and a declared foreign key names the table it
+    /// refers to.
+    pub fn dotted(&self) -> String {
+        self.source.join(".")
     }
 
     /// The one part of a relation of one part; `None` for any other.
@@ -272,6 +325,55 @@ impl From<String> for Relation {
     fn from(name: String) -> Self {
         Relation::named(name)
     }
+}
+
+/// The rule a refusal of a derived relation names: asked of a provider
+/// that does not declare [`ProviderCapabilities::derived_relations`], or
+/// one whose columns do not each read exactly one source column or
+/// expression, or name a column twice.
+pub const DERIVED_RULE: &str = "derived_relation";
+
+/// The refusal of a derived `relation`, of `field` of `request`, by a
+/// reader that renders derived relations where `renders` says so: one asked
+/// of a reader that does not, `UNSUPPORTED_REQUEST`; one whose columns are
+/// not each a name with exactly one of a source column or an expression,
+/// or name one column twice, `INVALID_REQUEST`; `None` for a relation read
+/// whole,
+/// and for a derived one the reader renders. Each names the rule
+/// ([`DERIVED_RULE`]), never a part's or an expression's text.
+pub fn refuse_derived(
+    request: &DataRequest,
+    field: &str,
+    relation: &Relation,
+    renders: bool,
+) -> Option<CoreError> {
+    if !relation.is_derived() {
+        return None;
+    }
+    let refusal = |sentence, message| {
+        Some(
+            CoreError::new(sentence, message)
+                .with_field("request", Detail::text(request.name()))
+                .with_field("field", Detail::text(field)),
+        )
+    };
+    if !renders {
+        return refusal(
+            Sentence::DerivedRelationUnread,
+            "a derived relation is asked of a provider that does not read one",
+        );
+    }
+    let mut names = BTreeSet::new();
+    for column in &relation.columns {
+        let reads = usize::from(column.column.is_some()) + usize::from(column.expression.is_some());
+        if reads != 1 || column.name.is_empty() || !names.insert(column.name.as_str()) {
+            return refusal(
+                Sentence::DerivedRelationMalformed,
+                "a derived relation's column reads no one source column or expression, or is named twice",
+            );
+        }
+    }
+    None
 }
 
 /// The refusal of `relation`, of `field` of `request`, by a reader that
@@ -403,6 +505,20 @@ pub struct TableKey {
     /// count included (T2.12).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub label: Option<u64>,
+    /// The source keeps the key unique (a declared primary or unique key
+    /// that may still hold a null): its distinct values are the rows
+    /// holding all of it, which a rendering may count as the rows less
+    /// those missing part of it, as the reference counts such a key
+    /// (`_key_count_sql`; contract v28, carried row P2-T2.2-3). The count
+    /// is the same either way.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub unique: bool,
+}
+
+/// Serde's test for leaving out a flag that is not set.
+#[allow(clippy::trivially_copy_pass_by_ref, reason = "serde's signature")]
+fn is_false(flag: &bool) -> bool {
+    !*flag
 }
 
 impl TableKey {
@@ -520,6 +636,13 @@ pub enum DataRequest {
         filters: Vec<Filter>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         key_dtype: Option<crate::ops::Dtype>,
+        /// The rows `table` holds, where the provider sizes its draw by
+        /// them ([`ProviderCapabilities::sample_rows`]): the core counts
+        /// them (`count_rows`) before it samples and names the count here,
+        /// as the reference's warehouse samplers read each table's rows
+        /// first (contract v28). Left out for any other provider.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        rows: Option<u64>,
     },
     /// The rows of `table` whose `key` equals a seed's key, `columns` in
     /// order after the seed's batch position (decision H15). `key` names the
@@ -831,6 +954,30 @@ pub struct ProviderCapabilities {
     /// the provider's error either way, never answered by the fallback.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fallback: Option<FallbackLimits>,
+    /// The provider reads derived relations ([`Relation::columns`],
+    /// [`Relation::filter`]; contract v28). Left out, `false`: the core
+    /// refuses a derived relation for the provider by name (rule
+    /// [`DERIVED_RULE`]).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub derived_relations: bool,
+    /// The provider sizes an entity sample by the table's rows, as the
+    /// reference's warehouse samplers do (a sampled percentage of the
+    /// rows): the core counts each sampled table's rows first and names
+    /// the count on the sample ([`DataRequest::SampleEntities`]'s `rows`;
+    /// contract v28). Left out, `false`.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub sample_rows: bool,
+    /// The provider's neighbor reads by a foreign key over a table with a
+    /// time column look back no further than the reference's warehouse
+    /// samplers do (`_by_fkey`): from each seed's anchor back by five
+    /// times the rows asked over the table's rate of rows per referenced
+    /// row and second, at most five years, the seconds rounded up. The
+    /// core counts the table's and the referenced table's rows, reads the
+    /// table's time bounds, and bounds each such read from below by that
+    /// look-back, exclusive (contract v28). Left out, `false`: no lower
+    /// bound.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub neighbor_lookback: bool,
 }
 
 /// The in-memory fallback's limits, as a provider declares them
@@ -1270,4 +1417,13 @@ pub struct ProviderError {
     pub retryable: bool,
     pub sqlstate: Option<String>,
     pub vendor_code: Option<String>,
+    /// The source refused the statement for an expression it says or
+    /// reads (contract v28): what the reference's Databricks reader calls
+    /// a refused expression, a data error (SQLSTATE class `22`) or a syntax
+    /// or analysis error (class `42`), which it answers by leaving out the
+    /// derived column it could not read. The host sets it from its
+    /// driver's error, as it reads the driver's SQLSTATE; the core reads no
+    /// text. Left out, `false`.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub refuses_expression: bool,
 }

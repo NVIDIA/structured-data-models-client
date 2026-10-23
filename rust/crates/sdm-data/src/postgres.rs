@@ -127,6 +127,7 @@ impl SqlDialect for Postgres {
     /// What a Postgres source answers through this layer.
     fn capabilities(&self) -> ProviderCapabilities {
         ProviderCapabilities {
+            derived_relations: false, neighbor_lookback: false, sample_rows: false,
             optional: sql::rendered(),
             max_keys_per_request: None,
             // `setseed` before `ORDER BY random()` repeats the draw on one
@@ -159,9 +160,10 @@ impl SqlDialect for Postgres {
         MOST_PARTS
     }
 
-    /// A Postgres source given its schema is read under it (contract v28).
-    fn takes_namespace(&self) -> bool {
-        true
+    /// A Postgres source given its schema is read under it (contract v28):
+    /// one part (design fix C).
+    fn namespace_depth(&self) -> usize {
+        1
     }
 
     fn seeds_for(&self, _request: &DataRequest, table: &Relation) -> String {
@@ -457,6 +459,7 @@ fn read(part: DescribePart, batches: &[RecordBatch]) -> Result<CatalogAnswer, Co
                 let declared = crate::read::strings(batch, k::FORMAT_TYPE)?;
                 for row in 0..batch.num_rows() {
                     found.push(CatalogColumn {
+                        canonical: None,
                         name: crate::read::text(names, row).unwrap_or_default(),
                         declared_type: crate::read::text(declared, row).unwrap_or_default(),
                         not_null: crate::read::text(nullable, row).as_deref() == Some("NO"),
