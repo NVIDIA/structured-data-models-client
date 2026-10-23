@@ -439,3 +439,58 @@ def test_a_column_named_unsupported_is_checked_as_the_old_client_checks_it(
 
     outcomes = _both(monkeypatch, act)
     assert outcomes['core'] == outcomes['old']
+
+
+def _said(error: StructuredDataError) -> tuple[str, str, str]:
+    r"""A refusal's class, code and words, the words after a leading
+    ``[CODE] `` (the core's prefix, P3E-2)."""
+    words = str(error)
+    if words.startswith(f'[{error.code}] '):
+        words = words[len(error.code) + 3 :]
+    return type(error).__name__, error.code, words
+
+
+@pytest.mark.parametrize(
+    ('name', 'edit'),
+    [
+        ('unsupported', 'key'),
+        ('unsupported', 'time column'),
+        ('byte', 'time column'),
+        ('uuid', 'key'),
+        ('json', 'link'),
+    ],
+)
+def test_a_table_edit_of_a_column_written_by_hand_is_refused_in_the_old_client_s_words(
+    name: str, edit: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Claude's review round 2 of 0c662906 (P1-1, P2-1): the language's own
+    # `unsupported` is checked as the language answers it, a name no type
+    # has is let through, a link joins names by family, and each refusal
+    # quotes the column's own type name.
+    from sdm_client import Relationship
+
+    def act() -> Any:
+        schema = _described()
+        try:
+            schema['orders'].columns['extra'] = Column(
+                'extra', name, 'unsupported' if name == 'unsupported' else 'ID'
+            )
+            if edit == 'key':
+                schema['orders'].primary_key = 'extra'
+            elif edit == 'time column':
+                schema['orders'].time_column = 'extra'
+            else:
+                schema['users']['user_id'].dtype = 'decimal(9, 2)'
+                schema.relationships = [
+                    Relationship('orders', 'extra', 'users', 'user_id')
+                ]
+        except StructuredDataError as refused:
+            return _said(refused)
+        return (
+            schema['orders'].primary_key,
+            schema['orders'].time_column,
+            len(schema.relationships),
+        )
+
+    outcomes = _both(monkeypatch, act)
+    assert outcomes['core'] == outcomes['old']
