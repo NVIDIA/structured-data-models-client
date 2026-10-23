@@ -114,3 +114,93 @@ def int64_field(
 def read(control: bytes) -> dict[str, Any]:
     message: dict[str, Any] = json.loads(control)
     return message
+
+
+#: A sample of every operation's result, as a ``done`` step carries it
+#: (``OperationResult``), each field set: what a host decodes into its own
+#: typed structures (T3.16, the structure design's fix D). Java reads the
+#: same samples.
+RESULTS: dict[str, dict[str, Any]] = {
+    'validate_query': {
+        'op': 'validate_query',
+        'accepted': True,
+        'diagnostics': [
+            {
+                'code': 'W1',
+                'message': 'a note',
+                'severity': 'warning',
+                'span': {
+                    'start_row': 1,
+                    'start_col': 2,
+                    'end_row': 1,
+                    'end_col': 9,
+                },
+            }
+        ],
+        'query': {
+            'entity_table': 'users',
+            'problem_type': 'forecast',
+            'windowed': True,
+            'num_forecasts': 1,
+            'text': 'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id',
+        },
+    },
+    'describe_source': {'op': 'describe_source', 'description': 3},
+    'edit_schema': {
+        'op': 'edit_schema',
+        'schema': 4,
+        'declared': {'table': 'users', 'column': 'age'},
+    },
+    'materialize': {
+        'op': 'materialize',
+        'state': {
+            'version': 2,
+            'payload': 5,
+            'query': 6,
+            'forecast': [
+                {'step': 2, 'payload': 7, 'query': 8, 'request_id': None}
+            ],
+            'batches': [{'payload': 9, 'rows': 40, 'request_id': None}],
+            'ranking': {
+                'top_k': 3,
+                'candidate': 0,
+                'value': '"a"',
+                'parts': [
+                    {
+                        'candidate': 1,
+                        'value': '"b"',
+                        'payload': 10,
+                        'query': 11,
+                        'request_id': None,
+                    }
+                ],
+            },
+        },
+        'query': {
+            'entity_table': 'users',
+            'problem_type': None,
+            'windowed': False,
+            'num_forecasts': 2,
+            'text': None,
+        },
+    },
+    'predict': {
+        'op': 'predict',
+        'result': 12,
+        'model': 'kumo-relational',
+        'request_id': 'sdm-1',
+        'metadata': 13,
+        'outputs': ['prediction'],
+        'unscored_candidates': [2, 4],
+    },
+}
+
+#: A column's source facts as ``HeldColumn.source`` carries them (T3.16).
+SOURCE_FACTS: dict[str, Any] = {
+    'dtype': 'string',
+    'received': {'type': 'utf8'},
+    'nullable': False,
+    'unique': True,
+    'declared_type': 'NUMERIC',
+    'exact_number': 'declared_key',
+}
