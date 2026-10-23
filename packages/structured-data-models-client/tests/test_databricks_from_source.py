@@ -236,3 +236,60 @@ def test_failed_key_reads_leave_the_schema_without_declared_keys_as_on_the_old_r
         monkeypatch,
     )
     assert _projection(core_schema) == _projection(old_schema)
+
+
+class _SessionWordWarehouse(_Warehouse):
+    r"""base.binary's warehouse whose ``users`` table also has a column
+    ``user``, a word Databricks reads as the session user once the column
+    is gone; a statement not recorded fails, after it is logged."""
+
+    def answer(self, operation: str, parameters: list[Any]) -> pa.Table:
+        found = super().answer(operation, parameters)
+        if 'information_schema.columns' in _normal(operation) and parameters[
+            -1:
+        ] == ['users']:
+            extra = {
+                name: [found[name][0].as_py()] for name in found.schema.names
+            }
+            extra['column_name'] = ['user']
+            extra['full_data_type'] = ['string']
+            found = pa.concat_tables(
+                [found, pa.table(extra, schema=found.schema)]
+            )
+        return found
+
+
+_SessionWordConnection = type(
+    'Connection',
+    (_SessionWordWarehouse,),
+    {'__module__': 'databricks.sql.client'},
+)
+
+
+@pytest.mark.parametrize('route', ['core', 'old'])
+def test_a_column_named_like_a_session_word_is_read_through_the_table(
+    route: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""Each read of ``users`` names its columns through the table, so a
+    ``user`` column since dropped fails the read rather than reading the
+    session user (round 1's Codex P0; ``_quoted_source_name``)."""
+    if route == 'core':
+        monkeypatch.setenv(
+            _routing.ENVIRONMENT, ','.join(_routing.FROM_SOURCE_DATABRICKS_SQL)
+        )
+    connection = _SessionWordConnection()
+    # The preview of ``users`` is not recorded with the column added.
+    with pytest.raises(Exception):  # noqa: B017, PT011
+        Schema.from_source(
+            DatabricksSource(connection, catalog='main', schema='shop')
+        )
+    previews = [
+        text
+        for text in connection.asked
+        if 'LIMIT 1000' in text and '`users`' in text
+    ]
+    assert previews, connection.asked
+    assert (
+        'FROM (SELECT source.`user_id`, source.`age`, source.`country`, '
+        'source.`user` FROM `main`.`shop`.`users` AS source)'
+    ) in previews[0]
