@@ -78,3 +78,8 @@ Reads became an allowlist too: a query, or what an `INSERT` fills its target wit
 The guard covers Snowflake's cursor base (so `DictCursor`) and its async connector, refuses Spark SQL given arguments to format, refuses Spark's and Delta's writer classes whole, admits only SQL commands at Spark Connect's command entry point, and guards subclasses defined after the install; checked against the real drivers (Snowflake connector 4.8.0, Databricks SQL 4.7.0, PySpark 4.0.1, Delta 4.4.1, Snowpark, psycopg).
 The refusal census's real-data mode lost its stand-in warehouse legs.
 
+## Fix round 6 (reviews of 6da8e532)
+
+Tests first again.
+A table's and a composite type's columns are held to the function rule a read is (no `CHECK`, `GENERATED` or `DEFAULT`, no call but a type's parameters), a name followed by `(` after `AS` or `::` must be a type or an alias's list of names, and Snowflake's `cmd_query` is guarded.
+
