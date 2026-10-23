@@ -298,7 +298,15 @@ pub struct CoreError {
     /// T2.8c): the error keeps what was paid for, so the rest can be asked
     /// again. Absent for any other error.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub answered: Option<AnsweredParts>,
+    pub answered: Option<Box<AnsweredParts>>,
+    /// Where a failed `materialize` read each relation the schema had not
+    /// read, under parts the session gave, before it failed
+    /// ([`crate::ops::Materialized::read_under`]): the host keeps them as
+    /// the reference keeps the tables a run read before it failed (contract
+    /// v28, T3.4). Absent for any other error; boxed, so an error stays
+    /// small where it carries none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub read_under: Option<Box<Vec<crate::ops::ReadUnder>>>,
 }
 
 /// The answers a failed request had received ([`CoreError::answered`]).
@@ -330,6 +338,7 @@ impl CoreError {
             retryable: false,
             drop_held: Vec::new(),
             answered: None,
+            read_under: None,
         }
     }
 
@@ -418,7 +427,7 @@ impl CoreError {
     /// ([`CoreError::answered`]).
     #[must_use]
     pub fn answering(mut self, answered: AnsweredParts) -> Self {
-        self.answered = Some(answered);
+        self.answered = Some(Box::new(answered));
         self
     }
 
