@@ -392,6 +392,10 @@ impl Asker {
     /// `relation` as the run's provider reads it (`DataAccess::read_as`);
     /// as it is where the run names no provider.
     pub fn read_as(&self, relation: &Relation) -> Relation {
+        // A table the run pinned is read where it pinned it (`Asker::pin`).
+        if let Some(pinned) = lock(&self.shared).pinned.get(relation) {
+            return pinned.clone();
+        }
         self.data
             .as_ref()
             .map_or_else(|| relation.clone(), |data| data.read_as(relation))
