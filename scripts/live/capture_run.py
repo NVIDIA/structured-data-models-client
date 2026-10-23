@@ -49,6 +49,7 @@ import importlib.util
 import json
 import os
 import sys
+from collections.abc import Iterable
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -417,6 +418,25 @@ def bootstrap_reference(reference: Path, site: Path) -> Path:
     path = Path(site) / 'sdm-reference-client.pth'
     path.write_text(f'{source}\n', encoding='utf-8')
     return path
+
+
+def installable_wheels(
+    folder: Path | str, tags: Iterable[Any] | None = None
+) -> list[str]:
+    r"""The wheels in ``folder`` this host installs, by its tags
+    (``tags``, else ``packaging.tags.sys_tags()``), sorted: the folder
+    holds every platform's build the jobs' hosts need (serverless runs on
+    x86_64 and aarch64), and pip refuses a whole install naming a wheel
+    the host does not support."""
+    from packaging.tags import sys_tags
+    from packaging.utils import parse_wheel_filename
+
+    supported = set(sys_tags() if tags is None else tags)
+    return sorted(
+        str(path)
+        for path in Path(folder).glob('*.whl')
+        if supported & set(parse_wheel_filename(path.name)[3])
+    )
 
 
 def use_reference_client(reference: Path) -> Path:
