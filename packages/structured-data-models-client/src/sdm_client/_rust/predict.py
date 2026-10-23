@@ -65,7 +65,7 @@ import json
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
-from sdm_client._rust import codec, results
+from sdm_client._rust import codec, errors, results
 from sdm_client._rust.run import Refused, TransportFailed, run
 from sdm_client.errors import NimRequestError, StructuredDataError
 
@@ -417,18 +417,16 @@ def predict(
                 }
             )
 
-    def unscored(fields: dict[str, Any]) -> list[Any]:
-        # The candidates the core left out, by position, as the caller gave
-        # them: the values only this host holds.
-        return [given[at] for at in fields['candidates']]
-
+    # The candidates the core names by position, as the caller gave them:
+    # the values only this host holds, which its sentences name.
     try:
-        finished = run(
-            operation,
-            attachments,
-            model=model_call,
-            host={'candidates': unscored},
-        )
+        with errors.holding(
+            candidates=lambda fields: [
+                given[at] for at in fields['candidates']
+            ],
+            candidate=lambda fields: given[fields['candidate']],
+        ):
+            finished = run(operation, attachments, model=model_call)
     except Exception as error:
         # Whatever the call raised, the answers before it are put on it.
         _carry_the_answers(error, request.parts is not None)

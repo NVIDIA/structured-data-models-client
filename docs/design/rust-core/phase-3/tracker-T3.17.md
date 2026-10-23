@@ -30,3 +30,10 @@ The `T3.17 tests` commit came first, each test failing on the phase head:
 | `assemble.rs` `check_links` | The primary key linked as a foreign key says the old client's sentence (T3.16 review r4, P2-2). |
 
 Register: P3E-5.
+
+## Fix 1 (review round 1)
+
+- The values only the host holds that a sentence names (a candidate as given, its type's name and its decimal written as the column's type, the question as written, the source described) are `{host.<name>}` placeholders, which the call in progress supplies (`errors.holding`); `decompose.py`, `client.py` and `_rust/schema.py` no longer choose or write a sentence.
+- `num_context_samples` past the endpoint's most and below 1 say the old client's words, the value as the caller gave it; the shapes a model lacks read `temporal` as the reference's `required_capabilities` does (the task's options); several reserved columns are paired as the old client pairs them.
+- No shared template spells a Python value: `None` and `'NaT'` are advice.
+- The census's test compares each refusal the core says on DuckDB with the old client's words, each difference listed with its entry; P3E-5 lists every remaining difference and waits for the owner.

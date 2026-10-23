@@ -213,19 +213,8 @@ def about_the_part(
     return carried
 
 
-def _reworded(error: StructuredDataError, said: str) -> StructuredDataError:
-    r"""``error`` with ``said`` for its message, its type, code and details
-    kept."""
-    carried = error.__class__.__new__(error.__class__)
-    carried.__dict__.update(error.__dict__)
-    carried.args = (said, *error.args[1:])
-    carried.message = said
-    return carried
-
-
 def said_as_parts_are(
     error: StructuredDataError,
-    text: str,
     candidates: list[Any] | None,
     *,
     steps: int | None = None,
@@ -234,12 +223,11 @@ def said_as_parts_are(
     route (T1.36 fix 21, T2.8), said as this client says it on the old
     route: a part's refusal said of the part it happened in, which the core
     names (``ranking_candidate`` by its position among ``candidates``,
-    ``forecast_step`` of ``steps``), and the refusals :func:`parts_of` and
-    :func:`_as_literal` give before anything is gathered that name what
-    only this client holds: the question as written, and a candidate as
-    given. Anything else is ``error`` as it is, in the core's sentence
-    (T3.17). Only the words are this client's: the type, the code and the
-    core's details are kept."""
+    ``forecast_step`` of ``steps``). Anything else is ``error`` as it is, in
+    the core's sentence, which names the question and the candidates as
+    the caller gave them from the values the call holds (T3.17). Only the
+    words are this client's: the type, the code and the core's details are
+    kept."""
     details = getattr(error, 'details', None)
     if not isinstance(details, dict):
         return error
@@ -254,52 +242,9 @@ def said_as_parts_are(
             FORECAST, tuple((None, n + 1) for n in range(int(steps or 1)))
         )
         return about_the_part(error, named, step)
-    # The core's sentence is its own words; only what names a value this
-    # host holds is said again here: the question as the caller wrote it,
-    # and a candidate as the caller gave it (T3.17).
-    rule = details.get('rule')
-    said = None
-    if rule == 'candidates_not_ranked':
-        said = (
-            f'candidates are the rows a ranking is over, and {text!r} does '
-            f'not rank anything. Ask it without candidates, or rank with '
-            f'"RANK TOP k", which is the question they are for'
-        )
-    elif (
-        rule is not None
-        and str(rule).startswith('candidate_')
-        and candidates is not None
-        and isinstance(details.get('candidate'), int)
-    ):
-        value = candidates[details['candidate']]
-        dtype = details.get('dtype')
-        if rule == 'candidate_not_exact':
-            said = (
-                f'the candidate {value} names no row of a column of '
-                f'{dtype or "numbers"}: written as one it becomes '
-                f'{_decimal_as_typed(value, dtype)}, which is a different row'
-            )
-        elif rule == 'candidate_not_whole':
-            said = f'{value!r} cannot name a row to rank'
-        elif rule == 'candidate_unreadable':
-            said = (
-                f'a candidate names a row by its key, and a '
-                f'{type(value).__name__} is not one: a key is looked up by '
-                f'value, so it has to be hashable'
-            )
-        elif rule == 'candidate_unwritable':
-            said = (
-                f'the candidate {value!r} cannot be written into a query: a '
-                f'key holding a quote, a comma, a bracket or nothing at all '
-                f'would read as part of the question rather than as the row '
-                f'it names'
-            )
-    return error if said is None else _reworded(error, said)
+    return error
 
 
-#: The core's refusals of a question asked in parts, by rule, in the words
-#: :func:`parts_of` and :func:`_as_literal` say them in, where they name
-#: nothing the core's details do not.
 def _for_each(query: ValidatedPredictiveQuery) -> str:
     r"""The entity clause as it was written, filter and all.
 

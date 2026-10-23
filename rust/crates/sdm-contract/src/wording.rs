@@ -15,14 +15,18 @@
 //! - `{name}`: the field `name` as text; `{name[0]}` the first of a list;
 //!   `{name:,}` a whole number with its thousands grouped;
 //! - `{name!c}`: the field with a conversion, the host's one value
-//!   formatter: `r` the value as the host writes it as a literal, `l` a list of them as an and-list (`'a', 'b' and 'c'`), `j`
-//!   joined by commas, `c` a list of text joined by commas as it is, `R`
-//!   joined by semicolons, `d` joined by dots, `p` a row of values (a list
-//!   as the host writes a tuple, else as `r`), `t` a date or time as the
-//!   host's time type writes it, `T` a list of times of day or text as the
-//!   host writes a list of them, and for a value the caller gave, held as
-//!   the JSON text the host wrote it in, `G` as a literal, `S` as text and
-//!   `N` the name of its type;
+//!   formatter: `r` the value as the host writes it as a literal, `l` a
+//!   list of them as an and-list (`'a', 'b' and 'c'`), `a` a list of text
+//!   as an and-list as it is, `j` joined by commas, `c` a list of text
+//!   joined by commas as it is, `R` joined by semicolons, `d` joined by
+//!   dots, `p` a row of values (a list as the host writes a tuple, else as
+//!   `r`), `t` a date or time as the host's time type writes it, `T` a list
+//!   of times of day or text as the host writes a list of them, and for a
+//!   value the caller gave, held as the JSON text the host wrote it in, `G`
+//!   as a literal, `S` as text, `N` the name of its type and `I` the whole
+//!   number it is (so `{name!I:,}` groups its thousands);
+//! - `{name:to(other)}`: a list paired with the list `other`, each pair as
+//!   the two literals joined by ` to `, the pairs by commas;
 //! - `{name:place}`, `{name:backend}`: a database the field names, by the
 //!   names the data layer gives it ([`DatabaseNames`]);
 //! - `{host.name}`: a value only the host holds, such as a candidate as the
@@ -179,6 +183,7 @@ advice! {
     GiveAHop = "give_a_hop", [];
     KeepOneLink = "keep_one_link", ["source_table", "target_table", "others"];
     MaterializeCall = "materialize_call", [];
+    MissingTime = "missing_time", [];
     NameCandidates = "name_candidates", ["column"];
     NamePrimaryKey = "name_primary_key", ["table"];
     NameTimeColumn = "name_time_column", ["table", "other"];
@@ -409,7 +414,7 @@ pub fn template(sentence: Sentence) -> Template {
         ),
         S::ColumnsLeftOut => grouped(r#"{column} ({dtype})"#, Group::ColumnsLeftOut),
         S::TimeValuesUnread => said(
-            r#"Could not parse {unread:,} of {rows:,} value(s) of time column '{column}' (for example {examples!T}); they were dropped as 'NaT'"#,
+            r#"Could not parse {unread:,} of {rows:,} value(s) of time column '{column}' (for example {examples!T}); they were dropped as {advice:missing_time()}"#,
         ),
         S::DatesReadDayFirst => owned(
             r#"text in {table}.{column} was read as dates in {format} format, which puts the day first"#,
@@ -433,7 +438,7 @@ pub fn template(sentence: Sentence) -> Template {
         S::TwoWaysToATable => said(
             r#"{source_table!r} reaches {target_table!r} through {columns!l}, and an aggregation across the two tables has to be resolved to one of them, so a query that crosses this pair is refused until it is. They are all kept because they are all real, and which one a question means is not something this can decide. To keep {kept!r}, drop the others: {advice:keep_one_link(source_table, target_table, others)}."#,
         ),
-        S::NoTables => said(r#"the source holds no table to describe"#),
+        S::NoTables => said(r#"{host.source!r} holds no table to describe"#),
         S::SourceNoPart => said(r#"table {table!r} is read from a source named by no part"#),
         S::SourceNameEmpty => {
             said(r#"table {table!r} is read from a source whose name has an empty part"#)
@@ -503,7 +508,7 @@ pub fn template(sentence: Sentence) -> Template {
         ),
         S::OptionValuesUnread => said(r#"the call's options are not JSON the core reads"#),
         S::CandidatesNotRanked => said(
-            r#"candidates are the rows a ranking is over, and this question does not rank anything. Ask it without candidates, or rank with "RANK TOP k", which is the question they are for"#,
+            r#"candidates are the rows a ranking is over, and {host.query!r} does not rank anything. Ask it without candidates, or rank with "RANK TOP k", which is the question they are for"#,
         ),
         S::RankingStatistic => said(
             r#"prediction_statistic applies only to a regression, and this question is a ranking, ordered by how likely each candidate is; ask it without prediction_statistic"#,
@@ -532,10 +537,10 @@ pub fn template(sentence: Sentence) -> Template {
             r#"a ranking gives back prediction, rankings, and {unsupported!j} are not among them. The per-candidate questions it is asked as are classifications; ask one of those directly for the fields a classification gives."#,
         ),
         S::RankingUnscoredOne => said(
-            r#"the context gathered for candidate {candidates[0]!r} holds one answer only, and a classification needs at least two classes to learn from, so there is nothing to rank and nothing was sent. Gather a wider context with num_context_samples if other entities in the data answer differently, or ask over a table of (entity, candidate) pairs, which scores every candidate from its features."#,
+            r#"the context gathered for candidate {host.candidates!l} holds one answer only, and a classification needs at least two classes to learn from, so there is nothing to rank and nothing was sent. Gather a wider context with num_context_samples if other entities in the data answer differently, or ask over a table of (entity, candidate) pairs, which scores every candidate from its features."#,
         ),
         S::RankingUnscoredSeveral => said(
-            r#"the contexts gathered for candidates {candidates!l} each hold one answer only, and a classification needs at least two classes to learn from, so there is nothing to rank and nothing was sent. Gather a wider context with num_context_samples if other entities in the data answer differently, or ask over a table of (entity, candidate) pairs, which scores every candidate from its features."#,
+            r#"the contexts gathered for candidates {host.candidates!l} each hold one answer only, and a classification needs at least two classes to learn from, so there is nothing to rank and nothing was sent. Gather a wider context with num_context_samples if other entities in the data answer differently, or ask over a table of (entity, candidate) pairs, which scores every candidate from its features."#,
         ),
         S::CandidatesUnscoredOne => said(
             r#"candidate {host.candidates!l} is left out of this ranking, unscored: the context sampled for it holds one answer only, nearly always because no entity in it linked to the candidate in the window, and a classification needs two to learn from. No call was sent for it, so each row ranks only the rest, and the result's unscored_candidates names it. Gather a wider context with num_context_samples if other entities in the data answer differently, or ask over a table of (entity, candidate) pairs, which scores every candidate from its features."#,
@@ -552,23 +557,23 @@ pub fn template(sentence: Sentence) -> Template {
         S::CandidateMissing => said(r#"a candidate names a row, and a missing value names none"#),
         S::CandidateBool => said(r#"a candidate names a row, and {advice:booleans()} do not"#),
         S::CandidateUnreadable => said(
-            r#"a candidate names a row by its key, and candidate {candidate} is not one: a key is looked up by value, so it has to be hashable"#,
+            r#"a candidate names a row by its key, and a {host.candidate_type} is not one: a key is looked up by value, so it has to be hashable"#,
         ),
         S::CandidateNotExact => said(
-            r#"candidate {candidate} names no row of a column of {dtype}: written as one it becomes a different row"#,
+            r#"the candidate {host.candidate} names no row of a column of {dtype}: written as one it becomes {host.written}, which is a different row"#,
         ),
-        S::CandidateNotWhole => said(r#"candidate {candidate} cannot name a row to rank"#),
+        S::CandidateNotWhole => said(r#"{host.candidate!r} cannot name a row to rank"#),
         S::CandidateUnwritable => said(
-            r#"candidate {candidate} cannot be written into a query: a key holding a quote, a comma, a bracket or nothing at all would read as part of the question rather than as the row it names"#,
+            r#"the candidate {host.candidate!r} cannot be written into a query: a key holding a quote, a comma, a bracket or nothing at all would read as part of the question rather than as the row it names"#,
         ),
         S::CandidateType => said(
-            r#"candidate {candidate} is a {type}, which this client cannot write into a question yet"#,
+            r#"candidate {host.candidate!r} is a {type}, which this client cannot write into a question yet"#,
         ),
         S::ProbabilitiesUnread => said(
-            r#"the endpoint answered the question about candidate {candidate!r} without saying how sure it was, and a ranking is only the order of those. It gave back {classes!r}, and this client knows a positive class spelled "true", "True", "TRUE" or "1"."#,
+            r#"the endpoint answered the question about candidate {host.candidate!r} without saying how sure it was, and a ranking is only the order of those. It gave back {classes!r}, and this client knows a positive class spelled "true", "True", "TRUE" or "1"."#,
         ),
         S::ProbabilitiesNone => said(
-            r#"the endpoint answered the question about candidate {candidate!r} without saying how sure it was, and a ranking is only the order of those. It gave back no probabilities, and this client knows a positive class spelled "true", "True", "TRUE" or "1"."#,
+            r#"the endpoint answered the question about candidate {host.candidate!r} without saying how sure it was, and a ranking is only the order of those. It gave back no probabilities, and this client knows a positive class spelled "true", "True", "TRUE" or "1"."#,
         ),
         S::NotYetPredict => said(
             r#"predicting this request needs the {rule!r} rule, which is not one this client's core supports yet"#,
@@ -666,7 +671,7 @@ pub fn template(sentence: Sentence) -> Template {
             r#"lag_timesteps is how many past steps of the target are added as features, a whole number of zero or more; a fraction or a boolean is not one"#,
         ),
         S::LagNotANumber => said(
-            r#"lag_timesteps is how many past steps of the target are added as features, a whole number of zero or more; text, None or a collection is not one"#,
+            r#"lag_timesteps is how many past steps of the target are added as features, a whole number of zero or more; text, {advice:nothing()} or a collection is not one"#,
         ),
         S::LagPastTimes => said(
             r#"lag_timesteps reaches further back than a time can be held (before 1677); ask for fewer steps"#,
@@ -675,10 +680,10 @@ pub fn template(sentence: Sentence) -> Template {
             r#"num_context_samples must be a whole number of labelled examples, got {given!N} {given!G}"#,
         ),
         S::NumContextSamplesBelowOne => said(
-            r#"num_context_samples must be at least 1; a model predicts from labelled examples, and {given} leaves it none"#,
+            r#"num_context_samples must be at least 1; a model predicts from labelled examples, and {given!S} leaves it none"#,
         ),
         S::NumContextSamplesPastMost => said(
-            r#"num_context_samples asks for more labelled examples than the endpoint takes, at most {limit:,}"#,
+            r#"num_context_samples is {given!I:,}, and the endpoint accepts at most {limit:,} context rows"#,
         ),
         S::NumHopsNotWhole => said(r#"num_hops must be a whole number, got {given!N} {given!G}"#),
         S::NumHopsNone => said(r#"num_hops must be a whole number, got {advice:nothing()}"#),
@@ -791,7 +796,7 @@ pub fn template(sentence: Sentence) -> Template {
             r#"{reserved[0]} uses a name this client needs for the request it builds, so it cannot also be a column of the data. Rename it, for instance to {renamed[0]!r}."#,
         ),
         S::WireReservedSeveral => said(
-            r#"{reserved!c} use names this client needs for the request it builds, so they cannot also be columns of the data. Rename them, for instance {columns!j} to {renamed!j}."#,
+            r#"{reserved!a} use names this client needs for the request it builds, so they cannot also be columns of the data. Rename them, for instance {columns:to(renamed)}."#,
         ),
         S::IndicesAbsent => said(
             r#"materialize names the entities to predict for with indices, and none were given"#,

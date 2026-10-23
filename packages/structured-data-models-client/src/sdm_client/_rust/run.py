@@ -163,7 +163,6 @@ def run(
     given: set[str] | None = None,
     kept: list[dict[str, Any]] | None = None,
     state: dict[str, Any] | None = None,
-    host: Mapping[str, Callable[[dict[str, Any]], Any]] | None = None,
 ) -> Finished:
     r"""Runs ``operation`` to its result, with the attachments its fields name.
 
@@ -171,10 +170,6 @@ def run(
     it already, or decides once the run ends whether to show it, from
     ``kept``, which then receives it (``errors.warn_held``). ``given``
     collects the code of every warning the run gave, shown or not.
-    ``host`` gives the values only the caller holds that a warning's
-    sentence names, each from the warning's fields, as a ranking's
-    candidates as the caller gave them, which the core names by position
-    (T2.8, T3.17).
 
     ``state``, for a ``materialize``, is where its materializer keeps the
     sampler state (decision E52): the state held there (``'held'``) is
@@ -213,7 +208,7 @@ def run(
             state.pop('held', None)
         errors.raise_from_core(refused.control, refused.attachments)
     try:
-        return _steps(core, handle, provider, model, quiet, given, kept, host)
+        return _steps(core, handle, provider, model, quiet, given, kept)
     finally:
         if state is not None:
             _keep(core, handle, state)
@@ -258,7 +253,6 @@ def _steps(
     quiet: frozenset[str],
     given: set[str] | None,
     kept: list[dict[str, Any]] | None = None,
-    host: Mapping[str, Callable[[dict[str, Any]], Any]] | None = None,
 ) -> Finished:
     r"""The run's steps, each answered, to its result."""
     driver_class: str | None = None
@@ -268,7 +262,7 @@ def _steps(
         try:
             control, sent = handle.next()
         except core.CoreError as failed:
-            _warn(handle, quiet, given, kept, host)
+            _warn(handle, quiet, given, kept)
             error = errors.error_from_core(
                 failed.control, failed.attachments, driver_class=driver_class
             )
@@ -282,7 +276,7 @@ def _steps(
                 _of_the_part(error, refused.raised)
                 raise refused.raised
             raise error from None
-        _warn(handle, quiet, given, kept, host)
+        _warn(handle, quiet, given, kept)
         step = codec.read(control, sent)
         if step['message'] != 'step':
             raise StructuredDataError(
@@ -485,11 +479,10 @@ def _warn(
     quiet: frozenset[str],
     given: set[str] | None,
     kept: list[dict[str, Any]] | None = None,
-    host: Mapping[str, Callable[[dict[str, Any]], Any]] | None = None,
 ) -> None:
     taken = handle.take_warnings()
     if taken is not None:
         control, sent = taken
         errors.warn_from_core(
-            control, sent, quiet=quiet, given=given, held=kept, host=host
+            control, sent, quiet=quiet, given=given, held=kept
         )

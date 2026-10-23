@@ -2654,7 +2654,14 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // faults may be refused here for another of them than the client
     // names, which the core does not claim to match (decision E41(k)(iii)).
     let asked_values = options::values(inputs.values.as_ref())?;
-    let mode = options::run_mode(asked_values.num_context_samples)?;
+    // A refusal of the size names it as the caller gave it.
+    let mode =
+        options::run_mode(asked_values.num_context_samples).map_err(
+            |refused| match &asked_values.num_context_samples_given {
+                Some(given) => refused.with_field("given", Detail::text(given)),
+                None => refused,
+            },
+        )?;
     // The hops the sampling options ask, bounded as the client bounds them,
     // before the options this core does not take are refused by name.
     options::hops(asked_values.num_hops, asked_values.num_neighbors)?;

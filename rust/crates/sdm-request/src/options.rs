@@ -146,6 +146,9 @@ pub enum AskedAnchor {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Asked {
     pub num_context_samples: Option<Integer>,
+    /// `num_context_samples` as the JSON text the host wrote it in, which
+    /// its refusals name as the caller gave it (`given`).
+    pub num_context_samples_given: Option<String>,
     pub num_hops: Option<Integer>,
     /// Whether `num_hops` was named as none, which the engine cannot
     /// compare with its bounds unless `num_neighbors` stands in for it.
@@ -279,6 +282,7 @@ pub fn values(given: Option<&Value>) -> Result<Asked, CoreError> {
         num_hops: None,
         num_hops_none: false,
         num_hops_text: None,
+        num_context_samples_given: None,
         num_neighbors: None,
         neighbors: None,
         max_pq_iterations: None,
@@ -310,7 +314,11 @@ pub fn values(given: Option<&Value>) -> Result<Asked, CoreError> {
             // ([`neighbors`]).
             ("num_context_samples" | "num_neighbors", Value::Null) => {}
             ("num_hops", Value::Null) => asked.num_hops_none = true,
-            ("num_context_samples", v) => asked.num_context_samples = Some(magnitude(name, v)?),
+            ("num_context_samples", v) => {
+                asked.num_context_samples = Some(magnitude(name, v)?);
+                asked.num_context_samples_given =
+                    Some(String::from_utf8_lossy(&v.to_bytes()).into_owned());
+            }
             ("num_hops", v) => {
                 asked.num_hops = Some(magnitude(name, v)?);
                 let (negative, digits) = integer(name, v)?;
@@ -836,16 +844,11 @@ pub fn run_mode(asked: Option<Integer>) -> Result<RunMode, CoreError> {
         return Ok(RunMode::Fast);
     };
     if negative || value == Some(0) {
-        let sign = if negative { "-" } else { "" };
         return Err(CoreError::new(
             Sentence::NumContextSamplesBelowOne,
             "num_context_samples is at least 1",
         )
-        .with_field("field", Detail::text("num_context_samples"))
-        .with_field(
-            "given",
-            Detail::text(format!("{sign}{}", value.unwrap_or_default())),
-        ));
+        .with_field("field", Detail::text("num_context_samples")));
     }
     match value {
         Some(n) if n <= RunMode::Fast.context_examples() as u128 => Ok(RunMode::Fast),

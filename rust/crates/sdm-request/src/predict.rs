@@ -388,8 +388,21 @@ pub fn prepare(
         Some(Value::Object(related)) => related.len(),
         _ => 0,
     };
-    let anchored = instance_table(payload, "predict")
-        .is_some_and(|(names, _)| names.contains(&"__kumo_anchor_time"));
+    // Temporal as the reference's `required_capabilities` reads it: the
+    // task's options naming an anchor time column, or a forecast or a link
+    // prediction (T3.17, where the shapes a refusal names became visible).
+    let anchored = payload
+        .get("task")
+        .and_then(|task| task.get("options"))
+        .and_then(|options| options.get("anchor_time_column"))
+        .is_some_and(|column| match column {
+            Value::Null | Value::Bool(false) => false,
+            Value::Text(text) => !text.is_empty(),
+            Value::Number(token) => token.parse::<f64>().is_ok_and(|n| n != 0.0),
+            Value::Array(items) => !items.is_empty(),
+            Value::Object(members) => !members.is_empty(),
+            Value::Bool(true) => true,
+        });
     let temporal = anchored || matches!(kind, "forecasting" | "temporal_link_prediction");
     let needed = |shape: &str| match shape {
         "relationships" => linked,

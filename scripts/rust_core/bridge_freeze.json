@@ -4,13 +4,13 @@
   "files": {
     "packages/structured-data-models-client/src/sdm_client/_rust/schema.py": {
       "<module>": {
-        "fingerprint": "21878033f1028c3ee7d35b99d327eeb9e41be1e9dce1847b7b5116c79cd6aa76"
+        "fingerprint": "553696c0298aa51d32476051c0f414b6d4da3d68b1517eeaf69a3a268fc30abe"
       },
       "build": {
         "fingerprint": "1ffa9b79f4ead237521dee3b3b02d7080dd908d00a0c39a53b29beee006830e0"
       },
       "from_source": {
-        "fingerprint": "d172f8d885c8787f27efa664d560d91157b27fbc87d200a7dc9d851757659ad9"
+        "fingerprint": "1b2374de11a665ddf4e52a05e182a5593cdbae2ae771da175d79a11d8c968e5a"
       }
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py": {
@@ -44,7 +44,7 @@
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py": {
       "<module>": {
-        "fingerprint": "b7ded43ba6d8546de2b31bd090e94af25807f298450bf59c2d5a1321d453729b"
+        "fingerprint": "1ffe1ec95ccddcdc35ef86b00d182bce616b27969e8171623043fc4caede0ad6"
       },
       "_adapter": {
         "fingerprint": "f40725046a4dc6e6d4843f595dc9907a872a039e056a9e7794cefc585046fef9"
@@ -86,7 +86,7 @@
         "fingerprint": "cd4dd88b279fff2339d627ed4c4707ef6f760dec24cc1c58f347c0bdbab7b88e"
       },
       "predict": {
-        "fingerprint": "f8ffb1386f22e03790edae9a52679c3f637df7980306cbb591dd4e4eddf9e80a"
+        "fingerprint": "50106d0e2b658061695ddcf3883ba1df8c1525388c66add79a36ef2a74a846eb"
       }
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/codec.py": {
@@ -194,7 +194,7 @@
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py": {
       "<module>": {
-        "fingerprint": "b85274bdd0ed239b19c9be670475d1613da9a80d719d7f7ccfe901f623b78c0f"
+        "fingerprint": "0303765ccbe4e7395926d2e9cd772419896050f9889ec8a13c9cdfa316cdd5b1"
       },
       "_Held.__getattr__": {
         "fingerprint": "1c11f042b8200ddeeed1c4f0ca22f07fa367d50bc7957f1262c3f92fde717fca"
@@ -218,10 +218,10 @@
         "fingerprint": "ceb1736bb28db2efb30697d89bd65e6e317c9765f8eae2dae4ec8ace2daf7c35"
       },
       "_Words.convert_field": {
-        "fingerprint": "38779a9c6a5aee5a8bc9da012097ceb1febd95528fea176993c6d2b59d0a5190"
+        "fingerprint": "ca4f3d1e70dac9cc6de9fd5ce0dbbb5fb4fff5698271fa33e9893bf8ebebe8e1"
       },
       "_Words.format_field": {
-        "fingerprint": "2402f7b7725008dcecfa59f66b200c63e8286f023a5b1c97bad4e3def14e5fbf"
+        "fingerprint": "81c8c351e7ddf05153c3af8aa4d84a40768096aa48ea08f8f47531cde624bffa"
       },
       "_Words.get_value": {
         "fingerprint": "c71335d3757eddf42f4722cd9496b2b5bfe2f8130d8975793ef974cf82093f35"
@@ -238,11 +238,14 @@
       "_fields": {
         "fingerprint": "05d15afd67d3afa16ed9300303935a1c36c5d3d0162991a6b3b2d7f12e9abf59"
       },
+      "_held": {
+        "fingerprint": "963db01ff1c1072e79a947953b1a2a77b8982b34124589d1c3e6141c660e9022"
+      },
       "_instance": {
         "fingerprint": "5a61a984c98014ceeeb62380b7ba2c8459ff20528cab2dbccef5737c0f5e1e3a"
       },
       "_said": {
-        "fingerprint": "e3105967e6a092a02c5522d46edb996d0a4f5913892d24b5da8da48829230a3c"
+        "fingerprint": "6afd24b6a4a58432d5d195936877378a1bf1caa0a414cdc2b84aab99ae3b72b9"
       },
       "_shown_timestamp": {
         "fingerprint": "c52a5329a9270e22084c111da7a456da2022e5c8347b25d6939a1ff3bd7b137d"
@@ -256,6 +259,9 @@
       "error_from_core": {
         "fingerprint": "998f2a66a650f638a840b126e8bdf0272fd231b364931128041107ea293ea558"
       },
+      "holding": {
+        "fingerprint": "9e64ecd7e71e03b647320abf8b92f74c8f5a13dcb9189888250b145cb9dffaf2"
+      },
       "numpy_warns_on_cast_overflow": {
         "fingerprint": "d152c028f851318aa7d29ee83b460d95e35eae190dfc5df59bbea6fc0df046ea"
       },
@@ -266,13 +272,13 @@
         "fingerprint": "39a6d78b294dc323e5ac6b3ce273bff86dd6d0305a3f51ef236f3986862253fb"
       },
       "said": {
-        "fingerprint": "676453329ef951c5cbf5df6d1708e0513ff5fee3eeb1b0e15f276f1dd9c4649c"
+        "fingerprint": "611bcdf8ce209203d2e4baae76bae222a37a1de6ec1d3718715ba83e032dc916"
       },
       "table": {
         "fingerprint": "0d4dfdebd8bbd6257ced1784723a96e754324c9301f1f918e112a9ed35fd8625"
       },
       "warn_from_core": {
-        "fingerprint": "92216f465eb80f9f1b8f53fab5f94d31fbbbc4ed81966bcc6796a4b4fcfbfdec"
+        "fingerprint": "60138f74363de3c099557977a13231a46f106cc15d719cef748105433f622aba"
       },
       "warn_held": {
         "fingerprint": "bfd36139c92eefac64653070dee6a6402f13bb6bbbe3f60573a86a3c2c24e1d3"
@@ -339,7 +345,7 @@
     },
     "packages/structured-data-models-client/src/sdm_client/client.py": {
       "<module>": {
-        "fingerprint": "fb5b78f6494b1eb8a1e7baab7514e96623a35b0706bb1f403e2ed04be7c0e11a"
+        "fingerprint": "c1ad25dff22f0033cd83cf7c765f4d9897f2c819aa72a64cd666c53cf9b808d2"
       },
       "SDMClient._answer_in_parts": {
         "fingerprint": "a3b7e4cf1b2eba283fc1bb0b53dce967dffdcbebaad3c7124b2c71189f3304c9"
@@ -371,7 +377,7 @@
     },
     "packages/structured-data-models-client/src/sdm_client/query.py": {
       "<module>": {
-        "fingerprint": "1bc33de280d50ed3c2832af9b581560b7c30320bea35e596a54d336729d77f37"
+        "fingerprint": "e2b43f08e0f846c47b62cdb012c1d95478178e7a562daa1d336299c41adf77c1"
       },
       "PredictiveQuery._refusal": {
         "fingerprint": "7457f66f4b0e3afad4c8dbab212e1cd5ddf2bbf054853376cb93bc2ac0f9b2b7"

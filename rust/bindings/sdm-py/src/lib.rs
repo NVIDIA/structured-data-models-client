@@ -86,9 +86,6 @@ fn core_call<T: Send>(py: Python<'_>, call: impl FnOnce() -> T + Send) -> PyResu
     }
 }
 
-/// Forgets the logger levels the bridge has cached, so a change to the
-/// `logging` configuration takes effect; the Python host calls it at each
-/// run start (decision H8). Before the first core call there is no cache.
 /// The table of what every error's and warning's sentence says, as its JSON
 /// text (`sdm_contract::wording`, T3.17): the host reads it once and fills
 /// each sentence from it.
@@ -97,6 +94,9 @@ fn templates() -> String {
     sdm_host::templates()
 }
 
+/// Forgets the logger levels the bridge has cached, so a change to the
+/// `logging` configuration takes effect; the Python host calls it at each
+/// run start (decision H8). Before the first core call there is no cache.
 #[pyfunction]
 fn reset_log_cache(py: Python<'_>) {
     if let Some(handle) = LOGGING.get(py).and_then(Option::as_ref) {

@@ -40,7 +40,6 @@ from sdm_client.core.warnings import SDMWarning, caller_stacklevel
 from sdm_client.decompose import (
     RANKING,
     Decomposition,
-    _reworded,
     about_the_part,
 )
 from sdm_client.errors import (
@@ -871,9 +870,10 @@ def _said_of_the_part(
     part it happened in, as :meth:`SDMClient._answer_in_parts` says each
     part's: a forecast's step (the core's ``forecast_step``), or a
     ranking's candidate (the core's ``ranking_candidate``), named as the
-    caller gave it; a ranking's
-    refusal naming candidates by their position among those given names
-    them as given."""
+    caller gave it; a ranking's refusal naming candidates by their position
+    among those given names them as given in its details. Its sentence
+    names them as given already, from the values the predict route holds
+    (T3.17)."""
     rewritten = request._decomposition
     assert rewritten is not None
     details = getattr(error, 'details', None)
@@ -899,18 +899,9 @@ def _said_of_the_part(
     details.pop('ranking_parts', None)
     if position is not None:
         return about_the_part(error, rewritten, by_position[position])
-    # The core's own sentence, said again with the candidates as the caller
-    # gave them, which only this host holds (T3.17).
-    sentence = getattr(error, '_sentence', None)
-    if sentence is None:
-        return error
-    from sdm_client._rust import errors as core_errors
-
-    try:
-        said = core_errors.render(sentence, details)
-    except (KeyError, IndexError, TypeError, ValueError, AttributeError):
-        return error
-    return _reworded(error, said)
+    # The core's sentence already names the candidates as given, the values
+    # the predict route holds for it (T3.17).
+    return error
 
 
 def _numbered_across_calls(

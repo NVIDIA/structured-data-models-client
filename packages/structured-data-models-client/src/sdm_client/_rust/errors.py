@@ -34,12 +34,14 @@ chained, and nothing the driver wrote reaches a traceback (decision H17).
 from __future__ import annotations
 
 import builtins
+import contextlib
 import datetime
 import functools
 import json
 import string
 import warnings
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
+from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any, NoReturn
 
@@ -172,8 +174,9 @@ ADVICE: dict[str, Callable[..., str]] = {
         'Name another key with primary_keys=, or pass check_keys=False to '
         'skip (one full scan per table).'
     ),
-    'smaller_calls': lambda: 'materialize(rows_per_call=N)',
+    'missing_time': lambda: "'NaT'",
     'result_frame': lambda: 'to_pandas()',
+    'smaller_calls': lambda: 'materialize(rows_per_call=N)',
 }
 
 #: The sentences that relay a library of this host's own, in that
@@ -259,6 +262,14 @@ class _Words(string.Formatter):
             name, _, rest = format_spec.partition('(')
             given = [a.strip() for a in rest.rstrip(')').split(',')]
             return ADVICE[name](*(self._fields[a] for a in given if a))
+        if format_spec.startswith('to(') and format_spec.endswith(')'):
+            # A list paired with another field's: each pair as its two
+            # literals joined by ` to `, the pairs by commas.
+            others = self._fields[format_spec[3:-1]]
+            return ', '.join(
+                f'{one!r} to {other!r}'
+                for one, other in zip(value, others, strict=True)
+            )
         if format_spec in ('place', 'backend'):
             names = table().databases.get(str(value))
             if format_spec == 'backend':
@@ -272,6 +283,11 @@ class _Words(string.Formatter):
             if len(quoted) < 3:
                 return ' and '.join(quoted)
             return f'{", ".join(quoted[:-1])} and {quoted[-1]}'
+        if conversion == 'a':
+            plain = [str(name) for name in value]
+            if len(plain) < 3:
+                return ' and '.join(plain)
+            return f'{", ".join(plain[:-1])} and {plain[-1]}'
         if conversion == 'j':
             return ', '.join(repr(name) for name in value)
         if conversion == 'c':
@@ -283,6 +299,10 @@ class _Words(string.Formatter):
         if conversion == 'p':
             # A row of values as the reference shows one: a tuple.
             return repr(tuple(value) if isinstance(value, list) else value)
+        if conversion == 'I':
+            # A whole number the caller gave, as the JSON text it was
+            # written in, so a spec can group its thousands.
+            return int(json.loads(value))
         if conversion in ('G', 'S', 'N'):
             # A value the caller gave, as the JSON text the host wrote it
             # in: its ``repr``, its ``str`` or its type's name, as Python
@@ -320,9 +340,35 @@ class _Held:
             raise AttributeError(name) from None
 
 
+#: How the call in progress reads each value only this host holds that a
+#: sentence names (``{host.<name>}``), from the error's or warning's
+#: decoded fields: a candidate as the caller gave it, by its position, the
+#: query as written, the source described (:func:`holding`).
+_HELD: ContextVar[Mapping[str, Callable[[dict[str, Any]], Any]] | None] = (
+    ContextVar('sdm_client_held_values', default=None)
+)
+
+
+def _held() -> Mapping[str, Callable[[dict[str, Any]], Any]]:
+    return _HELD.get() or {}
+
+
+@contextlib.contextmanager
+def holding(**values: Callable[[dict[str, Any]], Any]) -> Iterator[None]:
+    r"""Within the block, each error and warning the core gives fills a
+    sentence's ``{host.<name>}`` with ``values[name]`` of its decoded fields:
+    what only the caller holds, which the core names by position or not at
+    all (T3.17). Blocks nest; an inner one adds to and overrides the outer."""
+    token = _HELD.set({**_held(), **values})
+    try:
+        yield
+    finally:
+        _HELD.reset(token)
+
+
 class _HostValues(Mapping[str, Any]):
-    r"""The values only this host holds, each read from a warning's fields
-    when its sentence names it, and only then."""
+    r"""The values only this host holds, each read from a sentence's fields
+    when the sentence names it, and only then."""
 
     def __init__(
         self,
@@ -362,20 +408,22 @@ def render(
     return _Words(fields, host or {}).format(template)
 
 
-def _said(
-    sentence: str,
-    fields: Mapping[str, Any],
-    host: Mapping[str, Any] | None = None,
-) -> str:
-    r""":func:`render`, or, where the core gave a sentence its fields cannot
+#: The words of a sentence the core gave without what its template names:
+#: the defect, named, which tests hold the core's producers to never give.
+DEFECT = (
+    'the core said {sentence!r} without what it names; this is a defect, not '
+    'a problem with the request'
+)
+
+
+def _said(sentence: str, fields: dict[str, Any]) -> str:
+    r""":func:`render` with the values the call in progress holds
+    (:func:`holding`), or, where the core gave a sentence its fields cannot
     fill, the defect named: never a sentence the core did not choose."""
     try:
-        return render(sentence, fields, host)
+        return render(sentence, fields, _HostValues(_held(), fields))
     except (KeyError, IndexError, TypeError, ValueError, AttributeError):
-        return (
-            f'the core said {sentence!r} without what it names; this is a '
-            'defect, not a problem with the request'
-        )
+        return DEFECT.format(sentence=sentence)
 
 
 def _fields(given: Mapping[str, Any]) -> dict[str, Any]:
@@ -485,12 +533,10 @@ def _time_of_day(value: codec.Temporal) -> datetime.time:
     return datetime.time(hour, minute, second, micro)
 
 
-def said(
-    warning: Mapping[str, Any], host: Mapping[str, Any] | None = None
-) -> str:
+def said(warning: Mapping[str, Any]) -> str:
     r"""The words of one warning: its sentence, filled with its fields and
-    the values only this host holds (``host``)."""
-    return _said(warning['sentence'], _fields(warning.get('fields', {})), host)
+    the values the call in progress holds (:func:`holding`)."""
+    return _said(warning['sentence'], _fields(warning.get('fields', {})))
 
 
 def _instance(
@@ -542,7 +588,7 @@ def error_from_core(
         cls = StructuredDataError
     sentence = error['sentence']
     made = _instance(cls, _said(sentence, fields), code, details)
-    made._sentence = sentence  # type: ignore[attr-defined]
+    made._sentence = sentence
     return made
 
 
@@ -587,15 +633,13 @@ def warn_from_core(
     quiet: frozenset[str] = frozenset(),
     given: set[str] | None = None,
     held: list[dict[str, Any]] | None = None,
-    host: Mapping[str, Callable[[dict[str, Any]], Any]] | None = None,
 ) -> None:
     r"""Shows each warning of a ``warnings`` control message, in order, but
     those whose code ``quiet`` names: one the caller has shown already, or
     may show itself, kept in ``held`` when it is given (:func:`warn_held`).
-    Each code given is added to ``given``, shown or not. ``host`` gives the
-    values only this host holds that a sentence names (``{host.<name>}``),
-    each from the warning's decoded fields, as a ranking's candidates as the
-    caller gave them (T2.8). Warnings of one group of the core's table,
+    Each code given is added to ``given``, shown or not. A sentence naming
+    a value only this host holds takes it from the call in progress
+    (:func:`holding`). Warnings of one group of the core's table,
     given one after another with the same values of the fields it names,
     are shown as one."""
     message = codec.read(control, attachments)
@@ -630,22 +674,17 @@ def warn_from_core(
         else:
             shown.append((key, [warning]))
 
-    def held_by_host(warning: Mapping[str, Any]) -> Mapping[str, Any]:
-        return _HostValues(host or {}, _fields(warning.get('fields', {})))
-
     for key, together in shown:
         first = together[0]
         if key is None:
-            text = said(first, held_by_host(first))
+            text = said(first)
         else:
             words = groups[key[0]]
             text = (
                 _Words(_fields(first.get('fields', {})), {}).format(
                     words['opening']
                 )
-                + words['between'].join(
-                    said(w, held_by_host(w)) for w in together
-                )
+                + words['between'].join(said(w) for w in together)
                 + words['closing']
             )
         warnings.warn(

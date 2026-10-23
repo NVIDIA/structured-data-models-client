@@ -50,7 +50,7 @@ import warnings
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
-from sdm_client._rust import codec, providers, results
+from sdm_client._rust import codec, errors, providers, results
 from sdm_client._rust.run import run
 from sdm_client.errors import StructuredDataError
 
@@ -151,20 +151,14 @@ def from_source(
         'source': 1,
         'check_keys': bool(check_keys),
     }
-    try:
+    # The source, which only this host holds, as the core's sentence of a
+    # source with no table names it (`engine_graph`'s refusal, T3.17).
+    with errors.holding(source=lambda fields: source):
         finished = run(
             operation,
             {1: codec.attachment(spec)},
             provider=provider,
         )
-    except StructuredDataError as refused:
-        if (refused.details or {}).get('rule') == 'no_tables':
-            # The core's refusal, said naming the source as the reference
-            # names it, which only this host holds (`engine_graph`'s refusal
-            # of a source with no table).
-            refused.message = f'{source!r} holds no table to describe'
-            refused.args = (refused.message,)
-        raise
     described = results.expect(finished.result, results.Described)
     return build(cls, source, json.loads(finished.take(described.description)))
 
