@@ -399,14 +399,14 @@ def gather(
         attachments,
         provider=provider,
         state=materializer._core_sampler_state,
+        read=schema._keep_readings,
     )
     gathered = results.expect(finished.result, results.Gathered)
     # Where the run read each table the schema had not read, kept with the
     # schema for its next run, a table it holds a reading of left as it is,
     # as the reference's engine keeps the tables its first run read
     # (`EngineTables.keep`, T3.4).
-    for source_name, namespace in gathered.read_under.items():
-        schema._read_under.setdefault(source_name, namespace)
+    schema._keep_readings(gathered.read_under)
     state = gathered.state
     if gathered.query is None:
         raise StructuredDataError(

@@ -900,10 +900,6 @@ class Schema:
         # The engine's own reading of the source's tables, kept so that each
         # question does not read them again. Set by the first read.
         self._engine_tables: Any = None
-        # Where the core read each source table this schema described, by
-        # source name (the contract's `HeldSchema.read_under`), as the
-        # engine's reading is kept: a schema built anew has read none.
-        self._read_under: dict[str, tuple[str, ...]] = {}
         self._conversion_notes: tuple[str, ...] = ()
 
     @property
@@ -997,7 +993,6 @@ class Schema:
             {
                 '_source': None,
                 '_engine_tables': None,
-                '_read_under': {},
                 '_conversion_notes': (),
                 # The core's description of the source an earlier client
                 # kept beside the schema (to T3.16): its columns now carry
@@ -1040,6 +1035,36 @@ class Schema:
             _require_column(self._tables, link.target_table, link.target_column)
             _require_joinable(self._tables, link)
 
+    @property
+    def _read_under(self) -> Mapping[str, tuple[str, ...]]:
+        r"""Where the core read each of this schema's source tables, by source
+        name (T3.4), held with the engine's reading of them
+        (``EngineTables.readings``) so it lives exactly as long: none for a
+        schema whose engine reading is none yet."""
+        tables = self._engine_tables
+        return {} if tables is None else tables.readings()
+
+    def _keep_readings(
+        self, read: Mapping[str, tuple[str, ...]], *, replace: bool = False
+    ) -> None:
+        r"""Where the core says it read tables, kept with the engine's reading
+        as the old route keeps a table it read (``EngineTables.keep``): an
+        entry for a source name held already left as it is; or, ``replace``,
+        the readings as the core answered them whole (an edit's echo). The
+        engine's reading is made where none is yet, as the relational
+        materializer makes it before its first read."""
+        if not read and (replace is False or self._engine_tables is None):
+            return
+        from sdm_client.materializers.sources import EngineTables
+
+        if self._engine_tables is None:
+            self._engine_tables = EngineTables()
+        held = self._engine_tables.readings()
+        if replace:
+            held.clear()
+        for source_name, namespace in read.items():
+            held.setdefault(source_name, tuple(namespace))
+
     def snapshot(self) -> Schema:
         r"""This schema as it stands, so a later edit cannot reach back.
 
@@ -1062,7 +1087,6 @@ class Schema:
         # What the engine read of the source is shared, not copied: it is what
         # the tables are, and every gather is given its own copy of it.
         copied._engine_tables = self._engine_tables
-        copied._read_under = dict(self._read_under)
         copied._conversion_notes = self._conversion_notes
         return copied
 

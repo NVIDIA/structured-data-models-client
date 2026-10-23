@@ -120,7 +120,9 @@ def _store(
     schema._own_tables()
     # Where the schema read each relation, as the core answered it (the
     # contract's `HeldSchema.read_under`, which no edit changes).
-    schema._read_under = results.read_under(answer.get('read_under') or [])
+    schema._keep_readings(
+        results.read_under(answer.get('read_under') or []), replace=True
+    )
     answered = {table['name']: table for table in answer['tables']}
     for name, table in schema.tables.items():
         given = answered[name]
