@@ -1,5 +1,5 @@
 {
- "about": "The old client's Databricks statements for each request kind of sdm_contract::data::DataRequest, as it sent them in the runs of capture.json (record.py): the reference side of T3.4's goldens (rust/crates/sdm-data/tests/databricks_goldens.rs), for the diff the T3.4 brief's exit 2 reviews. C-1's recorded statements replace them.",
+ "about": "The old client's Databricks statements for each request kind of sdm_contract::data::DataRequest, as it sent them in the runs of capture.json (a synthetic unit fixture, recorded once with an offline stand-in since removed): the reference side of T3.4's goldens (rust/crates/sdm-data/tests/databricks_goldens.rs), for the diff the T3.4 brief's exit 2 reviews (compare.py beside it). C-1's recorded statements replace them.",
  "reference_commit": "43e55f4f",
  "kinds": {
   "describe/tables": [

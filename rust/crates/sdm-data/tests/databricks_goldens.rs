@@ -9,11 +9,11 @@
 //! core must copy verbatim are held to the old client's.
 //!
 //! The reference side is `contract/fixtures/databricks/reference-statements.json`,
-//! recorded by `contract/fixtures/databricks/record.py` from the reference
-//! (43e55f4f) running the cases on a stand-in Databricks connection, until
-//! C-1's recorded statements replace it; `record.py --diff` prints each
-//! golden beside the reference's statement of its kind, the evidence's
-//! diff. The relations are `main`.`shop`.<table>, the catalog and schema
+//! a synthetic unit fixture recorded once from the reference (43e55f4f)
+//! running the cases on an offline stand-in Databricks connection, since
+//! removed (owner B-lite), until C-1's recorded statements replace it;
+//! `contract/fixtures/databricks/compare.py` prints each golden beside the
+//! reference's statement of its kind, the evidence's diff. The relations are `main`.`shop`.<table>, the catalog and schema
 //! the fixture records under (its `{catalog}` and `{schema}`).
 //!
 //! What gates, by the design (choice 2, exact replay; choice 7 and KO3-41,
@@ -33,7 +33,7 @@
 //! The other statements' text is the dialect's, pinned here and reviewed
 //! against the old client's: a golden seeded with the old client's text may
 //! be changed with the request it answers, the diff then shown by
-//! `record.py --diff`.
+//! `contract/fixtures/databricks/compare.py`.
 
 mod goldens;
 
