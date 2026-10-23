@@ -40,16 +40,17 @@ from collections.abc import Callable, Mapping
 from types import ModuleType
 from typing import Any
 
+from sdm_connectors.providers import Provider
+
 from sdm_client._routing import RouteError
 from sdm_client._rust import codec, errors, facts
-from sdm_client._rust.providers import databricks
 from sdm_client.errors import StructuredDataError
 
-#: A provider: answers one fetch, the ``FetchStep`` as the contract writes
-#: it, with an object that exports Arrow through ``__arrow_c_stream__``, or
-#: with a :class:`Page` of it; the key sets its plan names are handed over
-#: with it, by attachment id, each an object exporting Arrow the same way.
-Provider = Callable[[dict[str, Any], Mapping[int, Any]], Any]
+# A provider (``sdm_connectors.providers.Provider``) answers one fetch, the
+# ``FetchStep`` as the contract writes it, with an object that exports Arrow
+# through ``__arrow_c_stream__``, or with a :class:`Page` of it; the key
+# sets its plan names are handed over with it, by attachment id, each an
+# object exporting Arrow the same way.
 
 #: A model: answers one call, given its body's bytes, with the bytes of the
 #: endpoint's answer.
@@ -109,14 +110,17 @@ def native() -> ModuleType:
     return _native
 
 
-def _driver(error: Exception) -> tuple[dict[str, Any], str]:
+def _driver(
+    error: Exception, provider: Any = None
+) -> tuple[dict[str, Any], str]:
     r"""A driver's exception as the contract's ``ProviderError``, and its class.
 
     Only the SQLSTATE and the vendor code are kept, as text, from the
-    attributes drivers put them in, and for a Databricks failure the
-    SQLSTATE its message writes and ``refuses_expression``
-    (:func:`~sdm_client._rust.providers.databricks.error_fields`); the
-    driver's message is not.
+    attributes drivers put them in, and what ``provider`` reads of the
+    failure where it reads one (its ``error_fields``, the
+    :class:`~sdm_connectors.providers.Provider` protocol's hook: a
+    Databricks failure's SQLSTATE its message writes and
+    ``refuses_expression``); the driver's message is not.
     """
     sqlstate = next(
         (
@@ -142,10 +146,11 @@ def _driver(error: Exception) -> tuple[dict[str, Any], str]:
         'sqlstate': sqlstate,
         'vendor_code': vendor,
     }
-    # A Databricks failure carries its SQLSTATE in its message (the SQL
-    # connector's) or answers it (Spark's), and says whether it refused an
-    # expression (``refuses_expression``, T3.4), as the reference reads it.
-    said = databricks.error_fields(error)
+    # What the provider reads of its driver's failure beyond the attributes
+    # above (a Databricks failure's SQLSTATE in its message and
+    # ``refuses_expression``, T3.4), as the reference reads it.
+    read = getattr(provider, 'error_fields', None)
+    said = read(error) if callable(read) else None
     if said is not None:
         provided.update(said)
     return provided, f'{kind.__module__}.{kind.__qualname__}'
@@ -332,7 +337,7 @@ def _steps(
                 handle.cancel()
                 raise
             except Exception as failure:  # noqa: BLE001 - the provider's
-                provided, driver_class = _driver(failure)
+                provided, driver_class = _driver(failure, provider)
                 outcome = {'outcome': 'error', 'error': provided}
             reply = codec.encode(
                 {
