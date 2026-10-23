@@ -1211,3 +1211,28 @@ def test_every_refusal_of_an_installed_guard_is_kept(installed: Any) -> None:
         _ = installed['DataFrame']().write
     assert len(wg.REFUSALS) == 2
     assert 'outside the test schema' in wg.REFUSALS[0]
+
+
+def test_the_old_clients_sampled_derived_table_read_passes() -> None:
+    # C-1 (databricks-sql, rule.key-name-form): the old client samples a
+    # renamed source as a derived table, `FROM (SELECT ...) TABLESAMPLE`.
+    # That read passes; a write dressed with the same sample, and a
+    # TABLESAMPLE after any other parenthesis, are still refused.
+    read = (
+        'SELECT `a`, `b`\n'
+        'FROM (SELECT source.`id` AS `a`, source.`x` AS `b` '
+        'FROM `other`.`s`.`t` AS source)\n'
+        'TABLESAMPLE (100.0 PERCENT) REPEATABLE (42)\n'
+        'WHERE `a` IS NOT NULL\nLIMIT 10000'
+    )
+    DATABRICKS.check(read)
+    for sql in (
+        'CREATE TABLE `other`.s.u AS SELECT * FROM (SELECT * FROM '
+        '`other`.s.t) TABLESAMPLE (5 PERCENT)',
+        'INSERT INTO `other`.s.u SELECT * FROM (SELECT * FROM '
+        '`other`.s.t) TABLESAMPLE (5 PERCENT)',
+        'SELECT * FROM `other`.s.t WHERE (a > 1) TABLESAMPLE (5 PERCENT)',
+        'SELECT * FROM (VALUES (1)) TABLESAMPLE (5 PERCENT)',
+    ):
+        with pytest.raises(wg.WriteRefused):
+            DATABRICKS.check(sql)
