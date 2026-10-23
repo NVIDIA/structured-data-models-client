@@ -10,7 +10,8 @@
 //! DuckDB and SQLite take 0, Postgres 1 (schema), Databricks 2 (catalog,
 //! schema).
 
-use sdm_contract::data::{DataLayer, DataRequest, FetchPlan, ProviderChoice};
+use sdm_contract::Scalar;
+use sdm_contract::data::{DataLayer, DataRequest, FetchPlan, ProviderChoice, SqlParam};
 use sdm_data::Data;
 use serde_json::json;
 
@@ -71,4 +72,45 @@ fn each_dialect_reads_a_relation_under_its_namespace_depth() {
     refused_by_namespace(text("databricks", json!(["x", "c", "s"])));
     // A part given inside one left to the connection writes no relation.
     refused_by_namespace(text("databricks", json!(["c", null])));
+}
+
+/// A Databricks source naming its catalog alone (`DatabricksSource(conn,
+/// catalog='main')`, round 1's P1-1): its namespace is read, the catalog
+/// given bound and the schema the session's current one, which the core
+/// then reads every relation under; deeper than two parts still refused.
+#[test]
+fn a_catalog_alone_reads_its_namespace_with_the_session_s_current_schema() {
+    let request: DataRequest = serde_json::from_value(json!({
+        "request": "describe", "tables": [], "part": "namespace"
+    }))
+    .unwrap();
+    let Ok(FetchPlan::Sql { statements, .. }) =
+        Data::new().plan(&request, &choice("databricks", json!(["main", null])))
+    else {
+        panic!("the namespace of a catalog alone is read");
+    };
+    let statement = statements.last().unwrap();
+    assert!(
+        statement.text.contains("SELECT 0 AS o, ? AS n"),
+        "{}",
+        statement.text
+    );
+    assert!(
+        statement
+            .text
+            .contains("SELECT 1 AS o, current_schema() AS n"),
+        "{}",
+        statement.text
+    );
+    assert_eq!(
+        statement.params,
+        vec![SqlParam::Value {
+            value: Scalar::Utf8("main".to_owned())
+        }]
+    );
+    assert!(
+        Data::new()
+            .plan(&request, &choice("databricks", json!(["x", "main", null])))
+            .is_err()
+    );
 }
