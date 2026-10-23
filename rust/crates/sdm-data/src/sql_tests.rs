@@ -14,8 +14,8 @@ use arrow_array::RecordBatch;
 use sdm_contract::catalog::CatalogAnswer;
 use sdm_contract::data::{
     DataRequest, DescribePart, Determinism, ExpectedSchema, FetchPlan, Filter, KeySet,
-    ProviderCapabilities, Relation, SeedBound, TableColumn, TableKey, TieTerm, Window, field,
-    seed_integer,
+    ProviderCapabilities, Relation, SeedBound, SqlParam, TableColumn, TableKey, TieTerm, Window,
+    field, seed_integer,
 };
 use sdm_contract::{ColumnType, CoreError, Detail, Scalar, Unit};
 
@@ -208,11 +208,22 @@ impl SqlDialect for Plain {
     fn describe(
         &self,
         _request: &DataRequest,
-        _tables: &[Relation],
-        _part: DescribePart,
+        tables: &[Relation],
+        part: DescribePart,
         _namespace: &[String],
-    ) -> Result<String, CoreError> {
-        Ok("SHOW TABLES".to_owned())
+    ) -> Result<(String, Vec<SqlParam>), CoreError> {
+        // A catalog read binding the name it looks for, as a warehouse's
+        // does (Databricks's `lower(?)`, T3.4).
+        Ok(match (part, tables) {
+            (DescribePart::Columns, [table]) => (
+                "SELECT column_name FROM information_schema.columns WHERE lower(table_name) = lower(?)"
+                    .to_owned(),
+                vec![SqlParam::Value {
+                    value: Scalar::Utf8(table.source.last().cloned().unwrap_or_default()),
+                }],
+            ),
+            _ => ("SHOW TABLES".to_owned(), vec![]),
+        })
     }
 
     fn expected(&self, request: &DataRequest) -> ExpectedSchema {
@@ -395,6 +406,43 @@ fn a_new_dialect_gets_every_shared_shape_by_implementing_the_trait() {
         }),
         "SHOW TABLES"
     );
+}
+
+#[test]
+fn a_catalog_statement_keeps_the_parameters_its_dialect_binds() {
+    let request = DataRequest::Describe {
+        tables: vec![relation(&["Orders"])],
+        part: DescribePart::Columns,
+    };
+    let FetchPlan::Sql { statements, .. } = sql::plan(&Plain, &request, &[]).unwrap() else {
+        panic!("a dialect planned a host fetch");
+    };
+    let [statement] = statements.as_slice() else {
+        panic!("one catalog statement, not {}", statements.len());
+    };
+    assert_eq!(
+        statement.text,
+        "SELECT column_name FROM information_schema.columns WHERE lower(table_name) = lower(?)"
+    );
+    assert_eq!(
+        statement.params,
+        vec![SqlParam::Value {
+            value: Scalar::Utf8("Orders".to_owned()),
+        }]
+    );
+    // A catalog statement binding nothing carries no parameter.
+    let FetchPlan::Sql { statements, .. } = sql::plan(
+        &Plain,
+        &DataRequest::Describe {
+            tables: vec![],
+            part: DescribePart::Tables,
+        },
+        &[],
+    )
+    .unwrap() else {
+        panic!("a dialect planned a host fetch");
+    };
+    assert!(statements.iter().all(|s| s.params.is_empty()));
 }
 
 #[test]
