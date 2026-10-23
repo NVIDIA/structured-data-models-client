@@ -344,6 +344,9 @@ def gather(
     operation = {
         'op': 'materialize',
         'provider': choice,
+        # The run's steps of progress, which keep the schema's engine
+        # reading as the reference keeps it (T3.4).
+        'progress': True,
         'schema': 1,
         'query': 2,
         'indices': 3,
@@ -394,18 +397,17 @@ def gather(
     # The sampler state the core's last run on this materializer left,
     # handed back, so a run skips what the reference's sampler reads once
     # (decision E52); the run leaves its own in its place, done or failed.
-    # The schema's engine reading made before the run reads anything, as
-    # the relational materializer makes it before its first read
-    # (`relational.py:555`), so a run that fails at once leaves one, empty;
-    # where the run reads the tables it reads anew is kept in it the moment
-    # those reads are answered (T3.4).
-    schema._engine_reading()
     finished = run(
         operation,
         attachments,
         provider=provider,
         state=materializer._core_sampler_state,
+        # The schema's engine reading made when the run builds its graph, a
+        # schema of a source's alone, and where it read its tables kept when
+        # it says so, as the reference's materializer makes and keeps them
+        # (`relational.py:554-556`, T3.4).
         read=schema._keep_readings,
+        built=None if schema.source is None else schema._engine_reading,
     )
     gathered = results.expect(finished.result, results.Gathered)
     state = gathered.state

@@ -15,7 +15,7 @@
       "moved": "T1.32a: the bridge's key_type refusal, for a key type it had no cast for, is the core's (sdm_engine::keys::cast refuses a key type no rule casts to)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::gather": {
-      "refactor": "T3.4 fix 5 to 7: the schema's engine reading made before the run reads anything, as relational.py:555 makes it, and where the run reads the tables it reads anew kept through run's read hook the moment the requests carrying them (FetchStep.read_under) are answered; no rule here"
+      "refactor": "T3.4 fix 5 to 8: the run asks for its progress steps; the schema's engine reading made when the run says it builds its graph (a source's schema alone), and where it read its tables kept when it says it read them, through run's built and read hooks, as relational.py:555 and EngineTables.keep make and keep the old route's; no rule here"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_text": {
       "moved": "T1.36 fix 4 (the final review's P2-2): the host's half of the moved cast: a float in a mix written as the core now writes a float entity (sdm_engine::keys's float_text), the reference's text of it, pyarrow's cast of the float to text at its own width (1e16 is 1e+16), so the core reads back the number the host was given; a boolean as before"
@@ -231,7 +231,7 @@
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::<module>": {
-      "moved": "T3.17: the core picks every error's and warning's sentence (Sentence, sdm-contract) and its template is the core's (wording.rs, _native.templates()); WORDED, SAID, GROUPED and the generic fallback gone; the module keeps the classes, the advice spellings and the host-owned words; fix 1: host-held values from the call in progress (holding), the a and I conversions and the to() pairing"
+      "refactor": "T3.4 fix 8: the semantic_model advice, Python's spelling of reading a metric view as a semantic model (source.semantic_model(name)), for the core's metric_view_as_table sentence; no rule here"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_Words.convert_field": {
       "moved": "T3.17: the one value formatter gains the conversions the shared templates name (d, p); fix 1: host-held values from the call in progress (holding), the a and I conversions and the to() pairing"
