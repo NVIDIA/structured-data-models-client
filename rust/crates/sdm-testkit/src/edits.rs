@@ -178,7 +178,6 @@ pub fn held(described: &SourceDescription) -> HeldSchema {
                             unique: column.unique,
                             declared_type: column.declared_type.clone(),
                             exact_number: column.exact_number,
-                            namespace: None,
                         }),
                     })
                     .collect(),
@@ -188,6 +187,7 @@ pub fn held(described: &SourceDescription) -> HeldSchema {
             })
             .collect(),
         links: described.links.clone(),
+        read_under: Vec::new(),
     }
 }
 

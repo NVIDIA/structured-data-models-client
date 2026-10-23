@@ -7,7 +7,7 @@
         "fingerprint": "21878033f1028c3ee7d35b99d327eeb9e41be1e9dce1847b7b5116c79cd6aa76"
       },
       "build": {
-        "fingerprint": "eb2e1eef7e6c79096fb93538806f0089a8e2d83dc95e2c6b7347bd651da09409"
+        "fingerprint": "76352cc9691d76fd17d604cb07766c8e4d84c156c8851102fbae0d62ef698047"
       },
       "from_source": {
         "fingerprint": "d172f8d885c8787f27efa664d560d91157b27fbc87d200a7dc9d851757659ad9"
@@ -375,7 +375,7 @@
     },
     "packages/structured-data-models-client/src/sdm_client/schema.py": {
       "<module>": {
-        "fingerprint": "ee525ea53ce6d99d4bd3ebebe5a7b80e11cdc8d53beca1eeed1c65d19b7467d6"
+        "fingerprint": "887250fa4c76d25e7a532c5f4aafedddd569ad8576c790151bd2580d76034600"
       },
       "Column.__setattr__": {
         "fingerprint": "69a9732baf2040e15b128e4137f50ddeccab23c6dfa5dd25d17739296c90c252"
