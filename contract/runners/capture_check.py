@@ -849,7 +849,11 @@ def capture_problems(
             mine = {
                 **raw,
                 'results': [
-                    {k: v for k, v in result.items() if k != 'arrow'}
+                    {
+                        k: v
+                        for k, v in result.items()
+                        if k not in ('arrow', 'held')
+                    }
                     if isinstance(result, dict)
                     else result
                     for result in raw.get('results') or []
@@ -890,6 +894,16 @@ def capture_problems(
                         f'{where} read {read}: columns {table.column_names} '
                         f'held, {columns} read'
                     )
+            # The values too, not only their shape (Codex r2 P1-1): the
+            # saved rows' digest is the read's, or, where placeholders
+            # changed them, the one the recording wrote beside it.
+            want = result.get('held') or (result.get('values') or {}).get(
+                'ordered'
+            )
+            if table is not None and run.saved_digest(result, table) != want:
+                problems.append(
+                    f'{where} read {read}: the Arrow held is not the rows read'
+                )
             schema = result.get('schema')
             if table is not None and isinstance(schema, list):
                 held_schema = [

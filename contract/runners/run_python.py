@@ -4168,6 +4168,42 @@ def capture_line(
     }
 
 
+def saved_digest(result: dict[str, Any], table: Any) -> str:
+    r"""The digest, in order, of a kept result's rows in the canonical form
+    its read recorded: an Arrow read's (it has a ``schema``) through
+    :func:`arrow_values`, a row read's through :func:`result_values` over
+    the table's rows, so a saved table is held to the read it stands for
+    (Codex r2 P1-1)."""
+    if 'schema' in result:
+        return arrow_values(table)['ordered']
+    names = list(table.schema.names)
+    columns = [column.to_pylist() for column in table.columns]
+    rows = list(zip(*columns, strict=True)) if columns else []
+    return result_values(names, None, rows, duckdb_types=False)['ordered']
+
+
+def _hold_reads(line: dict[str, Any], held: Placeheld) -> None:
+    r"""Each kept result checked against its read before it is written
+    (a kept table that is not the rows read is refused, naming the case),
+    and given ``held``, the digest of its placeheld table, where
+    placeholders change its rows: a recorded digest is of the private
+    values, which the written table no longer holds."""
+    for position, statement in enumerate(line.get('statements') or []):
+        for read, result in enumerate(statement.get('results') or []):
+            table = result.get('arrow')
+            if not (hasattr(table, 'schema') and hasattr(table, 'num_rows')):
+                continue
+            digest = saved_digest(result, table)
+            if digest != (result.get('values') or {}).get('ordered'):
+                raise RunnerFailure(
+                    f'{line["case"]}: statement {position} read {read} kept '
+                    'a table that is not the rows read; nothing is written'
+                )
+            placeheld = saved_digest(result, held.table(table))
+            if placeheld != digest:
+                result['held'] = placeheld
+
+
 def written(line: dict[str, Any], held: Placeheld) -> str:
     r"""A capture line as the text the recording mode writes: every private
     name placeheld, every Arrow table as IPC text, and the write refused
@@ -4176,6 +4212,7 @@ def written(line: dict[str, Any], held: Placeheld) -> str:
     included (each checked before it is encoded, so an encoding's bytes
     never pass for a name)."""
     tables: list[Any] = []
+    _hold_reads(line, held)
 
     def hold(value: Any) -> Any:
         if hasattr(value, 'schema') and hasattr(value, 'num_rows'):
