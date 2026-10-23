@@ -35,7 +35,7 @@ use arrow_schema::TimeUnit;
 use sdm_contract::catalog::{CatalogAnswer, CatalogForeignKey};
 use sdm_contract::data::{DataRequest, DescribePart, Relation, TableKey};
 use sdm_contract::ops::{ColumnRef, DescribedSource, NamedTable, OperationResult, SourceSpec};
-use sdm_contract::{CoreError, Detail, HostFacts, Scalar, Sentence, Unit};
+use sdm_contract::{CoreError, Detail, ErrorCode, HostFacts, Scalar, Sentence, Unit};
 use sdm_engine::time::text::Reader;
 use sdm_engine::time::{Instant, Zones};
 use sdm_schema::assemble::{self, Assembled, Given};

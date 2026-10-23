@@ -61,7 +61,7 @@ use sdm_contract::data::{
 };
 use sdm_contract::ops::Dtype;
 use sdm_contract::types::ColumnType;
-use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, Scalar};
+use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 
 use crate::sql::{self, NameCase, Sample, SeedRead, SqlDialect, not_taken};
 
@@ -438,8 +438,7 @@ impl CatalogTarget {
             },
             _ => {
                 return Err(CoreError::new(
-                    ErrorKind::Internal,
-                    ErrorCode::InternalError,
+                    Sentence::Internal,
                     "a relation past the parts the dialect takes reached its catalog read",
                 ));
             }
@@ -794,9 +793,6 @@ const SESSION_WORDS: &[&str] = &[
     "user",
 ];
 
-/// The rule a refusal of a metric view read as a table names.
-const METRIC_VIEW_RULE: &str = "metric_view";
-
 /// A table's columns, in order: each its name, its full declared type and
 /// whether it is declared not null (`is_nullable` other than `NO`, read as
 /// the reference reads it); a metric view refused by name, as the reference refuses one
@@ -815,12 +811,10 @@ fn read_columns(
         for row in 0..batch.num_rows() {
             if found.is_empty() && value(&kinds, row).as_deref() == Some("METRIC_VIEW") {
                 let mut refusal = CoreError::new(
-                    ErrorKind::InvalidRequest,
-                    ErrorCode::InvalidRequest,
+                    Sentence::MetricViewAsTable,
                     "a metric view is read as a table; its measures have no value per row",
                 )
-                .with_field("request", Detail::text(request.name()))
-                .with_field("rule", Detail::text(METRIC_VIEW_RULE));
+                .with_field("request", Detail::text(request.name()));
                 if let Some(table) = value(&tables, row) {
                     refusal = refusal.with_field("metric_view", Detail::text(table));
                 }
@@ -930,8 +924,7 @@ pub(crate) fn declared_dtype(declared: &str) -> Option<Dtype> {
 
 fn unread(at: usize) -> CoreError {
     CoreError::new(
-        ErrorKind::Internal,
-        ErrorCode::InternalError,
+        Sentence::Internal,
         "a catalog answer's column is missing or not text",
     )
     .with_field("position", Detail::text(at.to_string()))
@@ -1068,8 +1061,7 @@ pub(crate) fn bound_keys(
 ) -> Result<Option<(SchemaRef, Vec<RecordBatch>)>, CoreError> {
     let unbound = || {
         CoreError::new(
-            ErrorKind::Internal,
-            ErrorCode::InternalError,
+            Sentence::Internal,
             "a key set holds a column this dialect does not bind",
         )
     };
@@ -1147,8 +1139,7 @@ fn arrow_cast(column: &ArrayRef, to: &DataType) -> Result<ArrayRef, CoreError> {
                 .map(Int64Array::from)
                 .ok_or_else(|| {
                     CoreError::new(
-                        ErrorKind::Internal,
-                        ErrorCode::InternalError,
+                        Sentence::Internal,
                         "a key is not an integer the binding writes",
                     )
                 })?,
@@ -1165,8 +1156,7 @@ fn arrow_cast(column: &ArrayRef, to: &DataType) -> Result<ArrayRef, CoreError> {
                 .map(StringArray::from)
                 .ok_or_else(|| {
                     CoreError::new(
-                        ErrorKind::Unsupported,
-                        ErrorCode::UnsupportedRequest,
+                        Sentence::KeySetTypeUnbound,
                         "a key of this type is not one the binding writes as text",
                     )
                 })?,
