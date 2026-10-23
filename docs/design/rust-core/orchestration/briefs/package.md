@@ -1,7 +1,7 @@
 # Package brief template
 
 Every package brief is written from this template before its test author starts (learnings.md, lesson 16).
-`scripts/rust_core/brief_check.py <file>` names every `##` heading below a brief leaves out (T3.1); the orchestrator runs it before each launch, and T3.2's tooling train makes `lane.py start --brief <file>` refuse such a brief.
+`scripts/rust_core/brief_check.py <file>` names every `##` heading below a brief leaves out (T3.1); the orchestrator runs it before each launch, and since T3.2 `lane.py start --brief <file>` refuses such a brief.
 A heading may say "none" with a reason; it may not be left out.
 The standing rules of [implementer.md](implementer.md) and [test-author.md](test-author.md) are appended after it, as today.
 
@@ -30,7 +30,7 @@ The list for this package: lifting a refusal updates the census and the differen
 Every reader of every file the package adds or changes, with the command that runs it, the landed judging copy included.
 
 ## Judging paths
-Every path of `scripts/rust_core/judging-paths.txt` the package would change: none, or the change the orchestrator moves into the tooling train.
+Every path of `scripts/rust_core/judging-paths.txt` the package would change, or none; it lands with the package's product code.
 
 ## Owner decisions
 Each decision row the package relies on, with the owner's words verbatim and the question as asked.

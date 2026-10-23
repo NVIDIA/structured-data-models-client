@@ -69,22 +69,3 @@ def test_any_other_change_to_a_reference_file_is_refused(
     assert found is not None and said in found, (name, found)
     read = {PATH: (_text(LINES), _text(new))}.__getitem__
     assert judging.not_train(RULES, [PATH], read) == [PATH]
-
-
-def test_land_py_hands_the_train_check_the_reference_texts() -> None:
-    import importlib.util
-
-    spec = importlib.util.spec_from_file_location(
-        't32_reference_land', ROOT / 'scripts/rust_core/land.py'
-    )
-    assert spec is not None and spec.loader is not None
-    land = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = land
-    spec.loader.exec_module(land)
-    paths = ['scripts/rust_core/compare.py', PATH]
-    added = {PATH: (_text(LINES), _text(_with(result_text='t')))}.__getitem__
-    changed = {PATH: (_text(LINES), _text(LINES[:1]))}.__getitem__
-    args = (paths, RULES, 'T3.2', True, True, None)
-    assert land.judging_problem(*args, added) is None
-    why = land.judging_problem(*args, changed)
-    assert why is not None and PATH in why, why

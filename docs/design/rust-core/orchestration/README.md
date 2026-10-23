@@ -135,7 +135,7 @@ Three scripts in `scripts/rust_core/orchestration/` carry the mechanical part. E
 - **Stack on the landing commit**, never on a landed candidate. Phase 1 lost a cycle when the ratchet refused a merge base that wasn't a landing commit.
 - **Clean rebases are confirmed by script** (`mech_confirm.py`; decision E130). Reviewers look again only when the move changed something.
 - **Stacks, not chains.** Up to 4 approved packages land together, each on its own stamp (`land.py --stack`, then `stack-land`; "Stacked landings" below). `land_chain.sh` lands a chain one package at a time, each on its own stamp.
-- **Judging-path changes ride the train.** `land.py` refuses a package that changes a path in `scripts/rust_core/judging-paths.txt` unless it is the phase's first package or the tooling train (`--train`, first in its stack); see "The tooling train" below.
+- **Judging-path changes land with their package.** A package may change a path in `scripts/rust_core/judging-paths.txt` and product code together and land normally; both reviewers review all of it (T3.24, the owner, 2026-10-23: "The train rule - sure delete it, this will save time."). See "The judging paths" below.
   Every guard or gate change must also pass in its post-landing state.
 
 ## The Phase 3 process mechanisms (T3.0)
@@ -158,19 +158,18 @@ Up to 4 approved packages land together, each on its own handoff stamp, made for
    It checks the whole chain again, each package's stamp included, and fast-forwards the phase branch over every landing in one atomic push.
    Each landing's checkpoint stays the landing before it.
 4. If a package has no stamp, or a stamp made for another package, `stack-land` refuses naming it and `handoff.py run`; a prefix whose packages are stamped lands with `land.py stack-land --tip <that landing>`.
-5. If the phase head moved under a stack, `land.py restack --tip <top landing> [--train-first] [--move-branches]` replays it on the new head in a scratch worktree. Each patch must be the same (patch-id, `move_confirm.py`'s rule), so the reviews carry over; each moved package needs a new stamp, since `restack` drops the old trailer. A conflict or a changed patch refuses, and that package needs a review round. A single approved package moved before stacking is still confirmed with `move_confirm.py`.
+5. If the phase head moved under a stack, `land.py restack --tip <top landing> [--move-branches]` replays it on the new head in a scratch worktree. Each patch must be the same (patch-id, `move_confirm.py`'s rule), so the reviews carry over; each moved package needs a new stamp, since `restack` drops the old trailer. A conflict or a changed patch refuses, and that package needs a review round. A single approved package moved before stacking is still confirmed with `move_confirm.py`.
 
 `land.py verify` of a stacked landing stands on its own stamp. `auto_land.py` does steps 1 and 3 from queue entries: `"stack": true` and `{"stack_tip": SHA, ...}`.
 
-### The tooling train (item 1, land.py's part)
+### The judging paths (item 1)
 
 `scripts/rust_core/judging-paths.txt` lists the judging paths: the files that decide pass or fail (the gate, the ratchet, the comparator, coverage, the census, `land.py` and `lane.py`, the case and observation readers and their schemas).
 What product packages change as normal work is left out: the bridge freeze and its seeds, `wheel_smoke.py`, the recorders and probes under `contract/tools/`, vectors, cases and `ci.yml`.
 `land.py` reads it from the phase head, so a package cannot take its own change off the list.
-Only the phase's first package may change a judging path outside a train.
-After it, every judging change found mid-phase goes into one train package, which changes judging paths, other checking tools (`scripts/rust_core/`, `contract/runners/`, `contract/tools/`), their tests and docs only (and `contract/reference/**` only by adding fields to the lines already there, which `judging.py` checks), and lands at the front of the next stack: `land.py --stack --train ...` (its landing carries `Train: yes`).
-A package changing a judging path anywhere else is refused with a message naming that command.
-To collect a find into the train, cherry-pick its judging-only commits onto the train's branch under the train's ID, and drop them from the package.
+Everything outside the list (and outside tests, docs and the orchestration scripts) is product code, which the commit-msg rule's `Rule:` line covers in a fix commit (item 4).
+A package may change judging paths and product code together and land normally, alone or in a stack; both reviewers review everything it changes.
+The tooling train (a separate `--train` package, first in its stack, for every judging change after the phase's first package) is gone: it forced three mechanical splits in Phase 3 that caught nothing (T3.24, the owner, 2026-10-23).
 
 ### The handoff stamp (item 4)
 
@@ -256,13 +255,13 @@ The machine has 8 vCPUs, 30 GB of memory and 412 GB of fast disk at `/mnt/locals
 
 - **Before the design locks**, run `scripts/rust_core/gate_dryrun.sh kinds.yaml --python $SDM_LANE_ENV/current/cell-ref-pandas3/bin/python --gate <half>` over the design's planned case kinds (`kinds: [{name, case}]`, one stub case each).
   It judges each stub with the checkpoint's own case reader, `coverage.py`, `ratchet.py`, Python runner and `compare.py` (a worktree of the checkpoint, as the gate's harness judges) (and with `--rust` the test kit, with `--gate HALF` the locked gate) on a throwaway commit, and prints a `GAP <kind> (<case>): <tool>: ...` line for every refusal.
-  Those lines are the first train's list (the front of the first stack, `land.py --stack --train`), found up front instead of one judging package at a time mid-phase.
+  Those lines are the tooling work to do up front, instead of one judging change at a time mid-phase.
   A tool that fails on no line naming a kind prints `INCOMPLETE` and the dry run exits 1: what it judged is unknown.
   Without `--gate <half>` (the locked half the planned kinds fall in) the run is `INCOMPLETE` too, since the locked gate's refusals are part of the list.
 - **The slip report**: the heartbeat runs `scripts/rust_core/orchestration/phase_stats.py --phase-branch origin/$SDM_PHASE_BRANCH --no-ci --forecast <the design's forecast>`, a `{start, packages: [{id, hours}]}` file, and reads how many hours the phase is behind and the package or unplanned landings that caused most of it.
   It never blocks anything.
 
-### The tooling train's tools (T3.2)
+### The checking tools for Phase 3's legs (T3.2)
 
 T3.2 taught the checking tools Phase 3's warehouse and Java legs.
 

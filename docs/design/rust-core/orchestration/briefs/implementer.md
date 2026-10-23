@@ -13,7 +13,7 @@ The package brief above gives the scope, the exits, the design row and the decis
 - Final report: final SHA, each exit with its evidence, deviations, decision rows added, and anything needing the owner.
 
 **Judging paths and guards**
-- The judging paths are listed in `scripts/rust_core/judging-paths.txt`. After the phase's first package, `land.py` refuses a package changing one unless it is the tooling train (`land.py --stack --train`, first in its stack). If you need a judging change, report it: the orchestrator moves it into the train.
+- The judging paths are listed in `scripts/rust_core/judging-paths.txt`. A package may change one together with its product code and land normally; name every judging path you change in your report, so both reviewers check it.
 - Any guard or gate change must also pass in its post-landing state: the phase branch at the landing, judged against itself.
 - Guards are frozen at bug fixes. No new frameworks or harness layers; extend the existing runners, vectors and maps.
 - A new case-format key lands with accept and refuse vectors in `contract/tests/malformed-cases.json`, run by both loaders.

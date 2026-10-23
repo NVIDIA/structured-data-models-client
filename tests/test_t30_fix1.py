@@ -545,17 +545,6 @@ def test_a_binding_source_and_test_change_runs_only_the_binding_command() -> (
     assert printed == [' '.join(affected.BINDING)], printed
 
 
-def test_a_train_of_a_checker_fix_alone_is_allowed() -> None:
-    problem = land.judging_problem(
-        ['scripts/rust_core/bridge_freeze.py'], RULES, 'T3.98', True, True, None
-    )
-    assert problem is None, problem
-    # Its data stays product work: no judging path, no train needed.
-    assert (
-        judging.judging(RULES, ['scripts/rust_core/bridge_freeze.json']) == []
-    )
-
-
 @pytest.mark.parametrize(
     'command',
     [

@@ -2851,9 +2851,9 @@ def stack_tail(repo: Path, tip: str, head: str) -> str:
     walking the first-parent history from the phase head ``tip`` to
     ``head``, each landing commit whose ``Base-SHA`` is the landing before
     it (``tip`` for the first) extends the stack; the last one is the
-    candidate's checkpoint, so a package above a tooling train is judged
-    with the train's harness, each landing's checkpoint the landing before
-    it. With no such landing, or a ``head`` not above ``tip``, ``tip``."""
+    candidate's checkpoint, so a package above a landing that changed the
+    judging tools is judged with them, each landing's checkpoint the
+    landing before it. With no such landing, or a ``head`` not above ``tip``, ``tip``."""
     if git(repo, 'merge-base', tip, head).strip() != tip:
         return tip
     out = git(

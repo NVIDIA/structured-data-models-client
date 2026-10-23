@@ -58,7 +58,7 @@ SUITES = ('tests', 'contract/tests')
 MARKER = 'tooling'
 #: The marker as a test file carries it.
 MARKED = re.compile(rf'\bpytest\.mark\.{MARKER}\b')
-#: The one list of judging paths (owned by the tooling train, T3.0 item 1).
+#: The one list of judging paths (T3.0 item 1).
 JUDGING_PATHS = 'scripts/rust_core/judging-paths.txt'
 #: The tooling tests' own trigger, beyond the judging paths (T3.0 brief,
 #: item 3): changes under these run them.
