@@ -8,7 +8,8 @@
 //! is dropped or renamed, so the reference names each column its catalog
 //! read through the table (`DatabricksTable._quoted_source_name`), and a
 //! missing one fails the statement. The core names a table's columns the
-//! catalog read on its relation, each under its own name; the dialect
+//! catalog read on its relation, each under its own name, marked as the
+//! columns found (`Relation.found`, round 2's Claude P2-2); the dialect
 //! reads the table through them in every read where one is such a word,
 //! and by its name otherwise, as the reference does.
 
@@ -27,6 +28,7 @@ fn databricks() -> ProviderChoice {
 fn found(columns: &[&str]) -> Value {
     json!({
         "source": ["logins"],
+        "found": true,
         "columns": columns
             .iter()
             .map(|c| json!({"name": c, "column": c}))
@@ -93,4 +95,17 @@ fn a_table_with_no_such_column_is_read_by_its_name_as_the_reference_reads_it() {
         assert!(!text.contains("AS source"), "{name}: {text}");
         assert!(text.contains("`cat`.`sch`.`logins`"), "{name}: {text}");
     }
+}
+
+/// A derived relation a host names, its columns each its own source
+/// column, is read as those columns: only the columns the catalog found
+/// (`found`) are read by the table's name where no column needs them.
+#[test]
+fn a_host_s_derived_relation_is_read_as_its_columns() {
+    let mut table = found(&["login_id", "who", "at"]);
+    table.as_object_mut().unwrap().remove("found");
+    let text = texts(json!({
+        "request": "scan", "table": table, "columns": ["who"], "filters": [], "limit": null
+    }));
+    assert!(text.contains("AS source)"), "{text}");
 }
