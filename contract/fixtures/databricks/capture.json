@@ -1,7 +1,7 @@
 {
  "format": "sdm-capture/1",
  "fixture": true,
- "about": "A fixture written by T3.4's test author before C-1, shaped as the design's sdm-capture/1 (choice 2), recorded by record.py beside it from the reference running each case on a stand-in Databricks SQL connection over DuckDB (no warehouse): every statement the old client sent with its parameters and result, and the old client's reading of each catalog answer. C-1's capture replaces it.",
+ "about": "A fixture written by T3.4's test author before C-1, shaped as the design's sdm-capture/1 (choice 2), recorded once from the reference running each case on an offline stand-in Databricks SQL connection over DuckDB (no warehouse), since removed (owner B-lite), so a synthetic unit fixture, frozen; compare.py beside it compares the core's statements with the old client's: every statement the old client sent with its parameters and result, and the old client's reading of each catalog answer. C-1's capture replaces it.",
  "recording_commit": null,
  "reference_commit": "43e55f4f",
  "legs": {
