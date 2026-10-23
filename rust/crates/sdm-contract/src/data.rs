@@ -1007,6 +1007,36 @@ pub struct ProviderCapabilities {
     /// bound.
     #[serde(default, skip_serializing_if = "is_false")]
     pub neighbor_lookback: bool,
+    /// The vendor whose opaque Arrow extension types (`arrow.opaque`, its
+    /// metadata's `vendor_name`) the provider hands over: the host layer
+    /// reads an opaque column by that vendor's layout only when the column
+    /// names this vendor (register P1B-43). Left out, none, and no opaque
+    /// column is read as anything but its storage (contract v28, carried
+    /// row P2-MID2-2: before it, a flag of the data layer's).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub opaque_vendor: Option<String>,
+    /// The provider compares a window's bounds with the stored text of the
+    /// window's column, as a source with no time type does (SQLite's
+    /// reference spells each bound as one stored value is spelled,
+    /// `_time_spelling`): the core then reads one non-null value of a
+    /// table's time column (a `scan` of one row) before that table's first
+    /// windowed read in a run, and names it on each bound's seed column
+    /// ([`SEED_STORED_TIME`]). Left out, `false` (P2-MID2-2).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub compares_stored_times: bool,
+    /// The provider orders a seeded sample by the key's data type, as
+    /// SQLite's does (it hashes an integer key and the `rowid` otherwise):
+    /// the core then names the schema's type of a key of one column on each
+    /// `sample_entities` (`key_dtype`). Left out, `false` (P2-MID2-2).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub samples_by_key_dtype: bool,
+    /// The reference reads the provider's rows into a frame of NumPy-backed
+    /// floats, where a NaN is missing and `-0.0` is `0.0` (Postgres's rows,
+    /// read as Python objects); otherwise as Arrow-backed pandas does, where
+    /// a NaN is a value and the two zeros are two values (T2.12). Left out,
+    /// `false` (P2-MID2-2).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub reads_nan_as_missing: bool,
 }
 
 /// The in-memory fallback's limits, as a provider declares them
@@ -1183,18 +1213,6 @@ pub trait DataLayer: Send + Sync {
         batches: &[RecordBatch],
     ) -> Result<CatalogAnswer, CoreError>;
 
-    /// The vendor whose opaque Arrow extension types (`arrow.opaque`, its
-    /// metadata's `vendor_name`) the run's provider hands over, declared by
-    /// the layer that knows the source: the host layer reads an opaque
-    /// column by that vendor's layout only when the column names this
-    /// vendor (register P1B-43). `None`, the default and a host provider's,
-    /// declares none, and no opaque column is read as anything but its
-    /// storage.
-    fn opaque_vendor(&self, provider: &ProviderChoice) -> Option<&'static str> {
-        let _ = provider;
-        None
-    }
-
     /// The run's provider's answer to a fetch, admitted, read as the
     /// reference reads its source's values where the provider hands over
     /// the driver's own (T2.14d, MID2 P2-3): a dialect's value rules, such
@@ -1229,40 +1247,8 @@ pub trait DataLayer: Send + Sync {
         Ok(None)
     }
 
-    /// Whether the run's provider compares a window's bounds with the
-    /// stored text of the window's column, as a source with no time type
-    /// does (SQLite's reference spells each bound as one stored value is
-    /// spelled, `_time_spelling`): the core then reads one non-null value
-    /// of a table's time column (a `scan` of one row) before that table's
-    /// first windowed read in a run, and names it on each bound's seed
-    /// column ([`SEED_STORED_TIME`]), for the layer to spell the bounds by.
-    /// `false`, the default and a host provider's: the bounds are compared
-    /// as times.
-    fn compares_stored_times(&self, provider: &ProviderChoice) -> bool {
-        let _ = provider;
-        false
-    }
 
-    /// Whether the run's provider orders a seeded sample by the key's data
-    /// type, as SQLite's does (it hashes an integer key and the `rowid`
-    /// otherwise): the core then names the schema's type of a key of one
-    /// column on each `sample_entities` (`key_dtype`). `false`, the default
-    /// and a host provider's: the request leaves it out.
-    fn samples_by_key_dtype(&self, provider: &ProviderChoice) -> bool {
-        let _ = provider;
-        false
-    }
 
-    /// Whether the reference reads the run's provider's rows into a frame
-    /// of NumPy-backed floats, where a NaN is missing and `-0.0` is `0.0`
-    /// (Postgres's rows, read as Python objects); otherwise it reads them
-    /// as Arrow-backed pandas does (DuckDB's and SQLite's), where a NaN is
-    /// a value and the two zeros are two values. `false`, the default and a
-    /// host provider's (T2.12).
-    fn reads_nan_as_missing(&self, provider: &ProviderChoice) -> bool {
-        let _ = provider;
-        false
-    }
 
     /// The database the run's provider reads, by the name its built-in
     /// dialect has (`duckdb`, `sqlite`, `postgres`), which a host words a

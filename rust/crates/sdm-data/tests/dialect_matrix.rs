@@ -34,13 +34,14 @@ use serde_json::{Value, json};
 /// their tests included.
 const RECORDED: &str = include_str!("dialect_matrix.jsonl");
 
-/// The dialects held: the three this build renders, and two it refuses
-/// (one it knows by name, one it does not).
-const RENDERED: [&str; 3] = ["duckdb", "sqlite", "postgres"];
-const REFUSED: [&str; 2] = ["databricks", "nope"];
+/// The dialects held: the four this build renders (Databricks from T3.4),
+/// and two it refuses (one it knows by name, one it does not).
+const RENDERED: [&str; 4] = ["duckdb", "sqlite", "postgres", "databricks"];
+const REFUSED: [&str; 2] = ["snowflake", "nope"];
 
 fn relation(parts: &[&str]) -> Relation {
     Relation {
+        columns: Vec::new(), filter: None,
         source: parts.iter().map(|p| (*p).to_owned()).collect(),
     }
 }
@@ -186,6 +187,7 @@ fn reads() -> Vec<DataRequest> {
         });
         found.push(DataRequest::KeyCounts {
             keys: vec![TableKey {
+                unique: false,
                 table: table.clone(),
                 columns: names(&["id"]),
                 label: None,
@@ -251,16 +253,19 @@ fn reads() -> Vec<DataRequest> {
     found.push(DataRequest::KeyCounts {
         keys: vec![
             TableKey {
+                unique: false,
                 table: t.clone(),
                 columns: names(&["id"]),
                 label: None,
             },
             TableKey {
+                unique: false,
                 table: relation(&["u"]),
                 columns: names(&["a", "b"]),
                 label: Some(4),
             },
             TableKey {
+                unique: false,
                 table: relation(&["main", "v"]),
                 columns: names(&["x", "y", "z"]),
                 label: None,
@@ -270,11 +275,13 @@ fn reads() -> Vec<DataRequest> {
     found.push(DataRequest::KeyCounts {
         keys: vec![
             TableKey {
+                unique: false,
                 table: t.clone(),
                 columns: names(&["id"]),
                 label: None,
             },
             TableKey {
+                unique: false,
                 table: relation(&[]),
                 columns: names(&["id"]),
                 label: None,
@@ -305,6 +312,7 @@ fn samples() -> Vec<DataRequest> {
                   filters: Vec<Filter>,
                   key_dtype: Option<Dtype>| {
         DataRequest::SampleEntities {
+            rows: None,
             table,
             key: names(key),
             n: 10000,
@@ -829,10 +837,6 @@ fn probe(dialect: &str) -> Value {
     };
     json!({
         "capabilities": capabilities,
-        "opaque_vendor": data.opaque_vendor(&p),
-        "compares_stored_times": data.compares_stored_times(&p),
-        "samples_by_key_dtype": data.samples_by_key_dtype(&p),
-        "reads_nan_as_missing": data.reads_nan_as_missing(&p),
         "source_database": data.source_database(&p),
         "read_as": data.read_as(&provider(dialect, &[Some("s")]), &relation(&["t"])),
     })
@@ -880,6 +884,11 @@ fn rendered() -> Vec<String> {
 fn every_request_kind_renders_as_recorded_on_every_dialect() {
     let now = rendered();
     let recorded: Vec<&str> = RECORDED.lines().filter(|l| !l.is_empty()).collect();
+    if std::env::var_os("T34_DUMP").is_some() {
+        for line in &now {
+            println!("MATRIX {line}");
+        }
+    }
     if now.iter().map(String::as_str).eq(recorded.iter().copied()) {
         return;
     }

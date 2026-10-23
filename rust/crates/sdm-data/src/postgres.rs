@@ -127,6 +127,7 @@ impl SqlDialect for Postgres {
     /// What a Postgres source answers through this layer.
     fn capabilities(&self) -> ProviderCapabilities {
         ProviderCapabilities {
+            compares_stored_times: false, opaque_vendor: None, samples_by_key_dtype: false,
             derived_relations: false, neighbor_lookback: false, sample_rows: false,
             optional: sql::rendered(),
             max_keys_per_request: None,
@@ -152,6 +153,8 @@ impl SqlDialect for Postgres {
             index_advice: None,
             // Every optional request is rendered: none falls back.
             fallback: None,
+            // Postgres's driver reads a NaN as missing.
+            reads_nan_as_missing: true,
         }
     }
 
@@ -311,10 +314,6 @@ impl SqlDialect for Postgres {
         read(part, batches)
     }
 
-    /// Postgres's driver reads a NaN as missing.
-    fn reads_nan_as_missing(&self) -> bool {
-        true
-    }
 
     fn conform(
         &self,

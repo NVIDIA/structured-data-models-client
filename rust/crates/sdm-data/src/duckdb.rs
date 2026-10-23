@@ -283,6 +283,7 @@ impl SqlDialect for Duckdb {
     /// What a DuckDB source answers through this layer.
     fn capabilities(&self) -> ProviderCapabilities {
         ProviderCapabilities {
+            compares_stored_times: false, reads_nan_as_missing: false, samples_by_key_dtype: false,
             derived_relations: false, neighbor_lookback: false, sample_rows: false,
             optional: sql::rendered(),
             max_keys_per_request: None,
@@ -301,6 +302,9 @@ impl SqlDialect for Duckdb {
             index_advice: Some(IndexAdvice::SingleColumn),
             // Every optional request is rendered: none falls back.
             fallback: None,
+            // DuckDB's driver hands a HUGEINT, UHUGEINT or VARINT over as
+            // its opaque extension type (register P1B-43).
+            opaque_vendor: Some(OPAQUE_VENDOR.to_owned()),
         }
     }
 
@@ -428,9 +432,6 @@ impl SqlDialect for Duckdb {
         read(part, batches)
     }
 
-    fn opaque_vendor(&self) -> Option<&'static str> {
-        Some(OPAQUE_VENDOR)
-    }
 }
 
 /// One part of the catalog. The table list and the indexes are read whole,

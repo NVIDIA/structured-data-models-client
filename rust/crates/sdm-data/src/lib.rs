@@ -140,17 +140,8 @@ impl DataLayer for Data {
         }
     }
 
-    fn opaque_vendor(&self, provider: &ProviderChoice) -> Option<&'static str> {
-        sql_dialect(provider)?.opaque_vendor()
-    }
 
-    fn compares_stored_times(&self, provider: &ProviderChoice) -> bool {
-        sql_dialect(provider).is_some_and(|d| d.compares_stored_times())
-    }
 
-    fn samples_by_key_dtype(&self, provider: &ProviderChoice) -> bool {
-        sql_dialect(provider).is_some_and(|d| d.samples_by_key_dtype())
-    }
 
     fn conform(
         &self,
@@ -177,9 +168,6 @@ impl DataLayer for Data {
         }
     }
 
-    fn reads_nan_as_missing(&self, provider: &ProviderChoice) -> bool {
-        sql_dialect(provider).is_some_and(|d| d.reads_nan_as_missing())
-    }
 
     fn source_database(&self, provider: &ProviderChoice) -> Option<&'static str> {
         Some(sql_dialect(provider)?.name())
