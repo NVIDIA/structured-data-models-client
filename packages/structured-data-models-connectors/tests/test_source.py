@@ -225,3 +225,42 @@ def test_a_semantic_model_trusts_only_built_in_functions_by_default() -> None:
     source = DatabricksSource(_databricks(), catalog='main', schema='sales')
     assert source.semantic_model('m').trust_expressions is False
     assert source.semantic_model('m', trust_expressions=True).trust_expressions
+
+
+def test_each_source_says_its_kind() -> None:
+    warehouse = DatabricksSource(_databricks(), catalog='main', schema='s')
+    spark = DatabricksSource(_spark_session(), schema='s')
+    snowflake = SnowflakeSource(_snowflake(), database='DB')
+    # Both Databricks connections report the backend; the kind tells them
+    # apart, and routing and providers key on it (design fix F).
+    assert warehouse.backend == spark.backend == 'databricks'
+    assert warehouse.kind == 'databricks-sql'
+    assert spark.kind == 'databricks-spark'
+    assert Source(_spark_session()).kind == 'databricks-spark'
+    # A metric view is its own kind, whichever connection keeps it.
+    assert warehouse.semantic_model('m').kind == 'databricks-metric-view'
+    assert spark.semantic_model('m').kind == 'databricks-metric-view'
+    assert snowflake.kind == 'snowflake'
+    assert snowflake.semantic_model('V').kind == 'snowflake-semantic-view'
+    assert PostgresSource(_postgres()).kind == 'postgres'
+
+
+def test_each_source_gives_its_namespace_parts_in_its_class_order() -> None:
+    # Outermost first, by the class's namespace; a part left to the
+    # connection is None (design fix C).
+    assert DatabricksSource(
+        _databricks(), schema='s', catalog='c'
+    ).namespace_parts() == ['c', 's']
+    assert DatabricksSource(_spark_session(), schema='s').namespace_parts() == [
+        None,
+        's',
+    ]
+    assert SnowflakeSource(_snowflake(), database='DB').namespace_parts() == [
+        'DB',
+        None,
+    ]
+    assert PostgresSource(_postgres(), schema='p').namespace_parts() == ['p']
+    assert PostgresSource(_postgres()).namespace_parts() == [None]
+    # A semantic model is read in its source's namespace.
+    warehouse = DatabricksSource(_databricks(), catalog='main', schema='s')
+    assert warehouse.semantic_model('m').namespace_parts() == ['main', 's']
