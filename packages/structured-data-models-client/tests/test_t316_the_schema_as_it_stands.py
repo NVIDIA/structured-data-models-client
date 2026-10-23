@@ -1,0 +1,227 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+r"""T3.16, review round 1: an edit reads the schema as it stands, and the
+core route needs nothing of the old PQL package or the old engine.
+
+- An edit is checked against the data type the caller's schema holds, as
+  the old client's setter checks it, not the one the source gave when the
+  schema was described (Codex P1-1).
+- A column the source was never asked of is edited by its data type in any
+  spelling the old client takes, every timestamp unit among them (P1-2).
+- With ``predictive_query`` and ``sdm_relational_engine`` unimportable from
+  before the client is first imported, a schema is described, built and
+  edited, a query materialized and predicted, all on the core (the
+  structure design's rule 11, P1-3).
+
+Each public call runs on both routes, the old client's and the core's with
+every core route forced, and the core is held to the old route.
+"""
+
+from __future__ import annotations
+
+import importlib.util
+import os
+import subprocess
+import sys
+import textwrap
+import warnings
+from collections.abc import Callable
+from pathlib import Path
+from typing import Any
+
+import duckdb
+import pytest
+from sdm_connectors import DuckDBSource
+
+from sdm_client import (
+    Column,
+    Schema,
+    StructuredDataError,
+    _routing,
+)
+from sdm_client.errors import MissingExtraError
+
+ENGINE = importlib.util.find_spec('sdm_relational_engine') is not None
+CORE = ','.join(sorted(_routing.CORE_ROUTED))
+ROOT = Path(__file__).resolve().parents[3]
+QUERY = 'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id'
+SHOP = (
+    'CREATE TABLE users (user_id BIGINT PRIMARY KEY, age BIGINT)',
+    'INSERT INTO users SELECT i, 20 + i % 50 FROM range(40) t(i)',
+    'CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT, '
+    'price DOUBLE, ts TIMESTAMP)',
+    'INSERT INTO orders SELECT i, i % 40, 10 + i * 1.5, TIMESTAMP '
+    "'2023-06-01' + to_days(CAST(i AS INTEGER)) FROM range(400) t(i)",
+)
+
+
+@pytest.fixture(autouse=True)
+def _old(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+
+
+def _described() -> Schema:
+    connection = duckdb.connect()
+    for statement in SHOP:
+        connection.execute(statement)
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        return Schema.from_source(
+            DuckDBSource(connection), {'users': 'users', 'orders': 'orders'}
+        )
+
+
+def _both(
+    monkeypatch: pytest.MonkeyPatch, act: Callable[[], Any]
+) -> dict[str, Any]:
+    r"""``act``'s outcome on the old route and on the core's; where no
+    engine is installed the old route refuses as the missing extra, which is
+    held, and the core's outcome stands for both."""
+    outcomes = {}
+    for route in ('old', 'core'):
+        if route == 'core':
+            monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+        else:
+            monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+        if route == 'old' and not ENGINE:
+            with pytest.raises(MissingExtraError):
+                act()
+            continue
+        outcomes[route] = act()
+    monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+    outcomes.setdefault('old', outcomes['core'])
+    return outcomes
+
+
+def _refused(error: StructuredDataError) -> tuple[str, str]:
+    return (type(error).__name__, error.code)
+
+
+@pytest.mark.parametrize('meaning', ['text', 'timestamp', 'numerical'])
+def test_an_edit_reads_the_data_type_the_schema_holds(
+    meaning: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # `age` is a BIGINT in the source, retyped `string` by the caller: the
+    # old client's setter asks whether a string can mean `meaning`, so text
+    # and a timestamp are taken and a number refused.
+    def act() -> Any:
+        schema = _described()
+        schema['users']['age'].dtype = 'string'
+        try:
+            schema['users']['age'].stype = meaning
+        except StructuredDataError as refused:
+            return _refused(refused)
+        column = schema['users']['age']
+        return (
+            column.dtype,
+            column.stype,
+            column.stype_declared,
+            schema['users'].time_column,
+        )
+
+    outcomes = _both(monkeypatch, act)
+    assert outcomes['core'] == outcomes['old']
+    if meaning == 'numerical':
+        assert outcomes['old'] == ('StructuredDataError', 'INVALID_REQUEST')
+    else:
+        assert outcomes['old'][:2] == ('string', meaning)
+
+
+@pytest.mark.parametrize('unit', ['s', 'ms', 'us', 'ns'])
+def test_a_column_added_by_hand_is_a_time_column_in_any_timestamp_unit(
+    unit: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def act() -> Any:
+        schema = _described()
+        schema['users'].columns['seen'] = Column(
+            'seen', f'timestamp[{unit}]', 'timestamp'
+        )
+        try:
+            schema['users'].time_column = 'seen'
+        except StructuredDataError as refused:
+            return _refused(refused)
+        return schema['users'].time_column, schema['users']['seen'].stype
+
+    outcomes = _both(monkeypatch, act)
+    assert outcomes['core'] == outcomes['old'] == ('seen', 'timestamp')
+
+
+def test_the_core_route_needs_nothing_of_the_old_pql_or_engine(
+    tmp_path: Path,
+) -> None:
+    # The structure design's rule 11: both old packages unimportable from
+    # before the client is first imported, in a process of its own (a
+    # finder on sys.meta_path is the whole process's), and every core route
+    # forced: a schema described, a column added by hand and its meaning
+    # set, its key and links edited, the query validated, materialized and
+    # predicted.
+    script = f"""
+    import importlib.util, sys, warnings
+
+    OLD = ('predictive_query', 'sdm_relational_engine')
+
+    class Refused:
+        def find_spec(self, name, path=None, target=None):
+            if name in OLD or name.startswith(tuple(f'{{o}}.' for o in OLD)):
+                raise ImportError(f'{{name}} is not to be imported')
+
+    sys.meta_path.insert(0, Refused())
+
+    import duckdb
+    import pandas as pd
+    from sdm_client import (
+        Column, KumoRelational, PredictiveQuery, Relationship, SDMClient,
+        Schema,
+    )
+    from sdm_connectors import DuckDBSource
+
+    spec = importlib.util.spec_from_file_location(
+        'scripted_endpoint',
+        {str(ROOT / 'contract/runners/scripted_endpoint.py')!r},
+    )
+    endpoint = importlib.util.module_from_spec(spec)
+    sys.modules['scripted_endpoint'] = endpoint
+    spec.loader.exec_module(endpoint)
+
+    connection = duckdb.connect()
+    for statement in {list(SHOP)!r}:
+        connection.execute(statement)
+    connection.execute('ALTER TABLE users ADD COLUMN plan VARCHAR')
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        schema = Schema.from_source(
+            DuckDBSource(connection), {{'users': 'users', 'orders': 'orders'}}
+        )
+        del schema['users']['plan']
+        schema['users'].columns['plan'] = Column('plan', 'string', 'text')
+        schema['users']['plan'].stype = 'categorical'
+        schema['users']['age'].stype = 'categorical'
+        schema['orders'].primary_key = 'order_id'
+        schema.relationships = [
+            Relationship('orders', 'user_id', 'users', 'user_id')
+        ]
+        with endpoint.serve() as (url, received):
+            request = PredictiveQuery({QUERY!r}, schema).materialize(
+                indices=[0, 1], anchor_time=pd.Timestamp('2024-03-01')
+            )
+            with SDMClient(url, max_retries=0) as client:
+                result = client.predict(request, model=KumoRelational())
+    print(len(result), sorted(n for n in sys.modules if n.startswith(OLD)))
+    """
+    environment = {
+        key: value
+        for key, value in os.environ.items()
+        if key != _routing.ENVIRONMENT
+    }
+    done = subprocess.run(
+        [sys.executable, '-c', textwrap.dedent(script)],
+        capture_output=True,
+        text=True,
+        timeout=300,
+        env={**environment, _routing.ENVIRONMENT: CORE},
+        cwd=tmp_path,
+    )
+    assert done.returncode == 0, done.stderr
+    assert done.stdout.split() == ['2', '[]'], done.stdout

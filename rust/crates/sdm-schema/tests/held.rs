@@ -161,3 +161,43 @@ fn facts_of_another_relation_are_none_of_the_table_s() {
     assert_eq!(read.description.tables[0].columns[0].dtype, Dtype::Int);
     assert!(!read.description.tables[0].columns[0].unique);
 }
+
+#[test]
+fn the_data_type_the_host_holds_is_the_one_its_schema_is_read_by() {
+    // The caller retyped a described column: its schema says `string`, its
+    // facts what the source handed over. The schema the core works on is the
+    // caller's, as the old client's checks read it (T3.16 review round 1);
+    // what is fetched is still the source's.
+    let mut retyped = schema();
+    retyped.tables[0].columns[0].dtype = "string".into();
+    let read = held::read(retyped, &BTreeMap::new(), true).unwrap();
+    let key = &read.description.tables[0].columns[0];
+    assert_eq!(key.dtype, Dtype::String);
+    assert_eq!(key.received, ColumnType::Int64);
+    // Held as the source gave it, the source's more exact type stands.
+    let read = held::read(schema(), &BTreeMap::new(), true).unwrap();
+    assert_eq!(read.description.tables[0].columns[0].dtype, Dtype::Int);
+}
+
+#[test]
+fn every_spelling_the_old_client_takes_names_its_data_type() {
+    // Each timestamp unit, as the old client maps it, and the language's own
+    // names, as the old client passes them through.
+    for unit in ["s", "ms", "us", "ns"] {
+        assert_eq!(
+            held::wire_dtype(&format!("timestamp[{unit}]")).wire_name(),
+            "timestamp[us]",
+            "{unit}"
+        );
+    }
+    for (name, dtype) in [
+        ("int", Dtype::Int),
+        ("float", Dtype::Float),
+        ("time", Dtype::Time),
+        ("date", Dtype::Date),
+        ("int16", Dtype::Int16),
+        ("byte", Dtype::Byte),
+    ] {
+        assert_eq!(held::wire_dtype(name), dtype, "{name}");
+    }
+}
