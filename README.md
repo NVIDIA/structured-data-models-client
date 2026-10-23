@@ -170,10 +170,10 @@ Until that move ends, the repository also holds a harness that checks the core a
 - `rust/crates/<crate>/tests/` and `rust/bindings/sdm-py/tests/`: the Rust and binding tests.
 - `rust/testdata/`: shared Rust test data, including a vendored time zone database.
 - `tests/golden/public_api.json` and `tests/golden/wire_payloads.json`: snapshots of the public API and the wire payloads.
-- `tests/test_release_contract.py`, `tests/test_skills.py`, `tests/test_native_wheel.py`, `tests/test_rust_binding_edges.py`, `tests/test_rust_contract.py`: release, skills and native build checks.
+- `tests/test_release_contract.py`, `tests/test_skills.py`, `tests/test_native_wheel.py`, `tests/test_wheel_smoke.py`, `tests/test_rust_binding_edges.py`, `tests/test_rust_contract.py`: release, skills, native build and installed-wheel checks.
 - `qa/`: manual probes against live endpoints and warehouses.
 
-### Migration only (removed when the move to the Rust core ends)
+### Migration only (to be removed when the move to the Rust core ends)
 
 - `contract/`: the equivalence harness that runs each case on the Python code and on the core and compares the answers.
   - `cases/`, `fixtures/`, `bases.yaml`: the calls and the test databases.
@@ -181,9 +181,10 @@ Until that move ends, the repository also holds a harness that checks the core a
   - `runners/`, `tools/`, `tests/`: the runners, the recorders, and the harness's own tests and gates.
 - `rust/crates/sdm-testkit/`: a Rust stand-in host that runs the contract cases without Python.
 - `scripts/rust_core/`: the comparator, the gates, and the lane and landing tooling; `orchestration/` holds the helpers for parallel agents.
-  It also holds four product build tools for now: `native_wheel.py`, `pull_image.sh`, `rust_notices.py` and `contract_lock.py`.
-- `scripts/live/`: live Databricks and model checks, and real-data benchmarks.
-- `tests/` (everything not listed above): tests of the harness and of the migration tooling.
+  It also holds product build and release tools for now, which must move out before it goes: `native_wheel.py`, `pull_image.sh`, `rust_notices.py`, `contract_lock.py` and `wheel_smoke.py`.
+- `scripts/live/`: live Databricks and model checks, and real-data benchmarks; the smoke check `rfm_smoke.py` may be worth keeping.
+- `tests/` (the files not listed under product tests): mostly tests of the harness and of the migration tooling, but mixed: `tests/test_ci_workflow.py` also checks the product's CI jobs (native wheels, toolchain checksums), and `tests/test_live_smoke_offline.py` checks the live smoke script.
+  Sort each file before removing any.
 - `docs/design/rust-core/`: the migration's design notes and evidence.
 
 ### How a prediction flows
