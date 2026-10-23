@@ -59,18 +59,19 @@ pub enum Step {
     Done {
         result: OperationResult,
     },
-    /// The run builds its graph, past every refusal of the request and
-    /// before it reads anything of the source: the host makes the schema's
-    /// engine reading where it has none, as the reference's materializer
-    /// makes it (`relational.py:555`). Nothing to answer; the host asks for
-    /// the next step (contract v28, T3.4).
-    GraphBuilt,
-    /// The run has read every table it reads anew (a relation of the schema
-    /// with no reading, under the parts the session gave), before it
-    /// samples: the host keeps where it read each, a source name it holds a
-    /// reading of left as it is, as the reference's engine keeps its tables
-    /// (`EngineTables.keep`). Nothing to answer (contract v28, T3.4).
-    TablesInitialized {
+    /// A notice that asks the host nothing: the request's input checks
+    /// passed and nothing has been read from the source yet; the host now
+    /// starts the schema's record of its tables where it has none, as the
+    /// reference's materializer makes its `EngineTables` (`relational.py:555`),
+    /// and asks for the next step (contract v28, T3.4).
+    InputsChecked,
+    /// A notice that asks the host nothing: the catalog and schema each table
+    /// the run reads anew lives in are known (its catalog read under the
+    /// session's parts), as `read_under` says; no row data has been fetched.
+    /// The host records each, a source name it holds left as it is, as the
+    /// reference's engine keeps its tables (`EngineTables.keep`), and asks
+    /// for the next step (contract v28, T3.4).
+    TablesLocated {
         read_under: Vec<crate::ops::ReadUnder>,
     },
 }

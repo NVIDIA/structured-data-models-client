@@ -178,14 +178,15 @@ fn a_found_relation_is_its_catalog_s_columns_or_refused() {
 #[test]
 fn a_run_says_when_it_builds_its_graph_and_when_its_tables_are_read() {
     use sdm_contract::run::Step;
-    let built: Step = serde_json::from_value(serde_json::json!({"step": "graph_built"})).unwrap();
-    assert_eq!(built, Step::GraphBuilt);
+    let built: Step =
+        serde_json::from_value(serde_json::json!({"step": "inputs_checked"})).unwrap();
+    assert_eq!(built, Step::InputsChecked);
     let read: Step = serde_json::from_value(serde_json::json!({
-        "step": "tables_initialized",
+        "step": "tables_located",
         "read_under": [{"relation": {"source": ["orders"]}, "namespace": ["main", "shop"]}]
     }))
     .unwrap();
-    let Step::TablesInitialized { read_under } = read else {
+    let Step::TablesLocated { read_under } = read else {
         panic!("not the tables' step");
     };
     assert_eq!(

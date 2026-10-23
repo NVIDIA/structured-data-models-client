@@ -186,11 +186,12 @@ def run(
 ) -> Finished:
     r"""Runs ``operation`` to its result, with the attachments its fields name.
 
-    ``built`` and ``read``, for a ``materialize`` that asks for its steps of
-    progress (``progress``), are called when the run says it builds its
-    graph (``graph_built``) and when it says where it read the tables it
-    read anew (``tables_initialized``), as they happen, so the caller makes
-    and keeps the schema's engine reading as the reference does (T3.4).
+    ``built`` and ``read``, for a ``materialize`` that asks for its notices
+    (``progress``), are called when the run says its input checks passed and
+    nothing is read yet (``inputs_checked``) and which catalog and schema each
+    table it reads anew lives in (``tables_located``), as they happen, so
+    the caller starts and keeps the schema's record of its tables as the
+    reference keeps its ``EngineTables`` (T3.4).
 
     A warning whose code ``quiet`` names is not shown: the caller has shown
     it already, or decides once the run ends whether to show it, from
@@ -316,11 +317,11 @@ def _steps(
         if step['step'] == 'done':
             return Finished(step['result'], handle)
         # What the run says of its graph and tables asks nothing (T3.4).
-        if step['step'] == 'graph_built':
+        if step['step'] == 'inputs_checked':
             if built is not None:
                 built()
             continue
-        if step['step'] == 'tables_initialized':
+        if step['step'] == 'tables_located':
             if read is not None:
                 from sdm_client._rust import results
 

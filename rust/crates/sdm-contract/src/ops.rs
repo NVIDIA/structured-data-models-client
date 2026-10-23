@@ -906,10 +906,12 @@ pub struct Materialize {
     /// first run.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sampler_state: Option<SamplerState>,
-    /// Whether the host takes the run's steps that ask nothing
-    /// ([`crate::run::Step::GraphBuilt`], [`crate::run::Step::TablesInitialized`]),
-    /// to keep the schema's engine reading as the reference keeps it
-    /// (contract v28, T3.4). Left out, `false`: the run says neither.
+    /// Whether the host takes the run's notices that ask nothing
+    /// ([`crate::run::Step::InputsChecked`]: the input checks passed and
+    /// nothing is read yet; [`crate::run::Step::TablesLocated`]: the catalog
+    /// and schema each table read anew lives in), to keep the schema's record
+    /// of its tables as the reference keeps its `EngineTables` (contract v28,
+    /// T3.4). Left out, `false`: the run says neither.
     #[serde(default, skip_serializing_if = "crate::data::is_false")]
     pub progress: bool,
 }

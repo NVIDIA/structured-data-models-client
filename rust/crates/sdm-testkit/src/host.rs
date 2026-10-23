@@ -864,7 +864,7 @@ fn drive(
         match read(&out).map_err(|_| anyhow!("an unreadable step"))? {
             ControlMessage::Step(Step::Done { result }) => return Ok(Ok(result)),
             // What the run says of its graph and tables asks nothing.
-            ControlMessage::Step(Step::GraphBuilt | Step::TablesInitialized { .. }) => {}
+            ControlMessage::Step(Step::InputsChecked | Step::TablesLocated { .. }) => {}
             ControlMessage::Step(Step::Fetch { requests }) => {
                 for step in &requests {
                     observed

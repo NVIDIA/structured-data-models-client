@@ -163,9 +163,10 @@ struct Shared {
     /// The tables of one part the schema holds no reading of, read anew by
     /// this run ([`Asker::reads_anew`]).
     anew: Vec<Relation>,
-    /// Whether the run said it built its graph, and that it read its tables
-    /// ([`Asker::graph_built`], [`Asker::tables_initialized`]).
-    graph_built: bool,
+    /// Whether the run said its inputs are checked, and where each table
+    /// it reads anew lives ([`Asker::inputs_checked`],
+    /// [`Asker::tables_located`]).
+    inputs_checked: bool,
     initialized: bool,
     /// The steps the run said and the host has not been given, in order,
     /// said only where the host takes them ([`Asker::says_progress`]).
@@ -252,7 +253,7 @@ impl Asker {
 
     /// Names `anew`, the tables of one part the schema holds no reading of,
     /// which the run reads under the parts the session gives
-    /// ([`Asker::tables_initialized`]).
+    /// ([`Asker::tables_located`]).
     pub(crate) fn reads_anew(&self, anew: Vec<Relation>) {
         lock(&self.shared).anew = anew;
     }
@@ -263,31 +264,33 @@ impl Asker {
         (!shared.initialized).then(|| shared.anew.clone())
     }
 
-    /// Has the run say its graph and tables to the host, which takes those
-    /// steps (`Materialize::progress`).
+    /// Has the run give its notices of where its tables live to the host,
+    /// which takes them (`Materialize::progress`).
     pub(crate) fn says_progress(&self) {
         lock(&self.shared).says_progress = true;
     }
 
-    /// Says, once, that the run builds its graph ([`Step::GraphBuilt`]).
-    pub(crate) fn graph_built(&self) {
+    /// Says, once, that the request's inputs are checked and nothing is read
+    /// yet ([`Step::InputsChecked`]).
+    pub(crate) fn inputs_checked(&self) {
         let mut shared = lock(&self.shared);
-        if !shared.graph_built {
-            shared.graph_built = true;
+        if !shared.inputs_checked {
+            shared.inputs_checked = true;
             if shared.says_progress {
-                shared.progress.push(Step::GraphBuilt);
+                shared.progress.push(Step::InputsChecked);
             }
         }
     }
 
-    /// Says, once, that the run read every table it reads anew, under
-    /// `read_under` ([`Step::TablesInitialized`]).
-    pub(crate) fn tables_initialized(&self, read_under: Vec<sdm_contract::ops::ReadUnder>) {
+    /// Says, once, where every table the run reads anew lives, its catalog
+    /// read and its catalog and schema settled, no row fetched
+    /// ([`Step::TablesLocated`]).
+    pub(crate) fn tables_located(&self, read_under: Vec<sdm_contract::ops::ReadUnder>) {
         let mut shared = lock(&self.shared);
         if !shared.initialized {
             shared.initialized = true;
             if shared.says_progress {
-                shared.progress.push(Step::TablesInitialized { read_under });
+                shared.progress.push(Step::TablesLocated { read_under });
             }
         }
     }
@@ -785,8 +788,8 @@ pub struct Run {
     /// The run's data access, which reads each admitted answer's values as
     /// the reference reads them (`DataAccess::conform`).
     data: Option<DataAccess>,
-    /// The steps the body said ([`Step::GraphBuilt`],
-    /// [`Step::TablesInitialized`]) not given yet, each before the step the
+    /// The steps the body said ([`Step::InputsChecked`],
+    /// [`Step::TablesLocated`]) not given yet, each before the step the
     /// same poll made, which waits in `after`.
     said: std::collections::VecDeque<Step>,
     after: Option<Result<Step, CoreError>>,

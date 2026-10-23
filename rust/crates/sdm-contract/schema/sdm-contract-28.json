@@ -166,12 +166,12 @@
           ]
         },
         {
-          "description": "The run builds its graph, past every refusal of the request and\nbefore it reads anything of the source: the host makes the schema's\nengine reading where it has none, as the reference's materializer\nmakes it (`relational.py:555`). Nothing to answer; the host asks for\nthe next step (contract v28, T3.4).",
+          "description": "A notice that asks the host nothing: the request's input checks\npassed and nothing has been read from the source yet; the host now\nstarts the schema's record of its tables where it has none, as the\nreference's materializer makes its `EngineTables` (`relational.py:555`),\nand asks for the next step (contract v28, T3.4).",
           "type": "object",
           "properties": {
             "step": {
               "type": "string",
-              "const": "graph_built"
+              "const": "inputs_checked"
             }
           },
           "required": [
@@ -179,7 +179,7 @@
           ]
         },
         {
-          "description": "The run has read every table it reads anew (a relation of the schema\nwith no reading, under the parts the session gave), before it\nsamples: the host keeps where it read each, a source name it holds a\nreading of left as it is, as the reference's engine keeps its tables\n(`EngineTables.keep`). Nothing to answer (contract v28, T3.4).",
+          "description": "A notice that asks the host nothing: the catalog and schema each table\nthe run reads anew lives in are known (its catalog read under the\nsession's parts), as `read_under` says; no row data has been fetched.\nThe host records each, a source name it holds left as it is, as the\nreference's engine keeps its tables (`EngineTables.keep`), and asks\nfor the next step (contract v28, T3.4).",
           "type": "object",
           "properties": {
             "read_under": {
@@ -190,7 +190,7 @@
             },
             "step": {
               "type": "string",
-              "const": "tables_initialized"
+              "const": "tables_located"
             }
           },
           "required": [
@@ -3422,7 +3422,7 @@
               ]
             },
             "progress": {
-              "description": "Whether the host takes the run's steps that ask nothing\n([`crate::run::Step::GraphBuilt`], [`crate::run::Step::TablesInitialized`]),\nto keep the schema's engine reading as the reference keeps it\n(contract v28, T3.4). Left out, `false`: the run says neither.",
+              "description": "Whether the host takes the run's notices that ask nothing\n([`crate::run::Step::InputsChecked`]: the input checks passed and\nnothing is read yet; [`crate::run::Step::TablesLocated`]: the catalog\nand schema each table read anew lives in), to keep the schema's record\nof its tables as the reference keeps its `EngineTables` (contract v28,\nT3.4). Left out, `false`: the run says neither.",
               "type": "boolean"
             },
             "op": {
