@@ -70,3 +70,11 @@ C-1 and E-0 run the recording in process with every write through the repository
 
 The guard became an allowlist enforced on the drivers' own classes for every leg (Lakebase's separate check removed, the loader's Lakebase drops without `CASCADE`); every bypass both reviews found is a test that is refused.
 The comparator judges warehouse legs by every rule against the recorded reference lines, with no stand-in verdict or live-only items; the stand-in's policy section, gate runner and runner hook are removed.
+
+## Fix round 5 (reviews of cdebf606)
+
+Tests first: the round's refusal tests are committed before the code, and fail on cdebf606.
+Reads became an allowlist too: a query, or what an `INSERT` fills its target with, calls only the closed list of pure functions the old client's generated SQL and the loader's literals use, by plain name; a quoted, qualified or unlisted function and any sequence word are refused, and every statement the old client recorded on Postgres passes.
+The guard covers Snowflake's cursor base (so `DictCursor`) and its async connector, refuses Spark SQL given arguments to format, refuses Spark's and Delta's writer classes whole, admits only SQL commands at Spark Connect's command entry point, and guards subclasses defined after the install; checked against the real drivers (Snowflake connector 4.8.0, Databricks SQL 4.7.0, PySpark 4.0.1, Delta 4.4.1, Snowpark, psycopg).
+The refusal census's real-data mode lost its stand-in warehouse legs.
+
