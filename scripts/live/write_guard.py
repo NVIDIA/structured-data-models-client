@@ -94,7 +94,7 @@ import os
 import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, NoReturn, cast
 
 DIALECTS = ('databricks', 'snowflake', 'postgres')
 
@@ -442,7 +442,7 @@ class _Statement:
         self.refuse('an unclosed (')
         raise AssertionError
 
-    def refuse(self, why: str) -> None:
+    def refuse(self, why: str) -> NoReturn:
         raise WriteRefused(f'{self.what}: {why}')
 
 
@@ -1179,7 +1179,7 @@ def _hook(cls: type) -> None:
 
     def __init_subclass__(sub: type, **keywords: Any) -> None:
         if previous is _ABSENT:
-            super(cls, sub).__init_subclass__(**keywords)
+            super(cast(Any, cls), sub).__init_subclass__(**keywords)
         else:
             previous.__get__(None, sub)(**keywords)
         for base, attribute, make in list(_RULES):
@@ -1227,11 +1227,12 @@ def install(guards: Mapping[str, WriteGuard | None]) -> Callable[[], None]:
                 _wrap(
                     cls,
                     attribute,
-                    lambda f, c=check, k=spark: _guarded(f, c, k),
+                    functools.partial(_guarded, check=check, spark=spark),
                 )
         module_name, class_name, attributes = SPARK_CONNECT
         cls = _class(module_name, class_name)
         for attribute in attributes if cls is not None else ():
+            assert cls is not None
             if not hasattr(cls, attribute):
                 raise RuntimeError(
                     f'{class_name} has no {attribute}: the write guard cannot '
@@ -1239,10 +1240,11 @@ def install(guards: Mapping[str, WriteGuard | None]) -> Callable[[], None]:
                 )
             guard = guards.get('databricks')
             check = guard.check if guard is not None else _closed('databricks')
-            _wrap(cls, attribute, lambda f, c=check: _plan_request(f, c))
+            _wrap(cls, attribute, functools.partial(_plan_request, check=check))
         for module_name, class_name, attributes in REFUSED:
             cls = _class(module_name, class_name)
             for attribute in attributes if cls is not None else ():
+                assert cls is not None
                 _wrap(cls, attribute, _refusing(f'{class_name}.{attribute}'))
         for module_name, class_name in REFUSED_CLASSES:
             cls = _class(module_name, class_name, required=False)
