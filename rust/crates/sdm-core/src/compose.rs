@@ -83,6 +83,12 @@ impl DataAccess {
         access
     }
 
+    /// Whether the run's provider reads a table under `parts`, the
+    /// namespace it was read under earlier (`DataLayer::keeps`).
+    pub fn keeps(&self, parts: &[String]) -> bool {
+        self.layer.keeps(&self.provider, parts)
+    }
+
     /// What the run's provider answers.
     pub fn capabilities(&self) -> &ProviderCapabilities {
         &self.capabilities
