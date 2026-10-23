@@ -38,9 +38,12 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from types import ModuleType
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from sdm_connectors.providers import Provider
+if TYPE_CHECKING:
+    # Named for annotations only: the warehouse package is an optional
+    # dependency, and a core route over frames needs none of it.
+    from sdm_connectors.providers import Provider
 
 from sdm_client._routing import RouteError
 from sdm_client._rust import codec, errors, facts
