@@ -916,7 +916,7 @@ def probe(spec_path: Path, out: Path, route: str) -> None:
         def call(self: Any, step: dict[str, Any], keys: Any = None) -> Any:
             window = step['request'].get('window') or {}
             if window.get('lower') is not None and keys:
-                table = providers._arrow_table(next(iter(keys.values())))
+                table = providers.arrow_table(next(iter(keys.values())))
                 ends = table['end'].cast(pa.int64()).to_pylist()
                 starts = table['start'].cast(pa.int64()).to_pylist()
                 seeds.extend(
