@@ -4,8 +4,6 @@
 
 r"""Claude's round-1 findings on T3.2's landing tools (T3.2 fix 5):
 
-- the train may carry the CI workflow the owner moved off the landing path
-  (P2-6);
 - a stamp is written only for the SHA its steps ran on, on a clean tree
   (P2-8);
 - a lane is pushed only from its own worktree, where the lane check runs
@@ -48,7 +46,6 @@ def _module(path: Path, name: str) -> ModuleType:
 
 
 HANDOFF = _module(ROOT / 'scripts/rust_core/handoff.py', 't32_r1_handoff')
-JUDGING = _module(ROOT / 'scripts/rust_core/judging.py', 't32_r1_judging')
 
 
 def _git(where: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -60,14 +57,6 @@ def _git(where: Path, *args: str) -> subprocess.CompletedProcess[str]:
         stdin=subprocess.DEVNULL,
         timeout=120,
     )
-
-
-def test_the_train_carries_the_ci_workflow() -> None:
-    rules = JUDGING.patterns((ROOT / JUDGING.FILE).read_text(encoding='utf-8'))
-    assert JUDGING.not_train(rules, ['.github/workflows/ci.yml']) == []
-    assert JUDGING.not_train(rules, ['.github/workflows/other.yml']) == [
-        '.github/workflows/other.yml'
-    ]
 
 
 def test_no_stamp_for_a_tree_that_changed_while_the_steps_ran(

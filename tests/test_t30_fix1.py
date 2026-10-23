@@ -446,17 +446,6 @@ def test_auto_land_fails_a_stack_tip_entry_land_py_refuses(
     assert not entry.exists() and entry.with_suffix('.failed').exists()
 
 
-def test_a_checker_fix_rides_the_train_and_product_data_stays_out() -> None:
-    checker = [
-        'scripts/rust_core/bridge_freeze.py',
-        'scripts/rust_core/compare.py',
-    ]
-    assert judging.not_train(RULES, checker) == []
-    assert (
-        judging.judging(RULES, ['scripts/rust_core/bridge_freeze.json']) == []
-    )
-
-
 def test_the_dry_run_without_its_gate_is_incomplete(tmp_path: Path) -> None:
     import yaml
 

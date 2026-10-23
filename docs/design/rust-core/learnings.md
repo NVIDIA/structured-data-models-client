@@ -196,11 +196,11 @@ Phase 2 repeated it at twice the scale: 20 of 52 landings were judging, CI or ow
 A "gate freeze" declared at 22:06 on 10-17 was broken at 22:29; "no new judging splits" on 10-20 lasted three hours.
 It cost about 30 critical-path hours, the largest single cost of Phase 2.
 **Lesson:** before the design locks, one stub case of every planned case kind runs through the landed judging tools, and every gap they report goes into one up-front judging package.
-A judging change found later rides one tooling train at the front of the next stack, never a package of its own.
-When the product cannot match exactly, the order is: fix the product, change the case, then the train; never a new package.
+A judging change found later rides with the package that needs it, never a package of its own (the owner, 2026-10-23, T3.24: the tooling train rule, which forced three splits in Phase 3 that caught nothing, is gone).
+When the product cannot match exactly, the order is: fix the product, then change the case; never a new package.
 Owner decision rows and CI config ride with the package that needs them, and package IDs are plain integers (T3.1, T3.2), with no sub-letters.
 A reference move is the phase's last landing before the gate.
-**Enforced by:** `scripts/rust_core/gate_dryrun.sh` over the design's case kinds (*T3.0*; Phase 3's are `docs/design/rust-core/phase-3/dryrun-plan.yaml`); `scripts/rust_core/judging-paths.txt` and `land.py` refusing a judging change outside the phase's first package or a train (*T3.0*); `scripts/rust_core/lane.py start` refusing a package ID with a letter from Phase 3 on (*T3.2*).
+**Enforced by:** `scripts/rust_core/gate_dryrun.sh` over the design's case kinds (*T3.0*; Phase 3's are `docs/design/rust-core/phase-3/dryrun-plan.yaml`); `scripts/rust_core/judging-paths.txt`, which `land.py` reads from the phase head (*T3.0*; the train refusal removed in *T3.24*); `scripts/rust_core/lane.py start` refusing a package ID with a letter from Phase 3 on (*T3.2*).
 
 ### 14. Landing throughput sets the phase's length: stack the queue, keep CI short, one environment per lane (first attempt to Phase 2)
 
@@ -248,7 +248,7 @@ The reviewer who raised a finding on a docs-only fix round confirms its fix, and
 
 In the first attempt, reviewers asked for pluggable data access and one shared PQL; the plan dropped both silently.
 In Phase 2, two P3s carried from T2.1g came back 36 hours later as parts of two new packages, an owner's "keep refusing" never became a decision row until the mid-phase check, and the carry list grew past 100 items with no owner and no date.
-**Lesson:** every review comment is tracked to a plan item, a decision or an explicit no; a carried P3 that touches the judging path goes into the phase's up-front judging package or its train, not into a new package; the carry list is closed out at phase end into named rows for the next phase, and each design gives every carried row a package or a recorded no.
+**Lesson:** every review comment is tracked to a plan item, a decision or an explicit no; a carried P3 that touches the judging path goes into the phase's up-front judging package or rides with the package that needs it, not into a new package; the carry list is closed out at phase end into named rows for the next phase, and each design gives every carried row a package or a recorded no.
 **Enforced by:** `scripts/rust_core/orchestration/packet_checks.sh`, which lists rows awaiting the owner and proposed register entries at phase end (*exists*); tracking each P3 to its end is *wording only*.
 
 ### 19. A rule without a mechanism in the repository is a wish (Phase 2)

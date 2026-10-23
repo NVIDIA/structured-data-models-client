@@ -42,7 +42,6 @@
   "test_t32_the_s1_rule_names_an_s1_path_with_no_case",
   "test_t32_the_statement_log_is_entered_only_as_a_context",
   "test_t32_the_statement_log_logs_each_warehouse_driver",
-  "test_t32_the_statement_log_takes_psycopg_s_copy_and_stream",
-  "test_t32_the_train_takes_t32_s_file_list"
+  "test_t32_the_statement_log_takes_psycopg_s_copy_and_stream"
  ]
 }

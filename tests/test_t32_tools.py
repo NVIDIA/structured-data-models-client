@@ -26,8 +26,7 @@ per change:
   pending-live list; the Java runner runs;
 - the comparator hashes result rows as text, so a case whose result
   digest an entry excuses (P2G-3) still has its ids and predictions
-  compared (P2-T2.21-1);
-- ``land.py --train`` takes T3.2's file list (judging.py's train rule).
+  compared (P2-T2.21-1).
 
 Interfaces assumed (T3.2 defines them; this file is their first reader):
 
@@ -632,59 +631,3 @@ def test_t32_result_rows_are_compared_as_text_where_the_digest_is_excused(
     assert judged('a' * 64) == []
     differs = judged('b' * 64)
     assert any('text_digest' in text for text in differs), differs
-
-
-# --- the train's file list -----------------------------------------------------------------
-
-#: T3.2's file list as its brief names it, with the tests and docs this
-#: package's test author adds.
-TRAIN = (
-    'contract/runners/run_python.py',
-    'contract/runners/capture_check.py',
-    'contract/case.schema.json',
-    'contract/observation.schema.json',
-    'contract/compare-policy.yaml',
-    'contract/protected-paths.txt',
-    'contract/tools/refusal_census.py',
-    'scripts/rust_core/compare.py',
-    'scripts/rust_core/ratchet.py',
-    'scripts/rust_core/coverage.py',
-    'scripts/rust_core/register.py',
-    'scripts/rust_core/gate.sh',
-    'scripts/rust_core/l0_deps.py',
-    'scripts/rust_core/l0_scan.py',
-    'scripts/rust_core/lane.py',
-    'scripts/rust_core/land.py',
-    'scripts/rust_core/judging.py',
-    'scripts/rust_core/affected.py',
-    'scripts/rust_core/selftest.py',
-    'scripts/rust_core/lane_selftest.py',
-    'scripts/rust_core/handoff.py',
-    'scripts/rust_core/orchestration/clean_tmp.sh',
-    'rust/crates/sdm-testkit/src/case.rs',
-    'rust/crates/sdm-testkit/src/observation.rs',
-    'rust/crates/sdm-testkit/tests/t32_case_format.rs',
-    'rust/crates/sdm-testkit/tests/s0_cases.rs',
-    'contract/tests/malformed-cases.json',
-    'contract/tests/t32-case-format-vectors.json',
-    'contract/tests/t32-pending.json',
-    'contract/tests/test_t32_recording.py',
-    'tests/test_t32_case_format.py',
-    'tests/test_t32_live_only.py',
-    'tests/test_t32_tools.py',
-    'tests/test_t32_process.py',
-    'docs/design/rust-core/phase-0/scope-python.yaml',
-    'docs/design/rust-core/phase-3/dryrun-plan.yaml',
-    'docs/design/rust-core/orchestration/README.md',
-)
-
-
-@pending
-def test_t32_the_train_takes_t32_s_file_list() -> None:
-    r"""Exit 3: ``land.py --train`` takes T3.2's files, the judging paths
-    and the checking tools with their tests (the test kit's crate tests of
-    the case loader included) and docs."""
-    judging = _tool('judging')
-    rules = judging.patterns((ROOT / judging.FILE).read_text(encoding='utf-8'))
-    assert judging.not_train(rules, TRAIN) == []
-    assert judging.train_worthy(rules, TRAIN)
