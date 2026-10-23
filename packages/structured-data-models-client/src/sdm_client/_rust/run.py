@@ -42,6 +42,7 @@ from typing import Any
 
 from sdm_client._routing import RouteError
 from sdm_client._rust import codec, errors, facts
+from sdm_client._rust.providers import databricks
 from sdm_client.errors import StructuredDataError
 
 #: A provider: answers one fetch, the ``FetchStep`` as the contract writes
@@ -112,7 +113,10 @@ def _driver(error: Exception) -> tuple[dict[str, Any], str]:
     r"""A driver's exception as the contract's ``ProviderError``, and its class.
 
     Only the SQLSTATE and the vendor code are kept, as text, from the
-    attributes drivers put them in; the driver's message is not.
+    attributes drivers put them in, and for a Databricks failure the
+    SQLSTATE its message writes and ``refuses_expression``
+    (:func:`~sdm_client._rust.providers.databricks.error_fields`); the
+    driver's message is not.
     """
     sqlstate = next(
         (
@@ -138,6 +142,12 @@ def _driver(error: Exception) -> tuple[dict[str, Any], str]:
         'sqlstate': sqlstate,
         'vendor_code': vendor,
     }
+    # A Databricks failure carries its SQLSTATE in its message (the SQL
+    # connector's) or answers it (Spark's), and says whether it refused an
+    # expression (``refuses_expression``, T3.4), as the reference reads it.
+    said = databricks.error_fields(error)
+    if said is not None:
+        provided.update(said)
     return provided, f'{kind.__module__}.{kind.__qualname__}'
 
 

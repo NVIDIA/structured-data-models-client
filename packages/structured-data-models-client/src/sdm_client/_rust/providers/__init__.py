@@ -17,30 +17,43 @@ from __future__ import annotations
 
 from typing import Any
 
+from sdm_client._rust.providers.databricks import (
+    DatabricksSparkProvider,
+    DatabricksSqlProvider,
+)
 from sdm_client._rust.providers.duckdb import DuckDBProvider
 from sdm_client._rust.providers.postgres import PostgresProvider
 from sdm_client._rust.providers.sqlite import SqliteProvider
 
+#: Each kind of source the core reads (``Source.kind``): the built-in SQL
+#: dialect it renders for it, and the provider answering on its connection.
+_BY_KIND: dict[str, tuple[str, Any]] = {
+    'duckdb': ('duckdb', DuckDBProvider),
+    'sqlite': ('sqlite', SqliteProvider),
+    'postgres': ('postgres', PostgresProvider),
+    'databricks-sql': ('databricks', DatabricksSqlProvider),
+    'databricks-spark': ('databricks', DatabricksSparkProvider),
+}
+
 
 def for_source(source: Any) -> tuple[dict[str, Any], Any]:
     r"""The provider choice a run over ``source`` names, and the provider
-    answering its fetches: its backend's built-in SQL dialect, DuckDB's,
-    SQLite's (T2.2) or Postgres's (T2.3), on its connection.
+    answering its fetches, by the source's kind (``Source.kind``, design fix
+    F): its built-in SQL dialect, DuckDB's, SQLite's (T2.2), Postgres's
+    (T2.3) or Databricks's (T3.4, a SQL warehouse or a Spark session), on
+    its connection.
 
-    The choice carries the source's namespace (contract v28), the schema a
-    ``PostgresSource`` was given, under which the core reads each table and
-    lists the source's tables, as the reference qualifies each read by it;
-    a source given none is read in the connection's current schema.
+    The choice carries the source's namespace (contract v28,
+    ``Source.namespace_parts()``, design fix C): the schema a
+    ``PostgresSource`` was given, the catalog and schema of a
+    ``DatabricksSource``, each ``None`` where the connection's current one
+    is meant, under which the core reads each table and lists the source's
+    tables, as the reference qualifies each read by them; left out where
+    the source names none.
     """
-    backend = source.backend
-    made = {
-        'duckdb': DuckDBProvider,
-        'sqlite': SqliteProvider,
-        'postgres': PostgresProvider,
-    }[backend]
-    choice: dict[str, Any] = {'provider': 'sql', 'dialect': backend}
-    named = getattr(source, 'namespace', None) or {}
-    schema = named.get('schema')
-    if schema is not None:
-        choice['namespace'] = [schema]
+    dialect, made = _BY_KIND[source.kind]
+    choice: dict[str, Any] = {'provider': 'sql', 'dialect': dialect}
+    parts = source.namespace_parts()
+    if any(part is not None for part in parts):
+        choice['namespace'] = parts
     return choice, made(source.connection)
