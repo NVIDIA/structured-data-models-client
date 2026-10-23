@@ -1,0 +1,15 @@
+{
+ "about": "T3.11's acceptance tests written before the implementation, by function name: contract/tests/test_t311_java.py and tests/test_t311_java_ci.py, read through contract/tests/t311_gate.py. Each test named in 'pending' failed when written and must still fail; once it passes it fails, naming itself, until the implementer takes it out of 'pending'. The implementer changes nothing else: 'pending' stays within 'authored', the test author's list. A parametrized test is pending as a whole. The JUnit tests under java/src/test/java/com/nvidia/sdm/ (T311*) are not listed: they run only once the implementer's pom.xml builds them, on the same commit as the code they test.",
+ "pending": [],
+ "authored": [
+  "test_t311_a_jar_without_this_platform_s_native_is_a_named_error",
+  "test_t311_every_s0_case_on_the_java_host_equals_the_reference",
+  "test_t311_no_s1_or_s2_java_leg_is_admitted",
+  "test_t311_sdm_jni_depends_on_sdm_host_and_sdm_contract_and_no_pyo3",
+  "test_t311_the_jar_holds_a_native_for_every_platform_named",
+  "test_t311_the_jar_is_java_17_bytecode",
+  "test_t311_the_jar_load_jobs_run_on_each_jdk_and_platform_without_rust",
+  "test_t311_the_jar_loads_on_each_jdk_in_a_clean_environment",
+  "test_t311_the_java_s0_jobs_run_on_each_jdk_and_platform"
+ ]
+}
