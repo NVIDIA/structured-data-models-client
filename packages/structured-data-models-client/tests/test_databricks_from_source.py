@@ -694,3 +694,155 @@ def test_an_edit_keeps_each_table_where_it_was_read(
     assert users_read, read
     assert all(where[:2] == ('main', 'shop') for where in orders), read
     assert all(where[:2] == ('main', 'other') for where in users_read), read
+
+
+class _CompletingWarehouse(_SessionWarehouse):
+    r"""The session warehouse, which also answers the core's neighbor reads
+    the capture does not hold, by running them over the capture's own rows
+    in DuckDB (only Spark's JSON-to-table syntax replaced), so a
+    ``materialize`` completes on both routes; ``other``'s ``users`` holds a
+    country of its own, ``OTHER``, which only a read of it puts in a
+    request."""
+
+    def __init__(self, *, fail_constraints: bool = False) -> None:
+        import duckdb
+
+        super().__init__(fail_constraints=fail_constraints)
+        self._db = duckdb.connect()
+        for name in ('users', 'orders'):
+            rows = next(
+                found
+                for (text, _), found in self._recorded.items()
+                if f'FROM `main`.`shop`.`{name}` LIMIT 1000' in text
+            )
+            self._db.register('rows', rows)
+            self._db.execute(f'CREATE TABLE {name} AS SELECT * FROM rows')
+            self._db.unregister('rows')
+
+    def answer(self, operation: str, parameters: list[Any]) -> pa.Table:
+        import pandas as pd
+
+        try:
+            found = super().answer(operation, parameters)
+        except AssertionError:
+            text = _normal(operation)
+            if not text.startswith('WITH TMP AS ( SELECT pos AS '):
+                raise
+            keys = json.loads(parameters[0])
+            seeds = pd.DataFrame(
+                keys
+                if keys and isinstance(keys[0], dict)
+                else [{'key': key} for key in keys]
+            )
+            seeds['batch'] = range(len(seeds))
+            for column in ('start', 'end', 'time'):
+                if column in seeds:
+                    seeds[column] = pd.to_datetime(seeds[column])
+            self._db.register(
+                'seeds', pa.Table.from_pandas(seeds, preserve_index=False)
+            )
+            text = re.sub(
+                r'^WITH TMP AS \( .*? \) SELECT ',
+                'WITH TMP AS (SELECT * FROM seeds) SELECT ',
+                text,
+                count=1,
+            )
+            text = re.sub(r'`main`\.`\w+`\.', '', text).replace('`', '"')
+            found = self._db.execute(text).fetch_arrow_table()
+            self.calls[-1] = (_normal(operation), list(parameters))
+        if (
+            '`main`.`other`.`users`' in operation
+            and 'country' in found.column_names
+        ):
+            at = found.schema.get_field_index('country')
+            found = found.set_column(
+                at,
+                found.schema.field(at),
+                pa.array(
+                    ['OTHER'] * found.num_rows, found.schema.field(at).type
+                ),
+            )
+        return found
+
+
+_CompletingConnection = type(
+    'Connection',
+    (_CompletingWarehouse,),
+    {'__module__': 'databricks.sql.client'},
+)
+
+
+def _materialized(schema: Schema) -> Any:
+    import pandas as pd
+
+    from sdm_client import PredictiveQuery
+
+    return PredictiveQuery(
+        'PREDICT COUNT(orders.*, 0, 30, days) > 0 FOR EACH users.user_id',
+        schema,
+    ).materialize(indices=[0, 1], anchor_time=pd.Timestamp('2024-03-01'))
+
+
+def _read_since(connection: Any, mark: int) -> set[tuple[str, str, str]]:
+    return {
+        where
+        for text, _ in connection.calls[mark:]
+        for where in re.findall(r'`(\w+)`\.`(\w+)`\.`(\w+)`', text)
+    }
+
+
+@pytest.mark.parametrize('route', ['core', 'old'])
+def test_a_rebuilt_schema_keeps_where_its_first_materialize_read_its_tables(
+    route: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""A schema built anew is read where the session says at its first
+    ``materialize``, and there again at the next after the session moved,
+    as the old route keeps the tables its first ``materialize`` read
+    (``EngineTables.keep``; round 5's P0)."""
+    _route(route, monkeypatch)
+    connection = _CompletingConnection()
+    source = DatabricksSource(connection, catalog='main')
+    described = Schema.from_source(source)
+    schema = Schema(described.tables, described.relationships, source=source)
+    mark = len(connection.calls)
+    first = _materialized(schema)
+    assert {w[:2] for w in _read_since(connection, mark)} == {('main', 'shop')}
+    connection.schema = 'other'
+    mark = len(connection.calls)
+    second = _materialized(schema)
+    assert {w[:2] for w in _read_since(connection, mark)} == {('main', 'shop')}
+    assert 'OTHER' not in repr(first.payloads)
+    assert 'OTHER' not in repr(second.payloads)
+
+
+@pytest.mark.parametrize('route', ['core', 'old'])
+def test_a_table_added_to_a_described_schema_keeps_where_it_was_first_read(
+    route: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""A table the described schema never read, added by hand, is read
+    where the session says at the first ``materialize`` and there again
+    after the session moved (round 5's P0)."""
+    _route(route, monkeypatch)
+    from sdm_client import Relationship
+
+    connection = _CompletingConnection()
+    source = DatabricksSource(connection, catalog='main')
+    schema = Schema.from_source(
+        source, tables={'orders': 'orders'}, check_keys=False
+    )
+    users = Schema(
+        Schema.from_source(
+            source, tables={'users': 'users'}, check_keys=False
+        ).tables,
+        source=source,
+    )
+    schema.tables['users'] = users['users']
+    schema.relationships = [
+        Relationship('orders', 'user_id', 'users', 'user_id')
+    ]
+    _materialized(schema)
+    connection.schema = 'other'
+    mark = len(connection.calls)
+    second = _materialized(schema)
+    assert {w[:2] for w in _read_since(connection, mark)} == {('main', 'shop')}
+    assert 'OTHER' not in repr(second.payloads)
