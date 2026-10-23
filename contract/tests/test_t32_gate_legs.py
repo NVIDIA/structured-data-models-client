@@ -82,3 +82,28 @@ def test_the_gate_compares_each_leg_with_that_leg_s_files(
     assert 'python-core.jsonl' not in on['snowflake'], on['snowflake']
     assert str(standin) not in on['duckdb'], on['duckdb']
     assert 'a second file of python-core' not in said, said[-3000:]
+
+
+@pytest.mark.parametrize('kind', ['empty', 'missing'])
+def test_a_given_observation_file_the_gate_cannot_read_is_refused(
+    repo: Path,
+    tmp_path: Path,
+    observed: dict[str, list[dict[str, Any]]],
+    kind: str,
+) -> None:
+    # Codex r2 P1-3: it was dropped, and the comparison passed without it.
+    landed = modes.git(repo, 'rev-parse', 'HEAD')
+    modes.commit(repo)
+    given = modes.files(observed, tmp_path)
+    bad = tmp_path / 'given' / f'java-{kind}.jsonl'
+    if kind == 'empty':
+        bad.write_text('')
+    done = modes.subprocess.run(
+        [str(repo / 'scripts/rust_core/gate.sh'), '--no-l0', '--base', landed,
+         '--only', 'compare', *given, '--observations', str(bad)],
+        capture_output=True, text=True, check=False, cwd=repo,
+        env={**modes.os.environ, 'PYTHON': sys.executable},
+    )  # fmt: skip
+    said = done.stdout + done.stderr
+    assert done.returncode != 0, said[-3000:]
+    assert f'REFUSED {bad}' in said, said[-3000:]

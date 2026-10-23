@@ -766,19 +766,29 @@ judge_compare() {
   # line is judged on its leg and a live-only item without its E-1 verdict
   # fails the locked run.
   local pairs
+  # A file given and unreadable, empty or not observation lines is refused
+  # by name, never dropped from the comparison (Codex r2 P1-3).
   pairs=$("$PYTHON" -I -c '
 import json, sys
+refused = []
 for path in sys.argv[1:]:
     try:
         text = open(path, encoding="utf-8").read()
-    except OSError:
+        legs = {
+            json.loads(line)["case"].partition("@")[2] or "duckdb"
+            for line in text.splitlines()
+            if line.strip()
+        }
+    except (OSError, ValueError, KeyError, TypeError, AttributeError) as error:
+        refused.append(f"{path}: unreadable ({type(error).__name__})")
         continue
-    legs = set()
-    for line in text.splitlines():
-        if line.strip():
-            legs.add(json.loads(line).get("case", "").partition("@")[2] or "duckdb")
+    if not legs:
+        refused.append(f"{path}: no observation lines")
     for leg in sorted(legs):
         print(leg + "\t" + path)
+for line in refused:
+    print(f"compare: REFUSED {line}", file=sys.stderr)
+sys.exit(1 if refused else 0)
 ' "${given[@]}") || return 1
   local legs
   legs=$(cut -f1 <<<"$pairs" | sort -u | grep -v '^$')
