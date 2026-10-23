@@ -14,7 +14,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use sdm_contract::facts::PlatformFacts;
 use sdm_contract::ops::{ColumnRef, ProfileSpec, QueryColumn, QuerySchema, QueryTable, Severity};
 use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, HostFacts, Scalar, Unit};
-use sdm_core::pql::{DATE_LITERAL_DAY_FIRST, resolve};
+use sdm_core::pql::resolve;
 use sdm_core::profiles::Profile;
 use serde_json::{Map, Value, json};
 
@@ -458,7 +458,7 @@ pub fn differences(
         .warnings
         .iter()
         .map(|w| {
-            assert_eq!(w.code, DATE_LITERAL_DAY_FIRST);
+            assert_eq!(w.sentence, sdm_contract::Sentence::DateLiteralDayFirst);
             match &w.fields["format"] {
                 Detail::Scalar(Scalar::Utf8(text)) => text.clone(),
                 other => panic!("a format that is not text: {other:?}"),

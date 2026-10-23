@@ -276,6 +276,7 @@ def test_an_error_past_the_cap_is_raised_whole_from_its_attachment() -> None:
     error = {
         'kind': 'data_source',
         'code': 'PROVIDER_ERROR',
+        'sentence': 'provider_failed',
         'message': 'x' * 70_000,
         'retryable': True,
     }

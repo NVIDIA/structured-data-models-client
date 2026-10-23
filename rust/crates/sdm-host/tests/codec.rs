@@ -18,7 +18,7 @@ use sdm_contract::ops::{
 use sdm_contract::run::StartRun;
 use sdm_contract::{
     CONTRACT_VERSION, ColumnType, ControlMessage, CoreError, CoreWarning, Detail, ErrorCode,
-    ErrorKind, HostFacts, Scalar, Step, Unit,
+    ErrorKind, HostFacts, Scalar, Sentence, Step, Unit,
 };
 use sdm_core::Attachment;
 use sdm_host::{CONTROL_CAP, Outgoing, decode, encode, read, write, write_error};
@@ -242,18 +242,14 @@ fn a_done_carrying_a_source_description_arrives_whole_either_side_of_the_cap() {
 #[test]
 fn the_core_never_writes_what_its_contract_refuses() {
     // A decimal of precision 0 is outside the contract (decision E4).
-    let warning = CoreWarning {
-        code: "W".into(),
-        message: String::new(),
-        fields: BTreeMap::from([(
-            "d".to_owned(),
-            Detail::Scalar(Scalar::Decimal128 {
-                precision: 0,
-                scale: 0,
-                value: 1,
-            }),
-        )]),
-    };
+    let warning = CoreWarning::new(Sentence::ContextCapped, "").with_field(
+        "d",
+        Detail::Scalar(Scalar::Decimal128 {
+            precision: 0,
+            scale: 0,
+            value: 1,
+        }),
+    );
     let err = write(
         &ControlMessage::Warnings {
             warnings: vec![warning],
@@ -266,13 +262,9 @@ fn the_core_never_writes_what_its_contract_refuses() {
 
 fn error_of(size: usize) -> ControlMessage {
     exactly(size, |pad| ControlMessage::Error {
-        error: CoreError::new(ErrorKind::Internal, ErrorCode::InternalError, "small")
+        error: CoreError::new(Sentence::Internal, "small")
             .with_field("table", Detail::text("x".repeat(pad)))
-            .caused_by(CoreError::new(
-                ErrorKind::DataSource,
-                ErrorCode::ProviderError,
-                "cause",
-            )),
+            .caused_by(CoreError::new(Sentence::ProviderFailed, "cause")),
     })
 }
 
@@ -291,7 +283,7 @@ fn an_error_is_written_whole_with_its_fields_and_cause_either_side_of_the_cap() 
 
 #[test]
 fn an_error_the_encoder_refuses_becomes_an_internal_error() {
-    let bad = CoreError::new(ErrorKind::DataSource, ErrorCode::ProviderError, "bad").with_field(
+    let bad = CoreError::new(Sentence::ProviderFailed, "bad").with_field(
         "d",
         Detail::Scalar(Scalar::Decimal128 {
             precision: 0,
@@ -309,11 +301,7 @@ fn an_error_the_encoder_refuses_becomes_an_internal_error() {
         unreachable!()
     };
     let out = write_error(&big, || {
-        Err(CoreError::new(
-            ErrorKind::Internal,
-            ErrorCode::InternalError,
-            "out of ids",
-        ))
+        Err(CoreError::new(Sentence::Internal, "out of ids"))
     });
     let ControlMessage::Error { error } = read(&out).unwrap() else {
         panic!("an error message")
@@ -328,9 +316,11 @@ fn an_error_the_encoder_refuses_becomes_an_internal_error() {
 fn warnings_are_written_in_order_in_one_message_of_any_size() {
     let warnings: Vec<CoreWarning> = (0..40)
         .map(|i| CoreWarning {
-            code: "LONG".into(),
-            message: format!("{i:02}{}", "w".repeat(4_000)),
             fields: BTreeMap::new(),
+            ..CoreWarning::new(
+                Sentence::ContextCapped,
+                format!("{i:02}{}", "w".repeat(4_000)),
+            )
         })
         .collect();
     written_whole(&ControlMessage::Warnings { warnings }, true);

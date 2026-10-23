@@ -36,7 +36,7 @@ use sdm_contract::run::{FetchOutcome, FetchReply, ModelOutcome, ModelReply, Repl
 use sdm_contract::test_ops::{PanicAt, TestFetch, TestOperation};
 use sdm_contract::{
     CONTRACT_VERSION, ColumnType, ControlMessage, CoreError, Detail, ErrorCode, ErrorKind,
-    Field as ContractField, HostFacts, Scalar, Unit,
+    Field as ContractField, HostFacts, Scalar, Sentence, Unit,
 };
 use sdm_core::{ArrowData, Attachment, Attachments, RunState};
 use sdm_host::{HostRun, Outgoing, Unreadable, Unreadables, encode, read};
@@ -508,7 +508,7 @@ fn a_test_only_operation_that_panics_is_contained_wherever_it_panics() {
 
 #[test]
 fn an_error_carrying_fields_panic_does_not_poison_a_finished_run() {
-    let claimed = CoreError::new(ErrorKind::DataSource, ErrorCode::ProviderError, "failed")
+    let claimed = CoreError::new(Sentence::ProviderFailed, "failed")
         .with_field("panic", Detail::Scalar(Scalar::Bool(true)));
     let run = HostRun::start(
         &sdm_host::default_root(),

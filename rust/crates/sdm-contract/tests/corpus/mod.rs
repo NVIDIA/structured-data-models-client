@@ -23,8 +23,8 @@ use sdm_contract::run::{
     StartRun,
 };
 use sdm_contract::{
-    CONTRACT_VERSION, ColumnType, ControlMessage, CoreError, CoreWarning, Detail, ErrorCode,
-    ErrorKind, Field, HostFacts, Scalar, Step, Unit,
+    CONTRACT_VERSION, ColumnType, ControlMessage, CoreError, CoreWarning, Detail, ErrorKind, Field,
+    HostFacts, Scalar, Sentence, Step, Unit,
 };
 
 pub fn facts() -> HostFacts {
@@ -433,7 +433,7 @@ pub fn messages() -> Vec<ControlMessage> {
         },
         ControlMessage::Cancel {},
         ControlMessage::Error {
-            error: CoreError::new(ErrorKind::Internal, ErrorCode::InternalError, "panicked")
+            error: CoreError::new(Sentence::Internal, "panicked")
                 .with_field("panic", Detail::Scalar(Scalar::Bool(true)))
                 .caused_by(CoreError::provider(&ProviderError {
                     kind: ErrorKind::DataSource,
@@ -443,14 +443,12 @@ pub fn messages() -> Vec<ControlMessage> {
                 })),
         },
         ControlMessage::Warnings {
-            warnings: vec![CoreWarning {
-                code: "COMPOSITE_KEY_DROPPED".into(),
-                message: "dropped".into(),
-                fields: BTreeMap::from([(
-                    "columns".into(),
+            warnings: vec![
+                CoreWarning::new(Sentence::KeyRepeatsColumns, "repeats").with_field(
+                    "columns",
                     Detail::List(vec![Scalar::Utf8("a".into()), Scalar::Utf8("b".into())]),
-                )]),
-            }],
+                ),
+            ],
         },
         ControlMessage::SamplerState {
             state: SamplerState {

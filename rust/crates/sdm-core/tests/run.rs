@@ -18,7 +18,7 @@ use sdm_contract::data::{
 };
 use sdm_contract::ops::{OperationResult, QueryValidation};
 use sdm_contract::run::{Endpoint, ReplyId};
-use sdm_contract::{CoreError, CoreWarning, ErrorCode, ErrorKind, Step};
+use sdm_contract::{CoreError, CoreWarning, ErrorCode, ErrorKind, Sentence, Step};
 use sdm_core::{
     ArrowData, Asker, Attachment, CompositionRoot, FetchResult, ModelResult, Reply, Run, RunState,
 };
@@ -92,12 +92,9 @@ fn row_count(reply: &Reply) -> usize {
     }
 }
 
-fn warning(code: &str) -> CoreWarning {
-    CoreWarning {
-        code: code.into(),
-        message: String::new(),
-        fields: Default::default(),
-    }
+/// A warning named by its message, which the order checks read.
+fn warning(name: &str) -> CoreWarning {
+    CoreWarning::new(Sentence::ContextCapped, name)
 }
 
 /// A result carrying what the body saw, as diagnostic codes.
@@ -134,11 +131,7 @@ fn scripted() -> Run {
             .await;
         asker.warn(warning("THIRD"));
         let Reply::Model(ModelResult::Response { status, body, .. }) = answer else {
-            return Err(CoreError::new(
-                ErrorKind::ModelEndpoint,
-                ErrorCode::TransportError,
-                "no answer",
-            ));
+            return Err(CoreError::new(Sentence::TransportFailed, "no answer"));
         };
         Ok(done(vec![
             status.to_string(),
@@ -171,7 +164,7 @@ async fn join<A: Future + Unpin, B: Future + Unpin>(mut a: A, mut b: B) -> (A::O
 }
 
 fn codes_of(warnings: Vec<CoreWarning>) -> Vec<String> {
-    warnings.into_iter().map(|w| w.code).collect()
+    warnings.into_iter().map(|w| w.message).collect()
 }
 
 fn fetch_ids(step: &Step) -> Vec<ReplyId> {

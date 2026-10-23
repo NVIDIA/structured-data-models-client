@@ -15,7 +15,9 @@ use std::collections::BTreeSet;
 use sdm_contract::ops::{
     ColumnRef, DescribedColumn, DescribedTable, Dtype, Given as Written, SourceDescription, Stype,
 };
-use sdm_contract::{ColumnType, CoreWarning, Detail, ErrorCode, Scalar};
+use sdm_contract::{
+    Code, ColumnType, CoreWarning, Detail, ErrorCode, Scalar, Sentence, WarningCode,
+};
 use sdm_schema::assemble::{self, Given, Link};
 use sdm_schema::infer::{InferredColumn, InferredTable, PassedOver, Taken, TimeChoice};
 
@@ -995,34 +997,27 @@ fn every_warning_given_is_listed_and_every_listed_one_is_given() {
     );
     assert!(assemble::key_tied(&refused).is_empty());
     given.extend(said);
-    let mut seen: BTreeSet<(String, Option<String>)> = BTreeSet::new();
+    // Every sentence of the schema's warnings is given, each of its code
+    // (T3.17: the sentences take the place of the codes' variants).
+    let codes = [
+        WarningCode::TimeColumnsGuessed,
+        WarningCode::LinkCannotJoin,
+        WarningCode::TablesNameEachOther,
+        WarningCode::TwoWaysToATable,
+        WarningCode::ColumnsLeftOut,
+        WarningCode::TimeValuesUnread,
+        WarningCode::DatesReadDayFirst,
+        WarningCode::KeyCandidatesTied,
+    ];
+    let mut seen: BTreeSet<&str> = BTreeSet::new();
     for warning in &given {
-        let variant = warning.fields.get("variant").map(|v| match v {
-            Detail::Scalar(Scalar::Utf8(text)) => text.clone(),
-            other => panic!("{other:?}"),
-        });
-        let listed = assemble::WARNINGS
-            .iter()
-            .find(|(code, _)| *code == warning.code)
-            .unwrap_or_else(|| panic!("{} is not listed", warning.code));
-        match &variant {
-            Some(v) => assert!(listed.1.contains(&v.as_str()), "{}/{v}", warning.code),
-            None => assert!(listed.1.is_empty(), "{} gives no variant", warning.code),
-        }
-        seen.insert((warning.code.clone(), variant));
+        assert!(warning.holds_to_table(), "{warning:?}");
+        seen.insert(warning.sentence.as_str());
     }
-    let listed: BTreeSet<(String, Option<String>)> = assemble::WARNINGS
+    let listed: BTreeSet<&str> = Sentence::ALL
         .iter()
-        .flat_map(|(code, variants)| {
-            if variants.is_empty() {
-                vec![((*code).to_owned(), None)]
-            } else {
-                variants
-                    .iter()
-                    .map(|v| ((*code).to_owned(), Some((*v).to_owned())))
-                    .collect()
-            }
-        })
+        .filter(|s| matches!(s.code(), Code::Warning(code) if codes.contains(&code)))
+        .map(|s| s.as_str())
         .collect();
     assert_eq!(seen, listed);
 }
@@ -1067,16 +1062,10 @@ fn tied_keys_are_said_after_every_table_is_read_and_before_left_out_columns() {
     assert_eq!(
         said,
         [
-            (
-                assemble::KEY_CANDIDATES_TIED.to_owned(),
-                Detail::text("aaa")
-            ),
-            (
-                assemble::KEY_CANDIDATES_TIED.to_owned(),
-                Detail::text("zzz")
-            ),
-            (assemble::COLUMNS_LEFT_OUT.to_owned(), Detail::text("aaa")),
-            (assemble::COLUMNS_LEFT_OUT.to_owned(), Detail::text("zzz")),
+            ("KEY_CANDIDATES_TIED".to_owned(), Detail::text("aaa")),
+            ("KEY_CANDIDATES_TIED".to_owned(), Detail::text("zzz")),
+            ("COLUMNS_LEFT_OUT".to_owned(), Detail::text("aaa")),
+            ("COLUMNS_LEFT_OUT".to_owned(), Detail::text("zzz")),
         ]
     );
 }

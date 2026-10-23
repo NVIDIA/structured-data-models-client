@@ -11,7 +11,7 @@
 
 use std::sync::Arc;
 
-use sdm_contract::{ControlMessage, CoreError, CoreWarning, ErrorCode, ErrorKind};
+use sdm_contract::{ControlMessage, CoreError, CoreWarning, Sentence};
 use sdm_core::Run;
 use sdm_core::materialize::{CONTEXT_COVERAGE, MISSING_INDICES, ONCE_PER_PROCESS};
 use sdm_host::{HostRun, ZoneResolver, read};
@@ -21,15 +21,15 @@ use sdm_host::{HostRun, ZoneResolver, read};
 fn giving(codes: &'static [&'static str]) -> HostRun {
     let run = Run::new(move |asker| async move {
         for code in codes {
-            asker.warn(CoreWarning {
-                code: (*code).to_owned(),
-                message: "given".into(),
-                fields: Default::default(),
-            });
+            // A sentence of the code, the first the table lists.
+            let sentence = Sentence::ALL
+                .iter()
+                .find(|s| s.code().as_str() == Some(*code))
+                .expect("a sentence of the code");
+            asker.warn(CoreWarning::new(*sentence, "given"));
         }
         Err(CoreError::new(
-            ErrorKind::InvalidRequest,
-            ErrorCode::InvalidRequest,
+            Sentence::DataRequestRefused,
             "refused after its warnings",
         ))
     });
