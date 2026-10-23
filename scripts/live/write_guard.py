@@ -15,15 +15,16 @@ Lakebase), enforced in one place: :func:`install` wraps every entry point a
 statement reaches a server through, on the driver classes themselves
 (Snowflake's cursor base and connection, sync and async, and Snowpark's
 session, Databricks SQL's cursor, Spark's session, classic and Connect,
-Spark Connect's one command entry point, psycopg's cursors and
+Spark Connect's execution boundary, psycopg's cursors and
 connections, and every subclass, now or defined later), so every
 connection, every cursor a driver hands back and a session's own
 connection are guarded, with no wrapper object to step around. Spark SQL
 given arguments to format into its text is refused. Spark's and Delta's
 writer classes, whole, and Spark's DataFrame and catalog writes, which
-send no statement the guard could read, are refused outright, as is
-Snowflake's ``execute_stream``; on Spark Connect only a SQL command passes
-at all. A dialect with no test schema configured refuses every statement.
+send no statement the guard could read, and Spark's global temporary
+views, are refused outright, as is Snowflake's ``execute_stream``; on
+Spark Connect a plan passes only as a read or a SQL command, every SQL
+text in it checked. A dialect with no test schema configured refuses every statement.
 
 The test schema comes from the constructor or the environment:
 ``SDM_LIVE_<DIALECT>_TEST_DATABASE`` and ``SDM_LIVE_<DIALECT>_TEST_SCHEMA``,
@@ -33,17 +34,19 @@ is written here.
 
 An allowlist. A statement is admitted only in one of the forms below, read
 whole; everything else is refused, so a gap fails closed. One statement
-per text: any comment, semicolon, backslash, flow or pipe operator
-(Snowflake's ``->>``, Databricks' ``|>``), raw or escaped string
-(``r'...'``, ``E'...'``, ``U&'...'``), or quoted name holding its own
-quote or a control character is refused, so the guard and the engine never
-read the text differently.
+per text: any comment, semicolon, backslash, character outside ASCII
+(outside a string), flow or pipe operator (Snowflake's ``->>``,
+Databricks' ``|>``), raw or escaped string (``r'...'``, ``E'...'``,
+``U&'...'``), or quoted name holding its own quote or a control character
+is refused, so the guard and the engine never read the text differently.
 
 Reads (the forms the old client and the runner issue), anywhere:
 
 - ``SELECT`` and ``WITH`` queries holding no write verb, no ``INTO`` and
   no sequence (``NEXTVAL`` and the like), calling only the pure functions
-  of :data:`FUNCTIONS`, by plain name (Postgres' also as ``pg_catalog.``);
+  of :data:`FUNCTIONS`, by plain name (Postgres' also as ``pg_catalog.``),
+  a keyword taking a ``(`` only where it cannot be a call, and casting
+  (``::`` or ``CAST``) only to a built-in type of :data:`CAST_TYPES`;
 - ``DESCRIBE TABLE [EXTENDED] <t>``, ``SHOW TABLES [LIKE <p>] [IN [SCHEMA]
   <s>]``, ``SHOW IMPORTED KEYS IN TABLE <t>``, ``SHOW PARAMETERS LIKE <p>
   IN SESSION``, ``USE CATALOG | SCHEMA | DATABASE <s>`` and ``ALTER
@@ -132,6 +135,8 @@ def tokens(sql: str, dialect: str) -> list[Token]:
     i, n = 0, len(sql)
     while i < n:
         c = sql[i]
+        if not c.isascii():
+            raise WriteRefused('a character outside ASCII, outside a string')
         never = next((t for t in _NEVER[dialect] if sql.startswith(t, i)), None)
         if never:
             raise WriteRefused(f'{never} outside a string')
@@ -159,7 +164,11 @@ def tokens(sql: str, dialect: str) -> list[Token]:
             out.append(Token('string', text))
         elif c == '"' or (c == '`' and dialect == 'databricks'):
             text, i = _quoted(sql, i, c)
-            if c in text or any(ord(ch) < 32 for ch in text):
+            if (
+                c in text
+                or not text.isascii()
+                or any(ord(ch) < 32 for ch in text)
+            ):
                 raise WriteRefused(
                     'a quoted name holding its quote or a control character'
                 )
@@ -242,23 +251,51 @@ FUNCTIONS = frozenset(
         'SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW',
     }
 )  # fmt: skip
-#: Words a ``(`` may follow without calling anything: keywords, and type
-#: names taking their parameters.
-NOT_CALLS = frozenset(
+#: Keywords no dialect lets name a function, so a ``(`` after one, never
+#: qualified, calls nothing.
+RESERVED = frozenset(
     {
-        'ALL', 'AND', 'ANY', 'AS', 'BERNOULLI', 'BETWEEN', 'BY', 'CASE',
-        'DISTINCT', 'ELSE', 'END', 'ESCAPE', 'EXCEPT', 'EXISTS', 'FILTER',
-        'FOR', 'FROM', 'GROUP', 'HAVING', 'ILIKE', 'IN', 'INTERSECT',
-        'INTERVAL', 'IS', 'JOIN', 'LATERAL', 'LIKE', 'LIMIT', 'NOT', 'ON',
-        'OR', 'OVER', 'PARTITION', 'QUALIFY', 'REPEATABLE', 'ROW', 'ROWS',
-        'SAMPLE', 'SEED', 'SELECT', 'SOME', 'TABLESAMPLE', 'THEN', 'UNION',
-        'USING', 'VALUES', 'WHEN', 'WHERE', 'WITH', 'WITHIN',
-        'BINARY', 'CHAR', 'CHARACTER', 'DEC', 'DECIMAL', 'DOUBLE', 'FLOAT',
-        'NCHAR', 'NUMBER', 'NUMERIC', 'NVARCHAR', 'STRING', 'TEXT', 'TIME',
-        'TIMESTAMP', 'TIMESTAMP_LTZ', 'TIMESTAMP_NTZ', 'TIMESTAMP_TZ',
-        'VARBINARY', 'VARCHAR', 'VARYING', 'VECTOR', 'KEY', 'UNIQUE',
+        'ALL', 'AND', 'ANY', 'AS', 'BETWEEN', 'CASE', 'DISTINCT', 'ELSE',
+        'END', 'EXCEPT', 'EXISTS', 'FROM', 'GROUP', 'HAVING', 'IN',
+        'INTERSECT', 'INTERVAL', 'LATERAL', 'NOT', 'ON', 'OR', 'ROW',
+        'SELECT', 'SOME', 'THEN', 'UNION', 'USING', 'VALUES', 'WHEN',
+        'WHERE', 'WITH',
     }
 )  # fmt: skip
+#: Keywords a function could be named, taking a ``(`` only where the
+#: grammar puts them: after a closing ``)`` (a window, a filter, a
+#: sample's seed), after ORDER, GROUP or PARTITION, or after a table.
+AFTER_CLOSE = frozenset({'OVER', 'FILTER', 'REPEATABLE', 'WITHIN'})
+AFTER_BY = frozenset({'ORDER', 'GROUP', 'PARTITION'})
+AFTER_TABLE = frozenset({'TABLESAMPLE', 'SAMPLE'})
+#: The types a cast (``::`` or ``CAST(... AS ...)``) may name, by dialect:
+#: built-in types only (a domain's checks may call anything).
+CAST_TYPES = {
+    'snowflake': frozenset(
+        {
+            'ARRAY', 'BINARY', 'BOOLEAN', 'DATE', 'DECIMAL', 'DOUBLE',
+            'FLOAT', 'INT', 'INTEGER', 'BIGINT', 'NUMBER', 'NUMERIC',
+            'OBJECT', 'STRING', 'TEXT', 'TIME', 'TIMESTAMP',
+            'TIMESTAMP_LTZ', 'TIMESTAMP_NTZ', 'TIMESTAMP_TZ', 'VARCHAR',
+            'VARIANT',
+        }
+    ),
+    'databricks': frozenset(
+        {
+            'ARRAY', 'BIGINT', 'BINARY', 'BOOLEAN', 'DATE', 'DECIMAL',
+            'DOUBLE', 'FLOAT', 'INT', 'INTEGER', 'MAP', 'SMALLINT', 'STRING',
+            'STRUCT', 'TIMESTAMP', 'TIMESTAMP_NTZ', 'TINYINT',
+        }
+    ),
+    'postgres': frozenset(
+        {
+            'BIGINT', 'BOOLEAN', 'BYTEA', 'DATE', 'DOUBLE', 'FLOAT',
+            'INT', 'INTEGER', 'INTERVAL', 'JSON', 'JSONB', 'NUMERIC',
+            'PRECISION', 'REAL', 'SMALLINT', 'TEXT', 'TIME', 'TIMESTAMP',
+            'TIMESTAMPTZ', 'VARCHAR', 'WITH', 'WITHOUT', 'ZONE',
+        }
+    ),
+}  # fmt: skip
 #: Words that advance or read a sequence, refused wherever they stand.
 SEQUENCE_WORDS = frozenset(
     {'NEXTVAL', 'GETNEXTVAL', 'CURRVAL', 'SETVAL', 'LASTVAL'}
@@ -492,47 +529,89 @@ class WriteGuard:
     def _held(
         self, items: list[Token], words: frozenset[str], what: str
     ) -> None:
-        r"""Refuses ``items`` holding one of ``words`` or a sequence's
-        word, or calling anything but :data:`FUNCTIONS` by a plain name."""
+        r"""Refuses ``items`` holding one of ``words`` or a sequence's word,
+        casting to a type not built in, or calling anything but
+        :data:`FUNCTIONS` by a plain name; a keyword takes a ``(`` only
+        where it cannot be a call (:data:`RESERVED` and the words after it),
+        and an alias after ``AS`` its list of names."""
         # The word each open parenthesis follows, innermost last: inside a
-        # cast, AS names a type, never an alias.
+        # cast, AS names its type.
         openers: list[str] = []
+        types: set[int] = set()
         for i, token in enumerate(items):
             word = _upper(token)
-            call = items[i + 1 : i + 2] == [_OPEN]
+            after = items[i + 1 : i + 2]
+            before = items[i - 1] if i else None
             if token == _OPEN:
-                openers.append(_upper(items[i - 1]) if i else '')
-            elif token == _CLOSE and openers:
-                openers.pop()
-            if word in words and not call:
+                openers.append(_upper(before))
+                continue
+            if token == _CLOSE:
+                if openers:
+                    openers.pop()
+                continue
+            if word in words and after != [_OPEN]:
                 raise WriteRefused(f'{what}: {word} where no write may be')
             if word in SEQUENCE_WORDS:
                 raise WriteRefused(f'{what}: {word}, a sequence')
+            if token == Token('punct', ':') and after == [Token('punct', ':')]:
+                types |= self._cast_type(items, i + 2, what)
+                continue
+            if word == 'AS' and openers[-1:] in (['CAST'], ['TRY_CAST']):
+                types |= self._cast_type(items, i + 1, what)
+                continue
+            if after != [_OPEN] or token.kind not in ('word', 'name'):
+                continue
+            if i in types:
+                continue  # a cast's type, its parameters after it
+            if token.kind == 'name':
+                raise WriteRefused(f'{what}: a quoted name called')
+            if before == _DOT:
+                if not (
+                    self.dialect == 'postgres'
+                    and word in FUNCTIONS
+                    and _upper(items[i - 2]) == 'PG_CATALOG'
+                    and items[i - 3 : i - 2] != [_DOT]
+                ):
+                    raise WriteRefused(f'{what}: a qualified function')
+                continue
+            if before == Token('punct', '!'):
+                raise WriteRefused(f'{what}: a method called')
             if (
-                not call
-                or token.kind not in ('word', 'name')
-                or word in NOT_CALLS
+                word in FUNCTIONS
+                or word in RESERVED
+                or (word in AFTER_CLOSE and before == _CLOSE)
+                or (word == 'BY' and _upper(before) in AFTER_BY)
+                or (
+                    word in AFTER_TABLE
+                    and before is not None
+                    and before.kind in ('word', 'name')
+                    and _upper(before) not in RESERVED
+                )
+                or (
+                    _upper(before) == 'AS'
+                    and openers[-1:] not in (['CAST'], ['TRY_CAST'])
+                    and _names_only(items, i + 1)
+                )
             ):
                 continue
-            before = items[i - 1] if i else None
-            if (
-                _upper(before) == 'AS'
-                and openers[-1:] not in (['CAST'], ['TRY_CAST'])
-                and _names_only(items, i + 1)
-            ):
-                continue  # AS <alias> (<columns>)
-            if before == _DOT and (
-                self.dialect == 'postgres'
-                and i > 1
-                and _upper(items[i - 2]) == 'PG_CATALOG'
-            ):
-                before = (
-                    None  # Postgres' own catalog, as the old client names it
-                )
-            if token.kind != 'word' or before in (_DOT, Token('punct', '!')):
-                raise WriteRefused(f'{what}: a quoted or qualified function')
-            if word not in FUNCTIONS:
-                raise WriteRefused(f'{what}: {word}(), a function on no list')
+            raise WriteRefused(f'{what}: {word}(), a function on no list')
+
+    def _cast_type(self, items: list[Token], at: int, what: str) -> set[int]:
+        r"""The built-in type a cast names at ``at`` (one word or several,
+        never qualified or quoted); refuses any other. Returns the index
+        of its words."""
+        found: set[int] = set()
+        i = at
+        while (
+            i < len(items)
+            and items[i].kind == 'word'
+            and _upper(items[i]) in CAST_TYPES[self.dialect]
+        ):
+            found.add(i)
+            i += 1
+        if not found or items[i : i + 1] == [_DOT]:
+            raise WriteRefused(f'{what}: a cast to a type that is not built in')
+        return found
 
     # Statements.
 
@@ -822,10 +901,10 @@ ENTRY_POINTS: tuple[tuple[str, str, tuple[str, ...], str], ...] = (
 REFUSED: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ('snowflake.connector.connection', 'SnowflakeConnection', ('execute_stream',)),
     ('snowflake.connector.aio._connection', 'SnowflakeConnection', ('execute_stream',)),
-    ('pyspark.sql.dataframe', 'DataFrame', ('write', 'writeTo', 'writeStream', 'mergeInto')),
-    ('pyspark.sql.connect.dataframe', 'DataFrame', ('write', 'writeTo', 'writeStream', 'mergeInto')),
-    ('pyspark.sql.catalog', 'Catalog', ('createTable', 'createExternalTable', 'recoverPartitions')),
-    ('pyspark.sql.connect.catalog', 'Catalog', ('createTable', 'createExternalTable', 'recoverPartitions')),
+    ('pyspark.sql.dataframe', 'DataFrame', ('write', 'writeTo', 'writeStream', 'mergeInto', 'createGlobalTempView', 'createOrReplaceGlobalTempView')),
+    ('pyspark.sql.connect.dataframe', 'DataFrame', ('write', 'writeTo', 'writeStream', 'mergeInto', 'createGlobalTempView', 'createOrReplaceGlobalTempView')),
+    ('pyspark.sql.catalog', 'Catalog', ('createTable', 'createExternalTable', 'recoverPartitions', 'dropGlobalTempView')),
+    ('pyspark.sql.connect.catalog', 'Catalog', ('createTable', 'createExternalTable', 'recoverPartitions', 'dropGlobalTempView')),
 )  # fmt: skip
 #: Writer classes refused whole, every public method and property, so a
 #: writer kept from before the install, or made directly, writes nothing:
@@ -857,13 +936,15 @@ _OPTIONAL = frozenset(
         ('snowflake.connector.cursor', 'DictCursor'),
     }
 )
-#: Spark Connect's one command entry point: every command a Connect
-#: session sends (a writer's, a catalog's, a view's) passes it, and only a
-#: SQL command, its text checked, is admitted.
+#: Spark Connect's execution boundary: every plan a Connect session sends
+#: (``to_table``, ``to_pandas``, a command, a function's registration)
+#: passes one of these with its whole request. A plan is admitted only as a
+#: read (a relation) or a SQL command, every SQL text in it checked; each
+#: method must exist, or the install stops.
 SPARK_CONNECT = (
     'pyspark.sql.connect.client.core',
     'SparkConnectClient',
-    ('execute_command', 'execute_command_as_iterator'),
+    ('_execute_and_fetch_as_iterator', '_execute'),
 )
 #: The keyword each driver names its statement by, when it is not given
 #: first.
@@ -927,30 +1008,60 @@ def _guarded(
     return guarded
 
 
-def _sql_command(original: Any, check: Callable[[str], None]) -> Any:
-    r"""Spark Connect's command entry point, admitting only a SQL command
-    whose text ``check`` admits."""
+def _sql_texts(message: Any) -> list[str]:
+    r"""Every SQL text in a protobuf ``message``: each field named ``sql``,
+    a text or a SQL relation's ``query``, at any depth."""
+    found: list[str] = []
+    for field, value in message.ListFields():
+        if hasattr(value, 'ListFields') or isinstance(
+            value, (str, bytes, int, float, bool)
+        ):
+            values = [value]
+        elif callable(getattr(value, 'values', None)):
+            values = list(value.values())  # a map's values
+        else:
+            values = list(value)  # a repeated field
+        for each in values:
+            if field.name == 'sql' and isinstance(each, str):
+                found.append(each)
+            elif hasattr(each, 'ListFields'):
+                query = getattr(each, 'query', None)
+                if field.name == 'sql' and isinstance(query, str):
+                    found.append(query)
+                found.extend(_sql_texts(each))
+    return found
+
+
+def _plan_request(original: Any, check: Callable[[str], None]) -> Any:
+    r"""Spark Connect's execution boundary, admitting a request's plan only
+    as a read (a relation) or a SQL command, every SQL text in it checked."""
 
     @functools.wraps(original)
     def guarded(
-        self: Any, command: Any, *arguments: Any, **keywords: Any
+        self: Any, request: Any, *arguments: Any, **keywords: Any
     ) -> Any:
         try:
-            kind = command.WhichOneof('command_type')
-            sql = command.sql_command
-            text = sql.input.sql.query if sql.HasField('input') else sql.sql
-        except Exception:  # noqa: BLE001 - a command it cannot read is refused
-            raise WriteRefused(
-                'a Spark Connect command the guard cannot read'
-            ) from None
-        if kind != 'sql_command':
-            raise WriteRefused(
-                f'a Spark Connect {kind}, which is no SQL command'
+            plan = request.plan
+            kind = plan.WhichOneof('op_type')
+            command = (
+                plan.command.WhichOneof('command_type')
+                if kind == 'command'
+                else None
             )
-        if sql.HasField('input') and sql.input.sql.named_arguments:
-            raise WriteRefused('Spark SQL with named arguments')
-        check(text)
-        return original(self, command, *arguments, **keywords)
+            texts = _sql_texts(plan)
+        except Exception:  # noqa: BLE001 - a plan it cannot read is refused
+            raise WriteRefused(
+                'a Spark Connect plan the guard cannot read'
+            ) from None
+        if kind not in ('root', 'command') or (
+            kind == 'command' and (command != 'sql_command' or not texts)
+        ):
+            raise WriteRefused(
+                f'a Spark Connect {command or kind}, which is no read or SQL command'
+            )
+        for text in texts:
+            check(text)
+        return original(self, request, *arguments, **keywords)
 
     setattr(guarded, _MARK, True)
     return guarded
@@ -1079,9 +1190,14 @@ def install(guards: Mapping[str, WriteGuard | None]) -> Callable[[], None]:
         module_name, class_name, attributes = SPARK_CONNECT
         cls = _class(module_name, class_name)
         for attribute in attributes if cls is not None else ():
+            if not hasattr(cls, attribute):
+                raise RuntimeError(
+                    f'{class_name} has no {attribute}: the write guard cannot '
+                    'cover this Spark Connect version'
+                )
             guard = guards.get('databricks')
             check = guard.check if guard is not None else _closed('databricks')
-            _wrap(cls, attribute, lambda f, c=check: _sql_command(f, c))
+            _wrap(cls, attribute, lambda f, c=check: _plan_request(f, c))
         for module_name, class_name, attributes in REFUSED:
             cls = _class(module_name, class_name)
             for attribute in attributes if cls is not None else ():

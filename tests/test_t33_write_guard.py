@@ -859,40 +859,33 @@ def test_a_driver_subclass_made_after_the_install_is_guarded(
     assert seen == ['later:SELECT 1']
 
 
-class _Command:
-    r"""A Spark Connect command as its protobuf reads: its kind, and a SQL
-    command's text."""
-
-    def __init__(self, kind: str, text: str = '') -> None:
-        self.kind = kind
-        relation = types.SimpleNamespace(
-            sql=types.SimpleNamespace(query=text, named_arguments={})
-        )
-        self.sql_command = types.SimpleNamespace(
-            input=relation, sql='', HasField=lambda name: name == 'input'
-        )
-
-    def WhichOneof(self, group: str) -> str:  # noqa: N802 - protobuf's name
-        return self.kind
-
-
 def test_spark_connect_admits_only_checked_sql_commands(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # Claude r5 P1: every command a Connect session sends passes one entry
-    # point; only a SQL command, its text checked, goes through.
+    # Claude r5 P1: every command a Connect session sends passes the
+    # client's execution boundary; only a SQL command, its text checked,
+    # goes through.
     seen: list[Any] = []
 
     class SparkConnectClient:
-        def execute_command(
-            self, command: Any, observations: Any = None
-        ) -> Any:
-            seen.append(command.kind)
-            return None, {}, None
-
-        def execute_command_as_iterator(self, command: Any) -> Any:
-            seen.append(command.kind)
+        def _execute_and_fetch_as_iterator(self, req: Any, *a: Any) -> Any:
+            seen.append(req.plan.command.WhichOneof('command_type'))
             return iter(())
+
+        def _execute(self, req: Any) -> None:
+            seen.append(req.plan.command.WhichOneof('command_type'))
+
+        def execute_command(self, command: Any) -> Any:
+            return list(
+                self._execute_and_fetch_as_iterator(
+                    _Message(plan=_Message(command=command))
+                )
+            )
+
+    def sql(text: str) -> Any:
+        return _Message(
+            sql_command=_Message(input=_Message(sql=_Message(query=text)))
+        )
 
     fake = types.ModuleType('pyspark.sql.connect.client.core')
     fake.SparkConnectClient = SparkConnectClient
@@ -901,18 +894,16 @@ def test_spark_connect_admits_only_checked_sql_commands(
     try:
         client = SparkConnectClient()
         for command in (
-            _Command('write_operation'),
-            _Command('write_operation_v2'),
-            _Command('create_dataframe_view'),
-            _Command('sql_command', 'DROP TABLE `other`.s.t'),
+            _Message(write_operation=_Message(mode=1)),
+            _Message(write_operation_v2=_Message(mode=1)),
+            _Message(create_dataframe_view=_Message(name='v')),
+            sql('DROP TABLE `other`.s.t'),
         ):
-            for call in (
-                client.execute_command,
-                client.execute_command_as_iterator,
-            ):
-                with pytest.raises(wg.WriteRefused):
-                    call(command)
-        client.execute_command(_Command('sql_command', 'SELECT 1'))
+            with pytest.raises(wg.WriteRefused):
+                client.execute_command(command)
+            with pytest.raises(wg.WriteRefused):
+                client._execute(_Message(plan=_Message(command=command)))
+        client.execute_command(sql('SELECT 1'))
         assert seen == ['sql_command']
     finally:
         undo()
