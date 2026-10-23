@@ -245,6 +245,34 @@ class Source:
         return self._connection
 
     @property
+    def kind(self) -> str:
+        r"""Which kind of source this is, finer than its backend: what a
+        call over it is routed by, and which provider reads it.
+
+        Both Databricks connections have the backend ``'databricks'``; a SQL
+        warehouse connection is ``'databricks-sql'`` and a notebook's Spark
+        session ``'databricks-spark'``. A semantic model is its own kind,
+        ``'databricks-metric-view'`` or ``'snowflake-semantic-view'``. Any
+        other source is its backend.
+        """
+        if self._backend == 'databricks':
+            from sdm_connectors.backends.spark import SparkConnection
+
+            if isinstance(self._connection, SparkConnection):
+                return 'databricks-spark'
+            return 'databricks-sql'
+        return self._backend
+
+    def namespace_parts(self) -> list[str | None]:
+        r"""The namespace as the name parts before a table's own, outermost
+        first, in the class's order (``catalog`` then ``schema``,
+        ``database`` then ``schema``, ``schema``), each ``None`` where the
+        connection's current one is meant; empty for a source with no
+        namespace (DuckDB, SQLite).
+        """
+        return [self._namespace.get(name) for name in self._NAMESPACE]
+
+    @property
     def namespace(self) -> dict[str, str]:
         r"""The namespace given, by name: ``catalog``, ``database``,
         ``schema``. Anything left out is the connection's current one.
@@ -530,9 +558,26 @@ class SemanticModel(Source):
         """
         return self._trust_expressions
 
+    @property
+    def kind(self) -> str:
+        r"""``'databricks-metric-view'`` or ``'snowflake-semantic-view'``,
+        whichever connection keeps it."""
+        return f'{self._backend}-{_SEMANTIC_KIND[self._backend]}'
+
+    def namespace_parts(self) -> list[str | None]:
+        r"""Its source's namespace, which its name resolves against."""
+        return self._source.namespace_parts()
+
     def __repr__(self) -> str:
         trusted = ', trust_expressions=True' if self._trust_expressions else ''
         return f'SemanticModel({self._name!r} in {self._source!r}{trusted})'
+
+
+#: What a semantic model is called in each warehouse that keeps one.
+_SEMANTIC_KIND: Mapping[str, str] = {
+    'databricks': 'metric-view',
+    'snowflake': 'semantic-view',
+}
 
 
 _BY_BACKEND: Mapping[str, type[Source]] = {
