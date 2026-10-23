@@ -4,8 +4,6 @@
 
 package com.nvidia.sdm.internal;
 
-import com.nvidia.sdm.Profile;
-import com.nvidia.sdm.QuerySchema;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;

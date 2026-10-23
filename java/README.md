@@ -7,7 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 # Structured Data Models client for Java
 
 The Java library on the client's Rust core: the same core the Python client runs, loaded from the JAR through JNI (design choice 10 of `docs/design/rust-core/phase-3/design.md`).
-It answers query validation today (Java S0); sources, `materialize` and `predict` follow on the same core (T3.12, T3.13).
+It describes the tables of a DuckDB, SQLite or Postgres database through the caller's own JDBC connection, gathers a predictive query's request from them, and predicts with a model endpoint, each on the core, as the Python client does (Java S1, T3.12); Databricks follows (T3.13).
 Nothing is published to a repository before Phase 5.
 
 ## Coordinates
@@ -38,38 +38,60 @@ The second is Arrow Java's: its C Data module reaches native memory through `jav
 ## Use
 
 ```java
+import com.nvidia.sdm.DuckDbSource;
+import com.nvidia.sdm.MaterializeOptions;
+import com.nvidia.sdm.PredictionResult;
 import com.nvidia.sdm.PredictiveQuery;
-import com.nvidia.sdm.Profile;
-import com.nvidia.sdm.QuerySchema;
-import com.nvidia.sdm.StructuredDataException;
-import com.nvidia.sdm.Validation;
+import com.nvidia.sdm.Request;
+import com.nvidia.sdm.Schema;
+import com.nvidia.sdm.SdmClient;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.time.LocalDate;
 import java.util.List;
+import org.apache.arrow.memory.RootAllocator;
+import org.apache.arrow.vector.ipc.ArrowReader;
 
-QuerySchema schema = new QuerySchema(
-    List.of(
-        new QuerySchema.Table("users",
-            List.of(new QuerySchema.Column("user_id", "int", "ID")),
-            "user_id", null, null),
-        new QuerySchema.Table("orders",
-            List.of(
-                new QuerySchema.Column("order_id", "int", "ID"),
-                new QuerySchema.Column("user_id", "int", "ID"),
-                new QuerySchema.Column("ts", "time", "timestamp")),
-            "order_id", "ts", null)),
-    List.of(List.of(
-        new QuerySchema.ColumnRef("orders", "user_id"),
-        new QuerySchema.ColumnRef("users", "user_id"))));
-
-PredictiveQuery query = PredictiveQuery.parse(
-    "PREDICT COUNT(orders.*, 0, 30, days) > 0 FOR EACH users.user_id");
-Validation validation = query.validate(schema, Profile.RELATIONAL);
-if (!validation.accepted()) {
-  System.out.println(validation.reasons());
+try (Connection connection = DriverManager.getConnection("jdbc:duckdb:shop.duckdb");
+    SdmClient client = SdmClient.connect("http://localhost:8000");
+    RootAllocator allocator = new RootAllocator()) {
+  Schema schema = Schema.fromSource(DuckDbSource.of(connection))
+      .withStype("users", "age", "categorical");
+  Request request = PredictiveQuery
+      .parse("PREDICT COUNT(orders.*, 0, 30, days) > 0 FOR EACH users.user_id")
+      .materialize(schema, MaterializeOptions.builder()
+          .indices(List.of(1L, 2L))
+          .anchorTime(LocalDate.of(2024, 3, 1))
+          .build());
+  PredictionResult result = client.predict(request, SdmClient.KUMO_RELATIONAL);
+  try (ArrowReader rows = result.read(allocator)) {
+    while (rows.loadNextBatch()) {
+      System.out.println(rows.getVectorSchemaRoot().contentToTSVString());
+    }
+  }
 }
 ```
 
+The API mirrors Python's with Java names and plain data:
+
+| Python | Java |
+|---|---|
+| `DuckDBSource(connection)`, `SQLiteSource`, `PostgresSource(connection, schema=)` | `DuckDbSource.of(connection)`, `SqliteSource.of`, `PostgresSource.of(connection[, schema])`, each over a `java.sql.Connection` the caller keeps open |
+| `Schema.from_source(source, tables, primary_keys=, time_columns=, relationships=, check_keys=)` | `Schema.fromSource(source[, FromSourceOptions])` |
+| `schema[t].primary_key = k`, `.time_column = c`, `schema[t][c].stype = s`, `del schema[t][c]`, `schema.relationships = [...]` | `withPrimaryKey`, `withoutPrimaryKey`, `withTimeColumn`, `withoutTimeColumn`, `withStype`, `withoutColumn`, `withRelationships`, `withRelationship`: each a new schema, checked and made by the core; a schema never changes, so `snapshot()` is the schema itself |
+| `schema.tables`, `schema[t]`, `check_consistent()` | `tables()`, `table(name)`, `relationships()`, `checkConsistent()`; `Table` and `Column` |
+| `PredictiveQuery(text, schema).materialize(indices=, anchor_time=, **options)` | `PredictiveQuery.parse(text).materialize(schema, MaterializeOptions)`; an option is a name and a plain value (`option("num_neighbors", List.of(8, 8))`), as a keyword argument |
+| `Request.context_rows`, `predict_rows`, `payloads`, ... | `Request.contextRows()`, `predictRows()`, `payloads()`, `nothingToScore()`, `entityTable()`, ... |
+| `SDMClient(url, api_key, timeout=, max_retries=)`, `capabilities(model)`, `predict(request, model=, outputs=)` | `SdmClient.connect(url[, ClientOptions])`, `capabilities(model)`, `predict(request, model[, outputs])` |
+| `PredictionResult.to_pandas()`, `absent()`, `explanation` | `PredictionResult.read(allocator)` (the core's rows as Arrow, ordered by `row_index`), `absent(requested)`, `explanation()` |
+
+The JDBC drivers are the caller's: DuckDB's (`org.duckdb:duckdb_jdbc`), SQLite's (`org.xerial:sqlite-jdbc`) and Postgres's (`org.postgresql:postgresql`); the JAR ships none.
+What a driver gives reaches the core as the same Arrow Python's drivers give it, by the reviewed conversion table (`com.nvidia.sdm.internal.jdbc.ConversionTable`): DuckDB's own Arrow export; SQLite's columns typed as ADBC SQLite types them; Postgres's by type name, as Python's provider types them.
+The model transport sends the core's call as the bytes the core wrote, over `java.net.http`, retrying a transient failure (429, 502, 503, 504, a dropped connection) as Python's transport does.
+
 Every error is a `StructuredDataException`, as every Python error is a `StructuredDataError`: `code()` is the contract's error code to branch on (`INVALID_REQUEST`, `UNSUPPORTED_REQUEST`, `INTERNAL_ERROR`, ...), and `details()` holds the structured fields the core gave.
 A platform the JAR holds no native library for is refused as `UNSUPPORTED_REQUEST`, naming the platform.
+The model endpoint's own refusal is a `ModelEndpointException`, with the endpoint's status, code, words and other fields, as Python's `NimRequestError`.
 A panic inside the core is contained: the call raises `INTERNAL_ERROR` with `details().get("panic") == true`, and the JVM goes on.
 
 The core's log events reach SLF4J under the loggers its crates name (`sdm_core`, `sdm_host`, `sdm_data` and their modules), and its warnings under `com.nvidia.sdm.warnings`, at `WARN`.
@@ -96,4 +118,4 @@ cp rust/target/debug/libsdm_jni.so java/target/natives/linux-x86_64/
 mvn -f java/pom.xml verify
 ```
 
-The contract cases run on the Java host through `contract/runners/run_java.py`, which hands `contract/runners/java/ContractRunner.java` the calls to make and writes the observations the comparator judges.
+The contract cases run on the Java host through `contract/runners/run_java.py` (`--database duckdb|sqlite|postgres` for the S1 cases), which hands `contract/runners/java/ContractRunner.java` the calls to make and writes the observations the comparator judges; `mvn package` copies the JDBC drivers it opens the databases with into `target/jdbc`.

@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-package com.nvidia.sdm;
+package com.nvidia.sdm.internal;
 
 import java.util.List;
 import java.util.Map;
@@ -14,9 +14,10 @@ import java.util.Map;
  * @param accepted whether the query is valid against the schema and profile
  * @param diagnostics the diagnostics, errors and warnings, in order
  * @param warnings the run's warnings, in the order given
+ * @param resolvedText the query as the core writes it back when it accepts it, else null
  */
 public record Validation(
-    boolean accepted, List<Diagnostic> diagnostics, List<Warning> warnings) {
+    boolean accepted, List<Diagnostic> diagnostics, List<Warning> warnings, String resolvedText) {
   /** Copies both lists. */
   public Validation {
     diagnostics = List.copyOf(diagnostics);

@@ -2436,13 +2436,15 @@ jobs:
             grep -qx "com/nvidia/sdm/native/$native" <<<"$listed" \
               || { echo "::error::the JAR holds no $native"; exit 1; }
           done
-      # The JAR, its runtime dependencies, and the JAR-load test's program,
+      # The JAR, its runtime dependencies, the JDBC drivers the Java legs
+      # open their databases with (T3.12), and the JAR-load test's program,
       # so the load jobs need no checkout.
       - name: The JAR's artifact
         run: |
           mkdir -p java-jar
           cp java/target/structured-data-models-client-1.0.0.jar java/jar-load/JarLoad.java java-jar/
           cp -R java/target/lib java-jar/lib
+          cp -R java/target/jdbc java-jar/jdbc
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: java-jar
@@ -2450,19 +2452,25 @@ jobs:
 
   # Every Java test (mvn verify, with the runtime flags) on JDK 17 and 21,
   # loading the native with the test-only operations: the binding's
-  # lifetimes, Arrow both ways, the panic test in a subprocess JVM.
+  # lifetimes, Arrow both ways, the panic test in a subprocess JVM; from
+  # T3.12 the S1 API on DuckDB, SQLite and the pinned Postgres service,
+  # required (H26).
   java-test:
     name: java-test (${{ matrix.jdk }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: [landing, native-test-ops]
     if: needs.landing.outputs.skip != 'true' && needs.landing.outputs.full != 'false'
+    services:
+      postgres: *postgres-service
     strategy:
       fail-fast: false
       matrix:
         jdk: ['17', '21']
     env:
       SDM_REQUIRE_JAVA: '1'
+      SDM_POSTGRES_TEST_DSN: postgresql://postgres:postgres@localhost:5432/sdm_test
+      SDM_REQUIRE_POSTGRES: '1'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
@@ -2629,11 +2637,141 @@ jobs:
           path: java.jsonl
           if-no-files-found: warn
 
+  # Java S1 (T3.12): every S1 case on Java's paths through the Java host's
+  # JDBC providers on DuckDB, SQLite and the pinned Postgres service, on
+  # Linux, where the client wheel the runner's capture reads with is built;
+  # its lines judged on their own against the reference with the effective
+  # expectations, so a difference only Java shows fails the job. The
+  # Postgres legs run L5 for Java beside it (x86_64 has the test-ops build
+  # the test-only fetch needs).
+  java-db:
+    name: java (${{ matrix.jdk }}, ${{ matrix.platform }}, ${{ matrix.database }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    needs: [landing, java-jar, native-wheel, native-wheel-aarch64, native-test-ops]
+    if: needs.landing.outputs.skip != 'true' && needs.landing.outputs.full != 'false'
+    services:
+      postgres: *postgres-service
+    strategy:
+      fail-fast: false
+      matrix:
+        jdk: ['17', '21']
+        platform: [linux-x86_64]
+        runner: [ubuntu-latest]
+        wheel: [native-wheel]
+        database: [duckdb, sqlite, postgres]
+        include:
+          - jdk: '21'
+            platform: linux-aarch64
+            runner: ubuntu-24.04-arm
+            wheel: native-wheel-aarch64
+            database: duckdb
+          - jdk: '21'
+            platform: linux-aarch64
+            runner: ubuntu-24.04-arm
+            wheel: native-wheel-aarch64
+            database: sqlite
+          - jdk: '21'
+            platform: linux-aarch64
+            runner: ubuntu-24.04-arm
+            wheel: native-wheel-aarch64
+            database: postgres
+    env:
+      SDM_PUSH_BASE: ${{ needs.landing.outputs.base }}
+      CELL_PINS: pandas==3.0.6 pyarrow==25.0.1 numpy==2.5.3
+      DATABASE: ${{ matrix.database }}
+      SDM_POSTGRES_TEST_DSN: postgresql://postgres:postgres@localhost:5432/sdm_test
+      SDM_REQUIRE_JAVA: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: java-jar
+          path: jar
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ matrix.wheel }}
+          path: native
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.jdk }}
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      # The reference cell's pins, DuckDB at the reference's version and
+      # the drivers the contract loader writes SQLite and Postgres with:
+      # what the runner's capture and the loader read with, never what the
+      # Java host reads with (its JDBC drivers, in the JAR's artifact).
+      - name: Install the runner's environment
+        run: |
+          printf '%s\n' $CELL_PINS duckdb==1.5.6 > "$RUNNER_TEMP/cell.txt"
+          pip install --upgrade pip
+          pip install -c "$RUNNER_TEMP/cell.txt" $CELL_PINS duckdb==1.5.6 pyyaml jsonschema pytest \
+            ./packages/structured-data-models-api ./packages/structured-data-models-pql \
+            './packages/structured-data-models-connectors[duckdb,sqlite,postgres]' "$(ls native/*.whl)"
+      - name: The S1 cases on the Java host
+        run: |
+          python contract/runners/run_java.py --database "$DATABASE" \
+            --jar jar/structured-data-models-client-1.0.0.jar --classpath jar/lib --drivers jar/jdbc \
+            --out java.jsonl contract/cases/s1
+      - name: compare (java)
+        run: |
+          where=$(python scripts/rust_core/ratchet.py where) || { echo 'java: ratchet.py where failed'; exit 1; }
+          expect=()
+          if [ -n "$where" ]; then
+            python scripts/rust_core/ratchet.py effective $where --out effective.json || exit 1
+            expect=(--expect effective.json)
+          fi
+          # The reference's lines, and the case files, of the cases Java ran
+          # on this database (a case off Java's paths has no Java leg).
+          python - <<'EOF'
+          import glob, json, os, shutil
+          ran = {json.loads(line)['case'] for line in open('java.jsonl')}
+          (reference,) = glob.glob('contract/reference/*.jsonl')
+          with open('java-reference.jsonl', 'w') as out:
+              out.writelines(
+                  line for line in open(reference) if json.loads(line)['case'] in ran
+              )
+          os.makedirs('java-cases')
+          database = os.environ['DATABASE']
+          for path in glob.glob('contract/cases/s1/*.json'):
+              case = json.load(open(path))['id']
+              if (case if database == 'duckdb' else f'{case}@{database}') in ran:
+                  shutil.copy(path, 'java-cases/')
+          EOF
+          python scripts/rust_core/compare.py --cases java-cases --database "$DATABASE" \
+            --reference java-reference.jsonl ${expect[@]+"${expect[@]}"} \
+            --register docs/design/rust-core/register.yaml java.jsonl
+      - if: matrix.database == 'postgres' && matrix.platform == 'linux-x86_64'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: native-wheel-test-ops
+          path: native-test-ops
+      - if: matrix.database == 'postgres' && matrix.platform == 'linux-x86_64'
+        name: L5 for Java, on the service
+        env:
+          SDM_REQUIRE_POSTGRES: '1'
+          SDM_JAVA_JAR: jar/structured-data-models-client-1.0.0.jar
+        run: |
+          python -m venv --system-site-packages "$RUNNER_TEMP/kit"
+          "$RUNNER_TEMP/kit/bin/pip" install --quiet --no-deps --ignore-installed "$(ls native-test-ops/*.whl)"
+          cd packages/structured-data-models-client
+          "$RUNNER_TEMP/kit/bin/python" -m pytest -q -p no:cacheprovider tests_test_ops/test_l5_java.py
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: observations-java-${{ matrix.jdk }}-${{ matrix.platform }}-${{ matrix.database }}
+          path: java.jsonl
+          if-no-files-found: warn
+
   timing-guard:
     name: timing guard
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: [landing, lint, hygiene, rust-lint, rust-deny, rust-test, native-wheel, native-test-ops, native-wheel-aarch64, binding, wheel-smoke, wheel-smoke-aarch64, typecheck, test, engine, contract-python-ref-pandas3, tooling-contract, tooling-root, cross-host, contract-python-dbr17-pandas2, contract-python-floor-pandas2-2, contract-python-ref-pandas3-sqlite, contract-python-ref-pandas3-postgres, contract-python-dbr17-pandas2-sqlite, contract-python-dbr17-pandas2-postgres, contract-python-floor-pandas2-2-sqlite, contract-python-floor-pandas2-2-postgres, cross-host-sqlite, cross-host-postgres, l4-goldens, l5-conversion, build, engine-wheels, installed-wheel, runtime-install, sbom, java-native, java-jar, java-test, java-load, java]
+    needs: [landing, lint, hygiene, rust-lint, rust-deny, rust-test, native-wheel, native-test-ops, native-wheel-aarch64, binding, wheel-smoke, wheel-smoke-aarch64, typecheck, test, engine, contract-python-ref-pandas3, tooling-contract, tooling-root, cross-host, contract-python-dbr17-pandas2, contract-python-floor-pandas2-2, contract-python-ref-pandas3-sqlite, contract-python-ref-pandas3-postgres, contract-python-dbr17-pandas2-sqlite, contract-python-dbr17-pandas2-postgres, contract-python-floor-pandas2-2-sqlite, contract-python-floor-pandas2-2-postgres, cross-host-sqlite, cross-host-postgres, l4-goldens, l5-conversion, build, engine-wheels, installed-wheel, runtime-install, sbom, java-native, java-jar, java-test, java-load, java, java-db]
     if: ${{ !cancelled() && needs.landing.outputs.skip != 'true' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

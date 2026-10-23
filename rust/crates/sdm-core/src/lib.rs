@@ -29,7 +29,7 @@ mod test_ops;
 
 pub use compose::{CompositionRoot, DataAccess};
 pub use dispatch::start;
-pub use edit::{dtype_names, meanings};
+pub use edit::{dtype_names, meanings, wire_names};
 pub use run::{
     ArrowData, Ask, Asker, Attachment, AttachmentIds, Attachments, FetchResult, ModelResult, Reply,
     Run, RunState,
@@ -38,3 +38,7 @@ pub use run::{
 /// so a host reaches it through the core, never through an edge to
 /// `sdm-engine` (decision E30).
 pub use sdm_engine::time::{UnknownZone, Zones};
+/// What each model supports, as the client describes it to a caller
+/// (`capabilities()`), re-exported so a host reaches the request crate's
+/// table through the core (decision E30).
+pub use sdm_request::predict::{Capabilities, capabilities};

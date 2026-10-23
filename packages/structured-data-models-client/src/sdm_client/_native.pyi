@@ -128,3 +128,11 @@ def templates() -> str:
 
 def is_posix_zone(text: str) -> bool:
     """Whether a run takes ``text`` as a POSIX ``TZ`` local zone."""
+
+def local_zone(setting: str | None, roots: list[str]) -> tuple[str, str] | None:
+    """The local zone by the core's rule (T3.12): ``('iana', name)``,
+    ``('posix', text)`` or ``None``, from ``TZ`` and the lookup roots."""
+
+def capabilities() -> str:
+    """Each model's capabilities, as the client describes them, as JSON
+    (T3.12)."""

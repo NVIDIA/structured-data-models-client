@@ -36,6 +36,44 @@ pub fn dtype_names() -> Vec<(&'static str, String)> {
         .collect()
 }
 
+/// Every data type the contract names, in its order.
+const DTYPES: [Dtype; 18] = [
+    Dtype::Bool,
+    Dtype::Int,
+    Dtype::Byte,
+    Dtype::Int16,
+    Dtype::Int32,
+    Dtype::Int64,
+    Dtype::Float,
+    Dtype::Float32,
+    Dtype::Float64,
+    Dtype::String,
+    Dtype::Binary,
+    Dtype::Date,
+    Dtype::Time,
+    Dtype::Timedelta,
+    Dtype::Floatlist,
+    Dtype::Intlist,
+    Dtype::Stringlist,
+    Dtype::Unsupported,
+];
+
+/// Every data type's name on the client's wire ([`Dtype::wire_name`]), by
+/// the contract's name of it: the one table of them, which a host reads to
+/// name a described column's type as the schema holds it (T3.12).
+pub fn wire_names() -> Vec<(String, &'static str)> {
+    DTYPES
+        .iter()
+        .map(|&dtype| {
+            let named = serde_json::to_value(dtype).unwrap_or_default();
+            (
+                named.as_str().unwrap_or_default().to_owned(),
+                dtype.wire_name(),
+            )
+        })
+        .collect()
+}
+
 /// Every meaning a column of each data type can carry, as the language
 /// answers it ([`supports`]), each pair by the contract's names (`Stype`'s
 /// and `Dtype`'s): plain data a host reads in place of the old PQL
@@ -52,26 +90,6 @@ pub fn meanings() -> Vec<(String, String)> {
         Stype::Sequence,
         Stype::Image,
         Stype::Unsupported,
-    ];
-    const DTYPES: [Dtype; 18] = [
-        Dtype::Bool,
-        Dtype::Int,
-        Dtype::Byte,
-        Dtype::Int16,
-        Dtype::Int32,
-        Dtype::Int64,
-        Dtype::Float,
-        Dtype::Float32,
-        Dtype::Float64,
-        Dtype::String,
-        Dtype::Binary,
-        Dtype::Date,
-        Dtype::Time,
-        Dtype::Timedelta,
-        Dtype::Floatlist,
-        Dtype::Intlist,
-        Dtype::Stringlist,
-        Dtype::Unsupported,
     ];
     let name = |value: serde_json::Value| value.as_str().unwrap_or_default().to_owned();
     let mut pairs = Vec::new();

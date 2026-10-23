@@ -50,7 +50,12 @@ public final class NativeArrow implements AutoCloseable {
     if (current == 0) {
       throw new IllegalStateException("this Arrow attachment was closed");
     }
-    return ArrowExchange.importing(allocator, current);
+    try {
+      return ArrowExchange.importing(allocator, current);
+    } finally {
+      // Reachable until the export returns, so the cleaner cannot release the handle under it.
+      java.lang.ref.Reference.reachabilityFence(this);
+    }
   }
 
   /** Releases the native data; closing again does nothing. */
