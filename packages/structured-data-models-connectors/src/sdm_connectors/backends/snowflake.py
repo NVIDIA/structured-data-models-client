@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import inspect
+import os
 from typing import TYPE_CHECKING, Any, TypeAlias
 
 from sdm_connectors.sql import (
@@ -27,6 +28,12 @@ else:
     )
 
 Connection: TypeAlias = snowflake_connector.SnowflakeConnection
+
+#: The application every Snowflake session this client opens names itself as,
+#: which Snowflake attributes the session's queries to.
+APPLICATION = 'nvidia/kumo-sdm'
+
+_FILE_ARGS = frozenset({'connection_name', 'connections_file_path'})
 
 _AUTH_ARGS = frozenset(
     {
@@ -103,6 +110,10 @@ def connect(
     the escape hatch can never quietly replace a validated credential. What it
     does supply still counts towards the borrow decision, so credentials passed
     that way are honoured rather than silently ignored.
+
+    A connection it opens names itself to Snowflake as ``nvidia/kumo-sdm``,
+    unless ``application`` or the driver's ``SF_PARTNER`` names another. A
+    borrowed Snowpark session is used as it is.
     """
     check_connect_args('snowflake', kwargs, _CONNECT_ARGS)
     kwargs = merge_driver_options('snowflake', kwargs, driver_options)
@@ -122,19 +133,35 @@ def connect(
             return borrowed
         if not kwargs:
             return _connect_without_arguments()
-    return snowflake_connector.connect(**kwargs)
+    return snowflake_connector.connect(**_named(kwargs))
+
+
+def _named(kwargs: dict[str, Any]) -> dict[str, Any]:
+    r"""Return ``kwargs`` with :data:`APPLICATION`, unless the caller names
+    an application as ``application`` or ``SF_PARTNER``.
+
+    The driver reads its default connection only when given nothing but a
+    connections file, so that connection is named explicitly to keep it.
+    """
+    named = dict(kwargs)
+    if named.get('connection_name') is None and set(named) <= _FILE_ARGS:
+        manager = snowflake_connector.config_manager.CONFIG_MANAGER
+        named['connection_name'] = manager['default_connection_name']
+    if 'application' not in named and not os.environ.get('SF_PARTNER'):
+        named['application'] = APPLICATION
+    return named
 
 
 def _connect_without_arguments() -> Connection:
     r"""Connect with no arguments, explaining what this client expects on failure.
 
-    With no arguments the driver falls back to its own default-connection file,
-    whose absence it reports as "Default connection with name 'default' cannot
-    be found", a feature this package never mentions. The fallback still works
-    where it is configured; only the failure is re-stated in the client's terms.
+    With no arguments the driver falls back to its own default connection,
+    whose absence it reports in terms of a connections file this package
+    never mentions. The fallback still works where it is configured; only
+    the failure is re-stated in the client's terms.
     """
     try:
-        connection = snowflake_connector.connect()
+        connection = snowflake_connector.connect(**_named({}))
     except Exception as error:
         raise ConnectorError(
             f'snowflake connector requires connection arguments (at least '

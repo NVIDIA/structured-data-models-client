@@ -126,7 +126,12 @@ def test_snowflake_driver_options_credentials_suppress_borrowing(monkeypatch):
     )
 
     assert result is opened
-    assert seen == {'account': 'a', 'user': 'u', 'password': 'p'}
+    assert seen == {
+        'account': 'a',
+        'user': 'u',
+        'password': 'p',
+        'application': 'nvidia/kumo-sdm',
+    }
 
 
 def test_snowflake_borrows_session_when_no_auth_arguments(monkeypatch):
@@ -687,3 +692,58 @@ def test_a_databricks_default_is_taken_from_the_environment_only_when_absent(
     assert {k: v for k, v in sent.items() if k in ('catalog', 'schema')} == (
         taken
     )
+
+
+_NAMED = {'application': 'nvidia/kumo-sdm'}
+_DEFAULT = {'connection_name': 'default'}
+_CREDENTIALS = {'account': 'a', 'user': 'u'}
+
+
+@pytest.mark.parametrize(
+    ('arguments', 'partner', 'sent'),
+    [
+        ({}, None, {**_DEFAULT, **_NAMED}),
+        (_CREDENTIALS, None, {**_CREDENTIALS, **_NAMED}),
+        ({'connection_name': 'c'}, None, {'connection_name': 'c', **_NAMED}),
+        (
+            {'connections_file_path': 'f.toml'},
+            None,
+            {'connections_file_path': 'f.toml', **_DEFAULT, **_NAMED},
+        ),
+        (
+            {**_CREDENTIALS, 'application': 'theirs'},
+            None,
+            {**_CREDENTIALS, 'application': 'theirs'},
+        ),
+        ({}, 'their_partner', _DEFAULT),
+        (_CREDENTIALS, 'their_partner', _CREDENTIALS),
+    ],
+)
+def test_snowflake_names_the_sessions_it_opens(
+    monkeypatch, arguments, partner, sent
+):
+    r"""The driver reads its default connection only when given nothing but a
+    connections file, so that connection is named alongside the application."""
+    pytest.importorskip('snowflake.connector')
+    from sdm_connectors.backends import snowflake as backend
+
+    seen = {}
+    monkeypatch.setattr(backend, '_active_snowpark_connection', lambda: None)
+    monkeypatch.setattr(
+        backend.snowflake_connector.config_manager,
+        'CONFIG_MANAGER',
+        {'default_connection_name': 'default'},
+    )
+    monkeypatch.setattr(
+        backend.snowflake_connector,
+        'connect',
+        lambda **kwargs: seen.update(kwargs) or _Conn(),
+    )
+    if partner is None:
+        monkeypatch.delenv('SF_PARTNER', raising=False)
+    else:
+        monkeypatch.setenv('SF_PARTNER', partner)
+
+    backend.connect(**arguments)
+
+    assert seen == sent
