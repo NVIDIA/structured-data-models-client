@@ -197,7 +197,7 @@
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py": {
       "<module>": {
-        "fingerprint": "adeb7ee90b7503b1cac875f8882a3d64902f21f2c7053e9a7dedf2c8f49941bb"
+        "fingerprint": "71ef020ef84cd98f930bda91d324d56018c0da95845b7362fdbe4693ebc9ebde"
       },
       "_Words.convert_field": {
         "fingerprint": "eb6ac343d2114984bb9b64652349aea1b0c0de4ccde38f032ef0297837b857f7"

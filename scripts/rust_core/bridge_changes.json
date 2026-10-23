@@ -231,7 +231,7 @@
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::<module>": {
-      "moved": "T3.8: the words of the core's refusals of a key (rules key_not_unique and key_missing_values, the reference's _not_unique_enough, _a_key_missing_values and _SKIP_THE_CHECK), of a table the source does not hold (no_such_table, TableNotFoundError's) and of an entity several rows hold (held_by_several_rows, _refuse_an_id_scored_twice's), each rule the core's (P2-T2.16-10, P2-T2.16-11); the unreachable SAID['CANDIDATES_UNSCORED'] removed, predict words it (P2-WR-8)"
+      "moved": "T3.8: the words of the core's refusals of a key (rules key_not_unique and key_missing_values, the reference's _not_unique_enough, _a_key_missing_values and _SKIP_THE_CHECK), of a table the source does not hold (no_such_table, TableNotFoundError's) and of an entity several rows hold (held_by_several_rows, _refuse_an_id_scored_twice's), each rule the core's (P2-T2.16-10, P2-T2.16-11); the unreachable SAID['CANDIDATES_UNSCORED'] removed, predict words it (P2-WR-8); T3.16 fix 3: the core's refusal of a meaning a column's type cannot carry at materialize worded as the reference words it, check_consistent's sentence for the caller's type and the engine's (received an incompatible semantic type) for the source's"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_Words.convert_field": {
       "moved": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added; T2.14b: the conversions the reference's words need (!R, !G, !S, !N) over the core's fields; formatting only"
