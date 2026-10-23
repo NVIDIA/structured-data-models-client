@@ -425,6 +425,12 @@ def _fake_drivers(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
             seen.append('stream')
             return []
 
+        def cmd_query(
+            self, sql: str, sequence_counter: int, request_id: Any
+        ) -> Any:
+            seen.append(sql)
+            return {}
+
     class Session:
         connection = SnowflakeConnection()
 
@@ -509,6 +515,8 @@ def test_every_snowflake_entry_point_is_guarded(installed: Any) -> None:
         lambda: d['OwnCursor']().execute(OUTSIDE),
         lambda: connection.execute_string(OUTSIDE),
         lambda: connection.execute_stream(None),
+        # Claude r6 P3-2: the connection's public REST entry point.
+        lambda: connection.cmd_query(OUTSIDE, 1, None),
         # Codex r4 P0-2: execute_string's cursors are the driver's own, and
         # guarded as every cursor is.
         lambda: connection.execute_string('SELECT 1')[0].execute(OUTSIDE),
@@ -908,3 +916,42 @@ def test_spark_connect_admits_only_checked_sql_commands(
         assert seen == ['sql_command']
     finally:
         undo()
+
+
+# Round 6: a table's columns are held to the function rule too.
+
+REFUSED_R6 = {
+    'postgres': [
+        # Claude r6 P0: a CHECK calls a function on every INSERT.
+        'CREATE TABLE live_tests.t (a int CHECK (prod.audit(a) > 0))',
+        'CREATE TABLE live_tests.t (a int CHECK (audit(a) > 0))',
+        'CREATE TABLE "live_tests"."t" ("a" int, CHECK (audit("a") > 0))',
+        'CREATE TABLE live_tests.t (a int, CONSTRAINT c CHECK (lo_from_bytea(0, a::text::bytea) > 0))',
+        'CREATE TABLE live_tests.t (a int GENERATED ALWAYS AS (audit(a)) STORED)',
+        "CREATE TABLE live_tests.t (a oid DEFAULT lo_from_bytea(0, 'x'))",
+        'CREATE TYPE live_tests.t AS (a int, b audit(1))',
+        # Claude r6 P2-2: a function after AS or ::.
+        'SELECT a::audit(1) FROM other.t',
+        'SELECT CAST(a AS audit(1)) FROM other.t',
+    ],
+    'databricks': [
+        'CREATE TABLE `review-catalog`.live_tests.t (a INT, CONSTRAINT c CHECK (prod_fn(a) > 0))',
+        'CREATE TABLE `review-catalog`.live_tests.t (a INT GENERATED ALWAYS AS (prod_fn(a)))',
+        'CREATE TABLE `review-catalog`.live_tests.t (a INT DEFAULT prod_fn(1))',
+    ],
+    'snowflake': [
+        'CREATE TABLE REVIEW_DB.LIVE_TESTS.T (A INT DEFAULT OTHER.S.SEQ.NEXTVAL)',
+        'CREATE TABLE REVIEW_DB.LIVE_TESTS.T (A INT AS (PROD_FN(1)))',
+        'CREATE TABLE REVIEW_DB.LIVE_TESTS.T (A INT, CHECK (PROD_FN(A) > 0))',
+        'SELECT CAST(A AS PROD_FN(1)) FROM OTHER.S.T',
+    ],
+}
+
+
+@pytest.mark.parametrize(
+    ('dialect', 'sql'),
+    [(d, sql) for d, texts in REFUSED_R6.items() for sql in texts],
+)
+def test_round_6_column_functions_are_refused(dialect: str, sql: str) -> None:
+    with pytest.raises(wg.WriteRefused):
+        GUARDS[dialect].check(sql)
