@@ -355,6 +355,17 @@ WORDED: dict[tuple[str, ...], str] = {
         + _SKIP_THE_CHECK
         for field in ('primary_keys', 'keys')
     },
+    # A schema whose column means what its type cannot carry, refused at
+    # materialize (T3.16): as the reference's `check_consistent` says it of
+    # the type the caller's schema holds, and as its engine says it of the
+    # type the source gives, when it reads the table in place.
+    ('INVALID_REQUEST', 'schema', 'meaning_not_carried'): _SCHEMA_SAID[
+        'meaning_not_carried'
+    ],
+    ('INVALID_REQUEST', 'schema', 'incompatible_semantic_type'): (
+        'Column {column!r} received an incompatible semantic type '
+        '(got dtype={dtype!r} and stype={stype!r})'
+    ),
     # A table named that the source does not hold, as the reference's
     # engine says it (`TableNotFoundError`), named as the source reads it.
     ('INVALID_REQUEST', 'tables', 'no_such_table'): (

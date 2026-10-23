@@ -1,7 +1,7 @@
 {
   "commit": {
     "clean": true,
-    "sha": "aa44c1d95d27b71bc9d090f3c6d95b9f9f30f0a3"
+    "sha": "469520ccf9219f095178d60836abd39cdfd96011"
   },
   "database": "duckdb",
   "departs": [
@@ -1051,6 +1051,34 @@
         }
       },
       "site": "rule:open_window"
+    },
+    {
+      "departs": false,
+      "outcomes": {
+        "python-core": {
+          "result": "success",
+          "stage": "predict"
+        },
+        "reference": {
+          "result": "success",
+          "stage": "predict"
+        }
+      },
+      "site": "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::predict#1"
+    },
+    {
+      "departs": false,
+      "outcomes": {
+        "python-core": {
+          "result": "success",
+          "stage": "predict"
+        },
+        "reference": {
+          "result": "success",
+          "stage": "predict"
+        }
+      },
+      "site": "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::predict#2"
     }
   ],
   "reachability": "unmeasured: a probe names the site it was written for, and an outcome does not show which site produced it",
@@ -1059,7 +1087,7 @@
     "clean": true,
     "sha": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1"
   },
-  "sites": 41,
+  "sites": 43,
   "unmeasured": [
     "postgres",
     "sqlite"

@@ -1985,12 +1985,42 @@ pub(crate) fn meanings_carried(
     for table in &marked.tables {
         for column in &table.columns {
             let unknown = types.is_some_and(|t| t.is_unknown(&table.name, &column.name));
-            if !unknown && !crate::edit::supports(column.stype, column.dtype) {
-                return Err(not_carried(&table.name, &column.name));
+            if unknown || crate::edit::supports(column.stype, column.dtype) {
+                continue;
             }
+            let stype = name_of(serde_json::to_value(column.stype));
+            return Err(match types {
+                // As `check_consistent` says it, quoting the type the
+                // caller's schema holds.
+                Some(types) => not_carried(&table.name, &column.name)
+                    .with_field("reason", Detail::text("meaning_not_carried"))
+                    .with_field(
+                        "dtype",
+                        Detail::text(types.name(&table.name, &column.name, column.dtype)),
+                    )
+                    .with_field("stype", Detail::text(stype)),
+                // As the reference's engine says it when it reads the table
+                // in place, naming the source's type in the language's
+                // name.
+                None => not_carried(&table.name, &column.name)
+                    .with_field("reason", Detail::text("incompatible_semantic_type"))
+                    .with_field(
+                        "dtype",
+                        Detail::text(name_of(serde_json::to_value(column.dtype))),
+                    )
+                    .with_field("stype", Detail::text(stype)),
+            });
         }
     }
     Ok(())
+}
+
+/// A contract enum's name, as its JSON spells it.
+fn name_of(value: Result<serde_json::Value, serde_json::Error>) -> String {
+    value
+        .ok()
+        .and_then(|v| v.as_str().map(str::to_owned))
+        .unwrap_or_default()
 }
 
 fn not_carried(table: &str, column: &str) -> CoreError {
