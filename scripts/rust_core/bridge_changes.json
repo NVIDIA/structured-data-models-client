@@ -81,13 +81,13 @@
       "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
     },
     "packages/structured-data-models-client/src/sdm_client/schema.py::<module>": {
-      "moved": "T3.16 (fix A): Column._source (out of repr and equality, copied by _copy_column), _described_on_the_core, say_a_composite_key_is_dropped shared with _rust/spec.py, WIRE_TO_PQL_DTYPE named; Schema._core_description gone, and dropped from an older pickle's state; fix 1 (rule 11): supports_dtype reads the core's table of the language's meanings (_native.MEANINGS), the old PQL package only in a client without the core, and its time-column rule imported where a schema of frames is inferred; the data type name a column holds read by language_dtype, the core's one table of them (_native.DTYPE_NAMES), and query_schema, the one translation of a schema into the query language's (moved here from _rust/spec.py, which reads it), to_schema_definition built from it (T3.16 fix 1, review round 1); fix 2: the core's tables read only where the core is loaded or the old PQL package is absent, so the old route never loads the core"
+      "refactor": "T3.4 fix 3: _forget_namespaces and _keep_namespaces added: a schema built anew drops the namespace its columns' facts were read under, as the old route reads a new schema's tables afresh (a new EngineTables), and a snapshot keeps it, as it shares the engine's reading; no rule of the core's here"
     },
     "packages/structured-data-models-client/src/sdm_client/schema.py::Schema.from_source": {
       "refactor": "T2.2: a SQLite source routes as a DuckDB one (_routing.on_the_core with the backend's from-source paths); no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::build": {
-      "refactor": "T3.4 fix 2: each column's source facts keep the namespace the description was read under (SourceDescription.namespace), which the core answered; no rule here"
+      "refactor": "T3.4 fix 2 and 3: each column's source facts keep the namespace the description was read under (SourceDescription.namespace), which the core answered, on the schema that read them; no rule here"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::description": {
       "gone": "T3.16 (fix A): the schema is handed over as plain data by _rust/spec.py's held_schema; no saved description, no merge (sdm_schema::edit::read_held is gone)"
