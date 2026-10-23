@@ -494,3 +494,61 @@ def test_a_table_edit_of_a_column_written_by_hand_is_refused_in_the_old_client_s
 
     outcomes = _both(monkeypatch, act)
     assert outcomes['core'] == outcomes['old']
+
+
+@pytest.mark.parametrize(
+    ('table', 'column', 'meaning'),
+    [('users', 'age', 'text')],
+)
+def test_a_meaning_the_source_s_type_cannot_carry_is_refused_in_the_old_client_s_words(
+    table: str, column: str, meaning: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Claude's review round 2 (P2-2), held by the owner's rule: a column the
+    # caller retyped `string` and gave a meaning its source's type cannot
+    # carry is refused at materialize naming the column and both types, as
+    # the old client's engine names them.
+    def act() -> Any:
+        schema = _described()
+        schema[table][column].dtype = 'string'
+        schema[table][column].stype = meaning
+        from sdm_client import PredictiveQuery
+
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore')
+                PredictiveQuery(QUERY, schema).materialize(
+                    indices=[0, 1], anchor_time=pd.Timestamp('2024-03-01')
+                )
+        except StructuredDataError as refused:
+            return _said(refused)
+        return 'sampled'
+
+    outcomes = _both(monkeypatch, act)
+    assert outcomes['core'] == outcomes['old']
+    assert 'received an incompatible semantic type' in outcomes['old'][2]
+
+
+def test_a_meaning_the_caller_s_type_cannot_carry_is_refused_in_the_old_client_s_words(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The caller's own type changed after its meaning was set: the old
+    # client's check_consistent refuses at materialize, quoting the type the
+    # schema holds.
+    def act() -> Any:
+        schema = _described()
+        schema['users']['age'].stype = 'numerical'
+        schema['users']['age'].dtype = 'string'
+        from sdm_client import PredictiveQuery
+
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore')
+                PredictiveQuery(QUERY, schema).materialize(
+                    indices=[0, 1], anchor_time=pd.Timestamp('2024-03-01')
+                )
+        except StructuredDataError as refused:
+            return _said(refused)
+        return 'sampled'
+
+    outcomes = _both(monkeypatch, act)
+    assert outcomes['core'] == outcomes['old']
