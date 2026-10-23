@@ -539,6 +539,9 @@ class WriteGuard:
         # The word each open parenthesis follows, innermost last: inside a
         # cast, AS names its type.
         openers: list[str] = []
+        # Where each open parenthesis is, and the one the last ``)`` closed.
+        opened: list[int] = []
+        closed: int | None = None
         types: set[int] = set()
         for i, token in enumerate(items):
             word = _upper(token)
@@ -546,10 +549,12 @@ class WriteGuard:
             before = items[i - 1] if i else None
             if token == _OPEN:
                 openers.append(_upper(before))
+                opened.append(i)
                 continue
             if token == _CLOSE:
                 if openers:
                     openers.pop()
+                closed = opened.pop() if opened else None
                 continue
             if word in words and after != [_OPEN]:
                 raise WriteRefused(f'{what}: {word} where no write may be')
@@ -588,6 +593,16 @@ class WriteGuard:
                     and before is not None
                     and before.kind in ('word', 'name')
                     and _upper(before) not in RESERVED
+                )
+                or (
+                    # The old client's sampled derived table:
+                    # FROM (SELECT ...) TABLESAMPLE (...).
+                    word == 'TABLESAMPLE'
+                    and before == _CLOSE
+                    and closed is not None
+                    and closed > 0
+                    and _upper(items[closed - 1]) == 'FROM'
+                    and _upper(items[closed + 1]) == 'SELECT'
                 )
                 or (
                     _upper(before) == 'AS'
