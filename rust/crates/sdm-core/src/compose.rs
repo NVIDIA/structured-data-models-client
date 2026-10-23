@@ -21,7 +21,7 @@ use arrow_array::RecordBatch;
 use sdm_contract::catalog::CatalogAnswer;
 use sdm_contract::data::{
     DataLayer, DataRequest, FallbackLimits, FetchPlan, ProviderCapabilities, ProviderChoice,
-    Relation, seed_integer,
+    Relation, refuse_derived, seed_integer,
 };
 use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 
@@ -67,6 +67,22 @@ impl CompositionRoot {
 }
 
 impl DataAccess {
+    /// Whether the run's provider leaves a namespace part to the connection
+    /// inside one it gives (`DataLayer::unsettled`), which no relation can
+    /// be read under until the source says its current parts
+    /// ([`DataAccess::settled`]).
+    pub fn unsettled(&self) -> bool {
+        self.layer.unsettled(&self.provider)
+    }
+
+    /// The run's data access with its provider's namespace the parts the
+    /// source answered for it (`DataLayer::settled`).
+    pub fn settled(&self, parts: Vec<String>) -> DataAccess {
+        let mut access = self.clone();
+        access.provider = self.layer.settled(&self.provider, parts);
+        access
+    }
+
     /// What the run's provider answers.
     pub fn capabilities(&self) -> &ProviderCapabilities {
         &self.capabilities
@@ -162,6 +178,18 @@ impl DataAccess {
     /// request; a request the provider declared is never the fallback's.
     pub fn route(&self, request: &DataRequest) -> Result<Route, CoreError> {
         request.check()?;
+        // A derived relation only of a provider declaring it reads one,
+        // whichever way the request is answered (contract v28).
+        for (field, relation) in request.relations() {
+            if let Some(refusal) = refuse_derived(
+                request,
+                field,
+                relation,
+                self.capabilities.derived_relations,
+            ) {
+                return Err(refusal);
+            }
+        }
         if let Some(optional) = request.optional()
             && !self.capabilities.optional.contains(&optional)
         {

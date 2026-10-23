@@ -186,6 +186,7 @@ impl SqlDialect for Plain {
             reads_nan_as_missing: false,
             derived_relations: false,
             neighbor_lookback: false,
+            keys_optional: false,
             sample_rows: false,
             optional: Default::default(),
             max_keys_per_request: None,

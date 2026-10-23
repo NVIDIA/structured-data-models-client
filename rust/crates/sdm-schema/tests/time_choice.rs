@@ -123,7 +123,6 @@ fn of(columns: Vec<(&str, ArrayRef)>) -> Result<infer::InferredTable, String> {
         .fields()
         .iter()
         .map(|f| CatalogColumn {
-            canonical: None,
             name: f.name().clone(),
             declared_type: String::new(),
             not_null: false,
@@ -179,7 +178,6 @@ fn things(stamps: &[&str], rows: i64, constant: bool) -> Result<infer::InferredT
         .fields()
         .iter()
         .map(|f| CatalogColumn {
-            canonical: None,
             name: f.name().clone(),
             declared_type: String::new(),
             not_null: false,
@@ -542,7 +540,6 @@ fn previewed(stamps: &[&str], rows: i64, constant: bool) -> infer::Previewed {
         .fields()
         .iter()
         .map(|f| CatalogColumn {
-            canonical: None,
             name: f.name().clone(),
             declared_type: String::new(),
             not_null: false,
@@ -1066,7 +1063,6 @@ fn a_whole_table_read_that_failed_keeps_what_the_preview_doubts() {
         .fields()
         .iter()
         .map(|f| CatalogColumn {
-            canonical: None,
             name: f.name().clone(),
             declared_type: String::new(),
             not_null: false,

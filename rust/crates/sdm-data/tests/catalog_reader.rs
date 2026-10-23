@@ -41,6 +41,7 @@ fn host() -> ProviderChoice {
             reads_nan_as_missing: false,
             derived_relations: false,
             neighbor_lookback: false,
+            keys_optional: false,
             sample_rows: false,
             optional: Default::default(),
             max_keys_per_request: None,
@@ -137,7 +138,6 @@ fn duckdb_s_catalog_and_a_host_s_read_to_the_same_answer() {
     let columns = describe(DescribePart::Columns);
     let expected = CatalogAnswer::Columns(vec![
         CatalogColumn {
-            canonical: None,
             name: "order_id".into(),
             declared_type: "BIGINT".into(),
             not_null: true,
@@ -147,7 +147,6 @@ fn duckdb_s_catalog_and_a_host_s_read_to_the_same_answer() {
             dtype: None,
         },
         CatalogColumn {
-            canonical: None,
             name: "ts".into(),
             declared_type: "TIMESTAMP".into(),
             not_null: false,

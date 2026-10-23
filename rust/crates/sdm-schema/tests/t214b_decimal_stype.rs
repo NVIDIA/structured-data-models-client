@@ -71,7 +71,6 @@ fn stype_of_d(values: Vec<i128>, precision: u8, scale: i8) -> Stype {
         .fields()
         .iter()
         .map(|f| CatalogColumn {
-            canonical: None,
             name: f.name().clone(),
             declared_type: String::new(),
             not_null: false,

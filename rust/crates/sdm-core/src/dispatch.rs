@@ -82,8 +82,9 @@ pub fn start(
             let access = root.data_access(&request.provider)?;
             let check_keys = request.check_keys;
             let zones = Arc::clone(&zones);
-            Run::with_data(access, move |asker| {
-                crate::describe::run(asker, source, check_keys, facts, zones)
+            Run::with_data(access, move |asker| async move {
+                let asker = crate::describe::settled(asker).await?;
+                crate::describe::run(asker, source, check_keys, facts, zones).await
             })
         }
         Operation::EditSchema(request) => {
@@ -379,6 +380,7 @@ pub(crate) fn materialize(
                 labels_only,
             };
             Ok(Run::with_data(access, move |asker| async move {
+                let asker = crate::describe::settled(asker).await?;
                 // Each column's facts, the host's or, for a column with none,
                 // the source's, read before anything else of the run.
                 let found = crate::discover::facts(&asker, &held).await?;
@@ -391,6 +393,17 @@ pub(crate) fn materialize(
                 let description = read.by_the_source();
                 crate::materialize::meanings_carried(&description, None)?;
                 let source = crate::materialize::fingerprint(&provider, &description)?;
+                // Each table read as the columns its description holds.
+                for table in &description.tables {
+                    asker.guard(
+                        &table.source,
+                        table
+                            .columns
+                            .iter()
+                            .map(|column| column.name.clone())
+                            .collect(),
+                    );
+                }
                 crate::materialize::run(asker, inputs(description, source)).await
             }))
         }
