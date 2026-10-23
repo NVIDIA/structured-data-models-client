@@ -419,6 +419,22 @@ def bootstrap_reference(reference: Path, site: Path) -> Path:
     return path
 
 
+def use_reference_client(reference: Path) -> Path:
+    r"""Makes this process import ``sdm_client`` from the reference
+    checkout ``reference``: its client source first on ``sys.path``, any
+    ``sdm_client`` already imported forgotten, so the client the recording
+    runs is the checkout's, as the runner requires, beside the reference's
+    other packages installed from its wheels (``capture_job.py``; a
+    notebook's environment reads no ``.pth`` file). Returns the source."""
+    source = (Path(reference) / CLIENT_SOURCE).resolve()
+    if not (source / 'sdm_client' / '__init__.py').is_file():
+        raise SystemExit(f'{reference}: no reference client at {CLIENT_SOURCE}')
+    sys.path.insert(0, str(source))
+    for name in [n for n in sys.modules if n.split('.')[0] == 'sdm_client']:
+        del sys.modules[name]
+    return source
+
+
 #: Each job parameter that names part of a run's environment, and the
 #: variable it sets: the live configuration's path, the placeholders'
 #: private names and the write guard's test schema, filled into the job's
