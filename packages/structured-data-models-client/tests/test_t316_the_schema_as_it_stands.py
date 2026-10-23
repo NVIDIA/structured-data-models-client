@@ -32,6 +32,7 @@ from pathlib import Path
 from typing import Any
 
 import duckdb
+import pandas as pd
 import pytest
 from sdm_connectors import DuckDBSource
 
@@ -225,3 +226,140 @@ def test_the_core_route_needs_nothing_of_the_old_pql_or_engine(
     )
     assert done.returncode == 0, done.stderr
     assert done.stdout.split() == ['2', '[]'], done.stdout
+
+
+def test_the_client_s_profile_words_and_meanings_are_the_language_s() -> None:
+    # What the client holds in place of the old PQL package's objects on the
+    # core route (rule 11) is the language's, where that package is here to
+    # ask: each profile's model words, and each meaning a data type carries,
+    # the core's table of it.
+    import predictive_query.profiles as profiles
+    from predictive_query.schema.typing import Dtype, Stype
+
+    from sdm_client import _native
+    from sdm_client.base import PROFILE_MODELS
+
+    assert PROFILE_MODELS == {
+        name: getattr(profiles, name).capabilities.model
+        for name in PROFILE_MODELS
+    }
+    language = {
+        (stype.value, dtype.value)
+        for stype in Stype
+        for dtype in Dtype
+        if stype.supports_dtype(dtype)
+    }
+    assert set(map(tuple, _native.MEANINGS)) == language
+
+
+def _materialized(schema: Schema) -> Any:
+    r"""What a materialize of the shop's query answers: the payloads, or the
+    refusal's class and code."""
+    from sdm_client import PredictiveQuery
+
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            request = PredictiveQuery(QUERY, schema).materialize(
+                indices=[0, 1, 2], anchor_time=pd.Timestamp('2024-03-01')
+            )
+    except StructuredDataError as refused:
+        return _refused(refused)
+    import json
+
+    return json.loads(json.dumps(list(request._payloads), default=str))
+
+
+@pytest.mark.parametrize(
+    ('table', 'column', 'dtype', 'meaning'),
+    [
+        # Across families: a number held as text, text held as a number.
+        ('users', 'age', 'string', 'text'),
+        ('users', 'age', 'string', 'numerical'),
+        ('orders', 'price', 'string', 'categorical'),
+        ('users', 'user_id', 'float64', 'ID'),
+        ('orders', 'ts', 'string', 'text'),
+    ],
+)
+def test_a_retyped_column_is_edited_and_sampled_as_the_old_client_does(
+    table: str,
+    column: str,
+    dtype: str,
+    meaning: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def act() -> Any:
+        schema = _described()
+        schema[table][column].dtype = dtype
+        try:
+            schema[table][column].stype = meaning
+        except StructuredDataError as refused:
+            return ('edit', _refused(refused))
+        return ('sampled', _materialized(schema))
+
+    outcomes = _both(monkeypatch, act)
+    assert outcomes['core'] == outcomes['old']
+
+
+#: Each data type name the old client reads (its wire names, every
+#: timestamp unit, and the language's own names), and one it knows nothing
+#: of, which its checks let through.
+NAMES = (
+    'int64',
+    'int32',
+    'int',
+    'int16',
+    'byte',
+    'float64',
+    'float32',
+    'float',
+    'timestamp[s]',
+    'timestamp[ms]',
+    'timestamp[us]',
+    'timestamp[ns]',
+    'date',
+    'time',
+    'string',
+    'bool',
+    'decimal(9, 2)',
+)
+
+
+@pytest.mark.parametrize('name', NAMES)
+@pytest.mark.parametrize('edit', ['key', 'time column', 'meaning', 'link'])
+def test_a_column_written_by_hand_is_edited_by_any_name_the_old_client_reads(
+    name: str, edit: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A column the source was never asked of, added to a described schema
+    # under a data type name the old client reads, then edited.
+    from sdm_client import Relationship
+
+    def act() -> Any:
+        schema = _described()
+        try:
+            # A meaning the name's type carries, the old client's own check
+            # at construction, before the core sees anything.
+            meaning = 'timestamp' if name.startswith(('time', 'date')) else 'ID'
+            schema['orders'].columns['extra'] = Column('extra', name, meaning)
+            if edit == 'key':
+                schema['orders'].primary_key = 'extra'
+            elif edit == 'time column':
+                schema['orders'].time_column = 'extra'
+            elif edit == 'meaning':
+                schema['orders']['extra'].stype = 'categorical'
+            else:
+                schema.relationships = [
+                    *schema.relationships,
+                    Relationship('orders', 'extra', 'users', 'user_id'),
+                ]
+        except StructuredDataError as refused:
+            return _refused(refused)
+        return (
+            schema['orders'].primary_key,
+            schema['orders'].time_column,
+            schema['orders']['extra'].stype,
+            len(schema.relationships),
+        )
+
+    outcomes = _both(monkeypatch, act)
+    assert outcomes['core'] == outcomes['old']
