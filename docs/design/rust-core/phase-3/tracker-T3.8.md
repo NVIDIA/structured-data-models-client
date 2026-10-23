@@ -34,7 +34,7 @@ Vectors: `sdm-contract/tests/messages.rs` (`a_provider_namespace_takes_names_and
 
 ## Differences registered
 
-- P3E-1 (proposed): a Postgres table missing from a source given no schema is named without the current schema ("Table 'nope' ..." where the reference says "Table 'public.nope' ..."), since the core never reads `current_schema()` (KO2-58).
+- P3E-1: rejected as obsolete by Codex's round 2: since fix 2 a Postgres table missing from a source given no schema is named under the schema the read looked in, as the reference names it.
 - P3E-2 (proposed, an improvement): a core warning's words follow its code in brackets, `[TIME_COLUMNS_GUESSED] Some time columns ...`; no entry recorded it before.
 
 ## Core hygiene (open question 3)
@@ -56,3 +56,4 @@ Each pinned behaviour this package changes, and now pins the reference's:
 - Fix 1: defbc6e0's handoff failed in the tooling self-test, whose seeds edit `_rust/schema.py`'s `from_source`; `from_source` keeps its run, and a schema the core never described is described through it.
   pandas 3.1.0 (released 2026-10-22) broke two things on both routes alike: the old engine's static anchor (`pd.Timestamp.min - pd.DateOffset(0)` now raises), fixed in the engine; and a request's description of a number pandas 3.0 could not hold, which 3.1 holds, so that test expects the old client's answer under the installed pandas.
 - Fix 2 (Codex round 1, CHANGES REQUIRED; P3E-2 approved): a hand-built schema's left-out columns are no longer read (contract v28's `NamedTable.columns`); a query the core gathers alone keeps its day-first literal's warning; a missing Postgres table is named under the schema the read looked in, so P3E-1 has no difference left and awaits a reviewer's rejection.
+- Fix 3 (Codex round 2 P1, Claude round 2 P1, P2s and P3s): a projected composite key no longer marks the column kept, and a named key is never refused by inference; the core route keeps the query as the core writes it back and names a forecast's step, through `CoreQuery` filled from the core's validation; P3E-1 closed as rejected by Codex's round 2.

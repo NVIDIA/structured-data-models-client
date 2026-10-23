@@ -7501,21 +7501,23 @@ entries:
     schema and the name asked for: "Table 'public.nope' does not exist in
     the PostgreSQL database" (PostgresTable.source_name).
   new_behavior: >-
-    The core never reads current_schema() (KO2-58), so it names the table
-    as it was asked for: "Table 'nope' does not exist in the PostgreSQL
-    database", the same refusal, code and class. A source given its schema
-    is named as the reference names it ("Table 'sales.nope' ..."), the
-    schema read from the provider's namespace (contract v28, T3.8).
+    As proposed (T3.8, before fix 2): the core named the table as it was
+    asked for, "Table 'nope' does not exist in the PostgreSQL database".
+    Since T3.8 fix 2 it names it under the schema the read looked in, as
+    the reference does, so no difference remains.
   affected_inputs: >-
     Schema.from_source, and materialize of a schema the core did not
     describe, over a PostgresSource given no schema, naming a table the
     current schema does not hold, on the core route.
   cases: [T3.8]
   refs: [KO2-58, P2-T2.16-11]
-  status: proposed
-  approved_by: null
+  status: rejected
+  approved_by: reviewer
   decision_ref: null
   notes: >-
+    Rejected as obsolete by Codex's T3.8 review round 2 (REJECT-P3E-1:
+    missing-table messages match on both routes with implicit and explicit
+    namespaces); recorded by the implementer, not decided by it.
     Proposed by T3.8's implementer. Measured with the core route forced:
     the refusal's code (INVALID_REQUEST), class (StructuredDataError) and
     sentence match the reference's but for the schema before the table's
