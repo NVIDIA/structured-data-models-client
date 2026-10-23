@@ -94,3 +94,7 @@ Codex's round 7, tests first: no keyword or type exemption admits a qualified na
 The guard is a safety net against accidental writes by our own code; crafted bypasses are P3, for the owner's restricted database roles.
 Tests first: the recorder's own statements pass each leg's guard (its Lakebase zone read needed `current_setting`), each leg's plan leaves out by name the ten cases whose names hold a backtick or a line break (`capture_run.NOT_LIVE`), and the run records case by case, a failed case written with its reason to `<leg>.failed.json` while the others are recorded and imported.
 
+## Fix round 9 (reviews of 796406aa)
+
+Tests first: a case fails, with none of it imported, when the guard refused any statement during it (the guard keeps every refusal, so one the old client's call swallows is still seen), when the runner fails (its message surfaced) or when any other error is raised; the other cases go on.
+
