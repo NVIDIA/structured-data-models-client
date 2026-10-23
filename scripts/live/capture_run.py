@@ -19,11 +19,11 @@ cannot hold listed by the loader's reason, never recorded, and the
 environment the run needs, by variable name only (no value is read for
 print). ``run`` records: the old client (``run_python.py --mode
 python-ref``, T3.2's recording mode) over the planned cases on the leg's
-live connection (``SDM_LIVE_CONFIG``), in this process, with every write
-the loader makes, and on the SQL warehouse and Snowflake every statement on
-the connection, through the live write guard (KO3-51; ``write_guard.py``
-beside this file, without which the run does not start), refused outside
-the one test schema; its lines
+live connection (``SDM_LIVE_CONFIG``), in this process, with every
+statement any driver runs, the loader's and the old client's alike,
+through the live write guard (KO3-51; ``write_guard.py`` beside this file,
+installed on the drivers themselves, without which the run does not
+start), refused outside the one test schema; its lines
 written to ``DIR/<leg>.record.jsonl``, then each written as a capture under
 ``DIR/<leg>/<case>/`` with the leg's manifest (``captures.py import``: the
 placeholders and the private-name search applied again). Nothing is
@@ -199,7 +199,7 @@ GUARD = Path(__file__).resolve().with_name('write_guard.py')
 
 def load_guard(path: Path | str | None = GUARD) -> ModuleType:
     r"""The live write guard's module (``write_guard.py``, its
-    ``WriteGuard`` and ``guard_connection``); a run without it refuses to
+    ``WriteGuard``, ``install`` and ``from_environment``); a run without it refuses to
     start."""
     if not path or not Path(path).is_file():
         raise SystemExit(
@@ -212,65 +212,60 @@ def load_guard(path: Path | str | None = GUARD) -> ModuleType:
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
-    for name in ('WriteGuard', 'guard_connection'):
+    for name in ('WriteGuard', 'install', 'from_environment'):
         if not hasattr(module, name):
             raise SystemExit(f'the live write guard {path} has no {name}')
     return module
 
 
-def _postgres_check(schema: str) -> Any:
-    r"""Lakebase's write check: a statement the loader writes names its
-    table or type in the one test schema, first after its verb."""
-    import re
-
-    loader = _module('databases')
-    allowed = re.compile(
-        r'^(?:DROP TABLE IF EXISTS|CREATE TABLE|DROP TYPE IF EXISTS|CREATE TYPE|COPY) '
-        + re.escape(loader.quote(schema) + '.')
-    )
-
-    def check(statement: str) -> None:
-        if not allowed.match(statement):
-            raise PermissionError(
-                'a Lakebase write outside the test schema, or of another form, '
-                'refused'
-            )
-
-    return check
+#: Each leg's dialect in the write guard.
+DIALECT = {
+    'databricks-sql': 'databricks',
+    'databricks-spark': 'databricks',
+    'snowflake': 'snowflake',
+    'lakebase': 'postgres',
+}
 
 
-def install_guard(
-    leg: str, guard: ModuleType, runner: Any, loader: Any
-) -> None:
-    r"""Every live write of ``leg`` through ``guard``: the loader's
-    statements (``databases.WRITE_GUARD``), and on the SQL warehouse and
-    Snowflake every statement on the connection the runner opens
-    (``guard_connection``), each refused when it writes outside the one
-    test schema, ``SDM_LIVE_TEST_DATABASE`` and ``SDM_LIVE_TEST_SCHEMA``."""
-    schema = os.environ.get('SDM_LIVE_TEST_SCHEMA')
-    database = os.environ.get('SDM_LIVE_TEST_DATABASE')
-    if not schema or (leg != 'lakebase' and not database):
+def install_guard(leg: str, guard: ModuleType, loader: Any) -> Any:
+    r"""Every live statement of the run through the one write guard:
+    every driver's entry points (``guard.install``, each dialect's test
+    schema from ``SDM_LIVE_TEST_*``, a dialect with none refusing every
+    statement) and the loader's own statements (``databases.WRITE_GUARD``).
+    The leg's test schema must be set, and be the one its cases resolve
+    ``{catalog}`` and ``{schema}`` to (``SDM_CAPTURE_*``), or the run does
+    not start. Returns what undoes it."""
+    guards = guard.from_environment()
+    own = guards.get(DIALECT[leg])
+    if own is None:
         raise SystemExit(
-            'the write guard names no test schema (SDM_LIVE_TEST_*)'
+            f'the write guard names no test schema for {leg} (SDM_LIVE_TEST_*)'
         )
-    if leg == 'lakebase':
-        loader.WRITE_GUARD = _postgres_check(schema)
-        return
-    dialect = 'snowflake' if leg == 'snowflake' else 'databricks'
-    try:
-        check = guard.WriteGuard(dialect)
-    except PermissionError as refused:
-        raise SystemExit(f'the write guard cannot start: {refused}') from None
-    loader.WRITE_GUARD = check.check
-    if leg == 'databricks-spark':
-        return
-    opened = runner.connect_leg
+    for variable, held in (
+        ('SDM_CAPTURE_CATALOG', own.database),
+        ('SDM_CAPTURE_SCHEMA', own.schema),
+    ):
+        value = os.environ.get(variable)
+        if held is None or value is None:
+            continue
+        same = (
+            value.lower() == held.lower()
+            if own.dialect == 'databricks'
+            else value == held
+        )
+        if not same:
+            raise SystemExit(
+                f"{variable} is not the write guard's test schema "
+                '(SDM_LIVE_TEST_*): the loads would be refused'
+            )
+    undo = guard.install(guards)
+    loader.WRITE_GUARD = own.check
 
-    def connect_leg(*arguments: Any, **keywords: Any) -> Any:
-        connection, close = opened(*arguments, **keywords)
-        return guard.guard_connection(connection, check), close
+    def uninstall() -> None:
+        loader.WRITE_GUARD = None
+        undo()
 
-    runner.connect_leg = connect_leg
+    return uninstall
 
 
 def run(
@@ -297,10 +292,10 @@ def run(
     # its _sibling reads), so the guard holds every write it makes.
     loader = _named('databases')
     runner = _named('run_python')
-    install_guard(leg, guard, runner, loader)
     out.mkdir(parents=True, exist_ok=True)
     recording = out / f'{leg}.record.jsonl'
     observations = out / f'{leg}.python-ref.jsonl'
+    uninstall = install_guard(leg, guard, loader)
     try:
         status = runner.main(
             ['--mode', 'python-ref', '--reference', str(reference), '--database', leg,
@@ -310,6 +305,8 @@ def run(
     except runner.RunnerFailure as failure:
         print(f'{leg}: the recording failed: {failure}')
         return 1
+    finally:
+        uninstall()
     if status:
         print(f'{leg}: the recording failed (exit {status})')
         return 1

@@ -16,8 +16,8 @@ and :func:`read` gives it back, a capture is plain data:
 - ``versions``: the leg's runtime, Python, pandas and driver versions;
 - ``input_hash``: the hash of the case's input;
 - ``session``: the session's ``time_zone`` and ``null_order``
-  (``nulls_first`` or ``nulls_last`` for an ascending order), which the
-  core's run offline reads its session with;
+  (``nulls_first`` or ``nulls_last`` for an ascending order), the session
+  the recording ran in;
 - ``reference``: the old client's reference line, the observation
   Phase 2's lines use;
 - ``tables``: each table of the case as the warehouse returned it through

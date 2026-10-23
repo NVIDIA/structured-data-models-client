@@ -166,30 +166,28 @@ def test_the_job_imports_the_reference_checkout_s_own_client(
 def test_a_write_outside_the_test_schema_never_reaches_the_driver(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # Review r3 (Codex P2-4): the guard allows ALLOWED_SCHEMA, the case's
-    # placeholder resolves to WRONG_SCHEMA; the loader's first write is
-    # refused before the driver sees anything.
+    # Review r3 (Codex P2-4), r4 (Codex P0-1, Claude P1-1): the guard is
+    # installed on the driver's own cursor class; the case's placeholder
+    # resolves to WRONG_SCHEMA, and neither the loader's writes nor a
+    # statement on any cursor reach the driver outside ALLOWED_SCHEMA.
+    import types
+
     import duckdb
 
     # The repository's guard, as the run loads it (scripts/live).
     guard = capture_run.load_guard()
-    for name in ('DATABASE', 'SCHEMA'):
-        monkeypatch.delenv(f'SDM_LIVE_SNOWFLAKE_TEST_{name}', raising=False)
+    for dialect in ('SNOWFLAKE_', 'DATABRICKS_', 'POSTGRES_'):
+        for name in ('DATABASE', 'SCHEMA'):
+            monkeypatch.delenv(f'SDM_LIVE_{dialect}TEST_{name}', raising=False)
     monkeypatch.setenv('SDM_LIVE_TEST_DATABASE', 'REVIEW_DB')
     monkeypatch.setenv('SDM_LIVE_TEST_SCHEMA', 'ALLOWED_SCHEMA')
+    monkeypatch.delenv('SDM_CAPTURE_CATALOG', raising=False)
+    monkeypatch.delenv('SDM_CAPTURE_SCHEMA', raising=False)
     loader = capture_run._module('databases')
     monkeypatch.setattr(loader, 'WRITE_GUARD', None)
-
-    class Runner:
-        RunnerFailure = RuntimeError
-
-        @staticmethod
-        def connect_leg(*arguments, **keywords):
-            return Driver(), lambda: None
-
     seen: list[str] = []
 
-    class Cursor:
+    class SnowflakeCursor:
         def execute(self, sql, *a, **k):
             seen.append(sql)
 
@@ -201,33 +199,81 @@ def test_a_write_outside_the_test_schema_never_reaches_the_driver(
 
     class Driver:
         def cursor(self):
-            return Cursor()
+            return SnowflakeCursor()
 
-    capture_run.install_guard('snowflake', guard, Runner, loader)
-    connection, _ = Runner.connect_leg('snowflake', {}, {}, None)
+    fake = types.ModuleType('snowflake.connector.cursor')
+    fake.SnowflakeCursor = SnowflakeCursor
+    monkeypatch.setitem(sys.modules, 'snowflake.connector.cursor', fake)
+    uninstall = capture_run.install_guard('snowflake', guard, loader)
+    try:
 
-    class Target:
-        names = {'catalog': 'REVIEW_DB', 'schema': 'WRONG_SCHEMA'}
-        view = None
+        class Target:
+            names = {'catalog': 'REVIEW_DB', 'schema': 'WRONG_SCHEMA'}
+            view = None
+            connection = Driver()
 
-    Target.connection = connection
-    duck = duckdb.connect()
-    duck.execute('CREATE TABLE users (i INTEGER)')
-    with pytest.raises(PermissionError, match='outside the test schema'):
+        duck = duckdb.connect()
+        duck.execute('CREATE TABLE users (i INTEGER)')
+        with pytest.raises(PermissionError, match='outside the test schema'):
+            loader.load(duck, 'snowflake', Target())
+        # A statement on the driver's cursor, not the loader's, is refused too.
+        with pytest.raises(PermissionError):
+            Driver().cursor().execute('DROP TABLE OTHER_DB.PUBLIC.T')
+        assert seen == []
+        # The test schema itself loads.
+        Target.names = {'catalog': 'REVIEW_DB', 'schema': 'ALLOWED_SCHEMA'}
         loader.load(duck, 'snowflake', Target())
-    assert seen == []
-    # The test schema itself loads.
-    Target.names = {'catalog': 'REVIEW_DB', 'schema': 'ALLOWED_SCHEMA'}
-    loader.load(duck, 'snowflake', Target())
-    assert any(
-        s.startswith('CREATE TABLE "REVIEW_DB"."ALLOWED_SCHEMA"') for s in seen
-    )
-    # No guard, no run; no test schema, no run.
+        assert any(
+            s.startswith('CREATE TABLE "REVIEW_DB"."ALLOWED_SCHEMA"')
+            for s in seen
+        )
+    finally:
+        uninstall()
+    assert loader.WRITE_GUARD is None
+    Driver().cursor().execute('DROP TABLE OTHER_DB.PUBLIC.T')
+    # No guard, no run; no test schema, or another than the cases', no run.
     with pytest.raises(SystemExit, match='no live write guard'):
         capture_run.load_guard(tmp_path / 'write_guard.py')
+    monkeypatch.setenv('SDM_CAPTURE_SCHEMA', 'WRONG_SCHEMA')
+    with pytest.raises(SystemExit, match='SDM_CAPTURE_SCHEMA is not'):
+        capture_run.install_guard('snowflake', guard, loader)
     monkeypatch.delenv('SDM_LIVE_TEST_SCHEMA')
     with pytest.raises(SystemExit, match='no test schema'):
-        capture_run.install_guard('snowflake', guard, Runner, loader)
+        capture_run.install_guard('snowflake', guard, loader)
+
+
+def test_lakebase_runs_through_the_same_guard(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Review r4 (Codex P0-4, Claude P2-2): Lakebase has no check of its
+    # own; its psycopg classes are guarded, and the loader's drops carry no
+    # CASCADE.
+    import psycopg
+
+    guard = capture_run.load_guard()
+    for name in ('DATABASE', 'SCHEMA'):
+        monkeypatch.delenv(f'SDM_LIVE_POSTGRES_TEST_{name}', raising=False)
+    monkeypatch.setenv('SDM_LIVE_TEST_SCHEMA', 'live_tests')
+    monkeypatch.delenv('SDM_CAPTURE_SCHEMA', raising=False)
+    assert not hasattr(capture_run, '_postgres_check')
+    loader = capture_run._module('databases')
+    monkeypatch.setattr(loader, 'WRITE_GUARD', None)
+    uninstall = capture_run.install_guard('lakebase', guard, loader)
+    try:
+        for statement in (
+            'DROP TABLE IF EXISTS "live_tests"."a" CASCADE',
+            'DROP TABLE IF EXISTS "live_tests"."a", "other"."b"',
+            'DROP TABLE IF EXISTS "live_tests"."a"; DROP TABLE "other"."b"',
+        ):
+            with pytest.raises(PermissionError):
+                loader.WRITE_GUARD(statement)
+            with pytest.raises(PermissionError):
+                psycopg.Connection.execute(
+                    object.__new__(psycopg.Connection), statement
+                )
+        loader.WRITE_GUARD('DROP TABLE IF EXISTS "live_tests"."a"')
+    finally:
+        uninstall()
 
 
 class _CaseSensitiveSnowflake:

@@ -2,13 +2,18 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""The live write guard (scripts/live/write_guard.py; KO3-51): a write
-outside the one test schema never reaches the driver; reads pass."""
+"""The live write guard (scripts/live/write_guard.py; KO3-51): an allowlist
+of the old client's reads and the loader's writes, the writes only in the
+one test schema, enforced on every driver's entry points; everything else
+never reaches a driver. Every bypass the round 4 reviews found is here,
+refused."""
 
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
+import types
 from pathlib import Path
 from typing import Any
 
@@ -17,313 +22,588 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def _load() -> Any:
-    spec = importlib.util.spec_from_file_location(
-        't33_write_guard', ROOT / 'scripts/live/write_guard.py'
-    )
+def _load(name: str, path: Path) -> Any:
+    spec = importlib.util.spec_from_file_location(name, path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
+    sys.modules[name] = module
     spec.loader.exec_module(module)
     return module
 
 
-wg = _load()
+wg = _load('t33_write_guard', ROOT / 'scripts/live/write_guard.py')
+databases = _load('t33_guard_databases', ROOT / 'contract/runners/databases.py')
 
 #: Made-up names; Snowflake stores unquoted names upper-cased.
 SNOWFLAKE = wg.WriteGuard('snowflake', 'REVIEW_DB', 'LIVE_TESTS')
 DATABRICKS = wg.WriteGuard('databricks', 'review-catalog', 'live_tests')
+POSTGRES = wg.WriteGuard('postgres', None, 'live_tests')
+GUARDS = {
+    'snowflake': SNOWFLAKE,
+    'databricks': DATABRICKS,
+    'postgres': POSTGRES,
+}
 
-SNOWFLAKE_ALLOWED = [
-    'SELECT * FROM OTHER_DB.PUBLIC.T',
-    'select 1',
-    "SELECT REPLACE(a, 'x', 'y') FROM OTHER_DB.S.T",
-    'WITH x AS (SELECT 1) SELECT * FROM x',
-    "SHOW PARAMETERS LIKE 'TIMEZONE' IN SESSION",
-    'SHOW TABLES IN SCHEMA "REVIEW_DB"."LIVE_TESTS"',
-    'DESCRIBE TABLE OTHER_DB.S.T',
-    'USE SCHEMA OTHER_DB.S',
-    "ALTER SESSION SET TIMEZONE = 'UTC'",
-    'BEGIN',
-    'COMMIT',
-    'LIST @OTHER_DB.S.STAGE',
-    'CREATE TABLE "REVIEW_DB"."LIVE_TESTS"."users" ("ID" NUMBER(38,0))',
-    'create or replace table review_db.live_tests.t (i int)',
-    'INSERT INTO "REVIEW_DB"."LIVE_TESTS"."users" ("ID") VALUES (1), (2)',
-    'INSERT INTO "REVIEW_DB"."LIVE_TESTS"."users" ("ID") SELECT PARSE_JSON(column1) FROM VALUES (1)',
-    'INSERT ALL INTO REVIEW_DB.LIVE_TESTS.A INTO REVIEW_DB.LIVE_TESTS.B SELECT 1',
-    'DROP TABLE IF EXISTS "REVIEW_DB"."LIVE_TESTS"."users"',
-    'DROP SEMANTIC VIEW IF EXISTS "REVIEW_DB"."LIVE_TESTS".shop',
-    'ALTER TABLE REVIEW_DB.LIVE_TESTS.A RENAME TO REVIEW_DB.LIVE_TESTS.B',
-    'ALTER TABLE REVIEW_DB.LIVE_TESTS.A SWAP WITH REVIEW_DB.LIVE_TESTS.B',
-    'DELETE FROM REVIEW_DB.LIVE_TESTS.A WHERE 1 = 1',
-    'UPDATE REVIEW_DB.LIVE_TESTS.A SET x = 1',
-    'MERGE INTO REVIEW_DB.LIVE_TESTS.A USING OTHER_DB.S.B ON a.i = b.i '
-    'WHEN MATCHED THEN UPDATE SET x = 1',
-    'TRUNCATE TABLE IF EXISTS REVIEW_DB.LIVE_TESTS.A',
-    'COPY INTO REVIEW_DB.LIVE_TESTS.A FROM @REVIEW_DB.LIVE_TESTS.UPLOADS',
-    'PUT file:///tmp/a.csv @REVIEW_DB.LIVE_TESTS.UPLOADS',
-    'REMOVE @REVIEW_DB.LIVE_TESTS.UPLOADS/a.csv',
-    'GRANT SELECT ON TABLE REVIEW_DB.LIVE_TESTS.A TO ROLE R',
-    "COMMENT ON TABLE REVIEW_DB.LIVE_TESTS.A IS 'DROP TABLE OTHER_DB.S.T'",
-    'CREATE SCHEMA IF NOT EXISTS REVIEW_DB.LIVE_TESTS',
-    'CALL SYSTEM$CREATE_SEMANTIC_VIEW_FROM_YAML(\'"REVIEW_DB"."LIVE_TESTS"\', '
-    '$$\nname: shop\ntables: [{base_table: {database: OTHER_DB}}]\n$$)',
-    '-- DROP TABLE OTHER_DB.S.T\nSELECT 1',
-    '/* DROP TABLE OTHER_DB.S.T; */ SELECT 1;',
-    "SELECT 'x; DROP TABLE OTHER_DB.S.T'",
-    '// DROP TABLE OTHER_DB.S.T\nSELECT 1',
-    'SELECT 1; SELECT 2;',
-]
+ALLOWED = {
+    'snowflake': [
+        'SELECT * FROM "OTHER_DB"."PUBLIC"."T"',
+        "SELECT REPLACE(a, 'x', 'y') FROM OTHER_DB.S.T",
+        'WITH TMP AS (SELECT 1 AS x) SELECT * FROM TMP',
+        'SELECT SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW(?)',
+        'SELECT CURRENT_DATABASE(), CURRENT_SCHEMA()',
+        "SHOW PARAMETERS LIKE 'TIMEZONE' IN SESSION",
+        'SHOW TABLES IN SCHEMA "REVIEW_DB"."LIVE_TESTS"',
+        'SHOW TABLES LIKE ? IN SCHEMA OTHER_DB.S',
+        'SHOW IMPORTED KEYS IN TABLE OTHER_DB.S.T',
+        'DESCRIBE TABLE OTHER_DB.S.T',
+        'ALTER SESSION SET STATEMENT_TIMEOUT_IN_SECONDS = 60',
+        'CREATE TABLE "REVIEW_DB"."LIVE_TESTS"."users" ("ID" NUMBER(38,0) NOT NULL, '
+        'PRIMARY KEY ("ID"))',
+        'CREATE TABLE "REVIEW_DB"."LIVE_TESTS"."orders" ("U" NUMBER(38,0), '
+        'FOREIGN KEY ("U") REFERENCES "REVIEW_DB"."LIVE_TESTS"."users" ("ID"))',
+        'create or replace table review_db.live_tests.t (i int)',
+        'INSERT INTO "REVIEW_DB"."LIVE_TESTS"."users" ("ID") SELECT '
+        "CAST(column1 AS NUMBER(38,0)) FROM VALUES ('1'), (NULL)",
+        'DROP TABLE IF EXISTS "REVIEW_DB"."LIVE_TESTS"."users"',
+        'DROP SEMANTIC VIEW IF EXISTS "REVIEW_DB"."LIVE_TESTS".shop',
+        'CALL SYSTEM$CREATE_SEMANTIC_VIEW_FROM_YAML(\'"REVIEW_DB"."LIVE_TESTS"\', '
+        '$$name: shop\ntables:\n  - name: users\n    base_table:\n'
+        '      database: REVIEW_DB\n      schema: LIVE_TESTS\n      table: \'"users"\'\n$$)',
+    ],
+    'databricks': [
+        'SELECT * FROM `other`.`s`.`t`',
+        'SELECT current_timezone() AS zone',
+        'SHOW TABLES IN `review-catalog`.`live_tests`',
+        'DESCRIBE TABLE EXTENDED `other`.s.t',
+        'USE CATALOG `review-catalog`',
+        'USE SCHEMA `live_tests`',
+        'CREATE TABLE `review-catalog`.`live_tests`.`users` (`id` BIGINT)',
+        'CREATE TABLE `review-catalog`.live_tests.t (`a b` INT) '
+        "TBLPROPERTIES ('delta.columnMapping.mode' = 'name')",
+        'INSERT INTO `review-catalog`.`live_tests`.`users` (`id`) VALUES '
+        "(CAST(1 AS BIGINT)), (CAST(X'6869' AS STRING)), (DATE'2024-01-01')",
+        'DROP TABLE IF EXISTS `review-catalog`.`live_tests`.`users`',
+        'DROP VIEW IF EXISTS `review-catalog`.`live_tests`.`m`',
+        'CREATE OR REPLACE VIEW `review-catalog`.`live_tests`.`m` WITH METRICS '
+        'LANGUAGE YAML AS $$\nversion: 0.1\nsource: other.s.t\n$$',
+    ],
+    'postgres': [
+        'SELECT current_schema()',
+        'SELECT table_name FROM information_schema.tables WHERE table_schema = %s',
+        'SELECT setseed(%s)',
+        'CREATE TABLE "live_tests"."users" ("id" bigint NOT NULL)',
+        'CREATE TYPE "live_tests"."users_tags" AS ("a" text, "b" bigint[])',
+        'DROP TABLE IF EXISTS "live_tests"."users"',
+        'DROP TYPE IF EXISTS "live_tests"."users_tags"',
+        'COPY "live_tests"."users" FROM STDIN',
+    ],
+}
 
-SNOWFLAKE_REFUSED = [
-    # Another schema or database.
-    'CREATE TABLE OTHER_DB.LIVE_TESTS.T (i INT)',
-    'CREATE TABLE REVIEW_DB.OTHER.T (i INT)',
-    'DROP TABLE OTHER_DB.S.T',
-    'INSERT INTO OTHER_DB.S.T VALUES (1)',
-    'INSERT ALL INTO REVIEW_DB.LIVE_TESTS.A INTO OTHER_DB.S.B SELECT 1',
-    'ALTER TABLE REVIEW_DB.LIVE_TESTS.A RENAME TO OTHER_DB.S.B',
-    'ALTER TABLE REVIEW_DB.LIVE_TESTS.A SWAP WITH OTHER_DB.S.B',
-    'DELETE FROM OTHER_DB.S.T',
-    'UPDATE OTHER_DB.S.T SET x = 1',
-    'MERGE INTO OTHER_DB.S.T USING REVIEW_DB.LIVE_TESTS.B ON 1 = 1 '
-    'WHEN MATCHED THEN DELETE',
-    'COPY INTO @OTHER_DB.S.STAGE FROM REVIEW_DB.LIVE_TESTS.A',
-    "COPY INTO 's3://bucket/x' FROM REVIEW_DB.LIVE_TESTS.A",
-    'PUT file:///tmp/a.csv @~',
-    "PUT file:///tmp/a.csv '@REVIEW_DB.LIVE_TESTS.UPLOADS'",
-    'GRANT OWNERSHIP ON TABLE OTHER_DB.S.T TO ROLE R',
-    'GRANT ROLE R TO USER U',
-    'GRANT SELECT ON ALL TABLES IN SCHEMA REVIEW_DB.LIVE_TESTS TO ROLE R',
-    'UNDROP TABLE OTHER_DB.S.T',
-    "CALL SYSTEM$CREATE_SEMANTIC_VIEW_FROM_YAML('OTHER_DB.S', $$name: v$$)",
-    # Case: Snowflake's quoted names are exact.
-    'CREATE TABLE "review_db"."live_tests".t (i INT)',
-    # Unqualified or partly qualified.
-    'CREATE TABLE T (i INT)',
-    'CREATE TABLE LIVE_TESTS.T (i INT)',
-    'DROP TABLE IF EXISTS "users"',
-    'INSERT INTO T VALUES (1)',
-    'TRUNCATE TABLE T',
-    # Schemas, databases and the account as a whole.
-    'DROP SCHEMA REVIEW_DB.LIVE_TESTS',
-    'DROP SCHEMA IF EXISTS REVIEW_DB.LIVE_TESTS',
-    'CREATE SCHEMA REVIEW_DB.LIVE_TESTS',
-    'CREATE SCHEMA IF NOT EXISTS REVIEW_DB.OTHER',
-    'CREATE OR REPLACE SCHEMA REVIEW_DB.LIVE_TESTS',
-    'ALTER SCHEMA REVIEW_DB.LIVE_TESTS RENAME TO REVIEW_DB.X',
-    'CREATE DATABASE X',
-    'DROP DATABASE REVIEW_DB',
-    'ALTER WAREHOUSE W SUSPEND',
-    "ALTER USER U SET PASSWORD = 'x'",
-    # Not recognised, so refused.
-    'CALL OTHER_DB.S.PROC()',
-    "EXECUTE IMMEDIATE 'DROP TABLE OTHER_DB.S.T'",
-    'BEGIN DROP TABLE OTHER_DB.S.T; END',
-    "CREATE TABLE IDENTIFIER('REVIEW_DB.LIVE_TESTS.T') (i INT)",
-    'WITH x AS (SELECT 1) INSERT INTO OTHER_DB.S.T SELECT * FROM x',
-    'DECLARE x INT',
-    '(SELECT 1)',
-    # Multi-statement text: each statement checked.
-    'SELECT 1; DROP TABLE OTHER_DB.S.T',
-    'CREATE TABLE REVIEW_DB.LIVE_TESTS.T (i INT); DROP TABLE OTHER_DB.S.T;',
-    "SELECT 'a'; DROP TABLE OTHER_DB.S.T -- ;",
-    # Unterminated text, so the rest cannot be read.
-    "SELECT 'x; DROP TABLE OTHER_DB.S.T",
-    'SELECT 1 /* DROP TABLE OTHER_DB.S.T',
-    'SELECT $$ x',
-]
+REFUSED = {
+    'snowflake': [
+        # Another schema or database, or not fully qualified.
+        'CREATE TABLE OTHER_DB.LIVE_TESTS.T (i INT)',
+        'CREATE TABLE REVIEW_DB.OTHER.T (i INT)',
+        'CREATE TABLE "review_db"."live_tests".t (i INT)',
+        'CREATE TABLE LIVE_TESTS.T (i INT)',
+        'CREATE TABLE T (i INT)',
+        'DROP TABLE OTHER_DB.S.T',
+        'DROP TABLE IF EXISTS "users"',
+        'INSERT INTO OTHER_DB.S.T VALUES (1)',
+        'INSERT INTO T VALUES (1)',
+        'CREATE TABLE REVIEW_DB.LIVE_TESTS.A (u INT REFERENCES OTHER_DB.S.B (i))',
+        # Forms the guard does not admit.
+        'INSERT ALL INTO REVIEW_DB.LIVE_TESTS.A INTO OTHER_DB.S.B SELECT 1',
+        'CREATE TABLE REVIEW_DB.LIVE_TESTS.T AS SELECT * FROM OTHER_DB.S.T',
+        'DELETE FROM REVIEW_DB.LIVE_TESTS.A',
+        'TRUNCATE TABLE REVIEW_DB.LIVE_TESTS.A',
+        'ALTER TABLE REVIEW_DB.LIVE_TESTS.A RENAME TO OTHER_DB.S.B',
+        'DROP SCHEMA REVIEW_DB.LIVE_TESTS',
+        'CREATE SCHEMA IF NOT EXISTS REVIEW_DB.LIVE_TESTS',
+        'DROP TABLE REVIEW_DB.LIVE_TESTS.A CASCADE',
+        'USE SCHEMA OTHER_DB.S; DROP TABLE OTHER_DB.S.T',
+        'ALTER SESSION SET AUTOCOMMIT = FALSE',
+        'BEGIN',
+        'CALL OTHER_DB.S.PROC()',
+        "EXECUTE IMMEDIATE 'DROP TABLE OTHER_DB.S.T'",
+        "CREATE TABLE IDENTIFIER('REVIEW_DB.LIVE_TESTS.T') (i INT)",
+        'WITH x AS (SELECT 1) INSERT INTO OTHER_DB.S.T SELECT * FROM x',
+        # Codex r4: COPY's PURGE and a task's body.
+        'COPY INTO REVIEW_DB.LIVE_TESTS.T FROM @OTHER_DB.PUBLIC.STAGE PURGE=TRUE',
+        "CREATE TASK REVIEW_DB.LIVE_TESTS.T SCHEDULE = '1 MINUTE' AS "
+        'DELETE FROM OTHER_DB.PUBLIC.T',
+        'ALTER TASK REVIEW_DB.LIVE_TESTS.T RESUME',
+        "SELECT SYSTEM$CANCEL_QUERY('outside-query-id')",
+        # Codex r4: the CALL's schema argument as an expression.
+        "CALL SYSTEM$CREATE_SEMANTIC_VIEW_FROM_YAML('REVIEW_DB.LIVE_TESTS' || "
+        "'_OTHER', $$name: v$$)",
+        # Claude r4: comments the engine reads differently.
+        "SELECT 1 /**/// '\n; DROP TABLE OTHER.PROD.T --'",
+        '-- a comment\nSELECT 1',
+        'SELECT 1 // a comment',
+        'SELECT 1 /* a comment */',
+        # Claude r4: deferred execution and state-changing functions.
+        "CREATE TASK REVIEW_DB.LIVE_TESTS.T WAREHOUSE = WH SCHEDULE = '1 MINUTE' "
+        'AS DELETE FROM OTHER.PROD.T',
+        "CREATE ALERT REVIEW_DB.LIVE_TESTS.A WAREHOUSE = WH SCHEDULE = '1 MINUTE' "
+        'IF (EXISTS (SELECT 1)) THEN DROP TABLE OTHER.PROD.T',
+        'CREATE PIPE REVIEW_DB.LIVE_TESTS.P AUTO_INGEST = TRUE AS COPY INTO '
+        'OTHER.PROD.T FROM @REVIEW_DB.LIVE_TESTS.S',
+        'CREATE PROCEDURE REVIEW_DB.LIVE_TESTS.P() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$',
+        "SELECT SYSTEM$PIPE_FORCE_RESUME('OTHER.PROD.P')",
+        "SELECT SYSTEM$TASK_DEPENDENTS_ENABLE('OTHER.PROD.ROOT_TASK')",
+        'SHOW TABLES ->> DROP TABLE OTHER.PROD.T',
+        'SELECT 1 ->> SELECT 2',
+        # Claude r4: the CALL's schema string, YAML name and tables.
+        "CALL SYSTEM$CREATE_SEMANTIC_VIEW_FROM_YAML('\\tEVIEW_DB.LIVE_TESTS', $$name: v$$)",
+        "CALL SYSTEM$CREATE_SEMANTIC_VIEW_FROM_YAML('REVIEW_DB.LIVE_TESTS', "
+        '$$name: OTHER.PROD.V\ntables: []$$)',
+        "CALL SYSTEM$CREATE_SEMANTIC_VIEW_FROM_YAML('REVIEW_DB.LIVE_TESTS', "
+        '$$name: v\ntables:\n  - name: t\n    base_table:\n      database: OTHER\n'
+        '      schema: PROD\n      table: T\n$$)',
+        "CALL SYSTEM$CREATE_SEMANTIC_VIEW_FROM_YAML('REVIEW_DB.LIVE_TESTS', "
+        '$$name: v$$, TRUE)',
+        "CALL SYSTEM$CREATE_SEMANTIC_VIEW_FROM_YAML('OTHER_DB.S', $$name: v$$)",
+        # Quoted names holding their own quote; a second statement.
+        'DROP TABLE "REVIEW_DB"."LIVE_TESTS"."a""b"',
+        'SELECT 1; SELECT 2',
+        'SELECT 1;',
+        "SELECT 'x\\'; DROP TABLE OTHER.PROD.T",
+        "SELECT 'x; DROP TABLE OTHER_DB.S.T",
+    ],
+    'databricks': [
+        'CREATE TABLE `other`.`live_tests`.t (i INT)',
+        'CREATE TABLE "review-catalog"."live_tests".t (i INT)',
+        'CREATE TABLE review-catalog.live_tests.t (i INT)',
+        'DROP TABLE live_tests.t',
+        "INSERT OVERWRITE DIRECTORY '/tmp/x' SELECT 1",
+        "CREATE TABLE `review-catalog`.live_tests.t (i INT) LOCATION 's3://x'",
+        'DROP SCHEMA `review-catalog`.live_tests CASCADE',
+        # Claude r4: a raw string and nested comments.
+        "WITH a AS (SELECT r'\\') INSERT INTO other.prod.t SELECT 1 --'",
+        "WITH a AS (SELECT r'x') SELECT 1",
+        "WITH a AS (SELECT 1) /* /* */ ' */ INSERT INTO other.prod.t SELECT 1 --'",
+        # Claude r4 P2-1: OPTIONS (path ...).
+        'CREATE TABLE `review-catalog`.live_tests.t USING DELTA OPTIONS '
+        "(path 's3://bucket/other/prod/t') AS SELECT 1 a",
+        'SELECT 1 |> WHERE TRUE',
+        'MERGE INTO `review-catalog`.live_tests.t USING `other`.s.u ON TRUE '
+        'WHEN MATCHED THEN DELETE',
+        'CALL `review-catalog`.live_tests.p()',
+    ],
+    'postgres': [
+        # Codex r4: more than one target, a second statement, CASCADE.
+        'DROP TABLE IF EXISTS "live_tests"."a", "other"."b"',
+        'DROP TABLE IF EXISTS "live_tests"."a"; DROP TABLE "other"."b"',
+        'DROP TABLE IF EXISTS "live_tests"."a" CASCADE',
+        'DROP TYPE IF EXISTS "live_tests"."t" CASCADE',
+        'CREATE TABLE "live_tests"."t" (a int); DROP TABLE public.x',
+        'DROP TABLE "outside"."t"',
+        'CREATE TABLE "t" (a int)',
+        'COPY "live_tests"."t" TO PROGRAM \'rm -rf /\'',
+        'COPY "live_tests"."t" FROM \'/etc/passwd\'',
+        'WITH x AS (DELETE FROM other.t RETURNING *) SELECT * FROM x',
+        'SELECT * INTO other.t FROM live_tests.t',
+        "SELECT set_config('search_path', 'other', false)",
+        "SELECT nextval('other.seq')",
+        'SELECT $a$ $$ $a$',
+        "SELECT E'x\\'; DROP TABLE other.t; --'",
+        "SELECT U&'d\\0061t\\+000061'",
+        'CREATE TABLE "live_tests"."t" (a int DEFAULT nextval(\'other.s\'))',
+    ],
+}
 
-DATABRICKS_ALLOWED = [
-    'SELECT * FROM `other`.`s`.`t`',
-    'SELECT current_timezone() AS zone',
-    'SELECT "DROP TABLE x" AS s',
-    'SHOW TABLES IN `review-catalog`.`live_tests`',
-    'USE CATALOG `other`',
-    "SET TIME ZONE 'UTC'",
-    'CREATE TABLE `review-catalog`.`live_tests`.`users` (`id` BIGINT)',
-    'CREATE TABLE IF NOT EXISTS `Review-Catalog`.LIVE_TESTS.t (i INT)',
-    'INSERT INTO `review-catalog`.`live_tests`.`users` (`id`) VALUES (1)',
-    'INSERT OVERWRITE TABLE `review-catalog`.`live_tests`.t SELECT 1',
-    'DROP TABLE IF EXISTS `review-catalog`.`live_tests`.`users`',
-    'DROP VIEW IF EXISTS `review-catalog`.`live_tests`.`m`',
-    'CREATE OR REPLACE VIEW `review-catalog`.`live_tests`.`m` WITH METRICS '
-    'LANGUAGE YAML AS $$\nversion: 0.1\nsource: other.s.t\n$$',
-    'CREATE VOLUME IF NOT EXISTS `review-catalog`.live_tests.uploads',
-    'OPTIMIZE `review-catalog`.live_tests.t',
-    'MSCK REPAIR TABLE `review-catalog`.live_tests.t',
-    'CREATE SCHEMA IF NOT EXISTS `review-catalog`.live_tests',
-]
 
-DATABRICKS_REFUSED = [
-    'CREATE TABLE `other`.`live_tests`.t (i INT)',
-    'CREATE TABLE `review-catalog`.`other`.t (i INT)',
-    'DROP TABLE `other`.`s`.`t`',
-    'INSERT INTO `other`.s.t VALUES (1)',
-    "INSERT OVERWRITE DIRECTORY '/tmp/x' SELECT 1",
-    # A double-quoted text is a string on Databricks, never a name.
-    'CREATE TABLE "review-catalog"."live_tests".t (i INT)',
-    # Unquoted, the hyphen splits the catalog's name.
-    'CREATE TABLE review-catalog.live_tests.t (i INT)',
-    'CREATE TABLE t (i INT)',
-    'DROP TABLE live_tests.t',
-    "CREATE TABLE `review-catalog`.live_tests.t (i INT) LOCATION 's3://x'",
-    'DROP SCHEMA `review-catalog`.live_tests CASCADE',
-    'DROP CATALOG `review-catalog`',
-    'CALL `review-catalog`.live_tests.p()',
-    "CALL SYSTEM$CREATE_SEMANTIC_VIEW_FROM_YAML('`review-catalog`.live_tests', $$x$$)",
-    'SELECT 1; DROP TABLE `other`.s.t',
-]
+@pytest.mark.parametrize(
+    ('dialect', 'sql'),
+    [(d, sql) for d, texts in ALLOWED.items() for sql in texts],
+)
+def test_the_admitted_reads_and_test_schema_writes_pass(
+    dialect: str, sql: str
+) -> None:
+    GUARDS[dialect].check(sql)
 
 
-@pytest.mark.parametrize('sql', SNOWFLAKE_ALLOWED)
-def test_snowflake_reads_and_test_schema_writes_pass(sql: str) -> None:
-    SNOWFLAKE.check(sql)
-
-
-@pytest.mark.parametrize('sql', SNOWFLAKE_REFUSED)
-def test_snowflake_writes_elsewhere_are_refused(sql: str) -> None:
+@pytest.mark.parametrize(
+    ('dialect', 'sql'),
+    [(d, sql) for d, texts in REFUSED.items() for sql in texts],
+)
+def test_everything_else_is_refused(dialect: str, sql: str) -> None:
     with pytest.raises(wg.WriteRefused):
-        SNOWFLAKE.check(sql)
-
-
-@pytest.mark.parametrize('sql', DATABRICKS_ALLOWED)
-def test_databricks_reads_and_test_schema_writes_pass(sql: str) -> None:
-    DATABRICKS.check(sql)
-
-
-@pytest.mark.parametrize('sql', DATABRICKS_REFUSED)
-def test_databricks_writes_elsewhere_are_refused(sql: str) -> None:
-    with pytest.raises(wg.WriteRefused):
-        DATABRICKS.check(sql)
+        GUARDS[dialect].check(sql)
 
 
 def test_the_test_schema_comes_from_the_environment(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    for name in (
-        'SDM_LIVE_TEST_DATABASE',
-        'SDM_LIVE_TEST_SCHEMA',
-        'SDM_LIVE_SNOWFLAKE_TEST_DATABASE',
-        'SDM_LIVE_SNOWFLAKE_TEST_SCHEMA',
-    ):
-        monkeypatch.delenv(name, raising=False)
+    for dialect in ('', 'SNOWFLAKE_', 'POSTGRES_'):
+        for part in ('DATABASE', 'SCHEMA'):
+            monkeypatch.delenv(f'SDM_LIVE_{dialect}TEST_{part}', raising=False)
     with pytest.raises(wg.WriteRefused, match='no test schema'):
         wg.WriteGuard('snowflake')
+    assert wg.from_environment() == {d: None for d in wg.DIALECTS}
     with pytest.raises(ValueError):
-        wg.WriteGuard('postgres', 'A', 'B')
+        wg.WriteGuard('mysql', 'A', 'B')
     monkeypatch.setenv('SDM_LIVE_TEST_DATABASE', 'REVIEW_DB')
     monkeypatch.setenv('SDM_LIVE_TEST_SCHEMA', 'LIVE_TESTS')
-    guard = wg.WriteGuard('snowflake')
-    guard.check('DROP TABLE REVIEW_DB.LIVE_TESTS.T')
-    # A warehouse's own variables come first.
-    monkeypatch.setenv('SDM_LIVE_SNOWFLAKE_TEST_SCHEMA', 'OTHER')
-    guard = wg.WriteGuard('snowflake')
-    guard.check('DROP TABLE REVIEW_DB.OTHER.T')
+    wg.WriteGuard('snowflake').check('DROP TABLE REVIEW_DB.LIVE_TESTS.T')
+    # A warehouse's own variables come first; Postgres needs no database.
+    monkeypatch.setenv('SDM_LIVE_POSTGRES_TEST_SCHEMA', 'pg_tests')
+    wg.WriteGuard('postgres').check('DROP TABLE pg_tests.t')
     with pytest.raises(wg.WriteRefused):
-        guard.check('DROP TABLE REVIEW_DB.LIVE_TESTS.T')
+        wg.WriteGuard('postgres').check('DROP TABLE live_tests.t')
 
 
-class _Cursor:
-    def __init__(self, seen: list[str]) -> None:
-        self.seen = seen
+def test_every_case_the_loader_writes_passes_in_the_test_schema_only() -> None:
+    # Every statement the loader writes for every S1 case passes in the
+    # test schema, on each warehouse and on Lakebase; in another schema
+    # every write is refused.
+    runner = _load(
+        't33_guard_run_python', ROOT / 'contract/runners/run_python.py'
+    )
+    bases = runner.load_bases()
+    checked = 0
+    for path in sorted((ROOT / 'contract/cases').glob('s1/**/*.json')):
+        for case, _ in runner.load_cases([path]):
+            duck = runner._connection(case, bases)
+            try:
+                for engine, namespace in (
+                    ('snowflake', ('REVIEW_DB', 'LIVE_TESTS')),
+                    ('databricks', ('review-catalog', 'live_tests')),
+                ):
+                    try:
+                        ours, _ = databases.warehouse_statements(
+                            duck, engine, namespace
+                        )
+                        theirs, _ = databases.warehouse_statements(
+                            duck, engine, ('OTHER', 'S')
+                        )
+                    except databases.Unloadable:
+                        continue
+                    for statement in ours:
+                        _admitted(GUARDS[engine], statement, case['id'])
+                    for statement in theirs:
+                        with pytest.raises(wg.WriteRefused):
+                            GUARDS[engine].check(statement)
+                    checked += 1
+                for statement in _postgres_statements(duck, 'live_tests'):
+                    _admitted(POSTGRES, statement, case['id'])
+                for statement in _postgres_statements(duck, 'other'):
+                    with pytest.raises(wg.WriteRefused):
+                        POSTGRES.check(statement)
+            finally:
+                duck.close()
+    assert checked > 500, checked
 
-    def execute(self, sql: str, *arguments: Any) -> _Cursor:
-        self.seen.append(sql)
-        return self
 
-    def executemany(self, sql: str, rows: Any) -> None:
-        self.seen.append(sql)
+#: The cases whose names hold their own quote or a line break, which the
+#: guard's one strict name pattern refuses (the owner's allowlist
+#: decision): never recorded live.
+QUOTE_CASES = ('name.backtick-', 'name.line-break-', 'name.double-quote-')
 
-    def execute_async(self, sql: str) -> dict[str, str]:
-        self.seen.append(sql)
-        return {'queryId': 'q'}
 
-    def fetchall(self) -> list[tuple[int]]:
-        return [(1,)]
+def _admitted(guard: Any, statement: str, case: str) -> None:
+    try:
+        guard.check(statement)
+    except wg.WriteRefused as refused:
+        assert case.startswith(QUOTE_CASES), (
+            case,
+            str(refused),
+            statement[:200],
+        )
+        assert 'quoted name' in str(refused), refused
 
-    def close(self) -> None:
+
+def _postgres_statements(duck: Any, schema: str) -> list[str]:
+    r"""What the loader runs on Lakebase for ``duck``'s tables, recorded
+    on a stand-in connection; an unloadable case writes none."""
+    ran: list[str] = []
+
+    class Copy:
+        def __enter__(self) -> Copy:
+            return self
+
+        def __exit__(self, *exc: Any) -> None:
+            pass
+
+        def write_row(self, row: Any) -> None:
+            pass
+
+    class Cursor:
+        def copy(self, statement: str) -> Copy:
+            ran.append(statement)
+            return Copy()
+
+    class Connection:
+        def execute(self, statement: str, *arguments: Any) -> Any:
+            ran.append(statement)
+            return self
+
+        def cursor(self) -> Cursor:
+            return Cursor()
+
+        def commit(self) -> None:
+            pass
+
+    try:
+        databases._load_postgres(duck, Connection(), schema, replace=True)
+    except databases.Unloadable:
+        return []
+    return ran
+
+
+def test_the_loaders_semantic_view_passes_and_its_drop() -> None:
+    # The semantic view case's own CALL, as CaseSchema writes it.
+    case = json.loads((ROOT / 'tests/t33-semantic-view-case.json').read_text())
+    view = case['input']['view']
+    ran: list[str] = []
+    schema = databases.CaseSchema(
+        'snowflake', ran.append, ('REVIEW_DB', 'LIVE_TESTS')
+    )
+    schema.tables = ['users', 'orders']
+    yaml = (
+        view['yaml']
+        .replace('{catalog}', 'REVIEW_DB')
+        .replace('{schema}', 'LIVE_TESTS')
+    )
+    schema.create_view('semantic_view', view['name'], yaml)
+    schema.clear()
+    assert ran[0].startswith('CALL SYSTEM$CREATE_SEMANTIC_VIEW_FROM_YAML(')
+    for statement in ran:
+        SNOWFLAKE.check(statement)
+    # The same YAML naming another schema's tables is refused.
+    elsewhere = ran[0].replace('database: REVIEW_DB', 'database: OTHER_DB')
+    assert elsewhere != ran[0]
+    with pytest.raises(wg.WriteRefused, match='outside the test schema'):
+        SNOWFLAKE.check(elsewhere)
+
+
+# The drivers.
+
+
+def _fake_drivers(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
+    r"""Snowflake's, Snowpark's, Databricks SQL's and Spark's classes as
+    small fakes under their modules' names, each recording what reaches
+    it."""
+    seen: list[str] = []
+
+    class SnowflakeCursor:
+        def execute(self, command: str, *a: Any, **k: Any) -> SnowflakeCursor:
+            seen.append(command)
+            return self
+
+        def executemany(self, command: str, seq: Any) -> None:
+            seen.append(command)
+
+        def execute_async(self, command: str) -> dict[str, str]:
+            seen.append(command)
+            return {'queryId': 'q'}
+
+    class DictCursor(SnowflakeCursor):
         pass
 
+    class OwnCursor(SnowflakeCursor):
+        def execute(self, command: str, *a: Any, **k: Any) -> OwnCursor:
+            seen.append('own:' + command)
+            return self
 
-class _Driver:
-    def __init__(self) -> None:
-        self.seen: list[str] = []
+    class SnowflakeConnection:
+        def cursor(self) -> SnowflakeCursor:
+            return SnowflakeCursor()
 
-    def cursor(self) -> _Cursor:
-        return _Cursor(self.seen)
+        def execute_string(self, text: str) -> list[SnowflakeCursor]:
+            seen.append(text)
+            return [SnowflakeCursor()]
 
-    def execute_string(self, sql: str) -> list[Any]:
-        self.seen.append(sql)
-        return []
+        def execute_stream(self, stream: Any) -> list[Any]:
+            seen.append('stream')
+            return []
 
-    def execute_stream(self, stream: Any) -> list[Any]:
-        self.seen.append('stream')
-        return []
+    class Session:
+        connection = SnowflakeConnection()
 
-    def close(self) -> None:
-        pass
+        def sql(self, query: str) -> str:
+            seen.append(query)
+            return query
+
+    class Cursor:
+        def execute(self, operation: str, parameters: Any = None) -> None:
+            seen.append(operation)
+
+    class SparkSession:
+        def sql(self, sqlQuery: str, args: Any = None) -> str:
+            seen.append(sqlQuery)
+            return sqlQuery
+
+    class DataFrame:
+        @property
+        def write(self) -> str:
+            seen.append('write')
+            return 'writer'
+
+        def writeTo(self, table: str) -> None:
+            seen.append('writeTo')
+
+    class Catalog:
+        def createTable(self, name: str) -> None:
+            seen.append('createTable')
+
+    for module, classes in {
+        'snowflake.connector.cursor': [SnowflakeCursor, DictCursor, OwnCursor],
+        'snowflake.connector.connection': [SnowflakeConnection],
+        'snowflake.snowpark.session': [Session],
+        'databricks.sql.client': [Cursor],
+        'pyspark.sql.session': [SparkSession],
+        'pyspark.sql.dataframe': [DataFrame],
+        'pyspark.sql.catalog': [Catalog],
+    }.items():
+        fake = types.ModuleType(module)
+        for cls in classes:
+            setattr(fake, cls.__name__, cls)
+        monkeypatch.setitem(sys.modules, module, fake)
+    return {'seen': seen, **{c.__name__: c for c in (
+        SnowflakeCursor, DictCursor, OwnCursor, SnowflakeConnection, Session,
+        Cursor, SparkSession, DataFrame, Catalog,
+    )}}  # fmt: skip
 
 
-def test_a_guarded_connection_refuses_before_the_driver_sees_the_text() -> None:
-    driver = _Driver()
-    connection = wg.guard_connection(driver, SNOWFLAKE)
-    write = 'DROP TABLE OTHER_DB.S.T'
-    with connection.cursor() as cursor:
+@pytest.fixture
+def installed(monkeypatch: pytest.MonkeyPatch) -> Any:
+    drivers = _fake_drivers(monkeypatch)
+    for name in ('pyspark.sql.connect.session', 'pyspark.sql.connect.dataframe',
+                 'pyspark.sql.connect.catalog'):  # fmt: skip
+        monkeypatch.setitem(sys.modules, name, None)  # absent: not importable
+    undo = wg.install(GUARDS)
+    try:
+        yield drivers
+    finally:
+        undo()
+
+
+OUTSIDE = 'DROP TABLE OTHER_DB.PUBLIC.T'
+
+
+def test_every_snowflake_entry_point_is_guarded(installed: Any) -> None:
+    d, seen = installed, installed['seen']
+    connection = d['SnowflakeConnection']()
+    calls = [
+        lambda: connection.cursor().execute(OUTSIDE),
+        lambda: connection.cursor().execute(command=OUTSIDE),
+        lambda: connection.cursor().executemany(OUTSIDE, [()]),
+        lambda: connection.cursor().execute_async(OUTSIDE),
+        lambda: d['DictCursor']().execute(OUTSIDE),
+        lambda: d['OwnCursor']().execute(OUTSIDE),
+        lambda: connection.execute_string(OUTSIDE),
+        lambda: connection.execute_stream(None),
+        # Codex r4 P0-2: execute_string's cursors are the driver's own, and
+        # guarded as every cursor is.
+        lambda: connection.execute_string('SELECT 1')[0].execute(OUTSIDE),
+        # Codex r4 P0-1, Claude r4 P1-1: Snowpark's sql and its connection.
+        lambda: d['Session']().sql(OUTSIDE),
+        lambda: d['Session']().connection.cursor().execute(OUTSIDE),
+    ]
+    for call in calls:
+        with pytest.raises(wg.WriteRefused):
+            call()
+    assert seen == ['SELECT 1']
+    connection.cursor().execute('SELECT 1')
+    d['OwnCursor']().execute('DROP TABLE REVIEW_DB.LIVE_TESTS.T')
+    assert seen[1:] == ['SELECT 1', 'own:DROP TABLE REVIEW_DB.LIVE_TESTS.T']
+
+
+def test_every_databricks_and_spark_entry_point_is_guarded(
+    installed: Any,
+) -> None:
+    d, seen = installed, installed['seen']
+    for call in (
+        lambda: d['Cursor']().execute('DROP TABLE `other`.s.t'),
+        lambda: d['SparkSession']().sql('DROP TABLE `other`.s.t'),
+        lambda: d['SparkSession']().sql(sqlQuery='DROP TABLE `other`.s.t'),
+        lambda: d['DataFrame']().write,
+        lambda: d['DataFrame']().writeTo('`other`.s.t'),
+        lambda: d['Catalog']().createTable('t'),
+    ):
+        with pytest.raises(wg.WriteRefused):
+            call()
+    assert seen == []
+    d['SparkSession']().sql('USE CATALOG `review-catalog`')
+    assert seen == ['USE CATALOG `review-catalog`']
+
+
+def test_install_is_undone_and_a_dialect_with_no_schema_refuses_all(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    d = _fake_drivers(monkeypatch)
+    original = d['SnowflakeCursor'].__dict__['execute']
+    undo = wg.install({'snowflake': None})
+    try:
+        with pytest.raises(wg.WriteRefused, match='no snowflake test schema'):
+            d['SnowflakeCursor']().execute('SELECT 1')
+        with pytest.raises(RuntimeError, match='installed already'):
+            wg.install(GUARDS)
+    finally:
+        undo()
+    assert d['SnowflakeCursor'].__dict__['execute'] is original
+    assert 'execute' not in d['DictCursor'].__dict__
+    d['SnowflakeCursor']().execute('SELECT 1')
+    # A driver module whose class moved stops the install, undoing it.
+    monkeypatch.setitem(
+        sys.modules, 'databricks.sql.client', types.ModuleType('x')
+    )
+    with pytest.raises(RuntimeError, match='no class Cursor'):
+        wg.install(GUARDS)
+    assert d['SnowflakeCursor'].__dict__['execute'] is original
+
+
+def test_psycopgs_own_classes_are_guarded() -> None:
+    # Codex r4 P0-1/P0-4, Claude r4 P1-1: Lakebase's psycopg connection,
+    # its cursors (a subclass's included) and COPY, on psycopg's real
+    # classes; a refused statement never reaches them.
+    import psycopg
+    from psycopg import sql
+
+    def bare(cls: type) -> Any:
+        # Unconnected, and closed, so its finaliser has nothing to do.
+        made = object.__new__(cls)
+        made._closed = True
+        return made
+
+    undo = wg.install(GUARDS)
+    try:
+        outside = 'DROP TABLE "outside"."t"'
+        composed = sql.SQL('DROP TABLE {}').format(
+            sql.Identifier('outside', 't')
+        )
         for call in (
-            lambda: cursor.execute(write),
-            lambda: cursor.executemany(write, [()]),
-            lambda: cursor.execute_async(write),
-            lambda: connection.execute_string('SELECT 1; ' + write),
-            lambda: connection.execute_stream(None),
+            lambda: psycopg.Connection.execute(
+                bare(psycopg.Connection), outside
+            ),
+            lambda: psycopg.Cursor.execute(bare(psycopg.Cursor), outside),
+            lambda: psycopg.Cursor.execute(bare(psycopg.Cursor), composed),
+            lambda: psycopg.ClientCursor.execute(
+                bare(psycopg.ClientCursor), outside
+            ),
+            lambda: psycopg.ServerCursor.execute(
+                bare(psycopg.ServerCursor), outside
+            ),
+            lambda: psycopg.Cursor.executemany(
+                bare(psycopg.Cursor), outside, []
+            ),
+            lambda: psycopg.Cursor.copy(
+                bare(psycopg.Cursor), 'COPY "outside"."t" FROM STDIN'
+            ),
+            lambda: psycopg.AsyncCursor.execute(
+                bare(psycopg.AsyncCursor), outside
+            ),
         ):
             with pytest.raises(wg.WriteRefused):
                 call()
-        assert driver.seen == []
-        # Reads and test-schema writes go through, the cursor still ours.
-        assert cursor.execute('SELECT 1').fetchall() == [(1,)]
-        cursor.executemany(
-            'INSERT INTO REVIEW_DB.LIVE_TESTS.T VALUES (%s)', [(1,)]
-        )
-        assert cursor.execute_async('SELECT 2') == {'queryId': 'q'}
-    connection.execute_string('SELECT 1; DROP TABLE REVIEW_DB.LIVE_TESTS.T')
-    assert driver.seen == [
-        'SELECT 1',
-        'INSERT INTO REVIEW_DB.LIVE_TESTS.T VALUES (%s)',
-        'SELECT 2',
-        'SELECT 1; DROP TABLE REVIEW_DB.LIVE_TESTS.T',
-    ]
-
-
-def test_the_loaders_statements_pass_in_the_test_schema_only() -> None:
-    # The contract loader's warehouse statements for a small case, in the
-    # test schema and in another: every one passes in the first, every
-    # write is refused in the second.
-    import duckdb
-
-    loader_spec = importlib.util.spec_from_file_location(
-        't33_guard_databases', ROOT / 'contract/runners/databases.py'
-    )
-    assert loader_spec is not None and loader_spec.loader is not None
-    loader = importlib.util.module_from_spec(loader_spec)
-    sys.modules[loader_spec.name] = loader
-    loader_spec.loader.exec_module(loader)
-    duck = duckdb.connect()
-    duck.execute(
-        'CREATE TABLE users (id BIGINT PRIMARY KEY, name VARCHAR, '
-        'tags VARCHAR[], seen_at TIMESTAMP)'
-    )
-    duck.execute("INSERT INTO users VALUES (1, 'a', ['x'], '2024-01-01')")
-    for engine, guard, namespace in (
-        ('snowflake', SNOWFLAKE, ('REVIEW_DB', 'LIVE_TESTS')),
-        ('databricks', DATABRICKS, ('review-catalog', 'live_tests')),
-    ):
-        ours, _ = loader.warehouse_statements(duck, engine, namespace)
-        assert ours
-        for statement in ours:
-            guard.check(statement)
-        elsewhere, _ = loader.warehouse_statements(duck, engine, ('OTHER', 'S'))
-        for statement in elsewhere:
-            with pytest.raises(wg.WriteRefused):
-                guard.check(statement)
+        # An admitted statement reaches the driver (which, unconnected, fails).
+        with pytest.raises(Exception) as reached:
+            psycopg.Cursor.execute(
+                bare(psycopg.Cursor), 'DROP TABLE "live_tests"."t"'
+            )
+        assert not isinstance(reached.value, wg.WriteRefused)
+    finally:
+        undo()
+    assert not hasattr(psycopg.Cursor.execute, '__sdm_write_guard__')

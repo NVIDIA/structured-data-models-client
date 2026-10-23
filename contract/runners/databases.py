@@ -889,7 +889,8 @@ def _load_postgres(
     named as a catalog one (``pg_roles``) is the case's, never
     ``pg_catalog``'s. With ``replace``, each table and composite type of
     the case already in the schema is dropped first (Lakebase's one test
-    schema holds case after case). Returns the composite types created,
+    schema holds case after case), never with ``CASCADE``: an object that
+    depends on one stops the drop by name. Returns the composite types created,
     each qualified."""
     import psycopg
 
@@ -906,8 +907,7 @@ def _load_postgres(
             for table in reversed(tables):
                 connection.execute(
                     guarded(
-                        f'DROP TABLE IF EXISTS {quote(schema)}.{quote(table)} '
-                        'CASCADE'
+                        f'DROP TABLE IF EXISTS {quote(schema)}.{quote(table)}'
                     )
                 )
 
@@ -916,9 +916,7 @@ def _load_postgres(
         def create(statement: str) -> None:
             composite = statement.split(' AS (', 1)[0][len('CREATE TYPE ') :]
             if replace:
-                connection.execute(
-                    guarded(f'DROP TYPE IF EXISTS {composite} CASCADE')
-                )
+                connection.execute(guarded(f'DROP TYPE IF EXISTS {composite}'))
             connection.execute(guarded(statement))
             created.append(composite)
 
@@ -1668,7 +1666,7 @@ class CaseSchema:
             if self.database == 'lakebase':
                 self._run(
                     f'DROP TABLE IF EXISTS {quote(self.namespace[0])}.'
-                    f'{quote(table)} CASCADE'
+                    f'{quote(table)}'
                 )
             else:
                 self._run(
@@ -1676,7 +1674,7 @@ class CaseSchema:
                     + _qualified(self.database, self.namespace, table)
                 )
         for composite in reversed(self.types):
-            self._run(f'DROP TYPE IF EXISTS {composite} CASCADE')
+            self._run(f'DROP TYPE IF EXISTS {composite}')
         if self.database == 'lakebase':
             self.target.commit()
         self.tables, self.types = [], []
