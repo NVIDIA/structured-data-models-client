@@ -38,6 +38,7 @@ import os
 import socket
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -220,9 +221,11 @@ def test_t32_clean_tmp_never_lists_a_directory_holding_a_listening_socket(
     r"""A stale directory holding a listening socket (the live Codex
     daemon's) is not removable; a stale one beside it without one is, so
     the dry run reads the directory."""
-    roots = {
-        name: tmp_path / name for name in ('tmp', 'target', 'cells', 'state')
-    }
+    # A Unix socket's path holds at most 107 bytes: the swept root is a
+    # short directory under /tmp itself, whatever TMPDIR names.
+    short = tempfile.TemporaryDirectory(prefix='t32-', dir='/tmp')
+    roots = {name: tmp_path / name for name in ('target', 'cells', 'state')}
+    roots['tmp'] = Path(short.name) / 'r'
     for path in roots.values():
         path.mkdir()
     plain = roots['tmp'] / 't32-stale'
@@ -257,5 +260,6 @@ def test_t32_clean_tmp_never_lists_a_directory_holding_a_listening_socket(
         )
     finally:
         listener.close()
+        short.cleanup()
     assert f'would remove {plain}' in done.stdout, done.stdout + done.stderr
     assert f'would remove {daemon}' not in done.stdout, done.stdout
