@@ -33,8 +33,12 @@ pub mod schema_check;
 #[cfg(feature = "test-ops")]
 pub mod test_ops;
 pub mod types;
+pub mod wording;
 
-pub use error::{AnsweredParts, CoreError, CoreWarning, Detail, ErrorCode, ErrorKind, HeldState};
+pub use error::{
+    AnsweredParts, Code, CoreError, CoreWarning, Detail, ErrorCode, ErrorKind, HeldState, Sentence,
+    WarningCode,
+};
 pub use facts::HostFacts;
 pub use pql::{VALIDATED_QUERY_VERSION, ValidatedQuery, validated_query_schema_json};
 pub use run::{ControlMessage, Step};

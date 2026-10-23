@@ -65,7 +65,7 @@ import json
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
-from sdm_client._rust import codec, results
+from sdm_client._rust import codec, errors, results
 from sdm_client._rust.run import Refused, TransportFailed, run
 from sdm_client.errors import NimRequestError, StructuredDataError
 
@@ -417,18 +417,17 @@ def predict(
                 }
             )
 
-    def unscored(fields: dict[str, Any]) -> str:
-        # The core's notice of the candidates it left out, by position, said
-        # naming each as the caller gave it, as the client says it.
-        return _unscored([given[at] for at in fields['candidates']])
-
+    # The candidates the core names by position, as the caller gave them:
+    # the values only this host holds, which its sentences name.
     try:
-        finished = run(
-            operation,
-            attachments,
-            model=model_call,
-            words={'CANDIDATES_UNSCORED': unscored},
-        )
+        with errors.holding(
+            candidates=lambda fields: [
+                given[at] for at in fields['candidates']
+            ],
+            candidate=lambda fields: given[fields['candidate']],
+            part_candidate=lambda fields: given[fields['ranking_candidate']],
+        ):
+            finished = run(operation, attachments, model=model_call)
     except Exception as error:
         # Whatever the call raised, the answers before it are put on it.
         _carry_the_answers(error, request.parts is not None)
@@ -571,30 +570,6 @@ def _ranked(
         metadata=metadata,
         outputs=wanted,
         unscored_candidates=[given[at] for at in answered.unscored_candidates],
-    )
-
-
-def _unscored(cold: list[Any]) -> str:
-    r"""The words of the notice of a ranking's candidates left out,
-    unscored, naming each as the caller gave it, as the client's
-    ``_candidates_no_context_teaches`` says them."""
-    from sdm_client.client import _SCORE_THE_UNSCORED
-
-    many = len(cold) > 1
-    named = ', '.join(repr(candidate) for candidate in cold[:-1])
-    which = (
-        f'candidates {named} and {cold[-1]!r} are'
-        if many
-        else f'candidate {cold[0]!r} is'
-    )
-    them = 'them' if many else 'it'
-    return (
-        f'{which} left out of this ranking, unscored: the context sampled '
-        f'for {"each" if many else "it"} holds one answer only, nearly '
-        f'always because no entity in it linked to the candidate in the '
-        f'window, and a classification needs two to learn from. No call was '
-        f'sent for {them}, so each row ranks only the rest, and the '
-        f"result's unscored_candidates names {them}. {_SCORE_THE_UNSCORED}"
     )
 
 

@@ -19,7 +19,7 @@ use arrow_array::cast::AsArray;
 use arrow_array::types::{Decimal128Type, Int64Type};
 use arrow_array::{Array, ArrayRef, Decimal128Array, RecordBatch, StringArray};
 use arrow_schema::{DataType, Field, Schema};
-use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind};
+use sdm_contract::{CoreError, Detail, Sentence};
 
 use crate::ArrowData;
 
@@ -49,7 +49,7 @@ pub fn wider(a: &DataType, b: &DataType) -> Option<DataType> {
 }
 
 fn internal(message: &str) -> CoreError {
-    CoreError::new(ErrorKind::Internal, ErrorCode::InternalError, message)
+    CoreError::new(Sentence::Internal, message)
 }
 
 /// `array`, of a tier, in the tier `to`, no narrower; `None` where `to` is
@@ -153,8 +153,7 @@ pub fn conform(
     match widen(array, described) {
         Some(widened) => Ok(Some((retyped(field, described), widened))),
         None => Err(CoreError::new(
-            ErrorKind::Unsupported,
-            ErrorCode::ValueOutOfRange,
+            Sentence::BigIntegerPastType,
             format!(
                 "column {:?} holds a value that the type it was described as, {described}, \
                  cannot hold",
@@ -176,6 +175,7 @@ pub fn tier(field: &Field) -> Option<DataType> {
 #[cfg(test)]
 mod tests {
     use arrow_array::Int64Array;
+    use sdm_contract::ErrorCode;
 
     use super::*;
 

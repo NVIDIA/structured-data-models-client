@@ -43,6 +43,7 @@ from sdm_client.decompose import (
     FORECAST,
     RANKING,
     Decomposition,
+    _decimal_as_typed,
     about_the_part,
     parts_of,
     refuse_a_part_that_would_take_several_calls,
@@ -511,14 +512,36 @@ class PredictiveQuery:
         and, for a query only the core resolves (KO2-36) that the core does
         not resolve either, with the old validator's diagnostics."""
         given = None if candidates is None else list(candidates)
+
+        def candidate(fields: dict[str, Any]) -> Any:
+            # A candidate the core names by its position among those given.
+            assert given is not None
+            return given[fields['candidate']]
+
+        from sdm_client._rust import errors
+
         try:
-            whole = self._relational_materializer.materialize(
-                query=asked,
-                indices=indices,
-                num_context_samples=num_context_samples,
-                options=options,
-                candidates=given,
-            )
+            # What only this client holds, which the core's sentences name:
+            # the question as written, and a candidate as given, its type's
+            # name and its value written as the column's type (T3.17).
+            with errors.holding(
+                query=lambda fields: self.text,
+                candidate=candidate,
+                part_candidate=lambda fields: given[
+                    fields['ranking_candidate']
+                ],
+                candidate_type=lambda fields: type(candidate(fields)).__name__,
+                written=lambda fields: _decimal_as_typed(
+                    candidate(fields), fields.get('dtype')
+                ),
+            ):
+                whole = self._relational_materializer.materialize(
+                    query=asked,
+                    indices=indices,
+                    num_context_samples=num_context_samples,
+                    options=options,
+                    candidates=given,
+                )
         except MissingExtraError:
             raise
         except StructuredDataError as error:
@@ -533,18 +556,11 @@ class PredictiveQuery:
                 # The core does not resolve it either: the old validator's
                 # diagnostics say why, a mistyped column's among them.
                 raise asked.refusal from error
-            said = said_as_parts_are(
-                error,
-                self.text,
-                given,
-                steps=asked.num_forecasts,
-                options=options,
-            )
-            if said is error:
-                # The core's own words: raised as the core raised them, with
-                # no cause chained.
-                raise
-            raise said from error
+            # The core's own words, its part's included: raised as the core
+            # raised them, with no cause chained, the details as the old
+            # route's.
+            said_as_parts_are(error, given)
+            raise
         parts = None if whole._core is None else whole._core.parts
         if parts is None:
             return whole

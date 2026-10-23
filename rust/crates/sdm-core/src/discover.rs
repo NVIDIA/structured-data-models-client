@@ -25,7 +25,7 @@ use std::sync::Arc;
 use sdm_contract::catalog::{CatalogAnswer, CatalogColumn, CatalogKey, KeyKind};
 use sdm_contract::data::{DataRequest, DescribePart, Relation};
 use sdm_contract::ops::{HeldSchema, NamedTable, SourceFacts};
-use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, Scalar};
+use sdm_contract::{CoreError, Detail, ErrorCode, Scalar, Sentence};
 use sdm_schema::held::ColumnAt;
 use sdm_schema::infer::PREVIEW_ROWS;
 
@@ -350,20 +350,20 @@ pub(crate) async fn not_held(asker: &Asker, table: &Relation) -> CoreError {
             read.source.splice(0..0, parts);
         }
     }
-    let refused = CoreError::new(
-        ErrorKind::InvalidRequest,
-        ErrorCode::InvalidRequest,
-        "a table to describe is not one the source holds, or has no columns there",
-    )
-    .with_field("field", Detail::text("tables"))
-    .with_field("rule", Detail::text("no_such_table"))
-    .with_field(
-        "source",
-        Detail::List(read.source.into_iter().map(Scalar::Utf8).collect()),
-    );
+    let source = Detail::List(read.source.into_iter().map(Scalar::Utf8).collect());
+    let refused = |sentence| {
+        CoreError::new(
+            sentence,
+            "a table to describe is not one the source holds, or has no columns there",
+        )
+        .with_field("field", Detail::text("tables"))
+        .with_field("source", source)
+    };
     match asker.source_database() {
-        Some(database) => refused.with_field("database", Detail::text(database)),
-        None => refused,
+        Some(database) => {
+            refused(Sentence::NoSuchTable).with_field("database", Detail::text(database))
+        }
+        None => refused(Sentence::NoSuchTableInSource),
     }
 }
 

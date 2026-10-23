@@ -17,7 +17,7 @@
 //!   encoder refuses is a defect in the core, `INTERNAL_ERROR`.
 
 use sdm_contract::data::AttachmentId;
-use sdm_contract::{ControlMessage, CoreError, Detail, ErrorCode, ErrorKind, Scalar};
+use sdm_contract::{ControlMessage, CoreError, Detail, Scalar, Sentence};
 use sdm_core::{Attachment, Attachments};
 
 /// The largest control message envelope, in bytes, in either direction.
@@ -35,7 +35,7 @@ pub fn decode(bytes: &[u8]) -> Result<ControlMessage, CoreError> {
     if bytes.len() > CONTROL_CAP {
         return Err(size_fields(
             CoreError::protocol(
-                ErrorCode::InvalidMessage,
+                Sentence::InvalidMessage,
                 "the control message is larger than the control cap; input-sized fields travel as attachments",
             ),
             bytes.len(),
@@ -56,7 +56,7 @@ fn unreadable(message: &str, e: &serde_json::Error) -> CoreError {
         serde_json::error::Category::Eof => "eof",
     };
     let count = |n: usize| Detail::Scalar(Scalar::UInt64(u64::try_from(n).unwrap_or(u64::MAX)));
-    CoreError::protocol(ErrorCode::InvalidMessage, message)
+    CoreError::protocol(Sentence::InvalidMessage, message)
         .with_field("category", Detail::text(category))
         .with_field("line", count(e.line()))
         .with_field("column", count(e.column()))
@@ -69,8 +69,7 @@ pub fn encode(message: &ControlMessage) -> Result<Vec<u8>, CoreError> {
     if bytes.len() > CONTROL_CAP {
         return Err(size_fields(
             CoreError::new(
-                ErrorKind::Internal,
-                ErrorCode::InternalError,
+                Sentence::Internal,
                 "the control message is larger than the control cap",
             ),
             bytes.len(),
@@ -82,8 +81,7 @@ pub fn encode(message: &ControlMessage) -> Result<Vec<u8>, CoreError> {
 fn to_json(message: &ControlMessage) -> Result<Vec<u8>, CoreError> {
     serde_json::to_vec(message).map_err(|_| {
         CoreError::new(
-            ErrorKind::Internal,
-            ErrorCode::InternalError,
+            Sentence::Internal,
             "the core wrote a control message its contract refuses",
         )
     })
@@ -143,11 +141,7 @@ pub fn write_error(
     let control = encode(&ControlMessage::Error { error: replacement }).unwrap_or_else(|_| {
         // The replacement is the core's own short text; it always encodes.
         encode(&ControlMessage::Error {
-            error: CoreError::new(
-                ErrorKind::Internal,
-                ErrorCode::InternalError,
-                "the error could not be written",
-            ),
+            error: CoreError::new(Sentence::Internal, "the error could not be written"),
         })
         .expect("a short internal error is within the cap and of the contract")
     });
@@ -179,7 +173,7 @@ pub fn read(outgoing: &Outgoing) -> Result<ControlMessage, CoreError> {
     };
     let Some(Attachment::Bytes(bytes)) = outgoing.attachments.get(&attachment) else {
         return Err(CoreError::protocol(
-            ErrorCode::InvalidMessage,
+            Sentence::InvalidMessage,
             "an attached message names an attachment that is not with it",
         ));
     };

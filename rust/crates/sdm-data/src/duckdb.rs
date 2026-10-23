@@ -51,7 +51,7 @@ use sdm_contract::data::{
     MATCHES_COLUMN, NullOrder, ProviderCapabilities, Relation, SEED_BATCH, SEED_KEY_TYPE,
     TextTimes, TieTerm, field, seed_integer,
 };
-use sdm_contract::{ColumnType, CoreError, Detail, ErrorCode, ErrorKind, Scalar};
+use sdm_contract::{ColumnType, CoreError, Detail, Scalar, Sentence};
 
 use crate::quote::{identifier, text};
 use crate::read::{self, ColumnNames, ForeignKeyNames};
@@ -224,8 +224,7 @@ fn read(part: DescribePart, batches: &[RecordBatch]) -> Result<CatalogAnswer, Co
             Ok(CatalogAnswer::Indexes(found))
         }
         DescribePart::IndexColumns => Err(CoreError::new(
-            ErrorKind::Internal,
-            ErrorCode::InternalError,
+            Sentence::Internal,
             "DuckDB answers no index's columns by its name",
         )),
     }
@@ -345,8 +344,7 @@ impl SqlDialect for Duckdb {
         match seed_integer(seed) {
             Some(seed) if (0..=i128::from(MAX_SEED)).contains(&seed) => Ok(seed),
             Some(seed) if seed >= 0 => Err(CoreError::new(
-                ErrorKind::Internal,
-                ErrorCode::InternalError,
+                Sentence::Internal,
                 "a seed past the range the dialect declares reached its rendering",
             )
             .with_field("request", Detail::text(request.name()))

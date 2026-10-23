@@ -44,7 +44,7 @@ use arrow_schema::{Field, Schema};
 use sdm_contract::data::NullOrder;
 use sdm_contract::ops::Stype;
 use sdm_contract::types::ColumnType;
-use sdm_contract::{CoreError, CoreWarning, Detail, Scalar};
+use sdm_contract::{CoreError, CoreWarning, Detail, Scalar, Sentence};
 use sdm_engine::graph::{Graph, Table};
 use sdm_engine::keys::{self, Key};
 use sdm_engine::sample::{self, SEED_TIME};
@@ -552,21 +552,18 @@ impl Walk<'_> {
                             })
                             .collect(),
                     );
-                    self.asker.warn(CoreWarning {
-                        code: NULL_KEYS_LEFT_OUT.to_owned(),
-                        message: "rows reached with no value for their table's key were left out"
-                            .to_owned(),
-                        fields: [
-                            ("table".to_owned(), Detail::text(&table.name)),
-                            ("column".to_owned(), Detail::text(key)),
-                            (
-                                "rows".to_owned(),
-                                Detail::Scalar(Scalar::UInt64(left_out as u64)),
-                            ),
-                        ]
-                        .into_iter()
-                        .collect(),
-                    });
+                    // Rows a walk reached left out for a null key beside
+                    // keys that are not null (register P1B-40, the owner's
+                    // option (b) of 2026-10-13).
+                    self.asker.warn(
+                        CoreWarning::new(
+                            Sentence::NullKeysLeftOut,
+                            "rows reached with no value for their table's key were left out",
+                        )
+                        .with_field("table", Detail::text(&table.name))
+                        .with_field("column", Detail::text(key))
+                        .with_field("rows", Detail::Scalar(Scalar::UInt64(left_out as u64))),
+                    );
                 }
                 frame = first_of_each_key(frame, table, key)?;
             }
@@ -726,11 +723,6 @@ fn take_array(array: &ArrayRef, rows: &[usize]) -> Result<ArrayRef, CoreError> {
     arrow_select::take::take(array.as_ref(), &indices, None)
         .map_err(|_| internal("rows could not be taken"))
 }
-
-/// The warning that rows a walk reached were left out for a null key
-/// beside keys that are not null (register P1B-40, the owner's option (b)
-/// of 2026-10-13).
-pub const NULL_KEYS_LEFT_OUT: &str = "NULL_KEYS_LEFT_OUT";
 
 /// Which rows of a keyed table's rows reached to keep, where they hold a
 /// null text key beside a key that is not null: the reference sorts every

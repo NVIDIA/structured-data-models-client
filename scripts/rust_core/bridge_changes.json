@@ -21,16 +21,16 @@
       "moved": "T1.36 fix 4 (the final review's P2-2): the host's half of the moved cast: a float in a mix written as the core now writes a float entity (sdm_engine::keys's float_text), the reference's text of it, pyarrow's cast of the float to text at its own width (1e16 is 1e+16), so the core reads back the number the host was given; a boolean as before"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::from_source": {
-      "refactor": "T3.16 (fix D): the describe_source result decoded once, typed (results.Described)"
+      "moved": "T3.17 fix 1: the source with no table is the core's sentence, filled with the source as a host value; the Python sentence is gone"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::<module>": {
-      "refactor": "T3.16 (fix D): the result read through _rust/results.py; RouteError no longer imported"
+      "moved": "T3.17: the unscored candidates' sentence is the core's, named with the candidates as given (host values)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_id": {
       "moved": "T1.36 fix 8: the host's half of the moved entity reading: a row's id as the core's id_as_written column gives it (the JSON text of the reference's item value, read as the transport reads JSON), else the id column's value, a missing one None; no rule of its own, as _as_answered for a prediction"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::predict": {
-      "moved": "T3.16 (fix D): reads Request._core, a typed CoreRequest, and the typed results.Predicted; a request with none, or other payloads than the core wrote, is refused by name (INVALID_REQUEST, rule materialize_again), never a RouteError (the structure design's open question 3)"
+      "moved": "T3.17: host values in place of the words callback"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_carry_the_answers": {
       "moved": "T2.13: the carried answers' explanation, which the core puts on the result's schema with the model and metadata, handed to _result as the result's; no rule added"
@@ -42,7 +42,7 @@
       "refactor": "T3.16 (fix D): reads Request._core, a typed CoreRequest"
     },
     "packages/structured-data-models-client/src/sdm_client/query.py::<module>": {
-      "refactor": "T3.16: imports for the query schema written by _rust/spec.py and the warning filter around the shadow definition; profiles named (RELATIONAL, TABULAR), the old PQL package no longer imported at module level (T3.16 fix 1, rule 11)"
+      "moved": "T3.17 fix 1: imports the decimal spelling a candidate's sentence names as a host value"
     },
     "packages/structured-data-models-client/src/sdm_client/query.py::PredictiveQuery.materialize": {
       "moved": "T2.8: on the core route the question goes to the core whole: the ranking's decomposition and refusals, and the forecast's top_k and MOST_PARTS refusals, are the core's (parts_of is not run there), task= refused first as for any relational query"
@@ -57,7 +57,7 @@
       "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
     },
     "packages/structured-data-models-client/src/sdm_client/client.py::<module>": {
-      "moved": "T2.8: the module gains _said_of_the_part and _ranking_said, the words of the core's refusals of a ranking at predict (the part it names, its candidates as given), as _answer_in_parts said them; no rule of their own; T2.14b: _said_of_the_part reads the core's forecast_step and ranking_candidate only, the host's call counter gone (MID2 P2-4)"
+      "moved": "T3.17: a ranking's refusal is said again from the core's sentence with the candidates as given; _ranking_said gone"
     },
     "packages/structured-data-models-client/src/sdm_client/client.py::SDMClient.predict": {
       "main": "1fc5a68632c760568416ac64a7f499d235b620b8 Gather more entities than one call scores as several calls (#36)"
@@ -93,7 +93,7 @@
       "gone": "T3.16 (fix A): the schema is handed over as plain data by _rust/spec.py's held_schema; no saved description, no merge (sdm_schema::edit::read_held is gone)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::<module>": {
-      "refactor": "T3.16 (fix D): the describe result read through _rust/results.py's typed structures"
+      "moved": "T3.17 fix 1: imports the errors module for its host values"
     },
     "packages/structured-data-models-client/src/sdm_client/client.py::_predicts_on_the_core": {
       "refactor": "T2.2: a request over a SQLite source routes as one over DuckDB (_routing.on_the_core with the backend's predict paths); no rule added"
@@ -123,7 +123,7 @@
       "refactor": "T3.16 (fix D): reads the typed results.Predicted"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_unscored": {
-      "moved": "T2.8: the words of the core's CANDIDATES_UNSCORED notice, as _candidates_no_context_teaches words them, naming each candidate as the caller gave it; no rule of its own"
+      "gone": "T3.17: the unscored candidates' sentence is the core's, filled with the candidates as given"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_mapping": {
       "moved": "T2.8: the host's half of the moved rankings reading (sdm_wire's response::mappings): a member the core gives as a JSON object, or as the list of its pairs where a key is not text, made the mapping the reference's item holds; no rule of its own"
@@ -231,10 +231,10 @@
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::<module>": {
-      "moved": "T3.8: the words of the core's refusals of a key (rules key_not_unique and key_missing_values, the reference's _not_unique_enough, _a_key_missing_values and _SKIP_THE_CHECK), of a table the source does not hold (no_such_table, TableNotFoundError's) and of an entity several rows hold (held_by_several_rows, _refuse_an_id_scored_twice's), each rule the core's (P2-T2.16-10, P2-T2.16-11); the unreachable SAID['CANDIDATES_UNSCORED'] removed, predict words it (P2-WR-8); T3.16 fix 3: the core's refusal of a meaning a column's type cannot carry at materialize worded as the reference words it, check_consistent's sentence for the caller's type and the engine's (received an incompatible semantic type) for the source's"
+      "moved": "T3.17: the core picks every error's and warning's sentence (Sentence, sdm-contract) and its template is the core's (wording.rs, _native.templates()); WORDED, SAID, GROUPED and the generic fallback gone; the module keeps the classes, the advice spellings and the host-owned words; fix 1: host-held values from the call in progress (holding), the a and I conversions and the to() pairing"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_Words.convert_field": {
-      "moved": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added; T2.14b: the conversions the reference's words need (!R, !G, !S, !N) over the core's fields; formatting only"
+      "moved": "T3.17: the one value formatter gains the conversions the shared templates name (d, p); fix 1: host-held values from the call in progress (holding), the a and I conversions and the to() pairing"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_as_timestamp": {
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
@@ -258,16 +258,16 @@
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_worded": {
-      "moved": "T2.14a: newly covered by the freeze (FR P3-2); T2.13b: the template of a context left empty chosen by the facts the core gives (later, the count of tables), as most_entities_parts is; no rule added; T2.14b: a template looked up by the core's variant beside its field and rule, as the one-class refusal names the target as the constant-context notice names it"
+      "gone": "T3.17: the choice of template by field, rule and fields is the core's choice of sentence"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::error_from_core": {
-      "moved": "T3.8: a template filled from the fields and what _derived says of them"
+      "moved": "T3.17: the error says the core's sentence, filled by render; no template chosen here; fix 1: host-held values from the call in progress (holding), the a and I conversions and the to() pairing"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::raise_from_core": {
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::said": {
-      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+      "moved": "T3.17: a warning says its sentence; fix 1: host-held values from the call in progress (holding), the a and I conversions and the to() pairing"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::<module>": {
       "moved": "T2.14b (with T2.14d, MID2 P2-3): the docstring and constants say the value rules are the core's (DECLARED_SCALE_MARKER added; _INT64 bounds gone with _Numeric); T2.14b fix 1 (r1 review P3-6): a json[] column's elements marked as JSON and handed over as the JSON text of each value the driver read, so sdm-data's Postgres rule (Rule::JsonList) reads them as the reference does; no value rule here"
@@ -450,7 +450,7 @@
       "gone": "T3.16 (fix A): no second describe in Python; the core reads from the source the facts of a column that carries none (sdm-core's discover)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_derived": {
-      "moved": "T3.8: the key, the database and the entities as the reference names them in its words, from the core's fields (_the_key_of, _BACKEND_NAMES, TableNotFoundError, _refuse_an_id_scored_twice): the database by the core's field database"
+      "gone": "T3.17: the wording it derived (one key column or several, a table's place, the first five entities) is the core's choice of sentence and its fields"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::CoreQuery.to_string": {
       "gone": "T3.16 (fix D): CoreQuery moved to _rust/results.py with the host's other typed results"
@@ -466,6 +466,57 @@
     },
     "packages/structured-data-models-client/src/sdm_client/query.py::PredictiveQuery._refusal": {
       "refactor": "T3.16 fix 1 (rule 11): the profile's model words from base.PROFILE_MODELS, not the old PQL package's object"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_fields": {
+      "moved": "T3.17: the decoded fields a sentence is filled with"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_Held.__getattr__": {
+      "moved": "T3.17: the values only the host holds, {host.<name>}"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_Held.__init__": {
+      "moved": "T3.17: the values only the host holds, {host.<name>}"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_HostValues.__getitem__": {
+      "moved": "T3.17: a host value read from a warning's fields only when its sentence names it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_HostValues.__init__": {
+      "moved": "T3.17: a host value read from a warning's fields only when its sentence names it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_HostValues.__iter__": {
+      "moved": "T3.17: a host value read from a warning's fields only when its sentence names it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_HostValues.__len__": {
+      "moved": "T3.17: a host value read from a warning's fields only when its sentence names it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::render": {
+      "moved": "T3.17: fills the core's template of a sentence; a host-owned sentence in its library's words; fix 1: host-held values from the call in progress (holding), the a and I conversions and the to() pairing"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_said": {
+      "moved": "T3.17: a sentence its fields cannot fill names the core's defect, never a sentence the core did not choose; fix 1: host-held values from the call in progress (holding), the a and I conversions and the to() pairing"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::table": {
+      "moved": "T3.17: the core's table of sentences, read once from _native.templates()"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::warn_from_core": {
+      "moved": "T3.17: warnings group by the table's data; host values replace the words callback; fix 1: host-held values from the call in progress (holding), the a and I conversions and the to() pairing"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::warn_held": {
+      "moved": "T3.17: a held warning says its sentence"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_Words.format_field": {
+      "moved": "T3.17: advice and database names from the table; fix 1: host-held values from the call in progress (holding), the a and I conversions and the to() pairing"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_Words.get_value": {
+      "moved": "T3.17: advice and host values in a template"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_Words.__init__": {
+      "moved": "T3.17: the formatter holds the fields and host values"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_held": {
+      "moved": "T3.17 fix 1: the values the call in progress holds, read by the sentences that name them"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::holding": {
+      "moved": "T3.17 fix 1: the host-held values ({host.<name>}) a call supplies for the core's sentences, in place of the host writing its own sentence"
     }
   }
 }

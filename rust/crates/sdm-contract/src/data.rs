@@ -25,7 +25,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::catalog::CatalogAnswer;
-use crate::error::{CoreError, Detail, ErrorCode, ErrorKind};
+use crate::error::{CoreError, Detail, ErrorKind, Sentence};
 use crate::scalar::Scalar;
 use crate::types::{ColumnType, Field, Unit};
 
@@ -274,12 +274,8 @@ impl From<String> for Relation {
     }
 }
 
-/// The rule a refusal of a relation names: one of no part, or of more
-/// parts than the dialect or provider reading it accepts.
-pub const RELATION_RULE: &str = "relation";
-
 /// The refusal of `relation`, of `field` of `request`, by a reader that
-/// takes from one to `most` parts (rule [`RELATION_RULE`]): `INVALID_REQUEST`
+/// takes from one to `most` parts (rule `relation`): `INVALID_REQUEST`
 /// for a relation of no part, which no source reads, and
 /// `UNSUPPORTED_REQUEST` for more parts than the reader takes; `None` for
 /// a relation it reads. Each names the parts given and the most it takes,
@@ -291,24 +287,18 @@ pub fn refuse_relation(
     most: usize,
 ) -> Option<CoreError> {
     let parts = relation.source.len();
-    let (kind, code, message) = match parts {
-        0 => (
-            ErrorKind::InvalidRequest,
-            ErrorCode::InvalidRequest,
-            "a relation names no part",
-        ),
+    let (sentence, message) = match parts {
+        0 => (Sentence::RelationNoPart, "a relation names no part"),
         n if n > most => (
-            ErrorKind::Unsupported,
-            ErrorCode::UnsupportedRequest,
+            Sentence::RelationTooManyParts,
             "a relation has more name parts than its source reads",
         ),
         _ => return None,
     };
     Some(
-        CoreError::new(kind, code, message)
+        CoreError::new(sentence, message)
             .with_field("request", Detail::text(request.name()))
             .with_field("field", Detail::text(field))
-            .with_field("rule", Detail::text(RELATION_RULE))
             .with_field("parts", Detail::Scalar(Scalar::UInt64(parts as u64)))
             .with_field("most", Detail::Scalar(Scalar::UInt64(most as u64))),
     )
@@ -700,13 +690,9 @@ fn check_seeds(request: &DataRequest, key: &[String], seeds: &KeySet) -> Result<
 /// The refusal of a request whose fields contradict each other, naming the
 /// request and the field, never a value.
 pub fn refused(request: &DataRequest, field: &str, message: &str) -> CoreError {
-    CoreError::new(
-        ErrorKind::InvalidRequest,
-        ErrorCode::InvalidRequest,
-        message,
-    )
-    .with_field("request", Detail::text(request.name()))
-    .with_field("field", Detail::text(field))
+    CoreError::new(Sentence::DataRequestRefused, message)
+        .with_field("request", Detail::text(request.name()))
+        .with_field("field", Detail::text(field))
 }
 
 /// The optional requests a provider may declare.

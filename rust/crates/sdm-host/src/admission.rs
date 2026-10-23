@@ -73,7 +73,7 @@ use arrow_array::{
 };
 use arrow_buffer::{ArrowNativeType, NullBuffer, OffsetBuffer, ScalarBuffer};
 use arrow_schema::{DataType, Field, FieldRef, Fields, Schema, SchemaRef, TimeUnit};
-use sdm_contract::{ColumnType, CoreError, Detail, ErrorCode, ErrorKind};
+use sdm_contract::{ColumnType, CoreError, Detail, Sentence};
 use sdm_core::ArrowData;
 use sdm_core::run::schema_mismatch;
 
@@ -83,8 +83,7 @@ pub const OFFSET_CAPACITY: usize = i32::MAX as usize;
 /// The refusal of a type outside the set, naming what was received.
 fn unsupported(column: &str, received: &DataType) -> CoreError {
     CoreError::new(
-        ErrorKind::Unsupported,
-        ErrorCode::UnsupportedType,
+        Sentence::UnsupportedType,
         format!("column {column:?} has the Arrow type {received}, which the core does not take"),
     )
     .with_field("column", Detail::text(column))
@@ -211,8 +210,7 @@ fn convert_type(column: &str, received: &DataType) -> Result<DataType, CoreError
 /// The refusal of a value the admitted type cannot hold.
 fn out_of_range(column: &str, received: &DataType, admitted: &DataType) -> CoreError {
     CoreError::new(
-        ErrorKind::Unsupported,
-        ErrorCode::ValueOutOfRange,
+        Sentence::AdmittedPastType,
         format!(
             "column {column:?} holds a value of Arrow type {received} that {admitted} cannot \
              hold"
@@ -458,8 +456,7 @@ fn widen_offsets(offsets: &[i32]) -> Vec<i64> {
 
 fn internal(column: &str, e: &arrow_schema::ArrowError) -> CoreError {
     CoreError::new(
-        ErrorKind::Internal,
-        ErrorCode::InternalError,
+        Sentence::Internal,
         format!("admitting column {column:?}: {e}"),
     )
 }

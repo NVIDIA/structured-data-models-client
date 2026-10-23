@@ -33,7 +33,7 @@ use sdm_contract::data::{
     DataLayer, DataRequest, DescribePart, Dialect, FetchPlan, ProviderCapabilities, ProviderChoice,
     catalog_columns as c,
 };
-use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind};
+use sdm_contract::{CoreError, Detail, Sentence};
 use sdm_host::CompositionRoot;
 
 /// The data layer of host providers alone.
@@ -49,8 +49,7 @@ pub fn root() -> CompositionRoot {
 /// The refusal of a SQL dialect, which this layer renders none of.
 fn no_dialect(dialect: &Dialect) -> CoreError {
     CoreError::new(
-        ErrorKind::Unsupported,
-        ErrorCode::UnsupportedRequest,
+        Sentence::NoDialectNamed,
         "this data layer renders no SQL dialect",
     )
     .with_field("dialect", Detail::text(dialect.name()))
@@ -88,8 +87,7 @@ impl DataLayer for HostLayer {
         }
         let DataRequest::Describe { part, .. } = request else {
             return Err(CoreError::new(
-                ErrorKind::Internal,
-                ErrorCode::InternalError,
+                Sentence::Internal,
                 "only a catalog answer is read by the data layer",
             )
             .with_field("request", Detail::text(request.name())));
@@ -106,8 +104,7 @@ impl DataLayer for HostLayer {
 /// (decision H16, check (b)) should have refused first.
 fn unread_answer() -> CoreError {
     CoreError::new(
-        ErrorKind::Internal,
-        ErrorCode::InternalError,
+        Sentence::Internal,
         "a catalog answer is not in the shape its plan expects",
     )
 }

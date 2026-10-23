@@ -7638,6 +7638,60 @@ entries:
     test_a_column_added_by_hand_to_a_described_schema_is_edited_and_sampled).
     Proposed as an improvement; never self-approved.
 
+- id: P3E-5
+  title: A refusal the core route said only in its code's sentence now says what it refuses
+  kind: change
+  old_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build, a
+    refusal the Python host held no template for was said in its code's
+    one sentence ("the request is not one the core accepts", "the request
+    is valid, and not one the core supports yet", "a column has a type the
+    core does not take"), its details naming what was refused.
+  new_behavior: >-
+    The core gives every refusal and warning a sentence of one closed list
+    (T3.17), each said from one shared template, with what only the host
+    holds (a candidate or a source as the caller gave it, the query as
+    written) filled in by the host. Where the reference refuses the same
+    input with the same code, its words, held by the census's probes on
+    DuckDB (test_t317_wording.py, against the old client's words recorded
+    in contract/reference/census-words/duckdb.jsonl). The differences that remain, each a
+    named sentence where the core said its code's sentence before:
+    (a) the rules the core does not hold yet ("... needs the 'aggregation'
+    rule, which is not one this client's core supports yet"), which the
+    reference answers or refuses otherwise (P1B-2, P1B-3, P1B-4 and their
+    families); (b) refusals the reference gives by another code or class,
+    or by failing, named here by what is refused (an interval or a nested
+    interval by its column and Arrow type, HOST-2, P1B-47 and P1B-51; a seed past
+    the range, RS-7; mixed offsets, DT-11; the provider's error for a text
+    time, DT-12), so the words cannot be the reference's; (c) num_hops
+    given as None says "num_hops must be a whole number, got None", where
+    the reference raises Python's own comparison error ("'<=' not
+    supported between instances of 'int' and 'NoneType'"); (d) the
+    requests, states and option values the host or the core malformed,
+    which the reference has no form of, said by what is malformed.
+  affected_inputs: >-
+    Every refusal on a forced core route that had no host template: the
+    rules not held yet, the data layer's and the in-memory fallback's
+    refusals, the types and values the core does not take, a malformed
+    request state, sampler state or option value, and num_hops=None.
+  cases: [T3.17]
+  refs: [T3.17, E66, P1B-2, P1B-3, P1B-4, P1B-11, P1B-47, P1B-51, HOST-2, RS-7, DT-11, DT-12]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Code, class and the details callers branch on are unchanged, but for
+    fields added to name what the new sentences say: table and characters
+    (a table's name), source (an empty table), table (a table named twice,
+    the entity table left empty), given (top_k past its range, the
+    statistic, num_context_samples as the caller gave it), shown and more
+    (more than five entities held by several rows), reserved and renamed (a
+    column named as the wire names its own). Each sentence where both
+    routes refuse with one code says the reference's words, the census's
+    test holding every probe on DuckDB and listing each difference above
+    with its entry. These record departures from the reference's words, so
+    they wait for the owner. Approver: owner.
+
 # --- lane G entries (P2G-1..19) ---
 
 - id: P2G-1

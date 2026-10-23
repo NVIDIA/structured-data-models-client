@@ -12,12 +12,19 @@
 //!
 //! Each code may carry only the kinds [`ErrorCode::kinds`] lists, so a
 //! host's mapping keys on the code alone (decision E22). Every construction
-//! is held to that table: [`CoreError::new`] debug-asserts the pair;
+//! is held to that table: [`CoreError::new`] takes its code's kind;
 //! [`CoreError::provider`] and [`CoreError::transport`], whose kind comes
 //! from the host, give `INTERNAL_ERROR` for a kind outside the code's set;
 //! and since the fields are public and the type deserializes, `sdm-host`
 //! checks every pair where an error crosses the boundary
 //! ([`CoreError::holds_to_table`]).
+//!
+//! Every error and every warning says one [`Sentence`] of a closed list
+//! (invariant 8 of the Phase 3 structure design, T3.17): the core picks it,
+//! and each host fills its one shared template ([`crate::wording`]) with the
+//! values it names, as that host writes them. A sentence gives the public
+//! code ([`Sentence::code`]) and, where it has one, the rule a caller
+//! branches on (`fields.rule`, [`Sentence::rule`]); no host chooses one.
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -274,6 +281,14 @@ pub struct CoreError {
     pub kind: ErrorKind,
     /// Stable across releases and languages.
     pub code: ErrorCode,
+    /// What the error says, of [`ErrorCode`]'s sentences: the template each
+    /// host fills, read only for wording (T3.17).
+    pub sentence: Sentence,
+    /// Where the error happened in a question asked in parts (a forecast's
+    /// step, a ranking's candidate), a sentence of [`Code::Part`] said after
+    /// the error's own; none for any other error (T3.17 fix 2).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub part: Option<Sentence>,
     /// For a person to read; not promised, and never holding an input value.
     pub message: String,
     /// What callers branch on, by name.
@@ -313,29 +328,41 @@ pub struct AnsweredParts {
 }
 
 impl CoreError {
-    /// An error of `code` and `kind`, which must be one of the code's
-    /// [`ErrorCode::kinds`]; a debug build asserts it (decision E22).
-    pub fn new(kind: ErrorKind, code: ErrorCode, message: impl Into<String>) -> Self {
-        debug_assert!(
-            code.allows(kind),
-            "{code} does not carry kind {}",
-            kind.as_str()
-        );
-        Self {
-            kind,
+    /// An error saying `sentence`, of its code and that code's kind; the
+    /// sentence's rule, where it has one, is the error's `rule` field. A
+    /// warning's sentence is no error's: a debug build asserts it, and a
+    /// release build gives `INTERNAL_ERROR`.
+    pub fn new(sentence: Sentence, message: impl Into<String>) -> Self {
+        let Code::Error(code) = sentence.code() else {
+            debug_assert!(false, "{} is no error's sentence", sentence.as_str());
+            return Self::new(
+                Sentence::Internal,
+                "an error was given another kind's sentence",
+            );
+        };
+        let mut out = Self {
+            kind: code.kinds()[0],
             code,
+            sentence,
+            part: None,
             message: message.into(),
             fields: BTreeMap::new(),
             cause: None,
             retryable: false,
             drop_held: Vec::new(),
             answered: None,
+        };
+        if let Some(rule) = sentence.rule() {
+            out = out.with_field("rule", Detail::text(rule));
         }
+        out
     }
 
     /// A protocol error: the host broke the run protocol.
-    pub fn protocol(code: ErrorCode, message: impl Into<String>) -> Self {
-        Self::new(ErrorKind::Protocol, code, message)
+    pub fn protocol(sentence: Sentence, message: impl Into<String>) -> Self {
+        let out = Self::new(sentence, message);
+        debug_assert_eq!(out.kind, ErrorKind::Protocol, "{}", sentence.as_str());
+        out
     }
 
     /// The error a provider's failure becomes: its kind and retryability,
@@ -349,11 +376,8 @@ impl CoreError {
         if !ErrorCode::ProviderError.allows(error.kind) {
             return Self::outside_table(error.kind, ErrorCode::ProviderError);
         }
-        let mut out = Self::new(
-            error.kind,
-            ErrorCode::ProviderError,
-            "the data provider failed",
-        );
+        let mut out = Self::new(Sentence::ProviderFailed, "the data provider failed");
+        out.kind = error.kind;
         out.retryable = error.retryable;
         if let Some(sqlstate) = &error.sqlstate {
             out = out.with_field("sqlstate", Detail::text(sqlstate.clone()));
@@ -372,10 +396,10 @@ impl CoreError {
             return Self::outside_table(kind, ErrorCode::TransportError);
         }
         let mut out = Self::new(
-            kind,
-            ErrorCode::TransportError,
+            Sentence::TransportFailed,
             "the transport to the model endpoint failed",
         );
+        out.kind = kind;
         out.retryable = retryable;
         out
     }
@@ -384,8 +408,7 @@ impl CoreError {
     /// not carry, naming the pair as `pair_kind` and `pair_code`.
     pub fn outside_table(kind: ErrorKind, code: ErrorCode) -> Self {
         Self::new(
-            ErrorKind::Internal,
-            ErrorCode::InternalError,
+            Sentence::Internal,
             "an error carried a kind its code does not allow",
         )
         .with_field("pair_kind", Detail::text(kind.as_str()))
@@ -393,14 +416,45 @@ impl CoreError {
     }
 
     /// Whether this error, and every error in its cause chain, carries a
-    /// kind its code allows (decision E22).
+    /// kind its code allows (decision E22) and a sentence of its code
+    /// (T3.17).
     pub fn holds_to_table(&self) -> bool {
-        self.code.allows(self.kind) && self.cause.as_deref().is_none_or(CoreError::holds_to_table)
+        self.code.allows(self.kind)
+            && self.sentence.code() == Code::Error(self.code)
+            && self.part.is_none_or(|part| part.code() == Code::Part)
+            && self.cause.as_deref().is_none_or(CoreError::holds_to_table)
     }
 
     #[must_use]
     pub fn with_field(mut self, name: &str, value: Detail) -> Self {
         self.fields.insert(name.to_owned(), value);
+        self
+    }
+
+    /// This error saying `sentence` in place of its own, a sentence of the
+    /// same code: the core's choice between two ways of saying one refusal
+    /// once it knows which applies. The rule follows the sentence.
+    #[must_use]
+    pub fn saying(mut self, sentence: Sentence) -> Self {
+        debug_assert_eq!(
+            sentence.code(),
+            Code::Error(self.code),
+            "{}",
+            sentence.as_str()
+        );
+        self.sentence = sentence;
+        match sentence.rule() {
+            Some(rule) => self.with_field("rule", Detail::text(rule)),
+            None => self,
+        }
+    }
+
+    /// This error, said of the part of a question asked in parts it
+    /// happened in: `part`, a sentence of [`Code::Part`], said after its own.
+    #[must_use]
+    pub fn in_part(mut self, part: Sentence) -> Self {
+        debug_assert_eq!(part.code(), Code::Part, "{}", part.as_str());
+        self.part = Some(part);
         self
     }
 
@@ -447,9 +501,506 @@ impl std::error::Error for CoreError {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct CoreWarning {
+    /// The sentence's [`WarningCode`], as the contract spells it.
     #[schemars(regex(pattern = r"^[A-Z][A-Z0-9_]*$"))]
     pub code: String,
+    /// What the warning says (T3.17).
+    pub sentence: Sentence,
     pub message: String,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub fields: BTreeMap<String, Detail>,
+}
+
+impl CoreWarning {
+    /// A warning saying `sentence`, of its code. An error's sentence is no
+    /// warning's: a debug build asserts it.
+    pub fn new(sentence: Sentence, message: impl Into<String>) -> Self {
+        let code = match sentence.code() {
+            Code::Warning(code) => code.as_str(),
+            other => {
+                debug_assert!(false, "{} is no warning's sentence", sentence.as_str());
+                other.as_str().unwrap_or_default()
+            }
+        };
+        Self {
+            code: code.to_owned(),
+            sentence,
+            message: message.into(),
+            fields: BTreeMap::new(),
+        }
+    }
+
+    #[must_use]
+    pub fn with_field(mut self, name: &str, value: Detail) -> Self {
+        self.fields.insert(name.to_owned(), value);
+        self
+    }
+
+    /// This warning with each of `fields`.
+    #[must_use]
+    pub fn with_fields<'a>(mut self, fields: impl IntoIterator<Item = (&'a str, Detail)>) -> Self {
+        for (name, value) in fields {
+            self.fields.insert(name.to_owned(), value);
+        }
+        self
+    }
+
+    /// Whether the warning's code is its sentence's (T3.17).
+    pub fn holds_to_table(&self) -> bool {
+        matches!(self.sentence.code(), Code::Warning(code) if code.as_str() == self.code)
+    }
+}
+
+/// The code a sentence gives: an error's or a warning's; or none, for the
+/// sentence of the part of a question asked in parts an error happened in,
+/// said after the error's own of any code ([`CoreError::part`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Code {
+    Error(ErrorCode),
+    Warning(WarningCode),
+    Part,
+}
+
+impl Code {
+    /// The code's name, as the contract spells it; none for a part's.
+    pub fn as_str(self) -> Option<&'static str> {
+        match self {
+            Code::Error(code) => Some(code.as_str()),
+            Code::Warning(code) => Some(code.as_str()),
+            Code::Part => None,
+        }
+    }
+}
+
+macro_rules! warning_codes {
+    ($($variant:ident = $name:literal,)*) => {
+        /// The codes of the warnings the core gives: one closed list, each
+        /// spelled as it always has been on the wire (T3.17).
+        #[derive(
+            Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
+            JsonSchema,
+        )]
+        pub enum WarningCode {
+            $(
+                #[serde(rename = $name)]
+                $variant,
+            )*
+        }
+
+        impl WarningCode {
+            /// Every warning code, in the order the contract lists them.
+            pub const ALL: &'static [WarningCode] = &[$(WarningCode::$variant,)*];
+
+            /// The code's name, as the contract spells it.
+            pub const fn as_str(self) -> &'static str {
+                match self {
+                    $(WarningCode::$variant => $name,)*
+                }
+            }
+        }
+    };
+}
+
+macro_rules! rule_of {
+    () => {
+        None
+    };
+    ($rule:literal) => {
+        Some($rule)
+    };
+}
+
+macro_rules! sentences {
+    ($($variant:ident = $name:literal, $code:path $(, rule $rule:literal)?;)*) => {
+        /// What an error or a warning says: one variant per distinct
+        /// sentence, each with the one template every host fills
+        /// ([`crate::wording::template`]). The core picks it; a host only
+        /// fills it.
+        #[derive(
+            Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
+            JsonSchema,
+        )]
+        pub enum Sentence {
+            $(
+                #[serde(rename = $name)]
+                $variant,
+            )*
+        }
+
+        impl Sentence {
+            /// Every sentence, in the order the contract lists them.
+            pub const ALL: &'static [Sentence] = &[$(Sentence::$variant,)*];
+
+            /// The sentence's name, as the contract spells it.
+            pub const fn as_str(self) -> &'static str {
+                match self {
+                    $(Sentence::$variant => $name,)*
+                }
+            }
+
+            /// The public code of an error or warning that says it.
+            pub fn code(self) -> Code {
+                use ErrorCode as E;
+                use WarningCode as W;
+                match self {
+                    $(Sentence::$variant => Code::from($code),)*
+                }
+            }
+
+            /// The rule an error that says it names in its `rule` field,
+            /// the public detail a caller branches on; none where the
+            /// error's site names its own, or none.
+            pub fn rule(self) -> Option<&'static str> {
+                match self {
+                    $(Sentence::$variant => rule_of!($($rule)?),)*
+                }
+            }
+        }
+    };
+}
+
+impl From<ErrorCode> for Code {
+    fn from(code: ErrorCode) -> Self {
+        Code::Error(code)
+    }
+}
+
+impl From<WarningCode> for Code {
+    fn from(code: WarningCode) -> Self {
+        Code::Warning(code)
+    }
+}
+
+warning_codes! {
+    KeyNoValue = "KEY_NO_VALUE",
+    KeyRepeats = "KEY_REPEATS",
+    KeyDeclined = "KEY_DECLINED",
+    TimeColumnsGuessed = "TIME_COLUMNS_GUESSED",
+    ColumnsLeftOut = "COLUMNS_LEFT_OUT",
+    TimeValuesUnread = "TIME_VALUES_UNREAD",
+    DatesReadDayFirst = "DATES_READ_DAY_FIRST",
+    KeyCandidatesTied = "KEY_CANDIDATES_TIED",
+    LinkCannotJoin = "LINK_CANNOT_JOIN",
+    TablesNameEachOther = "TABLES_NAME_EACH_OTHER",
+    TwoWaysToATable = "TWO_WAYS_TO_A_TABLE",
+    CandidatesUnscored = "CANDIDATES_UNSCORED",
+    ContextConstant = "CONTEXT_CONSTANT",
+    OutputsAbsent = "OUTPUTS_ABSENT",
+    StepsUnexplained = "STEPS_UNEXPLAINED",
+    MissingIndices = "MISSING_INDICES",
+    ContextBeforeData = "CONTEXT_BEFORE_DATA",
+    AnchorAfterData = "ANCHOR_AFTER_DATA",
+    Float32Overflow = "FLOAT32_OVERFLOW",
+    ContextAfterAnchor = "CONTEXT_AFTER_ANCHOR",
+    ContextLeaks = "CONTEXT_LEAKS",
+    HopsIgnored = "HOPS_IGNORED",
+    ContextCoverage = "CONTEXT_COVERAGE",
+    ContextCapped = "CONTEXT_CAPPED",
+    TablesUnlinked = "TABLES_UNLINKED",
+    TablesUnreached = "TABLES_UNREACHED",
+    ColumnsUnread = "COLUMNS_UNREAD",
+    FilterChoseExamples = "FILTER_CHOSE_EXAMPLES",
+    ContextAnswers = "CONTEXT_ANSWERS",
+    NullKeysLeftOut = "NULL_KEYS_LEFT_OUT",
+    DateLiteralDayFirst = "DATE_LITERAL_DAY_FIRST",
+}
+
+sentences! {
+    Internal = "internal", E::InternalError;
+    ProviderFailed = "provider_failed", E::ProviderError;
+    TransportFailed = "transport_failed", E::TransportError;
+    UnknownReply = "unknown_reply", E::UnknownReply;
+    ReplyMissing = "reply_missing", E::ReplyMissing;
+    WrongReply = "wrong_reply", E::WrongReply;
+    RunFinished = "run_finished", E::RunFinished;
+    RunCancelled = "run_cancelled", E::RunCancelled;
+    RunPoisoned = "run_poisoned", E::RunPoisoned;
+    RunBusy = "run_busy", E::RunBusy;
+    InvalidMessage = "invalid_message", E::InvalidMessage;
+    UnknownModel = "unknown_model", E::UnknownModel;
+    MissingExtra = "missing_extra", E::MissingExtra;
+    SessionsUnsupported = "sessions_unsupported", E::SessionsUnsupported;
+    RelationNoPart = "relation_no_part", E::InvalidRequest, rule "relation";
+    RelationTooManyParts = "relation_too_many_parts", E::UnsupportedRequest, rule "relation";
+    DataRequestRefused = "data_request_refused", E::InvalidRequest;
+    UnsupportedType = "unsupported_type", E::UnsupportedType;
+    NotYetDescribe = "not_yet_describe", E::UnsupportedRequest;
+    EmptyTable = "empty_table", E::InvalidRequest;
+    TableNameEmpty = "table_name_empty", E::InvalidRequest;
+    TableNameCharacters = "table_name_characters", E::InvalidRequest;
+    TimeOutsideYears = "time_outside_years", E::ValueOutOfRange;
+    NoTable = "no_table", E::InvalidRequest;
+    KeyNotNames = "key_not_names", E::InvalidRequest, rule "key_not_names";
+    KeyNotNamesGiven = "key_not_names_given", E::InvalidRequest, rule "key_not_names";
+    TimeColumnNotAName = "time_column_not_a_name", E::InvalidRequest, rule "time_column_not_a_name";
+    TimeColumnNotANameGiven = "time_column_not_a_name_given", E::InvalidRequest, rule "time_column_not_a_name";
+    ColumnNotAName = "column_not_a_name", E::InvalidRequest;
+    ColumnNotANameGiven = "column_not_a_name_given", E::InvalidRequest;
+    EmptyKey = "empty_key", E::InvalidRequest;
+    NoColumn = "no_column", E::InvalidRequest;
+    KeyColumnTwice = "key_column_twice", E::InvalidRequest, rule "key_column_twice";
+    KeyCannotIdentify = "key_cannot_identify", E::InvalidRequest;
+    KeyIsTimeColumn = "key_is_time_column", E::InvalidRequest;
+    TimeIsKey = "time_is_key", E::InvalidRequest;
+    MeaningNotCarried = "meaning_not_carried", E::InvalidRequest;
+    NotASemanticType = "not_a_semantic_type", E::InvalidRequest;
+    NotASemanticTypeGiven = "not_a_semantic_type_given", E::InvalidRequest;
+    NotASemanticTypeUnread = "not_a_semantic_type_unread", E::InvalidRequest;
+    LeftOutKey = "left_out_key", E::InvalidRequest;
+    LeftOutTimeColumn = "left_out_time_column", E::InvalidRequest;
+    NotARelationship = "not_a_relationship", E::InvalidRequest;
+    NotARelationshipGiven = "not_a_relationship_given", E::InvalidRequest;
+    LinkUnheld = "link_unheld", E::InvalidRequest;
+    LinkNotTheKey = "link_not_the_key", E::InvalidRequest;
+    LinkNoKey = "link_no_key", E::InvalidRequest;
+    LinkCompositeKey = "link_composite_key", E::InvalidRequest;
+    LinkTypes = "link_types", E::InvalidRequest;
+    PrimaryKeyAsForeignKey = "primary_key_as_foreign_key", E::InvalidRequest;
+    SchemaTableTwice = "schema_table_twice", E::InvalidRequest;
+    SchemaColumnTwice = "schema_column_twice", E::InvalidRequest;
+    IncompatibleSemanticType = "incompatible_semantic_type", E::InvalidRequest;
+    KeyNotUniqueColumn = "key_not_unique_column", E::InvalidRequest, rule "key_not_unique";
+    KeyNotUniqueColumns = "key_not_unique_columns", E::InvalidRequest, rule "key_not_unique";
+    KeyNotUniqueUnenforced = "key_not_unique_unenforced", E::InvalidRequest, rule "key_not_unique";
+    KeyMissingValuesColumn = "key_missing_values_column", E::InvalidRequest, rule "key_missing_values";
+    KeyMissingValuesColumns = "key_missing_values_columns", E::InvalidRequest, rule "key_missing_values";
+    KeyNoValueColumn = "key_no_value_column", W::KeyNoValue;
+    KeyNoValueColumns = "key_no_value_columns", W::KeyNoValue;
+    KeyRepeatsColumn = "key_repeats_column", W::KeyRepeats;
+    KeyRepeatsColumns = "key_repeats_columns", W::KeyRepeats;
+    KeyDeclined = "key_declined", W::KeyDeclined;
+    TimeColumnsTakenEarliest = "time_columns_taken_earliest", W::TimeColumnsGuessed;
+    TimeColumnsTakenUncheckedEmpty = "time_columns_taken_unchecked_empty", W::TimeColumnsGuessed;
+    TimeColumnsTakenUncheckedSparse = "time_columns_taken_unchecked_sparse", W::TimeColumnsGuessed;
+    TimeColumnsTakenUncheckedConstantWhereHeld = "time_columns_taken_unchecked_constant_where_held", W::TimeColumnsGuessed;
+    TimeColumnsTakenUncheckedConstant = "time_columns_taken_unchecked_constant", W::TimeColumnsGuessed;
+    TimeColumnsTakenEditStamp = "time_columns_taken_edit_stamp", W::TimeColumnsGuessed;
+    TimeColumnsRefusedEmpty = "time_columns_refused_empty", W::TimeColumnsGuessed;
+    TimeColumnsRefusedSparse = "time_columns_refused_sparse", W::TimeColumnsGuessed;
+    TimeColumnsRefusedConstantWhereHeld = "time_columns_refused_constant_where_held", W::TimeColumnsGuessed;
+    TimeColumnsRefusedConstant = "time_columns_refused_constant", W::TimeColumnsGuessed;
+    TimeColumnsRefusedLoadStamp = "time_columns_refused_load_stamp", W::TimeColumnsGuessed;
+    TimeColumnsRefusedEditStamp = "time_columns_refused_edit_stamp", W::TimeColumnsGuessed;
+    TimeColumnsRefusedBirthDate = "time_columns_refused_birth_date", W::TimeColumnsGuessed;
+    ColumnsLeftOut = "columns_left_out", W::ColumnsLeftOut;
+    TimeValuesUnread = "time_values_unread", W::TimeValuesUnread;
+    DatesReadDayFirst = "dates_read_day_first", W::DatesReadDayFirst;
+    KeyCandidatesTied = "key_candidates_tied", W::KeyCandidatesTied;
+    LinkCannotJoinNotTheKey = "link_cannot_join_not_the_key", W::LinkCannotJoin;
+    LinkCannotJoinNoKey = "link_cannot_join_no_key", W::LinkCannotJoin;
+    LinkCannotJoinTypes = "link_cannot_join_types", W::LinkCannotJoin;
+    TablesNameEachOther = "tables_name_each_other", W::TablesNameEachOther;
+    TwoWaysToATable = "two_ways_to_a_table", W::TwoWaysToATable;
+    NoTables = "no_tables", E::InvalidRequest, rule "no_tables";
+    SourceNoPart = "source_no_part", E::InvalidRequest, rule "relation";
+    SourceNameEmpty = "source_name_empty", E::InvalidRequest;
+    TableNamedTwice = "table_named_twice", E::InvalidRequest;
+    NoSuchTable = "no_such_table", E::InvalidRequest, rule "no_such_table";
+    NoSuchTableInSource = "no_such_table_in_source", E::InvalidRequest, rule "no_such_table";
+    ProviderSchemaMismatch = "provider_schema_mismatch", E::ProviderSchemaMismatch;
+    ValueNotANumber = "value_not_a_number", E::ProviderSchemaMismatch;
+    Undeclared = "undeclared", E::UnsupportedRequest;
+    SeedPastRange = "seed_past_range", E::InvalidRequest;
+    BigIntegerPastType = "big_integer_past_type", E::ValueOutOfRange;
+    LagPastPayload = "lag_past_payload", E::InvalidRequest;
+    DateLiteralPacked = "date_literal_packed", E::InvalidRequest, rule "date_literal_packed";
+    LocalZoneUnread = "local_zone_unread", E::InvalidRequest;
+    ClockPastYears = "clock_past_years", E::InvalidRequest;
+    UnknownZone = "unknown_zone", E::InvalidRequest;
+    TestOperationRefused = "test_operation_refused", E::InvalidRequest;
+    FallbackLimit = "fallback_limit", E::UnsupportedRequest, rule "fallback_limit";
+    FallbackUnordered = "fallback_unordered", E::UnsupportedRequest, rule "fallback";
+    FallbackTimePast = "fallback_time_past", E::UnsupportedRequest, rule "fallback";
+    FallbackTimeType = "fallback_time_type", E::UnsupportedRequest, rule "fallback";
+    FallbackNoColumn = "fallback_no_column", E::UnsupportedRequest, rule "fallback";
+    FallbackSeedTypes = "fallback_seed_types", E::UnsupportedRequest, rule "fallback";
+    HostClockNotUtc = "host_clock_not_utc", E::InvalidRequest;
+    StateVersion = "state_version", E::InvalidRequest;
+    StateUnread = "state_unread", E::InvalidRequest;
+    SeedNegative = "seed_negative", E::InvalidRequest;
+    SamplerStateVersion = "sampler_state_version", E::InvalidRequest;
+    OptionValuesUnread = "option_values_unread", E::InvalidRequest;
+    CandidatesNotRanked = "candidates_not_ranked", E::InvalidRequest, rule "candidates_not_ranked";
+    RankingStatistic = "ranking_statistic", E::InvalidRequest, rule "ranking_statistic";
+    RankingColumn = "ranking_column", E::InvalidRequest, rule "ranking_column";
+    RankingFilter = "ranking_filter", E::InvalidRequest, rule "ranking_filter";
+    CandidatesMissing = "candidates_missing", E::InvalidRequest, rule "candidates_missing";
+    CandidatesEmpty = "candidates_empty", E::InvalidRequest, rule "candidates_empty";
+    TooManyCandidates = "too_many_candidates", E::InvalidRequest, rule "too_many_parts";
+    TooManySteps = "too_many_steps", E::InvalidRequest, rule "too_many_parts";
+    RankingOutputsNone = "ranking_outputs_none", E::InvalidRequest, rule "ranking_outputs";
+    RankingOutputUnknown = "ranking_output_unknown", E::InvalidRequest, rule "ranking_outputs";
+    RankingOutputsUnknown = "ranking_outputs_unknown", E::InvalidRequest, rule "ranking_outputs";
+    RankingUnscoredOne = "ranking_unscored_one", E::UnsupportedRequest, rule "ranking_unscored";
+    RankingUnscoredSeveral = "ranking_unscored_several", E::UnsupportedRequest, rule "ranking_unscored";
+    CandidatesUnscoredOne = "candidates_unscored_one", W::CandidatesUnscored;
+    CandidatesUnscoredSeveral = "candidates_unscored_several", W::CandidatesUnscored;
+    BatchedPartRanking = "batched_part_ranking", E::UnsupportedRequest, rule "batched_part";
+    BatchedPartForecast = "batched_part_forecast", E::UnsupportedRequest, rule "batched_part";
+    CandidateMissing = "candidate_missing", E::InvalidRequest, rule "candidate_missing";
+    CandidateBool = "candidate_bool", E::InvalidRequest, rule "candidate_bool";
+    CandidateUnreadable = "candidate_unreadable", E::InvalidRequest, rule "candidate_unreadable";
+    CandidateNotExact = "candidate_not_exact", E::InvalidRequest, rule "candidate_not_exact";
+    CandidateNotWhole = "candidate_not_whole", E::InvalidRequest, rule "candidate_not_whole";
+    CandidateUnwritable = "candidate_unwritable", E::InvalidRequest, rule "candidate_unwritable";
+    CandidateType = "candidate_type", E::UnsupportedRequest, rule "candidate_type";
+    ProbabilitiesUnread = "probabilities_unread", E::InternalError;
+    ProbabilitiesNone = "probabilities_none", E::InternalError;
+    NotYetPredict = "not_yet_predict", E::UnsupportedRequest;
+    ResponseUnread = "response_unread", E::InvalidResponse;
+    ExplanationNotAMapping = "explanation_not_a_mapping", E::InvalidResponse;
+    MetadataNotAMapping = "metadata_not_a_mapping", E::InvalidResponse;
+    ModelLacksShape = "model_lacks_shape", E::UnsupportedRequest;
+    ModelLacksTask = "model_lacks_task", E::UnsupportedRequest;
+    ModelLacksOutputs = "model_lacks_outputs", E::UnsupportedRequest;
+    ContextPastModel = "context_past_model", E::UnsupportedRequest;
+    NoContextRows = "no_context_rows", E::UnsupportedRequest;
+    TooManyClasses = "too_many_classes", E::UnsupportedRequest;
+    OneClassColumn = "one_class_column", E::UnsupportedRequest;
+    OneClassPredicted = "one_class_predicted", E::UnsupportedRequest;
+    OneClassQuestion = "one_class_question", E::UnsupportedRequest;
+    OneClassAnswer = "one_class_answer", E::UnsupportedRequest;
+    ContextConstantColumn = "context_constant_column", W::ContextConstant;
+    ContextConstantPredicted = "context_constant_predicted", W::ContextConstant;
+    ContextConstantQuestion = "context_constant_question", W::ContextConstant;
+    ContextConstantAnswer = "context_constant_answer", W::ContextConstant;
+    OutputsAbsent = "outputs_absent", W::OutputsAbsent;
+    StepsUnexplained = "steps_unexplained", W::StepsUnexplained;
+    ExplanationOneEntity = "explanation_one_entity", E::UnsupportedRequest;
+    ExplanationFastMode = "explanation_fast_mode", E::UnsupportedRequest;
+    OptionsUnread = "options_unread", E::UnsupportedRequest;
+    OptionsUnreadStatistic = "options_unread_statistic", E::UnsupportedRequest;
+    PayloadSmallerCalls = "payload_smaller_calls", E::InvalidRequest;
+    PayloadNoSmallerCall = "payload_no_smaller_call", E::InvalidRequest;
+    CallPastEndpoint = "call_past_endpoint", E::InvalidRequest;
+    OutputsNone = "outputs_none", E::InvalidRequest;
+    NotFinite = "not_finite", E::InvalidRequest;
+    PastInt64 = "past_int64", E::InvalidRequest;
+    ColumnTimePastNanoseconds = "column_time_past_nanoseconds", E::ValueOutOfRange;
+    LagNegative = "lag_negative", E::InvalidRequest;
+    LagNotWhole = "lag_not_whole", E::InvalidRequest;
+    LagNotANumber = "lag_not_a_number", E::InvalidRequest;
+    LagPastTimes = "lag_past_times", E::ValueOutOfRange;
+    NumContextSamplesNotWhole = "num_context_samples_not_whole", E::InvalidRequest;
+    NumContextSamplesBelowOne = "num_context_samples_below_one", E::InvalidRequest;
+    NumContextSamplesPastMost = "num_context_samples_past_most", E::UnsupportedRequest;
+    NumHopsNotWhole = "num_hops_not_whole", E::InvalidRequest;
+    NumHopsNone = "num_hops_none", E::InvalidRequest;
+    RandomSeedNotWhole = "random_seed_not_whole", E::InvalidRequest;
+    TopKNotWhole = "top_k_not_whole", E::InvalidRequest;
+    TopKOutOfRange = "top_k_out_of_range", E::InvalidRequest;
+    RowsPerCall = "rows_per_call", E::InvalidRequest;
+    MaxPqIterationsNotAWholeNumber = "max_pq_iterations_not_a_whole_number", E::InvalidRequest;
+    IterationsBelowOne = "iterations_below_one", E::InvalidRequest;
+    OptionNotWhole = "option_not_whole", E::InvalidRequest;
+    OptionUnknown = "option_unknown", E::InvalidRequest;
+    OptionNotABoolean = "option_not_a_boolean", E::InvalidRequest;
+    NeighborsNotASequence = "neighbors_not_a_sequence", E::InvalidRequest;
+    HopNotWhole = "hop_not_whole", E::InvalidRequest;
+    HopNegative = "hop_negative", E::InvalidRequest;
+    ContextAnchorNotATime = "context_anchor_not_a_time", E::InvalidRequest;
+    ExcludedNotAMapping = "excluded_not_a_mapping", E::InvalidRequest;
+    ExcludedNotASequence = "excluded_not_a_sequence", E::InvalidRequest;
+    StatisticUnknown = "statistic_unknown", E::InvalidRequest;
+    StatisticNotARegression = "statistic_not_a_regression", E::InvalidRequest;
+    NoHopNumHops = "no_hop_num_hops", E::InvalidRequest;
+    NoHopNumNeighbors = "no_hop_num_neighbors", E::InvalidRequest;
+    HopsPastEndpoint = "hops_past_endpoint", E::UnsupportedRequest;
+    HopsPastEndpointUncounted = "hops_past_endpoint_uncounted", E::UnsupportedRequest;
+    InferenceConfigNotAnObject = "inference_config_not_an_object", E::InvalidRequest;
+    InferenceOptionUnknown = "inference_option_unknown", E::InvalidRequest;
+    InferenceOptionNotABoolean = "inference_option_not_a_boolean", E::InvalidRequest;
+    InferenceOptionNotOneToFour = "inference_option_not_one_to_four", E::InvalidRequest;
+    InferenceOptionNotTransforms = "inference_option_not_transforms", E::InvalidRequest;
+    InferenceOptionNotAnOutputType = "inference_option_not_an_output_type", E::InvalidRequest;
+    SamplerStateUnread = "sampler_state_unread", E::InvalidRequest;
+    TimeConstantOffset = "time_constant_offset", E::InvalidRequest;
+    TimeConstantPast = "time_constant_past", E::InvalidRequest;
+    TimeColumnNotATime = "time_column_not_a_time", E::InvalidRequest;
+    OptionsWithoutValues = "options_without_values", E::InvalidRequest;
+    CompositeKeyFloat = "composite_key_float", E::InvalidRequest;
+    CompositeKeyNameLong = "composite_key_name_long", E::InvalidRequest;
+    CompositeKeyNameTaken = "composite_key_name_taken", E::InvalidRequest;
+    ReservedName = "reserved_name", E::InvalidRequest;
+    ReservedNames = "reserved_names", E::InvalidRequest;
+    SchemaLinkUnread = "schema_link_unread", E::InvalidRequest;
+    WireReservedOne = "wire_reserved_one", E::InvalidSchema;
+    WireReservedSeveral = "wire_reserved_several", E::InvalidSchema;
+    IndicesAbsent = "indices_absent", E::InvalidRequest;
+    IndicesNotOneColumn = "indices_not_one_column", E::InvalidRequest;
+    IndicesEmpty = "indices_empty", E::InvalidRequest;
+    IndexMissing = "index_missing", E::InvalidRequest;
+    AnchorEntityNotStatic = "anchor_entity_not_static", E::InvalidRequest;
+    AnchorEntityNoTimeColumn = "anchor_entity_no_time_column", E::InvalidRequest;
+    AnchorEntityNotShared = "anchor_entity_not_shared", E::InvalidRequest;
+    IterationsWholeForWindow = "iterations_whole_for_window", E::InvalidRequest;
+    EntityTableEmpty = "entity_table_empty", E::InvalidRequest;
+    EntityKeyMissing = "entity_key_missing", E::InvalidRequest;
+    TargetNotAFeature = "target_not_a_feature", E::InvalidRequest;
+    ContextPastRows = "context_past_rows", E::InvalidRequest;
+    HeldBySeveralRowsOne = "held_by_several_rows_one", E::InvalidRequest;
+    HeldBySeveralRows = "held_by_several_rows", E::InvalidRequest;
+    HeldBySeveralRowsMany = "held_by_several_rows_many", E::InvalidRequest;
+    NotInTable = "not_in_table", E::InvalidRequest;
+    SubgraphPastTables = "subgraph_past_tables", E::InvalidRequest;
+    Unresolved = "unresolved", E::InvalidRequest;
+    AnchorNotATime = "anchor_not_a_time", E::InvalidRequest;
+    AnchorBeforeData = "anchor_before_data", E::InvalidRequest;
+    ContextBeforeDataRefused = "context_before_data_refused", E::InvalidRequest;
+    ExcludedUnknownTable = "excluded_unknown_table", E::InvalidRequest;
+    ExcludedNotAFeature = "excluded_not_a_feature", E::InvalidRequest;
+    NullComparedNowhere = "null_compared_nowhere", E::InvalidRequest;
+    NoUniqueForeignKey = "no_unique_foreign_key", E::InvalidRequest;
+    ContextTooRestrictive = "context_too_restrictive", E::InvalidRequest;
+    NoEntityAtAnchor = "no_entity_at_anchor", E::InvalidRequest;
+    NoEntityAtAnchorLater = "no_entity_at_anchor_later", E::InvalidRequest;
+    NoEntityPassed = "no_entity_passed", E::InvalidRequest;
+    AnchorTooLate = "anchor_too_late", E::InvalidRequest;
+    NoEntityPassedSeveral = "no_entity_passed_several", E::InvalidRequest;
+    AnchorTooLateSeveral = "anchor_too_late_several", E::InvalidRequest;
+    ForecastTopK = "forecast_top_k", E::InvalidRequest, rule "forecast_top_k";
+    MostEntities = "most_entities", E::UnsupportedRequest, rule "most_entities";
+    MostEntitiesParts = "most_entities_parts", E::UnsupportedRequest, rule "most_entities";
+    MostCalls = "most_calls", E::UnsupportedRequest, rule "most_calls";
+    NotYetMaterialize = "not_yet_materialize", E::UnsupportedRequest;
+    MissingIndexTable = "missing_index_table", W::MissingIndices;
+    MissingIndexTables = "missing_index_tables", W::MissingIndices;
+    MissingIndicesTable = "missing_indices_table", W::MissingIndices;
+    MissingIndicesTables = "missing_indices_tables", W::MissingIndices;
+    ContextBeforeData = "context_before_data", W::ContextBeforeData;
+    ContextBeforeDataUntimed = "context_before_data_untimed", W::ContextBeforeData;
+    AnchorAfterData = "anchor_after_data", W::AnchorAfterData;
+    Float32Overflow = "float32_overflow", W::Float32Overflow;
+    ContextAfterAnchor = "context_after_anchor", W::ContextAfterAnchor;
+    ContextLeaks = "context_leaks", W::ContextLeaks;
+    HopsIgnored = "hops_ignored", W::HopsIgnored;
+    ContextCoverage = "context_coverage", W::ContextCoverage;
+    ContextCapped = "context_capped", W::ContextCapped;
+    TablesUnlinkedOne = "tables_unlinked_one", W::TablesUnlinked;
+    TablesUnreachedOne = "tables_unreached_one", W::TablesUnreached;
+    ColumnsUnreadOne = "columns_unread_one", W::ColumnsUnread;
+    TablesUnlinkedSeveral = "tables_unlinked_several", W::TablesUnlinked;
+    TablesUnreachedSeveral = "tables_unreached_several", W::TablesUnreached;
+    ColumnsUnreadSeveral = "columns_unread_several", W::ColumnsUnread;
+    FilterChoseExamples = "filter_chose_examples", W::FilterChoseExamples;
+    ContextAnswersWindowed = "context_answers_windowed", W::ContextAnswers;
+    ContextAnswersStatic = "context_answers_static", W::ContextAnswers;
+    NullKeysLeftOut = "null_keys_left_out", W::NullKeysLeftOut;
+    DateLiteralDayFirst = "date_literal_day_first", W::DateLiteralDayFirst;
+    EntityUncast = "entity_uncast", E::InvalidRequest;
+    TimePastNanoseconds = "time_past_nanoseconds", E::ValueOutOfRange;
+    TimePastUnit = "time_past_unit", E::ValueOutOfRange;
+    InListFraction = "in_list_fraction", E::InvalidRequest;
+    RenderingRefused = "rendering_refused", E::UnsupportedRequest;
+    NoDialect = "no_dialect", E::UnsupportedRequest;
+    NoDialectNamed = "no_dialect_named", E::UnsupportedRequest;
+    ValueNotJson = "value_not_json", E::ProviderSchemaMismatch;
+    ValueNotAtScale = "value_not_at_scale", E::ProviderSchemaMismatch;
+    TextNotUtf8 = "text_not_utf8", E::ValueOutOfRange, rule "text_not_utf8";
+    UnsupportedTypeUnread = "unsupported_type_unread", E::UnsupportedType;
+    AdmittedPastType = "admitted_past_type", E::ValueOutOfRange;
+    InvalidConfiguration = "invalid_configuration", E::InvalidConfiguration;
+    PartForecastStep = "part_forecast_step", Code::Part;
+    PartForecastStepOutran = "part_forecast_step_outran", Code::Part;
+    PartRankingCandidate = "part_ranking_candidate", Code::Part;
 }

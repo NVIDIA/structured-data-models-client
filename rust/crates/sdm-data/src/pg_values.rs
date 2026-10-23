@@ -39,7 +39,7 @@ use arrow_array::types::{
 use arrow_array::{Array, ArrayRef, Float64Array, Int64Array, ListArray, RecordBatch, StringArray};
 use arrow_schema::{DataType, Field, Schema, SchemaRef, TimeUnit};
 use sdm_contract::data::DECLARED_SCALE_MARKER;
-use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind};
+use sdm_contract::{CoreError, Detail, Sentence};
 
 /// The field metadata naming Arrow's canonical JSON extension type.
 const EXTENSION_NAME: &str = "ARROW:extension:name";
@@ -52,17 +52,16 @@ type Conformed = Option<(SchemaRef, Vec<RecordBatch>)>;
 
 /// A value of a column the rule cannot read, refused by name: the
 /// provider's answer is not what it says it is.
-fn unreadable(column: &str, what: &str) -> CoreError {
+fn unreadable(sentence: Sentence, column: &str, what: &str) -> CoreError {
     CoreError::new(
-        ErrorKind::DataSource,
-        ErrorCode::ProviderSchemaMismatch,
+        sentence,
         format!("column {column:?} holds a value that is not {what}"),
     )
     .with_field("column", Detail::text(column))
 }
 
 fn internal(message: &str) -> CoreError {
-    CoreError::new(ErrorKind::Internal, ErrorCode::InternalError, message)
+    CoreError::new(Sentence::Internal, message)
 }
 
 fn is_json(field: &Field) -> bool {
@@ -89,10 +88,9 @@ fn rule(field: &Field) -> Result<Rule, CoreError> {
             ))))
         }
         DataType::Utf8 => match field.metadata().get(DECLARED_SCALE_MARKER) {
-            Some(scale) => scale
-                .parse::<u32>()
-                .map(Rule::Declared)
-                .map_err(|_| unreadable(field.name(), "a declared scale")),
+            Some(scale) => scale.parse::<u32>().map(Rule::Declared).map_err(|_| {
+                unreadable(Sentence::ValueNotAtScale, field.name(), "a declared scale")
+            }),
             None => Ok(Rule::Kept),
         },
         _ => Ok(Rule::Kept),
@@ -213,14 +211,12 @@ fn json_column(
                 Ok(read) => Ok(read),
                 Err(Unread::NotUtf8) if in_list => Ok(None),
                 Err(Unread::NotUtf8) => Err(CoreError::new(
-                    ErrorKind::Unsupported,
-                    ErrorCode::ValueOutOfRange,
+                    Sentence::TextNotUtf8,
                     "a JSON string holds a lone surrogate, which no UTF-8 text holds",
                 )
                 .with_field("field", Detail::text("column"))
-                .with_field("column", Detail::text(column))
-                .with_field("rule", Detail::text("text_not_utf8"))),
-                Err(Unread::NotJson) => Err(unreadable(column, "JSON")),
+                .with_field("column", Detail::text(column))),
+                Err(Unread::NotJson) => Err(unreadable(Sentence::ValueNotJson, column, "JSON")),
             },
         })
         .map(|r| r.map(|v: Option<String>| v))
@@ -280,7 +276,7 @@ fn declared(
     scale: u32,
     to: &DataType,
 ) -> Result<ArrayRef, CoreError> {
-    let number = |_: &str| unreadable(column, "a number");
+    let number = |_: &str| unreadable(Sentence::ValueNotANumber, column, "a number");
     Ok(match (scale, to) {
         (0, DataType::Int64) => Arc::new(
             texts

@@ -28,7 +28,7 @@
 use sdm_contract::ops::{
     Materialized, OperationResult, QueryFacts, Ranking, RankingPart, RequestState, SamplerMemo,
 };
-use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, Scalar};
+use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 use sdm_request::ranking::{self, Candidate};
 use sdm_wire::json::Value;
 
@@ -41,14 +41,8 @@ use crate::run::Asker;
 
 /// A refusal of the call, `INVALID_REQUEST`, naming the field and the
 /// rule.
-fn refused(message: &str, field: &str, rule: &str) -> CoreError {
-    CoreError::new(
-        ErrorKind::InvalidRequest,
-        ErrorCode::InvalidRequest,
-        message,
-    )
-    .with_field("field", Detail::text(field))
-    .with_field("rule", Detail::text(rule))
+fn refused(sentence: Sentence, message: &str, field: &str) -> CoreError {
+    CoreError::new(sentence, message).with_field("field", Detail::text(field))
 }
 
 fn count(n: usize) -> Detail {
@@ -59,9 +53,9 @@ fn count(n: usize) -> Detail {
 /// (`parts_of`), before anything of it is gathered.
 pub(crate) fn candidates_on_no_ranking() -> CoreError {
     refused(
+        Sentence::CandidatesNotRanked,
         "candidates are the rows a ranking is over, and this question ranks nothing",
         "candidates",
-        "candidates_not_ranked",
     )
 }
 
@@ -83,34 +77,34 @@ pub(crate) async fn materialize(
     // classification.
     if given(&inputs, "prediction_statistic").is_some() {
         return Err(refused(
+            Sentence::RankingStatistic,
             "prediction_statistic applies only to a regression, and a ranking is ordered by how \
              likely each candidate is",
             "prediction_statistic",
-            "ranking_statistic",
         ));
     }
     // `_per_candidate`, in its order.
     let Some(ranked) = plan.ranked else {
         return Err(refused(
+            Sentence::RankingColumn,
             "a ranking is asked one candidate at a time, about what an entity reaches in a \
              window, and this one ranks a column instead",
             "query",
-            "ranking_column",
         ));
     };
     if ranked.filtered() {
         return Err(refused(
+            Sentence::RankingFilter,
             "the rows to rank are chosen by a filter, which each candidate's question cannot \
              combine with its own",
             "query",
-            "ranking_filter",
         ));
     }
     let Some(given_candidates) = &inputs.candidates else {
         return Err(refused(
+            Sentence::CandidatesMissing,
             "a ranking is over candidates, which have to be named",
             "candidates",
-            "candidates_missing",
         )
         .with_field("column", Detail::text(&ranked.column)));
     };
@@ -128,17 +122,17 @@ pub(crate) async fn materialize(
     let kept = ranking::distinct(&candidates);
     if kept.is_empty() {
         return Err(refused(
+            Sentence::CandidatesEmpty,
             "candidates is empty, so there is nothing to rank",
             "candidates",
-            "candidates_empty",
         ));
     }
     let most = inputs.most_parts.unwrap_or(MOST_PARTS);
     if kept.len() > most as usize {
         return Err(refused(
+            Sentence::TooManyCandidates,
             "a ranking asks one question per candidate, and these are more than the host's limit",
             "candidates",
-            "too_many_parts",
         )
         .with_field("candidates", count(kept.len()))
         .with_field("limit", Detail::Scalar(Scalar::UInt32(most))));
@@ -191,13 +185,11 @@ pub(crate) async fn materialize(
     let parts = u64::try_from(kept.len()).unwrap_or(u64::MAX);
     if entities > per_call {
         return Err(CoreError::new(
-            ErrorKind::Unsupported,
-            ErrorCode::UnsupportedRequest,
+            Sentence::BatchedPartRanking,
             "a ranking over more entities than one call scores would batch each candidate's \
              question",
         )
         .with_field("field", Detail::text("indices"))
-        .with_field("rule", Detail::text("batched_part"))
         .with_field("part_kind", Detail::text("ranking"))
         .with_field("entities", Detail::Scalar(Scalar::UInt64(entities)))
         .with_field("parts", Detail::Scalar(Scalar::UInt64(parts)))
@@ -230,6 +222,7 @@ pub(crate) async fn materialize(
                 Detail::Scalar(Scalar::UInt32(position)),
             )
             .with_field("ranking_parts", Detail::Scalar(Scalar::UInt64(parts)))
+            .in_part(Sentence::PartRankingCandidate)
         };
         let done = one(&asker, asked).await;
         asker.keep(handed.clone());
@@ -282,10 +275,6 @@ pub(crate) async fn materialize(
 const RANKING_OUTPUTS: [&str; 2] = ["prediction", "rankings"];
 const RANKING_PARTS: [&str; 2] = ["prediction", "probabilities"];
 
-/// The notice of the candidates a ranking leaves out, each context sampled
-/// for it holding one answer only, which a host words naming them.
-pub const CANDIDATES_UNSCORED: &str = "CANDIDATES_UNSCORED";
-
 /// A ranking's question as `predict` asks it: the candidate, by its
 /// position among those given and as the result names it, and the
 /// question's payload, query and the id its call carries.
@@ -305,9 +294,9 @@ pub(crate) async fn predict(
     if !inputs.default_outputs {
         if inputs.outputs.is_empty() {
             return Err(refused(
+                Sentence::RankingOutputsNone,
                 "outputs must name at least one field",
                 "outputs",
-                "ranking_outputs",
             ));
         }
         let unknown: Vec<&String> = inputs
@@ -317,10 +306,14 @@ pub(crate) async fn predict(
             .collect();
         if !unknown.is_empty() {
             return Err(refused(
+                if unknown.len() > 1 {
+                    Sentence::RankingOutputsUnknown
+                } else {
+                    Sentence::RankingOutputUnknown
+                },
                 "a ranking gives back its prediction and rankings, and an output named is \
                  neither",
                 "outputs",
-                "ranking_outputs",
             )
             .with_field(
                 "unsupported",
@@ -336,6 +329,7 @@ pub(crate) async fn predict(
                 Detail::Scalar(Scalar::UInt32(position)),
             )
             .with_field("ranking_parts", Detail::Scalar(Scalar::UInt64(parts)))
+            .in_part(Sentence::PartRankingCandidate)
         }
     };
     let asked: Vec<String> = RANKING_PARTS.iter().map(|f| (*f).to_owned()).collect();
@@ -371,24 +365,33 @@ pub(crate) async fn predict(
         }
     }
     let positions = |at: &[u32]| Detail::List(at.iter().map(|p| Scalar::UInt32(*p)).collect());
+    let several = cold.len() > 1;
     if cold.len() == questions.len() {
         return Err(CoreError::new(
-            ErrorKind::Unsupported,
-            ErrorCode::UnsupportedRequest,
+            if several {
+                Sentence::RankingUnscoredSeveral
+            } else {
+                Sentence::RankingUnscoredOne
+            },
             "the context gathered for every candidate holds one answer only, so there is \
              nothing to rank and nothing was sent",
         )
         .with_field("model", Detail::text(&inputs.model))
-        .with_field("rule", Detail::text("ranking_unscored"))
         .with_field("candidates", positions(&cold))
         .with_field("classes_in_context", count(1)));
     }
     if !cold.is_empty() {
-        asker.warn(sdm_contract::CoreWarning {
-            code: CANDIDATES_UNSCORED.to_owned(),
-            message: "candidates are left out of the ranking, unscored".to_owned(),
-            fields: [("candidates".to_owned(), positions(&cold))].into(),
-        });
+        asker.warn(
+            sdm_contract::CoreWarning::new(
+                if several {
+                    Sentence::CandidatesUnscoredSeveral
+                } else {
+                    Sentence::CandidatesUnscoredOne
+                },
+                "candidates are left out of the ranking, unscored",
+            )
+            .with_field("candidates", positions(&cold)),
+        );
     }
     // Each question left asked as a classification, in order, a refusal
     // said of its candidate, with how many were answered before it.

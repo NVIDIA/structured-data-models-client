@@ -21,7 +21,7 @@ use arrow_array::RecordBatch;
 use arrow_schema::{DataType, Field, Schema};
 use sdm_contract::data::{EXACT_NUMBER_MARKED, EXACT_NUMBER_MARKER, Relation};
 use sdm_contract::ops::{Dtype, ExactNumber, SourceFacts, Stype};
-use sdm_contract::{ColumnType, CoreError, Detail, ErrorCode, ErrorKind, Scalar, Unit};
+use sdm_contract::{ColumnType, CoreError, Detail, Scalar, Sentence, Unit};
 
 use crate::names;
 use crate::not_yet;
@@ -290,14 +290,17 @@ impl InferredTable {
 
 /// The owner's switch of P1B-11 (2026-10-13): an empty table is refused as
 /// an invalid request, which the reference's unnamed error says it is, not
-/// as a rule the core lacks; the operation and rule stay named.
-fn invalid_request(refusal: CoreError) -> CoreError {
-    CoreError {
-        kind: ErrorKind::InvalidRequest,
-        code: ErrorCode::InvalidRequest,
-        message: "a table of the source holds no rows".to_owned(),
-        ..refusal
-    }
+/// as a rule the core lacks; the operation and rule stay named, and the
+/// table is named by its source, as the reference's error names it.
+fn empty_table(source: &Relation) -> CoreError {
+    let refused = not_yet("empty_table");
+    CoreError::new(Sentence::EmptyTable, "a table of the source holds no rows")
+        .with_field("operation", refused.fields["operation"].clone())
+        .with_field("rule", refused.fields["rule"].clone())
+        .with_field(
+            "source",
+            Detail::List(source.source.iter().cloned().map(Scalar::Utf8).collect()),
+        )
 }
 
 /// Infers table `name`, read as `source` in the source, from its catalog
@@ -409,8 +412,7 @@ fn choose(
         }
         _ => {
             return Err(CoreError::new(
-                ErrorKind::Internal,
-                ErrorCode::InternalError,
+                Sentence::Internal,
                 "the time column's choice was given another reading of the whole table than it asks",
             ));
         }
@@ -549,8 +551,7 @@ pub fn source_facts(
 ) -> Result<Vec<(String, SourceFacts)>, CoreError> {
     if schema.fields().len() != catalog.len() {
         return Err(CoreError::new(
-            ErrorKind::Internal,
-            ErrorCode::InternalError,
+            Sentence::Internal,
             "a preview holds another number of columns than its catalog",
         ));
     }
@@ -590,7 +591,7 @@ pub fn preview_keyed(
     let rows: usize = batches.iter().map(RecordBatch::num_rows).sum();
     if rows == 0 {
         // The reference refuses an empty table as a RuntimeError.
-        return Err(invalid_request(not_yet("empty_table")));
+        return Err(empty_table(source));
     }
     let keyed = Keyed::of(catalog, constraints);
     let declared_primary = &keyed.primary;
@@ -1239,8 +1240,7 @@ pub fn first_values_past_the_years(
         let years = i128::from(DATETIME_MIN_US)..=i128::from(DATETIME_MAX_US);
         if !years.contains(&i128::from(*value)) || !years.contains(&wall) {
             return Err(CoreError::new(
-                ErrorKind::Unsupported,
-                ErrorCode::ValueOutOfRange,
+                Sentence::TimeOutsideYears,
                 "the first time a time column's choice reads is outside the years 1 to 9999",
             )
             .with_field("table", Detail::text(table.name.clone()))
@@ -1303,9 +1303,7 @@ pub fn whole_table(
     batches: &[RecordBatch],
     times: &dyn TextTimes,
 ) -> Result<WholeTable, CoreError> {
-    let internal = |message: &'static str| {
-        CoreError::new(ErrorKind::Internal, ErrorCode::InternalError, message)
-    };
+    let internal = |message: &'static str| CoreError::new(Sentence::Internal, message);
     let batch = batches
         .iter()
         .find(|b| b.num_rows() > 0)

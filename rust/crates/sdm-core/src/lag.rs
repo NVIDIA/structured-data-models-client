@@ -34,7 +34,7 @@
 //! than their own; the core puts each on its own row (T2.9 fix 1, a
 //! registered difference decided under KO2-70).
 
-use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, Scalar};
+use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 use sdm_engine::labels::{self, Labels, Target};
 use sdm_engine::sample::out_of_range;
 use sdm_engine::time::offset::Offset;
@@ -157,8 +157,7 @@ impl Lag {
             .unwrap_or(usize::MAX);
         if least > PAYLOAD_BYTES {
             return Err(CoreError::new(
-                ErrorKind::InvalidRequest,
-                ErrorCode::InvalidRequest,
+                Sentence::LagPastPayload,
                 "the request is larger than the endpoint takes",
             )
             .with_field("field", Detail::text("payload"))
@@ -223,8 +222,7 @@ impl Lag {
                     }
                     Labels::Int(_) | Labels::Text(_) => {
                         return Err(CoreError::new(
-                            ErrorKind::Internal,
-                            ErrorCode::InternalError,
+                            Sentence::Internal,
                             "a lagged target is neither a number nor a condition",
                         ));
                     }
@@ -241,6 +239,7 @@ impl Lag {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sdm_contract::ErrorCode;
     use sdm_contract::pql::TimeUnit;
     use sdm_engine::labels::{Aggregation, Constant, RelOp};
 

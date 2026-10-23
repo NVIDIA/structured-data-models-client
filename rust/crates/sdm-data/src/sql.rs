@@ -29,7 +29,7 @@ use sdm_contract::data::{
     TableColumn, TableKey, TieBreak, TieTerm, Window, refuse_relation, refused, seed_key_columns,
 };
 use sdm_contract::ops::Dtype;
-use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, Scalar};
+use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 
 use crate::{duckdb, postgres, quote, sqlite};
 
@@ -284,13 +284,9 @@ pub(crate) type Batches = (arrow_schema::SchemaRef, Vec<RecordBatch>);
 
 /// A request field a rendering does not take, refused by name.
 pub(crate) fn not_taken(request: &DataRequest, field: &str, message: &str) -> CoreError {
-    CoreError::new(
-        ErrorKind::Unsupported,
-        ErrorCode::UnsupportedRequest,
-        message,
-    )
-    .with_field("request", Detail::text(request.name()))
-    .with_field("field", Detail::text(field))
+    CoreError::new(Sentence::RenderingRefused, message)
+        .with_field("request", Detail::text(request.name()))
+        .with_field("field", Detail::text(field))
 }
 
 /// The one rendering of a relation every dialect's `FROM` goes through

@@ -28,7 +28,7 @@ use arrow_array::builder::{Float64Builder, Int64Builder, ListBuilder, StringBuil
 use arrow_array::{Array, ArrayRef, Int64Array, RecordBatch};
 use arrow_schema::{DataType, Field, Schema};
 use sdm_contract::ops::{GivenCandidate, TypedKind};
-use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, Scalar};
+use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 
 use crate::predict::{Entity, Part, id_columns};
 
@@ -322,14 +322,12 @@ pub fn distinct(candidates: &[Candidate]) -> Vec<(u32, &Candidate)> {
 }
 
 /// A candidate refused, by rule, naming it by its position.
-fn refused(rule: &'static str, position: u32) -> CoreError {
+fn refused(sentence: Sentence, position: u32) -> CoreError {
     CoreError::new(
-        ErrorKind::InvalidRequest,
-        ErrorCode::InvalidRequest,
+        sentence,
         "a candidate cannot be written into the question asked of it",
     )
     .with_field("field", Detail::text("candidates"))
-    .with_field("rule", Detail::text(rule))
     .with_field("candidate", Detail::Scalar(Scalar::UInt32(position)))
 }
 
@@ -337,7 +335,7 @@ fn refused(rule: &'static str, position: u32) -> CoreError {
 /// (`candidate_unreadable`, reason `not_a_key`), which names no row: the
 /// reference's `dict.fromkeys` fails on it before anything is written.
 pub fn unreadable(position: u32) -> CoreError {
-    refused("candidate_unreadable", position).with_field("reason", Detail::text("not_a_key"))
+    refused(Sentence::CandidateUnreadable, position).with_field("reason", Detail::text("not_a_key"))
 }
 
 /// Whether Python's `str.isspace` holds of `c`: Unicode white space, and
@@ -458,18 +456,16 @@ pub fn literal(
     let mut value = candidate.clone();
     match candidate {
         Candidate::Missing | Candidate::Repeat => {
-            return Err(refused("candidate_missing", position));
+            return Err(refused(Sentence::CandidateMissing, position));
         }
-        Candidate::Bool(_) => return Err(refused("candidate_bool", position)),
+        Candidate::Bool(_) => return Err(refused(Sentence::CandidateBool, position)),
         Candidate::Unreadable => return Err(unreadable(position)),
         Candidate::Other(name) => {
             return Err(CoreError::new(
-                ErrorKind::Unsupported,
-                ErrorCode::UnsupportedRequest,
+                Sentence::CandidateType,
                 "a candidate is of a type this core does not write into a question yet",
             )
             .with_field("field", Detail::text("candidates"))
-            .with_field("rule", Detail::text("candidate_type"))
             .with_field("candidate", Detail::Scalar(Scalar::UInt32(position)))
             .with_field("type", Detail::text(name)));
         }
@@ -477,7 +473,8 @@ pub fn literal(
             let dtype = dtype.map_or_else(|| decimal_dtype(unscaled, *scale), str::to_owned);
             let text = decimal_text(unscaled, *scale);
             let not_exact = || {
-                refused("candidate_not_exact", position).with_field("dtype", Detail::text(&dtype))
+                refused(Sentence::CandidateNotExact, position)
+                    .with_field("dtype", Detail::text(&dtype))
             };
             value = match dtype.as_str() {
                 "int64" => Candidate::Int(
@@ -497,7 +494,7 @@ pub fn literal(
     if dtype == Some("string") {
         match &value {
             Candidate::Float(f) if !f.is_finite() => {
-                return Err(refused("candidate_not_whole", position));
+                return Err(refused(Sentence::CandidateNotWhole, position));
             }
             Candidate::Float(f) => value = Candidate::Text(positional(&float_repr(*f))),
             Candidate::Int(n) => value = Candidate::Text(n.whole_text()),
@@ -507,16 +504,16 @@ pub fn literal(
     match value {
         Candidate::Int(n) => Ok(n.whole_text()),
         Candidate::Float(f) if !f.is_finite() || f.fract() != 0.0 => {
-            Err(refused("candidate_not_whole", position))
+            Err(refused(Sentence::CandidateNotWhole, position))
         }
         Candidate::Float(f) => Ok(whole_text(f)),
         Candidate::Text(text) | Candidate::Spelled(text) | Candidate::Typed { text, .. } => {
             if text.chars().any(|c| "\"'\\,()".contains(c)) || text.chars().all(is_space) {
-                return Err(refused("candidate_unwritable", position));
+                return Err(refused(Sentence::CandidateUnwritable, position));
             }
             Ok(format!("\"{text}\""))
         }
-        _ => Err(refused("candidate_missing", position)),
+        _ => Err(refused(Sentence::CandidateMissing, position)),
     }
 }
 
@@ -575,8 +572,11 @@ pub fn rank(answers: &[(u32, String, Part)], top_k: Option<u32>) -> Result<Vec<R
                     .collect();
                 classes.sort_unstable();
                 return Err(CoreError::new(
-                    ErrorKind::Internal,
-                    ErrorCode::InternalError,
+                    if classes.is_empty() {
+                        Sentence::ProbabilitiesNone
+                    } else {
+                        Sentence::ProbabilitiesUnread
+                    },
                     "the endpoint answered a candidate's question without saying how sure it was",
                 )
                 .with_field("field", Detail::text("probabilities"))
@@ -628,13 +628,7 @@ pub fn rank(answers: &[(u32, String, Part)], top_k: Option<u32>) -> Result<Vec<R
 /// int64, each one's position among those given, in the same order) and
 /// `answer_index`, the row's place in the order the answers named it.
 pub fn table(rows: &[Row], text_ids: bool) -> Result<RecordBatch, CoreError> {
-    let internal = || {
-        CoreError::new(
-            ErrorKind::Internal,
-            ErrorCode::InternalError,
-            "the ranking does not lay out",
-        )
-    };
+    let internal = || CoreError::new(Sentence::Internal, "the ranking does not lay out");
     let mut order: Vec<usize> = (0..rows.len()).collect();
     order.sort_by_key(|&i| rows[i].row_index);
     let mut fields = vec![Field::new("row_index", DataType::Int64, false)];
@@ -681,6 +675,7 @@ pub fn table(rows: &[Row], text_ids: bool) -> Result<RecordBatch, CoreError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sdm_contract::ErrorCode;
 
     fn repr(x: f64) -> String {
         // Enough of Python's repr for these tests.

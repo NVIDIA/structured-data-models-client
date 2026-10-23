@@ -33,9 +33,9 @@ use std::task::{Context, Poll};
 
 use arrow_schema::TimeUnit;
 use sdm_contract::catalog::{CatalogAnswer, CatalogForeignKey};
-use sdm_contract::data::{DataRequest, DescribePart, RELATION_RULE, Relation, TableKey};
+use sdm_contract::data::{DataRequest, DescribePart, Relation, TableKey};
 use sdm_contract::ops::{ColumnRef, DescribedSource, NamedTable, OperationResult, SourceSpec};
-use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, HostFacts, Scalar, Unit};
+use sdm_contract::{CoreError, Detail, HostFacts, Scalar, Sentence, Unit};
 use sdm_engine::time::text::Reader;
 use sdm_engine::time::{Instant, Zones};
 use sdm_schema::assemble::{self, Assembled, Given};
@@ -108,12 +108,10 @@ pub(crate) async fn run(
         )?;
         if listed.is_empty() {
             return Err(CoreError::new(
-                ErrorKind::InvalidRequest,
-                ErrorCode::InvalidRequest,
+                Sentence::NoTables,
                 "the source holds no table to describe",
             )
-            .with_field("field", Detail::text("tables"))
-            .with_field("rule", Detail::text("no_tables")));
+            .with_field("field", Detail::text("tables")));
         }
         // Each listed under its own name, which must be one the schema
         // may give a table.
@@ -356,13 +354,10 @@ fn check_ranges(read: &ArrowData, asked: &[String], preview: &ArrowData) -> Resu
 /// ([`assemble::check_table_name`]). Refusals are `INVALID_REQUEST`
 /// naming the field.
 fn named_tables(spec: &SourceSpec) -> Result<Vec<NamedTable>, CoreError> {
-    let refuse = |message: &'static str| {
-        CoreError::new(
-            ErrorKind::InvalidRequest,
-            ErrorCode::InvalidRequest,
-            message,
-        )
-        .with_field("field", Detail::text("tables"))
+    let refuse = |sentence, message: &'static str, table: &str| {
+        CoreError::new(sentence, message)
+            .with_field("field", Detail::text("tables"))
+            .with_field("table", Detail::text(table))
     };
     let mut seen = std::collections::BTreeSet::new();
     for table in &spec.tables {
@@ -371,15 +366,25 @@ fn named_tables(spec: &SourceSpec) -> Result<Vec<NamedTable>, CoreError> {
         // by its rule here, whatever reads it; how many parts a source takes
         // is its dialect's or provider's to refuse.
         if table.source.source.is_empty() {
-            return Err(
-                refuse("a relation names no part").with_field("rule", Detail::text(RELATION_RULE))
-            );
+            return Err(refuse(
+                Sentence::SourceNoPart,
+                "a relation names no part",
+                &table.name,
+            ));
         }
         if table.source.source.iter().any(String::is_empty) {
-            return Err(refuse("a table's name in the source is empty"));
+            return Err(refuse(
+                Sentence::SourceNameEmpty,
+                "a table's name in the source is empty",
+                &table.name,
+            ));
         }
         if !seen.insert(table.name.as_str()) {
-            return Err(refuse("a table is named twice"));
+            return Err(refuse(
+                Sentence::TableNamedTwice,
+                "a table is named twice",
+                &table.name,
+            ));
         }
     }
     Ok(spec.tables.clone())
@@ -610,11 +615,13 @@ async fn count_keys(
     // A declared key the source does not hold its rows to is refused naming
     // the source's database, as the reference names its backend.
     keys::hold(tables, &counted, stated, infer_links).map_err(|refused| {
+        if refused.sentence != Sentence::KeyNotUniqueUnenforced {
+            return refused;
+        }
         match asker.source_database() {
-            Some(database) if refused.fields.contains_key("variant") => {
-                refused.with_field("database", Detail::text(database))
-            }
-            _ => refused,
+            Some(database) => refused.with_field("database", Detail::text(database)),
+            // With no database to name, the key is said as any other.
+            None => refused.saying(Sentence::KeyNotUniqueColumn),
         }
     })
 }
@@ -865,34 +872,20 @@ mod tests {
 
     #[test]
     fn only_a_provider_s_failure_or_an_undeclared_request_falls_back() {
-        use sdm_contract::{CoreError, Detail, ErrorKind};
-        let error = |kind, code| CoreError::new(kind, code, "x");
-        assert!(falls_back(&error(
-            ErrorKind::DataSource,
-            ErrorCode::ProviderError
-        )));
-        let undeclared = error(ErrorKind::Unsupported, ErrorCode::UnsupportedRequest)
-            .with_field("request", Detail::text("column_ranges"));
+        use sdm_contract::{CoreError, Detail, Sentence};
+        let error = |sentence| CoreError::new(sentence, "x");
+        assert!(falls_back(&error(Sentence::ProviderFailed)));
+        let undeclared =
+            error(Sentence::Undeclared).with_field("request", Detail::text("column_ranges"));
         assert!(falls_back(&undeclared));
         // Another request undeclared, a rule not ported, a plan's refusal,
         // a mismatch and an internal error stay the core's.
-        let other = error(ErrorKind::Unsupported, ErrorCode::UnsupportedRequest)
-            .with_field("request", Detail::text("preview"));
+        let other = error(Sentence::Undeclared).with_field("request", Detail::text("preview"));
         assert!(!falls_back(&other));
-        let rule = error(ErrorKind::Unsupported, ErrorCode::UnsupportedRequest)
-            .with_field("rule", Detail::text("column_type"));
+        let rule = error(Sentence::NotYetDescribe).with_field("rule", Detail::text("column_type"));
         assert!(!falls_back(&rule));
-        assert!(!falls_back(&error(
-            ErrorKind::InvalidRequest,
-            ErrorCode::InvalidRequest
-        )));
-        assert!(!falls_back(&error(
-            ErrorKind::DataSource,
-            ErrorCode::ProviderSchemaMismatch
-        )));
-        assert!(!falls_back(&error(
-            ErrorKind::Internal,
-            ErrorCode::InternalError
-        )));
+        assert!(!falls_back(&error(Sentence::DataRequestRefused)));
+        assert!(!falls_back(&error(Sentence::ProviderSchemaMismatch)));
+        assert!(!falls_back(&error(Sentence::Internal)));
     }
 }
