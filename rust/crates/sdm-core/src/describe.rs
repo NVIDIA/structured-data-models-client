@@ -308,6 +308,10 @@ pub(crate) async fn run(
             table.duplicate_keys = Some(Scalar::UInt64(repeats));
         }
     }
+    // The namespace the run read its tables under, where it read parts
+    // the provider left to the connection, for materialize to read the
+    // same tables (`SourceDescription::namespace`).
+    description.namespace = asker.settled_namespace();
     let bytes = serde_json::to_vec(&description)
         .map_err(|_| internal("a source description does not serialize"))?;
     let id = asker.attach(Attachment::Bytes(bytes))?;
@@ -668,18 +672,26 @@ pub(crate) async fn ask(asker: &Asker, request: DataRequest) -> Result<ArrowData
 /// every later relation read under them, as the reference reads a
 /// Databricks source naming its catalog alone under the session's current
 /// schema (`SELECT current_catalog(), current_schema()`, T3.4).
-pub(crate) async fn settled(asker: Asker) -> Result<Asker, CoreError> {
+pub(crate) async fn settled(asker: Asker, known: Option<Vec<String>>) -> Result<Asker, CoreError> {
     let Some(data) = asker.data().filter(|data| data.unsettled()).cloned() else {
         return Ok(asker);
     };
-    let asked = DataRequest::Describe {
-        tables: vec![],
-        part: DescribePart::Namespace,
+    // The parts a description was read under, read again as they were
+    // (`SourceDescription::namespace`), else the source's current ones.
+    let parts = match known {
+        Some(parts) => parts,
+        None => {
+            let asked = DataRequest::Describe {
+                tables: vec![],
+                part: DescribePart::Namespace,
+            };
+            match describe(&asker, asked).await? {
+                CatalogAnswer::Namespace(parts) => parts,
+                _ => return Err(another_part()),
+            }
+        }
     };
-    match describe(&asker, asked).await? {
-        CatalogAnswer::Namespace(parts) => Ok(asker.with_access(data.settled(parts))),
-        _ => Err(another_part()),
-    }
+    Ok(asker.with_access(data.settled(parts.clone()), parts))
 }
 
 /// The catalog's answer to `request`, a `describe`: fetched, admitted,

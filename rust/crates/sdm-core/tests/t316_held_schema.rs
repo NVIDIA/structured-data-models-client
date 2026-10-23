@@ -71,6 +71,7 @@ fn source(relation: &str, dtype: Dtype, received: ColumnType, unique: bool) -> O
         unique,
         declared_type: None,
         exact_number: None,
+        namespace: None,
     })
 }
 
@@ -544,6 +545,7 @@ fn numeric() -> HeldSchema {
         unique: exact == ExactNumber::DeclaredKey,
         declared_type: None,
         exact_number: Some(exact),
+        namespace: None,
     };
     for table in &mut held.tables {
         for column in &mut table.columns {

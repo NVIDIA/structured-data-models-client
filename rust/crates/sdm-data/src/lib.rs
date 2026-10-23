@@ -229,7 +229,13 @@ impl DataLayer for Data {
 
     fn unsettled(&self, provider: &ProviderChoice) -> bool {
         match provider {
-            ProviderChoice::Sql { namespace, .. } => given_parts(namespace).is_none(),
+            ProviderChoice::Sql { dialect, namespace } => {
+                given_parts(namespace).is_none()
+                    || sql::dialect(dialect.name()).is_some_and(|d| {
+                        d.settles_namespace()
+                            && namespace.iter().flatten().count() < d.namespace_depth()
+                    })
+            }
             ProviderChoice::Host { .. } => false,
         }
     }
