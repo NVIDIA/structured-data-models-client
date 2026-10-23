@@ -6,7 +6,7 @@
 # Format: scope-format.md; schema: scope.schema.json.
 # Java starts with DuckDB, SQLite, Postgres and Databricks (plan decision 2); S3 only as the owner adds scope.
 # Ranking and forecasting stay out of Java until the owner adds them, so Java's S2 covers 4 of the 6 base job questions (owner decision J2).
-# Operation ids are shared with Python; Java API names are filled in when Java S0 work starts.
+# Operation ids are shared with Python; an api is filled in when that Java API exists (T3.11 for query.validate), and the note names the rest as design choice 10 does.
 # Case lists stay empty until Phase 1a.
 
 format: sdm-scope/1
@@ -32,65 +32,65 @@ backends:
   what: Behavior that does not depend on the backend; a case on any backend covers it
 operations:
 - id: query.validate
-  api: null
+  api: com.nvidia.sdm.PredictiveQuery.parse(text).validate(schema, profile), with QuerySchema and Profile
   layer: core
   modes: [accept, refuse]
-  note: Java API not designed yet; named when Java S0 work starts
+  note: T3.11; materialize() validates first from T3.12, as Python resolves in materialize()
 - id: source.open
   api: null
   layer: host
   modes: [explicit]
-  note: Java API not designed yet; named when Java S0 work starts
+  note: Named by design choice 10 as DuckDbSource, SqliteSource, PostgresSource, DatabricksSource, each built from a java.sql.Connection; lands with T3.12 and T3.13
 - id: schema.from-source
   api: null
   layer: core
   modes: [tables, catalog-keys, all-tables, semantic-model]
-  note: Java API not designed yet; named when Java S0 work starts
+  note: Named by design choice 10 as Schema.fromSource(source, options); lands with T3.12
 - id: schema.edit
   api: null
   layer: core
   modes: [set-time-column, set-primary-key, set-stype, drop-column, edit-relationships, snapshot]
-  note: Java API not designed yet; named when Java S0 work starts
+  note: Named by design choice 10 as options builders and plain records; lands with T3.12
 - id: schema.inspect
   api: null
   layer: core
   modes: [attributes, check-consistent]
-  note: Java API not designed yet; named when Java S0 work starts
+  note: Named by design choice 10 as plain records; lands with T3.12
 - id: query.materialize
   api: null
   layer: core
   modes: [indices-binary, indices-multiclass, indices-regression]
-  note: Java API not designed yet; named when Java S0 work starts
+  note: Named by design choice 10 as PredictiveQuery.materialize(options); lands with T3.12
 - id: request.inspect
   api: null
   layer: core
   modes: [attributes]
-  note: Java API not designed yet; named when Java S0 work starts
+  note: Named by design choice 10 as plain records; lands with T3.12
 - id: client.connect
   api: null
   layer: host
   modes: [url, databricks-serving]
-  note: Java API not designed yet; named when Java S0 work starts
+  note: Named by design choice 10 as SdmClient; lands with T3.12
 - id: client.capabilities
   api: null
   layer: core
   modes: [capabilities]
-  note: Java API not designed yet; named when Java S0 work starts
+  note: Named by design choice 10 on SdmClient; lands with T3.12
 - id: client.predict
   api: null
   layer: core
   modes: &id001 [binary, multiclass, regression]
-  note: Java API not designed yet; named when Java S0 work starts
+  note: Named by design choice 10 as SdmClient.predict(request); lands with T3.12
 - id: result.read
   api: null
   layer: host
   modes: *id001
-  note: Java records; Java API not designed yet; named when Java S0 work starts
+  note: Named by design choice 10 as an Arrow VectorSchemaRoot, small values as Java records; lands with T3.12
 - id: result.inspect
   api: null
   layer: core
   modes: [absent, explanation]
-  note: Java API not designed yet; named when Java S0 work starts
+  note: Named by design choice 10 as Java records; lands with T3.12
 paths:
 - id: query.validate/accept/any
   slice: S0

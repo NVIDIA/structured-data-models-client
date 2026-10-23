@@ -31,7 +31,8 @@ time, stopping at the first that fails:
   ``cargo deny --locked check`` when ``rust/`` changed;
 - ``own tests``: the test files the package adds or changes (pytest files,
   one session per test root as CI runs them; self-tests; each crate test by
-  its own ``--test``), each run in a short temporary directory it removes.
+  its own ``--test``; the Java library's, by ``java_build.py verify``),
+  each run in a short temporary directory it removes.
 
 In a fix round whose ``--previous`` SHA has a stamp, ``own tests`` takes
 the files changed since it.
@@ -80,6 +81,8 @@ CRATE_TEST = re.compile(r'rust/crates/([^/]+)/tests/([^/]+)\.rs$')
 #: A crate's or the binding's Rust source, whose ``#[cfg(test)]`` tests
 #: run with its crate's ``--lib``.
 INLINE = re.compile(r'rust/(?:crates|bindings)/([^/]+)/src/.+\.rs$')
+#: The Java library's test sources, run by ``java_build.py verify``.
+JAVA_TESTS = 'java/src/test/'
 
 
 class Failure(Exception):
@@ -304,8 +307,9 @@ def is_test(path: str) -> bool:
 def own_suites(root: Path, touched: list[str]) -> list[affected.Suite]:
     """The test files among ``touched`` as suites: a pytest file (the
     binding's under ``affected.BINDING``), a self-test, a crate test by its
-    own ``--test``, and a crate's or the binding's source file holding
-    ``#[cfg(test)]`` unit tests by its crate's ``--lib`` (Codex r3 P1-2)."""
+    own ``--test``, a crate's or the binding's source file holding
+    ``#[cfg(test)]`` unit tests by its crate's ``--lib`` (Codex r3 P1-2),
+    and a Java test source by ``affected.JAVA`` (T3.11)."""
     found: list[affected.Suite] = []
     for path in touched:
         if not (root / path).is_file():
@@ -320,6 +324,12 @@ def own_suites(root: Path, touched: list[str]) -> list[affected.Suite]:
             )  # fmt: skip
             if suite not in found:
                 found.append(suite)
+            continue
+        if path.startswith(JAVA_TESTS):
+            # The Java library's tests, which load the binding as it ships
+            # (T3.11): Maven runs them all.
+            if affected.JAVA not in found:
+                found.append(affected.JAVA)
             continue
         if not is_test(path):
             continue
