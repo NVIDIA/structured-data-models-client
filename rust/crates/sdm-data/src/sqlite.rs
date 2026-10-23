@@ -38,8 +38,9 @@
 //! the core reads the value and names it on each bound's seed column
 //! ([`SEED_STORED_TIME`]), and the rendering spells the bound from its
 //! ingested text the same way.
-
-use std::collections::BTreeSet;
+//!
+//! The statements are built once, by the shared builder ([`crate::sql`]),
+//! through [`Sqlite`]'s hooks (T3.18): only what is SQLite's own is here.
 
 use arrow_array::cast::AsArray;
 use arrow_array::types::Int64Type;
@@ -49,17 +50,17 @@ use sdm_contract::catalog::{
     KeyKind,
 };
 use sdm_contract::data::{
-    BATCH_COLUMN, DataRequest, DescribePart, Determinism, Dialect, ExpectedSchema, FetchPlan,
-    Filter, IndexAdvice, KeySet, MARKED, MATCHES_COLUMN, NullOrder, OptionalRequest,
-    ProviderCapabilities, Relation, SEED_BATCH, SEED_COUNT_UNREAD, SEED_KEY_UNIQUE,
-    SEED_STORED_TIME, SqlParam, SqlStatement, TableColumn, TableKey, TextTimes, TieBreak, TieTerm,
-    Window, field, seed_integer, seed_key_columns,
+    BATCH_COLUMN, DataRequest, DescribePart, Determinism, ExpectedSchema, IndexAdvice, KeySet,
+    MARKED, MATCHES_COLUMN, NullOrder, ProviderCapabilities, Relation, SEED_BATCH,
+    SEED_COUNT_UNREAD, SEED_KEY_UNIQUE, SEED_STORED_TIME, TextTimes, TieTerm, field, seed_integer,
+    seed_key_columns,
 };
 use sdm_contract::ops::Dtype;
 use sdm_contract::{ColumnType, CoreError, Detail, ErrorCode, ErrorKind, Scalar};
 
 use crate::mt19937::{HASH_PRIME, coefficients};
-use crate::quote::{identifier, identifiers, text};
+use crate::quote::{identifier, text};
+use crate::sql::{self, Sample, SeedRead, SqlDialect};
 
 /// The dialect's name on the wire.
 pub(crate) const NAME: &str = "sqlite";
@@ -88,19 +89,6 @@ mod catalog {
     pub const TO: &str = "to";
 }
 
-/// The optional requests this dialect renders.
-const RENDERED: &[OptionalRequest] = &[
-    OptionalRequest::CountRows,
-    OptionalRequest::Preview,
-    OptionalRequest::KeyCounts,
-    OptionalRequest::TimeBounds,
-    OptionalRequest::ColumnRanges,
-    OptionalRequest::RepeatedKey,
-    OptionalRequest::SampleEntities,
-    OptionalRequest::Neighbors,
-    OptionalRequest::Lookup,
-];
-
 /// The most name parts a SQLite relation takes: a schema (`main`, `temp`
 /// or an attached database) and a table (design choice 12).
 const MOST_PARTS: usize = 2;
@@ -120,7 +108,7 @@ const SEEDS: &str = "__sdm_seeds";
 /// not `table`'s last part in any case (SQLite matches ASCII names without
 /// case), which a source table of the same name would hide from an
 /// unqualified name.
-pub(crate) fn seeds_for(request: &DataRequest, table: &Relation) -> String {
+fn seeds_for(request: &DataRequest, table: &Relation) -> String {
     // FNV-1a: no digest crate shipped for a name no caller writes.
     let written = serde_json::to_vec(request).unwrap_or_default();
     let digest = written
@@ -136,13 +124,6 @@ pub(crate) fn seeds_for(request: &DataRequest, table: &Relation) -> String {
     name
 }
 
-/// The `FROM` target of `relation`, through the data layer's one rendering
-/// of a relation ([`crate::relation`]): each part quoted alone, never split
-/// on a dot, so `["a.b"]` is `"a.b"` and `["main", "t"]` is `"main"."t"`.
-fn from(request: &DataRequest, field: &str, relation: &Relation) -> Result<String, CoreError> {
-    crate::relation(request, field, relation, MOST_PARTS, identifier)
-}
-
 /// The pragma `name` of `relation`: `PRAGMA name("t")`, or for a relation
 /// naming its schema, `PRAGMA "s".name("t")`, as SQLite reads a pragma of
 /// another schema.
@@ -152,7 +133,7 @@ fn pragma(
     name: &str,
     relation: &Relation,
 ) -> Result<String, CoreError> {
-    from(request, field, relation)?;
+    sql::from(&Sqlite, request, field, relation)?;
     Ok(match relation.source.as_slice() {
         [schema, table] => format!(
             "PRAGMA {}.{name}({})",
@@ -166,188 +147,216 @@ fn pragma(
     })
 }
 
-/// What a SQLite source answers through this layer.
-pub(crate) fn capabilities() -> ProviderCapabilities {
-    ProviderCapabilities {
-        optional: RENDERED.iter().copied().collect::<BTreeSet<_>>(),
-        max_keys_per_request: None,
-        // The seeded draw of RS-2 repeats under a seed.
-        sampling: Determinism::SeededStable,
-        // SQLite takes a seed of any size (register RS-7); the largest the
-        // contract carries.
-        max_seed: u64::MAX,
-        // A SQL source's text times, read one by one (register DT-7).
-        text_times: Some(TextTimes::ValueByValue),
-        // SQLite orders a null as the smallest value. The core asks for
-        // nulls first; a descending term on the window's column, the one
-        // the reference orders descending, holds no null under the window,
-        // and any other is written as SQLite orders it.
-        null_order: Some(NullOrder::First),
-        // The reference's SQLite sampler reads each table's indexes and
-        // counts an index as serving a read when its first column is the
-        // read's (`index_info[0] == index[0]`).
-        index_advice: Some(IndexAdvice::LeadingColumn),
-        // Every optional request is rendered: none falls back.
-        fallback: None,
-    }
-}
+/// The SQLite dialect.
+pub(crate) struct Sqlite;
 
-/// The statements answering `request` on SQLite, with the schema the
-/// answer has: discovered where SQLite's driver infers its columns' types
-/// from their values, as it does for every catalog answer (an empty one
-/// reads every column as integers).
-pub(crate) fn plan(request: &DataRequest) -> Result<FetchPlan, CoreError> {
-    let mut params = vec![];
-    let text = match request {
-        DataRequest::Describe { tables, part } => describe(request, tables, *part)?,
-        DataRequest::Preview {
-            table,
-            columns,
-            limit,
-        } => {
-            let table = from(request, "table", table)?;
-            if columns.is_empty() {
-                return Err(sdm_contract::data::refused(
-                    request,
-                    "columns",
-                    "a preview names no columns",
-                ));
-            }
-            format!(
-                "SELECT {} FROM {table} ORDER BY rowid LIMIT {limit}",
-                identifiers(columns)
-            )
+impl SqlDialect for Sqlite {
+    fn name(&self) -> &'static str {
+        NAME
+    }
+
+    /// What a SQLite source answers through this layer.
+    fn capabilities(&self) -> ProviderCapabilities {
+        ProviderCapabilities {
+            optional: sql::rendered(),
+            max_keys_per_request: None,
+            // The seeded draw of RS-2 repeats under a seed.
+            sampling: Determinism::SeededStable,
+            // SQLite takes a seed of any size (register RS-7); the largest the
+            // contract carries.
+            max_seed: u64::MAX,
+            // A SQL source's text times, read one by one (register DT-7).
+            text_times: Some(TextTimes::ValueByValue),
+            // SQLite orders a null as the smallest value. The core asks for
+            // nulls first; a descending term on the window's column, the one
+            // the reference orders descending, holds no null under the window,
+            // and any other is written as SQLite orders it.
+            null_order: Some(NullOrder::First),
+            // The reference's SQLite sampler reads each table's indexes and
+            // counts an index as serving a read when its first column is the
+            // read's (`index_info[0] == index[0]`).
+            index_advice: Some(IndexAdvice::LeadingColumn),
+            // Every optional request is rendered: none falls back.
+            fallback: None,
         }
-        DataRequest::KeyCounts { keys } => key_counts(request, keys)?,
-        DataRequest::TimeBounds { columns } => time_bounds(request, columns)?,
-        DataRequest::ColumnRanges { table, columns } => {
-            let table = from(request, "table", table)?;
-            if columns.is_empty() {
-                return Err(sdm_contract::data::refused(
-                    request,
-                    "columns",
-                    "the column ranges name no columns",
-                ));
-            }
-            let mut selects = vec!["COUNT(*)".to_owned()];
-            for column in columns {
-                let quoted = identifier(column);
-                selects.push(format!("MIN({quoted}), MAX({quoted}), COUNT({quoted})"));
-            }
-            format!("SELECT {}\nFROM {table}", selects.join(", "))
-        }
-        DataRequest::RepeatedKey { table, key } => {
-            let table = from(request, "table", table)?;
-            if key.is_empty() {
-                return Err(sdm_contract::data::refused(
-                    request,
-                    "key",
-                    "a repeated key names no columns",
-                ));
-            }
-            let quoted = identifiers(key);
-            let present = key
+    }
+
+    /// A schema (`main`, `temp` or an attached database) and a table, each
+    /// quoted alone, never split on a dot, so `["a.b"]` is `"a.b"` and
+    /// `["main", "t"]` is `"main"."t"`.
+    fn most_parts(&self) -> usize {
+        MOST_PARTS
+    }
+
+    fn seeds_for(&self, request: &DataRequest, table: &Relation) -> String {
+        seeds_for(request, table)
+    }
+
+    /// The temporary table the provider binds, read as `temp`'s.
+    fn seeds_relation(&self, name: &str) -> String {
+        format!("temp.{}", identifier(name))
+    }
+
+    /// The bound spelled as the source's stored value ([`bound`]).
+    fn window_bound(&self, seeds: &KeySet, seed_column: &str) -> String {
+        bound(seeds, seed_column)
+    }
+
+    /// The first rows in `rowid` order, as the reference reads them.
+    fn preview_order(&self) -> &'static str {
+        " ORDER BY rowid"
+    }
+
+    /// Counted in a subquery, since SQLite counts one column distinct at a
+    /// time (`_count_distinct`).
+    fn distinct_keys(&self, quoted: &[String], table: &str) -> String {
+        format!(
+            "(SELECT COUNT(*) FROM (SELECT DISTINCT {} FROM {table} WHERE {}))",
+            quoted.join(", "),
+            quoted
                 .iter()
-                .map(|c| format!("{} IS NOT NULL", identifier(c)))
+                .map(|c| format!("{c} IS NOT NULL"))
                 .collect::<Vec<_>>()
-                .join(" AND ");
-            format!(
-                "SELECT {quoted}\nFROM {table}\nWHERE {present}\nGROUP BY {quoted}\nHAVING COUNT(*) > 1\nLIMIT 1"
-            )
-        }
-        DataRequest::SampleEntities {
-            table,
-            key,
-            n,
-            seed,
-            columns,
-            filters,
-            key_dtype,
-        } => {
-            let order = draw_order(table, key, *key_dtype);
-            let table = from(request, "table", table)?;
-            sample_entities(request, &table, key, *n, seed, columns, filters, &order)?
-        }
-        DataRequest::Neighbors {
-            table,
-            key,
-            columns,
-            seeds,
-            window,
-            per_seed,
-            order,
-        } => {
-            let seeds_name = seeds_for(request, table);
-            let table = from(request, "table", table)?;
-            params.push(SqlParam::KeySet {
-                keys: seeds.clone(),
-                relation: seeds_name.clone(),
-            });
-            neighbors(
+                .join(" AND ")
+        )
+    }
+
+    fn order_term(&self, term: &TieTerm, alias: &str, windowed: Option<&str>) -> String {
+        order_term(term, alias, windowed)
+    }
+
+    /// A non-negative integer of any size (register RS-7); the core refuses
+    /// none of them first.
+    fn sample_seed(&self, request: &DataRequest, seed: &Scalar) -> Result<i128, CoreError> {
+        match seed_integer(seed) {
+            Some(seed) if u128::try_from(seed).is_ok() => Ok(seed),
+            _ => Err(sdm_contract::data::refused(
                 request,
-                &table,
-                &seeds_name,
-                key,
-                columns,
-                seeds,
-                window.as_ref(),
-                *per_seed,
-                order.as_ref(),
-            )?
+                "seed",
+                "a sample's seed is a non-negative integer",
+            )),
         }
-        DataRequest::Lookup {
-            table,
-            key,
-            columns,
-            seeds,
-        } => {
-            let seeds_name = seeds_for(request, table);
-            let table = from(request, "table", table)?;
-            params.push(SqlParam::KeySet {
-                keys: seeds.clone(),
-                relation: seeds_name.clone(),
-            });
-            lookup(request, &table, &seeds_name, key, columns, seeds)?
-        }
-        DataRequest::Scan {
-            table,
-            columns,
-            filters,
-            limit,
-        } => {
-            let table = from(request, "table", table)?;
-            if columns.is_empty() {
-                return Err(sdm_contract::data::refused(
-                    request,
-                    "columns",
-                    "a scan names no columns",
-                ));
+    }
+
+    /// The reference's seeded entity draw on SQLite (`_sample_entity_table`
+    /// with a seed, register DF-2 and RS-2): the columns asked for, from the
+    /// rows that meet each not-null filter, the `n` rows that hash lowest.
+    /// The reference hashes an integer key, its rows sharing a key then in
+    /// `rowid` order, and the `rowid` of a table with another kind of key,
+    /// which the draw order decides ([`draw_order`]); a key of several
+    /// columns hashes the `rowid`.
+    fn sample(&self, sample: &Sample<'_>) -> Vec<String> {
+        // Non-negative: the seed is taken only so (`sample_seed`).
+        let seed = u128::try_from(sample.seed).unwrap_or_default();
+        let order = match (
+            sample.key,
+            draw_order(sample.relation, sample.key, sample.key_dtype),
+        ) {
+            ([one], DrawOrder::Key(integer)) => {
+                let key = identifier(one);
+                format!(
+                    "CASE WHEN {integer} THEN {} ELSE {} END, CASE WHEN {integer} THEN {key} END, rowid",
+                    seeded_hash(seed, &key),
+                    seeded_hash(seed, "rowid"),
+                )
             }
-            let mut text = format!(
-                "SELECT {} FROM {table}{}",
-                identifiers(columns),
-                conditions(request, filters, "")?
-            );
-            if let Some(limit) = limit {
-                text.push_str(&format!(" LIMIT {limit}"));
-            }
-            text
+            _ => format!("{}, rowid", seeded_hash(seed, "rowid")),
+        };
+        vec![format!(
+            "SELECT {}\nFROM {}{}\nORDER BY {order} LIMIT {}",
+            sample.projected, sample.table, sample.filtered, sample.n
+        )]
+    }
+
+    /// The reference's neighbor reads on SQLite (`_by_time` and `_by_fkey`)
+    /// with a limit per seed: the first rows of each seed in `order`, read
+    /// by `rowid`, the result in `(batch, order)`.
+    fn neighbors_per_seed(&self, read: &SeedRead<'_>, limit: u64, terms: &[TieTerm]) -> String {
+        let windowed = read.window.map(|w| w.column.as_str());
+        let ordered = |alias: &str| {
+            terms
+                .iter()
+                .map(|t| order_term(t, alias, windowed))
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+        format!(
+            "SELECT {}, {}\nFROM {} s\nJOIN {table} t\nON t.rowid IN (\n  SELECT rowid\n  FROM {table}\n  WHERE {}\n  ORDER BY {}\n  LIMIT {limit}\n)\nORDER BY {}, {}",
+            read.batch(),
+            read.projected(),
+            read.seeds(),
+            read.within("").join("\n  AND "),
+            ordered(""),
+            identifier(BATCH_COLUMN),
+            ordered("t."),
+            table = read.table,
+        )
+    }
+
+    /// The reference's key lookup on SQLite (`_by_pkey`): one row of the
+    /// table per seed whose key it holds. A key the source enforces unique
+    /// is joined plainly ([`SEED_KEY_UNIQUE`]); any other by the `rowid` of
+    /// its first row, with the count of rows holding it unless the seeds say
+    /// it is not read ([`SEED_COUNT_UNREAD`]), as the reference counts only
+    /// where it scores.
+    fn lookup(&self, read: &SeedRead<'_>) -> String {
+        let unique = seed_key_columns(read.key.len())
+            .iter()
+            .all(|seed| marked(read.seeds, seed, SEED_KEY_UNIQUE));
+        if unique {
+            return read.joined();
         }
-        DataRequest::CountRows { table, filters } => format!(
-            "SELECT COUNT(*) AS {} FROM {}{}",
-            identifier("rows"),
-            from(request, "table", table)?,
-            conditions(request, filters, "")?
-        ),
-    };
-    Ok(FetchPlan::Sql {
-        statements: vec![SqlStatement {
-            dialect: Dialect::new(NAME),
-            text,
-            params,
-        }],
-        expect: expected(request),
-    })
+        let table = &read.table;
+        let matching = read.seed_join("", "==");
+        let counted = if marked(read.seeds, SEED_BATCH, SEED_COUNT_UNREAD) {
+            String::new()
+        } else {
+            format!(
+                "(SELECT COUNT(*) FROM {table} WHERE {matching}) AS {}, ",
+                identifier(MATCHES_COLUMN)
+            )
+        };
+        format!(
+            "SELECT {}, {counted}{}\nFROM {} s\nJOIN {table} t\n  ON t.rowid = (\n    SELECT rowid\n    FROM {table}\n    WHERE {matching}\n    LIMIT 1\n)",
+            read.batch(),
+            read.projected(),
+            read.seeds(),
+        )
+    }
+
+    fn describe(
+        &self,
+        request: &DataRequest,
+        tables: &[Relation],
+        part: DescribePart,
+        _namespace: &[String],
+    ) -> Result<String, CoreError> {
+        describe(request, tables, part)
+    }
+
+    fn expected(&self, request: &DataRequest) -> ExpectedSchema {
+        expected(request)
+    }
+
+    fn read(
+        &self,
+        request: &DataRequest,
+        part: DescribePart,
+        batches: &[RecordBatch],
+    ) -> Result<CatalogAnswer, CoreError> {
+        read(request, part, batches)
+    }
+
+    /// SQLite stores a time as the text it was written as, compared as the
+    /// reference compares it ([`SEED_STORED_TIME`]).
+    fn compares_stored_times(&self) -> bool {
+        true
+    }
+
+    /// The seeded draw hashes an integer key ([`draw_order`]).
+    fn samples_by_key_dtype(&self) -> bool {
+        true
+    }
 }
 
 /// The schema SQLite's answer to `request` has: the key counts' four
@@ -355,7 +364,7 @@ pub(crate) fn plan(request: &DataRequest) -> Result<FetchPlan, CoreError> {
 /// other answer, whose column types SQLite's driver infers from the values
 /// (an empty or all-null column reading as integers), and which the core
 /// or this layer's reader checks itself.
-pub(crate) fn expected(request: &DataRequest) -> ExpectedSchema {
+fn expected(request: &DataRequest) -> ExpectedSchema {
     use sdm_contract::data::results::{KEY_DISTINCT, KEY_MISSING, KEY_POSITION, KEY_ROWS};
     match request {
         DataRequest::KeyCounts { .. } => ExpectedSchema::Schema {
@@ -368,38 +377,6 @@ pub(crate) fn expected(request: &DataRequest) -> ExpectedSchema {
     }
 }
 
-/// The `WHERE` clause of `filters`, with its leading space, or nothing for
-/// none: each a not-null filter, as the reference's sampler writes one;
-/// another kind of filter is not taken. `alias` qualifies the columns.
-fn conditions(request: &DataRequest, filters: &[Filter], alias: &str) -> Result<String, CoreError> {
-    let mut conditions = Vec::with_capacity(filters.len());
-    for filter in filters {
-        let Filter::NotNull { column } = filter else {
-            return Err(not_taken(
-                request,
-                "filters",
-                "this rendering takes not-null filters only",
-            ));
-        };
-        conditions.push(format!(" {alias}{} IS NOT NULL", identifier(column)));
-    }
-    if conditions.is_empty() {
-        return Ok(String::new());
-    }
-    Ok(format!(" WHERE{}", conditions.join(" AND")))
-}
-
-/// A request field this rendering does not take, refused by name.
-fn not_taken(request: &DataRequest, field: &str, message: &str) -> CoreError {
-    CoreError::new(
-        ErrorKind::Unsupported,
-        ErrorCode::UnsupportedRequest,
-        message,
-    )
-    .with_field("request", Detail::text(request.name()))
-    .with_field("field", Detail::text(field))
-}
-
 /// One part of the catalog, read as the reference reads it on SQLite: the
 /// table list whole, from `sqlite_master`; a table's columns, its indexes
 /// (whose unique ones are its keys) and its foreign keys by their pragmas,
@@ -410,17 +387,7 @@ fn describe(
     tables: &[Relation],
     part: DescribePart,
 ) -> Result<String, CoreError> {
-    for table in tables {
-        from(request, "tables", table)?;
-    }
-    let one = || match tables {
-        [table] => Ok(table),
-        _ => Err(not_taken(
-            request,
-            "tables",
-            "this part of the catalog is read for one table at a time",
-        )),
-    };
+    let one = || sql::one_table(request, tables);
     Ok(match part {
         DescribePart::Tables if tables.is_empty() => {
             "SELECT name FROM sqlite_master WHERE type='table'".to_owned()
@@ -465,63 +432,6 @@ fn held(relations: &[Relation]) -> String {
         })
         .collect();
     selects.join("\nUNION ALL\n")
-}
-
-/// One `SELECT` per key, in order, labelled by its position, as the
-/// reference counts on SQLite: the table's rows, the key's distinct values
-/// among the rows holding all of it, and the rows missing part of it. A
-/// key of several columns counts its distinct values in a subquery, since
-/// SQLite counts one column distinct at a time (`_count_distinct`).
-fn key_counts(request: &DataRequest, keys: &[TableKey]) -> Result<String, CoreError> {
-    let tables = keys
-        .iter()
-        .map(|key| from(request, "keys", &key.table))
-        .collect::<Result<Vec<_>, _>>()?;
-    Ok(keys
-        .iter()
-        .zip(tables)
-        .enumerate()
-        .map(|(position, (key, table))| {
-            let position = key.label_at(position);
-            let quoted: Vec<String> = key.columns.iter().map(|c| identifier(c)).collect();
-            let missing = quoted
-                .iter()
-                .map(|c| format!("{c} IS NULL"))
-                .collect::<Vec<_>>()
-                .join(" OR ");
-            let distinct = match quoted.as_slice() {
-                [one] => format!("COUNT(DISTINCT {one})"),
-                several => format!(
-                    "(SELECT COUNT(*) FROM (SELECT DISTINCT {} FROM {table} WHERE {}))",
-                    several.join(", "),
-                    several
-                        .iter()
-                        .map(|c| format!("{c} IS NOT NULL"))
-                        .collect::<Vec<_>>()
-                        .join(" AND ")
-                ),
-            };
-            format!(
-                "SELECT {position} AS k, COUNT(*) AS n, {distinct} AS d, COUNT(CASE WHEN {missing} THEN 1 END) AS z\nFROM {table}"
-            )
-        })
-        .collect::<Vec<_>>()
-        .join("\nUNION ALL\n"))
-}
-
-/// One `SELECT` per time column, in order, labelled by its position: the
-/// smallest and largest values as SQLite stores them, which the core reads
-/// as times (the reference's `_get_min_max_time_dict`).
-fn time_bounds(request: &DataRequest, columns: &[TableColumn]) -> Result<String, CoreError> {
-    let mut selects = Vec::with_capacity(columns.len());
-    for (position, at) in columns.iter().enumerate() {
-        let table = from(request, "columns", &at.table)?;
-        let time = identifier(&at.column);
-        selects.push(format!(
-            "SELECT\n  {position} as table_index,\n  MIN({time}) as min_date,\n  MAX({time}) as max_date\nFROM {table}"
-        ));
-    }
-    Ok(selects.join("\nUNION ALL\n"))
 }
 
 /// The seeded hash of `reference`, an integer expression, under the
@@ -570,98 +480,6 @@ fn draw_order(table: &Relation, key: &[String], key_dtype: Option<Dtype>) -> Dra
         text(one),
         u8::from(integer),
     ))
-}
-
-/// The reference's seeded entity draw on SQLite (`_sample_entity_table`
-/// with a seed, register DF-2 and RS-2): the columns asked for, from the
-/// rows that meet each not-null filter, the `n` rows that hash lowest. The
-/// reference hashes an integer key, its rows sharing a key then in `rowid`
-/// order, and the `rowid` of a table with another kind of key, which
-/// `order` decides ([`draw_order`]); a key of several columns hashes the
-/// `rowid`. A seed past the range the dialect declares never reaches here:
-/// the core refuses it first (register entry RS-7).
-#[allow(clippy::too_many_arguments)]
-fn sample_entities(
-    request: &DataRequest,
-    table: &str,
-    key: &[String],
-    n: u64,
-    seed: &Scalar,
-    columns: &[String],
-    filters: &[Filter],
-    order: &DrawOrder,
-) -> Result<String, CoreError> {
-    if columns.is_empty() {
-        return Err(sdm_contract::data::refused(
-            request,
-            "columns",
-            "a sample names no columns",
-        ));
-    }
-    if key.is_empty() || key.iter().any(|k| !columns.contains(k)) {
-        return Err(sdm_contract::data::refused(
-            request,
-            "key",
-            "a sample's key is not among the columns it projects",
-        ));
-    }
-    let seed = match seed_integer(seed).map(u128::try_from) {
-        Some(Ok(seed)) => seed,
-        _ => {
-            return Err(sdm_contract::data::refused(
-                request,
-                "seed",
-                "a sample's seed is a non-negative integer",
-            ));
-        }
-    };
-    let mut text = format!("SELECT {}\nFROM {table}", identifiers(columns));
-    let filtered = conditions(request, filters, "")?;
-    if !filtered.is_empty() {
-        text.push('\n');
-        text.push_str(filtered.trim_start());
-    }
-    let order = match (key, order) {
-        ([one], DrawOrder::Key(integer)) => {
-            let key = identifier(one);
-            format!(
-                "CASE WHEN {integer} THEN {} ELSE {} END, CASE WHEN {integer} THEN {key} END, rowid",
-                seeded_hash(seed, &key),
-                seeded_hash(seed, "rowid"),
-            )
-        }
-        _ => format!("{}, rowid", seeded_hash(seed, "rowid")),
-    };
-    text.push_str(&format!("\nORDER BY {order} LIMIT {n}"));
-    Ok(text)
-}
-
-/// The table's columns asked for, read from its alias, after the seed's
-/// batch position under the reference's name.
-fn joined_columns(request: &DataRequest, columns: &[String]) -> Result<String, CoreError> {
-    if columns.is_empty() {
-        return Err(sdm_contract::data::refused(
-            request,
-            "columns",
-            "the request names no columns",
-        ));
-    }
-    Ok(columns
-        .iter()
-        .map(|c| format!("t.{}", identifier(c)))
-        .collect::<Vec<_>>()
-        .join(", "))
-}
-
-/// The condition joining a key of `table` (under `alias`, or unqualified
-/// for `""`) to the seeds' key columns ([`seed_key_columns`]), `op` their
-/// comparison, joined by `AND`.
-fn key_join(key: &[String], alias: &str, op: &str) -> String {
-    key.iter()
-        .zip(seed_key_columns(key.len()))
-        .map(|(column, seed)| format!("{alias}{} {op} s.{}", identifier(column), identifier(&seed)))
-        .collect::<Vec<_>>()
-        .join(" AND ")
 }
 
 /// How the source spells its stored times, as the reference reads it from
@@ -785,23 +603,6 @@ fn bound(seeds: &KeySet, name: &str) -> String {
         .spell(&column)
 }
 
-/// The conditions a window puts on the rows of the table (under `alias`):
-/// the stored time not after the upper bound, after the lower one, each
-/// compared as text.
-fn window_conditions(seeds: &KeySet, window: &Window, alias: &str) -> Vec<String> {
-    let time = format!("{alias}{}", identifier(&window.column));
-    let mut found = Vec::new();
-    if let Some(upper) = &window.upper {
-        let op = if upper.inclusive { "<=" } else { "<" };
-        found.push(format!("{time} {op} {}", bound(seeds, &upper.seed_column)));
-    }
-    if let Some(lower) = &window.lower {
-        let op = if lower.inclusive { ">=" } else { ">" };
-        found.push(format!("{time} {op} {}", bound(seeds, &lower.seed_column)));
-    }
-    found
-}
-
 /// One term of a neighbor order, as SQLite orders it: a time's stored text
 /// orders as its time, so a term asked as a timestamp is the column. SQLite
 /// orders a null as the smallest value; a term whose nulls go elsewhere
@@ -821,58 +622,6 @@ fn order_term(term: &TieTerm, alias: &str, windowed: Option<&str>) -> String {
     format!("{column}{direction}{nulls}")
 }
 
-/// The reference's neighbor reads on SQLite (`_by_time` and `_by_fkey`):
-/// the rows of `table` whose `key` is a seed's key, within the seed's
-/// window as stored text, and, with a limit per seed, the first rows of
-/// each seed in `order`, read by `rowid`, the result in `(batch, order)`.
-#[allow(clippy::too_many_arguments, reason = "the request's fields, rendered")]
-fn neighbors(
-    request: &DataRequest,
-    table: &str,
-    seeds_name: &str,
-    key: &[String],
-    columns: &[String],
-    seeds: &KeySet,
-    window: Option<&Window>,
-    per_seed: Option<u64>,
-    order: Option<&TieBreak>,
-) -> Result<String, CoreError> {
-    let projected = joined_columns(request, columns)?;
-    let head = format!(
-        "SELECT s.{batch} AS {helper}, {projected}\nFROM temp.{seeds} s\nJOIN {table} t",
-        batch = identifier(SEED_BATCH),
-        helper = identifier(BATCH_COLUMN),
-        seeds = identifier(seeds_name),
-    );
-    let (Some(limit), Some(TieBreak(terms))) = (per_seed, order) else {
-        let mut conditions = vec![key_join(key, "t.", "=")];
-        if let Some(window) = window {
-            conditions.extend(window_conditions(seeds, window, "t."));
-        }
-        return Ok(format!("{head}\n  ON {}", conditions.join("\n AND ")));
-    };
-    let windowed = window.map(|w| w.column.as_str());
-    let mut inner = vec![key_join(key, "", "=")];
-    if let Some(window) = window {
-        inner.extend(window_conditions(seeds, window, ""));
-    }
-    let inner_order = terms
-        .iter()
-        .map(|t| order_term(t, "", windowed))
-        .collect::<Vec<_>>()
-        .join(", ");
-    let outer_order = terms
-        .iter()
-        .map(|t| order_term(t, "t.", windowed))
-        .collect::<Vec<_>>()
-        .join(", ");
-    Ok(format!(
-        "{head}\nON t.rowid IN (\n  SELECT rowid\n  FROM {table}\n  WHERE {}\n  ORDER BY {inner_order}\n  LIMIT {limit}\n)\nORDER BY {}, {outer_order}",
-        inner.join("\n  AND "),
-        identifier(BATCH_COLUMN),
-    ))
-}
-
 /// Whether the seeds' column `name` carries the flag `key`.
 fn marked(seeds: &KeySet, name: &str, key: &str) -> bool {
     seeds
@@ -880,50 +629,6 @@ fn marked(seeds: &KeySet, name: &str, key: &str) -> bool {
         .iter()
         .find(|f| f.name == name)
         .is_some_and(|f| f.metadata.get(key).map(String::as_str) == Some(MARKED))
-}
-
-/// The reference's key lookup on SQLite (`_by_pkey`): one row of `table`
-/// per seed whose key it holds. A key the source enforces unique is joined
-/// plainly ([`SEED_KEY_UNIQUE`]); any other by the `rowid` of its first
-/// row, with the count of rows holding it unless the seeds say it is not
-/// read ([`SEED_COUNT_UNREAD`]), as the reference counts only where it
-/// scores.
-fn lookup(
-    request: &DataRequest,
-    table: &str,
-    seeds_name: &str,
-    key: &[String],
-    columns: &[String],
-    seeds: &KeySet,
-) -> Result<String, CoreError> {
-    let projected = joined_columns(request, columns)?;
-    let batch = format!(
-        "s.{} AS {}",
-        identifier(SEED_BATCH),
-        identifier(BATCH_COLUMN)
-    );
-    let seeds_table = format!("temp.{}", identifier(seeds_name));
-    let unique = seed_key_columns(key.len())
-        .iter()
-        .all(|seed| marked(seeds, seed, SEED_KEY_UNIQUE));
-    if unique {
-        return Ok(format!(
-            "SELECT {batch}, {projected}\nFROM {seeds_table} s\nJOIN {table} t\n  ON {}",
-            key_join(key, "t.", "=")
-        ));
-    }
-    let matching = key_join(key, "", "==");
-    let counted = if marked(seeds, SEED_BATCH, SEED_COUNT_UNREAD) {
-        String::new()
-    } else {
-        format!(
-            "(SELECT COUNT(*) FROM {table} WHERE {matching}) AS {}, ",
-            identifier(MATCHES_COLUMN)
-        )
-    };
-    Ok(format!(
-        "SELECT {batch}, {counted}{projected}\nFROM {seeds_table} s\nJOIN {table} t\n  ON t.rowid = (\n    SELECT rowid\n    FROM {table}\n    WHERE {matching}\n    LIMIT 1\n)"
-    ))
 }
 
 /// The data type a SQLite column's declared type fixes, as the reference
@@ -1005,7 +710,7 @@ fn integers(batch: &RecordBatch, name: &str) -> Result<Vec<Option<i64>>, CoreErr
 
 /// SQLite's answer to a `describe` of `part`, asked by `request`, read
 /// into the contract's catalog answer.
-pub(crate) fn read(
+fn read(
     request: &DataRequest,
     part: DescribePart,
     batches: &[RecordBatch],
