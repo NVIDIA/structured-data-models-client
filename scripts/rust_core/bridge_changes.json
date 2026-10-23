@@ -15,7 +15,7 @@
       "moved": "T1.32a: the bridge's key_type refusal, for a key type it had no cast for, is the core's (sdm_engine::keys::cast refuses a key type no rule casts to)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::gather": {
-      "refactor": "T3.4 fix 5 and 6: where the core's run read each table it read anew (Materialized.read_under, or the failed run's CoreError.read_under through run's read hook) is kept with the schema's engine reading, a source name held already left as it is, as EngineTables.keep keeps the old route's; no rule here"
+      "refactor": "T3.4 fix 5 to 7: the schema's engine reading made before the run reads anything, as relational.py:555 makes it, and where the run reads the tables it reads anew kept through run's read hook the moment the requests carrying them (FetchStep.read_under) are answered; no rule here"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_text": {
       "moved": "T1.36 fix 4 (the final review's P2-2): the host's half of the moved cast: a float in a mix written as the core now writes a float entity (sdm_engine::keys's float_text), the reference's text of it, pyarrow's cast of the float to text at its own width (1e16 is 1e+16), so the core reads back the number the host was given; a boolean as before"
@@ -81,7 +81,7 @@
       "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
     },
     "packages/structured-data-models-client/src/sdm_client/schema.py::<module>": {
-      "refactor": "T3.4 fix 6: Schema._read_under, a read-only view of where the core read each table, held with the engine reading (EngineTables.readings) so it is made, shared, copied and pickled exactly where _engine_tables is, and Schema._keep_readings, the one place readings are kept; no rule of the core's here"
+      "refactor": "T3.4 fix 6 and 7: Schema._read_under, a read-only view of where the core read each table, held with the engine reading (EngineTables.readings) so it is made, shared, copied and pickled exactly where _engine_tables is; Schema._engine_reading, which makes it where relational.py:555 does; Schema._keep_readings, the one place readings are kept; no rule of the core's here"
     },
     "packages/structured-data-models-client/src/sdm_client/schema.py::Schema.from_source": {
       "refactor": "T2.2: a SQLite source routes as a DuckDB one (_routing.on_the_core with the backend's from-source paths); no rule added"
