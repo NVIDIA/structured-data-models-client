@@ -1026,3 +1026,165 @@ def test_cmd_query_by_keyword_is_refused_by_the_rule(installed: Any) -> None:
     with pytest.raises(wg.WriteRefused, match='outside the test schema'):
         connection.cmd_query(sql=OUTSIDE, sequence_counter=1, request_id=None)
     assert installed['seen'] == []
+
+
+# Codex round 7: no exemption admits a qualified name or a call, names are
+# plain ASCII, a cast is to a built-in type, and Spark's plans and global
+# views are guarded.
+
+REFUSED_C7 = {
+    'postgres': [
+        # P0-2: a qualified call whose last part looks like a type or keyword.
+        'SELECT outside.text(7)',
+        'SELECT outside.numeric(7)',
+        'SELECT outside.by(7)',
+        'SELECT pg_catalog.text(7)',
+        # P0-2: an unreserved keyword or type called where a call can stand.
+        'SELECT by(7)',
+        'SELECT filter(7)',
+        'SELECT text(7)',
+        # P0-2: a name the tokenizer would split.
+        'SELECT élower(7)',
+        'SELECT * FROM other."tablé"',
+        # P0-3: a cast to a domain or unknown type.
+        'SELECT 7::outside.audit_domain',
+        'SELECT CAST(7 AS outside.audit_domain)',
+        'SELECT 7::audit_domain',
+        'SELECT CAST(7 AS audit_domain)',
+        'SELECT 7::"audit_domain"',
+    ],
+    'snowflake': [
+        'SELECT OTHER.S.LOWER(1)',
+        'SELECT 7::OTHER.S.DOM',
+        'SELECT CAST(7 AS OTHER.S.DOM)',
+        'SELECT CAST(7 AS MYTYPE)',
+        'SELECT Ölower(1)',
+    ],
+    'databricks': [
+        'SELECT `other`.s.lower(1)',
+        'SELECT CAST(1 AS mytype)',
+    ],
+}
+
+
+@pytest.mark.parametrize(
+    ('dialect', 'sql'),
+    [(d, sql) for d, texts in REFUSED_C7.items() for sql in texts],
+)
+def test_codex_round_7_calls_and_casts_are_refused(
+    dialect: str, sql: str
+) -> None:
+    with pytest.raises(wg.WriteRefused):
+        GUARDS[dialect].check(sql)
+
+
+class _Message:
+    r"""A protobuf message as the guard reads one: its set fields."""
+
+    def __init__(self, **fields: Any) -> None:
+        self.fields = fields
+        for name, value in fields.items():
+            setattr(self, name, value)
+
+    def ListFields(self) -> list[tuple[Any, Any]]:  # noqa: N802 - protobuf's name
+        return [
+            (types.SimpleNamespace(name=k), v) for k, v in self.fields.items()
+        ]
+
+    def WhichOneof(self, group: str) -> str | None:  # noqa: N802
+        return next(iter(self.fields), None)
+
+
+def test_spark_connect_plans_are_guarded_at_their_common_boundary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Codex r7 P0-4: to_table and every other plan path send a whole plan
+    # past execute_command; a command in a plan, or a SQL relation's text,
+    # is held to the rule there.
+    seen: list[str] = []
+
+    class SparkConnectClient:
+        def _execute_and_fetch_as_iterator(
+            self, req: Any, *a: Any, **k: Any
+        ) -> Any:
+            seen.append('fetch')
+            return iter(())
+
+        def _execute(self, req: Any) -> None:
+            seen.append('execute')
+
+        def to_table(self, plan: Any, observations: Any) -> Any:
+            return list(
+                self._execute_and_fetch_as_iterator(_Message(plan=plan))
+            )
+
+    def sql(text: str) -> Any:
+        return _Message(sql=_Message(query=text))
+
+    command = _Message(
+        command=_Message(
+            sql_command=_Message(input=sql('DROP TABLE `other`.s.t'))
+        )
+    )
+    hidden = _Message(
+        root=_Message(project=_Message(input=sql('DROP TABLE `other`.s.t')))
+    )
+    writer = _Message(command=_Message(write_operation=_Message(mode=1)))
+    read = _Message(
+        root=_Message(project=_Message(input=sql('SELECT * FROM `other`.s.t')))
+    )
+    fake = types.ModuleType('pyspark.sql.connect.client.core')
+    fake.SparkConnectClient = SparkConnectClient
+    monkeypatch.setitem(sys.modules, 'pyspark.sql.connect.client.core', fake)
+    undo = wg.install(GUARDS)
+    try:
+        client = SparkConnectClient()
+        for plan in (command, hidden, writer):
+            with pytest.raises(wg.WriteRefused):
+                client.to_table(plan, {})
+            with pytest.raises(wg.WriteRefused):
+                client._execute(_Message(plan=plan))
+        client.to_table(read, {})
+        assert seen == ['fetch']
+    finally:
+        undo()
+
+
+def test_spark_global_and_temporary_views_are_refused(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Codex r7 P0-5: views in Spark's application-wide namespace.
+    seen: list[str] = []
+
+    class DataFrame:
+        def createOrReplaceGlobalTempView(self, name: str) -> None:  # noqa: N802
+            seen.append(name)
+
+        def createGlobalTempView(self, name: str) -> None:  # noqa: N802
+            seen.append(name)
+
+    class Catalog:
+        def dropGlobalTempView(self, name: str) -> None:  # noqa: N802
+            seen.append(name)
+
+    for module, cls in (
+        ('pyspark.sql.dataframe', DataFrame),
+        ('pyspark.sql.catalog', Catalog),
+    ):
+        fake = types.ModuleType(module)
+        setattr(fake, cls.__name__, cls)
+        monkeypatch.setitem(sys.modules, module, fake)
+    undo = wg.install(GUARDS)
+    try:
+        for call in (
+            lambda: DataFrame().createOrReplaceGlobalTempView(
+                'production_view'
+            ),
+            lambda: DataFrame().createGlobalTempView('production_view'),
+            lambda: Catalog().dropGlobalTempView('production_view'),
+        ):
+            with pytest.raises(wg.WriteRefused):
+                call()
+        assert seen == []
+    finally:
+        undo()
