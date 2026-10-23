@@ -385,8 +385,7 @@ pub fn refuse_derived(
                 .any(|c| c.expression.is_some() || c.column.as_ref() != Some(&c.name)))
     {
         return refusal(
-            ErrorKind::InvalidRequest,
-            ErrorCode::InvalidRequest,
+            Sentence::DerivedRelationMalformed,
             "a relation of the columns its catalog found renames, computes or filters them",
         );
     }
