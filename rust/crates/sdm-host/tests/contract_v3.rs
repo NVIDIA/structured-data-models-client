@@ -341,6 +341,7 @@ fn diagnostics_of(pad: usize) -> OperationResult {
                 span: None,
             })
             .collect(),
+        query: None,
     })
 }
 

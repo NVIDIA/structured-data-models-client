@@ -51,6 +51,7 @@ T1.24b, a schema changed in a way no edit it takes says
 
 from __future__ import annotations
 
+import dataclasses
 import datetime
 import json
 import math
@@ -567,23 +568,32 @@ def gather(
     return tuple(payloads), kept
 
 
-class Unresolved:
-    r"""A query the core resolves as it gathers it: one the core validated
-    (S0 on the core, P2-MID2-1), or, on the old validator's route, one
-    naming a column whose name holds a dot, a backtick or a line break,
-    which the old validator refuses and the core holds apart from its
-    table (KO2-36, T2.18). It is gathered as the caller wrote it, and the
-    core answers what it resolved of it (``Materialized.query``, contract
-    v26), a ranking's questions and a forecast's steps among it (T2.8).
-    ``refusal`` is the old validator's, said of a query the core does not
-    resolve either; ``None`` where the old validator was not asked."""
+@dataclasses.dataclass(frozen=True)
+class CoreQuery:
+    r"""What the core route reads of a query it gathers, and nothing of the
+    old validator's object (T3.8): a query the core validated (S0 on the
+    core, P2-MID2-1), from the core's own validation (``validate_query``'s
+    ``query``, contract v28); or, on the old validator's route, one naming a
+    column whose name holds a dot, a backtick or a line break, which the old
+    validator refuses and the core holds apart from its table (KO2-36,
+    T2.18).
 
-    def __init__(self, text: str, refusal: StructuredDataError | None) -> None:
-        self.text = text
-        self.refusal = refusal
+    ``text`` is what materialize sends and the request keeps as its query:
+    the query as the core writes it back where the core validated it, as the
+    reference's ``ValidatedPredictiveQuery.to_string()`` writes it, else as
+    the caller wrote it. ``num_forecasts`` is how many steps a forecast asks
+    (1 for any other query), which a refusal of one step names; ``None``
+    where the core did not validate it. ``refusal`` is the old validator's,
+    said of a query the core does not resolve either; ``None`` where the old
+    validator was not asked.
+    """
+
+    text: str
+    num_forecasts: int | None
+    refusal: StructuredDataError | None
 
     def to_string(self) -> str:
-        r"""The query as the caller wrote it, which materialize sends."""
+        r"""The query's text, which materialize sends."""
         return self.text
 
 

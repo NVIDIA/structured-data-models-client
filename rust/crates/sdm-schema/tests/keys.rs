@@ -173,10 +173,8 @@ fn a_declared_key_with_nulls_is_said_and_its_repeats_held() {
     assert_eq!(codes(&held), ["KEY_NO_VALUE"]);
     let err = keys::hold(&mut tables, &[(0, counted(1_000, 900, 0))], &none(), true).unwrap_err();
     assert_eq!(err.fields["field"], Detail::text("keys"));
-    assert_eq!(
-        err.fields["declared_unenforced"],
-        Detail::Scalar(Scalar::Bool(false))
-    );
+    // The source enforces nothing it declared here: no variant says so.
+    assert_eq!(err.fields.get("variant"), None);
 }
 
 #[test]

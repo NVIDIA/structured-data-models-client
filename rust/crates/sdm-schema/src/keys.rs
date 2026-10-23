@@ -208,11 +208,7 @@ pub fn hold(
             }
             return Err(refusal
                 .with_field("repeats", number(repeats))
-                .with_field("example", shown(&count.example))
-                .with_field(
-                    "declared_unenforced",
-                    Detail::Scalar(Scalar::Bool(declared && !enforced)),
-                ));
+                .with_field("example", shown(&count.example)));
         }
         if count.missing > 0 {
             warnings.push(warning(

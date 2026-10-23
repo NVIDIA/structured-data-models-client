@@ -93,11 +93,16 @@ impl Validation {
         }
     }
 
-    /// The answer `validate_query` gives.
-    pub fn to_result(&self) -> QueryValidation {
+    /// The answer `validate_query` gives over `schema`: an accepted
+    /// query's facts and its text as written back with it (T3.8).
+    pub fn to_result(&self, schema: &QuerySchema) -> QueryValidation {
         QueryValidation {
             accepted: self.query.is_some(),
             diagnostics: self.diagnostics.clone(),
+            query: self.facts(schema).map(|facts| QueryFacts {
+                text: self.text.clone(),
+                ..facts
+            }),
         }
     }
 
@@ -111,6 +116,7 @@ impl Validation {
             problem_type: query.problem_type,
             windowed: features.temporal_target,
             num_forecasts: query.num_forecasts,
+            text: None,
         })
     }
 }
@@ -147,7 +153,7 @@ pub fn validate_warned(
     on_adapter_stack(|| {
         let resolved = resolve_here(query, schema, profile, facts, zones);
         match resolved {
-            Ok(validation) => (Ok(validation.to_result()), validation.warnings),
+            Ok(validation) => (Ok(validation.to_result(schema)), validation.warnings),
             Err(Halted { error, warnings }) => (Err(*error), warnings),
         }
     })

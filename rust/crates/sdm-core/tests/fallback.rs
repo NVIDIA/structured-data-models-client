@@ -136,6 +136,7 @@ fn run_with(
                     Ok(OperationResult::ValidateQuery(QueryValidation {
                         accepted: true,
                         diagnostics: vec![],
+                        query: None,
                     }))
                 }
                 Reply::Fetch(FetchResult::Error(error)) => Err(CoreError::provider(&error)),

@@ -283,6 +283,7 @@ fn a_second_call_while_one_is_in_the_run_is_busy() {
         Ok(OperationResult::ValidateQuery(QueryValidation {
             accepted: true,
             diagnostics: vec![],
+            query: None,
         }))
     })));
     let first = {
@@ -362,6 +363,7 @@ fn fetching_run() -> Run {
                     span: None,
                 })
                 .collect(),
+            query: None,
         }))
     })
 }
@@ -549,6 +551,7 @@ fn model_run() -> Run {
         Ok(OperationResult::ValidateQuery(QueryValidation {
             accepted: body == b"answer",
             diagnostics: vec![],
+            query: None,
         }))
     })
 }

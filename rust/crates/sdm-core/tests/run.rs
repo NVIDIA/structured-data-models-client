@@ -113,6 +113,7 @@ fn done(seen: Vec<String>) -> OperationResult {
                 span: None,
             })
             .collect(),
+        query: None,
     })
 }
 
@@ -224,6 +225,7 @@ fn a_finished_run_refuses_every_call() {
         Ok(OperationResult::ValidateQuery(QueryValidation {
             accepted: true,
             diagnostics: vec![],
+            query: None,
         }))
     });
     assert!(matches!(run.next().unwrap(), Step::Done { .. }));

@@ -223,14 +223,9 @@ impl DataLayer for Data {
     fn read_as(&self, provider: &ProviderChoice, relation: &Relation) -> Relation {
         let parts = match provider {
             ProviderChoice::Sql { namespace, .. } if relation.source.len() == 1 => {
-                // The parts given, as `qualifying` reads them; a namespace
-                // it refuses was refused before any relation was read.
-                namespace
-                    .iter()
-                    .skip_while(|part| part.is_none())
-                    .flatten()
-                    .cloned()
-                    .collect::<Vec<_>>()
+                // A namespace no relation can write was refused before any
+                // relation was read.
+                given_parts(namespace).unwrap_or_default()
             }
             _ => Vec::new(),
         };
@@ -307,17 +302,26 @@ fn qualifying(
     request: &DataRequest,
     namespace: &[Option<String>],
 ) -> Result<Vec<String>, CoreError> {
-    let given: Vec<&Option<String>> = namespace.iter().skip_while(|part| part.is_none()).collect();
-    if given.iter().any(|part| part.is_none()) {
-        return Err(CoreError::new(
+    given_parts(namespace).ok_or_else(|| {
+        CoreError::new(
             ErrorKind::Unsupported,
             ErrorCode::UnsupportedRequest,
             "a namespace part left to the connection inside one given cannot qualify a relation",
         )
         .with_field("request", Detail::text(request.name()))
-        .with_field("field", Detail::text("namespace")));
+        .with_field("field", Detail::text("namespace"))
+    })
+}
+
+/// The one rule of a namespace's parts a relation is read under: those
+/// given, leading parts left `null` dropped; `None` where a part given
+/// follows one left `null`, which no relation can write.
+fn given_parts(namespace: &[Option<String>]) -> Option<Vec<String>> {
+    let given: Vec<&Option<String>> = namespace.iter().skip_while(|part| part.is_none()).collect();
+    if given.iter().any(|part| part.is_none()) {
+        return None;
     }
-    Ok(given.into_iter().flatten().cloned().collect())
+    Some(given.into_iter().flatten().cloned().collect())
 }
 
 /// `request` with each relation of one part read under `namespace`, the

@@ -120,6 +120,7 @@ fn done_with_message_of(size: usize) -> ControlMessage {
                 severity: Severity::Error,
                 span: None,
             }],
+            query: None,
         }),
     })
 }

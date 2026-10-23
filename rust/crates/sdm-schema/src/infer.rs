@@ -460,6 +460,39 @@ pub fn preview(
     times: &dyn TextTimes,
     floats: Floats,
 ) -> Result<Previewed, CoreError> {
+    preview_keyed(
+        name,
+        source,
+        catalog,
+        constraints,
+        schema,
+        batches,
+        times,
+        floats,
+        false,
+    )
+}
+
+/// [`preview`], where `key_stated` says whether the caller names the
+/// table's key (`primary_keys=`, or a schema's own key): the key inference
+/// would take then never decides anything, so one of a type no key takes is
+/// left unset rather than refused (T3.8 fix 3), and the caller's key is
+/// applied after, as the reference applies a named key over any it read.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the table, its catalog, its preview and the source's two readings"
+)]
+pub fn preview_keyed(
+    name: &str,
+    source: &Relation,
+    catalog: &[CatalogColumn],
+    constraints: &[CatalogKey],
+    schema: &Schema,
+    batches: &[RecordBatch],
+    times: &dyn TextTimes,
+    floats: Floats,
+    key_stated: bool,
+) -> Result<Previewed, CoreError> {
     let rows: usize = batches.iter().map(RecordBatch::num_rows).sum();
     if rows == 0 {
         // The reference refuses an empty table as a RuntimeError.
@@ -616,15 +649,21 @@ pub fn preview(
             Guess::Tied(tied) => (None, tied),
         },
     };
-    if let Some(key) = &key {
+    let mut key = key;
+    if let Some(found) = key.clone() {
         let column = columns
             .iter_mut()
-            .find(|c| &c.name == key)
+            .find(|c| c.name == found)
             .expect("the key is a column of the table");
         if !matches!(column.dtype, Dtype::Int | Dtype::Float | Dtype::String) {
-            return Err(not_yet("key_type"));
+            if !key_stated {
+                return Err(not_yet("key_type"));
+            }
+            // The caller's key replaces it: none is inferred.
+            key = None;
+        } else {
+            column.stype = Stype::Id;
         }
-        column.stype = Stype::Id;
     }
 
     Ok(Previewed {

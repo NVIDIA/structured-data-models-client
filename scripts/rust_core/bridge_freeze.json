@@ -15,12 +15,9 @@
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py": {
       "<module>": {
-        "fingerprint": "20c2349812ad78399dafa1d05164f832ff0466394d6618eac797afe3c7ef125c"
+        "fingerprint": "8a63031f8c60262d97b01fe166c9640097d796843f75d199aa59c2808a1f76ee"
       },
-      "Unresolved.__init__": {
-        "fingerprint": "3f98315e57241584d9f0e00542aa3619b3c77380a47576c9c2bbb86b4a19e260"
-      },
-      "Unresolved.to_string": {
+      "CoreQuery.to_string": {
         "fingerprint": "9185d2b2710c88a77a9c10ef628a6c4717ea6d2a51719d5d811c404f5e255765"
       },
       "_anchor": {
@@ -356,13 +353,13 @@
     },
     "packages/structured-data-models-client/src/sdm_client/query.py": {
       "<module>": {
-        "fingerprint": "77e3deca76ce5b18302ef564bc46fb8a7d494ecc991eafad44c1f098051f149b"
+        "fingerprint": "159cdd933bd2e74d1a096177fffff38bf7d44aee61f6ca3f92c4c67676ef351f"
       },
       "PredictiveQuery._refusal": {
         "fingerprint": "bfc5f58a968e98f9e32d32d0297d562d784a54b37a8edd770e69ccf4f45e484e"
       },
       "PredictiveQuery._resolve": {
-        "fingerprint": "ddb97843a097fa192bd3616bf76f8377925f2e7c167ed32dc0fddeb5e68ded0b"
+        "fingerprint": "1b80811c57dfd9b26c6cdd18393a9b8e994fbb5478651951fd4f0e8e6a80475a"
       },
       "PredictiveQuery._validate_materialize_args": {
         "fingerprint": "53b6ffb85f7d3f3f909709f14e3c82765e9043f6c179c43f2573ae8f828c0718"

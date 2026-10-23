@@ -86,9 +86,11 @@ def _schema(definition: Any) -> dict[str, Any]:
 
 def validate(
     text: str, definition: Any, profile: Profile
-) -> tuple[bool, list[str], list[dict[str, Any]]]:
+) -> tuple[bool, list[str], list[dict[str, Any]], dict[str, Any] | None]:
     r"""The core's answer: whether it accepts ``text``, its reasons if not,
-    and the warnings it held of an accepted query (:data:`SHADOWED`).
+    the warnings it held of an accepted query (:data:`SHADOWED`), and what
+    it resolved of an accepted one (``validate_query``'s ``query``, contract
+    v28: its text as the core writes it back, its forecast's steps).
 
     The query text and the schema travel as attachments, so neither the
     query's length nor the schema's width meets the control cap
@@ -128,7 +130,7 @@ def validate(
         for diagnostic in result['diagnostics']
         if diagnostic['severity'] == 'error'
     ]
-    return bool(result['accepted']), reasons, kept
+    return bool(result['accepted']), reasons, kept, result.get('query')
 
 
 def shadow(

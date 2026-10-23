@@ -299,6 +299,12 @@ pub enum Capability {
 pub struct QueryValidation {
     pub accepted: bool,
     pub diagnostics: Vec<PqlDiagnostic>,
+    /// What the core resolved of an accepted query (contract v28, T3.8),
+    /// which a host reads instead of resolving the query again: its facts
+    /// and its text as the core writes it back. Absent for a refused query
+    /// and from a core that does not say.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub query: Option<QueryFacts>,
 }
 
 /// One PQL diagnostic: its code and where in the query text it points.
@@ -1023,6 +1029,12 @@ pub struct QueryFacts {
     pub windowed: bool,
     /// How many timeframes `FORECAST n TIMEFRAMES` asks for; 1 otherwise.
     pub num_forecasts: u32,
+    /// The query as the core writes it back, the reference's
+    /// `ValidatedPredictiveQuery.to_string()` (contract v28, T3.8): given
+    /// by `validate_query`; absent from `materialize`'s, whose state holds
+    /// each question's text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
 }
 
 /// The version of [`RequestState`]'s format this build writes and reads

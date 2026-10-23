@@ -400,6 +400,7 @@ pub fn messages() -> Vec<ControlMessage> {
                         end_col: 17,
                     }),
                 }],
+                query: None,
             }),
         }),
         ControlMessage::Step(Step::Done {

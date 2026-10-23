@@ -803,6 +803,7 @@ fn through_host_run(data: ArrowData) -> ArrowData {
             Ok(OperationResult::ValidateQuery(QueryValidation {
                 accepted: true,
                 diagnostics: vec![],
+                query: None,
             }))
         }),
         Arc::new(ZoneResolver::new([])),

@@ -182,9 +182,24 @@ pub(crate) async fn run(
             // Only the columns the schema keeps are read, and only the keys
             // over them, so a column it leaves out is never inferred, as the
             // reference reads only the columns a schema describes; one it
-            // keeps that the source lacks is the description's to lack.
+            // keeps that the source lacks is the description's to lack. A
+            // key dropped for a column left out takes its marks off the
+            // columns kept, so what the catalog says of a column and of its
+            // keys agree (a primary key of `ts` and a column left out is no
+            // primary key of `ts`).
             declared.retain(|c| kept.contains(&c.name));
-            keys.retain(|k| k.columns.iter().all(|c| kept.contains(c)));
+            let (held, dropped): (Vec<_>, Vec<_>) = keys
+                .into_iter()
+                .partition(|k| k.columns.iter().all(|c| kept.contains(c)));
+            keys = held;
+            for key in dropped.iter().filter(|k| k.kind == KeyKind::Primary) {
+                for column in declared
+                    .iter_mut()
+                    .filter(|c| key.columns.contains(&c.name))
+                {
+                    column.primary_key = false;
+                }
+            }
         }
         let constraints = key_columns(&asker, &table.source, keys).await?;
         let column_names: Vec<String> = declared.iter().map(|c| c.name.clone()).collect();
@@ -213,7 +228,7 @@ pub(crate) async fn run(
         // key's text, any other's doubles (crate::exact_number).
         let preview = exact_number::settle(preview, &constraints)?;
         big_types.push(big_integer_types(&preview, &declared));
-        let previewed = infer::preview(
+        let previewed = infer::preview_keyed(
             &table.name,
             &table.source,
             &declared,
@@ -226,6 +241,8 @@ pub(crate) async fn run(
             } else {
                 infer::Floats::NanValue
             },
+            // A key the caller names is applied after, over any inferred.
+            spec.primary_keys.contains_key(&table.name),
         )?;
         // A preview that may have left rows unread: the time column's
         // choice reads its timestamps over every row, as the reference's

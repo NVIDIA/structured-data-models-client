@@ -61,7 +61,7 @@ from sdm_client.schema import Schema
 if TYPE_CHECKING:
     from predictive_query import Profile, ValidatedPredictiveQuery
 
-    from sdm_client._rust.materialize import Unresolved
+    from sdm_client._rust.materialize import CoreQuery
 
 
 def _refuse_the_task(task: str, why: str) -> NoReturn:
@@ -79,9 +79,9 @@ def _refuse_the_task(task: str, why: str) -> NoReturn:
 def _alone(asked: Any) -> bool:
     r"""Whether ``asked`` is a query only the core resolves (KO2-36), read
     on the core route only, where the bridge is imported."""
-    from sdm_client._rust.materialize import Unresolved
+    from sdm_client._rust.materialize import CoreQuery
 
-    return isinstance(asked, Unresolved)
+    return isinstance(asked, CoreQuery)
 
 
 class PredictiveQuery:
@@ -487,7 +487,7 @@ class PredictiveQuery:
 
     def _on_the_core(
         self,
-        asked: ValidatedPredictiveQuery | Unresolved,
+        asked: ValidatedPredictiveQuery | CoreQuery,
         *,
         indices: Sequence[Any],
         num_context_samples: int | None,
@@ -529,7 +529,7 @@ class PredictiveQuery:
                 error,
                 self.text,
                 given,
-                steps=getattr(asked, 'num_forecasts', None),
+                steps=asked.num_forecasts,
                 options=options,
             )
             if said is error:
@@ -636,13 +636,13 @@ class PredictiveQuery:
 
     def _resolve(
         self, profile: Profile
-    ) -> ValidatedPredictiveQuery | Unresolved:
+    ) -> ValidatedPredictiveQuery | CoreQuery:
         r"""Parse and validate the query.
 
         On the core route (S0, the private routing seam) the core decides
         validity (P2-MID2-1, design choice 9). A query it accepts that a
         relational materialize gathers on the core is the core's to resolve
-        as it gathers it: :class:`~sdm_client._rust.materialize.Unresolved`,
+        as it gathers it: :class:`~sdm_client._rust.materialize.CoreQuery`,
         the text alone, so the old validator is never reached on the core
         route. Only where the old materializer gathers it is the accepted
         query resolved by the old validator, for that materializer, which
@@ -652,7 +652,7 @@ class PredictiveQuery:
         materialize runs on the core over a schema holding a column the
         old validator's language cannot name (a dot, a backtick or a line
         break in its name), a query the old validator refuses is the core's
-        to resolve as it gathers it (KO2-36, T2.18): ``Unresolved``, holding
+        to resolve as it gathers it (KO2-36, T2.18): ``CoreQuery``, holding
         the old validator's refusal for a call only the old route answers.
         """
         from sdm_client import _routing
@@ -670,19 +670,23 @@ class PredictiveQuery:
         if core:
             from sdm_client._rust import s0
 
-            accepted, messages, held = s0.validate(
+            accepted, messages, held, resolved = s0.validate(
                 self.text, definition, profile
             )
             if not accepted:
                 raise self._refusal(messages, profile)
             if gathered_on_the_core:
                 from sdm_client._rust import errors
-                from sdm_client._rust.materialize import Unresolved
+                from sdm_client._rust.materialize import CoreQuery
 
                 # No shadow check reads it to say its day-first literal, so
                 # the core's warning is shown.
                 errors.warn_held(held)
-                return Unresolved(self.text, None)
+                return CoreQuery(
+                    text=str((resolved or {}).get('text') or self.text),
+                    num_forecasts=(resolved or {}).get('num_forecasts'),
+                    refusal=None,
+                )
             return s0.shadow(self.text, definition, profile)
         from predictive_query import validate
 
@@ -691,9 +695,13 @@ class PredictiveQuery:
             return old
         reasons = [error.message for error in response.errors]
         if gathered_on_the_core and names_a_query_cannot_say(self.schema):
-            from sdm_client._rust.materialize import Unresolved
+            from sdm_client._rust.materialize import CoreQuery
 
-            return Unresolved(self.text, self._refusal(reasons, profile))
+            return CoreQuery(
+                text=self.text,
+                num_forecasts=None,
+                refusal=self._refusal(reasons, profile),
+            )
         raise self._refusal(reasons, profile)
 
     def _refusal(

@@ -3,7 +3,7 @@
   "about": "Each change to frozen bridge code against the merge base, with one reason: moved (a rule moved into Rust, naming its task), refactor (behaviour kept), gone (an entry that left the freeze) or main (a change main made, merged by this change: the full SHA of the main commit, then its title). Entries the merge base already holds are spent and may be pruned.",
   "changes": {
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::<module>": {
-      "moved": "T3.8: RouteError no longer raised here (a schema the core has not described is described now, P2-T2.16-11), and the provider choice from _rust/providers"
+      "moved": "T3.8: RouteError no longer raised here (a schema the core has not described is described now, P2-T2.16-11), and the provider choice from _rust/providers; T3.8 fix 3: the core route reads what it needs of a query from the core's own validation (validate_query's query, contract v28: the text the core writes back, the forecast's steps) through CoreQuery, not a stand-in for the old validator's object (Claude round 2)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_indices": {
       "moved": "T1.32a: the cast to the key's type with pandas (pd.Series(indices, dtype=...)) and its INVALID_REQUEST and INTERNAL_ERROR split are the core's rule table; the bridge hands over the values as pyarrow infers them, or as their text where it infers no one type"
@@ -42,7 +42,7 @@
       "moved": "T2.8: a ranking the core gathered is predicted by the core, as a forecast is (T1.36 fix 21): its outputs' check, the check of every question before any is sent, the candidates left out, each question's call and the reassembly are the core's; the old route's are unchanged"
     },
     "packages/structured-data-models-client/src/sdm_client/query.py::<module>": {
-      "moved": "T2.8: _in_steps_on_the_core and _on_the_core_alone become _on_the_core, every query on the core route gathered whole by the core (a forecast's steps, a ranking's candidates, a query only the core resolves), its refusals said by decompose.said_as_parts_are; _kept_as_parts keeps a ranking's questions as _kept_as_steps keeps a forecast's steps"
+      "moved": "T2.8: _in_steps_on_the_core and _on_the_core_alone become _on_the_core, every query on the core route gathered whole by the core (a forecast's steps, a ranking's candidates, a query only the core resolves), its refusals said by decompose.said_as_parts_are; _kept_as_parts keeps a ranking's questions as _kept_as_steps keeps a forecast's steps; T3.8 fix 3: the core route reads what it needs of a query from the core's own validation (validate_query's query, contract v28: the text the core writes back, the forecast's steps) through CoreQuery, not a stand-in for the old validator's object (Claude round 2)"
     },
     "packages/structured-data-models-client/src/sdm_client/query.py::PredictiveQuery.materialize": {
       "moved": "T2.8: on the core route the question goes to the core whole: the ranking's decomposition and refusals, and the forecast's top_k and MOST_PARTS refusals, are the core's (parts_of is not run there), task= refused first as for any relational query"
@@ -108,13 +108,13 @@
       "moved": "T2.18: whether a query's target moves with time and its entity table, as the core resolved them (Materialized.query) for a query only the core resolves (KO2-36), else as the old validator did; the core's facts are taken out of the state the request keeps; T2.14b: the target's windowing and entity table (MID2 P2-4) are the core's Materialized.query facts for every query, never the old validator's tree"
     },
     "packages/structured-data-models-client/src/sdm_client/query.py::PredictiveQuery._resolve": {
-      "moved": "T3.8: the core chooses the validator (P2-MID2-1, design choice 9): on the core route the core validates, and a query the core gathers is resolved by the core alone (Unresolved), the old validator never asked; only an old-route materialize resolves the accepted query with the old validator; T3.8 fix 2: a query the core gathers alone, which no shadow validator reads, has the core's held day-first warning shown (s0.validate hands back what it held; Codex round 1, P3-1)"
+      "moved": "T3.8: the core chooses the validator (P2-MID2-1, design choice 9): on the core route the core validates, and a query the core gathers is resolved by the core alone (Unresolved), the old validator never asked; only an old-route materialize resolves the accepted query with the old validator; T3.8 fix 2: a query the core gathers alone, which no shadow validator reads, has the core's held day-first warning shown (s0.validate hands back what it held; Codex round 1, P3-1); T3.8 fix 3: the core route reads what it needs of a query from the core's own validation (validate_query's query, contract v28: the text the core writes back, the forecast's steps) through CoreQuery, not a stand-in for the old validator's object (Claude round 2)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::Unresolved.__init__": {
-      "moved": "T3.8: refusal None for a query the core validated (P2-MID2-1): the old validator is not asked on the core route"
+      "gone": "T3.8 fix 3: Unresolved replaced by the dataclass CoreQuery"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::Unresolved.to_string": {
-      "moved": "T2.18: such a query is sent to materialize as the caller wrote it; the core resolves it and writes it back"
+      "gone": "T3.8 fix 3: Unresolved replaced by the dataclass CoreQuery"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_candidates": {
       "moved": "T2.8: the host's half of the ranking's decomposition moved into the core: each candidate as the contract's given candidate of its own type (a NumPy value as the Python value it holds, a missing one null, an integer past int64 and a finite decimal by their exact digits, a value no scalar holds spelled as its str, as the reference's _as_literal reads it); one equal to a value given before it a repeat, as dict.fromkeys leaves it out, and one Python cannot hash unreadable (E101), which the core refuses by name (register P2D-1); how each is written into its question, and every refusal of one, are the core's (sdm_request::ranking); T2.14b: the candidate-repeat rule (MID2 P2-2) moved into sdm-request (ranking::distinct): no 'repeat' is written; each candidate is handed over as given, one Python cannot hash unreadable; T2.14b fix 1 (Codex r1 P2-1): a date, time of day or timestamp candidate given typed, its kind and text, so the core holds two equal ones one candidate as dict.fromkeys does (MID2 P2-2); T2.14b fix 2: a temporal candidate written by _typed (MID2 P2-2); T2.14b fix 4 (Codex r3 P2-1): the temporal candidates grouped as dict.fromkeys groups them, by Python's own == and hash, each given the position of its group's first (first), so the core keeps the reference's repeats with no equality of its own (MID2 P2-2); T2.14b fix 7 (Claude r4 P3-2, P3-3, the orchestrator's): which candidates repeat is Python's own (dict.fromkeys over every hashable candidate, by Python's == and hash), each later one sent as the contract's repeat, so the contract carries no host equality field; the core leaves a repeat out (MID2 P2-2); T2.14b fix 8 (Codex r6): a temporal candidate Python holds distinct from an earlier one of the same kind and text is sent spelled, which the core merges with none, so the core never merges what the host's grouping kept apart (MID2 P2-2)"
@@ -451,6 +451,9 @@
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_derived": {
       "moved": "T3.8: the key, the database and the entities as the reference names them in its words, from the core's fields (_the_key_of, _BACKEND_NAMES, TableNotFoundError, _refuse_an_id_scored_twice): the database by the core's field database"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::CoreQuery.to_string": {
+      "moved": "T3.8 fix 3: the core route reads what it needs of a query from the core's own validation (validate_query's query, contract v28: the text the core writes back, the forecast's steps) through CoreQuery, not a stand-in for the old validator's object (Claude round 2)"
     }
   }
 }

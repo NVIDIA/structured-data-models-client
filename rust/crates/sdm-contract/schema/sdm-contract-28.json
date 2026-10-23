@@ -4870,6 +4870,17 @@
                 "$ref": "#/$defs/PqlDiagnostic"
               }
             },
+            "query": {
+              "description": "What the core resolved of an accepted query (contract v28, T3.8),\nwhich a host reads instead of resolving the query again: its facts\nand its text as the core writes it back. Absent for a refused query\nand from a core that does not say.",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/QueryFacts"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "op": {
               "type": "string",
               "const": "validate_query"
@@ -5111,6 +5122,13 @@
           "type": "integer",
           "format": "uint32",
           "minimum": 0
+        },
+        "text": {
+          "description": "The query as the core writes it back, the reference's\n`ValidatedPredictiveQuery.to_string()` (contract v28, T3.8): given\nby `validate_query`; absent from `materialize`'s, whose state holds\neach question's text.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "additionalProperties": false,

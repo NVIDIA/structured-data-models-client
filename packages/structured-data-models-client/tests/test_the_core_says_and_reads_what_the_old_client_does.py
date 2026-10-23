@@ -96,6 +96,117 @@ def test_a_column_a_schema_built_by_hand_leaves_out_is_never_read(
     assert 'ignored_time' not in json.dumps(payload)
 
 
+def test_a_key_over_a_column_left_out_marks_no_column_it_keeps(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The source keys the table on (ts, omitted); the schema leaves `omitted`
+    # out and names `id`. The reference never reads the source's key here,
+    # so the schema's key stands (T3.8 fix 3, Codex round 2).
+    connection = duckdb.connect()
+    connection.execute(
+        'CREATE TABLE users (id BIGINT, target DOUBLE, ts TIMESTAMP, '
+        'omitted BIGINT, PRIMARY KEY (ts, omitted))'
+    )
+    connection.execute(
+        "INSERT INTO users SELECT i, i % 3, TIMESTAMP '2024-01-01' + i * "
+        'INTERVAL 1 DAY, i FROM range(20) t(i)'
+    )
+    schema = Schema(
+        {
+            'users': SourceTable(
+                'users',
+                'users',
+                {
+                    'id': Column('id', 'int64', 'ID'),
+                    'target': Column('target', 'float64', 'numerical'),
+                    'ts': Column('ts', 'timestamp[us]', 'timestamp'),
+                },
+                primary_key='id',
+            )
+        },
+        source=DuckDBSource(connection),
+    )
+
+    def materialized() -> Any:
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            request = PredictiveQuery(
+                'PREDICT users.target FOR EACH users.id', schema
+            ).materialize(indices=[1, 2], random_seed=7)
+        return json.loads(json.dumps(request._payloads, default=str))
+
+    answers = _on_both_routes(monkeypatch, materialized)
+    assert answers['core'] == answers['old']
+
+
+def _buys() -> Schema:
+    connection = duckdb.connect()
+    connection.execute(
+        'CREATE TABLE users AS SELECT i::BIGINT AS uid FROM range(20) t(i)'
+    )
+    connection.execute(
+        'CREATE TABLE buys AS SELECT i::BIGINT AS bid, (i % 20)::BIGINT AS '
+        "uid, TIMESTAMP '2025-06-01' + i * INTERVAL 1 DAY AS stamp "
+        'FROM range(300) t(i)'
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        return Schema.from_source(
+            DuckDBSource(connection),
+            primary_keys={'users': 'uid', 'buys': 'bid'},
+            time_columns={'buys': 'stamp'},
+        )
+
+
+def test_one_question_in_two_spellings_is_one_question(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A request keeps its query as the validated query writes it back, so a
+    # session pins one question however it was spelled (T3.8 fix 3, Claude
+    # round 2).
+    def asked() -> list[Any]:
+        schema = _buys()
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            requests = [
+                PredictiveQuery(text, schema).materialize(
+                    indices=[1, 2], random_seed=7
+                )
+                for text in (
+                    'PREDICT COUNT(buys.*, 0, 30, days) FOR EACH users.uid',
+                    'predict   count(buys.*, 0, 30, days)\nfor each users.uid',
+                )
+            ]
+        return [(r.query, r._question) for r in requests]
+
+    answers = _on_both_routes(monkeypatch, asked)
+    assert answers['core'] == answers['old']
+    (first, second) = answers['core']
+    assert first == second
+
+
+def test_a_forecast_step_s_refusal_names_the_step(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def refused() -> str:
+        schema = _buys()
+        with (
+            warnings.catch_warnings(),
+            pytest.raises(StructuredDataError) as caught,
+        ):
+            warnings.simplefilter('ignore')
+            PredictiveQuery(
+                'PREDICT COUNT(buys.*, 0, 30, days) FORECAST 40 TIMEFRAMES '
+                'FOR EACH users.uid',
+                schema,
+            ).materialize(indices=[1, 2])
+        return str(caught.value)
+
+    answers = _on_both_routes(monkeypatch, refused)
+    assert answers['core'] == answers['old']
+    assert 'This is forecast step 10 of 40.' in answers['core']
+
+
 def test_a_day_first_literal_is_warned_of_when_the_core_gathers_alone(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
