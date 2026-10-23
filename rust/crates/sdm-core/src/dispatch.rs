@@ -449,12 +449,23 @@ pub(crate) fn materialize(
                             .collect(),
                     );
                 }
-                let mut result =
-                    crate::materialize::run(asker, inputs(description, source)).await?;
-                if let OperationResult::Materialize(materialized) = &mut result {
-                    materialized.read_under = first_read;
+                // Where this run read the tables it read anew, answered done
+                // or failed, as the reference keeps the tables a run read
+                // before anything after can fail.
+                match crate::materialize::run(asker, inputs(description, source)).await {
+                    Ok(mut result) => {
+                        if let OperationResult::Materialize(materialized) = &mut result {
+                            materialized.read_under = first_read;
+                        }
+                        Ok(result)
+                    }
+                    Err(mut failed) => {
+                        if !first_read.is_empty() {
+                            failed.read_under = Some(Box::new(first_read));
+                        }
+                        Err(failed)
+                    }
                 }
-                Ok(result)
             }))
         }
         _ => Err(internal("a materialize run of another operation")),
