@@ -22,9 +22,8 @@ per change:
   by allowlist (U4): a qualifier the old denylist missed is no approval;
 - the census's real-data mode takes each leg;
 - ``gate.sh``: the main step fetches ``origin/main`` itself right before
-  it reads it (P2-T2.0f-1); the locked run passes the E-1 verdicts to the
-  comparator and holds the captures' pending-live list; the Java runner
-  and the stand-in legs run;
+  it reads it (P2-T2.0f-1); the locked run holds the captures'
+  pending-live list; the Java runner runs;
 - the comparator hashes result rows as text, so a case whose result
   digest an entry excuses (P2G-3) still has its ids and predictions
   compared (P2-T2.21-1);
@@ -499,8 +498,9 @@ def test_t32_an_owner_s_approval_is_read_by_allowlist() -> None:
 
 @pending
 def test_t32_the_census_s_real_data_mode_takes_each_leg() -> None:
-    r"""Check 2: the census's real-data mode runs per leg, the three
-    offline databases and each warehouse leg's stand-in."""
+    r"""Check 2: the census's real-data mode runs per leg on the three
+    offline databases; a warehouse leg runs live only (B-lite), so none is
+    one of its choices."""
     done = subprocess.run(
         [
             sys.executable,
@@ -515,8 +515,9 @@ def test_t32_the_census_s_real_data_mode_takes_each_leg() -> None:
         timeout=120,
     )
     assert done.returncode == 0, done.stdout + done.stderr
-    for leg in ('duckdb', 'sqlite', 'postgres', *WAREHOUSES):
-        assert leg in done.stdout, leg
+    choices = re.search(r'--database \{([^}]*)\}', done.stdout)
+    assert choices, done.stdout
+    assert set(choices.group(1).split(',')) == {'duckdb', 'sqlite', 'postgres'}
 
 
 def _function(name: str) -> str:
@@ -540,28 +541,21 @@ def test_t32_the_main_step_fetches_origin_main_before_reading_it() -> None:
 
 
 @pending
-def test_t32_the_locked_run_holds_live_only_items_and_pending_live_cases() -> (
-    None
-):
-    r"""Locked check 1 in ``gate.sh``: the locked run hands the comparator
-    the E-1 verdicts read from ``contract/captures/`` with the candidate
-    (``--verdicts``, ``--candidate``), and runs ``capture_check.py
-    captures --locked``."""
+def test_t32_the_locked_run_holds_pending_live_cases() -> None:
+    r"""Locked check 1 in ``gate.sh``: the locked run runs ``capture_check.py
+    captures --locked``, so no case is pending live at the final run (the
+    E-1 verdicts it also read went with the stand-in, B-lite)."""
     text = (RUST_CORE / 'gate.sh').read_text(encoding='utf-8')
-    assert re.search(r'compare\.py[^\n]*(\\\n[^\n]*)*--verdicts', text)
-    assert '--candidate' in text and 'contract/captures' in text
     assert re.search(r'capture_check\.py[^\n]*captures[^\n]*--locked', text)
 
 
 @pending
-def test_t32_the_gate_runs_the_java_and_stand_in_legs() -> None:
-    r"""``gate.sh`` runs the Java host's runner (``run_java.py``) and the
-    warehouse legs on the stand-in (python-core with ``--database`` each
-    leg), where it ran DuckDB's runners alone."""
+def test_t32_the_gate_runs_the_java_legs() -> None:
+    r"""``gate.sh`` runs the Java host's runner (``run_java.py``) beside
+    DuckDB's runners (its stand-in legs went with the stand-in, B-lite)."""
     body = _function('observe')
     assert re.search(r'^\s*java\)', body, re.M), 'no java runner in observe'
     assert 'run_java.py' in body
-    assert '--database' in body
 
 
 @pending

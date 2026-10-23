@@ -15,8 +15,10 @@ runs in, and a fake ``gh``):
 - ``lane.py`` never starts a lane on a finished phase, one whose branch
   ``rust-core`` already holds (T3.8's run made ``rust-core-phase-2-lane-e``
   from the ``rust-core`` checkout, 2026-10-22);
-- ``handoff.py`` removes its ``previous`` worktree when it is stopped
-  (SIGTERM), so no registered, dirty ``sdm-handoff-*`` worktree is left;
+- (``handoff.py``'s ``previous`` worktree, whose removal on SIGTERM this
+  file held, went with the fails-before step, the owner's "2026-10-23 cut
+  the tooling back"; ``tests/test_t32_train_own.py`` holds the stop's
+  clean-up);
 - ``clean_tmp.sh`` never lists a directory holding a listening socket (the
   live Codex daemon's) as removable.
 
@@ -33,11 +35,10 @@ import functools
 import importlib.util
 import json
 import os
-import signal
 import socket
 import subprocess
 import sys
-import time
+import tempfile
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -214,105 +215,17 @@ def test_t32_lane_never_starts_on_a_finished_phase(tmp_path: Path) -> None:
 
 
 @pending
-def test_t32_handoff_removes_its_previous_worktree_when_stopped(
-    tmp_path: Path,
-) -> None:
-    r"""A handoff stopped (SIGTERM) while it runs a fix's tests on the
-    previous round's tree leaves no ``sdm-handoff-*`` worktree registered
-    and no scratch behind."""
-    repo = tmp_path / 'repo'
-    repo.mkdir()
-    env = {
-        **{k: v for k, v in os.environ.items() if not k.startswith('GIT_')},
-        'GIT_CONFIG_GLOBAL': str(tmp_path / 'gitconfig'),
-        'GIT_CONFIG_NOSYSTEM': '1',
-        'GIT_TERMINAL_PROMPT': '0',
-        'TMPDIR': str(tmp_path),
-    }
-    (tmp_path / 'gitconfig').write_text(
-        '[user]\n\tname = T\n\temail = t@example.invalid\n', encoding='utf-8'
-    )
-
-    def git(*arguments: str) -> str:
-        return subprocess.run(
-            ['git', '-C', str(repo), *arguments],
-            capture_output=True,
-            text=True,
-            check=True,
-            env=env,
-            stdin=subprocess.DEVNULL,
-            timeout=120,
-        ).stdout.strip()
-
-    git('init', '--quiet', '-b', 'work')
-    (repo / 'README.md').write_text('base\n', encoding='utf-8')
-    git('add', '-A')
-    git('commit', '--quiet', '-m', 'Land T3.1: base')
-    base = git('rev-parse', 'HEAD')
-    (repo / 'notes.md').write_text('round 1\n', encoding='utf-8')
-    git('add', '-A')
-    git('commit', '--quiet', '-m', 'T3.2: round 1')
-    previous = git('rev-parse', 'HEAD')
-    (repo / 'tests').mkdir()
-    (repo / 'tests/test_t32_slow.py').write_text(
-        'import time\n\n\ndef test_slow():\n    time.sleep(60)\n',
-        encoding='utf-8',
-    )
-    git('add', '-A')
-    git('commit', '--quiet', '-m', 'T3.2 fix 1: a slow test')
-    process = subprocess.Popen(
-        [
-            sys.executable,
-            str(RUST_CORE / 'handoff.py'),
-            'run',
-            '--package',
-            'T3.2',
-            '--base',
-            base,
-            '--previous',
-            previous,
-            '--python',
-            sys.executable,
-        ],
-        cwd=repo,
-        env=env,
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    try:
-        deadline = time.monotonic() + 90
-        while 'sdm-handoff-' not in git('worktree', 'list', '--porcelain'):
-            assert process.poll() is None, (
-                'the handoff ended before its worktree'
-            )
-            assert time.monotonic() < deadline, 'no previous worktree was made'
-            time.sleep(0.5)
-        process.send_signal(signal.SIGTERM)
-        process.wait(timeout=60)
-    finally:
-        if process.poll() is None:
-            process.kill()
-            process.wait(timeout=30)
-    left = [
-        line
-        for line in git('worktree', 'list', '--porcelain').splitlines()
-        if 'sdm-handoff-' in line
-    ]
-    assert left == [], left
-    assert not list(tmp_path.glob('sdm-handoff-*'))
-
-
-@pending
 def test_t32_clean_tmp_never_lists_a_directory_holding_a_listening_socket(
     tmp_path: Path,
 ) -> None:
     r"""A stale directory holding a listening socket (the live Codex
     daemon's) is not removable; a stale one beside it without one is, so
     the dry run reads the directory."""
-    roots = {
-        name: tmp_path / name for name in ('tmp', 'target', 'cells', 'state')
-    }
+    # A Unix socket's path holds at most 107 bytes: the swept root is a
+    # short directory under /tmp itself, whatever TMPDIR names.
+    short = tempfile.TemporaryDirectory(prefix='t32-', dir='/tmp')
+    roots = {name: tmp_path / name for name in ('target', 'cells', 'state')}
+    roots['tmp'] = Path(short.name) / 'r'
     for path in roots.values():
         path.mkdir()
     plain = roots['tmp'] / 't32-stale'
@@ -347,5 +260,6 @@ def test_t32_clean_tmp_never_lists_a_directory_holding_a_listening_socket(
         )
     finally:
         listener.close()
+        short.cleanup()
     assert f'would remove {plain}' in done.stdout, done.stdout + done.stderr
     assert f'would remove {daemon}' not in done.stdout, done.stdout
