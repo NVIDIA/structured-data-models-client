@@ -16,6 +16,7 @@ use sdm_schema::held;
 
 fn facts(dtype: Dtype, received: ColumnType) -> SourceFacts {
     SourceFacts {
+        relation: "app_users".into(),
         dtype,
         received,
         nullable: false,
@@ -147,4 +148,16 @@ fn a_table_or_column_held_twice_is_the_host_s_fault() {
     twice.tables[0].columns.push(column);
     let refused = held::read(twice, &BTreeMap::new(), true).unwrap_err();
     assert_eq!(refused.code, ErrorCode::InvalidRequest);
+}
+
+#[test]
+fn facts_of_another_relation_are_none_of_the_table_s() {
+    let mut pointed = schema();
+    pointed.tables[0].source = "other_users".into();
+    let read = held::read(pointed.clone(), &BTreeMap::new(), true).unwrap();
+    assert_eq!(read.unfacted.len(), 2);
+    assert_eq!(held::lacking_facts(&pointed)[0].1, ["user_id", "seen"]);
+    // Read by its data type, as a column with none is.
+    assert_eq!(read.description.tables[0].columns[0].dtype, Dtype::Int);
+    assert!(!read.description.tables[0].columns[0].unique);
 }

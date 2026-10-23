@@ -65,8 +65,7 @@ import json
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
-from sdm_client._routing import RouteError
-from sdm_client._rust import codec
+from sdm_client._rust import codec, results
 from sdm_client._rust.run import Refused, TransportFailed, run
 from sdm_client.errors import NimRequestError, StructuredDataError
 
@@ -224,10 +223,10 @@ def predict(
     r"""The answer to ``request``, predicted on the core.
 
     Raises:
-        RouteError: The request was not materialized on the core, so it
-            holds no request state the core wrote, or holds other payloads
-            than the one it wrote.
-        StructuredDataError: The core's refusal, as :mod:`.errors` maps it
+        StructuredDataError: ``INVALID_REQUEST`` naming the rule
+            ``materialize_again`` for a request not materialized on the core,
+            which holds no request state the core wrote, or one holding other
+            payloads than the core wrote (T3.16); the core's refusal, as :mod:`.errors` maps it
             (the model and output checks, the context's, and what it does
             not predict yet, ``UNSUPPORTED_REQUEST`` naming the rule); a
             model given as neither a model handle nor an id; and the
@@ -237,27 +236,38 @@ def predict(
     from sdm_client.adapters.relational import _request_id
     from sdm_client.models import spec_for
 
-    state = getattr(request, '_core_state', None)
+    state = request._core
     if state is None:
-        raise RouteError(
-            'predict on the core needs a request materialize built on the core'
+        # A request the core did not materialize (one the old route built,
+        # or pickled before it could hold the core's state) holds nothing
+        # the core can predict from: refused by name, the caller told what
+        # to do (the structure design's open question 3, T3.16).
+        raise StructuredDataError(
+            'this request was not materialized on the core, so it holds '
+            'nothing the core can predict from; materialize it again',
+            code='INVALID_REQUEST',
+            details={'rule': 'materialize_again'},
         )
     # A forecast or a ranking the core gathered is held as one request per
     # part (T1.36 fix 21, T2.8), which the core predicts in one run, part
     # by part; a request of more rows than one call scores, as each call's
     # payload (T2.8c), which the core predicts in one run, call by call.
     steps = request.parts if request.parts is not None else (request,)
-    batched = state.get('batches')
+    batched = state.batches
     held = []
     for step in steps:
         payloads = step.payloads
         if payloads is None or len(payloads) != 1 + len(batched or ()):
-            raise RouteError(
-                'predict on the core takes the payloads materialize wrote'
+            # Payloads other than the ones the core wrote with its state.
+            raise StructuredDataError(
+                'this request holds other payloads than materialize wrote '
+                'on the core; materialize it again',
+                code='INVALID_REQUEST',
+                details={'rule': 'materialize_again'},
             )
         held.append((payloads[0], step.query))
     [(payload, query), *later] = held
-    ranking = state.get('ranking')
+    ranking = state.ranking
     # A ranking's candidates, by their position among those given, as the
     # caller gave them: the core names each by its position.
     given: dict[int, Any] = (
@@ -265,7 +275,7 @@ def predict(
         if ranking is None or request._decomposition is None
         else dict(
             zip(
-                ranking['positions'],
+                ranking.positions,
                 (about for _, about in request._decomposition.parts),
                 strict=True,
             )
@@ -328,7 +338,7 @@ def predict(
 
     operation: dict[str, Any] = {
         'op': 'predict',
-        'state': {'version': state['version'], 'payload': 1, 'query': 2},
+        'state': {'version': state.version, 'payload': 1, 'query': 2},
         'model': model_id,
         'request_id': _request_id(),
         # The outputs the caller named, or that it named none (the core then
@@ -361,17 +371,17 @@ def predict(
             )
     if request.parts is not None and ranking is not None:
         operation['state']['ranking'] = {
-            'candidate': ranking['positions'][0],
-            'value': ranking['values'][0],
+            'candidate': ranking.positions[0],
+            'value': ranking.values[0],
             'parts': [],
         }
-        if ranking.get('top_k') is not None:
-            operation['state']['ranking']['top_k'] = ranking['top_k']
+        if ranking.top_k is not None:
+            operation['state']['ranking']['top_k'] = ranking.top_k
         for number, ((more, asked), position, named) in enumerate(
             zip(
                 later,
-                ranking['positions'][1:],
-                ranking['values'][1:],
+                ranking.positions[1:],
+                ranking.values[1:],
                 strict=True,
             ),
             start=2,
@@ -423,25 +433,25 @@ def predict(
         # Whatever the call raised, the answers before it are put on it.
         _carry_the_answers(error, request.parts is not None)
         raise
-    answered = finished.result
-    metadata = json.loads(finished.take(answered['metadata']))
+    answered = results.expect(finished.result, results.Predicted)
+    metadata = json.loads(finished.take(answered.metadata))
     if ranking is not None:
         # The core's rows are ordered by row_index; a ranking's items keep
         # the order the answers named them in.
         rows = sorted(
-            _rows(finished.take(answered['result'])),
+            _rows(finished.take(answered.result)),
             key=lambda row: row['answer_index'],
         )
         return _ranked(answered, rows, metadata, given)
-    table = _table(finished.take(answered['result']))
+    table = _table(finished.take(answered.result))
     # The result's explanation, on the result's schema (T2.13).
     explained = (table.schema.metadata or {}).get(b'explanation')
     return _result(
         table.to_pylist(),
-        model=answered['model'],
-        request_id=answered['request_id'],
+        model=answered.model,
+        request_id=answered.request_id,
         metadata=metadata,
-        outputs=tuple(answered['outputs']),
+        outputs=answered.outputs,
         by_step=request.parts is not None,
         explanation=None if explained is None else explained.decode(),
     )
@@ -518,7 +528,7 @@ def _result(
 
 
 def _ranked(
-    answered: dict[str, Any],
+    answered: results.Predicted,
     rows: list[dict[str, Any]],
     metadata: dict[str, Any],
     given: dict[int, Any],
@@ -533,7 +543,7 @@ def _ranked(
 
     from sdm_client.result import PredictionResult
 
-    wanted = tuple(answered['outputs'])
+    wanted = answered.outputs
     items = []
     for row in rows:
         chosen = [given[at] for at in row['candidates']]
@@ -555,14 +565,12 @@ def _ranked(
             )
         )
     return PredictionResult(
-        model=answered['model'],
-        request_id=answered['request_id'],
+        model=answered.model,
+        request_id=answered.request_id,
         items=items,
         metadata=metadata,
         outputs=wanted,
-        unscored_candidates=[
-            given[at] for at in answered.get('unscored_candidates', ())
-        ],
+        unscored_candidates=[given[at] for at in answered.unscored_candidates],
     )
 
 

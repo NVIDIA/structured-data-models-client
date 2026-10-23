@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use sdm_contract::ops::{
     GivenCandidate, HeldSchema, Operation, OperationResult, QuerySchema, REQUEST_STATE_VERSION,
-    SAMPLER_STATE_VERSION, SamplerMemo, SchemaEdit, SourceDescription, SourceSpec,
+    SAMPLER_STATE_VERSION, SamplerMemo, SchemaEdit, SourceSpec,
 };
 use sdm_contract::run::StartRun;
 use sdm_contract::{
@@ -90,10 +90,9 @@ pub fn start(
             })
         }
         Operation::EditSchema(request) => {
-            let described: SourceDescription = take_json(&mut attachments, request.schema)?;
-            let held: Option<HeldSchema> = take_json_if(&mut attachments, request.held)?;
+            let held: HeldSchema = take_json(&mut attachments, request.schema)?;
             let edit: SchemaEdit = take_json(&mut attachments, request.edit)?;
-            Run::new(move |asker| crate::edit::run(asker, described, held, edit))
+            Run::new(move |asker| crate::edit::run(asker, held, edit))
         }
         operation @ Operation::Materialize(_) => materialize(
             root,
@@ -284,13 +283,10 @@ pub(crate) fn materialize(
 ) -> Result<Run, CoreError> {
     match operation {
         Operation::Materialize(request) => {
-            let described: SourceDescription = take_json(&mut attachments, request.schema)?;
-            let held: Option<HeldSchema> = take_json_if(&mut attachments, request.held)?;
-            // The schema as the host holds it, before anything else of the
-            // call is read; one changed in a way no edit the core takes says
-            // is refused by name (`schema_edited`, decision E67), as the
-            // host's bridge refused it before the core ran until T1.24b.
-            let description = sdm_schema::edit::read_held(described, held, "materialize")?;
+            // The schema as the host holds it, as plain data (T3.16): read
+            // at the run's start, where a column with no facts is read from
+            // the source (`crate::discover`).
+            let held: HeldSchema = take_json(&mut attachments, request.schema)?;
             let query: String = take_json(&mut attachments, request.query)?;
             let indices = match request.indices {
                 Some(id) => match attachments.remove(&id) {
@@ -368,9 +364,12 @@ pub(crate) fn materialize(
                     })?)
                 }
             };
-            let source = crate::materialize::fingerprint(&request.provider, &description)?;
             let access = root.data_access(&request.provider)?;
-            let inputs = crate::materialize::Inputs {
+            let provider = request.provider;
+            // The run's inputs, once the schema is read (below) and its
+            // fingerprint taken: the memo is read only if it was made under
+            // this provider and schema (decision E52).
+            let inputs = move |description, source: String| crate::materialize::Inputs {
                 memo: memo.filter(|memo| memo.source == source),
                 source,
                 description,
@@ -391,8 +390,13 @@ pub(crate) fn materialize(
                 #[cfg(feature = "test-ops")]
                 labels_only,
             };
-            Ok(Run::with_data(access, move |asker| {
-                crate::materialize::run(asker, inputs)
+            Ok(Run::with_data(access, move |asker| async move {
+                // Each column's facts, the host's or, for a column with none,
+                // the source's, read before anything else of the run.
+                let found = crate::discover::facts(&asker, &held).await?;
+                let description = sdm_schema::held::read(held, &found, false)?.description;
+                let source = crate::materialize::fingerprint(&provider, &description)?;
+                crate::materialize::run(asker, inputs(description, source)).await
             }))
         }
         _ => Err(internal("a materialize run of another operation")),

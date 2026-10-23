@@ -1728,7 +1728,13 @@ entries:
     another source table than the description's: the core reads the
     schema as the host holds it beside the description it last answered,
     sdm_schema::edit::read_held, and refuses such a schema there and at an
-    edit, P1B-17), until T1.24b the bridge's;
+    edit, P1B-17), until T1.24b the bridge's, lifted at T3.16 (the Phase 3
+    structure design's fix A): the core takes the schema as the host holds
+    it, as plain data, each column with what the source said of it and a
+    column with none read from the source, so a table or column added, a
+    column retyped or a table mapped to another source table is sampled as
+    the reference samples it (a column the source lacks left unread, a
+    retyped one read as the source holds it);
     from T1.27 the labels are the core's (sdm_engine::labels, E19): a
     windowed SUM, COUNT, AVG, MIN or MAX, a comparison of one, or of a
     column of the entity's own row, with a number or NULL, and a static
@@ -2663,6 +2669,15 @@ entries:
     the next edit or materialize fails as INVALID_MESSAGE, the held
     schema not reading as the contract's HeldSchema, rather than as
     schema_edited.
+    T3.16 (the Phase 3 structure design's fix A) removes the refusal:
+    edit_schema takes the schema alone, as plain data, each column with
+    what the source said of it, and edits a column with none by its data
+    type, as the reference's setters do; sdm_schema::edit::read_held and
+    the rule schema_edited are gone, and the pinning test now holds the
+    edit and the sample to the old route's
+    (test_a_schema_changed_by_hand_is_edited_and_sampled_as_the_old_route_does).
+    The entry no longer describes a difference: T3.16's implementer asks
+    the owner to retire it.
 - id: P1B-18
   title: A static decimal target is refused by name on the core route where the reference fails INTERNAL_ERROR
   kind: change
@@ -7558,6 +7573,70 @@ entries:
     failure in the client tests that compare the two routes' warnings, which
     now compare the words after a leading [CODE] (T3.8's tests do the same).
     No register entry recorded it before.
+- id: P3E-3
+  title: Predict on the core of a request the core never materialized is refused by name, asking for it to be materialized again
+  kind: change
+  old_behavior: >-
+    The reference predicts any Request PredictiveQuery.materialize built,
+    including one built before the caller's session changed routes or one
+    loaded from a pickle written by an older client.
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build, a
+    request holds what the core's materialize wrote for predict
+    (Request._core, a typed CoreRequest, T3.16); a request with none (built
+    on the old route, or pickled before it could hold one) or holding other
+    payloads than the core wrote is refused before any call is sent:
+    INVALID_REQUEST, rule materialize_again, saying to materialize it
+    again. Until T3.16 the same request raised the routing seam's
+    RouteError, which no caller could act on.
+  affected_inputs: >-
+    SDMClient.predict with the core's predict route forced, of a request
+    the core did not materialize.
+  cases: [T3.16]
+  refs: [T3.16]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    The Phase 3 structure design's open question 3, whose recommendation
+    is this refusal; proposed by T3.16's implementer, never self-approved.
+    Pinned by test_t316_the_schema_as_plain_data.py,
+    test_predict_of_a_request_the_core_never_materialized_asks_to_materialize_again,
+    and test_the_predict_route.py,
+    test_a_request_the_core_did_not_materialize_is_refused_by_name.
+- id: P3E-4
+  title: A column a source gained after the schema was described, added to it by hand, is read on the core route
+  kind: change
+  old_behavior: >-
+    The reference reads each table of a schema Schema.from_source made once,
+    when it describes it, and keeps what it read (EngineTables): a column
+    the source gained afterwards and the caller added to the schema by hand
+    is not in that reading, so materialize leaves it out of the request.
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build, the
+    schema reaches the core as plain data (T3.16): a column holding nothing
+    the source said of it is read from the source as it stands, so the
+    column the caller added is sampled and sent. Until T3.16 such a schema
+    was refused by name (schema_edited, P1B-3).
+  affected_inputs: >-
+    PredictiveQuery.materialize with the core's materialize route forced,
+    over a described schema to which the caller added, by hand, a column
+    the source gained after it was described.
+  cases: [T3.16]
+  refs: [T3.16, P1B-3]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Measured by T3.16's implementer (DuckDB: the users table altered to add
+    a column after describing, the column added to the schema and its
+    meaning set: the old route's request holds four users columns, the
+    core's five). The core sends the column the caller's schema names, as
+    the source now holds it; the reference's cache is of the source as it
+    was. A column the source held when the schema was described, left out
+    and added back, is sampled alike on both routes (held by
+    test_a_column_added_by_hand_to_a_described_schema_is_edited_and_sampled).
+    Proposed as an improvement; never self-approved.
 
 # --- lane G entries (P2G-1..19) ---
 

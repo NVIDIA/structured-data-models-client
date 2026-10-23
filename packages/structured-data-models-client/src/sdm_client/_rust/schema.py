@@ -50,7 +50,7 @@ import warnings
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
-from sdm_client._rust import codec, providers
+from sdm_client._rust import codec, providers, results
 from sdm_client._rust.run import run
 from sdm_client.errors import StructuredDataError
 
@@ -165,16 +165,18 @@ def from_source(
             refused.message = f'{source!r} holds no table to describe'
             refused.args = (refused.message,)
         raise
-    described = json.loads(finished.take(finished.result['description']))
-    return build(cls, source, described)
+    described = results.expect(finished.result, results.Described)
+    return build(cls, source, json.loads(finished.take(described.description)))
 
 
 def build(cls: type[Schema], source: Any, described: dict[str, Any]) -> Schema:
     r"""Today's ``Schema`` of a ``SourceDescription``, as the core assembled
     it: each column's meaning as the description gives it, with what it
     meant before the schema joined on it (``Column._stype_before_key``,
-    which the schema gives back if it stops joining on it), each table's
-    key and time column, and the links."""
+    which the schema gives back if it stops joining on it) and what the
+    source said of it (``Column._source``, T3.16), each table's key and
+    time column, and the links."""
+    from sdm_client._rust.results import SourceFacts
     from sdm_client.core.warnings import SDMWarning
     from sdm_client.materializers.sources import EngineTables, wire_dtype
     from sdm_client.schema import Column, Relationship, SourceTable
@@ -182,6 +184,11 @@ def build(cls: type[Schema], source: Any, described: dict[str, Any]) -> Schema:
     built: dict[str, SourceTable] = {}
     for table in described['tables']:
         name = table['name']
+        # The columns a time column was set on, which the old route's setter
+        # records as a meaning assigned (`stype_declared`): the column
+        # inference took, then the time column the schema holds, as the
+        # reference's schema shows them.
+        timed = {table['time_column_inferred'], table['time_column']} - {None}
         columns = {}
         for column in table['columns']:
             dtype = wire_dtype(column['dtype'])
@@ -190,9 +197,23 @@ def build(cls: type[Schema], source: Any, described: dict[str, Any]) -> Schema:
                     'the core described a column with no wire dtype',
                     code='INTERNAL_ERROR',
                 )
-            columns[column['name']] = Column(
-                column['name'], dtype, column['stype']
-            )
+            # Written as the core answered it, field by field: the core
+            # checked and marked it (decision E55), and the old route's
+            # checks, which ask the old PQL package, are not run again
+            # (T3.16, the structure design's rule 11). What the source said
+            # of it is kept with it and handed back whole to the core.
+            made = Column.__new__(Column)
+            for field, value in (
+                ('name', column['name']),
+                ('dtype', dtype),
+                ('stype', column['stype']),
+                ('untyped', False),
+                ('stype_declared', column['name'] in timed),
+                ('_stype_before_key', column['stype_before_key']),
+                ('_source', SourceFacts.of_described(column, table['source'])),
+            ):
+                object.__setattr__(made, field, value)
+            columns[column['name']] = made
         # Every column the core described is kept, whatever its name: the
         # core holds a query's table and column apart, so a dot, a backtick
         # or a line break in a column's name is data (KO2-36, T2.18). The
@@ -206,20 +227,14 @@ def build(cls: type[Schema], source: Any, described: dict[str, Any]) -> Schema:
         table_shape.columns = columns
         table_shape._own_columns()
         keys = tuple(table['primary_key'])
-        if keys:
-            table_shape.primary_key = keys[0] if len(keys) == 1 else keys
-        # The column inference took ordered the table before the links or
-        # the caller settled another, as the reference's schema shows it.
-        table_shape.time_column = table['time_column_inferred']
-        table_shape.time_column = table['time_column']
-        # Once the key and time column are set, whose setters re-derive
-        # the marks of a table held on its own.
-        for column in table['columns']:
-            object.__setattr__(
-                table_shape.columns[column['name']],
-                '_stype_before_key',
-                column['stype_before_key'],
-            )
+        # The key and time column as the core answered them, which marked
+        # the columns already.
+        object.__setattr__(
+            table_shape,
+            'primary_key',
+            None if not keys else keys[0] if len(keys) == 1 else keys,
+        )
+        object.__setattr__(table_shape, 'time_column', table['time_column'])
         duplicates = table['duplicate_keys']
         object.__setattr__(
             table_shape,
@@ -244,8 +259,4 @@ def build(cls: type[Schema], source: Any, described: dict[str, Any]) -> Schema:
         warnings.simplefilter('ignore', SDMWarning)
         schema = cls(built, links, source=source)
     schema._engine_tables = EngineTables()
-    # Kept for materialize on the core (T1.11c), which needs what the
-    # catalog said of each column and the schema does not hold: the type
-    # received, whether it may be null, whether the source keys it.
-    schema._core_description = described
     return schema

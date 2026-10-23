@@ -163,25 +163,35 @@ def test_the_schema_built_from_the_description_is_the_description() -> None:
         connection.execute(statement)
     previous = os.environ.get(_routing.ENVIRONMENT)
     os.environ[_routing.ENVIRONMENT] = ','.join(_routing.FROM_SOURCE_DUCKDB)
+    # The description the core answered, as the schema was built from it:
+    # the schema keeps none (T3.16), and the runner is handed the one the
+    # run answered.
+    answered: list[Any] = []
+    build = bridge.build
+
+    def kept(cls: Any, source: Any, described: Any) -> Any:
+        answered.append(json.loads(json.dumps(described)))
+        return build(cls, source, described)
+
+    bridge.build = kept  # type: ignore[assignment]
     try:
         with warnings.catch_warnings():
             warnings.simplefilter('ignore')
             schema = Schema.from_source(DuckDBSource(connection))
     finally:
+        bridge.build = build  # type: ignore[assignment]
         if previous is None:
             os.environ.pop(_routing.ENVIRONMENT, None)
         else:
             os.environ[_routing.ENVIRONMENT] = previous
-    described = schema._core_description
-    assert described is not None
-    assert runner.presented(schema) == []
+    [described] = answered
+    assert runner.presented(schema, described) == []
 
     def built(change: Any) -> list[str]:
         copied = json.loads(json.dumps(described))
         change(copied)
         made = bridge.build(Schema, schema.source, copied)
-        made._core_description = copied
-        found: list[str] = runner.presented(made)
+        found: list[str] = runner.presented(made, copied)
         return found
 
     def unjoined_identifier(d: dict[str, Any]) -> None:
@@ -234,7 +244,7 @@ def test_the_runners_hold_each_core_schema_to_its_description() -> None:
         assert outcome['result'] == 'success', outcome
         seen, _ = spec.observe_python_core(runner, probe, bases)
         assert seen == spec.success('from_source'), seen
-        runner.presented = lambda schema: ['seeded']
+        runner.presented = lambda schema, described=None: ['seeded']
         with pytest.raises(runner.RunnerFailure, match='departs from it'):
             runner._call(case, bases)
         with pytest.raises(spec.MapFailure, match='departs from it'):

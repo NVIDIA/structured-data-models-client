@@ -145,6 +145,11 @@ fn shop() -> SourceDescription {
     }
 }
 
+/// `description` as a host holds it, each column with its facts (T3.16).
+fn held_of(description: &SourceDescription) -> sdm_contract::ops::HeldSchema {
+    sdm_schema::held::held(description, &BTreeSet::new())
+}
+
 /// A host provider declaring the requests materialize asks.
 fn host() -> ProviderChoice {
     ProviderChoice::Host {
@@ -191,7 +196,6 @@ fn materialize_start(
     let operation = Operation::Materialize(Materialize {
         provider,
         schema: AttachmentId(1),
-        held: None,
         query: AttachmentId(2),
         indices: Some(AttachmentId(3)),
         anchor_time: Some(Scalar::Timestamp {
@@ -222,7 +226,7 @@ fn materialize_start(
     let attachments = Attachments::from([
         (
             AttachmentId(1),
-            Attachment::Bytes(serde_json::to_vec(description).unwrap()),
+            Attachment::Bytes(serde_json::to_vec(&held_of(description)).unwrap()),
         ),
         (
             AttachmentId(2),

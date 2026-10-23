@@ -490,7 +490,7 @@ class SDMClient:
         on_the_core = (
             None
             if not request.parts
-            or getattr(request.parts[0], '_core_state', None) is None
+            or getattr(request.parts[0], '_core', None) is None
             else _predicts_on_the_core(request.parts[0])
         )
         if on_the_core is not None:
@@ -882,8 +882,8 @@ def _said_of_the_part(
     if rewritten.kind != RANKING:
         step = details.pop('forecast_step', None)
         return about_the_part(error, rewritten, step or 1)
-    state: dict[str, Any] = getattr(request, '_core_state', None) or {}
-    positions = state['ranking']['positions']
+    ranking = None if request._core is None else request._core.ranking
+    positions = () if ranking is None else ranking.positions
     by_position = dict(
         zip(positions, (about for _, about in rewritten.parts), strict=True)
     )

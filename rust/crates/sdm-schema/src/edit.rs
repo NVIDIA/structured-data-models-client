@@ -18,21 +18,14 @@
 //! [`Given::Unreadable`], which is refused as the reference refuses a
 //! value it cannot read.
 //!
-//! [`read_held`] reads the schema as a host holds it, beside the
-//! description the core last answered of it, for `edit_schema` and
-//! `materialize` alike: the host's tables, columns, meanings, keys, time
-//! columns and links, and what the source said of each column; a table or
-//! column the description lacks, a column retyped, or a table mapped to
-//! another source table, is refused by name (`schema_edited`), never
-//! followed.
-
-use std::collections::BTreeSet;
+//! The schema edited is the one the host holds, as plain data
+//! ([`crate::held`], T3.16): a column the source was never asked of is
+//! edited by its data type, as the reference's setters edit any column.
 
 use sdm_contract::ops::{
-    ColumnRef, DescribedColumn, DescribedTable, Dtype, Given, HeldSchema, SchemaEdit,
-    SourceDescription, Stype,
+    ColumnRef, DescribedTable, Dtype, Given, SchemaEdit, SourceDescription, Stype,
 };
-use sdm_contract::{CoreError, CoreWarning, Detail, ErrorCode, ErrorKind, Scalar};
+use sdm_contract::{CoreError, CoreWarning, Detail, Scalar};
 
 use crate::assemble::{
     Link, can_identify, checked, empty_key, invalid, key_cannot_identify, key_is_time_column,
@@ -64,84 +57,6 @@ pub struct Edited {
     pub description: SourceDescription,
     pub declared: Option<ColumnRef>,
     pub warnings: Vec<CoreWarning>,
-}
-
-/// The refusal of a schema the host changed in a way no edit the core
-/// takes says: `UNSUPPORTED_REQUEST` naming the operation and the rule
-/// (`schema_edited`), never a name the schema holds (decision H17).
-pub fn edited_past(operation: &'static str) -> CoreError {
-    CoreError::new(
-        ErrorKind::Unsupported,
-        ErrorCode::UnsupportedRequest,
-        "the schema was changed in a way the core does not follow yet",
-    )
-    .with_field("operation", Detail::text(operation))
-    .with_field("rule", Detail::text("schema_edited"))
-}
-
-/// The schema as the host holds it (`held`), beside the description the
-/// core last answered of it (`described`), as `operation` reads it: each
-/// table the host holds, in its order, with the source and the columns the
-/// description gives it, each column's meaning and what it meant before
-/// the schema joined on it the host's, the key and time column the host's,
-/// the links the host's. A table the description lacks or the host maps
-/// to another source table, or a column the description lacks or the host
-/// holds as another data type, is refused by name (`schema_edited`); a
-/// table or column the host holds twice is the host's fault,
-/// `INVALID_REQUEST`. Left out (`None`), the host holds the description
-/// as it is.
-pub fn read_held(
-    described: SourceDescription,
-    held: Option<HeldSchema>,
-    operation: &'static str,
-) -> Result<SourceDescription, CoreError> {
-    let Some(held) = held else {
-        return Ok(described);
-    };
-    let mut seen = BTreeSet::new();
-    let mut tables = Vec::with_capacity(held.tables.len());
-    for table in held.tables {
-        if !seen.insert(table.name.clone()) {
-            return Err(invalid("the schema holds a table twice", "held"));
-        }
-        let Some(at) = described.tables.iter().find(|t| t.name == table.name) else {
-            return Err(edited_past(operation));
-        };
-        if at.source != table.source {
-            return Err(edited_past(operation));
-        }
-        let mut names = BTreeSet::new();
-        let mut columns = Vec::with_capacity(table.columns.len());
-        for column in table.columns {
-            if !names.insert(column.name.clone()) {
-                return Err(invalid("a table holds a column twice", "held"));
-            }
-            let Some(read) = at.columns.iter().find(|c| c.name == column.name) else {
-                return Err(edited_past(operation));
-            };
-            if read.dtype.wire_name() != column.dtype {
-                return Err(edited_past(operation));
-            }
-            columns.push(DescribedColumn {
-                stype: column.stype,
-                stype_before_key: column.stype_before_key,
-                ..read.clone()
-            });
-        }
-        tables.push(DescribedTable {
-            name: table.name,
-            source: table.source,
-            columns,
-            primary_key: table.primary_key,
-            time_column: table.time_column,
-            time_column_inferred: at.time_column_inferred.clone(),
-            duplicate_keys: at.duplicate_keys.clone(),
-        });
-    }
-    Ok(SourceDescription {
-        tables,
-        links: held.links,
-    })
 }
 
 /// `description` with `edit` made, as the reference's setters make it, or

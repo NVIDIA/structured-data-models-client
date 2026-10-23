@@ -11,6 +11,7 @@ pub mod attached;
 pub mod big_integer;
 pub mod compose;
 mod describe;
+mod discover;
 pub mod dispatch;
 mod edit;
 pub mod exact_number;

@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from sdm_client._rust import errors
+from sdm_client._rust import errors, results
 from sdm_client._rust.run import run
 from sdm_client.errors import StructuredDataError
 
@@ -34,6 +34,8 @@ SHADOWED = frozenset({'DATE_LITERAL_DAY_FIRST'})
 
 if TYPE_CHECKING:
     from predictive_query import Profile, ValidatedPredictiveQuery
+
+    from sdm_client._rust.results import QueryFacts
 
 
 def _profile(profile: Profile) -> dict[str, Any]:
@@ -55,42 +57,16 @@ def _profile(profile: Profile) -> dict[str, Any]:
     )
 
 
-def _schema(definition: Any) -> dict[str, Any]:
-    r"""A PQL schema definition as the contract's ``QuerySchema``."""
-    tables = [
-        {
-            'name': name,
-            'columns': [
-                {
-                    'name': column.name,
-                    'dtype': column.dtype.value,
-                    'stype': column.stype.value,
-                }
-                for column in table.cols
-            ],
-            'primary_key': table.pkey,
-            'time_column': table.time_col,
-            'end_time_column': table.end_time_col,
-        }
-        for name, table in definition.tables.items()
-    ]
-    links = [
-        [
-            {'table': key.table_name, 'column': key.col_name}
-            for key in group.columns
-        ]
-        for group in definition.col_groups
-    ]
-    return {'tables': tables, 'links': links}
-
-
 def validate(
-    text: str, definition: Any, profile: Profile
-) -> tuple[bool, list[str], list[dict[str, Any]], dict[str, Any] | None]:
-    r"""The core's answer: whether it accepts ``text``, its reasons if not,
-    the warnings it held of an accepted query (:data:`SHADOWED`), and what
-    it resolved of an accepted one (``validate_query``'s ``query``, contract
-    v28: its text as the core writes it back, its forecast's steps).
+    text: str, schema: dict[str, Any], profile: Profile
+) -> tuple[bool, list[str], list[dict[str, Any]], QueryFacts | None]:
+    r"""The core's answer over ``schema``, the contract's ``QuerySchema``
+    (:func:`~sdm_client._rust.spec.query_schema`, written with no object of
+    the old PQL package, T3.16): whether it accepts ``text``, its reasons if
+    not, the warnings it held of an accepted query (:data:`SHADOWED`), and
+    what it resolved of an accepted one (``validate_query``'s ``query``,
+    contract v28: its text as the core writes it back, its forecast's
+    steps).
 
     The query text and the schema travel as attachments, so neither the
     query's length nor the schema's width meets the control cap
@@ -109,28 +85,31 @@ def validate(
     }
     attachments = {
         1: codec.attachment(text),
-        2: codec.attachment(_schema(definition)),
+        2: codec.attachment(schema),
     }
     kept: list[dict[str, Any]] = []
     try:
-        result = run(operation, attachments, quiet=SHADOWED, kept=kept).result
+        result = results.expect(
+            run(operation, attachments, quiet=SHADOWED, kept=kept).result,
+            results.Validated,
+        )
     except StructuredDataError:
         # A run that ends with an error after reading a day-first literal
         # (a packed literal after it, say) meets no shadow check either:
         # the literal's warning is shown before the error (carried row U1).
         errors.warn_held(kept)
         raise
-    if not result['accepted']:
+    if not result.accepted:
         # No shadow check follows a refusal: the core's warnings are the
         # only ones the caller gets.
         errors.warn_held(kept)
         kept = []
     reasons = [
-        diagnostic['message']
-        for diagnostic in result['diagnostics']
-        if diagnostic['severity'] == 'error'
+        diagnostic.message
+        for diagnostic in result.diagnostics
+        if diagnostic.severity == 'error'
     ]
-    return bool(result['accepted']), reasons, kept, result.get('query')
+    return result.accepted, reasons, kept, result.query
 
 
 def shadow(

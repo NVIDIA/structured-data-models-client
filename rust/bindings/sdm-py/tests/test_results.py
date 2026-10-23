@@ -103,7 +103,7 @@ def test_source_facts_read_and_write_as_the_contract_spells_them() -> None:
     assert facts.to_contract() == SOURCE_FACTS
     sparse = {
         key: SOURCE_FACTS[key]
-        for key in ('dtype', 'received', 'nullable', 'unique')
+        for key in ('relation', 'dtype', 'received', 'nullable', 'unique')
     }
     assert results.SourceFacts.from_contract(sparse).to_contract() == sparse
 

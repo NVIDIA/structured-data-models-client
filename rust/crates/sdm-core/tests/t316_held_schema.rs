@@ -62,8 +62,9 @@ fn facts() -> HostFacts {
     }
 }
 
-fn source(dtype: Dtype, received: ColumnType, unique: bool) -> Option<SourceFacts> {
+fn source(relation: &str, dtype: Dtype, received: ColumnType, unique: bool) -> Option<SourceFacts> {
     Some(SourceFacts {
+        relation: relation.into(),
         dtype,
         received,
         nullable: !unique,
@@ -109,14 +110,14 @@ fn shop(country_facts: bool, ghost: bool) -> HeldSchema {
             "user_id",
             Dtype::Int,
             Stype::Id,
-            source(Dtype::Int, ColumnType::Int64, true),
+            source("users", Dtype::Int, ColumnType::Int64, true),
         ),
         held_column(
             "country",
             Dtype::String,
             Stype::Categorical,
             country_facts
-                .then(|| source(Dtype::String, ColumnType::Utf8, false))
+                .then(|| source("users", Dtype::String, ColumnType::Utf8, false))
                 .flatten(),
         ),
     ];
@@ -133,25 +134,25 @@ fn shop(country_facts: bool, ghost: bool) -> HeldSchema {
                         "order_id",
                         Dtype::Int,
                         Stype::Id,
-                        source(Dtype::Int, ColumnType::Int64, true),
+                        source("orders", Dtype::Int, ColumnType::Int64, true),
                     ),
                     held_column(
                         "user_id",
                         Dtype::Int,
                         Stype::Id,
-                        source(Dtype::Int, ColumnType::Int64, false),
+                        source("orders", Dtype::Int, ColumnType::Int64, false),
                     ),
                     held_column(
                         "price",
                         Dtype::Float,
                         Stype::Numerical,
-                        source(Dtype::Float, ColumnType::Float64, false),
+                        source("orders", Dtype::Float, ColumnType::Float64, false),
                     ),
                     held_column(
                         "ts",
                         Dtype::Date,
                         Stype::Timestamp,
-                        source(Dtype::Date, ts, false),
+                        source("orders", Dtype::Date, ts, false),
                     ),
                 ],
                 primary_key: vec!["order_id".into()],
@@ -175,6 +176,7 @@ fn host() -> ProviderChoice {
     ProviderChoice::Host {
         capabilities: ProviderCapabilities {
             optional: BTreeSet::from([
+                OptionalRequest::Preview,
                 OptionalRequest::TimeBounds,
                 OptionalRequest::SampleEntities,
                 OptionalRequest::Neighbors,
@@ -522,7 +524,8 @@ fn a_column_with_no_facts_is_edited_by_its_data_type_and_keeps_none() {
 /// is read by its role.
 fn numeric() -> HeldSchema {
     let mut held = shop(true, false);
-    let exact = |exact: ExactNumber, text: bool| SourceFacts {
+    let exact = |relation: &str, exact: ExactNumber, text: bool| SourceFacts {
+        relation: relation.into(),
         dtype: if text { Dtype::String } else { Dtype::Float64 },
         received: if text {
             ColumnType::Utf8
@@ -542,7 +545,7 @@ fn numeric() -> HeldSchema {
                 } else {
                     (ExactNumber::Other, false)
                 };
-                column.source = Some(exact(kind, text));
+                column.source = Some(exact(&table.name, kind, text));
                 column.dtype = if text { "string" } else { "float64" }.into();
             }
         }
@@ -592,4 +595,33 @@ fn an_exact_number_s_facts_follow_its_role_through_edits() {
     assert_eq!(column(&unkeyed, "users", "user_id").dtype, "string");
     let users = unkeyed.tables.iter().find(|t| t.name == "users").unwrap();
     assert_eq!(users.duplicate_keys, Some(Scalar::UInt64(0)));
+}
+
+#[test]
+fn a_table_pointed_at_another_relation_has_its_columns_read_afresh() {
+    // Facts are of the relation they were read from: the table the host
+    // points at another holds none of it, and every column it keeps is read
+    // from the relation it names now, as the reference reads a table by its
+    // source name.
+    let mut held = shop(true, false);
+    let users = held.tables.iter_mut().find(|t| t.name == "users").unwrap();
+    users.source = "other_users".into();
+    let steps = to_the_sample(&mut materialize(&held));
+    assert!(steps.iter().flatten().any(|r| matches!(
+        r,
+        DataRequest::Describe { tables, part: DescribePart::Columns }
+            if tables[0].single() == Some("other_users")
+    )));
+    let previews: Vec<&Vec<String>> = steps
+        .iter()
+        .flatten()
+        .filter_map(|r| match r {
+            DataRequest::Preview { columns, .. } => Some(columns),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        previews,
+        [&vec!["user_id".to_owned(), "country".to_owned()]]
+    );
 }
