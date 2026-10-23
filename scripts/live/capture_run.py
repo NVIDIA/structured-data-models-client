@@ -21,9 +21,9 @@ print). ``run`` records: the old client (``run_python.py --mode
 python-ref``, T3.2's recording mode) over the planned cases on the leg's
 live connection (``SDM_LIVE_CONFIG``), in this process, with every write
 the loader makes, and on the SQL warehouse and Snowflake every statement on
-the connection, through the live write guard (KO3-51; its module named by
-``SDM_LIVE_WRITE_GUARD`` or ``--guard``, without which the run does not
-start), refused outside the one test schema; its lines
+the connection, through the live write guard (KO3-51; ``write_guard.py``
+beside this file, without which the run does not start), refused outside
+the one test schema; its lines
 written to ``DIR/<leg>.record.jsonl``, then each written as a capture under
 ``DIR/<leg>/<case>/`` with the leg's manifest (``captures.py import``: the
 placeholders and the private-name search applied again). Nothing is
@@ -192,24 +192,25 @@ def plan(leg: str, e0: bool = False) -> dict[str, Any]:
     }
 
 
-#: The variable naming the live write guard's module (KO3-51; the owner's
-#: guard, which T3.7 brings into the repository): a run without it does
+#: The live write guard, beside this file (KO3-51): a run without it does
 #: not start.
-GUARD_VARIABLE = 'SDM_LIVE_WRITE_GUARD'
+GUARD = Path(__file__).resolve().with_name('write_guard.py')
 
 
-def load_guard(path: Path | str | None) -> ModuleType:
-    r"""The live write guard's module at ``path``: its ``WriteGuard`` and
-    ``guard_connection``; a run without one refuses to start."""
-    if not path:
+def load_guard(path: Path | str | None = GUARD) -> ModuleType:
+    r"""The live write guard's module (``write_guard.py``, its
+    ``WriteGuard`` and ``guard_connection``); a run without it refuses to
+    start."""
+    if not path or not Path(path).is_file():
         raise SystemExit(
-            f'no live write guard: name its module in {GUARD_VARIABLE} or '
-            '--guard; every live write goes through it (KO3-51)'
+            f'no live write guard at {path}; every live write goes through '
+            'it (KO3-51)'
         )
     spec = importlib.util.spec_from_file_location('sdm_live_write_guard', path)
-    if spec is None or spec.loader is None or not Path(path).is_file():
+    if spec is None or spec.loader is None:
         raise SystemExit(f'the live write guard {path} cannot be read')
     module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     for name in ('WriteGuard', 'guard_connection'):
         if not hasattr(module, name):
@@ -256,7 +257,10 @@ def install_guard(
         loader.WRITE_GUARD = _postgres_check(schema)
         return
     dialect = 'snowflake' if leg == 'snowflake' else 'databricks'
-    check = guard.WriteGuard(dialect, database, schema)
+    try:
+        check = guard.WriteGuard(dialect)
+    except PermissionError as refused:
+        raise SystemExit(f'the write guard cannot start: {refused}') from None
     loader.WRITE_GUARD = check.check
     if leg == 'databricks-spark':
         return
@@ -274,11 +278,11 @@ def run(
     reference: Path,
     out: Path,
     e0: bool = False,
-    guard_path: Path | str | None = None,
+    guard_path: Path | str | None = GUARD,
 ) -> int:
     r"""Records ``leg`` live (see the module's text), every write through
     the live write guard; returns the exit status."""
-    guard = load_guard(guard_path or os.environ.get(GUARD_VARIABLE))
+    guard = load_guard(guard_path)
     planned = plan(leg, e0)
     missing = [
         name for name, held in planned['environment'].items() if not held
@@ -349,37 +353,31 @@ def bootstrap_reference(reference: Path, site: Path) -> Path:
     return path
 
 
-#: The variables an environment file may set for a job's run: the
-#: placeholders' names, the live configuration and the write guard's
-#: schema, and the drivers' own.
-ENVIRONMENT_PREFIXES = (
-    'SDM_CAPTURE_',
-    'SDM_LIVE_',
-    'SNOWFLAKE_',
-    'DATABRICKS_',
-    'PG',
-)
+#: Each job parameter that names part of a run's environment, and the
+#: variable it sets: the live configuration's path, the placeholders'
+#: private names and the write guard's test schema, filled into the job's
+#: spec when it is submitted (``dbx_runs.py spec --set``), never written
+#: in the repository.
+JOB_ENVIRONMENT = {
+    'live_config': 'SDM_LIVE_CONFIG',
+    'capture_catalog': 'SDM_CAPTURE_CATALOG',
+    'capture_schema': 'SDM_CAPTURE_SCHEMA',
+    'test_database': 'SDM_LIVE_TEST_DATABASE',
+    'test_schema': 'SDM_LIVE_TEST_SCHEMA',
+}
 
 
-def load_environment(path: Path | str) -> list[str]:
-    r"""Sets the variables of the JSON file ``path`` (``{NAME: value}``) in
-    this process: what a one-time job's run reads (the live configuration,
-    the placeholders' private names, the write guard's schema), kept on
-    the authorized volume, never in the repository. A name outside
-    :data:`ENVIRONMENT_PREFIXES` is refused by name; no value is printed.
-    Returns the names set."""
-    document = json.loads(Path(path).read_text(encoding='utf-8'))
-    if not isinstance(document, dict) or not all(
-        isinstance(value, str) for value in document.values()
-    ):
-        raise SystemExit(f'{path}: not a map of names to text')
-    refused = sorted(
-        name for name in document if not name.startswith(ENVIRONMENT_PREFIXES)
-    )
-    if refused:
-        raise SystemExit(f'{path}: variables a run does not read: {refused}')
-    os.environ.update(document)
-    return sorted(document)
+def job_environment(parameters: dict[str, str]) -> list[str]:
+    r"""Sets the run's environment from a job's parameters
+    (:data:`JOB_ENVIRONMENT`), each given one; no value is printed.
+    Returns the variables set."""
+    found = []
+    for parameter, variable in JOB_ENVIRONMENT.items():
+        value = (parameters.get(parameter) or '').strip()
+        if value:
+            os.environ[variable] = value
+            found.append(variable)
+    return found
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -393,7 +391,6 @@ def main(argv: list[str] | None = None) -> int:
     running.add_argument('--reference', type=Path, required=True)
     running.add_argument('--out', type=Path, required=True)
     running.add_argument('--e0', action='store_true')
-    running.add_argument('--guard', type=Path)
     booting = commands.add_parser(
         'bootstrap', help='import sdm_client from the reference checkout'
     )
@@ -413,7 +410,6 @@ def main(argv: list[str] | None = None) -> int:
         arguments.reference,
         arguments.out,
         arguments.e0,
-        arguments.guard,
     )
 
 

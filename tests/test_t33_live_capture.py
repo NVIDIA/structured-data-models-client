@@ -60,9 +60,10 @@ def test_a_leg_s_plan_reaches_nothing_and_names_its_needs(
     assert (
         abs(order.index('databricks-sql') - order.index('databricks-spark')) > 1
     )
-    monkeypatch.delenv(capture_run.GUARD_VARIABLE, raising=False)
     with pytest.raises(SystemExit, match='no live write guard'):
-        capture_run.run(leg, ROOT, ROOT / 'never-written')
+        capture_run.run(
+            leg, ROOT, ROOT / 'never-written', guard_path=ROOT / 'no-guard.py'
+        )
     assert not (ROOT / 'never-written').exists()
 
 
@@ -84,6 +85,11 @@ def test_the_job_template_fills_and_passes_the_runs_check() -> None:
         'SHA7': 'a' * 7,
         'UUID': '00000000-0000-0000-0000-000000000000',
         'ENVIRONMENT_VERSION': '4',
+        'LIVE_CONFIG': '/Volumes/seeded/volume/live.json',
+        'CAPTURE_CATALOG': 'seeded_catalog',
+        'CAPTURE_SCHEMA': 'seeded_schema',
+        'TEST_DATABASE': 'seeded_catalog',
+        'TEST_SCHEMA': 'seeded_schema',
     }
     payload = dbx_runs.fill(
         {k: v for k, v in template.items() if not k.startswith('_')}, values
@@ -157,49 +163,6 @@ def test_the_job_imports_the_reference_checkout_s_own_client(
         capture_run.bootstrap_reference(empty, site)
 
 
-#: A write guard with the owner's guard's interface (WriteGuard,
-#: guard_connection; the guard itself lives outside the repository until
-#: T3.7): a write naming a schema other than the test schema is refused.
-FAKE_GUARD = """
-class WriteRefused(PermissionError):
-    pass
-
-
-class WriteGuard:
-    def __init__(self, dialect, database=None, schema=None):
-        self.schema = schema
-
-    def check(self, sql):
-        words = sql.split()
-        if words[0].upper() in ('SELECT', 'SHOW', 'DESCRIBE'):
-            return
-        if f'"{self.schema}".' not in sql and f'`{self.schema}`.' not in sql:
-            raise WriteRefused('a write outside the test schema')
-
-
-def guard_connection(conn, guard):
-    class Cursor:
-        def __init__(self, cursor):
-            self._cursor = cursor
-
-        def execute(self, sql, *a, **k):
-            guard.check(sql)
-            return self._cursor.execute(sql, *a, **k)
-
-        def __getattr__(self, name):
-            return getattr(self._cursor, name)
-
-    class Connection:
-        def cursor(self, *a, **k):
-            return Cursor(conn.cursor(*a, **k))
-
-        def __getattr__(self, name):
-            return getattr(conn, name)
-
-    return Connection()
-"""
-
-
 def test_a_write_outside_the_test_schema_never_reaches_the_driver(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -208,9 +171,10 @@ def test_a_write_outside_the_test_schema_never_reaches_the_driver(
     # refused before the driver sees anything.
     import duckdb
 
-    guard_path = tmp_path / 'write_guard.py'
-    guard_path.write_text(FAKE_GUARD)
-    guard = capture_run.load_guard(guard_path)
+    # The repository's guard, as the run loads it (scripts/live).
+    guard = capture_run.load_guard()
+    for name in ('DATABASE', 'SCHEMA'):
+        monkeypatch.delenv(f'SDM_LIVE_SNOWFLAKE_TEST_{name}', raising=False)
     monkeypatch.setenv('SDM_LIVE_TEST_DATABASE', 'REVIEW_DB')
     monkeypatch.setenv('SDM_LIVE_TEST_SCHEMA', 'ALLOWED_SCHEMA')
     loader = capture_run._module('databases')
@@ -258,9 +222,12 @@ def test_a_write_outside_the_test_schema_never_reaches_the_driver(
     assert any(
         s.startswith('CREATE TABLE "REVIEW_DB"."ALLOWED_SCHEMA"') for s in seen
     )
-    # No guard, no run.
+    # No guard, no run; no test schema, no run.
     with pytest.raises(SystemExit, match='no live write guard'):
-        capture_run.load_guard(None)
+        capture_run.load_guard(tmp_path / 'write_guard.py')
+    monkeypatch.delenv('SDM_LIVE_TEST_SCHEMA')
+    with pytest.raises(SystemExit, match='no test schema'):
+        capture_run.install_guard('snowflake', guard, Runner, loader)
 
 
 class _CaseSensitiveSnowflake:
@@ -286,6 +253,7 @@ class _Cursor:
     def __init__(self, warehouse: _CaseSensitiveSnowflake) -> None:
         self.warehouse = warehouse
         self.result: Any = None
+        self.description: Any = None
 
     def execute(self, sql: str, *arguments: Any, **keywords: Any) -> None:
         import pyarrow as pa
@@ -326,8 +294,9 @@ class _Cursor:
             self.result = pa.table(
                 {c: pa.array([], pa.int64()) for c in held.tables[table]}
             )
-        elif 'CURRENT_SETTING' in sql:
-            self.result = pa.table({'ZONE': ['UTC']})
+        elif sql.startswith('SHOW PARAMETERS'):
+            self.description = [('key',), ('value',)]
+            self.result = [('TIMEZONE', 'America/Los_Angeles')]
 
     def fetchall(self) -> Any:
         return self.result
@@ -389,7 +358,7 @@ def test_the_job_runs_in_its_notebook_with_its_environment(
         if isinstance(node, ast.Call)
     }
     assert 'capture_run.run' in calls
-    assert 'capture_run.load_environment' in calls
+    assert 'capture_run.job_environment' in calls
     # No child process runs the recording.
     runs = [
         ast.unparse(node)
@@ -400,22 +369,21 @@ def test_the_job_runs_in_its_notebook_with_its_environment(
     assert not any("'run'" in call for call in runs), runs
     template = json.loads((LIVE / 'capture.job.template.json').read_text())
     parameters = template['tasks'][0]['notebook_task']['base_parameters']
-    assert {'environment_file', 'guard_path'} <= set(parameters)
-    # The environment file: its names set, a value never printed, a name
-    # outside what a run reads refused.
-    path = tmp_path / 'environment.json'
-    path.write_text(
-        json.dumps({'SDM_CAPTURE_SCHEMA': 'zq_hidden', 'SDM_LIVE_CONFIG': 'x'})
+    assert set(capture_run.JOB_ENVIRONMENT) <= set(parameters)
+    # The guard is the repository's, never a file on the volume.
+    assert not any('guard' in name for name in parameters)
+    # The parameters set the run's variables; an empty one sets none.
+    for variable in capture_run.JOB_ENVIRONMENT.values():
+        monkeypatch.delenv(variable, raising=False)
+    found = capture_run.job_environment(
+        {
+            'capture_schema': 'zq_hidden',
+            'live_config': '/v/c.json',
+            'test_schema': '',
+        }
     )
-    for name in ('SDM_CAPTURE_SCHEMA', 'SDM_LIVE_CONFIG'):
-        monkeypatch.delenv(name, raising=False)
-    assert capture_run.load_environment(path) == [
-        'SDM_CAPTURE_SCHEMA',
-        'SDM_LIVE_CONFIG',
-    ]
+    assert found == ['SDM_LIVE_CONFIG', 'SDM_CAPTURE_SCHEMA']
     import os
 
     assert os.environ['SDM_CAPTURE_SCHEMA'] == 'zq_hidden'
-    path.write_text(json.dumps({'HOME': '/x'}))
-    with pytest.raises(SystemExit, match='HOME'):
-        capture_run.load_environment(path)
+    assert 'SDM_LIVE_TEST_SCHEMA' not in os.environ

@@ -1,5 +1,5 @@
 {
-  "_comment": "C-1 and E-0 on a leg recorded in a one-time serverless job (the Spark and Lakebase legs; design, the live-test plan): capture_job.py, the notebook, records the old client on the leg with the reference's wheels and writes the captures to the volume. Filled by `dbx_runs.py spec --template this --target serverless-env4 --notebook capture_job --sha SHA --set LEG=<leg> --set REPO_DIR=<repo snapshot> --set REFERENCE_DIR=<reference snapshot> --set CAMPAIGN=c1|e0 --out FILE`, submitted by `dbx_runs.py submit --json FILE`. Every <KEY> is filled from arguments and SDM_DBX_* environment variables; no workspace value is written here. The two Databricks legs run one after the other, never together (the one test schema holds one case's tables at a time).",
+  "_comment": "C-1 and E-0 on a leg recorded in a one-time serverless job (the Spark and Lakebase legs; design, the live-test plan): capture_job.py, the notebook, records the old client on the leg with the reference's wheels and writes the captures to the volume. Filled by `dbx_runs.py spec --template this --target serverless-env4 --notebook capture_job --sha SHA --set LEG=<leg> --set REPO_DIR=<repo snapshot> --set REFERENCE_DIR=<reference snapshot> --set CAMPAIGN=c1|e0 --set LIVE_CONFIG=<the live configuration's path on the volume> --set CAPTURE_CATALOG=... --set CAPTURE_SCHEMA=... --set TEST_DATABASE=... --set TEST_SCHEMA=... --out FILE` (dbx_runs.py writes the filled spec mode 0600 and never prints it), submitted by `dbx_runs.py submit --json FILE`. Every <KEY> is filled from arguments and SDM_DBX_* environment variables; no workspace value is written here. The two Databricks legs run one after the other, never together (the one test schema holds one case's tables at a time).",
   "run_name": "sdm-client capture <LEG> <SHA7>",
   "idempotency_token": "<UUID>",
   "timeout_seconds": 10800,
@@ -17,8 +17,11 @@
           "reference_dir": "<REFERENCE_DIR>",
           "wheel_dir": "<VOLUME_DIR>/reference-wheels/",
           "out_dir": "<VOLUME_DIR>/captures-<SHA7>/",
-          "guard_path": "<VOLUME_DIR>/write_guard.py",
-          "environment_file": "<VOLUME_DIR>/capture-environment-<LEG>.json",
+          "live_config": "<LIVE_CONFIG>",
+          "capture_catalog": "<CAPTURE_CATALOG>",
+          "capture_schema": "<CAPTURE_SCHEMA>",
+          "test_database": "<TEST_DATABASE>",
+          "test_schema": "<TEST_SCHEMA>",
           "commit": "<SHA>"
         }
       },

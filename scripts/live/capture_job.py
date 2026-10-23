@@ -15,18 +15,20 @@ The first cell installs the reference's wheels from ``wheel_dir``, removes
 its client wheel and names the reference checkout's client source in the
 site directory (``capture_run.py bootstrap``), since the recording runs
 the checkout's own client, then restarts Python so the import takes it.
-The second cell sets the run's environment from ``environment_file`` on
-the authorized volume (the live configuration, the placeholders' private
-names and the write guard's test schema; ``capture_run.load_environment``,
-never printed, never in the repository) and runs ``capture_run.run`` in
+The second cell sets the run's environment from the job's parameters
+(the live configuration's path, the placeholders' private names and the
+write guard's test schema; ``capture_run.job_environment``, filled when
+the job is submitted, never printed, never in the repository) and runs ``capture_run.run`` in
 this process, so the Spark leg reads the notebook's own Spark session,
-every write through the live write guard at ``guard_path``. It prints the
+every write through the repository's live write guard
+(``scripts/live/write_guard.py`` in ``repo_dir``). It prints the
 manifests written, never a value of the environment.
 
 Run outside Databricks, it prints this text and exits.
 
 Widgets (job base parameters): leg, campaign (c1 or e0), repo_dir,
-reference_dir, wheel_dir, out_dir, guard_path, environment_file, commit.
+reference_dir, wheel_dir, out_dir, live_config,
+capture_catalog, capture_schema, test_database, test_schema, commit.
 """
 
 import sys
@@ -42,8 +44,11 @@ WIDGETS = (
     'reference_dir',
     'wheel_dir',
     'out_dir',
-    'guard_path',
-    'environment_file',
+    'live_config',
+    'capture_catalog',
+    'capture_schema',
+    'test_database',
+    'test_schema',
     'commit',
 )
 for name in WIDGETS:
@@ -104,13 +109,14 @@ assert campaign in ('c1', 'e0'), campaign
 sys.path.insert(0, str(Path(dbutils.widgets.get('repo_dir')) / 'scripts/live'))
 import capture_run
 
-names = capture_run.load_environment(dbutils.widgets.get('environment_file'))
-print(f'the run reads {len(names)} variable(s) from its environment file')
+names = capture_run.job_environment(
+    {name: dbutils.widgets.get(name) for name in capture_run.JOB_ENVIRONMENT}
+)
+print(f'the run reads {len(names)} variable(s) from its job parameters')
 status = capture_run.run(
     leg,
     Path(dbutils.widgets.get('reference_dir')),
     Path(dbutils.widgets.get('out_dir')),
     campaign == 'e0',
-    dbutils.widgets.get('guard_path'),
 )
 dbutils.notebook.exit('passed' if status == 0 else f'failed {status}')
