@@ -541,7 +541,6 @@ impl Keyed {
             unique: self.unique.contains(&declared.name),
             declared_type: None,
             exact_number: exact_number(field, constraints),
-            namespace: None,
         })
     }
 }

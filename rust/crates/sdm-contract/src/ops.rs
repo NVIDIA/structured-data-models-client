@@ -423,8 +423,8 @@ pub struct SourceDescription {
     /// the run read parts the provider left to the connection (a
     /// Databricks source naming no catalog or schema: the session's
     /// current ones; contract v28, T3.4): `materialize` reads the same
-    /// tables under it (a host keeps it with each column's facts,
-    /// [`SourceFacts::namespace`]), whatever the session's current parts
+    /// tables under it (a host keeps it for each table it described,
+    /// [`HeldSchema::read_under`]), whatever the session's current parts
     /// are by then, as the reference keeps the tables it described. Left
     /// out, none was read, and each table is read under the provider's
     /// own namespace.
@@ -567,6 +567,29 @@ pub struct HeldSchema {
     /// The host's relationships as they stand, each
     /// `[foreign key, referenced key]`.
     pub links: Vec<Vec<ColumnRef>>,
+    /// Where the schema read each relation it read under parts its provider
+    /// left to the connection (a Databricks source naming no catalog or
+    /// schema: [`SourceDescription::namespace`] of the description that read
+    /// it), by relation, once each: `materialize` reads a table of that
+    /// relation there again while the source's own parts agree, whatever
+    /// the session's current parts are by then, as the reference keeps each
+    /// table it read by its source name. A fact of the schema that read the
+    /// relations, not of any table or column: a table adopted from another
+    /// schema, or edited, is read where this schema read its relation, and
+    /// a relation it never read where the source and its session say
+    /// (contract v28, T3.4). Absent from the JSON when none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub read_under: Vec<ReadUnder>,
+}
+
+/// One relation a schema read, and the namespace it read it under
+/// ([`HeldSchema::read_under`]).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ReadUnder {
+    pub relation: Relation,
+    /// Each part, outermost first, as the source answered it.
+    pub namespace: Vec<String>,
 }
 
 /// One table as the host holds it.
@@ -640,15 +663,6 @@ pub struct SourceFacts {
     /// [`DescribedColumn::exact_number`]; absent from the JSON when none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub exact_number: Option<ExactNumber>,
-    /// The namespace the relation was read under, each part given, where
-    /// the run read parts the provider left to the connection (a
-    /// Databricks source naming no catalog or schema: the session's
-    /// current ones; [`SourceDescription::namespace`], T3.4): `materialize`
-    /// reads the same tables under it, whatever the session's current
-    /// parts are by then, as the reference keeps the tables it described.
-    /// Absent from the JSON when none was read.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub namespace: Option<Vec<String>>,
 }
 
 /// One edit to a schema, as the caller made it to the host's schema, each

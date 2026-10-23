@@ -210,12 +210,7 @@ def build(cls: type[Schema], source: Any, described: dict[str, Any]) -> Schema:
                 ('untyped', False),
                 ('stype_declared', column['name'] in timed),
                 ('_stype_before_key', column['stype_before_key']),
-                (
-                    '_source',
-                    SourceFacts.of_described(
-                        column, table['source'], described.get('namespace')
-                    ),
-                ),
+                ('_source', SourceFacts.of_described(column, table['source'])),
             ):
                 object.__setattr__(made, field, value)
             columns[column['name']] = made
@@ -264,9 +259,12 @@ def build(cls: type[Schema], source: Any, described: dict[str, Any]) -> Schema:
         warnings.simplefilter('ignore', SDMWarning)
         schema = cls(built, links, source=source)
     schema._engine_tables = EngineTables()
-    # The namespace the core read the tables under, which this schema, the
-    # one that read them, keeps (T3.4).
-    from sdm_client.schema import _keep_namespaces
-
-    _keep_namespaces(schema._tables, built)
+    # Where the core read each table, where it read parts the source left
+    # to the connection (`SourceDescription.namespace`): kept by source name
+    # with the schema that read them, as its engine reading is (T3.4).
+    namespace = described.get('namespace')
+    if namespace is not None:
+        schema._read_under = {
+            table.source_name: tuple(namespace) for table in built.values()
+        }
     return schema
