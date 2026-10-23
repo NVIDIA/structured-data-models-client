@@ -63,8 +63,11 @@ def statements(step: dict[str, Any], dialect: str) -> list[dict[str, Any]]:
     return found
 
 
-def key_set(param: dict[str, Any], keys: Mapping[int, Any] | None) -> int:
-    r"""The attachment id of the key set ``param`` binds, one of ``keys``.
+def key_set(
+    param: dict[str, Any], keys: Mapping[int, Any] | None
+) -> tuple[int, Any]:
+    r"""The key set ``param`` binds, one of ``keys``: its attachment id and
+    the Arrow stream handed over under it.
 
     Raises:
         PlanNotRun: The parameter is not a key set (a scalar, which a
@@ -76,7 +79,7 @@ def key_set(param: dict[str, Any], keys: Mapping[int, Any] | None) -> int:
     attachment = param['keys']['attachment']
     if keys is None or attachment not in keys:
         raise PlanNotRun('a plan naming a key set not handed over')
-    return attachment
+    return attachment, keys[attachment]
 
 
 def bound_relations(
@@ -95,7 +98,7 @@ def bound_relations(
     relations: dict[str, int] = {}
     for statement in statements:
         for param in statement['params']:
-            attachment = key_set(param, keys)
+            attachment, _ = key_set(param, keys)
             bound = relations.setdefault(param['relation'], attachment)
             if bound != attachment:
                 raise PlanNotRun('a plan binding two key sets to one name')
