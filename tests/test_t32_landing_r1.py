@@ -86,23 +86,16 @@ def test_no_stamp_for_a_tree_that_changed_while_the_steps_ran(
     _git(repo, 'commit', '-q', '-m', 'T9.9: a change')
     sha = _git(repo, 'rev-parse', 'HEAD').stdout.strip()
     monkeypatch.chdir(repo)
-    for name in (
-        'step_lint',
-        'step_reference',
-        'step_own_tests',
-        'step_fails_before',
-        'step_affected',
-        'step_wheel',
-    ):
+    for name in ('step_lint', 'step_own_tests'):
         monkeypatch.setattr(
             HANDOFF, name, lambda *a, _n=name, **k: HANDOFF.Step(_n)
         )
 
     def edits(*args: object, **kw: object) -> object:
         (repo / 'a.txt').write_text('edited during the run\n')
-        return HANDOFF.Step('wheel')
+        return HANDOFF.Step('own tests')
 
-    monkeypatch.setattr(HANDOFF, 'step_wheel', edits)
+    monkeypatch.setattr(HANDOFF, 'step_own_tests', edits)
     argv = ['run', '--package', 'T9.9', '--base', base, '--python', 'py']
     assert HANDOFF.main(argv) == 1
     assert not (repo / '.git/sdm-handoff' / f'{sha}.json').exists()

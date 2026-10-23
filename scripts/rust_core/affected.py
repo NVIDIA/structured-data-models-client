@@ -211,16 +211,10 @@ def syntax(path: str) -> list[Suite]:
 
 
 def suites(
-    paths: Iterable[str],
-    files: Sequence[str] | None = None,
-    naming: bool = True,
+    paths: Iterable[str], files: Sequence[str] | None = None
 ) -> list[Suite]:
-    """The suites for ``paths``, each once, in a stable order. With
-    ``naming`` False, only the map's rows and the paths that are tests
-    themselves: no test is added for naming a path (``handoff.py``'s
-    affected step, the owner's 2026-10-22 speed change 1; the broad suites
-    are CI's)."""
-    files = (tracked() if naming else []) if files is None else files
+    """The suites for ``paths``, each once, in a stable order."""
+    files = tracked() if files is None else files
     out: list[Suite] = []
     for path in paths:
         found: list[Suite] = []
@@ -244,8 +238,7 @@ def suites(
         # reader. The crates' suites are cargo's.
         # A test is its own suite.
         if (
-            naming
-            and (ROOT / path).is_file()
+            (ROOT / path).is_file()
             and not path.startswith(('rust/', 'docs/'))
             and not judging.matches(IS_TEST, path)
         ):

@@ -2,15 +2,14 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""The handoff in about 15 minutes, and no push under a running one (the
-owner's "2026-10-22 evening: the five speed changes", changes 1 and 2;
-T3.2 fix 4):
+r"""The handoff in minutes, and no push under a running one (the owner's
+"2026-10-22 evening: the five speed changes" and "2026-10-23 cut the
+tooling back"):
 
-- the steps run cheapest first, each printed as it starts and ends with
-  its time, and the run stops at the first failing step;
+- lint, then the package's own tests, each printed as it starts and ends
+  with its time, the run stopping at the first failing step;
 - every command the run starts reads the lane's interpreter as
   ``SDM_PYTHON``;
-- the affected step runs the map's rows, not every test naming a file;
 - a stamp or a failure is an event ``handoff.py wait`` returns on;
 - the pre-push hook refuses a push while the package's handoff runs.
 """
@@ -41,7 +40,7 @@ def _module(path: Path, name: str) -> ModuleType:
 
 HANDOFF = _module(ROOT / 'scripts/rust_core/handoff.py', 't32_handoff_speed')
 AFFECTED = HANDOFF.affected
-ORDER = ['lint', 'reference', 'own tests', 'fails-before', 'affected', 'wheel']
+ORDER = ['lint', 'own tests']
 GIT_ENV = {
     'GIT_AUTHOR_NAME': 't',
     'GIT_AUTHOR_EMAIL': 't@example.invalid',
@@ -80,14 +79,7 @@ def _fake_steps(
 ) -> tuple[list[str], dict[str, str | None]]:
     ran: list[str] = []
     seen: dict[str, str | None] = {}
-    names = {
-        'step_lint': 'lint',
-        'step_reference': 'reference',
-        'step_own_tests': 'own tests',
-        'step_fails_before': 'fails-before',
-        'step_affected': 'affected',
-        'step_wheel': 'wheel',
-    }
+    names = {'step_lint': 'lint', 'step_own_tests': 'own tests'}
     for function, name in names.items():
 
         def fake(*args: object, _name: str = name, **kw: object) -> object:
@@ -135,22 +127,6 @@ def test_the_cheap_steps_run_first_and_the_first_failure_ends_the_run(
     assert list(stamp['seconds']) == ORDER, stamp
     assert _events(repo) == ['start', 'failed', 'start', 'stamped']
     assert HANDOFF.main(['wait', sha, '--timeout', '1']) == 0
-
-
-def test_the_affected_step_runs_the_map_rows_not_every_test_naming_a_file() -> (
-    None
-):
-    path = 'scripts/rust_core/compare.py'
-    broad = AFFECTED.suites([path])
-    narrow = AFFECTED.suites([path], naming=False)
-    assert any(s[: len(AFFECTED.PYTEST)] == AFFECTED.PYTEST for s in broad)
-    assert not any(
-        s[: len(AFFECTED.PYTEST)] == AFFECTED.PYTEST for s in narrow
-    ), narrow
-    # A package's own test runs once, in its own step.
-    own = 'tests/test_t32_handoff_speed.py'
-    assert (*AFFECTED.PYTEST, own) in HANDOFF.own_suites(ROOT, [own])
-    assert (*AFFECTED.PYTEST, own) in AFFECTED.suites([own], naming=False)
 
 
 def test_a_push_while_the_package_s_handoff_runs_is_refused(
@@ -205,27 +181,6 @@ def test_a_push_while_the_package_s_handoff_runs_is_refused(
     assert done.returncode == 0, done.stdout + done.stderr
 
 
-def test_the_previous_round_builds_in_one_target_per_lane(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    # Kept across runs, so cargo rebuilds only what changed (T3.3's run
-    # rebuilt DuckDB's C++ in a fresh directory for ten minutes).
-    monkeypatch.setattr(HANDOFF, 'TARGETS', tmp_path)
-    lane = {
-        'SDM_LANE_ENV': '/mnt/localssd/cells/a/',
-        'CARGO_TARGET_DIR': '/t/run7',
-    }
-    for run in ('/t/run7', '/t/run8'):
-        env = HANDOFF.previous_cargo_env(
-            {**lane, 'CARGO_TARGET_DIR': run}, ROOT
-        )
-        assert env['CARGO_TARGET_DIR'] == str(tmp_path / 'a-previous')
-    given = {**lane, 'SDM_PREVIOUS_TARGET_DIR': '/t/kept'}
-    assert (
-        HANDOFF.previous_cargo_env(given, ROOT)['CARGO_TARGET_DIR'] == '/t/kept'
-    )
-
-
 def test_the_suites_run_with_a_short_temporary_directory(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -257,17 +212,6 @@ def test_the_suites_run_with_a_short_temporary_directory(
     # pytest's base directly in it, not under pytest-of-<user>/pytest-<n>.
     base = argvs[0][argvs[0].index('--basetemp') + 1]
     assert base.startswith(f'{seen[0]}/p'), argvs
-
-
-def test_every_pytest_run_of_the_handoff_names_a_base_the_run_removes() -> None:
-    # pytest otherwise keeps three old bases under TMPDIR, and the gate
-    # tests' copies of the tree filled 121 GB of the local disk (T3.2).
-    import inspect
-
-    for function in (HANDOFF.run_suites, HANDOFF.step_fails_before):
-        source = inspect.getsource(function)
-        runs = source.count("'pytest'") + source.count('prefix[1:]')
-        assert runs and source.count("'--basetemp'") == runs, function
 
 
 def test_two_packages_same_named_test_files_run_in_sessions_of_their_own(

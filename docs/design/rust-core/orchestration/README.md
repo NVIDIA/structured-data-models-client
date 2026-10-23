@@ -174,22 +174,18 @@ To collect a find into the train, cherry-pick its judging-only commits onto the 
 
 ### The handoff stamp (item 4)
 
-Before an implementer or test author reports "ready", it runs `scripts/rust_core/handoff.py run --package <ID> [--python <lane environment python>] [--previous <last round's SHA>] [--case <id> ...]` with the tools' interpreter.
-On a clean worktree it runs these steps, cheapest first, printing each as it starts and ends with its time, and stops at the first that fails (the owner's "2026-10-22 evening: the five speed changes"; the broad suites are the nightly run's and the phase end's):
+Before an implementer or test author reports "ready", it runs `scripts/rust_core/handoff.py run --package <ID> [--python <lane environment python>] [--previous <last round's SHA>]` with the tools' interpreter.
+On a clean worktree it runs two steps, printing each as it starts and ends with its time, and stops at the first that fails (the owner's "2026-10-23 cut the tooling back"):
 
 1. lint: `ruff`, `cargo fmt`, `mypy --python-executable <lane python>` on changed packages, `l0_scan.py`, the hygiene check, and `cargo deny --locked check` when `rust/` changed;
-2. the package's cases (changed or named) against the recorded old-client answers, on python-core and, when `rust/` changed, rust-host, on each database the case names (a case naming Postgres needs `SDM_POSTGRES_TEST_DSN`, a throwaway postgres:17 container as CI runs, or no stamp);
-3. the package's own tests: each test file it adds or changes (a crate test by its own `--test`);
-4. in a fix round, the new or changed tests on the previous round's SHA, where at least one must fail: a fix to Rust production code needs a Rust test (a crate test, or a `#[cfg(test)]` block spliced into the previous source) that fails there with cargo, in a target directory of its own, and is refused with Python tests only; any other fix's Python tests run on the previous tree's package sources;
-5. the suites `scripts/rust_core/affected.py`'s map rows name for the changed files (the touched crates' cargo tests, the pytest files on the lane's one Python, the binding's tests on the lane's test-ops build, `SDM_KIT_PYTHON`), not every test that mentions a file's name;
-6. the Linux x86 wheel, built as CI's native-wheel job builds it, when `rust/` or the client's package changed.
+2. the package's own tests: each test file it adds or changes, one pytest session per test root as CI runs them (a crate test by its own `--test`).
 
-The stamp plus the two reviewers' APPROVE reports is what a landing needs; no CI run on the candidate is required (the owner's "2026-10-22 evening: CI off the landing path").
-The full CI matrix runs nightly on the phase head with fresh dependencies, its failures becoming fix items, and at the phase's end as its final gate, debugged from the lowest module up.
+The one stamp starts both reviewers, and with their two APPROVE reports is what a landing needs; no CI run on the candidate is required (the owner's "2026-10-22 evening: CI off the landing path").
+The full CI matrix runs nightly on the phase head with fresh dependencies, the client's suite with every route forced onto the core among it, its failures becoming fix items, and at the phase's end as its final gate, debugged from the lowest module up.
 
-In a fix round whose `--previous` SHA has a stamp, steps 3 and 5 take only what changed since it.
-Every command it starts reads `--python` as `SDM_PYTHON`, so the Rust tests that load cases never fall back to a bare `python3`.
-It writes `<git common dir>/sdm-handoff/<SHA>.json` only when all pass; `handoff.py check SHA` reads it.
+In a fix round whose `--previous` SHA has a stamp, step 2 takes only what changed since it.
+Every command it starts reads `--python` as `SDM_PYTHON`.
+It writes `<git common dir>/sdm-handoff/<SHA>.json` only when both pass and HEAD and the tree are unchanged; `handoff.py check SHA` reads it.
 Each start, stamp, failure and stop is a line of `<git common dir>/sdm-handoff/events.jsonl`, and `handoff.py wait SHA` returns the moment the SHA is stamped (exit 0) or its run fails or stops (exit 1): start both reviewers on its exit 0.
 While a run lives it holds `sdm-handoff/running/<ID>.json`; the pre-push hook refuses a push from the package's worktree until the run ends (`handoff.py running --package ID` names it), and a second run of the package is refused.
 New findings meanwhile go into a local next fix, pushed after the round's report.
@@ -247,8 +243,8 @@ The machine has 8 vCPUs, 30 GB of memory and 412 GB of fast disk at `/mnt/locals
   Heavy means any `gate.sh` leg, a full `pytest` of `contract/tests` or `tests`, a `tooling` test file, `cargo test`, `build` or `clippy` of the workspace, and every wheel build.
   The command hook refuses `cargo test`, `build` and `clippy`, a pytest over the whole `tests` or `contract/tests`, and `gate.sh` unless run behind `heavy` (the owner, 2026-10-22).
   `heavy --priority` (or `SDM_HEAVY_PRIORITY=1`), for the critical path's jobs as the orchestrator grants it, takes the next free slot before any job without it; every job admitted after a wait appends who, whether it had priority, how long it waited and the command to `$SDM_ORCH_STATE/heavy-waits.log`.
-- **At most three packages at once** (the owner, 2026-10-22).
-  `lane.py start` refuses a fourth active lane, naming the active ones: a lane worktree whose recorded package has not landed and is not paused; the limit is `MAX_LANES` in `heavy.conf`.
+- **One package at a time** (the owner, "2026-10-23 cut the tooling back"; three from 2026-10-22).
+  `lane.py start` refuses a second active lane, naming the active one: a lane worktree whose recorded package has not landed and is not paused; the limit is `MAX_LANES` in `heavy.conf`.
   `lane.py pause --lane <x>` frees a slot (`--resume` takes it back); a test author counts inside its package's lane.
 - **The watchdog.** The heartbeat runs `scripts/rust_core/orchestration/watchdog.py --phase <phase branch> --dispatch` every 15 minutes.
   It prints one line per problem and nothing when all is well: a lane worktree with no commit and no running process for 45 minutes (`IDLE`), the failed jobs of the newest finished CI run of each branch under the phase (`RED CI`), the failed jobs of the newest nightly run on the phase head (`NIGHTLY`, also appended once per run to `$SDM_ORCH_STATE/phase-<N>/fix-items.md`), and a package more than 2 hours past `forecast.yaml` and not landed (`SLIP`).

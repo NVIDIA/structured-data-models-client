@@ -155,6 +155,12 @@ class World:
             # phase cases below change or drop it.
             SDM_PHASE_BRANCH=PHASE,
         )
+        # The cases' own lane limit, not the machine's (heavy.conf's
+        # MAX_LANES, one package at a time since 2026-10-23): several cases
+        # start a second lane; the limit's own case sets its own.
+        limits = self.tmp / 'heavy.conf'
+        limits.write_text('MAX_LANES=4\n')
+        self.env['SDM_HEAVY_CONFIG'] = str(limits)
         self.gh_state({'runs': [], 'green_on': [], 'calls': []})
         self.remote = self.tmp / 'remote.git'
         self.git('init', '--quiet', '--bare', str(self.remote), cwd=self.tmp)

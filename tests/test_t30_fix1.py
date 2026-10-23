@@ -94,33 +94,6 @@ def repo(tmp_path: Path) -> Path:
 # --- finding 2: the previous round's sources ------------------------------------
 
 
-def test_the_previous_round_runs_on_its_own_sources(
-    repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    source = 'packages/demo/src/demo_answer/__init__.py'
-    test = (
-        'from demo_answer import ANSWER\n\n\n'
-        'def test_the_fixed_answer() -> None:\n'
-        '    assert ANSWER == 2\n'
-    )
-    base = _commit(repo, {'README.md': 'x\n'}, 'base')
-    previous = _commit(repo, {source: 'ANSWER = 1\n'}, 'T3.99: the answer')
-    _commit(
-        repo,
-        {source: 'ANSWER = 2\n', 'tests/test_demo_answer.py': test},
-        'T3.99 fix 1: the answer is 2',
-    )
-    # The fixed build is what the interpreter has installed.
-    monkeypatch.setenv('PYTHONPATH', str(repo / 'packages/demo/src'))
-    scratch = tmp_path / 'scratch'
-    scratch.mkdir()
-    step = handoff.step_fails_before(
-        repo, base, previous, sys.executable, scratch
-    )
-    assert step.ok, step.problems
-    assert any('fails on' in note for note in step.notes), step.notes
-
-
 # --- finding 3: inline Rust tests ------------------------------------------------
 
 RUST_OLD = 'pub fn lag() -> u32 {\n    1\n}\n'
@@ -130,27 +103,6 @@ RUST_NEW = (
     '    #[test]\n    fn two() {\n        assert_eq!(lag(), 2, "{}", "}");\n'
     '    }\n}\n'
 )
-
-
-def test_a_changed_cfg_test_block_is_spliced_into_the_previous_source(
-    repo: Path,
-) -> None:
-    path = 'rust/crates/demo/src/lag.rs'
-    previous = _commit(repo, {path: RUST_OLD}, 'T3.99: lag')
-    _commit(repo, {path: RUST_NEW}, 'T3.99 fix 1: lag is 2')
-    spliced = handoff.inline_tests(repo, previous, path)
-    assert spliced is not None
-    # The previous production code under the new test block.
-    assert spliced.startswith(RUST_OLD)
-    assert '#[cfg(test)]' in spliced and 'assert_eq!(lag(), 2' in spliced
-    block = handoff.test_block(RUST_NEW)
-    assert block is not None and RUST_NEW[block[0] : block[1]].endswith('}\n}')
-    assert handoff.is_test(path) is False
-    # An unchanged test block is no test change.
-    assert (
-        handoff.inline_tests(repo, _git(repo, 'rev-parse', 'HEAD'), path)
-        is None
-    )
 
 
 # --- finding 4: the product suites -----------------------------------------------
@@ -179,41 +131,6 @@ def test_a_product_change_selects_its_package_suites(
 
 
 # --- finding 5: a Postgres-only case ---------------------------------------------
-
-
-def test_a_postgres_only_case_gets_no_stamp_without_a_server(
-    repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.delenv('SDM_POSTGRES_TEST_DSN', raising=False)
-    case = {
-        'id': 's9.only.postgres',
-        'databases': ['postgres'],
-        'exclusion': 'KO9-1',
-    }
-    base = _commit(
-        repo,
-        {'contract/reference/r.jsonl': '{"case": "other"}\n'},
-        'base',
-    )
-    _commit(
-        repo,
-        {'contract/cases/s9/s9.only.postgres.json': json.dumps(case)},
-        'T3.99: a Postgres case',
-    )
-    scratch = tmp_path / 'scratch'
-    scratch.mkdir()
-    step = handoff.step_reference(
-        repo,
-        ['contract/cases/s9/s9.only.postgres.json'],
-        [],
-        sys.executable,
-        base,
-        scratch,
-    )
-    assert not step.ok
-    assert any('SDM_POSTGRES_TEST_DSN' in p for p in step.problems), (
-        step.problems
-    )
 
 
 # --- finding 8: cancelled jobs in the timing history ------------------------------
@@ -431,67 +348,6 @@ lane = _module('t30_fix2_lane', SCRIPTS / 'lane.py')
 land = _module('t30_fix2_land', SCRIPTS / 'land.py')
 
 
-def test_a_rust_fix_with_python_tests_only_is_refused(
-    repo: Path, tmp_path: Path
-) -> None:
-    path = 'rust/crates/demo/src/lag.rs'
-    base = _commit(repo, {'README.md': 'x\n'}, 'base')
-    previous = _commit(repo, {path: RUST_OLD}, 'T3.99: lag')
-    _commit(
-        repo,
-        {
-            path: RUST_OLD.replace('1', '2'),
-            'tests/test_lag.py': 'def test_lag() -> None:\n    assert True\n',
-        },
-        'T3.99 fix 1: lag is 2',
-    )
-    assert handoff.rust_production(repo, previous, [path]) == [path]
-    scratch = tmp_path / 'scratch'
-    scratch.mkdir()
-    step = handoff.step_fails_before(
-        repo, base, previous, sys.executable, scratch, 'T3.99'
-    )
-    assert not step.ok
-    assert any('adds no Rust test' in p for p in step.problems), step.problems
-    # A test block alone is no production change.
-    block = RUST_NEW[RUST_NEW.index('#[cfg(test)]') :]
-    _commit(repo, {path: RUST_OLD + '\n' + block}, 'T3.99 tests: lag')
-    assert handoff.rust_production(repo, previous, [path]) == []
-
-
-def test_a_case_naming_postgres_with_others_needs_the_server(
-    repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.delenv('SDM_POSTGRES_TEST_DSN', raising=False)
-    case = {
-        'id': 's9.mixed',
-        'databases': ['sqlite', 'postgres'],
-        'exclusion': 'KO9-1',
-    }
-    base = _commit(
-        repo, {'contract/reference/r.jsonl': '{"case": "other"}\n'}, 'base'
-    )
-    _commit(
-        repo,
-        {'contract/cases/s9/s9.mixed.json': json.dumps(case)},
-        'T3.99: a mixed case',
-    )
-    scratch = tmp_path / 'scratch'
-    scratch.mkdir()
-    # A python that fails at once: no SQLite leg can pass here either way.
-    step = handoff.step_reference(
-        repo,
-        ['contract/cases/s9/s9.mixed.json'],
-        [],
-        '/bin/false',
-        base,
-        scratch,
-    )
-    assert any(
-        'Postgres' in p and 'SDM_POSTGRES_TEST_DSN' in p for p in step.problems
-    )
-
-
 def test_mypy_judges_the_lane_s_packages(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -506,17 +362,6 @@ def test_mypy_judges_the_lane_s_packages(
     command = handoff.mypy(lane_python, tmp_path)
     assert command[:3] == [sys.executable, '-m', 'mypy']
     assert command[-2:] == ['--python-executable', lane_python]
-
-
-def test_the_binding_suite_runs_on_the_test_ops_build(tmp_path: Path) -> None:
-    kit = os.environ.get('SDM_KIT_PYTHON', '')
-    if not kit:
-        pytest.skip(
-            'the binding suite needs SDM_KIT_PYTHON, the test-ops build'
-        )
-    step = handoff.step_affected(ROOT, ['rust/bindings/sdm-py/src/lib.rs'], kit)
-    assert step.ok, step.problems
-    assert any('--native-build test-ops' in n for n in step.notes), step.notes
 
 
 @pytest.mark.parametrize(
@@ -746,21 +591,6 @@ def test_a_binding_source_and_test_change_runs_only_the_binding_command() -> (
     assert printed == [' '.join(affected.BINDING)], printed
 
 
-def test_a_python_fix_with_a_binding_test_is_no_rust_fix(repo: Path) -> None:
-    previous = _commit(repo, {'packages/p/src/p/a.py': 'A = 1\n'}, 'T3.99: a')
-    paths = ['packages/p/src/p/a.py', 'rust/bindings/sdm-py/tests/test_a.py']
-    assert handoff.rust_production(repo, previous, paths) == []
-
-
-def test_a_space_inside_a_rust_literal_is_a_production_change(
-    repo: Path,
-) -> None:
-    path = 'rust/crates/demo/src/text.rs'
-    previous = _commit(repo, {path: 'pub fn s() -> &str {\n    "ab"\n}\n'}, 'a')
-    _commit(repo, {path: 'pub fn s() -> &str {\n    "a b"\n}\n'}, 'b')
-    assert handoff.rust_production(repo, previous, [path]) == [path]
-
-
 def test_a_train_of_a_checker_fix_alone_is_allowed() -> None:
     problem = land.judging_problem(
         ['scripts/rust_core/bridge_freeze.py'], RULES, 'T3.98', True, True, None
@@ -799,60 +629,3 @@ def _fake_python(where: Path, installed: Path) -> str:
     )
     script.chmod(0o755)
     return str(script)
-
-
-def test_each_interpreter_gets_its_own_build_in_the_previous_tree(
-    tmp_path: Path,
-) -> None:
-    tree = tmp_path / 'tree'
-    (tree / 'packages/demo/src/demo_answer').mkdir(parents=True)
-    pythons = []
-    for name in ('production', 'test-ops'):
-        installed = tmp_path / name / 'demo_answer'
-        installed.mkdir(parents=True)
-        (installed / '_native.abi3.so').write_text(name)
-        (tmp_path / name / 'bin').mkdir()
-        pythons.append(_fake_python(tmp_path / name / 'bin', installed))
-    link = tree / 'packages/demo/src/demo_answer/_native.abi3.so'
-    handoff.source_path(tree, pythons[0])
-    assert link.read_text() == 'production'
-    handoff.source_path(tree, pythons[1])
-    assert link.read_text() == 'test-ops'
-
-
-def test_two_batches_that_pass_on_the_previous_tree_show_no_fix(
-    repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    # The control (Codex r4): a plain batch and a binding batch whose tests
-    # all pass on the previous implementation satisfy nothing.
-    conftest = (
-        'def pytest_addoption(parser):\n'
-        "    parser.addoption('--native-build', default='')\n"
-    )
-    passing = 'def test_it() -> None:\n    assert True\n'
-    base = _commit(repo, {'README.md': 'x\n'}, 'base')
-    previous = _commit(
-        repo,
-        {
-            'packages/demo/src/demo_answer/__init__.py': 'ANSWER = 1\n',
-            'rust/bindings/sdm-py/tests/conftest.py': conftest,
-        },
-        'T3.99: the answer',
-    )
-    _commit(
-        repo,
-        {
-            'packages/demo/src/demo_answer/__init__.py': 'ANSWER = 2\n',
-            'tests/test_demo_plain.py': passing,
-            'rust/bindings/sdm-py/tests/test_demo_binding.py': passing,
-        },
-        'T3.99 fix 1: the answer is 2',
-    )
-    monkeypatch.setenv('SDM_KIT_PYTHON', sys.executable)
-    scratch = tmp_path / 'scratch'
-    scratch.mkdir()
-    step = handoff.step_fails_before(
-        repo, base, previous, sys.executable, scratch, 'T3.99'
-    )
-    assert not step.ok
-    assert any('none shows the fix' in p for p in step.problems), step.problems
