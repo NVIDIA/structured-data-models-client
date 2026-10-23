@@ -87,4 +87,5 @@ A table's and a composite type's columns are held to the function rule a read is
 
 Tests first again.
 A table's columns are each a name and a built-in type the loader writes (on Postgres also a composite type in the test schema) or a key constraint referencing the test schema; `LIKE`, a domain or another schema's type, `INHERITS`, `PARTITION OF` and `OF` are refused, and inside a cast `AS` names a type, never an alias's column list.
+Codex's round 7, tests first: no keyword or type exemption admits a qualified name or a call, names are plain ASCII outside strings, a cast names only a built-in type, Spark Connect is guarded at its execution boundary (every plan a read or a SQL command, every SQL text in it checked), and Spark's global temporary views are refused.
 
