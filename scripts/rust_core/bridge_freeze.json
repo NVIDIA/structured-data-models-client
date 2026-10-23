@@ -89,7 +89,7 @@
         "fingerprint": "664c947a782ca12105ae32ac14b180960adeecd35340107d972984ae9703866c"
       },
       "predict": {
-        "fingerprint": "5363b48fb38dc318e7f7ae5e634af98cf436a8a084281891cae440a3275f57b2"
+        "fingerprint": "03a2dc8c0c681dc2c91bcef383cc95218d6d9bfa4166ad6c4200aa0dbae9aa03"
       }
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/codec.py": {
@@ -341,13 +341,13 @@
     },
     "packages/structured-data-models-client/src/sdm_client/query.py": {
       "<module>": {
-        "fingerprint": "56ce632e021a1a50d499d43f6aeb006c0c4a79c87ad9f18eba31830961f66830"
+        "fingerprint": "1bc33de280d50ed3c2832af9b581560b7c30320bea35e596a54d336729d77f37"
       },
       "PredictiveQuery._refusal": {
-        "fingerprint": "bfc5f58a968e98f9e32d32d0297d562d784a54b37a8edd770e69ccf4f45e484e"
+        "fingerprint": "7457f66f4b0e3afad4c8dbab212e1cd5ddf2bbf054853376cb93bc2ac0f9b2b7"
       },
       "PredictiveQuery._resolve": {
-        "fingerprint": "a8731dbf5218df8e592beda4e8804b851a2e123bec6742f78e9de33645b4b7a1"
+        "fingerprint": "69d8091c818ec80de3e18422ed74322b6a292a8d7fece225b126bfe7cba30539"
       },
       "PredictiveQuery._validate_materialize_args": {
         "fingerprint": "53b6ffb85f7d3f3f909709f14e3c82765e9043f6c179c43f2573ae8f828c0718"
@@ -361,7 +361,7 @@
     },
     "packages/structured-data-models-client/src/sdm_client/materializers/relational.py": {
       "<module>": {
-        "fingerprint": "438645a47954d2e3ff575f660caea4a7597310bafbbe63b6a362f34207a01d90"
+        "fingerprint": "c4cf87b2aefdd41af2e73a333a7592731bd286830d13f70c69ec89a6c322a6f5"
       },
       "RelationalMaterializer.__init__": {
         "fingerprint": "b8acd9ec661ff4d7b255782d879dddc5222d4e261886ecc99dd9ffab1c37a612"
@@ -370,7 +370,7 @@
         "fingerprint": "5496e6431a2482bea8c5584eae80add3b1c7521932b27fefc62bea4c97d916ea"
       },
       "RelationalMaterializer.materialize": {
-        "fingerprint": "25ce51c78e487fd7bb059e9211571881c2ee4aa3f064be177a7a8e67574af8c0"
+        "fingerprint": "06e76be6a3815165f50d1d290730e0f867ddb80e094e42a72f49f09fafd2507d"
       },
       "_tables_linked_to": {
         "fingerprint": "4fdf1b6b3eaefb88ca07bcd632b617d828cae0118384cff30dccc53429f2b83b"
@@ -378,7 +378,7 @@
     },
     "packages/structured-data-models-client/src/sdm_client/schema.py": {
       "<module>": {
-        "fingerprint": "22c891544cbc05f55e608da05c1dec962d2a086584972d3aefd279667321205e"
+        "fingerprint": "952bc8e1aade5c9d80250d87ccde2d82dca913da69d3cdff14eda29110aad905"
       },
       "Column.__setattr__": {
         "fingerprint": "69a9732baf2040e15b128e4137f50ddeccab23c6dfa5dd25d17739296c90c252"

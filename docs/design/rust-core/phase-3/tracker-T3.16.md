@@ -45,3 +45,17 @@ A column with no facts costs, per table holding one, the `columns` and `keys` re
 - P1B-17: its refusal is gone; the owner is asked to retire it.
 - P3E-3 (proposed): predict of a request the core never materialized refused by name.
 - P3E-4 (proposed): a column the source gained after describing, added by hand, is read on the core route; the reference's cached reading leaves it out.
+
+## Review round 1 (ec2eca2a)
+
+Codex and Claude, three P1 findings and Claude's P1-2; tests first (edacbfcb, d492f8ad, each failing on ec2eca2a), then fix 1.
+
+| Finding | Fix | The old client's rule |
+|---|---|---|
+| An edit was checked against the source's data type, not the one the caller's schema holds | The schema an edit reads holds each column as the host types it; the source's type is kept apart (`held::Read::retyped`), written back in the facts and read by materialize as the engine reads the table; materialize refuses a meaning the caller's type cannot carry, then one the source's cannot | A setter checks a meaning against the column's own `dtype`; `check_consistent` reads the caller's schema, and the engine refuses an incompatible semantic type when it reads the table in place |
+| Data type names: `timestamp[s|ms|ns]`, `date`, `int` and others refused as unsupported, the name rule written twice | One table, `sdm_schema::held::DTYPE_NAMES`, exported as `_native.DTYPE_NAMES` and read by the client's `language_dtype` (its own map only in a build without the core, held equal by a test); a name no type has is let through by an edit's checks, a byte joins only a byte | `_WIRE_TO_PQL_DTYPE`, the language's names passed through, `supports_dtype` letting an unknown pair through, `_join_family` by name |
+| The core route still imported the old PQL package | Profiles by name (`ModelSpec.profile`, `query.RELATIONAL`), the profile's model words in `base.PROFILE_MODELS`, the meaning check from `_native.MEANINGS`, every old-route import moved into the old route's functions; the test blocks both old packages before the client's first import | The core route needs neither old package (the design's rule 11) |
+
+Also: `Request._core` and `Column._source` typed; `to_schema_definition` built from `schema.query_schema`, the one translation (Claude P2-2); `_described_on_the_core`'s rule documented (P2-3).
+Not done: P2-1 (`build` marks the time columns' meanings declared as the old setter did) stays, held by the repr comparisons; P3-2 (the tooling's copies of the held schema) is in the judging train's files.
+A name no data type has is let through by an edit as the old client lets it through; so is the literal `unsupported`, which the old client checks.

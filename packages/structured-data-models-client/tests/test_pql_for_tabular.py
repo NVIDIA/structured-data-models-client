@@ -17,10 +17,10 @@ from unittest.mock import Mock
 
 import pandas as pd
 import pytest
-from predictive_query import RELATIONAL, TABULAR
 
 from sdm_client import PredictiveQuery
 from sdm_client.errors import StructuredDataError
+from sdm_client.query import RELATIONAL, TABULAR
 
 
 def users(n: int = 30) -> pd.DataFrame:

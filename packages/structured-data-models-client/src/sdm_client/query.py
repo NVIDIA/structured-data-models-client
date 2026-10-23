@@ -36,8 +36,8 @@ from numbers import Integral
 from typing import TYPE_CHECKING, Any, NoReturn
 
 import pandas as pd
-from predictive_query import RELATIONAL, TABULAR
 
+from sdm_client.base import PROFILE_MODELS
 from sdm_client.core.warnings import SDMWarning
 from sdm_client.decompose import (
     FORECAST,
@@ -60,8 +60,14 @@ from sdm_client.request import Request
 from sdm_client.schema import _MAX_CATEGORICAL_CARDINALITY as _MAX_CATEGORICAL
 from sdm_client.schema import Schema
 
+#: The language's profiles a query is resolved for, by name: the core
+#: validates for a name, and only the old route's validator reads the old
+#: PQL package's object of it (T3.16, rule 11).
+RELATIONAL = 'RELATIONAL'
+TABULAR = 'TABULAR'
+
 if TYPE_CHECKING:
-    from predictive_query import Profile, ValidatedPredictiveQuery
+    from predictive_query import ValidatedPredictiveQuery
 
     from sdm_client._rust.results import CoreParts, CoreQuery
 
@@ -650,9 +656,7 @@ class PredictiveQuery:
         carrier._asked = self.text
         return carrier
 
-    def _resolve(
-        self, profile: Profile
-    ) -> ValidatedPredictiveQuery | CoreQuery:
+    def _resolve(self, profile: str) -> ValidatedPredictiveQuery | CoreQuery:
         r"""Parse and validate the query.
 
         On the core route (S0, the private routing seam) the core decides
@@ -717,9 +721,13 @@ class PredictiveQuery:
             return s0.shadow(self.text, definition, profile)
         from predictive_query import validate
 
+        from sdm_client.base import language_profile
+
         definition = to_schema_definition(self.schema)
 
-        old, response = validate(self.text, definition, profile)
+        old, response = validate(
+            self.text, definition, language_profile(profile)
+        )
         if old is not None and response.ok:
             return old
         reasons = [error.message for error in response.errors]
@@ -734,7 +742,7 @@ class PredictiveQuery:
         raise self._refusal(reasons, profile)
 
     def _refusal(
-        self, messages: list[str], profile: Profile
+        self, messages: list[str], profile: str
     ) -> StructuredDataError:
         r"""The refusal of a query the language does not accept.
 
@@ -750,7 +758,7 @@ class PredictiveQuery:
             or 'the query did not resolve'
         )
         return StructuredDataError(
-            f'{self.text!r} is not a query {profile.capabilities.model} '
+            f'{self.text!r} is not a query {PROFILE_MODELS[profile]} '
             f'can answer: {_without_a_remedy_this_caller_cannot_run(reasons)}'
             f'{self._why_the_target_is_text(reasons, profile)}'
             f'{self._how_to_resolve_an_ambiguous_link(reasons)}',
@@ -805,7 +813,7 @@ class PredictiveQuery:
             f'== {target!r} and link.source_column in {rest!r})].'
         )
 
-    def _why_the_target_is_text(self, reasons: str, profile: Profile) -> str:
+    def _why_the_target_is_text(self, reasons: str, profile: str) -> str:
         r"""Say why a target is `text`, when that is what refused the query.
 
         Inference types a string column by how many distinct values it holds,
@@ -852,7 +860,7 @@ class PredictiveQuery:
         if ceiling is not None and distinct is not None and distinct > ceiling:
             return (
                 f'{said}. Typing it categorical would not help here, though: '
-                f'{profile.capabilities.model} classifies at most {ceiling} '
+                f'{PROFILE_MODELS[profile]} classifies at most {ceiling} '
                 f'classes and this column holds {distinct:,}, so the send '
                 f'would be refused. Predict a column with fewer classes, or '
                 f'group these into that many first'

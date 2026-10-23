@@ -6,8 +6,10 @@ r"""What a model is, to this client.
 
 A model is described by two things that are deliberately kept apart.
 
-A **profile** says what the model may be *asked*. It comes from
-``predictive_query`` and is data, not code: a frozen set of flags obeying one
+A **profile** says what the model may be *asked*. It is named here (the
+language's ``RELATIONAL`` or ``TABULAR``) and comes from ``predictive_query``
+where an old-route check reads it, never on the core route (T3.16, the
+structure design's rule 11); it is data, not code: a frozen set of flags obeying one
 normative rule: a capability may only reject. The language accepts a fixed
 set of queries and every model accepts a subset of it, so declaring a model can
 never widen what the language allows.
@@ -28,11 +30,11 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field, fields
 from typing import TYPE_CHECKING, Any, Protocol
 
-from predictive_query import Capabilities, Profile
-
 from sdm_client.errors import UnsupportedRequestError
 
 if TYPE_CHECKING:  # pragma: no cover - imported for typing only.
+    from predictive_query import Capabilities, Profile
+
     from sdm_client.request import Request
     from sdm_client.result import PredictionResult
 
@@ -88,8 +90,34 @@ class ModelSpec:
     r"""A model id, what it may be asked, and what its deployment serves."""
 
     model_id: str
-    profile: Profile
+    #: The language's profile the model is asked through, by its name
+    #: (``RELATIONAL`` or ``TABULAR``): the name the core validates a query
+    #: for, and :func:`language_profile` the old PQL package's object.
+    profile: str
     runtime: RuntimeContract
+
+
+#: How each of the language's profiles names the model it is asked of
+#: (``Profile.capabilities.model``), which a refusal of a query says, held
+#: here so the core route words it with nothing of the old PQL package
+#: (T3.16, rule 11); ``tests/test_t316_the_schema_as_it_stands.py`` holds
+#: it to the language's.
+PROFILE_MODELS = {
+    'FINE_TUNING': 'fine-tuning',
+    'RELATIONAL': 'a relational model',
+    'TABULAR': 'a tabular model',
+    'TIMESERIES': 'a time-series model',
+    'ANOMALY': 'an anomaly-detection model',
+}
+
+
+def language_profile(name: str) -> Profile:
+    r"""The old PQL package's profile named ``name``, for the old route's
+    validator and the capability checks that read it."""
+    import predictive_query.profiles as profiles
+
+    found: Profile = getattr(profiles, name)
+    return found
 
 
 @dataclass(frozen=True)
@@ -193,6 +221,8 @@ def required_capabilities(request: Request) -> Capabilities:
     Built with :meth:`Capabilities.nothing` and switched on, so a flag this
     request does not need stays off and cannot cause a spurious rejection.
     """
+    from predictive_query import Capabilities
+
     kind = request.task.kind
     temporal = bool(request.task.options.get('anchor_time_column')) or kind in {
         'forecasting',
@@ -222,7 +252,7 @@ def check_request_against_model(
             support.
     """
     required = required_capabilities(request)
-    supported = spec.profile.capabilities
+    supported = language_profile(spec.profile).capabilities
     unsupported = [
         name
         for name in SHAPE_CAPABILITIES
@@ -281,7 +311,7 @@ def check_request_against_model(
 
 def describe(spec: ModelSpec) -> ModelCapabilities:
     r"""The public description of a model, for ``capabilities()``."""
-    supported = spec.profile.capabilities
+    supported = language_profile(spec.profile).capabilities
     return ModelCapabilities(
         model=spec.model_id,
         tasks=tuple(sorted(spec.runtime.tasks)),
@@ -297,4 +327,6 @@ def describe(spec: ModelSpec) -> ModelCapabilities:
 
 def capability_names() -> tuple[str, ...]:
     r"""Every flag ``Capabilities`` carries, for tests that assert coverage."""
+    from predictive_query import Capabilities
+
     return tuple(f.name for f in fields(Capabilities) if f.name != 'model')

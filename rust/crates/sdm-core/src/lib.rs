@@ -29,6 +29,7 @@ mod test_ops;
 
 pub use compose::{CompositionRoot, DataAccess};
 pub use dispatch::start;
+pub use edit::{dtype_names, meanings};
 pub use run::{
     ArrowData, Ask, Asker, Attachment, AttachmentIds, Attachments, FetchResult, ModelResult, Reply,
     Run, RunState,

@@ -1969,6 +1969,43 @@ fn warn(asker: &Asker, code: &str, message: &str) {
 /// schema joins on keeps its identifier's meaning); and each link able to
 /// join. Before anything else of the call is read, as the reference asks
 /// it before the gathering starts.
+/// Refuses a schema whose column means what its data type cannot carry,
+/// before anything else of the call is read, as the reference refuses it
+/// (T3.16): as the caller holds it (`by_the_source` false), as its
+/// `check_consistent` reads the caller's schema, a column named by no data
+/// type the client knows let through ([`crate::edit::admits`]); then as the
+/// source gave it, as its engine refuses a column of an incompatible
+/// semantic type when it reads the table in place.
+pub(crate) fn meanings_carried(
+    description: &SourceDescription,
+    by_the_source: bool,
+) -> Result<(), CoreError> {
+    let mut marked = description.clone();
+    sdm_schema::assemble::mark_keys(&mut marked);
+    for table in &marked.tables {
+        for column in &table.columns {
+            let carried = if by_the_source {
+                crate::edit::supports(column.stype, column.dtype)
+            } else {
+                crate::edit::admits(column.stype, column.dtype)
+            };
+            if !carried {
+                return Err(not_carried(&table.name, &column.name));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn not_carried(table: &str, column: &str) -> CoreError {
+    invalid(
+        "a column's meaning is not one its values can carry",
+        "schema",
+    )
+    .with_field("table", Detail::text(table))
+    .with_field("column", Detail::text(column))
+}
+
 fn consistent(description: &mut SourceDescription) -> Result<(), CoreError> {
     sdm_schema::assemble::mark_keys(description);
     for table in &description.tables {
@@ -1976,12 +2013,7 @@ fn consistent(description: &mut SourceDescription) -> Result<(), CoreError> {
             // As the language answers it, as an edit's meaning is held.
             let supported = crate::edit::supports(column.stype, column.dtype);
             if !supported {
-                return Err(invalid(
-                    "a column's meaning is not one its values can carry",
-                    "schema",
-                )
-                .with_field("table", Detail::text(&table.name))
-                .with_field("column", Detail::text(&column.name)));
+                return Err(not_carried(&table.name, &column.name));
             }
         }
         // The engine's table takes a time column only of the timestamp

@@ -168,7 +168,9 @@ fn primary_key(
     }
     for name in names {
         let column = &shape.columns[column_at(shape, name, "primary_key")?];
-        if !can_identify(column.dtype) {
+        // A column named by no data type the old client knows, which its
+        // checks let through (`supports_dtype`, T3.16).
+        if column.dtype != Dtype::Unsupported && !can_identify(column.dtype) {
             return Err(key_cannot_identify(
                 table,
                 name,

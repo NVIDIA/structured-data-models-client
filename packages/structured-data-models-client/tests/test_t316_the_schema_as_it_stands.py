@@ -250,6 +250,18 @@ def test_the_client_s_profile_words_and_meanings_are_the_language_s() -> None:
         if stype.supports_dtype(dtype)
     }
     assert set(map(tuple, _native.MEANINGS)) == language
+    # The one table of data type names, which the client's fallback for a
+    # build without the core agrees with, and which names each of the
+    # language's types by its own name.
+    from sdm_client.schema import _WIRE_TO_PQL_DTYPE
+
+    names = dict(_native.DTYPE_NAMES)
+    assert {k: names[k] for k in _WIRE_TO_PQL_DTYPE} == _WIRE_TO_PQL_DTYPE
+    assert all(
+        names[dtype.value] == dtype.value
+        for dtype in Dtype
+        if dtype.value not in _WIRE_TO_PQL_DTYPE
+    )
 
 
 def _materialized(schema: Schema) -> Any:

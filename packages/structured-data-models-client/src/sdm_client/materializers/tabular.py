@@ -13,8 +13,6 @@ from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
 import pandas as pd
-from predictive_query import Stype
-from predictive_query.validator.utils import col_name, table_name
 
 from sdm_client.core.warnings import SDMWarning, caller_stacklevel
 from sdm_client.errors import StructuredDataError
@@ -52,6 +50,8 @@ def _derive_task_kind(
     query: ValidatedPredictiveQuery, target: pd.Series
 ) -> str:
     r"""The task the target implies, when the caller named none."""
+    from predictive_query import Stype
+
     if query.target_stype == Stype.categorical:
         return 'classification'
     if _holds_two_whole_numbers(target):
@@ -121,6 +121,8 @@ class TabularMaterializer:
         this one left out neither, so the same table asked the same question
         two ways built two different contexts.
         """
+        from predictive_query.validator.utils import col_name, table_name
+
         entity_table_name = table_name(query.entity_column)
         entity_col = col_name(query.entity_column)
         target_col = col_name(query.target_column)
@@ -158,6 +160,8 @@ class TabularMaterializer:
         task: str | None = None,
     ) -> Request:
         r"""Build a single-table request for rows in the table."""
+        from predictive_query.validator.utils import col_name, table_name
+
         entity_table_name = table_name(query.entity_column)
         entity_table = _rows(self.schema[entity_table_name])
         entity_col = col_name(query.entity_column)
@@ -220,6 +224,8 @@ class TabularMaterializer:
         from; the two differ, and the narrower one is what the model learns
         from.
         """
+        from predictive_query import Stype
+
         if query.target_stype not in {Stype.categorical, Stype.numerical}:
             raise StructuredDataError(
                 f'tabular materialization requires a categorical or '

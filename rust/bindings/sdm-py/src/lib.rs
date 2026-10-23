@@ -383,6 +383,30 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
                 .collect::<PyResult<Vec<_>>>()?,
         )?,
     )?;
+    // Each meaning a column of each data type can carry, as the language
+    // answers it, the client's check of a column's meaning (T3.16, rule 11).
+    module.add(
+        "MEANINGS",
+        PyTuple::new(
+            py,
+            sdm_host::meanings()
+                .into_iter()
+                .map(|(stype, dtype)| PyTuple::new(py, [stype, dtype]))
+                .collect::<PyResult<Vec<_>>>()?,
+        )?,
+    )?;
+    // Each data type name a host may give a column, and the contract's name
+    // of the type it names: the one table of them (T3.16).
+    module.add(
+        "DTYPE_NAMES",
+        PyTuple::new(
+            py,
+            sdm_host::dtype_names()
+                .into_iter()
+                .map(|(name, dtype)| PyTuple::new(py, [name.to_owned(), dtype]))
+                .collect::<PyResult<Vec<_>>>()?,
+        )?,
+    )?;
     module.add("CoreError", py.get_type::<CoreError>())?;
     module.add_class::<ArrowStream>()?;
     module.add_class::<Run>()?;

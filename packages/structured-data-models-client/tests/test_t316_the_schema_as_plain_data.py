@@ -550,10 +550,11 @@ def test_the_core_route_runs_no_code_of_the_old_engine_or_the_old_pql(
 ) -> None:
     # The structure design's rule 11, checked here (T3.16): with every core
     # route forced, describing, editing, materializing and predicting call
-    # no function of `sdm_relational_engine` or `predictive_query`. The
-    # client imports the PQL package's names at import time (Phase 5 removes
-    # it); what is held here is that the core route runs none of its code.
-    # The profile hook is this test's own, in a process of its own.
+    # no function of `sdm_relational_engine` or `predictive_query`, where
+    # both are installed. That neither is imported at all, from before the
+    # client's first import, is test_t316_the_schema_as_it_stands.py's
+    # test_the_core_route_needs_nothing_of_the_old_pql_or_engine. The
+    # profile hook is this test's own, in a process of its own.
     import subprocess
     import sys
     import textwrap

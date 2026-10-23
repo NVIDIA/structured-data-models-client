@@ -29,46 +29,6 @@ from sdm_client._rust import codec
 if TYPE_CHECKING:
     from sdm_client.schema import Schema
 
-#: The data types and meanings the contract's ``QuerySchema`` names, as it
-#: spells them (``sdm_contract::ops::Dtype`` and ``Stype``, the language's
-#: own): a column of another is not one a query can name, and is left out
-#: of the query's schema, as the language's own schema leaves it out.
-DTYPES = frozenset(
-    {
-        'bool',
-        'int',
-        'byte',
-        'int16',
-        'int32',
-        'int64',
-        'float',
-        'float32',
-        'float64',
-        'string',
-        'binary',
-        'date',
-        'time',
-        'timedelta',
-        'floatlist',
-        'intlist',
-        'stringlist',
-        'unsupported',
-    }
-)
-STYPES = frozenset(
-    {
-        'numerical',
-        'categorical',
-        'multicategorical',
-        'ID',
-        'text',
-        'timestamp',
-        'sequence',
-        'image',
-        'unsupported',
-    }
-)
-
 
 def held_schema(schema: Schema) -> dict[str, Any]:
     r"""``schema`` as the contract's ``HeldSchema``."""
@@ -107,53 +67,16 @@ def held_schema(schema: Schema) -> dict[str, Any]:
 
 
 def _links(schema: Schema) -> list[list[dict[str, str]]]:
-    return [
-        [
-            {'table': link.source_table, 'column': link.source_column},
-            {'table': link.target_table, 'column': link.target_column},
-        ]
-        for link in schema.relationships
-    ]
+    from sdm_client.schema import links_of
+
+    return links_of(schema)
 
 
 def query_schema(schema: Schema) -> dict[str, Any]:
-    r"""``schema`` as the contract's ``QuerySchema``, as the language's own
-    schema reads it (``schema.to_schema_definition``): each column of a
-    data type and meaning a query can name, by the language's names; a
-    single-column key, a composite one said and dropped
-    (:func:`sdm_client.schema.say_a_composite_key_is_dropped`); each link
-    a group of its two ends, in order of table and column."""
-    from sdm_client.schema import (
-        WIRE_TO_PQL_DTYPE,
-        say_a_composite_key_is_dropped,
-    )
+    r"""``schema`` as the contract's ``QuerySchema``
+    (:func:`sdm_client.schema.query_schema`, the one translation of a schema
+    into the query language's, which the old route's definition is built
+    from too)."""
+    from sdm_client.schema import query_schema as written
 
-    tables = []
-    for name, table in schema.tables.items():
-        columns = []
-        for column in table.columns.values():
-            dtype = WIRE_TO_PQL_DTYPE.get(column.dtype, column.dtype)
-            stype = str(column.stype)
-            if dtype not in DTYPES or stype not in STYPES:
-                continue
-            columns.append(
-                {'name': column.name, 'dtype': dtype, 'stype': stype}
-            )
-        key = table.primary_key
-        if key is not None and not isinstance(key, str):
-            say_a_composite_key_is_dropped(name, key)
-        tables.append(
-            {
-                'name': name,
-                'columns': columns,
-                # An empty name is none, as the language's table reads it.
-                'primary_key': key if isinstance(key, str) and key else None,
-                'time_column': table.time_column or None,
-                'end_time_column': None,
-            }
-        )
-    links = [
-        sorted(link, key=lambda end: (end['table'], end['column']))
-        for link in _links(schema)
-    ]
-    return {'tables': tables, 'links': links}
+    return written(schema)

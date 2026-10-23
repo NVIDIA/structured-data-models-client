@@ -65,6 +65,13 @@ ERROR_CODES: tuple[_Code, ...]
 #: Every warning the core may give, each with the variants it gives (none:
 #: one sentence), which a host words (decision E59(d)).
 WARNING_CODES: tuple[tuple[str, tuple[str, ...]], ...]
+#: Each ``(stype, dtype)`` the language lets a column mean, by the
+#: contract's names (T3.16): the client's check of a meaning, read in place
+#: of the old PQL package's.
+MEANINGS: tuple[tuple[str, str], ...]
+#: Each data type name a host may give a column, and the contract's name
+#: of the type it names (T3.16): the one table of them.
+DTYPE_NAMES: tuple[tuple[str, str], ...]
 
 class _ArrowStreamExportable(Protocol):
     def __arrow_c_stream__(

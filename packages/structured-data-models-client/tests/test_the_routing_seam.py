@@ -23,7 +23,6 @@ from typing import Any
 
 import pandas as pd
 import pytest
-from predictive_query import RELATIONAL, TABULAR
 
 from sdm_client import (
     MissingExtraError,
@@ -34,6 +33,7 @@ from sdm_client import (
     _routing,
 )
 from sdm_client._rust import s0
+from sdm_client.query import RELATIONAL, TABULAR
 
 ROOT = Path(__file__).resolve().parents[3]
 MANIFEST = ROOT / 'docs/design/rust-core/phase-0/scope-python.yaml'
