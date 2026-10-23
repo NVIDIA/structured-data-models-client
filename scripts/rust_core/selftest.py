@@ -402,6 +402,8 @@ def deps_cases(results: list[Result], base: dict[str, Any]) -> None:
 
         def jni(m: Metadata, extra: str | None = None, drop: str = '') -> None:
             m.member('sdm-jni', manifest)
+            # The binding exists from T3.11: its edges are the fixture's.
+            m.node('sdm-jni')['deps'] = []
             for dep in ('sdm-host', 'sdm-contract', 'jni'):
                 if dep != drop:
                     m.edge('sdm-jni', dep)
@@ -811,10 +813,10 @@ def freeze_cases(results: list[Result]) -> None:
     def added_raise(root: Path) -> None:
         edit(
             root / schema,
-            '    return build(cls, source, described)\n',
+            '    return build(cls, source, json.loads(finished.take(described.description)))\n',
             '    if described is None:\n'
             "        raise StructuredDataError('none', code='INTERNAL_ERROR')\n"
-            '    return build(cls, source, described)\n',
+            '    return build(cls, source, json.loads(finished.take(described.description)))\n',
         )
 
     # The tree, through git, and its copy against itself.
@@ -1047,8 +1049,8 @@ def freeze_cases(results: list[Result]) -> None:
             'a swallowing try',
             lambda r: edit(
                 r / materialize,
-                '    described, held = description(schema)\n',
-                '    try:\n        described, held = description(schema)\n'
+                '    choice, provider = providers.for_source(schema.source)\n',
+                '    try:\n        choice, provider = providers.for_source(schema.source)\n'
                 '    except StructuredDataError:\n        pass\n',
             ),
             gather,
@@ -1057,10 +1059,10 @@ def freeze_cases(results: list[Result]) -> None:
             'an aliased contextlib.suppress',
             lambda r: edit(
                 r / materialize,
-                '    described, held = description(schema)\n',
+                '    choice, provider = providers.for_source(schema.source)\n',
                 '    import contextlib\n\n    quiet = contextlib.suppress\n'
                 '    with quiet(ValueError):\n'
-                '        described, held = description(schema)\n',
+                '        choice, provider = providers.for_source(schema.source)\n',
             ),
             gather,
         ),
@@ -1336,8 +1338,8 @@ def freeze_cases(results: list[Result]) -> None:
             'a copy on a value',
             lambda r: edit(
                 r / schema,
-                '    return build(cls, source, described)\n',
-                '    return build(cls, source, described.copy())\n',
+                '    return build(cls, source, json.loads(finished.take(described.description)))\n',
+                '    return build(cls, source, json.loads(finished.take(described.description)).copy())\n',
             ),
             from_source,
         ),
