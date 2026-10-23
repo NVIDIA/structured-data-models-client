@@ -39,10 +39,12 @@ Lane H, stack 1. Brief: the orchestrator's `phase-3/briefs/T3.3.md`; design row 
 - `sdm-contract-run` reads the cases of the database it runs on (`case::load_for`): a warehouse-only case never runs on DuckDB.
 - C-1 and E-0: `scripts/live/capture_run.py` (`plan`, the dry mode; `run`), `capture.job.template.json` and its notebook `capture_job.py` for the Spark and Lakebase legs; the two Databricks legs run one after the other.
   The recording's lines become captures (`captures.py import`), against which the core's SQL is compared with the old client's recorded SQL.
-- The live write guard, `scripts/live/write_guard.py` (KO3-51), rewritten in the repository from the owner-approved spec after the copy outside it was lost: every live write, DDL included, goes only to the one test schema of its warehouse, fully qualified; reads pass; anything not recognised is refused.
-  The test schema comes from `SDM_LIVE_<DIALECT>_TEST_DATABASE` and `SDM_LIVE_<DIALECT>_TEST_SCHEMA`, else `SDM_LIVE_TEST_DATABASE` and `SDM_LIVE_TEST_SCHEMA`; no resource name is in the repository.
-  Difference from the spec, named: on Snowflake `CALL SYSTEM$CREATE_SEMANTIC_VIEW_FROM_YAML('<test schema>', ...)` is allowed (the loader creates a semantic view that way, in the schema the call names); every other CALL is refused.
-  `capture_run.py` loads it from beside itself, never from a path given at run time; a run without it, or without a test schema, does not start.
+- The live write guard, `scripts/live/write_guard.py` (KO3-51), in the repository after the copy outside it was lost: every live write, DDL included, goes only to the one test schema of its warehouse.
+  An allowlist (the owner's decision after round 4): one statement per text, with no comment, backslash, flow or pipe operator, escaped string or quoted name holding its own quote; the old client's reads (`SELECT` and `WITH` with no write verb, `INTO` or `SYSTEM$` function but `SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW`, and the exact `SHOW`, `DESCRIBE`, `USE` and `ALTER SESSION SET` forms); and the loader's writes (`CREATE TABLE`, `INSERT INTO`, `DROP TABLE | VIEW | SEMANTIC VIEW | TYPE` without `CASCADE`, the metric view, `CREATE TYPE`, `COPY ... FROM STDIN`, and the semantic view's `CALL` with its YAML's name and base tables checked), each target in the test schema; everything else refused.
+  One guard for every leg and path: `install` wraps the drivers' own classes (Snowflake's cursor and connection, Snowpark's session, Databricks SQL's cursor, Spark's session, classic and Connect, psycopg's cursors and connections, with every subclass), so a returned cursor or a session's own connection is guarded too; Spark's DataFrame and catalog writers and Snowflake's `execute_stream` are refused outright.
+  The test schema comes from `SDM_LIVE_<DIALECT>_TEST_*`, else `SDM_LIVE_TEST_*`, and must be the one the cases resolve to (`SDM_CAPTURE_*`); no resource name is in the repository.
+  Cost, named: the cases whose column names hold their own quote or a line break (`name.backtick-*`, `name.line-break-*`) are refused by the guard, so never recorded live.
+  `capture_run.py` loads it from beside itself; a run without it, or without a test schema, does not start.
 - Carried rows closed: P2-T2.7-1 (`layer.rs`), P2-T2.7-2 (`memory.rs`), P2-T2.14c-1, P2-T2.1a-3, P2-T2.16a-1, P2-T2.11-4, C28, OF-7's predicate, M5, C16's rest, P2-T2.16-14 and P2-T2.1o-1 (the slowest job is now `tooling`, about 43 minutes; `test`, `contract-python-ref-pandas3` and `engine` back at 60).
   ENV-2: `test_contract_loader.py`'s Postgres statement-capture tests pass in lane H's environment; closed.
   ENV-3: the prepush replay self-test passed on each of this package's pushes; closed.
@@ -63,3 +65,8 @@ From here the package is stacked on T3.2's candidate, on `rust-core-phase-3-topi
 Owner decision B-lite: the offline stand-in is dropped (`standin.rs`, its capture reader, `sdm-standin`, `standin_client.py`, the `standin-binary` and per-leg CI jobs, `handoff.py`'s warehouse legs on it); the C-1 recording and the comparison of the core's SQL with the old client's recorded SQL stay.
 A Snowflake semantic-view case keeps its table names, its columns created upper-cased and its YAML's base tables quoted, so the recording's read-back resolves.
 C-1 and E-0 run the recording in process with every write through the repository's live write guard, refused outside the one test schema before the driver sees it; the jobs run the reference checkout's client, set `SDM_LIVE_CONFIG`, `SDM_CAPTURE_*` and the test schema from their parameters, and the Spark leg reads the notebook's session.
+
+## Fix round 4 (reviews of 392f665a)
+
+The guard became an allowlist enforced on the drivers' own classes for every leg (Lakebase's separate check removed, the loader's Lakebase drops without `CASCADE`); every bypass both reviews found is a test that is refused.
+The comparator judges warehouse legs by every rule against the recorded reference lines, with no stand-in verdict or live-only items; the stand-in's policy section, gate runner and runner hook are removed.
