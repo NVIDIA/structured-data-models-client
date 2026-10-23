@@ -47,7 +47,7 @@
       "rule": "PROVIDER_ERROR: the time bounds' CAST of text the source cannot read as a timestamp",
       "owner": "T1.32e",
       "register": "DT-12",
-      "where": "rust/crates/sdm-data/src/duckdb.rs:343",
+      "where": "rust/crates/sdm-data/src/duckdb.rs:347",
       "holds": "format!(\"CAST({value} AS TIMESTAMP)\")",
       "why": "Text read as dates by inference (US dates; ISO dates with one unreadable value) that DuckDB's CAST in the time bounds cannot read: the reference's same statement fails and its client reports INTERNAL_ERROR, the core's provider error is PROVIDER_ERROR, a code proposed in register DT-12, which T1.32e settles when it admits the cases",
       "observed": {
