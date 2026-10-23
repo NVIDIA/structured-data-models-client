@@ -375,3 +375,67 @@ def test_a_column_written_by_hand_is_edited_by_any_name_the_old_client_reads(
 
     outcomes = _both(monkeypatch, act)
     assert outcomes['core'] == outcomes['old']
+
+
+#: Data type names outside the one table of them that the old client still
+#: reads by their prefix when it asks whether two columns can join
+#: (`_join_family`: a name starting `int` or `float` is a number, one
+#: starting `timestamp` a time), and its own odd ones.
+UNLISTED = (
+    'int8',
+    'int128',
+    'float16',
+    'float8',
+    'timestamp[us, UTC]',
+    'uint64',
+)
+
+
+@pytest.mark.parametrize('name', UNLISTED)
+@pytest.mark.parametrize('how', ['retyped', 'written by hand'])
+def test_a_link_reads_any_data_type_name_as_the_old_client_does(
+    name: str, how: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Codex's review round 2 of 0c662906: the foreign key of a link named by
+    # a data type outside the table, then linked and the query materialized.
+    from sdm_client import Relationship
+
+    def act() -> Any:
+        schema = _described()
+        schema.relationships = []
+        if how == 'retyped':
+            schema['orders']['user_id'].dtype = name
+        else:
+            del schema['orders']['user_id']
+            schema['orders'].columns['user_id'] = Column('user_id', name, 'ID')
+        try:
+            schema.relationships = [
+                Relationship('orders', 'user_id', 'users', 'user_id')
+            ]
+        except StructuredDataError as refused:
+            return ('link', _refused(refused))
+        return ('linked', _materialized(schema))
+
+    outcomes = _both(monkeypatch, act)
+    assert outcomes['core'] == outcomes['old']
+
+
+@pytest.mark.parametrize('meaning', ['categorical', 'ID', 'numerical'])
+def test_a_column_named_unsupported_is_checked_as_the_old_client_checks_it(
+    meaning: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The language's own name `unsupported`, which the old client checks as
+    # the language answers it (not the leniency a name it does not know gets).
+    def act() -> Any:
+        schema = _described()
+        try:
+            schema['users'].columns['odd'] = Column(
+                'odd', 'unsupported', 'unsupported'
+            )
+            schema['users']['odd'].stype = meaning
+        except StructuredDataError as refused:
+            return _refused(refused)
+        return schema['users']['odd'].stype
+
+    outcomes = _both(monkeypatch, act)
+    assert outcomes['core'] == outcomes['old']
