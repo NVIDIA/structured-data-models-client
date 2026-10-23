@@ -185,10 +185,11 @@ def run(
 ) -> Finished:
     r"""Runs ``operation`` to its result, with the attachments its fields name.
 
-    ``read``, for a ``materialize``, is handed where a failed run says it
-    read the tables it read anew (the error's ``read_under``, T3.4), before
-    its error is raised, so the caller keeps them as the reference keeps
-    the tables a failed run read.
+    ``read``, for a ``materialize``, is handed where the run reads the tables
+    it reads anew (a request's ``read_under``, T3.4) the moment the request
+    carrying them, and every request before it in its step, is answered
+    with data, so the caller keeps them when the reference keeps the tables
+    its engine read, and none where a read fails or is interrupted.
 
     A warning whose code ``quiet`` names is not shown: the caller has shown
     it already, or decides once the run ends whether to show it, from
@@ -232,9 +233,7 @@ def run(
             state.pop('held', None)
         errors.raise_from_core(refused.control, refused.attachments)
     try:
-        return _steps(
-            core, handle, provider, model, quiet, given, kept, read
-        )
+        return _steps(core, handle, provider, model, quiet, given, kept, read)
     finally:
         if state is not None:
             _keep(core, handle, state)
@@ -294,8 +293,6 @@ def _steps(
                 failed.control, failed.attachments, driver_class=driver_class
             )
             _answered(handle, failed, error)
-            if read is not None:
-                _read_under(failed, read)
         if error is not None:
             # Raised outside the handler, so nothing is its context.
             if refused is not None:
@@ -329,6 +326,9 @@ def _steps(
         # read it falls back from, T1.32e), and a later error is no other
         # step's.
         driver_class = None
+        # Whether a request of this step has failed: the readings a later
+        # one carries then hold of no table read (T3.4).
+        failed_in_step = False
         for request in step['requests']:
             attached: dict[int, Any] = {}
             try:
@@ -351,8 +351,19 @@ def _steps(
                 handle.cancel()
                 raise
             except Exception as failure:  # noqa: BLE001 - the provider's
+                failed_in_step = True
                 provided, driver_class = _driver(failure, provider)
                 outcome = {'outcome': 'error', 'error': provided}
+            if (
+                read is not None
+                and request.get('read_under')
+                and not failed_in_step
+            ):
+                # Where the run reads its tables anew, kept now its reads
+                # are answered, before the core is told (T3.4).
+                from sdm_client._rust import results
+
+                read(results.read_under(request['read_under']))
             reply = codec.encode(
                 {
                     'message': 'fetch_reply',
@@ -440,23 +451,6 @@ def _answered(handle: Any, failed: Any, error: StructuredDataError) -> None:
     stream = handle.take_attachment(answered['result'])
     if stream is not None:
         error._answered = (stream, answered['rows'])  # type: ignore[attr-defined]
-
-
-def _read_under(
-    failed: Any, read: Callable[[dict[str, tuple[str, ...]]], None]
-) -> None:
-    r"""Hands ``read`` where the core says the failed run read the tables
-    it read anew (the error's ``read_under``, T3.4); nothing where it says
-    none."""
-    from sdm_client._rust import results
-
-    try:
-        message = codec.read(failed.control, failed.attachments)
-        said = message['error'].get('read_under')
-    except (codec.CodecError, KeyError, TypeError, AttributeError):
-        return
-    if said:
-        read(results.read_under(said))
 
 
 #: The core's fields that say what a failed request had answered (T2.8c).

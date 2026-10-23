@@ -1044,6 +1044,16 @@ class Schema:
         tables = self._engine_tables
         return {} if tables is None else tables.readings()
 
+    def _engine_reading(self) -> Any:
+        r"""The schema's engine reading (``EngineTables``), made where there
+        is none yet, as the relational materializer makes it before its
+        first read (``relational.py:555``)."""
+        from sdm_client.materializers.sources import EngineTables
+
+        if self._engine_tables is None:
+            self._engine_tables = EngineTables()
+        return self._engine_tables
+
     def _keep_readings(
         self, read: Mapping[str, tuple[str, ...]], *, replace: bool = False
     ) -> None:
@@ -1055,11 +1065,7 @@ class Schema:
         materializer makes it before its first read."""
         if not read and (replace is False or self._engine_tables is None):
             return
-        from sdm_client.materializers.sources import EngineTables
-
-        if self._engine_tables is None:
-            self._engine_tables = EngineTables()
-        held = self._engine_tables.readings()
+        held = self._engine_reading().readings()
         if replace:
             held.clear()
         for source_name, namespace in read.items():
