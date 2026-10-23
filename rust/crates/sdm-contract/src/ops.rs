@@ -426,6 +426,15 @@ pub struct SourceDescription {
     /// the links inferred by name that can join, in that order (decision
     /// E55); in `materialize`'s schema, the host's.
     pub links: Vec<Vec<ColumnRef>>,
+    /// The namespace the tables were read under, each part given, where
+    /// the run read parts the provider left to the connection (a
+    /// Databricks source naming no catalog or schema: the session's
+    /// current ones; contract v28, T3.4): `materialize` reads the same
+    /// tables under it, whatever the session's current parts are by then,
+    /// as the reference keeps the tables it described. Left out, none was
+    /// read, and each table is read under the provider's own namespace.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub namespace: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]

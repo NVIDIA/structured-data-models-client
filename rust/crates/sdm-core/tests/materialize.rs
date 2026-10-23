@@ -142,6 +142,7 @@ fn shop() -> SourceDescription {
                 column: "user_id".into(),
             },
         ]],
+        namespace: None,
     }
 }
 

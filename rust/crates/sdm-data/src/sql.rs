@@ -112,6 +112,18 @@ pub(crate) trait SqlDialect: Sync {
         0
     }
 
+    /// Whether the source's every namespace part is read before any table
+    /// (design fix C): the parts the provider leaves to the connection, a
+    /// leading one included, read once as the session's current ones, so
+    /// each relation is read under the full namespace, as the reference
+    /// reads a Databricks source (`current_catalog()`, `current_schema()`)
+    /// and as its catalog names a table a foreign key refers to. `false`,
+    /// the default: a relation of fewer parts is read in the connection's
+    /// current ones.
+    fn settles_namespace(&self) -> bool {
+        false
+    }
+
     /// How the source compares names (design fix C): as written.
     fn name_case(&self) -> NameCase {
         NameCase::AsWritten

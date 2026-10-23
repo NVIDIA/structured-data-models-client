@@ -101,6 +101,7 @@ fn described() -> SourceDescription {
             duplicate_keys: None,
         }],
         links: vec![],
+        namespace: None,
     }
 }
 

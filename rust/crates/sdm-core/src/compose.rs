@@ -68,8 +68,8 @@ impl CompositionRoot {
 
 impl DataAccess {
     /// Whether the run's provider leaves a namespace part to the connection
-    /// inside one it gives (`DataLayer::unsettled`), which no relation can
-    /// be read under until the source says its current parts
+    /// that must be read before any table (`DataLayer::unsettled`), until
+    /// the source says its current parts
     /// ([`DataAccess::settled`]).
     pub fn unsettled(&self) -> bool {
         self.layer.unsettled(&self.provider)

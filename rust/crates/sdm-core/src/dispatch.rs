@@ -86,7 +86,7 @@ pub fn start(
             let check_keys = request.check_keys;
             let zones = Arc::clone(&zones);
             Run::with_data(access, move |asker| async move {
-                let asker = crate::describe::settled(asker).await?;
+                let asker = crate::describe::settled(asker, None).await?;
                 crate::describe::run(asker, source, check_keys, facts, zones).await
             })
         }
@@ -393,7 +393,8 @@ pub(crate) fn materialize(
                 labels_only,
             };
             Ok(Run::with_data(access, move |asker| async move {
-                let asker = crate::describe::settled(asker).await?;
+                let known = inputs.description.namespace.clone();
+                let asker = crate::describe::settled(asker, known).await?;
                 // Each table read as the columns its description holds.
                 for table in &inputs.description.tables {
                     asker.guard(

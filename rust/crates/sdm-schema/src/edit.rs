@@ -98,6 +98,7 @@ pub fn read_held(
     let Some(held) = held else {
         return Ok(described);
     };
+    let namespace = described.namespace.clone();
     let mut seen = BTreeSet::new();
     let mut tables = Vec::with_capacity(held.tables.len());
     for table in held.tables {
@@ -141,6 +142,7 @@ pub fn read_held(
     Ok(SourceDescription {
         tables,
         links: held.links,
+        namespace,
     })
 }
 
