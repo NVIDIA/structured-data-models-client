@@ -75,6 +75,16 @@ pub struct FetchStep {
     /// it; left out on a request's first fetch (design choice 1, paging).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub continuation: Option<String>,
+    /// Where the run reads the tables it reads anew (relations of the
+    /// schema with no reading, under the parts the session gave), which hold
+    /// once this request, and every request before it in its step, is
+    /// answered with data: carried by the request that reads the last of
+    /// them first, so a host keeps them at that moment, as the reference
+    /// keeps the tables its engine read (`EngineTables.keep`), and keeps
+    /// none where any of those reads fails or is interrupted (contract v28,
+    /// T3.4). Absent from the JSON when none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub read_under: Vec<crate::ops::ReadUnder>,
 }
 
 /// Which model endpoint a call goes to.

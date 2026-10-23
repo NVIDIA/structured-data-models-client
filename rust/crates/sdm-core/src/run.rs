@@ -160,6 +160,28 @@ struct Shared {
     /// Each table of one part read under a namespace of its own, by the
     /// relation the run names it by ([`Asker::pin`]).
     pinned: BTreeMap<Relation, Relation>,
+    /// The tables the run reads anew not read yet, by their source's parts,
+    /// and where the run reads them all ([`Asker::reads_anew`]).
+    unread: BTreeSet<Vec<String>>,
+    readings: Vec<sdm_contract::ops::ReadUnder>,
+}
+
+/// Where the run reads the tables it reads anew, for the request `request`
+/// when it reads the last of them first (`FetchStep::read_under`); none
+/// otherwise, and none for a catalog read, which names a table it may not
+/// find.
+fn first_reads(shared: &mut Shared, request: &DataRequest) -> Vec<sdm_contract::ops::ReadUnder> {
+    if shared.unread.is_empty() || matches!(request, DataRequest::Describe { .. }) {
+        return Vec::new();
+    }
+    for (_, relation) in request.relations() {
+        shared.unread.remove(&relation.source);
+    }
+    if shared.unread.is_empty() {
+        mem::take(&mut shared.readings)
+    } else {
+        Vec::new()
+    }
 }
 
 fn lock(shared: &Mutex<Shared>) -> MutexGuard<'_, Shared> {
@@ -237,6 +259,15 @@ impl Asker {
             }
         }
         request
+    }
+
+    /// Names `readings`, where the run reads the tables it reads anew, for
+    /// the request that reads the last of them first to carry
+    /// (`FetchStep::read_under`).
+    pub(crate) fn reads_anew(&self, readings: Vec<sdm_contract::ops::ReadUnder>) {
+        let mut shared = lock(&self.shared);
+        shared.unread = readings.iter().map(|r| r.relation.source.clone()).collect();
+        shared.readings = readings;
     }
 
     /// Reads the table `relation`, of one part, names under `parts` on every
@@ -621,11 +652,13 @@ impl Future for Ask {
                 match asked {
                     Asked::Fetch(asked) => {
                         let (request, plan) = (*asked).clone();
+                        let read_under = first_reads(&mut shared, &request);
                         shared.fetches.push(FetchStep {
                             id,
                             request,
                             plan,
                             continuation: None,
+                            read_under,
                         });
                         fetch = Some(asked);
                     }
@@ -687,6 +720,7 @@ impl Future for Ask {
                         request,
                         plan,
                         continuation: Some(continuation),
+                        read_under: Vec::new(),
                     });
                     this.state = AskState::Asked {
                         id: next,

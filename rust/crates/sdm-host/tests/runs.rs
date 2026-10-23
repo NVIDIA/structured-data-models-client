@@ -631,7 +631,6 @@ fn request_state_leaves_one_run_as_bytes_and_returns_under_the_host_s_id() {
                 ranking: None,
             },
             query: None,
-            read_under: Vec::new(),
         }))
     }));
     let Step::Done {
