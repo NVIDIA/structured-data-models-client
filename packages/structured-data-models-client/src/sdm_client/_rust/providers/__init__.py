@@ -25,6 +25,15 @@ from sdm_client._rust.providers.duckdb import DuckDBProvider
 from sdm_client._rust.providers.postgres import PostgresProvider
 from sdm_client._rust.providers.sqlite import SqliteProvider
 
+__all__ = [
+    'DatabricksSparkProvider',
+    'DatabricksSqlProvider',
+    'DuckDBProvider',
+    'PostgresProvider',
+    'SqliteProvider',
+    'for_source',
+]
+
 #: Each kind of source the core reads (``Source.kind``): the built-in SQL
 #: dialect it renders for it, and the name of the provider class answering
 #: on its connection, read when the run starts.
