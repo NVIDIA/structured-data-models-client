@@ -14,6 +14,7 @@ import importlib.util
 import json
 import re
 import sys
+import types
 from pathlib import Path
 from typing import Any
 
@@ -433,3 +434,141 @@ def test_the_job_runs_in_its_notebook_with_its_environment(
 
     assert os.environ['SDM_CAPTURE_SCHEMA'] == 'zq_hidden'
     assert 'SDM_LIVE_TEST_SCHEMA' not in os.environ
+
+
+# Round 9 (Claude P1-1, P1-2): the run records what it can.
+
+_GUARD_NAMES = {
+    'databricks-sql': ('review-catalog', 'live_tests'),
+    'databricks-spark': ('review-catalog', 'live_tests'),
+    'snowflake': ('REVIEW_DB', 'LIVE_TESTS'),
+    'lakebase': (None, 'live_tests'),
+}
+
+
+class _Recording:
+    r"""A connection of any leg's driver recording each statement sent."""
+
+    def __init__(self) -> None:
+        self.ran: list[str] = []
+
+    def cursor(self) -> _Recording:
+        return self
+
+    def execute(self, sql: str, *arguments: Any) -> _Recording:
+        self.ran.append(sql)
+        return self
+
+    def sql(self, sql: str) -> _Recording:
+        self.ran.append(sql)
+        return self
+
+    def collect(self) -> list[Any]:
+        return []
+
+    def fetchall(self) -> list[Any]:
+        return []
+
+    def close(self) -> None:
+        pass
+
+
+@pytest.mark.parametrize('leg', capture_run.LEGS)
+def test_the_recorders_own_statements_pass_each_legs_guard(leg: str) -> None:
+    # Claude r9 P1-1: the statements the recorder sends outside the
+    # capture (the session's zone, the schema's tables, the read-back, the
+    # Spark path's USE) pass the leg's guard.
+    runner = capture_run._module('run_python')
+    loader = capture_run._module('databases')
+    guard_module = capture_run.load_guard()
+    database, schema = _GUARD_NAMES[leg]
+    guard = guard_module.WriteGuard(capture_run.DIALECT[leg], database, schema)
+    names = {'catalog': database or '', 'schema': schema}
+    namespace = (schema,) if leg == 'lakebase' else (database, schema)
+    connection = _Recording()
+    loader.held(leg, connection, namespace)
+    statements = [
+        runner._ZONE[leg],
+        f'SELECT * FROM {runner._quoted(leg, names, "orders")}',
+        *connection.ran,
+    ]
+    if leg == 'databricks-spark':
+        statements += [f'USE CATALOG `{database}`', f'USE SCHEMA `{schema}`']
+    for statement in statements:
+        guard.check(statement)
+
+
+@pytest.mark.parametrize('leg', capture_run.LEGS)
+def test_a_plan_leaves_the_not_live_cases_out_by_name(leg: str) -> None:
+    # Claude r9 P1-2: a case whose loads the guard refuses by design (its
+    # name holds a backtick or a line break) is out of the leg's plan,
+    # named with its reason, never in what the leg records.
+    planned = capture_run.plan(leg)
+    recorded = {Path(path).stem for path in planned['record']}
+    left_out = {
+        case for case, (legs, _) in capture_run.NOT_LIVE.items() if leg in legs
+    }
+    assert left_out, leg
+    assert not recorded & left_out
+    named = {entry.split(':', 1)[0] for entry in planned['not_live']}
+    assert named == left_out
+    assert all('guard' in entry for entry in planned['not_live'])
+
+
+def test_a_failed_case_is_recorded_and_the_rest_continue(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Claude r9 P1-2: one case's failure ends that case alone; the others
+    # are recorded and imported, the failure written with its reason.
+    paths = [str(tmp_path / f'{name}.json') for name in ('a', 'b', 'c')]
+    monkeypatch.setattr(
+        capture_run,
+        'plan',
+        lambda leg, e0=False: {
+            'record': paths,
+            'environment': {'SDM_LIVE_CONFIG': True},
+        },
+    )
+    monkeypatch.setattr(capture_run, 'install_guard', lambda *a: lambda: None)
+    imported: list[list[str]] = []
+
+    class Failure(Exception):
+        pass
+
+    def main(argv: list[str]) -> int:
+        case = Path(argv[-1]).stem
+        if case == 'b':
+            raise Failure(
+                'lakebase could not be opened or loaded (WriteRefused)'
+            )
+        record = Path(argv[argv.index('--record') + 1])
+        record.write_text(json.dumps({'case': case}) + '\n')
+        return 0
+
+    runner = types.SimpleNamespace(main=main, RunnerFailure=Failure)
+    monkeypatch.setattr(
+        capture_run,
+        '_named',
+        lambda name: (
+            runner if name == 'run_python' else types.SimpleNamespace()
+        ),
+    )
+    captures = capture_run._module('captures')
+
+    def import_recording(path: Path, out: Path) -> list[Path]:
+        imported.append(
+            [
+                json.loads(line)['case']
+                for line in Path(path).read_text().splitlines()
+            ]
+        )
+        return []
+
+    monkeypatch.setattr(captures, 'import_recording', import_recording)
+    status = capture_run.run('lakebase', tmp_path, tmp_path / 'out')
+    assert status == 1
+    assert imported == [['a', 'c']]
+    failed = json.loads((tmp_path / 'out' / 'lakebase.failed.json').read_text())
+    assert failed == {
+        'b': 'lakebase could not be opened or loaded (WriteRefused)'
+    }

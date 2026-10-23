@@ -32,6 +32,9 @@ def _load(name: str, path: Path) -> Any:
 
 
 wg = _load('t33_write_guard', ROOT / 'scripts/live/write_guard.py')
+capture_run = _load(
+    't33_guard_capture_run', ROOT / 'scripts/live/capture_run.py'
+)
 databases = _load('t33_guard_databases', ROOT / 'contract/runners/databases.py')
 
 #: Made-up names; Snowflake stores unquoted names upper-cased.
@@ -256,8 +259,10 @@ def test_the_test_schema_comes_from_the_environment(
 
 def test_every_case_the_loader_writes_passes_in_the_test_schema_only() -> None:
     # Every statement the loader writes for every S1 case passes in the
-    # test schema, on each warehouse and on Lakebase; in another schema
-    # every write is refused.
+    # test schema, on each warehouse and on Lakebase, but for the cases the
+    # live plan leaves out by name on that leg (capture_run.NOT_LIVE, Claude
+    # r9 P1-2), each refused for its quoted name; in another schema every
+    # write is refused.
     runner = _load(
         't33_guard_run_python', ROOT / 'contract/runners/run_python.py'
     )
@@ -267,9 +272,13 @@ def test_every_case_the_loader_writes_passes_in_the_test_schema_only() -> None:
         for case, _ in runner.load_cases([path]):
             duck = runner._connection(case, bases)
             try:
-                for engine, namespace in (
-                    ('snowflake', ('REVIEW_DB', 'LIVE_TESTS')),
-                    ('databricks', ('review-catalog', 'live_tests')),
+                for engine, namespace, leg in (
+                    ('snowflake', ('REVIEW_DB', 'LIVE_TESTS'), 'snowflake'),
+                    (
+                        'databricks',
+                        ('review-catalog', 'live_tests'),
+                        'databricks-sql',
+                    ),
                 ):
                     try:
                         ours, _ = databases.warehouse_statements(
@@ -280,14 +289,17 @@ def test_every_case_the_loader_writes_passes_in_the_test_schema_only() -> None:
                         )
                     except databases.Unloadable:
                         continue
-                    for statement in ours:
-                        _admitted(GUARDS[engine], statement, case['id'])
+                    _admitted(GUARDS[engine], ours, case['id'], leg)
                     for statement in theirs:
                         with pytest.raises(wg.WriteRefused):
                             GUARDS[engine].check(statement)
                     checked += 1
-                for statement in _postgres_statements(duck, 'live_tests'):
-                    _admitted(POSTGRES, statement, case['id'])
+                _admitted(
+                    POSTGRES,
+                    _postgres_statements(duck, 'live_tests'),
+                    case['id'],
+                    'lakebase',
+                )
                 for statement in _postgres_statements(duck, 'other'):
                     with pytest.raises(wg.WriteRefused):
                         POSTGRES.check(statement)
@@ -296,22 +308,27 @@ def test_every_case_the_loader_writes_passes_in_the_test_schema_only() -> None:
     assert checked > 500, checked
 
 
-#: The cases whose names hold their own quote or a line break, which the
-#: guard's one strict name pattern refuses (the owner's allowlist
-#: decision): never recorded live.
-QUOTE_CASES = ('name.backtick-', 'name.line-break-', 'name.double-quote-')
-
-
-def _admitted(guard: Any, statement: str, case: str) -> None:
-    try:
-        guard.check(statement)
-    except wg.WriteRefused as refused:
-        assert case.startswith(QUOTE_CASES), (
-            case,
-            str(refused),
-            statement[:200],
-        )
-        assert 'quoted name' in str(refused), refused
+def _admitted(guard: Any, statements: list[str], case: str, leg: str) -> None:
+    r"""Every statement passes, unless ``case`` is left out of ``leg``'s
+    live plan by name, when one at least is refused, for its quoted name."""
+    refused = []
+    for statement in statements:
+        try:
+            guard.check(statement)
+        except wg.WriteRefused as refusal:
+            assert 'quoted name' in str(refusal), (
+                case,
+                str(refusal),
+                statement[:200],
+            )
+            refused.append(statement)
+    assert bool(refused) == (
+        leg in capture_run.NOT_LIVE.get(case, ((), ''))[0]
+    ), (
+        case,
+        leg,
+        refused[:1],
+    )
 
 
 def _postgres_statements(duck: Any, schema: str) -> list[str]:
@@ -732,8 +749,9 @@ def test_every_statement_the_old_client_recorded_on_postgres_passes() -> None:
                 try:
                     guard.check(statement['sql'])
                 except wg.WriteRefused as refused:
-                    # The name-quoting cases, by the strict name rule only.
-                    assert record['case'].startswith(QUOTE_CASES), refused
+                    # A case left out of Lakebase's live plan, for its name.
+                    case = record['case'].partition('@')[0]
+                    assert 'lakebase' in capture_run.NOT_LIVE[case][0], refused
                     assert 'quoted name' in str(refused), refused
                 checked += 1
     assert checked > 1000, checked
