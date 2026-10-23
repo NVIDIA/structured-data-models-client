@@ -9,6 +9,13 @@ these packages. All five distributions share one version and one entry.
 
 ### Added
 
+- Every `sdm_connectors` source says its kind and its namespace in one way:
+  `Source.kind` (`'databricks-sql'` for a SQL warehouse connection,
+  `'databricks-spark'` for a notebook's Spark session,
+  `'databricks-metric-view'` or `'snowflake-semantic-view'` for a semantic
+  model, else the backend) and `Source.namespace_parts()` (the namespace's
+  parts, outermost first, `None` where the connection's current one is
+  meant).
 - The relational engine publishes wheels for macOS (Apple silicon and Intel)
   and 64-bit Windows, and for CPython 3.14, alongside the `manylinux_2_28`
   x86-64 and aarch64 wheels it already built, so `structured-data-models-client[relational]`
