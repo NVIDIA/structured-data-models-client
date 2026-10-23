@@ -5205,6 +5205,17 @@
           "description": "What the error says, of [`ErrorCode`]'s sentences: the template each\nhost fills, read only for wording (T3.17).",
           "$ref": "#/$defs/Sentence"
         },
+        "part": {
+          "description": "Where the error happened in a question asked in parts (a forecast's\nstep, a ranking's candidate), a sentence of [`Code::Part`] said after\nthe error's own; none for any other error (T3.17 fix 2).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Sentence"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "message": {
           "description": "For a person to read; not promised, and never holding an input value.",
           "type": "string"
@@ -5671,7 +5682,10 @@
         "text_not_utf8",
         "unsupported_type_unread",
         "admitted_past_type",
-        "invalid_configuration"
+        "invalid_configuration",
+        "part_forecast_step",
+        "part_forecast_step_outran",
+        "part_ranking_candidate"
       ]
     },
     "Detail": {

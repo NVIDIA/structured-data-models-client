@@ -284,6 +284,11 @@ pub struct CoreError {
     /// What the error says, of [`ErrorCode`]'s sentences: the template each
     /// host fills, read only for wording (T3.17).
     pub sentence: Sentence,
+    /// Where the error happened in a question asked in parts (a forecast's
+    /// step, a ranking's candidate), a sentence of [`Code::Part`] said after
+    /// the error's own; none for any other error (T3.17 fix 2).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub part: Option<Sentence>,
     /// For a person to read; not promised, and never holding an input value.
     pub message: String,
     /// What callers branch on, by name.
@@ -329,16 +334,17 @@ impl CoreError {
     /// release build gives `INTERNAL_ERROR`.
     pub fn new(sentence: Sentence, message: impl Into<String>) -> Self {
         let Code::Error(code) = sentence.code() else {
-            debug_assert!(false, "{} is a warning's sentence", sentence.as_str());
+            debug_assert!(false, "{} is no error's sentence", sentence.as_str());
             return Self::new(
                 Sentence::Internal,
-                "an error was given a warning's sentence",
+                "an error was given another kind's sentence",
             );
         };
         let mut out = Self {
             kind: code.kinds()[0],
             code,
             sentence,
+            part: None,
             message: message.into(),
             fields: BTreeMap::new(),
             cause: None,
@@ -415,6 +421,7 @@ impl CoreError {
     pub fn holds_to_table(&self) -> bool {
         self.code.allows(self.kind)
             && self.sentence.code() == Code::Error(self.code)
+            && self.part.is_none_or(|part| part.code() == Code::Part)
             && self.cause.as_deref().is_none_or(CoreError::holds_to_table)
     }
 
@@ -440,6 +447,15 @@ impl CoreError {
             Some(rule) => self.with_field("rule", Detail::text(rule)),
             None => self,
         }
+    }
+
+    /// This error, said of the part of a question asked in parts it
+    /// happened in: `part`, a sentence of [`Code::Part`], said after its own.
+    #[must_use]
+    pub fn in_part(mut self, part: Sentence) -> Self {
+        debug_assert_eq!(part.code(), Code::Part, "{}", part.as_str());
+        self.part = Some(part);
+        self
     }
 
     /// This error, telling the host to drop the held state `state` it
@@ -501,9 +517,9 @@ impl CoreWarning {
     pub fn new(sentence: Sentence, message: impl Into<String>) -> Self {
         let code = match sentence.code() {
             Code::Warning(code) => code.as_str(),
-            Code::Error(code) => {
-                debug_assert!(false, "{} is an error's sentence", sentence.as_str());
-                code.as_str()
+            other => {
+                debug_assert!(false, "{} is no warning's sentence", sentence.as_str());
+                other.as_str().unwrap_or_default()
             }
         };
         Self {
@@ -535,19 +551,23 @@ impl CoreWarning {
     }
 }
 
-/// The code a sentence gives: an error's or a warning's.
+/// The code a sentence gives: an error's or a warning's; or none, for the
+/// sentence of the part of a question asked in parts an error happened in,
+/// said after the error's own of any code ([`CoreError::part`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Code {
     Error(ErrorCode),
     Warning(WarningCode),
+    Part,
 }
 
 impl Code {
-    /// The code's name, as the contract spells it.
-    pub fn as_str(self) -> &'static str {
+    /// The code's name, as the contract spells it; none for a part's.
+    pub fn as_str(self) -> Option<&'static str> {
         match self {
-            Code::Error(code) => code.as_str(),
-            Code::Warning(code) => code.as_str(),
+            Code::Error(code) => Some(code.as_str()),
+            Code::Warning(code) => Some(code.as_str()),
+            Code::Part => None,
         }
     }
 }
@@ -980,4 +1000,7 @@ sentences! {
     UnsupportedTypeUnread = "unsupported_type_unread", E::UnsupportedType;
     AdmittedPastType = "admitted_past_type", E::ValueOutOfRange;
     InvalidConfiguration = "invalid_configuration", E::InvalidConfiguration;
+    PartForecastStep = "part_forecast_step", Code::Part;
+    PartForecastStepOutran = "part_forecast_step_outran", Code::Part;
+    PartRankingCandidate = "part_ranking_candidate", Code::Part;
 }

@@ -265,6 +265,23 @@ pub fn check_memo(memo: &SamplerMemo) -> Result<(), CoreError> {
     ))
 }
 
+/// `error`, said of the forecast's step it happened in, `step` of `steps`
+/// (`forecast_step`, `forecast_steps`): with the remedy of asking for fewer
+/// steps where the step's window outran the data (`window_outran_the_data`),
+/// as the client says each part's refusal (`about_the_part`, T3.17 fix 2).
+pub(crate) fn in_step(error: CoreError, step: u32, steps: u32) -> CoreError {
+    let outran =
+        error.fields.get("window_outran_the_data") == Some(&Detail::Scalar(Scalar::Bool(true)));
+    error
+        .with_field("forecast_step", Detail::Scalar(Scalar::UInt32(step)))
+        .with_field("forecast_steps", Detail::Scalar(Scalar::UInt32(steps)))
+        .in_part(if outran {
+            Sentence::PartForecastStepOutran
+        } else {
+            Sentence::PartForecastStep
+        })
+}
+
 fn invalid(sentence: Sentence, message: &str, field: &str) -> CoreError {
     CoreError::new(sentence, message).with_field("field", Detail::text(field))
 }
@@ -2501,8 +2518,7 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
         let mut asked = inputs.clone();
         asked.query = steps.step(u64::from(step));
         asked.memo = None;
-        let tagged =
-            |e: CoreError| e.with_field("forecast_step", Detail::Scalar(Scalar::UInt32(step)));
+        let tagged = |e: CoreError| in_step(e, step, bound);
         let done = one(&asker, asked).await;
         asker.keep(handed.clone());
         match done.map_err(tagged)? {
@@ -2654,14 +2670,10 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // faults may be refused here for another of them than the client
     // names, which the core does not claim to match (decision E41(k)(iii)).
     let asked_values = options::values(inputs.values.as_ref())?;
-    // A refusal of the size names it as the caller gave it.
-    let mode =
-        options::run_mode(asked_values.num_context_samples).map_err(
-            |refused| match &asked_values.num_context_samples_given {
-                Some(given) => refused.with_field("given", Detail::text(given)),
-                None => refused,
-            },
-        )?;
+    let mode = options::run_mode(
+        asked_values.num_context_samples,
+        asked_values.num_context_samples_given.as_deref(),
+    )?;
     // The hops the sampling options ask, bounded as the client bounds them,
     // before the options this core does not take are refused by name.
     options::hops(asked_values.num_hops, asked_values.num_neighbors)?;

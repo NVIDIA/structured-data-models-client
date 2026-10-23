@@ -416,8 +416,7 @@ fn the_part_a_refusal_happened_in_is_a_sentence_of_the_core_s() {
             "part_ranking_candidate",
         ])
     );
-    let error = CoreError::new(Sentence::AnchorBeforeData, "m")
-        .in_part(Sentence::PartForecastStep);
+    let error = CoreError::new(Sentence::AnchorBeforeData, "m").in_part(Sentence::PartForecastStep);
     assert_eq!(error.part, Some(Sentence::PartForecastStep));
     assert!(error.holds_to_table());
     let mut crossed = error.clone();

@@ -35,6 +35,11 @@
 //! - `{advice:id(field, ...)}`: what to write in the host's language, an
 //!   [`Advice`] each host spells once, given the fields named.
 //!
+//! The sentence of the part of a question asked in parts an error happened
+//! in (a forecast's step, a ranking's candidate, [`crate::Code::Part`]) is
+//! said after the error's own, which ends in a full stop where it does
+//! not already end a sentence.
+//!
 //! A sentence that relays a host library's own message (its date parser's
 //! day-first dates, its numeric library's cast overflow, its language's
 //! comparison of unlike types) is marked by its [`Owner`]: its template is a neutral shared sentence, and
@@ -1006,6 +1011,15 @@ pub fn template(sentence: Sentence) -> Template {
         S::InvalidConfiguration => {
             said(r#"the configuration of this call is not one the core accepts"#)
         }
+        S::PartForecastStep => {
+            said(r#"This is forecast step {forecast_step} of {forecast_steps}."#)
+        }
+        S::PartForecastStepOutran => said(
+            r#"This is forecast step {forecast_step} of {forecast_steps}. The window named above is that step's rather than the one written; ask for fewer than {forecast_step} steps if the data does not reach that far."#,
+        ),
+        S::PartRankingCandidate => said(
+            r#"This is the question asked for candidate {host.part_candidate!r}, one of {ranking_parts} this ranking is asked as."#,
+        ),
     }
 }
 
@@ -1014,7 +1028,7 @@ pub fn template(sentence: Sentence) -> Template {
 struct SentenceEntry {
     name: &'static str,
     kind: &'static str,
-    code: &'static str,
+    code: Option<&'static str>,
     rule: Option<&'static str>,
     template: &'static str,
     owner: Owner,
@@ -1056,14 +1070,15 @@ pub fn table_json_naming(databases: &[DatabaseNames]) -> String {
             .iter()
             .map(|&sentence| {
                 let template = template(sentence);
-                let (kind, code) = match sentence.code() {
-                    Code::Error(code) => ("error", code.as_str()),
-                    Code::Warning(code) => ("warning", code.as_str()),
+                let kind = match sentence.code() {
+                    Code::Error(_) => "error",
+                    Code::Warning(_) => "warning",
+                    Code::Part => "part",
                 };
                 SentenceEntry {
                     name: sentence.as_str(),
                     kind,
-                    code,
+                    code: sentence.code().as_str(),
                     rule: sentence.rule(),
                     template: template.text,
                     owner: template.owner,

@@ -835,7 +835,12 @@ impl RunMode {
 /// fast run; up to a best run's, a best one. Below 1 is `INVALID_REQUEST`;
 /// past a best run's examples, `UNSUPPORTED_REQUEST`, as the endpoint takes
 /// no more.
-pub fn run_mode(asked: Option<Integer>) -> Result<RunMode, CoreError> {
+pub fn run_mode(asked: Option<Integer>, given: Option<&str>) -> Result<RunMode, CoreError> {
+    // A refusal names the size as the caller gave it, its JSON text.
+    let named = |refused: CoreError| match given {
+        Some(given) => refused.with_field("given", Detail::text(given)),
+        None => refused,
+    };
     let Some(Integer {
         negative,
         magnitude: value,
@@ -844,23 +849,27 @@ pub fn run_mode(asked: Option<Integer>) -> Result<RunMode, CoreError> {
         return Ok(RunMode::Fast);
     };
     if negative || value == Some(0) {
-        return Err(CoreError::new(
-            Sentence::NumContextSamplesBelowOne,
-            "num_context_samples is at least 1",
-        )
-        .with_field("field", Detail::text("num_context_samples")));
+        return Err(named(
+            CoreError::new(
+                Sentence::NumContextSamplesBelowOne,
+                "num_context_samples is at least 1",
+            )
+            .with_field("field", Detail::text("num_context_samples")),
+        ));
     }
     match value {
         Some(n) if n <= RunMode::Fast.context_examples() as u128 => Ok(RunMode::Fast),
         Some(n) if n <= RunMode::Best.context_examples() as u128 => Ok(RunMode::Best),
-        _ => Err(CoreError::new(
-            Sentence::NumContextSamplesPastMost,
-            "num_context_samples is past the most context the endpoint takes",
-        )
-        .with_field("field", Detail::text("num_context_samples"))
-        .with_field(
-            "limit",
-            Detail::Scalar(Scalar::UInt64(RunMode::Best.context_examples() as u64)),
+        _ => Err(named(
+            CoreError::new(
+                Sentence::NumContextSamplesPastMost,
+                "num_context_samples is past the most context the endpoint takes",
+            )
+            .with_field("field", Detail::text("num_context_samples"))
+            .with_field(
+                "limit",
+                Detail::Scalar(Scalar::UInt64(RunMode::Best.context_examples() as u64)),
+            ),
         )),
     }
 }
@@ -1261,18 +1270,27 @@ mod tests {
 
     #[test]
     fn the_run_mode_is_the_client_s() {
-        assert_eq!(run_mode(None).unwrap(), RunMode::Fast);
-        assert_eq!(run_mode(int(false, Some(1))).unwrap(), RunMode::Fast);
-        assert_eq!(run_mode(int(false, Some(1_000))).unwrap(), RunMode::Fast);
-        assert_eq!(run_mode(int(false, Some(1_001))).unwrap(), RunMode::Best);
-        assert_eq!(run_mode(int(false, Some(10_000))).unwrap(), RunMode::Best);
+        assert_eq!(run_mode(None, None).unwrap(), RunMode::Fast);
+        assert_eq!(run_mode(int(false, Some(1)), None).unwrap(), RunMode::Fast);
+        assert_eq!(
+            run_mode(int(false, Some(1_000)), None).unwrap(),
+            RunMode::Fast
+        );
+        assert_eq!(
+            run_mode(int(false, Some(1_001)), None).unwrap(),
+            RunMode::Best
+        );
+        assert_eq!(
+            run_mode(int(false, Some(10_000)), None).unwrap(),
+            RunMode::Best
+        );
         for (asked, code) in [
             (int(false, Some(0)), ErrorCode::InvalidRequest),
             (int(true, Some(5)), ErrorCode::InvalidRequest),
             (int(false, Some(10_001)), ErrorCode::UnsupportedRequest),
             (int(false, None), ErrorCode::UnsupportedRequest),
         ] {
-            assert_eq!(run_mode(asked).unwrap_err().code, code, "{asked:?}");
+            assert_eq!(run_mode(asked, None).unwrap_err().code, code, "{asked:?}");
         }
     }
 

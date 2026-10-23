@@ -216,32 +216,26 @@ def about_the_part(
 def said_as_parts_are(
     error: StructuredDataError,
     candidates: list[Any] | None,
-    *,
-    steps: int | None = None,
 ) -> StructuredDataError:
     r"""A refusal the core gave of a question it asks in parts, on the core
-    route (T1.36 fix 21, T2.8), said as this client says it on the old
-    route: a part's refusal said of the part it happened in, which the core
-    names (``ranking_candidate`` by its position among ``candidates``,
-    ``forecast_step`` of ``steps``). Anything else is ``error`` as it is, in
-    the core's sentence, which names the question and the candidates as
-    the caller gave them from the values the call holds (T3.17). Only the
-    words are this client's: the type, the code and the core's details are
-    kept."""
+    route (T1.36 fix 21, T2.8), with the details the old route's has: the
+    core's sentences already name the part it happened in (T3.17 fix 2), so
+    the part's fields (``ranking_candidate``, ``ranking_parts``,
+    ``forecast_step``, ``forecast_steps``) leave its details, and a
+    candidate named by its position among ``candidates`` is named as
+    given."""
     details = getattr(error, 'details', None)
     if not isinstance(details, dict):
         return error
-    if 'ranking_candidate' in details and candidates is not None:
-        position = details.pop('ranking_candidate')
-        many = details.pop('ranking_parts', 1)
-        named = Decomposition(RANKING, tuple((None, None) for _ in range(many)))
-        return about_the_part(error, named, candidates[position])
-    if 'forecast_step' in details and steps is not None:
-        step = details.pop('forecast_step')
-        named = Decomposition(
-            FORECAST, tuple((None, n + 1) for n in range(int(steps or 1)))
-        )
-        return about_the_part(error, named, step)
+    for name in (
+        'ranking_candidate',
+        'ranking_parts',
+        'forecast_step',
+        'forecast_steps',
+    ):
+        details.pop(name, None)
+    if candidates is not None and isinstance(details.get('candidate'), int):
+        details['candidate'] = candidates[details['candidate']]
     return error
 
 

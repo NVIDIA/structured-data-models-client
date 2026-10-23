@@ -93,10 +93,12 @@ fn new_and_protocol_build_only_the_table_s_pairs() {
                     assert!(built.is_err(), "protocol {code} built");
                 }
             }
-            Code::Warning(_) if cfg!(debug_assertions) => {
+            Code::Warning(_) | Code::Part if cfg!(debug_assertions) => {
                 assert!(built.is_err(), "{} built", sentence.as_str());
             }
-            Code::Warning(_) => assert_eq!(built.unwrap().code, ErrorCode::InternalError),
+            Code::Warning(_) | Code::Part => {
+                assert_eq!(built.unwrap().code, ErrorCode::InternalError)
+            }
         }
     }
 }

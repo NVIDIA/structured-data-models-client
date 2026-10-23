@@ -587,7 +587,16 @@ def error_from_core(
     if (code, details.get('rule')) in AS_THE_BASE_CLASS:
         cls = StructuredDataError
     sentence = error['sentence']
-    made = _instance(cls, _said(sentence, fields), code, details)
+    said = _said(sentence, fields)
+    part = error.get('part')
+    if part is not None:
+        # The part of a question asked in parts it happened in, the core's
+        # sentence too, after the error's, which ends in a full stop.
+        said = said.rstrip()
+        if said and said[-1] not in '.!?':
+            said += '.'
+        said = f'{said} {_said(part, fields)}'
+    made = _instance(cls, said, code, details)
     made._sentence = sentence
     return made
 

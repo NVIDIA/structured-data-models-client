@@ -425,6 +425,7 @@ def predict(
                 given[at] for at in fields['candidates']
             ],
             candidate=lambda fields: given[fields['candidate']],
+            part_candidate=lambda fields: given[fields['ranking_candidate']],
         ):
             finished = run(operation, attachments, model=model_call)
     except Exception as error:

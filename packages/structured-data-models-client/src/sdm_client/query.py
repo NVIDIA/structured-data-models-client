@@ -527,6 +527,9 @@ class PredictiveQuery:
             with errors.holding(
                 query=lambda fields: self.text,
                 candidate=candidate,
+                part_candidate=lambda fields: given[
+                    fields['ranking_candidate']
+                ],
                 candidate_type=lambda fields: type(candidate(fields)).__name__,
                 written=lambda fields: _decimal_as_typed(
                     candidate(fields), fields.get('dtype')
@@ -553,16 +556,11 @@ class PredictiveQuery:
                 # The core does not resolve it either: the old validator's
                 # diagnostics say why, a mistyped column's among them.
                 raise asked.refusal from error
-            said = said_as_parts_are(
-                error,
-                given,
-                steps=asked.num_forecasts,
-            )
-            if said is error:
-                # The core's own words: raised as the core raised them, with
-                # no cause chained.
-                raise
-            raise said from error
+            # The core's own words, its part's included: raised as the core
+            # raised them, with no cause chained, the details as the old
+            # route's.
+            said_as_parts_are(error, given)
+            raise
         parts = None if whole._core is None else whole._core.parts
         if parts is None:
             return whole

@@ -871,16 +871,22 @@ def _said_of_the_part(
     part's: a forecast's step (the core's ``forecast_step``), or a
     ranking's candidate (the core's ``ranking_candidate``), named as the
     caller gave it; a ranking's refusal naming candidates by their position
-    among those given names them as given in its details. Its sentence
-    names them as given already, from the values the predict route holds
-    (T3.17)."""
+    among those given names them as given in its details. A refusal of the
+    core says its part in the core's own sentences already, naming the
+    candidates as given from the values the predict route holds (T3.17 fix
+    2), so only its details change; one this client raised itself, which
+    the core never saw, is said of its part here."""
     rewritten = request._decomposition
     assert rewritten is not None
     details = getattr(error, 'details', None)
     if not isinstance(details, dict):
         details = {}
+    of_the_core = error._sentence is not None
     if rewritten.kind != RANKING:
         step = details.pop('forecast_step', None)
+        details.pop('forecast_steps', None)
+        if of_the_core:
+            return error
         return about_the_part(error, rewritten, step or 1)
     ranking = None if request._core is None else request._core.ranking
     positions = () if ranking is None else ranking.positions
@@ -897,10 +903,8 @@ def _said_of_the_part(
         )
     position = details.pop('ranking_candidate', None)
     details.pop('ranking_parts', None)
-    if position is not None:
+    if position is not None and not of_the_core:
         return about_the_part(error, rewritten, by_position[position])
-    # The core's sentence already names the candidates as given, the values
-    # the predict route holds for it (T3.17).
     return error
 
 

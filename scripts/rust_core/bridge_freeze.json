@@ -86,7 +86,7 @@
         "fingerprint": "cd4dd88b279fff2339d627ed4c4707ef6f760dec24cc1c58f347c0bdbab7b88e"
       },
       "predict": {
-        "fingerprint": "50106d0e2b658061695ddcf3883ba1df8c1525388c66add79a36ef2a74a846eb"
+        "fingerprint": "6b20f7958d797a00a8ecf4e9c18017bf1dd3b74bd59bb00f13b6ad6c03d79aea"
       }
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/codec.py": {
@@ -257,7 +257,7 @@
         "fingerprint": "a858e9c289e58eb69f6b99d8a1708af0640e58f732773b5969639d9917ade1a5"
       },
       "error_from_core": {
-        "fingerprint": "998f2a66a650f638a840b126e8bdf0272fd231b364931128041107ea293ea558"
+        "fingerprint": "f12d9124f45d58d837a6dd7be926095f2cee786fcb9595abdeba3bd9371cc72c"
       },
       "holding": {
         "fingerprint": "9e64ecd7e71e03b647320abf8b92f74c8f5a13dcb9189888250b145cb9dffaf2"

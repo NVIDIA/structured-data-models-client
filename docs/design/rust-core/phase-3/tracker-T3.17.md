@@ -37,3 +37,9 @@ Register: P3E-5.
 - `num_context_samples` past the endpoint's most and below 1 say the old client's words, the value as the caller gave it; the shapes a model lacks read `temporal` as the reference's `required_capabilities` does (the task's options); several reserved columns are paired as the old client pairs them.
 - No shared template spells a Python value: `None` and `'NaT'` are advice.
 - The census's test compares each refusal the core says on DuckDB with the old client's words, each difference listed with its entry; P3E-5 lists every remaining difference and waits for the owner.
+
+## Fix 2 (review round 2)
+
+- The part of a question asked in parts a refusal happened in is the core's: `CoreError.part`, a sentence of the part kind (`part_forecast_step`, `part_forecast_step_outran`, `part_ranking_candidate`), said after the refusal's own, with `forecast_steps` beside `forecast_step`; the candidate as given is a host value. `decompose.py` and `client.py` keep only the details as the old route's; a refusal the Python host raises itself, which the core never saw, is still said of its part by `about_the_part`. Contract v28's working entry rewritten.
+- The old client's census words are recorded in `contract/reference/census-words/duckdb.jsonl` by `contract/tools/census_words_record.py`, which the census's test compares with, so it runs wherever the suite does.
+- `run_mode` names the size as given itself; a materialize refusal's `candidate` detail is the candidate as given, as predict's is.

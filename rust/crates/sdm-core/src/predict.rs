@@ -128,6 +128,7 @@ pub(crate) async fn run(asker: Asker, mut inputs: Inputs) -> Result<OperationRes
         inputs.request_id.clone(),
     )];
     steps.extend(later);
+    let steps_asked = u32::try_from(steps.len()).unwrap_or(u32::MAX);
     let mut answers = Vec::with_capacity(steps.len());
     let mut outputs = Vec::new();
     let mut rows = 0usize;
@@ -148,7 +149,7 @@ pub(crate) async fn run(asker: Asker, mut inputs: Inputs) -> Result<OperationRes
             }],
         )
         .await
-        .map_err(|e| e.with_field("forecast_step", Detail::Scalar(Scalar::UInt32(step))));
+        .map_err(|e| crate::materialize::in_step(e, step, steps_asked));
         let (answer, named, scored) = match done {
             Ok(done) => done,
             Err(error) => return Err(carry_steps(&asker, error, answers, &outputs, rows)),

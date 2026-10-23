@@ -24,7 +24,7 @@ fn giving(codes: &'static [&'static str]) -> HostRun {
             // A sentence of the code, the first the table lists.
             let sentence = Sentence::ALL
                 .iter()
-                .find(|s| s.code().as_str() == *code)
+                .find(|s| s.code().as_str() == Some(*code))
                 .expect("a sentence of the code");
             asker.warn(CoreWarning::new(*sentence, "given"));
         }

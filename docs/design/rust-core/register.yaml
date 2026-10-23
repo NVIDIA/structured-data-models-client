@@ -7653,14 +7653,15 @@ entries:
     holds (a candidate or a source as the caller gave it, the query as
     written) filled in by the host. Where the reference refuses the same
     input with the same code, its words, held by the census's probes on
-    DuckDB (test_t317_wording.py). The differences that remain, each a
+    DuckDB (test_t317_wording.py, against the old client's words recorded
+    in contract/reference/census-words/duckdb.jsonl). The differences that remain, each a
     named sentence where the core said its code's sentence before:
     (a) the rules the core does not hold yet ("... needs the 'aggregation'
     rule, which is not one this client's core supports yet"), which the
     reference answers or refuses otherwise (P1B-2, P1B-3, P1B-4 and their
     families); (b) refusals the reference gives by another code or class,
     or by failing, named here by what is refused (an interval or a nested
-    interval by its column and Arrow type, HOST-2 and P1B-47; a seed past
+    interval by its column and Arrow type, HOST-2, P1B-47 and P1B-51; a seed past
     the range, RS-7; mixed offsets, DT-11; the provider's error for a text
     time, DT-12), so the words cannot be the reference's; (c) num_hops
     given as None says "num_hops must be a whole number, got None", where
@@ -7674,7 +7675,7 @@ entries:
     refusals, the types and values the core does not take, a malformed
     request state, sampler state or option value, and num_hops=None.
   cases: [T3.17]
-  refs: [T3.17, E66, P1B-2, P1B-3, P1B-4, P1B-11, P1B-47, HOST-2, RS-7, DT-11, DT-12]
+  refs: [T3.17, E66, P1B-2, P1B-3, P1B-4, P1B-11, P1B-47, P1B-51, HOST-2, RS-7, DT-11, DT-12]
   status: proposed
   approved_by: null
   decision_ref: null

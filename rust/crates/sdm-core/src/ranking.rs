@@ -222,6 +222,7 @@ pub(crate) async fn materialize(
                 Detail::Scalar(Scalar::UInt32(position)),
             )
             .with_field("ranking_parts", Detail::Scalar(Scalar::UInt64(parts)))
+            .in_part(Sentence::PartRankingCandidate)
         };
         let done = one(&asker, asked).await;
         asker.keep(handed.clone());
@@ -328,6 +329,7 @@ pub(crate) async fn predict(
                 Detail::Scalar(Scalar::UInt32(position)),
             )
             .with_field("ranking_parts", Detail::Scalar(Scalar::UInt64(parts)))
+            .in_part(Sentence::PartRankingCandidate)
         }
     };
     let asked: Vec<String> = RANKING_PARTS.iter().map(|f| (*f).to_owned()).collect();
