@@ -24,7 +24,9 @@ pub use runs::{Failure, HostRun, Unreadable, Unreadables, contain, is_posix_zone
 /// `CompositionRoot` too, so a host composes its own data layer
 /// (`CompositionRoot::new`) where it does not take [`default_root`]'s, as
 /// the dev-only test host swaps one in (T2.7).
-pub use sdm_core::{ArrowData, Attachment, Attachments, CompositionRoot, warning_codes};
+pub use sdm_core::{
+    ArrowData, Attachment, Attachments, CompositionRoot, dtype_names, meanings, warning_codes,
+};
 pub use zones::{ZoneError, ZoneResolver, ZoneRoot, ZoneSource};
 
 /// The databases the data layer of [`default_root`] provides for

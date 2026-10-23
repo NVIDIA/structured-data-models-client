@@ -265,21 +265,15 @@
           "$ref": "#/$defs/SourceDescription"
         },
         "EditSchema.schema": {
-          "$ref": "#/$defs/SourceDescription"
-        },
-        "EditSchema.held": {
           "$ref": "#/$defs/HeldSchema"
         },
         "EditSchema.edit": {
           "$ref": "#/$defs/SchemaEdit"
         },
         "SchemaEdited.schema": {
-          "$ref": "#/$defs/SourceDescription"
+          "$ref": "#/$defs/HeldSchema"
         },
         "Materialize.schema": {
-          "$ref": "#/$defs/SourceDescription"
-        },
-        "Materialize.held": {
           "$ref": "#/$defs/HeldSchema"
         },
         "Materialize.query": {
@@ -329,11 +323,9 @@
         "DescribeSource.source",
         "DescribedSource.description",
         "EditSchema.schema",
-        "EditSchema.held",
         "EditSchema.edit",
         "SchemaEdited.schema",
         "Materialize.schema",
-        "Materialize.held",
         "Materialize.query",
         "Materialize.values",
         "Materialize.candidates",
@@ -1661,7 +1653,7 @@
       "pattern": "^(NaN|inf|-inf|-?[0-9]+(\\.[0-9]+)?([eE][+-]?[0-9]+)?)$"
     },
     "HeldSchema": {
-      "description": "A schema as a host holds it, beside the description the core last\nanswered of it (decision E67): the host's schema may have been changed\nsince in ways no edit the core takes says (a table or column added, a\ncolumn retyped, a table mapped to another source table, a table or\ncolumn dropped from its dictionary). `edit_schema` and `materialize`\nread the description as the host holds it: its tables, columns,\nmeanings, keys, time columns and links the host's, what the source said\nof each column the description's; a table or column the description\nlacks, a column of another data type, or a table of another source is\nrefused by name (`schema_edited`).",
+      "description": "A schema as a host holds it, as plain data (contract v28, T3.16): its\ntables, columns, meanings, keys, time columns and links as they stand,\nhowever the host came to hold them (described, built by hand, edited,\ncopied or unpickled), and, on each column the source was asked of,\nwhat the source said of it ([`SourceFacts`]). `edit_schema` and\n`materialize` read it as it is; `materialize` asks the source for the\nfacts of a column that carries none, as `describe_source` reads them.",
       "type": "object",
       "properties": {
         "tables": {
@@ -1716,6 +1708,17 @@
             "string",
             "null"
           ]
+        },
+        "duplicate_keys": {
+          "description": "Rows sharing a key value, as the host holds it\n([`DescribedTable::duplicate_keys`]): a `u64` scalar, or none.\n`edit_schema` sets it as a key edit does; `materialize` does not\nread it. Absent from the JSON when none.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Scalar"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "additionalProperties": false,
@@ -1750,6 +1753,17 @@
               "type": "null"
             }
           ]
+        },
+        "source": {
+          "description": "What the source said of the column when it was described or last\nedited, as the core answered it; absent from the JSON for a column\nthe source was never asked of (built by hand). A column with none,\nor with facts of another relation than its table's, is one whose\nfacts `materialize` reads from the source, and which `edit_schema`\nedits by its data type, as the reference's setters do.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SourceFacts"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "additionalProperties": false,
@@ -1757,6 +1771,58 @@
         "name",
         "dtype",
         "stype"
+      ]
+    },
+    "SourceFacts": {
+      "description": "What the source said of one column ([`DescribedColumn`]'s facts), which\na host keeps on the column and hands back whole (contract v28, T3.16).",
+      "type": "object",
+      "properties": {
+        "relation": {
+          "description": "The relation of the source the facts were read from: a column of a\ntable the host points at another relation since holds facts of none\nof it, and is read afresh, as one with none is.",
+          "$ref": "#/$defs/Relation"
+        },
+        "dtype": {
+          "description": "The data type the source's catalog and values give the column\n([`DescribedColumn::dtype`]), which tells a date from a time of day\nwhere the wire's name does not.",
+          "$ref": "#/$defs/Dtype"
+        },
+        "received": {
+          "description": "The type the provider handed over, after admission\n([`DescribedColumn::received`]).",
+          "$ref": "#/$defs/ColumnType"
+        },
+        "nullable": {
+          "description": "[`DescribedColumn::nullable`].",
+          "type": "boolean"
+        },
+        "unique": {
+          "description": "[`DescribedColumn::unique`].",
+          "type": "boolean"
+        },
+        "declared_type": {
+          "description": "[`DescribedColumn::declared_type`]; absent from the JSON when none.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "exact_number": {
+          "description": "[`DescribedColumn::exact_number`]; absent from the JSON when none.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ExactNumber"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "relation",
+        "dtype",
+        "received",
+        "nullable",
+        "unique"
       ]
     },
     "SchemaEdit": {
@@ -3068,23 +3134,12 @@
           ]
         },
         {
-          "description": "Check one edit to a schema the core described and make it, as the\nreference client's setters check and make it (decision E67): the\nschema the host holds, and the edit; the result is the schema with the\nedit made, or the refusal the reference gives at the assignment.",
+          "description": "Check one edit to a schema and make it, as the reference client's\nsetters check and make it (decision E67): the schema the host holds, as\nplain data, and the edit; the result is the schema with the edit made,\nor the refusal the reference gives at the assignment (contract v28,\nT3.16: the schema alone, with what the source said of each column on\nthe column, never a description the core answered earlier).",
           "type": "object",
           "properties": {
             "schema": {
-              "description": "A bytes attachment of a [`SourceDescription`] as JSON: the\ndescription the core last answered of the schema,\n`describe_source`'s or the last `edit_schema`'s.",
+              "description": "A bytes attachment of a [`HeldSchema`] as JSON: the host's schema as\nit stands.",
               "$ref": "#/$defs/AttachmentId"
-            },
-            "held": {
-              "description": "A bytes attachment of a [`HeldSchema`] as JSON: the host's schema as\nit stands; left out, the host holds `schema` as it is.",
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/AttachmentId"
-                },
-                {
-                  "type": "null"
-                }
-              ]
             },
             "edit": {
               "description": "A bytes attachment of a [`SchemaEdit`] as JSON.",
@@ -3110,19 +3165,8 @@
               "$ref": "#/$defs/ProviderChoice"
             },
             "schema": {
-              "description": "A bytes attachment of a [`SourceDescription`] as JSON: the\ndescription the core last answered of the schema, or the schema to\nsample.",
+              "description": "A bytes attachment of a [`HeldSchema`] as JSON: the schema to\nsample, as the host holds it (contract v28, T3.16).",
               "$ref": "#/$defs/AttachmentId"
-            },
-            "held": {
-              "description": "A bytes attachment of a [`HeldSchema`] as JSON: the host's schema as\nit stands, which the core reads beside `schema` (decision E67); left\nout, the host holds `schema` as it is.",
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/AttachmentId"
-                },
-                {
-                  "type": "null"
-                }
-              ]
             },
             "query": {
               "description": "The query text: a bytes attachment of a JSON string.",
@@ -4917,7 +4961,7 @@
           "type": "object",
           "properties": {
             "schema": {
-              "description": "A bytes attachment of a [`SourceDescription`] as JSON: the schema\nwith the edit made, which the host holds from now on as the\ndescription the core last answered.",
+              "description": "A bytes attachment of a [`HeldSchema`] as JSON: the schema with the\nedit made, which the host holds from now on: each column's data\ntype, meanings and source facts, each table's key, time column and\nrepeated keys, and the links.",
               "$ref": "#/$defs/AttachmentId"
             },
             "declared": {
