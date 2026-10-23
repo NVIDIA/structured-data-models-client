@@ -629,7 +629,9 @@ CONNECT = _error(
 def test_a_databricks_failure_reaches_the_core_with_its_state(
     error: Exception, sqlstate: str | None, refuses: bool
 ) -> None:
-    provided, driver = _driver(error)
+    # Read by the provider whose driver failed (its ``error_fields``, the
+    # provider protocol's hook), never by the run loop naming a backend.
+    provided, driver = _driver(error, DatabricksSqlProvider(None))
     assert provided['sqlstate'] == sqlstate
     assert provided.get('refuses_expression', False) is refuses
     if not refuses:
@@ -648,16 +650,29 @@ def test_another_driver_s_failure_is_read_as_before() -> None:
         'relation does not exist. SQLSTATE: 42P01'
     )
     other.sqlstate = '42P01'  # type: ignore[attr-defined]
-    provided, _ = _driver(other)
+    provided, _ = _driver(other, DatabricksSqlProvider(None))
     assert provided == {
         'kind': 'data_source',
         'retryable': False,
         'sqlstate': '42P01',
         'vendor_code': None,
     }
-    plain, _ = _driver(ValueError('SQLSTATE: 42000'))
+    plain, _ = _driver(
+        ValueError('SQLSTATE: 42000'), DatabricksSqlProvider(None)
+    )
     assert plain['sqlstate'] is None
     assert 'refuses_expression' not in plain
+
+
+def test_a_provider_with_no_reading_of_failures_leaves_them_as_drivers_set_them() -> (
+    None
+):
+    error = _error('databricks.sql.exc', 'ServerOperationError')(
+        '[TABLE_OR_VIEW_NOT_FOUND] SQLSTATE: 42P01'
+    )
+    provided, _ = _driver(error, lambda step, keys=None: None)
+    assert provided['sqlstate'] is None
+    assert 'refuses_expression' not in provided
 
 
 class _Once:
