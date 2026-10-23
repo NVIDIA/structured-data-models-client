@@ -665,26 +665,20 @@ pub(crate) async fn ask(asker: &Asker, request: DataRequest) -> Result<ArrowData
 /// every later relation read under them, as the reference reads a
 /// Databricks source naming its catalog alone under the session's current
 /// schema (`SELECT current_catalog(), current_schema()`, T3.4).
-pub(crate) async fn settled(asker: Asker, known: Option<Vec<String>>) -> Result<Asker, CoreError> {
+pub(crate) async fn settled(asker: Asker) -> Result<Asker, CoreError> {
     let Some(data) = asker.data().filter(|data| data.unsettled()).cloned() else {
         return Ok(asker);
     };
-    // The parts a description was read under, read again as they were
-    // (`SourceDescription::namespace`), else the source's current ones.
-    let parts = match known {
-        Some(parts) => parts,
-        None => {
-            let asked = DataRequest::Describe {
-                tables: vec![],
-                part: DescribePart::Namespace,
-            };
-            match describe(&asker, asked).await? {
-                CatalogAnswer::Namespace(parts) => parts,
-                _ => return Err(another_part()),
-            }
-        }
+    let asked = DataRequest::Describe {
+        tables: vec![],
+        part: DescribePart::Namespace,
     };
-    Ok(asker.with_access(data.settled(parts.clone()), parts))
+    match describe(&asker, asked).await? {
+        CatalogAnswer::Namespace(parts) => {
+            Ok(asker.with_access(data.settled(parts.clone()), parts))
+        }
+        _ => Err(another_part()),
+    }
 }
 
 /// The catalog's answer to `request`, a `describe`: fetched, admitted,
