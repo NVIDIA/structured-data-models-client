@@ -13,14 +13,17 @@ driver sees it (KO3-51, the owner's rule).
 One guard per dialect (``databricks``, ``snowflake``, and ``postgres`` for
 Lakebase), enforced in one place: :func:`install` wraps every entry point a
 statement reaches a server through, on the driver classes themselves
-(Snowflake's cursor and connection and Snowpark's session, Databricks
-SQL's cursor, Spark's session, classic and Connect, psycopg's cursors and
-connections, and every subclass), so every connection, every cursor a
-driver hands back and a session's own connection are guarded, with no
-wrapper object to step around. Spark's DataFrame writers and catalog
-writes, which send no statement the guard could read, are refused
-outright, as is Snowflake's ``execute_stream``. A dialect with no test
-schema configured refuses every statement.
+(Snowflake's cursor base and connection, sync and async, and Snowpark's
+session, Databricks SQL's cursor, Spark's session, classic and Connect,
+Spark Connect's one command entry point, psycopg's cursors and
+connections, and every subclass, now or defined later), so every
+connection, every cursor a driver hands back and a session's own
+connection are guarded, with no wrapper object to step around. Spark SQL
+given arguments to format into its text is refused. Spark's and Delta's
+writer classes, whole, and Spark's DataFrame and catalog writes, which
+send no statement the guard could read, are refused outright, as is
+Snowflake's ``execute_stream``; on Spark Connect only a SQL command passes
+at all. A dialect with no test schema configured refuses every statement.
 
 The test schema comes from the constructor or the environment:
 ``SDM_LIVE_<DIALECT>_TEST_DATABASE`` and ``SDM_LIVE_<DIALECT>_TEST_SCHEMA``,
@@ -31,15 +34,16 @@ is written here.
 An allowlist. A statement is admitted only in one of the forms below, read
 whole; everything else is refused, so a gap fails closed. One statement
 per text: any comment, semicolon, backslash, flow or pipe operator
-(``->>``, ``|>``), raw or escaped string (``r'...'``, ``E'...'``,
-``U&'...'``), or quoted name holding its own quote or a control character is refused, so
-the guard and the engine never read the text differently.
+(Snowflake's ``->>``, Databricks' ``|>``), raw or escaped string
+(``r'...'``, ``E'...'``, ``U&'...'``), or quoted name holding its own
+quote or a control character is refused, so the guard and the engine never
+read the text differently.
 
 Reads (the forms the old client and the runner issue), anywhere:
 
-- ``SELECT`` and ``WITH`` queries holding no write verb and no ``INTO``,
-  calling no ``SYSTEM$`` function but ``SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW``
-  and none of Postgres' state-changing functions (:data:`DENIED_FUNCTIONS`);
+- ``SELECT`` and ``WITH`` queries holding no write verb, no ``INTO`` and
+  no sequence (``NEXTVAL`` and the like), calling only the pure functions
+  of :data:`FUNCTIONS`, by plain name (Postgres' also as ``pg_catalog.``);
 - ``DESCRIBE TABLE [EXTENDED] <t>``, ``SHOW TABLES [LIKE <p>] [IN [SCHEMA]
   <s>]``, ``SHOW IMPORTED KEYS IN TABLE <t>``, ``SHOW PARAMETERS LIKE <p>
   IN SESSION``, ``USE CATALOG | SCHEMA | DATABASE <s>`` and ``ALTER
@@ -53,7 +57,7 @@ qualified in the test schema (``<database>.<schema>.<object>``; Postgres
   ``TBLPROPERTIES ('...' = '...')``), every ``REFERENCES`` in the test
   schema, no write verb, ``AS``, ``DEFAULT``, ``CASCADE``, ``LOCATION``,
   ``OPTIONS`` or ``USING`` among the columns;
-- ``INSERT INTO <t> [(<columns>)] VALUES | SELECT ...``, holding nothing a
+- ``INSERT INTO <t> [(<names>)] VALUES | SELECT ...``, holding nothing a
   read may not;
 - ``DROP TABLE | VIEW [IF EXISTS] <t>``, Snowflake's ``DROP SEMANTIC VIEW``
   and Postgres' ``DROP TYPE`` too: one target, never ``CASCADE``;
@@ -63,7 +67,7 @@ qualified in the test schema (``<database>.<schema>.<object>``; Postgres
 - Snowflake: ``CALL SYSTEM$CREATE_SEMANTIC_VIEW_FROM_YAML('<the test
   schema>', $$<yaml>$$)``, exactly two literal arguments, the YAML's
   ``name`` one plain name and each table's ``base_table`` in the test
-  schema.
+  schema, no key given twice.
 
 Snowflake reads an unquoted name upper-cased and a quoted one exactly;
 Postgres an unquoted one lower-cased and a quoted one exactly; Unity
@@ -105,9 +109,14 @@ class Token:
 _WORD = re.compile(r'[A-Za-z_][A-Za-z0-9_$]*')
 _NUMBER = re.compile(r'[0-9]+(?:\.[0-9]*)?(?:[eE][+-]?[0-9]+)?')
 _PLAIN = re.compile(r'[A-Za-z_][A-Za-z0-9_]*')
-#: Text never admitted outside a string: comments, statement separators
-#: and Snowflake's flow and Databricks' pipe operators.
-_NEVER = ('--', '/*', '*/', ';', '->>', '|>')
+#: Text never admitted outside a string: comments, statement separators,
+#: and Snowflake's flow and Databricks' pipe operators (Postgres' ``->>``
+#: reads a JSON field, which the old client's SQL does).
+_NEVER = {
+    'databricks': ('--', '/*', '*/', ';', '|>'),
+    'snowflake': ('--', '/*', '*/', ';', '//', '->>'),
+    'postgres': ('--', '/*', '*/', ';'),
+}
 
 
 def tokens(sql: str, dialect: str) -> list[Token]:
@@ -119,9 +128,9 @@ def tokens(sql: str, dialect: str) -> list[Token]:
     i, n = 0, len(sql)
     while i < n:
         c = sql[i]
-        never = next((t for t in _NEVER if sql.startswith(t, i)), None)
-        if never or (dialect == 'snowflake' and sql.startswith('//', i)):
-            raise WriteRefused(f'{never or "//"} outside a string')
+        never = next((t for t in _NEVER[dialect] if sql.startswith(t, i)), None)
+        if never:
+            raise WriteRefused(f'{never} outside a string')
         if c.isspace():
             i += 1
         elif c == '$' and dialect != 'postgres' and sql.startswith('$$', i):
@@ -201,21 +210,67 @@ WRITE_WORDS = frozenset(
 COLUMN_WORDS = WRITE_WORDS | {
     'AS', 'CASCADE', 'DEFAULT', 'LOCATION', 'OPTIONS', 'USING', 'PURGE',
 }  # fmt: skip
-#: The one ``SYSTEM$`` function a read may call (the old client's).
-SYSTEM_READS = frozenset({'SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW'})
-#: Postgres functions that change state, refused in a read.
-DENIED_FUNCTIONS = frozenset(
+#: The functions a read, or what an ``INSERT`` fills its target with, may
+#: call: a closed list of pure functions, the ones the old client's
+#: generated SQL and the loader's literals use (every Postgres statement
+#: the reference recorded, and the loader's statements for every case, are
+#: held to it by the tests). Anything else called, by any name, quoted or
+#: qualified, is refused.
+FUNCTIONS = frozenset(
     {
-        'SET_CONFIG', 'NEXTVAL', 'SETVAL', 'PG_TERMINATE_BACKEND',
-        'PG_CANCEL_BACKEND', 'PG_RELOAD_CONF', 'PG_ROTATE_LOGFILE',
-        'LO_IMPORT', 'LO_EXPORT', 'LO_UNLINK', 'LO_CREATE', 'LO_FROM_BYTEA',
-        'LO_PUT', 'DBLINK', 'DBLINK_EXEC', 'PG_FILE_WRITE',
+        # Aggregates, windows and the session's identity.
+        'COUNT', 'MIN', 'MAX', 'SUM', 'AVG', 'MEDIAN', 'ROW_NUMBER',
+        'CURRENT_SCHEMA', 'CURRENT_DATABASE', 'CURRENT_CATALOG',
+        'CURRENT_TIMEZONE',
+        # Casts, conversions and literals.
+        'CAST', 'TRY_CAST', 'PARSE_JSON', 'HEX_DECODE_STRING', 'TO_BINARY',
+        'FROM_JSON', 'COALESCE',
+        # Text and time.
+        'LOWER', 'UPPER', 'TRIM', 'REPLACE', 'CHR', 'DATE_TRUNC', 'DATEADD',
+        'EXTRACT',
+        # Nested values and their rows.
+        'STRUCT', 'NAMED_STRUCT', 'OBJECT', 'ARRAY', 'MAP', 'FLATTEN',
+        'TABLE', 'POSEXPLODE', 'JSONB_ARRAY_ELEMENTS',
+        # Postgres' catalog and its sampling's seed (the session's own).
+        'FORMAT_TYPE', 'RANDOM', 'SETSEED',
+        # The semantic view's definition, read.
+        'SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW',
     }
 )  # fmt: skip
+#: Words a ``(`` may follow without calling anything: keywords, and type
+#: names taking their parameters.
+NOT_CALLS = frozenset(
+    {
+        'ALL', 'AND', 'ANY', 'AS', 'BERNOULLI', 'BETWEEN', 'BY', 'CASE',
+        'DISTINCT', 'ELSE', 'END', 'ESCAPE', 'EXCEPT', 'EXISTS', 'FILTER',
+        'FOR', 'FROM', 'GROUP', 'HAVING', 'ILIKE', 'IN', 'INTERSECT',
+        'INTERVAL', 'IS', 'JOIN', 'LATERAL', 'LIKE', 'LIMIT', 'NOT', 'ON',
+        'OR', 'OVER', 'PARTITION', 'QUALIFY', 'REPEATABLE', 'ROW', 'ROWS',
+        'SAMPLE', 'SEED', 'SELECT', 'SOME', 'TABLESAMPLE', 'THEN', 'UNION',
+        'USING', 'VALUES', 'WHEN', 'WHERE', 'WITH', 'WITHIN',
+        'BINARY', 'CHAR', 'CHARACTER', 'DEC', 'DECIMAL', 'DOUBLE', 'FLOAT',
+        'NCHAR', 'NUMBER', 'NUMERIC', 'NVARCHAR', 'STRING', 'TEXT', 'TIME',
+        'TIMESTAMP', 'TIMESTAMP_LTZ', 'TIMESTAMP_NTZ', 'TIMESTAMP_TZ',
+        'VARBINARY', 'VARCHAR', 'VECTOR',
+    }
+)  # fmt: skip
+#: Words that advance or read a sequence, refused wherever they stand.
+SEQUENCE_WORDS = frozenset(
+    {'NEXTVAL', 'GETNEXTVAL', 'CURRVAL', 'SETVAL', 'LASTVAL'}
+)
 #: The session parameters ``ALTER SESSION SET`` may set.
 SESSION_PARAMETERS = frozenset(
     {'STATEMENT_TIMEOUT_IN_SECONDS', 'TIMEZONE', 'QUERY_TAG'}
 )
+
+
+def _no_words(items: list[Token], words: frozenset[str], what: str) -> None:
+    r"""Refuses a table's or type's columns holding one of ``words`` or a
+    sequence's word (their ``(`` follow type names, never calls)."""
+    for token in items:
+        word = _upper(token)
+        if word in words or word in SEQUENCE_WORDS:
+            raise WriteRefused(f'{what}: {word} among the columns')
 
 
 def _upper(token: Token | None) -> str:
@@ -371,17 +426,38 @@ class WriteGuard:
     def _held(
         self, items: list[Token], words: frozenset[str], what: str
     ) -> None:
-        r"""Refuses ``items`` holding one of ``words``, or calling a
-        function no read may call."""
+        r"""Refuses ``items`` holding one of ``words`` or a sequence's
+        word, or calling anything but :data:`FUNCTIONS` by a plain name."""
         for i, token in enumerate(items):
             word = _upper(token)
             call = items[i + 1 : i + 2] == [_OPEN]
             if word in words and not call:
                 raise WriteRefused(f'{what}: {word} where no write may be')
-            if word.startswith('SYSTEM$') and word not in SYSTEM_READS:
-                raise WriteRefused(f'{what}: {word}')
-            if self.dialect == 'postgres' and call and word in DENIED_FUNCTIONS:
-                raise WriteRefused(f'{what}: {word}, which changes state')
+            if word in SEQUENCE_WORDS:
+                raise WriteRefused(f'{what}: {word}, a sequence')
+            if (
+                not call
+                or token.kind not in ('word', 'name')
+                or word in NOT_CALLS
+            ):
+                continue
+            before = items[i - 1] if i else None
+            if before == _DOT and (
+                self.dialect == 'postgres'
+                and i > 1
+                and _upper(items[i - 2]) == 'PG_CATALOG'
+            ):
+                before = (
+                    None  # Postgres' own catalog, as the old client names it
+                )
+            if token.kind != 'word' or before in (_DOT, Token('punct', '!')):
+                raise WriteRefused(f'{what}: a quoted or qualified function')
+            if (
+                word not in FUNCTIONS
+                and _upper(before) != 'AS'
+                and before != Token('punct', ':')
+            ):
+                raise WriteRefused(f'{what}: {word}(), a function on no list')
 
     # Statements.
 
@@ -430,7 +506,12 @@ class WriteGuard:
             s.expect('INTO')
             self._target(s)
             if s.peek() == _OPEN:
-                self._held(s.group(), COLUMN_WORDS, s.what)
+                columns = s.group()
+                if any(
+                    t.kind not in ('word', 'name') and t != _COMMA
+                    for t in columns
+                ):
+                    s.refuse('an INSERT column list that is not names')
             if _upper(s.peek()) not in ('VALUES', 'SELECT'):
                 s.refuse('an INSERT of neither VALUES nor SELECT')
             self._held(s.items[s.at :], WRITE_WORDS, s.what)
@@ -464,7 +545,7 @@ class WriteGuard:
         if s.accept('TABLE'):
             self._target(s)
             columns = s.group()
-            self._held(columns, COLUMN_WORDS, s.what)
+            _no_words(columns, COLUMN_WORDS, s.what)
             for i, token in enumerate(columns):
                 if _upper(token) == 'REFERENCES':
                     self._target(_Statement(columns[i + 1 :], s.what))
@@ -484,7 +565,7 @@ class WriteGuard:
         elif self.dialect == 'postgres' and not replace and s.accept('TYPE'):
             self._target(s)
             s.expect('AS')
-            self._held(s.group(), COLUMN_WORDS - {'AS'}, s.what)
+            _no_words(s.group(), COLUMN_WORDS - {'AS'}, s.what)
             s.end()
         else:
             s.refuse('an object the guard does not create')
@@ -519,7 +600,7 @@ class WriteGuard:
         try:
             import yaml
 
-            document = yaml.safe_load(arguments[2].text)
+            document = yaml.load(arguments[2].text, Loader=_unique_keys(yaml))
         except Exception:  # noqa: BLE001 - YAML it cannot read is refused
             s.refuse('a semantic view YAML the guard cannot read')
         if not isinstance(document, dict):
@@ -541,6 +622,20 @@ class WriteGuard:
             ]
             if None in parts or not self._container(parts[:2]):  # type: ignore[arg-type]
                 s.refuse('a semantic view table outside the test schema')
+
+
+def _unique_keys(yaml: Any) -> Any:
+    r"""A safe YAML loader refusing a mapping that gives a key twice,
+    which an engine may read otherwise than the guard does."""
+
+    class Loader(yaml.SafeLoader):
+        def construct_mapping(self, node: Any, deep: bool = False) -> Any:
+            keys = [self.construct_object(k, deep=deep) for k, _ in node.value]
+            if len(keys) != len(set(map(repr, keys))):
+                raise ValueError('a YAML key given twice')
+            return super().construct_mapping(node, deep=deep)
+
+    return Loader
 
 
 def _yaml_name(value: Any) -> tuple[str, bool] | None:
@@ -566,10 +661,17 @@ def _yaml_name(value: Any) -> tuple[str, bool] | None:
 
 #: Each driver entry point a statement reaches a server through, by
 #: module, class, attributes and dialect: each is guarded on the class and
-#: on every subclass that defines or inherits another one.
+#: on every subclass, now or defined later, that defines or inherits
+#: another one.
 ENTRY_POINTS: tuple[tuple[str, str, tuple[str, ...], str], ...] = (
+    # SnowflakeCursorBase holds every cursor's entry points (SnowflakeCursor
+    # and its sibling DictCursor); older connectors have SnowflakeCursor only.
+    ('snowflake.connector.cursor', 'SnowflakeCursorBase', ('execute', 'executemany', 'execute_async'), 'snowflake'),
     ('snowflake.connector.cursor', 'SnowflakeCursor', ('execute', 'executemany', 'execute_async'), 'snowflake'),
+    ('snowflake.connector.cursor', 'DictCursor', ('execute', 'executemany', 'execute_async'), 'snowflake'),
     ('snowflake.connector.connection', 'SnowflakeConnection', ('execute_string',), 'snowflake'),
+    ('snowflake.connector.aio._cursor', 'SnowflakeCursorBase', ('execute', 'executemany', 'execute_async'), 'snowflake'),
+    ('snowflake.connector.aio._connection', 'SnowflakeConnection', ('execute_string',), 'snowflake'),
     ('snowflake.snowpark.session', 'Session', ('sql',), 'snowflake'),
     ('databricks.sql.client', 'Cursor', ('execute', 'executemany', 'execute_async'), 'databricks'),
     ('pyspark.sql.session', 'SparkSession', ('sql',), 'databricks'),
@@ -585,16 +687,61 @@ ENTRY_POINTS: tuple[tuple[str, str, tuple[str, ...], str], ...] = (
 #: refused outright.
 REFUSED: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ('snowflake.connector.connection', 'SnowflakeConnection', ('execute_stream',)),
-    ('pyspark.sql.dataframe', 'DataFrame', ('write', 'writeTo', 'writeStream')),
-    ('pyspark.sql.connect.dataframe', 'DataFrame', ('write', 'writeTo', 'writeStream')),
+    ('snowflake.connector.aio._connection', 'SnowflakeConnection', ('execute_stream',)),
+    ('pyspark.sql.dataframe', 'DataFrame', ('write', 'writeTo', 'writeStream', 'mergeInto')),
+    ('pyspark.sql.connect.dataframe', 'DataFrame', ('write', 'writeTo', 'writeStream', 'mergeInto')),
     ('pyspark.sql.catalog', 'Catalog', ('createTable', 'createExternalTable', 'recoverPartitions')),
     ('pyspark.sql.connect.catalog', 'Catalog', ('createTable', 'createExternalTable', 'recoverPartitions')),
 )  # fmt: skip
+#: Writer classes refused whole, every public method and property, so a
+#: writer kept from before the install, or made directly, writes nothing:
+#: Spark's (classic and Connect) and Delta's. Absent from a version, a
+#: class is skipped.
+REFUSED_CLASSES: tuple[tuple[str, str], ...] = (
+    ('pyspark.sql.readwriter', 'DataFrameWriter'),
+    ('pyspark.sql.readwriter', 'DataFrameWriterV2'),
+    ('pyspark.sql.streaming.readwriter', 'DataStreamWriter'),
+    ('pyspark.sql.merge', 'MergeIntoWriter'),
+    ('pyspark.sql.connect.readwriter', 'DataFrameWriter'),
+    ('pyspark.sql.connect.readwriter', 'DataFrameWriterV2'),
+    ('pyspark.sql.connect.streaming.readwriter', 'DataStreamWriter'),
+    ('pyspark.sql.connect.merge', 'MergeIntoWriter'),
+    ('delta.tables', 'DeltaTable'),
+    ('delta.tables', 'DeltaMergeBuilder'),
+    ('delta.tables', 'DeltaTableBuilder'),
+    ('delta.tables', 'DeltaOptimizeBuilder'),
+    ('delta.connect.tables', 'DeltaTable'),
+    ('delta.connect.tables', 'DeltaMergeBuilder'),
+    ('delta.connect.tables', 'DeltaTableBuilder'),
+    ('delta.connect.tables', 'DeltaOptimizeBuilder'),
+)
+#: Entry point classes a driver version may not have (each covered by
+#: another entry when absent).
+_OPTIONAL = frozenset(
+    {
+        ('snowflake.connector.cursor', 'SnowflakeCursorBase'),
+        ('snowflake.connector.cursor', 'DictCursor'),
+    }
+)
+#: Spark Connect's one command entry point: every command a Connect
+#: session sends (a writer's, a catalog's, a view's) passes it, and only a
+#: SQL command, its text checked, is admitted.
+SPARK_CONNECT = (
+    'pyspark.sql.connect.client.core',
+    'SparkConnectClient',
+    ('execute_command', 'execute_command_as_iterator'),
+)
 #: The keyword each driver names its statement by, when it is not given
 #: first.
 _STATEMENT_KEYWORDS = ('command', 'operation', 'query', 'sqlQuery', 'statement')
+#: The keywords Spark's ``sql`` may be given: its bound ``args``; any other
+#: is formatted into the text after the guard reads it.
+_SPARK_KEYWORDS = frozenset({'sqlQuery', 'args'})
 _MARK = '__sdm_write_guard__'
 _INSTALLED: list[tuple[type, str, Any]] = []
+#: What :func:`install` applies, by base class, for a subclass defined later.
+_RULES: list[tuple[type, str, Callable[[Any], Any]]] = []
+_ABSENT = object()
 
 
 def _text(owner: Any, statement: Any) -> str:
@@ -621,9 +768,15 @@ def _text(owner: Any, statement: Any) -> str:
     )
 
 
-def _guarded(original: Any, check: Callable[[str], None]) -> Any:
+def _guarded(
+    original: Any, check: Callable[[str], None], spark: bool = False
+) -> Any:
     @functools.wraps(original)
     def guarded(self: Any, *arguments: Any, **keywords: Any) -> Any:
+        if spark and (len(arguments) > 2 or set(keywords) - _SPARK_KEYWORDS):
+            raise WriteRefused(
+                'Spark SQL with arguments formatted into its text'
+            )
         if arguments:
             statement = arguments[0]
         else:
@@ -638,6 +791,35 @@ def _guarded(original: Any, check: Callable[[str], None]) -> Any:
     return guarded
 
 
+def _sql_command(original: Any, check: Callable[[str], None]) -> Any:
+    r"""Spark Connect's command entry point, admitting only a SQL command
+    whose text ``check`` admits."""
+
+    @functools.wraps(original)
+    def guarded(
+        self: Any, command: Any, *arguments: Any, **keywords: Any
+    ) -> Any:
+        try:
+            kind = command.WhichOneof('command_type')
+            sql = command.sql_command
+            text = sql.input.sql.query if sql.HasField('input') else sql.sql
+        except Exception:  # noqa: BLE001 - a command it cannot read is refused
+            raise WriteRefused(
+                'a Spark Connect command the guard cannot read'
+            ) from None
+        if kind != 'sql_command':
+            raise WriteRefused(
+                f'a Spark Connect {kind}, which is no SQL command'
+            )
+        if sql.HasField('input') and sql.input.sql.named_arguments:
+            raise WriteRefused('Spark SQL with named arguments')
+        check(text)
+        return original(self, command, *arguments, **keywords)
+
+    setattr(guarded, _MARK, True)
+    return guarded
+
+
 def _refused(name: str) -> Any:
     def refused(*arguments: Any, **keywords: Any) -> Any:
         raise WriteRefused(f'{name}: writes no statement the guard can read')
@@ -646,9 +828,47 @@ def _refused(name: str) -> Any:
     return refused
 
 
+def _refusing(where: str) -> Callable[[Any], Any]:
+    r"""What replaces a refused attribute, of the same kind."""
+
+    def make(current: Any) -> Any:
+        if isinstance(current, property):
+            return property(_refused(where))
+        if isinstance(current, classmethod):
+            return classmethod(_refused(where))
+        if isinstance(current, staticmethod):
+            return staticmethod(_refused(where))
+        return _refused(where)
+
+    return make
+
+
+def _marked(current: Any) -> bool:
+    for each in (
+        current,
+        getattr(current, 'fget', None),
+        getattr(current, '__func__', None),
+    ):
+        if getattr(each, _MARK, False):
+            return True
+    return False
+
+
+def _wrap_one(cls: type, attribute: str, make: Callable[[Any], Any]) -> None:
+    try:
+        current = inspect.getattr_static(cls, attribute)
+    except AttributeError:
+        return
+    if _marked(current):
+        return
+    _INSTALLED.append((cls, attribute, cls.__dict__.get(attribute, _ABSENT)))
+    setattr(cls, attribute, make(current))
+
+
 def _wrap(cls: type, attribute: str, make: Callable[[Any], Any]) -> None:
     r"""``attribute`` of ``cls`` and of each subclass resolving it to
-    something else, replaced by ``make`` of what it resolved to."""
+    something else, replaced by ``make`` of what it resolved to; a
+    subclass defined later gets the same (:func:`_hook`)."""
     seen: set[type] = set()
     pending = [cls]
     while pending:
@@ -657,21 +877,30 @@ def _wrap(cls: type, attribute: str, make: Callable[[Any], Any]) -> None:
             continue
         seen.add(each)
         pending.extend(each.__subclasses__())
-        try:
-            current = inspect.getattr_static(each, attribute)
-        except AttributeError:
-            continue
-        target = current.fget if isinstance(current, property) else current
-        if getattr(target, _MARK, False):
-            continue
-        replacement = make(current)
-        _INSTALLED.append(
-            (each, attribute, each.__dict__.get(attribute, _ABSENT))
-        )
-        setattr(each, attribute, replacement)
+        _wrap_one(each, attribute, make)
+    _RULES.append((cls, attribute, make))
+    _hook(cls)
 
 
-_ABSENT = object()
+def _hook(cls: type) -> None:
+    r"""``cls``'s subclasses, when defined, wrapped by every rule of
+    :data:`_RULES` that covers them."""
+    previous = cls.__dict__.get('__init_subclass__', _ABSENT)
+    if previous is not _ABSENT and _marked(previous):
+        return
+
+    def __init_subclass__(sub: type, **keywords: Any) -> None:
+        if previous is _ABSENT:
+            super(cls, sub).__init_subclass__(**keywords)
+        else:
+            previous.__get__(None, sub)(**keywords)
+        for base, attribute, make in list(_RULES):
+            if issubclass(sub, base):
+                _wrap_one(sub, attribute, make)
+
+    setattr(__init_subclass__, _MARK, True)
+    _INSTALLED.append((cls, '__init_subclass__', previous))
+    cls.__init_subclass__ = classmethod(__init_subclass__)  # type: ignore[assignment]
 
 
 def _closed(dialect: str) -> Callable[[str], None]:
@@ -686,58 +915,82 @@ def _closed(dialect: str) -> Callable[[str], None]:
 def install(guards: Mapping[str, WriteGuard | None]) -> Callable[[], None]:
     r"""Every driver entry point (:data:`ENTRY_POINTS`) checked by its
     dialect's guard in ``guards`` (none, or one missing: every statement
-    of that dialect refused), and every :data:`REFUSED` interface refused,
-    for every driver importable here; returns what undoes it. A driver
-    module that imports but lacks a class named here stops the install, as
-    its entry points may have moved."""
+    of that dialect refused), every :data:`REFUSED` interface and every
+    :data:`REFUSED_CLASSES` writer refused, for every driver importable
+    here; returns what undoes it. A driver module that imports but lacks
+    an entry point's class stops the install, as its entry points may
+    have moved."""
     if _INSTALLED:
         raise RuntimeError('the live write guard is installed already')
     try:
         for module_name, class_name, attributes, dialect in ENTRY_POINTS:
-            cls = _class(module_name, class_name)
+            cls = _class(
+                module_name,
+                class_name,
+                required=(module_name, class_name) not in _OPTIONAL,
+            )
             if cls is None:
                 continue
             guard = guards.get(dialect)
             check = guard.check if guard is not None else _closed(dialect)
+            spark = module_name.startswith('pyspark.')
             for attribute in attributes:
-                _wrap(cls, attribute, lambda f, c=check: _guarded(f, c))
-        for module_name, class_name, attributes in REFUSED:
-            cls = _class(module_name, class_name)
-            if cls is None:
-                continue
-            for attribute in attributes:
-                where = f'{class_name}.{attribute}'
                 _wrap(
                     cls,
                     attribute,
-                    lambda f, w=where: (
-                        property(_refused(w))
-                        if isinstance(f, property)
-                        else _refused(w)
-                    ),
+                    lambda f, c=check, k=spark: _guarded(f, c, k),
                 )
+        module_name, class_name, attributes = SPARK_CONNECT
+        cls = _class(module_name, class_name)
+        for attribute in attributes if cls is not None else ():
+            guard = guards.get('databricks')
+            check = guard.check if guard is not None else _closed('databricks')
+            _wrap(cls, attribute, lambda f, c=check: _sql_command(f, c))
+        for module_name, class_name, attributes in REFUSED:
+            cls = _class(module_name, class_name)
+            for attribute in attributes if cls is not None else ():
+                _wrap(cls, attribute, _refusing(f'{class_name}.{attribute}'))
+        for module_name, class_name in REFUSED_CLASSES:
+            cls = _class(module_name, class_name, required=False)
+            if cls is None:
+                continue
+            for attribute in dir(cls):
+                if attribute.startswith('_'):
+                    continue
+                current = inspect.getattr_static(cls, attribute)
+                if callable(current) or isinstance(
+                    current, (property, classmethod, staticmethod)
+                ):
+                    _wrap(
+                        cls, attribute, _refusing(f'{class_name}.{attribute}')
+                    )
     except BaseException:
         uninstall()
         raise
     return uninstall
 
 
-def _class(module_name: str, class_name: str) -> type | None:
+def _class(
+    module_name: str, class_name: str, required: bool = True
+) -> type | None:
     try:
         module = importlib.import_module(module_name)
-    except ImportError:
+    except Exception:  # noqa: BLE001 - a driver that cannot import runs nothing
         return None
     cls = getattr(module, class_name, None)
-    if not isinstance(cls, type):
-        raise RuntimeError(
-            f'{module_name} has no class {class_name}: the write guard cannot '
-            'cover this driver version'
-        )
-    return cls
+    if isinstance(cls, type):
+        return cls
+    if not required:
+        return None
+    raise RuntimeError(
+        f'{module_name} has no class {class_name}: the write guard cannot '
+        'cover this driver version'
+    )
 
 
 def uninstall() -> None:
     r"""Undoes :func:`install`, the last change first."""
+    _RULES.clear()
     while _INSTALLED:
         cls, attribute, previous = _INSTALLED.pop()
         if previous is _ABSENT:
