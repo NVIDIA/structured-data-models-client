@@ -30,7 +30,8 @@ from collections.abc import Mapping
 from typing import Any
 
 from sdm_connectors import providers
-from sdm_connectors.providers import PlanNotRun, arrow_table
+from sdm_connectors.providers import PlanNotRun as PlanNotRun
+from sdm_connectors.providers import arrow_table
 
 #: Rows per batch the driver hands over; a larger result comes as several.
 BATCH_ROWS = 1_000_000
@@ -50,13 +51,7 @@ class DuckDBProvider:
         self, step: dict[str, Any], keys: Mapping[int, Any] | None = None
     ) -> Any:
         statements = providers.statements(step, 'duckdb')
-        relations: dict[str, int] = {}
-        for statement in statements:
-            for param in statement['params']:
-                attachment = providers.key_set(param, keys)
-                bound = relations.setdefault(param['relation'], attachment)
-                if bound != attachment:
-                    raise PlanNotRun('a plan binding two key sets to one name')
+        relations = providers.bound_relations(statements, keys)
         with self._connection.cursor() as cursor:
             for relation, attachment in relations.items():
                 cursor.register(relation, arrow_table((keys or {})[attachment]))
