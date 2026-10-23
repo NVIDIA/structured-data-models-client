@@ -1,0 +1,3557 @@
+{
+ "format": "sdm-capture/1",
+ "case": "shape.two-paths.keyless",
+ "leg": "snowflake",
+ "recording_commit": "e6c3791bf8e344703f6410aee39e7a26175fdf21",
+ "reference_commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+ "versions": {
+  "duckdb": "1.5.6",
+  "numpy": "2.5.3",
+  "pandas": "3.0.6",
+  "pyarrow": "25.0.1",
+  "python": "3.12.15",
+  "snowflake-connector-python": "4.8.0"
+ },
+ "input_hash": "786a3d7c88ecf0a0fa3e521aaea85ad150c04094469fcd851ad7f60c0ece8680",
+ "session": {
+  "time_zone": "America/Los_Angeles",
+  "null_order": "nulls_last"
+ },
+ "reference": {
+  "case": "shape.two-paths.keyless@snowflake",
+  "core": null,
+  "driver": {
+   "capture": {
+    "bindings": [],
+    "cursors": 21,
+    "events": [
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 1
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 2
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 3
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 4
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 5
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 6
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 7
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 8
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 9
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 10
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 11
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 12
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 13
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 14
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 15
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 16
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 17
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 18
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 19
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 20
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 21
+     }
+    ],
+    "incomplete": [],
+    "passed_through": [
+     "_paramstyle"
+    ],
+    "statements": [
+     {
+      "error": null,
+      "handle": 1,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "5096ab4bc9603c55f8efb6caa8bfa2c882b026d791f5c8d7421f702d815aae4b",
+        "method": "fetchall",
+        "rows": 2,
+        "values": {
+         "columns": [
+          "name",
+          "type",
+          "kind",
+          "null?",
+          "default",
+          "primary key",
+          "unique key",
+          "check",
+          "expression",
+          "comment",
+          "policy name",
+          "privacy domain",
+          "write default"
+         ],
+         "ordered": "7f8badac55060d7f30a3b54808c6d720d5dddb586f0432e7fee39260935c50f5",
+         "types": [
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "9",
+          "2"
+         ],
+         "unencodable": [],
+         "unordered": "7f8badac55060d7f30a3b54808c6d720d5dddb586f0432e7fee39260935c50f5"
+        }
+       }
+      ],
+      "sql": "DESCRIBE TABLE \"{catalog}\".\"{schema}\".\"customers\"",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 2,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "9e657208665ed5a12d97172fa234bf4d74ede27e8176059d3d64c875aec28fa5",
+        "method": "fetch_arrow_all",
+        "rows": 10,
+        "schema": [
+         {
+          "name": "cid",
+          "type": "int8"
+         },
+         {
+          "name": "seg",
+          "type": "string"
+         }
+        ],
+        "values": {
+         "columns": [
+          "cid",
+          "seg"
+         ],
+         "ordered": "6d4d152aefe2b8b6f48a6c3ebb614d6de7070816e2ec9908efd48d3e5de708bb",
+         "types": null,
+         "unencodable": [],
+         "unordered": "6d4d152aefe2b8b6f48a6c3ebb614d6de7070816e2ec9908efd48d3e5de708bb"
+        }
+       }
+      ],
+      "sql": "SELECT \"cid\", \"seg\" FROM \"{catalog}\".\"{schema}\".\"customers\" LIMIT 1000",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 3,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "2dad7e65abb3d7a7863ccd211721505b31a910b3072dd4684669d1a9414f1b64",
+        "method": "fetchall",
+        "rows": 4,
+        "values": {
+         "columns": [
+          "name",
+          "type",
+          "kind",
+          "null?",
+          "default",
+          "primary key",
+          "unique key",
+          "check",
+          "expression",
+          "comment",
+          "policy name",
+          "privacy domain",
+          "write default"
+         ],
+         "ordered": "a0dd0e665f9e3d329b599d4610d9eb31e26fe2fbc9d9447abd82092c62cab07b",
+         "types": [
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "9",
+          "2"
+         ],
+         "unencodable": [],
+         "unordered": "06fa67eeb5a4671567b4571544318aad70bff314fe9e82fb1c27ab35019cdeca"
+        }
+       }
+      ],
+      "sql": "DESCRIBE TABLE \"{catalog}\".\"{schema}\".\"details\"",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 4,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "57c952dab7ce176123aac023f9207be8ab7ea233e532846974479d652b8855ff",
+        "method": "fetch_arrow_all",
+        "rows": 120,
+        "schema": [
+         {
+          "name": "did",
+          "type": "int8"
+         },
+         {
+          "name": "hid",
+          "type": "int8"
+         },
+         {
+          "name": "cid",
+          "type": "int8"
+         },
+         {
+          "name": "ts",
+          "type": "timestamp[us]"
+         }
+        ],
+        "values": {
+         "columns": [
+          "did",
+          "hid",
+          "cid",
+          "ts"
+         ],
+         "ordered": "ed7c16190967c9537c7b691dcbb70db8e7ea6017c1701fb587be709507f59500",
+         "types": null,
+         "unencodable": [],
+         "unordered": "b96481a69cd3a02596f09be4012afec62194d5c09cc377c22733d0b8b0073598"
+        }
+       }
+      ],
+      "sql": "SELECT \"did\", \"hid\", \"cid\", \"ts\" FROM \"{catalog}\".\"{schema}\".\"details\" LIMIT 1000",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 5,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "deae64d95696ec747d2e0a9d3df0a550b9a5c899b9d1f57a245a418bad1d8c38",
+        "method": "fetchall",
+        "rows": 3,
+        "values": {
+         "columns": [
+          "name",
+          "type",
+          "kind",
+          "null?",
+          "default",
+          "primary key",
+          "unique key",
+          "check",
+          "expression",
+          "comment",
+          "policy name",
+          "privacy domain",
+          "write default"
+         ],
+         "ordered": "8b82c98859b1fae737e544066f6f29e8eb5f013478c2c6173f4ebf90ad1d6ed9",
+         "types": [
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "9",
+          "2"
+         ],
+         "unencodable": [],
+         "unordered": "46a9eba193106721ab05f1ffb92ddb88b2f15156f4be3834f818610c609388a5"
+        }
+       }
+      ],
+      "sql": "DESCRIBE TABLE \"{catalog}\".\"{schema}\".\"headers\"",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 6,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "01368e721ca033af249ce6775e93915ca2e2954b29b252e19a4af710c0dffa28",
+        "method": "fetch_arrow_all",
+        "rows": 40,
+        "schema": [
+         {
+          "name": "hid",
+          "type": "int8"
+         },
+         {
+          "name": "cid",
+          "type": "int8"
+         },
+         {
+          "name": "ts",
+          "type": "timestamp[us]"
+         }
+        ],
+        "values": {
+         "columns": [
+          "hid",
+          "cid",
+          "ts"
+         ],
+         "ordered": "50c7af9abcd83fba16af743d07d9a2f42829e02e6754d27ec1a86211dc799aa0",
+         "types": null,
+         "unencodable": [],
+         "unordered": "8d62406855e387b40548fe5bb90d142e04c5745049b471310a0260f281694883"
+        }
+       }
+      ],
+      "sql": "SELECT \"hid\", \"cid\", \"ts\" FROM \"{catalog}\".\"{schema}\".\"headers\" LIMIT 1000",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 7,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "method": "fetchall",
+        "rows": 0,
+        "values": {
+         "columns": [
+          "created_on",
+          "pk_database_name",
+          "pk_schema_name",
+          "pk_table_name",
+          "pk_column_name",
+          "fk_database_name",
+          "fk_schema_name",
+          "fk_table_name",
+          "fk_column_name",
+          "key_sequence",
+          "update_rule",
+          "delete_rule",
+          "fk_name",
+          "pk_name",
+          "deferrability",
+          "rely",
+          "comment"
+         ],
+         "ordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+         "types": [
+          "6",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "0",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2"
+         ],
+         "unencodable": [],
+         "unordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        }
+       }
+      ],
+      "sql": "SHOW IMPORTED KEYS IN TABLE \"{catalog}\".\"{schema}\".\"customers\"",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 8,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "method": "fetchall",
+        "rows": 0,
+        "values": {
+         "columns": [
+          "created_on",
+          "pk_database_name",
+          "pk_schema_name",
+          "pk_table_name",
+          "pk_column_name",
+          "fk_database_name",
+          "fk_schema_name",
+          "fk_table_name",
+          "fk_column_name",
+          "key_sequence",
+          "update_rule",
+          "delete_rule",
+          "fk_name",
+          "pk_name",
+          "deferrability",
+          "rely",
+          "comment"
+         ],
+         "ordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+         "types": [
+          "6",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "0",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2"
+         ],
+         "unencodable": [],
+         "unordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        }
+       }
+      ],
+      "sql": "SHOW IMPORTED KEYS IN TABLE \"{catalog}\".\"{schema}\".\"details\"",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 9,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "method": "fetchall",
+        "rows": 0,
+        "values": {
+         "columns": [
+          "created_on",
+          "pk_database_name",
+          "pk_schema_name",
+          "pk_table_name",
+          "pk_column_name",
+          "fk_database_name",
+          "fk_schema_name",
+          "fk_table_name",
+          "fk_column_name",
+          "key_sequence",
+          "update_rule",
+          "delete_rule",
+          "fk_name",
+          "pk_name",
+          "deferrability",
+          "rely",
+          "comment"
+         ],
+         "ordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+         "types": [
+          "6",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "0",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2"
+         ],
+         "unencodable": [],
+         "unordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        }
+       }
+      ],
+      "sql": "SHOW IMPORTED KEYS IN TABLE \"{catalog}\".\"{schema}\".\"headers\"",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 10,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "a9f8f3a20701bb60787ebf3a328cf4a9713b5a5cf74a6bd2d33ed69a72c105d9",
+        "method": "fetchall",
+        "rows": 2,
+        "values": {
+         "columns": [
+          "K",
+          "N",
+          "D",
+          "Z"
+         ],
+         "ordered": "6ed1e571da560c546b5ce5158321c6cef5264b8374052c7c8b59da0bdf372930",
+         "types": [
+          "0",
+          "0",
+          "0",
+          "0"
+         ],
+         "unencodable": [],
+         "unordered": "6ed1e571da560c546b5ce5158321c6cef5264b8374052c7c8b59da0bdf372930"
+        }
+       }
+      ],
+      "sql": "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT \"cid\") AS d, COUNT(CASE WHEN \"cid\" IS NULL THEN 1 END) AS z\nFROM \"{catalog}\".\"{schema}\".\"customers\"\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT \"hid\") AS d, COUNT(CASE WHEN \"hid\" IS NULL THEN 1 END) AS z\nFROM \"{catalog}\".\"{schema}\".\"headers\"",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 11,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'customers'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "a29196683dafb863427a3b0c3d99c48c94bcf62ea24badb1eca8b1185740b60b",
+        "method": "fetchone",
+        "rows": 1,
+        "values": {
+         "columns": [
+          "created_on",
+          "name",
+          "database_name",
+          "schema_name",
+          "kind",
+          "comment",
+          "cluster_by",
+          "rows",
+          "bytes",
+          "owner",
+          "retention_time",
+          "automatic_clustering",
+          "change_tracking",
+          "search_optimization",
+          "search_optimization_progress",
+          "search_optimization_bytes",
+          "is_external",
+          "enable_schema_evolution",
+          "owner_role_type",
+          "is_event",
+          "is_hybrid",
+          "is_iceberg",
+          "is_dynamic",
+          "is_immutable",
+          "is_interactive",
+          "row_timestamp",
+          "error_logging"
+         ],
+         "ordered": "baa140cb3a6eb90bbea3a9f7b6ebb08cd53f06b6fba1e6d5f5805eddeac629f7",
+         "types": [
+          "6",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "0",
+          "0",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "0",
+          "0",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2"
+         ],
+         "unencodable": [],
+         "unordered": "baa140cb3a6eb90bbea3a9f7b6ebb08cd53f06b6fba1e6d5f5805eddeac629f7"
+        }
+       }
+      ],
+      "sql": "SHOW TABLES LIKE ? IN SCHEMA \"{catalog}\".\"{schema}\"",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 12,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'details'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "7f334810f23e9974f2a4aab08fad500dbabb1618897adb4b316a792f2c1d06a6",
+        "method": "fetchone",
+        "rows": 1,
+        "values": {
+         "columns": [
+          "created_on",
+          "name",
+          "database_name",
+          "schema_name",
+          "kind",
+          "comment",
+          "cluster_by",
+          "rows",
+          "bytes",
+          "owner",
+          "retention_time",
+          "automatic_clustering",
+          "change_tracking",
+          "search_optimization",
+          "search_optimization_progress",
+          "search_optimization_bytes",
+          "is_external",
+          "enable_schema_evolution",
+          "owner_role_type",
+          "is_event",
+          "is_hybrid",
+          "is_iceberg",
+          "is_dynamic",
+          "is_immutable",
+          "is_interactive",
+          "row_timestamp",
+          "error_logging"
+         ],
+         "ordered": "8b520edb3e448ba78d883e738f72332dbbf973ea35db4eb9871bf23e2ba92073",
+         "types": [
+          "6",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "0",
+          "0",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "0",
+          "0",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2"
+         ],
+         "unencodable": [],
+         "unordered": "8b520edb3e448ba78d883e738f72332dbbf973ea35db4eb9871bf23e2ba92073"
+        }
+       }
+      ],
+      "sql": "SHOW TABLES LIKE ? IN SCHEMA \"{catalog}\".\"{schema}\"",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 13,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'headers'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "c07643c2c86ec7a4c945a6a2ebe4540c3c5f70cb7703577634776c70698686d7",
+        "method": "fetchone",
+        "rows": 1,
+        "values": {
+         "columns": [
+          "created_on",
+          "name",
+          "database_name",
+          "schema_name",
+          "kind",
+          "comment",
+          "cluster_by",
+          "rows",
+          "bytes",
+          "owner",
+          "retention_time",
+          "automatic_clustering",
+          "change_tracking",
+          "search_optimization",
+          "search_optimization_progress",
+          "search_optimization_bytes",
+          "is_external",
+          "enable_schema_evolution",
+          "owner_role_type",
+          "is_event",
+          "is_hybrid",
+          "is_iceberg",
+          "is_dynamic",
+          "is_immutable",
+          "is_interactive",
+          "row_timestamp",
+          "error_logging"
+         ],
+         "ordered": "20ccb27f7e2ccf4985ac940562f74f252624cb77e55857fda5ae87c10cbba529",
+         "types": [
+          "6",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "0",
+          "0",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "0",
+          "0",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2"
+         ],
+         "unencodable": [],
+         "unordered": "20ccb27f7e2ccf4985ac940562f74f252624cb77e55857fda5ae87c10cbba529"
+        }
+       }
+      ],
+      "sql": "SHOW TABLES LIKE ? IN SCHEMA \"{catalog}\".\"{schema}\"",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 14,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "96019efe00ae02e055f5b19cc616f73d0630caef393e5f6480ebf3f64709ed69",
+        "method": "fetchall",
+        "rows": 1,
+        "values": {
+         "columns": [
+          "TABLE_INDEX",
+          "MIN_DATE",
+          "MAX_DATE"
+         ],
+         "ordered": "b3e30af7d1a71b74dc0591ba49ab0b43fb159995abefef4ccb023b3061551781",
+         "types": [
+          "0",
+          "8",
+          "8"
+         ],
+         "unencodable": [],
+         "unordered": "b3e30af7d1a71b74dc0591ba49ab0b43fb159995abefef4ccb023b3061551781"
+        }
+       }
+      ],
+      "sql": "SELECT\n  0 as table_index,\n  MIN(\"ts\") as min_date,\n  MAX(\"ts\") as max_date\nFROM \"{catalog}\".\"{schema}\".\"details\"",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 15,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "2c0e644df48af5e6fec124d2a793651a58889a0377ad71678f4e909dfa619109",
+        "method": "fetch_arrow_all",
+        "rows": 10,
+        "schema": [
+         {
+          "name": "cid",
+          "type": "int8"
+         }
+        ],
+        "values": {
+         "columns": [
+          "cid"
+         ],
+         "ordered": "9f59b0176b29e749901842b2dd843711c68d68478164830b8a998db14176e6af",
+         "types": null,
+         "unencodable": [],
+         "unordered": "9f59b0176b29e749901842b2dd843711c68d68478164830b8a998db14176e6af"
+        }
+       }
+      ],
+      "sql": "SELECT \"cid\"\nFROM \"{catalog}\".\"{schema}\".\"customers\"\nSAMPLE ROW (10000 ROWS)\nWHERE \"cid\" IS NOT NULL",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 16,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'[[5, \"2024-02-01 00:00:00\", \"2024-01-02 00:00:00\"], [6, \"2024-02-01 00:00:00\", \"2024-01-02 00:00:00\"], [0, \"2024-02-01 00:00:00\", \"2024-01-02 00:00:00\"], [7, \"2024-02-01 00:00:00\", \"2024-01-02 00:00:00\"], [3, \"2024-02-01 00:00:00\", \"2024-01-02 00:00:00\"], [2, \"2024-02-01 00:00:00\", \"2024-01-02 00:00:00\"], [4, \"2024-02-01 00:00:00\", \"2024-01-02 00:00:00\"], [9, \"2024-02-01 00:00:00\", \"2024-01-02 00:00:00\"], [1, \"2024-02-01 00:00:00\", \"2024-01-02 00:00:00\"], [8, \"2024-02-01 00:00:00\", \"2024-01-02 00:00:00\"]]'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'2024-02-01 00:00:00'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'2024-01-02 00:00:00'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "8475de81da2f3c4b59c3ed6c66723ae4c239857bf3bc9af904390804cba38a31",
+        "method": "fetch_arrow_all",
+        "rows": 90,
+        "schema": [
+         {
+          "name": "__KUMO_BATCH__",
+          "type": "decimal128(38, 0)"
+         },
+         {
+          "name": "ts",
+          "type": "timestamp[us]"
+         }
+        ],
+        "values": {
+         "columns": [
+          "__KUMO_BATCH__",
+          "ts"
+         ],
+         "ordered": "ab2def91318a89c02ba30b358703a5b3f90edce431a68a0d120f81cd1bb25e1a",
+         "types": null,
+         "unencodable": [],
+         "unordered": "70270fb255de802119c3f78a1cafb3a08e173f74a844869ffe464a6641a43f5e"
+        }
+       }
+      ],
+      "sql": "WITH TMP as (\n  SELECT\n    f.index as __KUMO_BATCH__,\n    f.value[0]::NUMBER as __KUMO_ID__,\n    f.value[1]::TIMESTAMP_NTZ as __KUMO_END_TIME__,\n    f.value[2]::TIMESTAMP_NTZ as __KUMO_START_TIME__\n  FROM TABLE(FLATTEN(INPUT => PARSE_JSON(?))) f\n)\nSELECT TMP.__KUMO_BATCH__ as __KUMO_BATCH__, \"ts\"\nFROM TMP\nJOIN \"{catalog}\".\"{schema}\".\"details\"\n  ON \"cid\" = TMP.__KUMO_ID__\n AND \"ts\" <= TMP.__KUMO_END_TIME__\nAND \"ts\" > TMP.__KUMO_START_TIME__\nWHERE \"ts\" <= ?\nAND \"ts\" > ?",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 17,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'[5, 6, 0, 7, 3, 2, 4, 9, 1, 8, 0, 1, 2]'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "05842d3062da679759747f6cd1fadc937f6f80aa5fe3273ef9f55c6c9b6c52d3",
+        "method": "fetch_arrow_all",
+        "rows": 13,
+        "schema": [
+         {
+          "name": "__KUMO_BATCH__",
+          "type": "decimal128(38, 0)"
+         },
+         {
+          "name": "cid",
+          "type": "int8"
+         },
+         {
+          "name": "seg",
+          "type": "string"
+         }
+        ],
+        "values": {
+         "columns": [
+          "__KUMO_BATCH__",
+          "cid",
+          "seg"
+         ],
+         "ordered": "963d65388501f02dc0886e4ac01ced4b01b677cf2d3ff8a7a922ce31af3903d9",
+         "types": null,
+         "unencodable": [],
+         "unordered": "7a1c76a434108745cfc2595a39c7d3cc2a85a866e32d79febcab578e24f6ac14"
+        }
+       }
+      ],
+      "sql": "WITH TMP as (\n  SELECT\n    f.index as __KUMO_BATCH__,\n    f.value::NUMBER as __KUMO_ID__\n  FROM TABLE(FLATTEN(INPUT => PARSE_JSON(?))) f\n)\nSELECT TMP.__KUMO_BATCH__ as __KUMO_BATCH__, \"cid\", \"seg\"\nFROM TMP\nJOIN \"{catalog}\".\"{schema}\".\"customers\"\n  ON \"cid\" = TMP.__KUMO_ID__",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 18,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "96019efe00ae02e055f5b19cc616f73d0630caef393e5f6480ebf3f64709ed69",
+        "method": "fetchall",
+        "rows": 1,
+        "values": {
+         "columns": [
+          "TABLE_INDEX",
+          "MIN_DATE",
+          "MAX_DATE"
+         ],
+         "ordered": "b3e30af7d1a71b74dc0591ba49ab0b43fb159995abefef4ccb023b3061551781",
+         "types": [
+          "0",
+          "8",
+          "8"
+         ],
+         "unencodable": [],
+         "unordered": "b3e30af7d1a71b74dc0591ba49ab0b43fb159995abefef4ccb023b3061551781"
+        }
+       }
+      ],
+      "sql": "SELECT\n  0 as table_index,\n  MIN(\"ts\") as min_date,\n  MAX(\"ts\") as max_date\nFROM \"{catalog}\".\"{schema}\".\"headers\"",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 19,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'[[5, \"2024-01-02 00:00:00\", \"2019-09-25 00:00:00\"], [6, \"2024-01-02 00:00:00\", \"2019-09-25 00:00:00\"], [0, \"2024-01-02 00:00:00\", \"2019-09-25 00:00:00\"], [7, \"2024-01-02 00:00:00\", \"2019-09-25 00:00:00\"], [3, \"2024-01-02 00:00:00\", \"2019-09-25 00:00:00\"], [2, \"2024-01-02 00:00:00\", \"2019-09-25 00:00:00\"], [4, \"2024-01-02 00:00:00\", \"2019-09-25 00:00:00\"], [9, \"2024-01-02 00:00:00\", \"2019-09-25 00:00:00\"], [1, \"2024-01-02 00:00:00\", \"2019-09-25 00:00:00\"], [8, \"2024-01-02 00:00:00\", \"2019-09-25 00:00:00\"], [0, \"2024-02-01 00:00:00\", \"2019-10-25 00:00:00\"], [1, \"2024-02-01 00:00:00\", \"2019-10-25 00:00:00\"], [2, \"2024-02-01 00:00:00\", \"2019-10-25 00:00:00\"]]'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'2024-02-01 00:00:00'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'2019-09-25 00:00:00'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "52b179e8471783fe22ccc6e4cf34851322739ee0b0364e6c78bfb9be58419955",
+        "method": "fetch_arrow_all",
+        "rows": 13,
+        "schema": [
+         {
+          "name": "__KUMO_BATCH__",
+          "type": "decimal128(38, 0)"
+         },
+         {
+          "name": "hid",
+          "type": "int8"
+         },
+         {
+          "name": "cid",
+          "type": "int8"
+         },
+         {
+          "name": "ts",
+          "type": "timestamp[us]"
+         }
+        ],
+        "values": {
+         "columns": [
+          "__KUMO_BATCH__",
+          "hid",
+          "cid",
+          "ts"
+         ],
+         "ordered": "81d9748614d1adec23a2c29ab39b5637c5b119fc1afa49ba961a49b5dbf990fc",
+         "types": null,
+         "unencodable": [],
+         "unordered": "c4aaa8180a0a3d2d0b1a27212a2bb5a4d432f5ac7f47411149c71088be9937bc"
+        }
+       }
+      ],
+      "sql": "WITH TMP as (\n  SELECT\n    f.index as __KUMO_BATCH__,\n    f.value[0]::NUMBER as __KUMO_ID__,\n    f.value[1]::TIMESTAMP_NTZ as __KUMO_END_TIME__,\n    f.value[2]::TIMESTAMP_NTZ as __KUMO_START_TIME__\n  FROM TABLE(FLATTEN(INPUT => PARSE_JSON(?))) f\n)\nSELECT TMP.__KUMO_BATCH__ as __KUMO_BATCH__, \"hid\", \"cid\", \"ts\"\nFROM TMP\nJOIN \"{catalog}\".\"{schema}\".\"headers\"\n  ON \"cid\" = TMP.__KUMO_ID__\n AND \"ts\" <= TMP.__KUMO_END_TIME__\n AND \"ts\" > TMP.__KUMO_START_TIME__\nWHERE \"ts\" <= ?\n  AND \"ts\" > ?\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY TMP.__KUMO_BATCH__\n  ORDER BY \"ts\" DESC, \"hid\"\n) <= 32\nORDER BY TMP.__KUMO_BATCH__, \"ts\" DESC, \"hid\"",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 20,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'[[5, \"2024-01-02 00:00:00\", \"2022-07-31 00:00:00\"], [6, \"2024-01-02 00:00:00\", \"2022-07-31 00:00:00\"], [0, \"2024-01-02 00:00:00\", \"2022-07-31 00:00:00\"], [7, \"2024-01-02 00:00:00\", \"2022-07-31 00:00:00\"], [3, \"2024-01-02 00:00:00\", \"2022-07-31 00:00:00\"], [2, \"2024-01-02 00:00:00\", \"2022-07-31 00:00:00\"], [4, \"2024-01-02 00:00:00\", \"2022-07-31 00:00:00\"], [9, \"2024-01-02 00:00:00\", \"2022-07-31 00:00:00\"], [1, \"2024-01-02 00:00:00\", \"2022-07-31 00:00:00\"], [8, \"2024-01-02 00:00:00\", \"2022-07-31 00:00:00\"], [0, \"2024-02-01 00:00:00\", \"2022-08-30 00:00:00\"], [1, \"2024-02-01 00:00:00\", \"2022-08-30 00:00:00\"], [2, \"2024-02-01 00:00:00\", \"2022-08-30 00:00:00\"]]'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'2024-02-01 00:00:00'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'2022-07-31 00:00:00'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "b0d83501b3fa431a88d688cd3b84957ba6a0ddaeddc6c85f5bd6071ee8770970",
+        "method": "fetch_arrow_all",
+        "rows": 39,
+        "schema": [
+         {
+          "name": "__KUMO_BATCH__",
+          "type": "decimal128(38, 0)"
+         },
+         {
+          "name": "did",
+          "type": "int8"
+         },
+         {
+          "name": "hid",
+          "type": "int8"
+         },
+         {
+          "name": "cid",
+          "type": "int8"
+         },
+         {
+          "name": "ts",
+          "type": "timestamp[us]"
+         }
+        ],
+        "values": {
+         "columns": [
+          "__KUMO_BATCH__",
+          "did",
+          "hid",
+          "cid",
+          "ts"
+         ],
+         "ordered": "319ef67d27f6b78d7ace4a5a89591d5c7097909173e62580d7d8003ff90a05cb",
+         "types": null,
+         "unencodable": [],
+         "unordered": "5a8797dfcbb9616cb771a1e5c3bb3ef7d9c5bae77660084b6afad67af3551ab8"
+        }
+       }
+      ],
+      "sql": "WITH TMP as (\n  SELECT\n    f.index as __KUMO_BATCH__,\n    f.value[0]::NUMBER as __KUMO_ID__,\n    f.value[1]::TIMESTAMP_NTZ as __KUMO_END_TIME__,\n    f.value[2]::TIMESTAMP_NTZ as __KUMO_START_TIME__\n  FROM TABLE(FLATTEN(INPUT => PARSE_JSON(?))) f\n)\nSELECT TMP.__KUMO_BATCH__ as __KUMO_BATCH__, \"did\", \"hid\", \"cid\", \"ts\"\nFROM TMP\nJOIN \"{catalog}\".\"{schema}\".\"details\"\n  ON \"cid\" = TMP.__KUMO_ID__\n AND \"ts\" <= TMP.__KUMO_END_TIME__\n AND \"ts\" > TMP.__KUMO_START_TIME__\nWHERE \"ts\" <= ?\n  AND \"ts\" > ?\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY TMP.__KUMO_BATCH__\n  ORDER BY \"ts\" DESC, \"cid\", \"did\", \"hid\"\n) <= 32\nORDER BY TMP.__KUMO_BATCH__, \"ts\" DESC, \"cid\", \"did\", \"hid\"",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 21,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'[[0, \"2024-01-02 00:00:00\", \"2019-01-03 00:00:00\"], [1, \"2024-01-02 00:00:00\", \"2019-01-03 00:00:00\"], [30, \"2024-02-01 00:00:00\", \"2019-02-02 00:00:00\"], [20, \"2024-02-01 00:00:00\", \"2019-02-02 00:00:00\"], [10, \"2024-02-01 00:00:00\", \"2019-02-02 00:00:00\"], [0, \"2024-02-01 00:00:00\", \"2019-02-02 00:00:00\"], [31, \"2024-02-01 00:00:00\", \"2019-02-02 00:00:00\"], [21, \"2024-02-01 00:00:00\", \"2019-02-02 00:00:00\"], [11, \"2024-02-01 00:00:00\", \"2019-02-02 00:00:00\"], [1, \"2024-02-01 00:00:00\", \"2019-02-02 00:00:00\"], [22, \"2024-02-01 00:00:00\", \"2019-02-02 00:00:00\"], [12, \"2024-02-01 00:00:00\", \"2019-02-02 00:00:00\"], [2, \"2024-02-01 00:00:00\", \"2019-02-02 00:00:00\"]]'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'2024-02-01 00:00:00'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'2019-01-03 00:00:00'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "c65039f7d3eb363767737c809fcd5f26a2aca9954ad84aeb882befc572ab840e",
+        "method": "fetch_arrow_all",
+        "rows": 39,
+        "schema": [
+         {
+          "name": "__KUMO_BATCH__",
+          "type": "decimal128(38, 0)"
+         },
+         {
+          "name": "did",
+          "type": "int8"
+         },
+         {
+          "name": "hid",
+          "type": "int8"
+         },
+         {
+          "name": "cid",
+          "type": "int8"
+         },
+         {
+          "name": "ts",
+          "type": "timestamp[us]"
+         }
+        ],
+        "values": {
+         "columns": [
+          "__KUMO_BATCH__",
+          "did",
+          "hid",
+          "cid",
+          "ts"
+         ],
+         "ordered": "eb211798b43875dfa75b8b31bb2a49aafb54942fe3f878dd498b8cc94ca7be86",
+         "types": null,
+         "unencodable": [],
+         "unordered": "6cefc0658103c2b8e5f1227815d0346a2b6fd136031dfc9e20586db20b0000e3"
+        }
+       }
+      ],
+      "sql": "WITH TMP as (\n  SELECT\n    f.index as __KUMO_BATCH__,\n    f.value[0]::NUMBER as __KUMO_ID__,\n    f.value[1]::TIMESTAMP_NTZ as __KUMO_END_TIME__,\n    f.value[2]::TIMESTAMP_NTZ as __KUMO_START_TIME__\n  FROM TABLE(FLATTEN(INPUT => PARSE_JSON(?))) f\n)\nSELECT TMP.__KUMO_BATCH__ as __KUMO_BATCH__, \"did\", \"hid\", \"cid\", \"ts\"\nFROM TMP\nJOIN \"{catalog}\".\"{schema}\".\"details\"\n  ON \"hid\" = TMP.__KUMO_ID__\n AND \"ts\" <= TMP.__KUMO_END_TIME__\n AND \"ts\" > TMP.__KUMO_START_TIME__\nWHERE \"ts\" <= ?\n  AND \"ts\" > ?\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY TMP.__KUMO_BATCH__\n  ORDER BY \"ts\" DESC, \"cid\", \"did\", \"hid\"\n) <= 32\nORDER BY TMP.__KUMO_BATCH__, \"ts\" DESC, \"cid\", \"did\", \"hid\"",
+      "stage": "materialize"
+     }
+    ]
+   },
+   "query_log": {
+    "bindings": 0,
+    "compared": 21,
+    "differing": [],
+    "statements": 21
+   }
+  },
+  "format": "sdm-observation/1",
+  "host": {
+   "warnings": [
+    "UserWarning",
+    "UserWarning",
+    "SDMWarning"
+   ]
+  },
+  "identity": {
+   "cell": "ref-pandas3",
+   "commit": {
+    "clean": true,
+    "sha": "e6c3791bf8e344703f6410aee39e7a26175fdf21"
+   },
+   "contract": null,
+   "inputs": {
+    "bases": "9d69fe4aea2be4a6a2d96ea03f5258147c537927e2c6e6716b6030836ebc62f8",
+    "case": "d6b990dc1d383f724bef468d0f2d36e34250452240ecbe44f7fc1b719325e256"
+   },
+   "native": null,
+   "native_loaded": false,
+   "operations": [],
+   "platform": "linux-x86_64",
+   "reference": {
+    "commit": {
+     "clean": true,
+     "sha": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1"
+    },
+    "environment": "4848c08cc7bbb66e99d4a7416854e401ab51e44413b509172cf0c121a55c78e3",
+    "guard": {
+     "after": "passed",
+     "before": "passed"
+    }
+   },
+   "runner": "python-ref",
+   "versions": {
+    "duckdb": "1.5.6",
+    "numpy": "2.5.3",
+    "pandas": "3.0.6",
+    "pyarrow": "25.0.1",
+    "python": "3.12.15"
+   }
+  },
+  "outcome": {
+   "code": null,
+   "error": null,
+   "result": "success",
+   "stage": "predict"
+  },
+  "public": {
+   "payloads": [
+    {
+     "method": "POST",
+     "parsed": {
+      "context": {
+       "instance_table": {
+        "columns": [
+         "instance_id",
+         "__kumo_entity_ref_0",
+         "__kumo_anchor_time",
+         "TARGET"
+        ],
+        "format": "arrays",
+        "rows": [
+         [
+          {
+           "number": "0"
+          },
+          {
+           "number": "5"
+          },
+          "2024-01-02T00:00:00.000000Z",
+          {
+           "number": "9.0"
+          }
+         ],
+         [
+          {
+           "number": "1"
+          },
+          {
+           "number": "6"
+          },
+          "2024-01-02T00:00:00.000000Z",
+          {
+           "number": "9.0"
+          }
+         ],
+         [
+          {
+           "number": "2"
+          },
+          {
+           "number": "0"
+          },
+          "2024-01-02T00:00:00.000000Z",
+          {
+           "number": "9.0"
+          }
+         ],
+         [
+          {
+           "number": "3"
+          },
+          {
+           "number": "7"
+          },
+          "2024-01-02T00:00:00.000000Z",
+          {
+           "number": "9.0"
+          }
+         ],
+         [
+          {
+           "number": "4"
+          },
+          {
+           "number": "3"
+          },
+          "2024-01-02T00:00:00.000000Z",
+          {
+           "number": "9.0"
+          }
+         ],
+         [
+          {
+           "number": "5"
+          },
+          {
+           "number": "2"
+          },
+          "2024-01-02T00:00:00.000000Z",
+          {
+           "number": "9.0"
+          }
+         ],
+         [
+          {
+           "number": "6"
+          },
+          {
+           "number": "4"
+          },
+          "2024-01-02T00:00:00.000000Z",
+          {
+           "number": "9.0"
+          }
+         ],
+         [
+          {
+           "number": "7"
+          },
+          {
+           "number": "9"
+          },
+          "2024-01-02T00:00:00.000000Z",
+          {
+           "number": "9.0"
+          }
+         ],
+         [
+          {
+           "number": "8"
+          },
+          {
+           "number": "1"
+          },
+          "2024-01-02T00:00:00.000000Z",
+          {
+           "number": "9.0"
+          }
+         ],
+         [
+          {
+           "number": "9"
+          },
+          {
+           "number": "8"
+          },
+          "2024-01-02T00:00:00.000000Z",
+          {
+           "number": "9.0"
+          }
+         ]
+        ]
+       },
+       "related_tables": {
+        "customers": {
+         "columns": [
+          "instance_id",
+          "cid",
+          "seg"
+         ],
+         "format": "arrays",
+         "rows": [
+          [
+           {
+            "number": "0"
+           },
+           {
+            "number": "5"
+           },
+           "x"
+          ],
+          [
+           {
+            "number": "1"
+           },
+           {
+            "number": "6"
+           },
+           "x"
+          ],
+          [
+           {
+            "number": "2"
+           },
+           {
+            "number": "0"
+           },
+           "x"
+          ],
+          [
+           {
+            "number": "3"
+           },
+           {
+            "number": "7"
+           },
+           "x"
+          ],
+          [
+           {
+            "number": "4"
+           },
+           {
+            "number": "3"
+           },
+           "x"
+          ],
+          [
+           {
+            "number": "5"
+           },
+           {
+            "number": "2"
+           },
+           "x"
+          ],
+          [
+           {
+            "number": "6"
+           },
+           {
+            "number": "4"
+           },
+           "x"
+          ],
+          [
+           {
+            "number": "7"
+           },
+           {
+            "number": "9"
+           },
+           "x"
+          ],
+          [
+           {
+            "number": "8"
+           },
+           {
+            "number": "1"
+           },
+           "x"
+          ],
+          [
+           {
+            "number": "9"
+           },
+           {
+            "number": "8"
+           },
+           "x"
+          ]
+         ]
+        },
+        "details": {
+         "columns": [
+          "instance_id",
+          "__node_id",
+          "did",
+          "ts",
+          "cid",
+          "hid"
+         ],
+         "format": "arrays",
+         "rows": [
+          [
+           {
+            "number": "2"
+           },
+           {
+            "number": "0"
+           },
+           {
+            "number": "0"
+           },
+           "2024-01-01T00:00:00.000000Z",
+           {
+            "number": "0.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "2"
+           },
+           {
+            "number": "1"
+           },
+           {
+            "number": "40"
+           },
+           "2024-01-01T00:00:00.000000Z",
+           {
+            "number": "0.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "2"
+           },
+           {
+            "number": "2"
+           },
+           {
+            "number": "80"
+           },
+           "2024-01-01T00:00:00.000000Z",
+           {
+            "number": "0.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "8"
+           },
+           {
+            "number": "3"
+           },
+           {
+            "number": "1"
+           },
+           "2024-01-02T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "8"
+           },
+           {
+            "number": "4"
+           },
+           {
+            "number": "41"
+           },
+           "2024-01-02T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "8"
+           },
+           {
+            "number": "5"
+           },
+           {
+            "number": "81"
+           },
+           "2024-01-02T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "2"
+           },
+           {
+            "number": "39"
+           },
+           {
+            "number": "0"
+           },
+           "2024-01-01T00:00:00.000000Z",
+           null,
+           {
+            "number": "0.0"
+           }
+          ],
+          [
+           {
+            "number": "2"
+           },
+           {
+            "number": "40"
+           },
+           {
+            "number": "40"
+           },
+           "2024-01-01T00:00:00.000000Z",
+           null,
+           {
+            "number": "0.0"
+           }
+          ],
+          [
+           {
+            "number": "2"
+           },
+           {
+            "number": "41"
+           },
+           {
+            "number": "80"
+           },
+           "2024-01-01T00:00:00.000000Z",
+           null,
+           {
+            "number": "0.0"
+           }
+          ],
+          [
+           {
+            "number": "8"
+           },
+           {
+            "number": "42"
+           },
+           {
+            "number": "1"
+           },
+           "2024-01-02T00:00:00.000000Z",
+           null,
+           {
+            "number": "1.0"
+           }
+          ],
+          [
+           {
+            "number": "8"
+           },
+           {
+            "number": "43"
+           },
+           {
+            "number": "41"
+           },
+           "2024-01-02T00:00:00.000000Z",
+           null,
+           {
+            "number": "1.0"
+           }
+          ],
+          [
+           {
+            "number": "8"
+           },
+           {
+            "number": "44"
+           },
+           {
+            "number": "81"
+           },
+           "2024-01-02T00:00:00.000000Z",
+           null,
+           {
+            "number": "1.0"
+           }
+          ]
+         ]
+        },
+        "headers": {
+         "columns": [
+          "instance_id",
+          "__node_id",
+          "ts",
+          "cid"
+         ],
+         "format": "arrays",
+         "rows": [
+          [
+           {
+            "number": "2"
+           },
+           {
+            "number": "0"
+           },
+           "2024-01-01T00:00:00.000000Z",
+           {
+            "number": "0"
+           }
+          ],
+          [
+           {
+            "number": "8"
+           },
+           {
+            "number": "1"
+           },
+           "2024-01-02T00:00:00.000000Z",
+           {
+            "number": "1"
+           }
+          ]
+         ]
+        }
+       }
+      },
+      "inference": {
+       "run_mode": "fast",
+       "use_prediction_time": false
+      },
+      "metadata": {
+       "num_context_examples": {
+        "number": "10"
+       },
+       "num_prediction_examples": {
+        "number": "3"
+       },
+       "request_id": "sdm-653be1f8ec4f",
+       "source_query": "PREDICT COUNT(details.*, 0, 30, days) FOR EACH customers.cid"
+      },
+      "model": "kumo-relational",
+      "output": {
+       "fields": [
+        "prediction"
+       ],
+       "prediction_statistic": "median"
+      },
+      "predict": {
+       "instance_table": {
+        "columns": [
+         "instance_id",
+         "__kumo_entity_ref_0",
+         "__kumo_anchor_time"
+        ],
+        "format": "arrays",
+        "rows": [
+         [
+          {
+           "number": "10"
+          },
+          {
+           "number": "0"
+          },
+          "2024-02-01T00:00:00.000000Z"
+         ],
+         [
+          {
+           "number": "11"
+          },
+          {
+           "number": "1"
+          },
+          "2024-02-01T00:00:00.000000Z"
+         ],
+         [
+          {
+           "number": "12"
+          },
+          {
+           "number": "2"
+          },
+          "2024-02-01T00:00:00.000000Z"
+         ]
+        ]
+       },
+       "related_tables": {
+        "customers": {
+         "columns": [
+          "instance_id",
+          "cid",
+          "seg"
+         ],
+         "format": "arrays",
+         "rows": [
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "0"
+           },
+           "x"
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "1"
+           },
+           "x"
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "2"
+           },
+           "x"
+          ]
+         ]
+        },
+        "details": {
+         "columns": [
+          "instance_id",
+          "__node_id",
+          "did",
+          "ts",
+          "cid",
+          "hid"
+         ],
+         "format": "arrays",
+         "rows": [
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "6"
+           },
+           {
+            "number": "30"
+           },
+           "2024-01-31T00:00:00.000000Z",
+           {
+            "number": "0.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "7"
+           },
+           {
+            "number": "70"
+           },
+           "2024-01-31T00:00:00.000000Z",
+           {
+            "number": "0.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "8"
+           },
+           {
+            "number": "110"
+           },
+           "2024-01-31T00:00:00.000000Z",
+           {
+            "number": "0.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "9"
+           },
+           {
+            "number": "20"
+           },
+           "2024-01-21T00:00:00.000000Z",
+           {
+            "number": "0.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "10"
+           },
+           {
+            "number": "60"
+           },
+           "2024-01-21T00:00:00.000000Z",
+           {
+            "number": "0.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "11"
+           },
+           {
+            "number": "100"
+           },
+           "2024-01-21T00:00:00.000000Z",
+           {
+            "number": "0.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "12"
+           },
+           {
+            "number": "10"
+           },
+           "2024-01-11T00:00:00.000000Z",
+           {
+            "number": "0.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "13"
+           },
+           {
+            "number": "50"
+           },
+           "2024-01-11T00:00:00.000000Z",
+           {
+            "number": "0.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "14"
+           },
+           {
+            "number": "90"
+           },
+           "2024-01-11T00:00:00.000000Z",
+           {
+            "number": "0.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "15"
+           },
+           {
+            "number": "0"
+           },
+           "2024-01-01T00:00:00.000000Z",
+           {
+            "number": "0.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "16"
+           },
+           {
+            "number": "40"
+           },
+           "2024-01-01T00:00:00.000000Z",
+           {
+            "number": "0.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "17"
+           },
+           {
+            "number": "80"
+           },
+           "2024-01-01T00:00:00.000000Z",
+           {
+            "number": "0.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "18"
+           },
+           {
+            "number": "31"
+           },
+           "2024-02-01T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "19"
+           },
+           {
+            "number": "71"
+           },
+           "2024-02-01T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "20"
+           },
+           {
+            "number": "111"
+           },
+           "2024-02-01T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "21"
+           },
+           {
+            "number": "21"
+           },
+           "2024-01-22T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "22"
+           },
+           {
+            "number": "61"
+           },
+           "2024-01-22T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "23"
+           },
+           {
+            "number": "101"
+           },
+           "2024-01-22T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "24"
+           },
+           {
+            "number": "11"
+           },
+           "2024-01-12T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "25"
+           },
+           {
+            "number": "51"
+           },
+           "2024-01-12T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "26"
+           },
+           {
+            "number": "91"
+           },
+           "2024-01-12T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "27"
+           },
+           {
+            "number": "1"
+           },
+           "2024-01-02T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "28"
+           },
+           {
+            "number": "41"
+           },
+           "2024-01-02T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "29"
+           },
+           {
+            "number": "81"
+           },
+           "2024-01-02T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "30"
+           },
+           {
+            "number": "22"
+           },
+           "2024-01-23T00:00:00.000000Z",
+           {
+            "number": "2.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "31"
+           },
+           {
+            "number": "62"
+           },
+           "2024-01-23T00:00:00.000000Z",
+           {
+            "number": "2.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "32"
+           },
+           {
+            "number": "102"
+           },
+           "2024-01-23T00:00:00.000000Z",
+           {
+            "number": "2.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "33"
+           },
+           {
+            "number": "12"
+           },
+           "2024-01-13T00:00:00.000000Z",
+           {
+            "number": "2.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "34"
+           },
+           {
+            "number": "52"
+           },
+           "2024-01-13T00:00:00.000000Z",
+           {
+            "number": "2.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "35"
+           },
+           {
+            "number": "92"
+           },
+           "2024-01-13T00:00:00.000000Z",
+           {
+            "number": "2.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "36"
+           },
+           {
+            "number": "2"
+           },
+           "2024-01-03T00:00:00.000000Z",
+           {
+            "number": "2.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "37"
+           },
+           {
+            "number": "42"
+           },
+           "2024-01-03T00:00:00.000000Z",
+           {
+            "number": "2.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "38"
+           },
+           {
+            "number": "82"
+           },
+           "2024-01-03T00:00:00.000000Z",
+           {
+            "number": "2.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "45"
+           },
+           {
+            "number": "30"
+           },
+           "2024-01-31T00:00:00.000000Z",
+           null,
+           {
+            "number": "2.0"
+           }
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "46"
+           },
+           {
+            "number": "70"
+           },
+           "2024-01-31T00:00:00.000000Z",
+           null,
+           {
+            "number": "2.0"
+           }
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "47"
+           },
+           {
+            "number": "110"
+           },
+           "2024-01-31T00:00:00.000000Z",
+           null,
+           {
+            "number": "2.0"
+           }
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "48"
+           },
+           {
+            "number": "20"
+           },
+           "2024-01-21T00:00:00.000000Z",
+           null,
+           {
+            "number": "3.0"
+           }
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "49"
+           },
+           {
+            "number": "60"
+           },
+           "2024-01-21T00:00:00.000000Z",
+           null,
+           {
+            "number": "3.0"
+           }
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "50"
+           },
+           {
+            "number": "100"
+           },
+           "2024-01-21T00:00:00.000000Z",
+           null,
+           {
+            "number": "3.0"
+           }
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "51"
+           },
+           {
+            "number": "10"
+           },
+           "2024-01-11T00:00:00.000000Z",
+           null,
+           {
+            "number": "4.0"
+           }
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "52"
+           },
+           {
+            "number": "50"
+           },
+           "2024-01-11T00:00:00.000000Z",
+           null,
+           {
+            "number": "4.0"
+           }
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "53"
+           },
+           {
+            "number": "90"
+           },
+           "2024-01-11T00:00:00.000000Z",
+           null,
+           {
+            "number": "4.0"
+           }
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "54"
+           },
+           {
+            "number": "0"
+           },
+           "2024-01-01T00:00:00.000000Z",
+           null,
+           {
+            "number": "5.0"
+           }
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "55"
+           },
+           {
+            "number": "40"
+           },
+           "2024-01-01T00:00:00.000000Z",
+           null,
+           {
+            "number": "5.0"
+           }
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "56"
+           },
+           {
+            "number": "80"
+           },
+           "2024-01-01T00:00:00.000000Z",
+           null,
+           {
+            "number": "5.0"
+           }
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "57"
+           },
+           {
+            "number": "31"
+           },
+           "2024-02-01T00:00:00.000000Z",
+           null,
+           {
+            "number": "6.0"
+           }
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "58"
+           },
+           {
+            "number": "71"
+           },
+           "2024-02-01T00:00:00.000000Z",
+           null,
+           {
+            "number": "6.0"
+           }
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "59"
+           },
+           {
+            "number": "111"
+           },
+           "2024-02-01T00:00:00.000000Z",
+           null,
+           {
+            "number": "6.0"
+           }
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "60"
+           },
+           {
+            "number": "21"
+           },
+           "2024-01-22T00:00:00.000000Z",
+           null,
+           {
+            "number": "7.0"
+           }
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "61"
+           },
+           {
+            "number": "61"
+           },
+           "2024-01-22T00:00:00.000000Z",
+           null,
+           {
+            "number": "7.0"
+           }
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "62"
+           },
+           {
+            "number": "101"
+           },
+           "2024-01-22T00:00:00.000000Z",
+           null,
+           {
+            "number": "7.0"
+           }
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "63"
+           },
+           {
+            "number": "11"
+           },
+           "2024-01-12T00:00:00.000000Z",
+           null,
+           {
+            "number": "8.0"
+           }
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "64"
+           },
+           {
+            "number": "51"
+           },
+           "2024-01-12T00:00:00.000000Z",
+           null,
+           {
+            "number": "8.0"
+           }
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "65"
+           },
+           {
+            "number": "91"
+           },
+           "2024-01-12T00:00:00.000000Z",
+           null,
+           {
+            "number": "8.0"
+           }
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "66"
+           },
+           {
+            "number": "1"
+           },
+           "2024-01-02T00:00:00.000000Z",
+           null,
+           {
+            "number": "9.0"
+           }
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "67"
+           },
+           {
+            "number": "41"
+           },
+           "2024-01-02T00:00:00.000000Z",
+           null,
+           {
+            "number": "9.0"
+           }
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "68"
+           },
+           {
+            "number": "81"
+           },
+           "2024-01-02T00:00:00.000000Z",
+           null,
+           {
+            "number": "9.0"
+           }
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "69"
+           },
+           {
+            "number": "22"
+           },
+           "2024-01-23T00:00:00.000000Z",
+           null,
+           {
+            "number": "10.0"
+           }
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "70"
+           },
+           {
+            "number": "62"
+           },
+           "2024-01-23T00:00:00.000000Z",
+           null,
+           {
+            "number": "10.0"
+           }
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "71"
+           },
+           {
+            "number": "102"
+           },
+           "2024-01-23T00:00:00.000000Z",
+           null,
+           {
+            "number": "10.0"
+           }
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "72"
+           },
+           {
+            "number": "12"
+           },
+           "2024-01-13T00:00:00.000000Z",
+           null,
+           {
+            "number": "11.0"
+           }
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "73"
+           },
+           {
+            "number": "52"
+           },
+           "2024-01-13T00:00:00.000000Z",
+           null,
+           {
+            "number": "11.0"
+           }
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "74"
+           },
+           {
+            "number": "92"
+           },
+           "2024-01-13T00:00:00.000000Z",
+           null,
+           {
+            "number": "11.0"
+           }
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "75"
+           },
+           {
+            "number": "2"
+           },
+           "2024-01-03T00:00:00.000000Z",
+           null,
+           {
+            "number": "12.0"
+           }
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "76"
+           },
+           {
+            "number": "42"
+           },
+           "2024-01-03T00:00:00.000000Z",
+           null,
+           {
+            "number": "12.0"
+           }
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "77"
+           },
+           {
+            "number": "82"
+           },
+           "2024-01-03T00:00:00.000000Z",
+           null,
+           {
+            "number": "12.0"
+           }
+          ]
+         ]
+        },
+        "headers": {
+         "columns": [
+          "instance_id",
+          "__node_id",
+          "ts",
+          "cid"
+         ],
+         "format": "arrays",
+         "rows": [
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "2"
+           },
+           "2024-01-31T00:00:00.000000Z",
+           {
+            "number": "0"
+           }
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "3"
+           },
+           "2024-01-21T00:00:00.000000Z",
+           {
+            "number": "0"
+           }
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "4"
+           },
+           "2024-01-11T00:00:00.000000Z",
+           {
+            "number": "0"
+           }
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "5"
+           },
+           "2024-01-01T00:00:00.000000Z",
+           {
+            "number": "0"
+           }
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "6"
+           },
+           "2024-02-01T00:00:00.000000Z",
+           {
+            "number": "1"
+           }
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "7"
+           },
+           "2024-01-22T00:00:00.000000Z",
+           {
+            "number": "1"
+           }
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "8"
+           },
+           "2024-01-12T00:00:00.000000Z",
+           {
+            "number": "1"
+           }
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "9"
+           },
+           "2024-01-02T00:00:00.000000Z",
+           {
+            "number": "1"
+           }
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "10"
+           },
+           "2024-01-23T00:00:00.000000Z",
+           {
+            "number": "2"
+           }
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "11"
+           },
+           "2024-01-13T00:00:00.000000Z",
+           {
+            "number": "2"
+           }
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "12"
+           },
+           "2024-01-03T00:00:00.000000Z",
+           {
+            "number": "2"
+           }
+          ]
+         ]
+        }
+       }
+      },
+      "schema": {
+       "instance_table": {
+        "columns": {
+         "TARGET": {
+          "dtype": "float32",
+          "stype": "numerical"
+         },
+         "__kumo_anchor_time": {
+          "dtype": "timestamp[us]",
+          "nullable": false,
+          "stype": "timestamp"
+         },
+         "__kumo_entity_ref_0": {
+          "dtype": "int64",
+          "stype": "ID"
+         },
+         "instance_id": {
+          "dtype": "int64",
+          "nullable": false,
+          "stype": "ID"
+         }
+        },
+        "primary_key": "instance_id"
+       },
+       "related_tables": {
+        "customers": {
+         "columns": {
+          "cid": {
+           "dtype": "int64",
+           "nullable": false
+          },
+          "instance_id": {
+           "dtype": "int64",
+           "nullable": false,
+           "stype": "ID"
+          },
+          "seg": {
+           "dtype": "string",
+           "stype": "categorical"
+          }
+         },
+         "primary_key": [
+          "instance_id",
+          "cid"
+         ]
+        },
+        "details": {
+         "columns": {
+          "__node_id": {
+           "dtype": "int64",
+           "nullable": false,
+           "stype": "ID"
+          },
+          "cid": {
+           "dtype": "float64",
+           "stype": "ID"
+          },
+          "did": {
+           "dtype": "int64",
+           "stype": "ID"
+          },
+          "hid": {
+           "dtype": "float64",
+           "stype": "ID"
+          },
+          "instance_id": {
+           "dtype": "int64",
+           "nullable": false,
+           "stype": "ID"
+          },
+          "ts": {
+           "dtype": "timestamp[us]",
+           "stype": "timestamp"
+          }
+         },
+         "primary_key": [
+          "instance_id",
+          "__node_id"
+         ]
+        },
+        "headers": {
+         "columns": {
+          "__node_id": {
+           "dtype": "int64",
+           "nullable": false,
+           "stype": "ID"
+          },
+          "cid": {
+           "dtype": "int64",
+           "stype": "ID"
+          },
+          "instance_id": {
+           "dtype": "int64",
+           "nullable": false,
+           "stype": "ID"
+          },
+          "ts": {
+           "dtype": "timestamp[us]",
+           "stype": "timestamp"
+          }
+         },
+         "primary_key": [
+          "instance_id",
+          "__node_id"
+         ]
+        }
+       },
+       "relationships": [
+        {
+         "source_columns": [
+          "__kumo_entity_ref_0"
+         ],
+         "target_columns": [
+          "cid"
+         ],
+         "target_table": "customers"
+        },
+        {
+         "source_columns": [
+          "cid"
+         ],
+         "source_table": "headers",
+         "target_columns": [
+          "cid"
+         ],
+         "target_table": "customers"
+        },
+        {
+         "source_columns": [
+          "cid"
+         ],
+         "source_table": "details",
+         "target_columns": [
+          "cid"
+         ],
+         "target_table": "customers"
+        },
+        {
+         "source_columns": [
+          "hid"
+         ],
+         "source_table": "details",
+         "target_columns": [
+          "__node_id"
+         ],
+         "target_table": "headers"
+        }
+       ]
+      },
+      "task": {
+       "anchor_time_column": "__kumo_anchor_time",
+       "entity_table_names": [
+        "customers"
+       ],
+       "kind": "regression",
+       "target": {
+        "column_name": "TARGET",
+        "dtype": "float32"
+       }
+      }
+     },
+     "path": "/v1/predictions",
+     "sha256": "bb3a9dced43e16b8ff3cb6a199fccf51ee060a4f210137fa27e1a95e995eec7a"
+    }
+   ],
+   "result": {
+    "columns": [
+     {
+      "dtype": "int64",
+      "name": "row_index"
+     },
+     {
+      "dtype": "int64",
+      "name": "id"
+     },
+     {
+      "dtype": "float64",
+      "name": "prediction"
+     }
+    ],
+    "digest": "eb0e794d963bbd6f082e99b1ef5efd7095c91a3ee92f0cb7492aa8600cf1f6e4",
+    "rows": 3
+   },
+   "result_text": "f4035b1d60cfa07c3d687b35bea2fe7cc4b6d22aa7560e4fe81327ea1cd85d41",
+   "schema": {
+    "links": [
+     [
+      "headers",
+      "cid",
+      "customers",
+      "cid"
+     ],
+     [
+      "details",
+      "hid",
+      "headers",
+      "hid"
+     ],
+     [
+      "details",
+      "cid",
+      "customers",
+      "cid"
+     ]
+    ],
+    "tables": [
+     {
+      "columns": [
+       {
+        "dtype": "int64",
+        "name": "cid",
+        "stype": "ID"
+       },
+       {
+        "dtype": "string",
+        "name": "seg",
+        "stype": "categorical"
+       }
+      ],
+      "duplicate_keys": 0,
+      "name": "customers",
+      "primary_key": "cid",
+      "time_column": null
+     },
+     {
+      "columns": [
+       {
+        "dtype": "int64",
+        "name": "did",
+        "stype": "ID"
+       },
+       {
+        "dtype": "int64",
+        "name": "hid",
+        "stype": "ID"
+       },
+       {
+        "dtype": "int64",
+        "name": "cid",
+        "stype": "ID"
+       },
+       {
+        "dtype": "timestamp[us]",
+        "name": "ts",
+        "stype": "timestamp"
+       }
+      ],
+      "duplicate_keys": 0,
+      "name": "details",
+      "primary_key": null,
+      "time_column": "ts"
+     },
+     {
+      "columns": [
+       {
+        "dtype": "int64",
+        "name": "hid",
+        "stype": "ID"
+       },
+       {
+        "dtype": "int64",
+        "name": "cid",
+        "stype": "ID"
+       },
+       {
+        "dtype": "timestamp[us]",
+        "name": "ts",
+        "stype": "timestamp"
+       }
+      ],
+      "duplicate_keys": 0,
+      "name": "headers",
+      "primary_key": "hid",
+      "time_column": "ts"
+     }
+    ]
+   }
+  }
+ },
+ "tables": [
+  {
+   "name": "customers",
+   "data": "tables/9e657208665ed5a12d97172fa234bf4d74ede27e8176059d3d64c875aec28fa5.arrows"
+  },
+  {
+   "name": "details",
+   "data": "tables/57c952dab7ce176123aac023f9207be8ab7ea233e532846974479d652b8855ff.arrows"
+  },
+  {
+   "name": "headers",
+   "data": "tables/01368e721ca033af249ce6775e93915ca2e2954b29b252e19a4af710c0dffa28.arrows"
+  }
+ ],
+ "derived": [],
+ "draws": [
+  {
+   "table": "\"{catalog}\".\"{schema}\".\"customers\"",
+   "seed": null,
+   "fraction": "10000 ROWS",
+   "rows": "tables/2c0e644df48af5e6fec124d2a793651a58889a0377ad71678f4e909dfa619109.arrows",
+   "statement": "SELECT \"cid\"\nFROM \"{catalog}\".\"{schema}\".\"customers\"\nSAMPLE ROW (10000 ROWS)\nWHERE \"cid\" IS NOT NULL"
+  }
+ ],
+ "statements": [
+  {
+   "text": "DESCRIBE TABLE \"{catalog}\".\"{schema}\".\"customers\"",
+   "parameters": [],
+   "result": "tables/235b1f9157df5743c55f6eaf60b1823bb6d315fc53e16c808a9e202b5dc6dc35.arrows"
+  },
+  {
+   "text": "SELECT \"cid\", \"seg\" FROM \"{catalog}\".\"{schema}\".\"customers\" LIMIT 1000",
+   "parameters": [],
+   "result": "tables/9e657208665ed5a12d97172fa234bf4d74ede27e8176059d3d64c875aec28fa5.arrows"
+  },
+  {
+   "text": "DESCRIBE TABLE \"{catalog}\".\"{schema}\".\"details\"",
+   "parameters": [],
+   "result": "tables/c2de404fa480d5a5cd9ceca8e22dac60126ea3640d40392deda2e6caa59ae1a9.arrows"
+  },
+  {
+   "text": "SELECT \"did\", \"hid\", \"cid\", \"ts\" FROM \"{catalog}\".\"{schema}\".\"details\" LIMIT 1000",
+   "parameters": [],
+   "result": "tables/57c952dab7ce176123aac023f9207be8ab7ea233e532846974479d652b8855ff.arrows"
+  },
+  {
+   "text": "DESCRIBE TABLE \"{catalog}\".\"{schema}\".\"headers\"",
+   "parameters": [],
+   "result": "tables/301031d3f771bbc789a91cbdd223fd46524e71c8f9a6ec9405481a108ec8ea42.arrows"
+  },
+  {
+   "text": "SELECT \"hid\", \"cid\", \"ts\" FROM \"{catalog}\".\"{schema}\".\"headers\" LIMIT 1000",
+   "parameters": [],
+   "result": "tables/01368e721ca033af249ce6775e93915ca2e2954b29b252e19a4af710c0dffa28.arrows"
+  },
+  {
+   "text": "SHOW IMPORTED KEYS IN TABLE \"{catalog}\".\"{schema}\".\"customers\"",
+   "parameters": [],
+   "result": "tables/3645cf01f2ec465c24ec76be98d01f2a53eb424f5a17037114ed58020cd35dca.arrows"
+  },
+  {
+   "text": "SHOW IMPORTED KEYS IN TABLE \"{catalog}\".\"{schema}\".\"details\"",
+   "parameters": [],
+   "result": "tables/3645cf01f2ec465c24ec76be98d01f2a53eb424f5a17037114ed58020cd35dca.arrows"
+  },
+  {
+   "text": "SHOW IMPORTED KEYS IN TABLE \"{catalog}\".\"{schema}\".\"headers\"",
+   "parameters": [],
+   "result": "tables/3645cf01f2ec465c24ec76be98d01f2a53eb424f5a17037114ed58020cd35dca.arrows"
+  },
+  {
+   "text": "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT \"cid\") AS d, COUNT(CASE WHEN \"cid\" IS NULL THEN 1 END) AS z\nFROM \"{catalog}\".\"{schema}\".\"customers\"\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT \"hid\") AS d, COUNT(CASE WHEN \"hid\" IS NULL THEN 1 END) AS z\nFROM \"{catalog}\".\"{schema}\".\"headers\"",
+   "parameters": [],
+   "result": "tables/626ffa27eb05ed8788f7b18c9cc0c358b9f463ad8d194e1a8a6d42c805be6666.arrows"
+  },
+  {
+   "text": "SHOW TABLES LIKE ? IN SCHEMA \"{catalog}\".\"{schema}\"",
+   "parameters": [
+    "customers"
+   ],
+   "result": "tables/f554cc71dd0684b4272a18d7604154b84cf515ed1e6839e610f6a4a0e9b93040.arrows"
+  },
+  {
+   "text": "SHOW TABLES LIKE ? IN SCHEMA \"{catalog}\".\"{schema}\"",
+   "parameters": [
+    "details"
+   ],
+   "result": "tables/1d9f021907de7dc50d6e6016c27b7bcf509f94e972fc6b19893a162f84f4b6c3.arrows"
+  },
+  {
+   "text": "SHOW TABLES LIKE ? IN SCHEMA \"{catalog}\".\"{schema}\"",
+   "parameters": [
+    "headers"
+   ],
+   "result": "tables/a109321efc6d4fb02b84d113b8d28144cbf7745f1e1ed1b48dcfa39141a6a381.arrows"
+  },
+  {
+   "text": "SELECT\n  0 as table_index,\n  MIN(\"ts\") as min_date,\n  MAX(\"ts\") as max_date\nFROM \"{catalog}\".\"{schema}\".\"details\"",
+   "parameters": [],
+   "result": "tables/65eb4ab15875741c814858ffd15f9a35118e156b5477f1d3a63f1a5e4b0e8a25.arrows"
+  },
+  {
+   "text": "SELECT \"cid\"\nFROM \"{catalog}\".\"{schema}\".\"customers\"\nSAMPLE ROW (10000 ROWS)\nWHERE \"cid\" IS NOT NULL",
+   "parameters": [],
+   "result": "tables/2c0e644df48af5e6fec124d2a793651a58889a0377ad71678f4e909dfa619109.arrows"
+  },
+  {
+   "text": "WITH TMP as (\n  SELECT\n    f.index as __KUMO_BATCH__,\n    f.value[0]::NUMBER as __KUMO_ID__,\n    f.value[1]::TIMESTAMP_NTZ as __KUMO_END_TIME__,\n    f.value[2]::TIMESTAMP_NTZ as __KUMO_START_TIME__\n  FROM TABLE(FLATTEN(INPUT => PARSE_JSON(?))) f\n)\nSELECT TMP.__KUMO_BATCH__ as __KUMO_BATCH__, \"ts\"\nFROM TMP\nJOIN \"{catalog}\".\"{schema}\".\"details\"\n  ON \"cid\" = TMP.__KUMO_ID__\n AND \"ts\" <= TMP.__KUMO_END_TIME__\nAND \"ts\" > TMP.__KUMO_START_TIME__\nWHERE \"ts\" <= ?\nAND \"ts\" > ?",
+   "parameters": [
+    "[[5, \"2024-02-01 00:00:00\", \"2024-01-02 00:00:00\"], [6, \"2024-02-01 00:00:00\", \"2024-01-02 00:00:00\"], [0, \"2024-02-01 00:00:00\", \"2024-01-02 00:00:00\"], [7, \"2024-02-01 00:00:00\", \"2024-01-02 00:00:00\"], [3, \"2024-02-01 00:00:00\", \"2024-01-02 00:00:00\"], [2, \"2024-02-01 00:00:00\", \"2024-01-02 00:00:00\"], [4, \"2024-02-01 00:00:00\", \"2024-01-02 00:00:00\"], [9, \"2024-02-01 00:00:00\", \"2024-01-02 00:00:00\"], [1, \"2024-02-01 00:00:00\", \"2024-01-02 00:00:00\"], [8, \"2024-02-01 00:00:00\", \"2024-01-02 00:00:00\"]]",
+    "2024-02-01 00:00:00",
+    "2024-01-02 00:00:00"
+   ],
+   "result": "tables/8475de81da2f3c4b59c3ed6c66723ae4c239857bf3bc9af904390804cba38a31.arrows"
+  },
+  {
+   "text": "WITH TMP as (\n  SELECT\n    f.index as __KUMO_BATCH__,\n    f.value::NUMBER as __KUMO_ID__\n  FROM TABLE(FLATTEN(INPUT => PARSE_JSON(?))) f\n)\nSELECT TMP.__KUMO_BATCH__ as __KUMO_BATCH__, \"cid\", \"seg\"\nFROM TMP\nJOIN \"{catalog}\".\"{schema}\".\"customers\"\n  ON \"cid\" = TMP.__KUMO_ID__",
+   "parameters": [
+    "[5, 6, 0, 7, 3, 2, 4, 9, 1, 8, 0, 1, 2]"
+   ],
+   "result": "tables/05842d3062da679759747f6cd1fadc937f6f80aa5fe3273ef9f55c6c9b6c52d3.arrows"
+  },
+  {
+   "text": "SELECT\n  0 as table_index,\n  MIN(\"ts\") as min_date,\n  MAX(\"ts\") as max_date\nFROM \"{catalog}\".\"{schema}\".\"headers\"",
+   "parameters": [],
+   "result": "tables/65eb4ab15875741c814858ffd15f9a35118e156b5477f1d3a63f1a5e4b0e8a25.arrows"
+  },
+  {
+   "text": "WITH TMP as (\n  SELECT\n    f.index as __KUMO_BATCH__,\n    f.value[0]::NUMBER as __KUMO_ID__,\n    f.value[1]::TIMESTAMP_NTZ as __KUMO_END_TIME__,\n    f.value[2]::TIMESTAMP_NTZ as __KUMO_START_TIME__\n  FROM TABLE(FLATTEN(INPUT => PARSE_JSON(?))) f\n)\nSELECT TMP.__KUMO_BATCH__ as __KUMO_BATCH__, \"hid\", \"cid\", \"ts\"\nFROM TMP\nJOIN \"{catalog}\".\"{schema}\".\"headers\"\n  ON \"cid\" = TMP.__KUMO_ID__\n AND \"ts\" <= TMP.__KUMO_END_TIME__\n AND \"ts\" > TMP.__KUMO_START_TIME__\nWHERE \"ts\" <= ?\n  AND \"ts\" > ?\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY TMP.__KUMO_BATCH__\n  ORDER BY \"ts\" DESC, \"hid\"\n) <= 32\nORDER BY TMP.__KUMO_BATCH__, \"ts\" DESC, \"hid\"",
+   "parameters": [
+    "[[5, \"2024-01-02 00:00:00\", \"2019-09-25 00:00:00\"], [6, \"2024-01-02 00:00:00\", \"2019-09-25 00:00:00\"], [0, \"2024-01-02 00:00:00\", \"2019-09-25 00:00:00\"], [7, \"2024-01-02 00:00:00\", \"2019-09-25 00:00:00\"], [3, \"2024-01-02 00:00:00\", \"2019-09-25 00:00:00\"], [2, \"2024-01-02 00:00:00\", \"2019-09-25 00:00:00\"], [4, \"2024-01-02 00:00:00\", \"2019-09-25 00:00:00\"], [9, \"2024-01-02 00:00:00\", \"2019-09-25 00:00:00\"], [1, \"2024-01-02 00:00:00\", \"2019-09-25 00:00:00\"], [8, \"2024-01-02 00:00:00\", \"2019-09-25 00:00:00\"], [0, \"2024-02-01 00:00:00\", \"2019-10-25 00:00:00\"], [1, \"2024-02-01 00:00:00\", \"2019-10-25 00:00:00\"], [2, \"2024-02-01 00:00:00\", \"2019-10-25 00:00:00\"]]",
+    "2024-02-01 00:00:00",
+    "2019-09-25 00:00:00"
+   ],
+   "result": "tables/52b179e8471783fe22ccc6e4cf34851322739ee0b0364e6c78bfb9be58419955.arrows"
+  },
+  {
+   "text": "WITH TMP as (\n  SELECT\n    f.index as __KUMO_BATCH__,\n    f.value[0]::NUMBER as __KUMO_ID__,\n    f.value[1]::TIMESTAMP_NTZ as __KUMO_END_TIME__,\n    f.value[2]::TIMESTAMP_NTZ as __KUMO_START_TIME__\n  FROM TABLE(FLATTEN(INPUT => PARSE_JSON(?))) f\n)\nSELECT TMP.__KUMO_BATCH__ as __KUMO_BATCH__, \"did\", \"hid\", \"cid\", \"ts\"\nFROM TMP\nJOIN \"{catalog}\".\"{schema}\".\"details\"\n  ON \"cid\" = TMP.__KUMO_ID__\n AND \"ts\" <= TMP.__KUMO_END_TIME__\n AND \"ts\" > TMP.__KUMO_START_TIME__\nWHERE \"ts\" <= ?\n  AND \"ts\" > ?\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY TMP.__KUMO_BATCH__\n  ORDER BY \"ts\" DESC, \"cid\", \"did\", \"hid\"\n) <= 32\nORDER BY TMP.__KUMO_BATCH__, \"ts\" DESC, \"cid\", \"did\", \"hid\"",
+   "parameters": [
+    "[[5, \"2024-01-02 00:00:00\", \"2022-07-31 00:00:00\"], [6, \"2024-01-02 00:00:00\", \"2022-07-31 00:00:00\"], [0, \"2024-01-02 00:00:00\", \"2022-07-31 00:00:00\"], [7, \"2024-01-02 00:00:00\", \"2022-07-31 00:00:00\"], [3, \"2024-01-02 00:00:00\", \"2022-07-31 00:00:00\"], [2, \"2024-01-02 00:00:00\", \"2022-07-31 00:00:00\"], [4, \"2024-01-02 00:00:00\", \"2022-07-31 00:00:00\"], [9, \"2024-01-02 00:00:00\", \"2022-07-31 00:00:00\"], [1, \"2024-01-02 00:00:00\", \"2022-07-31 00:00:00\"], [8, \"2024-01-02 00:00:00\", \"2022-07-31 00:00:00\"], [0, \"2024-02-01 00:00:00\", \"2022-08-30 00:00:00\"], [1, \"2024-02-01 00:00:00\", \"2022-08-30 00:00:00\"], [2, \"2024-02-01 00:00:00\", \"2022-08-30 00:00:00\"]]",
+    "2024-02-01 00:00:00",
+    "2022-07-31 00:00:00"
+   ],
+   "result": "tables/b0d83501b3fa431a88d688cd3b84957ba6a0ddaeddc6c85f5bd6071ee8770970.arrows"
+  },
+  {
+   "text": "WITH TMP as (\n  SELECT\n    f.index as __KUMO_BATCH__,\n    f.value[0]::NUMBER as __KUMO_ID__,\n    f.value[1]::TIMESTAMP_NTZ as __KUMO_END_TIME__,\n    f.value[2]::TIMESTAMP_NTZ as __KUMO_START_TIME__\n  FROM TABLE(FLATTEN(INPUT => PARSE_JSON(?))) f\n)\nSELECT TMP.__KUMO_BATCH__ as __KUMO_BATCH__, \"did\", \"hid\", \"cid\", \"ts\"\nFROM TMP\nJOIN \"{catalog}\".\"{schema}\".\"details\"\n  ON \"hid\" = TMP.__KUMO_ID__\n AND \"ts\" <= TMP.__KUMO_END_TIME__\n AND \"ts\" > TMP.__KUMO_START_TIME__\nWHERE \"ts\" <= ?\n  AND \"ts\" > ?\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY TMP.__KUMO_BATCH__\n  ORDER BY \"ts\" DESC, \"cid\", \"did\", \"hid\"\n) <= 32\nORDER BY TMP.__KUMO_BATCH__, \"ts\" DESC, \"cid\", \"did\", \"hid\"",
+   "parameters": [
+    "[[0, \"2024-01-02 00:00:00\", \"2019-01-03 00:00:00\"], [1, \"2024-01-02 00:00:00\", \"2019-01-03 00:00:00\"], [30, \"2024-02-01 00:00:00\", \"2019-02-02 00:00:00\"], [20, \"2024-02-01 00:00:00\", \"2019-02-02 00:00:00\"], [10, \"2024-02-01 00:00:00\", \"2019-02-02 00:00:00\"], [0, \"2024-02-01 00:00:00\", \"2019-02-02 00:00:00\"], [31, \"2024-02-01 00:00:00\", \"2019-02-02 00:00:00\"], [21, \"2024-02-01 00:00:00\", \"2019-02-02 00:00:00\"], [11, \"2024-02-01 00:00:00\", \"2019-02-02 00:00:00\"], [1, \"2024-02-01 00:00:00\", \"2019-02-02 00:00:00\"], [22, \"2024-02-01 00:00:00\", \"2019-02-02 00:00:00\"], [12, \"2024-02-01 00:00:00\", \"2019-02-02 00:00:00\"], [2, \"2024-02-01 00:00:00\", \"2019-02-02 00:00:00\"]]",
+    "2024-02-01 00:00:00",
+    "2019-01-03 00:00:00"
+   ],
+   "result": "tables/c65039f7d3eb363767737c809fcd5f26a2aca9954ad84aeb882befc572ab840e.arrows"
+  }
+ ],
+ "loader": []
+}
