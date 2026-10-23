@@ -272,12 +272,12 @@ T3.2 taught the checking tools Phase 3's warehouse and Java legs.
   Each case's tables are loaded by T3.3's `databases.load(duck, leg, WarehouseTarget)`; every driver call is captured, and the driver's statement log runs beside it as the capture's query log.
   The output has each private name written back as its placeholder, and the write fails on any private value left; T3.3's writer turns it into the capture manifests.
 - **Captures.** `capture_check.py captures --cases DIR [--locked] MANIFEST...` lists each case and leg with no capture of its current input as `pending live: <case>@<leg>` (failing with `--locked`); `capture_check.py commit --candidate SHA [REV]` holds a captures-only commit to the final candidate; `contract/captures/**` is protected.
-- **Live only.** On a stand-in leg the core's observation carries the stand-in's verdict (`standin`); `compare.py` lists a live-only item (a code of `compare-policy.yaml`'s `standin` list) as `LIVE ONLY`, neither passed nor failed, and with `--verdicts MANIFEST... --candidate SHA` fails one without an E-1 verdict `equal` recorded on the final candidate; `gate.sh --locked` passes both, and runs `captures --locked` once `contract/captures/` exists.
-- **Runners.** `gate.sh --run` takes `java` (`run_java.py`, T3.11's) and `standin` (python-core on each warehouse leg through `standin_client.py`, T3.3's).
+- **Warehouse legs.** No offline stand-in (the owner's decision B-lite): a warehouse leg's observations are compared like any database's, by every rule, against the reference lines C-1 recorded on it; `gate.sh --locked` runs `captures --locked` once `contract/captures/` exists.
+- **Runners.** `gate.sh --run` takes `java` (`run_java.py`, T3.11's).
 - **Lanes.** `lane.py start --brief BRIEF` refuses a brief `brief_check.py` fails; from Phase 3 on it refuses a package ID with a letter, and it never starts a lane on a phase `rust-core` already holds.
 - **Coverage.** `coverage.py --check --gate LANGUAGE:SLICE` gates a slice's paths and cells (`python:S1`, `python:S2`, `java:S1`); each leg claims its own path, and a manifest path's `tests` (pytest node IDs) may claim a path the case format cannot express.
 - **Option C's sampled case.** `compare-policy.yaml`'s `sampled` section names the one sampled Snowflake case (`{leg, stage, statement, decision}`); on that leg its comparison holds only the sampling statement and the result's row count, besides the outcome, route, inputs, schema and warnings, and `capture_check.py` refuses a second case, another leg or another decision.
-- **The census's real-data mode.** `refusal_census.py real-data --database LEG --cases DIR --control CASE --out FILE`, one leg at a time, a warehouse leg on its stand-in, failing when its seeded control is not refused.
+- **The census's real-data mode.** `refusal_census.py real-data --database LEG --cases DIR --control CASE --out FILE`, one leg at a time, a warehouse leg live, failing when its seeded control is not refused.
 
 ### After T3.0 lands: the orchestrator's one-time steps
 

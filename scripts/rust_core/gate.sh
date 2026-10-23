@@ -38,8 +38,7 @@
 #   observations  required: with neither --run nor --observations the gate
 #                 fails, since the tree checks alone judge no behaviour;
 #                 --run python-core,python-old,rust-host makes them here
-#                 (from T3.2 also java, the Java host's run_java.py, and
-#                 standin, python-core on each warehouse leg's stand-in):
+#                 (from T3.2 also java, the Java host's run_java.py):
 #                 the Python runners with $PYTHON (default python3, an
 #                 environment holding the candidate's client), rust-host with
 #                 cargo, each with the checkpoint's run_python.py and test
@@ -635,28 +634,6 @@ observe() {
         # every leg it reports a provider for.
         "$PYTHON" -I "$tree/contract/runners/run_java.py" \
           --out "$made/java.jsonl" "$tree/contract/cases" || return 1 ;;
-      standin)
-        # Each warehouse leg on the stand-in (choice 2): python-core with
-        # --database the leg, its observations keyed <case>@<leg>. A leg
-        # no case runs on is not observed, and its file is no evidence
-        # (Claude r1 P1-2).
-        local leg said file kept
-        for leg in databricks-sql databricks-spark snowflake lakebase; do
-          if ! said=$("$PYTHON" -I "$tree/contract/runners/run_python.py" \
-            --mode python-core --database "$leg" \
-            --out "$made/standin-$leg.jsonl" "$tree/contract/cases" 2>&1); then
-            printf '%s\n' "$said"
-            grep -qF "runner failure: no case runs on $leg" <<<"$said" || return 1
-            echo "standin: no case runs on $leg; that leg is not observed"
-            kept=()
-            for file in "${given[@]+"${given[@]}"}"; do
-              [ "$file" = "$made/standin-$leg.jsonl" ] || kept+=("$file")
-            done
-            given=("${kept[@]+"${kept[@]}"}")
-            continue
-          fi
-          printf '%s\n' "$said"
-        done ;;
       *) echo "no runner $runner"; return 1 ;;
     esac
     echo "$runner: $made/$runner.jsonl"
@@ -697,13 +674,7 @@ prepare() {
 want() { [ -z "$only" ] || [ "$only" = "$1" ]; }
 
 given=("${observations[@]+"${observations[@]}"}")
-for runner in ${runs//,/ }; do
-  if [ "$runner" = standin ]; then
-    for leg in databricks-sql databricks-spark snowflake lakebase; do given+=("$made/standin-$leg.jsonl"); done
-  else
-    given+=("$made/$runner.jsonl")
-  fi
-done
+for runner in ${runs//,/ }; do given+=("$made/$runner.jsonl"); done
 if [ -n "$locked" ] || [ "$only" = observations ] ||
   { [ -z "$only" ] && { [ -n "$runs" ] || [ ${#given[@]} -eq 0 ] || [ "$differs" = 1 ]; }; }; then
   step observations evidence_of
@@ -742,29 +713,11 @@ judge_compare() {
     "$PYTHON" "$here/scripts/rust_core/ratchet.py" effective --repo "$candidate" \
       "${where[@]}" "${epic[@]+"${epic[@]}"}" --out "$scratch/effective.json" || return 1
   fi
-  # A live-only item (Phase 3 design choice 2) is neither passed nor
-  # failed offline; the locked run fails while one has no E-1 verdict
-  # "equal" for the final candidate in the core's live capture manifests
-  # under contract/captures/ (compare.py --verdicts --candidate): the
-  # candidate itself, or the final candidate a captures-only commit on it
-  # was recorded from (capture_check.py commit).
-  local verdicts=() final=$head
-  if [ -n "$locked" ]; then
-    if "$PYTHON" "$here/contract/runners/capture_check.py" commit \
-      --repo "$candidate" --candidate "$head~1" "$head" >/dev/null 2>&1; then
-      final=$(git -C "$candidate" rev-parse "$head~1")
-    fi
-    while IFS= read -r -d '' manifest; do verdicts+=("$manifest"); done < <(
-      find "$candidate/contract/captures" -name '*.json' -print0 2>/dev/null)
-    verdicts=(--candidate "$final" ${verdicts[@]+--verdicts "${verdicts[@]}"} --)
-  fi
   local status=0 leg file
   # One comparison per leg the observations hold lines of (Claude r1
   # P1-2): compare.py judges one database or warehouse leg a run, each with
-  # only the files that hold that leg's lines (a stand-in file per
-  # warehouse leg beside python-core's DuckDB one), so a warehouse or Java
-  # line is judged on its leg and a live-only item without its E-1 verdict
-  # fails the locked run.
+  # only the files that hold that leg's lines, so a warehouse or Java line
+  # is judged on its leg, against the reference lines recorded on it.
   local pairs
   # A file given and unreadable, empty or not observation lines is refused
   # by name, never dropped from the comparison (Codex r2 P1-3).
@@ -805,8 +758,7 @@ sys.exit(1 if refused else 0)
       --reference "$(ls "$candidate"/contract/reference/*.jsonl)" \
       --expect "$scratch/effective.json" \
       --register "$candidate/docs/design/rust-core/register.yaml" \
-      --database "$leg" \
-      "${verdicts[@]+"${verdicts[@]}"}" "${files[@]}" || status=1
+      --database "$leg" "${files[@]}" || status=1
   done
   # Locked check 1: no case pending live at the final run. From C-1's
   # captures on (contract/captures/), every case and warehouse leg needs a

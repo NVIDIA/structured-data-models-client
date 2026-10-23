@@ -97,15 +97,9 @@ RULELESS = {
 NOT_YET = re.compile(r'\bnot_yet\(\s*"([a-z0-9_]+)"')
 FN = re.compile(r'\bfn\s+([A-Za-z_][A-Za-z0-9_]*)')
 DATABASES = ('duckdb', 'sqlite', 'postgres')
-#: The legs the real-data mode runs on (T3.2): the offline databases, and
-#: each warehouse leg on its stand-in (run_python.py's Standin).
-LEGS = (
-    *DATABASES,
-    'databricks-sql',
-    'databricks-spark',
-    'snowflake',
-    'lakebase',
-)
+#: The legs the real-data mode runs on: the offline databases (a
+#: warehouse leg runs live only).
+LEGS = DATABASES
 #: The probes' case template: what the case format requires beside a
 #: probe's input, its routes every core route the corpus forces.
 TEMPLATE = {
@@ -543,68 +537,14 @@ def run(
 
 def _real_outcome(case: dict[str, Any], database: str) -> dict[str, Any]:
     r"""One real-data case's public calls on python-core, every route of
-    its calls forced on ``database``: on a database through the contract
-    loader, as a probe runs; on a warehouse leg through the stand-in."""
+    its calls forced on ``database``, through the contract loader, as a
+    probe runs."""
     runner = _runner()
     os.environ['SDM_CORE_ROUTES'] = ','.join(runner.routes_on(case, database))
     try:
-        if database in DATABASES:
-            return _outcome(case, database)
-        stand = runner.Standin(case, runner.load_bases(), database)
-        try:
-            return _outcome_on(stand, case, database)
-        finally:
-            stand.close()
+        return _outcome(case, database)
     finally:
         os.environ.pop('SDM_CORE_ROUTES', None)
-
-
-def _outcome_on(stand: Any, case: dict[str, Any], leg: str) -> dict[str, Any]:
-    r""":func:`_outcome` on a warehouse leg's stand-in session, its
-    forwarding provider plugged in for the calls (``Standin.plugged``), so
-    every fetch reaches the stand-in rather than the ordinary provider over
-    the offline connection, whose failure is no product refusal (Codex r1)."""
-    import warnings
-
-    import sdm_client
-    from sdm_client import PredictiveQuery, Schema, SDMClient
-
-    runner = _runner()
-    serve = runner._sibling('scripted_endpoint').serve
-    given = stand.case['input']
-    stage = 'from_source'
-    try:
-        with serve() as (url, _), stand.plugged(), warnings.catch_warnings():
-            warnings.simplefilter('ignore')
-            schema = Schema.from_source(
-                runner.warehouse_source(
-                    leg, stand.connection, stand.names, given
-                ),
-                **runner._from_source_arguments(given.get('from_source', {})),
-            )
-            runner._edit(schema, given.get('edits', []))
-            if case['until'] != 'from_source':
-                stage = 'materialize'
-                request = PredictiveQuery(given['pql'], schema).materialize(
-                    **runner._materialize_arguments(given['materialize'])
-                )
-            if case['until'] == 'predict':
-                stage = 'predict'
-                with SDMClient(url) as client:
-                    client.predict(request, model=sdm_client.KumoRelational())
-        return {'result': 'success', 'stage': stage}
-    except Exception as error:  # noqa: BLE001 - the case's outcome
-        details = getattr(error, 'details', None)
-        details = details if isinstance(details, dict) else {}
-        code = getattr(error, 'code', None)
-        rule = details.get('rule')
-        return {
-            'result': 'refusal',
-            'stage': stage,
-            'error': type(error).__name__,
-            'code': code if isinstance(code, str) else None,
-            'rule': rule if isinstance(rule, str) else None,
-        }
 
 
 #: The client's refusals: a control refused with anything else (an import
@@ -648,9 +588,8 @@ def control_problem(
 def real_data(cases: Path, database: str, control: Path) -> dict[str, Any]:
     r"""The census's real-data mode on ``database``, one leg (locked check
     2): every real-data case under ``cases`` (a full-size dataset's cases,
-    such as AdventureWorks' or RelBench H&M's, or C-1's AdventureWorks
-    tables on a warehouse leg's stand-in) run on python-core with every
-    route forced, each refusal counted by its rule (or, ruleless, its
+    such as AdventureWorks' or RelBench H&M's) run on python-core with
+    every route forced, each refusal counted by its rule (or, ruleless, its
     code), with the cases that hit it; and the control, a seeded refusal
     on a real source (``control``, one case), which must be counted, or
     the run fails: a census that sees nothing proves nothing."""
@@ -718,7 +657,7 @@ def main(argv: list[str] | None = None) -> int:
         help='the real-data mode, one leg: ' + ', '.join(LEGS),
         description='The census over the real datasets on one leg: '
         + ', '.join(LEGS)
-        + ' (a warehouse leg on its stand-in).',
+        + ' (a warehouse leg runs live only).',
     )
     real.add_argument('--database', choices=LEGS, required=True)
     real.add_argument('--cases', type=Path, required=True)

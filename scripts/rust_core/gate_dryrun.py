@@ -78,9 +78,6 @@ sys.path.insert(0, str(HERE))
 import phases  # noqa: E402
 
 STUBS = 'contract/cases/dryrun'
-#: The stand-in's forwarding client a warehouse kind's legs run through
-#: (T3.3).
-STANDIN_CLIENT = 'contract/runners/standin_client.py'
 IDENTITY = [
     '-c',
     'user.name=gate dry run',
@@ -458,27 +455,16 @@ def dry_run(arguments: argparse.Namespace) -> int:
             made = []
             runs: list[tuple[str, list[str], Path]] = []
             legs = list(kind.case.get('warehouses') or [])
-            if legs and not (tree / STANDIN_CLIENT).is_file():
-                # A warehouse kind runs only on its legs, offline on the
-                # stand-in (T3.3's standin_client.py): judged once it
-                # exists, as the design says, not a gap of the tools (T3.2).
+            if legs:
+                # A warehouse kind runs only on its legs, and those only
+                # live (C-1 records the reference, E-1 runs the core there,
+                # the owner's decision B-lite): the dry run observes none.
                 kind.notes.append(
-                    'observe and compare: the warehouse legs wait for the '
-                    'stand-in (contract/runners/standin_client.py, T3.3)'
+                    'observe and compare: the warehouse legs run live only, '
+                    'not in the dry run'
                 )
                 continue
-            if arguments.python and legs:
-                for leg in legs:
-                    out = observations / f'{kind.id}.{leg}.python-core.jsonl'
-                    runs.append(
-                        (
-                            f'observe (python-core, {leg})',
-                            [arguments.python, '-I', str(judge / 'contract/runners/run_python.py'),
-                             '--mode', 'python-core', '--database', leg, '--out', str(out), str(stub)],
-                            out,
-                        )
-                    )  # fmt: skip
-            elif arguments.python:
+            if arguments.python:
                 for mode in ('python-core', 'python-old'):
                     out = observations / f'{kind.id}.{mode}.jsonl'
                     runs.append(
