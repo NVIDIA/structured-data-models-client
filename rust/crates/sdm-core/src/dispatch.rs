@@ -83,7 +83,7 @@ pub fn start(
             let check_keys = request.check_keys;
             let zones = Arc::clone(&zones);
             Run::with_data(access, move |asker| async move {
-                let asker = crate::describe::settled(asker, None).await?;
+                let asker = crate::describe::settled(asker).await?;
                 crate::describe::run(asker, source, check_keys, facts, zones).await
             })
         }
@@ -399,16 +399,28 @@ pub(crate) fn materialize(
                 labels_only,
             };
             Ok(Run::with_data(access, move |asker| async move {
-                // The namespace the schema's columns were read under, where a
-                // run read parts the provider left to the connection: the
-                // same tables read again, whatever the session's current
-                // parts are now (`SourceFacts::namespace`).
-                let known = held
+                // Each table read where it was described, as the reference
+                // keeps the tables it read: under the namespace its columns'
+                // facts, still of its relation, were read under, where the
+                // source's own parts agree with it (`SourceFacts::namespace`);
+                // every other table where the source and its session say now.
+                let pinned: Vec<(sdm_contract::data::Relation, Vec<String>)> = held
                     .tables
                     .iter()
-                    .flat_map(|table| &table.columns)
-                    .find_map(|column| column.source.as_ref()?.namespace.clone());
-                let asker = crate::describe::settled(asker, known).await?;
+                    .filter_map(|table| {
+                        let parts = described_under(table)?;
+                        let data = asker.data()?;
+                        data.keeps(&parts).then(|| (table.source.clone(), parts))
+                    })
+                    .collect();
+                let asker = if pinned.len() == held.tables.len() {
+                    asker
+                } else {
+                    crate::describe::settled(asker).await?
+                };
+                for (relation, parts) in pinned {
+                    asker.pin(&relation, parts);
+                }
                 // Each column's facts, the host's or, for a column with none,
                 // the source's, read before anything else of the run.
                 let found = crate::discover::facts(&asker, &held).await?;
@@ -437,4 +449,18 @@ pub(crate) fn materialize(
         }
         _ => Err(internal("a materialize run of another operation")),
     }
+}
+
+/// The one namespace the columns of `table`, a table of one part, were read
+/// under, of the facts each holds of its relation (`facts_held`); `None`
+/// where none names one, or two name different ones.
+fn described_under(table: &sdm_contract::ops::HeldTable) -> Option<Vec<String>> {
+    table.source.single()?;
+    let mut read = table.columns.iter().filter_map(|column| {
+        sdm_schema::held::facts_held(table, column)?
+            .namespace
+            .as_ref()
+    });
+    let first = read.next()?;
+    read.all(|other| other == first).then(|| first.clone())
 }
