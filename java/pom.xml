@@ -38,6 +38,13 @@
     <arrow.version>19.0.0</arrow.version>
     <slf4j.version>2.0.17</slf4j.version>
     <junit.version>5.13.4</junit.version>
+    <!-- The JDBC drivers the providers are tested with (T3.12): DuckDB at
+         the reference's version (1.5.6), SQLite's and Postgres's current
+         releases. None ships with the JAR: a source is built from the
+         caller's own java.sql.Connection. -->
+    <duckdb.version>1.5.6.0</duckdb.version>
+    <sqlite.version>3.53.4.0</sqlite.version>
+    <postgresql.version>42.7.14</postgresql.version>
     <!-- Where the natives are copied before packaging: one directory per
          platform. -->
     <sdm.natives>${project.build.directory}/natives</sdm.natives>
@@ -75,6 +82,29 @@
       <groupId>org.slf4j</groupId>
       <artifactId>slf4j-api</artifactId>
       <version>${slf4j.version}</version>
+    </dependency>
+
+    <!-- DuckDB's driver, compiled against for its Arrow interface (a key set
+         registered as an Arrow stream, a result exported as one), which the
+         DuckDB provider reaches only for a DuckDB connection; the caller
+         brings the driver (provided, never shipped). -->
+    <dependency>
+      <groupId>org.duckdb</groupId>
+      <artifactId>duckdb_jdbc</artifactId>
+      <version>${duckdb.version}</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.xerial</groupId>
+      <artifactId>sqlite-jdbc</artifactId>
+      <version>${sqlite.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.postgresql</groupId>
+      <artifactId>postgresql</artifactId>
+      <version>${postgresql.version}</version>
+      <scope>test</scope>
     </dependency>
 
     <!-- The tests' logger, so a test can see the core's events reach SLF4J. -->
@@ -165,6 +195,20 @@
             <configuration>
               <includeScope>runtime</includeScope>
               <outputDirectory>${project.build.directory}/lib</outputDirectory>
+            </configuration>
+          </execution>
+          <!-- The JDBC drivers beside them, in target/jdbc: the contract
+               runner's database legs open their connections with these. -->
+          <execution>
+            <id>jdbc-drivers</id>
+            <phase>package</phase>
+            <goals>
+              <goal>copy-dependencies</goal>
+            </goals>
+            <configuration>
+              <includeScope>test</includeScope>
+              <includeArtifactIds>duckdb_jdbc,sqlite-jdbc,postgresql</includeArtifactIds>
+              <outputDirectory>${project.build.directory}/jdbc</outputDirectory>
             </configuration>
           </execution>
         </executions>

@@ -31,8 +31,17 @@ public final class Json {
 
   private Json() {}
 
+  /** Text nested past {@link #MAX_DEPTH}, which this reader does not read. */
+  public static final class TooDeep extends JsonException {
+    private static final long serialVersionUID = 1L;
+
+    TooDeep(String message) {
+      super(message);
+    }
+  }
+
   /** Why a value could not be written or text could not be read; it quotes none of either. */
-  public static final class JsonException extends Exception {
+  public static class JsonException extends Exception {
     private static final long serialVersionUID = 1L;
 
     JsonException(String message) {
@@ -195,7 +204,7 @@ public final class Json {
 
     Object value(int depth) throws JsonException {
       if (depth > MAX_DEPTH) {
-        throw failed("nesting past " + MAX_DEPTH + " levels");
+        throw new TooDeep("nesting past " + MAX_DEPTH + " levels at " + at);
       }
       char c = peek();
       switch (c) {

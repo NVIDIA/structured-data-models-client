@@ -42,7 +42,7 @@ use arrow_schema::ArrowError;
 use jni::errors::ErrorPolicy;
 use jni::objects::{Global, JByteArray, JClass, JIntArray, JLongArray, JObject, JObjectArray};
 use jni::sys::{jboolean, jint, jlong};
-use jni::{Env, EnvUnowned, JValue, jni_sig};
+use jni::{Env, EnvUnowned, JValue, jni_sig, jni_str};
 use sdm_contract::data::AttachmentId;
 use sdm_contract::{CONTRACT_VERSION, CoreError, Detail, ErrorCode, Scalar, Sentence};
 use sdm_host::{
@@ -402,6 +402,11 @@ pub extern "system" fn Java_com_nvidia_sdm_internal_NativeCore_info0<'caller>(
             "test_ops": cfg!(feature = "test-ops"),
             "providers": sdm_host::providers(),
             "error_codes": ErrorCode::ALL.map(ErrorCode::as_str),
+            // Each data type's name on the client's wire, by the contract's
+            // name of it: what a schema holds a described column's type as.
+            "wire_names": sdm_host::wire_names()
+                .into_iter()
+                .collect::<std::collections::BTreeMap<_, _>>(),
         });
         let bytes =
             serde_json::to_vec(&info).map_err(|_| Failure::Usage("the library's description"))?;
@@ -435,6 +440,131 @@ pub extern "system" fn Java_com_nvidia_sdm_internal_NativeCore_isPosixZone<'call
     entry(&mut unowned, |env| {
         let bytes = env.convert_byte_array(&text)?;
         Ok(std::str::from_utf8(&bytes).is_ok_and(sdm_host::is_posix_zone))
+    })
+}
+
+/// The machine's files as Java reads them, for the local zone's rule:
+/// `NativeCore.isRegularFile` and `NativeCore.realPath` (`Files.isRegularFile`
+/// and `Path.toRealPath`), so the binding does no I/O of its own (T3.12).
+/// A JNI failure is kept, and the entry fails with it after the rule.
+struct JavaZoneFiles<'local, 'caller> {
+    env: std::cell::RefCell<&'local mut Env<'caller>>,
+    class: &'local JClass<'caller>,
+    failed: std::cell::Cell<bool>,
+}
+
+impl JavaZoneFiles<'_, '_> {
+    fn path_bytes(path: &std::path::Path) -> Vec<u8> {
+        path.to_string_lossy().into_owned().into_bytes()
+    }
+}
+
+impl sdm_host::ZoneFiles for JavaZoneFiles<'_, '_> {
+    fn is_file(&self, path: &std::path::Path) -> bool {
+        let mut env = self.env.borrow_mut();
+        let answer = (|| -> jni::errors::Result<bool> {
+            let bytes = env.byte_array_from_slice(&Self::path_bytes(path))?;
+            env.call_static_method(
+                self.class,
+                jni_str!("isRegularFile"),
+                jni_sig!("([B)Z"),
+                &[JValue::Object(&bytes)],
+            )?
+            .z()
+        })();
+        answer.unwrap_or_else(|_| {
+            self.failed.set(true);
+            false
+        })
+    }
+
+    fn real_path(&self, path: &std::path::Path) -> Option<std::path::PathBuf> {
+        let mut env = self.env.borrow_mut();
+        let answer = (|| -> jni::errors::Result<Option<Vec<u8>>> {
+            let bytes = env.byte_array_from_slice(&Self::path_bytes(path))?;
+            let found = env
+                .call_static_method(
+                    self.class,
+                    jni_str!("realPath"),
+                    jni_sig!("([B)[B"),
+                    &[JValue::Object(&bytes)],
+                )?
+                .l()?;
+            if found.is_null() {
+                return Ok(None);
+            }
+            let found = env.cast_local::<JByteArray>(found)?;
+            Ok(Some(env.convert_byte_array(&found)?))
+        })();
+        match answer {
+            Ok(found) => found
+                .and_then(|bytes| String::from_utf8(bytes).ok())
+                .map(Into::into),
+            Err(_) => {
+                self.failed.set(true);
+                None
+            }
+        }
+    }
+}
+
+/// The local zone a host's facts name, by the one rule every host reads it
+/// with (`sdm_host::local_zone`, T3.12), the twin of `sdm-py`'s
+/// `local_zone`: `setting` is `TZ`'s UTF-8 bytes, or null when unset, and
+/// `roots` the JSON array of the zone lookup roots' paths in the host's
+/// order; the JSON bytes of `{"iana": name}`, `{"posix": text}` or `null`.
+/// A setting that is not UTF-8 names no zone. The rule's questions of the
+/// machine's files are answered by Java ([`JavaZoneFiles`]).
+#[allow(unsafe_code)]
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_nvidia_sdm_internal_NativeCore_localZone0<'caller>(
+    mut unowned: EnvUnowned<'caller>,
+    class: JClass<'caller>,
+    setting: JByteArray<'caller>,
+    roots: JByteArray<'caller>,
+) -> JByteArray<'caller> {
+    entry(&mut unowned, |env| {
+        let roots = env.convert_byte_array(&roots)?;
+        let roots: Vec<String> =
+            serde_json::from_slice(&roots).map_err(|_| Failure::Usage("the zone lookup roots"))?;
+        let roots: Vec<std::path::PathBuf> = roots.into_iter().map(Into::into).collect();
+        let setting = if setting.is_null() {
+            None
+        } else {
+            Some(env.convert_byte_array(&setting)?)
+        };
+        let zone = {
+            let files = JavaZoneFiles {
+                env: std::cell::RefCell::new(&mut *env),
+                class: &class,
+                failed: std::cell::Cell::new(false),
+            };
+            let zone = match setting.as_deref().map(std::str::from_utf8) {
+                None => sdm_host::local_zone(None, &roots, &files),
+                Some(Ok(text)) => sdm_host::local_zone(Some(text), &roots, &files),
+                Some(Err(_)) => None,
+            };
+            if files.failed.get() {
+                return Err(Failure::Jni);
+            }
+            zone
+        };
+        let bytes = serde_json::to_vec(&zone).map_err(|_| Failure::Usage("the local zone"))?;
+        Ok(env.byte_array_from_slice(&bytes)?)
+    })
+}
+
+/// What each model supports, as the client describes it to a caller, as
+/// the core's JSON bytes (`sdm_host::capabilities`, T3.12), the twin of
+/// `sdm-py`'s `capabilities()`.
+#[allow(unsafe_code)]
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_nvidia_sdm_internal_NativeCore_capabilities0<'caller>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+) -> JByteArray<'caller> {
+    entry(&mut unowned, |env| {
+        Ok(env.byte_array_from_slice(sdm_host::capabilities().as_bytes())?)
     })
 }
 

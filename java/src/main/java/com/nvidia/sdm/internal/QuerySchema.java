@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-package com.nvidia.sdm;
+package com.nvidia.sdm.internal;
 
 import java.util.List;
 import java.util.Objects;

@@ -287,8 +287,9 @@ REGISTER = REPO / 'docs/design/rust-core/register.yaml'
 RUNTIME_DEPRECATIONS = 'HOST-5'
 RUNTIME_LIBRARIES = ('pandas', 'pyarrow')
 #: The runners a ``more_exact`` item may name: the core's, since it is the
-#: core that is more exact than the reference.
-MORE_EXACT_RUNNERS = ('python-core', 'rust-host')
+#: core that is more exact than the reference; from T3.12 the Java host's,
+#: which runs the same core.
+MORE_EXACT_RUNNERS = ('python-core', 'rust-host', 'java')
 #: A ``more_exact`` field: a path under one of the roots the host and
 #: payload rules compare, at least one key or index below it.
 _MORE_EXACT_FIELD = re.compile(

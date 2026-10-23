@@ -5,7 +5,6 @@
 package com.nvidia.sdm.internal;
 
 import com.nvidia.sdm.StructuredDataException;
-import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -80,33 +79,20 @@ public final class Messages {
     return details;
   }
 
-  /** A field's value as plain Java: a scalar's, or a list of them. */
+  /**
+   * A field's value as plain Java: a scalar's ({@link Wording#scalar}: a whole number a {@code
+   * Long} or {@code BigInteger}, a float a {@code Double}, a decimal a {@code BigDecimal}, a date
+   * or time a {@code java.time} value), or a list of them.
+   */
   public static Object detail(Object value) {
     if (value instanceof List<?> list) {
       List<Object> out = new ArrayList<>();
       for (Object item : list) {
-        out.add(scalar(item));
+        out.add(Wording.scalar(item));
       }
       return Collections.unmodifiableList(out);
     }
-    return scalar(value);
-  }
-
-  /** A tagged scalar's plain value; one this host does not read plainly is kept as tagged. */
-  static Object scalar(Object value) {
-    if (!(value instanceof Map<?, ?> tagged) || !(tagged.get("t") instanceof String tag)) {
-      return value;
-    }
-    Object v = tagged.get("v");
-    return switch (tag) {
-      case "null" -> null;
-      case "bool", "utf8" -> v;
-      case "i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64" -> {
-        BigInteger number = new BigInteger((String) v);
-        yield number.bitLength() < 64 ? (Object) number.longValue() : number;
-      }
-      default -> value;
-    };
+    return Wording.scalar(value);
   }
 
   static StructuredDataException internal(String message) {

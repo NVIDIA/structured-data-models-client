@@ -123,12 +123,56 @@ const SHAPES: [&str; 6] = [
 ];
 
 /// What the client knows a model serves (`ModelSpec`): its id, the shapes
-/// its profile takes, its task kinds and its outputs.
+/// its profile takes, its task kinds and its outputs, the explanation
+/// shapes it names, and whether its endpoint pins sessions
+/// (`runtime.explanation_formats`, `runtime.sessions`).
 struct Spec {
     id: &'static str,
     shapes: &'static [&'static str],
     tasks: &'static [&'static str],
     outputs: &'static [&'static str],
+    explanation_formats: &'static [&'static str],
+    sessions: bool,
+}
+
+/// The models the contract carries, in this build's order.
+const MODELS: [&Spec; 2] = [&KUMO_RELATIONAL, &KUMO_TABULAR];
+
+/// What one model supports, as the client describes it to a caller
+/// (`ModelCapabilities`, `capabilities()`): the client side, never the
+/// endpoint's own answer, so its `source` is `sdk`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Capabilities {
+    pub model: &'static str,
+    /// Its task kinds, sorted.
+    pub tasks: Vec<&'static str>,
+    /// Its outputs, sorted.
+    pub outputs: Vec<&'static str>,
+    /// Every model takes one table.
+    pub single_table: bool,
+    /// Whether its profile takes several tables.
+    pub multiple_tables: bool,
+    /// Whether its profile takes relationships.
+    pub relationships: bool,
+    pub explanation_formats: Vec<&'static str>,
+    pub sessions: bool,
+}
+
+/// Every model's [`Capabilities`], in this build's order of them.
+pub fn capabilities() -> Vec<Capabilities> {
+    MODELS
+        .iter()
+        .map(|spec| Capabilities {
+            model: spec.id,
+            tasks: sorted(spec.tasks),
+            outputs: sorted(spec.outputs),
+            single_table: true,
+            multiple_tables: spec.shapes.contains(&"multiple_tables"),
+            relationships: spec.shapes.contains(&"relationships"),
+            explanation_formats: spec.explanation_formats.to_vec(),
+            sessions: spec.sessions,
+        })
+        .collect()
 }
 
 /// `KUMO_RELATIONAL`: every shape (the relational profile), its six task
@@ -153,6 +197,8 @@ const KUMO_RELATIONAL: Spec = Spec {
         "rankings",
         "scores",
     ],
+    explanation_formats: &[],
+    sessions: true,
 };
 
 /// `KUMO_TABULAR`: one table, static, no link or forecast.
@@ -161,6 +207,8 @@ const KUMO_TABULAR: Spec = Spec {
     shapes: &["static"],
     tasks: &["classification", "regression"],
     outputs: &["prediction", "probabilities", "quantiles"],
+    explanation_formats: &[],
+    sessions: true,
 };
 
 /// The refusal of a `predict` input that takes a rule this build does not
@@ -2139,6 +2187,39 @@ fn instance_text(value: &Value, float_text: fn(f64) -> String) -> Option<String>
 mod tests {
     use super::*;
     use sdm_contract::ErrorCode;
+
+    #[test]
+    fn every_model_is_described_as_the_client_describes_it() {
+        let all = capabilities();
+        let models: Vec<_> = all.iter().map(|c| c.model).collect();
+        assert_eq!(models, [RELATIONAL, TABULAR]);
+        let relational = &all[0];
+        assert_eq!(
+            relational.tasks,
+            [
+                "binary_classification",
+                "classification",
+                "forecasting",
+                "multiclass_classification",
+                "regression",
+                "temporal_link_prediction",
+            ]
+        );
+        assert!(relational.single_table && relational.multiple_tables && relational.relationships);
+        assert!(relational.sessions && relational.explanation_formats.is_empty());
+        let tabular = &all[1];
+        assert_eq!(tabular.tasks, ["classification", "regression"]);
+        assert_eq!(
+            tabular.outputs,
+            ["prediction", "probabilities", "quantiles"]
+        );
+        assert!(tabular.single_table && !tabular.multiple_tables && !tabular.relationships);
+        for each in &all {
+            let mut sorted = each.outputs.clone();
+            sorted.sort_unstable();
+            assert_eq!(each.outputs, sorted);
+        }
+    }
 
     #[test]
     fn the_predicted_column_is_read_as_the_adapter_reads_it() {

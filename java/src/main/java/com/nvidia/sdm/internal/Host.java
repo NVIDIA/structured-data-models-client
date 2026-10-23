@@ -10,23 +10,30 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
+import org.apache.arrow.c.ArrowArrayStream;
+import org.apache.arrow.memory.BufferAllocator;
+import org.apache.arrow.vector.ipc.ArrowReader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
  * The run loop: one core operation, from its {@code start} to its result, as the Python host's
  * {@code sdm_client._rust.run} drives it. It starts a run with this host's facts, asks it for
- * steps, takes the run's warnings in the order given, and raises the run's error as {@link
- * StructuredDataException}, its code and fields the core's. A step this host cannot answer (a
- * fetch or a model call, before the Java host has providers) cancels the run and is refused as
- * {@code INTERNAL_ERROR}. Not part of the API.
+ * steps, answers each fetch through the call's provider and each model call through its model,
+ * takes the run's warnings in the order given, and raises the run's error as {@link
+ * StructuredDataException}, its code and fields the core's. Not part of the API.
+ *
+ * <p>A provider's failure reaches the core as the contract's {@code ProviderError}: its kind,
+ * whether it may be retried, its SQLSTATE and vendor code, never the driver's text (decision
+ * H17); the error the run then ends with names the driver's exception class ({@code
+ * driver_class}). A model's {@link TransportFailed} is told to the core as the contract's
+ * transport error; a {@link Refused} call is told as its status, and once the core ends the run,
+ * the refusal is raised with what the core counted as answered before it.
  */
 public final class Host {
-  /**
-   * The databases the Java host has a provider for, and so the Java legs its cases run on: none
-   * before T3.12; S0's validation reads no data and needs none.
-   */
-  public static final java.util.List<String> PROVIDERS = java.util.List.of();
+  /** The databases the Java host has a provider for, and so the Java legs its cases run on. */
+  public static final List<String> PROVIDERS = List.of("duckdb", "sqlite", "postgres");
 
   /** The largest control message, in bytes, in either direction. */
   public static final int CONTROL_CAP = 64 * 1024;
@@ -34,11 +41,145 @@ public final class Host {
   /** Where the core's warnings are written, at {@code WARN}, as they are given. */
   private static final Logger WARNINGS = LoggerFactory.getLogger("com.nvidia.sdm.warnings");
 
+  /** The core's fields that say what a failed request had answered (T2.8c). */
+  private static final List<String> ANSWERED = List.of("calls_answered", "parts_answered");
+
   private Host() {}
 
+  /**
+   * Answers one fetch of the core's: given its request ({@code FetchStep}'s, with its {@code
+   * plan}) and the key sets the plan names, by attachment id, the data, as a reader the host
+   * exports to the core and closes.
+   */
+  @FunctionalInterface
+  public interface Provider {
+    ArrowReader answer(
+        Map<String, Object> request, Map<Integer, ArrowReader> keys, BufferAllocator allocator)
+        throws Exception;
+  }
+
+  /** Answers one model call: the core's body, as written, and the endpoint's answer's bytes. */
+  @FunctionalInterface
+  public interface Model {
+    byte[] call(byte[] body) throws TransportFailed, Refused;
+  }
+
+  /** The transport could not reach the endpoint or read its answer; it carries no text. */
+  public static final class TransportFailed extends Exception {
+    private static final long serialVersionUID = 1L;
+
+    public TransportFailed() {
+      super(null, null, false, false);
+    }
+  }
+
+  /**
+   * The call failed as the caller sees it: the endpoint's refusal as the transport reports it, or
+   * the transport's own failure, raised by {@code raise} given what the core counted as answered
+   * before it ({@code calls_answered}, {@code parts_answered}) to carry in its details; {@code
+   * status} the endpoint's, or null.
+   */
+  public static final class Refused extends Exception {
+    private static final long serialVersionUID = 1L;
+    private final transient Function<Map<String, Object>, StructuredDataException> raise;
+    private final Integer status;
+
+    public Refused(
+        Function<Map<String, Object>, StructuredDataException> raise, Integer status) {
+      super(null, null, false, false);
+      this.raise = raise;
+      this.status = status;
+    }
+
+    /** The refusal, carrying {@code answered}. */
+    public StructuredDataException raised(Map<String, Object> answered) {
+      return raise.apply(answered);
+    }
+
+    public Integer status() {
+      return status;
+    }
+  }
+
+  /**
+   * What one run is given beside its operation: its provider and model, or null for an operation
+   * that reads no data and calls no model, and the values only this host holds that a sentence
+   * may name ({@code {host.<name>}}), each read from the error's or warning's fields.
+   */
+  public record Call(
+      Provider provider, Model model, Map<String, Function<Map<String, Object>, Object>> held) {
+    public Call {
+      held = held == null ? Map.of() : Map.copyOf(held);
+    }
+
+    /** A run with nothing beside its operation. */
+    public static Call none() {
+      return new Call(null, null, Map.of());
+    }
+  }
+
   /** A finished run: its result, the warnings it gave in order, and the run, to take from. */
-  public record Finished(Map<String, Object> result, List<Map<String, Object>> warnings, Run run)
-      implements AutoCloseable {
+  public static final class Finished implements AutoCloseable {
+    private final Map<String, Object> result;
+    private final List<Map<String, Object>> warnings;
+    private final Run run;
+
+    Finished(Map<String, Object> result, List<Map<String, Object>> warnings, Run run) {
+      this.result = result;
+      this.warnings = warnings;
+      this.run = run;
+    }
+
+    public Map<String, Object> result() {
+      return result;
+    }
+
+    public List<Map<String, Object>> warnings() {
+      return warnings;
+    }
+
+    /** Takes the bytes attachment {@code id} the result names. */
+    public byte[] bytes(int id) {
+      Object taken = take(id);
+      if (taken instanceof byte[] bytes) {
+        return bytes;
+      }
+      if (taken instanceof NativeArrow arrow) {
+        arrow.close();
+      }
+      throw internal("the core's result names a bytes attachment it did not give");
+    }
+
+    /** Takes the Arrow attachment {@code id} the result names, as an IPC stream's bytes. */
+    public byte[] arrow(int id) {
+      Object taken = take(id);
+      if (!(taken instanceof NativeArrow arrow)) {
+        throw internal("the core's result names an Arrow attachment it did not give");
+      }
+      try (arrow) {
+        byte[] ipc = ArrowData.ipc(arrow.reader(ArrowData.allocator()));
+        Trace trace = Trace.installed();
+        if (trace != null) {
+          trace.taken(id, ipc, true);
+        }
+        return ipc;
+      }
+    }
+
+    private Object take(int id) {
+      Object taken;
+      try {
+        taken = run.takeAttachment(id);
+      } catch (NativeError e) {
+        throw error(e, Map.of());
+      }
+      Trace trace = Trace.installed();
+      if (trace != null && taken instanceof byte[] bytes) {
+        trace.taken(id, bytes, false);
+      }
+      return taken;
+    }
+
     @Override
     public void close() {
       run.close();
@@ -53,22 +194,31 @@ public final class Host {
   /**
    * An input-sized field as a bytes attachment of its JSON; what JSON cannot hold (text with an
    * unpaired surrogate, a number that is not finite) is refused as the Python host's transport
-   * refuses it, {@code INVALID_REQUEST}.
+   * refuses it, {@code INVALID_REQUEST}, in its words.
    */
   public static byte[] attachment(Object value) {
     try {
       return Json.write(value);
     } catch (Json.JsonException e) {
       throw new StructuredDataException(
-          "a value cannot be sent to the core: " + e.getMessage(),
+          "this request carries a value that cannot be sent as JSON",
           "INVALID_REQUEST",
           Map.of(),
           null);
     }
   }
 
-  /** Runs {@code operation} to its result, with the attachments its fields name. */
+  /** Runs {@code operation}, which reads no data and calls no model, to its result. */
   public static Finished run(Map<String, Object> operation, Map<Integer, ?> attachments) {
+    return run(operation, attachments, Call.none());
+  }
+
+  /**
+   * Runs {@code operation} to its result, with the attachments its fields name, each a {@code
+   * byte[]} or an {@link ArrowReader} this exports and closes.
+   */
+  public static Finished run(
+      Map<String, Object> operation, Map<Integer, ?> attachments, Call call) {
     Map<String, Object> start = new LinkedHashMap<>();
     start.put("message", "start");
     start.put("contract", contract());
@@ -77,45 +227,319 @@ public final class Host {
     byte[] message = control(start);
     NativeCore.setLogLevel(NativeLog.level());
     Run run;
+    List<ArrowArrayStream> exported = new ArrayList<>();
     try {
-      run = Run.start(message, attachments);
-    } catch (NativeError refused) {
-      throw error(refused);
-    }
-    List<Map<String, Object>> warnings = new ArrayList<>();
-    try {
-      while (true) {
-        NativeMessage step;
-        try {
-          step = run.next();
-        } catch (NativeError failed) {
-          warn(run, warnings);
-          throw error(failed);
-        }
-        Map<String, Object> read;
-        try (step) {
-          warn(run, warnings);
-          read = Messages.read(step);
-        }
-        if (!"step".equals(read.get("message"))) {
-          throw internal("the core gave a message that is not a step");
-        }
-        if ("done".equals(read.get("step"))) {
-          @SuppressWarnings("unchecked")
-          Map<String, Object> result = (Map<String, Object>) read.get("result");
-          return new Finished(result, Collections.unmodifiableList(warnings), run);
-        }
-        try {
-          run.cancel();
-        } catch (NativeError ignored) {
-          // The run ends here either way.
-        }
-        throw internal(
-            "the core asked for a " + read.get("step") + " step this call cannot answer");
+      Map<Integer, byte[]> told = new LinkedHashMap<>();
+      Map<Integer, Object> sent = exportAll(attachments, exported, told);
+      Trace trace = Trace.installed();
+      if (trace != null) {
+        trace.started(message, traced(attachments, told));
       }
+      run = Run.start(message, sent);
+    } catch (NativeError refused) {
+      told(refused);
+      throw error(refused, call.held());
+    } finally {
+      exported.forEach(ArrowArrayStream::close);
+    }
+    try {
+      return steps(run, call);
     } catch (RuntimeException e) {
       run.close();
       throw e;
+    }
+  }
+
+  /** Each attachment as the binding takes it: a reader exported to a stream it holds. */
+  private static Map<Integer, Object> exportAll(
+      Map<Integer, ?> attachments, List<ArrowArrayStream> exported, Map<Integer, byte[]> told) {
+    Map<Integer, Object> sent = new LinkedHashMap<>();
+    boolean traced = Trace.installed() != null;
+    for (Map.Entry<Integer, ?> each : attachments.entrySet()) {
+      Object value = each.getValue();
+      if (value instanceof ArrowReader reader) {
+        BufferAllocator allocator = ArrowData.allocator();
+        if (traced) {
+          // Read whole once, so the listener is told what is sent.
+          byte[] ipc = ArrowData.ipc(reader);
+          told.put(each.getKey(), ipc);
+          reader = ArrowData.reader(ipc, allocator);
+        }
+        ArrowArrayStream stream = ArrowExchange.export(allocator, reader);
+        exported.add(stream);
+        sent.put(each.getKey(), stream);
+      } else {
+        sent.put(each.getKey(), value);
+      }
+    }
+    return sent;
+  }
+
+  /** The attachments as the listener is told them: an Arrow one as its IPC bytes. */
+  private static Map<Integer, Object> traced(Map<Integer, ?> given, Map<Integer, byte[]> ipcs) {
+    Map<Integer, Object> told = new LinkedHashMap<>();
+    for (Map.Entry<Integer, ?> each : given.entrySet()) {
+      Object value = each.getValue();
+      told.put(
+          each.getKey(),
+          value instanceof ArrowReader ? new ArrowIpc(ipcs.get(each.getKey())) : value);
+    }
+    return told;
+  }
+
+  /** An Arrow attachment as the listener is told it: an IPC stream's bytes. */
+  public record ArrowIpc(byte[] bytes) {}
+
+  /** The run's steps, each answered, to its result. */
+  @SuppressWarnings("unchecked")
+  private static Finished steps(Run run, Call call) {
+    List<Map<String, Object>> warnings = new ArrayList<>();
+    String driverClass = null;
+    Refused refused = null;
+    Trace trace = Trace.installed();
+    while (true) {
+      NativeMessage step;
+      try {
+        step = run.next();
+      } catch (NativeError failed) {
+        warn(run, warnings, call);
+        if (trace != null) {
+          trace.failed(failed.kind(), failed.code());
+        }
+        Map<String, Object> details = new LinkedHashMap<>();
+        if (driverClass != null && "PROVIDER_ERROR".equals(failed.code())) {
+          details.put("driver_class", driverClass);
+        }
+        StructuredDataException error = error(failed, call.held(), details);
+        if (refused != null) {
+          throw carried(refused, error);
+        }
+        throw error;
+      }
+      Map<String, Object> read;
+      try (step) {
+        warn(run, warnings, call);
+        read = Messages.read(step);
+      }
+      if (!"step".equals(read.get("message"))) {
+        throw internal("the core gave a message that is not a step");
+      }
+      if (trace != null) {
+        trace.stepped(read);
+      }
+      Object kind = read.get("step");
+      if ("done".equals(kind)) {
+        Map<String, Object> result = (Map<String, Object>) read.get("result");
+        if (trace != null) {
+          trace.done(result);
+        }
+        return new Finished(result, Collections.unmodifiableList(warnings), run);
+      }
+      if ("call_model".equals(kind) && call.model() != null) {
+        refused = model(run, read, call.model());
+        continue;
+      }
+      if (!"fetch".equals(kind) || call.provider() == null) {
+        cancel(run);
+        throw internal("the core asked for a " + kind + " step this call cannot answer");
+      }
+      // A provider's failure is named by its driver's class only for the step that failed: the
+      // core may carry on past one, and a later error is no other step's.
+      driverClass = null;
+      for (Object item : (List<Object>) read.get("requests")) {
+        Map<String, Object> request = (Map<String, Object>) item;
+        String failedClass = fetch(run, request, call.provider());
+        if (failedClass != null) {
+          driverClass = failedClass;
+        }
+      }
+    }
+  }
+
+  /** Answers one fetch request; the class of the driver's exception when it failed, else null. */
+  @SuppressWarnings("unchecked")
+  private static String fetch(Run run, Map<String, Object> request, Provider provider) {
+    Map<String, Object> outcome = new LinkedHashMap<>();
+    Map<Integer, Object> attached = new LinkedHashMap<>();
+    String driverClass = null;
+    BufferAllocator allocator = ArrowData.allocator();
+    Map<Integer, ArrowReader> keys = new LinkedHashMap<>();
+    ArrowArrayStream stream = null;
+    try {
+      // A later page's step names the key sets the first took.
+      if (request.get("continuation") == null) {
+        keys = keySets(run, (Map<String, Object>) request.get("plan"), allocator);
+      }
+      ArrowReader answer = provider.answer(request, keys, allocator);
+      stream = ArrowExchange.export(allocator, answer);
+      outcome.put("outcome", "data");
+      outcome.put("data", 1);
+      attached.put(1, stream);
+    } catch (StructuredDataException e) {
+      // The host's own refusal (the flag Arrow needs), never a provider's failure.
+      cancel(run);
+      throw e;
+    } catch (Exception failure) {
+      Map<String, Object> provided = new LinkedHashMap<>();
+      provided.put("kind", "data_source");
+      provided.put("retryable", failure instanceof java.sql.SQLTransientException);
+      String sqlstate = failure instanceof java.sql.SQLException sql ? sql.getSQLState() : null;
+      provided.put("sqlstate", sqlstate);
+      int vendor = failure instanceof java.sql.SQLException sql ? sql.getErrorCode() : 0;
+      provided.put("vendor_code", vendor == 0 ? null : Integer.toString(vendor));
+      outcome.put("outcome", "error");
+      outcome.put("error", provided);
+      driverClass = failure.getClass().getName();
+    } finally {
+      for (ArrowReader reader : keys.values()) {
+        try {
+          reader.close();
+        } catch (Exception ignored) {
+          // Released either way.
+        }
+      }
+    }
+    Map<String, Object> reply = new LinkedHashMap<>();
+    reply.put("message", "fetch_reply");
+    reply.put("id", request.get("id"));
+    reply.put("outcome", outcome);
+    try {
+      run.reply(control(reply), attached);
+    } catch (NativeError e) {
+      told(e);
+      throw error(e, Map.of(), driverClass == null ? Map.of() : Map.of("driver_class", driverClass));
+    } finally {
+      if (stream != null) {
+        stream.close();
+      }
+    }
+    return driverClass;
+  }
+
+  /** The key sets a request's plan names, taken from the run by attachment id (decision Q1). */
+  @SuppressWarnings("unchecked")
+  private static Map<Integer, ArrowReader> keySets(
+      Run run, Map<String, Object> plan, BufferAllocator allocator) throws NativeError {
+    Map<Integer, ArrowReader> taken = new LinkedHashMap<>();
+    Object statements = plan == null ? null : plan.get("statements");
+    if (!(statements instanceof List<?> list)) {
+      return taken;
+    }
+    for (Object statement : list) {
+      for (Object param : (List<Object>) ((Map<String, Object>) statement).get("params")) {
+        Map<String, Object> read = (Map<String, Object>) param;
+        if (!"key_set".equals(read.get("param"))) {
+          continue;
+        }
+        int id = ((Number) ((Map<String, Object>) read.get("keys")).get("attachment")).intValue();
+        if (taken.containsKey(id)) {
+          continue;
+        }
+        Object value = run.takeAttachment(id);
+        if (value instanceof NativeArrow arrow) {
+          try (arrow) {
+            byte[] ipc = ArrowData.ipc(arrow.reader(allocator));
+            taken.put(id, ArrowData.reader(ipc, allocator));
+          }
+        }
+      }
+    }
+    return taken;
+  }
+
+  /**
+   * Answers one model call: its answer as a 200, a failed transport as the contract's transport
+   * error, a refused call as its status (or a transport error where it has none), returned for
+   * the run's end to raise.
+   */
+  private static Refused model(Run run, Map<String, Object> step, Model model) {
+    byte[] body;
+    try {
+      Object taken = run.takeAttachment(((Number) step.get("body")).intValue());
+      if (!(taken instanceof byte[] bytes)) {
+        throw internal("the core's model call carries no body");
+      }
+      body = bytes;
+    } catch (NativeError e) {
+      throw error(e, Map.of());
+    }
+    Trace trace = Trace.installed();
+    if (trace != null) {
+      trace.taken(((Number) step.get("body")).intValue(), body, false);
+    }
+    Map<String, Object> transportError = new LinkedHashMap<>();
+    transportError.put("outcome", "transport_error");
+    transportError.put("kind", "model_endpoint");
+    // The transport has already retried what it retries.
+    transportError.put("retryable", false);
+    Map<String, Object> outcome;
+    Map<Integer, Object> attached = new LinkedHashMap<>();
+    Refused refused = null;
+    try {
+      byte[] answer = model.call(body);
+      attached.put(1, answer);
+      outcome = response(200);
+    } catch (TransportFailed failed) {
+      outcome = transportError;
+    } catch (Refused failed) {
+      refused = failed;
+      Integer status = failed.status();
+      if (status != null && status >= 300 && status <= 599) {
+        attached.put(1, "{}".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        outcome = response(status);
+      } else {
+        outcome = transportError;
+      }
+    } catch (RuntimeException e) {
+      cancel(run);
+      throw e;
+    }
+    Map<String, Object> reply = new LinkedHashMap<>();
+    reply.put("message", "model_reply");
+    reply.put("id", step.get("id"));
+    reply.put("outcome", outcome);
+    try {
+      run.reply(control(reply), attached);
+    } catch (NativeError e) {
+      told(e);
+      throw error(e, Map.of());
+    }
+    return refused;
+  }
+
+  /** The listener told of the core's error, when there is one. */
+  private static void told(NativeError failed) {
+    Trace trace = Trace.installed();
+    if (trace != null) {
+      trace.failed(failed.kind(), failed.code());
+    }
+  }
+
+  private static Map<String, Object> response(int status) {
+    Map<String, Object> outcome = new LinkedHashMap<>();
+    outcome.put("outcome", "response");
+    outcome.put("status", status);
+    outcome.put("content_type", "application/json");
+    outcome.put("body", 1);
+    return outcome;
+  }
+
+  /** The refusal the caller sees, carrying what the core counted as answered before it. */
+  private static StructuredDataException carried(Refused refused, StructuredDataException ended) {
+    Map<String, Object> answered = new LinkedHashMap<>();
+    for (String name : ANSWERED) {
+      if (ended.details().containsKey(name)) {
+        answered.put(name, ended.details().get(name));
+      }
+    }
+    return refused.raised(answered);
+  }
+
+  private static void cancel(Run run) {
+    try {
+      run.cancel();
+    } catch (NativeError ignored) {
+      // The run ends here either way.
     }
   }
 
@@ -135,10 +559,10 @@ public final class Host {
 
   /**
    * Takes the run's warnings, each with its words ({@link Wording}) as its {@code message}, writes
-   * each to SLF4J and keeps it, in order.
+   * them to SLF4J, a group given one after another as one, and keeps each, in order.
    */
   @SuppressWarnings("unchecked")
-  private static void warn(Run run, List<Map<String, Object>> into) {
+  private static void warn(Run run, List<Map<String, Object>> into, Call call) {
     NativeMessage taken;
     try {
       taken = run.takeWarnings();
@@ -148,32 +572,50 @@ public final class Host {
     if (taken == null) {
       return;
     }
+    List<Map<String, Object>> given = new ArrayList<>();
     try (taken) {
       Object warnings = Messages.read(taken).get("warnings");
       if (warnings instanceof List<?> list) {
         for (Object item : list) {
-          Map<String, Object> warning = new LinkedHashMap<>((Map<String, Object>) item);
-          warning.put("message", Wording.said(warning));
-          into.add(warning);
-          WARNINGS.warn("[{}] {}", warning.get("code"), warning.get("message"));
+          given.add((Map<String, Object>) item);
         }
       }
+    }
+    Trace trace = Trace.installed();
+    if (trace != null) {
+      trace.warned(given);
+    }
+    for (Wording.Said said : Wording.warnings(given, call.held())) {
+      for (Map<String, Object> warning : said.warnings()) {
+        Map<String, Object> kept = new LinkedHashMap<>(warning);
+        kept.put("message", Wording.said(warning, call.held()));
+        into.add(kept);
+      }
+      WARNINGS.warn("[{}] {}", said.code(), said.text());
     }
   }
 
   /**
    * The {@link StructuredDataException} a public call raises for the core's error: the same code,
-   * fields, kind and retryability, holding nothing native, the error's message closed.
+   * fields, kind and retryability, its sentence filled with the values this call holds, holding
+   * nothing native, the error's message closed.
    */
-  public static StructuredDataException error(NativeError raised) {
+  public static StructuredDataException error(
+      NativeError raised, Map<String, Function<Map<String, Object>, Object>> held) {
+    return error(raised, held, Map.of());
+  }
+
+  private static StructuredDataException error(
+      NativeError raised,
+      Map<String, Function<Map<String, Object>, Object>> held,
+      Map<String, Object> more) {
+    Map<String, Object> given = Messages.fields(raised.message());
     raised.message().close();
+    String said = held.isEmpty() ? raised.getMessage() : Wording.said(given, held);
+    Map<String, Object> details = new LinkedHashMap<>(raised.details());
+    details.putAll(more);
     return new StructuredDataException(
-        raised.getMessage(),
-        raised.code(),
-        raised.details(),
-        raised.kind(),
-        raised.retryable(),
-        null);
+        said, raised.code(), details, raised.kind(), raised.retryable(), null);
   }
 
   static StructuredDataException internal(String message) {

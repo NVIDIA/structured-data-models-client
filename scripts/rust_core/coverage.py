@@ -424,9 +424,11 @@ def generated(
     return out
 
 
-#: A client test's pytest node ID: ``<file>::<test>``.
+#: A client test's pytest node ID, ``<file>::<test>``, or, for the Java
+#: manifest's paths (T3.12), a JUnit test method, ``<file>#<method>``.
 _TEST = re.compile(
     r'(?P<file>[A-Za-z0-9_./-]+\.py)::(?P<name>test_[A-Za-z0-9_]+)'
+    r'|(?P<java>java/src/test/java/[A-Za-z0-9_./-]+\.java)#(?P<method>[A-Za-z0-9_]+)'
 )
 
 
@@ -435,18 +437,24 @@ def _test_problem(test: str, root: Any) -> str | None:
     ``root`` is the candidate's tree (its ``read``) or a directory."""
     found = _TEST.fullmatch(test)
     if found is None:
-        return 'not <file>::<test>'
+        return 'not <file>::<test> or <file>.java#<method>'
     if root is None:
         root = HERE.parents[1]
+    path = found['file'] or found['java']
     try:
         source = (
-            (root / found['file']).read_text(encoding='utf-8')
+            (root / path).read_text(encoding='utf-8')
             if isinstance(root, Path)
-            else root.read(found['file'])
+            else root.read(path)
         )
     except Exception:  # noqa: BLE001 - an unreadable file defines no test
         source = None
-    if not source or not re.search(rf'^\s*def {found["name"]}\(', source, re.M):
+    defined = (
+        rf'^\s*def {found["name"]}\('
+        if found['file']
+        else rf'^\s*void {found["method"]}\('
+    )
+    if not source or not re.search(defined, source, re.M):
         return 'no test the tree defines'
     return None
 

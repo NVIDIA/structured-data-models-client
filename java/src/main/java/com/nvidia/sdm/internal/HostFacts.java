@@ -23,9 +23,8 @@ import java.util.regex.Pattern;
  *
  * <ul>
  *   <li>{@code now}: the clock, a {@code ts} in microseconds, in UTC;
- *   <li>{@code local_zone}: {@code TZ} when set (an IANA name a lookup root holds, else a POSIX
- *       {@code TZ} string the core reads, else none), else the zone {@code /etc/localtime} links
- *       to;
+ *   <li>{@code local_zone}: by the core's one rule, which the Python host reads too ({@link
+ *       NativeCore#localZone}), from {@code TZ} and the lookup roots;
  *   <li>{@code zone_roots}: the directories of Python's default {@code zoneinfo.TZPATH} that
  *       exist, each with the database version read there;
  *   <li>{@code platform}: the operating system as Python's {@code sys.platform} names it, and
@@ -107,46 +106,16 @@ public final class HostFacts {
     return roots;
   }
 
-  private static boolean iana(String name, List<Map<String, Object>> roots) {
-    if (name.equalsIgnoreCase("UTC")) {
-      return true;
-    }
-    if (name.isEmpty() || name.startsWith("/") || List.of(name.split("/", -1)).contains("..")) {
-      return false;
-    }
-    for (Map<String, Object> root : roots) {
-      if (Files.isRegularFile(Path.of((String) root.get("path"), name))) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  /** The local zone, as the platform names it, or null when it names none the core reads. */
+  /**
+   * The local zone, by the core's one rule ({@link NativeCore#localZone}, which the Python host
+   * reads too), from {@code setting} ({@code TZ}, or null when unset) and the lookup roots; null
+   * when it names none the core reads.
+   */
   static Map<String, Object> localZone(List<Map<String, Object>> roots, String setting) {
-    if (setting != null) {
-      String name = setting.startsWith(":") ? setting.substring(1) : setting;
-      if (iana(name, roots)) {
-        return Map.of("iana", name);
-      }
-      if (NativeCore.isPosixZone(setting.getBytes(StandardCharsets.UTF_8))) {
-        return Map.of("posix", setting);
-      }
-      return null;
+    List<String> paths = new ArrayList<>();
+    for (Map<String, Object> root : roots) {
+      paths.add((String) root.get("path"));
     }
-    Path target;
-    try {
-      target = Path.of("/etc/localtime").toRealPath();
-    } catch (IOException | RuntimeException e) {
-      return null;
-    }
-    List<String> parts = new ArrayList<>();
-    target.forEach(part -> parts.add(part.toString()));
-    int index = parts.lastIndexOf("zoneinfo");
-    if (index < 0) {
-      return null;
-    }
-    String name = String.join("/", parts.subList(index + 1, parts.size()));
-    return name.isEmpty() ? null : Map.of("iana", name);
+    return NativeCore.localZone(setting, paths);
   }
 }

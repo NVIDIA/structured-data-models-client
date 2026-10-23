@@ -7,6 +7,7 @@ package com.nvidia.sdm.internal;
 import com.nvidia.sdm.StructuredDataException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -150,6 +151,69 @@ public final class NativeCore {
 
   /** Whether the UTF-8 text is a POSIX TZ string a run takes as its local zone. */
   public static native boolean isPosixZone(byte[] text);
+
+  /**
+   * The local zone a run's facts name, by the core's one rule ({@code sdm_host::local_zone},
+   * which the Python host reads too): {@code setting} is {@code TZ}, or null when unset, and
+   * {@code roots} the zone lookup roots in this host's order. {@code {"iana": name}}, {@code
+   * {"posix": text}}, or null when neither names one.
+   */
+  @SuppressWarnings("unchecked")
+  public static Map<String, Object> localZone(String setting, List<String> roots) {
+    load();
+    try {
+      byte[] answer =
+          localZone0(
+              setting == null ? null : setting.getBytes(StandardCharsets.UTF_8),
+              Json.write(roots));
+      Object read = Json.read(answer);
+      return read == null ? null : Map.copyOf((Map<String, Object>) read);
+    } catch (Json.JsonException | ClassCastException e) {
+      throw new StructuredDataException(
+          "the native library's local zone cannot be read", "INTERNAL_ERROR", Map.of(), e);
+    }
+  }
+
+  private static native byte[] localZone0(byte[] setting, byte[] roots);
+
+  /**
+   * Whether the UTF-8 path names a regular file, links followed: the rule of {@link #localZone}
+   * asks it of this host, which reads the machine's files (the native library reads none).
+   */
+  static boolean isRegularFile(byte[] path) {
+    try {
+      return Files.isRegularFile(Path.of(new String(path, StandardCharsets.UTF_8)));
+    } catch (RuntimeException e) {
+      return false;
+    }
+  }
+
+  /**
+   * The UTF-8 path with every link resolved, or null when it does not resolve: the rule of {@link
+   * #localZone} asks it of this host.
+   */
+  static byte[] realPath(byte[] path) {
+    try {
+      return Path.of(new String(path, StandardCharsets.UTF_8))
+          .toRealPath()
+          .toString()
+          .getBytes(StandardCharsets.UTF_8);
+    } catch (IOException | RuntimeException e) {
+      return null;
+    }
+  }
+
+  /**
+   * What each model supports, as the client describes it to a caller, as the core's JSON bytes
+   * ({@code sdm_host::capabilities}): {@code {"models": [...]}}.
+   */
+  public static byte[] capabilities() {
+    load();
+    return capabilities0();
+  }
+
+  private static native byte[] capabilities0();
+
 
   /** Sets the most verbose level the core's events pass at, 0 none to 5 trace. */
   public static native void setLogLevel(int level);

@@ -112,6 +112,87 @@ fn is_posix_zone(text: &str) -> bool {
     sdm_host::is_posix_zone(text)
 }
 
+/// The machine's files as Python reads them, for the local zone's rule:
+/// `os.path.isfile` and `pathlib.Path.resolve(strict=True)`, the calls the
+/// Python host made before the rule moved into `sdm-host` (T3.12), so the
+/// binding does no I/O of its own. The first exception Python raised that
+/// the rule cannot read as an answer is kept, and raised after.
+struct PyZoneFiles<'py> {
+    isfile: Bound<'py, PyAny>,
+    path: Bound<'py, PyAny>,
+    raised: std::cell::RefCell<Option<PyErr>>,
+}
+
+impl PyZoneFiles<'_> {
+    fn kept<T>(&self, answer: PyResult<T>, otherwise: T) -> T {
+        answer.unwrap_or_else(|error| {
+            self.raised.borrow_mut().get_or_insert(error);
+            otherwise
+        })
+    }
+}
+
+impl sdm_host::ZoneFiles for PyZoneFiles<'_> {
+    fn is_file(&self, path: &std::path::Path) -> bool {
+        let answer = self
+            .isfile
+            .call1((path,))
+            .and_then(|found| found.is_truthy());
+        self.kept(answer, false)
+    }
+
+    fn real_path(&self, path: &std::path::Path) -> Option<std::path::PathBuf> {
+        let py = self.path.py();
+        let resolved = self.path.call1((path,)).and_then(|made| {
+            let keywords = PyDict::new(py);
+            keywords.set_item("strict", true)?;
+            made.call_method("resolve", (), Some(&keywords))
+        });
+        match resolved {
+            Ok(found) => self.kept(found.str().map(|text| Some(text.to_string().into())), None),
+            // A path that does not resolve (OSError) names no zone.
+            Err(error) if error.is_instance_of::<pyo3::exceptions::PyOSError>(py) => None,
+            Err(error) => self.kept(Err(error), None),
+        }
+    }
+}
+
+/// The local zone a host's facts name, by the one rule every host reads it
+/// with (`sdm_host::local_zone`, T3.12): `setting` is `TZ` when set, and
+/// `roots` the zone lookup roots in the host's zone library's order;
+/// `('iana', name)`, `('posix', text)`, or `None`. The rule's questions of
+/// the machine's files are answered by Python (`os.path.isfile`,
+/// `pathlib.Path.resolve`).
+#[pyfunction]
+#[pyo3(signature = (setting, roots))]
+fn local_zone(
+    py: Python<'_>,
+    setting: Option<&str>,
+    roots: Vec<String>,
+) -> PyResult<Option<(&'static str, String)>> {
+    let files = PyZoneFiles {
+        isfile: py.import("os.path")?.getattr("isfile")?,
+        path: py.import("pathlib")?.getattr("Path")?,
+        raised: std::cell::RefCell::new(None),
+    };
+    let roots: Vec<std::path::PathBuf> = roots.into_iter().map(Into::into).collect();
+    let zone = sdm_host::local_zone(setting, &roots, &files);
+    if let Some(error) = files.raised.into_inner() {
+        return Err(error);
+    }
+    Ok(zone.map(|zone| match zone {
+        sdm_contract::facts::LocalZone::Iana(name) => ("iana", name),
+        sdm_contract::facts::LocalZone::Posix(text) => ("posix", text),
+    }))
+}
+
+/// What each model supports, as the client describes it to a caller, as
+/// the core's JSON (`sdm_host::capabilities`, T3.12).
+#[pyfunction]
+fn capabilities() -> String {
+    sdm_host::capabilities()
+}
+
 /// The batches of an Arrow attachment, ready to export again; each export
 /// shares their buffers.
 #[pyclass(frozen, module = "sdm_client._native")]
@@ -411,5 +492,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(reset_log_cache, module)?)?;
     module.add_function(wrap_pyfunction!(templates, module)?)?;
     module.add_function(wrap_pyfunction!(is_posix_zone, module)?)?;
+    module.add_function(wrap_pyfunction!(local_zone, module)?)?;
+    module.add_function(wrap_pyfunction!(capabilities, module)?)?;
     Ok(())
 }
