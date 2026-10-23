@@ -1236,3 +1236,27 @@ def test_the_old_clients_sampled_derived_table_read_passes() -> None:
     ):
         with pytest.raises(wg.WriteRefused):
             DATABRICKS.check(sql)
+
+
+def test_the_old_clients_join_onto_a_derived_table_passes() -> None:
+    # C-1 (databricks-sql, rule.key-name-form): the old client joins its
+    # batch onto a renamed source as a derived table, `JOIN (SELECT ...)`.
+    # That read passes; a write inside or around it, and a JOIN onto any
+    # other parenthesis, are still refused.
+    read = (
+        'WITH TMP AS (\nSELECT * FROM `other`.`s`.`ids`\n)\n'
+        'SELECT TMP.__KUMO_BATCH__ as __KUMO_BATCH__, `a`\nFROM TMP\n'
+        'JOIN (SELECT source.`id` AS `a` FROM `other`.`s`.`t` AS source)\n'
+        '  ON `a` = TMP.__KUMO_ID__'
+    )
+    DATABRICKS.check(read)
+    for sql in (
+        'INSERT INTO `other`.s.u SELECT * FROM `other`.s.v JOIN '
+        '(SELECT * FROM `other`.s.t) ON 1 = 1',
+        'CREATE TABLE `other`.s.u AS SELECT * FROM `other`.s.v JOIN '
+        '(SELECT * FROM `other`.s.t) ON 1 = 1',
+        'SELECT * FROM `other`.s.v JOIN (DELETE FROM `other`.s.t) ON 1 = 1',
+        'SELECT * FROM `other`.s.v JOIN (VALUES (1)) ON 1 = 1',
+    ):
+        with pytest.raises(wg.WriteRefused):
+            DATABRICKS.check(sql)
