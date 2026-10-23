@@ -74,8 +74,10 @@ Postgres an unquoted one lower-cased and a quoted one exactly; Unity
 Catalog case-insensitively (a double-quoted text is a string there).
 
 Not covered: statements sent below the drivers' public entry points (a
-Spark session's JVM, libpq called directly); neither the loader nor the
-old client uses them.
+Spark session's JVM, libpq called directly), and functions a statement
+calls without parentheses (Postgres' attribute notation, a user-defined
+operator), which need a writing function or operator to exist already;
+neither the loader nor the old client uses them.
 """
 
 from __future__ import annotations
@@ -208,7 +210,8 @@ WRITE_WORDS = frozenset(
 )  # fmt: skip
 #: Words refused, besides those, among a table's columns.
 COLUMN_WORDS = WRITE_WORDS | {
-    'AS', 'CASCADE', 'DEFAULT', 'LOCATION', 'OPTIONS', 'USING', 'PURGE',
+    'AS', 'CASCADE', 'CHECK', 'DEFAULT', 'GENERATED', 'LOCATION', 'OPTIONS',
+    'USING', 'PURGE',
 }  # fmt: skip
 #: The functions a read, or what an ``INSERT`` fills its target with, may
 #: call: a closed list of pure functions, the ones the old client's
@@ -251,7 +254,7 @@ NOT_CALLS = frozenset(
         'BINARY', 'CHAR', 'CHARACTER', 'DEC', 'DECIMAL', 'DOUBLE', 'FLOAT',
         'NCHAR', 'NUMBER', 'NUMERIC', 'NVARCHAR', 'STRING', 'TEXT', 'TIME',
         'TIMESTAMP', 'TIMESTAMP_LTZ', 'TIMESTAMP_NTZ', 'TIMESTAMP_TZ',
-        'VARBINARY', 'VARCHAR', 'VECTOR',
+        'VARBINARY', 'VARCHAR', 'VARYING', 'VECTOR', 'KEY', 'UNIQUE',
     }
 )  # fmt: skip
 #: Words that advance or read a sequence, refused wherever they stand.
@@ -264,13 +267,31 @@ SESSION_PARAMETERS = frozenset(
 )
 
 
-def _no_words(items: list[Token], words: frozenset[str], what: str) -> None:
-    r"""Refuses a table's or type's columns holding one of ``words`` or a
-    sequence's word (their ``(`` follow type names, never calls)."""
-    for token in items:
-        word = _upper(token)
-        if word in words or word in SEQUENCE_WORDS:
-            raise WriteRefused(f'{what}: {word} among the columns')
+def _referenced(items: list[Token], at: int) -> bool:
+    r"""Whether the name ending at ``at`` is a ``REFERENCES`` target, the
+    ``(`` after it its columns."""
+    i = at
+    while (
+        i > 1 and items[i - 1] == _DOT and items[i - 2].kind in ('word', 'name')
+    ):
+        i -= 2
+    return i > 0 and _upper(items[i - 1]) == 'REFERENCES'
+
+
+def _names_only(items: list[Token], at: int) -> bool:
+    r"""Whether the parenthesised group opening at ``at`` holds names
+    only, as an alias's column list does (nothing in it can call)."""
+    depth = 0
+    for token in items[at:]:
+        if token == _OPEN:
+            depth += 1
+            if depth > 1:
+                return False
+        elif token == _CLOSE:
+            return True
+        elif token.kind not in ('word', 'name') and token != _COMMA:
+            return False
+    return False
 
 
 def _upper(token: Token | None) -> str:
@@ -442,6 +463,10 @@ class WriteGuard:
             ):
                 continue
             before = items[i - 1] if i else None
+            if _referenced(items, i) or (
+                _upper(before) == 'AS' and _names_only(items, i + 1)
+            ):
+                continue  # REFERENCES <t> (<columns>), or AS <alias> (<columns>)
             if before == _DOT and (
                 self.dialect == 'postgres'
                 and i > 1
@@ -452,11 +477,7 @@ class WriteGuard:
                 )
             if token.kind != 'word' or before in (_DOT, Token('punct', '!')):
                 raise WriteRefused(f'{what}: a quoted or qualified function')
-            if (
-                word not in FUNCTIONS
-                and _upper(before) != 'AS'
-                and before != Token('punct', ':')
-            ):
+            if word not in FUNCTIONS:
                 raise WriteRefused(f'{what}: {word}(), a function on no list')
 
     # Statements.
@@ -545,7 +566,7 @@ class WriteGuard:
         if s.accept('TABLE'):
             self._target(s)
             columns = s.group()
-            _no_words(columns, COLUMN_WORDS, s.what)
+            self._held(columns, COLUMN_WORDS, s.what)
             for i, token in enumerate(columns):
                 if _upper(token) == 'REFERENCES':
                     self._target(_Statement(columns[i + 1 :], s.what))
@@ -565,7 +586,7 @@ class WriteGuard:
         elif self.dialect == 'postgres' and not replace and s.accept('TYPE'):
             self._target(s)
             s.expect('AS')
-            _no_words(s.group(), COLUMN_WORDS - {'AS'}, s.what)
+            self._held(s.group(), COLUMN_WORDS, s.what)
             s.end()
         else:
             s.refuse('an object the guard does not create')
@@ -669,9 +690,9 @@ ENTRY_POINTS: tuple[tuple[str, str, tuple[str, ...], str], ...] = (
     ('snowflake.connector.cursor', 'SnowflakeCursorBase', ('execute', 'executemany', 'execute_async'), 'snowflake'),
     ('snowflake.connector.cursor', 'SnowflakeCursor', ('execute', 'executemany', 'execute_async'), 'snowflake'),
     ('snowflake.connector.cursor', 'DictCursor', ('execute', 'executemany', 'execute_async'), 'snowflake'),
-    ('snowflake.connector.connection', 'SnowflakeConnection', ('execute_string',), 'snowflake'),
+    ('snowflake.connector.connection', 'SnowflakeConnection', ('execute_string', 'cmd_query'), 'snowflake'),
     ('snowflake.connector.aio._cursor', 'SnowflakeCursorBase', ('execute', 'executemany', 'execute_async'), 'snowflake'),
-    ('snowflake.connector.aio._connection', 'SnowflakeConnection', ('execute_string',), 'snowflake'),
+    ('snowflake.connector.aio._connection', 'SnowflakeConnection', ('execute_string', 'cmd_query'), 'snowflake'),
     ('snowflake.snowpark.session', 'Session', ('sql',), 'snowflake'),
     ('databricks.sql.client', 'Cursor', ('execute', 'executemany', 'execute_async'), 'databricks'),
     ('pyspark.sql.session', 'SparkSession', ('sql',), 'databricks'),
