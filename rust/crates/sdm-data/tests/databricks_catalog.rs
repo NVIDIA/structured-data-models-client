@@ -8,8 +8,9 @@
 //! `CatalogAnswer`, equal to how the old client read the same rows.
 //!
 //! The rows are `contract/fixtures/databricks/capture.json`'s, shaped as the
-//! design's `sdm-capture/1` and recorded by `record.py` beside it from the
-//! reference (43e55f4f) on a stand-in connection, until C-1's capture of
+//! design's `sdm-capture/1`, a synthetic unit fixture recorded once from the
+//! reference (43e55f4f) on an offline stand-in connection since removed (owner
+//! B-lite), until C-1's capture of
 //! the same cases replaces them; each catalog statement's entry carries its
 //! rows (`result.rows`, every column a string, as Unity Catalog's
 //! `information_schema` gives them) and the old client's reading of them

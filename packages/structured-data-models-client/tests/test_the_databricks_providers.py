@@ -16,8 +16,9 @@ CN/backends/spark.py:33-35, :132). Neither reads pandas or converts
 anything: the recorded Arrow crosses as recorded (design choice 5).
 
 The recorded Arrow is ``contract/fixtures/databricks/capture.json``'s,
-shaped as the design's ``sdm-capture/1``, recorded by ``record.py`` beside
-it from the reference on a stand-in connection; C-1's capture replaces it.
+shaped as the design's ``sdm-capture/1``, a synthetic unit fixture recorded
+once from the reference on an offline stand-in connection since removed (owner
+B-lite); C-1's capture replaces it.
 Each fake answers only a statement the capture holds, by its exact text, so
 a provider that rewrites a statement fails.
 
