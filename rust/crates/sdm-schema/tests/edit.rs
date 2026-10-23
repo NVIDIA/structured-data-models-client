@@ -108,7 +108,12 @@ fn shop() -> SourceDescription {
 }
 
 fn made(description: SourceDescription, edit: &SchemaEdit) -> Result<Edited, CoreError> {
-    edit::edit(description, edit, &supports)
+    edit::edit(
+        description,
+        edit,
+        &supports,
+        &sdm_schema::assemble::HostTypes::default(),
+    )
 }
 
 fn table<'a>(description: &'a SourceDescription, name: &str) -> &'a DescribedTable {

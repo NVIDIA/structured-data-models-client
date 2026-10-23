@@ -453,11 +453,11 @@ fn the_columns_joined_on_are_marked_again_from_what_the_host_holds() {
 
 #[test]
 fn a_link_that_cannot_join_is_refused_by_the_consistency_check() {
-    assert!(assemble::check_links(&description()).is_ok());
+    assert!(assemble::check_links(&description(), &assemble::HostTypes::default()).is_ok());
     let refused = |change: &dyn Fn(&mut SourceDescription)| {
         let mut schema = description();
         change(&mut schema);
-        let err = assemble::check_links(&schema).unwrap_err();
+        let err = assemble::check_links(&schema, &assemble::HostTypes::default()).unwrap_err();
         assert_eq!(err.code, ErrorCode::InvalidRequest);
         assert_eq!(err.fields["field"], Detail::text("relationships"));
         // Named, when the link has both ends.
@@ -483,7 +483,7 @@ fn a_link_that_cannot_join_is_refused_by_the_consistency_check() {
     // A number joins a number.
     let mut widened = description();
     widened.tables[0].columns[1].dtype = Dtype::Float;
-    assert!(assemble::check_links(&widened).is_ok());
+    assert!(assemble::check_links(&widened, &assemble::HostTypes::default()).is_ok());
     // A link whose foreign key is its own table's primary key, which the
     // reference's engine refuses (`Graph._edge_error`), is refused naming
     // the link (T1.24b); the same key on another column of it is not.
@@ -495,7 +495,7 @@ fn a_link_that_cannot_join_is_refused_by_the_consistency_check() {
         .find(|t| t.name == foreign.table)
         .unwrap();
     table.primary_key = vec![foreign.column.clone()];
-    let err = assemble::check_links(&keyed).unwrap_err();
+    let err = assemble::check_links(&keyed, &assemble::HostTypes::default()).unwrap_err();
     assert_eq!(err.code, ErrorCode::InvalidRequest);
     assert_eq!(err.fields["field"], Detail::text("relationships"));
     assert_eq!(err.fields["source_column"], Detail::text(&foreign.column));

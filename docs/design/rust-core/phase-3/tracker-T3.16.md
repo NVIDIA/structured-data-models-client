@@ -69,5 +69,15 @@ Codex P1 and Claude P1-1, P2-1, P2-2; tests first (ca42c483, 39348fc6), then fix
 | Refusals quoted the wire name (`byte` said as `int32`) | Each edit refusal quotes the host's name | The setters quote the column's `dtype` |
 | Materialize's refusal of a meaning the source's type cannot carry was generic | Worded as the old route words it, on the owner's rule (a worse error blocks): the core names the column, the type and the meaning (reason `incompatible_semantic_type`, the source's type; `meaning_not_carried`, the caller's), and the host says the engine's sentence and `check_consistent`'s | The engine names the column and both types; `check_consistent` quotes the caller's type |
 
-Also: materialize checks a meaning once against the caller's types and once against the source's, before the run (Claude P3-1); `meanings()` is held to the enums by exhaustive matches (P3-2); the client's own copies of the type tables (`_WIRE_TO_PQL_DTYPE`, `DTYPES`, `STYPES`, the old PQL fallback of `supports_dtype`) serve only a build without the core and go with the old route in Phase 5 (P3-3).
+Also: materialize checks a meaning once against the caller's types and once against the source's, before the run (Claude P3-1); `meanings()` lists every variant of the two enums (P3-2; the unused exhaustive matches dropped in round 3); the client's own copies of the type tables (`_WIRE_TO_PQL_DTYPE`, `DTYPES`, `STYPES`, the old PQL fallback of `supports_dtype`) serve only a build without the core and go with the old route in Phase 5 (P3-3).
 The refusal census's DuckDB run (`docs/design/rust-core/phase-2/evidence/census/duckdb.json`, `sites.json`) was rerun at 469520cc, with the two `materialize_again` sites probed: 43 probes, the one departure `aggregation` as at T2.16.
+
+## Review round 3 (9c061237)
+
+Claude P1 and P3; test first (198b95ab), then fix 4.
+
+| Finding | Fix | The old client's rule |
+|---|---|---|
+| The join check existed twice and had drifted: a linked column retyped by the caller, then materialized, was refused in generic words | One join check: materialize's consistency check (`assemble::check_links`) refuses each link through the relationships edit's own (`assemble::checked`), naming the link and both host type names | `check_consistent` calls `_require_joinable`, the setter's check, and says `orders.user_id -> users.user_id joins 'string' to 'int64', which cannot match` |
+
+Also: the plain and `_named` versions of `joins`, `check_links` and `edit` merged into one each, taking the host's type names (`HostTypes::default()` where a host gave none) (P3).

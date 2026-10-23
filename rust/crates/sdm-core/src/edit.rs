@@ -73,39 +73,6 @@ pub fn meanings() -> Vec<(String, String)> {
         Dtype::Stringlist,
         Dtype::Unsupported,
     ];
-    // Every variant listed: a new one fails these matches, so the arrays
-    // above are held to the enums by the compiler (Claude r2 P3-2).
-    let _every_stype = |stype: Stype| match stype {
-        Stype::Numerical
-        | Stype::Categorical
-        | Stype::Multicategorical
-        | Stype::Id
-        | Stype::Text
-        | Stype::Timestamp
-        | Stype::Sequence
-        | Stype::Image
-        | Stype::Unsupported => (),
-    };
-    let _every_dtype = |dtype: Dtype| match dtype {
-        Dtype::Bool
-        | Dtype::Int
-        | Dtype::Byte
-        | Dtype::Int16
-        | Dtype::Int32
-        | Dtype::Int64
-        | Dtype::Float
-        | Dtype::Float32
-        | Dtype::Float64
-        | Dtype::String
-        | Dtype::Binary
-        | Dtype::Date
-        | Dtype::Time
-        | Dtype::Timedelta
-        | Dtype::Floatlist
-        | Dtype::Intlist
-        | Dtype::Stringlist
-        | Dtype::Unsupported => (),
-    };
     let name = |value: serde_json::Value| value.as_str().unwrap_or_default().to_owned();
     let mut pairs = Vec::new();
     for stype in STYPES {
@@ -130,7 +97,7 @@ pub(crate) async fn run(
     // Edits read no data: a column the source was never asked of is edited
     // by its data type, as the reference's setters edit any column.
     let read = sdm_schema::held::read(held, &BTreeMap::new(), true)?;
-    let edited = sdm_schema::edit::edit_named(read.description, &edit, &supports, &read.types)?;
+    let edited = sdm_schema::edit::edit(read.description, &edit, &supports, &read.types)?;
     for warning in edited.warnings {
         asker.warn(warning);
     }

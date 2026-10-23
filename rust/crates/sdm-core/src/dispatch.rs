@@ -399,7 +399,7 @@ pub(crate) fn materialize(
                 // `check_consistent` reads it; then as its engine reads the
                 // source (T3.16 review round 1).
                 crate::materialize::meanings_carried(&read.description, Some(&read.types))?;
-                sdm_schema::assemble::check_links_named(&read.description, &read.types)?;
+                sdm_schema::assemble::check_links(&read.description, &read.types)?;
                 let description = read.by_the_source();
                 crate::materialize::meanings_carried(&description, None)?;
                 let source = crate::materialize::fingerprint(&provider, &description)?;

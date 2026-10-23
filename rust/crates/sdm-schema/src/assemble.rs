@@ -277,7 +277,7 @@ pub fn assemble(
             .collect();
         let mut links = Vec::new();
         for link in declared.iter().cloned().chain(by_name) {
-            match joins(&described, &link) {
+            match joins(&described, &link, &HostTypes::default()) {
                 Ok(()) => links.push(link),
                 // A link inferred or declared names columns the tables hold.
                 Err(Unjoinable::Missing) => {}
@@ -332,7 +332,7 @@ pub(crate) fn checked(
     types: &HostTypes,
 ) -> Result<(), CoreError> {
     let field = "relationships";
-    let refused = match joins_named(tables, link, types) {
+    let refused = match joins(tables, link, types) {
         Ok(()) => return Ok(()),
         // The first end the schema does not hold, in the reference's order
         // (`_require_column` of the source, then of the target), named as
@@ -810,13 +810,9 @@ fn named<'a>(types: &'a HostTypes, at: &ColumnRef, column: &DescribedColumn) -> 
 
 /// Whether `link` can join (`_require_joinable`): it names columns the
 /// schema holds, refers to its table's primary key of one column, and its
-/// two columns hold values of one family.
-pub fn joins(tables: &[DescribedTable], link: &[ColumnRef]) -> Result<(), Unjoinable> {
-    joins_named(tables, link, &HostTypes::default())
-}
-
-/// [`joins`], each column's data type read by the name `types` gives it.
-pub fn joins_named(
+/// two columns hold values of one family, each column's type read by the
+/// name `types` gives it (the host's, T3.16).
+pub fn joins(
     tables: &[DescribedTable],
     link: &[ColumnRef],
     types: &HostTypes,
@@ -986,42 +982,17 @@ pub fn mark_keys(description: &mut SourceDescription) {
 }
 
 /// Refuses a schema whose links cannot join (`Schema.check_consistent`'s
-/// relationships), as `INVALID_REQUEST`; then, as the reference's engine
+/// relationships, each column's type read by the name `types` gives it), as
+/// `INVALID_REQUEST`; then, as the reference's engine
 /// refuses the graph it is handed (`Graph._edge_error`), a link whose
 /// foreign key is its own table's primary key (T1.24b: found by the E49
 /// differential, a key named on a link's foreign key).
-pub fn check_links(description: &SourceDescription) -> Result<(), CoreError> {
-    check_links_named(description, &HostTypes::default())
-}
-
-/// [`check_links`], each column's data type read by the name `types` gives
-/// it, as the reference's `check_consistent` reads the caller's schema.
-pub fn check_links_named(
-    description: &SourceDescription,
-    types: &HostTypes,
-) -> Result<(), CoreError> {
+pub fn check_links(description: &SourceDescription, types: &HostTypes) -> Result<(), CoreError> {
+    // One join check, the relationships edit's ([`checked`]), its refusal
+    // naming the link and both types as the reference's
+    // `_require_joinable` does (T3.16 review round 3).
     for link in &description.links {
-        let message = match joins_named(&description.tables, link, types) {
-            Ok(()) => continue,
-            Err(Unjoinable::Missing) => {
-                "a relationship names a table or column the schema does not hold"
-            }
-            Err(Unjoinable::NotTheKey) => {
-                "a relationship does not join to its table's primary key of one column"
-            }
-            Err(Unjoinable::Types) => "a relationship joins two kinds of value that cannot match",
-        };
-        let mut refused = invalid(message, "relationships");
-        // The link by its names, as the warnings name one, when it has
-        // both ends.
-        if let [foreign, referenced] = link.as_slice() {
-            refused = refused
-                .with_field("source_table", Detail::text(&foreign.table))
-                .with_field("source_column", Detail::text(&foreign.column))
-                .with_field("target_table", Detail::text(&referenced.table))
-                .with_field("target_column", Detail::text(&referenced.column));
-        }
-        return Err(refused);
+        checked(&description.tables, link, types)?;
     }
     for link in &description.links {
         let [foreign, referenced] = link.as_slice() else {

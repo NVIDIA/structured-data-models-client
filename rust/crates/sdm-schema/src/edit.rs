@@ -63,20 +63,14 @@ pub struct Edited {
 /// `description` with `edit` made, as the reference's setters make it, or
 /// the reference's refusal of it at the assignment (`INVALID_REQUEST`,
 /// naming the field, and the table and column where it names them).
+/// `description` with `edit` made, as the reference's setters make it, or
+/// the reference's refusal of it at the assignment (`INVALID_REQUEST`,
+/// naming the field, and the table and column where it names them); each
+/// column's data type read by the name the host gave it (`types`, T3.16),
+/// as the setters read a column's `dtype`: a meaning or key checked against
+/// it, a name no data type has let through, a link's two columns joined by
+/// their names' families, and a refusal quoting the name.
 pub fn edit(
-    description: SourceDescription,
-    edit: &SchemaEdit,
-    supports: Supports<'_>,
-) -> Result<Edited, CoreError> {
-    edit_named(description, edit, supports, &HostTypes::default())
-}
-
-/// [`edit`], each column's data type read by the name the host gave it
-/// (`types`, T3.16), as the reference's setters read a column's `dtype`: a
-/// meaning or key checked against it, a name no data type has let through,
-/// a link's two columns joined by their names' families, and a refusal
-/// quoting the name.
-pub fn edit_named(
     mut description: SourceDescription,
     edit: &SchemaEdit,
     supports: Supports<'_>,

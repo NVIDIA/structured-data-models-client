@@ -2053,7 +2053,7 @@ fn consistent(description: &mut SourceDescription) -> Result<(), CoreError> {
             );
         }
     }
-    sdm_schema::assemble::check_links(description)
+    sdm_schema::assemble::check_links(description, &sdm_schema::assemble::HostTypes::default())
 }
 
 /// The names of options the host passes without their values
