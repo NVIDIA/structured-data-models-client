@@ -25,8 +25,10 @@ statement any driver runs, the loader's and the old client's alike,
 through the live write guard (KO3-51; ``write_guard.py`` beside this file,
 installed on the drivers themselves, without which the run does not
 start), refused outside the one test schema; case by case, a case that
-fails written with its reason to ``DIR/<leg>.failed.json`` while the
-others go on; their lines written to ``DIR/<leg>.record.jsonl``, then each written as a capture under
+fails (the runner's failure, any other error, or any statement of the
+case the guard refused, even one the old client's call took for its
+answer) written with its reason to ``DIR/<leg>.failed.json``, none of it
+imported, while the others go on; their lines written to ``DIR/<leg>.record.jsonl``, then each written as a capture under
 ``DIR/<leg>/<case>/`` with the leg's manifest (``captures.py import``: the
 placeholders and the private-name search applied again). Nothing is
 written into the repository: the orchestrator commits the captures under
@@ -289,7 +291,7 @@ def install_guard(leg: str, guard: ModuleType, loader: Any) -> Any:
                 '(SDM_LIVE_TEST_*): the loads would be refused'
             )
     undo = guard.install(guards)
-    loader.WRITE_GUARD = own.check
+    loader.WRITE_GUARD = guard._keeping(own.check)
 
     def uninstall() -> None:
         loader.WRITE_GUARD = None
@@ -335,18 +337,34 @@ def run(
             case = Path(path).stem
             recording = parts / f'{number:04d}.record.jsonl'
             observations = parts / f'{number:04d}.python-ref.jsonl'
+            refusals = len(guard.REFUSALS)
             try:
-                status = runner.main(
-                    ['--mode', 'python-ref', '--reference', str(reference),
-                     '--database', leg, '--record', str(recording),
-                     '--out', str(observations), path]
-                )  # fmt: skip
+                lines = runner.run(
+                    'python-ref',
+                    runner.load_cases([Path(path)]),
+                    reference,
+                    database=leg,
+                    record=recording,
+                )
             except runner.RunnerFailure as failure:
                 failed[case] = str(failure)
                 continue
-            if status:
-                failed[case] = f'the recording exited {status}'
+            except Exception as error:  # noqa: BLE001 - this case alone fails
+                failed[case] = f'{type(error).__name__}: {error}'
                 continue
+            if len(guard.REFUSALS) > refusals:
+                # A statement of the case refused, whoever sent it: the old
+                # client's call would record the refusal as its own answer.
+                failed[case] = 'the write guard refused: ' + '; '.join(
+                    guard.REFUSALS[refusals:]
+                )
+                continue
+            observations.write_text(
+                ''.join(
+                    json.dumps(item, sort_keys=True) + '\n' for item in lines
+                ),
+                encoding='utf-8',
+            )
             if recording.is_file():
                 recorded.append(recording)
     finally:

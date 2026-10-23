@@ -958,6 +958,27 @@ _STATEMENT_KEYWORDS = (
 _SPARK_KEYWORDS = frozenset({'sqlQuery', 'args'})
 _MARK = '__sdm_write_guard__'
 _INSTALLED: list[tuple[type, str, Any]] = []
+#: Every refusal an installed entry point made since :func:`install`, its
+#: message: a caller that catches one (the old client's call makes it the
+#: case's outcome) cannot hide it from the run, which fails the case.
+REFUSALS: list[str] = []
+
+
+def _keeping(function: Any) -> Any:
+    r"""``function``, each refusal it raises kept in :data:`REFUSALS`."""
+
+    @functools.wraps(function)
+    def kept(*arguments: Any, **keywords: Any) -> Any:
+        try:
+            return function(*arguments, **keywords)
+        except WriteRefused as refused:
+            REFUSALS.append(str(refused))
+            raise
+
+    setattr(kept, _MARK, True)
+    return kept
+
+
 #: What :func:`install` applies, by base class, for a subclass defined later.
 _RULES: list[tuple[type, str, Callable[[Any], Any]]] = []
 _ABSENT = object()
@@ -1006,8 +1027,7 @@ def _guarded(
         check(_text(self, statement))
         return original(self, *arguments, **keywords)
 
-    setattr(guarded, _MARK, True)
-    return guarded
+    return _keeping(guarded)
 
 
 def _sql_texts(message: Any) -> list[str]:
@@ -1065,16 +1085,14 @@ def _plan_request(original: Any, check: Callable[[str], None]) -> Any:
             check(text)
         return original(self, request, *arguments, **keywords)
 
-    setattr(guarded, _MARK, True)
-    return guarded
+    return _keeping(guarded)
 
 
 def _refused(name: str) -> Any:
     def refused(*arguments: Any, **keywords: Any) -> Any:
         raise WriteRefused(f'{name}: writes no statement the guard can read')
 
-    setattr(refused, _MARK, True)
-    return refused
+    return _keeping(refused)
 
 
 def _refusing(where: str) -> Callable[[Any], Any]:
@@ -1171,6 +1189,7 @@ def install(guards: Mapping[str, WriteGuard | None]) -> Callable[[], None]:
     have moved."""
     if _INSTALLED:
         raise RuntimeError('the live write guard is installed already')
+    REFUSALS.clear()
     try:
         for module_name, class_name, attributes, dialect in ENTRY_POINTS:
             cls = _class(
