@@ -23,7 +23,6 @@ fn facts(dtype: Dtype, received: ColumnType) -> SourceFacts {
         unique: true,
         declared_type: Some("HUGEINT".into()),
         exact_number: None,
-        namespace: None,
     }
 }
 
@@ -53,6 +52,7 @@ fn schema() -> HeldSchema {
             duplicate_keys: Some(Scalar::UInt64(3)),
         }],
         links: vec![],
+        read_under: Vec::new(),
     }
 }
 

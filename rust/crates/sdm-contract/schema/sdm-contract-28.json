@@ -712,7 +712,7 @@
           }
         },
         "namespace": {
-          "description": "The namespace the tables were read under, each part given, where\nthe run read parts the provider left to the connection (a\nDatabricks source naming no catalog or schema: the session's\ncurrent ones; contract v28, T3.4): `materialize` reads the same\ntables under it (a host keeps it with each column's facts,\n[`SourceFacts::namespace`]), whatever the session's current parts\nare by then, as the reference keeps the tables it described. Left\nout, none was read, and each table is read under the provider's\nown namespace.",
+          "description": "The namespace the tables were read under, each part given, where\nthe run read parts the provider left to the connection (a\nDatabricks source naming no catalog or schema: the session's\ncurrent ones; contract v28, T3.4): `materialize` reads the same\ntables under it (a host keeps it for each table it described,\n[`HeldSchema::read_under`]), whatever the session's current parts\nare by then, as the reference keeps the tables it described. Left\nout, none was read, and each table is read under the provider's\nown namespace.",
           "type": [
             "array",
             "null"
@@ -1725,6 +1725,13 @@
               "$ref": "#/$defs/ColumnRef"
             }
           }
+        },
+        "read_under": {
+          "description": "Where the schema read each relation it read under parts its provider\nleft to the connection (a Databricks source naming no catalog or\nschema: [`SourceDescription::namespace`] of the description that read\nit), by relation, once each: `materialize` reads a table of that\nrelation there again while the source's own parts agree, whatever\nthe session's current parts are by then, as the reference keeps each\ntable it read by its source name. A fact of the schema that read the\nrelations, not of any table or column: a table adopted from another\nschema, or edited, is read where this schema read its relation, and\na relation it never read where the source and its session say\n(contract v28, T3.4). Absent from the JSON when none.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ReadUnder"
+          }
         }
       },
       "additionalProperties": false,
@@ -1867,16 +1874,6 @@
               "type": "null"
             }
           ]
-        },
-        "namespace": {
-          "description": "The namespace the relation was read under, each part given, where\nthe run read parts the provider left to the connection (a\nDatabricks source naming no catalog or schema: the session's\ncurrent ones; [`SourceDescription::namespace`], T3.4): `materialize`\nreads the same tables under it, whatever the session's current\nparts are by then, as the reference keeps the tables it described.\nAbsent from the JSON when none was read.",
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "type": "string"
-          }
         }
       },
       "additionalProperties": false,
@@ -1886,6 +1883,27 @@
         "received",
         "nullable",
         "unique"
+      ]
+    },
+    "ReadUnder": {
+      "description": "One relation a schema read, and the namespace it read it under\n([`HeldSchema::read_under`]).",
+      "type": "object",
+      "properties": {
+        "relation": {
+          "$ref": "#/$defs/Relation"
+        },
+        "namespace": {
+          "description": "Each part, outermost first, as the source answered it.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "relation",
+        "namespace"
       ]
     },
     "SchemaEdit": {
