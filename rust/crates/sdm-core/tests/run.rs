@@ -44,6 +44,7 @@ where
     let root = CompositionRoot::new(Arc::new(sdm_data::Data::new()));
     let host = ProviderChoice::Host {
         capabilities: ProviderCapabilities {
+            derived_relations: false, neighbor_lookback: false, sample_rows: false,
             optional: BTreeSet::new(),
             max_keys_per_request: None,
             max_seed: u64::MAX,
@@ -70,6 +71,7 @@ fn rows(n: usize) -> FetchResult {
 
 fn failed() -> FetchResult {
     FetchResult::Error(ProviderError {
+        refuses_expression: false,
         kind: ErrorKind::DataSource,
         retryable: false,
         sqlstate: Some("42P01".into()),

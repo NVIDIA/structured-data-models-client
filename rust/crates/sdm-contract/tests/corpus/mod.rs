@@ -270,6 +270,7 @@ pub fn messages() -> Vec<ControlMessage> {
                 FetchStep {
                     id: ReplyId(4),
                     request: DataRequest::SampleEntities {
+                        rows: None,
                         table: "users".into(),
                         key: vec!["user_id".into()],
                         n: 10_000,
@@ -302,6 +303,7 @@ pub fn messages() -> Vec<ControlMessage> {
                     id: ReplyId(6),
                     request: DataRequest::KeyCounts {
                         keys: vec![TableKey {
+                            unique: false,
                             table: "orders".into(),
                             columns: vec!["order_id".into()],
                             label: None,
@@ -358,6 +360,7 @@ pub fn messages() -> Vec<ControlMessage> {
             id: ReplyId(2),
             outcome: FetchOutcome::Error {
                 error: ProviderError {
+                    refuses_expression: false,
                     kind: ErrorKind::DataSource,
                     retryable: true,
                     sqlstate: Some("42P01".into()),
@@ -438,6 +441,7 @@ pub fn messages() -> Vec<ControlMessage> {
             error: CoreError::new(ErrorKind::Internal, ErrorCode::InternalError, "panicked")
                 .with_field("panic", Detail::Scalar(Scalar::Bool(true)))
                 .caused_by(CoreError::provider(&ProviderError {
+                    refuses_expression: false,
                     kind: ErrorKind::DataSource,
                     retryable: true,
                     sqlstate: Some("08006".into()),

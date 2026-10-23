@@ -562,7 +562,7 @@
       ]
     },
     "Relation": {
-      "description": "What a request reads: a relation of the source, by its name's parts,\neach quoted alone and never split on a dot, so `[\"a.b\"]` is one table\nnamed `a.b` and `[\"main\", \"t\"]` the table `t` of `main` (design choice\n12). Plain data, a list of strings, as easily built by a host in any\nlanguage as a name is. How many parts a source takes is its dialect's:\n`sdm-data` renders every dialect's `FROM` from a relation through one\nfunction and refuses one of no part, or of more parts than its dialect\naccepts, by name (rule `relation`); a host provider refuses one it\ncannot read the same way. Two schema tables over one source are two\nequal relations.",
+      "description": "What a request reads: a relation of the source, by its name's parts,\neach quoted alone and never split on a dot, so `[\"a.b\"]` is one table\nnamed `a.b` and `[\"main\", \"t\"]` the table `t` of `main` (design choice\n12). Plain data, a list of strings, as easily built by a host in any\nlanguage as a name is. How many parts a source takes is its dialect's:\n`sdm-data` renders every dialect's `FROM` from a relation through one\nfunction and refuses one of no part, or of more parts than its dialect\naccepts, by name (rule `relation`); a host provider refuses one it\ncannot read the same way. Two schema tables over one source are two\nequal relations.\n\nA relation may be derived (contract v28, design choice 3 of Phase 3):\n`columns`, where given, are the relation's columns, each a name with\nthe source column it reads or an SQL text expression over the source's\ncolumns, and `filter` an SQL text condition every row read holds, as a\nview's definition gives them. Both are text of the source's own SQL,\nopaque to the core, which never reads or writes them: only a provider\ndeclaring [`ProviderCapabilities::derived_relations`] is asked for a\nderived relation, and the core refuses one for any other by name (rule\n[`DERIVED_RULE`]).",
       "type": "object",
       "properties": {
         "source": {
@@ -570,11 +570,50 @@
           "items": {
             "type": "string"
           }
+        },
+        "columns": {
+          "description": "The relation's columns, in order, where it is derived; empty, the\nsource's own columns under their own names.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RelationColumn"
+          }
+        },
+        "filter": {
+          "description": "The condition, in the source's SQL, every row of the relation holds;\nleft out, every row of the source is the relation's.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "additionalProperties": false,
       "required": [
         "source"
+      ]
+    },
+    "RelationColumn": {
+      "description": "One column of a derived relation: the name the relation gives it, and\nwhat it reads, exactly one of a column of the source (`column`) or an\nexpression in the source's SQL over its columns (`expression`).",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "column": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "expression": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name"
       ]
     },
     "Given": {
@@ -2077,6 +2116,13 @@
           "items": {
             "$ref": "#/$defs/MemoStoredTime"
           }
+        },
+        "rows": {
+          "description": "Each table's rows, read once where the provider's sampling is sized\nby them ([`crate::data::ProviderCapabilities::sample_rows`],\n`neighbor_lookback`; contract v28), as the reference's warehouse\nsamplers count every table's rows as they are built; left out where\nnone was read.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MemoRows"
+          }
         }
       },
       "additionalProperties": false,
@@ -2136,6 +2182,26 @@
       "additionalProperties": false,
       "required": [
         "table"
+      ]
+    },
+    "MemoRows": {
+      "description": "One table's rows, as counted.",
+      "type": "object",
+      "properties": {
+        "table": {
+          "description": "The table, as the schema names it.",
+          "type": "string"
+        },
+        "rows": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "table",
+        "rows"
       ]
     },
     "StatePayload": {
@@ -3496,6 +3562,18 @@
               "type": "null"
             }
           ]
+        },
+        "derived_relations": {
+          "description": "The provider reads derived relations ([`Relation::columns`],\n[`Relation::filter`]; contract v28). Left out, `false`: the core\nrefuses a derived relation for the provider by name (rule\n[`DERIVED_RULE`]).",
+          "type": "boolean"
+        },
+        "sample_rows": {
+          "description": "The provider sizes an entity sample by the table's rows, as the\nreference's warehouse samplers do (a sampled percentage of the\nrows): the core counts each sampled table's rows first and names\nthe count on the sample ([`DataRequest::SampleEntities`]'s `rows`;\ncontract v28). Left out, `false`.",
+          "type": "boolean"
+        },
+        "neighbor_lookback": {
+          "description": "The provider's neighbor reads by a foreign key over a table with a\ntime column look back no further than the reference's warehouse\nsamplers do (`_by_fkey`): from each seed's anchor back by five\ntimes the rows asked over the table's rate of rows per referenced\nrow and second, at most five years, the seconds rounded up. The\ncore counts the table's and the referenced table's rows, reads the\ntable's time bounds, and bounds each such read from below by that\nlook-back, exclusive (contract v28). Left out, `false`: no lower\nbound.",
+          "type": "boolean"
         }
       },
       "additionalProperties": false,
@@ -3892,6 +3970,10 @@
             "string",
             "null"
           ]
+        },
+        "refuses_expression": {
+          "description": "The source refused the statement for an expression it says or\nreads (contract v28): what the reference's Databricks reader calls\na refused expression, a data error (SQLSTATE class `22`) or a syntax\nor analysis error (class `42`), which it answers by leaving out the\nderived column it could not read. The host sets it from its\ndriver's error, as it reads the driver's SQLSTATE; the core reads no\ntext. Left out, `false`.",
+          "type": "boolean"
         }
       },
       "additionalProperties": false,
@@ -4286,6 +4368,15 @@
                 }
               ]
             },
+            "rows": {
+              "description": "The rows `table` holds, where the provider sizes its draw by\nthem ([`ProviderCapabilities::sample_rows`]): the core counts\nthem (`count_rows`) before it samples and names the count here,\nas the reference's warehouse samplers read each table's rows\nfirst (contract v28). Left out for any other provider.",
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
             "request": {
               "type": "string",
               "const": "sample_entities"
@@ -4586,6 +4677,10 @@
           ],
           "format": "uint64",
           "minimum": 0
+        },
+        "unique": {
+          "description": "The source keeps the key unique (a declared primary or unique key\nthat may still hold a null): its distinct values are the rows\nholding all of it, which a rendering may count as the rows less\nthose missing part of it, as the reference counts such a key\n(`_key_count_sql`; contract v28, carried row P2-T2.2-3). The count\nis the same either way.",
+          "type": "boolean"
         }
       },
       "additionalProperties": false,
