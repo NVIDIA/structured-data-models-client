@@ -2,20 +2,11 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""T3.3's acceptance tests for the warehouse harness around the stand-in
-(T3.3's brief, exits 3, 5, 6 and 7), written by the package's test author
-before the implementation:
-
-- exit 3: ``scripts/rust_core/l0_deps.py`` passes with the stand-in, its
-  module and its ``sdm-standin`` binary, in the workspace;
-- exit 5: a difference on one warehouse leg only stops ``handoff.py``'s
-  stamp (the reference step runs each touched case's warehouse legs on the
-  stand-in);
-- exit 6: CI's leg jobs, ``contract-python (ref-pandas3, <leg>)`` and
-  ``cross-host (<leg>)`` for each warehouse leg, run the cases on that leg
-  and judge them;
-- exit 7: the carried CI rows the brief names (P2-T2.14c-1, P2-T2.1a-3,
-  P2-T2.16a-1, P2-T2.11-4, C28, OF-7's phase predicate, M5, C16).
+r"""T3.3's acceptance tests for the carried CI rows (T3.3's brief, exit 7:
+P2-T2.14c-1, P2-T2.1a-3, P2-T2.16a-1, P2-T2.11-4, C28, OF-7's phase
+predicate, M5, C16), written by the package's test author before the
+implementation. The stand-in's tests (exits 3, 5 and 6) went with the
+stand-in (decision B-lite).
 
 Each test listed in ``contract/tests/t33-pending.json``'s ``pending`` (as
 ``py:<function name>``) failed when written and is held to failing
@@ -24,13 +15,8 @@ Each test listed in ``contract/tests/t33-pending.json``'s ``pending`` (as
 
 from __future__ import annotations
 
-import itertools
 import json
-import os
 import re
-import shutil
-import subprocess
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -40,8 +26,6 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 CI = ROOT / '.github/workflows/ci.yml'
 PENDING_FILE = ROOT / 'contract/tests/t33-pending.json'
-#: The four warehouse legs (Phase 3 design, choice 1).
-LEGS = ('databricks-sql', 'databricks-spark', 'snowflake', 'lakebase')
 
 
 def _pending_names(key: str) -> set[str]:
@@ -59,127 +43,11 @@ def pending(test: Any) -> Any:
     return test
 
 
-# --- exit 3: l0_deps.py with the stand-in in the workspace -----------------
-
-
-@pending
-def test_t33_l0_deps_passes_with_the_stand_in_in_the_workspace() -> None:
-    r"""Exit 3 (choice 2, "Where it lives"): the stand-in is one module of
-    ``sdm-testkit`` and its ``sdm-standin`` binary, and ``l0_deps.py``
-    holds unchanged over them: nothing shipped reaches ``sdm-testkit``."""
-    assert (ROOT / 'rust/crates/sdm-testkit/src/standin.rs').is_file()
-    metadata = subprocess.run(
-        ['cargo', 'metadata', '--no-deps', '--format-version', '1'],
-        cwd=ROOT / 'rust',
-        stdin=subprocess.DEVNULL,
-        capture_output=True,
-        text=True,
-        timeout=600,
-    )
-    assert metadata.returncode == 0, metadata.stderr[-2000:]
-    testkit = next(
-        package
-        for package in json.loads(metadata.stdout)['packages']
-        if package['name'] == 'sdm-testkit'
-    )
-    assert any(
-        target['name'] == 'sdm-standin' and 'bin' in target['kind']
-        for target in testkit['targets']
-    ), [target['name'] for target in testkit['targets']]
-    done = subprocess.run(
-        [sys.executable, 'scripts/rust_core/l0_deps.py'],
-        cwd=ROOT,
-        stdin=subprocess.DEVNULL,
-        capture_output=True,
-        text=True,
-        timeout=600,
-    )
-    assert done.returncode == 0, (done.stdout + done.stderr)[-3000:]
-
-
 # --- the workflow --------------------------------------------------------------
 
 
 def _workflow() -> dict[str, Any]:
     return yaml.safe_load(CI.read_text(encoding='utf-8'))
-
-
-def _matrix(job: dict[str, Any]) -> list[dict[str, Any]]:
-    r"""Each combination of a job's static matrix; one empty one when it
-    has none."""
-    matrix = (job.get('strategy') or {}).get('matrix')
-    if not isinstance(matrix, dict):
-        return [{}]
-    axes = {
-        key: value
-        for key, value in matrix.items()
-        if key not in ('include', 'exclude') and isinstance(value, list)
-    }
-    combos = [
-        dict(zip(axes, values, strict=True))
-        for values in itertools.product(*axes.values())
-    ] or ([{}] if not matrix.get('include') else [])
-    return combos + [dict(each) for each in matrix.get('include', [])]
-
-
-def _filled(value: Any, matrix: dict[str, Any]) -> Any:
-    r"""``value`` with each ``${{ matrix.<key> }}`` filled in."""
-    if isinstance(value, str):
-        return re.sub(
-            r'\$\{\{\s*matrix\.([A-Za-z0-9_-]+)\s*\}\}',
-            lambda found: str(matrix.get(found.group(1), found.group(0))),
-            value,
-        )
-    if isinstance(value, dict):
-        return {key: _filled(item, matrix) for key, item in value.items()}
-    if isinstance(value, list):
-        return [_filled(item, matrix) for item in value]
-    return value
-
-
-def _jobs_named() -> dict[str, dict[str, Any]]:
-    r"""Every job of the workflow by the name CI shows, each matrix
-    combination its own job, its matrix values filled in."""
-    named: dict[str, dict[str, Any]] = {}
-    for key, job in _workflow()['jobs'].items():
-        for combo in _matrix(job):
-            filled = _filled(job, combo)
-            named[str(filled.get('name', key))] = filled
-    return named
-
-
-# --- exit 6: the leg jobs ----------------------------------------------------
-
-
-@pending
-@pytest.mark.parametrize('leg', LEGS)
-def test_t33_ci_s_leg_jobs_run_and_judge_each_warehouse_leg(leg: str) -> None:
-    r"""Exit 6: ``contract-python (ref-pandas3, <leg>)`` runs python-core on
-    the leg in the reference cell and judges it with the comparator, and
-    ``cross-host (<leg>)`` judges rust-host on the same leg; Lakebase's
-    stand-in is the local Postgres CI runs, required where it is named."""
-    jobs = _jobs_named()
-    python_job = jobs.get(f'contract-python (ref-pandas3, {leg})')
-    host_job = jobs.get(f'cross-host ({leg})')
-    assert python_job is not None, sorted(jobs)
-    assert host_job is not None, sorted(jobs)
-    for job in (python_job, host_job):
-        assert isinstance(job.get('timeout-minutes'), int)
-        text = json.dumps(job)
-        assert leg in text
-        assert 'compare.py' in text
-    python_text = json.dumps(python_job)
-    assert 'run_python.py' in python_text and 'python-core' in python_text
-    assert (python_job.get('env') or {}).get('CELL') == 'ref-pandas3'
-    assert 'rust-host' in json.dumps(host_job)
-    if leg == 'lakebase':
-        services = python_job.get('services') or {}
-        assert any(
-            str(service.get('image', '')).startswith(('postgres', '${{'))
-            or 'postgres' in json.dumps(service)
-            for service in services.values()
-        ), services
-        assert (python_job.get('env') or {}).get('SDM_REQUIRE_POSTGRES')
 
 
 # --- exit 7: the carried CI rows ---------------------------------------------
@@ -407,169 +275,3 @@ def test_t33_no_vector_sets_its_zone_per_connection() -> None:
                 if _PER_CONNECTION_ZONE.search(each)
             ]
     assert not per_connection, per_connection
-
-
-# --- exit 5: a warehouse-only difference stops the stamp ---------------------
-
-PHASE_BRANCH = 'rust-core-phase-3'
-PACKAGE = 'T3.99'
-TOPIC = f'{PHASE_BRANCH}-t3.99'
-HANDOFF = 'scripts/rust_core/handoff.py'
-#: An S1 case, which runs on every warehouse leg by default, and the leg
-#: its difference is seeded on: Lakebase, judged on the local Postgres.
-SEEDED_CASE = 'base.regression'
-SEEDED_LEG = 'lakebase'
-GIT_ENV = {
-    'GIT_CONFIG_GLOBAL': os.devnull,
-    'GIT_CONFIG_NOSYSTEM': '1',
-    'GIT_AUTHOR_NAME': 'Test Person',
-    'GIT_AUTHOR_EMAIL': 'test@example.com',
-    'GIT_COMMITTER_NAME': 'Test Person',
-    'GIT_COMMITTER_EMAIL': 'test@example.com',
-    'GIT_TERMINAL_PROMPT': '0',
-}
-
-
-def _git(where: Path, *args: str) -> str:
-    done = subprocess.run(
-        ['git', '-C', str(where), *args],
-        env={**os.environ, **GIT_ENV},
-        capture_output=True,
-        text=True,
-        stdin=subprocess.DEVNULL,
-        timeout=300,
-    )
-    if done.returncode != 0:
-        raise AssertionError(f'git {args}: {done.stderr.strip()}')
-    return done.stdout.strip()
-
-
-def _clone(tmp_path: Path) -> Path:
-    r"""A clone of this repository, its HEAD and this worktree's changes
-    under ``scripts/``, ``tests/``, ``contract/`` and ``.claude/`` as the
-    phase head, and a topic branch on it holding one package commit."""
-    origin, work = tmp_path / 'origin.git', tmp_path / 'work'
-    _git(tmp_path, 'clone', '-q', '--bare', '--shared', str(ROOT), str(origin))
-    _git(tmp_path, 'clone', '-q', '--shared', str(origin), str(work))
-    _git(work, 'checkout', '-q', '--detach', _git(ROOT, 'rev-parse', 'HEAD'))
-    changed = _git(ROOT, 'diff', '--name-only', 'HEAD').splitlines()
-    added = _git(
-        ROOT, 'ls-files', '--others', '--exclude-standard'
-    ).splitlines()
-    for name in {*changed, *added}:
-        if not name.startswith(('scripts/', 'tests/', 'contract/', '.claude/')):
-            continue
-        source, target = ROOT / name, work / name
-        if source.is_file():
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(source, target)
-        elif target.exists():
-            target.unlink()
-    if _git(work, 'status', '--porcelain'):
-        _git(work, 'add', '-A')
-        _git(work, 'commit', '-q', '-s', '-m', 'T3.3: the tools under test')
-    head = _git(work, 'rev-parse', 'HEAD')
-    _git(
-        work, 'push', '-q', 'origin',
-        f'{head}:refs/heads/{PHASE_BRANCH}', f'{head}:refs/heads/rust-core',
-    )  # fmt: skip
-    _git(work, 'fetch', '-q', 'origin')
-    _git(work, 'checkout', '-q', '-b', TOPIC, head)
-    probe = work / 'docs/t399-probe.md'
-    probe.parent.mkdir(parents=True, exist_ok=True)
-    probe.write_text('A probe for the handoff test.\n', encoding='utf-8')
-    _git(work, 'add', '-A')
-    _git(work, 'commit', '-q', '-s', '-m', f'{PACKAGE}: a probe')
-    return work
-
-
-#: ``--python`` for the handoff: the core interpreter, which, when told
-#: to, makes python-core's answer to the seeded case on the seeded leg
-#: alone differ from the old client's (a float64 column read as float32).
-SEEDING_PYTHON = r"""#!{python}
-import json, os, subprocess, sys
-
-args = sys.argv[1:]
-done = subprocess.run([os.environ['T33_CORE_PYTHON'], *args])
-key = os.environ['T33_SEED_CASE'] + '@' + os.environ['T33_SEED_LEG']
-if (
-    any(a.endswith('run_python.py') for a in args)
-    and 'python-core' in args
-    and '--out' in args
-):
-    path = args[args.index('--out') + 1]
-
-    def differ(value):
-        if isinstance(value, dict):
-            return {{k: differ(v) for k, v in value.items()}}
-        if isinstance(value, list):
-            return [differ(v) for v in value]
-        return 'float32' if value == 'float64' else value
-
-    if os.path.exists(path):
-        with open(path) as handle:
-            lines = handle.read().splitlines()
-        out = []
-        for line in lines:
-            seen = json.loads(line)
-            if seen.get('case') == key:
-                seen['public'] = differ(seen.get('public'))
-                line = json.dumps(seen, sort_keys=True)
-            out.append(line)
-        with open(path, 'w') as handle:
-            handle.write(''.join(line + '\n' for line in out))
-sys.exit(done.returncode)
-"""
-
-
-@pending
-@pytest.mark.tooling
-def test_t33_a_difference_on_one_warehouse_leg_stops_the_stamp(
-    tmp_path: Path,
-) -> None:
-    r"""Exit 5: the handoff's reference step runs each touched case's
-    warehouse legs on the stand-in, from the committed capture, so a
-    difference seeded on one warehouse leg alone (the DuckDB, SQLite and
-    Postgres legs as the old client answered) stops the stamp, naming the
-    case on that leg."""
-    core = os.environ.get('SDM_TEST_CORE_PYTHON', '')
-    dsn = os.environ.get('SDM_POSTGRES_TEST_DSN', '')
-    if not core or not dsn:
-        pytest.skip(
-            'the reference step needs SDM_TEST_CORE_PYTHON (the candidate '
-            "client's interpreter) and SDM_POSTGRES_TEST_DSN"
-        )
-    work = _clone(tmp_path)
-    sha = _git(work, 'rev-parse', 'HEAD')
-    seeding = tmp_path / 'seeding-python'
-    seeding.write_text(SEEDING_PYTHON.format(python=sys.executable))
-    seeding.chmod(0o755)
-    env = {
-        **{
-            k: v
-            for k, v in os.environ.items()
-            if not k.startswith(('SDM_', 'GIT_'))
-        },
-        **GIT_ENV,
-        'SDM_ORCH_STATE': str(tmp_path / 'state'),
-        'SDM_PHASE_BRANCH': PHASE_BRANCH,
-        'SDM_POSTGRES_TEST_DSN': dsn,
-        'T33_CORE_PYTHON': core,
-        'T33_SEED_CASE': SEEDED_CASE,
-        'T33_SEED_LEG': SEEDED_LEG,
-    }
-    done = subprocess.run(
-        [
-            sys.executable, str(work / HANDOFF), 'run', '--package', PACKAGE,
-            '--case', SEEDED_CASE, '--python', str(seeding),
-        ],
-        cwd=work, env=env, capture_output=True, text=True,
-        stdin=subprocess.DEVNULL, timeout=3600,
-    )  # fmt: skip
-    said = done.stdout + done.stderr
-    assert done.returncode == 1, said[-3000:]
-    assert f'{SEEDED_CASE}@{SEEDED_LEG}' in said, said[-3000:]
-    common = Path(_git(work, 'rev-parse', '--git-common-dir'))
-    if not common.is_absolute():
-        common = work / common
-    assert not (common / 'sdm-handoff' / f'{sha}.json').exists()
