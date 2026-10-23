@@ -6,9 +6,9 @@ r"""The capture writer and reader (Phase 3 design, choice 2; T3.3).
 
 A capture is what the old client did and got on one warehouse leg for one
 case, recorded live in C-1 (or E-0) by ``run_python.py``'s recording mode
-(T3.2); the stand-in (``sdm-testkit``'s ``standin.rs``) answers the core's
-requests from it offline. As the writer takes it and :func:`read` gives it
-back, a capture is plain data:
+(T3.2): the old client's answers and the statements it sent, which the
+core's SQL is compared with (the owner's B-lite). As the writer takes it
+and :func:`read` gives it back, a capture is plain data:
 
 - ``case``, ``leg``: the case's id and its warehouse leg (:data:`LEGS`);
 - ``recording_commit``, ``reference_commit``: the commit whose harness
@@ -17,7 +17,7 @@ back, a capture is plain data:
 - ``input_hash``: the hash of the case's input;
 - ``session``: the session's ``time_zone`` and ``null_order``
   (``nulls_first`` or ``nulls_last`` for an ascending order), which the
-  stand-in sets on its local engine (B5);
+  core's run offline reads its session with;
 - ``reference``: the old client's reference line, the observation
   Phase 2's lines use;
 - ``tables``: each table of the case as the warehouse returned it through
@@ -1008,7 +1008,7 @@ def from_recording(
     if not zone:
         raise CaptureError(
             f'{case}@{leg}: the recording names no session time zone, which '
-            'the stand-in sets (B5)'
+            'the offline run reads (B5)'
         )
     return {
         'case': case,
@@ -1050,39 +1050,6 @@ def import_recording(
     return [write_manifest(directory) for directory in sorted(legs)]
 
 
-def references(
-    leg: str,
-    cases: list[tuple[dict[str, Any], Path]],
-    root: Path,
-    recorded: Mapping[str, str],
-) -> tuple[list[str], list[Path], list[str]]:
-    r"""The old client's reference lines for ``leg`` of the ``cases`` (each
-    loaded case and its file) that run there: the line each one's capture
-    under ``root/<leg>/<case>`` holds, keyed ``<case>@<leg>``, or, on
-    Lakebase, which is Postgres, the old client's recorded Postgres line
-    (``recorded``, by key) until C-1's capture holds one. Returns the lines,
-    the case files they are for, and the cases pending live (no capture
-    yet)."""
-    lines: list[str] = []
-    files: list[Path] = []
-    pending: list[str] = []
-    for case, path in cases:
-        name = case['id']
-        capture = Path(root) / leg / name
-        line: dict[str, Any] | None = None
-        if (capture / DOCUMENT).is_file():
-            line = dict(read_document(capture)['reference'])
-        elif leg == 'lakebase' and f'{name}@postgres' in recorded:
-            line = json.loads(recorded[f'{name}@postgres'])
-        if line is None:
-            pending.append(f'{name}@{leg}')
-            continue
-        line['case'] = f'{name}@{leg}'
-        lines.append(json.dumps(line, sort_keys=True))
-        files.append(path)
-    return lines, files, pending
-
-
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
     commands = parser.add_subparsers(dest='command', required=True)
@@ -1098,15 +1065,6 @@ def main(argv: list[str] | None = None) -> int:
         'manifest', help="write a leg directory's manifest.json"
     )
     listing.add_argument('directory', type=Path)
-    judging = commands.add_parser(
-        'references',
-        help="a leg's reference lines and the case files they are for",
-    )
-    judging.add_argument('--leg', required=True, choices=LEGS)
-    judging.add_argument('--cases', type=Path, required=True)
-    judging.add_argument('--reference', type=Path, required=True)
-    judging.add_argument('--out', type=Path, required=True)
-    judging.add_argument('--files', type=Path, required=True)
     importing = commands.add_parser(
         'import',
         help="write each line of run_python.py --record's file as a capture",
@@ -1114,47 +1072,6 @@ def main(argv: list[str] | None = None) -> int:
     importing.add_argument('recording', type=Path)
     importing.add_argument('out', type=Path)
     arguments = parser.parse_args(argv)
-    if arguments.command == 'references':
-        import importlib.util
-
-        spec = importlib.util.spec_from_file_location(
-            'captures_run_python', Path(__file__).with_name('run_python.py')
-        )
-        assert spec is not None and spec.loader is not None
-        runner = importlib.util.module_from_spec(spec)
-        sys.modules[spec.name] = runner
-        spec.loader.exec_module(runner)
-        paths = (
-            sorted(arguments.cases.rglob('*.json'))
-            if arguments.cases.is_dir()
-            else [arguments.cases]
-        )
-        loaded = []
-        for path in paths:
-            ((case, _),) = runner.load_cases([path])
-            if arguments.leg in runner.case_warehouses(case):
-                loaded.append((case, path))
-        recorded = {}
-        for text in arguments.reference.read_text(
-            encoding='utf-8'
-        ).splitlines():
-            if text.strip():
-                recorded[json.loads(text)['case']] = text
-        lines, files, pending = references(
-            arguments.leg, loaded, CAPTURES, recorded
-        )
-        arguments.out.write_text(
-            ''.join(f'{x}\n' for x in lines), encoding='utf-8'
-        )
-        arguments.files.write_text(
-            ''.join(f'{p}\n' for p in files), encoding='utf-8'
-        )
-        for name in pending:
-            print(f'pending live: {name}')
-        print(
-            f'{len(lines)} case(s) judged on {arguments.leg}, {len(pending)} pending live'
-        )
-        return 0
     if arguments.command == 'import':
         for path in import_recording(arguments.recording, arguments.out):
             print(f'wrote {path}')

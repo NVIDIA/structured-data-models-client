@@ -1137,39 +1137,6 @@ jobs:
   # comparisons on the same effective expectations as the gate. One job per
   # cell, sharing its steps: replay_jobs.py substitutes no matrix value but
   # the Python version.
-  # The stand-in's binary (T3.3), built once for the jobs that run the
-  # contract tests and the warehouse legs over it, so no test builds it
-  # under its own timeout.
-  standin-binary:
-    name: sdm-standin
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    needs: landing
-    if: needs.landing.outputs.skip != 'true'
-    defaults:
-      run:
-        working-directory: rust
-    env:
-      CARGO_PROFILE_DEV_DEBUG: line-tables-only
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Free runner disk
-        run: |
-          df -h /
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
-          df -h /
-      - run: rustup toolchain install
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-        with:
-          workspaces: rust
-          save-if: ${{ env.SAVE_CACHES == 'true' }}
-      - run: cargo build -p sdm-testkit --bin sdm-standin --locked
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: sdm-standin
-          path: rust/target/debug/sdm-standin
-          if-no-files-found: error
-
   contract-python-ref-pandas3:
     name: contract-python (ref-pandas3, duckdb)
     runs-on: ubuntu-latest
@@ -1177,7 +1144,7 @@ jobs:
     # one run on T2.16's ran past 90 (T2.1o first raised it from 60); the
     # cause is carried into Phase 3 (P2-T2.16-14).
     timeout-minutes: 60
-    needs: [landing, native-wheel, native-test-ops, standin-binary]
+    needs: [landing, native-wheel, native-test-ops]
     env:
       SDM_PUSH_BASE: ${{ needs.landing.outputs.base }}
       CELL: ref-pandas3
@@ -1237,16 +1204,6 @@ jobs:
       # with its stack, and a worker that dies ends the run rather than
       # leaving xdist waiting on it.
       # The checking tools' own tests run in tooling (contract) (T3.0).
-      - &standin-binary
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: sdm-standin
-          path: standin
-      - &standin-path
-        name: The stand-in's binary, built once (standin-binary)
-        run: |
-          chmod +x standin/sdm-standin
-          echo "SDM_STANDIN=$PWD/standin/sdm-standin" >> "$GITHUB_ENV"
       - name: The runner's controls and the route tests
         run: python -m pytest contract/tests -q -m 'not tooling' -n auto --dist loadfile --timeout=600 --max-worker-restart=0
       # As in rust-test, whether the gate runs fails closed (T1.18); off
@@ -1808,140 +1765,6 @@ jobs:
             --reference "$reference" ${expect[@]+"${expect[@]}"} \
             cross-host/python-core.jsonl cross-host/rust-host.jsonl || status=1
           exit $status
-
-  # Each warehouse leg offline (Phase 3 design, choice 2; T3.3): python-core
-  # on the leg's stand-in (sdm-standin; Lakebase's is the Postgres service),
-  # held by compare.py to the old client's reference line its C-1 capture
-  # holds (contract/captures/<leg>/), Lakebase's to the Postgres line until
-  # its capture exists. A case with no capture on the leg yet is listed
-  # pending live, never passed; a leg the core reports no provider for yet
-  # is listed and judged once its package adds the provider (the staging
-  # rule, T3.2).
-  contract-python-ref-pandas3-legs:
-    name: contract-python (ref-pandas3, ${{ matrix.leg }})
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    needs: [landing, native-wheel, native-test-ops, standin-binary]
-    if: ${{ !cancelled() && needs.landing.outputs.skip != 'true' }}
-    strategy:
-      fail-fast: false
-      matrix:
-        leg: [databricks-sql, databricks-spark, snowflake, lakebase]
-    services:
-      postgres: *postgres-service
-    env:
-      SDM_PUSH_BASE: ${{ needs.landing.outputs.base }}
-      CELL: ref-pandas3
-      CELL_PINS: pandas==3.0.6 pyarrow==25.0.1 numpy==2.5.3
-      DATABASE: ${{ matrix.leg }}
-      SDM_POSTGRES_TEST_DSN: postgresql://postgres:postgres@localhost:5432/sdm_test
-      SDM_REQUIRE_POSTGRES: '1'
-    steps:
-      - *contract-checkout
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: '3.12'
-      - *contract-wheel
-      - *contract-install
-      - *standin-binary
-      - *standin-path
-      - name: python-core on the leg, offline, against the old client's answers
-        run: |
-          set -o pipefail
-          out=leg-observations
-          mkdir -p "$out"
-          python -I contract/runners/captures.py references --leg "$DATABASE" \
-            --cases contract/cases --reference "$(ls contract/reference/*.jsonl)" \
-            --out "$out/reference.jsonl" --files "$out/cases.txt" || exit 1
-          : > "$out/python-core.jsonl"
-          if ! python -I -c 'import os, sys, sdm_client._native as n; sys.exit(os.environ["DATABASE"] not in n.PROVIDERS)'; then
-            echo "the core reports no $DATABASE provider yet: judged once its package adds it"
-            exit 0
-          fi
-          if [ ! -s "$out/cases.txt" ]; then
-            echo "no case has a reference on $DATABASE yet: every one is pending live"
-            exit 0
-          fi
-          mapfile -t files < "$out/cases.txt"
-          python -I contract/runners/run_python.py --mode python-core --database "$DATABASE" \
-            --out "$out/python-core.jsonl" "${files[@]}" || exit 1
-          where=$(python scripts/rust_core/ratchet.py where) || { echo 'ratchet.py where failed'; exit 1; }
-          expect=()
-          if [ -n "$where" ]; then
-            python scripts/rust_core/ratchet.py effective $where --out "$out/effective.json" || exit 1
-            expect=(--expect "$out/effective.json")
-          fi
-          python scripts/rust_core/compare.py --cases contract/cases --database "$DATABASE" \
-            --reference "$out/reference.jsonl" ${expect[@]+"${expect[@]}"} \
-            --register docs/design/rust-core/register.yaml "$out/python-core.jsonl"
-      - if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: observations-python-core-${{ matrix.leg }}
-          path: leg-observations/
-          if-no-files-found: error
-
-  # rust-host on each warehouse leg (T3.3): its observations, made in
-  # process over the stand-in, held to the same reference lines as
-  # python-core's; a leg rust-host reports no provider for yet
-  # (sdm-contract-run --providers) is listed, judged once its package adds
-  # it.
-  cross-host-legs:
-    name: cross-host (${{ matrix.leg }})
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    needs: [landing, contract-python-ref-pandas3-legs]
-    if: ${{ !cancelled() && needs.landing.outputs.skip != 'true' }}
-    strategy:
-      fail-fast: false
-      matrix:
-        leg: [databricks-sql, databricks-spark, snowflake, lakebase]
-    env:
-      SDM_PUSH_BASE: ${{ needs.landing.outputs.base }}
-      DATABASE: ${{ matrix.leg }}
-    steps:
-      - *contract-checkout
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: '3.12'
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: observations-python-core-${{ matrix.leg }}
-          path: cross-host
-      - name: compare on the leg (python-core, rust-host)
-        run: |
-          pip install duckdb==1.5.6 pyarrow==25.0.1 pyyaml jsonschema
-          # The databases rust-host has a provider for: sdm-testkit's
-          # PROVIDERS, which sdm-contract-run --providers prints, read from
-          # its source so the job builds nothing it would not run.
-          if ! python - <<'EOF'
-          import os, re, sys
-          text = open('rust/crates/sdm-testkit/src/lib.rs', encoding='utf-8').read()
-          found = re.search(r'pub const PROVIDERS: &\[&str\] = &\[([^\]]*)\]', text)
-          if found is None:
-              sys.exit('sdm-testkit names no PROVIDERS')
-          sys.exit(os.environ['DATABASE'] not in re.findall(r'"([^"]+)"', found.group(1)))
-          EOF
-          then
-            echo "rust-host reports no $DATABASE provider yet: judged once its package adds it"
-            exit 0
-          fi
-          if [ ! -s cross-host/cases.txt ]; then
-            echo "no case has a reference on $DATABASE yet: every one is pending live"
-            exit 0
-          fi
-          mapfile -t files < cross-host/cases.txt
-          (cd rust && cargo run -q -p sdm-testkit --bin sdm-contract-run --locked -- \
-            --database "$DATABASE" --out ../cross-host/rust-host.jsonl "${files[@]/#/../}") || exit 1
-          where=$(python scripts/rust_core/ratchet.py where) || { echo 'cross-host: ratchet.py where failed'; exit 1; }
-          expect=()
-          if [ -n "$where" ]; then
-            python scripts/rust_core/ratchet.py effective $where --out cross-host/effective.json || exit 1
-            expect=(--expect cross-host/effective.json)
-          fi
-          python scripts/rust_core/compare.py --cases contract/cases --database "$DATABASE" \
-            --reference cross-host/reference.jsonl ${expect[@]+"${expect[@]}"} \
-            cross-host/python-core.jsonl cross-host/rust-host.jsonl
 
   cross-host-postgres:
     name: cross-host (postgres)
@@ -2505,7 +2328,7 @@ jobs:
     name: timing guard
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: [landing, lint, hygiene, rust-lint, rust-deny, rust-test, native-wheel, native-test-ops, native-wheel-aarch64, binding, wheel-smoke, wheel-smoke-aarch64, typecheck, test, engine, contract-python-ref-pandas3, tooling-contract, tooling-root, cross-host, contract-python-dbr17-pandas2, contract-python-floor-pandas2-2, contract-python-ref-pandas3-sqlite, contract-python-ref-pandas3-postgres, contract-python-dbr17-pandas2-sqlite, contract-python-dbr17-pandas2-postgres, contract-python-floor-pandas2-2-sqlite, contract-python-floor-pandas2-2-postgres, cross-host-sqlite, cross-host-postgres, standin-binary, contract-python-ref-pandas3-legs, cross-host-legs, l4-goldens, l5-conversion, build, engine-wheels, installed-wheel, runtime-install, sbom]
+    needs: [landing, lint, hygiene, rust-lint, rust-deny, rust-test, native-wheel, native-test-ops, native-wheel-aarch64, binding, wheel-smoke, wheel-smoke-aarch64, typecheck, test, engine, contract-python-ref-pandas3, tooling-contract, tooling-root, cross-host, contract-python-dbr17-pandas2, contract-python-floor-pandas2-2, contract-python-ref-pandas3-sqlite, contract-python-ref-pandas3-postgres, contract-python-dbr17-pandas2-sqlite, contract-python-dbr17-pandas2-postgres, contract-python-floor-pandas2-2-sqlite, contract-python-floor-pandas2-2-postgres, cross-host-sqlite, cross-host-postgres, l4-goldens, l5-conversion, build, engine-wheels, installed-wheel, runtime-install, sbom]
     if: ${{ !cancelled() && needs.landing.outputs.skip != 'true' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
