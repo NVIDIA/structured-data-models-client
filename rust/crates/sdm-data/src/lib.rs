@@ -41,6 +41,8 @@ mod postgres;
 mod quote;
 mod read;
 mod sqlite;
+#[cfg(test)]
+mod sql_tests;
 
 pub use keys::canonical_decimal_text;
 
