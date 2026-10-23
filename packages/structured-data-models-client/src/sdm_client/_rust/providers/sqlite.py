@@ -35,7 +35,8 @@ from collections.abc import Mapping
 from typing import Any
 
 from sdm_connectors import providers
-from sdm_connectors.providers import PlanNotRun, arrow_table
+from sdm_connectors.providers import PlanNotRun as PlanNotRun
+from sdm_connectors.providers import arrow_table
 
 #: The key-set tables this module made, by connection (temporary tables are
 #: the connection's own): only these are ever replaced. A connection object
@@ -64,13 +65,7 @@ class SqliteProvider:
         self, step: dict[str, Any], keys: Mapping[int, Any] | None = None
     ) -> Any:
         statements = providers.statements(step, 'sqlite')
-        relations: dict[str, int] = {}
-        for statement in statements:
-            for param in statement['params']:
-                attachment = providers.key_set(param, keys)
-                bound = relations.setdefault(param['relation'], attachment)
-                if bound != attachment:
-                    raise PlanNotRun('a plan binding two key sets to one name')
+        relations = providers.bound_relations(statements, keys)
         made = _made(self._connection)
         with self._connection.cursor() as cursor:
             for relation, attachment in relations.items():
