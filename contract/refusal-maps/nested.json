@@ -16,7 +16,7 @@
       "rule": "column_type",
       "owner": "T1.32c",
       "register": "P1B-10",
-      "where": "rust/crates/sdm-schema/src/infer.rs:809-812",
+      "where": "rust/crates/sdm-schema/src/infer.rs:808-811",
       "why": "A struct or map column, which the reference fails with an unnamed RuntimeError naming the wrong type (P1B-1): refused by name (P1B-10). A list is read as the reference reads a catalog type ending []: of integers, floats, text or binary it is left out with the reference's warning, as the reference leaves out a list (nested.list-int), of a fixed size or not (P1B-9, which the reference fails unnamed); a list of any other item is refused by name (P1B-51). From T1.32c binary and a duration are left out with the reference's warning, as the reference leaves them out. Each probe without the column reaches predict's result on both runners",
       "observed": {
         "python-core": {

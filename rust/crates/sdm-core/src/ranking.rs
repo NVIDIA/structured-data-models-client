@@ -267,6 +267,7 @@ pub(crate) async fn materialize(
             }),
         },
         query: facts,
+        read_under: Vec::new(),
     }))
 }
 
