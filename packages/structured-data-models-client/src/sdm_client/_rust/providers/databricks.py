@@ -45,6 +45,9 @@ import re
 from collections.abc import Mapping
 from typing import Any
 
+from sdm_connectors import providers
+from sdm_connectors.providers import PlanNotRun, arrow_table
+
 from sdm_client._rust import codec
 
 #: The budget of a key set's JSON text, in bytes, below the warehouse's
@@ -53,10 +56,6 @@ PARAMETER_BUDGET = 900_000
 #: The result column numbering each row's seed within the key set bound
 #: (the contract's ``BATCH_COLUMN``).
 BATCH_COLUMN = '__kumo_batch__'
-
-
-class PlanNotRun(Exception):
-    r"""A plan this provider does not run. Its text names no value."""
 
 
 class DatabricksProvider:
@@ -71,17 +70,16 @@ class DatabricksProvider:
         self._connection = connection
         self._budget = budget
 
+    @staticmethod
+    def error_fields(error: BaseException) -> dict[str, Any] | None:
+        r"""What a Databricks failure tells the core (:func:`error_fields`),
+        for the run loop (``sdm_connectors.providers.Provider``)."""
+        return error_fields(error)
+
     def __call__(
         self, step: dict[str, Any], keys: Mapping[int, Any] | None = None
     ) -> Any:
-        plan = step['plan']
-        if plan['plan'] != 'sql':
-            raise PlanNotRun("a host plan is not a SQL provider's to run")
-        statements = plan['statements']
-        if not statements or any(
-            statement['dialect'] != 'databricks' for statement in statements
-        ):
-            raise PlanNotRun('a plan with no statement or another dialect')
+        statements = providers.statements(step, 'databricks')
         # Each key set read once, however many statements bind it.
         read: dict[int, list[Any]] = {}
         *before, (text, chunks) = [
@@ -160,12 +158,10 @@ def _bound(
             raise PlanNotRun('a parameter of an unknown kind')
         if at is not None:
             raise PlanNotRun('a statement binding more than one key set')
-        attachment = param['keys']['attachment']
-        if keys is None or attachment not in keys:
-            raise PlanNotRun('a plan naming a key set not handed over')
+        attachment = providers.key_set(param, keys)
         at = len(values)
         if attachment not in read:
-            read[attachment] = _rows(_arrow_table(keys[attachment]))
+            read[attachment] = _rows(arrow_table(keys[attachment]))
         rows = read[attachment]
         values.append(None)
     if at is None:
@@ -350,16 +346,3 @@ def error_fields(error: BaseException) -> dict[str, Any] | None:
     if state[:2] in ('22', '42'):
         fields['refuses_expression'] = True
     return fields
-
-
-def _arrow_table(stream: Any) -> Any:
-    r"""A key set the core sent, an object exporting an Arrow stream, read
-    whole as a pyarrow table, through the PyCapsule interface pyarrow 14.0.1
-    reads (decision E16)."""
-    import pyarrow as pa
-
-    # The private importer, because pyarrow 14.0.1, the floor, has no public
-    # reader of a stream capsule (RecordBatchReader.from_stream is 15's).
-    return pa.RecordBatchReader._import_from_c_capsule(
-        stream.__arrow_c_stream__()
-    ).read_all()

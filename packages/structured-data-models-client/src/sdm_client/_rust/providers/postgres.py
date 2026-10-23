@@ -57,6 +57,9 @@ from contextlib import nullcontext
 from decimal import Decimal
 from typing import Any
 
+from sdm_connectors import providers
+from sdm_connectors.providers import PlanNotRun, arrow_table
+
 #: The field metadata key marking a column of numbers handed over as their
 #: exact text (``sdm_contract::data::EXACT_NUMBER_MARKER``).
 EXACT_NUMBER_MARKER = 'sdm:exact_number'
@@ -123,10 +126,6 @@ _TEXT = frozenset(
 _JSON = ('json', 'jsonb')
 
 
-class PlanNotRun(Exception):
-    r"""A plan this provider does not run. Its text names no value."""
-
-
 class PostgresProvider:
     r"""Answers fetch steps on ``connection``, a psycopg connection."""
 
@@ -139,14 +138,7 @@ class PostgresProvider:
     def __call__(
         self, step: dict[str, Any], keys: Mapping[int, Any] | None = None
     ) -> Any:
-        plan = step['plan']
-        if plan['plan'] != 'sql':
-            raise PlanNotRun("a host plan is not a SQL provider's to run")
-        statements = plan['statements']
-        if not statements or any(
-            statement['dialect'] != 'postgres' for statement in statements
-        ):
-            raise PlanNotRun('a plan with no statement or another dialect')
+        statements = providers.statements(step, 'postgres')
         bound: list[str | None] = []
         for statement in statements:
             params = statement['params']
@@ -155,13 +147,8 @@ class PostgresProvider:
             if not params:
                 bound.append(None)
                 continue
-            param = params[0]
-            if param['param'] != 'key_set':
-                raise PlanNotRun('a plan with a scalar parameter')
-            attachment = param['keys']['attachment']
-            if keys is None or attachment not in keys:
-                raise PlanNotRun('a plan naming a key set not handed over')
-            bound.append(_bound_text(_arrow_table(keys[attachment])))
+            attachment = providers.key_set(params[0], keys)
+            bound.append(_bound_text(arrow_table(keys[attachment])))
         connection = self._connection
         with _own_transaction(connection), connection.cursor() as cursor:
             for statement, text in zip(statements, bound, strict=True):
@@ -459,16 +446,3 @@ def _bound_text(table: Any) -> str:
     ]
     rows = [list(row) for row in zip(*columns, strict=True)] if columns else []
     return json.dumps(rows, separators=(',', ':'), ensure_ascii=False)
-
-
-def _arrow_table(stream: Any) -> Any:
-    r"""A key set the core sent, an object exporting an Arrow stream, read
-    whole as a pyarrow table, through the PyCapsule interface pyarrow 14.0.1
-    reads (decision E16)."""
-    import pyarrow as pa
-
-    # The private importer, because pyarrow 14.0.1, the floor, has no public
-    # reader of a stream capsule (RecordBatchReader.from_stream is 15's).
-    return pa.RecordBatchReader._import_from_c_capsule(
-        stream.__arrow_c_stream__()
-    ).read_all()
