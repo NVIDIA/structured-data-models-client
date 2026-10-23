@@ -555,7 +555,7 @@ pub struct TableKey {
 
 /// Serde's test for leaving out a flag that is not set.
 #[allow(clippy::trivially_copy_pass_by_ref, reason = "serde's signature")]
-fn is_false(flag: &bool) -> bool {
+pub(crate) fn is_false(flag: &bool) -> bool {
     !*flag
 }
 

@@ -312,6 +312,8 @@ pub(crate) fn materialize(
             // provider and description (decision E52). Each refusal of the
             // state tells the host to drop it (decision E74), so its next
             // run starts afresh rather than being refused the same way.
+            // Whether the host takes the run's progress steps.
+            let progress = request.progress;
             let memo = match &request.sampler_state {
                 None => None,
                 Some(state) => {
@@ -380,6 +382,9 @@ pub(crate) fn materialize(
                 labels_only,
             };
             Ok(Run::with_data(access, move |asker| async move {
+                if progress {
+                    asker.says_progress();
+                }
                 // Each table read where this schema read its relation, as the
                 // reference keeps each table it read by its source name: under
                 // the namespace the schema read it under, where the source's
@@ -399,31 +404,28 @@ pub(crate) fn materialize(
                             .then(|| (table.source.clone(), read.namespace.clone()))
                     })
                     .collect();
-                let asker = if pinned.len() == held.tables.len() {
-                    asker
-                } else {
-                    crate::describe::settled(asker).await?
-                };
-                // Where this run reads each relation the schema has not read,
-                // under the parts the session gave (`FetchStep::read_under`).
-                let first_read: Vec<sdm_contract::ops::ReadUnder> = match asker.settled_namespace()
-                {
-                    Some(namespace) => held
-                        .tables
-                        .iter()
-                        .filter(|table| table.source.single().is_some())
-                        .filter(|table| {
-                            !pinned.iter().any(|(relation, _)| *relation == table.source)
-                        })
-                        .map(|table| sdm_contract::ops::ReadUnder {
-                            relation: table.source.clone(),
-                            namespace: namespace.clone(),
-                        })
-                        .collect(),
-                    None => Vec::new(),
-                };
+                // The tables the schema holds no reading of, read under the
+                // parts the session gives once the run builds its graph
+                // (`describe::initialize`), where the provider leaves parts
+                // to the connection.
+                let unsettled = asker
+                    .data()
+                    .is_some_and(crate::compose::DataAccess::unsettled);
+                let anew: Vec<sdm_contract::data::Relation> = held
+                    .tables
+                    .iter()
+                    .filter(|table| unsettled && table.source.single().is_some())
+                    .filter(|table| !pinned.iter().any(|(relation, _)| *relation == table.source))
+                    .map(|table| table.source.clone())
+                    .collect();
                 for (relation, parts) in pinned {
                     asker.pin(&relation, parts);
+                }
+                asker.reads_anew(anew);
+                // A column with no facts is read from the source before the
+                // checks that need them, so the run builds its graph first.
+                if !sdm_schema::held::lacking_facts(&held).is_empty() {
+                    crate::describe::initialize(&asker).await?;
                 }
                 // Each column's facts, the host's or, for a column with none,
                 // the source's, read before anything else of the run.
@@ -448,9 +450,6 @@ pub(crate) fn materialize(
                             .collect(),
                     );
                 }
-                // Where this run reads the tables it reads anew, carried by the
-                // request that reads the last of them first.
-                asker.reads_anew(first_read);
                 crate::materialize::run(asker, inputs(description, source)).await
             }))
         }

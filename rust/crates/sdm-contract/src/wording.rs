@@ -196,6 +196,7 @@ advice! {
     OptimizeIndices = "optimize_indices", [];
     PredictCall = "predict_call", [];
     RaiseMostParts = "raise_most_parts", [];
+    SemanticModel = "semantic_model", ["metric_view"];
     ResultFrame = "result_frame", [];
     SetPrimaryKey = "set_primary_key", ["target_table", "target_column"];
     SkipKeyCheck = "skip_key_check", [];
@@ -247,7 +248,7 @@ pub fn template(sentence: Sentence) -> Template {
             r#"the core asked the data source for a {request} of a derived relation whose columns do not each read one source column or expression; this is a defect, not a problem with the request"#,
         ),
         S::MetricViewAsTable => said(
-            r#"{metric_view!r} is a metric view, not a table. Its measures are aggregations with no value per row, so it cannot be read as a table."#,
+            r#"{metric_view!r} is a metric view, not a table: its measures are aggregations with no value per row. Read it as a semantic model instead, with {advice:semantic_model(metric_view)}."#,
         ),
         S::KeySetTypeUnbound => said(
             r#"the core asked the data source to match keys of a type its SQL does not bind as text"#,

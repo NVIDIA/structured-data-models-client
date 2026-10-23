@@ -815,7 +815,14 @@ fn read_columns(
                     "a metric view is read as a table; its measures have no value per row",
                 )
                 .with_field("request", Detail::text(request.name()));
-                if let Some(table) = value(&tables, row) {
+                // Named as the caller named it, as the reference names it.
+                let named = match request {
+                    DataRequest::Describe { tables: asked, .. } => asked
+                        .first()
+                        .and_then(|relation| relation.source.last().cloned()),
+                    _ => None,
+                };
+                if let Some(table) = named.or_else(|| value(&tables, row)) {
                     refusal = refusal.with_field("metric_view", Detail::text(table));
                 }
                 return Err(refusal);

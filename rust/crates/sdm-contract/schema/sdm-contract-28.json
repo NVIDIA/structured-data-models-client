@@ -164,6 +164,39 @@
             "step",
             "result"
           ]
+        },
+        {
+          "description": "The run builds its graph, past every refusal of the request and\nbefore it reads anything of the source: the host makes the schema's\nengine reading where it has none, as the reference's materializer\nmakes it (`relational.py:555`). Nothing to answer; the host asks for\nthe next step (contract v28, T3.4).",
+          "type": "object",
+          "properties": {
+            "step": {
+              "type": "string",
+              "const": "graph_built"
+            }
+          },
+          "required": [
+            "step"
+          ]
+        },
+        {
+          "description": "The run has read every table it reads anew (a relation of the schema\nwith no reading, under the parts the session gave), before it\nsamples: the host keeps where it read each, a source name it holds a\nreading of left as it is, as the reference's engine keeps its tables\n(`EngineTables.keep`). Nothing to answer (contract v28, T3.4).",
+          "type": "object",
+          "properties": {
+            "read_under": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ReadUnder"
+              }
+            },
+            "step": {
+              "type": "string",
+              "const": "tables_initialized"
+            }
+          },
+          "required": [
+            "step",
+            "read_under"
+          ]
         }
       ],
       "required": [
@@ -3388,6 +3421,10 @@
                 }
               ]
             },
+            "progress": {
+              "description": "Whether the host takes the run's steps that ask nothing\n([`crate::run::Step::GraphBuilt`], [`crate::run::Step::TablesInitialized`]),\nto keep the schema's engine reading as the reference keeps it\n(contract v28, T3.4). Left out, `false`: the run says neither.",
+              "type": "boolean"
+            },
             "op": {
               "type": "string",
               "const": "materialize"
@@ -4210,13 +4247,6 @@
             "string",
             "null"
           ]
-        },
-        "read_under": {
-          "description": "Where the run reads the tables it reads anew (relations of the\nschema with no reading, under the parts the session gave), which hold\nonce this request, and every request before it in its step, is\nanswered with data: carried by the request that reads the last of\nthem first, so a host keeps them at that moment, as the reference\nkeeps the tables its engine read (`EngineTables.keep`), and keeps\nnone where any of those reads fails or is interrupted (contract v28,\nT3.4). Absent from the JSON when none.",
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/ReadUnder"
-          }
         }
       },
       "additionalProperties": false,
