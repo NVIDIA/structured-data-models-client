@@ -167,6 +167,7 @@ ADVICE: dict[str, Callable[..., str]] = {
     'optimize_indices': lambda: 'KumoRelational(graph, optimize=True)',
     'predict_call': lambda: 'predict()',
     'raise_most_parts': lambda: 'raise sdm_client.decompose.MOST_PARTS',
+    'semantic_model': lambda name: f'source.semantic_model({name!r})',
     'set_primary_key': lambda table, column: (
         f'primary_keys={{{table!r}: {column!r}}}'
     ),
