@@ -41,7 +41,8 @@ const REFUSED: [&str; 2] = ["snowflake", "nope"];
 
 fn relation(parts: &[&str]) -> Relation {
     Relation {
-        columns: Vec::new(), filter: None,
+        columns: Vec::new(),
+        filter: None,
         source: parts.iter().map(|p| (*p).to_owned()).collect(),
     }
 }
@@ -884,11 +885,6 @@ fn rendered() -> Vec<String> {
 fn every_request_kind_renders_as_recorded_on_every_dialect() {
     let now = rendered();
     let recorded: Vec<&str> = RECORDED.lines().filter(|l| !l.is_empty()).collect();
-    if std::env::var_os("T34_DUMP").is_some() {
-        for line in &now {
-            println!("MATRIX {line}");
-        }
-    }
     if now.iter().map(String::as_str).eq(recorded.iter().copied()) {
         return;
     }

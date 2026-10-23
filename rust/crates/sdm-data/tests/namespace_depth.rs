@@ -43,11 +43,18 @@ fn refused_by_namespace(result: Result<String, String>) {
 #[test]
 fn each_dialect_reads_a_relation_under_its_namespace_depth() {
     // Depth 0: no namespace to read under.
-    assert_eq!(text("duckdb", json!([])).unwrap(), "SELECT \"a\" FROM \"t\" LIMIT 1");
+    assert_eq!(
+        text("duckdb", json!([])).unwrap(),
+        "SELECT \"a\" FROM \"t\" LIMIT 1"
+    );
     refused_by_namespace(text("duckdb", json!(["s"])));
     refused_by_namespace(text("sqlite", json!(["s"])));
     // Depth 1: the schema.
-    assert!(text("postgres", json!(["s"])).unwrap().contains("FROM \"s\".\"t\""));
+    assert!(
+        text("postgres", json!(["s"]))
+            .unwrap()
+            .contains("FROM \"s\".\"t\"")
+    );
     refused_by_namespace(text("postgres", json!(["c", "s"])));
     // Depth 2: the catalog and the schema, each quoted alone.
     assert!(

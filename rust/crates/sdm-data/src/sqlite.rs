@@ -159,8 +159,11 @@ impl SqlDialect for Sqlite {
     /// What a SQLite source answers through this layer.
     fn capabilities(&self) -> ProviderCapabilities {
         ProviderCapabilities {
-            opaque_vendor: None, reads_nan_as_missing: false,
-            derived_relations: false, neighbor_lookback: false, sample_rows: false,
+            opaque_vendor: None,
+            reads_nan_as_missing: false,
+            derived_relations: false,
+            neighbor_lookback: false,
+            sample_rows: false,
             optional: sql::rendered(),
             max_keys_per_request: None,
             // The seeded draw of RS-2 repeats under a seed.
@@ -353,8 +356,6 @@ impl SqlDialect for Sqlite {
     ) -> Result<CatalogAnswer, CoreError> {
         read(request, part, batches)
     }
-
-
 }
 
 /// The schema SQLite's answer to `request` has: the key counts' four
