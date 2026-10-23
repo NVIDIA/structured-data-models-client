@@ -100,6 +100,7 @@ fn described() -> SourceDescription {
             duplicate_keys: None,
         }],
         links: vec![],
+        namespace: None,
     }
 }
 
@@ -127,6 +128,7 @@ fn held(description: &SourceDescription) -> HeldSchema {
                             unique: c.unique,
                             declared_type: c.declared_type.clone(),
                             exact_number: c.exact_number,
+                            namespace: None,
                         }),
                     })
                     .collect(),

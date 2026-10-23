@@ -591,7 +591,7 @@
           }
         },
         "columns": {
-          "description": "The relation's columns, in order, where it is derived; empty, the\nsource's own columns under their own names. Columns that each read\nthe source's column of their own name, with no filter, are the\nsource's columns a catalog read found, which a provider may read\nthrough the source so that a column since dropped or renamed fails\nthe read rather than reading anything else by its name (the\nreference's Databricks reads, `_quoted_source_name`; T3.4).",
+          "description": "The relation's columns, in order, where it is derived; empty, the\nsource's own columns under their own names; or, where `found`, the\ncolumns the source's catalog found.",
           "type": "array",
           "items": {
             "$ref": "#/$defs/RelationColumn"
@@ -603,6 +603,10 @@
             "string",
             "null"
           ]
+        },
+        "found": {
+          "description": "The columns are the ones the source's catalog found, each read by\nits own name, with no filter (T3.4, round 2): a provider may read\nthe table through them, so that one since dropped or renamed fails\nthe read rather than reading anything else by its name (the\nreference's Databricks reads, `_quoted_source_name`), or read the\ntable whole where no column needs it. Left out, `false`: the\ncolumns, if any, are the relation's own.",
+          "type": "boolean"
         }
       },
       "additionalProperties": false,
@@ -732,6 +736,16 @@
             "items": {
               "$ref": "#/$defs/ColumnRef"
             }
+          }
+        },
+        "namespace": {
+          "description": "The namespace the tables were read under, each part given, where\nthe run read parts the provider left to the connection (a\nDatabricks source naming no catalog or schema: the session's\ncurrent ones; contract v28, T3.4): `materialize` reads the same\ntables under it (a host keeps it with each column's facts,\n[`SourceFacts::namespace`]), whatever the session's current parts\nare by then, as the reference keeps the tables it described. Left\nout, none was read, and each table is read under the provider's\nown namespace.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
           }
         }
       },
@@ -1880,6 +1894,16 @@
               "type": "null"
             }
           ]
+        },
+        "namespace": {
+          "description": "The namespace the relation was read under, each part given, where\nthe run read parts the provider left to the connection (a\nDatabricks source naming no catalog or schema: the session's\ncurrent ones; [`SourceDescription::namespace`], T3.4): `materialize`\nreads the same tables under it, whatever the session's current\nparts are by then, as the reference keeps the tables it described.\nAbsent from the JSON when none was read.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
         }
       },
       "additionalProperties": false,

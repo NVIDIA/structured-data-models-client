@@ -253,18 +253,23 @@ pub struct KeySet {
 pub struct Relation {
     pub source: Vec<String>,
     /// The relation's columns, in order, where it is derived; empty, the
-    /// source's own columns under their own names. Columns that each read
-    /// the source's column of their own name, with no filter, are the
-    /// source's columns a catalog read found, which a provider may read
-    /// through the source so that a column since dropped or renamed fails
-    /// the read rather than reading anything else by its name (the
-    /// reference's Databricks reads, `_quoted_source_name`; T3.4).
+    /// source's own columns under their own names; or, where `found`, the
+    /// columns the source's catalog found.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub columns: Vec<RelationColumn>,
     /// The condition, in the source's SQL, every row of the relation holds;
     /// left out, every row of the source is the relation's.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub filter: Option<String>,
+    /// The columns are the ones the source's catalog found, each read by
+    /// its own name, with no filter (T3.4, round 2): a provider may read
+    /// the table through them, so that one since dropped or renamed fails
+    /// the read rather than reading anything else by its name (the
+    /// reference's Databricks reads, `_quoted_source_name`), or read the
+    /// table whole where no column needs it. Left out, `false`: the
+    /// columns, if any, are the relation's own.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub found: bool,
 }
 
 /// One column of a derived relation: the name the relation gives it, and
@@ -295,6 +300,7 @@ impl Relation {
             source,
             columns: Vec::new(),
             filter: None,
+            found: false,
         }
     }
 
@@ -1293,9 +1299,12 @@ pub trait DataLayer: Send + Sync {
         None
     }
 
-    /// Whether `provider` leaves a namespace part to the connection inside
-    /// one it gives (a Databricks source naming its catalog and not its
-    /// schema): the core then reads the source's namespace first
+    /// Whether `provider` leaves a namespace part to the connection that
+    /// must be read before any table: one inside a part it gives (a
+    /// catalog named and not its schema), or any part of a dialect that
+    /// reads every table under its full namespace (Databricks, whose
+    /// catalog names a referenced table in full): the core then reads the
+    /// source's namespace first
     /// ([`DescribePart::Namespace`]) and runs under the parts it answers
     /// ([`DataLayer::settled`]; T3.4). `false`, the default and a host
     /// provider's.
