@@ -977,15 +977,21 @@ class _Capture:
                 }
             )
         elif operation['op'] == 'edit_schema':
-            # The schema and the edit a setter passed (T1.24b): the
-            # description the core last answered, the schema as the host
-            # holds it, and the edit; kept apart from ``inputs``, whose
-            # shape a gate's checkpoint fixes.
+            # The schema and the edit a setter passed (T1.24b): the schema
+            # as the host holds it, from T3.16 as plain data alone, before
+            # it beside the description the core last answered (`held`);
+            # and the edit; kept apart from ``inputs``, whose shape a gate's
+            # checkpoint fixes.
+            held = operation.get('held')
             self.edits.append(
                 {
                     'op': 'edit_schema',
                     'schema': json.loads(attachments[operation['schema']]),
-                    'held': json.loads(attachments[operation['held']]),
+                    **(
+                        {}
+                        if held is None
+                        else {'held': json.loads(attachments[held])}
+                    ),
                     'edit': json.loads(attachments[operation['edit']]),
                 }
             )
@@ -4368,14 +4374,17 @@ def _edit(schema: Any, edits: list[dict[str, Any]]) -> None:
             ]
 
 
-def presented(schema: Any) -> list[str]:
+def presented(schema: Any, described: Any = None) -> list[str]:
     r"""Each way a schema the core described departs from the description
-    it was built from (T1.21d): a table's key or time column, a column's
-    meaning or what it meant before the schema joined on it, or the links,
-    as the Python object holds them once built. Building it re-runs the
-    object's own key marking and link checks, which must change nothing of
-    the core's answer; empty for a schema not described on the core."""
-    described = getattr(schema, '_core_description', None)
+    it was built from (T1.21d), ``described``, the description the run's
+    ``describe_source`` answered (from T3.16 the schema keeps none; before,
+    the one it kept): a table's key or time column, a column's meaning or
+    what it meant before the schema joined on it, or the links, as the
+    Python object holds them once built. Building it re-runs the object's
+    own key marking and link checks, which must change nothing of the
+    core's answer; empty for a schema not described on the core."""
+    if described is None:
+        described = getattr(schema, '_core_description', None)
     if described is None:
         return []
     found = []
@@ -4413,8 +4422,8 @@ def presented(schema: Any) -> list[str]:
     return found
 
 
-def _require_presented(schema: Any) -> None:
-    found = presented(schema)
+def _require_presented(schema: Any, capture: Any = None) -> None:
+    found = presented(schema, None if capture is None else capture.described)
     if found:
         raise RunnerFailure(
             "the Schema built from the core's description departs from it: "
@@ -4524,6 +4533,7 @@ def _call(
     driver_capture: bool = True,
     database: str = 'duckdb',
     keep: dict[str, Any] | None = None,
+    core_runs: Any = None,
 ) -> tuple[dict[str, Any], list[str], dict[str, Any], dict[str, Any]]:
     r"""Makes the case's public calls on ``database`` (a database or a
     warehouse leg), with the driver capture on or off: its outcome, warning
@@ -4596,6 +4606,7 @@ def _call(
             cleanup,
             public,
             statements,
+            core_runs,
         )
 
     if logs:
@@ -4643,10 +4654,13 @@ def _calls(
     cleanup: Any,
     public: dict[str, Any],
     statements: StatementLog | None,
+    core_runs: Any = None,
 ) -> tuple[Any, ...]:
     r"""The case's public calls (:func:`_call`'s), under the statement log
     when there is one: the outcome, the statements logged and the
-    warnings shown."""
+    warnings shown; ``core_runs``, the record of the case's core runs
+    (``_Capture``), holds the description the schema is held to
+    (:func:`presented`)."""
     from sdm_client import KumoRelational, PredictiveQuery, Schema, SDMClient
 
     serve = _sibling('scripted_endpoint').serve
@@ -4676,7 +4690,7 @@ def _calls(
                 else _source(database, given_to_source)
             )
             schema = Schema.from_source(source, **from_source)
-            _require_presented(schema)
+            _require_presented(schema, core_runs)
             public['schema'] = _schema_projection(schema)
             # The user's edits finish describing the schema, so a refusal
             # of one is the from_source stage's.
@@ -4908,7 +4922,7 @@ def run(
         keep: dict[str, Any] | None = {} if record is not None else None
         try:
             outcome, shown, driver, public, origins = _call(
-                case, bases, driver_capture, database, keep
+                case, bases, driver_capture, database, keep, capture
             )
         finally:
             os.environ.pop('SDM_CORE_ROUTES', None)

@@ -1186,6 +1186,80 @@ def stored_schema(
     return out
 
 
+#: Each data type's name on the client's wire (``sdm_contract::ops::Dtype::
+#: wire_name``), as a host's held schema names a column's.
+_WIRE_NAMES = {
+    'bool': 'bool',
+    'int': 'int64',
+    'int64': 'int64',
+    'byte': 'int32',
+    'int16': 'int32',
+    'int32': 'int32',
+    'float': 'float64',
+    'float64': 'float64',
+    'float32': 'float32',
+    'string': 'string',
+    'date': 'timestamp[us]',
+    'time': 'timestamp[us]',
+    'binary': 'binary',
+    'timedelta': 'timedelta',
+    'floatlist': 'floatlist',
+    'intlist': 'intlist',
+    'stringlist': 'stringlist',
+    'unsupported': 'unsupported',
+}
+
+#: What a described column says of its source, which a held column keeps
+#: as its facts (``SourceFacts``, T3.16), each but the relation.
+_FACTS = ('dtype', 'received', 'nullable', 'unique')
+_OPTIONAL_FACTS = ('declared_type', 'exact_number')
+
+
+def held_schema(described: Any) -> Any:
+    r"""``described``, a ``SourceDescription``, as a host holds it and hands
+    it to ``materialize`` (the contract's ``HeldSchema``, from T3.16): each
+    column by its wire data type, its meanings and the facts the source
+    gave of it, of its table's relation; each table's key, time column and
+    repeated keys; the links. ``described`` itself where it is not one."""
+    if not isinstance(described, dict) or not isinstance(
+        described.get('tables'), list
+    ):
+        return described
+    try:
+        tables = []
+        for table in described['tables']:
+            held = {
+                'name': table['name'],
+                'source': table['source'],
+                'columns': [
+                    {
+                        'name': column['name'],
+                        'dtype': _WIRE_NAMES[column['dtype']],
+                        'stype': column['stype'],
+                        'stype_before_key': column['stype_before_key'],
+                        'source': {
+                            'relation': table['source'],
+                            **{key: column[key] for key in _FACTS},
+                            **{
+                                key: column[key]
+                                for key in _OPTIONAL_FACTS
+                                if column.get(key) is not None
+                            },
+                        },
+                    }
+                    for column in table['columns']
+                ],
+                'primary_key': table['primary_key'],
+                'time_column': table['time_column'],
+            }
+            if table.get('duplicate_keys') is not None:
+                held['duplicate_keys'] = table['duplicate_keys']
+            tables.append(held)
+        return {'tables': tables, 'links': described['links']}
+    except (KeyError, TypeError):
+        return described
+
+
 def _case_inputs(
     report: Report,
     case: dict[str, Any],
@@ -1196,7 +1270,8 @@ def _case_inputs(
 ) -> None:
     r"""A core runner's recorded inputs are the case's ``core`` inputs, and
     the schema ``materialize`` sampled is the runner's own: the description
-    its ``describe_source`` answered, where the case makes no edit to it
+    its ``describe_source`` answered, or from T3.16 that description as the
+    host holds it (:func:`held_schema`), where the case makes no edit to it
     (T1.21d; the case names no schema, and with edits the hosts' agreement
     is the ``core`` rule's). Off DuckDB the schema ``validate_query`` is
     handed holds each column's dtype as the type map stores it there
@@ -1243,7 +1318,9 @@ def _case_inputs(
             for each in started
         )
         if not case['input'].get('edits') and any(
-            each.get('schema') != core['described'] for each in started
+            each.get('schema')
+            not in (core['described'], held_schema(core['described']))
+            for each in started
         ):
             _differ(
                 report,
