@@ -203,7 +203,7 @@ def test_the_core_speaks_v28_and_refuses_a_v25_host_by_name() -> None:
         {
             'message': 'start',
             'contract': 25,
-            'facts': facts.host_facts(core.is_posix_zone),
+            'facts': facts.host_facts(core),
             'operation': {
                 'op': 'describe_source',
                 'provider': {'provider': 'sql', 'dialect': 'duckdb'},

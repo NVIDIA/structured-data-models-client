@@ -5,8 +5,6 @@
 package com.nvidia.sdm.internal;
 
 import com.nvidia.sdm.PredictiveQuery;
-import com.nvidia.sdm.Profile;
-import com.nvidia.sdm.QuerySchema;
 import com.nvidia.sdm.StructuredDataException;
 import java.util.List;
 import org.apache.arrow.memory.BufferAllocator;
@@ -34,8 +32,7 @@ public final class NoFlagMain {
                     null)),
             List.of());
     boolean accepted =
-        PredictiveQuery.parse("PREDICT users.age FOR EACH users.id")
-            .validate(schema, Profile.RELATIONAL)
+        QueryValidation.validate("PREDICT users.age FOR EACH users.id", schema, Profile.RELATIONAL)
             .accepted();
     System.out.println("validated accepted=" + accepted);
     try (BufferAllocator allocator = new RootAllocator();

@@ -391,11 +391,14 @@ def test_t311_every_s0_case_on_the_java_host_equals_the_reference(
 
 @java
 def test_t311_no_s1_or_s2_java_leg_is_admitted(tmp_path: Path) -> None:
-    # Exit 1's second half: no Java provider exists at T3.11, so the runner
-    # runs an S0 case and leaves an S1 and an S2 case out, and no committed
-    # baseline holds a Java line of a case outside S0.
+    # Exit 1's second half: no Java provider existed at T3.11, so the runner
+    # ran an S0 case and left an S1 and an S2 case out, and no committed
+    # baseline holds a Java line of a case outside S0. From T3.12 an S1 case
+    # on Java's paths runs on its databases (contract/tests/
+    # test_t312_java.py); one off them, a ranking (J2: none in Java), still
+    # has no leg, nor has an S2 case.
     _jar()
-    s1 = CASES / 's1/base.regression.json'
+    s1 = CASES / 's1/rank.top-k.json'
     # Phase 3's warehouse cases, as they land (T3.4 to T3.7, T3.13).
     s2 = sorted((CASES / 's2').glob('*.json'))[:1]
     s0 = S0 / 's0.accept.sum-window.json'

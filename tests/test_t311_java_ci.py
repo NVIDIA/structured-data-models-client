@@ -153,14 +153,15 @@ def test_t311_the_java_s0_jobs_run_on_each_jdk_and_platform() -> None:
             name,
             _runs_on(job, values),
         )
-    # No Java S1 or S2 leg yet: no java job names a database or warehouse.
+    # No Java S2 leg yet: a java job names S0, or from T3.12 one of the S1
+    # databases (tests/test_t312_java_ci.py), never a warehouse.
     legs = {
         match.group(1)
         for name in jobs
         for match in [re.match(r'java \(\d+, [a-z0-9_-]+, ([^)]+)\)$', name)]
         if match
     }
-    assert legs == {'s0'}, legs
+    assert legs <= {'s0', 'duckdb', 'sqlite', 'postgres'}, legs
 
 
 @held

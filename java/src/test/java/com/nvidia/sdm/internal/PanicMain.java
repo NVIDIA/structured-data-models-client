@@ -5,8 +5,6 @@
 package com.nvidia.sdm.internal;
 
 import com.nvidia.sdm.PredictiveQuery;
-import com.nvidia.sdm.Profile;
-import com.nvidia.sdm.QuerySchema;
 import com.nvidia.sdm.StructuredDataException;
 import java.util.List;
 import java.util.Map;
@@ -47,8 +45,7 @@ public final class PanicMain {
                     null)),
             List.of());
     boolean accepted =
-        PredictiveQuery.parse("PREDICT users.age FOR EACH users.id")
-            .validate(schema, Profile.RELATIONAL)
+        QueryValidation.validate("PREDICT users.age FOR EACH users.id", schema, Profile.RELATIONAL)
             .accepted();
     System.out.println("survived accepted=" + accepted);
   }

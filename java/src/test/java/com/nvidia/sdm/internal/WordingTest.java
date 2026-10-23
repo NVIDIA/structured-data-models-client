@@ -63,7 +63,7 @@ class WordingTest {
 
   @Test
   void everySentenceS0CanReachIsSaidAndNamesNoAdviceToSpell() {
-    Map<String, String> table = Wording.table();
+    Map<String, String> table = Wording.templates();
     for (String sentence : S0) {
       String template = table.get(sentence);
       assertTrue(template != null, sentence + " is not in the core's table");
@@ -87,9 +87,10 @@ class WordingTest {
 
   @Test
   void aSentenceThisHostCannotFillIsTheDefectNamed() {
-    // Advice is spelled by the Java host from T3.12; S0 reaches none.
+    // Advice is spelled by the Java host from T3.12: a sentence naming it is filled.
     assertEquals(
-        String.format(Wording.DEFECT, "\"left_out_key\""),
+        "t.c is the table's primary key; set that to something else, or null, before leaving"
+            + " the column out",
         Wording.say("left_out_key", Map.of("table", "t", "column", "c")));
     // A field the template names and the error does not carry.
     assertEquals(

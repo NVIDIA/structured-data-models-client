@@ -4,6 +4,7 @@
 
 package com.nvidia.sdm;
 
+import com.nvidia.sdm.internal.QuerySchema;
 import java.util.List;
 
 /** The schemas the tests validate against. */
