@@ -3252,6 +3252,29 @@ def _(tmp: Path) -> tuple[bool, str]:
     return t30_detail(s, ok, 'refused')
 
 
+@case(
+    'T3.24: a package changing a judging path and a product file, past the '
+    "phase's first package, lands with plain land.py"
+)
+def _(tmp: Path) -> tuple[bool, str]:
+    s = Stack(tmp, earlier=T30_EARLIER)
+    s.build(
+        1,
+        {JUDGING_FILE: '# the comparator, changed\n', 'notes/p1.txt': 'p1\n'},
+    )
+    s.green(1)
+    code = s.call(s.land_args(1))
+    head = s.remote_phase()
+    ok = (
+        code == 0
+        and head is not None
+        and head != s.h
+        and s.r.git('rev-parse', f'{head}^') == s.candidates[1]
+        and 'Train' not in s.trailers(head)
+    )
+    return t30_detail(s, ok, 'landed')
+
+
 def t30_moved_on(s: Stack, files: dict[str, str | None]) -> str:
     """Another package lands on the phase branch while the stack waits:
     its commit and its landing commit on the phase head, pushed."""
