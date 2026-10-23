@@ -1,0 +1,57 @@
+{
+  "format": "sdm-case/1",
+  "id": "view.semantic.binary",
+  "status": "acceptance",
+  "slice": "S2",
+  "warehouses": [
+    "snowflake"
+  ],
+  "paths": [
+    "schema.from-source/semantic-model/snowflake-semantic-view",
+    "query.materialize/indices-binary/snowflake-semantic-view",
+    "client.predict/binary/snowflake-semantic-view"
+  ],
+  "routes": [
+    "schema.from-source/semantic-model/snowflake-semantic-view",
+    "query.materialize/indices-binary/snowflake-semantic-view",
+    "query.materialize/indices-multiclass/snowflake-semantic-view",
+    "query.materialize/indices-regression/snowflake-semantic-view",
+    "query.materialize/indices-link-prediction/snowflake-semantic-view",
+    "query.materialize/indices-ranking/snowflake-semantic-view",
+    "query.materialize/indices-forecast/snowflake-semantic-view",
+    "client.predict/binary/snowflake-semantic-view",
+    "client.predict/multiclass/snowflake-semantic-view",
+    "client.predict/regression/snowflake-semantic-view",
+    "client.predict/link-prediction/snowflake-semantic-view",
+    "client.predict/ranking/snowflake-semantic-view",
+    "client.predict/forecast/snowflake-semantic-view"
+  ],
+  "cells": [
+    "int64/primary-key",
+    "int64/foreign-key",
+    "timestamp-us/time-column"
+  ],
+  "input": {
+    "base": "shop",
+    "pql": "PREDICT COUNT(orders.*, 0, 30, days) > 0 FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ],
+      "anchor_time": "2024-03-01"
+    },
+    "view": {
+      "kind": "semantic_view",
+      "name": "view_semantic_binary",
+      "yaml": "name: shop_semantics\ntables:\n  - name: users\n    base_table:\n      database: '{catalog}'\n      schema: '{schema}'\n      table: users\n    primary_key:\n      columns: [user_id]\n    dimensions:\n      - name: user_id\n        expr: user_id\n        data_type: NUMBER\n      - name: country\n        expr: country\n        data_type: TEXT\n    facts:\n      - name: age\n        expr: age\n        data_type: NUMBER\n  - name: orders\n    base_table:\n      database: '{catalog}'\n      schema: '{schema}'\n      table: orders\n    primary_key:\n      columns: [order_id]\n    dimensions:\n      - name: order_id\n        expr: order_id\n        data_type: NUMBER\n      - name: user_id\n        expr: user_id\n        data_type: NUMBER\n    time_dimensions:\n      - name: ts\n        expr: ts\n        data_type: TIMESTAMP_NTZ\n    facts:\n      - name: price\n        expr: price\n        data_type: FLOAT\n      - name: price_with_tax\n        expr: price * 1.2\n        data_type: FLOAT\n    metrics:\n      - name: revenue\n        expr: SUM(orders.price)\nrelationships:\n  - name: orders_to_users\n    left_table: orders\n    right_table: users\n    relationship_columns:\n      - left_column: user_id\n        right_column: user_id\n"
+    }
+  },
+  "until": "predict",
+  "expect": {
+    "outcome": "success",
+    "stage": "predict"
+  },
+  "why": "A binary question through a semantic view. The semantic view is created in the test schema from the yaml, each base table named with the {catalog} (the database) and {schema} placeholders the capture writes, no private name; it is read through SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW (RE/graph.py:2056-2060), whose statement is T3.6's to render, and judged on the snowflake leg by T3.6's exit (T3.5 brief, open question 2)",
+  "source": "written by T3.5's test author from the reference at 43e55f4f"
+}
