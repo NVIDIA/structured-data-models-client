@@ -21,7 +21,6 @@ base.binary's): the core route describes the source as the old route does
 from __future__ import annotations
 
 import base64
-import importlib.util
 import json
 import sys
 import types
@@ -109,6 +108,8 @@ class _Warehouse:
         self._recorded = _recorded()
         self._fail_constraints = fail_constraints
         self.asked: list[str] = []
+        #: The session's current schema, which a caller may switch.
+        self.schema = 'shop'
 
     def cursor(self) -> _Cursor:
         return _Cursor(self)
@@ -128,11 +129,20 @@ class _Warehouse:
             )
         if text == 'SELECT current_catalog(), current_schema()':
             return pa.table(
-                {'current_catalog()': ['main'], 'current_schema()': ['shop']}
+                {
+                    'current_catalog()': ['main'],
+                    'current_schema()': [self.schema],
+                }
             )
-        if 'current_schema()' in text and 'ORDER BY p.o' in text:
-            # The core's read of the session's namespace: one row per part.
-            return pa.table({'name': ['main', 'shop']})
+        if 'ORDER BY p.o' in text:
+            # The core's read of the session's namespace: one row per part,
+            # each given (bound) or the session's current one.
+            given = iter(parameters)
+            parts = [
+                next(given) if f'SELECT {at} AS o, ? AS n' in text else current
+                for at, current in enumerate(['main', self.schema])
+            ]
+            return pa.table({'name': parts})
         key = (text, json.dumps(parameters))
         if key not in self._recorded:
             raise AssertionError(
@@ -143,14 +153,15 @@ class _Warehouse:
 
 @pytest.fixture(autouse=True)
 def _driver(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    r"""The Databricks SQL connector's modules, where it is not installed,
-    as stand-ins naming its ``Connection`` the fake warehouse: the old
-    route imports the driver, which these runs never reach. Every module
-    imported over the stand-ins is forgotten after, so a later test sees
-    the driver missing as it is."""
-    if importlib.util.find_spec('databricks') is not None:
-        yield
-        return
+    r"""The Databricks SQL connector's modules as stand-ins naming its
+    ``Connection`` the fake warehouse, whether or not the connector is
+    installed: the old route takes only its driver's connection, which
+    these runs never reach (round 2's Codex P2). Every module that read
+    the driver is imported anew over the stand-ins, and forgotten after,
+    so a later test sees the driver as it is installed."""
+    for name in list(sys.modules):
+        if 'databricks' in name:
+            monkeypatch.delitem(sys.modules, name)
     before = set(sys.modules)
     client = types.ModuleType('databricks.sql.client')
     client.Connection = _Warehouse  # type: ignore[attr-defined]
@@ -167,10 +178,7 @@ def _driver(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     yield
     for name in set(sys.modules) - before:
         if 'databricks' in name:
-            parent, _, child = name.rpartition('.')
             sys.modules.pop(name, None)
-            if parent in sys.modules and hasattr(sys.modules[parent], child):
-                delattr(sys.modules[parent], child)
 
 
 #: Recognised as a Databricks SQL connection by its module.
@@ -371,3 +379,46 @@ def test_a_declared_foreign_key_is_linked_whatever_namespace_the_source_names(
     assert ['orders', 'buyer', 'users', 'user_id'] in _projection(core_schema)[
         'links'
     ]
+
+
+@pytest.mark.parametrize('route', ['core', 'old'])
+def test_materialize_reads_the_tables_described_whatever_the_session_s_schema_is_now(
+    route: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""A schema described under the session's current schema ``shop``
+    reads ``shop``'s tables when it is materialized after the session moved
+    to ``other``, as the old route keeps the tables it described (round 2's
+    Codex P0-2): the namespace the description was read under travels with
+    it."""
+    import pandas as pd
+
+    from sdm_client import PredictiveQuery
+
+    if route == 'core':
+        monkeypatch.setenv(
+            _routing.ENVIRONMENT,
+            ','.join(
+                _routing.FROM_SOURCE_DATABRICKS_SQL
+                + _routing.MATERIALIZE_DATABRICKS_SQL
+            ),
+        )
+    connection = _Connection()
+    schema = Schema.from_source(DatabricksSource(connection, catalog='main'))
+    connection.schema = 'other'
+    described = len(connection.asked)
+    # Not every sampling statement of either route is recorded; what the
+    # run reads before it stops is what is held here.
+    try:
+        PredictiveQuery(
+            'PREDICT COUNT(orders.*, 0, 30, days) > 0 FOR EACH users.user_id',
+            schema,
+        ).materialize(indices=[0, 1], anchor_time=pd.Timestamp('2024-03-01'))
+    except Exception:  # noqa: BLE001, S110 - the reads are what is held
+        pass
+    read = [
+        text
+        for text in connection.asked[described:]
+        if '`orders`' in text or '`users`' in text
+    ]
+    assert read, connection.asked[described:]
+    assert all('`main`.`shop`.' in text for text in read), read

@@ -96,3 +96,42 @@ fn the_warehouse_samplers_fields_are_optional_and_round_trip() {
     }));
     assert!(error.refuses_expression);
 }
+
+/// The namespace a description's tables were read under, where the run
+/// read parts the provider left to the connection, travels with the
+/// description, so materialize reads the same tables (round 2's Codex
+/// P0-2); left out, none was read.
+#[test]
+fn a_description_carries_the_namespace_its_tables_were_read_under() {
+    use sdm_contract::ops::SourceDescription;
+    let described: SourceDescription = serde_json::from_value(serde_json::json!({
+        "tables": [], "links": [], "namespace": ["main", "shop"]
+    }))
+    .unwrap();
+    assert_eq!(
+        described.namespace,
+        Some(vec!["main".to_owned(), "shop".to_owned()])
+    );
+    let plain: SourceDescription =
+        serde_json::from_value(serde_json::json!({"tables": [], "links": []})).unwrap();
+    assert_eq!(plain.namespace, None);
+    assert!(!serde_json::to_string(&plain).unwrap().contains("namespace"));
+}
+
+/// The columns a catalog read found, marked on a relation (round 2's
+/// Claude P2-2), apart from a derived relation's own columns.
+#[test]
+fn a_relation_marks_the_columns_its_catalog_found() {
+    use sdm_contract::data::Relation;
+    let found: Relation = serde_json::from_value(serde_json::json!({
+        "source": ["t"], "found": true, "columns": [{"name": "a", "column": "a"}]
+    }))
+    .unwrap();
+    assert!(found.found);
+    assert!(!Relation::named("t").found);
+    assert!(
+        !serde_json::to_string(&Relation::named("t"))
+            .unwrap()
+            .contains("found")
+    );
+}
