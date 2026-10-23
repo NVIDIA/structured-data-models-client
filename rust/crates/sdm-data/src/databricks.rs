@@ -100,6 +100,7 @@ impl SqlDialect for Databricks {
     /// What a Databricks source answers through this layer.
     fn capabilities(&self) -> ProviderCapabilities {
         ProviderCapabilities {
+            opaque_vendor: None, compares_stored_times: false, samples_by_key_dtype: false, reads_nan_as_missing: false,
             optional: sql::rendered(),
             // The provider splits a key set past the warehouse's parameter
             // size into several statements itself, as the reference's

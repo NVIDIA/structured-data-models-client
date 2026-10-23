@@ -144,17 +144,19 @@ fn each_dialect_casts_a_time_as_it_compares_one() {
 #[test]
 fn each_dialect_declares_its_quirks() {
     let quirks = |name: &str| {
-        let d = dialect(name);
+        // In its capabilities since contract v28 (P2-MID2-2).
+        let c = dialect(name).capabilities();
         (
-            d.opaque_vendor(),
-            d.compares_stored_times(),
-            d.samples_by_key_dtype(),
-            d.reads_nan_as_missing(),
+            c.opaque_vendor,
+            c.compares_stored_times,
+            c.samples_by_key_dtype,
+            c.reads_nan_as_missing,
         )
     };
-    assert_eq!(quirks("duckdb"), (Some("DuckDB"), false, false, false));
+    assert_eq!(quirks("duckdb"), (Some("DuckDB".to_owned()), false, false, false));
     assert_eq!(quirks("sqlite"), (None, true, true, false));
     assert_eq!(quirks("postgres"), (None, false, false, true));
+    assert_eq!(quirks("databricks"), (None, false, false, false));
 }
 
 /// A dialect of the trait's required hooks alone, quoting with backticks
@@ -168,6 +170,7 @@ impl SqlDialect for Plain {
 
     fn capabilities(&self) -> ProviderCapabilities {
         ProviderCapabilities {
+            opaque_vendor: None, compares_stored_times: false, samples_by_key_dtype: false, reads_nan_as_missing: false,
             derived_relations: false, neighbor_lookback: false, sample_rows: false,
             optional: Default::default(),
             max_keys_per_request: None,
