@@ -1092,13 +1092,15 @@ pub struct Materialized {
     /// own validator may not. Absent from a core that does not say.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub query: Option<QueryFacts>,
-    /// Where the run read each relation of the schema it read under parts
-    /// the provider left to the connection and the schema had not read
-    /// before ([`HeldSchema::read_under`] said nothing of it): the host
-    /// adds each relation it holds no reading of to the schema's, so the
+    /// Where the run read each relation of one part of the schema that it
+    /// did not read where [`HeldSchema::read_under`] says (the schema held
+    /// no reading of it, or one the provider's own parts do not agree
+    /// with), under the parts the session gave. A host adds an entry only
+    /// for a relation it holds no reading of, keeping any it holds, so the
     /// next run reads the same tables, as the reference keeps the tables
-    /// its first `materialize` read (`EngineTables.keep`; contract v28,
-    /// T3.4). Absent from the JSON when none.
+    /// its first `materialize` read (`EngineTables.keep`); a failed run
+    /// carries them on its error ([`crate::CoreError::read_under`])
+    /// (contract v28, T3.4). Absent from the JSON when none.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub read_under: Vec<ReadUnder>,
 }
