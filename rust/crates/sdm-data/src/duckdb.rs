@@ -283,8 +283,12 @@ impl SqlDialect for Duckdb {
     /// What a DuckDB source answers through this layer.
     fn capabilities(&self) -> ProviderCapabilities {
         ProviderCapabilities {
-            compares_stored_times: false, reads_nan_as_missing: false, samples_by_key_dtype: false,
-            derived_relations: false, neighbor_lookback: false, sample_rows: false,
+            compares_stored_times: false,
+            reads_nan_as_missing: false,
+            samples_by_key_dtype: false,
+            derived_relations: false,
+            neighbor_lookback: false,
+            sample_rows: false,
             optional: sql::rendered(),
             max_keys_per_request: None,
             // DuckDB's reservoir sampling repeats under a seed (REPEATABLE).
@@ -431,7 +435,6 @@ impl SqlDialect for Duckdb {
     ) -> Result<CatalogAnswer, CoreError> {
         read(part, batches)
     }
-
 }
 
 /// One part of the catalog. The table list and the indexes are read whole,

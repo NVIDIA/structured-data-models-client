@@ -59,7 +59,8 @@ fn a_postgres_namespace_lists_and_reads_under_its_schema() {
     );
     // A relation naming its schema reads where it says.
     let named = Relation {
-        columns: Vec::new(), filter: None,
+        columns: Vec::new(),
+        filter: None,
         source: vec!["other".into(), "orders".into()],
     };
     assert!(text(&preview(named), &under).contains(r#"FROM "other"."orders""#));
