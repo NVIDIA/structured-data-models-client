@@ -1168,50 +1168,82 @@
      {
       "columns": [
        {
-        "dtype": "int",
+        "dtype": "int64",
         "name": "order_id",
-        "nullable": true,
-        "received": {
-         "type": "int64"
+        "source": {
+         "dtype": "int",
+         "nullable": true,
+         "received": {
+          "type": "int64"
+         },
+         "relation": {
+          "source": [
+           "orders"
+          ]
+         },
+         "unique": false
         },
         "stype": "ID",
-        "stype_before_key": null,
-        "unique": false
+        "stype_before_key": null
        },
        {
-        "dtype": "int",
+        "dtype": "int64",
         "name": "user_id",
-        "nullable": true,
-        "received": {
-         "type": "int64"
+        "source": {
+         "dtype": "int",
+         "nullable": true,
+         "received": {
+          "type": "int64"
+         },
+         "relation": {
+          "source": [
+           "orders"
+          ]
+         },
+         "unique": false
         },
         "stype": "ID",
-        "stype_before_key": null,
-        "unique": false
+        "stype_before_key": null
        },
        {
-        "dtype": "float",
+        "dtype": "float64",
         "name": "price",
-        "nullable": true,
-        "received": {
-         "type": "float64"
+        "source": {
+         "dtype": "float",
+         "nullable": true,
+         "received": {
+          "type": "float64"
+         },
+         "relation": {
+          "source": [
+           "orders"
+          ]
+         },
+         "unique": false
         },
         "stype": "numerical",
-        "stype_before_key": null,
-        "unique": false
+        "stype_before_key": null
        },
        {
-        "dtype": "date",
+        "dtype": "timestamp[us]",
         "name": "ts",
-        "nullable": true,
-        "received": {
-         "type": "timestamp",
-         "unit": "us",
-         "zone": null
+        "source": {
+         "dtype": "date",
+         "nullable": true,
+         "received": {
+          "type": "timestamp",
+          "unit": "us",
+          "zone": null
+         },
+         "relation": {
+          "source": [
+           "orders"
+          ]
+         },
+         "unique": false
         },
         "stype": "timestamp",
-        "stype_before_key": null,
-        "unique": false
+        "stype_before_key": null
        }
       ],
       "duplicate_keys": {
@@ -1227,43 +1259,66 @@
         "orders"
        ]
       },
-      "time_column": "ts",
-      "time_column_inferred": null
+      "time_column": "ts"
      },
      {
       "columns": [
        {
-        "dtype": "int",
+        "dtype": "int64",
         "name": "user_id",
-        "nullable": true,
-        "received": {
-         "type": "int64"
+        "source": {
+         "dtype": "int",
+         "nullable": true,
+         "received": {
+          "type": "int64"
+         },
+         "relation": {
+          "source": [
+           "users"
+          ]
+         },
+         "unique": false
         },
         "stype": "ID",
-        "stype_before_key": null,
-        "unique": false
+        "stype_before_key": null
        },
        {
-        "dtype": "int",
+        "dtype": "int64",
         "name": "age",
-        "nullable": true,
-        "received": {
-         "type": "int32"
+        "source": {
+         "dtype": "int",
+         "nullable": true,
+         "received": {
+          "type": "int32"
+         },
+         "relation": {
+          "source": [
+           "users"
+          ]
+         },
+         "unique": false
         },
         "stype": "numerical",
-        "stype_before_key": null,
-        "unique": false
+        "stype_before_key": null
        },
        {
         "dtype": "string",
         "name": "country",
-        "nullable": true,
-        "received": {
-         "type": "utf8"
+        "source": {
+         "dtype": "string",
+         "nullable": true,
+         "received": {
+          "type": "utf8"
+         },
+         "relation": {
+          "source": [
+           "users"
+          ]
+         },
+         "unique": false
         },
         "stype": "categorical",
-        "stype_before_key": null,
-        "unique": false
+        "stype_before_key": null
        }
       ],
       "duplicate_keys": {
@@ -1279,8 +1334,7 @@
         "users"
        ]
       },
-      "time_column": null,
-      "time_column_inferred": null
+      "time_column": null
      }
     ]
    },

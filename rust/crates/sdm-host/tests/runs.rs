@@ -707,7 +707,6 @@ fn request_state_leaves_one_run_as_bytes_and_returns_under_the_host_s_id() {
                 namespace: Vec::new(),
             },
             schema: AttachmentId(1),
-            held: None,
             query: AttachmentId(2),
             indices: Some(AttachmentId(3)),
             anchor_time: None,

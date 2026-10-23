@@ -3,20 +3,21 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! The user's edits to the schema, as this host makes them (decision E67,
-//! T1.24b): each passed to the core's `edit_schema` with the description
-//! the core last answered and the schema as this host holds it, the core
+//! T1.24b): each passed to the core's `edit_schema` with the schema as
+//! this host holds it, the core
 //! function the Python client's setters pass theirs to, so the core checks
 //! and makes every edit and this host decides none (`crate::host` runs
 //! them). The case names only the edits, never the schema `materialize`
 //! samples (decision E50). An edit the core refuses is the case's outcome,
 //! at the from_source stage, as the Python runner records it.
 //!
-//! This host holds a schema as the description the core last answered
-//! ([`held`]): it changes nothing of it the core did not answer, so it
-//! never holds a schema changed past its description.
+//! This host holds a schema as plain data ([`held`], T3.16): the
+//! description the core answered, each column with its facts, and each
+//! edit's answer read back ([`described`]).
 
 use sdm_contract::ops::{
-    self, ColumnRef, Given, HeldColumn, HeldSchema, HeldTable, SourceDescription,
+    self, ColumnRef, DescribedColumn, DescribedTable, Given, HeldColumn, HeldSchema, HeldTable,
+    SourceDescription, SourceFacts,
 };
 use serde::Deserialize;
 
@@ -150,8 +151,9 @@ impl SchemaEdit {
     }
 }
 
-/// The schema as this host holds it: the description the core last
-/// answered, as it is, each column's data type by its wire name.
+/// The schema as this host holds it, as plain data (T3.16): the
+/// description the core last answered, each column's data type by its wire
+/// name and with what the source said of it.
 pub fn held(described: &SourceDescription) -> HeldSchema {
     HeldSchema {
         tables: described
@@ -168,12 +170,59 @@ pub fn held(described: &SourceDescription) -> HeldSchema {
                         dtype: column.dtype.wire_name().to_owned(),
                         stype: column.stype,
                         stype_before_key: column.stype_before_key,
+                        source: Some(SourceFacts {
+                            relation: table.source.clone(),
+                            dtype: column.dtype,
+                            received: column.received.clone(),
+                            nullable: column.nullable,
+                            unique: column.unique,
+                            declared_type: column.declared_type.clone(),
+                            exact_number: column.exact_number,
+                        }),
                     })
                     .collect(),
                 primary_key: table.primary_key.clone(),
                 time_column: table.time_column.clone(),
+                duplicate_keys: table.duplicate_keys.clone(),
             })
             .collect(),
         links: described.links.clone(),
     }
+}
+
+/// The schema `edit_schema` answered, as this host holds it from then on,
+/// the description it reads its query schema from; `None` where a column
+/// carries no facts, which no schema this host holds has.
+pub fn described(held: &HeldSchema) -> Option<SourceDescription> {
+    let mut tables = Vec::with_capacity(held.tables.len());
+    for table in &held.tables {
+        let mut columns = Vec::with_capacity(table.columns.len());
+        for column in &table.columns {
+            let facts = column.source.clone()?;
+            columns.push(DescribedColumn {
+                name: column.name.clone(),
+                received: facts.received,
+                dtype: facts.dtype,
+                stype: column.stype,
+                stype_before_key: column.stype_before_key,
+                nullable: facts.nullable,
+                unique: facts.unique,
+                declared_type: facts.declared_type,
+                exact_number: facts.exact_number,
+            });
+        }
+        tables.push(DescribedTable {
+            name: table.name.clone(),
+            source: table.source.clone(),
+            columns,
+            primary_key: table.primary_key.clone(),
+            time_column: table.time_column.clone(),
+            time_column_inferred: None,
+            duplicate_keys: table.duplicate_keys.clone(),
+        });
+    }
+    Some(SourceDescription {
+        tables,
+        links: held.links.clone(),
+    })
 }

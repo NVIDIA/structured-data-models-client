@@ -25,12 +25,10 @@ which ``RelationalMaterializer.materialize`` builds the ``Request``.
 
 The core's ``materialize`` samples the source through its backend's
 provider (:mod:`.providers`) and lays out the payload the engine lays out;
-this module hands it the description the core last answered of the
-schema and the schema as it stands (from T1.24b, decision E67), which the
-core reads together: what the schema says now, with what the description
-said of each column that the schema does not hold (the type the source
-handed over, whether it may be null, whether the source keys it); and the
-entities to predict for as one Arrow column of the type pyarrow gives
+this module hands it the schema as it stands, as plain data, each column
+with what the source said of it where the core described it (T3.16; the
+core reads from the source the facts of a column that carries none); and
+the entities to predict for as one Arrow column of the type pyarrow gives
 their values, which the core casts to the key's type (T1.32a). From T1.21d the core holds that schema to the reference's
 consistency check itself, marking the columns it joins on again from what
 each column means and meant before it was joined on (decision E55); this
@@ -44,29 +42,29 @@ the core (decision E61): the anchor time and seed in their fields, an
 unseeded sample, an anchor at each entity's own time and a context size as
 the contract says them, and the names of the rest; the core refuses with
 ``UNSUPPORTED_REQUEST``, naming the rule, each it does not take yet, and
-any schema it does not sample yet (register entry P1B-3), and, from
-T1.24b, a schema changed in a way no edit it takes says
-(``schema_edited``), which this module no longer refuses itself.
+and any schema it does not sample yet (register entry P1B-3).
 """
 
 from __future__ import annotations
 
-import dataclasses
 import datetime
 import json
 import math
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
-from sdm_client._rust import codec, providers
+from sdm_client._rust import codec, providers, results
+from sdm_client._rust.results import CoreQuery, CoreRequest, QueryFacts
 from sdm_client._rust.run import run
+from sdm_client._rust.spec import held_schema
 from sdm_client.errors import StructuredDataError
 
 if TYPE_CHECKING:
     from predictive_query import ValidatedPredictiveQuery
 
     from sdm_client.materializers.relational import RelationalMaterializer
-    from sdm_client.schema import Schema
+
+__all__ = ['CoreQuery', 'gather']
 
 #: The options the contract carries in fields of their own (from T1.28a
 #: the seed, the statistic and the inference options among the call's
@@ -112,83 +110,6 @@ VALUED = frozenset(
         'use_prediction_time',
     }
 )
-
-
-def description(schema: Schema) -> tuple[dict[str, Any], dict[str, Any]]:
-    r"""The schema as the contract's ``Materialize`` and ``EditSchema`` take
-    it: the ``SourceDescription`` the core last answered of it
-    (``describe_source``'s, or the last edit's), and the schema as it
-    stands (``HeldSchema``): each table by the name the schema holds it
-    under, its source's name of the table, its columns' data types and
-    meanings and what each meant before the schema joined on it, its key
-    and time column, and the links. The core reads the two together
-    (decision E67): what the schema says now, with what the description
-    said of each column that the schema does not hold, and refuses by name
-    a schema changed in a way it does not follow yet (``schema_edited``);
-    this module checks none of it.
-
-    A schema the core has not described (built by hand, unpickled, or
-    described on the old route) is described now, its tables by their
-    source names with the keys and time columns it holds and no link
-    inferred or keys counted, since the schema as it stands decides those;
-    as the reference reads the source's catalog for any schema it
-    materializes (``query.py``'s ``materialize``). That description is not
-    kept: the schema is the caller's, as built.
-
-    Raises:
-        StructuredDataError: The core's refusal of a table the source does
-            not hold, as describing it refuses one.
-    """
-    from sdm_client.schema import _as_key_tuple
-
-    described = getattr(schema, '_core_description', None)
-    # The data type of each column as the source holds it, for a schema
-    # described now: the reference reads each column of a table in place as
-    # the source holds it, whatever type the schema wrote for it
-    # (`_copy_for_one_gather`), so a type written by hand is no edit.
-    read: dict[tuple[str, str], str] = {}
-    if described is None:
-        from sdm_client.materializers.sources import wire_dtype
-
-        described = _described_now(schema)
-        read = {
-            (described_table['name'], column['name']): dtype
-            for described_table in described['tables']
-            for column in described_table['columns']
-            if (dtype := wire_dtype(column['dtype'])) is not None
-        }
-    tables = []
-    for name, table in schema.tables.items():
-        key = table.primary_key
-        tables.append(
-            {
-                'name': name,
-                'source': codec.relation(getattr(table, 'source_name', name)),
-                'columns': [
-                    {
-                        'name': column_name,
-                        'dtype': read.get((name, column_name), column.dtype),
-                        'stype': str(column.stype),
-                        'stype_before_key': (
-                            None
-                            if column._stype_before_key is None
-                            else str(column._stype_before_key)
-                        ),
-                    }
-                    for column_name, column in table.columns.items()
-                ],
-                'primary_key': [] if key is None else list(_as_key_tuple(key)),
-                'time_column': table.time_column,
-            }
-        )
-    links = [
-        [
-            {'table': link.source_table, 'column': link.source_column},
-            {'table': link.target_table, 'column': link.target_column},
-        ]
-        for link in schema.relationships
-    ]
-    return described, {'tables': tables, 'links': links}
 
 
 def _anchor(value: Any) -> dict[str, Any] | None:
@@ -380,44 +301,6 @@ def _missing(value: Any) -> bool:
     )
 
 
-def _described_now(schema: Schema) -> dict[str, Any]:
-    r"""The core's description of ``schema``'s tables in its source, for a
-    schema the core has not described (:func:`description`)."""
-    import warnings
-
-    from sdm_client._rust.schema import from_source
-
-    with warnings.catch_warnings():
-        # What describing says of the tables was said, or not, when the
-        # schema was built; the schema as it stands is what is asked.
-        warnings.simplefilter('ignore')
-        described: dict[str, Any] = from_source(
-            type(schema),
-            schema.source,
-            {
-                name: getattr(table, 'source_name', name)
-                for name, table in schema.tables.items()
-            },
-            primary_keys={
-                name: table.primary_key
-                for name, table in schema.tables.items()
-                if table.primary_key is not None
-            },
-            time_columns={
-                name: table.time_column for name, table in schema.tables.items()
-            },
-            relationships=[],
-            check_keys=False,
-            # Only the columns the schema keeps: one it leaves out is never
-            # read, as the reference reads only those (`_copy_for_one_gather`).
-            columns={
-                name: list(table.columns)
-                for name, table in schema.tables.items()
-            },
-        )._core_description
-    return described
-
-
 def gather(
     materializer: RelationalMaterializer,
     query: ValidatedPredictiveQuery,
@@ -425,9 +308,15 @@ def gather(
     num_context_samples: int | None,
     options: dict[str, Any],
     candidates: Sequence[Any] | None = None,
-) -> tuple[tuple[dict[str, Any], ...], dict[str, Any]]:
-    r"""The payloads of the request, gathered on the core, and the request
-    state's version, which the request keeps for predict on the core.
+) -> tuple[tuple[dict[str, Any], ...], QueryFacts, CoreRequest]:
+    r"""The payloads of the request, gathered on the core; what the core
+    resolved of the query; and what the request keeps for predict on the
+    core (:class:`~sdm_client._rust.results.CoreRequest`), with the parts of
+    a request the core gathered in parts.
+
+    The schema is handed over as it stands, as plain data
+    (:func:`~sdm_client._rust.spec.held_schema`, T3.16): the core reads
+    from the source what it needs of a column that carries no facts.
 
     ``candidates``, a ranking's, are handed over as the caller named them,
     each as the contract's given candidate of its own type
@@ -451,13 +340,11 @@ def gather(
 
     schema = materializer.schema
     anchor = options.get('anchor_time')
-    described, held = description(schema)
     choice, provider = providers.for_source(schema.source)
     operation = {
         'op': 'materialize',
         'provider': choice,
         'schema': 1,
-        'held': 4,
         'query': 2,
         'indices': 3,
         'anchor_time': _anchor(options.get('anchor_time')),
@@ -476,10 +363,9 @@ def gather(
         'most_parts': max(0, min(int(decompose.MOST_PARTS), 2**32 - 1)),
     }
     attachments = {
-        1: codec.attachment(described),
+        1: codec.attachment(held_schema(schema)),
         2: codec.attachment(query.to_string()),
         3: _indices(indices),
-        4: codec.attachment(held),
         # Each as the caller gave it, a value JSON cannot hold refused as
         # the client's transport refuses it; a context size of none is none.
         5: codec.attachment(
@@ -514,97 +400,70 @@ def gather(
         provider=provider,
         state=materializer._core_sampler_state,
     )
-    state = finished.result['state']
-    payload = json.loads(finished.take(state['payload']))
-    query = json.loads(finished.take(state['query']))
-    # What the core resolved of the query (T2.18), which asked() reads and
-    # takes out before the request keeps the state.
-    kept: dict[str, Any] = {
-        'version': state['version'],
-        'facts': finished.result.get('query'),
-    }
+    gathered = results.expect(finished.result, results.Gathered)
+    state = gathered.state
+    if gathered.query is None:
+        raise StructuredDataError(
+            'the core gathered a query and said nothing of it',
+            code='INTERNAL_ERROR',
+        )
+    payload = json.loads(finished.take(state.payload))
+    query = json.loads(finished.take(state.query))
     payloads = [payload]
-    if state.get('batches') is not None:
+    batches = None
+    if state.batches is not None:
         # A request asked in several calls (T2.8c): each later call's
         # payload, in order, and the rows the core gathered it to score.
-        kept['batches'] = []
-        for batch in state['batches']:
-            payloads.append(json.loads(finished.take(batch['payload'])))
-            kept['batches'].append(batch['rows'])
-    if state.get('ranking') is not None:
+        for batch in state.batches:
+            payloads.append(json.loads(finished.take(batch.payload)))
+        batches = tuple(batch.rows for batch in state.batches)
+    parts = None
+    if state.ranking is not None:
         # A ranking, which the core asked as one binary question per
         # candidate (T2.8): the first candidate's position, query and name
         # (the JSON text of its value, as the result names it), each later
         # one's position among the candidates given, name, payload and
         # query, and how many candidates a row keeps.
-        kept['query'] = query
-        kept['ranking'] = {
-            'top_k': state['ranking'].get('top_k'),
-            'candidate': state['ranking']['candidate'],
-            'value': state['ranking']['value'],
-            'parts': [
-                (
-                    part['candidate'],
-                    part['value'],
-                    json.loads(finished.take(part['payload'])),
-                    json.loads(finished.take(part['query'])),
+        parts = results.CoreParts(
+            kind='ranking',
+            query=query,
+            position=state.ranking.candidate,
+            name=state.ranking.value,
+            top_k=state.ranking.top_k,
+            later=tuple(
+                results.CorePart(
+                    position=part.candidate,
+                    name=part.value,
+                    payload=json.loads(finished.take(part.payload)),
+                    query=json.loads(finished.take(part.query)),
                 )
-                for part in state['ranking']['parts']
-            ],
-        }
-    if state.get('forecast') is not None:
+                for part in state.ranking.parts
+            ),
+        )
+    elif state.forecast is not None:
         # A forecast, which the core asked as one regression per step (T1.36
         # fix 21): step 1's query, and each later step's number, payload
         # and query, from which the client keeps one request per step.
-        kept['query'] = query
-        kept['forecast'] = [
-            (
-                step['step'],
-                json.loads(finished.take(step['payload'])),
-                json.loads(finished.take(step['query'])),
-            )
-            for step in state['forecast']
-        ]
-    return tuple(payloads), kept
-
-
-@dataclasses.dataclass(frozen=True)
-class CoreQuery:
-    r"""What the core route reads of a query it gathers, and nothing of the
-    old validator's object (T3.8): a query the core validated (S0 on the
-    core, P2-MID2-1), from the core's own validation (``validate_query``'s
-    ``query``, contract v28); or, on the old validator's route, one naming a
-    column whose name holds a dot, a backtick or a line break, which the old
-    validator refuses and the core holds apart from its table (KO2-36,
-    T2.18).
-
-    ``text`` is what materialize sends and the request keeps as its query:
-    the query as the core writes it back where the core validated it, as the
-    reference's ``ValidatedPredictiveQuery.to_string()`` writes it, else as
-    the caller wrote it. ``num_forecasts`` is how many steps a forecast asks
-    (1 for any other query), which a refusal of one step names; ``None``
-    where the core did not validate it. ``refusal`` is the old validator's,
-    said of a query the core does not resolve either; ``None`` where the old
-    validator was not asked.
-    """
-
-    text: str
-    num_forecasts: int | None
-    refusal: StructuredDataError | None
-
-    def to_string(self) -> str:
-        r"""The query's text, which materialize sends."""
-        return self.text
-
-
-def asked(state: dict[str, Any]) -> tuple[bool, str]:
-    r"""Whether the target of the query moves with time, and its entity
-    table, as the core resolved them (``state``'s ``facts``, the core's
-    ``Materialized.query``, taken out of it), for every query (T2.14b)."""
-    facts = state.pop('facts', None)
-    if facts is None:
-        raise StructuredDataError(
-            'the core gathered a query and said nothing of it',
-            code='INTERNAL_ERROR',
+        parts = results.CoreParts(
+            kind='forecast',
+            query=query,
+            position=1,
+            name=None,
+            top_k=None,
+            later=tuple(
+                results.CorePart(
+                    position=step.step,
+                    name=None,
+                    payload=json.loads(finished.take(step.payload)),
+                    query=json.loads(finished.take(step.query)),
+                )
+                for step in state.forecast
+            ),
         )
-    return bool(facts['windowed']), str(facts['entity_table'])
+    return (
+        tuple(payloads),
+        gathered.query,
+        results.CoreRequest(
+            version=state.version, batches=batches, parts=parts
+        ),
+    )

@@ -125,6 +125,12 @@ class Column:
     untyped: bool = field(init=False, default=False)
     stype_declared: bool = field(init=False, default=False)
     _stype_before_key: str | None = field(init=False, default=None, repr=False)
+    #: What the source said of the column, where the core described it
+    #: (``sdm_client._rust.results.SourceFacts``, T3.16): kept with the
+    #: column, copied and pickled with it, and handed back whole to the
+    #: core, which reads a column with none from the source. Out of repr
+    #: and equality, so a column is what it says, however it was made.
+    _source: Any = field(init=False, default=None, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         self._check_stype(self.stype)
@@ -185,14 +191,8 @@ class Column:
                 'assign the dtype you want instead',
                 code='INVALID_REQUEST',
             )
-        if (
-            key == 'stype'
-            and getattr(
-                getattr(getattr(self, '_table', None), '_schema', None),
-                '_core_description',
-                None,
-            )
-            is not None
+        if key == 'stype' and _described_on_the_core(
+            getattr(getattr(self, '_table', None), '_schema', None)
         ):
             # A core-built schema's column: the core checks and makes the
             # edit, and its answer is stored (T1.24b, decision E66(g)).
@@ -409,12 +409,8 @@ class _TableShape:
         return _copy_table(self)
 
     def __setattr__(self, key: str, value: Any) -> None:
-        if (
-            key in ('primary_key', 'time_column')
-            and getattr(
-                getattr(self, '_schema', None), '_core_description', None
-            )
-            is not None
+        if key in ('primary_key', 'time_column') and _described_on_the_core(
+            getattr(self, '_schema', None)
         ):
             # A core-built schema's table: the core checks and makes the
             # edit, and its answer is stored (T1.24b, decision E66(g)).
@@ -789,10 +785,7 @@ class SourceTable(_TableShape):
         says nothing about it. A table of frames drops a column from its frame
         before :meth:`Schema.from_data` instead.
         """
-        if (
-            getattr(getattr(self, '_schema', None), '_core_description', None)
-            is not None
-        ):
+        if _described_on_the_core(getattr(self, '_schema', None)):
             # A core-built schema's table: the core checks and makes the
             # edit, and its answer is stored (T1.24b).
             from sdm_client._rust import edits
@@ -905,10 +898,6 @@ class Schema:
         # The engine's own reading of the source's tables, kept so that each
         # question does not read them again. Set by the first read.
         self._engine_tables: Any = None
-        # The core's description of the source, kept by Schema.from_source
-        # on the core route for materialize on the core (private routing
-        # seam, T1.11c); None otherwise.
-        self._core_description: Any = None
         self._conversion_notes: tuple[str, ...] = ()
 
     @property
@@ -952,7 +941,9 @@ class Schema:
         """
         if (
             key == 'relationships'
-            and getattr(self, '_core_description', None) is not None
+            # An edit of a schema that stands: building one is no edit.
+            and 'relationships' in vars(self)
+            and _described_on_the_core(self)
         ):
             # A core-built schema: the core checks and makes the edit, and
             # its answer is stored (T1.24b, decision E66(g)).
@@ -1000,9 +991,16 @@ class Schema:
             {
                 '_source': None,
                 '_engine_tables': None,
-                '_core_description': None,
                 '_conversion_notes': (),
-                **state,
+                # The core's description of the source an earlier client
+                # kept beside the schema (to T3.16): its columns now carry
+                # what the source said of them, and a column with none is
+                # read from the source again.
+                **{
+                    key: value
+                    for key, value in state.items()
+                    if key != '_core_description'
+                },
             },
         )
         with warnings.catch_warnings():
@@ -1057,7 +1055,6 @@ class Schema:
         # What the engine read of the source is shared, not copied: it is what
         # the tables are, and every gather is given its own copy of it.
         copied._engine_tables = self._engine_tables
-        copied._core_description = self._core_description
         copied._conversion_notes = self._conversion_notes
         return copied
 
@@ -1965,6 +1962,19 @@ def _require_column(
     return column
 
 
+def _described_on_the_core(schema: Any) -> bool:
+    r"""Whether ``schema`` was described on the core: a column of it holds
+    what the source said of it (``Column._source``, T3.16), so its edits are
+    the core's ``edit_schema``'s (T1.24b, decision E66(g)); ``None`` and a
+    schema of frames are not."""
+    tables = vars(schema).get('_tables') if schema is not None else None
+    return any(
+        column._source is not None
+        for table in (tables or {}).values()
+        for column in table.columns.values()
+    )
+
+
 def _as_key_tuple(key: Any) -> tuple[str, ...]:
     r"""A primary key as the tuple of column names it is.
 
@@ -2103,6 +2113,9 @@ def _copy_column(column: Column) -> Column:
         '_stype_before_key',
     ):
         object.__setattr__(made, field_name, getattr(column, field_name))
+    # What the source said of it, frozen, so shared (T3.16); a column
+    # unpickled from before it had any holds none.
+    object.__setattr__(made, '_source', getattr(column, '_source', None))
     return made
 
 
@@ -2768,7 +2781,7 @@ class _Links(list):
         object.__setattr__(self, '_schema', schema)
 
     def _resettle(self, links: list[Relationship]) -> None:
-        if getattr(self._schema, '_core_description', None) is not None:
+        if _described_on_the_core(self._schema):
             # A core-built schema: the core checks and makes the edit, and
             # its answer is stored in this list (T1.24b).
             from sdm_client._rust import edits
@@ -3232,17 +3245,7 @@ def to_schema_definition(schema: Schema) -> Any:
             )
         key = table.primary_key
         if key is not None and not isinstance(key, str):
-            warnings.warn(
-                f'table {name!r} has the composite primary key '
-                f'{list(key)}, and a predictive query can only name a single '
-                f'key column, so this query is resolved against {name!r} as '
-                f'though it had no key. The request still carries the '
-                f'composite key; only the query does not see it. Name a '
-                f'single column as the primary key if the query needs to '
-                f'identify a row of {name!r}.',
-                category=SDMWarning,
-                stacklevel=caller_stacklevel(),
-            )
+            say_a_composite_key_is_dropped(name, key)
         tables[name] = TableDefinition(
             cols=columns,
             pkey=key if isinstance(key, str) else None,
@@ -3268,8 +3271,25 @@ def to_schema_definition(schema: Schema) -> Any:
     return SchemaDefinition(tables=tables, col_groups=groups)
 
 
+def say_a_composite_key_is_dropped(name: str, key: Sequence[str]) -> None:
+    r"""Say that table ``name``'s composite ``key`` is not one a query can
+    name, so the query is resolved as though it had none: one place, for
+    the language's schema definition and the core's query schema alike."""
+    warnings.warn(
+        f'table {name!r} has the composite primary key '
+        f'{list(key)}, and a predictive query can only name a single '
+        f'key column, so this query is resolved against {name!r} as '
+        f'though it had no key. The request still carries the '
+        f'composite key; only the query does not see it. Name a '
+        f'single column as the primary key if the query needs to '
+        f'identify a row of {name!r}.',
+        category=SDMWarning,
+        stacklevel=caller_stacklevel(),
+    )
+
+
 # The wire spells a few types differently from the language.
-_WIRE_TO_PQL_DTYPE = {
+WIRE_TO_PQL_DTYPE = _WIRE_TO_PQL_DTYPE = {
     'int64': 'int',
     'int32': 'int',
     'float64': 'float',

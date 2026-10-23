@@ -32,7 +32,7 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use arrow_schema::TimeUnit;
-use sdm_contract::catalog::{CatalogAnswer, CatalogColumn, CatalogForeignKey, CatalogKey, KeyKind};
+use sdm_contract::catalog::{CatalogAnswer, CatalogForeignKey};
 use sdm_contract::data::{DataRequest, DescribePart, RELATION_RULE, Relation, TableKey};
 use sdm_contract::ops::{ColumnRef, DescribedSource, NamedTable, OperationResult, SourceSpec};
 use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, HostFacts, Scalar, Unit};
@@ -40,13 +40,13 @@ use sdm_engine::time::text::Reader;
 use sdm_engine::time::{Instant, Zones};
 use sdm_schema::assemble::{self, Assembled, Given};
 use sdm_schema::catalog;
-use sdm_schema::infer::{self, InferredTable, PREVIEW_ROWS};
+use sdm_schema::infer::{self, InferredTable};
 use sdm_schema::keys;
 
+use crate::discover::falls_back;
 use crate::run::{
     ArrowData, Ask, Asker, Attachment, FetchResult, Reply, internal, schema_mismatch,
 };
-use crate::{big_integer, exact_number};
 
 /// The reader of text times for a run whose clock is `facts.now`: its
 /// year, in UTC, places a two-digit year, as the date literals' reader
@@ -135,99 +135,16 @@ pub(crate) async fn run(
     // Each table's marked big integers' declared types (big_integer_types).
     let mut big_types = Vec::with_capacity(names.len());
     for table in &names {
-        let one = || vec![table.source.clone()];
-        let asked = describe_all(
-            &asker,
-            [
-                DataRequest::Describe {
-                    tables: one(),
-                    part: DescribePart::Columns,
-                },
-                DataRequest::Describe {
-                    tables: one(),
-                    part: DescribePart::Keys,
-                },
-            ],
-        )
-        .await;
-        let [columns, keys] = match asked {
-            Ok(answers) => answers,
-            // A table the caller named that the source does not hold: a
-            // dialect may fail reading its columns rather than answer none
-            // (DuckDB's pragma does). The source, asked only then whether
-            // it holds a relation of that name, says which, so the caller's
-            // naming is refused as the reference refuses it, and any other
-            // failure stays the provider's.
-            Err(failed) if caller_named && failed.code == ErrorCode::ProviderError => {
-                // Absence only where the source says so; the provider's
-                // first error stands otherwise, and where the question
-                // itself fails, whatever its error (a provider's, or an
-                // answer that does not read), since that says nothing of
-                // the table.
-                return Err(match holds(&asker, &table.source).await {
-                    Ok(false) => not_held(&asker, &table.source).await,
-                    Ok(true) | Err(_) => failed,
-                });
-            }
-            Err(failed) => return Err(failed),
-        };
-        let mut declared = declared_columns(columns)?;
-        if declared.is_empty() {
-            // A table the source answers with no columns, as the reference
-            // refuses one it cannot read.
-            return Err(not_held(&asker, &table.source).await);
-        }
-        let mut keys = declared_keys(keys)?;
-        if let Some(kept) = &table.columns {
-            // Only the columns the schema keeps are read, and only the keys
-            // over them, so a column it leaves out is never inferred, as the
-            // reference reads only the columns a schema describes; one it
-            // keeps that the source lacks is the description's to lack. A
-            // key dropped for a column left out takes its marks off the
-            // columns kept, so what the catalog says of a column and of its
-            // keys agree (a primary key of `ts` and a column left out is no
-            // primary key of `ts`).
-            declared.retain(|c| kept.contains(&c.name));
-            let (held, dropped): (Vec<_>, Vec<_>) = keys
-                .into_iter()
-                .partition(|k| k.columns.iter().all(|c| kept.contains(c)));
-            keys = held;
-            for key in dropped.iter().filter(|k| k.kind == KeyKind::Primary) {
-                for column in declared
-                    .iter_mut()
-                    .filter(|c| key.columns.contains(&c.name))
-                {
-                    column.primary_key = false;
-                }
-            }
-        }
-        let constraints = key_columns(&asker, &table.source, keys).await?;
-        let column_names: Vec<String> = declared.iter().map(|c| c.name.clone()).collect();
-        let preview = ask(
-            &asker,
-            DataRequest::Preview {
-                table: table.source.clone(),
-                columns: column_names.clone(),
-                limit: PREVIEW_ROWS,
-            },
-        )
-        .await?;
-        let returned: Vec<&String> = preview.schema.fields().iter().map(|f| f.name()).collect();
-        if returned.len() != column_names.len()
-            || returned.iter().zip(&column_names).any(|(a, b)| *a != b)
-        {
-            return Err(schema_mismatch(
-                "expected",
-                None,
-                "a preview's columns are not the ones it asked for",
-            ));
-        }
-        // A big integer's tier, the whole column's (P1B-43).
-        let preview = whole_column_tiers(&asker, &table.source, preview).await?;
-        // A column of numbers handed over as their text, by its role: a
-        // key's text, any other's doubles (crate::exact_number).
-        let preview = exact_number::settle(preview, &constraints)?;
-        big_types.push(big_integer_types(&preview, &declared));
+        // The table read as `materialize` reads a column it holds no facts
+        // of (crate::discover): its catalog, its preview, each big
+        // integer's tier and each exact number's type.
+        let crate::discover::Discovered {
+            declared,
+            constraints,
+            preview,
+            big_types: types,
+        } = crate::discover::table(&asker, table, caller_named, None).await?;
+        big_types.push(types);
         let previewed = infer::preview_keyed(
             &table.name,
             &table.source,
@@ -378,123 +295,6 @@ pub(crate) async fn run(
     }))
 }
 
-/// Whether the time column's choice falls back to the preview on
-/// `failed`, the error asking `column_ranges` gave: the provider's own
-/// failure (`PROVIDER_ERROR`), as the reference falls back on whatever its
-/// fetch raises, or the request refused as one the provider does not
-/// declare (`UNSUPPORTED_REQUEST` naming it), as a table that cannot ask
-/// its source falls back there. Anything else is the core's error.
-///
-/// The second test reads only the code and the `request` field: any
-/// `UNSUPPORTED_REQUEST` naming `column_ranges` falls back, whatever
-/// raised it. Today only [`crate::compose::undeclared`] raises one; a
-/// refusal of another kind that came to carry that field would fall back
-/// too.
-fn falls_back(failed: &CoreError) -> bool {
-    match failed.code {
-        ErrorCode::ProviderError => true,
-        ErrorCode::UnsupportedRequest => {
-            failed.fields.get("request") == Some(&Detail::text("column_ranges"))
-        }
-        _ => false,
-    }
-}
-
-/// The catalog's declared type of each big-integer column the host layer
-/// read from an opaque type and marked ([`crate::big_integer`]), by name:
-/// what the described schema keeps (`DescribedColumn::declared_type`), so a
-/// `decimal128(38, 0)` seed is joined to such a key in the key's own type
-/// with no statement `materialize` adds (register P1B-43). Every other
-/// column keeps none, and joins as before part 3.
-fn big_integer_types(preview: &ArrowData, declared: &[CatalogColumn]) -> Vec<(String, String)> {
-    preview
-        .schema
-        .fields()
-        .iter()
-        .filter(|f| big_integer::is_marked(f))
-        .filter_map(|f| {
-            let column = declared.iter().find(|c| &c.name == f.name())?;
-            Some((column.name.clone(), column.declared_type.clone()))
-        })
-        .collect()
-}
-
-/// `preview` with each big-integer column the host layer read
-/// ([`crate::big_integer`]) in the tier of its values over the whole
-/// table, so the column is described in one tier every fetch is held to:
-/// where the preview may have left rows unread, the column's smallest and
-/// largest values are asked of the source (`column_ranges`, one request for
-/// every such column), and the column takes the widest tier of the preview
-/// and those two (a column already read as text, the widest tier, is not
-/// asked). The request is the time column's own kind, but asked apart,
-/// before inference: a big integer's tier decides its inference (an int or
-/// a string, and so whether it may be the key), which the time column's
-/// candidates follow. Where the source fails that request or does not take it,
-/// as [`falls_back`] reads it, the preview's tier stands, and a later fetch
-/// past it is refused by name.
-async fn whole_column_tiers(
-    asker: &Asker,
-    source: &Relation,
-    preview: ArrowData,
-) -> Result<ArrowData, CoreError> {
-    let big: Vec<(String, arrow_schema::DataType)> = preview
-        .schema
-        .fields()
-        .iter()
-        .filter_map(|f| big_integer::tier(f).map(|t| (f.name().clone(), t)))
-        // Text is the widest tier: no range widens it.
-        .filter(|(_, tier)| *tier != arrow_schema::DataType::Utf8)
-        .collect();
-    let rows: usize = preview.batches.iter().map(|b| b.num_rows()).sum();
-    if big.is_empty() || (rows as u64) < PREVIEW_ROWS {
-        return Ok(preview);
-    }
-    let asked: Vec<String> = big.iter().map(|(name, _)| name.clone()).collect();
-    let read = match ask(
-        asker,
-        DataRequest::ColumnRanges {
-            table: source.clone(),
-            columns: asked.clone(),
-        },
-    )
-    .await
-    {
-        Ok(read) => read,
-        Err(failed) if falls_back(&failed) => return Ok(preview),
-        Err(failed) => return Err(failed),
-    };
-    let fields = read.schema.fields();
-    if fields.len() != 1 + 3 * asked.len() {
-        return Err(schema_mismatch(
-            "expected",
-            None,
-            "the column ranges hold another number of columns than asked",
-        ));
-    }
-    let mut tiers = Vec::new();
-    for (at, (name, previewed)) in big.iter().enumerate() {
-        let mut tier = previewed.clone();
-        for index in [1 + 3 * at, 2 + 3 * at] {
-            tier = big_integer::tier(&fields[index])
-                .and_then(|range| big_integer::wider(&tier, &range))
-                .ok_or_else(|| {
-                    schema_mismatch(
-                        "expected",
-                        Some(name),
-                        "a big integer's range is not of a big integer's type",
-                    )
-                })?;
-        }
-        if &tier != previewed {
-            tiers.push((name.clone(), tier));
-        }
-    }
-    if tiers.is_empty() {
-        return Ok(preview);
-    }
-    big_integer::widen_data(&preview, &tiers)
-}
-
 /// Holds the answer to a `column_ranges` request over `asked` to its
 /// shape, which the contract leaves the columns' own types to (`Discover`):
 /// one row; the table's rows, then each column's smallest value, largest
@@ -548,62 +348,6 @@ fn check_ranges(read: &ArrowData, asked: &[String], preview: &ArrowData) -> Resu
         }
     }
     Ok(())
-}
-
-/// The refusal of a table to describe that the source does not hold, or
-/// holds with no columns: `INVALID_REQUEST`, as the reference refuses a
-/// table it cannot read (its `TableNotFoundError`), naming the table as
-/// the source reads it (`source`): under the provider's namespace, or, for
-/// a name of one part, under the namespace the source reads it in, which
-/// the source says (`describe` of its namespace: a Postgres source's
-/// current schema, as the reference names the table under it); and the
-/// database the source is (`database`), which the host words.
-async fn not_held(asker: &Asker, table: &Relation) -> CoreError {
-    let mut read = asker.read_as(table);
-    if read.source.len() == 1 {
-        let asked = DataRequest::Describe {
-            tables: vec![],
-            part: DescribePart::Namespace,
-        };
-        // Only to name the table: a source that cannot say leaves it alone.
-        if let Ok(CatalogAnswer::Namespace(parts)) = describe(asker, asked).await {
-            read.source.splice(0..0, parts);
-        }
-    }
-    let refused = CoreError::new(
-        ErrorKind::InvalidRequest,
-        ErrorCode::InvalidRequest,
-        "a table to describe is not one the source holds, or has no columns there",
-    )
-    .with_field("field", Detail::text("tables"))
-    .with_field("rule", Detail::text("no_such_table"))
-    .with_field(
-        "source",
-        Detail::List(read.source.into_iter().map(Scalar::Utf8).collect()),
-    );
-    match asker.source_database() {
-        Some(database) => refused.with_field("database", Detail::text(database)),
-        None => refused,
-    }
-}
-
-/// Whether the source holds a relation, a table or a view, under `source`,
-/// as the source itself resolves the name: `describe` of the tables with
-/// `source` named, whose answer is empty when it holds none (sdm-data's
-/// rendering decides how the dialect matches a name; the core matches
-/// none).
-async fn holds(asker: &Asker, source: &Relation) -> Result<bool, CoreError> {
-    let held = table_names(
-        describe(
-            asker,
-            DataRequest::Describe {
-                tables: vec![source.clone()],
-                part: DescribePart::Tables,
-            },
-        )
-        .await?,
-    )?;
-    Ok(!held.is_empty())
 }
 
 /// The tables `spec` names, checked as the reference checks a mapping of
@@ -893,7 +637,7 @@ pub(crate) async fn describe(
 
 /// The catalog's answers to `requests`, asked together in one step, in
 /// order.
-async fn describe_all<const N: usize>(
+pub(crate) async fn describe_all<const N: usize>(
     asker: &Asker,
     requests: [DataRequest; N],
 ) -> Result<[CatalogAnswer; N], CoreError> {
@@ -917,69 +661,15 @@ async fn describe_vec(
 
 /// The refusal of a catalog answer the data layer read as another part
 /// than the one asked for.
-fn another_part() -> CoreError {
+pub(crate) fn another_part() -> CoreError {
     internal("the data layer read another part of the catalog than was asked for")
 }
 
-fn table_names(answer: CatalogAnswer) -> Result<Vec<String>, CoreError> {
+pub(crate) fn table_names(answer: CatalogAnswer) -> Result<Vec<String>, CoreError> {
     match answer {
         CatalogAnswer::Tables(names) => Ok(names),
         _ => Err(another_part()),
     }
-}
-
-fn declared_columns(answer: CatalogAnswer) -> Result<Vec<CatalogColumn>, CoreError> {
-    match answer {
-        CatalogAnswer::Columns(columns) => Ok(columns),
-        _ => Err(another_part()),
-    }
-}
-
-fn declared_keys(answer: CatalogAnswer) -> Result<Vec<CatalogKey>, CoreError> {
-    match answer {
-        CatalogAnswer::Keys(keys) => Ok(keys),
-        _ => Err(another_part()),
-    }
-}
-
-/// `keys`, each one the catalog lists as an index by its name (SQLite's
-/// unique indexes) with its columns read by that name, one index after
-/// another in the catalog's order, as the reference reads each
-/// (`PRAGMA index_info`); the index is its table's schema's object, so its
-/// relation is `source`'s with the index's name last.
-async fn key_columns(
-    asker: &Asker,
-    source: &Relation,
-    keys: Vec<CatalogKey>,
-) -> Result<Vec<CatalogKey>, CoreError> {
-    let mut read = Vec::with_capacity(keys.len());
-    for mut key in keys {
-        if let Some(index) = &key.index {
-            let mut relation = source.clone();
-            if let Some(last) = relation.source.last_mut() {
-                last.clone_from(index);
-            }
-            let answer = describe(
-                asker,
-                DataRequest::Describe {
-                    tables: vec![relation],
-                    part: DescribePart::IndexColumns,
-                },
-            )
-            .await?;
-            let CatalogAnswer::IndexColumns(columns) = answer else {
-                return Err(another_part());
-            };
-            // An index over an expression names no column, and keys none
-            // the core can read.
-            match columns.into_iter().collect::<Option<Vec<String>>>() {
-                Some(columns) if !columns.is_empty() => key.columns = columns,
-                _ => key.kind = KeyKind::Other,
-            }
-        }
-        read.push(key);
-    }
-    Ok(read)
 }
 
 fn foreign_keys(answer: CatalogAnswer) -> Result<Vec<CatalogForeignKey>, CoreError> {
@@ -1099,7 +789,8 @@ mod tests {
     use arrow_schema::{DataType, Field, Schema, TimeUnit};
     use sdm_contract::ErrorCode;
 
-    use super::{ArrowData, check_ranges, falls_back};
+    use super::{ArrowData, check_ranges};
+    use crate::discover::falls_back;
 
     fn stamp() -> DataType {
         DataType::Timestamp(TimeUnit::Microsecond, None)

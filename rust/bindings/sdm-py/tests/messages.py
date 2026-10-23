@@ -197,6 +197,7 @@ RESULTS: dict[str, dict[str, Any]] = {
 
 #: A column's source facts as ``HeldColumn.source`` carries them (T3.16).
 SOURCE_FACTS: dict[str, Any] = {
+    'relation': {'source': ['users']},
     'dtype': 'string',
     'received': {'type': 'utf8'},
     'nullable': False,

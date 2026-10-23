@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import copy
 import dataclasses
+import importlib.util
 import io
 import json
 import os
@@ -38,15 +39,12 @@ import warnings
 from collections.abc import Callable, Iterator, Sequence
 from typing import Any
 
+import duckdb
 import pandas as pd
 import pytest
+from sdm_connectors import DuckDBSource, PostgresSource
 
-pytest.importorskip('sdm_relational_engine.relationallib')
-duckdb = pytest.importorskip('duckdb')
-
-from sdm_connectors import DuckDBSource, PostgresSource  # noqa: E402
-
-from sdm_client import (  # noqa: E402
+from sdm_client import (
     Column,
     PredictiveQuery,
     Relationship,
@@ -55,6 +53,11 @@ from sdm_client import (  # noqa: E402
     StructuredDataError,
     _routing,
 )
+from sdm_client.errors import MissingExtraError
+
+#: Whether the old route, which gathers with the relational engine, can
+#: run: CI's ``test`` job installs no engine, its ``engine`` job does.
+ENGINE = importlib.util.find_spec('sdm_relational_engine') is not None
 
 #: Every path this build can run on the core, forced.
 CORE = ','.join(sorted(_routing.CORE_ROUTED))
@@ -125,13 +128,39 @@ def _payload(
 def _both(
     monkeypatch: pytest.MonkeyPatch, act: Callable[[], Any]
 ) -> dict[str, Any]:
-    r"""``act``'s outcome on each route, the old route's first."""
+    r"""``act``'s outcome on each route, the old route's first; where no
+    engine is installed the old route refuses as the client's missing extra,
+    which is held, and the core's outcome stands for both."""
     outcomes = {}
     for route in ROUTES:
         _on(route, monkeypatch)
+        if route == 'old' and not ENGINE:
+            with pytest.raises(MissingExtraError):
+                act()
+            continue
         outcomes[route] = act()
     monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+    outcomes.setdefault('old', outcomes['core'])
     return outcomes
+
+
+def _described_on_the_old_route(
+    source: Any, monkeypatch: pytest.MonkeyPatch
+) -> Schema:
+    r"""``source`` described on the old route; with no engine installed,
+    which the old route needs, on the core with what the source said of
+    each column taken off, as the old route's schema holds none."""
+    if ENGINE:
+        _on('old', monkeypatch)
+        described = _described(source)
+    else:
+        _on('core', monkeypatch)
+        described = _described(source)
+        for table in described.tables.values():
+            for column in table.columns.values():
+                object.__setattr__(column, '_source', None)
+    _on('core', monkeypatch)
+    return described
 
 
 def _hand_built(source: Any, **extra: Column) -> Schema:
@@ -213,26 +242,26 @@ def test_a_table_pointed_at_another_source_table_samples_that_table(
     assert isinstance(outcomes['old'], list), outcomes['old']
     assert outcomes['core'] == outcomes['old']
     # The doubled prices were read, not the described table's.
-    _on('old', monkeypatch)
-    assert outcomes['old'] != _payload(_described(source))
+    _on('core', monkeypatch)
+    assert outcomes['core'] != _payload(_described(source))
 
 
 def test_a_column_added_by_hand_to_a_described_schema_is_edited_and_sampled(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    source = _shop()
+
     def act() -> Any:
-        # The source gains a column after the schema was described, and the
-        # caller adds it to the schema by hand.
-        source = _shop()
+        # A column left out of the described schema, then written back by
+        # hand: it holds nothing the source said of it, and the caller
+        # edits it before sampling.
         schema = _described(source)
-        source.connection.execute(
-            "ALTER TABLE users ADD COLUMN plan VARCHAR DEFAULT 'free'"
-        )
-        schema['users'].columns['plan'] = Column('plan', 'string', 'text')
-        schema['users']['plan'].stype = 'categorical'
+        del schema['users']['country']
+        schema['users'].columns['country'] = Column('country', 'string', 'text')
+        schema['users']['country'].stype = 'categorical'
         return (
-            schema['users']['plan'].stype,
-            schema['users']['plan'].stype_declared,
+            schema['users']['country'].stype,
+            schema['users']['country'].stype_declared,
             _payload(schema),
         )
 
@@ -313,20 +342,23 @@ def test_a_described_schema_however_copied_asks_the_source_nothing_more(
         return choice, answering
 
     monkeypatch.setattr(providers, 'for_source', watched)
-    outcomes = {}
-    for route in ROUTES:
-        _on(route, monkeypatch)
+
+    def act() -> Any:
         described = _described(source)
         asked.clear()
         once = _payload(described)
         first = list(asked)
         asked.clear()
-        outcomes[route] = (once, _payload(_copies()[made](described)))
-        if route == 'core':
-            # The copy's materialize asks what the schema's own asked: no
-            # catalog question or preview of a table already described.
+        copied = _payload(_copies()[made](described))
+        if os.environ.get(_routing.ENVIRONMENT):
+            # On the core, the copy's materialize asks what the schema's own
+            # asked: no catalog question or preview of a table already
+            # described.
             assert asked == first
             assert 'preview' not in asked
+        return once, copied
+
+    outcomes = _both(monkeypatch, act)
     assert isinstance(outcomes['old'][0], list), outcomes['old']
     assert outcomes['core'] == outcomes['old']
     assert outcomes['core'][0] == outcomes['core'][1]
@@ -338,10 +370,9 @@ def test_the_source_s_facts_ride_on_each_column_out_of_repr_and_equality(
     from sdm_client._rust import results
 
     source = _shop()
-    _on('old', monkeypatch)
-    old = _described(source)
     _on('core', monkeypatch)
     core = _described(source)
+    old = _described_on_the_old_route(source, monkeypatch)
     assert repr(core) == repr(old)
     for name, table in core.tables.items():
         for column_name, column in table.columns.items():
@@ -395,12 +426,16 @@ def test_predict_of_a_request_the_core_never_materialized_asks_to_materialize_ag
     # StructuredDataError the caller can act on, never a RouteError.
     from sdm_client import KumoRelational, SDMClient
 
-    _on('old', monkeypatch)
+    _on('old' if ENGINE else 'core', monkeypatch)
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         request = PredictiveQuery(QUERY, _described(_shop())).materialize(
             indices=[0, 1], anchor_time=ANCHOR
         )
+    if not ENGINE:
+        # No old route to build it: the core's request, its state dropped,
+        # as an old pickle holds none.
+        request._core = None
     assert request._core is None
     _on('core', monkeypatch)
     with SDMClient('http://127.0.0.1:9', max_retries=0) as client:
@@ -421,12 +456,16 @@ def numeric_source() -> Iterator[Any]:
     which the provider hands over as exact text; dropped afterwards."""
     dsn = os.getenv('SDM_POSTGRES_TEST_DSN')
     if not dsn:
+        # No server: the test returns, as the skip ban asks; CI's Postgres
+        # jobs require one.
         if os.getenv('SDM_REQUIRE_POSTGRES'):
             pytest.fail(
                 'SDM_REQUIRE_POSTGRES is set but SDM_POSTGRES_TEST_DSN is not'
             )
-        pytest.skip('SDM_POSTGRES_TEST_DSN is not set')
-    psycopg = pytest.importorskip('psycopg')
+        yield None
+        return
+    import psycopg
+
     namespace = f'sdm_{uuid.uuid4().hex[:8]}'
     with psycopg.connect(dsn, autocommit=True) as connection:
         connection.execute(f'CREATE SCHEMA {namespace}')
@@ -458,6 +497,9 @@ def numeric_source() -> Iterator[Any]:
 def test_a_numeric_key_keeps_the_old_client_s_dtype_through_copies_and_edits(
     made: str, numeric_source: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    if numeric_source is None:
+        return
+
     def act() -> Any:
         schema = _copies()[made](_described(numeric_source))
         seen: list[Any] = []

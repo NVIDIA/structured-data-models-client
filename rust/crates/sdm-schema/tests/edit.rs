@@ -7,13 +7,13 @@
 //! on a table in its source (`Column.__setattr__`,
 //! `_TableShape.__setattr__`, `SourceTable.__delitem__`,
 //! `Schema.__setattr__` and its list); each refusal seeded, so a core that
-//! took an edit the reference refuses fails here; and the reading of a
-//! schema as a host holds it (`read_held`), each change past the
-//! description refused by name, and a host's own fault refused.
+//! took an edit the reference refuses fails here; and a schema as a host
+//! holds it, with its facts, read as the description (T3.16).
+
+use std::collections::{BTreeMap, BTreeSet};
 
 use sdm_contract::ops::{
-    ColumnRef, DescribedColumn, DescribedTable, Dtype, Given, HeldColumn, HeldSchema, HeldTable,
-    SchemaEdit, SourceDescription, Stype,
+    ColumnRef, DescribedColumn, DescribedTable, Dtype, Given, SchemaEdit, SourceDescription, Stype,
 };
 use sdm_contract::{ColumnType, CoreError, Detail, ErrorCode, Scalar};
 use sdm_schema::edit::{self, Edited};
@@ -492,107 +492,17 @@ fn a_refused_edit_changes_nothing() {
     assert!(made(shop(), &bad).is_err());
 }
 
-fn held(description: &SourceDescription) -> HeldSchema {
-    HeldSchema {
-        tables: description
-            .tables
-            .iter()
-            .map(|t| HeldTable {
-                name: t.name.clone(),
-                source: t.source.clone(),
-                columns: t
-                    .columns
-                    .iter()
-                    .map(|c| HeldColumn {
-                        name: c.name.clone(),
-                        dtype: c.dtype.wire_name().to_owned(),
-                        stype: c.stype,
-                        stype_before_key: c.stype_before_key,
-                    })
-                    .collect(),
-                primary_key: t.primary_key.clone(),
-                time_column: t.time_column.clone(),
-            })
-            .collect(),
-        links: description.links.clone(),
-    }
-}
-
-fn edited_past(result: Result<SourceDescription, CoreError>) {
-    let error = result.expect_err("a schema changed past its description");
-    assert_eq!(error.code, ErrorCode::UnsupportedRequest);
-    assert_eq!(
-        error.fields.get("rule"),
-        Some(&Detail::text("schema_edited"))
-    );
-    assert_eq!(
-        error.fields.get("operation"),
-        Some(&Detail::text("materialize"))
-    );
-}
-
 #[test]
-fn a_schema_held_as_described_reads_as_the_description() {
+fn a_schema_held_with_its_facts_reads_as_the_description() {
+    // T3.16: the schema a host holds, each column with its facts, is the
+    // schema the edits work on, whatever the core answered of it before.
     let shop = shop();
-    assert_eq!(
-        edit::read_held(shop.clone(), Some(held(&shop)), "materialize").unwrap(),
-        shop
-    );
-    assert_eq!(
-        edit::read_held(shop.clone(), None, "materialize").unwrap(),
-        shop
-    );
-    // What the host holds is what is read: a meaning, a key, a time column,
-    // a column or table dropped from its dictionary, the links; what the
-    // source said of each column is the description's.
-    let mut mine = held(&shop);
-    mine.tables[0].columns[1].stype = Stype::Categorical;
-    mine.tables[0].columns.remove(4);
-    mine.tables[0].time_column = None;
-    mine.tables.remove(1);
-    mine.links.clear();
-    let read = edit::read_held(shop.clone(), Some(mine), "materialize").unwrap();
-    assert_eq!(read.tables.len(), 1);
-    assert_eq!(read.tables[0].columns.len(), 4);
-    assert_eq!(read.tables[0].columns[1].stype, Stype::Categorical);
-    assert_eq!(
-        read.tables[0].columns[1].received,
-        shop.tables[0].columns[1].received
-    );
-    assert_eq!(read.tables[0].time_column, None);
-    assert!(read.links.is_empty());
-}
-
-#[test]
-fn a_schema_changed_past_its_description_is_refused_by_name() {
-    let shop = shop();
-    let mut table_added = held(&shop);
-    table_added.tables.push(HeldTable {
-        name: "more".into(),
-        ..table_added.tables[0].clone()
-    });
-    let mut other_source = held(&shop);
-    other_source.tables[1].source = "other_orders".into();
-    let mut column_added = held(&shop);
-    column_added.tables[0].columns.push(HeldColumn {
-        name: "added".into(),
-        dtype: "int64".into(),
-        stype: Stype::Numerical,
-        stype_before_key: None,
-    });
-    let mut retyped = held(&shop);
-    retyped.tables[0].columns[1].dtype = "float64".into();
-    for changed in [table_added, other_source, column_added, retyped] {
-        edited_past(edit::read_held(shop.clone(), Some(changed), "materialize"));
+    let held = sdm_schema::held::held(&shop, &BTreeSet::new());
+    let read = sdm_schema::held::read(held, &BTreeMap::new(), false).unwrap();
+    assert!(read.unfacted.is_empty());
+    let mut expected = shop;
+    for table in &mut expected.tables {
+        table.time_column_inferred = None;
     }
-    // A table or column held twice is the host's fault.
-    let mut twice = held(&shop);
-    twice.tables.push(twice.tables[0].clone());
-    let error = edit::read_held(shop.clone(), Some(twice), "materialize").unwrap_err();
-    assert_eq!(error.code, ErrorCode::InvalidRequest);
-    let mut twice = held(&shop);
-    let again = twice.tables[0].columns[0].clone();
-    twice.tables[0].columns.push(again);
-    let error = edit::read_held(shop, Some(twice), "materialize").unwrap_err();
-    assert_eq!(error.code, ErrorCode::InvalidRequest);
+    assert_eq!(read.description, expected);
 }

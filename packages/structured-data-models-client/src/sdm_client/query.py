@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import dataclasses
 import re
+import warnings
 from collections.abc import Mapping, Sequence
 from numbers import Integral
 from typing import TYPE_CHECKING, Any, NoReturn
@@ -37,6 +38,7 @@ from typing import TYPE_CHECKING, Any, NoReturn
 import pandas as pd
 from predictive_query import RELATIONAL, TABULAR
 
+from sdm_client.core.warnings import SDMWarning
 from sdm_client.decompose import (
     FORECAST,
     RANKING,
@@ -61,7 +63,7 @@ from sdm_client.schema import Schema
 if TYPE_CHECKING:
     from predictive_query import Profile, ValidatedPredictiveQuery
 
-    from sdm_client._rust.materialize import CoreQuery
+    from sdm_client._rust.results import CoreParts, CoreQuery
 
 
 def _refuse_the_task(task: str, why: str) -> NoReturn:
@@ -79,7 +81,7 @@ def _refuse_the_task(task: str, why: str) -> NoReturn:
 def _alone(asked: Any) -> bool:
     r"""Whether ``asked`` is a query only the core resolves (KO2-36), read
     on the core route only, where the bridge is imported."""
-    from sdm_client._rust.materialize import CoreQuery
+    from sdm_client._rust.results import CoreQuery
 
     return isinstance(asked, CoreQuery)
 
@@ -537,16 +539,22 @@ class PredictiveQuery:
                 # no cause chained.
                 raise
             raise said from error
-        state = whole._core_state
-        if state.get('ranking') is not None:
-            assert given is not None
-            return self._kept_as_parts(whole, given, indices)
-        if state.get('forecast') is None:
+        parts = None if whole._core is None else whole._core.parts
+        if parts is None:
             return whole
-        return self._kept_as_steps(whole, Decomposition(FORECAST, ()), indices)
+        if parts.kind == 'ranking':
+            assert given is not None
+            return self._kept_as_parts(whole, parts, given, indices)
+        return self._kept_as_steps(
+            whole, parts, Decomposition(FORECAST, ()), indices
+        )
 
     def _kept_as_parts(
-        self, whole: Request, given: list[Any], indices: Sequence[Any]
+        self,
+        whole: Request,
+        parts: CoreParts,
+        given: list[Any],
+        indices: Sequence[Any],
     ) -> Request:
         r"""A ranking the core gathered as one question per candidate, kept
         together as :meth:`_in_parts` keeps the parts it gathers: one
@@ -554,17 +562,16 @@ class PredictiveQuery:
         about the candidate as the caller gave it."""
         import copy
 
-        state = whole._core_state
-        ranking = state['ranking']
+        from sdm_client._rust.results import CoreRanking, CoreRequest
+
+        version = whole._core.version
         gathered = []
         for position, named, payload, query in [
-            (
-                ranking['candidate'],
-                ranking['value'],
-                whole.payloads[0],
-                state['query'],
+            (parts.position, parts.name, whole.payloads[0], parts.query),
+            *(
+                (part.position, part.name, part.payload, part.query)
+                for part in parts.later
             ),
-            *ranking['parts'],
         ]:
             part = Request.materialized(
                 payloads=(payload,),
@@ -575,7 +582,7 @@ class PredictiveQuery:
                 entity_table=whole.entity_table,
                 requested_inference=whole.requested_inference,
             )
-            part._core_state = {'version': state['version']}
+            part._core = CoreRequest(version=version)
             gathered.append((part, query, position, named))
         carrier = copy.copy(gathered[0][0])
         carrier._parts = tuple(part for part, *_ in gathered)
@@ -584,35 +591,44 @@ class PredictiveQuery:
             tuple(
                 (query, given[position]) for _, query, position, _ in gathered
             ),
-            ranking.get('top_k'),
+            parts.top_k,
         )
         # What predict on the core reads of the ranking: how many candidates
         # a row keeps, and each question's candidate by its position among
         # those given and by its name in the result.
-        carrier._core_state = {
-            'version': state['version'],
-            'ranking': {
-                'top_k': ranking.get('top_k'),
-                'positions': [position for _, _, position, _ in gathered],
-                'values': [named for *_, named in gathered],
-            },
-        }
+        carrier._core = CoreRequest(
+            version=version,
+            ranking=CoreRanking(
+                top_k=parts.top_k,
+                positions=tuple(position for _, _, position, _ in gathered),
+                values=tuple(str(named) for *_, named in gathered),
+            ),
+        )
         carrier._asked = self.text
         return carrier
 
     def _kept_as_steps(
-        self, whole: Request, rewritten: Decomposition, indices: Sequence[Any]
+        self,
+        whole: Request,
+        parts: CoreParts,
+        rewritten: Decomposition,
+        indices: Sequence[Any],
     ) -> Request:
         r"""A forecast the core gathered in steps, kept together as
         :meth:`_in_parts` keeps the parts it gathers: one request per step,
         with the step's payload and query."""
         import copy
 
-        state = whole._core_state
+        from sdm_client._rust.results import CoreRequest
+
+        version = whole._core.version
         gathered = []
         for step, payload, query in [
-            (1, whole.payloads[0], state['query']),
-            *state.get('forecast', ()),
+            (parts.position, whole.payloads[0], parts.query),
+            *(
+                (part.position, part.payload, part.query)
+                for part in parts.later
+            ),
         ]:
             part = Request.materialized(
                 payloads=(payload,),
@@ -623,7 +639,7 @@ class PredictiveQuery:
                 entity_table=whole.entity_table,
                 requested_inference=whole.requested_inference,
             )
-            part._core_state = {'version': state['version']}
+            part._core = CoreRequest(version=version)
             gathered.append((part, query, step))
         carrier = copy.copy(gathered[0][0])
         carrier._parts = tuple(part for part, _, _ in gathered)
@@ -642,7 +658,7 @@ class PredictiveQuery:
         On the core route (S0, the private routing seam) the core decides
         validity (P2-MID2-1, design choice 9). A query it accepts that a
         relational materialize gathers on the core is the core's to resolve
-        as it gathers it: :class:`~sdm_client._rust.materialize.CoreQuery`,
+        as it gathers it: :class:`~sdm_client._rust.results.CoreQuery`,
         the text alone, so the old validator is never reached on the core
         route. Only where the old materializer gathers it is the accepted
         query resolved by the old validator, for that materializer, which
@@ -666,36 +682,49 @@ class PredictiveQuery:
             to_schema_definition,
         )
 
-        definition = to_schema_definition(self.schema)
         if core:
             from sdm_client._rust import s0
+            from sdm_client._rust.spec import query_schema
 
+            # The schema as the core reads it, written with no object of the
+            # old PQL package (T3.16, rule 11).
             accepted, messages, held, resolved = s0.validate(
-                self.text, definition, profile
+                self.text, query_schema(self.schema), profile
             )
             if not accepted:
                 raise self._refusal(messages, profile)
             if gathered_on_the_core:
                 from sdm_client._rust import errors
-                from sdm_client._rust.materialize import CoreQuery
+                from sdm_client._rust.results import CoreQuery
 
                 # No shadow check reads it to say its day-first literal, so
                 # the core's warning is shown.
                 errors.warn_held(held)
                 return CoreQuery(
-                    text=str((resolved or {}).get('text') or self.text),
-                    num_forecasts=(resolved or {}).get('num_forecasts'),
+                    text=str(
+                        (None if resolved is None else resolved.text)
+                        or self.text
+                    ),
+                    num_forecasts=(
+                        None if resolved is None else resolved.num_forecasts
+                    ),
                     refusal=None,
                 )
+            with warnings.catch_warnings():
+                # Said once, as the core's query schema was written.
+                warnings.simplefilter('ignore', SDMWarning)
+                definition = to_schema_definition(self.schema)
             return s0.shadow(self.text, definition, profile)
         from predictive_query import validate
+
+        definition = to_schema_definition(self.schema)
 
         old, response = validate(self.text, definition, profile)
         if old is not None and response.ok:
             return old
         reasons = [error.message for error in response.errors]
         if gathered_on_the_core and names_a_query_cannot_say(self.schema):
-            from sdm_client._rust.materialize import CoreQuery
+            from sdm_client._rust.results import CoreQuery
 
             return CoreQuery(
                 text=self.text,

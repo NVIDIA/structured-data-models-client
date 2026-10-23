@@ -320,6 +320,12 @@ class Request:
     # caller reads: `parts` and `asked` say what a caller needs to see.
     _decomposition: Decomposition | None = None
 
+    # What a request materialized on the core keeps for predict on the core
+    # (``sdm_client._rust.results.CoreRequest``, T3.16): ``None`` for one
+    # the core did not materialize, which predict on the core refuses by
+    # name, asking for it to be materialized again.
+    _core: Any = None
+
     def __init__(
         self,
         context: pd.DataFrame,

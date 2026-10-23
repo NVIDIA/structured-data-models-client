@@ -32,10 +32,10 @@ use duckdb::arrow::datatypes::{Field, Schema};
 use sdm_contract::data::{AttachmentId, Dialect, FetchPlan, KeySet, ProviderChoice, SqlParam};
 use sdm_contract::facts::PlatformFacts;
 use sdm_contract::ops::{
-    DescribeSource, Dtype, EditSchema, ForecastStep, GivenCandidate, Materialize, Operation,
-    OperationResult, Predict, ProfileSpec, QueryColumn, QuerySchema, QueryTable, Ranking,
-    RankingPart, RequestBatch, RequestState, SamplerState, Seed, SourceDescription, SourceSpec,
-    ValidateQuery,
+    DescribeSource, Dtype, EditSchema, ForecastStep, GivenCandidate, HeldSchema, Materialize,
+    Operation, OperationResult, Predict, ProfileSpec, QueryColumn, QuerySchema, QueryTable,
+    Ranking, RankingPart, RequestBatch, RequestState, SamplerState, Seed, SourceDescription,
+    SourceSpec, ValidateQuery,
 };
 use sdm_contract::run::{FetchOutcome, FetchReply, ModelOutcome, ModelReply, StartRun};
 use sdm_contract::{
@@ -84,10 +84,11 @@ pub struct Observed {
     /// What the DuckDB provider ran, and DuckDB's query log, for a case
     /// whose operations read data (the observation's `driver`, T1.11e).
     pub driver: Option<Value>,
-    /// What this host passed each `edit_schema` and `materialize`'s held
-    /// schema, in order (T1.24b), as the Python runner records them in
-    /// `core.edits`: apart from `inputs`, whose shape a gate's checkpoint
-    /// fixes, and written by no observation yet.
+    /// What this host passed each `edit_schema`, the schema as it held it
+    /// and the edit, in order (T1.24b; from T3.16 the schema alone), as the
+    /// Python runner records them in `core.edits`: apart from `inputs`,
+    /// whose shape a gate's checkpoint fixes, and written by no observation
+    /// yet.
     pub edits: Vec<Value>,
     /// What a failed `predict` had answered before it failed, as the core
     /// carried it on its error (`CoreError.answered`, T2.1g): the result's
@@ -1134,14 +1135,12 @@ fn edit_schema(
     log: &mut DriverLog,
 ) -> Result<std::result::Result<SourceDescription, Answer>> {
     // What this host sends, as it encodes it, is what it records.
-    let schema_bytes = serde_json::to_vec(schema)?;
     let held_bytes = serde_json::to_vec(&edits::held(schema))?;
     let edit_bytes = serde_json::to_vec(&edit.to_contract())?;
     observed.operations.push("edit_schema".into());
     observed.edits.push(json!({
         "op": "edit_schema",
-        "schema": serde_json::from_slice::<Value>(&schema_bytes)?,
-        "held": serde_json::from_slice::<Value>(&held_bytes)?,
+        "schema": serde_json::from_slice::<Value>(&held_bytes)?,
         "edit": serde_json::from_slice::<Value>(&edit_bytes)?,
     }));
     let start = ControlMessage::Start(Box::new(StartRun {
@@ -1149,15 +1148,13 @@ fn edit_schema(
         facts: facts()?,
         operation: Operation::EditSchema(EditSchema {
             schema: AttachmentId(1),
-            held: Some(AttachmentId(2)),
-            edit: AttachmentId(3),
+            edit: AttachmentId(2),
         }),
     }));
     let message = encode(&start).map_err(|_| anyhow!("{}: its start does not encode", case.id))?;
     let attachments = BTreeMap::from([
-        (AttachmentId(1), Attachment::Bytes(schema_bytes)),
-        (AttachmentId(2), Attachment::Bytes(held_bytes)),
-        (AttachmentId(3), Attachment::Bytes(edit_bytes)),
+        (AttachmentId(1), Attachment::Bytes(held_bytes)),
+        (AttachmentId(2), Attachment::Bytes(edit_bytes)),
     ]);
     let handle = match HostRun::start(&source.root(), &message, attachments) {
         Ok(handle) => handle,
@@ -1169,8 +1166,13 @@ fn edit_schema(
             let Ok(Some(Attachment::Bytes(bytes))) = handle.take_attachment(edited.schema) else {
                 bail!("{}: the schema edited is not attached", case.id);
             };
-            Ok(Ok(serde_json::from_slice(&bytes).map_err(|_| {
-                anyhow!("{}: the schema edited is not a SourceDescription", case.id)
+            let held: HeldSchema = serde_json::from_slice(&bytes)
+                .map_err(|_| anyhow!("{}: the schema edited is not a HeldSchema", case.id))?;
+            Ok(Ok(edits::described(&held).ok_or_else(|| {
+                anyhow!(
+                    "{}: the schema edited holds a column with no facts",
+                    case.id
+                )
             })?))
         }
         Ok(_) => bail!("{}: edit_schema answered another operation", case.id),
@@ -1533,8 +1535,7 @@ fn start_materialize(
     // What this host sends, as it encodes it, is what it records: the
     // description the core last answered, and the schema as this host
     // holds it (decision E67).
-    let schema_bytes = serde_json::to_vec(schema)?;
-    let held_bytes = serde_json::to_vec(&edits::held(schema))?;
+    let schema_bytes = serde_json::to_vec(&edits::held(schema))?;
     // Off DuckDB the call is the Python host's on the core route (T2.1d):
     // it sends the validated query as the PQL library writes it back
     // (`to_string()`), which `sdm-pql` writes the same way; a query it does
@@ -1647,10 +1648,6 @@ fn start_materialize(
         values_bytes.extend_from_slice(format!(r#","lag_timesteps":{sent}}}"#).as_bytes());
     }
     observed.operations.push("materialize".into());
-    observed.edits.push(json!({
-        "op": "materialize",
-        "held": serde_json::from_slice::<Value>(&held_bytes)?,
-    }));
     observed.inputs.push(json!({
         "op": "materialize",
         "provider": serde_json::to_value(&provider)?,
@@ -1666,7 +1663,6 @@ fn start_materialize(
         operation: as_op(Materialize {
             provider,
             schema: AttachmentId(1),
-            held: Some(AttachmentId(5)),
             query: AttachmentId(2),
             indices: Some(AttachmentId(3)),
             candidates: candidates.as_ref().map(|_| AttachmentId(7)),
@@ -1691,7 +1687,6 @@ fn start_materialize(
     let message = encode(&start).map_err(|_| anyhow!("{}: its start does not encode", case.id))?;
     let mut attachments = BTreeMap::from([
         (AttachmentId(1), Attachment::Bytes(schema_bytes)),
-        (AttachmentId(5), Attachment::Bytes(held_bytes)),
         (AttachmentId(2), Attachment::Bytes(query_bytes)),
         (AttachmentId(6), Attachment::Bytes(values_bytes)),
         (
