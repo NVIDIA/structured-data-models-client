@@ -128,7 +128,6 @@ fn held(description: &SourceDescription) -> HeldSchema {
                             unique: c.unique,
                             declared_type: c.declared_type.clone(),
                             exact_number: c.exact_number,
-                            namespace: None,
                         }),
                     })
                     .collect(),
@@ -138,6 +137,7 @@ fn held(description: &SourceDescription) -> HeldSchema {
             })
             .collect(),
         links: description.links.clone(),
+        read_under: Vec::new(),
     }
 }
 

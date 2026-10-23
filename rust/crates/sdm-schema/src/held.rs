@@ -110,7 +110,6 @@ pub fn by_data_type(relation: &Relation, dtype: &str) -> SourceFacts {
         unique: false,
         declared_type: None,
         exact_number: None,
-        namespace: None,
     }
 }
 
@@ -197,8 +196,6 @@ pub fn read(
     let mut types = crate::assemble::HostTypes::default();
     let links = held.links;
     let mut names = BTreeSet::new();
-    // The namespace the host's facts were read under (`SourceFacts::namespace`).
-    let mut namespace = None;
     for table in held.tables {
         if !names.insert(table.name.clone()) {
             return Err(invalid(
@@ -232,9 +229,6 @@ pub fn read(
                     None => continue,
                 },
             };
-            if namespace.is_none() {
-                namespace = facts.namespace.clone();
-            }
             // The host's name of the type, which a join reads; but for a
             // column of exact numbers, whose type its role decides (T2.21).
             if facts.exact_number.is_none() {
@@ -273,7 +267,7 @@ pub fn read(
         description: SourceDescription {
             tables,
             links,
-            namespace,
+            namespace: None,
         },
         unfacted,
         retyped,
@@ -301,13 +295,7 @@ pub fn held(
                 columns: table
                     .columns
                     .iter()
-                    .map(|column| {
-                        let mut held = held_column(table, column, unfacted, retyped);
-                        if let Some(facts) = &mut held.source {
-                            facts.namespace = description.namespace.clone();
-                        }
-                        held
-                    })
+                    .map(|column| held_column(table, column, unfacted, retyped))
                     .collect(),
                 primary_key: table.primary_key.clone(),
                 time_column: table.time_column.clone(),
@@ -315,6 +303,7 @@ pub fn held(
             })
             .collect(),
         links: description.links.clone(),
+        read_under: Vec::new(),
     }
 }
 
@@ -354,6 +343,5 @@ pub fn facts_of(relation: &Relation, column: &DescribedColumn) -> SourceFacts {
         unique: column.unique,
         declared_type: column.declared_type.clone(),
         exact_number: column.exact_number,
-        namespace: None,
     }
 }

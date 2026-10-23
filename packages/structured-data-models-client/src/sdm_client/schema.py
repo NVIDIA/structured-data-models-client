@@ -896,14 +896,14 @@ class Schema:
         self._tables = {
             name: _copy_table(table) for name, table in tables.items()
         }
-        # A schema built anew reads where its tables are from its source and
-        # session, as the old route reads a new schema's tables afresh: the
-        # namespace a description was read under is not carried over (T3.4).
-        _forget_namespaces(self._tables)
         self.relationships = relationships
         # The engine's own reading of the source's tables, kept so that each
         # question does not read them again. Set by the first read.
         self._engine_tables: Any = None
+        # Where the core read each source table this schema described, by
+        # source name (the contract's `HeldSchema.read_under`), as the
+        # engine's reading is kept: a schema built anew has read none.
+        self._read_under: dict[str, tuple[str, ...]] = {}
         self._conversion_notes: tuple[str, ...] = ()
 
     @property
@@ -997,6 +997,7 @@ class Schema:
             {
                 '_source': None,
                 '_engine_tables': None,
+                '_read_under': {},
                 '_conversion_notes': (),
                 # The core's description of the source an earlier client
                 # kept beside the schema (to T3.16): its columns now carry
@@ -1059,10 +1060,9 @@ class Schema:
             source=self._source,
         )
         # What the engine read of the source is shared, not copied: it is what
-        # the tables are, and every gather is given its own copy of it; and so
-        # is where the core read them (T3.4).
+        # the tables are, and every gather is given its own copy of it.
         copied._engine_tables = self._engine_tables
-        _keep_namespaces(copied._tables, self._tables)
+        copied._read_under = dict(self._read_under)
         copied._conversion_notes = self._conversion_notes
         return copied
 
@@ -2108,30 +2108,6 @@ def _copy_table(table: _T) -> _T:
     for column in copied.columns.values():
         object.__setattr__(column, '_table', copied)
     return copied
-
-
-def _forget_namespaces(tables: Mapping[str, Any]) -> None:
-    r"""Each column of ``tables`` with what the source said of it but the
-    namespace it was read under (``SourceFacts.namespace``), which only the
-    schema that read it keeps."""
-    for table in tables.values():
-        for column in table.columns.values():
-            facts = getattr(column, '_source', None)
-            if facts is not None and facts.namespace is not None:
-                object.__setattr__(
-                    column, '_source', replace(facts, namespace=None)
-                )
-
-
-def _keep_namespaces(
-    tables: Mapping[str, Any], read: Mapping[str, Any]
-) -> None:
-    r"""Each column of ``tables`` with the facts its column of ``read``
-    holds, the namespace it was read under included."""
-    for name, table in tables.items():
-        for column_name, column in table.columns.items():
-            facts = getattr(read[name].columns[column_name], '_source', None)
-            object.__setattr__(column, '_source', facts)
 
 
 def _copy_column(column: Column) -> Column:

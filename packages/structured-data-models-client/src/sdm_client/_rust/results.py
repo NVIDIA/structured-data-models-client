@@ -95,10 +95,6 @@ def _list(value: Any, where: str) -> list[Any]:
     return value
 
 
-def _parts(value: Any, where: str) -> tuple[str, ...]:
-    return tuple(_text(part, where) for part in _list(value, where))
-
-
 # --- What the source said of a column ------------------------------------------
 
 
@@ -121,10 +117,6 @@ class SourceFacts:
     unique: bool
     declared_type: str | None = None
     exact_number: str | None = None
-    #: The namespace the relation was read under, where the core read the
-    #: parts the source left to the connection (T3.4): materialize reads
-    #: the same tables under it.
-    namespace: tuple[str, ...] | None = None
 
     @classmethod
     def from_contract(cls, value: Any) -> SourceFacts:
@@ -133,7 +125,7 @@ class SourceFacts:
             value,
             "a column's source facts",
             ('relation', 'dtype', 'received', 'nullable', 'unique'),
-            ('declared_type', 'exact_number', 'namespace'),
+            ('declared_type', 'exact_number'),
         )
         return cls(
             relation=read['relation'],
@@ -143,23 +135,17 @@ class SourceFacts:
             unique=_flag(read['unique'], 'unique'),
             declared_type=_maybe(read['declared_type'], _text, 'declared_type'),
             exact_number=_maybe(read['exact_number'], _text, 'exact_number'),
-            namespace=_maybe(read['namespace'], _parts, 'namespace'),
         )
 
     @classmethod
     def of_described(
-        cls,
-        column: Mapping[str, Any],
-        relation: Any,
-        namespace: Any = None,
+        cls, column: Mapping[str, Any], relation: Any
     ) -> SourceFacts:
         r"""The facts of a column of the contract's ``SourceDescription``,
-        of a table read from ``relation``, under the description's
-        ``namespace`` where it names one."""
+        of a table read from ``relation``."""
         return cls.from_contract(
             {
                 'relation': relation,
-                **({} if namespace is None else {'namespace': namespace}),
                 **{
                     key: column[key]
                     for key in (
@@ -189,8 +175,6 @@ class SourceFacts:
             written['declared_type'] = self.declared_type
         if self.exact_number is not None:
             written['exact_number'] = self.exact_number
-        if self.namespace is not None:
-            written['namespace'] = list(self.namespace)
         return written
 
 
