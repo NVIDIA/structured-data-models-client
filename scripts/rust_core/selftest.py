@@ -2390,6 +2390,7 @@ def scan_cases(results: list[Result]) -> None:
 
     def jni(root: Path, text: str) -> None:
         source = root / 'rust/bindings/sdm-jni/src'
+        # The binding exists from T3.11: its root is replaced in the copy.
         source.mkdir(parents=True, exist_ok=True)
         (source / 'lib.rs').write_text(text)
 
