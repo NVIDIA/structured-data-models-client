@@ -159,6 +159,7 @@ impl SqlDialect for Sqlite {
     /// What a SQLite source answers through this layer.
     fn capabilities(&self) -> ProviderCapabilities {
         ProviderCapabilities {
+            opaque_vendor: None, reads_nan_as_missing: false,
             derived_relations: false, neighbor_lookback: false, sample_rows: false,
             optional: sql::rendered(),
             max_keys_per_request: None,
@@ -180,6 +181,10 @@ impl SqlDialect for Sqlite {
             index_advice: Some(IndexAdvice::LeadingColumn),
             // Every optional request is rendered: none falls back.
             fallback: None,
+            // A time is stored as text, compared as stored (`_time_spelling`).
+            compares_stored_times: true,
+            // The seeded draw hashes an integer key ([`draw_order`]).
+            samples_by_key_dtype: true,
         }
     }
 
@@ -349,16 +354,7 @@ impl SqlDialect for Sqlite {
         read(request, part, batches)
     }
 
-    /// SQLite stores a time as the text it was written as, compared as the
-    /// reference compares it ([`SEED_STORED_TIME`]).
-    fn compares_stored_times(&self) -> bool {
-        true
-    }
 
-    /// The seeded draw hashes an integer key ([`draw_order`]).
-    fn samples_by_key_dtype(&self) -> bool {
-        true
-    }
 }
 
 /// The schema SQLite's answer to `request` has: the key counts' four
