@@ -374,8 +374,7 @@ pub(crate) fn from(
     // a read of the source with the relation's columns or filter dropped.
     dialect.derived(relation, &source).ok_or_else(|| {
         CoreError::new(
-            ErrorKind::Internal,
-            ErrorCode::InternalError,
+            Sentence::Internal,
             "a dialect declaring derived relations rendered none",
         )
         .with_field("request", Detail::text(request.name()))

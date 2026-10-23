@@ -478,12 +478,7 @@ pub(crate) fn materialize(
                         }
                         Ok(result)
                     }
-                    Err(mut failed) => {
-                        if !first_read.is_empty() {
-                            failed.read_under = Some(Box::new(first_read));
-                        }
-                        Err(failed)
-                    }
+                    Err(failed) => Err(failed),
                 }
             }))
         }
