@@ -54,9 +54,11 @@ qualified in the test schema (``<database>.<schema>.<object>``; Postgres
 ``<schema>.<object>``):
 
 - ``CREATE [OR REPLACE] TABLE <t> (<columns>)`` (Databricks: then
-  ``TBLPROPERTIES ('...' = '...')``), every ``REFERENCES`` in the test
-  schema, no write verb, ``AS``, ``DEFAULT``, ``CASCADE``, ``LOCATION``,
-  ``OPTIONS`` or ``USING`` among the columns;
+  ``TBLPROPERTIES ('...' = '...')``): each column ``<name> <type> [NOT
+  NULL]`` of a built-in type the loader writes (:data:`TYPES`; on Postgres
+  also a composite type in the test schema), or a key constraint whose
+  ``REFERENCES`` is in the test schema; nothing else (no ``LIKE``,
+  ``CHECK``, ``DEFAULT``, generated column, domain or other schema's type);
 - ``INSERT INTO <t> [(<names>)] VALUES | SELECT ...``, holding nothing a
   read may not;
 - ``DROP TABLE | VIEW [IF EXISTS] <t>``, Snowflake's ``DROP SEMANTIC VIEW``
@@ -267,15 +269,58 @@ SESSION_PARAMETERS = frozenset(
 )
 
 
-def _referenced(items: list[Token], at: int) -> bool:
-    r"""Whether the name ending at ``at`` is a ``REFERENCES`` target, the
-    ``(`` after it its columns."""
-    i = at
-    while (
-        i > 1 and items[i - 1] == _DOT and items[i - 2].kind in ('word', 'name')
+#: The column types the loader writes, by dialect: a closed list of
+#: built-in types (a qualified or unknown name may be a domain, whose
+#: checks can call anything).
+TYPES = {
+    'snowflake': frozenset(
+        {
+            'ARRAY', 'BINARY', 'BOOLEAN', 'DATE', 'FLOAT', 'NUMBER', 'OBJECT',
+            'TIME', 'TIMESTAMP_LTZ', 'TIMESTAMP_NTZ', 'VARCHAR', 'VARIANT',
+            'NOT', 'NULL',
+        }
+    ),
+    'databricks': frozenset(
+        {
+            'ARRAY', 'BIGINT', 'BINARY', 'BOOLEAN', 'DATE', 'DECIMAL',
+            'DOUBLE', 'FLOAT', 'INT', 'MAP', 'SMALLINT', 'STRING', 'STRUCT',
+            'TIMESTAMP', 'TIMESTAMP_NTZ', 'TINYINT', 'NOT', 'NULL',
+        }
+    ),
+    'postgres': frozenset(
+        {
+            'BIGINT', 'BOOLEAN', 'BYTEA', 'DATE', 'DOUBLE', 'INTEGER',
+            'INTERVAL', 'JSONB', 'NUMERIC', 'PRECISION', 'REAL', 'SMALLINT',
+            'TEXT', 'TIME', 'TIMESTAMP', 'WITH', 'WITHOUT', 'ZONE', 'NOT',
+            'NULL',
+        }
+    ),
+}  # fmt: skip
+#: The words a table's key constraint starts with.
+KEY_WORDS = frozenset({'CONSTRAINT', 'PRIMARY', 'UNIQUE', 'FOREIGN'})
+
+
+def _split(items: list[Token]) -> list[list[Token]]:
+    r"""``items`` split at their top-level commas."""
+    parts: list[list[Token]] = [[]]
+    depth = 0
+    for token in items:
+        if token in (_OPEN, Token('punct', '<')):
+            depth += 1
+        elif token in (_CLOSE, Token('punct', '>')):
+            depth -= 1
+        if token == _COMMA and depth == 0:
+            parts.append([])
+        else:
+            parts[-1].append(token)
+    return parts
+
+
+def _names(items: list[Token], what: str) -> None:
+    if not items or any(
+        t.kind not in ('word', 'name') and t != _COMMA for t in items
     ):
-        i -= 2
-    return i > 0 and _upper(items[i - 1]) == 'REFERENCES'
+        raise WriteRefused(f'{what}: a column list that is not names')
 
 
 def _names_only(items: list[Token], at: int) -> bool:
@@ -449,9 +494,16 @@ class WriteGuard:
     ) -> None:
         r"""Refuses ``items`` holding one of ``words`` or a sequence's
         word, or calling anything but :data:`FUNCTIONS` by a plain name."""
+        # The word each open parenthesis follows, innermost last: inside a
+        # cast, AS names a type, never an alias.
+        openers: list[str] = []
         for i, token in enumerate(items):
             word = _upper(token)
             call = items[i + 1 : i + 2] == [_OPEN]
+            if token == _OPEN:
+                openers.append(_upper(items[i - 1]) if i else '')
+            elif token == _CLOSE and openers:
+                openers.pop()
             if word in words and not call:
                 raise WriteRefused(f'{what}: {word} where no write may be')
             if word in SEQUENCE_WORDS:
@@ -463,10 +515,12 @@ class WriteGuard:
             ):
                 continue
             before = items[i - 1] if i else None
-            if _referenced(items, i) or (
-                _upper(before) == 'AS' and _names_only(items, i + 1)
+            if (
+                _upper(before) == 'AS'
+                and openers[-1:] not in (['CAST'], ['TRY_CAST'])
+                and _names_only(items, i + 1)
             ):
-                continue  # REFERENCES <t> (<columns>), or AS <alias> (<columns>)
+                continue  # AS <alias> (<columns>)
             if before == _DOT and (
                 self.dialect == 'postgres'
                 and i > 1
@@ -565,11 +619,7 @@ class WriteGuard:
         replace = s.accept('OR', 'REPLACE')
         if s.accept('TABLE'):
             self._target(s)
-            columns = s.group()
-            self._held(columns, COLUMN_WORDS, s.what)
-            for i, token in enumerate(columns):
-                if _upper(token) == 'REFERENCES':
-                    self._target(_Statement(columns[i + 1 :], s.what))
+            self._columns(s.group(), s.what, constraints=True)
             if self.dialect == 'databricks' and s.accept('TBLPROPERTIES'):
                 properties = s.group()
                 if any(t.kind not in ('string', 'punct') for t in properties):
@@ -586,10 +636,73 @@ class WriteGuard:
         elif self.dialect == 'postgres' and not replace and s.accept('TYPE'):
             self._target(s)
             s.expect('AS')
-            self._held(s.group(), COLUMN_WORDS, s.what)
+            self._columns(s.group(), s.what, constraints=False)
             s.end()
         else:
             s.refuse('an object the guard does not create')
+
+    def _columns(
+        self, items: list[Token], what: str, constraints: bool
+    ) -> None:
+        r"""A table's (or composite type's) columns, each ``<name> <type>
+        [NOT NULL]`` with a built-in type of :data:`TYPES` (on Postgres
+        also a composite type in the test schema), or, in a table, a key
+        constraint (``[CONSTRAINT <name>] PRIMARY KEY | UNIQUE (<names>)``,
+        ``FOREIGN KEY (<names>) REFERENCES <t> (<names>)``, ``<t>`` in the
+        test schema): nothing taken from another object (``LIKE``), and
+        nothing a write could call (a domain's or user type's checks)."""
+        for column in _split(items):
+            if not column:
+                raise WriteRefused(f'{what}: an empty column')
+            if constraints and _upper(column[0]) in KEY_WORDS:
+                self._constraint(column, what)
+                continue
+            if column[0].kind not in ('word', 'name'):
+                raise WriteRefused(f'{what}: a column with no name')
+            self._type(column[1:], what)
+
+    def _type(self, items: list[Token], what: str) -> None:
+        i = 0
+        while i < len(items):
+            token = items[i]
+            word = _upper(token)
+            if token.kind == 'word' and word in TYPES[self.dialect]:
+                i += 1
+            elif token.kind == 'number' or (
+                token.kind == 'punct' and token.text in '()<>[],'
+            ):
+                i += 1
+            elif (
+                token.kind == 'name'
+                and self.dialect == 'databricks'
+                and items[i + 1 : i + 2] == [Token('punct', ':')]
+            ):
+                i += 2  # a struct's field
+            elif self.dialect == 'postgres' and token.kind in ('word', 'name'):
+                inner = _Statement(items[i:], what)
+                self._target(inner)  # a composite type in the test schema
+                i += inner.at
+            else:
+                raise WriteRefused(
+                    f'{what}: a column type the guard does not admit'
+                )
+
+    def _constraint(self, items: list[Token], what: str) -> None:
+        s = _Statement(items, what)
+        if s.accept('CONSTRAINT'):
+            if s.peek() is None or s.peek().kind not in ('word', 'name'):  # type: ignore[union-attr]
+                s.refuse('a constraint with no name')
+            s.at += 1
+        if s.accept('PRIMARY', 'KEY') or s.accept('UNIQUE'):
+            _names(s.group(), what)
+        elif s.accept('FOREIGN', 'KEY'):
+            _names(s.group(), what)
+            s.expect('REFERENCES')
+            self._target(s)
+            _names(s.group(), what)
+        else:
+            s.refuse('a constraint the guard does not admit')
+        s.end()
 
     def _drop(self, s: _Statement) -> None:
         if not (
@@ -754,7 +867,9 @@ SPARK_CONNECT = (
 )
 #: The keyword each driver names its statement by, when it is not given
 #: first.
-_STATEMENT_KEYWORDS = ('command', 'operation', 'query', 'sqlQuery', 'statement')
+_STATEMENT_KEYWORDS = (
+    'command', 'operation', 'query', 'sqlQuery', 'statement', 'sql',
+)  # fmt: skip
 #: The keywords Spark's ``sql`` may be given: its bound ``args``; any other
 #: is formatted into the text after the guard reads it.
 _SPARK_KEYWORDS = frozenset({'sqlQuery', 'args'})
