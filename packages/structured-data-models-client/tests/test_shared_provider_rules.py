@@ -51,3 +51,22 @@ def test_a_key_set_not_handed_over_is_refused_by_name() -> None:
     assert shared.key_set(param, {3: object()}) == 3
     with pytest.raises(shared.PlanNotRun, match='scalar'):
         shared.key_set({'param': 'value', 'value': {}}, {})
+
+
+def test_a_key_set_name_binds_one_key_set_however_often_it_is_named() -> None:
+    r"""The relation each key set is bound under, one rule for every
+    provider binding key sets by name (round 2's Codex P1-3)."""
+
+    def param(attachment: int) -> dict[str, Any]:
+        return {
+            'param': 'key_set',
+            'keys': {'attachment': attachment},
+            'relation': 'keys',
+        }
+
+    keys = {1: object(), 2: object()}
+    same = [{'params': [param(1)]}, {'params': [param(1)]}]
+    assert shared.bound_relations(same, keys) == {'keys': 1}
+    two = [{'params': [param(1)]}, {'params': [param(2)]}]
+    with pytest.raises(shared.PlanNotRun, match='two key sets to one name'):
+        shared.bound_relations(two, keys)
