@@ -348,11 +348,6 @@ class Gathered:
 
     state: GatheredState
     query: QueryFacts | None
-    #: Where the run read each table the schema had not read, by source
-    #: name (the contract's ``Materialized.read_under``, T3.4).
-    read_under: dict[str, tuple[str, ...]] = dataclasses.field(
-        default_factory=dict
-    )
 
 
 def read_under(value: Any) -> dict[str, tuple[str, ...]]:
@@ -499,18 +494,13 @@ _RESULTS: dict[str, tuple[tuple[str, ...], tuple[str, ...], Any]] = {
     'edit_schema': (('schema',), ('declared',), _edited),
     'materialize': (
         ('state',),
-        ('query', 'read_under'),
+        ('query',),
         lambda read: Gathered(
             state=_state(read['state']),
             query=(
                 None
                 if read['query'] is None
                 else QueryFacts.from_contract(read['query'])
-            ),
-            read_under=(
-                {}
-                if read['read_under'] is None
-                else read_under(read['read_under'])
             ),
         ),
     ),
