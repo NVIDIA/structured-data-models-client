@@ -5,7 +5,8 @@ Lane H, stack 1. Brief: the orchestrator's `phase-3/briefs/T3.3.md`; design row 
 ## Order of work
 
 1. The warehouse loader and the capture writer, for the review round before C-1 (this section's first push).
-2. The stand-in (`sdm-testkit`'s `src/standin.rs`, its capture reader, the `sdm-standin` binary, `contract/runners/standin_client.py`), `handoff.py`'s warehouse legs, the C-1 and E-0 job templates, the per-leg CI jobs and the carried CI rows.
+2. The C-1 and E-0 job templates, the live write guard and the carried CI rows.
+   The offline stand-in, its binary, its client, `handoff.py`'s warehouse legs on it and the per-leg CI jobs were built in rounds 1 to 3 and dropped in fix round 3 (owner decision B-lite, below).
 3. C-1's captures, committed under the protected-path trailer when the orchestrator hands them over.
 
 ## The loader (`contract/runners/databases.py`)
@@ -29,22 +30,22 @@ Lane H, stack 1. Brief: the orchestrator's `phase-3/briefs/T3.3.md`; design row 
 
 ## Probes before the first push
 
-- The loader over every case of `contract/cases`: each case's tables are written for both engines or refused by name (`test_every_s1_case_is_written_or_named_on_each_warehouse`, and the test author's), and every statement passes the live write guard's check offline (run once from the guard outside the repository).
+- The loader over every case of `contract/cases`: each case's tables are written for both engines or refused by name (`test_every_s1_case_is_written_or_named_on_each_warehouse`, and the test author's), and every statement passes the live write guard's check (`tests/test_t33_write_guard.py` runs the loader's statements through it).
 - Outside JSON: a capture nested 100,000 levels is refused by name (`not a capture (RecursionError)`); an object 200,000 keys wide reads; a reference line nested past Python's recursion is refused by name at write time.
 - The private-name check, seeded: a name left in the reference line, a cell, a field name, a statement, a binary cell, a URL's host and a token each fail the write with no file written (`contract/tests/test_captures.py`).
 
-## The stand-in, the harness and the carried rows
+## The live runs, the guard and the carried rows
 
-- The stand-in (`sdm-testkit`'s `standin.rs`, `sdm-standin`, `standin_client.py`): exact replay, then the DuckDB local engine with the capture's NULL order and zone, a draw served only as recorded, a missing table or draw refused by name, B1, B2 and B4; `standin_client.open` gives `run_python.py` the forwarding provider `provider(step, keys)`, and serves Lakebase on the local Postgres, the case's tables loaded under the capture's `{schema}`.
-- `handoff.py` reads each case's legs as `run_python.py` does: an S2 case never runs on DuckDB, SQLite or Postgres; each touched case's warehouse legs run on python-core offline where the core reports the leg's provider, held to the capture's reference line (Lakebase's to the Postgres line until its capture exists); a leg with no reference is named pending live.
-  Exit 5's test (a difference on Lakebase alone stops the stamp) passes once the core reports a Lakebase provider (T3.7); until then the leg is named, not judged.
 - `sdm-contract-run` reads the cases of the database it runs on (`case::load_for`): a warehouse-only case never runs on DuckDB.
-- The per-leg CI jobs, `contract-python (ref-pandas3, <leg>)` and `cross-host (<leg>)`, judge the cases with a reference on the leg where the core or rust-host reports its provider, and list the rest.
 - C-1 and E-0: `scripts/live/capture_run.py` (`plan`, the dry mode; `run`), `capture.job.template.json` and its notebook `capture_job.py` for the Spark and Lakebase legs; the two Databricks legs run one after the other.
+  The recording's lines become captures (`captures.py import`), against which the core's SQL is compared with the old client's recorded SQL.
+- The live write guard, `scripts/live/write_guard.py` (KO3-51), rewritten in the repository from the owner-approved spec after the copy outside it was lost: every live write, DDL included, goes only to the one test schema of its warehouse, fully qualified; reads pass; anything not recognised is refused.
+  The test schema comes from `SDM_LIVE_<DIALECT>_TEST_DATABASE` and `SDM_LIVE_<DIALECT>_TEST_SCHEMA`, else `SDM_LIVE_TEST_DATABASE` and `SDM_LIVE_TEST_SCHEMA`; no resource name is in the repository.
+  Difference from the spec, named: on Snowflake `CALL SYSTEM$CREATE_SEMANTIC_VIEW_FROM_YAML('<test schema>', ...)` is allowed (the loader creates a semantic view that way, in the schema the call names); every other CALL is refused.
+  `capture_run.py` loads it from beside itself, never from a path given at run time; a run without it, or without a test schema, does not start.
 - Carried rows closed: P2-T2.7-1 (`layer.rs`), P2-T2.7-2 (`memory.rs`), P2-T2.14c-1, P2-T2.1a-3, P2-T2.16a-1, P2-T2.11-4, C28, OF-7's predicate, M5, C16's rest, P2-T2.16-14 and P2-T2.1o-1 (the slowest job is now `tooling`, about 43 minutes; `test`, `contract-python-ref-pandas3` and `engine` back at 60).
   ENV-2: `test_contract_loader.py`'s Postgres statement-capture tests pass in lane H's environment; closed.
   ENV-3: the prepush replay self-test passed on each of this package's pushes; closed.
-- `handoff.py` builds the previous round's Rust tests in a target directory of their own: built into the caller's, their artifacts were newer than the candidate's sources and the next build took them as fresh.
 
 ## Fix round 1 (reviews of 5bfb59e2)
 
@@ -59,7 +60,6 @@ From here the package is stacked on T3.2's candidate, on `rust-core-phase-3-topi
 
 ## Fix round 3 (reviews of e8cdee80)
 
-The stand-in serves a draw only for the request's own seed, and a recorded view read by exact replay.
+Owner decision B-lite: the offline stand-in is dropped (`standin.rs`, its capture reader, `sdm-standin`, `standin_client.py`, the `standin-binary` and per-leg CI jobs, `handoff.py`'s warehouse legs on it); the C-1 recording and the comparison of the core's SQL with the old client's recorded SQL stay.
 A Snowflake semantic-view case keeps its table names, its columns created upper-cased and its YAML's base tables quoted, so the recording's read-back resolves.
-C-1 and E-0 run the recording in process with every write through the live write guard, refused outside the one test schema; the jobs run the reference checkout's client and read their environment file.
-The guard module itself was at `/mnt/localssd/tmp/live-setup/write_guard.py`, which is gone from this machine: C-1 needs it restored (T3.7 brings it into the repository).
+C-1 and E-0 run the recording in process with every write through the repository's live write guard, refused outside the one test schema before the driver sees it; the jobs run the reference checkout's client, set `SDM_LIVE_CONFIG`, `SDM_CAPTURE_*` and the test schema from their parameters, and the Spark leg reads the notebook's session.
