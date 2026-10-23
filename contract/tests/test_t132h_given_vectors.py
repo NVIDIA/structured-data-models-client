@@ -598,7 +598,7 @@ def test_a_start_speaking_contract_22_is_refused_before_a_run_exists(
             {
                 'message': 'start',
                 'contract': 22,
-                'facts': facts.host_facts(core.is_posix_zone),
+                'facts': facts.host_facts(core),
                 'operation': {
                     'op': 'describe_source',
                     'provider': RECORDED['provider'],

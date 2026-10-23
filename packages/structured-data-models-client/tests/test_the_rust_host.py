@@ -226,7 +226,7 @@ def test_the_local_zone_is_named_only_as_the_host_reads_it(
 ) -> None:
     for setting, expected in TZ_SETTINGS:
         monkeypatch.setenv('TZ', setting)
-        assert facts.local_zone([], _native.is_posix_zone) == expected, setting
+        assert facts.local_zone([], _native) == expected, setting
     # An IANA name a root holds, with or without the leading colon, wins
     # over the POSIX reading (EST5EDT is both).
     (tmp_path / 'Europe').mkdir()
@@ -239,7 +239,7 @@ def test_the_local_zone_is_named_only_as_the_host_reads_it(
         ('EST5EDT', 'EST5EDT'),
     ]:
         monkeypatch.setenv('TZ', setting)
-        assert facts.local_zone(roots, _native.is_posix_zone) == {'iana': name}
+        assert facts.local_zone(roots, _native) == {'iana': name}
 
 
 @pytest.mark.parametrize(('setting', 'expected'), TZ_SETTINGS)
@@ -254,8 +254,8 @@ def test_no_tz_setting_refuses_a_run_and_a_valid_one_keeps_its_zone(
     sent: list[Any] = []
     real = facts.host_facts
 
-    def spy(is_posix: Any) -> dict[str, Any]:
-        built = real(is_posix)
+    def spy(native: Any) -> dict[str, Any]:
+        built = real(native)
         sent.append(built['local_zone'])
         return built
 
@@ -284,7 +284,7 @@ def test_the_platform_s_year_padding_is_read_from_strftime() -> None:
         datetime.date(1, 1, 1).strftime('%Y') == '0001'
     )
     assert platform['os'] in ('linux', 'darwin', 'windows')
-    now = facts.host_facts(_native.is_posix_zone)['now']
+    now = facts.host_facts(_native)['now']
     assert (now['t'], now['unit'], now['zone']) == ('ts', 'us', 'UTC')
 
 
@@ -307,7 +307,7 @@ def test_the_date_literal_range_is_pandas_own_where_pandas_bounds_it(
     # pandas 3 holds year 1, and the host declares none.
     import pandas
 
-    built = facts.host_facts(_native.is_posix_zone)
+    built = facts.host_facts(_native)
     declared = built.get('date_literal_range')
     if _pandas_holds_year_1():
         assert declared is None, declared
@@ -325,8 +325,8 @@ def test_the_date_literal_range_is_pandas_own_where_pandas_bounds_it(
     sent: list[Any] = []
     real = facts.host_facts
 
-    def spy(is_posix: Any) -> dict[str, Any]:
-        started = real(is_posix)
+    def spy(native: Any) -> dict[str, Any]:
+        started = real(native)
         sent.append(started.get('date_literal_range'))
         return started
 
