@@ -2,7 +2,7 @@
  "format": "sdm-capture/1",
  "case": "shape.one-column-two-tables",
  "leg": "databricks-sql",
- "recording_commit": "8f3eb648abc0d00abfd34087fe5124106e137fa4",
+ "recording_commit": "be663bf19e98ca3c03266618d646a3f3099ea07b",
  "reference_commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
  "versions": {
   "databricks-sdk": "0.148.0",
@@ -1043,8 +1043,8 @@
   "identity": {
    "cell": "ref-pandas3",
    "commit": {
-    "clean": false,
-    "sha": "8f3eb648abc0d00abfd34087fe5124106e137fa4"
+    "clean": true,
+    "sha": "be663bf19e98ca3c03266618d646a3f3099ea07b"
    },
    "contract": null,
    "inputs": {
@@ -1538,7 +1538,7 @@
        "num_prediction_examples": {
         "number": "3"
        },
-       "request_id": "sdm-f7d316e707be",
+       "request_id": "sdm-5da3bed06fac",
        "source_query": "PREDICT COUNT(details.*, 0, 30, days) FOR EACH customers.cid"
       },
       "model": "kumo-relational",
@@ -2370,7 +2370,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "f2dea89e1e657b3f3cdc16adce4d51d1d5f373cf23f2df5ca9033dec55fde4a0"
+     "sha256": "3fd17b6390899627eb9e94c60dd80688951e6f696d27c9172af90c9951312cf0"
     }
    ],
    "result": {

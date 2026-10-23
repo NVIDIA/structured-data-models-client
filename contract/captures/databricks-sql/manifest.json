@@ -1,6 +1,6 @@
 {
  "format": "sdm-capture/1",
- "recording_commit": "8f3eb648abc0d00abfd34087fe5124106e137fa4",
+ "recording_commit": "be663bf19e98ca3c03266618d646a3f3099ea07b",
  "reference_commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
  "legs": {
   "databricks-sql": {
@@ -657,6 +657,10 @@
   "rule.composite-key-given@databricks-sql": {
    "input_hash": "f4f9559ea714624bbb9985737fe9417cd11c9ffaaf00f41019265b2ea1593667",
    "capture": "rule.composite-key-given"
+  },
+  "rule.key-name-form@databricks-sql": {
+   "input_hash": "01f650e0b7e072c6d566f4883341965f6abbf1d24c8da3f6743b6e649feca579",
+   "capture": "rule.key-name-form"
   },
   "rule.key-tie-entity@databricks-sql": {
    "input_hash": "4092201c32afdb348cfcc3292971b793575e88eb317f2141286ba730285e112e",

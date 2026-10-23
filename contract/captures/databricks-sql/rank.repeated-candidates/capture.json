@@ -2,7 +2,7 @@
  "format": "sdm-capture/1",
  "case": "rank.repeated-candidates",
  "leg": "databricks-sql",
- "recording_commit": "8f3eb648abc0d00abfd34087fe5124106e137fa4",
+ "recording_commit": "be663bf19e98ca3c03266618d646a3f3099ea07b",
  "reference_commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
  "versions": {
   "databricks-sdk": "0.148.0",
@@ -441,14 +441,14 @@
       ],
       "results": [
        {
-        "digest": "d0bbf8b14709632898fa43993e1799fdfe1d8b2a9bf1f999c9472a0d7dfda1f6",
+        "digest": "0bc1fab1457b8b54a1794d2ec718cb0e872623dd012e1cb83b53920e0f3be4cc",
         "method": "fetchall",
         "rows": 4,
         "values": {
          "columns": [
           "table_name"
          ],
-         "ordered": "3efc71bf733a7ccc72fc641faa774a52cba284e3e9b41020cc86ee66e55cb1ef",
+         "ordered": "db1471995df98e8835b4de46a4a0ed8b5fe841b28a49ed26103f8bd8fdc33719",
          "types": [
           "string"
          ],
@@ -730,127 +730,6 @@
        },
        {
         "type": "builtins.str",
-        "value": "'items'"
-       }
-      ],
-      "results": [
-       {
-        "digest": "d580e957c1c10bd502146a662ed8faa4d29ec6ef30f1e28ffbb5f2997cdd16f1",
-        "method": "fetchall",
-        "rows": 2,
-        "values": {
-         "columns": [
-          "column_name",
-          "full_data_type",
-          "is_nullable",
-          "table_catalog",
-          "table_schema",
-          "table_name",
-          "table_type"
-         ],
-         "ordered": "e970f4b048d2028fe047f4953c5609ed09b8640966784a6a7e8cc7d6f3294cbe",
-         "types": [
-          "string",
-          "string",
-          "string",
-          "string",
-          "string",
-          "string",
-          "string"
-         ],
-         "unencodable": [],
-         "unordered": "e970f4b048d2028fe047f4953c5609ed09b8640966784a6a7e8cc7d6f3294cbe"
-        }
-       }
-      ],
-      "sql": "SELECT c.column_name, c.full_data_type, c.is_nullable,\n       c.table_catalog, c.table_schema, c.table_name,\n       t.table_type\nFROM `{catalog}`.information_schema.columns c\nJOIN `{catalog}`.information_schema.tables t\n  ON t.table_catalog = c.table_catalog\n AND t.table_schema = c.table_schema\n AND t.table_name = c.table_name\nWHERE c.table_schema = lower(?)\n  AND c.table_name = lower(?)\nORDER BY c.ordinal_position",
-      "stage": "from_source"
-     },
-     {
-      "error": null,
-      "handle": 6,
-      "parameters": [
-       {
-        "type": "builtins.str",
-        "value": "'{schema}'"
-       },
-       {
-        "type": "builtins.str",
-        "value": "'items'"
-       }
-      ],
-      "results": [
-       {
-        "digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-        "method": "fetchall",
-        "rows": 0,
-        "values": {
-         "columns": [
-          "constraint_type",
-          "constraint_name",
-          "column_name"
-         ],
-         "ordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-         "types": [
-          "string",
-          "string",
-          "string"
-         ],
-         "unencodable": [],
-         "unordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
-        }
-       }
-      ],
-      "sql": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name\nFROM `{catalog}`.information_schema.table_constraints tc\nJOIN `{catalog}`.information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = lower(?)\n  AND tc.table_name = lower(?)\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE')",
-      "stage": "from_source"
-     },
-     {
-      "error": null,
-      "handle": 7,
-      "parameters": null,
-      "results": [
-       {
-        "digest": "d305be957ee5f24d6392a9b9a208722d567c7460eb65a64e3d871e6d34f73acb",
-        "method": "fetchall_arrow",
-        "rows": 4,
-        "schema": [
-         {
-          "name": "item_id",
-          "type": "int64"
-         },
-         {
-          "name": "kind",
-          "type": "string"
-         }
-        ],
-        "values": {
-         "columns": [
-          "item_id",
-          "kind"
-         ],
-         "ordered": "d7fa0c3e8eef8f5eb62548db2c8769e3f7ef65615024d4a94ba40ecba5229e01",
-         "types": [
-          "bigint",
-          "string"
-         ],
-         "unencodable": [],
-         "unordered": "d7fa0c3e8eef8f5eb62548db2c8769e3f7ef65615024d4a94ba40ecba5229e01"
-        }
-       }
-      ],
-      "sql": "SELECT `item_id`, `kind` FROM `{catalog}`.`{schema}`.`items` LIMIT 1000",
-      "stage": "from_source"
-     },
-     {
-      "error": null,
-      "handle": 8,
-      "parameters": [
-       {
-        "type": "builtins.str",
-        "value": "'{schema}'"
-       },
-       {
-        "type": "builtins.str",
         "value": "'buys'"
        }
       ],
@@ -889,7 +768,7 @@
      },
      {
       "error": null,
-      "handle": 8,
+      "handle": 6,
       "parameters": [
        {
         "type": "builtins.str",
@@ -927,7 +806,7 @@
      },
      {
       "error": null,
-      "handle": 9,
+      "handle": 7,
       "parameters": null,
       "results": [
        {
@@ -976,6 +855,127 @@
      },
      {
       "error": null,
+      "handle": 8,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{schema}'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'items'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "d580e957c1c10bd502146a662ed8faa4d29ec6ef30f1e28ffbb5f2997cdd16f1",
+        "method": "fetchall",
+        "rows": 2,
+        "values": {
+         "columns": [
+          "column_name",
+          "full_data_type",
+          "is_nullable",
+          "table_catalog",
+          "table_schema",
+          "table_name",
+          "table_type"
+         ],
+         "ordered": "e970f4b048d2028fe047f4953c5609ed09b8640966784a6a7e8cc7d6f3294cbe",
+         "types": [
+          "string",
+          "string",
+          "string",
+          "string",
+          "string",
+          "string",
+          "string"
+         ],
+         "unencodable": [],
+         "unordered": "e970f4b048d2028fe047f4953c5609ed09b8640966784a6a7e8cc7d6f3294cbe"
+        }
+       }
+      ],
+      "sql": "SELECT c.column_name, c.full_data_type, c.is_nullable,\n       c.table_catalog, c.table_schema, c.table_name,\n       t.table_type\nFROM `{catalog}`.information_schema.columns c\nJOIN `{catalog}`.information_schema.tables t\n  ON t.table_catalog = c.table_catalog\n AND t.table_schema = c.table_schema\n AND t.table_name = c.table_name\nWHERE c.table_schema = lower(?)\n  AND c.table_name = lower(?)\nORDER BY c.ordinal_position",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 8,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{schema}'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'items'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "method": "fetchall",
+        "rows": 0,
+        "values": {
+         "columns": [
+          "constraint_type",
+          "constraint_name",
+          "column_name"
+         ],
+         "ordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+         "types": [
+          "string",
+          "string",
+          "string"
+         ],
+         "unencodable": [],
+         "unordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        }
+       }
+      ],
+      "sql": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name\nFROM `{catalog}`.information_schema.table_constraints tc\nJOIN `{catalog}`.information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = lower(?)\n  AND tc.table_name = lower(?)\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE')",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 9,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "d305be957ee5f24d6392a9b9a208722d567c7460eb65a64e3d871e6d34f73acb",
+        "method": "fetchall_arrow",
+        "rows": 4,
+        "schema": [
+         {
+          "name": "item_id",
+          "type": "int64"
+         },
+         {
+          "name": "kind",
+          "type": "string"
+         }
+        ],
+        "values": {
+         "columns": [
+          "item_id",
+          "kind"
+         ],
+         "ordered": "d7fa0c3e8eef8f5eb62548db2c8769e3f7ef65615024d4a94ba40ecba5229e01",
+         "types": [
+          "bigint",
+          "string"
+         ],
+         "unencodable": [],
+         "unordered": "d7fa0c3e8eef8f5eb62548db2c8769e3f7ef65615024d4a94ba40ecba5229e01"
+        }
+       }
+      ],
+      "sql": "SELECT `item_id`, `kind` FROM `{catalog}`.`{schema}`.`items` LIMIT 1000",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
       "handle": 10,
       "parameters": [
        {
@@ -1018,7 +1018,7 @@
        },
        {
         "type": "builtins.str",
-        "value": "'items'"
+        "value": "'buys'"
        }
       ],
       "results": [],
@@ -1035,7 +1035,7 @@
        },
        {
         "type": "builtins.str",
-        "value": "'buys'"
+        "value": "'items'"
        }
       ],
       "results": [],
@@ -1048,7 +1048,7 @@
       "parameters": null,
       "results": [
        {
-        "digest": "164e68fad0b016ad19af560a8b3b243569f5c8f5f64e6feaf1dae56ed673ce9d",
+        "digest": "ae6c76c6884dd2c3e273d7d5c91537cd0ba05bbf8fecdb6a558ed6c06ec1ee51",
         "method": "fetchall",
         "rows": 4,
         "values": {
@@ -1058,7 +1058,7 @@
           "d",
           "z"
          ],
-         "ordered": "1f03d45b3ad8e16b997778c42ebb25c5042bd071929104eef629f8cbcda93f7a",
+         "ordered": "6af7f43bb335329a5ce67759eecc80afd7a0e478a8d87003f7c349078ca500ec",
          "types": [
           "int",
           "bigint",
@@ -1066,11 +1066,11 @@
           "bigint"
          ],
          "unencodable": [],
-         "unordered": "1f03d45b3ad8e16b997778c42ebb25c5042bd071929104eef629f8cbcda93f7a"
+         "unordered": "6af7f43bb335329a5ce67759eecc80afd7a0e478a8d87003f7c349078ca500ec"
         }
        }
       ],
-      "sql": "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT `user_id`) AS d, COUNT(CASE WHEN `user_id` IS NULL THEN 1 END) AS z\nFROM `{catalog}`.`{schema}`.`users`\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT `order_id`) AS d, COUNT(CASE WHEN `order_id` IS NULL THEN 1 END) AS z\nFROM `{catalog}`.`{schema}`.`orders`\nUNION ALL\nSELECT 2 AS k, COUNT(*) AS n, COUNT(DISTINCT `item_id`) AS d, COUNT(CASE WHEN `item_id` IS NULL THEN 1 END) AS z\nFROM `{catalog}`.`{schema}`.`items`\nUNION ALL\nSELECT 3 AS k, COUNT(*) AS n, COUNT(DISTINCT `buy_id`) AS d, COUNT(CASE WHEN `buy_id` IS NULL THEN 1 END) AS z\nFROM `{catalog}`.`{schema}`.`buys`",
+      "sql": "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT `user_id`) AS d, COUNT(CASE WHEN `user_id` IS NULL THEN 1 END) AS z\nFROM `{catalog}`.`{schema}`.`users`\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT `order_id`) AS d, COUNT(CASE WHEN `order_id` IS NULL THEN 1 END) AS z\nFROM `{catalog}`.`{schema}`.`orders`\nUNION ALL\nSELECT 2 AS k, COUNT(*) AS n, COUNT(DISTINCT `buy_id`) AS d, COUNT(CASE WHEN `buy_id` IS NULL THEN 1 END) AS z\nFROM `{catalog}`.`{schema}`.`buys`\nUNION ALL\nSELECT 3 AS k, COUNT(*) AS n, COUNT(DISTINCT `item_id`) AS d, COUNT(CASE WHEN `item_id` IS NULL THEN 1 END) AS z\nFROM `{catalog}`.`{schema}`.`items`",
       "stage": "from_source"
      },
      {
@@ -1129,31 +1129,6 @@
       "parameters": null,
       "results": [
        {
-        "digest": "72cf80a3dbc5f166f5bc7ba869ef120479f4657a6ef9ebefd7f743598df38e75",
-        "method": "fetchone",
-        "rows": 1,
-        "values": {
-         "columns": [
-          "count(1)"
-         ],
-         "ordered": "58441d0117e5e1905ba24143a89db5677778293159872806a77e707854c7c180",
-         "types": [
-          "bigint"
-         ],
-         "unencodable": [],
-         "unordered": "58441d0117e5e1905ba24143a89db5677778293159872806a77e707854c7c180"
-        }
-       }
-      ],
-      "sql": "SELECT COUNT(*) FROM `{catalog}`.`{schema}`.`items`",
-      "stage": "materialize"
-     },
-     {
-      "error": null,
-      "handle": 18,
-      "parameters": null,
-      "results": [
-       {
         "digest": "0d194df8bfcb958a73ea0dd739a6fa308abde68d4802e2463c1905c215e6e5fa",
         "method": "fetchone",
         "rows": 1,
@@ -1171,6 +1146,31 @@
        }
       ],
       "sql": "SELECT COUNT(*) FROM `{catalog}`.`{schema}`.`buys`",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 18,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "72cf80a3dbc5f166f5bc7ba869ef120479f4657a6ef9ebefd7f743598df38e75",
+        "method": "fetchone",
+        "rows": 1,
+        "values": {
+         "columns": [
+          "count(1)"
+         ],
+         "ordered": "58441d0117e5e1905ba24143a89db5677778293159872806a77e707854c7c180",
+         "types": [
+          "bigint"
+         ],
+         "unencodable": [],
+         "unordered": "58441d0117e5e1905ba24143a89db5677778293159872806a77e707854c7c180"
+        }
+       }
+      ],
+      "sql": "SELECT COUNT(*) FROM `{catalog}`.`{schema}`.`items`",
       "stage": "materialize"
      },
      {
@@ -1612,31 +1612,6 @@
       "parameters": null,
       "results": [
        {
-        "digest": "72cf80a3dbc5f166f5bc7ba869ef120479f4657a6ef9ebefd7f743598df38e75",
-        "method": "fetchone",
-        "rows": 1,
-        "values": {
-         "columns": [
-          "count(1)"
-         ],
-         "ordered": "58441d0117e5e1905ba24143a89db5677778293159872806a77e707854c7c180",
-         "types": [
-          "bigint"
-         ],
-         "unencodable": [],
-         "unordered": "58441d0117e5e1905ba24143a89db5677778293159872806a77e707854c7c180"
-        }
-       }
-      ],
-      "sql": "SELECT COUNT(*) FROM `{catalog}`.`{schema}`.`items`",
-      "stage": "materialize"
-     },
-     {
-      "error": null,
-      "handle": 30,
-      "parameters": null,
-      "results": [
-       {
         "digest": "0d194df8bfcb958a73ea0dd739a6fa308abde68d4802e2463c1905c215e6e5fa",
         "method": "fetchone",
         "rows": 1,
@@ -1654,6 +1629,31 @@
        }
       ],
       "sql": "SELECT COUNT(*) FROM `{catalog}`.`{schema}`.`buys`",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 30,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "72cf80a3dbc5f166f5bc7ba869ef120479f4657a6ef9ebefd7f743598df38e75",
+        "method": "fetchone",
+        "rows": 1,
+        "values": {
+         "columns": [
+          "count(1)"
+         ],
+         "ordered": "58441d0117e5e1905ba24143a89db5677778293159872806a77e707854c7c180",
+         "types": [
+          "bigint"
+         ],
+         "unencodable": [],
+         "unordered": "58441d0117e5e1905ba24143a89db5677778293159872806a77e707854c7c180"
+        }
+       }
+      ],
+      "sql": "SELECT COUNT(*) FROM `{catalog}`.`{schema}`.`items`",
       "stage": "materialize"
      },
      {
@@ -2095,31 +2095,6 @@
       "parameters": null,
       "results": [
        {
-        "digest": "72cf80a3dbc5f166f5bc7ba869ef120479f4657a6ef9ebefd7f743598df38e75",
-        "method": "fetchone",
-        "rows": 1,
-        "values": {
-         "columns": [
-          "count(1)"
-         ],
-         "ordered": "58441d0117e5e1905ba24143a89db5677778293159872806a77e707854c7c180",
-         "types": [
-          "bigint"
-         ],
-         "unencodable": [],
-         "unordered": "58441d0117e5e1905ba24143a89db5677778293159872806a77e707854c7c180"
-        }
-       }
-      ],
-      "sql": "SELECT COUNT(*) FROM `{catalog}`.`{schema}`.`items`",
-      "stage": "materialize"
-     },
-     {
-      "error": null,
-      "handle": 42,
-      "parameters": null,
-      "results": [
-       {
         "digest": "0d194df8bfcb958a73ea0dd739a6fa308abde68d4802e2463c1905c215e6e5fa",
         "method": "fetchone",
         "rows": 1,
@@ -2137,6 +2112,31 @@
        }
       ],
       "sql": "SELECT COUNT(*) FROM `{catalog}`.`{schema}`.`buys`",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 42,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "72cf80a3dbc5f166f5bc7ba869ef120479f4657a6ef9ebefd7f743598df38e75",
+        "method": "fetchone",
+        "rows": 1,
+        "values": {
+         "columns": [
+          "count(1)"
+         ],
+         "ordered": "58441d0117e5e1905ba24143a89db5677778293159872806a77e707854c7c180",
+         "types": [
+          "bigint"
+         ],
+         "unencodable": [],
+         "unordered": "58441d0117e5e1905ba24143a89db5677778293159872806a77e707854c7c180"
+        }
+       }
+      ],
+      "sql": "SELECT COUNT(*) FROM `{catalog}`.`{schema}`.`items`",
       "stage": "materialize"
      },
      {
@@ -2538,8 +2538,8 @@
   "identity": {
    "cell": "ref-pandas3",
    "commit": {
-    "clean": false,
-    "sha": "8f3eb648abc0d00abfd34087fe5124106e137fa4"
+    "clean": true,
+    "sha": "be663bf19e98ca3c03266618d646a3f3099ea07b"
    },
    "contract": null,
    "inputs": {
@@ -5500,7 +5500,7 @@
        "num_prediction_examples": {
         "number": "2"
        },
-       "request_id": "sdm-60cf89bd6f5b",
+       "request_id": "sdm-05e91e0de9f0",
        "source_query": "PREDICT COUNT(buys.* WHERE buys.item_id = 2, 0, 30, days) > 0 FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -6032,7 +6032,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "c1dbb1558c9b595875b5f3734f403a82024b4c3d024a896b9af3bf7f1d17be29"
+     "sha256": "aa58aa0c32af1c1ec6dd8954d15813f8810857c8494cc5a33370249fe16c7ef9"
     },
     {
      "method": "POST",
@@ -8956,7 +8956,7 @@
        "num_prediction_examples": {
         "number": "2"
        },
-       "request_id": "sdm-cb1607785003",
+       "request_id": "sdm-8608bb0732cd",
        "source_query": "PREDICT COUNT(buys.* WHERE buys.item_id = 1, 0, 30, days) > 0 FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -9488,7 +9488,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "8daaf8b99be6e7e4a8420e07701501050da3850d45dedf21d90841ce0d2590cc"
+     "sha256": "635fbadc43796c8784be1ff4c4487a253892871457d850c3e241e9f67925e887"
     },
     {
      "method": "POST",
@@ -12412,7 +12412,7 @@
        "num_prediction_examples": {
         "number": "2"
        },
-       "request_id": "sdm-81c5b79e21a3",
+       "request_id": "sdm-768e10162abd",
        "source_query": "PREDICT COUNT(buys.* WHERE buys.item_id = 0, 0, 30, days) > 0 FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -12944,7 +12944,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "e34f6e23268e106514bada7a4a6f810b290035c7fe6535b7f539df1e0f1ee516"
+     "sha256": "b7561d7fa0957a88ea54e6e49b4781eb79e76636c81d9bcb0f42776e6320d2ad"
     }
    ],
    "result": {
@@ -13047,24 +13047,6 @@
       "columns": [
        {
         "dtype": "int64",
-        "name": "item_id",
-        "stype": "ID"
-       },
-       {
-        "dtype": "string",
-        "name": "kind",
-        "stype": "categorical"
-       }
-      ],
-      "duplicate_keys": 0,
-      "name": "items",
-      "primary_key": "item_id",
-      "time_column": null
-     },
-     {
-      "columns": [
-       {
-        "dtype": "int64",
         "name": "buy_id",
         "stype": "ID"
        },
@@ -13088,6 +13070,24 @@
       "name": "buys",
       "primary_key": "buy_id",
       "time_column": "ts"
+     },
+     {
+      "columns": [
+       {
+        "dtype": "int64",
+        "name": "item_id",
+        "stype": "ID"
+       },
+       {
+        "dtype": "string",
+        "name": "kind",
+        "stype": "categorical"
+       }
+      ],
+      "duplicate_keys": 0,
+      "name": "items",
+      "primary_key": "item_id",
+      "time_column": null
      }
     ]
    }
@@ -13141,7 +13141,7 @@
    "parameters": [
     "{schema}"
    ],
-   "result": "tables/0fa98d7e912f0310d9584250ef8c52fd1e96b47b9e6e2b54f42d54c1066fe782.arrows"
+   "result": "tables/2ad88ce1df4ae9463b1f82d8a1295ba283b740fb6558157922e3da632c3f31c5.arrows"
   },
   {
    "text": "SELECT c.column_name, c.full_data_type, c.is_nullable,\n       c.table_catalog, c.table_schema, c.table_name,\n       t.table_type\nFROM `{catalog}`.information_schema.columns c\nJOIN `{catalog}`.information_schema.tables t\n  ON t.table_catalog = c.table_catalog\n AND t.table_schema = c.table_schema\n AND t.table_name = c.table_name\nWHERE c.table_schema = lower(?)\n  AND c.table_name = lower(?)\nORDER BY c.ordinal_position",
@@ -13189,27 +13189,6 @@
    "text": "SELECT c.column_name, c.full_data_type, c.is_nullable,\n       c.table_catalog, c.table_schema, c.table_name,\n       t.table_type\nFROM `{catalog}`.information_schema.columns c\nJOIN `{catalog}`.information_schema.tables t\n  ON t.table_catalog = c.table_catalog\n AND t.table_schema = c.table_schema\n AND t.table_name = c.table_name\nWHERE c.table_schema = lower(?)\n  AND c.table_name = lower(?)\nORDER BY c.ordinal_position",
    "parameters": [
     "{schema}",
-    "items"
-   ],
-   "result": "tables/ba592adc5a0e68c1ee466d2b13d1a45a9a424d6effc511161adb52810890a11a.arrows"
-  },
-  {
-   "text": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name\nFROM `{catalog}`.information_schema.table_constraints tc\nJOIN `{catalog}`.information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = lower(?)\n  AND tc.table_name = lower(?)\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE')",
-   "parameters": [
-    "{schema}",
-    "items"
-   ],
-   "result": "tables/a9b1ee8ad6e21529d27be456649ed4b0a313d9db8d9b56a4c23a74282bc6c7b1.arrows"
-  },
-  {
-   "text": "SELECT `item_id`, `kind` FROM `{catalog}`.`{schema}`.`items` LIMIT 1000",
-   "parameters": [],
-   "result": "tables/d305be957ee5f24d6392a9b9a208722d567c7460eb65a64e3d871e6d34f73acb.arrows"
-  },
-  {
-   "text": "SELECT c.column_name, c.full_data_type, c.is_nullable,\n       c.table_catalog, c.table_schema, c.table_name,\n       t.table_type\nFROM `{catalog}`.information_schema.columns c\nJOIN `{catalog}`.information_schema.tables t\n  ON t.table_catalog = c.table_catalog\n AND t.table_schema = c.table_schema\n AND t.table_name = c.table_name\nWHERE c.table_schema = lower(?)\n  AND c.table_name = lower(?)\nORDER BY c.ordinal_position",
-   "parameters": [
-    "{schema}",
     "buys"
    ],
    "result": "tables/3ee414cc218026871cda16f129030b6bc191993b362b29e7f3b3dca7343b75c1.arrows"
@@ -13226,6 +13205,27 @@
    "text": "SELECT `buy_id`, `user_id`, `item_id`, `ts` FROM `{catalog}`.`{schema}`.`buys` LIMIT 1000",
    "parameters": [],
    "result": "tables/764f9842d3d27e6805f9c50d3ecac0ce1d63a1a90f88d8e7218b44616a05229c.arrows"
+  },
+  {
+   "text": "SELECT c.column_name, c.full_data_type, c.is_nullable,\n       c.table_catalog, c.table_schema, c.table_name,\n       t.table_type\nFROM `{catalog}`.information_schema.columns c\nJOIN `{catalog}`.information_schema.tables t\n  ON t.table_catalog = c.table_catalog\n AND t.table_schema = c.table_schema\n AND t.table_name = c.table_name\nWHERE c.table_schema = lower(?)\n  AND c.table_name = lower(?)\nORDER BY c.ordinal_position",
+   "parameters": [
+    "{schema}",
+    "items"
+   ],
+   "result": "tables/ba592adc5a0e68c1ee466d2b13d1a45a9a424d6effc511161adb52810890a11a.arrows"
+  },
+  {
+   "text": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name\nFROM `{catalog}`.information_schema.table_constraints tc\nJOIN `{catalog}`.information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = lower(?)\n  AND tc.table_name = lower(?)\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE')",
+   "parameters": [
+    "{schema}",
+    "items"
+   ],
+   "result": "tables/a9b1ee8ad6e21529d27be456649ed4b0a313d9db8d9b56a4c23a74282bc6c7b1.arrows"
+  },
+  {
+   "text": "SELECT `item_id`, `kind` FROM `{catalog}`.`{schema}`.`items` LIMIT 1000",
+   "parameters": [],
+   "result": "tables/d305be957ee5f24d6392a9b9a208722d567c7460eb65a64e3d871e6d34f73acb.arrows"
   },
   {
    "text": "SELECT tc.constraint_name, kcu.column_name,\n       ccu.table_catalog, ccu.table_schema,\n       ccu.table_name, ccu.column_name\nFROM `{catalog}`.information_schema.table_constraints tc\nJOIN `{catalog}`.information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN `{catalog}`.information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN `{catalog}`.information_schema.constraint_column_usage ccu\n  ON rc.unique_constraint_catalog = ccu.constraint_catalog\n AND rc.unique_constraint_schema = ccu.constraint_schema\n AND rc.unique_constraint_name = ccu.constraint_name\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = lower(?)\n  AND tc.table_name = lower(?)",
@@ -13247,7 +13247,7 @@
    "text": "SELECT tc.constraint_name, kcu.column_name,\n       ccu.table_catalog, ccu.table_schema,\n       ccu.table_name, ccu.column_name\nFROM `{catalog}`.information_schema.table_constraints tc\nJOIN `{catalog}`.information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN `{catalog}`.information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN `{catalog}`.information_schema.constraint_column_usage ccu\n  ON rc.unique_constraint_catalog = ccu.constraint_catalog\n AND rc.unique_constraint_schema = ccu.constraint_schema\n AND rc.unique_constraint_name = ccu.constraint_name\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = lower(?)\n  AND tc.table_name = lower(?)",
    "parameters": [
     "{schema}",
-    "items"
+    "buys"
    ],
    "result": null
   },
@@ -13255,14 +13255,14 @@
    "text": "SELECT tc.constraint_name, kcu.column_name,\n       ccu.table_catalog, ccu.table_schema,\n       ccu.table_name, ccu.column_name\nFROM `{catalog}`.information_schema.table_constraints tc\nJOIN `{catalog}`.information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN `{catalog}`.information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN `{catalog}`.information_schema.constraint_column_usage ccu\n  ON rc.unique_constraint_catalog = ccu.constraint_catalog\n AND rc.unique_constraint_schema = ccu.constraint_schema\n AND rc.unique_constraint_name = ccu.constraint_name\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = lower(?)\n  AND tc.table_name = lower(?)",
    "parameters": [
     "{schema}",
-    "buys"
+    "items"
    ],
    "result": null
   },
   {
-   "text": "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT `user_id`) AS d, COUNT(CASE WHEN `user_id` IS NULL THEN 1 END) AS z\nFROM `{catalog}`.`{schema}`.`users`\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT `order_id`) AS d, COUNT(CASE WHEN `order_id` IS NULL THEN 1 END) AS z\nFROM `{catalog}`.`{schema}`.`orders`\nUNION ALL\nSELECT 2 AS k, COUNT(*) AS n, COUNT(DISTINCT `item_id`) AS d, COUNT(CASE WHEN `item_id` IS NULL THEN 1 END) AS z\nFROM `{catalog}`.`{schema}`.`items`\nUNION ALL\nSELECT 3 AS k, COUNT(*) AS n, COUNT(DISTINCT `buy_id`) AS d, COUNT(CASE WHEN `buy_id` IS NULL THEN 1 END) AS z\nFROM `{catalog}`.`{schema}`.`buys`",
+   "text": "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT `user_id`) AS d, COUNT(CASE WHEN `user_id` IS NULL THEN 1 END) AS z\nFROM `{catalog}`.`{schema}`.`users`\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT `order_id`) AS d, COUNT(CASE WHEN `order_id` IS NULL THEN 1 END) AS z\nFROM `{catalog}`.`{schema}`.`orders`\nUNION ALL\nSELECT 2 AS k, COUNT(*) AS n, COUNT(DISTINCT `buy_id`) AS d, COUNT(CASE WHEN `buy_id` IS NULL THEN 1 END) AS z\nFROM `{catalog}`.`{schema}`.`buys`\nUNION ALL\nSELECT 3 AS k, COUNT(*) AS n, COUNT(DISTINCT `item_id`) AS d, COUNT(CASE WHEN `item_id` IS NULL THEN 1 END) AS z\nFROM `{catalog}`.`{schema}`.`items`",
    "parameters": [],
-   "result": "tables/0f00a8d7545d2de33d05ca1dd53a83b92df0f8a52c29ca3af1bc8f3a68643a6f.arrows"
+   "result": "tables/9eae41754c4196368348a71eaa485fe602236ec138b6252ec1e43263893b45a7.arrows"
   },
   {
    "text": "SELECT COUNT(*) FROM `{catalog}`.`{schema}`.`users`",
@@ -13275,14 +13275,14 @@
    "result": "tables/3ab1c6b8f7e6ece2e20d9ec89f145eed8194530f56bcbfef1c2f2113f7b4eee3.arrows"
   },
   {
-   "text": "SELECT COUNT(*) FROM `{catalog}`.`{schema}`.`items`",
-   "parameters": [],
-   "result": "tables/deb47028d25b01c226f517a9c6cadc2fbbb60f841dfe88e312e8f49dbef38867.arrows"
-  },
-  {
    "text": "SELECT COUNT(*) FROM `{catalog}`.`{schema}`.`buys`",
    "parameters": [],
    "result": "tables/bd92b6f274bbeee9cb3ce3e1660207f564cb4a51fcb43aed36bf71a8ed3c7d09.arrows"
+  },
+  {
+   "text": "SELECT COUNT(*) FROM `{catalog}`.`{schema}`.`items`",
+   "parameters": [],
+   "result": "tables/deb47028d25b01c226f517a9c6cadc2fbbb60f841dfe88e312e8f49dbef38867.arrows"
   },
   {
    "text": "SELECT\n  0 as table_index,\n  MIN(`ts`) as min_date,\n  MAX(`ts`) as max_date\nFROM `{catalog}`.`{schema}`.`buys`",
@@ -13351,14 +13351,14 @@
    "result": "tables/3ab1c6b8f7e6ece2e20d9ec89f145eed8194530f56bcbfef1c2f2113f7b4eee3.arrows"
   },
   {
-   "text": "SELECT COUNT(*) FROM `{catalog}`.`{schema}`.`items`",
-   "parameters": [],
-   "result": "tables/deb47028d25b01c226f517a9c6cadc2fbbb60f841dfe88e312e8f49dbef38867.arrows"
-  },
-  {
    "text": "SELECT COUNT(*) FROM `{catalog}`.`{schema}`.`buys`",
    "parameters": [],
    "result": "tables/bd92b6f274bbeee9cb3ce3e1660207f564cb4a51fcb43aed36bf71a8ed3c7d09.arrows"
+  },
+  {
+   "text": "SELECT COUNT(*) FROM `{catalog}`.`{schema}`.`items`",
+   "parameters": [],
+   "result": "tables/deb47028d25b01c226f517a9c6cadc2fbbb60f841dfe88e312e8f49dbef38867.arrows"
   },
   {
    "text": "SELECT\n  0 as table_index,\n  MIN(`ts`) as min_date,\n  MAX(`ts`) as max_date\nFROM `{catalog}`.`{schema}`.`buys`",
@@ -13427,14 +13427,14 @@
    "result": "tables/3ab1c6b8f7e6ece2e20d9ec89f145eed8194530f56bcbfef1c2f2113f7b4eee3.arrows"
   },
   {
-   "text": "SELECT COUNT(*) FROM `{catalog}`.`{schema}`.`items`",
-   "parameters": [],
-   "result": "tables/deb47028d25b01c226f517a9c6cadc2fbbb60f841dfe88e312e8f49dbef38867.arrows"
-  },
-  {
    "text": "SELECT COUNT(*) FROM `{catalog}`.`{schema}`.`buys`",
    "parameters": [],
    "result": "tables/bd92b6f274bbeee9cb3ce3e1660207f564cb4a51fcb43aed36bf71a8ed3c7d09.arrows"
+  },
+  {
+   "text": "SELECT COUNT(*) FROM `{catalog}`.`{schema}`.`items`",
+   "parameters": [],
+   "result": "tables/deb47028d25b01c226f517a9c6cadc2fbbb60f841dfe88e312e8f49dbef38867.arrows"
   },
   {
    "text": "SELECT\n  0 as table_index,\n  MIN(`ts`) as min_date,\n  MAX(`ts`) as max_date\nFROM `{catalog}`.`{schema}`.`buys`",

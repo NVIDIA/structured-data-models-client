@@ -2,7 +2,7 @@
  "format": "sdm-capture/1",
  "case": "multicall.calls.100",
  "leg": "databricks-sql",
- "recording_commit": "8f3eb648abc0d00abfd34087fe5124106e137fa4",
+ "recording_commit": "be663bf19e98ca3c03266618d646a3f3099ea07b",
  "reference_commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
  "versions": {
   "databricks-sdk": "0.148.0",
@@ -5365,8 +5365,8 @@
   "identity": {
    "cell": "ref-pandas3",
    "commit": {
-    "clean": false,
-    "sha": "8f3eb648abc0d00abfd34087fe5124106e137fa4"
+    "clean": true,
+    "sha": "be663bf19e98ca3c03266618d646a3f3099ea07b"
    },
    "contract": null,
    "inputs": {
@@ -7513,7 +7513,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-9c1d15ec228f",
+       "request_id": "sdm-fed468b3a080",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -7623,7 +7623,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "eb6832ada7cbc071582dcc960d9eb498c901b0c69c3d165afa707ca69ab713c7"
+     "sha256": "8357271b63530858319319fac38bced0bde569816e32c699dbef3c80dda42c06"
     },
     {
      "method": "POST",
@@ -9733,7 +9733,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-7b25beec1d7c",
+       "request_id": "sdm-55fa3a567b7b",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -9843,7 +9843,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "7c58c4cc37c5e71e2db6c89515a91b812fc2af18e78c61f7d835d4e5f6a476da"
+     "sha256": "7765de044e8a224714050daeba0941e9e7e63dc9a6b8dd350fba79d7e1e59f92"
     },
     {
      "method": "POST",
@@ -11953,7 +11953,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-41bd4ed38b95",
+       "request_id": "sdm-c61a0b163b90",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -12063,7 +12063,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "7b984f9d71781989ab6b135ab286b881bb3a7c12b36168293a7eb99d2f63501f"
+     "sha256": "17644560f80e9905339925348291baae64e1f025629386737c304abb676a5032"
     },
     {
      "method": "POST",
@@ -14173,7 +14173,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-6b50b2aa44f6",
+       "request_id": "sdm-6352791ca15c",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -14283,7 +14283,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "03dd28b1b82d6166eede24231a888e8433fd0c3b52af00cacddb27511ab0ade2"
+     "sha256": "0f4c957354e8294d69b75d392de650318bda6873c484362f55a3c0abd2652231"
     },
     {
      "method": "POST",
@@ -16393,7 +16393,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-fd43e13fe704",
+       "request_id": "sdm-5e403387403d",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -16503,7 +16503,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "38615ea6831b8d6eb5537eeadf347575d3983475266e3ed954ebcc7054f2eaa2"
+     "sha256": "96bd912999a1264301167b140e48a5565d45217bd45935e4e95f52894eef0df1"
     },
     {
      "method": "POST",
@@ -18613,7 +18613,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-ed797ec4070e",
+       "request_id": "sdm-0472992e5568",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -18723,7 +18723,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "85f1d6101f42c981d99fc3e65f5e8fcdd3d7df869656e57956adeb0b5ac9a9fd"
+     "sha256": "287171fa252bb9a34048dd289ea726c345841a297f5747a0214fb34d7737e246"
     },
     {
      "method": "POST",
@@ -20833,7 +20833,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-0baa7152ab92",
+       "request_id": "sdm-7e3cd4b19d8d",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -20943,7 +20943,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "11cf0599a99632a3ef3d6303ec22442c1eb7837d56fc75f2c700a176c5ac32dd"
+     "sha256": "396e1a5b018fdf4dba0e8cb5bfa9536828add2387ba0b7796ec7189b2f0e4162"
     },
     {
      "method": "POST",
@@ -23053,7 +23053,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-3471b8fe78fa",
+       "request_id": "sdm-0855406462c7",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -23163,7 +23163,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "d5d30893ce8a78ceeb49c9b5da0325b3bea739a551afaf94c5f1b8b9d960301e"
+     "sha256": "449110e28e49c55c05425cf436e591a2476733e8e0dc1782a224f40b1cbb9efa"
     },
     {
      "method": "POST",
@@ -25273,7 +25273,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-e37e477816ec",
+       "request_id": "sdm-55c8d0fc9b99",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -25383,7 +25383,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "ebd3338cbcce7bcfdbea300a93f67a7df8279b101742026be58158bfb4170888"
+     "sha256": "cce76cbac0c2e6003860ca61bebb8510ddcf9a65d7d6041842494de11e2bc93b"
     },
     {
      "method": "POST",
@@ -27493,7 +27493,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-7c9748456fee",
+       "request_id": "sdm-a11cf3c39b5d",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -27603,7 +27603,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "c730126ab13015d72ff91c19229368707e7af8acc5131c177ba014f2bf655a40"
+     "sha256": "e6da4bd5ae901270ec01d7a194da85783e0ee12425ed1bf39d823b10644368bb"
     },
     {
      "method": "POST",
@@ -29713,7 +29713,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-1742cc4b0f88",
+       "request_id": "sdm-80e2a32d064d",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -29823,7 +29823,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "3c7100b09ef40e44716eb9ab47e19f4c8e6eec68f7323c0fd8424131758e34a6"
+     "sha256": "53563b910f594d7062bd172d18aad08079c506eed79a2a14f5d63884e9b580cb"
     },
     {
      "method": "POST",
@@ -31933,7 +31933,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-becfd7ff4482",
+       "request_id": "sdm-ae5ed0f09316",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -32043,7 +32043,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "30b5cc890b95019074748ebb6ee1104b0b7fb770bdd78567ff96784085b48261"
+     "sha256": "4e235349955e8d0748936ae08d248b75015c87aba0775fd3e7fb6fef1a10c2c0"
     },
     {
      "method": "POST",
@@ -34153,7 +34153,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-223b70199b5c",
+       "request_id": "sdm-187d0292ba6b",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -34263,7 +34263,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "a034ae40f75d594a271bd4d3e4b0f147a4c4ae12c848af0c138222ff752b66c5"
+     "sha256": "a2321a89676daac45fc1ceea9ccdf1d96a1aa52290429f9dd54a0f642184dac5"
     },
     {
      "method": "POST",
@@ -36373,7 +36373,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-ba309c0e7e53",
+       "request_id": "sdm-bbcf1a317716",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -36483,7 +36483,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "7af8d30ec565df55c119aee5c9a4aef8338e02250d75a9931b96c283322d4e4f"
+     "sha256": "6ea44dc707f1ad709803b0dd3cb3e1e2fa51dfec18a0a15aa4654136f917f98e"
     },
     {
      "method": "POST",
@@ -38593,7 +38593,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-e6513f701ab5",
+       "request_id": "sdm-da29d05cfd86",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -38703,7 +38703,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "663107540ad9c1c15fa48a32ea624cc4f3cda11cb3cdc2ac1d984b251ad39de9"
+     "sha256": "bd77ea92e18545b8639a8b426020ee4724d307a57e9f113024c16cb7b5d0ba15"
     },
     {
      "method": "POST",
@@ -40813,7 +40813,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-6babf0780da2",
+       "request_id": "sdm-0ec0069b787c",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -40923,7 +40923,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "1a291a03642510a9544cdd1bf2a9fb928c256c0a321630fb93b9fce7926f9bcd"
+     "sha256": "39fa7477330e7a025576f17f12da9aa0b9e0a83d55f140402c635ca0d5f52c76"
     },
     {
      "method": "POST",
@@ -43033,7 +43033,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-f2b16cd7cff2",
+       "request_id": "sdm-dbe0887ae1fb",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -43143,7 +43143,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "aa874048f3cfbcdfeb21b098e0dc1ce79ae309167be382bfe9e2bccbfd31ab7b"
+     "sha256": "c1fddf1e1d58945f013b18080fda8375e959959c7cf1383aca289fcae7d4d8d9"
     },
     {
      "method": "POST",
@@ -45253,7 +45253,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-7d276f6d6d8f",
+       "request_id": "sdm-9ae44c2c4568",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -45363,7 +45363,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "5c6ab7d2d5b2414da08bcd0a7b601c33ceec597c7e254a39a57555b8ecf7415f"
+     "sha256": "356df3644d64e4c6a1b326ea1a89b76d1d6f21c13d266112a6fe1fd5e966ba91"
     },
     {
      "method": "POST",
@@ -47473,7 +47473,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-ea917633a0eb",
+       "request_id": "sdm-658c1be33ffb",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -47583,7 +47583,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "015204db839cf682f891ee94a922c9f74a60e93eec2c87de72601e0b796c07dd"
+     "sha256": "f947568c577ab3f46d8e9f5002f5c8390b4664f8ae8a976034084bcde5a6130a"
     },
     {
      "method": "POST",
@@ -49693,7 +49693,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-613aa323a064",
+       "request_id": "sdm-4b553315d262",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -49803,7 +49803,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "de027cfb35e4c8c7f5f23cf893ea3a2f3e9599a7754f1b0f925cb6f9ccf13b8a"
+     "sha256": "08e26bb5b1583c4ba109bcd2d2da751b516b928a6db862adf339d100799d0cb1"
     },
     {
      "method": "POST",
@@ -51913,7 +51913,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-82a8b64ca68b",
+       "request_id": "sdm-6991557fd38d",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -52023,7 +52023,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "e75f7e1e0d4080c322dfd55cc809b6d3ab78963eaaa74cfbf14cc2d2758ca9a5"
+     "sha256": "bbaa5323e5947176cd20e9891ef3c5310aa5b07aefc6493e2ecbef85115fd923"
     },
     {
      "method": "POST",
@@ -54133,7 +54133,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-a612a6e55e9e",
+       "request_id": "sdm-c1257a4da1b0",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -54243,7 +54243,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "2f6f75b1426e74a000d809674f22299c1a8250b400a64609f9381e9da70c7d0d"
+     "sha256": "4d474df512e259e58ccc9918d55b6347741cb578607b769b798fe0ec8211f804"
     },
     {
      "method": "POST",
@@ -56353,7 +56353,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-a0f588d449a9",
+       "request_id": "sdm-05969d7ebad0",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -56463,7 +56463,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "b9b0c7d1e1ce6cc61c69f6433abbdd75cf4c1b1394bed8c2f9f55e4c2d14be27"
+     "sha256": "8156ea02a80201453c78291cc8c9a474252355cfc20afcb88f33d32394178a85"
     },
     {
      "method": "POST",
@@ -58573,7 +58573,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-da8fed2c85bc",
+       "request_id": "sdm-a339c284b974",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -58683,7 +58683,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "e3463051ace71764d431fb01a358cc8c87e2bdd090a084c7639cf3ef9d02d38f"
+     "sha256": "5b840010c04375ac44de6ddb885d5cdbeb772dba8681439cf79f4063a6e8a6b0"
     },
     {
      "method": "POST",
@@ -60793,7 +60793,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-9e8108bdf203",
+       "request_id": "sdm-27d5d7ce1cc1",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -60903,7 +60903,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "bfe52f9436613505437b1ca7b8eca34f66c429088d78a165d2e8fa8152e52487"
+     "sha256": "3249f8b56edda711130b6896af0865760f82facf4c23cb6331b9d22c9f454fde"
     },
     {
      "method": "POST",
@@ -63013,7 +63013,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-051570669f79",
+       "request_id": "sdm-93e28d339f32",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -63123,7 +63123,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "d42acedb498d2e4bd5ee428bdad192c0ca045e81c9e91dd0e5e6707424c665db"
+     "sha256": "664bbfbdb247aa13f1a2ae75ac021d931f60bfc7e03244f5eccc1991542c77fb"
     },
     {
      "method": "POST",
@@ -65233,7 +65233,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-8c8d9975c297",
+       "request_id": "sdm-88e9ac6629d1",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -65343,7 +65343,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "4bb6e767dbbb20ea2cb49968fdcaca50676cf4df5b8a732b55aa3e06d4176be4"
+     "sha256": "c009629c132000110ee2a1d4bb5455c8778c50477ce20d17c73605f5ed9badbf"
     },
     {
      "method": "POST",
@@ -67453,7 +67453,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-97f6f328dbb7",
+       "request_id": "sdm-3a2bb98d2166",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -67563,7 +67563,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "9ed3276e7fe20bf18556fa7c5118059547d2144e8caa1d942831082e8b60a08f"
+     "sha256": "cf3322967f9b2a547ee0f47dd57131aaebdeafdb62201f0df27464185a03f18d"
     },
     {
      "method": "POST",
@@ -69673,7 +69673,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-2bf12e180ce3",
+       "request_id": "sdm-039ca9f292cb",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -69783,7 +69783,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "8d500c3a0835b6e43a80ec1870335a84dce66536450adb620309d2b35ae74611"
+     "sha256": "45e0bf7f56d4270f4b86019f07d96372d3fabe63c0070fc9fe927680230d18a1"
     },
     {
      "method": "POST",
@@ -71893,7 +71893,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-00f3f6cb505a",
+       "request_id": "sdm-09dd646886d8",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -72003,7 +72003,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "695586ba17d12570b39495858d9adb7b7e40591ad1e6152e9f35c52b6938a883"
+     "sha256": "5c78ae639c7fe34b6ed1ba7392307ef5d298b5f8d49d5b68bcd051b46d8fd203"
     },
     {
      "method": "POST",
@@ -74113,7 +74113,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-fee2dae8ae7f",
+       "request_id": "sdm-437b347ad7e1",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -74223,7 +74223,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "f516cf9bffd2e435a5b6148c2696cfd1f58fd9a5d225b329ab92ce297d32714f"
+     "sha256": "b313752d2e36b06984f21ac6401a956be4fcbfd492976c1d7d3c6a3a06002ed9"
     },
     {
      "method": "POST",
@@ -76333,7 +76333,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-70aaa22254f2",
+       "request_id": "sdm-3da4787c5f13",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -76443,7 +76443,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "27341228f8d55ccee0abfad9299c762f43663c8f75e9a724628be545bc854407"
+     "sha256": "3eeb92395587062a0400c346697f150f31545ed1da6eff8f838b697be933ad96"
     },
     {
      "method": "POST",
@@ -78553,7 +78553,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-3838459245c0",
+       "request_id": "sdm-9722f98384a5",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -78663,7 +78663,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "e0c8750a9342fa354dc4948c509b7b4609b019967bbd597867475d0e0942b4a7"
+     "sha256": "3dd2e7cc1a503a09d3e36bea04b2d5bb6636ac5c0de6141cd4258b8665719ab7"
     },
     {
      "method": "POST",
@@ -80773,7 +80773,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-01d7c10496c0",
+       "request_id": "sdm-9c19cd7560e1",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -80883,7 +80883,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "68155682a31a836d6f316494d9f3abc7a6d5e2c42fe46502118ae3011f997886"
+     "sha256": "2ffa67db04e3010e4919733037fbe2717adcd6654d63f460fee00428e5148707"
     },
     {
      "method": "POST",
@@ -82993,7 +82993,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-1b2619b12979",
+       "request_id": "sdm-200569013c54",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -83103,7 +83103,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "2aa870a4da0175125cd77908ff215d2e4f2aa5c661f099f214a9122ca5c86399"
+     "sha256": "0066db8b7425b10228dad5bea8837bba0768e2616e303444928910ad202dbeaa"
     },
     {
      "method": "POST",
@@ -85213,7 +85213,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-4f0beb90f3a2",
+       "request_id": "sdm-db44c617e931",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -85323,7 +85323,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "c0b2ba817ae0598c1156a8407aadaa27cf57bf7e7b2d26a87eafdb2b07f1cae1"
+     "sha256": "a54be20a472129a4207316e39d3c241e990a1fcba4765d63ef988e6db41edd88"
     },
     {
      "method": "POST",
@@ -87433,7 +87433,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-80219c5484ce",
+       "request_id": "sdm-d4a6fe17e927",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -87543,7 +87543,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "624b24161ce0a8b5ce226dc7aadced83ddb909b51206ddf361c483d9a4bc20a2"
+     "sha256": "e04c6f56e0df987a010de6be59fcc93215c0270a6039077c08b15955d39535c6"
     },
     {
      "method": "POST",
@@ -89653,7 +89653,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-0c4d771dacfc",
+       "request_id": "sdm-ea4b654e4891",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -89763,7 +89763,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "27520f7eb55dac1bcbedd100abdb6b377936f4f528a6b85acd7c7ca3c464e93f"
+     "sha256": "bda95d17da6760640af30f1b0058d45ed94c30c70ddfd153b6ddc44f164aaf84"
     },
     {
      "method": "POST",
@@ -91873,7 +91873,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-ee396a6c9936",
+       "request_id": "sdm-a2e4b11680cb",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -91983,7 +91983,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "13318d40f263855ad5f6ad749a5f388e6d7c3f3883872c385be8998f9c8f4d89"
+     "sha256": "3501921eee976552b78232f08a11c07b052b4e4db665bccc94a1d5b10d3cfb16"
     },
     {
      "method": "POST",
@@ -94093,7 +94093,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-a2ee4f63ef0b",
+       "request_id": "sdm-26e0d07b36fa",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -94203,7 +94203,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "90decc5ffcbcb07df2918bb96d09c0fb7cd0bda5645c3ae35395718180da10a9"
+     "sha256": "bca3311033aaf35d21e2df3168b1c3ffb07dcc3470fb679705a358407a897cc6"
     },
     {
      "method": "POST",
@@ -96313,7 +96313,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-52f99add80e8",
+       "request_id": "sdm-b42d28627bcf",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -96423,7 +96423,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "2d82a1495f0560dcecf84672ce4b80c8f84aca2894614ded540289ef846fa129"
+     "sha256": "8a334ccf9e1ae6bebdb7fb88fd91bbbe3e8586466c96fda7e6a806a662d9665d"
     },
     {
      "method": "POST",
@@ -98533,7 +98533,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-465b929ee460",
+       "request_id": "sdm-729b1bd99a43",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -98643,7 +98643,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "b92edb6d78be51454d5cd9975c5be51d7a93d54968bb152cc29eb17345021552"
+     "sha256": "5def9bb7bccbad4ac9f9527e46dbc699e90cf20ddb8b0d835a7c7aac86dc6223"
     },
     {
      "method": "POST",
@@ -100753,7 +100753,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-4d44083d0b60",
+       "request_id": "sdm-410abba72729",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -100863,7 +100863,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "78909a1de9fdd20d717ad61bf69a8d4a3c9fdbd8be4603e27880decb3394f8d9"
+     "sha256": "377ba6c989856a808ae8ba96697c94f917d69856500a05aaaa033ec6807fdd56"
     },
     {
      "method": "POST",
@@ -102973,7 +102973,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-520f2526df1c",
+       "request_id": "sdm-0d1617d27a54",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -103083,7 +103083,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "18570a7e3c870aa581cbde2c521d364e8167b4adbed0a8580a292711dbbbf9c7"
+     "sha256": "c3d008dd43e33363c7092f43d023199833f94f8c360f92b0e2a626515a591a17"
     },
     {
      "method": "POST",
@@ -105193,7 +105193,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-3a987b60293e",
+       "request_id": "sdm-78d1a0fa2225",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -105303,7 +105303,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "6a6ed0738ae29d0a1e7245202121ece5d82c4d7f6219d1df82f7e6b18cfa7e43"
+     "sha256": "f27ab2dc9609c8ca1979d8beeda1880a12fc0292754b08fb7977af889eedcc50"
     },
     {
      "method": "POST",
@@ -107413,7 +107413,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-bb5f86688c3e",
+       "request_id": "sdm-7d5be53d8e3a",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -107523,7 +107523,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "50a9789f7a750b8a9992f9bc35b6978b45ab47ab9169242a5f8a95aa2e89e2fd"
+     "sha256": "81876c83cfe01021a1b5e929188b67eb38690aab5e58d4b24569d0eadfacf8fa"
     },
     {
      "method": "POST",
@@ -109633,7 +109633,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-81a9d995ce0d",
+       "request_id": "sdm-6a60dec5881e",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -109743,7 +109743,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "3bc00413e5092f410fdbfcb0f486144bad586f16d9343e9149e10d3e4662d3a8"
+     "sha256": "8a80804b1aaa81e8196c834264da4a27c4e0d09b9813e69eee5564e8fc4ae078"
     },
     {
      "method": "POST",
@@ -111853,7 +111853,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-fce64aa847f4",
+       "request_id": "sdm-216d60fb7e60",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -111963,7 +111963,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "69887af678e5db8ef5235fec38222a1526875d311b2a52a615a4a9ef09e26b57"
+     "sha256": "68a65dfb54f7daf609f5b4684589f2f9cd55f5d60290450bac9a320e49836444"
     },
     {
      "method": "POST",
@@ -114073,7 +114073,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-177414117cc8",
+       "request_id": "sdm-181956404694",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -114183,7 +114183,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "70f4e3feb7d689b82ea9edd22ba1e2aca95b79ddfae95c247955d80a96fa1317"
+     "sha256": "6982030bc41bca93c9fa33522a358184e9e88472ac214fbd50b04c69d385e0f3"
     },
     {
      "method": "POST",
@@ -116293,7 +116293,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-13d418e48a83",
+       "request_id": "sdm-455e906bc382",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -116403,7 +116403,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "28b7c6b1508402f6c6b3451e0c68826b249320be468d2edee43af6480e758df8"
+     "sha256": "5d8a19aecf53bd2348a39254c0e802c828ec31bef560086276a32105832c5d81"
     },
     {
      "method": "POST",
@@ -118513,7 +118513,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-be2f2f29aa7c",
+       "request_id": "sdm-e69c0ee512d1",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -118623,7 +118623,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "35cd2d9f1a64173e353bac6736034666ed862502025574b960bd4e8ecb74be0e"
+     "sha256": "9a1c55b2d877e21ae2d6a49266e534dfd735792881a9f3aa282197bd5ae597c4"
     },
     {
      "method": "POST",
@@ -120733,7 +120733,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-659c2d1cc0d9",
+       "request_id": "sdm-d6d8a0f60946",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -120843,7 +120843,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "6297f2dcfac940f099c82a37d1c5d056c9455537aabf0ad87f178511cfe0f749"
+     "sha256": "b5f44932a201ff025d75bd335dbf60a9826619406874f3053b06594ba7d1efc3"
     },
     {
      "method": "POST",
@@ -122953,7 +122953,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-565ea383d529",
+       "request_id": "sdm-2d5423214a54",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -123063,7 +123063,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "2c787c11a4893e0f0976606e39e8bd78ae4b593801fbccede3778f9d153d9836"
+     "sha256": "74cece01dbe7fa19e30dcba1b19890e3d3a226794dfa7496cb6d65e21ba91b8a"
     },
     {
      "method": "POST",
@@ -125173,7 +125173,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-520e812ad0b3",
+       "request_id": "sdm-20963dedac2f",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -125283,7 +125283,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "1b8a4e8114cf608723ffa2c044f8f80626c0786347aa90978a2b669453209e45"
+     "sha256": "b59db516fd1716b79af0461312192ec6f8efbdecc51c10ff8624e7b580115fe9"
     },
     {
      "method": "POST",
@@ -127393,7 +127393,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-598c7a2aea3b",
+       "request_id": "sdm-fbfd1fc1c357",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -127503,7 +127503,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "59e09a98945170bc6692247e2786cc3bf337992e3db59172df08f818b7f625af"
+     "sha256": "503409a911297f311612418d98ccfaaed8f887a0f9e81e5d35af0049b6834736"
     },
     {
      "method": "POST",
@@ -129613,7 +129613,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-1cb16f85bb13",
+       "request_id": "sdm-7f24efd02a71",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -129723,7 +129723,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "2453f3ad686a7d67c43c12c6dda533150b09c0ce8973e83fd7c674034c2bb3ae"
+     "sha256": "048d93ebc47e0d3e684218fe1b8bef73f5fc12249f88ed1cad5d9156195f5a46"
     },
     {
      "method": "POST",
@@ -131833,7 +131833,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-b75708c75377",
+       "request_id": "sdm-735bad49ba50",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -131943,7 +131943,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "573c04718af8da501a0209cc0fd94cfc9977e9333a8930b2c82051eb721a632d"
+     "sha256": "17aa6e4694e8dec567f6c5b6d3448717688da86fb5e8d6d4e9580c47292028f5"
     },
     {
      "method": "POST",
@@ -134053,7 +134053,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-c037d66da37e",
+       "request_id": "sdm-592c0ba8b9b5",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -134163,7 +134163,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "dde25b5b4519cd70ea726f8673e87cc04c723ef9f9330ac88e8515a4a936dbc6"
+     "sha256": "18f4d159ed8843784c0e4b90e469d2be00d9b30eb6bde57d4b221d65b741f53c"
     },
     {
      "method": "POST",
@@ -136273,7 +136273,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-6ee54266b6f4",
+       "request_id": "sdm-73c7a71c2421",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -136383,7 +136383,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "136e2fa8f248e04f4f6099dbb5a27afaf79f1136780dc6c957e2353ee7d227eb"
+     "sha256": "ab104b3eea1d7f143cd2e9cb6b85f4d3590c0f18dbccb442a92624802838a36f"
     },
     {
      "method": "POST",
@@ -138493,7 +138493,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-673fd36dbbd2",
+       "request_id": "sdm-9e85293b29a7",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -138603,7 +138603,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "7855a2849ff81ee57fb6832d92ae37676a3335dc6c66fe5c4f8e27d307b784ab"
+     "sha256": "0979a457eb2cd9b2ad8a14877d429d4f8469411284f7290a1d9008a6c907c8ac"
     },
     {
      "method": "POST",
@@ -140713,7 +140713,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-bbec6faeb104",
+       "request_id": "sdm-6aaccea429d2",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -140823,7 +140823,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "c42328c1f0a1263086002c62dad88c375b8bd86255b19f7442994d45e1a7e578"
+     "sha256": "f47e9f2c92a2493ab3888b25415d12ea779785c0039b9799fb245db2c5b0ee01"
     },
     {
      "method": "POST",
@@ -142933,7 +142933,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-83c015766ad7",
+       "request_id": "sdm-029d630f02d6",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -143043,7 +143043,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "945960c52e197127ffec8187b5cd0a4de333e31e7ce2cee09b9968ad624a6eb4"
+     "sha256": "c61ac1f2ca04f8a290da4992f67911765168287fdc2bd254c38c29ed9602e84a"
     },
     {
      "method": "POST",
@@ -145153,7 +145153,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-f8de4d323696",
+       "request_id": "sdm-644fd52d6474",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -145263,7 +145263,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "b753e6d248343978e10c2419d54862cfdfa17503ae1da0b1f54a9659e21e5476"
+     "sha256": "e5c10b56ca5c801682644413884fcf57839e76dea286b61c3b88be03ac06c889"
     },
     {
      "method": "POST",
@@ -147373,7 +147373,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-e60661753dac",
+       "request_id": "sdm-5d9cfb3c6dce",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -147483,7 +147483,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "081b3de5620bfa5d9736dc4500efaf6ee3575065eb00f2be61f82201d5f36834"
+     "sha256": "f8ca719cbf95db31ef70faf9c1ee4051d459d7ff94a643776719cf7ac38fe119"
     },
     {
      "method": "POST",
@@ -149593,7 +149593,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-3ad88cdde6d3",
+       "request_id": "sdm-1fe6c59ad75d",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -149703,7 +149703,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "ce1d9926a8f149d233a6015eebecf714ef214eee1591ba529c995f2e7360fd4b"
+     "sha256": "ed50a07a843aa1169061c589589409d09f011fd1fe3b20fd91339674aa4a4406"
     },
     {
      "method": "POST",
@@ -151813,7 +151813,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-bd9a56a38e19",
+       "request_id": "sdm-8b9a8af4b2ba",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -151923,7 +151923,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "3e49bb81f94ef1f84ddb99a860af723857c1f34c52447276c3c4585a07f8a240"
+     "sha256": "0c046b579d4329d75cdf3ac87217b3b4011e90ce17bfb10af8d310643bfa8871"
     },
     {
      "method": "POST",
@@ -154033,7 +154033,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-e09a701574f3",
+       "request_id": "sdm-dfb6aaad80a9",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -154143,7 +154143,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "0b7b97cb24ac88746b6d2d968f22f7318a329c54f163157bd2f6882c9f6a09ea"
+     "sha256": "cea2db7ebf34f90ff539e46bdd7006fdf9c3eca1e17b416869ffe5bd64569db1"
     },
     {
      "method": "POST",
@@ -156253,7 +156253,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-bdef1fb1b787",
+       "request_id": "sdm-1b988e59b259",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -156363,7 +156363,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "a192923f914b26af24170831184d95e61894a24ad817427a9c12b3529817158d"
+     "sha256": "7123d8d5689c74f1066d7937d1d2e49e5f9b20e666e373e3b283919114d61627"
     },
     {
      "method": "POST",
@@ -158473,7 +158473,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-edd7f4434f37",
+       "request_id": "sdm-e085a867986e",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -158583,7 +158583,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "d383370dd8cbca36d94deaa1f2777c536d85ce8759bf0281897e4e84dfd53a24"
+     "sha256": "b4a61967dd829956d2cf8cfa7d32a41f4b663b175f22f13acec70564958c632c"
     },
     {
      "method": "POST",
@@ -160693,7 +160693,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-070d22beb2e6",
+       "request_id": "sdm-a2741df850e2",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -160803,7 +160803,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "123c82f8d8ec668f186ca4a5bd6d1bd2a8c7084772793a0ac70963158ca73af6"
+     "sha256": "16a4025b04db0632d681565f82ac585e3b625e322810a1ad28f17e26115ad407"
     },
     {
      "method": "POST",
@@ -162913,7 +162913,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-4e106b007c17",
+       "request_id": "sdm-63c66b0d7b28",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -163023,7 +163023,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "adaef8a76e3087ed988d64807d0d6763830fdf49947852d9845b55bd60644c9c"
+     "sha256": "22ad3b538c332bd5cc4ae24a2bc79e8820217b61671dacddf8423ca01d8c19b8"
     },
     {
      "method": "POST",
@@ -165133,7 +165133,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-9227a642c0ac",
+       "request_id": "sdm-fd7e7a7433ab",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -165243,7 +165243,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "b2d438d06a3154c96c667c498d9fb640453fb0474dadda0da83c48ed0577a97d"
+     "sha256": "79315050058cd2bed9fe23423ae04475a691c85f1e0c95f8e0718ea12006f8e1"
     },
     {
      "method": "POST",
@@ -167353,7 +167353,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-4b2640793b0f",
+       "request_id": "sdm-2f88e9658c8a",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -167463,7 +167463,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "969788f286950b40a6a9d5adbc86e088d461c7c26422b21248a64f084ef00b32"
+     "sha256": "80cec1a9da9d00b76fab70a942f13e158dee27ce52d57e9c9506965648211d6d"
     },
     {
      "method": "POST",
@@ -169573,7 +169573,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-49f28f5d5f02",
+       "request_id": "sdm-f48774323f1d",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -169683,7 +169683,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "c35936d148be83697711ffeff216e276cdfae3e9605f0cf7330dc92067460f4d"
+     "sha256": "77679514ff2a0975153ee17a9e2ec0e869b2bc2c6db6a7297ee7938b9749f362"
     },
     {
      "method": "POST",
@@ -171793,7 +171793,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-8ac6c6ad622f",
+       "request_id": "sdm-f0228bfd3a05",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -171903,7 +171903,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "e3c1661eace885f31987a85184c023b5e1d35cf6c7e3150108a14f4a37074818"
+     "sha256": "994d66b3fa0aca0facc1dfab27e47af351fd5535355a52a5b8ed2dd2e030fae7"
     },
     {
      "method": "POST",
@@ -174013,7 +174013,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-e4b132d1fac5",
+       "request_id": "sdm-515a09699a11",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -174123,7 +174123,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "44c63c73599f0f4e22a5d464d66fc79b9728ef4411309620d1c4109cd607a0ac"
+     "sha256": "71c03968ca21ce3544b1289ed047ba0ee3c53655f69fcf4b06f449f96e559063"
     },
     {
      "method": "POST",
@@ -176233,7 +176233,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-b0ea92ed36db",
+       "request_id": "sdm-baa3163f493a",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -176343,7 +176343,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "5a944315cb6d59feed852cd36fca5c9f2971e5c3d4a34aeb1853e2e5794dd6ff"
+     "sha256": "83f1078b0a66b4df74efc6d198c10c3b259b692b153b7b2a943f22592da75c9a"
     },
     {
      "method": "POST",
@@ -178453,7 +178453,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-b37acfa6deef",
+       "request_id": "sdm-095f231a9c48",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -178563,7 +178563,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "014cebbfdb0100bc448939348f5171f98c33e6cd96605cde94d91819f31ea8a0"
+     "sha256": "8cd2f776eb098d59827782957adc7ae3f5139dcb005d50b64f2bf2639bb68956"
     },
     {
      "method": "POST",
@@ -180673,7 +180673,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-a6b3b04b848a",
+       "request_id": "sdm-1c191bf1232b",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -180783,7 +180783,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "3862f0811cac53f27613b29de2e5448a7febe8ad8dd9a213276cab5bf7ba1199"
+     "sha256": "b82c4b52c5019226afdd16ab74ff66c2016bd8738c303f89a2c5531a0d9e040c"
     },
     {
      "method": "POST",
@@ -182893,7 +182893,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-10dfb7203cdd",
+       "request_id": "sdm-aff37db9f3a5",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -183003,7 +183003,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "c5d5fcbd3609430cb84eb68da5bdbe624a2f44ddbb2b2ff9626fd128be0a081c"
+     "sha256": "7d7ad794aa4f8b0a752253986031d9c35a214af9ae77e845b492da2a026b0072"
     },
     {
      "method": "POST",
@@ -185113,7 +185113,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-141be8b4acff",
+       "request_id": "sdm-d691d20510a0",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -185223,7 +185223,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "5da9af93785f7ab2c08a2782dfc21cc399a7399135fc83d7a8b52d8267f23770"
+     "sha256": "d6e1e32f92591816567eabc4fc440d3f66e4e8ee4046569038ffbeb046bb10ac"
     },
     {
      "method": "POST",
@@ -187333,7 +187333,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-7b1e0b1971a0",
+       "request_id": "sdm-5a9abbf0c749",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -187443,7 +187443,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "e6b5d3409c41ca738f972a33e5322116124c7f4ba897274a7d17fc10ec617ae2"
+     "sha256": "99b4a3aa0f34883d3e200b9b2e191e355f004d9f9696ec771f80c0828ef61e3a"
     },
     {
      "method": "POST",
@@ -189553,7 +189553,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-5e9958f5bd22",
+       "request_id": "sdm-c02d9298d5af",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -189663,7 +189663,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "9e3cf95e5aea65e214909fb60d9e5d3a032db740ad12d1aeffd3e2e43362ab63"
+     "sha256": "2d5f0b10b1feedc29a646fc19f9881a163edf62c3d6697b31f75770a77cc602b"
     },
     {
      "method": "POST",
@@ -191773,7 +191773,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-a509c5493f3c",
+       "request_id": "sdm-f3e6cb1a19f5",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -191883,7 +191883,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "dfd490559fc44d9b52ee232e059ce80a24c449ead756d88ef7dbe14ef7e4fad4"
+     "sha256": "d57fc4c6e1f5273e2691d1a441f07bb06bc0deae85ea4cc7d608ea65182ceb04"
     },
     {
      "method": "POST",
@@ -193993,7 +193993,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-54f289947222",
+       "request_id": "sdm-d254c95bb0d9",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -194103,7 +194103,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "d78e2af659a90b98a7338ca9f5d1eb23d6999de881cebcde8453119d14ce85bc"
+     "sha256": "c3d98523cdec149ec9623bf02596f4057eb3131d1e2957b352836a81e5b2729e"
     },
     {
      "method": "POST",
@@ -196213,7 +196213,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-a467c8143426",
+       "request_id": "sdm-571a83086201",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -196323,7 +196323,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "4c01c419ea0e7d40fe0f587fed7a1bbbc52f77f1bcd35aff69b236a6896fb0a8"
+     "sha256": "55225734460ee466a44c4620df0d797058d7406fd3e3c3a5cf7742a4de4cee5d"
     },
     {
      "method": "POST",
@@ -198433,7 +198433,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-d6b942689e58",
+       "request_id": "sdm-5716a32cdc62",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -198543,7 +198543,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "830b5892840308b66ed99be54b98a3210cabeadbd5be3d65ec8708e4fc266916"
+     "sha256": "773dd23868e0e99a8d02dcc8a26fa7de5e65b2b582028d9b860bc9c8da18cc3e"
     },
     {
      "method": "POST",
@@ -200653,7 +200653,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-a651934b339d",
+       "request_id": "sdm-5bfb45c05a20",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -200763,7 +200763,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "d9981b9f7d763466fd8d8e35b732ec122a9b6a77d2b21566effa9e0a8a5fcd6a"
+     "sha256": "d266a76789c34526746af8ded42944fa1f19f89bed8c43f5d2ef3472b87814ab"
     },
     {
      "method": "POST",
@@ -202873,7 +202873,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-7513982aa463",
+       "request_id": "sdm-0e2ea3845136",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -202983,7 +202983,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "5318bc551511d6848a2c71cf3b62fcf5eb4d9c091490a997667b31f05e9accb9"
+     "sha256": "da467c7c3cac784a2613d5b164c58c5371d455c897210bcda49c3ec686d0e8a5"
     },
     {
      "method": "POST",
@@ -205093,7 +205093,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-8f99f875113a",
+       "request_id": "sdm-131540268093",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -205203,7 +205203,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "1b0e41471b7ecbfc82bc5deb3881f51307d2c991a1118799afd2d5ade13e35b2"
+     "sha256": "f708fed73e6ee7c40542d7d3674131a82d58257129bd74e3d06665aa9c0422e9"
     },
     {
      "method": "POST",
@@ -207313,7 +207313,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-c2765d35d16b",
+       "request_id": "sdm-2aea25d192e2",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -207423,7 +207423,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "e30c4fdc578182a799220eae009cf9f9fcb62c2fc0e526c665679bec9bc5c62d"
+     "sha256": "8f78de795d5e981683b9594b47d67961ff9849642686a29b5d3384c23af6c4b6"
     },
     {
      "method": "POST",
@@ -209533,7 +209533,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-73e88b3d346b",
+       "request_id": "sdm-385977f55d16",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -209643,7 +209643,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "494309e5af8878f66f34143d99d911afc7c01c94f86ba367cd77f191a5792f24"
+     "sha256": "761a6d9f9210524dfbd5e102cf30b3b45d060ccb525c34c715e437831baf3f24"
     },
     {
      "method": "POST",
@@ -211753,7 +211753,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-e6c36599f644",
+       "request_id": "sdm-8863f85bc02a",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -211863,7 +211863,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "39bcc1368ae1a49a07ee233a3df64ec129b85a11249c33d8edbe81f153c99529"
+     "sha256": "77061db9ecc6f67b5ff38fe1d7cc65bd09de32bc549e418a90c2fccf1c9d6ae1"
     },
     {
      "method": "POST",
@@ -213973,7 +213973,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-b188df3fdd98",
+       "request_id": "sdm-1882834ea29c",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -214083,7 +214083,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "3d2f8b9cc76dfe1befecf06d4eb5f4749e9d5439b39b1046d1023e61580758d0"
+     "sha256": "d6f076e55501522e342143fac26489a56fed185d104a6e024b77137732bcdbfd"
     },
     {
      "method": "POST",
@@ -216193,7 +216193,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-dd34f883d1f3",
+       "request_id": "sdm-f5f9c95f4353",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -216303,7 +216303,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "5a218792ac877c45f48fc3f74734b7277c43cd8e53d4761135fb703cc88fe861"
+     "sha256": "6771fd866e8b2786fa98789e2c4cc695a77f5462f32ea7925aab5d3b45f1b555"
     },
     {
      "method": "POST",
@@ -218413,7 +218413,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-9ee9fe57f836",
+       "request_id": "sdm-44a0f2224200",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -218523,7 +218523,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "d281b92ee3ac700802405f94d6a7ee21fb04ec8f051e5e210df8c8cf1b60dee6"
+     "sha256": "8524aceb7be94a80aacdd97c603c01c96bc4df102c6497317e56506b669c7eb2"
     },
     {
      "method": "POST",
@@ -220633,7 +220633,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-341f2f860daa",
+       "request_id": "sdm-86aa2217829b",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -220743,7 +220743,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "7b77b0a2094f162f8ff9261ea2b1efffb38518cfc11814b9edac11239723c1b8"
+     "sha256": "2a7cc564d710e1aa1a28debc7d9bef02a0c23ea991e86c4fb29ed4810c4eee0c"
     },
     {
      "method": "POST",
@@ -222853,7 +222853,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-d35066dc236a",
+       "request_id": "sdm-9c3f1f9e8e7f",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -222963,7 +222963,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "9ed8f3c1585967097549f4b5bd996ac698cd05bb65a8bbc8d31acc42bdd3c81e"
+     "sha256": "27ea057632b94308b0c25edfb973ff5bb2ff7b2c1480992d2ed0a93ff6d5412f"
     },
     {
      "method": "POST",
@@ -225073,7 +225073,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-c6e7be42f078",
+       "request_id": "sdm-f817d4109acb",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -225183,7 +225183,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "88a0ff455e34afef21ef1f6d8cde9d2fd9ff6f48372d88edac11733f34259cd4"
+     "sha256": "5fa90a17b7ac0e6acf13543c9e54d54b7b22ca16e82166dc929e11ed0c586bed"
     },
     {
      "method": "POST",
@@ -227293,7 +227293,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-8e5f23cf9db5",
+       "request_id": "sdm-93559ad616a6",
        "source_query": "PREDICT users.score FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -227403,7 +227403,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "eff16eaa7a403b12263172484183cbc97f10d064a3d6db72692cd61cb4b3e0ed"
+     "sha256": "c9d15c4d456746dd457ea7a3a3bd717ab57342cdefbda9945b2b900de1249618"
     }
    ],
    "result": {

@@ -2,7 +2,7 @@
  "format": "sdm-capture/1",
  "case": "decimal.sum-10-2",
  "leg": "databricks-sql",
- "recording_commit": "8f3eb648abc0d00abfd34087fe5124106e137fa4",
+ "recording_commit": "be663bf19e98ca3c03266618d646a3f3099ea07b",
  "reference_commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
  "versions": {
   "databricks-sdk": "0.148.0",
@@ -822,7 +822,7 @@
    "cell": "ref-pandas3",
    "commit": {
     "clean": true,
-    "sha": "8f3eb648abc0d00abfd34087fe5124106e137fa4"
+    "sha": "be663bf19e98ca3c03266618d646a3f3099ea07b"
    },
    "contract": null,
    "inputs": {
@@ -10946,7 +10946,7 @@
        "num_prediction_examples": {
         "number": "2"
        },
-       "request_id": "sdm-a35dfe488972",
+       "request_id": "sdm-94a311606331",
        "source_query": "PREDICT SUM(orders.amount, 0, 30, days) FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -11444,7 +11444,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "709abb86a7db259d4a7633d164bf98170cb3b1ce8c0a0fc3ef5266c7a204246e"
+     "sha256": "cf20c7bd083c8506cb5776d5fcaadde1441b1516225ecd3b8e3a438ffdc2cf20"
     }
    ],
    "result": {

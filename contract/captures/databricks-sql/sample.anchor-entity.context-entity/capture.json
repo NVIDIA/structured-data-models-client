@@ -2,7 +2,7 @@
  "format": "sdm-capture/1",
  "case": "sample.anchor-entity.context-entity",
  "leg": "databricks-sql",
- "recording_commit": "8f3eb648abc0d00abfd34087fe5124106e137fa4",
+ "recording_commit": "be663bf19e98ca3c03266618d646a3f3099ea07b",
  "reference_commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
  "versions": {
   "databricks-sdk": "0.148.0",
@@ -765,8 +765,8 @@
   "identity": {
    "cell": "ref-pandas3",
    "commit": {
-    "clean": false,
-    "sha": "8f3eb648abc0d00abfd34087fe5124106e137fa4"
+    "clean": true,
+    "sha": "be663bf19e98ca3c03266618d646a3f3099ea07b"
    },
    "contract": null,
    "inputs": {
@@ -1379,7 +1379,7 @@
        "num_prediction_examples": {
         "number": "2"
        },
-       "request_id": "sdm-f377ec72022a",
+       "request_id": "sdm-d07abd42ee94",
        "source_query": "PREDICT users.country FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -1679,7 +1679,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "731b1bae71bfa7998fb0bff16d9c4998a34bdd7dc349b30c141afd65544c615f"
+     "sha256": "feb7f08ae08b72647a5d2b599c9eca067e467f1fb054487cea3271ee607fba84"
     }
    ],
    "result": {

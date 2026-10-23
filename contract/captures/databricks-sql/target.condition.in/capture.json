@@ -2,7 +2,7 @@
  "format": "sdm-capture/1",
  "case": "target.condition.in",
  "leg": "databricks-sql",
- "recording_commit": "8f3eb648abc0d00abfd34087fe5124106e137fa4",
+ "recording_commit": "be663bf19e98ca3c03266618d646a3f3099ea07b",
  "reference_commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
  "versions": {
   "databricks-sdk": "0.148.0",
@@ -747,8 +747,8 @@
   "identity": {
    "cell": "ref-pandas3",
    "commit": {
-    "clean": false,
-    "sha": "8f3eb648abc0d00abfd34087fe5124106e137fa4"
+    "clean": true,
+    "sha": "be663bf19e98ca3c03266618d646a3f3099ea07b"
    },
    "contract": null,
    "inputs": {
@@ -1852,7 +1852,7 @@
        "num_prediction_examples": {
         "number": "2"
        },
-       "request_id": "sdm-987a4281bc06",
+       "request_id": "sdm-b5984525ab0d",
        "source_query": "PREDICT users.age IN (22, 23) FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -2351,7 +2351,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "3cd8ffc171e86079152f4e68b58ac75ce0985554b32f8cae253cd3a54e233c24"
+     "sha256": "4bbfe56859a73fcab4a2e9b72ff2e5c871e540af4075ba31352e7797c887d7b8"
     }
    ],
    "result": {

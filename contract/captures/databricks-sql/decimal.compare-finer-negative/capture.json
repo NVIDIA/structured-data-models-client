@@ -2,7 +2,7 @@
  "format": "sdm-capture/1",
  "case": "decimal.compare-finer-negative",
  "leg": "databricks-sql",
- "recording_commit": "8f3eb648abc0d00abfd34087fe5124106e137fa4",
+ "recording_commit": "be663bf19e98ca3c03266618d646a3f3099ea07b",
  "reference_commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
  "versions": {
   "databricks-sdk": "0.148.0",
@@ -760,7 +760,7 @@
    "cell": "ref-pandas3",
    "commit": {
     "clean": true,
-    "sha": "8f3eb648abc0d00abfd34087fe5124106e137fa4"
+    "sha": "be663bf19e98ca3c03266618d646a3f3099ea07b"
    },
    "contract": null,
    "inputs": {
@@ -1883,7 +1883,7 @@
        "num_prediction_examples": {
         "number": "2"
        },
-       "request_id": "sdm-bbe909786eee",
+       "request_id": "sdm-35a37df70279",
        "source_query": "PREDICT users.d > -1.5 FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -2393,7 +2393,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "dbb1ba0a98daece41c140f392ac027bb506303a1aff87950fc7c75419f1cf8a8"
+     "sha256": "b3fba370cf516af2ff2633d6e8f10acd4e6246b13b9a633c1b8c305f87829d02"
     }
    ],
    "result": {

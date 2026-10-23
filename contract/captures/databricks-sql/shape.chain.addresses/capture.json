@@ -2,7 +2,7 @@
  "format": "sdm-capture/1",
  "case": "shape.chain.addresses",
  "leg": "databricks-sql",
- "recording_commit": "8f3eb648abc0d00abfd34087fe5124106e137fa4",
+ "recording_commit": "be663bf19e98ca3c03266618d646a3f3099ea07b",
  "reference_commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
  "versions": {
   "databricks-sdk": "0.148.0",
@@ -981,7 +981,7 @@
         }
        }
       ],
-      "sql": "SELECT\n  0 as table_index,\n  MIN(`ts`) as min_date,\n  MAX(`ts`) as max_date\nFROM `{catalog}`.`{schema}`.`orders`\nUNION ALL\nSELECT\n  1 as table_index,\n  MIN(`ts`) as min_date,\n  MAX(`ts`) as max_date\nFROM `{catalog}`.`{schema}`.`lines`",
+      "sql": "SELECT\n  0 as table_index,\n  MIN(`ts`) as min_date,\n  MAX(`ts`) as max_date\nFROM `{catalog}`.`{schema}`.`lines`\nUNION ALL\nSELECT\n  1 as table_index,\n  MIN(`ts`) as min_date,\n  MAX(`ts`) as max_date\nFROM `{catalog}`.`{schema}`.`orders`",
       "stage": "materialize"
      },
      {
@@ -1234,8 +1234,8 @@
   "identity": {
    "cell": "ref-pandas3",
    "commit": {
-    "clean": false,
-    "sha": "8f3eb648abc0d00abfd34087fe5124106e137fa4"
+    "clean": true,
+    "sha": "be663bf19e98ca3c03266618d646a3f3099ea07b"
    },
    "contract": null,
    "inputs": {
@@ -1730,7 +1730,7 @@
        "num_prediction_examples": {
         "number": "3"
        },
-       "request_id": "sdm-53eaea853147",
+       "request_id": "sdm-21e31af1af29",
        "source_query": "PREDICT addresses.city FOR EACH addresses.aid"
       },
       "model": "kumo-relational",
@@ -2592,7 +2592,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "90a3b5adbd8efd9809f1494ae505038c4753f0336f4ae1e1f4f38bcefe562526"
+     "sha256": "13b947575beb59423eecb9a4c4d80eaf1eb587171d3459e98704e2e56febbe32"
     }
    ],
    "result": {
@@ -2938,7 +2938,7 @@
    "result": "tables/adad1a31b03e9dcf120df1394fe9bb7f8cb5e7cfc933a7c5a947adc14919e185.arrows"
   },
   {
-   "text": "SELECT\n  0 as table_index,\n  MIN(`ts`) as min_date,\n  MAX(`ts`) as max_date\nFROM `{catalog}`.`{schema}`.`orders`\nUNION ALL\nSELECT\n  1 as table_index,\n  MIN(`ts`) as min_date,\n  MAX(`ts`) as max_date\nFROM `{catalog}`.`{schema}`.`lines`",
+   "text": "SELECT\n  0 as table_index,\n  MIN(`ts`) as min_date,\n  MAX(`ts`) as max_date\nFROM `{catalog}`.`{schema}`.`lines`\nUNION ALL\nSELECT\n  1 as table_index,\n  MIN(`ts`) as min_date,\n  MAX(`ts`) as max_date\nFROM `{catalog}`.`{schema}`.`orders`",
    "parameters": [],
    "result": "tables/f2f92c6045d525140bc0c450e7131e86eecca7251358475c341ddc3197eb04ab.arrows"
   },

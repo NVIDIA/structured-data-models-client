@@ -2,7 +2,7 @@
  "format": "sdm-capture/1",
  "case": "base.adventureworks.color",
  "leg": "databricks-sql",
- "recording_commit": "8f3eb648abc0d00abfd34087fe5124106e137fa4",
+ "recording_commit": "be663bf19e98ca3c03266618d646a3f3099ea07b",
  "reference_commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
  "versions": {
   "databricks-sdk": "0.148.0",
@@ -1717,7 +1717,7 @@
    "cell": "ref-pandas3",
    "commit": {
     "clean": true,
-    "sha": "8f3eb648abc0d00abfd34087fe5124106e137fa4"
+    "sha": "be663bf19e98ca3c03266618d646a3f3099ea07b"
    },
    "contract": null,
    "inputs": {
@@ -22928,7 +22928,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-2669d38b5f59",
+       "request_id": "sdm-9df709ba4cf4",
        "source_query": "PREDICT products.Color FOR EACH products.ProductID"
       },
       "model": "kumo-relational",
@@ -23689,7 +23689,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "0155220ac815391d22c81f37dbbde4d0906b25b75e4bf5d4f5fe059ab430d3ff"
+     "sha256": "a1c2f4ef5879a2e4f2d80cf5d0502d9fc35f56d84ffca148450aada5f7f67d04"
     }
    ],
    "result": {

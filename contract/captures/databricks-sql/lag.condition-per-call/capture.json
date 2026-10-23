@@ -2,7 +2,7 @@
  "format": "sdm-capture/1",
  "case": "lag.condition-per-call",
  "leg": "databricks-sql",
- "recording_commit": "8f3eb648abc0d00abfd34087fe5124106e137fa4",
+ "recording_commit": "be663bf19e98ca3c03266618d646a3f3099ea07b",
  "reference_commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
  "versions": {
   "databricks-sdk": "0.148.0",
@@ -1011,8 +1011,8 @@
   "identity": {
    "cell": "ref-pandas3",
    "commit": {
-    "clean": false,
-    "sha": "8f3eb648abc0d00abfd34087fe5124106e137fa4"
+    "clean": true,
+    "sha": "be663bf19e98ca3c03266618d646a3f3099ea07b"
    },
    "contract": null,
    "inputs": {
@@ -1312,7 +1312,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-21db30895b9f",
+       "request_id": "sdm-80e2a6dc4af7",
        "source_query": "PREDICT AVG(orders.price, 0, 28, days) > 20 FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -1541,7 +1541,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "a56a17abd66f66fe407bd609eec33ff046885cf3a2de21aed4605de987e6abfa"
+     "sha256": "41be2e7a84ce975a226c228dd9375a8b5b2f34a643abd6680699680ea9c6dc35"
     },
     {
      "method": "POST",
@@ -1804,7 +1804,7 @@
        "num_prediction_examples": {
         "number": "1"
        },
-       "request_id": "sdm-4c617cd5317e",
+       "request_id": "sdm-15bcf53a0b40",
        "source_query": "PREDICT AVG(orders.price, 0, 28, days) > 20 FOR EACH users.user_id"
       },
       "model": "kumo-relational",
@@ -2018,7 +2018,7 @@
       }
      },
      "path": "/v1/predictions",
-     "sha256": "41893907bb1eaea5ee61c6da0aa81f8f95cf0da360fd9071fd2597643c50b487"
+     "sha256": "0d562958d5c1cd9c8bf71d12b6ee48d6cff72267b0966376efcf13c23a597433"
     }
    ],
    "result": {
