@@ -39,7 +39,7 @@
       "owner": "T1.32d",
       "register": "none",
       "reference": "same",
-      "where": "packages/structured-data-models-client/src/sdm_client/query.py:695",
+      "where": "packages/structured-data-models-client/src/sdm_client/query.py:699",
       "holds": "raise self._refusal(",
       "why": "The reference's own refusal: python-core validates the query before the core's materialize, by the core's validate_query, and rust-host runs validate_query after describe_source as the case carries it, its refusal INVALID_REQUEST; T1.32g admits the case with it",
       "observed": {

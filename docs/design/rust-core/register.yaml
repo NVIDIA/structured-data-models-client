@@ -7637,6 +7637,36 @@ entries:
     and added back, is sampled alike on both routes (held by
     test_a_column_added_by_hand_to_a_described_schema_is_edited_and_sampled).
     Proposed as an improvement; never self-approved.
+- id: P3E-5
+  title: Materialize's refusal of a meaning the source's type cannot carry is worded generically on the core route
+  kind: change
+  old_behavior: >-
+    Where a column's meaning is one its caller's type carries and its
+    source's does not (a BIGINT column retyped `string` and given `text`),
+    the reference's engine refuses the request when it reads the table in
+    place: INVALID_REQUEST, "Column 'age' received an incompatible semantic
+    type (got dtype='int' and stype='text')".
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build, the
+    same request is refused before anything is gathered, INVALID_REQUEST
+    with field schema and the table and column, worded "a column's meaning
+    is not one its values can carry" (T3.16 review round 1): the class,
+    code and moment match, the words do not name the two types.
+  affected_inputs: >-
+    PredictiveQuery.materialize with the core's materialize route forced,
+    over a described schema with a column the caller retyped and gave a
+    meaning its source's type cannot carry.
+  cases: [T3.16]
+  refs: [T3.16, T3.17]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Found by Claude's review round 2 of T3.16 (P2-2). The sentence is T3.17's
+    to pick (the structure design's fix B, which gives every refusal a
+    sentence and its typed fields); held by
+    test_a_retyped_column_is_edited_and_sampled_as_the_old_client_does on
+    class and code. Never self-approved.
 
 # --- lane G entries (P2G-1..19) ---
 

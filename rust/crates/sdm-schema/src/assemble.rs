@@ -260,7 +260,7 @@ pub fn assemble(
         // each column of exact numbers read as the links given read it.
         read_exact_numbers(&mut described, given);
         for link in given {
-            checked(&described, link)?;
+            checked(&described, link, &HostTypes::default())?;
         }
         given.to_vec()
     } else {
@@ -326,9 +326,13 @@ pub fn assemble(
 /// table and column the schema holds at each end, and it can join
 /// (`_require_joinable`), each refused as `INVALID_REQUEST` naming the
 /// link.
-pub(crate) fn checked(tables: &[DescribedTable], link: &[ColumnRef]) -> Result<(), CoreError> {
+pub(crate) fn checked(
+    tables: &[DescribedTable],
+    link: &[ColumnRef],
+    types: &HostTypes,
+) -> Result<(), CoreError> {
     let field = "relationships";
-    let refused = match joins(tables, link) {
+    let refused = match joins_named(tables, link, types) {
         Ok(()) => return Ok(()),
         // The first end the schema does not hold, in the reference's order
         // (`_require_column` of the source, then of the target), named as
@@ -381,8 +385,8 @@ pub(crate) fn checked(tables: &[DescribedTable], link: &[ColumnRef]) -> Result<(
         }
         Err(Unjoinable::Types) => {
             let dtype = |at: Option<&ColumnRef>| {
-                at.and_then(|at| column(tables, at))
-                    .map_or("unsupported", |c| c.dtype.wire_name())
+                at.and_then(|at| column(tables, at).map(|c| named(types, at, c)))
+                    .unwrap_or("unsupported")
             };
             invalid(
                 "a relationship given joins two kinds of value that cannot match",
@@ -479,7 +483,7 @@ pub fn apply_keys_and_times(
                 return Err(key_cannot_identify(
                     name,
                     column,
-                    keyed.dtype,
+                    keyed.dtype.wire_name(),
                     "primary_keys",
                 ));
             }
@@ -544,7 +548,7 @@ pub fn apply_keys_and_times(
             return Err(meaning_not_carried(
                 name,
                 column,
-                timed.dtype,
+                timed.dtype.wire_name(),
                 "timestamp",
                 "time_columns",
             ));
@@ -647,7 +651,7 @@ pub(crate) fn no_column<S: AsRef<str>>(
 pub(crate) fn key_cannot_identify(
     table: &str,
     column: &str,
-    dtype: Dtype,
+    dtype: &str,
     field: &str,
 ) -> CoreError {
     invalid(
@@ -657,7 +661,7 @@ pub(crate) fn key_cannot_identify(
     .with_field("table", Detail::text(table))
     .with_field("column", Detail::text(column))
     .with_field("reason", Detail::text("key_cannot_identify"))
-    .with_field("dtype", Detail::text(dtype.wire_name()))
+    .with_field("dtype", Detail::text(dtype))
 }
 
 /// A column named as a key that is its table's time column (`_check_key`).
@@ -688,7 +692,7 @@ pub(crate) fn time_is_key(table: &str, column: &str, field: &str) -> CoreError {
 pub(crate) fn meaning_not_carried(
     table: &str,
     column: &str,
-    dtype: Dtype,
+    dtype: &str,
     meaning: &str,
     field: &str,
 ) -> CoreError {
@@ -696,7 +700,7 @@ pub(crate) fn meaning_not_carried(
         .with_field("table", Detail::text(table))
         .with_field("column", Detail::text(column))
         .with_field("reason", Detail::text("meaning_not_carried"))
-        .with_field("dtype", Detail::text(dtype.wire_name()))
+        .with_field("dtype", Detail::text(dtype))
         .with_field("stype", Detail::text(meaning))
 }
 
@@ -751,29 +755,43 @@ pub enum Unjoinable {
     Types,
 }
 
-/// What has to agree across a join: a number matches a number, a time a
-/// time (`_join_family`). A number is a type whose name starts `int` or
-/// `float`, as the client's `_join_family` reads a name, so a byte, which
-/// only a host names a column by (`byte`), matches only a byte (T3.16).
-fn family(dtype: Dtype) -> u8 {
-    match dtype {
-        Dtype::Byte => 10,
-        Dtype::Int
-        | Dtype::Int16
-        | Dtype::Int32
-        | Dtype::Int64
-        | Dtype::Float
-        | Dtype::Float32
-        | Dtype::Float64 => 0,
-        Dtype::Date | Dtype::Time => 1,
-        Dtype::String => 2,
-        Dtype::Bool => 3,
-        Dtype::Binary => 4,
-        Dtype::Timedelta => 5,
-        Dtype::Floatlist => 6,
-        Dtype::Intlist => 7,
-        Dtype::Stringlist => 8,
-        Dtype::Unsupported => 9,
+/// The data type names a host gave its columns (T3.16), which the
+/// reference's checks of the caller's schema read: each by table and
+/// column, but for a column of exact numbers, whose type its role decides
+/// (T2.21); and those of them no data type has, which those checks let
+/// through. A column with no name here is named by its type's wire name.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct HostTypes {
+    pub names: BTreeMap<(String, String), String>,
+    pub unknown: BTreeSet<(String, String)>,
+}
+
+impl HostTypes {
+    /// The name of the data type of `table`'s `column`, of type `dtype`.
+    pub fn name<'a>(&'a self, table: &str, column: &str, dtype: Dtype) -> &'a str {
+        self.names
+            .get(&(table.to_owned(), column.to_owned()))
+            .map_or(dtype.wire_name(), String::as_str)
+    }
+
+    /// Whether the host named `table`'s `column` by no data type, which the
+    /// reference's checks let through (`supports_dtype`).
+    pub fn is_unknown(&self, table: &str, column: &str) -> bool {
+        self.unknown
+            .contains(&(table.to_owned(), column.to_owned()))
+    }
+}
+
+/// What has to agree across a join, as the client's `_join_family` reads a
+/// data type's name: any name starting `int` or `float` a number, any
+/// starting `timestamp` a time, any other itself.
+pub fn join_family(name: &str) -> &str {
+    if name.starts_with("int") || name.starts_with("float") {
+        "number"
+    } else if name.starts_with("timestamp") {
+        "timestamp"
+    } else {
+        name
     }
 }
 
@@ -786,10 +804,23 @@ fn column<'a>(tables: &'a [DescribedTable], at: &ColumnRef) -> Option<&'a Descri
         .find(|c| c.name == at.column)
 }
 
+fn named<'a>(types: &'a HostTypes, at: &ColumnRef, column: &DescribedColumn) -> &'a str {
+    types.name(&at.table, &at.column, column.dtype)
+}
+
 /// Whether `link` can join (`_require_joinable`): it names columns the
 /// schema holds, refers to its table's primary key of one column, and its
 /// two columns hold values of one family.
 pub fn joins(tables: &[DescribedTable], link: &[ColumnRef]) -> Result<(), Unjoinable> {
+    joins_named(tables, link, &HostTypes::default())
+}
+
+/// [`joins`], each column's data type read by the name `types` gives it.
+pub fn joins_named(
+    tables: &[DescribedTable],
+    link: &[ColumnRef],
+    types: &HostTypes,
+) -> Result<(), Unjoinable> {
     let [foreign, referenced] = link else {
         return Err(Unjoinable::Missing);
     };
@@ -803,7 +834,7 @@ pub fn joins(tables: &[DescribedTable], link: &[ColumnRef]) -> Result<(), Unjoin
     if key != [referenced.column.clone()] {
         return Err(Unjoinable::NotTheKey);
     }
-    if family(source.dtype) != family(target.dtype) {
+    if join_family(named(types, foreign, source)) != join_family(named(types, referenced, target)) {
         return Err(Unjoinable::Types);
     }
     Ok(())
@@ -960,8 +991,17 @@ pub fn mark_keys(description: &mut SourceDescription) {
 /// foreign key is its own table's primary key (T1.24b: found by the E49
 /// differential, a key named on a link's foreign key).
 pub fn check_links(description: &SourceDescription) -> Result<(), CoreError> {
+    check_links_named(description, &HostTypes::default())
+}
+
+/// [`check_links`], each column's data type read by the name `types` gives
+/// it, as the reference's `check_consistent` reads the caller's schema.
+pub fn check_links_named(
+    description: &SourceDescription,
+    types: &HostTypes,
+) -> Result<(), CoreError> {
     for link in &description.links {
-        let message = match joins(&description.tables, link) {
+        let message = match joins_named(&description.tables, link, types) {
             Ok(()) => continue,
             Err(Unjoinable::Missing) => {
                 "a relationship names a table or column the schema does not hold"

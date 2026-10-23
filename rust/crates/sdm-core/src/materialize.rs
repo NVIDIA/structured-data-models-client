@@ -1971,25 +1971,21 @@ fn warn(asker: &Asker, code: &str, message: &str) {
 /// it before the gathering starts.
 /// Refuses a schema whose column means what its data type cannot carry,
 /// before anything else of the call is read, as the reference refuses it
-/// (T3.16): as the caller holds it (`by_the_source` false), as its
-/// `check_consistent` reads the caller's schema, a column named by no data
-/// type the client knows let through ([`crate::edit::admits`]); then as the
-/// source gave it, as its engine refuses a column of an incompatible
-/// semantic type when it reads the table in place.
+/// (T3.16): with `types`, as the caller holds it, as its `check_consistent`
+/// reads the caller's schema, a column named by no data type the client
+/// knows let through; without, as the source gave it, as its engine refuses
+/// a column of an incompatible semantic type when it reads the table in
+/// place.
 pub(crate) fn meanings_carried(
     description: &SourceDescription,
-    by_the_source: bool,
+    types: Option<&sdm_schema::assemble::HostTypes>,
 ) -> Result<(), CoreError> {
     let mut marked = description.clone();
     sdm_schema::assemble::mark_keys(&mut marked);
     for table in &marked.tables {
         for column in &table.columns {
-            let carried = if by_the_source {
-                crate::edit::supports(column.stype, column.dtype)
-            } else {
-                crate::edit::admits(column.stype, column.dtype)
-            };
-            if !carried {
+            let unknown = types.is_some_and(|t| t.is_unknown(&table.name, &column.name));
+            if !unknown && !crate::edit::supports(column.stype, column.dtype) {
                 return Err(not_carried(&table.name, &column.name));
             }
         }
@@ -2009,13 +2005,8 @@ fn not_carried(table: &str, column: &str) -> CoreError {
 fn consistent(description: &mut SourceDescription) -> Result<(), CoreError> {
     sdm_schema::assemble::mark_keys(description);
     for table in &description.tables {
-        for column in &table.columns {
-            // As the language answers it, as an edit's meaning is held.
-            let supported = crate::edit::supports(column.stype, column.dtype);
-            if !supported {
-                return Err(not_carried(&table.name, &column.name));
-            }
-        }
+        // Each column's meaning was held to what its values can carry before
+        // the run (`meanings_carried`, from dispatch).
         // The engine's table takes a time column only of the timestamp
         // meaning (`Column.__setattr__`): one the schema joins on keeps
         // its identifier's, and the reference refuses the request.

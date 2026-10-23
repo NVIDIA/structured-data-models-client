@@ -34,6 +34,7 @@ Nothing here contacts a model. Inference reads your frames locally.
 from __future__ import annotations
 
 import functools
+import importlib.util
 import warnings
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from collections.abc import Set as AbstractSet
@@ -3067,18 +3068,19 @@ def supports_dtype(stype: str, dtype: str) -> bool:
 
     Answered by the language rather than by a second table kept here, so the
     two cannot drift: the core's table of it (``sdm_client._native.MEANINGS``,
-    T3.16, which the core derives from its own language), else, in a client
-    without the core, the old PQL package's. An unrecognised pair is allowed
+    T3.16, which the core derives from its own language) where the core is
+    loaded or the old PQL package is not installed; the old PQL package's
+    otherwise, so the old route never loads the core (the routing seam). The
+    two tables are held equal by a test. An unrecognised pair is allowed
     through: this is a guard against a known-wrong combination, not a
     whitelist.
     """
     named = language_dtype(dtype)
-    meanings = _meanings()
-    if meanings is not None:
-        stypes, dtypes, pairs = meanings
-        if stype not in stypes or named not in dtypes:
+    native = _the_core()
+    if native is not None:
+        if stype not in STYPES or named not in DTYPES:
             return True
-        return (stype, named) in pairs
+        return (stype, named) in _meanings(native)
     from predictive_query.schema.typing import Dtype, Stype
 
     try:
@@ -3087,18 +3089,28 @@ def supports_dtype(stype: str, dtype: str) -> bool:
         return True
 
 
-@functools.cache
-def _meanings() -> (
-    tuple[frozenset[str], frozenset[str], frozenset[tuple[str, str]]] | None
-):
-    r"""The core's meanings by data type, and the names of each, or ``None``
-    in a client built without the core."""
+def _the_core() -> Any:
+    r"""The core, where it is loaded (a core route ran), or where the old
+    PQL package is not installed and it can be; ``None`` otherwise, so an
+    old route's check never loads it."""
+    import sys
+
+    loaded = sys.modules.get('sdm_client._native')
+    if loaded is not None:
+        return loaded
+    if importlib.util.find_spec('predictive_query') is not None:
+        return None
     try:
         from sdm_client import _native
     except ImportError:
         return None
-    pairs = frozenset((stype, dtype) for stype, dtype in _native.MEANINGS)
-    return STYPES, DTYPES, pairs
+    return _native
+
+
+@functools.cache
+def _meanings(native: Any) -> frozenset[tuple[str, str]]:
+    r"""The core's table of each meaning a data type carries."""
+    return frozenset((stype, dtype) for stype, dtype in native.MEANINGS)
 
 
 class _KeyQuality(NamedTuple):
@@ -3408,18 +3420,22 @@ def language_dtype(dtype: str) -> str:
     r"""The language's name of the data type a column's ``dtype`` names:
     the core's table of the names a host may give a column
     (``sdm_client._native.DTYPE_NAMES``, T3.16, the one the core reads a
-    held schema by), else, in a client built without the core,
-    :data:`_WIRE_TO_PQL_DTYPE`; a name neither knows is its own."""
+    held schema by) where the core is loaded (:func:`_the_core`), else
+    :data:`_WIRE_TO_PQL_DTYPE`, held equal to it by a test; a name neither
+    knows is its own."""
     return _dtype_names().get(dtype, dtype)
 
 
-@functools.cache
 def _dtype_names() -> dict[str, str]:
-    try:
-        from sdm_client import _native
-    except ImportError:
+    native = _the_core()
+    if native is None:
         return dict(_WIRE_TO_PQL_DTYPE)
-    return dict(_native.DTYPE_NAMES)
+    return _native_dtype_names(native)
+
+
+@functools.cache
+def _native_dtype_names(native: Any) -> dict[str, str]:
+    return dict(native.DTYPE_NAMES)
 
 
 # The wire spells a few types differently from the language: read only in a

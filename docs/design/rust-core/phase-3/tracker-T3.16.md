@@ -58,4 +58,15 @@ Codex and Claude, three P1 findings and Claude's P1-2; tests first (edacbfcb, d4
 
 Also: `Request._core` and `Column._source` typed; `to_schema_definition` built from `schema.query_schema`, the one translation (Claude P2-2); `_described_on_the_core`'s rule documented (P2-3).
 Not done: P2-1 (`build` marks the time columns' meanings declared as the old setter did) stays, held by the repr comparisons; P3-2 (the tooling's copies of the held schema) is in the judging train's files.
-A name no data type has is let through by an edit as the old client lets it through; so is the literal `unsupported`, which the old client checks.
+
+## Review round 2 (0c662906)
+
+Codex P1 and Claude P1-1, P2-1, P2-2; tests first (ca42c483, 39348fc6), then fix 2.
+
+| Finding | Fix | The old client's rule |
+|---|---|---|
+| A name outside the table (`int8`, `float16`) fell into another join family than `int64`; every unknown name and the literal `unsupported` were folded into one lenient type | The host's own type name is carried beside the schema the core works on (`sdm_schema::assemble::HostTypes`: each column's name, but for an exact number's, and the names no type has); a join compares the names' families (`assemble::join_family`, the client's `_join_family`); only a name no type has is let through a meaning or key check, the literal `unsupported` checked as the language checks it | `_join_family` reads a name's prefix; `supports_dtype` lets only an unknown pair through |
+| Refusals quoted the wire name (`byte` said as `int32`) | Each edit refusal quotes the host's name | The setters quote the column's `dtype` |
+| Materialize's refusal of a meaning the source's type cannot carry is generic | Registered, P3E-5 (proposed), for T3.17's sentences | The engine names the column and both types |
+
+Also: materialize checks a meaning once against the caller's types and once against the source's, before the run (Claude P3-1); `meanings()` is held to the enums by exhaustive matches (P3-2); the client's own copies of the type tables (`_WIRE_TO_PQL_DTYPE`, `DTYPES`, `STYPES`, the old PQL fallback of `supports_dtype`) serve only a build without the core and go with the old route in Phase 5 (P3-3).

@@ -28,9 +28,10 @@ use sdm_contract::ops::{
 use sdm_contract::{CoreError, CoreWarning, Detail, Scalar};
 
 use crate::assemble::{
-    Link, can_identify, checked, empty_key, invalid, key_cannot_identify, key_is_time_column,
-    key_not_names, mark_keys, meaning_not_carried, name_each_other, no_column, no_table, once,
-    read_exact_numbers, sorted_names, time_column_not_a_name, time_is_key, two_ways, with_given,
+    HostTypes, Link, can_identify, checked, empty_key, invalid, key_cannot_identify,
+    key_is_time_column, key_not_names, mark_keys, meaning_not_carried, name_each_other, no_column,
+    no_table, once, read_exact_numbers, sorted_names, time_column_not_a_name, time_is_key,
+    two_ways, with_given,
 };
 
 /// The meanings a caller may assign a column, by the text it gives
@@ -63,25 +64,39 @@ pub struct Edited {
 /// the reference's refusal of it at the assignment (`INVALID_REQUEST`,
 /// naming the field, and the table and column where it names them).
 pub fn edit(
+    description: SourceDescription,
+    edit: &SchemaEdit,
+    supports: Supports<'_>,
+) -> Result<Edited, CoreError> {
+    edit_named(description, edit, supports, &HostTypes::default())
+}
+
+/// [`edit`], each column's data type read by the name the host gave it
+/// (`types`, T3.16), as the reference's setters read a column's `dtype`: a
+/// meaning or key checked against it, a name no data type has let through,
+/// a link's two columns joined by their names' families, and a refusal
+/// quoting the name.
+pub fn edit_named(
     mut description: SourceDescription,
     edit: &SchemaEdit,
     supports: Supports<'_>,
+    types: &HostTypes,
 ) -> Result<Edited, CoreError> {
     let mut declared = None;
     let mut warnings = Vec::new();
     match edit {
         SchemaEdit::PrimaryKey { table, key } => {
-            primary_key(&mut description, table, key)?;
+            primary_key(&mut description, table, key, types)?;
         }
         SchemaEdit::TimeColumn { table, column } => {
-            declared = time_column(&mut description, table, column, supports)?;
+            declared = time_column(&mut description, table, column, supports, types)?;
         }
         SchemaEdit::Stype {
             table,
             column,
             stype,
         } => {
-            stype_of(&mut description, table, column, stype, supports)?;
+            stype_of(&mut description, table, column, stype, supports, types)?;
             declared = Some(ColumnRef {
                 table: table.clone(),
                 column: column.clone(),
@@ -89,7 +104,7 @@ pub fn edit(
         }
         SchemaEdit::LeaveOut { table, column } => leave_out(&mut description, table, column)?,
         SchemaEdit::Relationships { links } => {
-            warnings = relationships(&mut description, links)?;
+            warnings = relationships(&mut description, links, types)?;
         }
     }
     Ok(Edited {
@@ -147,6 +162,7 @@ fn primary_key(
     description: &mut SourceDescription,
     table: &str,
     key: &Given<Option<Vec<String>>>,
+    types: &HostTypes,
 ) -> Result<(), CoreError> {
     let at = table_at(description, table, "primary_key")?;
     let names = match key {
@@ -170,11 +186,11 @@ fn primary_key(
         let column = &shape.columns[column_at(shape, name, "primary_key")?];
         // A column named by no data type the old client knows, which its
         // checks let through (`supports_dtype`, T3.16).
-        if column.dtype != Dtype::Unsupported && !can_identify(column.dtype) {
+        if !types.is_unknown(table, name) && !can_identify(column.dtype) {
             return Err(key_cannot_identify(
                 table,
                 name,
-                column.dtype,
+                types.name(table, name, column.dtype),
                 "primary_key",
             ));
         }
@@ -201,6 +217,7 @@ fn time_column(
     table: &str,
     column: &Given<Option<String>>,
     supports: Supports<'_>,
+    types: &HostTypes,
 ) -> Result<Option<ColumnRef>, CoreError> {
     let at = table_at(description, table, "time_column")?;
     let name = match column {
@@ -230,6 +247,7 @@ fn time_column(
         Stype::Timestamp,
         supports,
         "time_column",
+        types,
     )?;
     description.tables[at].time_column = Some(name.clone());
     Ok(Some(ColumnRef {
@@ -247,6 +265,7 @@ fn stype_of(
     column: &str,
     stype: &Given<String>,
     supports: Supports<'_>,
+    types: &HostTypes,
 ) -> Result<(), CoreError> {
     let at = table_at(description, table, "stype")?;
     column_at(&description.tables[at], column, "stype")?;
@@ -277,7 +296,7 @@ fn stype_of(
             Given::Unreadable => refused,
         });
     };
-    assign(description, at, column, meaning, supports, "stype")
+    assign(description, at, column, meaning, supports, "stype", types)
 }
 
 /// A meaning assigned to a column of the table at `at`
@@ -294,10 +313,13 @@ fn assign(
     meaning: Stype,
     supports: Supports<'_>,
     field: &str,
+    types: &HostTypes,
 ) -> Result<(), CoreError> {
     let shape = &mut description.tables[at];
     let index = column_at(shape, column, field)?;
-    if !supports(meaning, shape.columns[index].dtype) {
+    // A column named by no data type the old client knows, which its checks
+    // let through (`supports_dtype`, T3.16); any other by its type.
+    if !types.is_unknown(&shape.name, column) && !supports(meaning, shape.columns[index].dtype) {
         let said = SEMANTIC_TYPES
             .iter()
             .find(|(_, stype)| *stype == meaning)
@@ -305,7 +327,7 @@ fn assign(
         return Err(meaning_not_carried(
             &shape.name,
             column,
-            shape.columns[index].dtype,
+            types.name(&shape.name, column, shape.columns[index].dtype),
             said,
             field,
         ));
@@ -375,6 +397,7 @@ fn leave_out(
 fn relationships(
     description: &mut SourceDescription,
     links: &[Given<Vec<ColumnRef>>],
+    types: &HostTypes,
 ) -> Result<Vec<CoreWarning>, CoreError> {
     // Each column of exact numbers read as the links given read it, before
     // they are checked (T2.21); a refusal leaves the schema as it was.
@@ -396,7 +419,7 @@ fn relationships(
                 None => refused,
             });
         };
-        checked(&description.tables, link)?;
+        checked(&description.tables, link, types)?;
         given.push(link.clone());
     }
     let settled = once(given);

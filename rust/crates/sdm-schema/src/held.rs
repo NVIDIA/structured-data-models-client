@@ -44,6 +44,10 @@ pub struct Read {
     /// the old client's checks read it, and the source's is what its data
     /// is read as ([`Read::by_the_source`]).
     pub retyped: BTreeMap<ColumnAt, Dtype>,
+    /// The data type name the host gave each column, as the reference's
+    /// checks of the caller's schema read it (a meaning, a key, a join's
+    /// family, [`crate::assemble::join_family`]).
+    pub types: crate::assemble::HostTypes,
 }
 
 impl Read {
@@ -189,6 +193,7 @@ pub fn read(
     let mut tables = Vec::with_capacity(held.tables.len());
     let mut unfacted = BTreeSet::new();
     let mut retyped = BTreeMap::new();
+    let mut types = crate::assemble::HostTypes::default();
     let links = held.links;
     let mut names = BTreeSet::new();
     for table in held.tables {
@@ -213,6 +218,14 @@ pub fn read(
                     None => continue,
                 },
             };
+            // The host's name of the type, which a join reads; but for a
+            // column of exact numbers, whose type its role decides (T2.21).
+            if facts.exact_number.is_none() {
+                types.names.insert(at.clone(), column.dtype.clone());
+            }
+            if named_dtype(&column.dtype).is_none() {
+                types.unknown.insert(at.clone());
+            }
             let dtype = held_dtype(column, &facts);
             if dtype != facts.dtype && !unfacted.contains(&at) {
                 retyped.insert(at, facts.dtype);
@@ -243,6 +256,7 @@ pub fn read(
         description: SourceDescription { tables, links },
         unfacted,
         retyped,
+        types,
     })
 }
 

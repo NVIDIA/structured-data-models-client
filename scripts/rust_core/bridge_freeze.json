@@ -378,7 +378,7 @@
     },
     "packages/structured-data-models-client/src/sdm_client/schema.py": {
       "<module>": {
-        "fingerprint": "952bc8e1aade5c9d80250d87ccde2d82dca913da69d3cdff14eda29110aad905"
+        "fingerprint": "887250fa4c76d25e7a532c5f4aafedddd569ad8576c790151bd2580d76034600"
       },
       "Column.__setattr__": {
         "fingerprint": "69a9732baf2040e15b128e4137f50ddeccab23c6dfa5dd25d17739296c90c252"
