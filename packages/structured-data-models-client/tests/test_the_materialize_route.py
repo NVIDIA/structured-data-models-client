@@ -48,7 +48,9 @@ from sdm_client._rust import materialize as _rust_materialize
 from sdm_client._rust import run as _rust_run
 from sdm_client._rust import schema as _rust_schema
 from sdm_client._rust.run import run
+from sdm_client._rust.spec import held_schema
 from sdm_client.errors import MissingExtraError
+from sdm_client.schema import _described_on_the_core
 
 ROOT = Path(__file__).resolve().parents[3]
 CORE = ','.join(_routing.FROM_SOURCE_DUCKDB + _routing.MATERIALIZE_DUCKDB)
@@ -602,11 +604,12 @@ def test_tables_named_are_sampled_as_the_old_route_samples_them(
         ),
     )
     core, schema = _named()
-    assert schema._core_description is not None
-    # Each source a relation of one part, its name whole (contract v26).
-    assert {
-        t['name']: t['source'] for t in schema._core_description['tables']
-    } == {name: {'source': [source]} for name, source in NAMED.items()}
+    assert _described_on_the_core(schema)
+    # Each source a relation of one part, its name whole (contract v26), as
+    # the schema is handed to the core (T3.16).
+    assert {t['name']: t['source'] for t in held_schema(schema)['tables']} == {
+        name: {'source': [source]} for name, source in NAMED.items()
+    }
     payload = core._payloads[0]
     assert set(payload['context']['related_tables']) == {'buyers', 'purchases'}
     assert core.entity_table == 'buyers'
@@ -624,15 +627,17 @@ def test_a_schema_not_described_on_the_core_is_described_and_materialized(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # The reference materializes any Schema (T3.8, P2-T2.16-11): a schema
-    # the core has no description of is described on the core then, and
-    # asks what the same schema described on the core asks.
+    # whose columns hold no facts of the source has them read by the core
+    # (T3.16), and asks what the same schema described on the core asks.
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         described = Schema.from_source(DuckDBSource(_connection()))
         schema = described.snapshot()
-        # As a schema the old route described: no description of the core's.
-        schema._core_description = None
+        # As a schema the old route described: no facts of the source.
+        for table in schema.tables.values():
+            for column in table.columns.values():
+                object.__setattr__(column, '_source', None)
         asked = [
             PredictiveQuery(QUERY, held)
             .materialize(indices=[0, 1], anchor_time=ANCHOR, random_seed=7)
@@ -640,8 +645,8 @@ def test_a_schema_not_described_on_the_core_is_described_and_materialized(
             for held in (schema, described)
         ]
     assert asked[0] == asked[1]
-    # The description made for the call is not kept: the schema is as built.
-    assert schema._core_description is None
+    # The facts read for the call are not kept: the schema is as built.
+    assert not _described_on_the_core(schema)
 
 
 def test_on_the_core_route_the_core_chooses_the_validator(
@@ -759,6 +764,42 @@ def test_the_largest_declared_seed_reaches_the_core_exactly() -> None:
             ]
         ],
     }
+    # The schema as the host holds it (T3.16): each column with what the
+    # source said of it.
+    wire = {'int': 'int64', 'float': 'float64', 'date': 'timestamp[us]'}
+    held = {
+        'tables': [
+            {
+                **{
+                    key: table[key]
+                    for key in ('name', 'source', 'primary_key', 'time_column')
+                },
+                'columns': [
+                    {
+                        'name': column['name'],
+                        'dtype': wire[column['dtype']],
+                        'stype': column['stype'],
+                        'stype_before_key': None,
+                        'source': {
+                            'relation': table['source'],
+                            **{
+                                key: column[key]
+                                for key in (
+                                    'dtype',
+                                    'received',
+                                    'nullable',
+                                    'unique',
+                                )
+                            },
+                        },
+                    }
+                    for column in table['columns']
+                ],
+            }
+            for table in description['tables']
+        ],
+        'links': description['links'],
+    }
     import pyarrow as pa
 
     asked: list[dict[str, Any]] = []
@@ -808,7 +849,7 @@ def test_the_largest_declared_seed_reaches_the_core_exactly() -> None:
         run(
             operation,
             {
-                1: codec.attachment(description),
+                1: codec.attachment(held),
                 2: codec.attachment(QUERY),
                 3: pa.table({'indices': pa.array([0, 1], pa.int64())}),
             },
@@ -914,25 +955,36 @@ def test_a_nan_in_a_label_s_window_is_skipped_as_the_reference_skips_it(
     assert _context_row(mixed, 22)[3] == 5.0
 
 
-def test_a_table_mapped_to_another_source_table_is_refused_by_name(
+def test_a_table_mapped_to_another_source_table_samples_that_table(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore')
-        connection = _connection()
-        schema = Schema.from_source(DuckDBSource(connection))
-        connection.execute(
-            'CREATE TABLE other_orders AS SELECT order_id, user_id, '
-            'price * 2 AS price, ts FROM orders'
-        )
-        schema.tables['orders'].source_name = 'other_orders'
-        with pytest.raises(StructuredDataError) as refused:
-            PredictiveQuery(QUERY, schema).materialize(
-                indices=[0, 1], anchor_time=ANCHOR
+    # T3.16: the schema is plain data, so a table pointed at another source
+    # table is sampled from it, as the reference samples a table by its
+    # source name, where until T3.16 the core refused it (`schema_edited`).
+    def sampled() -> Any:
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            connection = _connection()
+            schema = Schema.from_source(DuckDBSource(connection))
+            connection.execute(
+                'CREATE TABLE other_orders AS SELECT order_id, user_id, '
+                'price * 2 AS price, ts FROM orders'
             )
-    assert refused.value.code == 'UNSUPPORTED_REQUEST'
-    assert refused.value.details['rule'] == 'schema_edited'
+            schema.tables['orders'].source_name = 'other_orders'
+            return (
+                PredictiveQuery(QUERY, schema)
+                .materialize(indices=[0, 1], anchor_time=ANCHOR)
+                ._payloads[0]
+            )
+
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    core = sampled()
+    monkeypatch.delenv(_routing.ENVIRONMENT)
+    if _old_route_needs_the_engine():
+        return
+    assert json.loads(json.dumps(core)) == json.loads(
+        json.dumps(sampled(), default=str)
+    )
 
 
 def test_a_table_named_as_the_core_s_seeds_is_read(

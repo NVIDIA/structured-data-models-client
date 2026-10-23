@@ -46,6 +46,7 @@ from sdm_client import (
     StructuredDataError,
     _routing,
 )
+from sdm_client._rust.results import CoreRequest
 from sdm_client.errors import NimRequestError
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -193,7 +194,7 @@ def test_the_result_on_the_core_is_the_old_route_s(
 ) -> None:
     request = _materialized(monkeypatch)
     # Contract v26's request state, version 2 (design choice 1).
-    assert request._core_state == {'version': 2}
+    assert request._core == CoreRequest(version=2)
     with _endpoint().serve() as (url, received):
         core, old = _both(monkeypatch, request, url)
     assert not isinstance(core, Exception), core
@@ -222,7 +223,7 @@ def test_another_request_state_version_is_refused_by_name(
 ) -> None:
     request = _materialized(monkeypatch)
     # Version 1, the state contract v25 wrote: not the current version.
-    request._core_state = {'version': 1}
+    request._core = CoreRequest(version=1)
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     with _endpoint().serve() as (url, received):
         with pytest.raises(StructuredDataError) as refused:
@@ -233,14 +234,18 @@ def test_another_request_state_version_is_refused_by_name(
     assert received.requests == []
 
 
-def test_a_request_the_core_did_not_materialize_has_no_core_route(
+def test_a_request_the_core_did_not_materialize_is_refused_by_name(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # T3.16: refused by name, asking for it to be materialized again,
+    # never a RouteError.
     request = _materialized(monkeypatch)
-    del request._core_state
+    request._core = None
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
-    with pytest.raises(_routing.RouteError):
+    with pytest.raises(StructuredDataError) as refused:
         _predict('http://127.0.0.1:9', request)
+    assert refused.value.code == 'INVALID_REQUEST'
+    assert refused.value.details['rule'] == 'materialize_again'
 
 
 def test_the_outputs_are_checked_on_the_core_as_on_the_old_route(

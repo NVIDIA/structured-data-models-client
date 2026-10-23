@@ -470,9 +470,13 @@ def test_another_request_state_version_is_refused_by_name() -> None:
         request = recorder()._materialize(
             _schema(), recorder().QUERIES['windowed']
         )
-        state = request._core_state
-        assert isinstance(state.get('version'), int)
-        state['version'] += 40
+        import dataclasses
+
+        assert isinstance(request._core.version, int)
+        request._core = dataclasses.replace(
+            request._core, version=request._core.version + 40
+        )
+        state = {'version': request._core.version}
         with endpoint().serve() as (url, received):
             with pytest.raises(StructuredDataError) as refused:
                 _predict(request, url)

@@ -23,15 +23,13 @@
 use serde_json::Value;
 
 /// The attachments the core reads from a `start`, by the lock's names.
-const READ: [&str; 14] = [
+const READ: [&str; 12] = [
     "ValidateQuery.query",
     "ValidateQuery.schema",
     "DescribeSource.source",
     "EditSchema.schema",
-    "EditSchema.held",
     "EditSchema.edit",
     "Materialize.schema",
-    "Materialize.held",
     "Materialize.query",
     "Materialize.candidates",
     "RequestState.query",
