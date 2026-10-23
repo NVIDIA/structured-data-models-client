@@ -399,18 +399,23 @@ pub(crate) fn materialize(
                 labels_only,
             };
             Ok(Run::with_data(access, move |asker| async move {
-                // Each table read where it was described, as the reference
-                // keeps the tables it read: under the namespace its columns'
-                // facts, still of its relation, were read under, where the
-                // source's own parts agree with it (`SourceFacts::namespace`);
-                // every other table where the source and its session say now.
+                // Each table read where this schema read its relation, as the
+                // reference keeps each table it read by its source name: under
+                // the namespace the schema read it under, where the source's
+                // own parts agree with it (`HeldSchema::read_under`); every
+                // other table where the source and its session say now.
                 let pinned: Vec<(sdm_contract::data::Relation, Vec<String>)> = held
                     .tables
                     .iter()
                     .filter_map(|table| {
-                        let parts = described_under(table)?;
+                        table.source.single()?;
+                        let read = held
+                            .read_under
+                            .iter()
+                            .find(|r| r.relation == table.source)?;
                         let data = asker.data()?;
-                        data.keeps(&parts).then(|| (table.source.clone(), parts))
+                        data.keeps(&read.namespace)
+                            .then(|| (table.source.clone(), read.namespace.clone()))
                     })
                     .collect();
                 let asker = if pinned.len() == held.tables.len() {
@@ -449,18 +454,4 @@ pub(crate) fn materialize(
         }
         _ => Err(internal("a materialize run of another operation")),
     }
-}
-
-/// The one namespace the columns of `table`, a table of one part, were read
-/// under, of the facts each holds of its relation (`facts_held`); `None`
-/// where none names one, or two name different ones.
-fn described_under(table: &sdm_contract::ops::HeldTable) -> Option<Vec<String>> {
-    table.source.single()?;
-    let mut read = table.columns.iter().filter_map(|column| {
-        sdm_schema::held::facts_held(table, column)?
-            .namespace
-            .as_ref()
-    });
-    let first = read.next()?;
-    read.all(|other| other == first).then(|| first.clone())
 }
