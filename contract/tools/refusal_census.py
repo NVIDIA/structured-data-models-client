@@ -73,6 +73,9 @@ from typing import Any
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
+#: The variable that has an outcome carry the refusal's words, which only
+#: a test comparing both routes' words sets (T3.17); evidence never does.
+MESSAGES = 'SDM_CENSUS_MESSAGES'
 #: The probe list, relative to a tree's root.
 PROBES = Path('contract/refusal-census.json')
 CRATES = 'rust/crates/*/src/**/*.rs'
@@ -409,6 +412,11 @@ def _outcome(
             value = details.get(name)
             found[name] = value if isinstance(value, str) else None
         found['detail_keys'] = sorted(str(key) for key in details)
+        if os.environ.get(MESSAGES) == '1':
+            # Only for a test comparing the words of both routes (T3.17);
+            # the census's evidence never records a message.
+            found['message'] = str(error)
+            found['sentence'] = getattr(error, '_sentence', None)
         return found
     finally:
         cleanup()
