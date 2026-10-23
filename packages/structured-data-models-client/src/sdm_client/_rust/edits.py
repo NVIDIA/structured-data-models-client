@@ -111,13 +111,16 @@ def _store(
     numbers is read by its role, T2.21); the column whose meaning the
     caller chose. A value the object holds that the answer agrees with is
     kept as the caller gave it."""
-    from sdm_client._rust import codec
+    from sdm_client._rust import codec, results
     from sdm_client._rust.results import SourceFacts
     from sdm_client.schema import _as_key_tuple
 
     # The tables and columns this schema marks are its own, as the
     # reference's setters take them before marking.
     schema._own_tables()
+    # Where the schema read each relation, as the core answered it (the
+    # contract's `HeldSchema.read_under`, which no edit changes).
+    schema._read_under = results.read_under(answer.get('read_under') or [])
     answered = {table['name']: table for table in answer['tables']}
     for name, table in schema.tables.items():
         given = answered[name]
