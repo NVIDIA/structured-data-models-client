@@ -53,6 +53,7 @@ def _provider_error() -> bytes:
     error = {
         'kind': 'data_source',
         'code': 'PROVIDER_ERROR',
+        'sentence': 'provider_failed',
         'message': 'a provider failed',
     }
     return json.dumps({'message': 'error', 'error': error}).encode()

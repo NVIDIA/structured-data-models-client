@@ -11,9 +11,7 @@ use sdm_contract::ops::{
     SAMPLER_STATE_VERSION, SamplerMemo, SchemaEdit, SourceSpec,
 };
 use sdm_contract::run::StartRun;
-use sdm_contract::{
-    CONTRACT_VERSION, CoreError, Detail, ErrorCode, ErrorKind, HeldState, HostFacts, Scalar,
-};
+use sdm_contract::{CONTRACT_VERSION, CoreError, Detail, HeldState, HostFacts, Scalar, Sentence};
 use sdm_engine::time::Zones;
 
 use crate::attached::{check_attachments, take_json, take_json_if};
@@ -29,7 +27,7 @@ pub fn check_contract(contract: u32) -> Result<(), CoreError> {
         return Ok(());
     }
     Err(CoreError::protocol(
-        ErrorCode::InvalidMessage,
+        Sentence::InvalidMessage,
         format!(
             "the host speaks contract version {contract}, and this core version {CONTRACT_VERSION}"
         ),
@@ -54,8 +52,7 @@ pub fn start(
     // The clock is an instant in UTC, spelled as the contract spells it (E5).
     if !matches!(&start.facts.now, Scalar::Timestamp { zone: Some(zone), .. } if zone == "UTC") {
         return Err(CoreError::new(
-            ErrorKind::InvalidRequest,
-            ErrorCode::InvalidRequest,
+            Sentence::HostClockNotUtc,
             "the host's clock must be a ts scalar in UTC",
         )
         .with_field("field", Detail::text("facts.now")));
@@ -108,8 +105,7 @@ pub fn start(
             // state is read (decision H23).
             if request.state.version != REQUEST_STATE_VERSION {
                 return Err(CoreError::new(
-                    ErrorKind::InvalidRequest,
-                    ErrorCode::InvalidRequest,
+                    Sentence::StateVersion,
                     "the request state is of a version this core does not read",
                 )
                 .with_field("field", Detail::text("state.version"))
@@ -144,8 +140,7 @@ pub fn start(
                         // Each step's call carries its own id (T1.36 fix 24).
                         let Some(request_id) = step.request_id.clone() else {
                             return Err(CoreError::new(
-                                ErrorKind::InvalidRequest,
-                                ErrorCode::InvalidRequest,
+                                Sentence::StateUnread,
                                 "a forecast's later step names no request id",
                             )
                             .with_field("field", Detail::text("state.forecast.request_id")));
@@ -168,8 +163,7 @@ pub fn start(
                         .chain(ranking.parts.iter().map(|part| part.candidate));
                     if !positions.clone().zip(positions.skip(1)).all(|(a, b)| a < b) {
                         return Err(CoreError::new(
-                            ErrorKind::InvalidRequest,
-                            ErrorCode::InvalidRequest,
+                            Sentence::StateUnread,
                             "a ranking's questions do not name its candidates in the order given",
                         )
                         .with_field("field", Detail::text("state.ranking.candidate")));
@@ -189,8 +183,7 @@ pub fn start(
                         let query: String = take_json(&mut attachments, part.query)?;
                         let Some(request_id) = part.request_id.clone() else {
                             return Err(CoreError::new(
-                                ErrorKind::InvalidRequest,
-                                ErrorCode::InvalidRequest,
+                                Sentence::StateUnread,
                                 "a ranking's later question names no request id",
                             )
                             .with_field("field", Detail::text("state.ranking.request_id")));
@@ -221,8 +214,7 @@ pub fn start(
                 Some(batches) => {
                     if request.state.forecast.is_some() {
                         return Err(CoreError::new(
-                            ErrorKind::InvalidRequest,
-                            ErrorCode::InvalidRequest,
+                            Sentence::StateUnread,
                             "a forecast's request is one call per step, never batched",
                         )
                         .with_field("field", Detail::text("state.batches")));
@@ -235,8 +227,7 @@ pub fn start(
                         };
                         let Some(request_id) = batch.request_id.clone() else {
                             return Err(CoreError::new(
-                                ErrorKind::InvalidRequest,
-                                ErrorCode::InvalidRequest,
+                                Sentence::StateUnread,
                                 "a later call of a request names no request id",
                             )
                             .with_field("field", Detail::text("state.batches.request_id")));
@@ -304,8 +295,7 @@ pub(crate) fn materialize(
             // (`DataAccess::plan`).
             if request.seed.as_ref().is_some_and(|seed| seed.is_negative()) {
                 return Err(CoreError::new(
-                    ErrorKind::InvalidRequest,
-                    ErrorCode::InvalidRequest,
+                    Sentence::SeedNegative,
                     "a sampling seed cannot be negative",
                 )
                 .with_field("field", Detail::text("seed"))
@@ -326,8 +316,7 @@ pub(crate) fn materialize(
                 Some(state) => {
                     if state.version != SAMPLER_STATE_VERSION {
                         return Err(CoreError::new(
-                            ErrorKind::InvalidRequest,
-                            ErrorCode::InvalidRequest,
+                            Sentence::SamplerStateVersion,
                             "the sampler state is of a version this core does not read",
                         )
                         .with_field("field", Detail::text("sampler_state.version"))
@@ -355,8 +344,7 @@ pub(crate) fn materialize(
                     };
                     Some(sdm_wire::json::read(&bytes).map_err(|e| {
                         CoreError::new(
-                            ErrorKind::InvalidRequest,
-                            ErrorCode::InvalidRequest,
+                            Sentence::OptionValuesUnread,
                             "the call's option values are not JSON this core reads",
                         )
                         .with_field("field", Detail::text("values"))

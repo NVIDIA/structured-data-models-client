@@ -34,7 +34,7 @@ use arrow_schema::TimeUnit;
 use jiff::Timestamp;
 use jiff::civil::DateTime;
 use jiff::tz::{AmbiguousOffset, TimeZone};
-use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind};
+use sdm_contract::{CoreError, Detail, Sentence};
 
 /// A zone name the run's zones do not hold. It carries no name: a zone's
 /// name can come from the data or the caller, and no input value reaches a
@@ -62,8 +62,7 @@ const CYCLE_NANOS: i128 = DAYS_PER_CYCLE * SECONDS_PER_DAY * NANOS_PER_SECOND;
 /// A time outside what the named unit's count holds.
 pub fn out_of_range(field: &str) -> CoreError {
     CoreError::new(
-        ErrorKind::Unsupported,
-        ErrorCode::ValueOutOfRange,
+        Sentence::TimePastUnit,
         "a time is outside what the unit asked for holds",
     )
     .with_field("field", Detail::text(field))
@@ -389,6 +388,7 @@ fn civil_from_days(days: i128) -> (i64, u8, u8) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sdm_contract::ErrorCode;
 
     #[test]
     fn civil_arithmetic_round_trips_across_the_range() {

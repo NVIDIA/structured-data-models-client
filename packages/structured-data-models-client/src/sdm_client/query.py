@@ -538,7 +538,6 @@ class PredictiveQuery:
                 self.text,
                 given,
                 steps=asked.num_forecasts,
-                options=options,
             )
             if said is error:
                 # The core's own words: raised as the core raised them, with

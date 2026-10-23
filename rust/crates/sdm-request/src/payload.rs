@@ -48,7 +48,7 @@ use arrow_array::types::{
 use arrow_array::{Array, ArrayRef};
 use arrow_schema::{DataType, TimeUnit};
 use sdm_contract::ops::Stype;
-use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, Scalar};
+use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 use sdm_engine::labels::Labels;
 use sdm_wire::json::Value;
 use sdm_wire::payload::{
@@ -241,13 +241,8 @@ pub struct Built {
     pub answering: usize,
 }
 
-fn invalid(message: &str, column: &str) -> CoreError {
-    CoreError::new(
-        ErrorKind::InvalidRequest,
-        ErrorCode::InvalidRequest,
-        message,
-    )
-    .with_field("column", Detail::text(column))
+fn invalid(sentence: Sentence, message: &str, column: &str) -> CoreError {
+    CoreError::new(sentence, message).with_field("column", Detail::text(column))
 }
 
 /// A value no request holds, with the value as Python writes a float
@@ -261,6 +256,7 @@ fn not_finite(column: &str, value: f64) -> CoreError {
         "-inf"
     };
     invalid(
+        Sentence::NotFinite,
         "a value is not finite, and a request holds finite numbers or nulls",
         column,
     )
@@ -274,7 +270,7 @@ fn count(n: usize) -> Detail {
 }
 
 fn internal(message: &str) -> CoreError {
-    CoreError::new(ErrorKind::Internal, ErrorCode::InternalError, message)
+    CoreError::new(Sentence::Internal, message)
 }
 
 /// The wire dtype of a column of `data_type`, or a refusal naming the rule:
@@ -379,10 +375,14 @@ fn int_cell(value: i128, column: &str) -> Result<Value, CoreError> {
         // The range, for the host's words (the reference's
         // `_cell_json_value`), never the value (decision H17); the table and
         // row are its caller's.
-        return Err(invalid("a value is outside the range int64 holds", column)
-            .with_field("field", Detail::text("request"))
-            .with_field("reason", Detail::text("past_int64"))
-            .with_field("dtype", Detail::text("int64")));
+        return Err(invalid(
+            Sentence::PastInt64,
+            "a value is outside the range int64 holds",
+            column,
+        )
+        .with_field("field", Detail::text("request"))
+        .with_field("reason", Detail::text("past_int64"))
+        .with_field("dtype", Detail::text("int64")));
     }
     if value.abs() > JSON_SAFE {
         return Ok(Value::Text(value.to_string()));
@@ -447,8 +447,7 @@ fn to_ns(value: i64, unit: TimeUnit, column: &str) -> Result<i64, CoreError> {
     };
     value.checked_mul(per).ok_or_else(|| {
         CoreError::new(
-            ErrorKind::Unsupported,
-            ErrorCode::ValueOutOfRange,
+            Sentence::ColumnTimePastNanoseconds,
             "a time is outside what nanoseconds since the epoch hold",
         )
         .with_field("column", Detail::text(column))
@@ -1219,8 +1218,11 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
     if bytes.len() > PAYLOAD_BYTES {
         let count = |n: usize| Detail::Scalar(sdm_contract::Scalar::UInt64(n as u64));
         return Err(CoreError::new(
-            ErrorKind::InvalidRequest,
-            ErrorCode::InvalidRequest,
+            if sampled.num_test > 1 {
+                Sentence::PayloadSmallerCalls
+            } else {
+                Sentence::PayloadNoSmallerCall
+            },
             "the request is larger than the endpoint takes",
         )
         .with_field("field", Detail::text("payload"))

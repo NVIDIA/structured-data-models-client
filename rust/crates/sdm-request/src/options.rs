@@ -12,7 +12,7 @@
 //! Each refusal is a code and fields naming the option and why, never the
 //! value given; the host words it.
 
-use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, Scalar};
+use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 use sdm_wire::json::{Value, is_integer_token, whole};
 use sdm_wire::payload::{ClassificationConfig, InferenceConfig};
 
@@ -99,25 +99,28 @@ impl AskedLag {
     /// as lagged features, which are none for a static one.
     pub fn refusal(self, temporal: bool) -> Result<u64, CoreError> {
         let refused = |message: &str, reason: &'static str| {
-            CoreError::new(
-                ErrorKind::InvalidRequest,
-                ErrorCode::InvalidRequest,
-                message,
-            )
-            .with_field("field", Detail::text("lag_timesteps"))
-            .with_field("reason", Detail::text(reason))
+            CoreError::new(Sentence::LagNegative, message)
+                .with_field("field", Detail::text("lag_timesteps"))
+                .with_field("reason", Detail::text(reason))
         };
         match self {
-            AskedLag::Unordered => Err(mistyped("lag_timesteps", "not_a_number")),
+            AskedLag::Unordered => Err(mistyped(
+                Sentence::LagNotANumber,
+                "lag_timesteps",
+                "not_a_number",
+            )),
             AskedLag::Negative => Err(refused(
                 "the past steps added as features cannot be negative",
                 "negative",
             )),
             _ if !temporal => Ok(0),
-            AskedLag::NotWhole => Err(mistyped("lag_timesteps", "not_a_whole_number")),
+            AskedLag::NotWhole => Err(mistyped(
+                Sentence::LagNotWhole,
+                "lag_timesteps",
+                "not_a_whole_number",
+            )),
             AskedLag::TooLarge => Err(CoreError::new(
-                ErrorKind::Unsupported,
-                ErrorCode::ValueOutOfRange,
+                Sentence::LagPastTimes,
                 "a time is outside what nanoseconds since the epoch hold",
             )
             .with_field("field", Detail::text("lag_timesteps"))),
@@ -183,14 +186,26 @@ pub struct Asked {
 
 /// A value of the wrong type for its option, refused as the client
 /// refuses it (`INVALID_REQUEST`), naming the option and the type it takes.
-fn mistyped(field: &str, reason: &'static str) -> CoreError {
+fn mistyped(sentence: Sentence, field: &str, reason: &'static str) -> CoreError {
     CoreError::new(
-        ErrorKind::InvalidRequest,
-        ErrorCode::InvalidRequest,
+        sentence,
         "an option of the call is of a type it does not take",
     )
     .with_field("field", Detail::text(field))
     .with_field("reason", Detail::text(reason))
+}
+
+/// The sentence of an option that is not a whole number, by the option.
+fn not_whole(field: &str) -> Sentence {
+    match field {
+        "num_context_samples" => Sentence::NumContextSamplesNotWhole,
+        "num_hops" => Sentence::NumHopsNotWhole,
+        "random_seed" => Sentence::RandomSeedNotWhole,
+        "top_k" => Sentence::TopKNotWhole,
+        "rows_per_call" => Sentence::RowsPerCall,
+        "max_pq_iterations" => Sentence::MaxPqIterationsNotAWholeNumber,
+        _ => Sentence::OptionNotWhole,
+    }
 }
 
 /// A value the caller gave, as the JSON text the host wrote it in, which a
@@ -213,7 +228,8 @@ fn integer(field: &str, value: &Value) -> Result<(bool, String), CoreError> {
         // A boolean, a float or anything else: not a whole number, as the
         // client's check (`numbers.Integral`, a bool excluded) refuses it,
         // naming the value given, for the host's words.
-        _ => Err(mistyped(field, "not_a_whole_number").with_field("given", given_text(value))),
+        _ => Err(mistyped(not_whole(field), field, "not_a_whole_number")
+            .with_field("given", given_text(value))),
     }
 }
 
@@ -281,7 +297,11 @@ pub fn values(given: Option<&Value>) -> Result<Asked, CoreError> {
         return Ok(asked);
     };
     let Value::Object(members) = given else {
-        return Err(mistyped("values", "not_an_object"));
+        return Err(mistyped(
+            Sentence::OptionValuesUnread,
+            "values",
+            "not_an_object",
+        ));
     };
     for (name, value) in members {
         match (name.as_str(), value) {
@@ -308,7 +328,10 @@ pub fn values(given: Option<&Value>) -> Result<Asked, CoreError> {
                 asked.neighbors = Some(hops.clone());
             }
             ("num_neighbors", v) => {
-                return Err(mistyped(name, "not_a_sequence").with_field("given", given_text(v)));
+                return Err(
+                    mistyped(Sentence::NeighborsNotASequence, name, "not_a_sequence")
+                        .with_field("given", given_text(v)),
+                );
             }
             ("max_pq_iterations", v) => asked.max_pq_iterations = Some(v.clone()),
             ("context_anchor_time", v) => asked.context_anchor_time = Some(v.clone()),
@@ -318,10 +341,19 @@ pub fn values(given: Option<&Value>) -> Result<Asked, CoreError> {
             ("prediction_statistic", Value::Text(text)) => {
                 asked.prediction_statistic = Some(text.clone());
             }
-            ("prediction_statistic", _) => return Err(mistyped(name, "not_text")),
+            ("prediction_statistic", v) => {
+                return Err(mistyped(Sentence::StatisticUnknown, name, "not_text")
+                    .with_field("given", given_text(v)));
+            }
             ("inference_config", Value::Null) => {}
             ("inference_config", v @ Value::Object(_)) => asked.inference_config = Some(v.clone()),
-            ("inference_config", _) => return Err(mistyped(name, "not_a_mapping")),
+            ("inference_config", _) => {
+                return Err(mistyped(
+                    Sentence::InferenceConfigNotAnObject,
+                    name,
+                    "not_a_mapping",
+                ));
+            }
             ("rows_per_call", v) => asked.rows_per_call = rows_per_call(v)?,
             ("random_seed", Value::Null) => asked.seed = AskedSeed::Unseeded,
             ("random_seed", v) => {
@@ -333,7 +365,7 @@ pub fn values(given: Option<&Value>) -> Result<Asked, CoreError> {
             // Any value, refused only where the engine refuses it, after the
             // context is labelled (T2.9).
             ("lag_timesteps", v) => asked.lag_timesteps = Some(AskedLag::of(v)),
-            _ => return Err(mistyped(name, "not_an_option")),
+            _ => return Err(mistyped(Sentence::OptionUnknown, name, "not_an_option")),
         }
     }
     Ok(asked)
@@ -351,11 +383,11 @@ pub fn top_k(given: &Value) -> Result<u32, CoreError> {
     match digits.parse::<u32>() {
         Ok(k) if !negative && (1..=MAX_TOP_K).contains(&k) => Ok(k),
         _ => Err(CoreError::new(
-            ErrorKind::InvalidRequest,
-            ErrorCode::InvalidRequest,
+            Sentence::TopKOutOfRange,
             "top_k is not a number of candidates this model ranks",
         )
         .with_field("field", Detail::text("top_k"))
+        .with_field("given", given_text(given))
         .with_field("reason", Detail::text("out_of_range"))
         .with_field("limit", Detail::Scalar(Scalar::UInt32(MAX_TOP_K)))),
     }
@@ -370,7 +402,7 @@ pub fn top_k(given: &Value) -> Result<u32, CoreError> {
 fn lax_boolean(field: &str, value: &Value) -> Result<bool, CoreError> {
     const FALSE: [&str; 6] = ["0", "off", "f", "false", "n", "no"];
     const TRUE: [&str; 6] = ["1", "on", "t", "true", "y", "yes"];
-    let refused = || mistyped(field, "not_a_boolean");
+    let refused = || mistyped(Sentence::OptionNotABoolean, field, "not_a_boolean");
     match value {
         Value::Bool(b) => Ok(*b),
         Value::Number(token) => match token.parse::<f64>() {
@@ -413,12 +445,17 @@ pub fn excluded(asked: &Asked) -> Result<Vec<(String, Vec<Value>)>, CoreError> {
             .iter()
             .map(|(table, columns)| match columns {
                 Value::Array(columns) => Ok((table.clone(), columns.clone())),
-                _ => Err(mistyped(NAME, "not_a_sequence")
-                    .with_field("table", Detail::text(table))
-                    .with_field("given", given_text(columns))),
+                _ => Err(
+                    mistyped(Sentence::ExcludedNotASequence, NAME, "not_a_sequence")
+                        .with_field("table", Detail::text(table))
+                        .with_field("given", given_text(columns)),
+                ),
             })
             .collect(),
-        Some(other) => Err(mistyped(NAME, "not_a_mapping").with_field("given", given_text(other))),
+        Some(other) => Err(
+            mistyped(Sentence::ExcludedNotAMapping, NAME, "not_a_mapping")
+                .with_field("given", given_text(other)),
+        ),
     }
 }
 
@@ -486,19 +523,30 @@ fn iterations(given: &Value) -> Result<Iterations, CoreError> {
             magnitude: Some(u128::from(*b)),
         },
         Value::Number(token) if !is_integer_token(token) => {
-            let f: f64 = token
-                .parse()
-                .map_err(|_| mistyped("max_pq_iterations", "not_a_whole_number"))?;
+            let f: f64 = token.parse().map_err(|_| {
+                mistyped(
+                    Sentence::MaxPqIterationsNotAWholeNumber,
+                    "max_pq_iterations",
+                    "not_a_whole_number",
+                )
+            })?;
             if f.is_nan() || f < 1.0 {
-                return Err(invalid("max_pq_iterations", "below_one"));
+                return Err(invalid(
+                    Sentence::IterationsBelowOne,
+                    "max_pq_iterations",
+                    "below_one",
+                ));
             }
             return Ok(Iterations::Float(f));
         }
         v => magnitude("max_pq_iterations", v)?,
     };
     match magnitude {
-        _ if negative => Err(invalid("max_pq_iterations", "below_one")),
-        Some(0) => Err(invalid("max_pq_iterations", "below_one")),
+        _ if negative || magnitude == Some(0) => Err(invalid(
+            Sentence::IterationsBelowOne,
+            "max_pq_iterations",
+            "below_one",
+        )),
         Some(n) => Ok(Iterations::Whole(u64::try_from(n).unwrap_or(u64::MAX))),
         None => Ok(Iterations::Whole(u64::MAX)),
     }
@@ -526,7 +574,11 @@ pub enum Hop {
 pub fn neighbors(asked: &Asked, mode: RunMode) -> Result<Vec<Hop>, CoreError> {
     let Some(given) = &asked.neighbors else {
         if asked.num_hops_none {
-            return Err(mistyped("num_hops", "not_a_whole_number"));
+            return Err(mistyped(
+                Sentence::NumHopsNone,
+                "num_hops",
+                "not_a_whole_number",
+            ));
         }
         let hops = asked
             .num_hops
@@ -560,8 +612,8 @@ pub fn neighbors(asked: &Asked, mode: RunMode) -> Result<Vec<Hop>, CoreError> {
 /// P2I-1). A size below zero is refused, `INVALID_REQUEST` (`negative`),
 /// where the reference's three samplers disagree (register P2I-4, KO2-82).
 fn hop(given: &Value) -> Result<Hop, CoreError> {
-    let refused = || mistyped("num_neighbors", "not_a_whole_number");
-    let negative = || invalid("num_neighbors", "negative");
+    let refused = || mistyped(Sentence::HopNotWhole, "num_neighbors", "not_a_whole_number");
+    let below_zero = || invalid(Sentence::HopNegative, "num_neighbors", "negative");
     let size = match given {
         Value::Bool(b) => f64::from(u8::from(*b)),
         Value::Text(text) => {
@@ -578,7 +630,7 @@ fn hop(given: &Value) -> Result<Hop, CoreError> {
                 .filter(|size: &f64| plain && size.is_finite())
                 .ok_or_else(refused)?;
             if size < 0.0 {
-                return Err(negative());
+                return Err(below_zero());
             }
             // `'0' == 0` is false: a zero spelled as text ends nothing.
             return Ok(if size >= 1.0 {
@@ -595,7 +647,7 @@ fn hop(given: &Value) -> Result<Hop, CoreError> {
             {
                 return Ok(match magnitude {
                     Some(0) => Hop::Stop,
-                    _ if negative => return Err(invalid("num_neighbors", "negative")),
+                    _ if negative => return Err(below_zero()),
                     Some(n) => Hop::Keep(u64::try_from(n).unwrap_or(u64::MAX)),
                     None => Hop::Keep(u64::MAX),
                 });
@@ -608,7 +660,7 @@ fn hop(given: &Value) -> Result<Hop, CoreError> {
         return Err(refused());
     }
     if size < 0.0 {
-        return Err(negative());
+        return Err(below_zero());
     }
     Ok(if size == 0.0 {
         Hop::Stop
@@ -640,7 +692,13 @@ pub fn hops_ignored(asked: &Asked) -> Option<String> {
 /// (`to_naive_utc`); a value of another form is refused as mistyped
 /// (`not_a_time`), which no host that holds to the contract sends.
 fn context_anchor(given: &Value) -> Result<AskedAnchor, CoreError> {
-    let refused = || mistyped("context_anchor_time", "not_a_time");
+    let refused = || {
+        mistyped(
+            Sentence::ContextAnchorNotATime,
+            "context_anchor_time",
+            "not_a_time",
+        )
+    };
     match given {
         Value::Null => Ok(AskedAnchor::Absent),
         Value::Text(text) if text == "entity" => Ok(AskedAnchor::Entity),
@@ -684,8 +742,9 @@ pub fn rows_per_call(given: &Value) -> Result<Option<u64>, CoreError> {
         magnitude,
     } = magnitude("rows_per_call", given)?;
     match magnitude {
-        _ if negative => Err(invalid("rows_per_call", "below_one")),
-        Some(0) => Err(invalid("rows_per_call", "below_one")),
+        _ if negative || magnitude == Some(0) => {
+            Err(invalid(Sentence::RowsPerCall, "rows_per_call", "below_one"))
+        }
         Some(n) => Ok(Some(u64::try_from(n).unwrap_or(u64::MAX))),
         None => Ok(Some(u64::MAX)),
     }
@@ -777,19 +836,22 @@ pub fn run_mode(asked: Option<Integer>) -> Result<RunMode, CoreError> {
         return Ok(RunMode::Fast);
     };
     if negative || value == Some(0) {
+        let sign = if negative { "-" } else { "" };
         return Err(CoreError::new(
-            ErrorKind::InvalidRequest,
-            ErrorCode::InvalidRequest,
+            Sentence::NumContextSamplesBelowOne,
             "num_context_samples is at least 1",
         )
-        .with_field("field", Detail::text("num_context_samples")));
+        .with_field("field", Detail::text("num_context_samples"))
+        .with_field(
+            "given",
+            Detail::text(format!("{sign}{}", value.unwrap_or_default())),
+        ));
     }
     match value {
         Some(n) if n <= RunMode::Fast.context_examples() as u128 => Ok(RunMode::Fast),
         Some(n) if n <= RunMode::Best.context_examples() as u128 => Ok(RunMode::Best),
         _ => Err(CoreError::new(
-            ErrorKind::Unsupported,
-            ErrorCode::UnsupportedRequest,
+            Sentence::NumContextSamplesPastMost,
             "num_context_samples is past the most context the endpoint takes",
         )
         .with_field("field", Detail::text("num_context_samples"))
@@ -827,14 +889,22 @@ pub fn hops(num_hops: Option<Integer>, num_neighbors: Option<Integer>) -> Result
         None => error,
     };
     if negative || value == Some(0) {
-        return Err(named(invalid(field, "no_hop"))
+        let sentence = if field == "num_hops" {
+            Sentence::NoHopNumHops
+        } else {
+            Sentence::NoHopNumNeighbors
+        };
+        return Err(named(invalid(sentence, field, "no_hop"))
             .with_field("limit", Detail::Scalar(Scalar::UInt64(HOPS_MAX as u64))));
     }
     if value.is_none_or(|n| n > HOPS_MAX) {
         return Err(named(
             CoreError::new(
-                ErrorKind::Unsupported,
-                ErrorCode::UnsupportedRequest,
+                if asked.is_some() {
+                    Sentence::HopsPastEndpoint
+                } else {
+                    Sentence::HopsPastEndpointUncounted
+                },
                 "the sampling options ask more hops than the endpoint reads",
             )
             .with_field("field", Detail::text(field))
@@ -848,10 +918,9 @@ pub fn hops(num_hops: Option<Integer>, num_neighbors: Option<Integer>) -> Result
 /// (`PREDICTION_STATISTICS`).
 pub const STATISTICS: [&str; 2] = ["mean", "median"];
 
-fn invalid(field: &'static str, reason: &'static str) -> CoreError {
+fn invalid(sentence: Sentence, field: &'static str, reason: &'static str) -> CoreError {
     CoreError::new(
-        ErrorKind::InvalidRequest,
-        ErrorCode::InvalidRequest,
+        sentence,
         "an option of the call is not one the engine reads",
     )
     .with_field("field", Detail::text(field))
@@ -864,7 +933,12 @@ pub fn statistic(given: Option<&str>) -> Result<Option<String>, CoreError> {
     match given {
         None => Ok(None),
         Some(name) if STATISTICS.contains(&name) => Ok(Some(name.to_owned())),
-        Some(_) => Err(invalid("prediction_statistic", "not_a_statistic")),
+        Some(name) => Err(invalid(
+            Sentence::StatisticUnknown,
+            "prediction_statistic",
+            "not_a_statistic",
+        )
+        .with_field("given", given_text(&Value::Text(name.to_owned())))),
     }
 }
 
@@ -872,8 +946,12 @@ pub fn statistic(given: Option<&str>) -> Result<Option<String>, CoreError> {
 /// (`_record_the_statistic`): refused, as the reference refuses it.
 pub fn statistic_for(kind: Kind, statistic: Option<&String>) -> Result<(), CoreError> {
     if statistic.is_some() && kind != Kind::Regression {
-        return Err(invalid("prediction_statistic", "not_a_regression")
-            .with_field("task", Detail::text(kind.wire_name())));
+        return Err(invalid(
+            Sentence::StatisticNotARegression,
+            "prediction_statistic",
+            "not_a_regression",
+        )
+        .with_field("task", Detail::text(kind.wire_name())));
     }
     Ok(())
 }
@@ -913,7 +991,14 @@ const OUTPUT_TYPES: [&str; 3] = ["mean", "median", "quantiles"];
 /// A refusal of the inference option `key`: `INVALID_REQUEST`, as the
 /// engine's validation error is the caller's (a `ValueError`).
 fn option_refused(key: &str, reason: &'static str) -> CoreError {
-    invalid("inference_config", reason).with_field("key", Detail::text(key))
+    let sentence = match reason {
+        "not_a_boolean" => Sentence::InferenceOptionNotABoolean,
+        "not_a_whole_number" | "out_of_range" => Sentence::InferenceOptionNotOneToFour,
+        "not_a_list" | "not_a_transform" => Sentence::InferenceOptionNotTransforms,
+        "not_an_output_type" => Sentence::InferenceOptionNotAnOutputType,
+        _ => Sentence::InferenceOptionUnknown,
+    };
+    invalid(sentence, "inference_config", reason).with_field("key", Detail::text(key))
 }
 
 /// A boolean option given as text, read as the engine's validation
@@ -1079,7 +1164,11 @@ pub fn options(kind: Kind, given: Option<&Value>) -> Result<Options, CoreError> 
         return Ok(options);
     };
     let Value::Object(members) = given else {
-        return Err(invalid("inference_config", "not_an_object"));
+        return Err(invalid(
+            Sentence::InferenceConfigNotAnObject,
+            "inference_config",
+            "not_an_object",
+        ));
     };
     for (key, value) in members {
         match key.as_str() {
@@ -1150,6 +1239,7 @@ impl Options {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sdm_contract::ErrorCode;
 
     fn read(text: &str) -> Value {
         sdm_wire::json::read(text.as_bytes()).unwrap()

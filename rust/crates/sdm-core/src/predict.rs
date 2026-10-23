@@ -29,7 +29,7 @@
 use sdm_contract::error::AnsweredParts;
 use sdm_contract::ops::{OperationResult, Predicted};
 use sdm_contract::run::Endpoint;
-use sdm_contract::{CoreError, CoreWarning, Detail, ErrorCode, ErrorKind, Scalar};
+use sdm_contract::{CoreError, CoreWarning, Detail, Scalar, Sentence};
 use sdm_request::predict::{
     Notice, Part, absent, absent_notice, bad_response, body, by_step, call_bytes, call_starts,
     empty, layout, merge, nothing_to_score, numbered_from, predict_rows, preflight, prepare,
@@ -39,21 +39,6 @@ use sdm_wire::json::{self, Value};
 use sdm_wire::response::PredictionResponse;
 
 use crate::run::{ArrowData, Asker, Attachment, ModelResult, Reply, internal};
-
-/// Predict's notices, each with the variants it gives (none: one
-/// sentence), which a host words (decision E59(d)): a regression's constant
-/// context, by how the target is named, an output the caller named that
-/// the answer left out, and a forecast explained in some steps and not
-/// others (T2.13).
-pub const WARNINGS: &[(&str, &[&str])] = &[
-    (
-        sdm_request::predict::CONTEXT_CONSTANT,
-        &["column", "predicted", "question", "answer"],
-    ),
-    (sdm_request::predict::OUTPUTS_ABSENT, &[]),
-    (crate::ranking::CANDIDATES_UNSCORED, &[]),
-    (sdm_request::predict::STEPS_UNEXPLAINED, &[]),
-];
 
 /// A forecast's later step: its number, payload, query and request id.
 pub(crate) type LaterStep = (u32, Vec<u8>, String, String);
@@ -102,8 +87,7 @@ pub(crate) fn payload(bytes: &[u8]) -> Result<Value, CoreError> {
     json::read(bytes).map_err(|e| {
         let count = |n: usize| Detail::Scalar(Scalar::UInt64(u64::try_from(n).unwrap_or(u64::MAX)));
         CoreError::new(
-            ErrorKind::InvalidRequest,
-            ErrorCode::InvalidRequest,
+            Sentence::StateUnread,
             "the request state's payload is not JSON",
         )
         .with_field("field", Detail::text("state.payload"))
@@ -114,15 +98,7 @@ pub(crate) fn payload(bytes: &[u8]) -> Result<Value, CoreError> {
 }
 
 fn warn(asker: &Asker, notice: Notice) {
-    asker.warn(CoreWarning {
-        code: notice.code.to_owned(),
-        message: notice.message.to_owned(),
-        fields: notice
-            .fields
-            .into_iter()
-            .map(|(name, value)| (name.to_owned(), value))
-            .collect(),
-    });
+    asker.warn(CoreWarning::new(notice.sentence, notice.message).with_fields(notice.fields));
 }
 
 pub(crate) async fn run(asker: Asker, mut inputs: Inputs) -> Result<OperationResult, CoreError> {

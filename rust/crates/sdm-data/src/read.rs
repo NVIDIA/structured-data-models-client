@@ -21,11 +21,10 @@ use sdm_contract::catalog::{
     KeyKind,
 };
 use sdm_contract::data::{DescribePart, catalog_columns as c};
-use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind};
+use sdm_contract::{CoreError, Detail, Sentence};
 
 fn unread(name: &str, message: &str) -> CoreError {
-    CoreError::new(ErrorKind::Internal, ErrorCode::InternalError, message)
-        .with_field("column", Detail::text(name))
+    CoreError::new(Sentence::Internal, message).with_field("column", Detail::text(name))
 }
 
 fn column<'a>(batch: &'a RecordBatch, name: &str) -> Result<&'a ArrayRef, CoreError> {

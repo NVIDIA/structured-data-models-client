@@ -23,61 +23,12 @@ use std::collections::{BTreeMap, BTreeSet};
 use sdm_contract::ops::{
     self, ColumnRef, DescribedColumn, DescribedTable, Dtype, ExactNumber, SourceDescription, Stype,
 };
-use sdm_contract::{ColumnType, CoreError, CoreWarning, Detail, ErrorCode, ErrorKind, Scalar};
+use sdm_contract::{ColumnType, CoreError, CoreWarning, Detail, Scalar, Sentence};
 
 use crate::infer::{InferredTable, PassedOver, Taken, TimeChoice};
 
 /// A link, `[foreign key, referenced key]`, as the contract holds it.
 pub type Link = Vec<ColumnRef>;
-
-/// The warning that time columns were inferred, or refused, on a guess.
-pub const TIME_COLUMNS_GUESSED: &str = "TIME_COLUMNS_GUESSED";
-/// The warning that a link inferred or declared cannot join.
-pub const LINK_CANNOT_JOIN: &str = "LINK_CANNOT_JOIN";
-/// The warning that two tables name each other.
-pub const TABLES_NAME_EACH_OTHER: &str = "TABLES_NAME_EACH_OTHER";
-/// The warning that one table reaches another through several columns.
-pub const TWO_WAYS_TO_A_TABLE: &str = "TWO_WAYS_TO_A_TABLE";
-/// The warning that a column with no scalar form was left out.
-pub const COLUMNS_LEFT_OUT: &str = "COLUMNS_LEFT_OUT";
-/// The warning that a time of day's values were read as no time.
-pub const TIME_VALUES_UNREAD: &str = "TIME_VALUES_UNREAD";
-/// The warning that text was read as dates by a format that puts the day
-/// first.
-pub const DATES_READ_DAY_FIRST: &str = "DATES_READ_DAY_FIRST";
-/// The warning that several columns tied for a table's key, so it got none.
-pub const KEY_CANDIDATES_TIED: &str = "KEY_CANDIDATES_TIED";
-
-/// The schema's warnings, each with the variants it gives (none: one
-/// sentence), which a host words (decision E59(d)); `tests/assemble.rs`
-/// holds what the assembly gives to this list, every pair given.
-pub const WARNINGS: &[(&str, &[&str])] = &[
-    (
-        TIME_COLUMNS_GUESSED,
-        &[
-            "taken_earliest",
-            "taken_edit_stamp",
-            "taken_unchecked_empty",
-            "taken_unchecked_sparse",
-            "taken_unchecked_constant",
-            "taken_unchecked_constant_where_held",
-            "refused_empty",
-            "refused_sparse",
-            "refused_constant",
-            "refused_constant_where_held",
-            "refused_load_stamp",
-            "refused_edit_stamp",
-            "refused_birth_date",
-        ],
-    ),
-    (LINK_CANNOT_JOIN, &["not_the_key", "no_key", "types"]),
-    (TABLES_NAME_EACH_OTHER, &[]),
-    (TWO_WAYS_TO_A_TABLE, &[]),
-    (COLUMNS_LEFT_OUT, &[]),
-    (TIME_VALUES_UNREAD, &[]),
-    (DATES_READ_DAY_FIRST, &[]),
-    (KEY_CANDIDATES_TIED, &[]),
-];
 
 /// A schema assembled: its description and the warnings given, in order.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -86,13 +37,8 @@ pub struct Assembled {
     pub warnings: Vec<CoreWarning>,
 }
 
-pub(crate) fn invalid(message: &str, field: &str) -> CoreError {
-    CoreError::new(
-        ErrorKind::InvalidRequest,
-        ErrorCode::InvalidRequest,
-        message,
-    )
-    .with_field("field", Detail::text(field))
+pub(crate) fn invalid(sentence: Sentence, message: &str, field: &str) -> CoreError {
+    CoreError::new(sentence, message).with_field("field", Detail::text(field))
 }
 
 /// Whether a column of `dtype` can identify a row: the integer, float and
@@ -125,13 +71,26 @@ pub const NOT_IN_A_NAME: [char; 4] = ['`', '\n', '\r', '.'];
 /// may hold any character its catalog does.
 pub fn check_table_name(name: &str) -> Result<(), CoreError> {
     if name.is_empty() {
-        return Err(invalid("a table's name is empty", "tables"));
+        return Err(invalid(
+            Sentence::TableNameEmpty,
+            "a table's name is empty",
+            "tables",
+        )
+        .with_field("table", Detail::text(name)));
     }
     if name.contains(NOT_IN_A_NAME) {
+        let held: Vec<String> = NOT_IN_A_NAME
+            .iter()
+            .filter(|c| name.contains(**c))
+            .map(char::to_string)
+            .collect();
         return Err(invalid(
+            Sentence::TableNameCharacters,
             "a table's name holds a character a name may not: a backtick, a newline, a carriage return or a dot",
             "tables",
-        ));
+        )
+        .with_field("table", Detail::text(name))
+        .with_field("characters", texts(&held)));
     }
     Ok(())
 }
@@ -178,16 +137,15 @@ pub fn key_by_reference(tables: &mut [InferredTable], declared: &[Link]) -> Resu
             continue;
         };
         if !can_identify(keyed.dtype) {
-            return Err(invalid(
-                "a column a foreign key refers to cannot identify a row, so it cannot be a primary key",
+            return Err(key_cannot_identify(
+                &name,
+                &column,
+                keyed.dtype.wire_name(),
                 "primary_key",
             ));
         }
         if time.as_deref() == Some(column.as_str()) {
-            return Err(invalid(
-                "a column a foreign key refers to is its table's time column, so it cannot also be its primary key",
-                "primary_key",
-            ));
+            return Err(key_is_time_column(&name, &column, "primary_key"));
         }
         if keyed.stype != Stype::Id {
             keyed.stype_before_key = Some(keyed.stype);
@@ -355,6 +313,7 @@ pub(crate) fn checked(
             })
             .unwrap_or_else(|| {
                 invalid(
+                    Sentence::LinkUnheld,
                     "a relationship given names a table or column the schema does not hold",
                     field,
                 )
@@ -366,18 +325,17 @@ pub(crate) fn checked(
                 .get(1)
                 .and_then(|end| tables.iter().find(|t| t.name == end.table))
                 .map_or(&[], |t| t.primary_key.as_slice());
+            let (sentence, reason) = match key.len() {
+                0 => (Sentence::LinkNoKey, "no_key"),
+                1 => (Sentence::LinkNotTheKey, "not_the_key"),
+                _ => (Sentence::LinkCompositeKey, "composite_key"),
+            };
             invalid(
+                sentence,
                 "a relationship given does not join to its table's primary key of one column",
                 field,
             )
-            .with_field(
-                "reason",
-                Detail::text(match key.len() {
-                    0 => "no_key",
-                    1 => "not_the_key",
-                    _ => "composite_key",
-                }),
-            )
+            .with_field("reason", Detail::text(reason))
             .with_field(
                 "key",
                 Detail::List(key.iter().cloned().map(Scalar::Utf8).collect()),
@@ -389,6 +347,7 @@ pub(crate) fn checked(
                     .unwrap_or("unsupported")
             };
             invalid(
+                Sentence::LinkTypes,
                 "a relationship given joins two kinds of value that cannot match",
                 field,
             )
@@ -464,12 +423,12 @@ pub fn apply_keys_and_times(
         let mut named = BTreeSet::new();
         if let Some(twice) = key.iter().find(|column| !named.insert(column.as_str())) {
             return Err(invalid(
+                Sentence::KeyColumnTwice,
                 "a primary key names a column more than once",
                 "primary_keys",
             )
             .with_field("table", Detail::text(name))
-            .with_field("column", Detail::text(twice))
-            .with_field("rule", Detail::text("key_column_twice")));
+            .with_field("column", Detail::text(twice)));
         }
         if key.is_empty() {
             return Err(empty_key(name, "primary_keys"));
@@ -574,10 +533,14 @@ pub(crate) fn no_table<'a>(
     field: &str,
     tables: impl IntoIterator<Item = &'a str>,
 ) -> CoreError {
-    invalid("a table named is not the schema's", field)
-        .with_field("table", Detail::text(name))
-        .with_field("reason", Detail::text("no_table"))
-        .with_field("tables", sorted_names(tables))
+    invalid(
+        Sentence::NoTable,
+        "a table named is not the schema's",
+        field,
+    )
+    .with_field("table", Detail::text(name))
+    .with_field("reason", Detail::text("no_table"))
+    .with_field("tables", sorted_names(tables))
 }
 
 /// A key the host could not write as a column or a sequence of them
@@ -585,16 +548,23 @@ pub(crate) fn no_table<'a>(
 /// `field` each operation's own (decision E101), naming the value as the
 /// host spelled it, where it did (`given`, KO2-86).
 pub(crate) fn key_not_names(table: &str, field: &str, spelled: Option<&str>) -> CoreError {
-    with_given(
-        invalid("a primary key names a column or a sequence of them", field)
-            .with_field("table", Detail::text(table))
-            .with_field("rule", Detail::text("key_not_names")),
-        spelled,
-    )
+    let refused = |sentence| {
+        invalid(
+            sentence,
+            "a primary key names a column or a sequence of them",
+            field,
+        )
+        .with_field("table", Detail::text(table))
+    };
+    match spelled {
+        Some(_) => with_given(refused(Sentence::KeyNotNamesGiven), spelled),
+        None => refused(Sentence::KeyNotNames),
+    }
 }
 
 /// `refused`, naming the host's text of a value the caller gave (`given`),
-/// where the host gave one (KO2-86).
+/// where the host gave one (KO2-86); `refused` says the sentence that
+/// names it.
 pub(crate) fn with_given(refused: CoreError, spelled: Option<&str>) -> CoreError {
     match spelled {
         Some(text) => refused
@@ -614,21 +584,27 @@ pub(crate) fn time_column_not_a_name<S: AsRef<str>>(
     spelled: Option<&str>,
     columns: &[S],
 ) -> CoreError {
-    let refused = invalid("a column named is not its table's", field)
-        .with_field("table", Detail::text(table))
-        .with_field("rule", Detail::text("time_column_not_a_name"));
+    let refused = |sentence| {
+        invalid(sentence, "a column named is not its table's", field)
+            .with_field("table", Detail::text(table))
+    };
     match spelled {
-        Some(_) => with_given(refused, spelled).with_field("columns", sorted_names(columns)),
-        None => refused,
+        Some(_) => with_given(refused(Sentence::TimeColumnNotANameGiven), spelled)
+            .with_field("columns", sorted_names(columns)),
+        None => refused(Sentence::TimeColumnNotAName),
     }
 }
 
 /// A key naming no column, refused alike by `describe_source` (an empty
 /// list, or `null`) and `edit_schema` (an empty list; its `null` clears).
 pub(crate) fn empty_key(table: &str, field: &str) -> CoreError {
-    invalid("a table was given an empty primary key", field)
-        .with_field("table", Detail::text(table))
-        .with_field("reason", Detail::text("empty_key"))
+    invalid(
+        Sentence::EmptyKey,
+        "a table was given an empty primary key",
+        field,
+    )
+    .with_field("table", Detail::text(table))
+    .with_field("reason", Detail::text("empty_key"))
 }
 
 /// A column the table does not have (`_check_column`), naming the table's
@@ -639,11 +615,15 @@ pub(crate) fn no_column<S: AsRef<str>>(
     field: &str,
     columns: &[S],
 ) -> CoreError {
-    invalid("a column named is not its table's", field)
-        .with_field("table", Detail::text(table))
-        .with_field("column", Detail::text(column))
-        .with_field("reason", Detail::text("no_column"))
-        .with_field("columns", sorted_names(columns))
+    invalid(
+        Sentence::NoColumn,
+        "a column named is not its table's",
+        field,
+    )
+    .with_field("table", Detail::text(table))
+    .with_field("column", Detail::text(column))
+    .with_field("reason", Detail::text("no_column"))
+    .with_field("columns", sorted_names(columns))
 }
 
 /// A column named as a key whose values cannot identify a row
@@ -655,6 +635,7 @@ pub(crate) fn key_cannot_identify(
     field: &str,
 ) -> CoreError {
     invalid(
+        Sentence::KeyCannotIdentify,
         "a column named as a primary key cannot identify a row",
         field,
     )
@@ -667,6 +648,7 @@ pub(crate) fn key_cannot_identify(
 /// A column named as a key that is its table's time column (`_check_key`).
 pub(crate) fn key_is_time_column(table: &str, column: &str, field: &str) -> CoreError {
     invalid(
+        Sentence::KeyIsTimeColumn,
         "a column named as a primary key is its table's time column",
         field,
     )
@@ -679,6 +661,7 @@ pub(crate) fn key_is_time_column(table: &str, column: &str, field: &str) -> Core
 /// (`_check_time_column`).
 pub(crate) fn time_is_key(table: &str, column: &str, field: &str) -> CoreError {
     invalid(
+        Sentence::TimeIsKey,
         "a column named as a time column is its table's primary key",
         field,
     )
@@ -696,12 +679,16 @@ pub(crate) fn meaning_not_carried(
     meaning: &str,
     field: &str,
 ) -> CoreError {
-    invalid("a column's meaning is not one its values can carry", field)
-        .with_field("table", Detail::text(table))
-        .with_field("column", Detail::text(column))
-        .with_field("reason", Detail::text("meaning_not_carried"))
-        .with_field("dtype", Detail::text(dtype))
-        .with_field("stype", Detail::text(meaning))
+    invalid(
+        Sentence::MeaningNotCarried,
+        "a column's meaning is not one its values can carry",
+        field,
+    )
+    .with_field("table", Detail::text(table))
+    .with_field("column", Detail::text(column))
+    .with_field("reason", Detail::text("meaning_not_carried"))
+    .with_field("dtype", Detail::text(dtype))
+    .with_field("stype", Detail::text(meaning))
 }
 
 /// Links each column to another table's primary key of the same name
@@ -1006,6 +993,7 @@ pub fn check_links(description: &SourceDescription, types: &HostTypes) -> Result
         if keyed {
             return Err(named_link(
                 invalid(
+                    Sentence::PrimaryKeyAsForeignKey,
                     "a relationship's foreign key is its table's primary key",
                     "relationships",
                 ),
@@ -1028,15 +1016,8 @@ fn texts<S: AsRef<str>>(names: &[S]) -> Detail {
 /// A warning of `code`, saying `message`, a sentence that names nothing,
 /// with `fields`, whose names and values the warning speaks of: the host
 /// words it from these (decision E59).
-fn warning(code: &str, message: &str, fields: Vec<(&str, Detail)>) -> CoreWarning {
-    CoreWarning {
-        code: code.to_owned(),
-        message: message.to_owned(),
-        fields: fields
-            .into_iter()
-            .map(|(name, value)| (name.to_owned(), value))
-            .collect(),
-    }
+fn warning(sentence: Sentence, message: &str, fields: Vec<(&str, Detail)>) -> CoreWarning {
+    CoreWarning::new(sentence, message).with_fields(fields)
 }
 
 fn count(n: usize) -> Detail {
@@ -1052,7 +1033,7 @@ pub fn left_out(table: &InferredTable) -> Vec<CoreWarning> {
         .iter()
         .map(|column| {
             warning(
-                COLUMNS_LEFT_OUT,
+                Sentence::ColumnsLeftOut,
                 "a column whose values have no scalar form was left out of its table",
                 vec![
                     ("table", Detail::text(&table.name)),
@@ -1075,7 +1056,7 @@ pub fn unread_times(table: &InferredTable) -> Vec<CoreWarning> {
         .iter()
         .map(|unread| {
             warning(
-                TIME_VALUES_UNREAD,
+                Sentence::TimeValuesUnread,
                 "a time of day's values were read as no time and dropped",
                 vec![
                     ("table", Detail::text(&table.name)),
@@ -1099,7 +1080,7 @@ pub fn day_first(table: &InferredTable) -> Vec<CoreWarning> {
         .iter()
         .map(|(column, format)| {
             warning(
-                DATES_READ_DAY_FIRST,
+                Sentence::DatesReadDayFirst,
                 "text was read as dates by a format that puts the day first",
                 vec![
                     ("table", Detail::text(&table.name)),
@@ -1119,7 +1100,7 @@ pub fn key_tied(table: &InferredTable) -> Vec<CoreWarning> {
         return Vec::new();
     }
     vec![warning(
-        KEY_CANDIDATES_TIED,
+        Sentence::KeyCandidatesTied,
         "several columns tied for a table's primary key, so it was given none",
         vec![
             ("table", Detail::text(&table.name)),
@@ -1184,19 +1165,18 @@ fn cannot_join(tables: &[DescribedTable], link: &[ColumnRef], why: Unjoinable) -
         ("target_table", Detail::text(&referenced.table)),
         ("target_column", Detail::text(&referenced.column)),
     ];
-    if why == Unjoinable::NotTheKey {
+    let sentence = if why == Unjoinable::NotTheKey {
         // A declared foreign key may name a unique column that is not the
         // key, which is no fault of the types.
         fields.push(("reason", Detail::text("not_the_key")));
-        fields.push((
-            "variant",
-            Detail::text(if key.is_empty() {
-                "no_key"
-            } else {
-                "not_the_key"
-            }),
-        ));
+        let (sentence, variant) = if key.is_empty() {
+            (Sentence::LinkCannotJoinNoKey, "no_key")
+        } else {
+            (Sentence::LinkCannotJoinNotTheKey, "not_the_key")
+        };
+        fields.push(("variant", Detail::text(variant)));
         fields.push(("key", texts(key)));
+        sentence
     } else {
         let dtype = |at: &ColumnRef| {
             column(tables, at)
@@ -1207,9 +1187,10 @@ fn cannot_join(tables: &[DescribedTable], link: &[ColumnRef], why: Unjoinable) -
         fields.push(("variant", Detail::text("types")));
         fields.push(("source_dtype", Detail::text(dtype(foreign))));
         fields.push(("target_dtype", Detail::text(dtype(referenced))));
-    }
+        Sentence::LinkCannotJoinTypes
+    };
     warning(
-        LINK_CANNOT_JOIN,
+        sentence,
         "a relationship declared or inferred cannot join, so none was made from it",
         fields,
     )
@@ -1242,7 +1223,7 @@ fn unchecked(
         .filter(|(name, _)| name == column)
         .map(|(_, why)| {
             let mut fields = at(column);
-            let variant = match why {
+            let (variant, sentence) = match why {
                 PassedOver::Constant {
                     value,
                     missing,
@@ -1251,13 +1232,22 @@ fn unchecked(
                     fields.push(("missing", count(*missing)));
                     fields.push(("rows", count(*rows)));
                     match value {
-                        None => "taken_unchecked_empty",
+                        None => (
+                            "taken_unchecked_empty",
+                            Sentence::TimeColumnsTakenUncheckedEmpty,
+                        ),
                         Some(value) => {
                             fields.push(("value", Detail::Scalar(value.clone())));
                             if *missing > 0 {
-                                "taken_unchecked_constant_where_held"
+                                (
+                                    "taken_unchecked_constant_where_held",
+                                    Sentence::TimeColumnsTakenUncheckedConstantWhereHeld,
+                                )
                             } else {
-                                "taken_unchecked_constant"
+                                (
+                                    "taken_unchecked_constant",
+                                    Sentence::TimeColumnsTakenUncheckedConstant,
+                                )
                             }
                         }
                     }
@@ -1265,13 +1255,19 @@ fn unchecked(
                 PassedOver::Sparse { missing, rows } => {
                     fields.push(("missing", count(*missing)));
                     fields.push(("rows", count(*rows)));
-                    "taken_unchecked_sparse"
+                    (
+                        "taken_unchecked_sparse",
+                        Sentence::TimeColumnsTakenUncheckedSparse,
+                    )
                 }
                 // Only a reason of the values is unconfirmed.
-                _ => "taken_unchecked_empty",
+                _ => (
+                    "taken_unchecked_empty",
+                    Sentence::TimeColumnsTakenUncheckedEmpty,
+                ),
             };
             fields.push(("variant", Detail::text(variant)));
-            warning(TIME_COLUMNS_GUESSED, message, fields)
+            warning(sentence, message, fields)
         })
         .collect()
 }
@@ -1308,13 +1304,17 @@ fn guessed_time_columns(
                     fields.push(("variant", Detail::text("taken_earliest")));
                     fields.push(("among", texts(&choice.among)));
                     fields.push(("other", Detail::text(other.map_or("", String::as_str))));
-                    said.push(warning(TIME_COLUMNS_GUESSED, message, fields));
+                    said.push(warning(Sentence::TimeColumnsTakenEarliest, message, fields));
                     said.extend(unchecked(choice, column, &at));
                 }
                 Some(Taken::EditStamp) => {
                     let mut fields = at(column);
                     fields.push(("variant", Detail::text("taken_edit_stamp")));
-                    said.push(warning(TIME_COLUMNS_GUESSED, message, fields));
+                    said.push(warning(
+                        Sentence::TimeColumnsTakenEditStamp,
+                        message,
+                        fields,
+                    ));
                     said.extend(unchecked(choice, column, &at));
                 }
                 _ => said.extend(unchecked(choice, column, &at)),
@@ -1327,7 +1327,7 @@ fn guessed_time_columns(
                     }
                     let mut fields = at(column);
                     fields.push(("reason", Detail::text(why.reason())));
-                    let variant = match why {
+                    let (variant, sentence) = match why {
                         PassedOver::Constant {
                             value,
                             missing,
@@ -1336,13 +1336,16 @@ fn guessed_time_columns(
                             fields.push(("missing", count(*missing)));
                             fields.push(("rows", count(*rows)));
                             match value {
-                                None => "refused_empty",
+                                None => ("refused_empty", Sentence::TimeColumnsRefusedEmpty),
                                 Some(value) => {
                                     fields.push(("value", Detail::Scalar(value.clone())));
                                     if *missing > 0 {
-                                        "refused_constant_where_held"
+                                        (
+                                            "refused_constant_where_held",
+                                            Sentence::TimeColumnsRefusedConstantWhereHeld,
+                                        )
                                     } else {
-                                        "refused_constant"
+                                        ("refused_constant", Sentence::TimeColumnsRefusedConstant)
                                     }
                                 }
                             }
@@ -1350,14 +1353,20 @@ fn guessed_time_columns(
                         PassedOver::Sparse { missing, rows } => {
                             fields.push(("missing", count(*missing)));
                             fields.push(("rows", count(*rows)));
-                            "refused_sparse"
+                            ("refused_sparse", Sentence::TimeColumnsRefusedSparse)
                         }
-                        PassedOver::LoadStamp => "refused_load_stamp",
-                        PassedOver::EditStamp => "refused_edit_stamp",
-                        PassedOver::BirthDate => "refused_birth_date",
+                        PassedOver::LoadStamp => {
+                            ("refused_load_stamp", Sentence::TimeColumnsRefusedLoadStamp)
+                        }
+                        PassedOver::EditStamp => {
+                            ("refused_edit_stamp", Sentence::TimeColumnsRefusedEditStamp)
+                        }
+                        PassedOver::BirthDate => {
+                            ("refused_birth_date", Sentence::TimeColumnsRefusedBirthDate)
+                        }
                     };
                     fields.push(("variant", Detail::text(variant)));
-                    said.push(warning(TIME_COLUMNS_GUESSED, message, fields));
+                    said.push(warning(sentence, message, fields));
                 }
             }
         }
@@ -1384,7 +1393,7 @@ pub(crate) fn name_each_other(links: &[Link]) -> Vec<CoreWarning> {
         }
         said.insert((source, target));
         warnings.push(warning(
-            TABLES_NAME_EACH_OTHER,
+            Sentence::TablesNameEachOther,
             "two tables name each other, so a relationship is crossed in both directions",
             vec![
                 ("source_table", Detail::text(source)),
@@ -1416,7 +1425,7 @@ pub(crate) fn two_ways(links: &[Link]) -> Vec<CoreWarning> {
         }
         columns.sort_unstable();
         warnings.push(warning(
-            TWO_WAYS_TO_A_TABLE,
+            Sentence::TwoWaysToATable,
             "one table reaches another through more than one column",
             vec![
                 ("source_table", Detail::text(source)),

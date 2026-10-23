@@ -24,10 +24,16 @@ pub use runs::{Failure, HostRun, Unreadable, Unreadables, contain, is_posix_zone
 /// `CompositionRoot` too, so a host composes its own data layer
 /// (`CompositionRoot::new`) where it does not take [`default_root`]'s, as
 /// the dev-only test host swaps one in (T2.7).
-pub use sdm_core::{
-    ArrowData, Attachment, Attachments, CompositionRoot, dtype_names, meanings, warning_codes,
-};
+pub use sdm_core::{ArrowData, Attachment, Attachments, CompositionRoot, dtype_names, meanings};
 pub use zones::{ZoneError, ZoneResolver, ZoneRoot, ZoneSource};
+
+/// The table of what every sentence says, which a binding exports as the
+/// JSON it is (`sdm_contract::wording`, T3.17): a host reads it once and
+/// fills each error's and warning's sentence from it, formatting nothing
+/// the table does not name.
+pub fn templates() -> String {
+    sdm_contract::wording::table_json()
+}
 
 /// The databases the data layer of [`default_root`] provides for
 /// (`sdm_data::PROVIDERS`), which a binding reports as plain data.

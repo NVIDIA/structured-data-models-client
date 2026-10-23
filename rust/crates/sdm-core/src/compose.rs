@@ -23,7 +23,7 @@ use sdm_contract::data::{
     DataLayer, DataRequest, FallbackLimits, FetchPlan, ProviderCapabilities, ProviderChoice,
     Relation, seed_integer,
 };
-use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, Scalar};
+use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 
 use crate::ArrowData;
 
@@ -231,8 +231,7 @@ pub enum Route {
 /// The refusal of an optional request the provider did not declare.
 pub(crate) fn undeclared(request: &str) -> CoreError {
     CoreError::new(
-        ErrorKind::Unsupported,
-        ErrorCode::UnsupportedRequest,
+        Sentence::Undeclared,
         "the provider did not declare this request",
     )
     .with_field("request", Detail::text(request))
@@ -244,8 +243,7 @@ pub(crate) fn undeclared(request: &str) -> CoreError {
 /// a seed past what its scalar carries (`seed_scalar`).
 pub(crate) fn past_seed_range(request: &str, max: u64) -> CoreError {
     CoreError::new(
-        ErrorKind::InvalidRequest,
-        ErrorCode::InvalidRequest,
+        Sentence::SeedPastRange,
         "the provider samples with no seed larger than the largest it declares",
     )
     .with_field("request", Detail::text(request))

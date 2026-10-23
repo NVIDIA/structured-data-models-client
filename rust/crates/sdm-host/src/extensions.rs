@@ -40,7 +40,7 @@ use arrow_array::{
     Array, ArrayRef, Decimal128Array, Int64Array, RecordBatch, StringArray, Time64MicrosecondArray,
 };
 use arrow_schema::{DataType, Field, Schema, SchemaRef};
-use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind};
+use sdm_contract::{CoreError, Detail, Sentence};
 
 const EXTENSION_NAME: &str = "ARROW:extension:name";
 const EXTENSION_METADATA: &str = "ARROW:extension:metadata";
@@ -102,8 +102,7 @@ fn meaning(field: &Field, vendor: Option<&str>) -> Option<Meaning> {
 /// The refusal of a value whose bytes the type's layout does not read.
 fn unreadable(column: &str, received: &DataType) -> CoreError {
     CoreError::new(
-        ErrorKind::Unsupported,
-        ErrorCode::UnsupportedType,
+        Sentence::UnsupportedTypeUnread,
         format!("column {column:?} holds a value of Arrow type {received} the core cannot read"),
     )
     .with_field("column", Detail::text(column))
@@ -331,9 +330,7 @@ fn big_array(values: &[Option<Big>], read_as: &DataType) -> Result<ArrayRef, Cor
                 .map(|v| v.as_ref().map(small))
                 .collect::<Decimal128Array>()
                 .with_precision_and_scale(*precision, *scale)
-                .map_err(|e| {
-                    CoreError::new(ErrorKind::Internal, ErrorCode::InternalError, e.to_string())
-                })?,
+                .map_err(|e| CoreError::new(Sentence::Internal, e.to_string()))?,
         ),
         _ => Arc::new(
             values
@@ -457,9 +454,7 @@ pub(crate) fn read(
                 columns,
                 &arrow_array::RecordBatchOptions::new().with_row_count(Some(batch.num_rows())),
             )
-            .map_err(|e| {
-                CoreError::new(ErrorKind::Internal, ErrorCode::InternalError, e.to_string())
-            })
+            .map_err(|e| CoreError::new(Sentence::Internal, e.to_string()))
         })
         .collect::<Result<_, _>>()?;
     Ok((schema, batches))

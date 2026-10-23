@@ -53,15 +53,14 @@ pub mod keys;
 mod names;
 mod values;
 
-use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind};
+use sdm_contract::{CoreError, Detail, Sentence};
 
 /// The refusal of an input whose inference takes a rule this build does not
 /// port yet, naming the rule, never a value or a name the input holds
 /// (decision H17).
 pub fn not_yet(rule: &'static str) -> CoreError {
     CoreError::new(
-        ErrorKind::Unsupported,
-        ErrorCode::UnsupportedRequest,
+        Sentence::NotYetDescribe,
         "describing this source takes an inference rule this core does not hold yet",
     )
     .with_field("operation", Detail::text("describe_source"))

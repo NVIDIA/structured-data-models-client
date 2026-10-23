@@ -29,7 +29,7 @@ use sdm_contract::run::{FetchOutcome, FetchReply, FetchStep, ReplyId, StartRun};
 use sdm_contract::test_ops::{TestFetch, TestOperation, TestResult};
 use sdm_contract::{
     CONTRACT_VERSION, ColumnType, ControlMessage, CoreError, CoreWarning, Detail, ErrorCode,
-    ErrorKind, Field, HostFacts, Scalar, Step, Unit,
+    ErrorKind, Field, HostFacts, Scalar, Sentence, Step, Unit,
 };
 use sdm_core::{ArrowData, Attachment, Attachments};
 use sdm_host::{CONTROL_CAP, HostRun, Outgoing, decode, encode, read};
@@ -401,13 +401,9 @@ fn a_real_validation_whose_diagnostics_pass_the_cap_arrives_whole() {
 fn an_error_arrives_whole_either_side_of_the_cap() {
     for (size, past) in EITHER_SIDE {
         let message = exactly(size, |pad| ControlMessage::Error {
-            error: CoreError::new(ErrorKind::DataSource, ErrorCode::ProviderError, "failed")
+            error: CoreError::new(Sentence::ProviderFailed, "failed")
                 .with_field("table", Detail::text("t".repeat(pad)))
-                .caused_by(CoreError::new(
-                    ErrorKind::Internal,
-                    ErrorCode::InternalError,
-                    "cause",
-                )),
+                .caused_by(CoreError::new(Sentence::Internal, "cause")),
         });
         let ControlMessage::Error { error: expected } = &message else {
             unreachable!()
@@ -428,9 +424,11 @@ fn an_error_arrives_whole_either_side_of_the_cap() {
 fn warnings_arrive_whole_and_in_order_past_the_cap() {
     let warnings: Vec<CoreWarning> = (0..3)
         .map(|i| CoreWarning {
-            code: "LONG".into(),
-            message: format!("{i}{}", "w".repeat(CONTROL_CAP)),
             fields: BTreeMap::new(),
+            ..CoreWarning::new(
+                Sentence::ContextCapped,
+                format!("{i}{}", "w".repeat(CONTROL_CAP)),
+            )
         })
         .collect();
     let run = test_op(

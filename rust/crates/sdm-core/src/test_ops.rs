@@ -11,7 +11,7 @@ use std::time::Duration;
 use sdm_contract::data::DataRequest;
 use sdm_contract::ops::{OperationResult, ProfileName, ProfileSpec, QuerySchema};
 use sdm_contract::test_ops::{PanicAt, TestFetch, TestOperation, TestResult};
-use sdm_contract::{CoreError, CoreWarning, Detail, ErrorCode, ErrorKind, HostFacts, Scalar, Unit};
+use sdm_contract::{CoreError, CoreWarning, Detail, HostFacts, Scalar, Sentence, Unit};
 use sdm_engine::time::Zones;
 
 use crate::attached::take_json;
@@ -52,8 +52,7 @@ pub(crate) fn run(
                 ),
                 _ => {
                     return Err(CoreError::new(
-                        ErrorKind::InvalidRequest,
-                        ErrorCode::InvalidRequest,
+                        Sentence::TestOperationRefused,
                         "a test fetch names a plan or a provider, and not both, and what a provider declares only with a provider",
                     ));
                 }
@@ -120,15 +119,24 @@ pub(crate) fn run(
             // own message (decision E22).
             if !error.holds_to_table() {
                 return Err(CoreError::protocol(
-                    ErrorCode::InvalidMessage,
+                    Sentence::InvalidMessage,
                     "the error carries a kind its code does not allow",
                 )
                 .with_field("attachment", Detail::Scalar(Scalar::UInt32(id.0))));
             }
             Run::new(move |_| async move { Err(error) })
         }
-        TestOperation::Warn { warnings } => {
-            let warnings: Vec<CoreWarning> = take_json(attachments, warnings)?;
+        TestOperation::Warn { warnings: id } => {
+            let warnings: Vec<CoreWarning> = take_json(attachments, id)?;
+            // A warning whose code is not its sentence's is refused as the
+            // start's own message (T3.17).
+            if !warnings.iter().all(CoreWarning::holds_to_table) {
+                return Err(CoreError::protocol(
+                    Sentence::InvalidMessage,
+                    "a warning carries a code its sentence does not give",
+                )
+                .with_field("attachment", Detail::Scalar(Scalar::UInt32(id.0))));
+            }
             Run::new(move |asker| async move {
                 for warning in warnings {
                     asker.warn(warning);
@@ -194,8 +202,7 @@ pub(crate) fn run(
                 } => jiff::Timestamp::from_nanosecond(i128::from(value)),
                 _ => {
                     return Err(CoreError::new(
-                        ErrorKind::InvalidRequest,
-                        ErrorCode::InvalidRequest,
+                        Sentence::TestOperationRefused,
                         "the zone operation reads a ts scalar",
                     ));
                 }
@@ -215,8 +222,7 @@ pub(crate) fn run(
 /// come from the data or the caller (decision H17).
 fn unknown_zone() -> CoreError {
     CoreError::new(
-        ErrorKind::InvalidRequest,
-        ErrorCode::InvalidRequest,
+        Sentence::UnknownZone,
         "a time zone is not in the host's zone lookup roots or the bundled database",
     )
 }

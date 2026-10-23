@@ -899,52 +899,18 @@ def _said_of_the_part(
     details.pop('ranking_parts', None)
     if position is not None:
         return about_the_part(error, rewritten, by_position[position])
-    said = _ranking_said(details)
-    return error if said is None else _reworded(error, said)
+    # The core's own sentence, said again with the candidates as the caller
+    # gave them, which only this host holds (T3.17).
+    sentence = getattr(error, '_sentence', None)
+    if sentence is None:
+        return error
+    from sdm_client._rust import errors as core_errors
 
-
-def _ranking_said(details: dict[str, Any]) -> str | None:
-    r"""The words of a ranking's refusal the core gave at predict, by its
-    rule or field, as the client says it (its candidates already named as
-    given); none for any other."""
-    rule = details.get('rule')
-    if rule == 'ranking_outputs':
-        unknown = details.get('unsupported') or []
-        if not unknown:
-            return 'outputs must name at least one field'
-        return (
-            f'a ranking gives back {", ".join(_RANKING_OUTPUTS)}, and '
-            f'{", ".join(repr(name) for name in unknown)} '
-            f'{"are" if len(unknown) > 1 else "is"} not among them. The '
-            f'per-candidate questions it is asked as are classifications; ask '
-            f'one of those directly for the fields a classification gives.'
-        )
-    if rule == 'ranking_unscored':
-        cold = list(details.get('candidates') or [])
-        if not cold:
-            return None
-        named = ', '.join(repr(candidate) for candidate in cold[:-1])
-        which = (
-            f'the contexts gathered for candidates {named} and '
-            f'{cold[-1]!r} each hold'
-            if len(cold) > 1
-            else f'the context gathered for candidate {cold[0]!r} holds'
-        )
-        return (
-            f'{which} one answer only, and a classification needs at least '
-            f'two classes to learn from, so there is nothing to rank and '
-            f'nothing was sent. {_SCORE_THE_UNSCORED}'
-        )
-    if details.get('field') == 'probabilities' and 'candidate' in details:
-        given = details.get('classes') or []
-        return (
-            f'the endpoint answered the question about candidate '
-            f'{details["candidate"]!r} without saying how sure it was, and a '
-            f'ranking is only the order of those. It gave back '
-            f'{sorted(given) or "no probabilities"}, and this client knows a '
-            f'positive class spelled "true", "True", "TRUE" or "1".'
-        )
-    return None
+    try:
+        said = core_errors.render(sentence, details)
+    except (KeyError, IndexError, TypeError, ValueError, AttributeError):
+        return error
+    return _reworded(error, said)
 
 
 def _numbered_across_calls(

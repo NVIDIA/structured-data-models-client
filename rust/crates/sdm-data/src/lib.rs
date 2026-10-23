@@ -57,7 +57,7 @@ use sdm_contract::catalog::CatalogAnswer;
 use sdm_contract::data::{
     DataLayer, DataRequest, Dialect, FetchPlan, ProviderCapabilities, ProviderChoice, Relation,
 };
-use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind};
+use sdm_contract::{CoreError, Detail, Sentence};
 use sql::SqlDialect;
 
 /// The SQL dialects this build knows by name. It renders DuckDB's,
@@ -205,8 +205,7 @@ impl DataLayer for Data {
     ) -> Result<CatalogAnswer, CoreError> {
         let DataRequest::Describe { part, .. } = request else {
             return Err(CoreError::new(
-                ErrorKind::Internal,
-                ErrorCode::InternalError,
+                Sentence::Internal,
                 "only a catalog answer is read by the data layer",
             )
             .with_field("request", Detail::text(request.name())));
@@ -300,13 +299,10 @@ fn no_namespace(request: &DataRequest, namespace: &[String]) -> Result<(), CoreE
 /// The refusal of a SQL dialect this build renders nothing for, naming it
 /// when it is one this build knows by name.
 fn no_dialect(dialect: &Dialect) -> CoreError {
-    let error = CoreError::new(
-        ErrorKind::Unsupported,
-        ErrorCode::UnsupportedRequest,
-        "this build has no built-in SQL provider for the dialect asked for",
-    );
+    let message = "this build has no built-in SQL provider for the dialect asked for";
     match KNOWN.iter().find(|known| **known == dialect.name()) {
-        Some(known) => error.with_field("dialect", Detail::text(*known)),
-        None => error,
+        Some(known) => CoreError::new(Sentence::NoDialectNamed, message)
+            .with_field("dialect", Detail::text(*known)),
+        None => CoreError::new(Sentence::NoDialect, message),
     }
 }

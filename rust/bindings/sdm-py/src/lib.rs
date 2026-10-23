@@ -89,6 +89,14 @@ fn core_call<T: Send>(py: Python<'_>, call: impl FnOnce() -> T + Send) -> PyResu
 /// Forgets the logger levels the bridge has cached, so a change to the
 /// `logging` configuration takes effect; the Python host calls it at each
 /// run start (decision H8). Before the first core call there is no cache.
+/// The table of what every error's and warning's sentence says, as its JSON
+/// text (`sdm_contract::wording`, T3.17): the host reads it once and fills
+/// each sentence from it.
+#[pyfunction]
+fn templates() -> String {
+    sdm_host::templates()
+}
+
 #[pyfunction]
 fn reset_log_cache(py: Python<'_>) {
     if let Some(handle) = LOGGING.get(py).and_then(Option::as_ref) {
@@ -373,16 +381,6 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         "ERROR_CODES",
         PyTuple::new(py, ErrorCode::ALL.map(ErrorCode::as_str))?,
     )?;
-    module.add(
-        "WARNING_CODES",
-        PyTuple::new(
-            py,
-            sdm_host::warning_codes()
-                .into_iter()
-                .map(|(code, variants)| Ok((code, PyTuple::new(py, variants)?)))
-                .collect::<PyResult<Vec<_>>>()?,
-        )?,
-    )?;
     // Each meaning a column of each data type can carry, as the language
     // answers it, the client's check of a column's meaning (T3.16, rule 11).
     module.add(
@@ -411,6 +409,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<ArrowStream>()?;
     module.add_class::<Run>()?;
     module.add_function(wrap_pyfunction!(reset_log_cache, module)?)?;
+    module.add_function(wrap_pyfunction!(templates, module)?)?;
     module.add_function(wrap_pyfunction!(is_posix_zone, module)?)?;
     Ok(())
 }

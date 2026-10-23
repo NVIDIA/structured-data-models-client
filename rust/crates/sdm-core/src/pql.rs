@@ -33,7 +33,9 @@ use sdm_contract::pql::{
     Aggregation, ConditionOp, EntityClause, LogicalOp, NodeKind, NodeType, PqlLiteral, PqlNode,
     ProblemType, QueryMode, TimeUnit, ValidatedQuery, Window,
 };
-use sdm_contract::{CoreError, CoreWarning, Detail, ErrorCode, ErrorKind, HostFacts, Scalar, Unit};
+use sdm_contract::{
+    CoreError, CoreWarning, Detail, HostFacts, Scalar, Sentence, Unit, WarningCode,
+};
 use sdm_engine::time::{Instant, Zones};
 use sdm_pql as parser;
 use sdm_pql::ast::{self, ConstValue, Kind, NodeRef};
@@ -44,13 +46,8 @@ use crate::profiles::{
     Mode, Profile, QueryFeatures, check_capabilities, check_parsed_capabilities,
 };
 
-/// D4's warning: a date literal read day first, whose format, as `strftime`
-/// writes it, is the `format` field, and whose place in the query is
-/// `start_row`, `start_col`, `end_row` and `end_col`.
-pub const DATE_LITERAL_DAY_FIRST: &str = "DATE_LITERAL_DAY_FIRST";
-
-/// Every warning the adapter gives, with its variants (none).
-pub const WARNINGS: &[(&str, &[&str])] = &[(DATE_LITERAL_DAY_FIRST, &[])];
+/// D4's warning's code: a date literal read day first.
+pub const DATE_LITERAL_DAY_FIRST: &str = WarningCode::DateLiteralDayFirst.as_str();
 
 /// A query's validation, with the validated query when it was accepted.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -455,12 +452,10 @@ fn is_error(diagnostic: &PqlDiagnostic) -> bool {
 /// (KO2-86, narrowing decision E79: a value of the caller's own call).
 fn packed(query: &str, location: Option<ast::Location>, literal: &str) -> CoreError {
     let mut error = CoreError::new(
-        ErrorKind::InvalidRequest,
-        ErrorCode::InvalidRequest,
+        Sentence::DateLiteralPacked,
         "a date literal with a run of five digits or more is refused",
     )
     .with_field("operation", Detail::text("validate_query"))
-    .with_field("rule", Detail::text("date_literal_packed"))
     .with_field("field", Detail::text("query"))
     .with_field("query", Detail::text(query))
     .with_field("literal", Detail::text(literal));
@@ -480,7 +475,7 @@ fn count(n: usize) -> Detail {
 }
 
 fn internal(message: impl Into<String>) -> CoreError {
-    CoreError::new(ErrorKind::Internal, ErrorCode::InternalError, message)
+    CoreError::new(Sentence::Internal, message)
 }
 
 // --- Host facts --------------------------------------------------------------
@@ -500,11 +495,15 @@ fn day_first_warning(warning: &parser::DateWarning) -> CoreWarning {
         fields.insert("end_row".to_owned(), count(at.end_row));
         fields.insert("end_col".to_owned(), count(at.end_col));
     }
-    CoreWarning {
-        code: DATE_LITERAL_DAY_FIRST.to_owned(),
-        message: "a date literal was read day first".to_owned(),
-        fields,
-    }
+    // D4's warning: a date literal read day first, whose format, as
+    // `strftime` writes it, is the `format` field, and whose place in the
+    // query is `start_row`, `start_col`, `end_row` and `end_col`.
+    let mut warning = CoreWarning::new(
+        Sentence::DateLiteralDayFirst,
+        "a date literal was read day first",
+    );
+    warning.fields = fields;
+    warning
 }
 
 /// The current year in the host's local zone, which places a two-digit
@@ -524,8 +523,7 @@ pub fn local_year(facts: &HostFacts, zones: &dyn Zones) -> Result<i16, CoreError
     let now = Instant::from_count(*value, unit);
     let unread = || {
         CoreError::new(
-            ErrorKind::InvalidRequest,
-            ErrorCode::InvalidRequest,
+            Sentence::LocalZoneUnread,
             "the host's local zone is not one this run can read",
         )
         .with_field("field", Detail::text("facts.local_zone"))
@@ -543,8 +541,7 @@ pub fn local_year(facts: &HostFacts, zones: &dyn Zones) -> Result<i16, CoreError
     };
     i16::try_from(year).map_err(|_| {
         CoreError::new(
-            ErrorKind::InvalidRequest,
-            ErrorCode::InvalidRequest,
+            Sentence::ClockPastYears,
             "the host's clock is past the years a date literal can be read in",
         )
         .with_field("field", Detail::text("facts.now"))
@@ -1029,6 +1026,7 @@ pub(crate) fn float_text(x: f64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sdm_contract::ErrorCode;
     use sdm_contract::facts::PlatformFacts;
     use sdm_engine::time::UnknownZone;
 

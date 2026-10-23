@@ -18,7 +18,7 @@ use sdm_contract::data::{
     DataRequest, KeySet, MARKED, NullOrder, SEED_BATCH, SEED_COUNT_UNREAD, SEED_KEY, SEED_KEY_TYPE,
     SEED_KEY_UNIQUE, SeedBound, TieBreak, TieTerm,
 };
-use sdm_contract::{ColumnType, CoreError, Detail, ErrorCode, ErrorKind};
+use sdm_contract::{ColumnType, CoreError, Detail, Sentence};
 
 use crate::graph::Table;
 use crate::random::Pcg64;
@@ -40,8 +40,7 @@ pub const SEED_END: &str = "end";
 /// reference's pandas times cannot hold either.
 pub fn out_of_range(field: &str) -> CoreError {
     CoreError::new(
-        ErrorKind::Unsupported,
-        ErrorCode::ValueOutOfRange,
+        Sentence::TimePastNanoseconds,
         "a time is outside what nanoseconds since the epoch hold",
     )
     .with_field("field", Detail::text(field))
@@ -336,13 +335,8 @@ pub fn seeds(keys: ArrayRef, times: Vec<(&str, Vec<i64>)>) -> Result<RecordBatch
                 .map(|v| (v != MISSING_ANCHOR).then_some(v)),
         )));
     }
-    RecordBatch::try_new(Arc::new(Schema::new(fields)), columns).map_err(|_| {
-        CoreError::new(
-            ErrorKind::Internal,
-            ErrorCode::InternalError,
-            "the seeds do not make one batch",
-        )
-    })
+    RecordBatch::try_new(Arc::new(Schema::new(fields)), columns)
+        .map_err(|_| CoreError::new(Sentence::Internal, "the seeds do not make one batch"))
 }
 
 /// The order `_by_fkey` keeps a table's neighbors in (design, "Data
@@ -453,8 +447,7 @@ pub fn by_time(
 ) -> Result<DataRequest, CoreError> {
     let time = table.time_column.clone().ok_or_else(|| {
         CoreError::new(
-            ErrorKind::Internal,
-            ErrorCode::InternalError,
+            Sentence::Internal,
             "a windowed read names a table without a time column",
         )
     })?;
@@ -492,11 +485,7 @@ pub fn by_pkey(
     counted: bool,
 ) -> Result<DataRequest, CoreError> {
     let key = table.primary_key.clone().ok_or_else(|| {
-        CoreError::new(
-            ErrorKind::Internal,
-            ErrorCode::InternalError,
-            "a lookup names a table without a key",
-        )
+        CoreError::new(Sentence::Internal, "a lookup names a table without a key")
     })?;
     let mut seeds = typed(seeds, table, &key);
     let unique = table.column(&key).is_some_and(|c| c.unique);
