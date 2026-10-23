@@ -607,3 +607,226 @@ def test_psycopgs_own_classes_are_guarded() -> None:
     finally:
         undo()
     assert not hasattr(psycopg.Cursor.execute, '__sdm_write_guard__')
+
+
+# Round 5: reads are an allowlist too, and Spark's writers are refused.
+
+#: Each round 5 bypass, refused.
+REFUSED_R5 = {
+    'postgres': [
+        # Codex r5 P0-1: a quoted or qualified function name.
+        'SELECT pg_catalog."setval"(\'outside.production_id_seq\', 1, false)',
+        'SELECT "nextval"(\'outside.production_id_seq\')',
+        "SELECT pg_catalog.setval('outside.s', 1)",
+        'SELECT "setval"(\'outside.s\', 1) FROM live_tests.t',
+        # A function on no list.
+        'SELECT pg_sleep(1)',
+        'SELECT lo_unlink(1)',
+        "SELECT set_config('search_path', 'x', false)",
+    ],
+    'snowflake': [
+        # Codex r5 P0-2: a sequence advanced outside the test schema.
+        'SELECT OTHER_DB.PUBLIC.PRODUCTION_ID_SEQ.NEXTVAL',
+        'SELECT OTHER_DB.PUBLIC.PRODUCTION_ID_SEQ.nextval AS n',
+        'INSERT INTO REVIEW_DB.LIVE_TESTS.T SELECT OTHER_DB.PUBLIC.PRODUCTION_ID_SEQ.NEXTVAL',
+        'SELECT OTHER_DB.PUBLIC.S.GETNEXTVAL()',
+        'SELECT * FROM TABLE(GETNEXTVAL(OTHER_DB.PUBLIC.S))',
+        # Functions on no list.
+        'SELECT UUID_STRING()',
+        'SELECT SEQ8()',
+        'SELECT SYSTEM$WAIT(1)',
+        "SELECT SECRET('x')",
+        'SELECT "LOWER"(\'A\')',
+        'SELECT m!PREDICT(1)',
+        'INSERT INTO REVIEW_DB.LIVE_TESTS.T SELECT UUID_STRING()',
+        # Claude r5: a YAML key given twice, read differently by the engine.
+        "CALL SYSTEM$CREATE_SEMANTIC_VIEW_FROM_YAML('REVIEW_DB.LIVE_TESTS', "
+        '$$name: v\nname: OTHER.PROD.V\n$$)',
+        "CALL SYSTEM$CREATE_SEMANTIC_VIEW_FROM_YAML('REVIEW_DB.LIVE_TESTS', "
+        '$$name: v\ntables:\n  - name: t\n    base_table:\n      database: OTHER\n'
+        '      database: REVIEW_DB\n      schema: LIVE_TESTS\n      table: T\n$$)',
+    ],
+    'databricks': [
+        "SELECT http_request('x')",
+        "SELECT secret('scope', 'key')",
+        'SELECT `lower`(a) FROM `other`.s.t',
+    ],
+}
+
+#: Reads the old client's generated SQL makes, admitted.
+ALLOWED_R5 = {
+    'postgres': [
+        "SELECT a ->> 'k' FROM live_tests.t",
+        'SELECT COUNT(*), MIN(a), MAX(a) FROM other.t',
+        'SELECT format_type(a.atttypid, a.atttypmod) FROM pg_catalog.pg_attribute a',
+        'SELECT ROW_NUMBER() OVER (PARTITION BY a ORDER BY b) AS n FROM other.t',
+        'SELECT CAST(a AS numeric(20, 0)), a::numeric(20, 0) FROM other.t',
+    ],
+    'snowflake': [
+        'SELECT COUNT(*) FROM "OTHER"."S"."T" SAMPLE ROW (5 ROWS)',
+        'SELECT t.value FROM other.s.x, LATERAL FLATTEN(INPUT => PARSE_JSON(x.v)) t',
+        "SELECT DATE_TRUNC('day', ts), DATEADD('day', 1, ts) FROM other.s.t",
+        'INSERT INTO "REVIEW_DB"."LIVE_TESTS"."T" ("A") SELECT '
+        "PARSE_JSON(HEX_DECODE_STRING(column1))::VARIANT FROM VALUES ('6869')",
+    ],
+    'databricks': [
+        'SELECT * FROM `other`.s.t TABLESAMPLE (5 PERCENT) REPEATABLE (1)',
+        "SELECT posexplode(from_json(v, 'array<int>')) FROM `other`.s.t",
+        'SELECT current_catalog(), current_schema()',
+    ],
+}
+
+
+@pytest.mark.parametrize(
+    ('dialect', 'sql'),
+    [(d, sql) for d, texts in REFUSED_R5.items() for sql in texts],
+)
+def test_round_5_bypasses_are_refused(dialect: str, sql: str) -> None:
+    with pytest.raises(wg.WriteRefused):
+        GUARDS[dialect].check(sql)
+
+
+@pytest.mark.parametrize(
+    ('dialect', 'sql'),
+    [(d, sql) for d, texts in ALLOWED_R5.items() for sql in texts],
+)
+def test_the_old_clients_reads_pass(dialect: str, sql: str) -> None:
+    GUARDS[dialect].check(sql)
+
+
+def test_every_statement_the_old_client_recorded_on_postgres_passes() -> None:
+    # Every statement the reference recorded on Postgres, the old client's
+    # own generated SQL (contract/reference), passes the Postgres guard: the
+    # read allowlist holds what the old client sends.
+    guard = wg.WriteGuard('postgres', None, 'public')
+    checked = 0
+    for path in (ROOT / 'contract/reference').glob('*.jsonl'):
+        for line in path.read_text(encoding='utf-8').splitlines():
+            record = json.loads(line)
+            if not record['case'].endswith('@postgres'):
+                continue
+            capture = (record.get('driver') or {}).get('capture') or {}
+            for statement in capture.get('statements') or []:
+                guard.check(statement['sql'])
+                checked += 1
+    assert checked > 1000, checked
+
+
+def test_a_quoted_function_never_reaches_psycopg() -> None:
+    # Codex r5 P0-1, through the installed driver boundary.
+    import psycopg
+
+    undo = wg.install(GUARDS)
+    try:
+        cursor = object.__new__(psycopg.Cursor)
+        cursor._closed = True
+        with pytest.raises(wg.WriteRefused):
+            psycopg.Cursor.execute(
+                cursor,
+                'SELECT pg_catalog."setval"(\'outside.production_id_seq\', 1, false)',
+            )
+    finally:
+        undo()
+
+
+def _fake_spark_writers(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
+    r"""Spark's and Delta's writer classes as small fakes under their
+    modules' names, each recording a write that reaches it."""
+    seen: list[str] = []
+
+    def make(name: str, methods: tuple[str, ...]) -> type:
+        def method(label: str) -> Any:
+            def call(self: Any, *a: Any, **k: Any) -> Any:
+                seen.append(label)
+                return self
+
+            return call
+
+        namespace = {m: method(f'{name}.{m}') for m in methods}
+        return type(name, (), namespace)
+
+    writer = make(
+        'DataFrameWriter', ('mode', 'saveAsTable', 'insertInto', 'save')
+    )
+    v2 = make('DataFrameWriterV2', ('using', 'create', 'append', 'overwrite'))
+    stream = make('DataStreamWriter', ('toTable', 'start'))
+    merge = make('MergeIntoWriter', ('whenMatched', 'merge'))
+    delta = make('DeltaTable', ('delete', 'update', 'merge', 'vacuum'))
+    delta.forName = classmethod(
+        lambda cls, *a: seen.append('DeltaTable.forName')
+    )
+    builder = make('DeltaMergeBuilder', ('execute',))
+    for module, classes in {
+        'pyspark.sql.readwriter': [writer, v2],
+        'pyspark.sql.streaming.readwriter': [stream],
+        'pyspark.sql.merge': [merge],
+        'delta.tables': [delta, builder],
+    }.items():
+        fake = types.ModuleType(module)
+        for cls in classes:
+            setattr(fake, cls.__name__, cls)
+        monkeypatch.setitem(sys.modules, module, fake)
+    return {
+        'seen': seen,
+        **{c.__name__: c for c in (writer, v2, stream, merge, delta, builder)},
+    }
+
+
+def test_spark_and_delta_writers_are_refused_however_reached(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Codex r5 P0-3: a writer kept from before the install, or made after
+    # it, writes nothing.
+    w = _fake_spark_writers(monkeypatch)
+    kept = w['DataFrameWriter']()
+    undo = wg.install(GUARDS)
+    try:
+        for call in (
+            lambda: kept.mode('overwrite').saveAsTable('other.prod.accounts'),
+            lambda: kept.saveAsTable('other.prod.accounts'),
+            lambda: w['DataFrameWriter']().insertInto('other.prod.accounts'),
+            lambda: w['DataFrameWriterV2']().append(),
+            lambda: w['DataStreamWriter']().toTable('other.prod.t'),
+            lambda: w['MergeIntoWriter']().merge(),
+            lambda: w['DeltaTable']().delete(),
+            lambda: w['DeltaTable'].forName(None, 'other.prod.t'),
+            lambda: w['DeltaMergeBuilder']().execute(),
+        ):
+            with pytest.raises(wg.WriteRefused):
+                call()
+        assert w['seen'] == []
+    finally:
+        undo()
+    kept.saveAsTable('t')
+    assert w['seen'] == ['DataFrameWriter.saveAsTable']
+
+
+def test_spark_sql_with_substituted_arguments_is_refused(
+    installed: Any,
+) -> None:
+    # Codex r5 P0-3, Claude's lead: PySpark formats keyword arguments into
+    # the text after the guard reads it; bound args are not substituted.
+    session = installed['SparkSession']()
+    with pytest.raises(wg.WriteRefused):
+        session.sql('SELECT * FROM {t}', t='`other`.s.t')
+    with pytest.raises(wg.WriteRefused):
+        session.sql('DROP TABLE {t}', t='`other`.s.t')
+    session.sql('SELECT ? AS a', args=[1])
+    assert installed['seen'] == ['SELECT ? AS a']
+
+
+def test_a_driver_subclass_made_after_the_install_is_guarded(
+    installed: Any,
+) -> None:
+    # Claude's lead: a subclass defined later, overriding an entry point.
+    seen = installed['seen']
+
+    class Later(installed['SnowflakeCursor']):
+        def execute(self, command: str, *a: Any, **k: Any) -> Any:
+            seen.append('later:' + command)
+            return self
+
+    with pytest.raises(wg.WriteRefused):
+        Later().execute('DROP TABLE OTHER_DB.PUBLIC.T')
+    Later().execute('SELECT 1')
+    assert seen == ['later:SELECT 1']
