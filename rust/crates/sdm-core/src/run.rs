@@ -630,7 +630,7 @@ pub struct Run {
     shared: Arc<Mutex<Shared>>,
     /// The opaque vendor the run's provider hands over, as its data layer
     /// declares it ([`DataAccess::opaque_vendor`]).
-    opaque_vendor: Option<&'static str>,
+    opaque_vendor: Option<String>,
     /// The run's data access, which reads each admitted answer's values as
     /// the reference reads them (`DataAccess::conform`).
     data: Option<DataAccess>,
@@ -664,7 +664,10 @@ impl Run {
         F: Future<Output = Result<OperationResult, CoreError>> + Send + 'static,
     {
         let shared = Arc::new(Mutex::new(Shared::default()));
-        let opaque_vendor = data.as_ref().and_then(DataAccess::opaque_vendor);
+        let opaque_vendor = data
+            .as_ref()
+            .and_then(DataAccess::opaque_vendor)
+            .map(str::to_owned);
         let access = data.clone();
         let body = make(Asker {
             shared: Arc::clone(&shared),
@@ -684,8 +687,8 @@ impl Run {
     /// that declares none, or an operation that names no provider. The host
     /// layer reads an opaque column by its vendor's layout only when the
     /// column names this vendor (register P1B-43).
-    pub fn opaque_vendor(&self) -> Option<&'static str> {
-        self.opaque_vendor
+    pub fn opaque_vendor(&self) -> Option<&str> {
+        self.opaque_vendor.as_deref()
     }
 
     /// The run's attachment numbering; see [`AttachmentIds`].
