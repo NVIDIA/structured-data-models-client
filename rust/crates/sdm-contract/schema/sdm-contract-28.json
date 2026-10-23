@@ -5334,7 +5334,7 @@
               ]
             },
             "read_under": {
-              "description": "Where the run read each relation of the schema it read under parts\nthe provider left to the connection and the schema had not read\nbefore ([`HeldSchema::read_under`] said nothing of it): the host\nadds each relation it holds no reading of to the schema's, so the\nnext run reads the same tables, as the reference keeps the tables\nits first `materialize` read (`EngineTables.keep`; contract v28,\nT3.4). Absent from the JSON when none.",
+              "description": "Where the run read each relation of one part of the schema that it\ndid not read where [`HeldSchema::read_under`] says (the schema held\nno reading of it, or one the provider's own parts do not agree\nwith), under the parts the session gave. A host adds an entry only\nfor a relation it holds no reading of, keeping any it holds, so the\nnext run reads the same tables, as the reference keeps the tables\nits first `materialize` read (`EngineTables.keep`); a failed run\ncarries them on its error ([`crate::CoreError::read_under`])\n(contract v28, T3.4). Absent from the JSON when none.",
               "type": "array",
               "items": {
                 "$ref": "#/$defs/ReadUnder"
@@ -5596,6 +5596,16 @@
               "type": "null"
             }
           ]
+        },
+        "read_under": {
+          "description": "Where a failed `materialize` read each relation the schema had not\nread, under parts the session gave, before it failed\n([`crate::ops::Materialized::read_under`]): the host keeps them as\nthe reference keeps the tables a run read before it failed (contract\nv28, T3.4). Absent for any other error; boxed, so an error stays\nsmall where it carries none.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/ReadUnder"
+          }
         }
       },
       "additionalProperties": false,
