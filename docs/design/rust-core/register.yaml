@@ -7654,7 +7654,7 @@ entries:
     written) filled in by the host. Where the reference refuses the same
     input with the same code, its words, held by the census's probes on
     DuckDB (test_t317_wording.py, against the old client's words recorded
-    in contract/reference/census-words/duckdb.jsonl). The differences that remain, each a
+    in contract/census-words/duckdb.jsonl). The differences that remain, each a
     named sentence where the core said its code's sentence before:
     (a) the rules the core does not hold yet ("... needs the 'aggregation'
     rule, which is not one this client's core supports yet"), which the

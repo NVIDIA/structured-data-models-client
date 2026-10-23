@@ -487,7 +487,7 @@ def test_no_refusal_on_the_census_s_core_route_says_a_generic_sentence(
 #: from the reference checkout by ``contract/tools/census_words_record.py``
 #: (one line a probe: its site, outcome and message), so the comparison
 #: runs wherever the suite does (T3.17 review r2, P1).
-WORDS = ROOT / 'contract/reference/census-words/duckdb.jsonl'
+WORDS = ROOT / 'contract/census-words/duckdb.jsonl'
 #: Each census probe whose refusal, in a sentence of the core's, the core
 #: route says in other words than the reference's, with the register entry
 #: that records why: each one where the reference refuses otherwise, by

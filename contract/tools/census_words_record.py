@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 r"""Records the old client's words for each refusal census probe on DuckDB
-into ``contract/reference/census-words/duckdb.jsonl`` (T3.17 review r2), so
+into ``contract/census-words/duckdb.jsonl`` (T3.17 review r2), so
 ``test_t317_wording.py`` compares the core route's words with them wherever
 the suite runs. Run from this repository's root with this checkout's
 interpreter, naming the reference checkout and its interpreter::
@@ -34,7 +34,7 @@ from pathlib import Path
 from types import ModuleType
 
 ROOT = Path(__file__).resolve().parents[2]
-OUT = ROOT / 'contract/reference/census-words/duckdb.jsonl'
+OUT = ROOT / 'contract/census-words/duckdb.jsonl'
 
 
 def _census() -> ModuleType:

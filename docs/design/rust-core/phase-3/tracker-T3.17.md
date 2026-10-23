@@ -41,5 +41,5 @@ Register: P3E-5.
 ## Fix 2 (review round 2)
 
 - The part of a question asked in parts a refusal happened in is the core's: `CoreError.part`, a sentence of the part kind (`part_forecast_step`, `part_forecast_step_outran`, `part_ranking_candidate`), said after the refusal's own, with `forecast_steps` beside `forecast_step`; the candidate as given is a host value. `decompose.py` and `client.py` keep only the details as the old route's; a refusal the Python host raises itself, which the core never saw, is still said of its part by `about_the_part`. Contract v28's working entry rewritten.
-- The old client's census words are recorded in `contract/reference/census-words/duckdb.jsonl` by `contract/tools/census_words_record.py`, which the census's test compares with, so it runs wherever the suite does.
+- The old client's census words are recorded in `contract/census-words/duckdb.jsonl` by `contract/tools/census_words_record.py`, which the census's test compares with, so it runs wherever the suite does.
 - `run_mode` names the size as given itself; a materialize refusal's `candidate` detail is the candidate as given, as predict's is.
