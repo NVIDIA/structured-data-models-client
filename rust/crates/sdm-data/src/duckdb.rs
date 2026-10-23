@@ -287,6 +287,7 @@ impl SqlDialect for Duckdb {
             samples_by_key_dtype: false,
             derived_relations: false,
             neighbor_lookback: false,
+            keys_optional: false,
             sample_rows: false,
             optional: sql::rendered(),
             max_keys_per_request: None,

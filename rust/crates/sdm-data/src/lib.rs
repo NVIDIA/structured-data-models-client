@@ -57,7 +57,8 @@ pub use pg_values::json_text;
 use arrow_array::RecordBatch;
 use sdm_contract::catalog::CatalogAnswer;
 use sdm_contract::data::{
-    DataLayer, DataRequest, Dialect, FetchPlan, ProviderCapabilities, ProviderChoice, Relation,
+    DataLayer, DataRequest, DescribePart, Dialect, FetchPlan, ProviderCapabilities, ProviderChoice,
+    Relation, SqlStatement,
 };
 use sdm_contract::wording::DatabaseNames;
 use sdm_contract::{CoreError, Detail, Sentence};
@@ -167,6 +168,30 @@ impl DataLayer for Data {
             }),
             ProviderChoice::Sql { dialect, namespace } => {
                 let dialect = rendered(dialect)?;
+                // The namespace itself, read where a part is left to the
+                // connection inside one given, which the core then reads
+                // every relation under (T3.4).
+                if let DataRequest::Describe {
+                    part: DescribePart::Namespace,
+                    ..
+                } = request
+                    && given_parts(namespace).is_none()
+                {
+                    let parts: Vec<String> = namespace
+                        .iter()
+                        .map(|part| part.clone().unwrap_or_default())
+                        .collect();
+                    deeper(request, &parts, dialect.namespace_depth())?;
+                    let (text, params) = dialect.current_namespace(request, namespace)?;
+                    return Ok(FetchPlan::Sql {
+                        statements: vec![SqlStatement {
+                            dialect: Dialect::new(dialect.name()),
+                            text,
+                            params,
+                        }],
+                        expect: dialect.expected(request),
+                    });
+                }
                 let namespace = qualifying(request, namespace)?;
                 deeper(request, &namespace, dialect.namespace_depth())?;
                 sql::plan(dialect, &in_namespace(request, &namespace), &namespace)
@@ -201,6 +226,23 @@ impl DataLayer for Data {
 
     fn source_database(&self, provider: &ProviderChoice) -> Option<&'static str> {
         Some(sql_dialect(provider)?.name())
+    }
+
+    fn unsettled(&self, provider: &ProviderChoice) -> bool {
+        match provider {
+            ProviderChoice::Sql { namespace, .. } => given_parts(namespace).is_none(),
+            ProviderChoice::Host { .. } => false,
+        }
+    }
+
+    fn settled(&self, provider: &ProviderChoice, parts: Vec<String>) -> ProviderChoice {
+        match provider {
+            ProviderChoice::Sql { dialect, .. } => ProviderChoice::Sql {
+                dialect: dialect.clone(),
+                namespace: parts.into_iter().map(Some).collect(),
+            },
+            ProviderChoice::Host { .. } => provider.clone(),
+        }
     }
 
     fn read_as(&self, provider: &ProviderChoice, relation: &Relation) -> Relation {
@@ -283,25 +325,10 @@ fn in_namespace(request: &DataRequest, namespace: &[String]) -> DataRequest {
     if namespace.is_empty() {
         return request;
     }
-    let under = |relation: &mut Relation| {
+    for relation in request.relations_mut() {
         if relation.source.len() == 1 {
             relation.source.splice(0..0, namespace.iter().cloned());
         }
-    };
-    match &mut request {
-        DataRequest::Describe { tables, .. } => tables.iter_mut().for_each(under),
-        DataRequest::KeyCounts { keys } => keys.iter_mut().for_each(|k| under(&mut k.table)),
-        DataRequest::TimeBounds { columns } => {
-            columns.iter_mut().for_each(|c| under(&mut c.table));
-        }
-        DataRequest::Scan { table, .. }
-        | DataRequest::Preview { table, .. }
-        | DataRequest::CountRows { table, .. }
-        | DataRequest::ColumnRanges { table, .. }
-        | DataRequest::RepeatedKey { table, .. }
-        | DataRequest::SampleEntities { table, .. }
-        | DataRequest::Neighbors { table, .. }
-        | DataRequest::Lookup { table, .. } => under(table),
     }
     request
 }

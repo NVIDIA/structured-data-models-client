@@ -19,8 +19,7 @@
 //! - the catalog read through `<catalog>.information_schema`, the schema
 //!   and table bound as parameters and folded with `lower(?)`, as Unity
 //!   Catalog stores them (`DatabricksTable._get_source_columns`); the
-//!   names the catalog answers are the table's canonical relation
-//!   (`CatalogColumn::canonical`), which the core names it by after;
+//!   table keeps the name its caller gives it, which the host takes back;
 //! - a column typed by its declaration first, as the reference types it
 //!   (`_to_dtype`, [`declared_dtype`]);
 //! - a key set bound as one parameter of JSON text, unpacked by
@@ -129,6 +128,9 @@ impl SqlDialect for Databricks {
             derived_relations: true,
             sample_rows: true,
             neighbor_lookback: true,
+            // The reference carries on without keys its catalog fails to
+            // read (`DatabricksTable`'s key reads).
+            keys_optional: true,
         }
     }
 
@@ -152,12 +154,29 @@ impl SqlDialect for Databricks {
         format!("`{}`", name.replace('`', "``"))
     }
 
-    /// A derived relation as the reference reads a metric view's table
+    /// A derived relation as the reference reads a table
     /// (`_quoted_source_name`): its columns, each the source's column under
     /// the relation's name for it or an expression, from the source under
     /// [`SOURCE_ALIAS`], where its filter holds, left unaliased
-    /// (Databricks refuses `(...) AS x TABLESAMPLE`).
+    /// (Databricks refuses `(...) AS x TABLESAMPLE`). The columns a catalog
+    /// read found, each under its own name with no filter, are read so only
+    /// where one is named like a session word ([`SESSION_WORDS`]), which
+    /// Databricks reads, quoted or not, as the session's value once the
+    /// column is dropped or renamed; otherwise the source by its name.
     fn derived(&self, relation: &Relation, source: &str) -> Option<String> {
+        let found = relation.filter.is_none()
+            && relation
+                .columns
+                .iter()
+                .all(|c| c.expression.is_none() && c.column.as_ref() == Some(&c.name));
+        if found
+            && !relation
+                .columns
+                .iter()
+                .any(|c| SESSION_WORDS.contains(&c.name.to_lowercase().as_str()))
+        {
+            return Some(source.to_owned());
+        }
         let columns = if relation.columns.is_empty() {
             "*".to_owned()
         } else {
@@ -321,6 +340,14 @@ impl SqlDialect for Databricks {
         describe(request, tables, part, namespace)
     }
 
+    fn current_namespace(
+        &self,
+        request: &DataRequest,
+        namespace: &[Option<String>],
+    ) -> Result<(String, Vec<SqlParam>), CoreError> {
+        current_namespace(request, &[], namespace)
+    }
+
     /// What the contract fixes for the key counts; what the source answers
     /// for the catalog's reads, which [`read`] reads by position, and for
     /// the time bounds, in the column's own type, as the reference reads
@@ -459,28 +486,8 @@ fn describe(
         // The source's namespace, one row per part, outermost first, each
         // given or the session's current one.
         DescribePart::Namespace => {
-            sql::whole(request, tables)?;
-            let given = |at: usize| namespace.len() + at >= NAMESPACE_DEPTH;
-            let mut params = Vec::new();
-            let mut parts = Vec::new();
-            for (at, current) in ["current_catalog()", "current_schema()"].iter().enumerate() {
-                if given(at) {
-                    params.push(text_param(
-                        &namespace[namespace.len() + at - NAMESPACE_DEPTH],
-                    ));
-                    parts.push(format!("SELECT {at} AS o, ? AS n"));
-                } else {
-                    parts.push(format!("SELECT {at} AS o, {current} AS n"));
-                }
-            }
-            (
-                format!(
-                    "SELECT p.n AS {name}\nFROM ({parts}) p\nWHERE p.n IS NOT NULL\nORDER BY p.o",
-                    name = identifier(sdm_contract::data::catalog_columns::NAME),
-                    parts = parts.join(" UNION ALL "),
-                ),
-                params,
-            )
+            let given: Vec<Option<String>> = namespace.iter().cloned().map(Some).collect();
+            current_namespace(request, tables, &given)?
         }
         // `Graph.from_databricks`'s listing, as it writes it, in the
         // namespace's catalog and schema; the session's current ones where
@@ -630,6 +637,43 @@ fn seed_cte(d: &Databricks, read: &SeedRead<'_>) -> Result<String, CoreError> {
 
 /// A Databricks answer to a `describe` of `part`, read as the reference
 /// reads it, each column by its position in the statement's select list.
+/// The source's namespace, one row per part, outermost first: each part
+/// `namespace` gives, the parts aligned to the innermost (a catalog and a
+/// schema, or a schema alone), or the session's current one where it
+/// gives none (`current_catalog()`, `current_schema()`), as the reference
+/// reads the parts a source leaves out (`SELECT current_catalog(),
+/// current_schema()`).
+fn current_namespace(
+    request: &DataRequest,
+    tables: &[Relation],
+    namespace: &[Option<String>],
+) -> Result<(String, Vec<SqlParam>), CoreError> {
+    sql::whole(request, tables)?;
+    let mut params = Vec::new();
+    let mut parts = Vec::new();
+    for (at, current) in ["current_catalog()", "current_schema()"].iter().enumerate() {
+        let given = (namespace.len() + at)
+            .checked_sub(NAMESPACE_DEPTH)
+            .and_then(|i| namespace.get(i))
+            .and_then(Option::as_ref);
+        match given {
+            Some(part) => {
+                params.push(text_param(part));
+                parts.push(format!("SELECT {at} AS o, ? AS n"));
+            }
+            None => parts.push(format!("SELECT {at} AS o, {current} AS n")),
+        }
+    }
+    Ok((
+        format!(
+            "SELECT p.n AS {name}\nFROM ({parts}) p\nWHERE p.n IS NOT NULL\nORDER BY p.o",
+            name = identifier(sdm_contract::data::catalog_columns::NAME),
+            parts = parts.join(" UNION ALL "),
+        ),
+        params,
+    ))
+}
+
 pub(crate) fn read(
     request: &DataRequest,
     part: DescribePart,
@@ -729,13 +773,30 @@ pub(crate) fn read(
     }
 }
 
+/// The words Databricks reads without parentheses as the session's
+/// identity or clock (the reference's `view_expr._SESSION_WORDS`).
+const SESSION_WORDS: &[&str] = &[
+    "current_catalog",
+    "current_database",
+    "current_date",
+    "current_path",
+    "current_role",
+    "current_schema",
+    "current_time",
+    "current_timestamp",
+    "current_user",
+    "localtime",
+    "localtimestamp",
+    "session_user",
+    "user",
+];
+
 /// The rule a refusal of a metric view read as a table names.
 const METRIC_VIEW_RULE: &str = "metric_view";
 
 /// A table's columns, in order: each its name, its full declared type and
 /// whether it is declared not null (`is_nullable` other than `NO`, read as
-/// the reference reads it); the canonical relation the catalog names the
-/// table by; a metric view refused by name, as the reference refuses one
+/// the reference reads it); a metric view refused by name, as the reference refuses one
 /// read as a table (`MetricViewAsTableError`).
 fn read_columns(
     request: &DataRequest,
@@ -746,8 +807,6 @@ fn read_columns(
         let names = text_at(batch, 0)?;
         let types = text_at(batch, 1)?;
         let nullable = text_at(batch, 2)?;
-        let catalogs = text_at(batch, 3)?;
-        let schemas = text_at(batch, 4)?;
         let tables = text_at(batch, 5)?;
         let kinds = text_at(batch, 6)?;
         for row in 0..batch.num_rows() {
@@ -772,19 +831,7 @@ fn read_columns(
                 key_nullable: false,
                 unique: false,
                 dtype: value(&types, row).and_then(|declared| declared_dtype(&declared)),
-                canonical: Some(vec![
-                    value(&catalogs, row).unwrap_or_default(),
-                    value(&schemas, row).unwrap_or_default(),
-                    value(&tables, row).unwrap_or_default(),
-                ]),
             });
-        }
-    }
-    // The names of the first row's table, on every column, as the
-    // reference adopts them from it.
-    if let Some(first) = found.first().and_then(|c| c.canonical.clone()) {
-        for column in &mut found {
-            column.canonical = Some(first.clone());
         }
     }
     Ok(CatalogAnswer::Columns(found))

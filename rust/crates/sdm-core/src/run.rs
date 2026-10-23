@@ -30,7 +30,7 @@ use arrow_schema::SchemaRef;
 use sdm_contract::catalog::CatalogAnswer;
 use sdm_contract::data::{
     AttachmentId, DataRequest, ExpectedSchema, FetchPlan, ProviderCapabilities, ProviderError,
-    Relation,
+    Relation, RelationColumn,
 };
 use sdm_contract::ops::{OperationResult, SAMPLER_STATE_VERSION, SamplerMemo, SamplerState};
 use sdm_contract::run::{Endpoint, FetchStep, ModelCall, ReplyId};
@@ -151,6 +151,9 @@ struct Shared {
     bound: BTreeSet<AttachmentId>,
     /// Answered, not yet taken by the body.
     replies: BTreeMap<ReplyId, Reply>,
+    /// Each table's columns as the source's catalog read them, by the
+    /// relation the run names the table by ([`Asker::guard`]).
+    guarded: BTreeMap<Relation, Vec<String>>,
 }
 
 fn lock(shared: &Mutex<Shared>) -> MutexGuard<'_, Shared> {
@@ -169,6 +172,61 @@ pub struct Asker {
 }
 
 impl Asker {
+    /// The run's data access, for an operation that names a provider.
+    pub(crate) fn data(&self) -> Option<&DataAccess> {
+        self.data.as_ref()
+    }
+
+    /// Names `columns`, the columns the source's catalog read for the
+    /// table `relation` names, on every later read of it, for a provider
+    /// declaring derived relations: each read of the table then reads it
+    /// as those columns of the source, so that one since dropped or
+    /// renamed fails the read rather than reading another value of its
+    /// name, as the reference reads a Databricks table (a column named
+    /// like a session word, `user`, read as the session's value;
+    /// `_quoted_source_name`, T3.4). The provider renders it, or reads the
+    /// table whole where no column needs it.
+    pub(crate) fn guard(&self, relation: &Relation, columns: Vec<String>) {
+        if self
+            .data
+            .as_ref()
+            .is_some_and(|data| data.capabilities().derived_relations)
+            && !relation.is_derived()
+            && !columns.is_empty()
+        {
+            lock(&self.shared).guarded.insert(relation.clone(), columns);
+        }
+    }
+
+    /// `request` with each table it reads whole read as the columns the
+    /// catalog read for it ([`Asker::guard`]).
+    fn guarded(&self, mut request: DataRequest) -> DataRequest {
+        let shared = lock(&self.shared);
+        // A catalog read names the table itself.
+        if shared.guarded.is_empty() || matches!(request, DataRequest::Describe { .. }) {
+            return request;
+        }
+        for relation in request.relations_mut() {
+            if let Some(columns) = shared.guarded.get(relation) {
+                relation.columns = columns
+                    .iter()
+                    .map(|name| RelationColumn {
+                        name: name.clone(),
+                        column: Some(name.clone()),
+                        expression: None,
+                    })
+                    .collect();
+            }
+        }
+        request
+    }
+
+    /// The asker with `data` its run's data access from here on.
+    pub(crate) fn with_access(mut self, data: DataAccess) -> Asker {
+        self.data = Some(data);
+        self
+    }
+
     /// The answer to one data request, planned by the run's data layer for
     /// its provider (decision H14); a request the plan refuses, or an
     /// operation that names no provider, is the error.
@@ -178,6 +236,7 @@ impl Asker {
                 "the operation asked for data and names no provider",
             ));
         };
+        let request = self.guarded(request);
         let limits = match data.route(&request)? {
             Route::Plan(plan) => {
                 self.bind_keys(data, &plan)?;
