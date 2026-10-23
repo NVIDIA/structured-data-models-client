@@ -20,6 +20,7 @@ fn statement(dialect: &str, unique: bool) -> String {
         }],
     };
     let choice = ProviderChoice::Sql {
+        namespace: Vec::new(),
         dialect: Dialect::new(dialect),
     };
     let Ok(FetchPlan::Sql { statements, .. }) = Data::new().plan(&request, &choice) else {

@@ -71,6 +71,14 @@ fn each_refused_vector_is_refused() {
     assert!(!refused.is_empty());
     for vector in refused {
         let (name, value) = (vector["definition"].as_str().unwrap(), &vector["value"]);
+        // A shape a later version adds (contract v28's derived relation) is
+        // refused through the version the vector names, and read after it.
+        if let Some(through) = vector["refused_through"].as_u64()
+            && u64::from(sdm_contract::CONTRACT_VERSION) > through
+        {
+            assert!(load(name, value).is_ok(), "{} was refused", vector["name"]);
+            continue;
+        }
         assert!(load(name, value).is_err(), "{} was read", vector["name"]);
     }
 }

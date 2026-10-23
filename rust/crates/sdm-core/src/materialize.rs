@@ -3027,6 +3027,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
             &ask(
                 asker,
                 DataRequest::SampleEntities {
+                    rows: None,
                     table: entity.source.clone(),
                     key: vec![key.clone()],
                     n: trials as u64,
