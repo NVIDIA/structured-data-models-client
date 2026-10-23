@@ -65,7 +65,6 @@ which maps each inventory case into the case format and back without loss.
 from __future__ import annotations
 
 import argparse
-import contextlib
 import copy
 import functools
 import hashlib
@@ -2750,7 +2749,7 @@ PRIVATE_ENVIRONMENT = (
 _PRIVATE_MIN = 4
 #: The recording mode's own format (design choice 2): one line per case
 #: and leg, the input T3.3's ``captures.py import`` turns into the capture
-#: (``sdm-capture/1``, the stand-in's), which ``capture_check.py
+#: (``sdm-capture/1``), which ``capture_check.py
 #: recording`` holds complete.
 RECORD_FORMAT = 'sdm-record/1'
 #: A statement's random draw: Databricks' ``TABLESAMPLE (p PERCENT)
@@ -3689,7 +3688,7 @@ def raw_arrow(leg: str, connection: Any, sql: str) -> Any:
 
 
 #: The statement each leg's session time zone is read with, outside the
-#: capture (choice 2: the stand-in sets DuckDB's session to it).
+#: capture, kept with the recording.
 _ZONE = {
     'databricks-sql': 'SELECT current_timezone() AS zone',
     'databricks-spark': 'SELECT current_timezone() AS zone',
@@ -3960,150 +3959,6 @@ class Live:
                 self._undo.pop()()
             except Exception:  # noqa: BLE001, S110 - closing after the case
                 pass
-
-
-#: The core's SQL dialect each warehouse leg's provider renders (Phase 3
-#: design choice 2: the stand-in receives each request with the plan the
-#: leg's own dialect rendered for it).
-LEG_DIALECTS = {
-    'databricks-sql': 'databricks',
-    'databricks-spark': 'databricks',
-    'snowflake': 'snowflake',
-    'lakebase': 'postgres',
-}
-
-
-class _Offline:
-    r"""What a warehouse leg's source holds offline in place of a driver
-    connection: nothing runs through it (the stand-in's forwarding provider
-    answers every fetch), it only names the leg's driver to the source's
-    dispatch, as the real one would."""
-
-    version = '4.0.0'
-
-    def cursor(self) -> Any:
-        raise RunnerFailure('a stand-in leg runs nothing through its driver')
-
-    def sql(self, *arguments: Any, **keywords: Any) -> Any:
-        raise RunnerFailure('a stand-in leg runs nothing through its driver')
-
-    def close(self) -> None:
-        pass
-
-
-#: Each leg's offline connection class, under the driver's package the
-#: source dispatch reads (a Spark session by its class name).
-_OFFLINE = {
-    'databricks-sql': type(
-        'Connection', (_Offline,), {'__module__': 'databricks.sql.sdm_standin'}
-    ),
-    'databricks-spark': type(
-        'SparkSession', (_Offline,), {'__module__': 'pyspark.sql.sdm_standin'}
-    ),
-    'snowflake': type(
-        'SnowflakeConnection',
-        (_Offline,),
-        {'__module__': 'snowflake.connector.sdm_standin'},
-    ),
-    'lakebase': type(
-        'Connection', (_Offline,), {'__module__': 'psycopg.sdm_standin'}
-    ),
-}
-
-
-class Standin:
-    r"""A warehouse leg served offline by the stand-in (Phase 3 design
-    choice 2; T3.3's ``sdm-standin``) for python-core, through
-    ``standin_client.py``'s forwarding provider over the pipe protocol: the
-    stand-in needs each whole fetch step (the request and the plan the
-    leg's dialect rendered), so the session's provider is plugged in as the
-    leg's provider (:meth:`plugged`), answering every fetch the core asks,
-    and the source holds an offline connection that only names the leg's
-    driver (:class:`_Offline`). The run keeps the stand-in's verdict for
-    the observation's ``standin`` field.
-
-    ``standin_client.py`` meets this: ``open(leg, case, bases, captures)``
-    gives a session with ``provider(step, keys)`` (the host's provider
-    interface, ``sdm_client._rust.run.Provider``), ``names`` (each
-    placeholder's name offline), ``verdict()`` (``{"live_only": code or
-    None, "flagged": [codes]}``) and ``close()``; the captures are
-    ``contract/captures/``."""
-
-    def __init__(
-        self, case: dict[str, Any], bases: dict[str, list[str]], leg: str
-    ) -> None:
-        self.leg = leg
-        if (
-            'standin_client' not in sys.modules
-            and not (HERE / 'standin_client.py').is_file()
-        ):
-            raise RunnerFailure(
-                f'{case["id"]}: {leg} runs offline on the stand-in, and '
-                'standin_client.py is not beside the runner'
-            )
-        client = _sibling('standin_client')
-        self._session = client.open(leg, case, bases, CONTRACT / 'captures')
-        self.provider = self._session.provider
-        self.connection = _OFFLINE[leg]()
-        self.names = dict(self._session.names)
-        self.case = resolved(case, self.names)
-
-    def captured(self, log: DriverLog) -> Any:
-        r"""The offline connection: nothing runs through it, so there is
-        no driver call to capture; the stand-in's statements are its own,
-        and only reported (KO3-45)."""
-        return self.connection
-
-    @contextlib.contextmanager
-    def plugged(self) -> Iterator[None]:
-        r"""The session's forwarding provider as the provider of every run
-        over this leg's offline connection, for the case's calls, restored
-        after: the Python host's ``_provider`` of ``describe_source`` and
-        ``materialize`` (test-only, as the capture is)."""
-        from sdm_client._rust import materialize, schema
-
-        choice = {'provider': 'sql', 'dialect': LEG_DIALECTS[self.leg]}
-        saved = [(module, module._provider) for module in (schema, materialize)]
-
-        def forwarding(original: Any) -> Any:
-            def chosen(source: Any) -> tuple[dict[str, Any], Any]:
-                held = getattr(source, 'connection', None)
-                # A Spark source wraps the session it was given.
-                if self.connection not in (
-                    held,
-                    getattr(held, '_session', None),
-                ):
-                    return original(source)
-                # The host's own choice, its namespace included (T3.8's
-                # field, the source's catalog and schema), so the dialect
-                # renders the old client's catalog statements; only the
-                # provider answering is the stand-in's. A host with no
-                # provider of the leg yet gives the leg's dialect alone.
-                try:
-                    made, _ = original(source)
-                except (KeyError, NotImplementedError):
-                    made = dict(choice)
-                return made, self.provider
-
-            return chosen
-
-        try:
-            for module, original in saved:
-                module._provider = forwarding(original)
-            yield
-        finally:
-            for module, original in saved:
-                module._provider = original
-
-    def verdict(self) -> dict[str, Any]:
-        found = self._session.verdict()
-        return {
-            'live_only': found.get('live_only'),
-            'flagged': list(found.get('flagged') or []),
-        }
-
-    def close(self) -> None:
-        self._session.close()
 
 
 def capture_line(
@@ -4677,11 +4532,8 @@ def _call(
     (:class:`Live`); with ``keep``, the recording mode's, every result is
     kept whole and ``keep`` gets the leg, the capture's log and the
     view-derived relations, read before the leg closes."""
-    offline = database in WAREHOUSES and keep is not None and 'standin' in keep
-    live: Live | Standin | None = None
-    if offline:
-        live = Standin(case, bases, database)
-    elif database in WAREHOUSES:
+    live: Live | None = None
+    if database in WAREHOUSES:
         live = Live(case, bases, database)
     given = (live.case if live is not None else case)['input']
     # The call's arguments are the harness's to build: an input it cannot
@@ -4701,10 +4553,9 @@ def _call(
         connection, cleanup, types = _open(case, bases, database)
     # Setup is everything run before the connection reaches the source; the
     # query log (DuckDB's own, or off DuckDB the driver's statement log,
-    # entered only in a with, so it is always left, P2-T2.1a-2; the
-    # stand-in's leg keeps none, its statements being the stand-in's) and
-    # the capture start after it.
-    logs = database != 'duckdb' and not isinstance(live, Standin)
+    # entered only in a with, so it is always left, P2-T2.1a-2) and the
+    # capture start after it.
+    logs = database != 'duckdb'
     try:
         if database == 'duckdb':
             enable_query_log(connection)
@@ -4800,15 +4651,7 @@ def _calls(
 
     serve = _sibling('scripted_endpoint').serve
     stage = 'from_source'
-    # On a stand-in leg, the stand-in's forwarding provider answers every
-    # fetch of the case's calls (Standin.plugged).
-    plugged = (
-        live.plugged()
-        if isinstance(live, Standin)
-        else contextlib.nullcontext()
-    )
     with (
-        plugged,
         # The scripted endpoint, failing the case's chosen call and
         # answering a classification with its probabilities (T2.8's ranking
         # cases), a regression with its quantiles (T2.9's forecast cases),
@@ -4882,9 +4725,7 @@ def _calls(
                     logged = []
                 else:
                     logged = query_log(connection)
-                if isinstance(live, Standin):
-                    keep['standin'] = live.verdict()
-                elif keep is not None and live is not None and log is not None:
+                if keep is not None and live is not None and log is not None:
                     keep.update(
                         live=live, log=log, relations=live.relations(log)
                     )
@@ -5058,7 +4899,6 @@ def run(
             )
     recorded = []
     kept: list[dict[str, Any]] = []
-    standins: list[dict[str, Any] | None] = []
     for case, case_digest in cases:
         capture = boundary.reset() if boundary is not None else None
         if capture is not None:
@@ -5066,9 +4906,6 @@ def run(
         if mode == 'python-core':
             os.environ['SDM_CORE_ROUTES'] = ','.join(routes_on(case, database))
         keep: dict[str, Any] | None = {} if record is not None else None
-        if mode == 'python-core' and database in WAREHOUSES:
-            # Offline on the stand-in (choice 2): its verdict is kept.
-            keep = {'standin': None}
         try:
             outcome, shown, driver, public, origins = _call(
                 case, bases, driver_capture, database, keep
@@ -5077,7 +4914,6 @@ def run(
             os.environ.pop('SDM_CORE_ROUTES', None)
         if keep is not None and record is not None:
             kept.append(keep)
-        standins.append(None if keep is None else keep.get('standin'))
         recorded.append(
             (
                 case,
@@ -5116,7 +4952,7 @@ def run(
         driver,
         public,
         origins,
-    ), standin in zip(recorded, standins, strict=True):
+    ) in recorded:
         observation = {
             'format': 'sdm-observation/1',
             'case': case_key(case['id'], database),
@@ -5148,9 +4984,6 @@ def run(
             'driver': driver,
             'public': public,
         }
-        if standin is not None:
-            # The stand-in's verdict on a warehouse leg judged offline.
-            observation['standin'] = standin
         problem = _invalid(validate, observation)
         if problem is not None:
             raise RunnerFailure(

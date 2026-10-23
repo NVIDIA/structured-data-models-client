@@ -103,7 +103,6 @@ SECTIONS = (
     'reach',
     'baseline',
     'relaxations',
-    'standin',
     'sampled',
 )
 #: A field path of an observation, dotted (``outcome.code``).
@@ -118,18 +117,6 @@ FIELD = re.compile(r'[a-z_]+(\.[a-z_]+)*')
 APPROVED_EXCLUSIONS: dict[str, tuple[str, ...]] = {
     # The request id the client draws at random (approved 2026-10-10).
     'E35': ('metadata', 'request_id'),
-}
-
-
-#: What the policy's ``standin`` section may hold, by the owner's
-#: approval: the stand-in's reason codes, exactly the design's blind-spot
-#: rows B1, B2 and B4 (Phase 3 design choice 2), and the rules only reported
-#: on a stand-in leg, H9's statement count and results (KO3-45, approved by
-#: owner 2026-10-22). Widening either needs the owner and a review of this
-#: protected file.
-APPROVED_STANDIN = {
-    'codes': ('B1', 'B2', 'B4'),
-    'diagnostic': ('sql.count', 'sql.result'),
 }
 
 
@@ -382,24 +369,6 @@ def policy(
         for item in loaded['relaxations']
     ):
         raise PolicyError('relaxations: not a list of changes and decisions')
-    standin = loaded['standin']
-    if not isinstance(standin, dict) or set(standin) != set(APPROVED_STANDIN):
-        raise PolicyError('standin: not its codes and diagnostic rules')
-    if list(standin['codes'] or []) != list(APPROVED_STANDIN['codes']):
-        raise PolicyError(
-            "standin: its codes are not the design's B1, B2 and B4"
-        )
-    diagnostic = standin['diagnostic']
-    if (
-        not isinstance(diagnostic, list)
-        or any(
-            rule not in APPROVED_STANDIN['diagnostic'] for rule in diagnostic
-        )
-        or any(rule not in rules for rule in diagnostic)
-    ):
-        raise PolicyError(
-            'standin: a diagnostic rule the owner did not approve (KO3-45)'
-        )
     sampled = loaded['sampled']
     if (
         not isinstance(sampled, dict)

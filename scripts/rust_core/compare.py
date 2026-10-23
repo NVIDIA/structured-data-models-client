@@ -246,10 +246,6 @@ UNOBSERVING = ('rust-host', 'java')
 ENDPOINT_REFUSAL = 'NimRequestError'
 INVALID_RESPONSE = 'INVALID_RESPONSE'
 PYTHON = ('python-ref', 'python-core', 'python-old')
-#: The runners that carry the stand-in's verdict on a warehouse leg judged
-#: offline (Phase 3 design choice 2): the core's, Python's, Rust's and
-#: Java's hosts.
-STANDIN_RUNNERS = ('python-core', 'rust-host', 'java')
 #: The runtime cell the reference is recorded in (design, "Runtime cells",
 #: H1). In another named cell the host rules compare ``python-core`` with
 #: ``python-old`` there and only report the reference's (T1.18).
@@ -385,11 +381,6 @@ class Report:
         #: The columns only the core keeps, by case (the bare ID) and
         #: table (:func:`core_only_columns`, T2.1f).
         self.core_only: dict[str, dict[str, frozenset[str]]] = {}
-        #: The live-only items of a stand-in run (Phase 3 design choice 2),
-        #: each line's key with its code: neither passed nor failed
-        #: offline, each discharged only by E-1's verdict on the final
-        #: candidate (:func:`verdict_problems`).
-        self.live_only: dict[str, str] = {}
 
     def fail(self, text: str, rule: str | None = None) -> None:
         if rule is not None and self.rules.get(rule) == 'diagnostic':
@@ -477,82 +468,6 @@ def _observations(
     if len(runners) > 1:
         report.fail(f'{path.name}: observations of more than one runner')
     return (runners.pop() if len(runners) == 1 else None), by_case
-
-
-def _standin(
-    report: Report,
-    key: str,
-    who: str,
-    observation: dict[str, Any],
-    codes: tuple[str, ...],
-    offline: bool,
-) -> tuple[str | None, tuple[str, ...]]:
-    r"""The stand-in's verdict an observation carries (Phase 3 design
-    choice 2): its live-only code and its flags, each held to the policy's
-    ``standin`` codes. Only a core runner's observation of a warehouse leg
-    judged offline carries one, and it must; anywhere else one fails. A
-    code not listed, a live-only mark with no stand-in reason among them,
-    fails as any difference does, so no case marks itself live only."""
-    verdict = observation.get('standin')
-    if not offline or who not in STANDIN_RUNNERS:
-        if verdict is not None:
-            report.fail(
-                f'{key}: {who}: a stand-in verdict where no stand-in served '
-                'the case'
-            )
-        return None, ()
-    if verdict is None:
-        report.fail(
-            f"{key}: {who}: a stand-in leg without the stand-in's verdict"
-        )
-        return None, ()
-    code, flagged = verdict['live_only'], tuple(verdict['flagged'])
-    for each in (*([] if code is None else [code]), *flagged):
-        if each not in codes:
-            report.fail(
-                f'{key}: {who}: live-only mark {each} is no stand-in reason '
-                f'of compare-policy.yaml ({", ".join(codes)})'
-            )
-            return None, ()
-    return code, flagged
-
-
-def _live_only(
-    report: Report, key: str, who: str, code: str, since: int, why: str
-) -> None:
-    r"""``who``'s comparison of ``key`` since ``since`` made live only:
-    listed by its code, its differences under a rule reported, neither
-    passed nor failed offline. A failure under no rule (a runner failure,
-    a file's problem) still fails."""
-    report.live_only.setdefault(key, code)
-    _reported_rules(report, since, f'live only, {code}: {why}', LIVE_KEEPS)
-
-
-#: The rules a live-only item is still held to: the case's inputs, its route
-#: and its reach, which the stand-in does not answer (T3.2 r1, Claude P2-3);
-#: a stale input or a wrong route fails as anywhere.
-LIVE_KEEPS = ('inputs', 'route', 'reach')
-
-
-def _reported_rules(
-    report: Report, since: int, why: str, keep: tuple[str, ...] = ()
-) -> None:
-    r"""The failures under a rule since ``since`` reported as notes, each
-    saying ``why``, but those under a rule in ``keep``; a failure under no
-    rule still fails."""
-    kept = []
-    for rule, text in report.failures[since:]:
-        if rule is None or rule in keep:
-            kept.append((rule, text))
-        else:
-            report.notes.append(f'reported ({why}): {rule}: {text}')
-    del report.failures[since:]
-    report.failures.extend(kept)
-
-
-def _differences(report: Report, since: int) -> bool:
-    r"""Whether a rule found a difference since ``since``."""
-    return any(rule is not None for rule, _ in report.failures[since:])
 
 
 def _differ(
@@ -3153,14 +3068,10 @@ def compare(
     register_file: Path = REGISTER,
     improvements: Path | None = None,
     database: str = 'duckdb',
-    live: bool = False,
 ) -> Report:
     r"""The comparison of ``files``' observations on ``database``, a
-    database or a warehouse leg. A warehouse leg is judged offline, on the
-    stand-in, unless ``live`` (E-1, H9 in full): offline its core runners
-    carry the stand-in's verdict, the policy's ``standin`` rules are only
-    reported, and a live-only item is listed rather than passed or failed
-    (:func:`_standin`)."""
+    database or a warehouse leg. A warehouse leg is judged as any database
+    is, by every rule, against the reference lines recorded on it."""
     check = _capture_check()
     try:
         policy = (
@@ -3196,17 +3107,7 @@ def compare(
     if database not in runner.LEGS:
         report.fail(f'--database: {database} is not one of {runner.LEGS}')
         return report
-    offline = database in runner.WAREHOUSES and not live
-    codes = tuple(policy['standin']['codes'])
-    if offline:
-        # H9 narrowed on a stand-in leg, and only there (KO3-45).
-        report.rules = {
-            **report.rules,
-            **{rule: 'diagnostic' for rule in policy['standin']['diagnostic']},
-        }
-    elif live and database not in runner.WAREHOUSES:
-        report.fail(f'--live: {database} is not a warehouse leg')
-        return report
+    on_warehouse = database in runner.WAREHOUSES
     cases = [case for case, _ in loaded if database in runner.case_legs(case)]
     try:
         bases = runner.load_bases(bases_file or runner.BASES)
@@ -3291,7 +3192,6 @@ def compare(
             }
         before = len(report.failures)
         ref = reference.get(case['id'])
-        live_only: dict[str, str] = {}
         stops: dict[str, str | None] = {}
         earliers: dict[str, str | None] = {}
         if reference_file is not None and ref is None:
@@ -3320,10 +3220,6 @@ def compare(
                     'reach' if reach is not None else None,
                 )
                 continue
-            since = len(report.failures)
-            code, flagged = _standin(
-                report, case['id'], who, observation, codes, offline
-            )
             _shape(report, case, who, observation)
             _inputs(report, case, who, observation, digests)
             wanted = effective.get(case['id'], {}).get(who)
@@ -3385,9 +3281,7 @@ def compare(
                 if who in PYTHON and cell not in (None, REFERENCE_CELL):
                     # H1: in a cell other than the reference's, the host
                     # fields against the reference are reported; python-core
-                    # against python-old gates them (below). Its own
-                    # marker: ``since`` marks the whole runner comparison,
-                    # which a live-only verdict reports (T3.2 r1, Codex 4).
+                    # against python-old gates them (below).
                     hosted = len(report.failures)
                     _host_fields(
                         report, case, who, seen, against, stop=earlier or stop
@@ -3425,9 +3319,10 @@ def compare(
                 theirs = ref['identity']['versions'].get('duckdb')
                 mine = observation['identity']['versions'].get('duckdb')
                 # Java's host opens DuckDB only where its leg does.
-                if mine != theirs and not offline and mine is not None:
-                    # Offline, a warehouse leg's reference ran on the
-                    # warehouse, and DuckDB is only the stand-in's engine.
+                if mine != theirs and not on_warehouse and mine is not None:
+                    # On a warehouse leg the reference ran on the warehouse,
+                    # where DuckDB only holds the case's tables before they
+                    # are loaded; its version is no part of the answer.
                     _differ(
                         report,
                         f'{case["id"]}: {who}',
@@ -3436,29 +3331,6 @@ def compare(
                         mine,
                         rule='route',
                     )
-            if code is not None:
-                _live_only(
-                    report,
-                    case['id'],
-                    who,
-                    code,
-                    since,
-                    'the stand-in could not answer',
-                )
-                live_only[who] = code
-            elif flagged and _differences(report, since):
-                # A flagged answer that differs may be the local engine's
-                # casts, not the core's: live only. One that matches passes.
-                _live_only(
-                    report,
-                    case['id'],
-                    who,
-                    flagged[0],
-                    since,
-                    'a flagged answer differs from the reference',
-                )
-                live_only[who] = flagged[0]
-        paired = len(report.failures)
         python = observed.get('python-core', {}).get(case['id'])
         old = observed.get('python-old', {}).get(case['id'])
         # Past the reference's stop (E114): python-old held python-core
@@ -3510,12 +3382,6 @@ def compare(
                 ),
                 host='java',
             )
-        if live_only:
-            # The core runners' agreement on a live-only case is reported:
-            # one side's answer there is the local engine's or none.
-            _reported_rules(
-                report, paired, 'live only: ' + ', '.join(sorted(live_only))
-            )
         if sample is not None:
             sampled_judgment(
                 report,
@@ -3534,50 +3400,6 @@ def compare(
     return report
 
 
-def verdict_problems(
-    live_only: dict[str, str], manifests: list[Path], candidate: str
-) -> list[str]:
-    r"""Why the locked run fails on the live-only items (Phase 3 design
-    choice 2; locked check 1): each needs E-1's verdict ``equal`` for its
-    key in a capture manifest of the core's live run (``contract/captures/``,
-    ``{"recording_commit": SHA, "verdicts": {"<case>@<leg>": "equal" |
-    "differs"}}``) recorded on ``candidate``, the final candidate; none, one
-    recorded on another commit, or ``differs`` fails, naming the item."""
-    found: dict[str, list[tuple[str, str]]] = {}
-    problems = []
-    for path in manifests:
-        try:
-            manifest = json.loads(path.read_text(encoding='utf-8'))
-        except (OSError, ValueError, RecursionError) as error:
-            problems.append(f'{path.name}: unreadable ({type(error).__name__})')
-            continue
-        verdicts = (
-            manifest.get('verdicts') if isinstance(manifest, dict) else None
-        )
-        if not isinstance(verdicts, dict):
-            continue
-        commit = str(manifest.get('recording_commit'))
-        for key, verdict in verdicts.items():
-            found.setdefault(str(key), []).append((commit, str(verdict)))
-    for key, code in sorted(live_only.items()):
-        mine = [
-            verdict
-            for commit, verdict in found.get(key, [])
-            if commit == candidate
-        ]
-        if not mine:
-            problems.append(
-                f'{key}: live only ({code}), and no E-1 verdict for the final '
-                f'candidate {candidate}'
-                + (' (only for another commit)' if found.get(key) else '')
-            )
-        elif any(verdict != 'equal' for verdict in mine):
-            problems.append(
-                f'{key}: live only ({code}), and E-1 found it differs'
-            )
-    return problems
-
-
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     parser.add_argument('--cases', type=Path, action='append', required=True)
@@ -3592,25 +3414,6 @@ def main(argv: list[str] | None = None) -> int:
         "more_exact fields (default: this tree's)",
     )
     parser.add_argument('--database', default='duckdb')
-    parser.add_argument(
-        '--live',
-        action='store_true',
-        help='a warehouse leg run live (E-1), judged by every rule, with no '
-        'stand-in verdict',
-    )
-    parser.add_argument(
-        '--verdicts',
-        type=Path,
-        nargs='+',
-        default=[],
-        metavar='MANIFEST',
-        help="the core's live capture manifests (E-1), read with --candidate",
-    )
-    parser.add_argument(
-        '--candidate',
-        help='the final candidate: each live-only item needs an E-1 verdict '
-        'equal recorded on it (the locked run)',
-    )
     parser.add_argument('observations', type=Path, nargs='*')
     arguments = parser.parse_args(argv)
     if not arguments.observations and arguments.reference is None:
@@ -3627,7 +3430,6 @@ def main(argv: list[str] | None = None) -> int:
         arguments.expect,
         improvements=arguments.register,
         database=arguments.database,
-        live=arguments.live,
     )
     for text in report.info:
         print(f'statements per public call: {text}')
@@ -3635,24 +3437,6 @@ def main(argv: list[str] | None = None) -> int:
         print(text)
     for text in report.texts:
         print(f'DIFFERS {text}')
-    for key, code in sorted(report.live_only.items()):
-        print(f'LIVE ONLY {key}: {code}')
-    if report.live_only:
-        print(
-            f'compare: {len(report.live_only)} live-only items, neither passed '
-            'nor failed offline'
-        )
-    if arguments.candidate is not None:
-        refused = verdict_problems(
-            report.live_only, arguments.verdicts, arguments.candidate
-        )
-        for text in refused:
-            print(f'NO VERDICT {text}')
-        if refused:
-            print(
-                f'compare: {len(refused)} live-only items E-1 has not discharged'
-            )
-            return 1
     if report.failures:
         print(f'compare: {len(report.failures)} differences')
         return 1

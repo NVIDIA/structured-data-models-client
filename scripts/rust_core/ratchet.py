@@ -950,26 +950,6 @@ def key_form() -> re.Pattern[str]:
     return re.compile(schema['$defs']['key']['pattern'])
 
 
-def standin_codes(policy: Any) -> tuple[str, ...]:
-    r"""The stand-in's reason codes a policy lists (T3.2's ``standin``
-    section), none for a policy without it."""
-    section = policy.get('standin') if isinstance(policy, dict) else None
-    codes = section.get('codes') if isinstance(section, dict) else None
-    return tuple(str(code) for code in codes or ())
-
-
-def live_only(observation: Any, codes: tuple[str, ...]) -> str | None:
-    r"""The live-only code an observation's stand-in verdict carries, when
-    it is one of ``codes`` (Phase 3 design choice 2): such an observation
-    is neither passed nor failed offline, so it is never held to a
-    baseline nor baselined; E-1 judges it."""
-    verdict = (
-        observation.get('standin') if isinstance(observation, dict) else None
-    )
-    code = verdict.get('live_only') if isinstance(verdict, dict) else None
-    return code if code in codes else None
-
-
 def case_of(key: str) -> str:
     r"""The case a line's key names: a DuckDB line's key is the bare case
     ID, a SQLite or Postgres line's ``<case>@sqlite`` or ``<case>@postgres``
@@ -2055,16 +2035,6 @@ def policy_relaxations(old: Any, new: Any) -> list[str]:
     for name in old.get('baseline') or []:
         if name not in fields:
             found.append(f'baseline field {name} removed')
-    # The stand-in's section (T3.2): a reason code added admits a new way
-    # to be live only, and a rule made diagnostic on stand-in legs narrows
-    # H9 further; each is a relaxation of the section the checkpoint has.
-    theirs_standin = old.get('standin')
-    if isinstance(theirs_standin, dict):
-        mine_standin = new.get('standin') or {}
-        for key, what in (('codes', 'code'), ('diagnostic', 'diagnostic rule')):
-            for item in mine_standin.get(key) or []:
-                if item not in (theirs_standin.get(key) or []):
-                    found.append(f'standin {what} {item} added')
     # The sampled case's section (T3.2 fix 4, option C): a case added or
     # its statement moved holds that case to less than every rule.
     theirs_sampled = old.get('sampled')
@@ -2375,7 +2345,6 @@ def check_baselines(
     gone: set[str],
     reference: dict[str, dict[str, Any]],
     ordered: dict[str, Any] | None,
-    codes: tuple[str, ...] = (),
 ) -> None:
     for runner, by_case in sorted(observed.items()):
         crashes = {
@@ -2393,14 +2362,6 @@ def check_baselines(
                 report.fail(
                     'baselines',
                     f'{case}: {runner}: baselined, and not observed',
-                )
-                continue
-            code = live_only(observation, codes)
-            if code is not None:
-                report.note(
-                    'baselines',
-                    f'{case}: {runner}: live only ({code}), judged by E-1, '
-                    'not by its baseline',
                 )
                 continue
             now = projection(observation, old_fields)
@@ -2434,13 +2395,6 @@ def check_baselines(
             if case_of(case) not in corpus:
                 continue  # a line of no case: check_keys names it
             observation = by_case.get(case)
-            if live_only(observation, codes) is not None:
-                report.fail(
-                    'baselines',
-                    f'{case}: {runner}: a proposed baseline of a live-only '
-                    'observation, which only E-1 judges',
-                )
-                continue
             if (
                 line['projection'].get('outcome.code') == PANIC
                 and case not in crashes
@@ -2465,8 +2419,6 @@ def check_baselines(
         # <case>@<database> on another).
         for case in sorted(by_case):
             spec = corpus.get(case_of(case), ({}, ''))[0]
-            if live_only(by_case[case], codes) is not None:
-                continue
             if spec.get('status') == 'acceptance' and case not in mine:
                 report.fail(
                     'baselines',
@@ -2644,7 +2596,6 @@ def check(
                 (new_policy or {}).get('ordered')
                 if isinstance(new_policy, dict)
                 else None,
-                standin_codes(old_policy),
             )
     except Unreadable as error:
         report.fail('read', str(error))
@@ -2707,9 +2658,7 @@ def accept(
         ref = reference.get(case)
         for runner, by_case in observed.items():
             observation = by_case.get(case)
-            if observation is None or live_only(
-                observation, standin_codes(policy)
-            ):
+            if observation is None:
                 continue
             want = expected.get(case, {}).get(runner)
             if want is None and ref is not None:
