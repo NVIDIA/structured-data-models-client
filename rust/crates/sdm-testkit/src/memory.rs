@@ -18,13 +18,13 @@
 //! table, each answered from the same rows.
 //!
 //! It answers `describe` and `scan`, which every provider answers, and
-//! declares every optional request but `column_ranges`
-//! ([`Memory::capabilities`]): the kit's (`preview`, `count_rows`,
-//! `key_counts`, `repeated_key`, `neighbors`, `lookup`) and the two the
-//! core's sampler requires of a provider before it reads anything
-//! (`time_bounds`, `sample_entities`). Without `column_ranges` the core
-//! chooses a time column from the preview, as it does for a source that
-//! cannot ask. Its only filter is the not-null filter the core writes.
+//! declares every optional request ([`Memory::capabilities`]): the kit's
+//! (`preview`, `count_rows`, `key_counts`, `repeated_key`, `neighbors`,
+//! `lookup`), the two the core's sampler requires of a provider before it
+//! reads anything (`time_bounds`, `sample_entities`), and `column_ranges`,
+//! over every row, so the core chooses a time column on a table bigger
+//! than its preview from the whole table, as on a SQL source (P2-T2.7-2).
+//! Its only filter is the not-null filter the core writes.
 //! A sample keeps the table's order: every row where `n` covers them, else
 //! its own seeded draw ([`drawn`]). Values are compared
 //! as the SQL pushdowns compare them: a key's parts must all be present to
@@ -124,6 +124,7 @@ pub const DECLARED: &[OptionalRequest] = &[
     OptionalRequest::CountRows,
     OptionalRequest::KeyCounts,
     OptionalRequest::TimeBounds,
+    OptionalRequest::ColumnRanges,
     OptionalRequest::RepeatedKey,
     OptionalRequest::SampleEntities,
     OptionalRequest::Neighbors,
@@ -369,7 +370,49 @@ impl Memory {
                 let n = usize::try_from(*n).unwrap_or(usize::MAX);
                 taken(&rows, &drawn(rows.num_rows(), n, seed)?)
             }
-            DataRequest::ColumnRanges { .. } => Err(not_read()),
+            DataRequest::ColumnRanges { table, columns } => {
+                // One row over every row of the table, as the reference's
+                // `_full_range` reads it: the table's rows, then each
+                // column's smallest and largest value, of its own type, and
+                // the rows holding one (P2-T2.7-2).
+                let rows = &self.table(table)?.rows;
+                let mut fields = vec![Field::new("count", DataType::Int64, false)];
+                let mut arrays: Vec<ArrayRef> =
+                    vec![Arc::new(Int64Array::from(vec![count(rows.num_rows())]))];
+                for (at, column) in named(rows, columns)?.into_iter().enumerate() {
+                    let converter =
+                        RowConverter::new(vec![SortField::new(column.data_type().clone())])
+                            .map_err(|_| not_read())?;
+                    let ordered = converter
+                        .convert_columns(std::slice::from_ref(&column))
+                        .map_err(|_| not_read())?;
+                    let held: Vec<usize> =
+                        (0..column.len()).filter(|&i| column.is_valid(i)).collect();
+                    let least = held
+                        .iter()
+                        .copied()
+                        .min_by(|&a, &b| ordered.row(a).cmp(&ordered.row(b)));
+                    let most = held
+                        .iter()
+                        .copied()
+                        .max_by(|&a, &b| ordered.row(a).cmp(&ordered.row(b)));
+                    for (label, pick) in [("min", least), ("max", most)] {
+                        let pick = pick.map(position).transpose()?;
+                        fields.push(Field::new(
+                            format!("{label}_{at}"),
+                            column.data_type().clone(),
+                            true,
+                        ));
+                        arrays.push(
+                            take(&column, &UInt32Array::from(vec![pick]), None)
+                                .map_err(arrow_failed)?,
+                        );
+                    }
+                    fields.push(Field::new(format!("count_{at}"), DataType::Int64, false));
+                    arrays.push(Arc::new(Int64Array::from(vec![count(held.len())])));
+                }
+                RecordBatch::try_new(Arc::new(Schema::new(fields)), arrays).map_err(arrow_failed)
+            }
         }
     }
 
