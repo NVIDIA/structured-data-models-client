@@ -26,13 +26,14 @@ from sdm_client._rust.providers.postgres import PostgresProvider
 from sdm_client._rust.providers.sqlite import SqliteProvider
 
 #: Each kind of source the core reads (``Source.kind``): the built-in SQL
-#: dialect it renders for it, and the provider answering on its connection.
-_BY_KIND: dict[str, tuple[str, Any]] = {
-    'duckdb': ('duckdb', DuckDBProvider),
-    'sqlite': ('sqlite', SqliteProvider),
-    'postgres': ('postgres', PostgresProvider),
-    'databricks-sql': ('databricks', DatabricksSqlProvider),
-    'databricks-spark': ('databricks', DatabricksSparkProvider),
+#: dialect it renders for it, and the name of the provider class answering
+#: on its connection, read when the run starts.
+_BY_KIND: dict[str, tuple[str, str]] = {
+    'duckdb': ('duckdb', 'DuckDBProvider'),
+    'sqlite': ('sqlite', 'SqliteProvider'),
+    'postgres': ('postgres', 'PostgresProvider'),
+    'databricks-sql': ('databricks', 'DatabricksSqlProvider'),
+    'databricks-spark': ('databricks', 'DatabricksSparkProvider'),
 }
 
 
@@ -51,7 +52,8 @@ def for_source(source: Any) -> tuple[dict[str, Any], Any]:
     tables, as the reference qualifies each read by them; left out where
     the source names none.
     """
-    dialect, made = _BY_KIND[source.kind]
+    dialect, name = _BY_KIND[source.kind]
+    made = globals()[name]
     choice: dict[str, Any] = {'provider': 'sql', 'dialect': dialect}
     parts = source.namespace_parts()
     if any(part is not None for part in parts):
