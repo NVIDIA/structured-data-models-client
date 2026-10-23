@@ -724,6 +724,8 @@ sentences! {
     RelationTooManyParts = "relation_too_many_parts", E::UnsupportedRequest, rule "relation";
     DerivedRelationUnread = "derived_relation_unread", E::UnsupportedRequest, rule "derived_relation";
     DerivedRelationMalformed = "derived_relation_malformed", E::InvalidRequest, rule "derived_relation";
+    MetricViewAsTable = "metric_view_as_table", E::InvalidRequest, rule "metric_view";
+    KeySetTypeUnbound = "key_set_type_unbound", E::UnsupportedRequest;
     DataRequestRefused = "data_request_refused", E::InvalidRequest;
     UnsupportedType = "unsupported_type", E::UnsupportedType;
     NotYetDescribe = "not_yet_describe", E::UnsupportedRequest;

@@ -246,6 +246,12 @@ pub fn template(sentence: Sentence) -> Template {
         S::DerivedRelationMalformed => said(
             r#"the core asked the data source for a {request} of a derived relation whose columns do not each read one source column or expression; this is a defect, not a problem with the request"#,
         ),
+        S::MetricViewAsTable => said(
+            r#"{metric_view!r} is a metric view, not a table. Its measures are aggregations with no value per row, so it cannot be read as a table."#,
+        ),
+        S::KeySetTypeUnbound => said(
+            r#"the core asked the data source to match keys of a type its SQL does not bind as text"#,
+        ),
         S::DataRequestRefused => said(
             r#"the core asked the data source for a {request} whose {field} it does not take; this is a defect, not a problem with the request"#,
         ),
