@@ -64,17 +64,12 @@ def held_schema(schema: Schema) -> dict[str, Any]:
             held['duplicate_keys'] = codec.integer('u64', int(repeated))
         tables.append(held)
     held_schema: dict[str, Any] = {'tables': tables, 'links': _links(schema)}
-    # Where the schema read each table's relation it read (T3.4), for the
-    # tables it holds now, whichever schema each table came from.
-    read_under = schema._read_under
-    named = {
-        getattr(table, 'source_name', name)
-        for name, table in schema.tables.items()
-    }
+    # Where the schema read each relation it read (T3.4), every one it
+    # holds a reading of, a table it holds now or not, as its engine reading
+    # keeps every table it read.
     under = [
         {'relation': codec.relation(source_name), 'namespace': list(parts)}
-        for source_name, parts in read_under.items()
-        if source_name in named
+        for source_name, parts in schema._read_under.items()
     ]
     if under:
         held_schema['read_under'] = under
