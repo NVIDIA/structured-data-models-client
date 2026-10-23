@@ -79,6 +79,29 @@ def key_set(param: dict[str, Any], keys: Mapping[int, Any] | None) -> int:
     return attachment
 
 
+def bound_relations(
+    statements: list[dict[str, Any]], keys: Mapping[int, Any] | None
+) -> dict[str, int]:
+    r"""The key set each relation name of ``statements`` binds, by name, for
+    a provider that binds each key set as a relation of the name its
+    parameter gives (DuckDB registers it, SQLite ingests it): every
+    parameter a key set handed over (:func:`key_set`), one name binding one
+    key set however often it is named.
+
+    Raises:
+        PlanNotRun: A parameter is not a key set handed over, or one name
+            binds two key sets.
+    """
+    relations: dict[str, int] = {}
+    for statement in statements:
+        for param in statement['params']:
+            attachment = key_set(param, keys)
+            bound = relations.setdefault(param['relation'], attachment)
+            if bound != attachment:
+                raise PlanNotRun('a plan binding two key sets to one name')
+    return relations
+
+
 def arrow_table(stream: Any) -> Any:
     r"""A key set the core sent, an object exporting an Arrow stream, read
     whole as a pyarrow table, through the PyCapsule interface pyarrow 14.0.1
@@ -92,4 +115,11 @@ def arrow_table(stream: Any) -> Any:
     ).read_all()
 
 
-__all__ = ['PlanNotRun', 'Provider', 'arrow_table', 'key_set', 'statements']
+__all__ = [
+    'PlanNotRun',
+    'Provider',
+    'arrow_table',
+    'bound_relations',
+    'key_set',
+    'statements',
+]
