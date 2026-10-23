@@ -394,6 +394,12 @@ def gather(
     # The sampler state the core's last run on this materializer left,
     # handed back, so a run skips what the reference's sampler reads once
     # (decision E52); the run leaves its own in its place, done or failed.
+    # The schema's engine reading made before the run reads anything, as
+    # the relational materializer makes it before its first read
+    # (`relational.py:555`), so a run that fails at once leaves one, empty;
+    # where the run reads the tables it reads anew is kept in it the moment
+    # those reads are answered (T3.4).
+    schema._engine_reading()
     finished = run(
         operation,
         attachments,
@@ -402,11 +408,6 @@ def gather(
         read=schema._keep_readings,
     )
     gathered = results.expect(finished.result, results.Gathered)
-    # Where the run read each table the schema had not read, kept with the
-    # schema for its next run, a table it holds a reading of left as it is,
-    # as the reference's engine keeps the tables its first run read
-    # (`EngineTables.keep`, T3.4).
-    schema._keep_readings(gathered.read_under)
     state = gathered.state
     if gathered.query is None:
         raise StructuredDataError(
