@@ -688,22 +688,23 @@ pub(crate) async fn settled(asker: Asker) -> Result<Asker, CoreError> {
     }
 }
 
-/// The run's graph build, as the reference's materializer builds its
-/// graph (`relational.py:555`), past every refusal of the request and before
-/// it reads anything: said to the host ([`Asker::graph_built`]); then each
-/// table the schema holds no reading of read where the session says (its
-/// namespace read once, each table pinned under it, and its catalog read,
-/// a table the source does not hold refused by name, as the reference's
-/// engine reads each table it keeps), and said read with where
-/// ([`Asker::tables_initialized`]), before anything is sampled, as the
-/// reference's engine keeps its tables (`EngineTables.keep`). Once a run.
+/// The schema's record of where its tables live made, past every input
+/// check of the request and before it reads anything, as the reference's
+/// materializer makes its `EngineTables` (`relational.py:555`), and said to
+/// the host ([`Asker::inputs_checked`]); then each table the record
+/// holds nothing of located where the session says (its namespace read
+/// once, each table pinned under it, and its catalog read, a table the
+/// source does not hold refused by name, as the reference's engine reads
+/// each table it keeps), and said with where ([`Asker::tables_located`]),
+/// before any row is fetched, as the reference's engine keeps its tables
+/// (`EngineTables.keep`). Once a run.
 pub(crate) async fn initialize(asker: &Asker) -> Result<(), CoreError> {
-    asker.graph_built();
+    asker.inputs_checked();
     let Some(anew) = asker.uninitialized() else {
         return Ok(());
     };
     if anew.is_empty() {
-        asker.tables_initialized(Vec::new());
+        asker.tables_located(Vec::new());
         return Ok(());
     }
     let asked = DataRequest::Describe {
@@ -736,7 +737,7 @@ pub(crate) async fn initialize(asker: &Asker) -> Result<(), CoreError> {
             _ => return Err(another_part()),
         }
     }
-    asker.tables_initialized(
+    asker.tables_located(
         anew.into_iter()
             .map(|relation| sdm_contract::ops::ReadUnder {
                 relation,

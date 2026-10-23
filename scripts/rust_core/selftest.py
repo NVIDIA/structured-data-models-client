@@ -3258,8 +3258,11 @@ def scan_cases(results: list[Result]) -> None:
             '    CallModel(ModelCall),\n',
             '    CallModel(ModelCall),\n    SortRows { column: String },\n',
         ),
-        "Step has ['fetch', 'call_model', 'sort_rows', 'done']",
+        "'sort_rows'",
     )
+    # The two notices that ask the host nothing (T3.4, the owner's decision
+    # of 2026-10-23) are the tree's own and pass; any other new step fails.
+    steps('the two notices, which ask the host nothing', lambda r: None, None)
 
     def schema_variant(root: Path) -> None:
         path = next((root / contract / 'schema').glob('sdm-contract-*.json'))
