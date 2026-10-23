@@ -83,3 +83,8 @@ The refusal census's real-data mode lost its stand-in warehouse legs.
 Tests first again.
 A table's and a composite type's columns are held to the function rule a read is (no `CHECK`, `GENERATED` or `DEFAULT`, no call but a type's parameters), a name followed by `(` after `AS` or `::` must be a type or an alias's list of names, and Snowflake's `cmd_query` is guarded.
 
+## Fix round 7 (reviews of 0c897542)
+
+Tests first again.
+A table's columns are each a name and a built-in type the loader writes (on Postgres also a composite type in the test schema) or a key constraint referencing the test schema; `LIKE`, a domain or another schema's type, `INHERITS`, `PARTITION OF` and `OF` are refused, and inside a cast `AS` names a type, never an alias's column list.
+
