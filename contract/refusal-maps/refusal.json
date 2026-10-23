@@ -14,8 +14,8 @@
       "rule": "UNSUPPORTED_TYPE: a union, outside the type set",
       "owner": "T1.32c",
       "register": "P1B-7",
-      "where": "rust/crates/sdm-host/src/admission.rs:87",
-      "holds": "ErrorCode::UnsupportedType,",
+      "where": "rust/crates/sdm-host/src/admission.rs:86",
+      "holds": "Sentence::UnsupportedType,",
       "why": "The named refusal the plan asks for in place of the reference's unnamed RuntimeError, which names the wrong type: register P1B-7, approved by the owner, under which T1.32g admits nested.union. The probe without the column reaches predict's result on both runners",
       "observed": {
         "rust-host": {
@@ -39,7 +39,7 @@
       "owner": "T1.32d",
       "register": "none",
       "reference": "same",
-      "where": "packages/structured-data-models-client/src/sdm_client/query.py:699",
+      "where": "packages/structured-data-models-client/src/sdm_client/query.py:698",
       "holds": "raise self._refusal(",
       "why": "The reference's own refusal: python-core validates the query before the core's materialize, by the core's validate_query, and rust-host runs validate_query after describe_source as the case carries it, its refusal INVALID_REQUEST; T1.32g admits the case with it",
       "observed": {

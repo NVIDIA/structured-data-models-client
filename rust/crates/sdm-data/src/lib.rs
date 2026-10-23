@@ -57,6 +57,7 @@ use sdm_contract::catalog::CatalogAnswer;
 use sdm_contract::data::{
     DataLayer, DataRequest, Dialect, FetchPlan, ProviderCapabilities, ProviderChoice, Relation,
 };
+use sdm_contract::wording::DatabaseNames;
 use sdm_contract::{CoreError, Detail, Sentence};
 use sql::SqlDialect;
 
@@ -80,6 +81,38 @@ const KNOWN: &[&str] = &[
 /// exactly when it is listed. A dialect's package adds its name with its
 /// rendering.
 pub const PROVIDERS: &[&str] = &[duckdb::NAME, sqlite::NAME, postgres::NAME];
+
+/// Each database a sentence may name (`{database:backend}`,
+/// `{database:place}`, T3.17), as the reference names it: as a product, and
+/// as the place a table is held. A warehouse is named as the reference's
+/// remote data backend.
+pub const DATABASE_NAMES: &[DatabaseNames] = &[
+    DatabaseNames {
+        name: duckdb::NAME,
+        backend: "DuckDB",
+        place: "DuckDB database",
+    },
+    DatabaseNames {
+        name: sqlite::NAME,
+        backend: "SQLite",
+        place: "SQLite database",
+    },
+    DatabaseNames {
+        name: postgres::NAME,
+        backend: "PostgreSQL",
+        place: "PostgreSQL database",
+    },
+    DatabaseNames {
+        name: "databricks",
+        backend: "Databricks",
+        place: "remote data backend",
+    },
+    DatabaseNames {
+        name: "snowflake",
+        backend: "Snowflake",
+        place: "remote data backend",
+    },
+];
 
 /// The dialect `dialect` names, if this build renders it.
 fn rendered(dialect: &Dialect) -> Result<&'static dyn SqlDialect, CoreError> {

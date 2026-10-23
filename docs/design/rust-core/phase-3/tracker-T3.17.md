@@ -23,7 +23,7 @@ The `T3.17 tests` commit came first, each test failing on the phase head:
 | Where | Change |
 |---|---|
 | `sdm-contract/src/error.rs` | `Sentence` (294 sentences), `WarningCode`, `Code`; `CoreError` and `CoreWarning` carry their sentence, `CoreError::new(sentence, message)` takes the code's kind and the sentence's rule, `holds_to_table` checks the sentence is of the code. Contract v28's working entry rewritten (H4). |
-| `sdm-contract/src/wording.rs` | `template(sentence)`, exhaustive; `Advice` (21), the two groups, the databases' names; `table_json()`. |
+| `sdm-contract/src/wording.rs` | `template(sentence)`, exhaustive; `Advice` (21) and the two groups; `table_json()`. The databases' names a sentence reads are `sdm_data::DATABASE_NAMES`, which `sdm-host` adds to the exported table. |
 | Every crate | Each refusal and warning site names its sentence; the warning-code tables (`WARNINGS`, `warning_codes()`, `_native.WARNING_CODES`) are gone. |
 | `_rust/errors.py` | The code-to-class table, the warning classes, the emission policy, the value formatter, `ADVICE`, `HOST_OWNED`; grouping from the table's data. The generic fallback, `WORDED`, `SAID`, `GROUPED` and `_derived` are gone. |
 | `client.py`, `decompose.py` | The ranking's and the parts' refusals the core now words are no longer said again here; a ranking's refusal is said again from the core's sentence with the candidates as given. |

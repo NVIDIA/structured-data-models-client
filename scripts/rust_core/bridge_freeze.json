@@ -44,7 +44,7 @@
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py": {
       "<module>": {
-        "fingerprint": "244a49230332305685be1ecc78f0082a0bb40dee58c57816cce5013bc740708a"
+        "fingerprint": "b7ded43ba6d8546de2b31bd090e94af25807f298450bf59c2d5a1321d453729b"
       },
       "_adapter": {
         "fingerprint": "f40725046a4dc6e6d4843f595dc9907a872a039e056a9e7794cefc585046fef9"
@@ -85,11 +85,8 @@
       "_table": {
         "fingerprint": "cd4dd88b279fff2339d627ed4c4707ef6f760dec24cc1c58f347c0bdbab7b88e"
       },
-      "_unscored": {
-        "fingerprint": "664c947a782ca12105ae32ac14b180960adeecd35340107d972984ae9703866c"
-      },
       "predict": {
-        "fingerprint": "03a2dc8c0c681dc2c91bcef383cc95218d6d9bfa4166ad6c4200aa0dbae9aa03"
+        "fingerprint": "f8ffb1386f22e03790edae9a52679c3f637df7980306cbb591dd4e4eddf9e80a"
       }
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/codec.py": {
@@ -197,16 +194,40 @@
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py": {
       "<module>": {
-        "fingerprint": "71ef020ef84cd98f930bda91d324d56018c0da95845b7362fdbe4693ebc9ebde"
+        "fingerprint": "b85274bdd0ed239b19c9be670475d1613da9a80d719d7f7ccfe901f623b78c0f"
+      },
+      "_Held.__getattr__": {
+        "fingerprint": "1c11f042b8200ddeeed1c4f0ca22f07fa367d50bc7957f1262c3f92fde717fca"
+      },
+      "_Held.__init__": {
+        "fingerprint": "b64e7be8c0f5f084c00bcb0bef6a4a718c1b77f3207d2a0cf1650548d89d6821"
+      },
+      "_HostValues.__getitem__": {
+        "fingerprint": "e85c880f0eca89a7c28d43efb1986e95d2693da9af09ffe604d6061dae03d5a8"
+      },
+      "_HostValues.__init__": {
+        "fingerprint": "9f149cd7dd4b741a69aa7c60874fc4b481cb4052ec984f490408038359e104ae"
+      },
+      "_HostValues.__iter__": {
+        "fingerprint": "d3164cce93f91020276033433a849fe51d44c020f9f3e2a7e8392d84b041eb76"
+      },
+      "_HostValues.__len__": {
+        "fingerprint": "4c55dede8ddfefc3b1682eead3bbca6586791faaa5d398f058624a83ecd9620b"
+      },
+      "_Words.__init__": {
+        "fingerprint": "ceb1736bb28db2efb30697d89bd65e6e317c9765f8eae2dae4ec8ace2daf7c35"
       },
       "_Words.convert_field": {
-        "fingerprint": "eb6ac343d2114984bb9b64652349aea1b0c0de4ccde38f032ef0297837b857f7"
+        "fingerprint": "38779a9c6a5aee5a8bc9da012097ceb1febd95528fea176993c6d2b59d0a5190"
+      },
+      "_Words.format_field": {
+        "fingerprint": "2402f7b7725008dcecfa59f66b200c63e8286f023a5b1c97bad4e3def14e5fbf"
+      },
+      "_Words.get_value": {
+        "fingerprint": "c71335d3757eddf42f4722cd9496b2b5bfe2f8130d8975793ef974cf82093f35"
       },
       "_as_timestamp": {
         "fingerprint": "135f7e24f53bb042be4a6fe1d87bea031748a770c1f97157867e498fc94698a5"
-      },
-      "_derived": {
-        "fingerprint": "75a814f061edbf6120f5b3bcc19279e2d0b81495e037fb2a844fe113905190c7"
       },
       "_detail": {
         "fingerprint": "7b79f1ba54d421fd211bc5960ee81ffee1a259354ddf3c7a020e5e1a8b8819c7"
@@ -214,8 +235,14 @@
       "_duckdb_text": {
         "fingerprint": "073ee399591d65a70f6833a7f46f39253cbd8aa49253e1f8e976ee243070c4bb"
       },
+      "_fields": {
+        "fingerprint": "05d15afd67d3afa16ed9300303935a1c36c5d3d0162991a6b3b2d7f12e9abf59"
+      },
       "_instance": {
         "fingerprint": "5a61a984c98014ceeeb62380b7ba2c8459ff20528cab2dbccef5737c0f5e1e3a"
+      },
+      "_said": {
+        "fingerprint": "e3105967e6a092a02c5522d46edb996d0a4f5913892d24b5da8da48829230a3c"
       },
       "_shown_timestamp": {
         "fingerprint": "c52a5329a9270e22084c111da7a456da2022e5c8347b25d6939a1ff3bd7b137d"
@@ -226,11 +253,8 @@
       "_timestamp": {
         "fingerprint": "a858e9c289e58eb69f6b99d8a1708af0640e58f732773b5969639d9917ade1a5"
       },
-      "_worded": {
-        "fingerprint": "bab16a5a2cbd4d84fe03f98df8253362575c847df116129ff6af886a8564000e"
-      },
       "error_from_core": {
-        "fingerprint": "86082eafa2ae0c56c12085453573f1bae08b54569c69877a83ec2860974b21cc"
+        "fingerprint": "998f2a66a650f638a840b126e8bdf0272fd231b364931128041107ea293ea558"
       },
       "numpy_warns_on_cast_overflow": {
         "fingerprint": "d152c028f851318aa7d29ee83b460d95e35eae190dfc5df59bbea6fc0df046ea"
@@ -238,14 +262,20 @@
       "raise_from_core": {
         "fingerprint": "b3a43c78a0fefe59130b503128d06dc97940280739ab0acf47cdcb3dcb184305"
       },
+      "render": {
+        "fingerprint": "39a6d78b294dc323e5ac6b3ce273bff86dd6d0305a3f51ef236f3986862253fb"
+      },
       "said": {
-        "fingerprint": "bca18cb08ad590e82a5faf8787849ab71f3f2b15363fe858ba210c5a914b8402"
+        "fingerprint": "676453329ef951c5cbf5df6d1708e0513ff5fee3eeb1b0e15f276f1dd9c4649c"
+      },
+      "table": {
+        "fingerprint": "0d4dfdebd8bbd6257ced1784723a96e754324c9301f1f918e112a9ed35fd8625"
       },
       "warn_from_core": {
-        "fingerprint": "8e74cae7045195239110b4d765c64a638f12b5dcf2c74bc48113bd7d717396e8"
+        "fingerprint": "92216f465eb80f9f1b8f53fab5f94d31fbbbc4ed81966bcc6796a4b4fcfbfdec"
       },
       "warn_held": {
-        "fingerprint": "f428d852f03ee9543d73a97bfcb82ba77804633e3e395d14ec12a6138b6a2ce4"
+        "fingerprint": "bfd36139c92eefac64653070dee6a6402f13bb6bbbe3f60573a86a3c2c24e1d3"
       }
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py": {
@@ -309,7 +339,7 @@
     },
     "packages/structured-data-models-client/src/sdm_client/client.py": {
       "<module>": {
-        "fingerprint": "3d0dfc1032d0a3739ec7ca3b2645d2b0295bbbfa357d27e5e52a870b376c5664"
+        "fingerprint": "fb5b78f6494b1eb8a1e7baab7514e96623a35b0706bb1f403e2ed04be7c0e11a"
       },
       "SDMClient._answer_in_parts": {
         "fingerprint": "a3b7e4cf1b2eba283fc1bb0b53dce967dffdcbebaad3c7124b2c71189f3304c9"

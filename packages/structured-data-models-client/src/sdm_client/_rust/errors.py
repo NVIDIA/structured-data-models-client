@@ -173,7 +173,7 @@ ADVICE: dict[str, Callable[..., str]] = {
         'skip (one full scan per table).'
     ),
     'smaller_calls': lambda: 'materialize(rows_per_call=N)',
-    'to_pandas': lambda: 'to_pandas()',
+    'result_frame': lambda: 'to_pandas()',
 }
 
 #: The sentences that relay a library of this host's own, in that

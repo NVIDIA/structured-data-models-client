@@ -15,8 +15,7 @@
 //! - `{name}`: the field `name` as text; `{name[0]}` the first of a list;
 //!   `{name:,}` a whole number with its thousands grouped;
 //! - `{name!c}`: the field with a conversion, the host's one value
-//!   formatter: `r` the value as the host writes it as a literal (Python's
-//!   `repr`), `l` a list of them as an and-list (`'a', 'b' and 'c'`), `j`
+//!   formatter: `r` the value as the host writes it as a literal, `l` a list of them as an and-list (`'a', 'b' and 'c'`), `j`
 //!   joined by commas, `c` a list of text joined by commas as it is, `R`
 //!   joined by semicolons, `d` joined by dots, `p` a row of values (a list
 //!   as the host writes a tuple, else as `r`), `t` a date or time as the
@@ -25,16 +24,16 @@
 //!   the JSON text the host wrote it in, `G` as a literal, `S` as text and
 //!   `N` the name of its type;
 //! - `{name:place}`, `{name:backend}`: a database the field names, by the
-//!   names [`DATABASES`] gives it;
+//!   names the data layer gives it ([`DatabaseNames`]);
 //! - `{host.name}`: a value only the host holds, such as a candidate as the
 //!   caller gave it, which the host supplies by name (conversions as
 //!   above);
 //! - `{advice:id(field, ...)}`: what to write in the host's language, an
 //!   [`Advice`] each host spells once, given the fields named.
 //!
-//! A sentence that relays a host library's own message (pandas' day-first
-//! dates, NumPy's cast overflow, Python's comparison of unlike types) is
-//! marked by its [`Owner`]: its template is a neutral shared sentence, and
+//! A sentence that relays a host library's own message (its date parser's
+//! day-first dates, its numeric library's cast overflow, its language's
+//! comparison of unlike types) is marked by its [`Owner`]: its template is a neutral shared sentence, and
 //! the host whose library it is says it in that library's words. Warnings
 //! given one after another are said together where their [`Group`] says
 //! so, as data ([`grouping`]).
@@ -43,18 +42,19 @@ use serde::Serialize;
 
 use crate::error::{Code, Sentence, WarningCode};
 
-/// Whose words a sentence is.
+/// Whose words a sentence is: every host's, or, for a message a host's
+/// own library gives, that library's, which the host says in its words.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Owner {
     /// The template is every host's.
     Shared,
-    /// pandas' own message, which a Python host relays in pandas' words.
-    Pandas,
-    /// NumPy's own message, which a Python host relays in NumPy's words.
-    Numpy,
-    /// Python's own message, which a Python host gives in Python's words.
-    Python,
+    /// The host's date parser's own message, of dates read day first.
+    HostDates,
+    /// The host's numeric library's own message, of a cast that overflows.
+    HostCast,
+    /// The host language's own message, of a comparison of unlike types.
+    HostComparison,
 }
 
 /// What a sentence says, and how.
@@ -186,49 +186,23 @@ advice! {
     OptimizeIndices = "optimize_indices", [];
     PredictCall = "predict_call", [];
     RaiseMostParts = "raise_most_parts", [];
+    ResultFrame = "result_frame", [];
     SetPrimaryKey = "set_primary_key", ["target_table", "target_column"];
     SkipKeyCheck = "skip_key_check", [];
     SmallerCalls = "smaller_calls", [];
-    ToPandas = "to_pandas", [];
 }
 
 /// A database a sentence names: by the name the core gives it, as a
-/// product (`backend`), and as the place a table is held (`place`).
+/// product (`backend`), and as the place a table is held (`place`). The
+/// data layer holds each database's (`sdm_data::DATABASE_NAMES`), since a
+/// dialect is its alone; the host's table carries them beside the
+/// sentences.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct DatabaseNames {
     pub name: &'static str,
     pub backend: &'static str,
     pub place: &'static str,
 }
-
-/// The databases a sentence may name, as the reference names them.
-pub const DATABASES: &[DatabaseNames] = &[
-    DatabaseNames {
-        name: "duckdb",
-        backend: "DuckDB",
-        place: "DuckDB database",
-    },
-    DatabaseNames {
-        name: "sqlite",
-        backend: "SQLite",
-        place: "SQLite database",
-    },
-    DatabaseNames {
-        name: "postgres",
-        backend: "PostgreSQL",
-        place: "PostgreSQL database",
-    },
-    DatabaseNames {
-        name: "databricks",
-        backend: "Databricks",
-        place: "remote data backend",
-    },
-    DatabaseNames {
-        name: "snowflake",
-        backend: "Snowflake",
-        place: "remote data backend",
-    },
-];
 
 /// What `sentence` says.
 pub fn template(sentence: Sentence) -> Template {
@@ -439,7 +413,7 @@ pub fn template(sentence: Sentence) -> Template {
         ),
         S::DatesReadDayFirst => owned(
             r#"text in {table}.{column} was read as dates in {format} format, which puts the day first"#,
-            Owner::Pandas,
+            Owner::HostDates,
         ),
         S::KeyCandidatesTied => said(
             r#"Found multiple potential primary keys in table '{table}': {columns!T}. Please specify the primary key for this table manually."#,
@@ -649,7 +623,7 @@ pub fn template(sentence: Sentence) -> Template {
             r#"every context row has the same answer, so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ."#,
         ),
         S::OutputsAbsent => said(
-            r#"{model} answered without {absent!r}, which this request asked for, so no column of {advice:to_pandas()} will carry it. The answer to the rest of the request is unaffected."#,
+            r#"{model} answered without {absent!r}, which this request asked for, so no column of {advice:result_frame()} will carry it. The answer to the rest of the request is unaffected."#,
         ),
         S::StepsUnexplained => said(
             r#"{model} explained {explained} of {steps} forecast steps, and step {missing!c} carries none, so the explanation this request asked for is not there for every step."#,
@@ -718,7 +692,7 @@ pub fn template(sentence: Sentence) -> Template {
         ),
         S::MaxPqIterationsNotAWholeNumber => owned(
             r#"max_pq_iterations must be a whole number, got {given!N}"#,
-            Owner::Python,
+            Owner::HostComparison,
         ),
         S::IterationsBelowOne => {
             said(r#"'max_pq_iterations' must be greater than zero (got {given!S})"#)
@@ -945,7 +919,7 @@ pub fn template(sentence: Sentence) -> Template {
         ),
         S::Float32Overflow => owned(
             r#"a value past the range of a 32-bit float was cast to one, as an infinity"#,
-            Owner::Numpy,
+            Owner::HostCast,
         ),
         S::ContextAfterAnchor => said(
             r#"Context anchor timestamp (got '{context_anchor!t}') is set to a later date than the prediction anchor timestamp (got '{anchor!t}'). Please make sure this is intended."#,
@@ -994,7 +968,7 @@ pub fn template(sentence: Sentence) -> Template {
         ),
         S::DateLiteralDayFirst => owned(
             r#"a date literal of the query was read in {format} format, which puts the day first"#,
-            Owner::Pandas,
+            Owner::HostDates,
         ),
         S::EntityUncast => said(
             r#"the entity at position {position} of indices cannot name a row of a key of {key_type}"#,
@@ -1056,17 +1030,22 @@ struct AdviceEntry {
 }
 
 #[derive(Serialize)]
-struct Table {
+struct Table<'a> {
     sentences: Vec<SentenceEntry>,
     groups: Vec<GroupEntry>,
     advice: Vec<AdviceEntry>,
-    databases: &'static [DatabaseNames],
+    databases: &'a [DatabaseNames],
 }
 
 /// The whole table, as the JSON a host reads once: every sentence with its
-/// code, rule, template, owner and group, the groups, the advice and the
-/// databases' names. Data only: nothing is formatted.
+/// code, rule, template, owner and group, the groups and the advice. Data
+/// only: nothing is formatted.
 pub fn table_json() -> String {
+    table_json_naming(&[])
+}
+
+/// [`table_json`], naming `databases` as the data layer names them.
+pub fn table_json_naming(databases: &[DatabaseNames]) -> String {
     let table = Table {
         sentences: Sentence::ALL
             .iter()
@@ -1101,7 +1080,7 @@ pub fn table_json() -> String {
                 arguments: advice.arguments(),
             })
             .collect(),
-        databases: DATABASES,
+        databases,
     };
     serde_json::to_string(&table).expect("the table serializes")
 }

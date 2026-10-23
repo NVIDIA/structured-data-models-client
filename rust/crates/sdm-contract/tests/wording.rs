@@ -335,10 +335,13 @@ fn a_sentence_that_relays_a_host_library_is_marked_host_owned() {
     assert_eq!(
         owned,
         BTreeMap::from([
-            ("dates_read_day_first", Owner::Pandas),
-            ("date_literal_day_first", Owner::Pandas),
-            ("float32_overflow", Owner::Numpy),
-            ("max_pq_iterations_not_a_whole_number", Owner::Python),
+            ("dates_read_day_first", Owner::HostDates),
+            ("date_literal_day_first", Owner::HostDates),
+            ("float32_overflow", Owner::HostCast),
+            (
+                "max_pq_iterations_not_a_whole_number",
+                Owner::HostComparison
+            ),
         ])
     );
     // A host-owned sentence still has a neutral shared one.

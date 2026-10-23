@@ -90,7 +90,12 @@ def test_the_binding_exports_the_core_s_table() -> None:
             assert entry['code'] in _native.ERROR_CODES, name
         else:
             assert entry['code'] == entry['code'].upper(), name
-        assert entry['owner'] in ('shared', 'pandas', 'numpy', 'python'), name
+        assert entry['owner'] in (
+            'shared',
+            'host_dates',
+            'host_cast',
+            'host_comparison',
+        ), name
     # Every error code the core gives is said by a sentence of the table.
     said = {e['code'] for e in sentences.values() if e['kind'] == 'error'}
     assert said == set(_native.ERROR_CODES)

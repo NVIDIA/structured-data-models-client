@@ -32,7 +32,7 @@ pub use zones::{ZoneError, ZoneResolver, ZoneRoot, ZoneSource};
 /// fills each error's and warning's sentence from it, formatting nothing
 /// the table does not name.
 pub fn templates() -> String {
-    sdm_contract::wording::table_json()
+    sdm_contract::wording::table_json_naming(sdm_data::DATABASE_NAMES)
 }
 
 /// The databases the data layer of [`default_root`] provides for
