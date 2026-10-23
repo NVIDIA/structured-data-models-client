@@ -636,3 +636,44 @@ def test_the_job_loads_the_reference_client_in_its_own_process(
     assert "'bootstrap'" not in (LIVE / 'capture_job.py').read_text()
     with pytest.raises(SystemExit, match='no reference client'):
         capture_run.use_reference_client(tmp_path / 'installed')
+
+
+def test_the_job_installs_only_its_hosts_wheels(tmp_path: Path) -> None:
+    # C-1's Spark leg: serverless runs on x86_64 and aarch64 hosts, so the
+    # wheel folder holds both platforms' builds, and the job hands pip only
+    # the ones its own host installs (an unsupported wheel named to pip
+    # fails the whole install).
+    from packaging.tags import Tag
+
+    names = [
+        'structured_data_models_api-1.0.0-py3-none-any.whl',
+        'structured_data_models_relational_engine-1.0.0-cp312-cp312-'
+        'manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl',
+        'structured_data_models_relational_engine-1.0.0-cp312-cp312-'
+        'manylinux_2_28_aarch64.whl',
+        'duckdb-1.5.6-cp312-cp312-manylinux_2_26_aarch64.'
+        'manylinux_2_28_aarch64.whl',
+    ]
+    for name in names:
+        (tmp_path / name).write_bytes(b'')
+    arm = [
+        Tag('cp312', 'cp312', 'manylinux_2_28_aarch64'),
+        Tag('py3', 'none', 'any'),
+    ]
+    chosen = capture_run.installable_wheels(tmp_path, arm)
+    assert [Path(path).name for path in chosen] == sorted(
+        name for name in names if 'x86_64' not in name
+    )
+    x86 = [
+        Tag('cp312', 'cp312', 'manylinux_2_28_x86_64'),
+        Tag('py3', 'none', 'any'),
+    ]
+    assert [
+        Path(path).name
+        for path in capture_run.installable_wheels(tmp_path, x86)
+    ] == sorted(names[:2])
+    # The job hands pip the chosen wheels, never the folder's every wheel.
+    assert (
+        'capture_run.installable_wheels'
+        in (LIVE / 'capture_job.py').read_text()
+    )
