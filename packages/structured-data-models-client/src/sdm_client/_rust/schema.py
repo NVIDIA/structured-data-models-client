@@ -258,7 +258,7 @@ def build(cls: type[Schema], source: Any, described: dict[str, Any]) -> Schema:
     # with the schema that read them, as its engine reading is (T3.4).
     namespace = described.get('namespace')
     if namespace is not None:
-        schema._read_under = {
-            table.source_name: tuple(namespace) for table in built.values()
-        }
+        schema._keep_readings(
+            {table.source_name: tuple(namespace) for table in built.values()}
+        )
     return schema

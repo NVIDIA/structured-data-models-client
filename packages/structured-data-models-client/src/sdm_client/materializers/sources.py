@@ -32,6 +32,14 @@ class EngineTables:
 
     def __init__(self) -> None:
         self._tables: dict[str, Any] = {}
+        self.read_under: dict[str, tuple[str, ...]] = {}
+
+    def readings(self) -> dict[str, tuple[str, ...]]:
+        r"""Where the core read each table, by the schema's source name (the
+        contract's ``HeldSchema.read_under``, T3.4): kept here, with the
+        engine's own tables, so the two share one lifetime; one pickled
+        before it held any starts empty."""
+        return self.__dict__.setdefault('read_under', {})
 
     def keep(self, tables: Mapping[str, Any]) -> None:
         r"""Keyed by the schema's source name; Databricks and Postgres qualify

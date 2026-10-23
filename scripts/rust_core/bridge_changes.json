@@ -15,7 +15,7 @@
       "moved": "T1.32a: the bridge's key_type refusal, for a key type it had no cast for, is the core's (sdm_engine::keys::cast refuses a key type no rule casts to)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::gather": {
-      "refactor": "T3.4 fix 5: where the core's run read each table the schema had not read (Materialized.read_under) is kept with the schema, a table it holds a reading of left as it is, as EngineTables.keep keeps the old route's; no rule here"
+      "refactor": "T3.4 fix 5 and 6: where the core's run read each table it read anew (Materialized.read_under, or the failed run's CoreError.read_under through run's read hook) is kept with the schema's engine reading, a source name held already left as it is, as EngineTables.keep keeps the old route's; no rule here"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_text": {
       "moved": "T1.36 fix 4 (the final review's P2-2): the host's half of the moved cast: a float in a mix written as the core now writes a float entity (sdm_engine::keys's float_text), the reference's text of it, pyarrow's cast of the float to text at its own width (1e16 is 1e+16), so the core reads back the number the host was given; a boolean as before"
@@ -81,13 +81,13 @@
       "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
     },
     "packages/structured-data-models-client/src/sdm_client/schema.py::<module>": {
-      "moved": "T3.16 (fix A): Column._source (out of repr and equality, copied by _copy_column), _described_on_the_core, say_a_composite_key_is_dropped shared with _rust/spec.py, WIRE_TO_PQL_DTYPE named; Schema._core_description gone, and dropped from an older pickle's state; fix 1 (rule 11): supports_dtype reads the core's table of the language's meanings (_native.MEANINGS), the old PQL package only in a client without the core, and its time-column rule imported where a schema of frames is inferred; the data type name a column holds read by language_dtype, the core's one table of them (_native.DTYPE_NAMES), and query_schema, the one translation of a schema into the query language's (moved here from _rust/spec.py, which reads it), to_schema_definition built from it (T3.16 fix 1, review round 1); fix 2: the core's tables read only where the core is loaded or the old PQL package is absent, so the old route never loads the core"
+      "refactor": "T3.4 fix 6: Schema._read_under, a read-only view of where the core read each table, held with the engine reading (EngineTables.readings) so it is made, shared, copied and pickled exactly where _engine_tables is, and Schema._keep_readings, the one place readings are kept; no rule of the core's here"
     },
     "packages/structured-data-models-client/src/sdm_client/schema.py::Schema.from_source": {
       "refactor": "T2.2: a SQLite source routes as a DuckDB one (_routing.on_the_core with the backend's from-source paths); no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::build": {
-      "refactor": "T3.4: the schema Schema.from_source builds keeps where the core read each table (SourceDescription.namespace) by source name, Schema._read_under, as its engine reading is kept; no rule here"
+      "refactor": "T3.4: the schema Schema.from_source builds keeps where the core read each table (SourceDescription.namespace) with its engine reading (Schema._keep_readings, EngineTables.readings), so the two share one lifetime; no rule here"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::description": {
       "gone": "T3.16 (fix A): the schema is handed over as plain data by _rust/spec.py's held_schema; no saved description, no merge (sdm_schema::edit::read_held is gone)"
@@ -216,7 +216,7 @@
       "refactor": "T3.16 (fix A): a schema described on the core is one whose columns hold their source facts (schema._described_on_the_core)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/edits.py::_store": {
-      "refactor": "T3.4 fix 5: where the schema read each relation is stored as the core's edit answers it (HeldSchema.read_under), one source of truth; no rule here"
+      "refactor": "T3.4 fix 5 and 6: where the schema read each relation is stored whole as the core's edit answers it (HeldSchema.read_under), with the engine reading; no rule here"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/edits.py::column": {
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
