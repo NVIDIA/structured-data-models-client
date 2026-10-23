@@ -423,6 +423,25 @@ pub(crate) fn materialize(
                 } else {
                     crate::describe::settled(asker).await?
                 };
+                // Where this run reads each relation the schema has not read,
+                // under the parts the session gave: answered for the host to
+                // keep (`Materialized::read_under`).
+                let first_read: Vec<sdm_contract::ops::ReadUnder> = match asker.settled_namespace()
+                {
+                    Some(namespace) => held
+                        .tables
+                        .iter()
+                        .filter(|table| table.source.single().is_some())
+                        .filter(|table| {
+                            !pinned.iter().any(|(relation, _)| *relation == table.source)
+                        })
+                        .map(|table| sdm_contract::ops::ReadUnder {
+                            relation: table.source.clone(),
+                            namespace: namespace.clone(),
+                        })
+                        .collect(),
+                    None => Vec::new(),
+                };
                 for (relation, parts) in pinned {
                     asker.pin(&relation, parts);
                 }
@@ -449,7 +468,12 @@ pub(crate) fn materialize(
                             .collect(),
                     );
                 }
-                crate::materialize::run(asker, inputs(description, source)).await
+                let mut result =
+                    crate::materialize::run(asker, inputs(description, source)).await?;
+                if let OperationResult::Materialize(materialized) = &mut result {
+                    materialized.read_under = first_read;
+                }
+                Ok(result)
             }))
         }
         _ => Err(internal("a materialize run of another operation")),

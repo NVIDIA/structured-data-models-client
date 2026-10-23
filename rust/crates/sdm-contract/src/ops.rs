@@ -1111,6 +1111,15 @@ pub struct Materialized {
     /// own validator may not. Absent from a core that does not say.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub query: Option<QueryFacts>,
+    /// Where the run read each relation of the schema it read under parts
+    /// the provider left to the connection and the schema had not read
+    /// before ([`HeldSchema::read_under`] said nothing of it): the host
+    /// adds each relation it holds no reading of to the schema's, so the
+    /// next run reads the same tables, as the reference keeps the tables
+    /// its first `materialize` read (`EngineTables.keep`; contract v28,
+    /// T3.4). Absent from the JSON when none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub read_under: Vec<ReadUnder>,
 }
 
 /// The facts of a resolved query a host reads: plain values, no tree. Its

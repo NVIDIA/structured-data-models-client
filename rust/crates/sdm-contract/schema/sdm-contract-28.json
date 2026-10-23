@@ -5333,6 +5333,13 @@
                 }
               ]
             },
+            "read_under": {
+              "description": "Where the run read each relation of the schema it read under parts\nthe provider left to the connection and the schema had not read\nbefore ([`HeldSchema::read_under`] said nothing of it): the host\nadds each relation it holds no reading of to the schema's, so the\nnext run reads the same tables, as the reference keeps the tables\nits first `materialize` read (`EngineTables.keep`; contract v28,\nT3.4). Absent from the JSON when none.",
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ReadUnder"
+              }
+            },
             "op": {
               "type": "string",
               "const": "materialize"
