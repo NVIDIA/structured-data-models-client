@@ -782,6 +782,7 @@ fn host_provider() -> ProviderChoice {
             reads_nan_as_missing: false,
             derived_relations: false,
             neighbor_lookback: false,
+            keys_optional: false,
             sample_rows: false,
             optional: BTreeSet::from([OptionalRequest::Preview]),
             max_keys_per_request: None,

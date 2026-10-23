@@ -163,6 +163,7 @@ impl SqlDialect for Sqlite {
             reads_nan_as_missing: false,
             derived_relations: false,
             neighbor_lookback: false,
+            keys_optional: false,
             sample_rows: false,
             optional: sql::rendered(),
             max_keys_per_request: None,
@@ -758,7 +759,6 @@ fn read(
                     .enumerate()
                     .map(
                         |(at, (name, declared_type, not_null, primary_key))| CatalogColumn {
-                            canonical: None,
                             name,
                             dtype: declared_dtype(&declared_type),
                             declared_type,

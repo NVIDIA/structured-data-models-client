@@ -640,8 +640,8 @@ impl Source<'_> {
                 namespace: Vec::new(),
             },
             // The non-SQL provider, a host provider, as it declares itself.
-            Source::Memory(..) => ProviderChoice::Host {
-                capabilities: Memory::capabilities(),
+            Source::Memory(memory, _) => ProviderChoice::Host {
+                capabilities: memory.declared.clone().unwrap_or_else(Memory::capabilities),
             },
         }
     }
