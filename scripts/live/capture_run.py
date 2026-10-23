@@ -15,7 +15,8 @@ its YAML first, its statements shown, so a statement the engine refuses
 shows before anything is recorded; C-1: every case that runs on the leg; with
 ``--e0``, only those pending live, with no capture on the leg or one whose
 input hash is not the case's), each case whose tables the leg's engine
-cannot hold listed by the loader's reason, never recorded, and the
+cannot hold listed by the loader's reason, never recorded, each case
+:data:`NOT_LIVE` leaves out of the leg listed by name and reason, and the
 environment the run needs, by variable name only (no value is read for
 print). ``run`` records: the old client (``run_python.py --mode
 python-ref``, T3.2's recording mode) over the planned cases on the leg's
@@ -23,8 +24,9 @@ live connection (``SDM_LIVE_CONFIG``), in this process, with every
 statement any driver runs, the loader's and the old client's alike,
 through the live write guard (KO3-51; ``write_guard.py`` beside this file,
 installed on the drivers themselves, without which the run does not
-start), refused outside the one test schema; its lines
-written to ``DIR/<leg>.record.jsonl``, then each written as a capture under
+start), refused outside the one test schema; case by case, a case that
+fails written with its reason to ``DIR/<leg>.failed.json`` while the
+others go on; their lines written to ``DIR/<leg>.record.jsonl``, then each written as a capture under
 ``DIR/<leg>/<case>/`` with the leg's manifest (``captures.py import``: the
 placeholders and the private-name search applied again). Nothing is
 written into the repository: the orchestrator commits the captures under
@@ -117,9 +119,13 @@ def plan(leg: str, e0: bool = False) -> dict[str, Any]:
     record: list[str] = []
     refused: list[str] = []
     current: list[str] = []
+    not_live: list[str] = []
     for path in sorted(CASES.rglob('*.json')):
         ((case, _),) = runner.load_cases([path])
         if leg not in runner.case_warehouses(case):
+            continue
+        if leg in NOT_LIVE.get(case['id'], ((), ''))[0]:
+            not_live.append(f'{case["id"]}: {NOT_LIVE[case["id"]][1]}')
             continue
         if e0:
             capture = CAPTURES / leg / case['id']
@@ -187,9 +193,33 @@ def plan(leg: str, e0: bool = False) -> dict[str, Any]:
         'order': list(ORDER),
         'record': record,
         'refused_by_the_loader': refused,
+        'not_live': not_live,
         'current': current,
         'environment': {name: name in os.environ for name in ENVIRONMENT[leg]},
     }
+
+
+#: The cases a leg's live plan leaves out, by name, with the legs and the
+#: reason: their names hold a character the write guard's one strict name
+#: rule refuses (a backtick on Databricks, a line break anywhere), so every
+#: load of theirs is refused by design (the owner's allowlist decision).
+_BACKTICK = (
+    'a name holds a backtick, which the write guard refuses on Databricks'
+)
+_LINE_BREAK = 'a name holds a line break, which the write guard refuses'
+NOT_LIVE: dict[str, tuple[tuple[str, ...], str]] = {
+    **{
+        f'name.backtick-{part}': (
+            ('databricks-sql', 'databricks-spark'),
+            _BACKTICK,
+        )
+        for part in ('aggregation', 'entity', 'feature', 'filter', 'target')
+    },
+    **{
+        f'name.line-break-{part}': (LEGS, _LINE_BREAK)
+        for part in ('aggregation', 'entity', 'feature', 'filter', 'target')
+    },
+}
 
 
 #: The live write guard, beside this file (KO3-51): a run without it does
@@ -293,26 +323,47 @@ def run(
     loader = _named('databases')
     runner = _named('run_python')
     out.mkdir(parents=True, exist_ok=True)
-    recording = out / f'{leg}.record.jsonl'
-    observations = out / f'{leg}.python-ref.jsonl'
+    parts = out / f'{leg}.cases'
+    parts.mkdir(exist_ok=True)
+    failed: dict[str, str] = {}
+    recorded: list[Path] = []
     uninstall = install_guard(leg, guard, loader)
     try:
-        status = runner.main(
-            ['--mode', 'python-ref', '--reference', str(reference), '--database', leg,
-             '--record', str(recording), '--out', str(observations),
-             *planned['record']]
-        )  # fmt: skip
-    except runner.RunnerFailure as failure:
-        print(f'{leg}: the recording failed: {failure}')
-        return 1
+        # One case at a time: a case that fails (refused, or not opened)
+        # is written with its reason, and the others go on.
+        for number, path in enumerate(planned['record']):
+            case = Path(path).stem
+            recording = parts / f'{number:04d}.record.jsonl'
+            observations = parts / f'{number:04d}.python-ref.jsonl'
+            try:
+                status = runner.main(
+                    ['--mode', 'python-ref', '--reference', str(reference),
+                     '--database', leg, '--record', str(recording),
+                     '--out', str(observations), path]
+                )  # fmt: skip
+            except runner.RunnerFailure as failure:
+                failed[case] = str(failure)
+                continue
+            if status:
+                failed[case] = f'the recording exited {status}'
+                continue
+            if recording.is_file():
+                recorded.append(recording)
     finally:
         uninstall()
-    if status:
-        print(f'{leg}: the recording failed (exit {status})')
-        return 1
-    for manifest in _module('captures').import_recording(recording, out):
+    whole = out / f'{leg}.record.jsonl'
+    whole.write_text(
+        ''.join(part.read_text(encoding='utf-8') for part in recorded),
+        encoding='utf-8',
+    )
+    (out / f'{leg}.failed.json').write_text(
+        json.dumps(failed, indent=1, sort_keys=True) + '\n', encoding='utf-8'
+    )
+    for case, reason in sorted(failed.items()):
+        print(f'{leg}: {case} failed: {reason}')
+    for manifest in _module('captures').import_recording(whole, out):
         print(f'{leg}: wrote {manifest}')
-    return 0
+    return 1 if failed else 0
 
 
 def _named(name: str) -> ModuleType:

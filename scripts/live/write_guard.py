@@ -247,6 +247,8 @@ FUNCTIONS = frozenset(
         'TABLE', 'POSEXPLODE', 'JSONB_ARRAY_ELEMENTS',
         # Postgres' catalog and its sampling's seed (the session's own).
         'FORMAT_TYPE', 'RANDOM', 'SETSEED',
+        # The recorder's read of the session's time zone (Postgres).
+        'CURRENT_SETTING',
         # The semantic view's definition, read.
         'SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW',
     }
