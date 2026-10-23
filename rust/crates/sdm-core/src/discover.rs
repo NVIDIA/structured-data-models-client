@@ -99,20 +99,34 @@ pub(crate) async fn table(
     previewed: Option<&[String]>,
 ) -> Result<Discovered, CoreError> {
     let one = || vec![table.source.clone()];
-    let asked = describe_all(
-        asker,
-        [
-            DataRequest::Describe {
-                tables: one(),
-                part: DescribePart::Columns,
-            },
-            DataRequest::Describe {
-                tables: one(),
-                part: DescribePart::Keys,
-            },
-        ],
-    )
-    .await;
+    let columns = DataRequest::Describe {
+        tables: one(),
+        part: DescribePart::Columns,
+    };
+    let keys = DataRequest::Describe {
+        tables: one(),
+        part: DescribePart::Keys,
+    };
+    // Whether a failed read of the table's keys is read as none, as the
+    // reference reads Unity Catalog's informational constraints
+    // (`DatabricksTable`, DB/table.py:271-303): the columns first, then the
+    // keys, a failure of which is read as no keys.
+    let asked = if asker.capabilities()?.keys_optional {
+        match describe(asker, columns).await {
+            Ok(columns) => {
+                let keys = match describe(asker, keys).await {
+                    Err(failed) if failed.code == ErrorCode::ProviderError => {
+                        CatalogAnswer::Keys(Vec::new())
+                    }
+                    other => other?,
+                };
+                Ok([columns, keys])
+            }
+            Err(failed) => Err(failed),
+        }
+    } else {
+        describe_all(asker, [columns, keys]).await
+    };
     let [columns, keys] = match asked {
         Ok(answers) => answers,
         // A table the caller named that the source does not hold: a
@@ -140,6 +154,12 @@ pub(crate) async fn table(
         // refuses one it cannot read.
         return Err(not_held(asker, &table.source).await);
     }
+    // Every later read of the table reads the columns its catalog found
+    // (`Asker::guard`).
+    asker.guard(
+        &table.source,
+        declared.iter().map(|column| column.name.clone()).collect(),
+    );
     let mut keys = declared_keys(keys)?;
     if let Some(kept) = &table.columns {
         // Only the columns the schema keeps are read, and only the keys

@@ -217,6 +217,7 @@ fn every_operation_dispatches_to_a_run() {
             reads_nan_as_missing: false,
             derived_relations: false,
             neighbor_lookback: false,
+            keys_optional: false,
             sample_rows: false,
             optional: BTreeSet::new(),
             max_keys_per_request: None,
@@ -229,19 +230,23 @@ fn every_operation_dispatches_to_a_run() {
         },
     };
     // A table named is read by its source name, with no listing of the
-    // source's tables first (T1.23): its columns first, alone, since a
-    // catalog may answer the name it holds the table under, which the keys
-    // are then read by (T3.4, DB/table.py:262).
+    // source's tables first (T1.23): its columns and keys in one step.
     let Step::Fetch { requests } = run_of(&root, describe(host)).unwrap().next().unwrap() else {
         panic!("describe_source did not ask for the table named");
     };
     let asked: Vec<&DataRequest> = requests.iter().map(|step| &step.request).collect();
     assert_eq!(
         asked,
-        [&DataRequest::Describe {
-            tables: vec!["t".into()],
-            part: DescribePart::Columns,
-        }]
+        [
+            &DataRequest::Describe {
+                tables: vec!["t".into()],
+                part: DescribePart::Columns,
+            },
+            &DataRequest::Describe {
+                tables: vec!["t".into()],
+                part: DescribePart::Keys,
+            },
+        ]
     );
 }
 
@@ -285,6 +290,7 @@ fn capabilities(optional: &[OptionalRequest]) -> ProviderCapabilities {
         reads_nan_as_missing: false,
         derived_relations: false,
         neighbor_lookback: false,
+        keys_optional: false,
         sample_rows: false,
         optional: optional.iter().copied().collect(),
         max_keys_per_request: None,
@@ -633,6 +639,7 @@ fn materialize(seed: Option<Seed>) -> Operation {
                 reads_nan_as_missing: false,
                 derived_relations: false,
                 neighbor_lookback: false,
+                keys_optional: false,
                 sample_rows: false,
                 optional: BTreeSet::new(),
                 max_keys_per_request: None,

@@ -41,7 +41,7 @@
 //! the provider itself never runs a statement.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result, anyhow};
 use arrow_array::builder::{ListBuilder, StringBuilder};
@@ -111,10 +111,14 @@ pub struct Table {
     pub foreign_keys: Vec<ForeignKey>,
 }
 
-/// The source: its tables, in the order its catalog lists them.
+/// The source: its tables, in the order its catalog lists them; what the
+/// provider declares where not [`Memory::capabilities`]; and each request
+/// it was asked, in order (a clone shares the log).
 #[derive(Debug, Clone, Default)]
 pub struct Memory {
     pub tables: Vec<Table>,
+    pub declared: Option<ProviderCapabilities>,
+    pub asked: Arc<Mutex<Vec<DataRequest>>>,
 }
 
 /// The requests this provider answers itself, beside `describe` and
@@ -171,6 +175,7 @@ impl Memory {
             reads_nan_as_missing: false,
             derived_relations: false,
             neighbor_lookback: false,
+            keys_optional: false,
             sample_rows: false,
             optional: DECLARED.iter().copied().collect(),
             max_keys_per_request: None,
@@ -211,6 +216,9 @@ impl Memory {
         request: &DataRequest,
         keys: &BTreeMap<AttachmentId, RecordBatch>,
     ) -> Result<RecordBatch, ProviderError> {
+        if let Ok(mut asked) = self.asked.lock() {
+            asked.push(request.clone());
+        }
         let key_set = |set: &KeySet| keys.get(&set.attachment).ok_or_else(not_held);
         match request {
             DataRequest::Describe { tables, part } => self.describe(tables, *part),
@@ -616,7 +624,10 @@ impl Memory {
                 foreign_keys,
             });
         }
-        Ok(Memory { tables })
+        Ok(Memory {
+            tables,
+            ..Memory::default()
+        })
     }
 }
 

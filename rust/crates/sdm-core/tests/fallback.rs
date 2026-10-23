@@ -91,6 +91,7 @@ fn host(optional: &[OptionalRequest], fallback: Option<FallbackLimits>) -> Provi
             reads_nan_as_missing: false,
             derived_relations: false,
             neighbor_lookback: false,
+            keys_optional: false,
             sample_rows: false,
             optional: optional.iter().copied().collect::<BTreeSet<_>>(),
             max_keys_per_request: None,

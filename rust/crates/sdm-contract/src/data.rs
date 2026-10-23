@@ -253,7 +253,12 @@ pub struct KeySet {
 pub struct Relation {
     pub source: Vec<String>,
     /// The relation's columns, in order, where it is derived; empty, the
-    /// source's own columns under their own names.
+    /// source's own columns under their own names. Columns that each read
+    /// the source's column of their own name, with no filter, are the
+    /// source's columns a catalog read found, which a provider may read
+    /// through the source so that a column since dropped or renamed fails
+    /// the read rather than reading anything else by its name (the
+    /// reference's Databricks reads, `_quoted_source_name`; T3.4).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub columns: Vec<RelationColumn>,
     /// The condition, in the source's SQL, every row of the relation holds;
@@ -698,6 +703,44 @@ pub enum DataRequest {
 }
 
 impl DataRequest {
+    /// Each relation the request reads, with the field naming it.
+    pub fn relations(&self) -> Vec<(&'static str, &Relation)> {
+        match self {
+            DataRequest::Describe { tables, .. } => tables.iter().map(|t| ("tables", t)).collect(),
+            DataRequest::KeyCounts { keys } => keys.iter().map(|k| ("keys", &k.table)).collect(),
+            DataRequest::TimeBounds { columns } => {
+                columns.iter().map(|c| ("columns", &c.table)).collect()
+            }
+            DataRequest::Scan { table, .. }
+            | DataRequest::Preview { table, .. }
+            | DataRequest::CountRows { table, .. }
+            | DataRequest::ColumnRanges { table, .. }
+            | DataRequest::RepeatedKey { table, .. }
+            | DataRequest::SampleEntities { table, .. }
+            | DataRequest::Neighbors { table, .. }
+            | DataRequest::Lookup { table, .. } => vec![("table", table)],
+        }
+    }
+
+    /// Each relation the request reads, to change in place.
+    pub fn relations_mut(&mut self) -> Vec<&mut Relation> {
+        match self {
+            DataRequest::Describe { tables, .. } => tables.iter_mut().collect(),
+            DataRequest::KeyCounts { keys } => keys.iter_mut().map(|k| &mut k.table).collect(),
+            DataRequest::TimeBounds { columns } => {
+                columns.iter_mut().map(|c| &mut c.table).collect()
+            }
+            DataRequest::Scan { table, .. }
+            | DataRequest::Preview { table, .. }
+            | DataRequest::CountRows { table, .. }
+            | DataRequest::ColumnRanges { table, .. }
+            | DataRequest::RepeatedKey { table, .. }
+            | DataRequest::SampleEntities { table, .. }
+            | DataRequest::Neighbors { table, .. }
+            | DataRequest::Lookup { table, .. } => vec![table],
+        }
+    }
+
     /// The request's name, as the contract spells it.
     pub fn name(&self) -> &'static str {
         match self {
@@ -1007,6 +1050,16 @@ pub struct ProviderCapabilities {
     /// bound.
     #[serde(default, skip_serializing_if = "is_false")]
     pub neighbor_lookback: bool,
+    /// The provider's catalog may fail to read a table's declared keys and
+    /// foreign keys where it reads its columns (Unity Catalog's
+    /// `table_constraints` on an older runtime or without the privilege):
+    /// the core then reads a table's columns and its keys apart, and reads
+    /// a failed key or foreign-key read as no declared keys, as the
+    /// reference's Databricks reader carries on without them
+    /// (`DatabricksTable`'s key reads; contract v28). Left out, `false`: a
+    /// failed key read fails the description.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub keys_optional: bool,
     /// The vendor whose opaque Arrow extension types (`arrow.opaque`, its
     /// metadata's `vendor_name`) the provider hands over: the host layer
     /// reads an opaque column by that vendor's layout only when the column
@@ -1254,6 +1307,24 @@ pub trait DataLayer: Send + Sync {
     fn source_database(&self, provider: &ProviderChoice) -> Option<&'static str> {
         let _ = provider;
         None
+    }
+
+    /// Whether `provider` leaves a namespace part to the connection inside
+    /// one it gives (a Databricks source naming its catalog and not its
+    /// schema): the core then reads the source's namespace first
+    /// ([`DescribePart::Namespace`]) and runs under the parts it answers
+    /// ([`DataLayer::settled`]; T3.4). `false`, the default and a host
+    /// provider's.
+    fn unsettled(&self, provider: &ProviderChoice) -> bool {
+        let _ = provider;
+        false
+    }
+
+    /// `provider` with its namespace the parts the source answered for it,
+    /// each given; as it is, the default and a host provider's.
+    fn settled(&self, provider: &ProviderChoice, parts: Vec<String>) -> ProviderChoice {
+        let _ = parts;
+        provider.clone()
     }
 
     /// `relation` as the run's provider reads it: under the provider's
