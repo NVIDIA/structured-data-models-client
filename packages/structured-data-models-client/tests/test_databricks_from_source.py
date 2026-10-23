@@ -434,6 +434,7 @@ def _route(route: str, monkeypatch: pytest.MonkeyPatch) -> None:
             _routing.ENVIRONMENT,
             ','.join(
                 _routing.FROM_SOURCE_DATABRICKS_SQL
+                + _routing.FROM_SOURCE_DATABRICKS_SQL_TABLES
                 + _routing.MATERIALIZE_DATABRICKS_SQL
             ),
         )
@@ -532,24 +533,164 @@ def test_a_table_retargeted_after_the_session_moved_is_read_under_the_session(
     assert all(where[:2] == ('main', 'shop') for where in kept), read
 
 
+class _SessionWarehouse(_Warehouse):
+    r"""base.binary's warehouse holding the same tables in every schema of
+    ``main``: a statement naming the session's schema (``other``,
+    ``third``) is answered as the recorded one naming ``shop``, the schema
+    it names in each answer the session's."""
+
+    def answer(self, operation: str, parameters: list[Any]) -> pa.Table:
+        text = _normal(operation)
+        if 'current_catalog()' in text or 'ORDER BY p.o' in text:
+            return super().answer(operation, parameters)
+        asked = (text, list(parameters))
+        for part in ('other', 'third'):
+            operation = operation.replace(f'`main`.`{part}`.', '`main`.`shop`.')
+        moved = ['shop' if p in ('other', 'third') else p for p in parameters]
+        try:
+            found = super().answer(operation, moved)
+        finally:
+            self.calls[-1] = asked
+        if 'table_schema' in found.column_names:
+            at = found.schema.get_field_index('table_schema')
+            found = found.set_column(
+                at,
+                found.schema.field(at),
+                pa.array(
+                    [self.schema] * found.num_rows, found.schema.field(at).type
+                ),
+            )
+        return found
+
+
+_SessionConnection = type(
+    'Connection', (_SessionWarehouse,), {'__module__': 'databricks.sql.client'}
+)
+
+
+def _described_under(connection: Any) -> set[str]:
+    r"""The schemas ``connection``'s catalog reads were bound to."""
+    return {
+        parameters[0]
+        for text, parameters in connection.calls
+        if 'information_schema.columns' in text and parameters
+    }
+
+
 @pytest.mark.parametrize('route', ['core', 'old'])
 def test_a_schema_mixing_two_descriptions_reads_the_session_it_is_built_in(
     route: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    r"""A schema built from tables of two descriptions, one under ``shop``
-    and one under ``other``, is a new schema, read under its source's
-    session as the old route reads it (round 3's P0)."""
+    r"""A schema built from tables described under ``shop`` and under
+    ``other`` is a new schema, read under its source's session, ``third``,
+    as the old route reads it (round 3's P0; round 4's P2-1)."""
     _route(route, monkeypatch)
-    connection = _Connection()
-    under_shop = Schema.from_source(DatabricksSource(connection))
-    connection.schema = 'other'
-    under_other = Schema.from_source(DatabricksSource(_Connection()))
-    connection.schema = 'shop'
+    at_shop = _SessionConnection()
+    under_shop = Schema.from_source(DatabricksSource(at_shop))
+    at_other = _SessionConnection()
+    at_other.schema = 'other'
+    under_other = Schema.from_source(DatabricksSource(at_other))
+    assert _described_under(at_shop) == {'shop'}
+    assert _described_under(at_other) == {'other'}
+    at_third = _SessionConnection()
+    at_third.schema = 'third'
     mixed = Schema(
         {'orders': under_shop['orders'], 'users': under_other['users']},
         under_shop.relationships,
-        source=DatabricksSource(connection),
+        source=DatabricksSource(at_third),
     )
-    read = _reads(mixed, connection)
+    read = _reads(mixed, at_third)
+    assert read, at_third.asked
+    assert all(where[:2] == ('main', 'third') for where in read), read
+
+
+@pytest.mark.parametrize('connections', ['one', 'two'])
+@pytest.mark.parametrize('route', ['core', 'old'])
+def test_a_table_adopted_in_place_is_read_where_the_receiving_schema_read_it(
+    route: str, connections: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""A table assigned into a schema from another schema described under
+    another session is read where the receiving schema read its table of
+    that name, as the old route reads it (its own reading of the source,
+    by source name): on one connection or two (round 4's P0, Claude's
+    case)."""
+    _route(route, monkeypatch)
+    dev_connection = _SessionConnection()
+    dev = Schema.from_source(DatabricksSource(dev_connection))
+    if connections == 'one':
+        prod_connection = dev_connection
+    else:
+        prod_connection = _SessionConnection()
+    prod_connection.schema = 'other'
+    prod = Schema.from_source(DatabricksSource(prod_connection))
+    prod.tables['orders'] = dev['orders']
+    prod.check_consistent()
+    read = _reads(prod, prod_connection)
+    assert read, prod_connection.asked
+    assert all(where[:2] == ('main', 'other') for where in read), read
+
+
+@pytest.mark.parametrize('route', ['core', 'old'])
+def test_a_table_adopted_from_a_later_reading_keeps_the_receiving_schema_s(
+    route: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""A schema read under ``shop`` that adopts its ``users`` from a later
+    reading of the same source under ``other`` reads ``users`` where it
+    read it itself, ``shop``, as the old route keeps its own reading
+    (round 4's P0-1, Codex's case)."""
+    _route(route, monkeypatch)
+    connection = _SessionConnection()
+    source = DatabricksSource(connection, catalog='main')
+    schema = Schema.from_source(source)
+    connection.schema = 'other'
+    elsewhere = Schema.from_source(source)
+    schema.tables['users'] = elsewhere['users']
+    schema.check_consistent()
+    read = _reads(schema, connection)
     assert read, connection.asked
     assert all(where[:2] == ('main', 'shop') for where in read), read
+
+
+@pytest.mark.parametrize('edit', ['relationship', 'stype'])
+@pytest.mark.parametrize('route', ['core', 'old'])
+def test_an_edit_keeps_each_table_where_it_was_read(
+    route: str, edit: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""A schema read under ``shop`` for ``orders`` alone that takes a
+    ``users`` read nowhere yet (a schema built anew), then is edited (a
+    relationship assigned, an unrelated column's meaning changed), reads
+    ``orders`` under ``shop`` and ``users`` under the session's ``other``,
+    as the old route does: an edit spreads no table's reading onto another
+    (round 4's P0-2, Codex's case)."""
+    from sdm_client import Relationship
+
+    _route(route, monkeypatch)
+    connection = _SessionConnection()
+    source = DatabricksSource(connection, catalog='main')
+    schema = Schema.from_source(
+        source, tables={'orders': 'orders'}, check_keys=False
+    )
+    connection.schema = 'other'
+    users = Schema.from_source(
+        source, tables={'users': 'users'}, check_keys=False
+    )
+    rebuilt = Schema(users.tables, source=source)
+    schema.tables['users'] = rebuilt['users']
+    schema.check_consistent()
+    if edit == 'relationship':
+        schema.relationships = [
+            Relationship('orders', 'user_id', 'users', 'user_id')
+        ]
+    else:
+        schema.relationships = [
+            Relationship('orders', 'user_id', 'users', 'user_id')
+        ]
+        schema['orders']['price'].stype = 'numerical'
+    read = _reads(schema, connection)
+    assert read, connection.asked
+    orders = [where for where in read if where[2] == 'orders']
+    users_read = [where for where in read if where[2] == 'users']
+    assert orders, read
+    assert users_read, read
+    assert all(where[:2] == ('main', 'shop') for where in orders), read
+    assert all(where[:2] == ('main', 'other') for where in users_read), read
