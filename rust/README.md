@@ -35,28 +35,28 @@ Test-only dependencies, not drawn: `sdm-core`'s tests use `sdm-data`, and the te
 Each crate's own README repeats its part of this graph.
 
 ```mermaid
-graph TD
-    py[sdm-py] --> host[sdm-host]
-    testkit[sdm-testkit<br/>dev only] --> host
-    host --> core[sdm-core]
-    host --> data[sdm-data]
-    core --> request[sdm-request]
-    core --> engine[sdm-engine]
-    core --> schema[sdm-schema]
-    core --> wire[sdm-wire]
-    core --> pql[sdm-pql]
-    request --> engine
-    request --> wire
-    engine --> schema
-    schema --> contract[sdm-contract]
-    wire --> contract
-    data --> contract
-    engine --> contract
-    request --> contract
-    core --> contract
-    host --> contract
-    py --> contract
-    testkit --> contract
+flowchart TD
+    sdm_py["sdm-py"] --> sdm_host["sdm-host"]
+    sdm_testkit["sdm-testkit (dev only)"] --> sdm_host
+    sdm_host --> sdm_core["sdm-core"]
+    sdm_host --> sdm_data["sdm-data"]
+    sdm_core --> sdm_request["sdm-request"]
+    sdm_core --> sdm_engine["sdm-engine"]
+    sdm_core --> sdm_schema["sdm-schema"]
+    sdm_core --> sdm_wire["sdm-wire"]
+    sdm_core --> sdm_pql["sdm-pql"]
+    sdm_request --> sdm_engine
+    sdm_request --> sdm_wire
+    sdm_engine --> sdm_schema
+    sdm_schema --> sdm_contract["sdm-contract"]
+    sdm_wire --> sdm_contract
+    sdm_data --> sdm_contract
+    sdm_engine --> sdm_contract
+    sdm_request --> sdm_contract
+    sdm_core --> sdm_contract
+    sdm_host --> sdm_contract
+    sdm_py --> sdm_contract
+    sdm_testkit --> sdm_contract
 ```
 
 The same graph in plain text (each crate also depends on `sdm-contract`, except `sdm-pql`):
