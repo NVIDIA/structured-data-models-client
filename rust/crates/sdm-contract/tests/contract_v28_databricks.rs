@@ -12,6 +12,7 @@
 use sdm_contract::data::{
     DERIVED_RULE, DataRequest, ProviderCapabilities, ProviderError, Relation, refuse_derived,
 };
+use sdm_contract::Detail;
 use serde_json::json;
 
 fn read<T: serde::de::DeserializeOwned>(value: serde_json::Value) -> T {
@@ -51,7 +52,7 @@ fn a_derived_relation_is_refused_by_name_where_it_is_not_read() {
         unreachable!()
     };
     let refused = refuse_derived(&request, "table", table, false).unwrap();
-    assert_eq!(refused.fields["rule"].to_string(), format!("{DERIVED_RULE:?}"));
+    assert_eq!(refused.fields["rule"], Detail::text(DERIVED_RULE));
     assert!(refuse_derived(&request, "table", table, true).is_none());
     // A column reading both a column and an expression, or named twice.
     for columns in [

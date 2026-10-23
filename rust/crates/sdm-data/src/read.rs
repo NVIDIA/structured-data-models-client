@@ -158,6 +158,7 @@ pub(crate) fn columns(
         for row in 0..batch.num_rows() {
             if let Some(name) = text(name, row) {
                 found.push(CatalogColumn {
+                    canonical: None,
                     name,
                     declared_type: text(declared_type, row).unwrap_or_default(),
                     not_null: flag(not_null, row),

@@ -28,6 +28,7 @@ fn dialect(name: &str) -> &'static dyn SqlDialect {
 
 fn relation(parts: &[&str]) -> Relation {
     Relation {
+        columns: Vec::new(), filter: None,
         source: parts.iter().map(|p| (*p).to_owned()).collect(),
     }
 }
@@ -39,11 +40,17 @@ fn names(names: &[&str]) -> Vec<String> {
 #[test]
 fn each_dialect_is_found_by_its_name_and_only_those() {
     let found: Vec<&str> = DIALECTS.iter().map(|d| d.name()).collect();
-    assert_eq!(found, PROVIDERS);
-    for name in PROVIDERS {
+    assert_eq!(found, ["duckdb", "sqlite", "postgres", "databricks"]);
+    for name in &found {
         assert_eq!(dialect(name).name(), *name);
     }
-    for name in ["databricks", "snowflake", "DuckDB", "", "nope"] {
+    // The providers by the names the runners use: a dialect's, or its legs
+    // (Databricks's SQL warehouse and Spark session run one dialect).
+    assert_eq!(
+        PROVIDERS,
+        ["duckdb", "sqlite", "postgres", "databricks-sql", "databricks-spark"]
+    );
+    for name in ["snowflake", "DuckDB", "", "nope"] {
         assert!(sql::dialect(name).is_none(), "{name}");
     }
 }
@@ -51,15 +58,21 @@ fn each_dialect_is_found_by_its_name_and_only_those() {
 #[test]
 fn each_dialect_declares_its_depth_quoting_and_namespace() {
     for (name, most, namespace, max_seed) in [
-        ("duckdb", 3, false, (1 << 31) - 1),
-        ("sqlite", 2, false, u64::MAX),
-        ("postgres", 2, true, u64::MAX),
+        ("duckdb", 3, 0, (1 << 31) - 1),
+        ("sqlite", 2, 0, u64::MAX),
+        ("postgres", 2, 1, u64::MAX),
+        ("databricks", 3, 2, u64::MAX),
     ] {
         let d = dialect(name);
         assert_eq!(d.most_parts(), most, "{name}");
-        assert_eq!(d.takes_namespace(), namespace, "{name}");
-        assert_eq!(d.identifier("a\"b.c"), "\"a\"\"b.c\"", "{name}");
+        assert_eq!(d.namespace_depth(), namespace, "{name}");
         assert_eq!(d.capabilities().max_seed, max_seed, "{name}");
+        let quoted = if name == "databricks" {
+            "`a\"b.c`"
+        } else {
+            "\"a\"\"b.c\""
+        };
+        assert_eq!(d.identifier("a\"b.c"), quoted, "{name}");
     }
 }
 
@@ -155,6 +168,7 @@ impl SqlDialect for Plain {
 
     fn capabilities(&self) -> ProviderCapabilities {
         ProviderCapabilities {
+            derived_relations: false, neighbor_lookback: false, sample_rows: false,
             optional: Default::default(),
             max_keys_per_request: None,
             sampling: Determinism::SeededStable,
@@ -300,11 +314,13 @@ fn a_new_dialect_gets_every_shared_shape_by_implementing_the_trait() {
         one(DataRequest::KeyCounts {
             keys: vec![
                 TableKey {
+                    unique: false,
                     table: t(),
                     columns: names(&["a"]),
                     label: None,
                 },
                 TableKey {
+                    unique: false,
                     table: relation(&["u"]),
                     columns: names(&["a", "b"]),
                     label: Some(7),
@@ -324,6 +340,7 @@ fn a_new_dialect_gets_every_shared_shape_by_implementing_the_trait() {
     );
     assert_eq!(
         one(DataRequest::SampleEntities {
+            rows: None,
             table: t(),
             key: names(&["a"]),
             n: 3,
@@ -485,6 +502,7 @@ fn the_shared_builder_refuses_for_every_dialect_alike() {
     assert_eq!(field_of(empty, "field"), Some(Detail::text("columns")));
     // A sample's key outside its columns, before its seed is read.
     let key = plain(&DataRequest::SampleEntities {
+        rows: None,
         table: relation(&["t"]),
         key: names(&["k"]),
         n: 1,

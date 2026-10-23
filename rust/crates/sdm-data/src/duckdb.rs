@@ -282,6 +282,7 @@ impl SqlDialect for Duckdb {
     /// What a DuckDB source answers through this layer.
     fn capabilities(&self) -> ProviderCapabilities {
         ProviderCapabilities {
+            derived_relations: false, neighbor_lookback: false, sample_rows: false,
             optional: sql::rendered(),
             max_keys_per_request: None,
             // DuckDB's reservoir sampling repeats under a seed (REPEATABLE).

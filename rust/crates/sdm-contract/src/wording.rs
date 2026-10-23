@@ -240,6 +240,12 @@ pub fn template(sentence: Sentence) -> Template {
         S::RelationTooManyParts => said(
             r#"the core asked the data source for a {request} of a relation of {parts:,} name parts, and it reads at most {most:,}"#,
         ),
+        S::DerivedRelationUnread => said(
+            r#"the core asked the data source for a {request} of a derived relation, which it does not read"#,
+        ),
+        S::DerivedRelationMalformed => said(
+            r#"the core asked the data source for a {request} of a derived relation whose columns do not each read one source column or expression; this is a defect, not a problem with the request"#,
+        ),
         S::DataRequestRefused => said(
             r#"the core asked the data source for a {request} whose {field} it does not take; this is a defect, not a problem with the request"#,
         ),

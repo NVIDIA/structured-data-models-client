@@ -155,6 +155,7 @@ pub enum Unreadable {
 /// which may quote values (decision H17).
 fn producer_failed() -> ProviderError {
     ProviderError {
+        refuses_expression: false,
         kind: ErrorKind::DataSource,
         retryable: false,
         sqlstate: None,
