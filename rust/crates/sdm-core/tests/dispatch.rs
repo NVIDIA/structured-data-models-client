@@ -783,7 +783,10 @@ fn a_day_first_date_literal_warns_on_the_run_s_warnings_channel() {
         warnings[0].fields["format"],
         sdm_contract::Detail::text("%d/%m/%Y")
     );
-    assert!(sdm_core::warning_codes().contains(&("DATE_LITERAL_DAY_FIRST", &[][..])));
+    assert_eq!(
+        warnings[0].sentence,
+        sdm_contract::Sentence::DateLiteralDayFirst
+    );
 }
 
 /// T1.6c: a packed date (D8) is refused by name, not read, so it never

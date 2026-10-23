@@ -362,8 +362,9 @@ fn a_provider_error_keeps_its_retryability_and_codes_in_the_core_error() {
         assert_eq!(error.fields["vendor_code"], Detail::text("1213"));
     }
     // An error written without the field is not retryable.
-    let error: CoreError =
-        serde_json::from_str(r#"{"kind":"internal","code":"INTERNAL_ERROR","message":""}"#)
-            .unwrap();
+    let error: CoreError = serde_json::from_str(
+        r#"{"kind":"internal","code":"INTERNAL_ERROR","sentence":"internal","message":""}"#,
+    )
+    .unwrap();
     assert!(!error.retryable);
 }

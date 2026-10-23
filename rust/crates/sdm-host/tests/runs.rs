@@ -27,7 +27,7 @@ use sdm_contract::run::{
 };
 use sdm_contract::{
     CONTRACT_VERSION, ControlMessage, CoreError, CoreWarning, Detail, ErrorCode, ErrorKind,
-    HostFacts, Scalar, Step, Unit,
+    HostFacts, Scalar, Sentence, Step, Unit,
 };
 use sdm_core::{ArrowData, Attachment, FetchResult, ModelResult, Reply, Run, RunState};
 use sdm_host::{
@@ -261,12 +261,8 @@ fn a_panic_is_contained_and_poisons_the_run() {
     );
     // An error is not a panic, whatever its fields say.
     let failure = contain::<()>(|| {
-        Err(CoreError::new(
-            ErrorKind::Internal,
-            ErrorCode::InternalError,
-            "set by a host",
-        )
-        .with_field("panic", Detail::Scalar(Scalar::Bool(true))))
+        Err(CoreError::new(Sentence::Internal, "set by a host")
+            .with_field("panic", Detail::Scalar(Scalar::Bool(true))))
     })
     .unwrap_err();
     assert!(!failure.panicked);
@@ -524,11 +520,7 @@ fn data_admission_refuses_ends_the_run_with_the_refusal() {
 
 fn model_run() -> Run {
     Run::new(|asker| async move {
-        asker.warn(CoreWarning {
-            code: "FIRST".into(),
-            message: String::new(),
-            fields: BTreeMap::new(),
-        });
+        asker.warn(CoreWarning::new(Sentence::ContextCapped, ""));
         let reply = asker
             .call_model(
                 Endpoint::Predict,
@@ -536,17 +528,9 @@ fn model_run() -> Run {
                 b"{\"q\":1}".to_vec(),
             )
             .await;
-        asker.warn(CoreWarning {
-            code: "SECOND".into(),
-            message: String::new(),
-            fields: BTreeMap::new(),
-        });
+        asker.warn(CoreWarning::new(Sentence::HopsIgnored, ""));
         let Reply::Model(ModelResult::Response { body, .. }) = reply else {
-            return Err(CoreError::new(
-                ErrorKind::ModelEndpoint,
-                ErrorCode::TransportError,
-                "no",
-            ));
+            return Err(CoreError::new(Sentence::TransportFailed, "no"));
         };
         Ok(OperationResult::ValidateQuery(QueryValidation {
             accepted: body == b"answer",
@@ -607,7 +591,7 @@ fn a_model_call_s_body_is_the_run_s_attachment_1_and_its_answer_the_host_s() {
         panic!("a warnings message");
     };
     let codes: Vec<&str> = warnings.iter().map(|w| w.code.as_str()).collect();
-    assert_eq!(codes, ["FIRST", "SECOND"]);
+    assert_eq!(codes, ["CONTEXT_CAPPED", "HOPS_IGNORED"]);
     assert!(run.take_warnings().unwrap().is_none());
 }
 
