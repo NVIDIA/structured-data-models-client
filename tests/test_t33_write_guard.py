@@ -61,7 +61,7 @@ ALLOWED = {
         'PRIMARY KEY ("ID"))',
         'CREATE TABLE "REVIEW_DB"."LIVE_TESTS"."orders" ("U" NUMBER(38,0), '
         'FOREIGN KEY ("U") REFERENCES "REVIEW_DB"."LIVE_TESTS"."users" ("ID"))',
-        'create or replace table review_db.live_tests.t (i int)',
+        'create or replace table review_db.live_tests.t (i number(38, 0))',
         'INSERT INTO "REVIEW_DB"."LIVE_TESTS"."users" ("ID") SELECT '
         "CAST(column1 AS NUMBER(38,0)) FROM VALUES ('1'), (NULL)",
         'DROP TABLE IF EXISTS "REVIEW_DB"."LIVE_TESTS"."users"',
