@@ -236,3 +236,25 @@ fn missing_start_wrong_provider_wrong_leg_and_skipped_case_are_not_passes() {
         assert!(!out.exists(), "fault {fault} wrote an observation");
     }
 }
+
+#[test]
+fn a_started_refusal_before_any_fetch_is_observed() {
+    let leg = "databricks-sql";
+    let dir = Scratch::new();
+    let mut core = core(&provider(leg, false));
+    // The dialect cannot interpret a namespace with three parts, so the
+    // actual core refuses before requesting any SQL from the provider.
+    core["describe_source"]["provider"]["namespace"] = json!(["one", "two", "three"]);
+    let line = json!({"format": "sdm-replay/1", "case": "t310.replay@databricks-sql",
+                      "core": core, "fetches": []});
+    let (done, out) = replay(&dir.0, leg, &line, leg);
+    assert!(
+        done.status.success(),
+        "{}",
+        String::from_utf8_lossy(&done.stderr)
+    );
+    let observed: Value =
+        serde_json::from_str(std::fs::read_to_string(out).unwrap().trim()).unwrap();
+    assert_eq!(observed["outcome"]["result"], "refusal");
+    assert_eq!(observed["core"]["fetches"], json!([]));
+}

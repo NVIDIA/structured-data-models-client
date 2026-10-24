@@ -81,6 +81,35 @@ def test_missing_describe_start_cannot_become_an_empty_source() -> None:
         run_python._replay_core(SimpleNamespace(inputs=[]))
 
 
+def test_a_started_warehouse_case_with_no_fetch_is_still_recorded() -> None:
+    capture = SimpleNamespace(
+        inputs=[
+            {
+                'op': 'describe_source',
+                'provider': {'provider': 'sql', 'dialect': 'databricks'},
+                'source': {
+                    'tables': [],
+                    'primary_keys': {},
+                    'time_columns': {},
+                },
+                'check_keys': True,
+            }
+        ],
+        answered=[],
+    )
+    line = run_python._replay_line(
+        {'id': 'no-fetch'},
+        'databricks-sql',
+        capture,
+        {'capture': {'statements': []}},
+    )
+    assert line['case'] == 'no-fetch@databricks-sql'
+    assert line['fetches'] == []
+    assert line['core']['describe_source'] == {
+        key: value for key, value in capture.inputs[0].items() if key != 'op'
+    }
+
+
 def test_multiple_starts_are_not_silently_collapsed() -> None:
     start = {
         'op': 'describe_source',
