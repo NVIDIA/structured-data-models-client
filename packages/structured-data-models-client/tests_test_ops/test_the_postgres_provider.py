@@ -214,7 +214,6 @@ def _keyed(
         'double': {'type': 'float64'},
         'uint64': {'type': 'uint64'},
         'int64': {'type': 'int64'},
-        'double': {'type': 'float64'},
     }
     request = dict(request)
     request['seeds'] = {
