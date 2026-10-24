@@ -120,6 +120,10 @@
         "connect": {
           "description": "The connect path the case's connection is opened through, handed to Schema.from_source as it is and found by detection (Phase 3 design choice 1): warehouse (sdm_connectors.databricks.warehouse(), databricks-sql), spark (a notebook's Spark session, databricks-spark), snowpark (a Snowpark session, snowflake) or lakebase (sdm_connectors.databricks.lakebase(), lakebase). The case's warehouses are exactly that leg.",
           "enum": ["warehouse", "spark", "snowpark", "lakebase"]
+        },
+        "named_part": {
+          "description": "The one namespace part the case's source names (the second early capture, T3.20): catalog (Snowflake's database) or schema, the other left for the source to read from the session, which the run opens in the test schema. Only on a case naming warehouses that each have two namespace parts (databricks-sql, databricks-spark, snowflake), and never beside connect, whose source names none.",
+          "enum": ["catalog", "schema"]
         }
       }
     },
