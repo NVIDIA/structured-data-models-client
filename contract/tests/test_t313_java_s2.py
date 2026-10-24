@@ -200,7 +200,8 @@ def test_a_java_guard_refusal_prevents_jdbc_execution_and_is_not_a_product_answe
         assert not os.environ.get('SDM_REQUIRE_JAVA')
         return
     jar = Path(given).resolve()
-    java = run_java.java_binary(None)
+    home = os.environ.get('SDM_JAVA_HOME') or os.environ.get('JAVA_HOME')
+    java = run_java.java_binary(str(Path(home) / 'bin/java') if home else None)
     javac = str(Path(java).with_name('javac'))
     guard = tmp_path / 'refuse.py'
     guard.write_text('import sys\nsys.stdin.read()\nraise SystemExit(1)\n')
