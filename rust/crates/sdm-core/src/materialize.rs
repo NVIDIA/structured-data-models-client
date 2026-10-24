@@ -193,6 +193,12 @@ pub(crate) struct Inputs {
     pub memo: Option<SamplerMemo>,
     /// The fingerprint of this provider and description ([`fingerprint`]).
     pub source: String,
+    /// The schema as the host holds it where a column of it holds no facts
+    /// of the source: `description` is then read by the columns' data types,
+    /// and the facts are read once the request's inputs are checked
+    /// (`describe::initialize`), as the reference's engine reads a table
+    /// after its materializer's checks (T3.4).
+    pub pending: Option<sdm_contract::ops::HeldSchema>,
     /// The test-only `labels` operation's run: it finishes with the
     /// context's labels, before anything of the task's layout is read.
     #[cfg(feature = "test-ops")]
@@ -2850,6 +2856,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     let inputs_anchor_entity = inputs.anchor_entity;
     let Inputs {
         mut description,
+        pending,
         query,
         indices,
         anchor_time,
@@ -3006,7 +3013,33 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // Every input check of the request made: the location cache made, and
     // where each table read anew lives settled, before any row is fetched,
     // as the reference makes its `EngineTables` and its engine keeps them.
-    crate::describe::initialize(asker).await?;
+    // A schema whose columns held no facts read now, by what the source
+    // says of them.
+    let (graph, validated, source_query) =
+        match crate::describe::initialize(asker, pending.as_ref()).await? {
+            // Its graph and its query read again over the schema as the
+            // source holds it, as the reference's engine reads its tables:
+            // a column the source does not hold is no column of it.
+            Some(located) => {
+                description = located;
+                consistent(&mut description)?;
+                reserved(&description)?;
+                let graph = Graph::new(&description)?;
+                let validation = crate::pql::resolve(
+                    &query,
+                    &query_schema(&description),
+                    &profile,
+                    &facts,
+                    &*zones,
+                )?;
+                let (Some(validated), Some(source_query)) = (validation.query, validation.text)
+                else {
+                    return Err(unresolved(&query, &validation.diagnostics));
+                };
+                (graph, validated, source_query)
+            }
+            None => (graph, validated, source_query),
+        };
     missing_indexes(&mut memo, &graph, asker.capabilities()?.index_advice).await?;
     // Each table's rows, where the provider sizes its sampling by them,
     // as the reference's warehouse sampler counts them as it is built.

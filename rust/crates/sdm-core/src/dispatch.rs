@@ -379,10 +379,11 @@ pub(crate) fn materialize(
             // The run's inputs, once the schema is read (below) and its
             // fingerprint taken: the memo is read only if it was made under
             // this provider and schema (decision E52).
-            let inputs = move |description, source: String| crate::materialize::Inputs {
+            let inputs = move |description, source: String, pending| crate::materialize::Inputs {
                 memo: memo.filter(|memo| memo.source == source),
                 source,
                 description,
+                pending,
                 query,
                 indices,
                 candidates,
@@ -441,22 +442,26 @@ pub(crate) fn materialize(
                     asker.pin(&relation, parts);
                 }
                 asker.reads_anew(anew);
-                // A column with no facts is read from the source before the
-                // checks that need them, so the run builds its graph first.
-                if !sdm_schema::held::lacking_facts(&held).is_empty() {
-                    crate::describe::initialize(&asker).await?;
-                }
-                // Each column's facts, the host's or, for a column with none,
-                // the source's, read before anything else of the run.
-                let found = crate::discover::facts(&asker, &held).await?;
-                let read = sdm_schema::held::read(held, &found, false)?;
+                // A column with no facts is read from the source only once the
+                // request's inputs are checked (`describe::initialize`), as the
+                // reference's engine reads its tables after its materializer's
+                // checks; until then the schema is read by its columns' data
+                // types, as an edit reads it.
+                let lacking = !sdm_schema::held::lacking_facts(&held).is_empty();
+                let read = sdm_schema::held::read(
+                    held.clone(),
+                    &std::collections::BTreeMap::new(),
+                    lacking,
+                )?;
                 // The schema as the caller holds it first, as the reference's
                 // `check_consistent` reads it; then as its engine reads the
-                // source (T3.16 review round 1).
+                // source (T3.16 review round 1), where its facts are held.
                 crate::materialize::meanings_carried(&read.description, Some(&read.types))?;
                 sdm_schema::assemble::check_links(&read.description, &read.types)?;
                 let description = read.by_the_source();
-                crate::materialize::meanings_carried(&description, None)?;
+                if !lacking {
+                    crate::materialize::meanings_carried(&description, None)?;
+                }
                 let source = crate::materialize::fingerprint(&provider, &description)?;
                 // Each table read as the columns its description holds.
                 for table in &description.tables {
@@ -469,7 +474,8 @@ pub(crate) fn materialize(
                             .collect(),
                     );
                 }
-                crate::materialize::run(asker, inputs(description, source)).await
+                crate::materialize::run(asker, inputs(description, source, lacking.then_some(held)))
+                    .await
             }))
         }
         _ => Err(internal("a materialize run of another operation")),
