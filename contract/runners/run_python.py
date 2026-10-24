@@ -531,7 +531,9 @@ def warehouse_problem(case: dict[str, Any]) -> str | None:
     None (design choice 1): ``input.view`` and ``input.connect`` only on a
     case naming ``warehouses``; a view's kind kept by every leg named
     (:data:`VIEW_LEGS`); a connect path's case naming exactly its leg
-    (:data:`CONNECT_LEGS`). sdm-testkit's loader holds the same rules."""
+    (:data:`CONNECT_LEGS`); ``input.named_part`` only on a case naming
+    warehouses, none of them Lakebase, and no connect path. sdm-testkit's
+    loader holds the same rules."""
     given = case['input']
     legs = case.get('warehouses')
     if ('view' in given or 'connect' in given) and legs is None:
@@ -546,6 +548,11 @@ def warehouse_problem(case: dict[str, Any]) -> str | None:
     connect = given.get('connect')
     if connect is not None and legs != [CONNECT_LEGS[connect]]:
         return f'input/connect {connect} runs on {CONNECT_LEGS[connect]} alone'
+    if 'named_part' in given:
+        if legs is None or connect is not None:
+            return 'input/named_part needs warehouses and no connect'
+        if 'lakebase' in legs:
+            return 'input/named_part on lakebase, whose source names one part'
     return None
 
 
@@ -3690,9 +3697,14 @@ class WarehouseTarget:
         self.view = dict(view) if view is not None else None
 
 
-def _quoted(leg: str, names: Mapping[str, str], table: str) -> str:
+def _quoted(
+    leg: str, names: Mapping[str, str], table: str, fold: bool = False
+) -> str:
     r"""``table`` in the test schema, qualified and quoted as ``leg``'s
-    engine reads it, its name exactly as the case's DuckDB data has it."""
+    engine reads it, its name exactly as the case's DuckDB data has it, or
+    with ``fold`` in upper case, as the loader stored it."""
+    if fold:
+        table = table.upper()
     if leg in ('databricks-sql', 'databricks-spark'):
         parts = [names.get('catalog', ''), names.get('schema', ''), table]
         return '.'.join('`' + part.replace('`', '``') + '`' for part in parts)
@@ -3781,11 +3793,14 @@ def connect_leg(
     spec: Mapping[str, Any],
     names: Mapping[str, str],
     path: str | None,
+    in_schema: bool = False,
 ) -> tuple[Any, Any]:
     r"""The leg's connection, opened as the live configuration says
     (:func:`live_configuration`), and what closes it: through the case's
     connect ``path`` when it has one, its namespace the test schema so a
-    connection handed over as it is resolves the case's tables there."""
+    connection handed over as it is resolves the case's tables there, as
+    with ``in_schema`` (a source naming one part reads the other from the
+    session)."""
     catalog, schema = names.get('catalog'), names.get('schema')
     if leg == 'databricks-sql':
         if path == 'warehouse' or 'driver' not in spec:
@@ -3797,7 +3812,7 @@ def connect_leg(
                 raise RunnerFailure('the live configuration names no warehouse')
             workspace = _workspace(options)
             driver = dict(options.pop('driver', {}) or {})
-            if path == 'warehouse':
+            if path == 'warehouse' or in_schema:
                 driver.update(catalog=catalog, schema=schema)
             connection = warehouse(warehouse_id, workspace=workspace, **driver)
         else:
@@ -3812,7 +3827,7 @@ def connect_leg(
             SparkSession.getActiveSession()
             or SparkSession.builder.getOrCreate()
         )
-        if path == 'spark':
+        if path == 'spark' or in_schema:
             session.sql(f'USE CATALOG `{catalog}`')
             session.sql(f'USE SCHEMA `{schema}`')
         # The notebook owns its session: closing the case's stops nothing.
@@ -3827,7 +3842,10 @@ def connect_leg(
             return session, session.close
         import snowflake.connector
 
-        connection = snowflake.connector.connect(**spec['driver'])
+        driver = dict(spec['driver'])
+        if in_schema:
+            driver.update(database=catalog, schema=schema)
+        connection = snowflake.connector.connect(**driver)
         return connection, connection.close
     if leg == 'lakebase':
         from sdm_connectors.databricks import lakebase
@@ -3854,21 +3872,34 @@ def warehouse_source(
     leg: str, captured: Any, names: Mapping[str, str], given: Mapping[str, Any]
 ) -> Any:
     r"""The public source a user builds on ``leg`` over the captured
-    connection: the raw connection itself for a connect case (found by
-    detection, CN/source.py:97-107); the leg's source class in the test
-    schema otherwise, and a view case's semantic model of it."""
+    connection: for a connect case, ``Source(connection)``, which finds the
+    leg's source class by the connection's type (CN/source.py:97-107), as
+    the case's ``Source(session)`` does; the leg's source class in the test
+    schema otherwise, naming only the case's ``named_part`` when it has
+    one, and a view case's semantic model of it."""
     import sdm_connectors
 
     if 'connect' in given:
-        return captured
+        return sdm_connectors.Source(captured)
     catalog, schema = names.get('catalog'), names.get('schema')
+    named = given.get('named_part')
+    parts = {
+        'catalog': catalog if named in (None, 'catalog') else None,
+        'schema': schema if named in (None, 'schema') else None,
+    }
     if leg in ('databricks-sql', 'databricks-spark'):
         source = sdm_connectors.DatabricksSource(
-            captured, catalog=catalog, schema=schema
+            captured,
+            **{key: value for key, value in parts.items() if value},
         )
     elif leg == 'snowflake':
         source = sdm_connectors.SnowflakeSource(
-            captured, database=catalog, schema=schema
+            captured,
+            **{
+                ('database' if key == 'catalog' else key): value
+                for key, value in parts.items()
+                if value
+            },
         )
     else:
         return sdm_connectors.PostgresSource(captured, schema=schema)
@@ -3908,7 +3939,11 @@ class Live:
         self._undo: list[Any] = []
         try:
             self.connection, close = connect_leg(
-                leg, spec, self.names, given.get('connect')
+                leg,
+                spec,
+                self.names,
+                given.get('connect'),
+                in_schema='named_part' in given,
             )
             self._undo.append(close)
             # The connect path's session is not the driver connection the
@@ -3932,7 +3967,13 @@ class Live:
                     raw_arrow(
                         leg,
                         writer,
-                        f'SELECT * FROM {_quoted(leg, self.names, name)}',
+                        'SELECT * FROM '
+                        + _quoted(
+                            leg,
+                            self.names,
+                            name,
+                            loader.folds(leg, given.get('view')),
+                        ),
                     ),
                 )
                 for name in self.table_names

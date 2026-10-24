@@ -1,0 +1,7422 @@
+{
+ "format": "sdm-capture/1",
+ "case": "sample.parent-table.relbench-stack",
+ "leg": "lakebase",
+ "recording_commit": "8f3eb648abc0d00abfd34087fe5124106e137fa4",
+ "reference_commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+ "versions": {
+  "databricks-sdk": "0.148.0",
+  "duckdb": "1.5.6",
+  "numpy": "2.5.3",
+  "pandas": "3.0.6",
+  "psycopg": "3.3.6",
+  "pyarrow": "25.0.1",
+  "python": "3.12.15"
+ },
+ "input_hash": "e15d74421f1469a3d1ed8892369e53fbab3be9e78350fc0e1f3a8e2d0fb20ca0",
+ "session": {
+  "time_zone": "GMT",
+  "null_order": "nulls_last"
+ },
+ "reference": {
+  "case": "sample.parent-table.relbench-stack@lakebase",
+  "core": null,
+  "driver": {
+   "capture": {
+    "bindings": [],
+    "cursors": 29,
+    "events": [
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 1
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 2
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 3
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 4
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 5
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 6
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 7
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 8
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 9
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 10
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 11
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 12
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 13
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 14
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 15
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 16
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 17
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 18
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 19
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 20
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 21
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 22
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 23
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 24
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 25
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 26
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 27
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 28
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 29
+     }
+    ],
+    "incomplete": [],
+    "passed_through": [
+     "autocommit",
+     "description"
+    ],
+    "statements": [
+     {
+      "error": null,
+      "handle": 1,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{schema}'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "1c3c905d8e42caea2a005c9de2a947b954c6691a3cf46370918ffbac49578436",
+        "method": "fetchall",
+        "rows": 3,
+        "values": {
+         "columns": [
+          "table_name"
+         ],
+         "ordered": "e0c0fac4e8d0182f4d2908f537f98e945061be2ede9608b25844d7ba805e3896",
+         "types": [
+          "name"
+         ],
+         "unencodable": [],
+         "unordered": "e0c0fac4e8d0182f4d2908f537f98e945061be2ede9608b25844d7ba805e3896"
+        }
+       }
+      ],
+      "sql": "SELECT table_name\nFROM information_schema.tables\nWHERE table_schema = %s\n  AND table_type = 'BASE TABLE'\nORDER BY table_name",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 2,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{schema}'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'posts'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "5a7f4bfb6e53f4ead6e200c1a3ba4d031c6582f24ce2ae69aa086175265e8e5c",
+        "method": "fetchall",
+        "rows": 5,
+        "values": {
+         "columns": [
+          "column_name",
+          "data_type",
+          "udt_name",
+          "numeric_scale",
+          "is_nullable",
+          "table_schema",
+          "table_name",
+          "format_type"
+         ],
+         "ordered": "05b45c0177ed5450632c44f98148bc6f279113ff123e5c05f27da1265920c003",
+         "types": [
+          "name",
+          "varchar",
+          "name",
+          "int4",
+          "varchar(3)",
+          "name",
+          "name",
+          "text"
+         ],
+         "unencodable": [],
+         "unordered": "f70b00be69942dfd55c50d99f02ef34a6ad74c8ab67c9013d16616db6d234296"
+        }
+       }
+      ],
+      "sql": "SELECT c.column_name, c.data_type, c.udt_name,\n       c.numeric_scale, c.is_nullable, c.table_schema,\n       c.table_name,\n       pg_catalog.format_type(a.atttypid, a.atttypmod)\nFROM information_schema.columns c\nJOIN pg_catalog.pg_namespace n\n  ON n.nspname = c.table_schema\nJOIN pg_catalog.pg_class rel\n  ON rel.relnamespace = n.oid AND rel.relname = c.table_name\nJOIN pg_catalog.pg_attribute a\n  ON a.attrelid = rel.oid AND a.attname = c.column_name\n AND a.attnum > 0 AND NOT a.attisdropped\nWHERE c.table_schema = %s AND c.table_name = %s\nORDER BY c.ordinal_position",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 2,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{schema}'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'posts'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "method": "fetchall",
+        "rows": 0,
+        "values": {
+         "columns": [
+          "constraint_type",
+          "constraint_name",
+          "column_name",
+          "ordinal_position"
+         ],
+         "ordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+         "types": [
+          "varchar",
+          "name",
+          "name",
+          "int4"
+         ],
+         "unencodable": [],
+         "unordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        }
+       }
+      ],
+      "sql": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = %s AND tc.table_name = %s\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE', 'FOREIGN KEY')",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 3,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "043ce3f1ad6c45d7fa2c059f3fccddaf993ac9a53a2a82fc53076e9640a5cba6",
+        "method": "fetchall",
+        "rows": 20,
+        "values": {
+         "columns": [
+          "Id",
+          "OwnerUserId",
+          "ParentId",
+          "PostTypeId",
+          "CreationDate"
+         ],
+         "ordered": "82443ca0e1d90650e638e002a716c44a60643a0b98e55d1a21dd09b3fca6bf04",
+         "types": [
+          "int8",
+          "int8",
+          "int8",
+          "int4",
+          "timestamp"
+         ],
+         "unencodable": [],
+         "unordered": "460ae95676fe26a0dc9c0516af11ab1f0632320b00e5bcb2b7396c8b7f984b53"
+        }
+       }
+      ],
+      "sql": "SELECT \"Id\", \"OwnerUserId\", \"ParentId\", \"PostTypeId\", \"CreationDate\" FROM \"{schema}\".\"posts\" LIMIT 1000",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 4,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{schema}'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'users'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "91bbc18d1b95c7503923f8467d1313150b484d70f1963cc819a0f960261ea104",
+        "method": "fetchall",
+        "rows": 3,
+        "values": {
+         "columns": [
+          "column_name",
+          "data_type",
+          "udt_name",
+          "numeric_scale",
+          "is_nullable",
+          "table_schema",
+          "table_name",
+          "format_type"
+         ],
+         "ordered": "9d9b2e80b732bf7eb0156e6e6f10d95f1de88cd9d429698260b78d59b3e20f63",
+         "types": [
+          "name",
+          "varchar",
+          "name",
+          "int4",
+          "varchar(3)",
+          "name",
+          "name",
+          "text"
+         ],
+         "unencodable": [],
+         "unordered": "7262c12d24f7922b5ab34f88f45777d59d42eeae51723ff3bdf1987cc540e7a6"
+        }
+       }
+      ],
+      "sql": "SELECT c.column_name, c.data_type, c.udt_name,\n       c.numeric_scale, c.is_nullable, c.table_schema,\n       c.table_name,\n       pg_catalog.format_type(a.atttypid, a.atttypmod)\nFROM information_schema.columns c\nJOIN pg_catalog.pg_namespace n\n  ON n.nspname = c.table_schema\nJOIN pg_catalog.pg_class rel\n  ON rel.relnamespace = n.oid AND rel.relname = c.table_name\nJOIN pg_catalog.pg_attribute a\n  ON a.attrelid = rel.oid AND a.attname = c.column_name\n AND a.attnum > 0 AND NOT a.attisdropped\nWHERE c.table_schema = %s AND c.table_name = %s\nORDER BY c.ordinal_position",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 4,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{schema}'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'users'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "method": "fetchall",
+        "rows": 0,
+        "values": {
+         "columns": [
+          "constraint_type",
+          "constraint_name",
+          "column_name",
+          "ordinal_position"
+         ],
+         "ordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+         "types": [
+          "varchar",
+          "name",
+          "name",
+          "int4"
+         ],
+         "unencodable": [],
+         "unordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        }
+       }
+      ],
+      "sql": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = %s AND tc.table_name = %s\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE', 'FOREIGN KEY')",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 5,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "98412097e9c54f0a7dbbce87a52561718d3876a795a60a5842557404bbb2bb7b",
+        "method": "fetchall",
+        "rows": 6,
+        "values": {
+         "columns": [
+          "Id",
+          "Reputation",
+          "CreationDate"
+         ],
+         "ordered": "73340b18f81a89725ea4d6e207196cb08396d0b5c6bdf4db0cbcb4b236f8c7bd",
+         "types": [
+          "int8",
+          "int4",
+          "timestamp"
+         ],
+         "unencodable": [],
+         "unordered": "73340b18f81a89725ea4d6e207196cb08396d0b5c6bdf4db0cbcb4b236f8c7bd"
+        }
+       }
+      ],
+      "sql": "SELECT \"Id\", \"Reputation\", \"CreationDate\" FROM \"{schema}\".\"users\" LIMIT 1000",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 6,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{schema}'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'votes'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "1af48a69e4c760d10e7e79038366a183278f261f93549958ec8e8a0669062e1e",
+        "method": "fetchall",
+        "rows": 5,
+        "values": {
+         "columns": [
+          "column_name",
+          "data_type",
+          "udt_name",
+          "numeric_scale",
+          "is_nullable",
+          "table_schema",
+          "table_name",
+          "format_type"
+         ],
+         "ordered": "81fb2378d6196cdf9baeeeac933682319263ed606a0e8ba98c739f50bbba2d50",
+         "types": [
+          "name",
+          "varchar",
+          "name",
+          "int4",
+          "varchar(3)",
+          "name",
+          "name",
+          "text"
+         ],
+         "unencodable": [],
+         "unordered": "31d207b64c62e7181e7a8b14af156e841468112b154d16eec3065052644ca748"
+        }
+       }
+      ],
+      "sql": "SELECT c.column_name, c.data_type, c.udt_name,\n       c.numeric_scale, c.is_nullable, c.table_schema,\n       c.table_name,\n       pg_catalog.format_type(a.atttypid, a.atttypmod)\nFROM information_schema.columns c\nJOIN pg_catalog.pg_namespace n\n  ON n.nspname = c.table_schema\nJOIN pg_catalog.pg_class rel\n  ON rel.relnamespace = n.oid AND rel.relname = c.table_name\nJOIN pg_catalog.pg_attribute a\n  ON a.attrelid = rel.oid AND a.attname = c.column_name\n AND a.attnum > 0 AND NOT a.attisdropped\nWHERE c.table_schema = %s AND c.table_name = %s\nORDER BY c.ordinal_position",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 6,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{schema}'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'votes'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "method": "fetchall",
+        "rows": 0,
+        "values": {
+         "columns": [
+          "constraint_type",
+          "constraint_name",
+          "column_name",
+          "ordinal_position"
+         ],
+         "ordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+         "types": [
+          "varchar",
+          "name",
+          "name",
+          "int4"
+         ],
+         "unencodable": [],
+         "unordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        }
+       }
+      ],
+      "sql": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = %s AND tc.table_name = %s\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE', 'FOREIGN KEY')",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 7,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "f98f1a1c8cc6547b83e840af95420ec60c155a74b92f6b093cb8dc5f65418242",
+        "method": "fetchall",
+        "rows": 120,
+        "values": {
+         "columns": [
+          "Id",
+          "PostId",
+          "UserId",
+          "VoteTypeId",
+          "CreationDate"
+         ],
+         "ordered": "60829426a00fa65aa98fa2885dac908dc0392dae276cc1dd400079c91e2004a3",
+         "types": [
+          "int8",
+          "int8",
+          "int8",
+          "int4",
+          "timestamp"
+         ],
+         "unencodable": [],
+         "unordered": "0972093cc748cbde421177430d55ebf8b0e4ba36e3a257cd3965744e7c30a0e8"
+        }
+       }
+      ],
+      "sql": "SELECT \"Id\", \"PostId\", \"UserId\", \"VoteTypeId\", \"CreationDate\" FROM \"{schema}\".\"votes\" LIMIT 1000",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 8,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{schema}'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'posts'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "method": "fetchall",
+        "rows": 0,
+        "values": {
+         "columns": [
+          "constraint_name",
+          "column_name",
+          "table_schema",
+          "table_name",
+          "column_name",
+          "ordinal_position"
+         ],
+         "ordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+         "types": [
+          "name",
+          "name",
+          "name",
+          "name",
+          "name",
+          "int4"
+         ],
+         "unencodable": [],
+         "unordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        }
+       }
+      ],
+      "sql": "SELECT tc.constraint_name, kcu.column_name,\n       target_kcu.table_schema, target_kcu.table_name,\n       target_kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN information_schema.key_column_usage target_kcu\n  ON rc.unique_constraint_catalog = target_kcu.constraint_catalog\n AND rc.unique_constraint_schema = target_kcu.constraint_schema\n AND rc.unique_constraint_name = target_kcu.constraint_name\n AND target_kcu.ordinal_position = kcu.position_in_unique_constraint\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = %s AND tc.table_name = %s\nORDER BY tc.constraint_name, kcu.ordinal_position",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 9,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{schema}'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'users'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "method": "fetchall",
+        "rows": 0,
+        "values": {
+         "columns": [
+          "constraint_name",
+          "column_name",
+          "table_schema",
+          "table_name",
+          "column_name",
+          "ordinal_position"
+         ],
+         "ordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+         "types": [
+          "name",
+          "name",
+          "name",
+          "name",
+          "name",
+          "int4"
+         ],
+         "unencodable": [],
+         "unordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        }
+       }
+      ],
+      "sql": "SELECT tc.constraint_name, kcu.column_name,\n       target_kcu.table_schema, target_kcu.table_name,\n       target_kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN information_schema.key_column_usage target_kcu\n  ON rc.unique_constraint_catalog = target_kcu.constraint_catalog\n AND rc.unique_constraint_schema = target_kcu.constraint_schema\n AND rc.unique_constraint_name = target_kcu.constraint_name\n AND target_kcu.ordinal_position = kcu.position_in_unique_constraint\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = %s AND tc.table_name = %s\nORDER BY tc.constraint_name, kcu.ordinal_position",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 10,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{schema}'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'votes'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "method": "fetchall",
+        "rows": 0,
+        "values": {
+         "columns": [
+          "constraint_name",
+          "column_name",
+          "table_schema",
+          "table_name",
+          "column_name",
+          "ordinal_position"
+         ],
+         "ordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+         "types": [
+          "name",
+          "name",
+          "name",
+          "name",
+          "name",
+          "int4"
+         ],
+         "unencodable": [],
+         "unordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        }
+       }
+      ],
+      "sql": "SELECT tc.constraint_name, kcu.column_name,\n       target_kcu.table_schema, target_kcu.table_name,\n       target_kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN information_schema.key_column_usage target_kcu\n  ON rc.unique_constraint_catalog = target_kcu.constraint_catalog\n AND rc.unique_constraint_schema = target_kcu.constraint_schema\n AND rc.unique_constraint_name = target_kcu.constraint_name\n AND target_kcu.ordinal_position = kcu.position_in_unique_constraint\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = %s AND tc.table_name = %s\nORDER BY tc.constraint_name, kcu.ordinal_position",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 11,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "a79fdc1ab2e04f3f017402c7d003ab87c63acfc427e40f477e7aeb278e0ad569",
+        "method": "fetchall",
+        "rows": 3,
+        "values": {
+         "columns": [
+          "k",
+          "n",
+          "d",
+          "z"
+         ],
+         "ordered": "47e40cc8428f57f73cd01205428d6b6cdf1f331c390e518a2ade1864e0ef93e3",
+         "types": [
+          "int4",
+          "int8",
+          "int8",
+          "int8"
+         ],
+         "unencodable": [],
+         "unordered": "47e40cc8428f57f73cd01205428d6b6cdf1f331c390e518a2ade1864e0ef93e3"
+        }
+       }
+      ],
+      "sql": "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT \"Id\") AS d, COUNT(CASE WHEN \"Id\" IS NULL THEN 1 END) AS z\nFROM \"{schema}\".\"posts\"\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT \"Id\") AS d, COUNT(CASE WHEN \"Id\" IS NULL THEN 1 END) AS z\nFROM \"{schema}\".\"users\"\nUNION ALL\nSELECT 2 AS k, COUNT(*) AS n, COUNT(DISTINCT \"Id\") AS d, COUNT(CASE WHEN \"Id\" IS NULL THEN 1 END) AS z\nFROM \"{schema}\".\"votes\"",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 12,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "46e9e0c8485cce07458f4754cf9d13637b4b9895bfe5cbd1541f0c46cd737419",
+        "method": "fetchone",
+        "rows": 1,
+        "values": {
+         "columns": [
+          "count"
+         ],
+         "ordered": "37884ba068dc0468e31691ef4dc8a0dfbad0cffbbef4bdcfb33b4a6adb2aa76c",
+         "types": [
+          "int8"
+         ],
+         "unencodable": [],
+         "unordered": "37884ba068dc0468e31691ef4dc8a0dfbad0cffbbef4bdcfb33b4a6adb2aa76c"
+        }
+       }
+      ],
+      "sql": "SELECT COUNT(*) FROM \"{schema}\".\"posts\"",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 13,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "a23bc7829deff3112f5a881d8148e8043a5a7eceedbf843902e18266ea24a7a6",
+        "method": "fetchone",
+        "rows": 1,
+        "values": {
+         "columns": [
+          "count"
+         ],
+         "ordered": "44685e00363754e574a61a3814e8dcea35b359c5811c99a391fcb0530da2ca23",
+         "types": [
+          "int8"
+         ],
+         "unencodable": [],
+         "unordered": "44685e00363754e574a61a3814e8dcea35b359c5811c99a391fcb0530da2ca23"
+        }
+       }
+      ],
+      "sql": "SELECT COUNT(*) FROM \"{schema}\".\"users\"",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 14,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "0d194df8bfcb958a73ea0dd739a6fa308abde68d4802e2463c1905c215e6e5fa",
+        "method": "fetchone",
+        "rows": 1,
+        "values": {
+         "columns": [
+          "count"
+         ],
+         "ordered": "738d8afc163801b71c00b4e4a7b289b7972d0d79cdd6b02c4e24d80a922d599c",
+         "types": [
+          "int8"
+         ],
+         "unencodable": [],
+         "unordered": "738d8afc163801b71c00b4e4a7b289b7972d0d79cdd6b02c4e24d80a922d599c"
+        }
+       }
+      ],
+      "sql": "SELECT COUNT(*) FROM \"{schema}\".\"votes\"",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 15,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "55064f8b3ab29d661c230c3833842b38d03d2681d6a465d5e0b07548249230b0",
+        "method": "fetchall",
+        "rows": 1,
+        "values": {
+         "columns": [
+          "table_index",
+          "min_date",
+          "max_date"
+         ],
+         "ordered": "8dd1405097e4172d361c79be663279a595d0108725ebbdc7c36255f6ba10dac1",
+         "types": [
+          "int4",
+          "timestamp",
+          "timestamp"
+         ],
+         "unencodable": [],
+         "unordered": "8dd1405097e4172d361c79be663279a595d0108725ebbdc7c36255f6ba10dac1"
+        }
+       }
+      ],
+      "sql": "SELECT 0 AS table_index, MIN(\"CreationDate\") AS min_date, MAX(\"CreationDate\") AS max_date\nFROM \"{schema}\".\"votes\"",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 16,
+      "parameters": [
+       {
+        "type": "builtins.float",
+        "value": "-0.31481207155156876"
+       }
+      ],
+      "results": [],
+      "sql": "SELECT setseed(%s)",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 16,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "90157f30765a48d278ffa26275db82ee52d2092763802649d5c043c7b62b94f3",
+        "method": "fetchall",
+        "rows": 20,
+        "values": {
+         "columns": [
+          "Id",
+          "CreationDate"
+         ],
+         "ordered": "6c5a65f4975402c4624b4e55bb6a2f657b6f1e4b12b4509ad38ccab9f2f10e7c",
+         "types": [
+          "int8",
+          "timestamp"
+         ],
+         "unencodable": [],
+         "unordered": "ae41847bc46d818ba3b329511c40ff49b824a4c22c75a0c6d11744253a1555ee"
+        }
+       }
+      ],
+      "sql": "SELECT \"Id\", \"CreationDate\"\nFROM \"{schema}\".\"posts\"\nWHERE \"Id\" IS NOT NULL AND \"CreationDate\" IS NOT NULL\nORDER BY random()\nLIMIT 10000",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 17,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'[{\"id\":10,\"e\":\"2020-07-01T00:00:00\",\"s\":\"2020-04-02T00:00:00\"},{\"id\":3,\"e\":\"2020-07-01T00:00:00\",\"s\":\"2020-04-02T00:00:00\"},{\"id\":5,\"e\":\"2020-07-01T00:00:00\",\"s\":\"2020-04-02T00:00:00\"},{\"id\":0,\"e\":\"2020-07-01T00:00:00\",\"s\":\"2020-04-02T00:00:00\"},{\"id\":7,\"e\":\"2020-07-01T00:00:00\",\"s\":\"2020-04-02T00:00:00\"},{\"id\":8,\"e\":\"2020-07-01T00:00:00\",\"s\":\"2020-04-02T00:00:00\"},{\"id\":1,\"e\":\"2020-07-01T00:00:00\",\"s\":\"2020-04-02T00:00:00\"},{\"id\":4,\"e\":\"2020-07-01T00:00:00\",\"s\":\"2020-04-02T00:00:00\"},{\"id\":6,\"e\":\"2020-07-01T00:00:00\",\"s\":\"2020-04-02T00:00:00\"},{\"id\":9,\"e\":\"2020-07-01T00:00:00\",\"s\":\"2020-04-02T00:00:00\"},{\"id\":2,\"e\":\"2020-07-01T00:00:00\",\"s\":\"2020-04-02T00:00:00\"}]'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "57e7ce0b58505afade528f2a6adfd34b8ad240391dffd69144dca0cd1c2623c6",
+        "method": "fetchall",
+        "rows": 24,
+        "values": {
+         "columns": [
+          "__kumo_batch__",
+          "CreationDate"
+         ],
+         "ordered": "0e1a67c561c6c8c12bfdc85fedaaa1a981a55fe7ecda857444414ce21d4fcf30",
+         "types": [
+          "int8",
+          "timestamp"
+         ],
+         "unencodable": [],
+         "unordered": "0e1a67c561c6c8c12bfdc85fedaaa1a981a55fe7ecda857444414ce21d4fcf30"
+        }
+       }
+      ],
+      "sql": "WITH TMP AS (\n  SELECT (ordinality - 1)::bigint AS __KUMO_BATCH__, (value->>'id')::bigint AS __KUMO_ID__, (value->>'e')::timestamp without time zone AS __KUMO_END_TIME__, (value->>'s')::timestamp without time zone AS __KUMO_START_TIME__\n  FROM jsonb_array_elements(%s::jsonb) WITH ORDINALITY\n       AS input(value, ordinality)\n)\nSELECT TMP.__KUMO_BATCH__, \"CreationDate\"\nFROM TMP\nJOIN \"{schema}\".\"votes\"\n  ON \"PostId\" = TMP.__KUMO_ID__\n AND \"CreationDate\" <= TMP.__KUMO_END_TIME__\n AND \"CreationDate\" > TMP.__KUMO_START_TIME__\nORDER BY TMP.__KUMO_BATCH__, \"CreationDate\"",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 18,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'[10,3,5,0,7,8,1,4,6,9,2,0,1,2]'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "1e2a27db2098055bef12951f7f43f07b0cb3512158f7801384952096719c4e5e",
+        "method": "fetchall",
+        "rows": 14,
+        "values": {
+         "columns": [
+          "__kumo_batch__",
+          "Id",
+          "OwnerUserId",
+          "ParentId",
+          "PostTypeId",
+          "CreationDate",
+          "__kumo_row__",
+          "__kumo_matches__"
+         ],
+         "ordered": "ad3f19bda6ef98193a5f72f086ed9b1c4594e9e8482eba32b73b3aa34ed91372",
+         "types": [
+          "int8",
+          "int8",
+          "int8",
+          "int8",
+          "int4",
+          "timestamp",
+          "int8",
+          "int8"
+         ],
+         "unencodable": [],
+         "unordered": "9b9dd36ede41cddedfff36c296be3a59ac490b24e06a524d8d2021d4818d650b"
+        }
+       }
+      ],
+      "sql": "WITH TMP AS (\n  SELECT (ordinality - 1)::bigint AS __KUMO_BATCH__, (value #>> '{}')::bigint AS __KUMO_ID__\n  FROM jsonb_array_elements(%s::jsonb) WITH ORDINALITY\n       AS input(value, ordinality)\n)\nSELECT * FROM (\n  SELECT TMP.__KUMO_BATCH__, \"Id\", \"OwnerUserId\", \"ParentId\", \"PostTypeId\", \"CreationDate\",\n         ROW_NUMBER() OVER (PARTITION BY TMP.__KUMO_BATCH__\n           ORDER BY \"Id\") AS __KUMO_ROW__,\n         COUNT(*) OVER (PARTITION BY TMP.__KUMO_BATCH__) AS __KUMO_MATCHES__\n  FROM TMP\n  JOIN \"{schema}\".\"posts\"\n    ON \"Id\" = TMP.__KUMO_ID__\n) AS sampled\nWHERE __KUMO_ROW__ = 1\nORDER BY __KUMO_BATCH__",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 19,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'[4,3,5,0,1,2]'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "304ae363463dca472c4397d11d827a7f69361214c12bfe9a91fa6462b857457a",
+        "method": "fetchall",
+        "rows": 6,
+        "values": {
+         "columns": [
+          "__kumo_batch__",
+          "Id",
+          "Reputation",
+          "CreationDate",
+          "__kumo_row__",
+          "__kumo_matches__"
+         ],
+         "ordered": "71b7569be382f4120e98658dd305088a033001fabce8f72a4a24a3d4e083d88a",
+         "types": [
+          "int8",
+          "int8",
+          "int4",
+          "timestamp",
+          "int8",
+          "int8"
+         ],
+         "unencodable": [],
+         "unordered": "71b7569be382f4120e98658dd305088a033001fabce8f72a4a24a3d4e083d88a"
+        }
+       }
+      ],
+      "sql": "WITH TMP AS (\n  SELECT (ordinality - 1)::bigint AS __KUMO_BATCH__, (value #>> '{}')::bigint AS __KUMO_ID__\n  FROM jsonb_array_elements(%s::jsonb) WITH ORDINALITY\n       AS input(value, ordinality)\n)\nSELECT * FROM (\n  SELECT TMP.__KUMO_BATCH__, \"Id\", \"Reputation\", \"CreationDate\",\n         ROW_NUMBER() OVER (PARTITION BY TMP.__KUMO_BATCH__\n           ORDER BY \"Id\") AS __KUMO_ROW__,\n         COUNT(*) OVER (PARTITION BY TMP.__KUMO_BATCH__) AS __KUMO_MATCHES__\n  FROM TMP\n  JOIN \"{schema}\".\"users\"\n    ON \"Id\" = TMP.__KUMO_ID__\n) AS sampled\nWHERE __KUMO_ROW__ = 1\nORDER BY __KUMO_BATCH__",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 20,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'[11,4,6,1,8,9,2,5,7,10,3]'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "e16888cb6796b2e93a4bbf0dfa4c32a759fcf103a880dd67dc07660ecb6cc3e8",
+        "method": "fetchall",
+        "rows": 11,
+        "values": {
+         "columns": [
+          "__kumo_batch__",
+          "Id",
+          "OwnerUserId",
+          "ParentId",
+          "PostTypeId",
+          "CreationDate",
+          "__kumo_row__",
+          "__kumo_matches__"
+         ],
+         "ordered": "70113244d8203d96f3c01660facc9f8b4e399f07c19e6215dae56db4856e55e2",
+         "types": [
+          "int8",
+          "int8",
+          "int8",
+          "int8",
+          "int4",
+          "timestamp",
+          "int8",
+          "int8"
+         ],
+         "unencodable": [],
+         "unordered": "f483b4cdf79869f44ccdd734a08abe8b7696428a8b635a6593d5ba6469fe5fdd"
+        }
+       }
+      ],
+      "sql": "WITH TMP AS (\n  SELECT (ordinality - 1)::bigint AS __KUMO_BATCH__, (value #>> '{}')::bigint AS __KUMO_ID__\n  FROM jsonb_array_elements(%s::jsonb) WITH ORDINALITY\n       AS input(value, ordinality)\n)\nSELECT * FROM (\n  SELECT TMP.__KUMO_BATCH__, \"Id\", \"OwnerUserId\", \"ParentId\", \"PostTypeId\", \"CreationDate\",\n         ROW_NUMBER() OVER (PARTITION BY TMP.__KUMO_BATCH__\n           ORDER BY \"Id\") AS __KUMO_ROW__,\n         COUNT(*) OVER (PARTITION BY TMP.__KUMO_BATCH__) AS __KUMO_MATCHES__\n  FROM TMP\n  JOIN \"{schema}\".\"posts\"\n    ON \"Id\" = TMP.__KUMO_ID__\n) AS sampled\nWHERE __KUMO_ROW__ = 1\nORDER BY __KUMO_BATCH__",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 21,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'[{\"id\":10,\"e\":\"2020-04-02T00:00:00\"},{\"id\":3,\"e\":\"2020-04-02T00:00:00\"},{\"id\":5,\"e\":\"2020-04-02T00:00:00\"},{\"id\":0,\"e\":\"2020-04-02T00:00:00\"},{\"id\":7,\"e\":\"2020-04-02T00:00:00\"},{\"id\":8,\"e\":\"2020-04-02T00:00:00\"},{\"id\":1,\"e\":\"2020-04-02T00:00:00\"},{\"id\":4,\"e\":\"2020-04-02T00:00:00\"},{\"id\":6,\"e\":\"2020-04-02T00:00:00\"},{\"id\":9,\"e\":\"2020-04-02T00:00:00\"},{\"id\":2,\"e\":\"2020-04-02T00:00:00\"},{\"id\":0,\"e\":\"2020-07-01T00:00:00\"},{\"id\":1,\"e\":\"2020-07-01T00:00:00\"},{\"id\":2,\"e\":\"2020-07-01T00:00:00\"}]'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "693924b375e1386c93cde687ee926d25db74daa58ea7493451a0c9c361681513",
+        "method": "fetchall",
+        "rows": 13,
+        "values": {
+         "columns": [
+          "__kumo_batch__",
+          "Id",
+          "OwnerUserId",
+          "ParentId",
+          "PostTypeId",
+          "CreationDate",
+          "__kumo_row__"
+         ],
+         "ordered": "bdc5a488aee00e6240ce847c256a6d91132353a9c00c4177f31f3c50bb28bc96",
+         "types": [
+          "int8",
+          "int8",
+          "int8",
+          "int8",
+          "int4",
+          "timestamp",
+          "int8"
+         ],
+         "unencodable": [],
+         "unordered": "2e291201e9f57bf899bbae55a29d2bf1068fb07ee36bc5b6294c435934975727"
+        }
+       }
+      ],
+      "sql": "WITH TMP AS (\n  SELECT (ordinality - 1)::bigint AS __KUMO_BATCH__, (value->>'id')::bigint AS __KUMO_ID__, (value->>'e')::timestamp without time zone AS __KUMO_END_TIME__\n  FROM jsonb_array_elements(%s::jsonb) WITH ORDINALITY\n       AS input(value, ordinality)\n)\nSELECT TMP.__KUMO_BATCH__, sampled.*\nFROM TMP\nJOIN LATERAL (\n  SELECT \"Id\", \"OwnerUserId\", \"ParentId\", \"PostTypeId\", \"CreationDate\",\n         ROW_NUMBER() OVER (ORDER BY \"CreationDate\" DESC, \"Id\") AS __KUMO_ROW__\n  FROM \"{schema}\".\"posts\"\n  WHERE \"ParentId\" = TMP.__KUMO_ID__\n    AND \"CreationDate\" <= TMP.__KUMO_END_TIME__\n  ORDER BY \"CreationDate\" DESC, \"Id\"\n  LIMIT 32\n) AS sampled ON TRUE\nORDER BY __KUMO_BATCH__, __KUMO_ROW__",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 22,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'[{\"id\":10,\"e\":\"2020-04-02T00:00:00\"},{\"id\":3,\"e\":\"2020-04-02T00:00:00\"},{\"id\":5,\"e\":\"2020-04-02T00:00:00\"},{\"id\":0,\"e\":\"2020-04-02T00:00:00\"},{\"id\":7,\"e\":\"2020-04-02T00:00:00\"},{\"id\":8,\"e\":\"2020-04-02T00:00:00\"},{\"id\":1,\"e\":\"2020-04-02T00:00:00\"},{\"id\":4,\"e\":\"2020-04-02T00:00:00\"},{\"id\":6,\"e\":\"2020-04-02T00:00:00\"},{\"id\":9,\"e\":\"2020-04-02T00:00:00\"},{\"id\":2,\"e\":\"2020-04-02T00:00:00\"},{\"id\":0,\"e\":\"2020-07-01T00:00:00\"},{\"id\":1,\"e\":\"2020-07-01T00:00:00\"},{\"id\":2,\"e\":\"2020-07-01T00:00:00\"}]'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "44d8ae4cf86f198e3dd905cdc996b08fe69dbaadb79fdffa1807649730796aae",
+        "method": "fetchall",
+        "rows": 42,
+        "values": {
+         "columns": [
+          "__kumo_batch__",
+          "Id",
+          "PostId",
+          "UserId",
+          "VoteTypeId",
+          "CreationDate",
+          "__kumo_row__"
+         ],
+         "ordered": "892c48da715c11bb835fd22d605b1b53d66c31a371bb619012b53bb15cfcf1bd",
+         "types": [
+          "int8",
+          "int8",
+          "int8",
+          "int8",
+          "int4",
+          "timestamp",
+          "int8"
+         ],
+         "unencodable": [],
+         "unordered": "464af6f9d38457a6497dab67b16d9572999c4ee33728e427632a20e24960ef3a"
+        }
+       }
+      ],
+      "sql": "WITH TMP AS (\n  SELECT (ordinality - 1)::bigint AS __KUMO_BATCH__, (value->>'id')::bigint AS __KUMO_ID__, (value->>'e')::timestamp without time zone AS __KUMO_END_TIME__\n  FROM jsonb_array_elements(%s::jsonb) WITH ORDINALITY\n       AS input(value, ordinality)\n)\nSELECT TMP.__KUMO_BATCH__, sampled.*\nFROM TMP\nJOIN LATERAL (\n  SELECT \"Id\", \"PostId\", \"UserId\", \"VoteTypeId\", \"CreationDate\",\n         ROW_NUMBER() OVER (ORDER BY \"CreationDate\" DESC, \"Id\") AS __KUMO_ROW__\n  FROM \"{schema}\".\"votes\"\n  WHERE \"PostId\" = TMP.__KUMO_ID__\n    AND \"CreationDate\" <= TMP.__KUMO_END_TIME__\n  ORDER BY \"CreationDate\" DESC, \"Id\"\n  LIMIT 32\n) AS sampled ON TRUE\nORDER BY __KUMO_BATCH__, __KUMO_ROW__",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 23,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'[5,4,0,1,2,3]'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "152b715b17818f3ba9c19144908fa7cbecad2a25e549d3851ddd7f5958c6cfee",
+        "method": "fetchall",
+        "rows": 6,
+        "values": {
+         "columns": [
+          "__kumo_batch__",
+          "Id",
+          "Reputation",
+          "CreationDate",
+          "__kumo_row__",
+          "__kumo_matches__"
+         ],
+         "ordered": "3f0f29a82f83445dba1d5b2fc4fa728356ba97ddf772c731ff96c989322b8dd2",
+         "types": [
+          "int8",
+          "int8",
+          "int4",
+          "timestamp",
+          "int8",
+          "int8"
+         ],
+         "unencodable": [],
+         "unordered": "3f0f29a82f83445dba1d5b2fc4fa728356ba97ddf772c731ff96c989322b8dd2"
+        }
+       }
+      ],
+      "sql": "WITH TMP AS (\n  SELECT (ordinality - 1)::bigint AS __KUMO_BATCH__, (value #>> '{}')::bigint AS __KUMO_ID__\n  FROM jsonb_array_elements(%s::jsonb) WITH ORDINALITY\n       AS input(value, ordinality)\n)\nSELECT * FROM (\n  SELECT TMP.__KUMO_BATCH__, \"Id\", \"Reputation\", \"CreationDate\",\n         ROW_NUMBER() OVER (PARTITION BY TMP.__KUMO_BATCH__\n           ORDER BY \"Id\") AS __KUMO_ROW__,\n         COUNT(*) OVER (PARTITION BY TMP.__KUMO_BATCH__) AS __KUMO_MATCHES__\n  FROM TMP\n  JOIN \"{schema}\".\"users\"\n    ON \"Id\" = TMP.__KUMO_ID__\n) AS sampled\nWHERE __KUMO_ROW__ = 1\nORDER BY __KUMO_BATCH__",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 24,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'[12,5,7,2,9,10,3,6,8,11,4]'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "86b4044f7863ec9c0d66d8121434d8e62f66814d8c56006d4cb1ad4117cec23c",
+        "method": "fetchall",
+        "rows": 11,
+        "values": {
+         "columns": [
+          "__kumo_batch__",
+          "Id",
+          "OwnerUserId",
+          "ParentId",
+          "PostTypeId",
+          "CreationDate",
+          "__kumo_row__",
+          "__kumo_matches__"
+         ],
+         "ordered": "f5524f8aced91c7c19211b5c0857134639734f659c2291587eaf5b8f267d5842",
+         "types": [
+          "int8",
+          "int8",
+          "int8",
+          "int8",
+          "int4",
+          "timestamp",
+          "int8",
+          "int8"
+         ],
+         "unencodable": [],
+         "unordered": "a904b7b8232b4fa8289b22427710ae19079d089a5cae7ebff6bde035bbfcdd47"
+        }
+       }
+      ],
+      "sql": "WITH TMP AS (\n  SELECT (ordinality - 1)::bigint AS __KUMO_BATCH__, (value #>> '{}')::bigint AS __KUMO_ID__\n  FROM jsonb_array_elements(%s::jsonb) WITH ORDINALITY\n       AS input(value, ordinality)\n)\nSELECT * FROM (\n  SELECT TMP.__KUMO_BATCH__, \"Id\", \"OwnerUserId\", \"ParentId\", \"PostTypeId\", \"CreationDate\",\n         ROW_NUMBER() OVER (PARTITION BY TMP.__KUMO_BATCH__\n           ORDER BY \"Id\") AS __KUMO_ROW__,\n         COUNT(*) OVER (PARTITION BY TMP.__KUMO_BATCH__) AS __KUMO_MATCHES__\n  FROM TMP\n  JOIN \"{schema}\".\"posts\"\n    ON \"Id\" = TMP.__KUMO_ID__\n) AS sampled\nWHERE __KUMO_ROW__ = 1\nORDER BY __KUMO_BATCH__",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 25,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'[{\"id\":11,\"e\":\"2020-04-02T00:00:00\"},{\"id\":4,\"e\":\"2020-04-02T00:00:00\"},{\"id\":6,\"e\":\"2020-04-02T00:00:00\"},{\"id\":1,\"e\":\"2020-04-02T00:00:00\"},{\"id\":8,\"e\":\"2020-04-02T00:00:00\"},{\"id\":9,\"e\":\"2020-04-02T00:00:00\"},{\"id\":2,\"e\":\"2020-04-02T00:00:00\"},{\"id\":5,\"e\":\"2020-04-02T00:00:00\"},{\"id\":7,\"e\":\"2020-04-02T00:00:00\"},{\"id\":10,\"e\":\"2020-04-02T00:00:00\"},{\"id\":3,\"e\":\"2020-04-02T00:00:00\"},{\"id\":1,\"e\":\"2020-07-01T00:00:00\"},{\"id\":2,\"e\":\"2020-07-01T00:00:00\"},{\"id\":3,\"e\":\"2020-07-01T00:00:00\"},{\"id\":9,\"e\":\"2020-04-02T00:00:00\"},{\"id\":2,\"e\":\"2020-04-02T00:00:00\"},{\"id\":4,\"e\":\"2020-04-02T00:00:00\"},{\"id\":6,\"e\":\"2020-04-02T00:00:00\"},{\"id\":7,\"e\":\"2020-04-02T00:00:00\"},{\"id\":0,\"e\":\"2020-04-02T00:00:00\"},{\"id\":3,\"e\":\"2020-04-02T00:00:00\"},{\"id\":5,\"e\":\"2020-04-02T00:00:00\"},{\"id\":8,\"e\":\"2020-04-02T00:00:00\"},{\"id\":1,\"e\":\"2020-04-02T00:00:00\"},{\"id\":19,\"e\":\"2020-07-01T00:00:00\"},{\"id\":0,\"e\":\"2020-07-01T00:00:00\"},{\"id\":1,\"e\":\"2020-07-01T00:00:00\"}]'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "bb21321e43ccf2b70f9bbfe942a282a7e793e0995014be9e82070ad7c9169bdb",
+        "method": "fetchall",
+        "rows": 26,
+        "values": {
+         "columns": [
+          "__kumo_batch__",
+          "Id",
+          "OwnerUserId",
+          "ParentId",
+          "PostTypeId",
+          "CreationDate",
+          "__kumo_row__"
+         ],
+         "ordered": "24038603826093ebc583b315435784eb8f5b16b3429554d48c61936915989ae0",
+         "types": [
+          "int8",
+          "int8",
+          "int8",
+          "int8",
+          "int4",
+          "timestamp",
+          "int8"
+         ],
+         "unencodable": [],
+         "unordered": "b55f0db86cd677d090a0313e2e0de1b1387a70bd7f9c5531222729b0e8292e73"
+        }
+       }
+      ],
+      "sql": "WITH TMP AS (\n  SELECT (ordinality - 1)::bigint AS __KUMO_BATCH__, (value->>'id')::bigint AS __KUMO_ID__, (value->>'e')::timestamp without time zone AS __KUMO_END_TIME__\n  FROM jsonb_array_elements(%s::jsonb) WITH ORDINALITY\n       AS input(value, ordinality)\n)\nSELECT TMP.__KUMO_BATCH__, sampled.*\nFROM TMP\nJOIN LATERAL (\n  SELECT \"Id\", \"OwnerUserId\", \"ParentId\", \"PostTypeId\", \"CreationDate\",\n         ROW_NUMBER() OVER (ORDER BY \"CreationDate\" DESC, \"Id\") AS __KUMO_ROW__\n  FROM \"{schema}\".\"posts\"\n  WHERE \"ParentId\" = TMP.__KUMO_ID__\n    AND \"CreationDate\" <= TMP.__KUMO_END_TIME__\n  ORDER BY \"CreationDate\" DESC, \"Id\"\n  LIMIT 32\n) AS sampled ON TRUE\nORDER BY __KUMO_BATCH__, __KUMO_ROW__",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 26,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'[{\"id\":11,\"e\":\"2020-04-02T00:00:00\"},{\"id\":4,\"e\":\"2020-04-02T00:00:00\"},{\"id\":6,\"e\":\"2020-04-02T00:00:00\"},{\"id\":1,\"e\":\"2020-04-02T00:00:00\"},{\"id\":8,\"e\":\"2020-04-02T00:00:00\"},{\"id\":9,\"e\":\"2020-04-02T00:00:00\"},{\"id\":2,\"e\":\"2020-04-02T00:00:00\"},{\"id\":5,\"e\":\"2020-04-02T00:00:00\"},{\"id\":7,\"e\":\"2020-04-02T00:00:00\"},{\"id\":10,\"e\":\"2020-04-02T00:00:00\"},{\"id\":3,\"e\":\"2020-04-02T00:00:00\"},{\"id\":1,\"e\":\"2020-07-01T00:00:00\"},{\"id\":2,\"e\":\"2020-07-01T00:00:00\"},{\"id\":3,\"e\":\"2020-07-01T00:00:00\"},{\"id\":9,\"e\":\"2020-04-02T00:00:00\"},{\"id\":2,\"e\":\"2020-04-02T00:00:00\"},{\"id\":4,\"e\":\"2020-04-02T00:00:00\"},{\"id\":6,\"e\":\"2020-04-02T00:00:00\"},{\"id\":7,\"e\":\"2020-04-02T00:00:00\"},{\"id\":0,\"e\":\"2020-04-02T00:00:00\"},{\"id\":3,\"e\":\"2020-04-02T00:00:00\"},{\"id\":5,\"e\":\"2020-04-02T00:00:00\"},{\"id\":8,\"e\":\"2020-04-02T00:00:00\"},{\"id\":1,\"e\":\"2020-04-02T00:00:00\"},{\"id\":19,\"e\":\"2020-07-01T00:00:00\"},{\"id\":0,\"e\":\"2020-07-01T00:00:00\"},{\"id\":1,\"e\":\"2020-07-01T00:00:00\"}]'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "be66196ec495c15f5b74064075e03a4e56cd6142cfd05d19f49ad294e3c345d4",
+        "method": "fetchall",
+        "rows": 75,
+        "values": {
+         "columns": [
+          "__kumo_batch__",
+          "Id",
+          "PostId",
+          "UserId",
+          "VoteTypeId",
+          "CreationDate",
+          "__kumo_row__"
+         ],
+         "ordered": "e20d09922ad78a5b1a613dccfc89da41dbf3651f7bb03ca4e11d8ee4ba4b4231",
+         "types": [
+          "int8",
+          "int8",
+          "int8",
+          "int8",
+          "int4",
+          "timestamp",
+          "int8"
+         ],
+         "unencodable": [],
+         "unordered": "c275162fcee633b9d03d8f62004e5225873f97b52eca624f01ce32a4a33f3fb2"
+        }
+       }
+      ],
+      "sql": "WITH TMP AS (\n  SELECT (ordinality - 1)::bigint AS __KUMO_BATCH__, (value->>'id')::bigint AS __KUMO_ID__, (value->>'e')::timestamp without time zone AS __KUMO_END_TIME__\n  FROM jsonb_array_elements(%s::jsonb) WITH ORDINALITY\n       AS input(value, ordinality)\n)\nSELECT TMP.__KUMO_BATCH__, sampled.*\nFROM TMP\nJOIN LATERAL (\n  SELECT \"Id\", \"PostId\", \"UserId\", \"VoteTypeId\", \"CreationDate\",\n         ROW_NUMBER() OVER (ORDER BY \"CreationDate\" DESC, \"Id\") AS __KUMO_ROW__\n  FROM \"{schema}\".\"votes\"\n  WHERE \"PostId\" = TMP.__KUMO_ID__\n    AND \"CreationDate\" <= TMP.__KUMO_END_TIME__\n  ORDER BY \"CreationDate\" DESC, \"Id\"\n  LIMIT 32\n) AS sampled ON TRUE\nORDER BY __KUMO_BATCH__, __KUMO_ROW__",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 27,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'[{\"id\":4,\"e\":\"2020-04-02T00:00:00\"},{\"id\":3,\"e\":\"2020-04-02T00:00:00\"},{\"id\":5,\"e\":\"2020-04-02T00:00:00\"},{\"id\":0,\"e\":\"2020-04-02T00:00:00\"},{\"id\":1,\"e\":\"2020-04-02T00:00:00\"},{\"id\":2,\"e\":\"2020-04-02T00:00:00\"},{\"id\":1,\"e\":\"2020-04-02T00:00:00\"},{\"id\":4,\"e\":\"2020-04-02T00:00:00\"},{\"id\":0,\"e\":\"2020-04-02T00:00:00\"},{\"id\":3,\"e\":\"2020-04-02T00:00:00\"},{\"id\":2,\"e\":\"2020-04-02T00:00:00\"},{\"id\":0,\"e\":\"2020-07-01T00:00:00\"},{\"id\":1,\"e\":\"2020-07-01T00:00:00\"},{\"id\":2,\"e\":\"2020-07-01T00:00:00\"}]'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "d60e1b17b4a8264ac120ef9b791402ed232d8f5ec1290a104359269371420b33",
+        "method": "fetchall",
+        "rows": 32,
+        "values": {
+         "columns": [
+          "__kumo_batch__",
+          "Id",
+          "OwnerUserId",
+          "ParentId",
+          "PostTypeId",
+          "CreationDate",
+          "__kumo_row__"
+         ],
+         "ordered": "2fbb1df9e04e6667c16d7007bd01ebab0b595143f766c4fadf98d24bed3de0be",
+         "types": [
+          "int8",
+          "int8",
+          "int8",
+          "int8",
+          "int4",
+          "timestamp",
+          "int8"
+         ],
+         "unencodable": [],
+         "unordered": "b32de9f8ce659a222abee6bdd639b65e7dcdcc919ce483dba216e36f61cfe4cd"
+        }
+       }
+      ],
+      "sql": "WITH TMP AS (\n  SELECT (ordinality - 1)::bigint AS __KUMO_BATCH__, (value->>'id')::bigint AS __KUMO_ID__, (value->>'e')::timestamp without time zone AS __KUMO_END_TIME__\n  FROM jsonb_array_elements(%s::jsonb) WITH ORDINALITY\n       AS input(value, ordinality)\n)\nSELECT TMP.__KUMO_BATCH__, sampled.*\nFROM TMP\nJOIN LATERAL (\n  SELECT \"Id\", \"OwnerUserId\", \"ParentId\", \"PostTypeId\", \"CreationDate\",\n         ROW_NUMBER() OVER (ORDER BY \"CreationDate\" DESC, \"Id\") AS __KUMO_ROW__\n  FROM \"{schema}\".\"posts\"\n  WHERE \"OwnerUserId\" = TMP.__KUMO_ID__\n    AND \"CreationDate\" <= TMP.__KUMO_END_TIME__\n  ORDER BY \"CreationDate\" DESC, \"Id\"\n  LIMIT 32\n) AS sampled ON TRUE\nORDER BY __KUMO_BATCH__, __KUMO_ROW__",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 28,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'[{\"id\":4,\"e\":\"2020-04-02T00:00:00\"},{\"id\":3,\"e\":\"2020-04-02T00:00:00\"},{\"id\":5,\"e\":\"2020-04-02T00:00:00\"},{\"id\":0,\"e\":\"2020-04-02T00:00:00\"},{\"id\":1,\"e\":\"2020-04-02T00:00:00\"},{\"id\":2,\"e\":\"2020-04-02T00:00:00\"},{\"id\":1,\"e\":\"2020-04-02T00:00:00\"},{\"id\":4,\"e\":\"2020-04-02T00:00:00\"},{\"id\":0,\"e\":\"2020-04-02T00:00:00\"},{\"id\":3,\"e\":\"2020-04-02T00:00:00\"},{\"id\":2,\"e\":\"2020-04-02T00:00:00\"},{\"id\":0,\"e\":\"2020-07-01T00:00:00\"},{\"id\":1,\"e\":\"2020-07-01T00:00:00\"},{\"id\":2,\"e\":\"2020-07-01T00:00:00\"}]'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "8c831dbd384f37d65d734ea7ab6e6ba0a59a06837f0cb7141e8b6f60643c10fa",
+        "method": "fetchall",
+        "rows": 85,
+        "values": {
+         "columns": [
+          "__kumo_batch__",
+          "Id",
+          "PostId",
+          "UserId",
+          "VoteTypeId",
+          "CreationDate",
+          "__kumo_row__"
+         ],
+         "ordered": "e575b8ed9b2e747fc6fb17b3de563752ac0d60e7ba9cf8b0cef6f9b0bffec622",
+         "types": [
+          "int8",
+          "int8",
+          "int8",
+          "int8",
+          "int4",
+          "timestamp",
+          "int8"
+         ],
+         "unencodable": [],
+         "unordered": "0d334bd1c13e7d96a8fcaea3c98b570e821273b6a91423aa921e573b6caef6ce"
+        }
+       }
+      ],
+      "sql": "WITH TMP AS (\n  SELECT (ordinality - 1)::bigint AS __KUMO_BATCH__, (value->>'id')::bigint AS __KUMO_ID__, (value->>'e')::timestamp without time zone AS __KUMO_END_TIME__\n  FROM jsonb_array_elements(%s::jsonb) WITH ORDINALITY\n       AS input(value, ordinality)\n)\nSELECT TMP.__KUMO_BATCH__, sampled.*\nFROM TMP\nJOIN LATERAL (\n  SELECT \"Id\", \"PostId\", \"UserId\", \"VoteTypeId\", \"CreationDate\",\n         ROW_NUMBER() OVER (ORDER BY \"CreationDate\" DESC, \"Id\") AS __KUMO_ROW__\n  FROM \"{schema}\".\"votes\"\n  WHERE \"UserId\" = TMP.__KUMO_ID__\n    AND \"CreationDate\" <= TMP.__KUMO_END_TIME__\n  ORDER BY \"CreationDate\" DESC, \"Id\"\n  LIMIT 32\n) AS sampled ON TRUE\nORDER BY __KUMO_BATCH__, __KUMO_ROW__",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 29,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'[1,3,2,4,5,0]'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "519ff20ba4185c59d8d630cf4eae62334ac93d429e27feb3dc687b3049c5549c",
+        "method": "fetchall",
+        "rows": 6,
+        "values": {
+         "columns": [
+          "__kumo_batch__",
+          "Id",
+          "Reputation",
+          "CreationDate",
+          "__kumo_row__",
+          "__kumo_matches__"
+         ],
+         "ordered": "cd851d64145a61ee03b958a8a95b9b0479348c2ffe201abb291642481ded7801",
+         "types": [
+          "int8",
+          "int8",
+          "int4",
+          "timestamp",
+          "int8",
+          "int8"
+         ],
+         "unencodable": [],
+         "unordered": "cd851d64145a61ee03b958a8a95b9b0479348c2ffe201abb291642481ded7801"
+        }
+       }
+      ],
+      "sql": "WITH TMP AS (\n  SELECT (ordinality - 1)::bigint AS __KUMO_BATCH__, (value #>> '{}')::bigint AS __KUMO_ID__\n  FROM jsonb_array_elements(%s::jsonb) WITH ORDINALITY\n       AS input(value, ordinality)\n)\nSELECT * FROM (\n  SELECT TMP.__KUMO_BATCH__, \"Id\", \"Reputation\", \"CreationDate\",\n         ROW_NUMBER() OVER (PARTITION BY TMP.__KUMO_BATCH__\n           ORDER BY \"Id\") AS __KUMO_ROW__,\n         COUNT(*) OVER (PARTITION BY TMP.__KUMO_BATCH__) AS __KUMO_MATCHES__\n  FROM TMP\n  JOIN \"{schema}\".\"users\"\n    ON \"Id\" = TMP.__KUMO_ID__\n) AS sampled\nWHERE __KUMO_ROW__ = 1\nORDER BY __KUMO_BATCH__",
+      "stage": "materialize"
+     }
+    ]
+   },
+   "query_log": {
+    "bindings": 0,
+    "compared": 33,
+    "differing": [],
+    "statements": 33
+   }
+  },
+  "format": "sdm-observation/1",
+  "host": {
+   "warnings": [
+    "UserWarning"
+   ]
+  },
+  "identity": {
+   "cell": "ref-pandas3",
+   "commit": {
+    "clean": true,
+    "sha": "8f3eb648abc0d00abfd34087fe5124106e137fa4"
+   },
+   "contract": null,
+   "inputs": {
+    "bases": "9d69fe4aea2be4a6a2d96ea03f5258147c537927e2c6e6716b6030836ebc62f8",
+    "case": "3a8c3506127610cd95b2f9995ded4d9f9a768f3d57f8dbcaa3da7d573f4e8627"
+   },
+   "native": null,
+   "native_loaded": false,
+   "operations": [],
+   "platform": "linux-x86_64",
+   "reference": {
+    "commit": {
+     "clean": true,
+     "sha": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1"
+    },
+    "environment": "4848c08cc7bbb66e99d4a7416854e401ab51e44413b509172cf0c121a55c78e3",
+    "guard": {
+     "after": "passed",
+     "before": "passed"
+    }
+   },
+   "runner": "python-ref",
+   "versions": {
+    "duckdb": "1.5.6",
+    "numpy": "2.5.3",
+    "pandas": "3.0.6",
+    "pyarrow": "25.0.1",
+    "python": "3.12.15"
+   }
+  },
+  "outcome": {
+   "code": null,
+   "error": null,
+   "result": "success",
+   "stage": "predict"
+  },
+  "public": {
+   "payloads": [
+    {
+     "method": "POST",
+     "parsed": {
+      "context": {
+       "instance_table": {
+        "columns": [
+         "instance_id",
+         "__kumo_entity_ref_0",
+         "__kumo_anchor_time",
+         "TARGET"
+        ],
+        "format": "arrays",
+        "rows": [
+         [
+          {
+           "number": "0"
+          },
+          {
+           "number": "10"
+          },
+          "2020-04-02T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "1"
+          },
+          {
+           "number": "3"
+          },
+          "2020-04-02T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "2"
+          },
+          {
+           "number": "5"
+          },
+          "2020-04-02T00:00:00.000000Z",
+          {
+           "number": "3.0"
+          }
+         ],
+         [
+          {
+           "number": "3"
+          },
+          {
+           "number": "0"
+          },
+          "2020-04-02T00:00:00.000000Z",
+          {
+           "number": "3.0"
+          }
+         ],
+         [
+          {
+           "number": "4"
+          },
+          {
+           "number": "7"
+          },
+          "2020-04-02T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "5"
+          },
+          {
+           "number": "8"
+          },
+          "2020-04-02T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "6"
+          },
+          {
+           "number": "1"
+          },
+          "2020-04-02T00:00:00.000000Z",
+          {
+           "number": "6.0"
+          }
+         ],
+         [
+          {
+           "number": "7"
+          },
+          {
+           "number": "4"
+          },
+          "2020-04-02T00:00:00.000000Z",
+          {
+           "number": "6.0"
+          }
+         ],
+         [
+          {
+           "number": "8"
+          },
+          {
+           "number": "6"
+          },
+          "2020-04-02T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "9"
+          },
+          {
+           "number": "9"
+          },
+          "2020-04-02T00:00:00.000000Z",
+          {
+           "number": "6.0"
+          }
+         ],
+         [
+          {
+           "number": "10"
+          },
+          {
+           "number": "2"
+          },
+          "2020-04-02T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          }
+         ]
+        ]
+       },
+       "related_tables": {
+        "posts": {
+         "columns": [
+          "instance_id",
+          "Id",
+          "PostTypeId",
+          "CreationDate",
+          "OwnerUserId",
+          "ParentId"
+         ],
+         "format": "arrays",
+         "rows": [
+          [
+           {
+            "number": "0"
+           },
+           {
+            "number": "10"
+           },
+           {
+            "number": "1"
+           },
+           "2020-03-31T00:00:00.000000Z",
+           {
+            "number": "0.0"
+           },
+           {
+            "number": "11.0"
+           }
+          ],
+          [
+           {
+            "number": "1"
+           },
+           {
+            "number": "3"
+           },
+           {
+            "number": "2"
+           },
+           "2020-01-28T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           {
+            "number": "4.0"
+           }
+          ],
+          [
+           {
+            "number": "2"
+           },
+           {
+            "number": "5"
+           },
+           {
+            "number": "2"
+           },
+           "2020-02-15T00:00:00.000000Z",
+           {
+            "number": "2.0"
+           },
+           {
+            "number": "6.0"
+           }
+          ],
+          [
+           {
+            "number": "3"
+           },
+           {
+            "number": "0"
+           },
+           {
+            "number": "1"
+           },
+           "2020-01-01T00:00:00.000000Z",
+           {
+            "number": "3.0"
+           },
+           {
+            "number": "1.0"
+           }
+          ],
+          [
+           {
+            "number": "4"
+           },
+           {
+            "number": "7"
+           },
+           {
+            "number": "2"
+           },
+           "2020-03-04T00:00:00.000000Z",
+           {
+            "number": "4.0"
+           },
+           {
+            "number": "8.0"
+           }
+          ],
+          [
+           {
+            "number": "5"
+           },
+           {
+            "number": "8"
+           },
+           {
+            "number": "1"
+           },
+           "2020-03-13T00:00:00.000000Z",
+           {
+            "number": "5.0"
+           },
+           {
+            "number": "9.0"
+           }
+          ],
+          [
+           {
+            "number": "6"
+           },
+           {
+            "number": "1"
+           },
+           {
+            "number": "2"
+           },
+           "2020-01-10T00:00:00.000000Z",
+           {
+            "number": "6.0"
+           },
+           {
+            "number": "2.0"
+           }
+          ],
+          [
+           {
+            "number": "7"
+           },
+           {
+            "number": "4"
+           },
+           {
+            "number": "1"
+           },
+           "2020-02-06T00:00:00.000000Z",
+           {
+            "number": "7.0"
+           },
+           {
+            "number": "5.0"
+           }
+          ],
+          [
+           {
+            "number": "8"
+           },
+           {
+            "number": "6"
+           },
+           {
+            "number": "1"
+           },
+           "2020-02-24T00:00:00.000000Z",
+           {
+            "number": "8.0"
+           },
+           {
+            "number": "7.0"
+           }
+          ],
+          [
+           {
+            "number": "9"
+           },
+           {
+            "number": "9"
+           },
+           {
+            "number": "2"
+           },
+           "2020-03-22T00:00:00.000000Z",
+           {
+            "number": "9.0"
+           },
+           {
+            "number": "10.0"
+           }
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "2"
+           },
+           {
+            "number": "1"
+           },
+           "2020-01-19T00:00:00.000000Z",
+           {
+            "number": "10.0"
+           },
+           {
+            "number": "3.0"
+           }
+          ],
+          [
+           {
+            "number": "0"
+           },
+           {
+            "number": "11"
+           },
+           {
+            "number": "2"
+           },
+           "2020-04-09T00:00:00.000000Z",
+           {
+            "number": "14.0"
+           },
+           {
+            "number": "12.0"
+           }
+          ],
+          [
+           {
+            "number": "1"
+           },
+           {
+            "number": "4"
+           },
+           {
+            "number": "1"
+           },
+           "2020-02-06T00:00:00.000000Z",
+           {
+            "number": "15.0"
+           },
+           {
+            "number": "5.0"
+           }
+          ],
+          [
+           {
+            "number": "2"
+           },
+           {
+            "number": "6"
+           },
+           {
+            "number": "1"
+           },
+           "2020-02-24T00:00:00.000000Z",
+           {
+            "number": "16.0"
+           },
+           {
+            "number": "7.0"
+           }
+          ],
+          [
+           {
+            "number": "3"
+           },
+           {
+            "number": "1"
+           },
+           {
+            "number": "2"
+           },
+           "2020-01-10T00:00:00.000000Z",
+           {
+            "number": "17.0"
+           },
+           {
+            "number": "2.0"
+           }
+          ],
+          [
+           {
+            "number": "4"
+           },
+           {
+            "number": "8"
+           },
+           {
+            "number": "1"
+           },
+           "2020-03-13T00:00:00.000000Z",
+           {
+            "number": "18.0"
+           },
+           {
+            "number": "9.0"
+           }
+          ],
+          [
+           {
+            "number": "5"
+           },
+           {
+            "number": "9"
+           },
+           {
+            "number": "2"
+           },
+           "2020-03-22T00:00:00.000000Z",
+           {
+            "number": "19.0"
+           },
+           {
+            "number": "10.0"
+           }
+          ],
+          [
+           {
+            "number": "6"
+           },
+           {
+            "number": "2"
+           },
+           {
+            "number": "1"
+           },
+           "2020-01-19T00:00:00.000000Z",
+           {
+            "number": "20.0"
+           },
+           {
+            "number": "3.0"
+           }
+          ],
+          [
+           {
+            "number": "7"
+           },
+           {
+            "number": "5"
+           },
+           {
+            "number": "2"
+           },
+           "2020-02-15T00:00:00.000000Z",
+           {
+            "number": "21.0"
+           },
+           {
+            "number": "6.0"
+           }
+          ],
+          [
+           {
+            "number": "8"
+           },
+           {
+            "number": "7"
+           },
+           {
+            "number": "2"
+           },
+           "2020-03-04T00:00:00.000000Z",
+           {
+            "number": "22.0"
+           },
+           {
+            "number": "8.0"
+           }
+          ],
+          [
+           {
+            "number": "9"
+           },
+           {
+            "number": "10"
+           },
+           {
+            "number": "1"
+           },
+           "2020-03-31T00:00:00.000000Z",
+           {
+            "number": "23.0"
+           },
+           {
+            "number": "11.0"
+           }
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "3"
+           },
+           {
+            "number": "2"
+           },
+           "2020-01-28T00:00:00.000000Z",
+           {
+            "number": "24.0"
+           },
+           {
+            "number": "4.0"
+           }
+          ],
+          [
+           {
+            "number": "0"
+           },
+           {
+            "number": "9"
+           },
+           {
+            "number": "2"
+           },
+           "2020-03-22T00:00:00.000000Z",
+           {
+            "number": "28.0"
+           },
+           {
+            "number": "10.0"
+           }
+          ],
+          [
+           {
+            "number": "1"
+           },
+           {
+            "number": "2"
+           },
+           {
+            "number": "1"
+           },
+           "2020-01-19T00:00:00.000000Z",
+           {
+            "number": "29.0"
+           },
+           {
+            "number": "3.0"
+           }
+          ],
+          [
+           {
+            "number": "2"
+           },
+           {
+            "number": "4"
+           },
+           {
+            "number": "1"
+           },
+           "2020-02-06T00:00:00.000000Z",
+           {
+            "number": "30.0"
+           },
+           {
+            "number": "5.0"
+           }
+          ],
+          [
+           {
+            "number": "4"
+           },
+           {
+            "number": "6"
+           },
+           {
+            "number": "1"
+           },
+           "2020-02-24T00:00:00.000000Z",
+           {
+            "number": "31.0"
+           },
+           {
+            "number": "7.0"
+           }
+          ],
+          [
+           {
+            "number": "5"
+           },
+           {
+            "number": "7"
+           },
+           {
+            "number": "2"
+           },
+           "2020-03-04T00:00:00.000000Z",
+           {
+            "number": "32.0"
+           },
+           {
+            "number": "8.0"
+           }
+          ],
+          [
+           {
+            "number": "6"
+           },
+           {
+            "number": "0"
+           },
+           {
+            "number": "1"
+           },
+           "2020-01-01T00:00:00.000000Z",
+           {
+            "number": "33.0"
+           },
+           {
+            "number": "1.0"
+           }
+          ],
+          [
+           {
+            "number": "7"
+           },
+           {
+            "number": "3"
+           },
+           {
+            "number": "2"
+           },
+           "2020-01-28T00:00:00.000000Z",
+           {
+            "number": "34.0"
+           },
+           {
+            "number": "4.0"
+           }
+          ],
+          [
+           {
+            "number": "8"
+           },
+           {
+            "number": "5"
+           },
+           {
+            "number": "2"
+           },
+           "2020-02-15T00:00:00.000000Z",
+           {
+            "number": "35.0"
+           },
+           {
+            "number": "6.0"
+           }
+          ],
+          [
+           {
+            "number": "9"
+           },
+           {
+            "number": "8"
+           },
+           {
+            "number": "1"
+           },
+           "2020-03-13T00:00:00.000000Z",
+           {
+            "number": "36.0"
+           },
+           {
+            "number": "9.0"
+           }
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "1"
+           },
+           {
+            "number": "2"
+           },
+           "2020-01-10T00:00:00.000000Z",
+           {
+            "number": "37.0"
+           },
+           {
+            "number": "2.0"
+           }
+          ],
+          [
+           {
+            "number": "0"
+           },
+           {
+            "number": "12"
+           },
+           {
+            "number": "1"
+           },
+           "2020-04-18T00:00:00.000000Z",
+           null,
+           null
+          ],
+          [
+           {
+            "number": "1"
+           },
+           {
+            "number": "5"
+           },
+           {
+            "number": "2"
+           },
+           "2020-02-15T00:00:00.000000Z",
+           null,
+           null
+          ],
+          [
+           {
+            "number": "2"
+           },
+           {
+            "number": "7"
+           },
+           {
+            "number": "2"
+           },
+           "2020-03-04T00:00:00.000000Z",
+           null,
+           null
+          ],
+          [
+           {
+            "number": "3"
+           },
+           {
+            "number": "2"
+           },
+           {
+            "number": "1"
+           },
+           "2020-01-19T00:00:00.000000Z",
+           null,
+           null
+          ],
+          [
+           {
+            "number": "4"
+           },
+           {
+            "number": "9"
+           },
+           {
+            "number": "2"
+           },
+           "2020-03-22T00:00:00.000000Z",
+           null,
+           null
+          ],
+          [
+           {
+            "number": "5"
+           },
+           {
+            "number": "10"
+           },
+           {
+            "number": "1"
+           },
+           "2020-03-31T00:00:00.000000Z",
+           null,
+           null
+          ],
+          [
+           {
+            "number": "6"
+           },
+           {
+            "number": "3"
+           },
+           {
+            "number": "2"
+           },
+           "2020-01-28T00:00:00.000000Z",
+           null,
+           null
+          ],
+          [
+           {
+            "number": "7"
+           },
+           {
+            "number": "6"
+           },
+           {
+            "number": "1"
+           },
+           "2020-02-24T00:00:00.000000Z",
+           null,
+           null
+          ],
+          [
+           {
+            "number": "8"
+           },
+           {
+            "number": "8"
+           },
+           {
+            "number": "1"
+           },
+           "2020-03-13T00:00:00.000000Z",
+           null,
+           null
+          ],
+          [
+           {
+            "number": "9"
+           },
+           {
+            "number": "11"
+           },
+           {
+            "number": "2"
+           },
+           "2020-04-09T00:00:00.000000Z",
+           null,
+           null
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "4"
+           },
+           {
+            "number": "1"
+           },
+           "2020-02-06T00:00:00.000000Z",
+           null,
+           null
+          ],
+          [
+           {
+            "number": "0"
+           },
+           {
+            "number": "8"
+           },
+           {
+            "number": "1"
+           },
+           "2020-03-13T00:00:00.000000Z",
+           null,
+           null
+          ],
+          [
+           {
+            "number": "1"
+           },
+           {
+            "number": "1"
+           },
+           {
+            "number": "2"
+           },
+           "2020-01-10T00:00:00.000000Z",
+           null,
+           null
+          ],
+          [
+           {
+            "number": "2"
+           },
+           {
+            "number": "3"
+           },
+           {
+            "number": "2"
+           },
+           "2020-01-28T00:00:00.000000Z",
+           null,
+           null
+          ],
+          [
+           {
+            "number": "4"
+           },
+           {
+            "number": "5"
+           },
+           {
+            "number": "2"
+           },
+           "2020-02-15T00:00:00.000000Z",
+           null,
+           null
+          ],
+          [
+           {
+            "number": "5"
+           },
+           {
+            "number": "6"
+           },
+           {
+            "number": "1"
+           },
+           "2020-02-24T00:00:00.000000Z",
+           null,
+           null
+          ],
+          [
+           {
+            "number": "7"
+           },
+           {
+            "number": "2"
+           },
+           {
+            "number": "1"
+           },
+           "2020-01-19T00:00:00.000000Z",
+           null,
+           null
+          ],
+          [
+           {
+            "number": "8"
+           },
+           {
+            "number": "4"
+           },
+           {
+            "number": "1"
+           },
+           "2020-02-06T00:00:00.000000Z",
+           null,
+           null
+          ],
+          [
+           {
+            "number": "9"
+           },
+           {
+            "number": "7"
+           },
+           {
+            "number": "2"
+           },
+           "2020-03-04T00:00:00.000000Z",
+           null,
+           null
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "0"
+           },
+           {
+            "number": "1"
+           },
+           "2020-01-01T00:00:00.000000Z",
+           null,
+           null
+          ],
+          [
+           {
+            "number": "0"
+           },
+           {
+            "number": "4"
+           },
+           {
+            "number": "1"
+           },
+           "2020-02-06T00:00:00.000000Z",
+           null,
+           null
+          ],
+          [
+           {
+            "number": "1"
+           },
+           {
+            "number": "9"
+           },
+           {
+            "number": "2"
+           },
+           "2020-03-22T00:00:00.000000Z",
+           null,
+           null
+          ],
+          [
+           {
+            "number": "3"
+           },
+           {
+            "number": "6"
+           },
+           {
+            "number": "1"
+           },
+           "2020-02-24T00:00:00.000000Z",
+           null,
+           null
+          ],
+          [
+           {
+            "number": "4"
+           },
+           {
+            "number": "1"
+           },
+           {
+            "number": "2"
+           },
+           "2020-01-10T00:00:00.000000Z",
+           null,
+           null
+          ],
+          [
+           {
+            "number": "5"
+           },
+           {
+            "number": "2"
+           },
+           {
+            "number": "1"
+           },
+           "2020-01-19T00:00:00.000000Z",
+           null,
+           null
+          ],
+          [
+           {
+            "number": "6"
+           },
+           {
+            "number": "7"
+           },
+           {
+            "number": "2"
+           },
+           "2020-03-04T00:00:00.000000Z",
+           null,
+           null
+          ],
+          [
+           {
+            "number": "7"
+           },
+           {
+            "number": "10"
+           },
+           {
+            "number": "1"
+           },
+           "2020-03-31T00:00:00.000000Z",
+           null,
+           null
+          ],
+          [
+           {
+            "number": "8"
+           },
+           {
+            "number": "0"
+           },
+           {
+            "number": "1"
+           },
+           "2020-01-01T00:00:00.000000Z",
+           null,
+           null
+          ],
+          [
+           {
+            "number": "9"
+           },
+           {
+            "number": "3"
+           },
+           {
+            "number": "2"
+           },
+           "2020-01-28T00:00:00.000000Z",
+           null,
+           null
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "8"
+           },
+           {
+            "number": "1"
+           },
+           "2020-03-13T00:00:00.000000Z",
+           null,
+           null
+          ]
+         ]
+        },
+        "users": {
+         "columns": [
+          "instance_id",
+          "__node_id",
+          "Reputation",
+          "CreationDate"
+         ],
+         "format": "arrays",
+         "rows": [
+          [
+           {
+            "number": "0"
+           },
+           {
+            "number": "0"
+           },
+           {
+            "number": "40"
+           },
+           "2019-03-22T00:00:00.000000Z"
+          ],
+          [
+           {
+            "number": "1"
+           },
+           {
+            "number": "1"
+           },
+           {
+            "number": "30"
+           },
+           "2019-03-02T00:00:00.000000Z"
+          ],
+          [
+           {
+            "number": "2"
+           },
+           {
+            "number": "2"
+           },
+           {
+            "number": "50"
+           },
+           "2019-04-11T00:00:00.000000Z"
+          ],
+          [
+           {
+            "number": "3"
+           },
+           {
+            "number": "3"
+           },
+           {
+            "number": "0"
+           },
+           "2019-01-01T00:00:00.000000Z"
+          ],
+          [
+           {
+            "number": "4"
+           },
+           {
+            "number": "4"
+           },
+           {
+            "number": "10"
+           },
+           "2019-01-21T00:00:00.000000Z"
+          ],
+          [
+           {
+            "number": "5"
+           },
+           {
+            "number": "5"
+           },
+           {
+            "number": "20"
+           },
+           "2019-02-10T00:00:00.000000Z"
+          ],
+          [
+           {
+            "number": "6"
+           },
+           {
+            "number": "6"
+           },
+           {
+            "number": "10"
+           },
+           "2019-01-21T00:00:00.000000Z"
+          ],
+          [
+           {
+            "number": "7"
+           },
+           {
+            "number": "7"
+           },
+           {
+            "number": "40"
+           },
+           "2019-03-22T00:00:00.000000Z"
+          ],
+          [
+           {
+            "number": "8"
+           },
+           {
+            "number": "8"
+           },
+           {
+            "number": "0"
+           },
+           "2019-01-01T00:00:00.000000Z"
+          ],
+          [
+           {
+            "number": "9"
+           },
+           {
+            "number": "9"
+           },
+           {
+            "number": "30"
+           },
+           "2019-03-02T00:00:00.000000Z"
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "10"
+           },
+           {
+            "number": "20"
+           },
+           "2019-02-10T00:00:00.000000Z"
+          ],
+          [
+           {
+            "number": "0"
+           },
+           {
+            "number": "14"
+           },
+           {
+            "number": "50"
+           },
+           "2019-04-11T00:00:00.000000Z"
+          ],
+          [
+           {
+            "number": "1"
+           },
+           {
+            "number": "15"
+           },
+           {
+            "number": "40"
+           },
+           "2019-03-22T00:00:00.000000Z"
+          ],
+          [
+           {
+            "number": "2"
+           },
+           {
+            "number": "16"
+           },
+           {
+            "number": "0"
+           },
+           "2019-01-01T00:00:00.000000Z"
+          ],
+          [
+           {
+            "number": "3"
+           },
+           {
+            "number": "17"
+           },
+           {
+            "number": "10"
+           },
+           "2019-01-21T00:00:00.000000Z"
+          ],
+          [
+           {
+            "number": "4"
+           },
+           {
+            "number": "18"
+           },
+           {
+            "number": "20"
+           },
+           "2019-02-10T00:00:00.000000Z"
+          ],
+          [
+           {
+            "number": "5"
+           },
+           {
+            "number": "19"
+           },
+           {
+            "number": "30"
+           },
+           "2019-03-02T00:00:00.000000Z"
+          ],
+          [
+           {
+            "number": "6"
+           },
+           {
+            "number": "20"
+           },
+           {
+            "number": "20"
+           },
+           "2019-02-10T00:00:00.000000Z"
+          ],
+          [
+           {
+            "number": "7"
+           },
+           {
+            "number": "21"
+           },
+           {
+            "number": "50"
+           },
+           "2019-04-11T00:00:00.000000Z"
+          ],
+          [
+           {
+            "number": "8"
+           },
+           {
+            "number": "22"
+           },
+           {
+            "number": "10"
+           },
+           "2019-01-21T00:00:00.000000Z"
+          ],
+          [
+           {
+            "number": "9"
+           },
+           {
+            "number": "23"
+           },
+           {
+            "number": "40"
+           },
+           "2019-03-22T00:00:00.000000Z"
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "24"
+           },
+           {
+            "number": "30"
+           },
+           "2019-03-02T00:00:00.000000Z"
+          ],
+          [
+           {
+            "number": "0"
+           },
+           {
+            "number": "28"
+           },
+           {
+            "number": "30"
+           },
+           "2019-03-02T00:00:00.000000Z"
+          ],
+          [
+           {
+            "number": "1"
+           },
+           {
+            "number": "29"
+           },
+           {
+            "number": "20"
+           },
+           "2019-02-10T00:00:00.000000Z"
+          ],
+          [
+           {
+            "number": "2"
+           },
+           {
+            "number": "30"
+           },
+           {
+            "number": "40"
+           },
+           "2019-03-22T00:00:00.000000Z"
+          ],
+          [
+           {
+            "number": "4"
+           },
+           {
+            "number": "31"
+           },
+           {
+            "number": "0"
+           },
+           "2019-01-01T00:00:00.000000Z"
+          ],
+          [
+           {
+            "number": "5"
+           },
+           {
+            "number": "32"
+           },
+           {
+            "number": "10"
+           },
+           "2019-01-21T00:00:00.000000Z"
+          ],
+          [
+           {
+            "number": "6"
+           },
+           {
+            "number": "33"
+           },
+           {
+            "number": "0"
+           },
+           "2019-01-01T00:00:00.000000Z"
+          ],
+          [
+           {
+            "number": "7"
+           },
+           {
+            "number": "34"
+           },
+           {
+            "number": "30"
+           },
+           "2019-03-02T00:00:00.000000Z"
+          ],
+          [
+           {
+            "number": "8"
+           },
+           {
+            "number": "35"
+           },
+           {
+            "number": "50"
+           },
+           "2019-04-11T00:00:00.000000Z"
+          ],
+          [
+           {
+            "number": "9"
+           },
+           {
+            "number": "36"
+           },
+           {
+            "number": "20"
+           },
+           "2019-02-10T00:00:00.000000Z"
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "37"
+           },
+           {
+            "number": "10"
+           },
+           "2019-01-21T00:00:00.000000Z"
+          ],
+          [
+           {
+            "number": "2"
+           },
+           {
+            "number": "40"
+           },
+           {
+            "number": "10"
+           },
+           "2019-01-21T00:00:00.000000Z"
+          ],
+          [
+           {
+            "number": "2"
+           },
+           {
+            "number": "41"
+           },
+           {
+            "number": "30"
+           },
+           "2019-03-02T00:00:00.000000Z"
+          ],
+          [
+           {
+            "number": "3"
+           },
+           {
+            "number": "42"
+           },
+           {
+            "number": "20"
+           },
+           "2019-02-10T00:00:00.000000Z"
+          ],
+          [
+           {
+            "number": "3"
+           },
+           {
+            "number": "43"
+           },
+           {
+            "number": "40"
+           },
+           "2019-03-22T00:00:00.000000Z"
+          ],
+          [
+           {
+            "number": "6"
+           },
+           {
+            "number": "44"
+           },
+           {
+            "number": "50"
+           },
+           "2019-04-11T00:00:00.000000Z"
+          ],
+          [
+           {
+            "number": "6"
+           },
+           {
+            "number": "45"
+           },
+           {
+            "number": "30"
+           },
+           "2019-03-02T00:00:00.000000Z"
+          ],
+          [
+           {
+            "number": "7"
+           },
+           {
+            "number": "46"
+           },
+           {
+            "number": "0"
+           },
+           "2019-01-01T00:00:00.000000Z"
+          ],
+          [
+           {
+            "number": "7"
+           },
+           {
+            "number": "47"
+           },
+           {
+            "number": "20"
+           },
+           "2019-02-10T00:00:00.000000Z"
+          ],
+          [
+           {
+            "number": "9"
+           },
+           {
+            "number": "48"
+           },
+           {
+            "number": "50"
+           },
+           "2019-04-11T00:00:00.000000Z"
+          ],
+          [
+           {
+            "number": "9"
+           },
+           {
+            "number": "49"
+           },
+           {
+            "number": "10"
+           },
+           "2019-01-21T00:00:00.000000Z"
+          ]
+         ]
+        },
+        "votes": {
+         "columns": [
+          "instance_id",
+          "__node_id",
+          "VoteTypeId",
+          "CreationDate",
+          "PostId",
+          "UserId"
+         ],
+         "format": "arrays",
+         "rows": [
+          [
+           {
+            "number": "2"
+           },
+           {
+            "number": "0"
+           },
+           {
+            "number": "2"
+           },
+           "2020-03-20T00:00:00.000000Z",
+           {
+            "number": "5.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "2"
+           },
+           {
+            "number": "1"
+           },
+           {
+            "number": "1"
+           },
+           "2020-02-19T00:00:00.000000Z",
+           {
+            "number": "5.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "2"
+           },
+           {
+            "number": "2"
+           },
+           {
+            "number": "3"
+           },
+           "2020-01-20T00:00:00.000000Z",
+           {
+            "number": "5.0"
+           },
+           {
+            "number": "2.0"
+           }
+          ],
+          [
+           {
+            "number": "3"
+           },
+           {
+            "number": "3"
+           },
+           {
+            "number": "3"
+           },
+           "2020-03-05T00:00:00.000000Z",
+           {
+            "number": "0.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "3"
+           },
+           {
+            "number": "4"
+           },
+           {
+            "number": "2"
+           },
+           "2020-02-04T00:00:00.000000Z",
+           {
+            "number": "0.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "3"
+           },
+           {
+            "number": "5"
+           },
+           {
+            "number": "1"
+           },
+           "2020-01-05T00:00:00.000000Z",
+           {
+            "number": "0.0"
+           },
+           {
+            "number": "3.0"
+           }
+          ],
+          [
+           {
+            "number": "6"
+           },
+           {
+            "number": "6"
+           },
+           {
+            "number": "3"
+           },
+           "2020-04-01T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "6"
+           },
+           {
+            "number": "7"
+           },
+           {
+            "number": "1"
+           },
+           "2020-03-08T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "6"
+           },
+           {
+            "number": "8"
+           },
+           {
+            "number": "2"
+           },
+           "2020-03-02T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           {
+            "number": "6.0"
+           }
+          ],
+          [
+           {
+            "number": "6"
+           },
+           {
+            "number": "9"
+           },
+           {
+            "number": "3"
+           },
+           "2020-02-07T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "6"
+           },
+           {
+            "number": "10"
+           },
+           {
+            "number": "1"
+           },
+           "2020-02-01T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "6"
+           },
+           {
+            "number": "11"
+           },
+           {
+            "number": "2"
+           },
+           "2020-01-08T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           {
+            "number": "6.0"
+           }
+          ],
+          [
+           {
+            "number": "7"
+           },
+           {
+            "number": "12"
+           },
+           {
+            "number": "2"
+           },
+           "2020-03-29T00:00:00.000000Z",
+           {
+            "number": "4.0"
+           },
+           {
+            "number": "7.0"
+           }
+          ],
+          [
+           {
+            "number": "7"
+           },
+           {
+            "number": "13"
+           },
+           {
+            "number": "2"
+           },
+           "2020-03-11T00:00:00.000000Z",
+           {
+            "number": "4.0"
+           },
+           {
+            "number": "7.0"
+           }
+          ],
+          [
+           {
+            "number": "7"
+           },
+           {
+            "number": "14"
+           },
+           {
+            "number": "1"
+           },
+           "2020-02-28T00:00:00.000000Z",
+           {
+            "number": "4.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "7"
+           },
+           {
+            "number": "15"
+           },
+           {
+            "number": "1"
+           },
+           "2020-02-10T00:00:00.000000Z",
+           {
+            "number": "4.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "7"
+           },
+           {
+            "number": "16"
+           },
+           {
+            "number": "3"
+           },
+           "2020-01-29T00:00:00.000000Z",
+           {
+            "number": "4.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "7"
+           },
+           {
+            "number": "17"
+           },
+           {
+            "number": "3"
+           },
+           "2020-01-11T00:00:00.000000Z",
+           {
+            "number": "4.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "9"
+           },
+           {
+            "number": "18"
+           },
+           {
+            "number": "1"
+           },
+           "2020-03-26T00:00:00.000000Z",
+           {
+            "number": "9.0"
+           },
+           {
+            "number": "9.0"
+           }
+          ],
+          [
+           {
+            "number": "9"
+           },
+           {
+            "number": "19"
+           },
+           {
+            "number": "3"
+           },
+           "2020-03-14T00:00:00.000000Z",
+           {
+            "number": "9.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "9"
+           },
+           {
+            "number": "20"
+           },
+           {
+            "number": "3"
+           },
+           "2020-02-25T00:00:00.000000Z",
+           {
+            "number": "9.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "9"
+           },
+           {
+            "number": "21"
+           },
+           {
+            "number": "2"
+           },
+           "2020-02-13T00:00:00.000000Z",
+           {
+            "number": "9.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "9"
+           },
+           {
+            "number": "22"
+           },
+           {
+            "number": "2"
+           },
+           "2020-01-26T00:00:00.000000Z",
+           {
+            "number": "9.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "9"
+           },
+           {
+            "number": "23"
+           },
+           {
+            "number": "1"
+           },
+           "2020-01-14T00:00:00.000000Z",
+           {
+            "number": "9.0"
+           },
+           {
+            "number": "9.0"
+           }
+          ],
+          [
+           {
+            "number": "1"
+           },
+           {
+            "number": "42"
+           },
+           {
+            "number": "2"
+           },
+           "2020-03-29T00:00:00.000000Z",
+           {
+            "number": "4.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "1"
+           },
+           {
+            "number": "43"
+           },
+           {
+            "number": "2"
+           },
+           "2020-03-11T00:00:00.000000Z",
+           {
+            "number": "4.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "1"
+           },
+           {
+            "number": "44"
+           },
+           {
+            "number": "1"
+           },
+           "2020-02-28T00:00:00.000000Z",
+           {
+            "number": "4.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "1"
+           },
+           {
+            "number": "45"
+           },
+           {
+            "number": "1"
+           },
+           "2020-02-10T00:00:00.000000Z",
+           {
+            "number": "4.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "1"
+           },
+           {
+            "number": "46"
+           },
+           {
+            "number": "3"
+           },
+           "2020-01-29T00:00:00.000000Z",
+           {
+            "number": "4.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "1"
+           },
+           {
+            "number": "47"
+           },
+           {
+            "number": "3"
+           },
+           "2020-01-11T00:00:00.000000Z",
+           {
+            "number": "4.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "3"
+           },
+           {
+            "number": "48"
+           },
+           {
+            "number": "3"
+           },
+           "2020-04-01T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "3"
+           },
+           {
+            "number": "49"
+           },
+           {
+            "number": "1"
+           },
+           "2020-03-08T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "3"
+           },
+           {
+            "number": "50"
+           },
+           {
+            "number": "2"
+           },
+           "2020-03-02T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "3"
+           },
+           {
+            "number": "51"
+           },
+           {
+            "number": "3"
+           },
+           "2020-02-07T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "3"
+           },
+           {
+            "number": "52"
+           },
+           {
+            "number": "1"
+           },
+           "2020-02-01T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "3"
+           },
+           {
+            "number": "53"
+           },
+           {
+            "number": "2"
+           },
+           "2020-01-08T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "5"
+           },
+           {
+            "number": "54"
+           },
+           {
+            "number": "1"
+           },
+           "2020-03-26T00:00:00.000000Z",
+           {
+            "number": "9.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "5"
+           },
+           {
+            "number": "55"
+           },
+           {
+            "number": "3"
+           },
+           "2020-03-14T00:00:00.000000Z",
+           {
+            "number": "9.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "5"
+           },
+           {
+            "number": "56"
+           },
+           {
+            "number": "3"
+           },
+           "2020-02-25T00:00:00.000000Z",
+           {
+            "number": "9.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "5"
+           },
+           {
+            "number": "57"
+           },
+           {
+            "number": "2"
+           },
+           "2020-02-13T00:00:00.000000Z",
+           {
+            "number": "9.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "5"
+           },
+           {
+            "number": "58"
+           },
+           {
+            "number": "2"
+           },
+           "2020-01-26T00:00:00.000000Z",
+           {
+            "number": "9.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "5"
+           },
+           {
+            "number": "59"
+           },
+           {
+            "number": "1"
+           },
+           "2020-01-14T00:00:00.000000Z",
+           {
+            "number": "9.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "7"
+           },
+           {
+            "number": "60"
+           },
+           {
+            "number": "2"
+           },
+           "2020-03-20T00:00:00.000000Z",
+           {
+            "number": "5.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "7"
+           },
+           {
+            "number": "61"
+           },
+           {
+            "number": "1"
+           },
+           "2020-02-19T00:00:00.000000Z",
+           {
+            "number": "5.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "7"
+           },
+           {
+            "number": "62"
+           },
+           {
+            "number": "3"
+           },
+           "2020-01-20T00:00:00.000000Z",
+           {
+            "number": "5.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "0"
+           },
+           {
+            "number": "75"
+           },
+           {
+            "number": "1"
+           },
+           "2020-03-26T00:00:00.000000Z",
+           {
+            "number": "9.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "0"
+           },
+           {
+            "number": "76"
+           },
+           {
+            "number": "3"
+           },
+           "2020-03-14T00:00:00.000000Z",
+           {
+            "number": "9.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "0"
+           },
+           {
+            "number": "77"
+           },
+           {
+            "number": "3"
+           },
+           "2020-02-25T00:00:00.000000Z",
+           {
+            "number": "9.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "0"
+           },
+           {
+            "number": "78"
+           },
+           {
+            "number": "2"
+           },
+           "2020-02-13T00:00:00.000000Z",
+           {
+            "number": "9.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "0"
+           },
+           {
+            "number": "79"
+           },
+           {
+            "number": "2"
+           },
+           "2020-01-26T00:00:00.000000Z",
+           {
+            "number": "9.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "0"
+           },
+           {
+            "number": "80"
+           },
+           {
+            "number": "1"
+           },
+           "2020-01-14T00:00:00.000000Z",
+           {
+            "number": "9.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "2"
+           },
+           {
+            "number": "81"
+           },
+           {
+            "number": "2"
+           },
+           "2020-03-29T00:00:00.000000Z",
+           {
+            "number": "4.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "2"
+           },
+           {
+            "number": "82"
+           },
+           {
+            "number": "2"
+           },
+           "2020-03-11T00:00:00.000000Z",
+           {
+            "number": "4.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "2"
+           },
+           {
+            "number": "83"
+           },
+           {
+            "number": "1"
+           },
+           "2020-02-28T00:00:00.000000Z",
+           {
+            "number": "4.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "2"
+           },
+           {
+            "number": "84"
+           },
+           {
+            "number": "1"
+           },
+           "2020-02-10T00:00:00.000000Z",
+           {
+            "number": "4.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "2"
+           },
+           {
+            "number": "85"
+           },
+           {
+            "number": "3"
+           },
+           "2020-01-29T00:00:00.000000Z",
+           {
+            "number": "4.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "2"
+           },
+           {
+            "number": "86"
+           },
+           {
+            "number": "3"
+           },
+           "2020-01-11T00:00:00.000000Z",
+           {
+            "number": "4.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "6"
+           },
+           {
+            "number": "87"
+           },
+           {
+            "number": "3"
+           },
+           "2020-03-05T00:00:00.000000Z",
+           {
+            "number": "0.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "6"
+           },
+           {
+            "number": "88"
+           },
+           {
+            "number": "2"
+           },
+           "2020-02-04T00:00:00.000000Z",
+           {
+            "number": "0.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "6"
+           },
+           {
+            "number": "89"
+           },
+           {
+            "number": "1"
+           },
+           "2020-01-05T00:00:00.000000Z",
+           {
+            "number": "0.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "8"
+           },
+           {
+            "number": "90"
+           },
+           {
+            "number": "2"
+           },
+           "2020-03-20T00:00:00.000000Z",
+           {
+            "number": "5.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "8"
+           },
+           {
+            "number": "91"
+           },
+           {
+            "number": "1"
+           },
+           "2020-02-19T00:00:00.000000Z",
+           {
+            "number": "5.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "8"
+           },
+           {
+            "number": "92"
+           },
+           {
+            "number": "3"
+           },
+           "2020-01-20T00:00:00.000000Z",
+           {
+            "number": "5.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "93"
+           },
+           {
+            "number": "3"
+           },
+           "2020-04-01T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "94"
+           },
+           {
+            "number": "1"
+           },
+           "2020-03-08T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "95"
+           },
+           {
+            "number": "2"
+           },
+           "2020-03-02T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "96"
+           },
+           {
+            "number": "3"
+           },
+           "2020-02-07T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "97"
+           },
+           {
+            "number": "1"
+           },
+           "2020-02-01T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "98"
+           },
+           {
+            "number": "2"
+           },
+           "2020-01-08T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "0"
+           },
+           {
+            "number": "117"
+           },
+           {
+            "number": "2"
+           },
+           "2020-03-29T00:00:00.000000Z",
+           null,
+           {
+            "number": "0.0"
+           }
+          ],
+          [
+           {
+            "number": "0"
+           },
+           {
+            "number": "118"
+           },
+           {
+            "number": "2"
+           },
+           "2020-03-11T00:00:00.000000Z",
+           null,
+           {
+            "number": "0.0"
+           }
+          ],
+          [
+           {
+            "number": "0"
+           },
+           {
+            "number": "119"
+           },
+           {
+            "number": "2"
+           },
+           "2020-02-22T00:00:00.000000Z",
+           null,
+           {
+            "number": "0.0"
+           }
+          ],
+          [
+           {
+            "number": "0"
+           },
+           {
+            "number": "120"
+           },
+           {
+            "number": "2"
+           },
+           "2020-02-04T00:00:00.000000Z",
+           null,
+           {
+            "number": "0.0"
+           }
+          ],
+          [
+           {
+            "number": "0"
+           },
+           {
+            "number": "121"
+           },
+           {
+            "number": "2"
+           },
+           "2020-01-17T00:00:00.000000Z",
+           null,
+           {
+            "number": "0.0"
+           }
+          ],
+          [
+           {
+            "number": "1"
+           },
+           {
+            "number": "122"
+           },
+           {
+            "number": "1"
+           },
+           "2020-03-26T00:00:00.000000Z",
+           null,
+           {
+            "number": "1.0"
+           }
+          ],
+          [
+           {
+            "number": "1"
+           },
+           {
+            "number": "123"
+           },
+           {
+            "number": "1"
+           },
+           "2020-03-08T00:00:00.000000Z",
+           null,
+           {
+            "number": "1.0"
+           }
+          ],
+          [
+           {
+            "number": "1"
+           },
+           {
+            "number": "124"
+           },
+           {
+            "number": "1"
+           },
+           "2020-02-19T00:00:00.000000Z",
+           null,
+           {
+            "number": "1.0"
+           }
+          ],
+          [
+           {
+            "number": "1"
+           },
+           {
+            "number": "125"
+           },
+           {
+            "number": "1"
+           },
+           "2020-02-01T00:00:00.000000Z",
+           null,
+           {
+            "number": "1.0"
+           }
+          ],
+          [
+           {
+            "number": "1"
+           },
+           {
+            "number": "126"
+           },
+           {
+            "number": "1"
+           },
+           "2020-01-14T00:00:00.000000Z",
+           null,
+           {
+            "number": "1.0"
+           }
+          ],
+          [
+           {
+            "number": "2"
+           },
+           {
+            "number": "127"
+           },
+           {
+            "number": "3"
+           },
+           "2020-04-01T00:00:00.000000Z",
+           null,
+           {
+            "number": "2.0"
+           }
+          ],
+          [
+           {
+            "number": "2"
+           },
+           {
+            "number": "128"
+           },
+           {
+            "number": "3"
+           },
+           "2020-03-14T00:00:00.000000Z",
+           null,
+           {
+            "number": "2.0"
+           }
+          ],
+          [
+           {
+            "number": "2"
+           },
+           {
+            "number": "129"
+           },
+           {
+            "number": "3"
+           },
+           "2020-02-25T00:00:00.000000Z",
+           null,
+           {
+            "number": "2.0"
+           }
+          ],
+          [
+           {
+            "number": "2"
+           },
+           {
+            "number": "130"
+           },
+           {
+            "number": "3"
+           },
+           "2020-02-07T00:00:00.000000Z",
+           null,
+           {
+            "number": "2.0"
+           }
+          ],
+          [
+           {
+            "number": "3"
+           },
+           {
+            "number": "131"
+           },
+           {
+            "number": "1"
+           },
+           "2020-03-17T00:00:00.000000Z",
+           null,
+           {
+            "number": "3.0"
+           }
+          ],
+          [
+           {
+            "number": "3"
+           },
+           {
+            "number": "132"
+           },
+           {
+            "number": "1"
+           },
+           "2020-02-28T00:00:00.000000Z",
+           null,
+           {
+            "number": "3.0"
+           }
+          ],
+          [
+           {
+            "number": "3"
+           },
+           {
+            "number": "133"
+           },
+           {
+            "number": "1"
+           },
+           "2020-02-10T00:00:00.000000Z",
+           null,
+           {
+            "number": "3.0"
+           }
+          ],
+          [
+           {
+            "number": "3"
+           },
+           {
+            "number": "134"
+           },
+           {
+            "number": "1"
+           },
+           "2020-01-23T00:00:00.000000Z",
+           null,
+           {
+            "number": "3.0"
+           }
+          ],
+          [
+           {
+            "number": "4"
+           },
+           {
+            "number": "135"
+           },
+           {
+            "number": "2"
+           },
+           "2020-03-20T00:00:00.000000Z",
+           null,
+           {
+            "number": "4.0"
+           }
+          ],
+          [
+           {
+            "number": "4"
+           },
+           {
+            "number": "136"
+           },
+           {
+            "number": "2"
+           },
+           "2020-03-02T00:00:00.000000Z",
+           null,
+           {
+            "number": "4.0"
+           }
+          ],
+          [
+           {
+            "number": "4"
+           },
+           {
+            "number": "137"
+           },
+           {
+            "number": "2"
+           },
+           "2020-02-13T00:00:00.000000Z",
+           null,
+           {
+            "number": "4.0"
+           }
+          ],
+          [
+           {
+            "number": "4"
+           },
+           {
+            "number": "138"
+           },
+           {
+            "number": "2"
+           },
+           "2020-01-26T00:00:00.000000Z",
+           null,
+           {
+            "number": "4.0"
+           }
+          ],
+          [
+           {
+            "number": "4"
+           },
+           {
+            "number": "139"
+           },
+           {
+            "number": "2"
+           },
+           "2020-01-08T00:00:00.000000Z",
+           null,
+           {
+            "number": "4.0"
+           }
+          ],
+          [
+           {
+            "number": "5"
+           },
+           {
+            "number": "140"
+           },
+           {
+            "number": "3"
+           },
+           "2020-03-23T00:00:00.000000Z",
+           null,
+           {
+            "number": "5.0"
+           }
+          ],
+          [
+           {
+            "number": "5"
+           },
+           {
+            "number": "141"
+           },
+           {
+            "number": "3"
+           },
+           "2020-03-05T00:00:00.000000Z",
+           null,
+           {
+            "number": "5.0"
+           }
+          ],
+          [
+           {
+            "number": "5"
+           },
+           {
+            "number": "142"
+           },
+           {
+            "number": "3"
+           },
+           "2020-02-16T00:00:00.000000Z",
+           null,
+           {
+            "number": "5.0"
+           }
+          ],
+          [
+           {
+            "number": "5"
+           },
+           {
+            "number": "143"
+           },
+           {
+            "number": "3"
+           },
+           "2020-01-29T00:00:00.000000Z",
+           null,
+           {
+            "number": "5.0"
+           }
+          ],
+          [
+           {
+            "number": "5"
+           },
+           {
+            "number": "144"
+           },
+           {
+            "number": "3"
+           },
+           "2020-01-11T00:00:00.000000Z",
+           null,
+           {
+            "number": "5.0"
+           }
+          ],
+          [
+           {
+            "number": "6"
+           },
+           {
+            "number": "145"
+           },
+           {
+            "number": "2"
+           },
+           "2020-03-20T00:00:00.000000Z",
+           null,
+           {
+            "number": "6.0"
+           }
+          ],
+          [
+           {
+            "number": "6"
+           },
+           {
+            "number": "146"
+           },
+           {
+            "number": "2"
+           },
+           "2020-02-13T00:00:00.000000Z",
+           null,
+           {
+            "number": "6.0"
+           }
+          ],
+          [
+           {
+            "number": "6"
+           },
+           {
+            "number": "147"
+           },
+           {
+            "number": "2"
+           },
+           "2020-01-26T00:00:00.000000Z",
+           null,
+           {
+            "number": "6.0"
+           }
+          ],
+          [
+           {
+            "number": "7"
+           },
+           {
+            "number": "148"
+           },
+           {
+            "number": "2"
+           },
+           "2020-02-22T00:00:00.000000Z",
+           null,
+           {
+            "number": "7.0"
+           }
+          ],
+          [
+           {
+            "number": "7"
+           },
+           {
+            "number": "149"
+           },
+           {
+            "number": "2"
+           },
+           "2020-02-04T00:00:00.000000Z",
+           null,
+           {
+            "number": "7.0"
+           }
+          ],
+          [
+           {
+            "number": "7"
+           },
+           {
+            "number": "150"
+           },
+           {
+            "number": "2"
+           },
+           "2020-01-17T00:00:00.000000Z",
+           null,
+           {
+            "number": "7.0"
+           }
+          ],
+          [
+           {
+            "number": "8"
+           },
+           {
+            "number": "151"
+           },
+           {
+            "number": "1"
+           },
+           "2020-03-17T00:00:00.000000Z",
+           null,
+           {
+            "number": "8.0"
+           }
+          ],
+          [
+           {
+            "number": "8"
+           },
+           {
+            "number": "152"
+           },
+           {
+            "number": "1"
+           },
+           "2020-02-28T00:00:00.000000Z",
+           null,
+           {
+            "number": "8.0"
+           }
+          ],
+          [
+           {
+            "number": "8"
+           },
+           {
+            "number": "153"
+           },
+           {
+            "number": "1"
+           },
+           "2020-02-10T00:00:00.000000Z",
+           null,
+           {
+            "number": "8.0"
+           }
+          ],
+          [
+           {
+            "number": "8"
+           },
+           {
+            "number": "154"
+           },
+           {
+            "number": "1"
+           },
+           "2020-01-23T00:00:00.000000Z",
+           null,
+           {
+            "number": "8.0"
+           }
+          ],
+          [
+           {
+            "number": "8"
+           },
+           {
+            "number": "155"
+           },
+           {
+            "number": "1"
+           },
+           "2020-01-05T00:00:00.000000Z",
+           null,
+           {
+            "number": "8.0"
+           }
+          ],
+          [
+           {
+            "number": "9"
+           },
+           {
+            "number": "156"
+           },
+           {
+            "number": "1"
+           },
+           "2020-03-08T00:00:00.000000Z",
+           null,
+           {
+            "number": "9.0"
+           }
+          ],
+          [
+           {
+            "number": "9"
+           },
+           {
+            "number": "157"
+           },
+           {
+            "number": "1"
+           },
+           "2020-02-19T00:00:00.000000Z",
+           null,
+           {
+            "number": "9.0"
+           }
+          ],
+          [
+           {
+            "number": "9"
+           },
+           {
+            "number": "158"
+           },
+           {
+            "number": "1"
+           },
+           "2020-02-01T00:00:00.000000Z",
+           null,
+           {
+            "number": "9.0"
+           }
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "159"
+           },
+           {
+            "number": "3"
+           },
+           "2020-03-23T00:00:00.000000Z",
+           null,
+           {
+            "number": "10.0"
+           }
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "160"
+           },
+           {
+            "number": "3"
+           },
+           "2020-03-05T00:00:00.000000Z",
+           null,
+           {
+            "number": "10.0"
+           }
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "161"
+           },
+           {
+            "number": "3"
+           },
+           "2020-02-16T00:00:00.000000Z",
+           null,
+           {
+            "number": "10.0"
+           }
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "162"
+           },
+           {
+            "number": "3"
+           },
+           "2020-01-29T00:00:00.000000Z",
+           null,
+           {
+            "number": "10.0"
+           }
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "163"
+           },
+           {
+            "number": "3"
+           },
+           "2020-01-11T00:00:00.000000Z",
+           null,
+           {
+            "number": "10.0"
+           }
+          ]
+         ]
+        }
+       }
+      },
+      "inference": {
+       "run_mode": "fast",
+       "use_prediction_time": false
+      },
+      "metadata": {
+       "num_context_examples": {
+        "number": "11"
+       },
+       "num_prediction_examples": {
+        "number": "3"
+       },
+       "request_id": "sdm-9f8729cf69a1",
+       "source_query": "PREDICT COUNT(votes.*, 0, 90, days) FOR EACH posts.Id"
+      },
+      "model": "kumo-relational",
+      "output": {
+       "fields": [
+        "prediction"
+       ],
+       "prediction_statistic": "median"
+      },
+      "predict": {
+       "instance_table": {
+        "columns": [
+         "instance_id",
+         "__kumo_entity_ref_0",
+         "__kumo_anchor_time"
+        ],
+        "format": "arrays",
+        "rows": [
+         [
+          {
+           "number": "11"
+          },
+          {
+           "number": "0"
+          },
+          "2020-07-01T00:00:00.000000Z"
+         ],
+         [
+          {
+           "number": "12"
+          },
+          {
+           "number": "1"
+          },
+          "2020-07-01T00:00:00.000000Z"
+         ],
+         [
+          {
+           "number": "13"
+          },
+          {
+           "number": "2"
+          },
+          "2020-07-01T00:00:00.000000Z"
+         ]
+        ]
+       },
+       "related_tables": {
+        "posts": {
+         "columns": [
+          "instance_id",
+          "Id",
+          "PostTypeId",
+          "CreationDate",
+          "OwnerUserId",
+          "ParentId"
+         ],
+         "format": "arrays",
+         "rows": [
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "0"
+           },
+           {
+            "number": "1"
+           },
+           "2020-01-01T00:00:00.000000Z",
+           {
+            "number": "11.0"
+           },
+           {
+            "number": "1.0"
+           }
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "1"
+           },
+           {
+            "number": "2"
+           },
+           "2020-01-10T00:00:00.000000Z",
+           {
+            "number": "12.0"
+           },
+           {
+            "number": "2.0"
+           }
+          ],
+          [
+           {
+            "number": "13"
+           },
+           {
+            "number": "2"
+           },
+           {
+            "number": "1"
+           },
+           "2020-01-19T00:00:00.000000Z",
+           {
+            "number": "13.0"
+           },
+           {
+            "number": "3.0"
+           }
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "1"
+           },
+           {
+            "number": "2"
+           },
+           "2020-01-10T00:00:00.000000Z",
+           {
+            "number": "25.0"
+           },
+           {
+            "number": "2.0"
+           }
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "2"
+           },
+           {
+            "number": "1"
+           },
+           "2020-01-19T00:00:00.000000Z",
+           {
+            "number": "26.0"
+           },
+           {
+            "number": "3.0"
+           }
+          ],
+          [
+           {
+            "number": "13"
+           },
+           {
+            "number": "3"
+           },
+           {
+            "number": "2"
+           },
+           "2020-01-28T00:00:00.000000Z",
+           {
+            "number": "27.0"
+           },
+           {
+            "number": "4.0"
+           }
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "19"
+           },
+           {
+            "number": "2"
+           },
+           "2020-06-20T00:00:00.000000Z",
+           {
+            "number": "25.0"
+           },
+           {
+            "number": "0.0"
+           }
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "0"
+           },
+           {
+            "number": "1"
+           },
+           "2020-01-01T00:00:00.000000Z",
+           {
+            "number": "38.0"
+           },
+           {
+            "number": "1.0"
+           }
+          ],
+          [
+           {
+            "number": "13"
+           },
+           {
+            "number": "1"
+           },
+           {
+            "number": "2"
+           },
+           "2020-01-10T00:00:00.000000Z",
+           {
+            "number": "39.0"
+           },
+           {
+            "number": "2.0"
+           }
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "2"
+           },
+           {
+            "number": "1"
+           },
+           "2020-01-19T00:00:00.000000Z",
+           null,
+           null
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "3"
+           },
+           {
+            "number": "2"
+           },
+           "2020-01-28T00:00:00.000000Z",
+           null,
+           null
+          ],
+          [
+           {
+            "number": "13"
+           },
+           {
+            "number": "4"
+           },
+           {
+            "number": "1"
+           },
+           "2020-02-06T00:00:00.000000Z",
+           null,
+           null
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "18"
+           },
+           {
+            "number": "1"
+           },
+           "2020-06-11T00:00:00.000000Z",
+           null,
+           null
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "19"
+           },
+           {
+            "number": "2"
+           },
+           "2020-06-20T00:00:00.000000Z",
+           null,
+           null
+          ],
+          [
+           {
+            "number": "13"
+           },
+           {
+            "number": "0"
+           },
+           {
+            "number": "1"
+           },
+           "2020-01-01T00:00:00.000000Z",
+           null,
+           null
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "12"
+           },
+           {
+            "number": "1"
+           },
+           "2020-04-18T00:00:00.000000Z",
+           null,
+           null
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "6"
+           },
+           {
+            "number": "1"
+           },
+           "2020-02-24T00:00:00.000000Z",
+           null,
+           null
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "13"
+           },
+           {
+            "number": "2"
+           },
+           "2020-04-27T00:00:00.000000Z",
+           null,
+           null
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "7"
+           },
+           {
+            "number": "2"
+           },
+           "2020-03-04T00:00:00.000000Z",
+           null,
+           null
+          ],
+          [
+           {
+            "number": "13"
+           },
+           {
+            "number": "14"
+           },
+           {
+            "number": "1"
+           },
+           "2020-05-06T00:00:00.000000Z",
+           null,
+           null
+          ],
+          [
+           {
+            "number": "13"
+           },
+           {
+            "number": "8"
+           },
+           {
+            "number": "1"
+           },
+           "2020-03-13T00:00:00.000000Z",
+           null,
+           null
+          ]
+         ]
+        },
+        "users": {
+         "columns": [
+          "instance_id",
+          "__node_id",
+          "Reputation",
+          "CreationDate"
+         ],
+         "format": "arrays",
+         "rows": [
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "11"
+           },
+           {
+            "number": "0"
+           },
+           "2019-01-01T00:00:00.000000Z"
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "12"
+           },
+           {
+            "number": "10"
+           },
+           "2019-01-21T00:00:00.000000Z"
+          ],
+          [
+           {
+            "number": "13"
+           },
+           {
+            "number": "13"
+           },
+           {
+            "number": "20"
+           },
+           "2019-02-10T00:00:00.000000Z"
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "25"
+           },
+           {
+            "number": "10"
+           },
+           "2019-01-21T00:00:00.000000Z"
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "26"
+           },
+           {
+            "number": "20"
+           },
+           "2019-02-10T00:00:00.000000Z"
+          ],
+          [
+           {
+            "number": "13"
+           },
+           {
+            "number": "27"
+           },
+           {
+            "number": "30"
+           },
+           "2019-03-02T00:00:00.000000Z"
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "38"
+           },
+           {
+            "number": "0"
+           },
+           "2019-01-01T00:00:00.000000Z"
+          ],
+          [
+           {
+            "number": "13"
+           },
+           {
+            "number": "39"
+           },
+           {
+            "number": "10"
+           },
+           "2019-01-21T00:00:00.000000Z"
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "50"
+           },
+           {
+            "number": "20"
+           },
+           "2019-02-10T00:00:00.000000Z"
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "51"
+           },
+           {
+            "number": "40"
+           },
+           "2019-03-22T00:00:00.000000Z"
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "52"
+           },
+           {
+            "number": "50"
+           },
+           "2019-04-11T00:00:00.000000Z"
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "53"
+           },
+           {
+            "number": "30"
+           },
+           "2019-03-02T00:00:00.000000Z"
+          ]
+         ]
+        },
+        "votes": {
+         "columns": [
+          "instance_id",
+          "__node_id",
+          "VoteTypeId",
+          "CreationDate",
+          "PostId",
+          "UserId"
+         ],
+         "format": "arrays",
+         "rows": [
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "24"
+           },
+           {
+            "number": "3"
+           },
+           "2020-06-03T00:00:00.000000Z",
+           {
+            "number": "0.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "25"
+           },
+           {
+            "number": "2"
+           },
+           "2020-05-04T00:00:00.000000Z",
+           {
+            "number": "0.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "26"
+           },
+           {
+            "number": "1"
+           },
+           "2020-04-04T00:00:00.000000Z",
+           {
+            "number": "0.0"
+           },
+           {
+            "number": "11.0"
+           }
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "27"
+           },
+           {
+            "number": "3"
+           },
+           "2020-03-05T00:00:00.000000Z",
+           {
+            "number": "0.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "28"
+           },
+           {
+            "number": "2"
+           },
+           "2020-02-04T00:00:00.000000Z",
+           {
+            "number": "0.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "29"
+           },
+           {
+            "number": "1"
+           },
+           "2020-01-05T00:00:00.000000Z",
+           {
+            "number": "0.0"
+           },
+           {
+            "number": "11.0"
+           }
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "30"
+           },
+           {
+            "number": "3"
+           },
+           "2020-06-30T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "31"
+           },
+           {
+            "number": "1"
+           },
+           "2020-06-06T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "32"
+           },
+           {
+            "number": "2"
+           },
+           "2020-05-31T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           {
+            "number": "12.0"
+           }
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "33"
+           },
+           {
+            "number": "3"
+           },
+           "2020-05-07T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "34"
+           },
+           {
+            "number": "1"
+           },
+           "2020-05-01T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "35"
+           },
+           {
+            "number": "2"
+           },
+           "2020-04-07T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           {
+            "number": "12.0"
+           }
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "36"
+           },
+           {
+            "number": "3"
+           },
+           "2020-04-01T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "37"
+           },
+           {
+            "number": "1"
+           },
+           "2020-03-08T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "38"
+           },
+           {
+            "number": "2"
+           },
+           "2020-03-02T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           {
+            "number": "12.0"
+           }
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "39"
+           },
+           {
+            "number": "3"
+           },
+           "2020-02-07T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "40"
+           },
+           {
+            "number": "1"
+           },
+           "2020-02-01T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "41"
+           },
+           {
+            "number": "2"
+           },
+           "2020-01-08T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           {
+            "number": "12.0"
+           }
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "63"
+           },
+           {
+            "number": "3"
+           },
+           "2020-06-30T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "64"
+           },
+           {
+            "number": "1"
+           },
+           "2020-06-06T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "65"
+           },
+           {
+            "number": "2"
+           },
+           "2020-05-31T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "66"
+           },
+           {
+            "number": "3"
+           },
+           "2020-05-07T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "67"
+           },
+           {
+            "number": "1"
+           },
+           "2020-05-01T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "68"
+           },
+           {
+            "number": "2"
+           },
+           "2020-04-07T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "69"
+           },
+           {
+            "number": "3"
+           },
+           "2020-04-01T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "70"
+           },
+           {
+            "number": "1"
+           },
+           "2020-03-08T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "71"
+           },
+           {
+            "number": "2"
+           },
+           "2020-03-02T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "72"
+           },
+           {
+            "number": "3"
+           },
+           "2020-02-07T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "73"
+           },
+           {
+            "number": "1"
+           },
+           "2020-02-01T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "74"
+           },
+           {
+            "number": "2"
+           },
+           "2020-01-08T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "99"
+           },
+           {
+            "number": "3"
+           },
+           "2020-06-03T00:00:00.000000Z",
+           {
+            "number": "0.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "100"
+           },
+           {
+            "number": "2"
+           },
+           "2020-05-04T00:00:00.000000Z",
+           {
+            "number": "0.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "101"
+           },
+           {
+            "number": "1"
+           },
+           "2020-04-04T00:00:00.000000Z",
+           {
+            "number": "0.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "102"
+           },
+           {
+            "number": "3"
+           },
+           "2020-03-05T00:00:00.000000Z",
+           {
+            "number": "0.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "103"
+           },
+           {
+            "number": "2"
+           },
+           "2020-02-04T00:00:00.000000Z",
+           {
+            "number": "0.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "104"
+           },
+           {
+            "number": "1"
+           },
+           "2020-01-05T00:00:00.000000Z",
+           {
+            "number": "0.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "13"
+           },
+           {
+            "number": "105"
+           },
+           {
+            "number": "3"
+           },
+           "2020-06-30T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "13"
+           },
+           {
+            "number": "106"
+           },
+           {
+            "number": "1"
+           },
+           "2020-06-06T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "13"
+           },
+           {
+            "number": "107"
+           },
+           {
+            "number": "2"
+           },
+           "2020-05-31T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "13"
+           },
+           {
+            "number": "108"
+           },
+           {
+            "number": "3"
+           },
+           "2020-05-07T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "13"
+           },
+           {
+            "number": "109"
+           },
+           {
+            "number": "1"
+           },
+           "2020-05-01T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "13"
+           },
+           {
+            "number": "110"
+           },
+           {
+            "number": "2"
+           },
+           "2020-04-07T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "13"
+           },
+           {
+            "number": "111"
+           },
+           {
+            "number": "3"
+           },
+           "2020-04-01T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "13"
+           },
+           {
+            "number": "112"
+           },
+           {
+            "number": "1"
+           },
+           "2020-03-08T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "13"
+           },
+           {
+            "number": "113"
+           },
+           {
+            "number": "2"
+           },
+           "2020-03-02T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "13"
+           },
+           {
+            "number": "114"
+           },
+           {
+            "number": "3"
+           },
+           "2020-02-07T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "13"
+           },
+           {
+            "number": "115"
+           },
+           {
+            "number": "1"
+           },
+           "2020-02-01T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "13"
+           },
+           {
+            "number": "116"
+           },
+           {
+            "number": "2"
+           },
+           "2020-01-08T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "164"
+           },
+           {
+            "number": "1"
+           },
+           "2020-06-15T00:00:00.000000Z",
+           null,
+           {
+            "number": "11.0"
+           }
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "165"
+           },
+           {
+            "number": "1"
+           },
+           "2020-05-28T00:00:00.000000Z",
+           null,
+           {
+            "number": "11.0"
+           }
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "166"
+           },
+           {
+            "number": "1"
+           },
+           "2020-05-10T00:00:00.000000Z",
+           null,
+           {
+            "number": "11.0"
+           }
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "167"
+           },
+           {
+            "number": "1"
+           },
+           "2020-04-22T00:00:00.000000Z",
+           null,
+           {
+            "number": "11.0"
+           }
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "168"
+           },
+           {
+            "number": "1"
+           },
+           "2020-03-17T00:00:00.000000Z",
+           null,
+           {
+            "number": "11.0"
+           }
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "169"
+           },
+           {
+            "number": "1"
+           },
+           "2020-02-28T00:00:00.000000Z",
+           null,
+           {
+            "number": "11.0"
+           }
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "170"
+           },
+           {
+            "number": "1"
+           },
+           "2020-02-10T00:00:00.000000Z",
+           null,
+           {
+            "number": "11.0"
+           }
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "171"
+           },
+           {
+            "number": "1"
+           },
+           "2020-01-23T00:00:00.000000Z",
+           null,
+           {
+            "number": "11.0"
+           }
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "172"
+           },
+           {
+            "number": "2"
+           },
+           "2020-06-18T00:00:00.000000Z",
+           null,
+           {
+            "number": "12.0"
+           }
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "173"
+           },
+           {
+            "number": "2"
+           },
+           "2020-05-13T00:00:00.000000Z",
+           null,
+           {
+            "number": "12.0"
+           }
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "174"
+           },
+           {
+            "number": "2"
+           },
+           "2020-04-25T00:00:00.000000Z",
+           null,
+           {
+            "number": "12.0"
+           }
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "175"
+           },
+           {
+            "number": "2"
+           },
+           "2020-03-20T00:00:00.000000Z",
+           null,
+           {
+            "number": "12.0"
+           }
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "176"
+           },
+           {
+            "number": "2"
+           },
+           "2020-02-13T00:00:00.000000Z",
+           null,
+           {
+            "number": "12.0"
+           }
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "177"
+           },
+           {
+            "number": "2"
+           },
+           "2020-01-26T00:00:00.000000Z",
+           null,
+           {
+            "number": "12.0"
+           }
+          ],
+          [
+           {
+            "number": "13"
+           },
+           {
+            "number": "178"
+           },
+           {
+            "number": "3"
+           },
+           "2020-06-21T00:00:00.000000Z",
+           null,
+           {
+            "number": "13.0"
+           }
+          ],
+          [
+           {
+            "number": "13"
+           },
+           {
+            "number": "179"
+           },
+           {
+            "number": "3"
+           },
+           "2020-06-03T00:00:00.000000Z",
+           null,
+           {
+            "number": "13.0"
+           }
+          ],
+          [
+           {
+            "number": "13"
+           },
+           {
+            "number": "180"
+           },
+           {
+            "number": "3"
+           },
+           "2020-05-16T00:00:00.000000Z",
+           null,
+           {
+            "number": "13.0"
+           }
+          ],
+          [
+           {
+            "number": "13"
+           },
+           {
+            "number": "181"
+           },
+           {
+            "number": "3"
+           },
+           "2020-04-28T00:00:00.000000Z",
+           null,
+           {
+            "number": "13.0"
+           }
+          ],
+          [
+           {
+            "number": "13"
+           },
+           {
+            "number": "182"
+           },
+           {
+            "number": "3"
+           },
+           "2020-04-10T00:00:00.000000Z",
+           null,
+           {
+            "number": "13.0"
+           }
+          ],
+          [
+           {
+            "number": "13"
+           },
+           {
+            "number": "183"
+           },
+           {
+            "number": "3"
+           },
+           "2020-03-23T00:00:00.000000Z",
+           null,
+           {
+            "number": "13.0"
+           }
+          ],
+          [
+           {
+            "number": "13"
+           },
+           {
+            "number": "184"
+           },
+           {
+            "number": "3"
+           },
+           "2020-03-05T00:00:00.000000Z",
+           null,
+           {
+            "number": "13.0"
+           }
+          ],
+          [
+           {
+            "number": "13"
+           },
+           {
+            "number": "185"
+           },
+           {
+            "number": "3"
+           },
+           "2020-02-16T00:00:00.000000Z",
+           null,
+           {
+            "number": "13.0"
+           }
+          ],
+          [
+           {
+            "number": "13"
+           },
+           {
+            "number": "186"
+           },
+           {
+            "number": "3"
+           },
+           "2020-01-29T00:00:00.000000Z",
+           null,
+           {
+            "number": "13.0"
+           }
+          ],
+          [
+           {
+            "number": "13"
+           },
+           {
+            "number": "187"
+           },
+           {
+            "number": "3"
+           },
+           "2020-01-11T00:00:00.000000Z",
+           null,
+           {
+            "number": "13.0"
+           }
+          ]
+         ]
+        }
+       }
+      },
+      "schema": {
+       "instance_table": {
+        "columns": {
+         "TARGET": {
+          "dtype": "float32",
+          "stype": "numerical"
+         },
+         "__kumo_anchor_time": {
+          "dtype": "timestamp[us]",
+          "nullable": false,
+          "stype": "timestamp"
+         },
+         "__kumo_entity_ref_0": {
+          "dtype": "int64",
+          "stype": "ID"
+         },
+         "instance_id": {
+          "dtype": "int64",
+          "nullable": false,
+          "stype": "ID"
+         }
+        },
+        "primary_key": "instance_id"
+       },
+       "related_tables": {
+        "posts": {
+         "columns": {
+          "CreationDate": {
+           "dtype": "timestamp[us]",
+           "stype": "timestamp"
+          },
+          "Id": {
+           "dtype": "int64",
+           "nullable": false
+          },
+          "OwnerUserId": {
+           "dtype": "float64",
+           "stype": "ID"
+          },
+          "ParentId": {
+           "dtype": "float64",
+           "stype": "ID"
+          },
+          "PostTypeId": {
+           "dtype": "int64",
+           "stype": "ID"
+          },
+          "instance_id": {
+           "dtype": "int64",
+           "nullable": false,
+           "stype": "ID"
+          }
+         },
+         "primary_key": [
+          "instance_id",
+          "Id"
+         ]
+        },
+        "users": {
+         "columns": {
+          "CreationDate": {
+           "dtype": "timestamp[us]",
+           "stype": "timestamp"
+          },
+          "Reputation": {
+           "dtype": "int64",
+           "stype": "categorical"
+          },
+          "__node_id": {
+           "dtype": "int64",
+           "nullable": false,
+           "stype": "ID"
+          },
+          "instance_id": {
+           "dtype": "int64",
+           "nullable": false,
+           "stype": "ID"
+          }
+         },
+         "primary_key": [
+          "instance_id",
+          "__node_id"
+         ]
+        },
+        "votes": {
+         "columns": {
+          "CreationDate": {
+           "dtype": "timestamp[us]",
+           "stype": "timestamp"
+          },
+          "PostId": {
+           "dtype": "float64",
+           "stype": "ID"
+          },
+          "UserId": {
+           "dtype": "float64",
+           "stype": "ID"
+          },
+          "VoteTypeId": {
+           "dtype": "int64",
+           "stype": "ID"
+          },
+          "__node_id": {
+           "dtype": "int64",
+           "nullable": false,
+           "stype": "ID"
+          },
+          "instance_id": {
+           "dtype": "int64",
+           "nullable": false,
+           "stype": "ID"
+          }
+         },
+         "primary_key": [
+          "instance_id",
+          "__node_id"
+         ]
+        }
+       },
+       "relationships": [
+        {
+         "source_columns": [
+          "__kumo_entity_ref_0"
+         ],
+         "target_columns": [
+          "Id"
+         ],
+         "target_table": "posts"
+        },
+        {
+         "source_columns": [
+          "OwnerUserId"
+         ],
+         "source_table": "posts",
+         "target_columns": [
+          "__node_id"
+         ],
+         "target_table": "users"
+        },
+        {
+         "source_columns": [
+          "ParentId"
+         ],
+         "source_table": "posts",
+         "target_columns": [
+          "Id"
+         ],
+         "target_table": "posts"
+        },
+        {
+         "source_columns": [
+          "PostId"
+         ],
+         "source_table": "votes",
+         "target_columns": [
+          "Id"
+         ],
+         "target_table": "posts"
+        },
+        {
+         "source_columns": [
+          "UserId"
+         ],
+         "source_table": "votes",
+         "target_columns": [
+          "__node_id"
+         ],
+         "target_table": "users"
+        }
+       ]
+      },
+      "task": {
+       "anchor_time_column": "__kumo_anchor_time",
+       "entity_table_names": [
+        "posts"
+       ],
+       "kind": "regression",
+       "target": {
+        "column_name": "TARGET",
+        "dtype": "float32"
+       }
+      }
+     },
+     "path": "/v1/predictions",
+     "sha256": "1925cd339b6b30e7922d19b1433f051cab02595e0412133d796d040a7ee8e9bd"
+    }
+   ],
+   "result": {
+    "columns": [
+     {
+      "dtype": "int64",
+      "name": "row_index"
+     },
+     {
+      "dtype": "int64",
+      "name": "id"
+     },
+     {
+      "dtype": "float64",
+      "name": "prediction"
+     }
+    ],
+    "digest": "eb0e794d963bbd6f082e99b1ef5efd7095c91a3ee92f0cb7492aa8600cf1f6e4",
+    "rows": 3
+   },
+   "result_text": "f4035b1d60cfa07c3d687b35bea2fe7cc4b6d22aa7560e4fe81327ea1cd85d41",
+   "schema": {
+    "links": [
+     [
+      "posts",
+      "OwnerUserId",
+      "users",
+      "Id"
+     ],
+     [
+      "posts",
+      "ParentId",
+      "posts",
+      "Id"
+     ],
+     [
+      "votes",
+      "PostId",
+      "posts",
+      "Id"
+     ],
+     [
+      "votes",
+      "UserId",
+      "users",
+      "Id"
+     ]
+    ],
+    "tables": [
+     {
+      "columns": [
+       {
+        "dtype": "int64",
+        "name": "Id",
+        "stype": "ID"
+       },
+       {
+        "dtype": "int64",
+        "name": "OwnerUserId",
+        "stype": "ID"
+       },
+       {
+        "dtype": "int64",
+        "name": "ParentId",
+        "stype": "ID"
+       },
+       {
+        "dtype": "int64",
+        "name": "PostTypeId",
+        "stype": "ID"
+       },
+       {
+        "dtype": "timestamp[us]",
+        "name": "CreationDate",
+        "stype": "timestamp"
+       }
+      ],
+      "duplicate_keys": 0,
+      "name": "posts",
+      "primary_key": "Id",
+      "time_column": "CreationDate"
+     },
+     {
+      "columns": [
+       {
+        "dtype": "int64",
+        "name": "Id",
+        "stype": "ID"
+       },
+       {
+        "dtype": "int64",
+        "name": "Reputation",
+        "stype": "categorical"
+       },
+       {
+        "dtype": "timestamp[us]",
+        "name": "CreationDate",
+        "stype": "timestamp"
+       }
+      ],
+      "duplicate_keys": 0,
+      "name": "users",
+      "primary_key": "Id",
+      "time_column": "CreationDate"
+     },
+     {
+      "columns": [
+       {
+        "dtype": "int64",
+        "name": "Id",
+        "stype": "ID"
+       },
+       {
+        "dtype": "int64",
+        "name": "PostId",
+        "stype": "ID"
+       },
+       {
+        "dtype": "int64",
+        "name": "UserId",
+        "stype": "ID"
+       },
+       {
+        "dtype": "int64",
+        "name": "VoteTypeId",
+        "stype": "ID"
+       },
+       {
+        "dtype": "timestamp[us]",
+        "name": "CreationDate",
+        "stype": "timestamp"
+       }
+      ],
+      "duplicate_keys": 0,
+      "name": "votes",
+      "primary_key": "Id",
+      "time_column": "CreationDate"
+     }
+    ]
+   }
+  }
+ },
+ "tables": [
+  {
+   "name": "posts",
+   "data": "tables/230874a4220c68c41df646566da4b81fd2422664e1ebd4f54271ab0a89a2cb6e.arrows"
+  },
+  {
+   "name": "users",
+   "data": "tables/023ea0264be3cd23b8c4941fa6e393e0b803a3c948303bf0a46bd2ecebb727d3.arrows"
+  },
+  {
+   "name": "votes",
+   "data": "tables/32a65e3ec75e444b2938f16443b1d08ca167dd1e872dfdfe46cdf7539cc439de.arrows"
+  }
+ ],
+ "derived": [],
+ "draws": [],
+ "statements": [
+  {
+   "text": "SELECT table_name\nFROM information_schema.tables\nWHERE table_schema = %s\n  AND table_type = 'BASE TABLE'\nORDER BY table_name",
+   "parameters": [
+    "{schema}"
+   ],
+   "result": "tables/35e4122b578689a665e0ea7105452a2281ab7cf30e2ab48f08f7e32505471eda.arrows"
+  },
+  {
+   "text": "SELECT c.column_name, c.data_type, c.udt_name,\n       c.numeric_scale, c.is_nullable, c.table_schema,\n       c.table_name,\n       pg_catalog.format_type(a.atttypid, a.atttypmod)\nFROM information_schema.columns c\nJOIN pg_catalog.pg_namespace n\n  ON n.nspname = c.table_schema\nJOIN pg_catalog.pg_class rel\n  ON rel.relnamespace = n.oid AND rel.relname = c.table_name\nJOIN pg_catalog.pg_attribute a\n  ON a.attrelid = rel.oid AND a.attname = c.column_name\n AND a.attnum > 0 AND NOT a.attisdropped\nWHERE c.table_schema = %s AND c.table_name = %s\nORDER BY c.ordinal_position",
+   "parameters": [
+    "{schema}",
+    "posts"
+   ],
+   "result": "tables/ab9cb5f57d72b595c022d10c4d967088902073b9a701cb147b8f57e8244084a5.arrows"
+  },
+  {
+   "text": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = %s AND tc.table_name = %s\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE', 'FOREIGN KEY')",
+   "parameters": [
+    "{schema}",
+    "posts"
+   ],
+   "result": "tables/e286250e156c178de91f308c659bcadbbe16d0439b1bb53538cfd8c7e30c5f63.arrows"
+  },
+  {
+   "text": "SELECT \"Id\", \"OwnerUserId\", \"ParentId\", \"PostTypeId\", \"CreationDate\" FROM \"{schema}\".\"posts\" LIMIT 1000",
+   "parameters": [],
+   "result": "tables/230874a4220c68c41df646566da4b81fd2422664e1ebd4f54271ab0a89a2cb6e.arrows"
+  },
+  {
+   "text": "SELECT c.column_name, c.data_type, c.udt_name,\n       c.numeric_scale, c.is_nullable, c.table_schema,\n       c.table_name,\n       pg_catalog.format_type(a.atttypid, a.atttypmod)\nFROM information_schema.columns c\nJOIN pg_catalog.pg_namespace n\n  ON n.nspname = c.table_schema\nJOIN pg_catalog.pg_class rel\n  ON rel.relnamespace = n.oid AND rel.relname = c.table_name\nJOIN pg_catalog.pg_attribute a\n  ON a.attrelid = rel.oid AND a.attname = c.column_name\n AND a.attnum > 0 AND NOT a.attisdropped\nWHERE c.table_schema = %s AND c.table_name = %s\nORDER BY c.ordinal_position",
+   "parameters": [
+    "{schema}",
+    "users"
+   ],
+   "result": "tables/33848f80fc9f8ca65b1fea04c1ca0526a4db329aefccd4faa87cdbf420bcc30b.arrows"
+  },
+  {
+   "text": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = %s AND tc.table_name = %s\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE', 'FOREIGN KEY')",
+   "parameters": [
+    "{schema}",
+    "users"
+   ],
+   "result": "tables/e286250e156c178de91f308c659bcadbbe16d0439b1bb53538cfd8c7e30c5f63.arrows"
+  },
+  {
+   "text": "SELECT \"Id\", \"Reputation\", \"CreationDate\" FROM \"{schema}\".\"users\" LIMIT 1000",
+   "parameters": [],
+   "result": "tables/023ea0264be3cd23b8c4941fa6e393e0b803a3c948303bf0a46bd2ecebb727d3.arrows"
+  },
+  {
+   "text": "SELECT c.column_name, c.data_type, c.udt_name,\n       c.numeric_scale, c.is_nullable, c.table_schema,\n       c.table_name,\n       pg_catalog.format_type(a.atttypid, a.atttypmod)\nFROM information_schema.columns c\nJOIN pg_catalog.pg_namespace n\n  ON n.nspname = c.table_schema\nJOIN pg_catalog.pg_class rel\n  ON rel.relnamespace = n.oid AND rel.relname = c.table_name\nJOIN pg_catalog.pg_attribute a\n  ON a.attrelid = rel.oid AND a.attname = c.column_name\n AND a.attnum > 0 AND NOT a.attisdropped\nWHERE c.table_schema = %s AND c.table_name = %s\nORDER BY c.ordinal_position",
+   "parameters": [
+    "{schema}",
+    "votes"
+   ],
+   "result": "tables/09b0e3b13a529ad70429e3c5aa479924ae1e8d95dc7326e1e590328da4049d40.arrows"
+  },
+  {
+   "text": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = %s AND tc.table_name = %s\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE', 'FOREIGN KEY')",
+   "parameters": [
+    "{schema}",
+    "votes"
+   ],
+   "result": "tables/e286250e156c178de91f308c659bcadbbe16d0439b1bb53538cfd8c7e30c5f63.arrows"
+  },
+  {
+   "text": "SELECT \"Id\", \"PostId\", \"UserId\", \"VoteTypeId\", \"CreationDate\" FROM \"{schema}\".\"votes\" LIMIT 1000",
+   "parameters": [],
+   "result": "tables/32a65e3ec75e444b2938f16443b1d08ca167dd1e872dfdfe46cdf7539cc439de.arrows"
+  },
+  {
+   "text": "SELECT tc.constraint_name, kcu.column_name,\n       target_kcu.table_schema, target_kcu.table_name,\n       target_kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN information_schema.key_column_usage target_kcu\n  ON rc.unique_constraint_catalog = target_kcu.constraint_catalog\n AND rc.unique_constraint_schema = target_kcu.constraint_schema\n AND rc.unique_constraint_name = target_kcu.constraint_name\n AND target_kcu.ordinal_position = kcu.position_in_unique_constraint\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = %s AND tc.table_name = %s\nORDER BY tc.constraint_name, kcu.ordinal_position",
+   "parameters": [
+    "{schema}",
+    "posts"
+   ],
+   "result": "tables/394d63ec01769df0784105fd26102fc50851ceb1c753d9da8d1d61b3047e386e.arrows"
+  },
+  {
+   "text": "SELECT tc.constraint_name, kcu.column_name,\n       target_kcu.table_schema, target_kcu.table_name,\n       target_kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN information_schema.key_column_usage target_kcu\n  ON rc.unique_constraint_catalog = target_kcu.constraint_catalog\n AND rc.unique_constraint_schema = target_kcu.constraint_schema\n AND rc.unique_constraint_name = target_kcu.constraint_name\n AND target_kcu.ordinal_position = kcu.position_in_unique_constraint\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = %s AND tc.table_name = %s\nORDER BY tc.constraint_name, kcu.ordinal_position",
+   "parameters": [
+    "{schema}",
+    "users"
+   ],
+   "result": "tables/394d63ec01769df0784105fd26102fc50851ceb1c753d9da8d1d61b3047e386e.arrows"
+  },
+  {
+   "text": "SELECT tc.constraint_name, kcu.column_name,\n       target_kcu.table_schema, target_kcu.table_name,\n       target_kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN information_schema.key_column_usage target_kcu\n  ON rc.unique_constraint_catalog = target_kcu.constraint_catalog\n AND rc.unique_constraint_schema = target_kcu.constraint_schema\n AND rc.unique_constraint_name = target_kcu.constraint_name\n AND target_kcu.ordinal_position = kcu.position_in_unique_constraint\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = %s AND tc.table_name = %s\nORDER BY tc.constraint_name, kcu.ordinal_position",
+   "parameters": [
+    "{schema}",
+    "votes"
+   ],
+   "result": "tables/394d63ec01769df0784105fd26102fc50851ceb1c753d9da8d1d61b3047e386e.arrows"
+  },
+  {
+   "text": "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT \"Id\") AS d, COUNT(CASE WHEN \"Id\" IS NULL THEN 1 END) AS z\nFROM \"{schema}\".\"posts\"\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT \"Id\") AS d, COUNT(CASE WHEN \"Id\" IS NULL THEN 1 END) AS z\nFROM \"{schema}\".\"users\"\nUNION ALL\nSELECT 2 AS k, COUNT(*) AS n, COUNT(DISTINCT \"Id\") AS d, COUNT(CASE WHEN \"Id\" IS NULL THEN 1 END) AS z\nFROM \"{schema}\".\"votes\"",
+   "parameters": [],
+   "result": "tables/c56c7e3bce5e168fce0bc12d90f681b0ff8a8b4f0cac91671a709ef3de93441b.arrows"
+  },
+  {
+   "text": "SELECT COUNT(*) FROM \"{schema}\".\"posts\"",
+   "parameters": [],
+   "result": "tables/22f035affadd9a9b19eed541487e2d8d1334ea1744ed6d608010567ccee518de.arrows"
+  },
+  {
+   "text": "SELECT COUNT(*) FROM \"{schema}\".\"users\"",
+   "parameters": [],
+   "result": "tables/ae58bbbe2e1b439a29ddbafbcaddf4708691d5a60c687efffb423835a7b9a54a.arrows"
+  },
+  {
+   "text": "SELECT COUNT(*) FROM \"{schema}\".\"votes\"",
+   "parameters": [],
+   "result": "tables/9d4ccfb4a5b2c42fd08dad5af92476fd3338b20e6572cef819b112f15ad7bb03.arrows"
+  },
+  {
+   "text": "SELECT 0 AS table_index, MIN(\"CreationDate\") AS min_date, MAX(\"CreationDate\") AS max_date\nFROM \"{schema}\".\"votes\"",
+   "parameters": [],
+   "result": "tables/a78c59fc5e4e18699629e9c07f454521913ded8b37592e9eb77660c870ad31e4.arrows"
+  },
+  {
+   "text": "SELECT setseed(%s)",
+   "parameters": [
+    -0.31481207155156876
+   ],
+   "result": null
+  },
+  {
+   "text": "SELECT \"Id\", \"CreationDate\"\nFROM \"{schema}\".\"posts\"\nWHERE \"Id\" IS NOT NULL AND \"CreationDate\" IS NOT NULL\nORDER BY random()\nLIMIT 10000",
+   "parameters": [],
+   "result": "tables/2c21f2bf2e5e3433e0dbe555a2e0862811c460d4f43cc01d4c0adae96da6e70e.arrows"
+  },
+  {
+   "text": "WITH TMP AS (\n  SELECT (ordinality - 1)::bigint AS __KUMO_BATCH__, (value->>'id')::bigint AS __KUMO_ID__, (value->>'e')::timestamp without time zone AS __KUMO_END_TIME__, (value->>'s')::timestamp without time zone AS __KUMO_START_TIME__\n  FROM jsonb_array_elements(%s::jsonb) WITH ORDINALITY\n       AS input(value, ordinality)\n)\nSELECT TMP.__KUMO_BATCH__, \"CreationDate\"\nFROM TMP\nJOIN \"{schema}\".\"votes\"\n  ON \"PostId\" = TMP.__KUMO_ID__\n AND \"CreationDate\" <= TMP.__KUMO_END_TIME__\n AND \"CreationDate\" > TMP.__KUMO_START_TIME__\nORDER BY TMP.__KUMO_BATCH__, \"CreationDate\"",
+   "parameters": [
+    "[{\"id\":10,\"e\":\"2020-07-01T00:00:00\",\"s\":\"2020-04-02T00:00:00\"},{\"id\":3,\"e\":\"2020-07-01T00:00:00\",\"s\":\"2020-04-02T00:00:00\"},{\"id\":5,\"e\":\"2020-07-01T00:00:00\",\"s\":\"2020-04-02T00:00:00\"},{\"id\":0,\"e\":\"2020-07-01T00:00:00\",\"s\":\"2020-04-02T00:00:00\"},{\"id\":7,\"e\":\"2020-07-01T00:00:00\",\"s\":\"2020-04-02T00:00:00\"},{\"id\":8,\"e\":\"2020-07-01T00:00:00\",\"s\":\"2020-04-02T00:00:00\"},{\"id\":1,\"e\":\"2020-07-01T00:00:00\",\"s\":\"2020-04-02T00:00:00\"},{\"id\":4,\"e\":\"2020-07-01T00:00:00\",\"s\":\"2020-04-02T00:00:00\"},{\"id\":6,\"e\":\"2020-07-01T00:00:00\",\"s\":\"2020-04-02T00:00:00\"},{\"id\":9,\"e\":\"2020-07-01T00:00:00\",\"s\":\"2020-04-02T00:00:00\"},{\"id\":2,\"e\":\"2020-07-01T00:00:00\",\"s\":\"2020-04-02T00:00:00\"}]"
+   ],
+   "result": "tables/c18eed62e32ede848e0eb7c4151fdd28c2476e56e2aa73a3371e6749d06afcee.arrows"
+  },
+  {
+   "text": "WITH TMP AS (\n  SELECT (ordinality - 1)::bigint AS __KUMO_BATCH__, (value #>> '{}')::bigint AS __KUMO_ID__\n  FROM jsonb_array_elements(%s::jsonb) WITH ORDINALITY\n       AS input(value, ordinality)\n)\nSELECT * FROM (\n  SELECT TMP.__KUMO_BATCH__, \"Id\", \"OwnerUserId\", \"ParentId\", \"PostTypeId\", \"CreationDate\",\n         ROW_NUMBER() OVER (PARTITION BY TMP.__KUMO_BATCH__\n           ORDER BY \"Id\") AS __KUMO_ROW__,\n         COUNT(*) OVER (PARTITION BY TMP.__KUMO_BATCH__) AS __KUMO_MATCHES__\n  FROM TMP\n  JOIN \"{schema}\".\"posts\"\n    ON \"Id\" = TMP.__KUMO_ID__\n) AS sampled\nWHERE __KUMO_ROW__ = 1\nORDER BY __KUMO_BATCH__",
+   "parameters": [
+    "[10,3,5,0,7,8,1,4,6,9,2,0,1,2]"
+   ],
+   "result": "tables/b9a9c4062410afca6e0a381b12d845a985a89f246d058334c6a3e9b13e3512a7.arrows"
+  },
+  {
+   "text": "WITH TMP AS (\n  SELECT (ordinality - 1)::bigint AS __KUMO_BATCH__, (value #>> '{}')::bigint AS __KUMO_ID__\n  FROM jsonb_array_elements(%s::jsonb) WITH ORDINALITY\n       AS input(value, ordinality)\n)\nSELECT * FROM (\n  SELECT TMP.__KUMO_BATCH__, \"Id\", \"Reputation\", \"CreationDate\",\n         ROW_NUMBER() OVER (PARTITION BY TMP.__KUMO_BATCH__\n           ORDER BY \"Id\") AS __KUMO_ROW__,\n         COUNT(*) OVER (PARTITION BY TMP.__KUMO_BATCH__) AS __KUMO_MATCHES__\n  FROM TMP\n  JOIN \"{schema}\".\"users\"\n    ON \"Id\" = TMP.__KUMO_ID__\n) AS sampled\nWHERE __KUMO_ROW__ = 1\nORDER BY __KUMO_BATCH__",
+   "parameters": [
+    "[4,3,5,0,1,2]"
+   ],
+   "result": "tables/1d1c11b0af84639b1e728334f6636cc3c25d3bb11d1108fd0e53179cce2a57c6.arrows"
+  },
+  {
+   "text": "WITH TMP AS (\n  SELECT (ordinality - 1)::bigint AS __KUMO_BATCH__, (value #>> '{}')::bigint AS __KUMO_ID__\n  FROM jsonb_array_elements(%s::jsonb) WITH ORDINALITY\n       AS input(value, ordinality)\n)\nSELECT * FROM (\n  SELECT TMP.__KUMO_BATCH__, \"Id\", \"OwnerUserId\", \"ParentId\", \"PostTypeId\", \"CreationDate\",\n         ROW_NUMBER() OVER (PARTITION BY TMP.__KUMO_BATCH__\n           ORDER BY \"Id\") AS __KUMO_ROW__,\n         COUNT(*) OVER (PARTITION BY TMP.__KUMO_BATCH__) AS __KUMO_MATCHES__\n  FROM TMP\n  JOIN \"{schema}\".\"posts\"\n    ON \"Id\" = TMP.__KUMO_ID__\n) AS sampled\nWHERE __KUMO_ROW__ = 1\nORDER BY __KUMO_BATCH__",
+   "parameters": [
+    "[11,4,6,1,8,9,2,5,7,10,3]"
+   ],
+   "result": "tables/3487ff8cab65c75d154b2455e4200eaf743bd622bb8148c759acb0f185f662e3.arrows"
+  },
+  {
+   "text": "WITH TMP AS (\n  SELECT (ordinality - 1)::bigint AS __KUMO_BATCH__, (value->>'id')::bigint AS __KUMO_ID__, (value->>'e')::timestamp without time zone AS __KUMO_END_TIME__\n  FROM jsonb_array_elements(%s::jsonb) WITH ORDINALITY\n       AS input(value, ordinality)\n)\nSELECT TMP.__KUMO_BATCH__, sampled.*\nFROM TMP\nJOIN LATERAL (\n  SELECT \"Id\", \"OwnerUserId\", \"ParentId\", \"PostTypeId\", \"CreationDate\",\n         ROW_NUMBER() OVER (ORDER BY \"CreationDate\" DESC, \"Id\") AS __KUMO_ROW__\n  FROM \"{schema}\".\"posts\"\n  WHERE \"ParentId\" = TMP.__KUMO_ID__\n    AND \"CreationDate\" <= TMP.__KUMO_END_TIME__\n  ORDER BY \"CreationDate\" DESC, \"Id\"\n  LIMIT 32\n) AS sampled ON TRUE\nORDER BY __KUMO_BATCH__, __KUMO_ROW__",
+   "parameters": [
+    "[{\"id\":10,\"e\":\"2020-04-02T00:00:00\"},{\"id\":3,\"e\":\"2020-04-02T00:00:00\"},{\"id\":5,\"e\":\"2020-04-02T00:00:00\"},{\"id\":0,\"e\":\"2020-04-02T00:00:00\"},{\"id\":7,\"e\":\"2020-04-02T00:00:00\"},{\"id\":8,\"e\":\"2020-04-02T00:00:00\"},{\"id\":1,\"e\":\"2020-04-02T00:00:00\"},{\"id\":4,\"e\":\"2020-04-02T00:00:00\"},{\"id\":6,\"e\":\"2020-04-02T00:00:00\"},{\"id\":9,\"e\":\"2020-04-02T00:00:00\"},{\"id\":2,\"e\":\"2020-04-02T00:00:00\"},{\"id\":0,\"e\":\"2020-07-01T00:00:00\"},{\"id\":1,\"e\":\"2020-07-01T00:00:00\"},{\"id\":2,\"e\":\"2020-07-01T00:00:00\"}]"
+   ],
+   "result": "tables/22115388c87955572f9347a7a8220ae454fe59c04dba93ee0f1cb73ceec838bb.arrows"
+  },
+  {
+   "text": "WITH TMP AS (\n  SELECT (ordinality - 1)::bigint AS __KUMO_BATCH__, (value->>'id')::bigint AS __KUMO_ID__, (value->>'e')::timestamp without time zone AS __KUMO_END_TIME__\n  FROM jsonb_array_elements(%s::jsonb) WITH ORDINALITY\n       AS input(value, ordinality)\n)\nSELECT TMP.__KUMO_BATCH__, sampled.*\nFROM TMP\nJOIN LATERAL (\n  SELECT \"Id\", \"PostId\", \"UserId\", \"VoteTypeId\", \"CreationDate\",\n         ROW_NUMBER() OVER (ORDER BY \"CreationDate\" DESC, \"Id\") AS __KUMO_ROW__\n  FROM \"{schema}\".\"votes\"\n  WHERE \"PostId\" = TMP.__KUMO_ID__\n    AND \"CreationDate\" <= TMP.__KUMO_END_TIME__\n  ORDER BY \"CreationDate\" DESC, \"Id\"\n  LIMIT 32\n) AS sampled ON TRUE\nORDER BY __KUMO_BATCH__, __KUMO_ROW__",
+   "parameters": [
+    "[{\"id\":10,\"e\":\"2020-04-02T00:00:00\"},{\"id\":3,\"e\":\"2020-04-02T00:00:00\"},{\"id\":5,\"e\":\"2020-04-02T00:00:00\"},{\"id\":0,\"e\":\"2020-04-02T00:00:00\"},{\"id\":7,\"e\":\"2020-04-02T00:00:00\"},{\"id\":8,\"e\":\"2020-04-02T00:00:00\"},{\"id\":1,\"e\":\"2020-04-02T00:00:00\"},{\"id\":4,\"e\":\"2020-04-02T00:00:00\"},{\"id\":6,\"e\":\"2020-04-02T00:00:00\"},{\"id\":9,\"e\":\"2020-04-02T00:00:00\"},{\"id\":2,\"e\":\"2020-04-02T00:00:00\"},{\"id\":0,\"e\":\"2020-07-01T00:00:00\"},{\"id\":1,\"e\":\"2020-07-01T00:00:00\"},{\"id\":2,\"e\":\"2020-07-01T00:00:00\"}]"
+   ],
+   "result": "tables/2fcd1997bc265311e84f581f33a068829722f907b92220c1ac782248dc3ce3b7.arrows"
+  },
+  {
+   "text": "WITH TMP AS (\n  SELECT (ordinality - 1)::bigint AS __KUMO_BATCH__, (value #>> '{}')::bigint AS __KUMO_ID__\n  FROM jsonb_array_elements(%s::jsonb) WITH ORDINALITY\n       AS input(value, ordinality)\n)\nSELECT * FROM (\n  SELECT TMP.__KUMO_BATCH__, \"Id\", \"Reputation\", \"CreationDate\",\n         ROW_NUMBER() OVER (PARTITION BY TMP.__KUMO_BATCH__\n           ORDER BY \"Id\") AS __KUMO_ROW__,\n         COUNT(*) OVER (PARTITION BY TMP.__KUMO_BATCH__) AS __KUMO_MATCHES__\n  FROM TMP\n  JOIN \"{schema}\".\"users\"\n    ON \"Id\" = TMP.__KUMO_ID__\n) AS sampled\nWHERE __KUMO_ROW__ = 1\nORDER BY __KUMO_BATCH__",
+   "parameters": [
+    "[5,4,0,1,2,3]"
+   ],
+   "result": "tables/016a232155b471cbcce853f8bd72c943802150b76ff9a10d439c3832a911fe42.arrows"
+  },
+  {
+   "text": "WITH TMP AS (\n  SELECT (ordinality - 1)::bigint AS __KUMO_BATCH__, (value #>> '{}')::bigint AS __KUMO_ID__\n  FROM jsonb_array_elements(%s::jsonb) WITH ORDINALITY\n       AS input(value, ordinality)\n)\nSELECT * FROM (\n  SELECT TMP.__KUMO_BATCH__, \"Id\", \"OwnerUserId\", \"ParentId\", \"PostTypeId\", \"CreationDate\",\n         ROW_NUMBER() OVER (PARTITION BY TMP.__KUMO_BATCH__\n           ORDER BY \"Id\") AS __KUMO_ROW__,\n         COUNT(*) OVER (PARTITION BY TMP.__KUMO_BATCH__) AS __KUMO_MATCHES__\n  FROM TMP\n  JOIN \"{schema}\".\"posts\"\n    ON \"Id\" = TMP.__KUMO_ID__\n) AS sampled\nWHERE __KUMO_ROW__ = 1\nORDER BY __KUMO_BATCH__",
+   "parameters": [
+    "[12,5,7,2,9,10,3,6,8,11,4]"
+   ],
+   "result": "tables/6b17015e6899ab340702757a8fa5d685c6acc2a13eaea7dd9a7df80ba7ba3dc6.arrows"
+  },
+  {
+   "text": "WITH TMP AS (\n  SELECT (ordinality - 1)::bigint AS __KUMO_BATCH__, (value->>'id')::bigint AS __KUMO_ID__, (value->>'e')::timestamp without time zone AS __KUMO_END_TIME__\n  FROM jsonb_array_elements(%s::jsonb) WITH ORDINALITY\n       AS input(value, ordinality)\n)\nSELECT TMP.__KUMO_BATCH__, sampled.*\nFROM TMP\nJOIN LATERAL (\n  SELECT \"Id\", \"OwnerUserId\", \"ParentId\", \"PostTypeId\", \"CreationDate\",\n         ROW_NUMBER() OVER (ORDER BY \"CreationDate\" DESC, \"Id\") AS __KUMO_ROW__\n  FROM \"{schema}\".\"posts\"\n  WHERE \"ParentId\" = TMP.__KUMO_ID__\n    AND \"CreationDate\" <= TMP.__KUMO_END_TIME__\n  ORDER BY \"CreationDate\" DESC, \"Id\"\n  LIMIT 32\n) AS sampled ON TRUE\nORDER BY __KUMO_BATCH__, __KUMO_ROW__",
+   "parameters": [
+    "[{\"id\":11,\"e\":\"2020-04-02T00:00:00\"},{\"id\":4,\"e\":\"2020-04-02T00:00:00\"},{\"id\":6,\"e\":\"2020-04-02T00:00:00\"},{\"id\":1,\"e\":\"2020-04-02T00:00:00\"},{\"id\":8,\"e\":\"2020-04-02T00:00:00\"},{\"id\":9,\"e\":\"2020-04-02T00:00:00\"},{\"id\":2,\"e\":\"2020-04-02T00:00:00\"},{\"id\":5,\"e\":\"2020-04-02T00:00:00\"},{\"id\":7,\"e\":\"2020-04-02T00:00:00\"},{\"id\":10,\"e\":\"2020-04-02T00:00:00\"},{\"id\":3,\"e\":\"2020-04-02T00:00:00\"},{\"id\":1,\"e\":\"2020-07-01T00:00:00\"},{\"id\":2,\"e\":\"2020-07-01T00:00:00\"},{\"id\":3,\"e\":\"2020-07-01T00:00:00\"},{\"id\":9,\"e\":\"2020-04-02T00:00:00\"},{\"id\":2,\"e\":\"2020-04-02T00:00:00\"},{\"id\":4,\"e\":\"2020-04-02T00:00:00\"},{\"id\":6,\"e\":\"2020-04-02T00:00:00\"},{\"id\":7,\"e\":\"2020-04-02T00:00:00\"},{\"id\":0,\"e\":\"2020-04-02T00:00:00\"},{\"id\":3,\"e\":\"2020-04-02T00:00:00\"},{\"id\":5,\"e\":\"2020-04-02T00:00:00\"},{\"id\":8,\"e\":\"2020-04-02T00:00:00\"},{\"id\":1,\"e\":\"2020-04-02T00:00:00\"},{\"id\":19,\"e\":\"2020-07-01T00:00:00\"},{\"id\":0,\"e\":\"2020-07-01T00:00:00\"},{\"id\":1,\"e\":\"2020-07-01T00:00:00\"}]"
+   ],
+   "result": "tables/9381fbf25fc5e28f10792ba28753ba3723c929f147d985e2261083dd104708de.arrows"
+  },
+  {
+   "text": "WITH TMP AS (\n  SELECT (ordinality - 1)::bigint AS __KUMO_BATCH__, (value->>'id')::bigint AS __KUMO_ID__, (value->>'e')::timestamp without time zone AS __KUMO_END_TIME__\n  FROM jsonb_array_elements(%s::jsonb) WITH ORDINALITY\n       AS input(value, ordinality)\n)\nSELECT TMP.__KUMO_BATCH__, sampled.*\nFROM TMP\nJOIN LATERAL (\n  SELECT \"Id\", \"PostId\", \"UserId\", \"VoteTypeId\", \"CreationDate\",\n         ROW_NUMBER() OVER (ORDER BY \"CreationDate\" DESC, \"Id\") AS __KUMO_ROW__\n  FROM \"{schema}\".\"votes\"\n  WHERE \"PostId\" = TMP.__KUMO_ID__\n    AND \"CreationDate\" <= TMP.__KUMO_END_TIME__\n  ORDER BY \"CreationDate\" DESC, \"Id\"\n  LIMIT 32\n) AS sampled ON TRUE\nORDER BY __KUMO_BATCH__, __KUMO_ROW__",
+   "parameters": [
+    "[{\"id\":11,\"e\":\"2020-04-02T00:00:00\"},{\"id\":4,\"e\":\"2020-04-02T00:00:00\"},{\"id\":6,\"e\":\"2020-04-02T00:00:00\"},{\"id\":1,\"e\":\"2020-04-02T00:00:00\"},{\"id\":8,\"e\":\"2020-04-02T00:00:00\"},{\"id\":9,\"e\":\"2020-04-02T00:00:00\"},{\"id\":2,\"e\":\"2020-04-02T00:00:00\"},{\"id\":5,\"e\":\"2020-04-02T00:00:00\"},{\"id\":7,\"e\":\"2020-04-02T00:00:00\"},{\"id\":10,\"e\":\"2020-04-02T00:00:00\"},{\"id\":3,\"e\":\"2020-04-02T00:00:00\"},{\"id\":1,\"e\":\"2020-07-01T00:00:00\"},{\"id\":2,\"e\":\"2020-07-01T00:00:00\"},{\"id\":3,\"e\":\"2020-07-01T00:00:00\"},{\"id\":9,\"e\":\"2020-04-02T00:00:00\"},{\"id\":2,\"e\":\"2020-04-02T00:00:00\"},{\"id\":4,\"e\":\"2020-04-02T00:00:00\"},{\"id\":6,\"e\":\"2020-04-02T00:00:00\"},{\"id\":7,\"e\":\"2020-04-02T00:00:00\"},{\"id\":0,\"e\":\"2020-04-02T00:00:00\"},{\"id\":3,\"e\":\"2020-04-02T00:00:00\"},{\"id\":5,\"e\":\"2020-04-02T00:00:00\"},{\"id\":8,\"e\":\"2020-04-02T00:00:00\"},{\"id\":1,\"e\":\"2020-04-02T00:00:00\"},{\"id\":19,\"e\":\"2020-07-01T00:00:00\"},{\"id\":0,\"e\":\"2020-07-01T00:00:00\"},{\"id\":1,\"e\":\"2020-07-01T00:00:00\"}]"
+   ],
+   "result": "tables/305b32f54a9e51d9dd6ef30f5d11ff401c4cd653f999c6a6fe563f3bce4754a9.arrows"
+  },
+  {
+   "text": "WITH TMP AS (\n  SELECT (ordinality - 1)::bigint AS __KUMO_BATCH__, (value->>'id')::bigint AS __KUMO_ID__, (value->>'e')::timestamp without time zone AS __KUMO_END_TIME__\n  FROM jsonb_array_elements(%s::jsonb) WITH ORDINALITY\n       AS input(value, ordinality)\n)\nSELECT TMP.__KUMO_BATCH__, sampled.*\nFROM TMP\nJOIN LATERAL (\n  SELECT \"Id\", \"OwnerUserId\", \"ParentId\", \"PostTypeId\", \"CreationDate\",\n         ROW_NUMBER() OVER (ORDER BY \"CreationDate\" DESC, \"Id\") AS __KUMO_ROW__\n  FROM \"{schema}\".\"posts\"\n  WHERE \"OwnerUserId\" = TMP.__KUMO_ID__\n    AND \"CreationDate\" <= TMP.__KUMO_END_TIME__\n  ORDER BY \"CreationDate\" DESC, \"Id\"\n  LIMIT 32\n) AS sampled ON TRUE\nORDER BY __KUMO_BATCH__, __KUMO_ROW__",
+   "parameters": [
+    "[{\"id\":4,\"e\":\"2020-04-02T00:00:00\"},{\"id\":3,\"e\":\"2020-04-02T00:00:00\"},{\"id\":5,\"e\":\"2020-04-02T00:00:00\"},{\"id\":0,\"e\":\"2020-04-02T00:00:00\"},{\"id\":1,\"e\":\"2020-04-02T00:00:00\"},{\"id\":2,\"e\":\"2020-04-02T00:00:00\"},{\"id\":1,\"e\":\"2020-04-02T00:00:00\"},{\"id\":4,\"e\":\"2020-04-02T00:00:00\"},{\"id\":0,\"e\":\"2020-04-02T00:00:00\"},{\"id\":3,\"e\":\"2020-04-02T00:00:00\"},{\"id\":2,\"e\":\"2020-04-02T00:00:00\"},{\"id\":0,\"e\":\"2020-07-01T00:00:00\"},{\"id\":1,\"e\":\"2020-07-01T00:00:00\"},{\"id\":2,\"e\":\"2020-07-01T00:00:00\"}]"
+   ],
+   "result": "tables/f3b7ddad1b5f08c426728ca82a33b86d0e6e74c72df40603350f8b63e5a699b9.arrows"
+  },
+  {
+   "text": "WITH TMP AS (\n  SELECT (ordinality - 1)::bigint AS __KUMO_BATCH__, (value->>'id')::bigint AS __KUMO_ID__, (value->>'e')::timestamp without time zone AS __KUMO_END_TIME__\n  FROM jsonb_array_elements(%s::jsonb) WITH ORDINALITY\n       AS input(value, ordinality)\n)\nSELECT TMP.__KUMO_BATCH__, sampled.*\nFROM TMP\nJOIN LATERAL (\n  SELECT \"Id\", \"PostId\", \"UserId\", \"VoteTypeId\", \"CreationDate\",\n         ROW_NUMBER() OVER (ORDER BY \"CreationDate\" DESC, \"Id\") AS __KUMO_ROW__\n  FROM \"{schema}\".\"votes\"\n  WHERE \"UserId\" = TMP.__KUMO_ID__\n    AND \"CreationDate\" <= TMP.__KUMO_END_TIME__\n  ORDER BY \"CreationDate\" DESC, \"Id\"\n  LIMIT 32\n) AS sampled ON TRUE\nORDER BY __KUMO_BATCH__, __KUMO_ROW__",
+   "parameters": [
+    "[{\"id\":4,\"e\":\"2020-04-02T00:00:00\"},{\"id\":3,\"e\":\"2020-04-02T00:00:00\"},{\"id\":5,\"e\":\"2020-04-02T00:00:00\"},{\"id\":0,\"e\":\"2020-04-02T00:00:00\"},{\"id\":1,\"e\":\"2020-04-02T00:00:00\"},{\"id\":2,\"e\":\"2020-04-02T00:00:00\"},{\"id\":1,\"e\":\"2020-04-02T00:00:00\"},{\"id\":4,\"e\":\"2020-04-02T00:00:00\"},{\"id\":0,\"e\":\"2020-04-02T00:00:00\"},{\"id\":3,\"e\":\"2020-04-02T00:00:00\"},{\"id\":2,\"e\":\"2020-04-02T00:00:00\"},{\"id\":0,\"e\":\"2020-07-01T00:00:00\"},{\"id\":1,\"e\":\"2020-07-01T00:00:00\"},{\"id\":2,\"e\":\"2020-07-01T00:00:00\"}]"
+   ],
+   "result": "tables/6c9ffb8837e7ad2a07e73e4fc9296d4fc4aabd69f237c549b217cc98904f306d.arrows"
+  },
+  {
+   "text": "WITH TMP AS (\n  SELECT (ordinality - 1)::bigint AS __KUMO_BATCH__, (value #>> '{}')::bigint AS __KUMO_ID__\n  FROM jsonb_array_elements(%s::jsonb) WITH ORDINALITY\n       AS input(value, ordinality)\n)\nSELECT * FROM (\n  SELECT TMP.__KUMO_BATCH__, \"Id\", \"Reputation\", \"CreationDate\",\n         ROW_NUMBER() OVER (PARTITION BY TMP.__KUMO_BATCH__\n           ORDER BY \"Id\") AS __KUMO_ROW__,\n         COUNT(*) OVER (PARTITION BY TMP.__KUMO_BATCH__) AS __KUMO_MATCHES__\n  FROM TMP\n  JOIN \"{schema}\".\"users\"\n    ON \"Id\" = TMP.__KUMO_ID__\n) AS sampled\nWHERE __KUMO_ROW__ = 1\nORDER BY __KUMO_BATCH__",
+   "parameters": [
+    "[1,3,2,4,5,0]"
+   ],
+   "result": "tables/e982051168768a0671f1567de31f41f69d9dedb87beca86f2cac37ef8df5142f.arrows"
+  }
+ ],
+ "loader": []
+}

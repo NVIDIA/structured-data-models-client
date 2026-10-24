@@ -1,0 +1,68 @@
+{
+  "format": "sdm-case/1",
+  "id": "view.semantic.ranking",
+  "status": "acceptance",
+  "slice": "S2",
+  "warehouses": [
+    "snowflake"
+  ],
+  "paths": [
+    "schema.from-source/semantic-model/snowflake-semantic-view",
+    "query.materialize/indices-ranking/snowflake-semantic-view",
+    "client.predict/ranking/snowflake-semantic-view"
+  ],
+  "routes": [
+    "schema.from-source/semantic-model/snowflake-semantic-view",
+    "query.materialize/indices-binary/snowflake-semantic-view",
+    "query.materialize/indices-multiclass/snowflake-semantic-view",
+    "query.materialize/indices-regression/snowflake-semantic-view",
+    "query.materialize/indices-link-prediction/snowflake-semantic-view",
+    "query.materialize/indices-ranking/snowflake-semantic-view",
+    "query.materialize/indices-forecast/snowflake-semantic-view",
+    "client.predict/binary/snowflake-semantic-view",
+    "client.predict/multiclass/snowflake-semantic-view",
+    "client.predict/regression/snowflake-semantic-view",
+    "client.predict/link-prediction/snowflake-semantic-view",
+    "client.predict/ranking/snowflake-semantic-view",
+    "client.predict/forecast/snowflake-semantic-view"
+  ],
+  "cells": [
+    "int64/primary-key",
+    "int64/foreign-key",
+    "timestamp-us/time-column"
+  ],
+  "input": {
+    "base": "shop",
+    "setup": [
+      "CREATE TABLE items AS SELECT i::BIGINT AS item_id, ['a', 'b', 'c', 'd'][1 + i] AS kind FROM range(4) t(i)",
+      "CREATE TABLE buys AS SELECT i::BIGINT AS buy_id, (i % 8)::BIGINT AS user_id, ((i * 3) % 4)::BIGINT AS item_id, TIMESTAMP '2023-01-01' + to_days((i * 5)::INTEGER) AS ts FROM range(120) t(i)"
+    ],
+    "pql": "PREDICT LIST_DISTINCT(BUYS.ITEM_ID, 0, 30, days) RANK TOP 2 FOR EACH USERS.USER_ID",
+    "materialize": {
+      "indices": [
+        0,
+        1,
+        2
+      ],
+      "anchor_time": "2023-06-01",
+      "candidates": [
+        0,
+        1,
+        2
+      ]
+    },
+    "probabilities": true,
+    "view": {
+      "kind": "semantic_view",
+      "name": "view_semantic_ranking",
+      "yaml": "name: shop_buys\ntables:\n  - name: users\n    base_table:\n      database: '{catalog}'\n      schema: '{schema}'\n      table: users\n    primary_key:\n      columns: [user_id]\n    dimensions:\n      - name: user_id\n        expr: user_id\n        data_type: NUMBER\n      - name: country\n        expr: country\n        data_type: TEXT\n    facts:\n      - name: age\n        expr: age\n        data_type: NUMBER\n  - name: items\n    base_table:\n      database: '{catalog}'\n      schema: '{schema}'\n      table: items\n    primary_key:\n      columns: [item_id]\n    dimensions:\n      - name: item_id\n        expr: item_id\n        data_type: NUMBER\n      - name: kind\n        expr: kind\n        data_type: TEXT\n  - name: buys\n    base_table:\n      database: '{catalog}'\n      schema: '{schema}'\n      table: buys\n    primary_key:\n      columns: [buy_id]\n    dimensions:\n      - name: buy_id\n        expr: buy_id\n        data_type: NUMBER\n      - name: user_id\n        expr: user_id\n        data_type: NUMBER\n      - name: item_id\n        expr: item_id\n        data_type: NUMBER\n    time_dimensions:\n      - name: ts\n        expr: ts\n        data_type: TIMESTAMP_NTZ\nrelationships:\n  - name: buys_to_users\n    left_table: buys\n    right_table: users\n    relationship_columns:\n      - left_column: user_id\n        right_column: user_id\n  - name: buys_to_items\n    left_table: buys\n    right_table: items\n    relationship_columns:\n      - left_column: item_id\n        right_column: item_id\n"
+    }
+  },
+  "until": "predict",
+  "expect": {
+    "outcome": "success",
+    "stage": "predict"
+  },
+  "why": "A ranking over named candidates through a semantic view of three tables and two relationships. The semantic view is created in the test schema from the yaml, each base table named with the {catalog} (the database) and {schema} placeholders the capture writes, no private name; it is read through SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW (RE/graph.py:2056-2060), whose statement is T3.6's to render, and judged on the snowflake leg by T3.6's exit (T3.5 brief, open question 2) The question names the view's tables and columns in upper case, as Snowflake gives back the unquoted names of a semantic view (the second early capture: in lower case the old client refuses the question at materialize).",
+  "source": "written by T3.5's test author from the reference at 43e55f4f"
+}

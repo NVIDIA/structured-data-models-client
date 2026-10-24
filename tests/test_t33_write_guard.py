@@ -450,10 +450,20 @@ def _fake_drivers(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
 
     class Session:
         connection = SnowflakeConnection()
+        _session_id = 42
+        # What close sends to cancel the session's queries (Snowpark's
+        # cancel_all, session.py).
+        closing = 'select system$cancel_all_queries(42)'
 
         def sql(self, query: str) -> str:
             seen.append(query)
             return query
+
+        def cancel_all(self) -> None:
+            self.connection.cursor().execute(self.closing)
+
+        def close(self) -> None:
+            self.cancel_all()
 
     class Cursor:
         def execute(self, operation: str, parameters: Any = None) -> None:
@@ -1211,3 +1221,89 @@ def test_every_refusal_of_an_installed_guard_is_kept(installed: Any) -> None:
         _ = installed['DataFrame']().write
     assert len(wg.REFUSALS) == 2
     assert 'outside the test schema' in wg.REFUSALS[0]
+
+
+def test_the_old_clients_sampled_derived_table_read_passes() -> None:
+    # C-1 (databricks-sql, rule.key-name-form): the old client samples a
+    # renamed source as a derived table, `FROM (SELECT ...) TABLESAMPLE`.
+    # That read passes; a write dressed with the same sample, and a
+    # TABLESAMPLE after any other parenthesis, are still refused.
+    read = (
+        'SELECT `a`, `b`\n'
+        'FROM (SELECT source.`id` AS `a`, source.`x` AS `b` '
+        'FROM `other`.`s`.`t` AS source)\n'
+        'TABLESAMPLE (100.0 PERCENT) REPEATABLE (42)\n'
+        'WHERE `a` IS NOT NULL\nLIMIT 10000'
+    )
+    DATABRICKS.check(read)
+    for sql in (
+        'CREATE TABLE `other`.s.u AS SELECT * FROM (SELECT * FROM '
+        '`other`.s.t) TABLESAMPLE (5 PERCENT)',
+        'INSERT INTO `other`.s.u SELECT * FROM (SELECT * FROM '
+        '`other`.s.t) TABLESAMPLE (5 PERCENT)',
+        'SELECT * FROM `other`.s.t WHERE (a > 1) TABLESAMPLE (5 PERCENT)',
+        'SELECT * FROM (VALUES (1)) TABLESAMPLE (5 PERCENT)',
+    ):
+        with pytest.raises(wg.WriteRefused):
+            DATABRICKS.check(sql)
+
+
+def test_the_old_clients_join_onto_a_derived_table_passes() -> None:
+    # C-1 (databricks-sql, rule.key-name-form): the old client joins its
+    # batch onto a renamed source as a derived table, `JOIN (SELECT ...)`.
+    # That read passes; a write inside or around it, and a JOIN onto any
+    # other parenthesis, are still refused.
+    read = (
+        'WITH TMP AS (\nSELECT * FROM `other`.`s`.`ids`\n)\n'
+        'SELECT TMP.__KUMO_BATCH__ as __KUMO_BATCH__, `a`\nFROM TMP\n'
+        'JOIN (SELECT source.`id` AS `a` FROM `other`.`s`.`t` AS source)\n'
+        '  ON `a` = TMP.__KUMO_ID__'
+    )
+    DATABRICKS.check(read)
+    for sql in (
+        'INSERT INTO `other`.s.u SELECT * FROM `other`.s.v JOIN '
+        '(SELECT * FROM `other`.s.t) ON 1 = 1',
+        'CREATE TABLE `other`.s.u AS SELECT * FROM `other`.s.v JOIN '
+        '(SELECT * FROM `other`.s.t) ON 1 = 1',
+        'SELECT * FROM `other`.s.v JOIN (DELETE FROM `other`.s.t) ON 1 = 1',
+        'SELECT * FROM `other`.s.v JOIN (VALUES (1)) ON 1 = 1',
+    ):
+        with pytest.raises(wg.WriteRefused):
+            DATABRICKS.check(sql)
+
+
+def test_the_old_clients_trusted_bitmap_sample_passes() -> None:
+    # T3.20 second capture (view.metric.trusted-function): with
+    # trust_expressions=True the old client samples the view's
+    # bitmap_bucket_number dimension. That pure read passes; a write
+    # calling it is still refused.
+    DATABRICKS.check(
+        'SELECT bitmap_bucket_number(source.`order_id`) AS `bucket`\n'
+        'FROM `other`.`s`.`orders` AS source\nLIMIT 1000'
+    )
+    for sql in (
+        'CREATE TABLE `other`.s.u AS SELECT bitmap_bucket_number(1) AS b',
+        'INSERT INTO `other`.s.u SELECT bitmap_bucket_number(`id`) '
+        'FROM `other`.s.t',
+    ):
+        with pytest.raises(wg.WriteRefused):
+            DATABRICKS.check(sql)
+
+
+def test_snowpark_cancels_its_own_queries_only_while_it_closes(
+    installed: Any,
+) -> None:
+    # T3.20 second capture (snowflake.connect.snowpark): Session.close
+    # sends select system$cancel_all_queries(<its id>). That one statement
+    # passes while its session closes; sent at any other time, for another
+    # session, or as anything else during close, it is refused.
+    d, seen = installed, installed['seen']
+    d['Session']().close()
+    assert seen[-1] == 'select system$cancel_all_queries(42)'
+    with pytest.raises(wg.WriteRefused):
+        d['Session']().cancel_all()
+    for sent in ('select system$cancel_all_queries(43)', OUTSIDE):
+        session = d['Session']()
+        session.closing = sent
+        with pytest.raises(wg.WriteRefused):
+            session.close()

@@ -74,6 +74,11 @@ qualified in the test schema (``<database>.<schema>.<object>``; Postgres
   ``name`` one plain name and each table's ``base_table`` in the test
   schema, no key given twice.
 
+One statement is admitted by where it is sent from, not by its form:
+Snowpark's own ``select system$cancel_all_queries(<session id>)``, only
+while that session's ``Session.close`` runs and only for its own id
+(:data:`SESSION_CLOSE`).
+
 Snowflake reads an unquoted name upper-cased and a quoted one exactly;
 Postgres an unquoted one lower-cased and a quoted one exactly; Unity
 Catalog case-insensitively (a double-quoted text is a string there).
@@ -87,6 +92,7 @@ neither the loader nor the old client uses them.
 
 from __future__ import annotations
 
+import contextvars
 import functools
 import importlib
 import inspect
@@ -94,7 +100,7 @@ import os
 import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, NoReturn, cast
 
 DIALECTS = ('databricks', 'snowflake', 'postgres')
 
@@ -251,6 +257,9 @@ FUNCTIONS = frozenset(
         'CURRENT_SETTING',
         # The semantic view's definition, read.
         'SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW',
+        # A metric view's trusted expression the old client samples
+        # (Databricks' pure bitmap function, view.metric.trusted-function).
+        'BITMAP_BUCKET_NUMBER',
     }
 )  # fmt: skip
 #: Keywords no dialect lets name a function, so a ``(`` after one, never
@@ -442,7 +451,7 @@ class _Statement:
         self.refuse('an unclosed (')
         raise AssertionError
 
-    def refuse(self, why: str) -> None:
+    def refuse(self, why: str) -> NoReturn:
         raise WriteRefused(f'{self.what}: {why}')
 
 
@@ -539,6 +548,9 @@ class WriteGuard:
         # The word each open parenthesis follows, innermost last: inside a
         # cast, AS names its type.
         openers: list[str] = []
+        # Where each open parenthesis is, and the one the last ``)`` closed.
+        opened: list[int] = []
+        closed: int | None = None
         types: set[int] = set()
         for i, token in enumerate(items):
             word = _upper(token)
@@ -546,10 +558,12 @@ class WriteGuard:
             before = items[i - 1] if i else None
             if token == _OPEN:
                 openers.append(_upper(before))
+                opened.append(i)
                 continue
             if token == _CLOSE:
                 if openers:
                     openers.pop()
+                closed = opened.pop() if opened else None
                 continue
             if word in words and after != [_OPEN]:
                 raise WriteRefused(f'{what}: {word} where no write may be')
@@ -588,6 +602,22 @@ class WriteGuard:
                     and before is not None
                     and before.kind in ('word', 'name')
                     and _upper(before) not in RESERVED
+                )
+                or (
+                    # The old client's join onto a derived table:
+                    # JOIN (SELECT ...) ON ....
+                    word == 'JOIN'
+                    and [_upper(t) for t in items[i + 2 : i + 3]] == ['SELECT']
+                )
+                or (
+                    # The old client's sampled derived table:
+                    # FROM (SELECT ...) TABLESAMPLE (...).
+                    word == 'TABLESAMPLE'
+                    and before == _CLOSE
+                    and closed is not None
+                    and closed > 0
+                    and _upper(items[closed - 1]) == 'FROM'
+                    and _upper(items[closed + 1]) == 'SELECT'
                 )
                 or (
                     _upper(before) == 'AS'
@@ -964,6 +994,38 @@ _INSTALLED: list[tuple[type, str, Any]] = []
 REFUSALS: list[str] = []
 
 
+#: Snowpark's ``Session.close``: while it runs, the one statement it sends
+#: to cancel its own session's queries is admitted (:func:`_closing`).
+SESSION_CLOSE = ('snowflake.snowpark.session', 'Session', 'close')
+#: The statement the closing session may send, exactly, or ``None``.
+_CLOSING: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    'sdm_write_guard_closing', default=None
+)
+
+
+def _closing(original: Any) -> Any:
+    r"""Snowpark's ``Session.close``, admitting while it runs exactly
+    ``select system$cancel_all_queries(<its session id>)``, the statement
+    its ``cancel_all`` sends, and nothing else."""
+
+    @functools.wraps(original)
+    def close(self: Any, *arguments: Any, **keywords: Any) -> Any:
+        session_id = getattr(self, '_session_id', None)
+        admitted = (
+            f'select system$cancel_all_queries({session_id})'
+            if isinstance(session_id, int) and not isinstance(session_id, bool)
+            else None
+        )
+        token = _CLOSING.set(admitted)
+        try:
+            return original(self, *arguments, **keywords)
+        finally:
+            _CLOSING.reset(token)
+
+    setattr(close, _MARK, True)
+    return close
+
+
 def _keeping(function: Any) -> Any:
     r"""``function``, each refusal it raises kept in :data:`REFUSALS`."""
 
@@ -1024,7 +1086,10 @@ def _guarded(
             if len(given) != 1:
                 raise WriteRefused('a statement the guard cannot find')
             statement = keywords[given[0]]
-        check(_text(self, statement))
+        text = _text(self, statement)
+        closing = _CLOSING.get()
+        if closing is None or text != closing:
+            check(text)
         return original(self, *arguments, **keywords)
 
     return _keeping(guarded)
@@ -1158,7 +1223,7 @@ def _hook(cls: type) -> None:
 
     def __init_subclass__(sub: type, **keywords: Any) -> None:
         if previous is _ABSENT:
-            super(cls, sub).__init_subclass__(**keywords)
+            super(cast(Any, cls), sub).__init_subclass__(**keywords)
         else:
             previous.__get__(None, sub)(**keywords)
         for base, attribute, make in list(_RULES):
@@ -1206,11 +1271,12 @@ def install(guards: Mapping[str, WriteGuard | None]) -> Callable[[], None]:
                 _wrap(
                     cls,
                     attribute,
-                    lambda f, c=check, k=spark: _guarded(f, c, k),
+                    functools.partial(_guarded, check=check, spark=spark),
                 )
         module_name, class_name, attributes = SPARK_CONNECT
         cls = _class(module_name, class_name)
         for attribute in attributes if cls is not None else ():
+            assert cls is not None
             if not hasattr(cls, attribute):
                 raise RuntimeError(
                     f'{class_name} has no {attribute}: the write guard cannot '
@@ -1218,11 +1284,16 @@ def install(guards: Mapping[str, WriteGuard | None]) -> Callable[[], None]:
                 )
             guard = guards.get('databricks')
             check = guard.check if guard is not None else _closed('databricks')
-            _wrap(cls, attribute, lambda f, c=check: _plan_request(f, c))
+            _wrap(cls, attribute, functools.partial(_plan_request, check=check))
         for module_name, class_name, attributes in REFUSED:
             cls = _class(module_name, class_name)
             for attribute in attributes if cls is not None else ():
+                assert cls is not None
                 _wrap(cls, attribute, _refusing(f'{class_name}.{attribute}'))
+        module_name, class_name, attribute = SESSION_CLOSE
+        cls = _class(module_name, class_name, required=False)
+        if cls is not None:
+            _wrap(cls, attribute, _closing)
         for module_name, class_name in REFUSED_CLASSES:
             cls = _class(module_name, class_name, required=False)
             if cls is None:

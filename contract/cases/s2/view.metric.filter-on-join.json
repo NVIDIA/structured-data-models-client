@@ -1,0 +1,58 @@
+{
+  "format": "sdm-case/1",
+  "id": "view.metric.filter-on-join",
+  "status": "acceptance",
+  "slice": "S2",
+  "warehouses": [
+    "databricks-sql",
+    "databricks-spark"
+  ],
+  "paths": [
+    "schema.from-source/semantic-model/databricks-metric-view"
+  ],
+  "routes": [
+    "schema.from-source/semantic-model/databricks-metric-view",
+    "query.materialize/indices-binary/databricks-metric-view",
+    "query.materialize/indices-multiclass/databricks-metric-view",
+    "query.materialize/indices-regression/databricks-metric-view",
+    "query.materialize/indices-link-prediction/databricks-metric-view",
+    "query.materialize/indices-ranking/databricks-metric-view",
+    "query.materialize/indices-forecast/databricks-metric-view",
+    "client.predict/binary/databricks-metric-view",
+    "client.predict/multiclass/databricks-metric-view",
+    "client.predict/regression/databricks-metric-view",
+    "client.predict/link-prediction/databricks-metric-view",
+    "client.predict/ranking/databricks-metric-view",
+    "client.predict/forecast/databricks-metric-view"
+  ],
+  "cells": [
+    "int64/primary-key",
+    "int64/foreign-key",
+    "timestamp-us/time-column"
+  ],
+  "input": {
+    "base": "shop",
+    "pql": "PREDICT COUNT(orders.*, 0, 30, days) > 0 FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ],
+      "anchor_time": "2024-03-01"
+    },
+    "view": {
+      "kind": "metric_view",
+      "name": "view_metric_filter_on_join",
+      "yaml": "version: 0.1\nsource: \"`{catalog}`.`{schema}`.orders\"\nfilter: users.country = 'US'\njoins:\n  - name: users\n    source: \"`{catalog}`.`{schema}`.users\"\n    on: source.user_id = users.user_id\ndimensions:\n  - name: order_id\n    expr: source.order_id\n  - name: user_id\n    expr: source.user_id\n  - name: ts\n    expr: source.ts\n"
+    }
+  },
+  "until": "from_source",
+  "expect": {
+    "outcome": "refusal",
+    "stage": "from_source",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+  },
+  "why": "A row filter on a joined table's column, which cannot be put on the fact table alone: the reference refuses the view (UnsupportedFilterError, _check_filter, DB/metric_view.py:1238), raised as StructuredDataError INVALID_REQUEST. The view is created in the test schema from the yaml, its sources named with the {catalog} and {schema} placeholders the capture writes (no private name), each part backtick-quoted since Databricks reads a catalog's hyphen only quoted; its joins' on keys are bare, as people write them, so PyYAML reads each as the key true (KO3-40), which the reference reads too (DB/metric_view.py:825-909, join_cfg.get(True))",
+  "source": "written by T3.5's test author from the reference at 43e55f4f"
+}

@@ -53,7 +53,7 @@ import signal
 import sys
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -524,6 +524,41 @@ def bootstrap_reference(reference: Path, site: Path) -> Path:
     path = Path(site) / 'sdm-reference-client.pth'
     path.write_text(f'{source}\n', encoding='utf-8')
     return path
+
+
+def installable_wheels(
+    folder: Path | str, tags: Iterable[Any] | None = None
+) -> list[str]:
+    r"""The wheels in ``folder`` this host installs, by its tags
+    (``tags``, else ``packaging.tags.sys_tags()``), sorted: the folder
+    holds every platform's build the jobs' hosts need (serverless runs on
+    x86_64 and aarch64), and pip refuses a whole install naming a wheel
+    the host does not support."""
+    from packaging.tags import sys_tags
+    from packaging.utils import parse_wheel_filename
+
+    supported = set(sys_tags() if tags is None else tags)
+    return sorted(
+        str(path)
+        for path in Path(folder).glob('*.whl')
+        if supported & set(parse_wheel_filename(path.name)[3])
+    )
+
+
+def use_reference_client(reference: Path) -> Path:
+    r"""Makes this process import ``sdm_client`` from the reference
+    checkout ``reference``: its client source first on ``sys.path``, any
+    ``sdm_client`` already imported forgotten, so the client the recording
+    runs is the checkout's, as the runner requires, beside the reference's
+    other packages installed from its wheels (``capture_job.py``; a
+    notebook's environment reads no ``.pth`` file). Returns the source."""
+    source = (Path(reference) / CLIENT_SOURCE).resolve()
+    if not (source / 'sdm_client' / '__init__.py').is_file():
+        raise SystemExit(f'{reference}: no reference client at {CLIENT_SOURCE}')
+    sys.path.insert(0, str(source))
+    for name in [n for n in sys.modules if n.split('.')[0] == 'sdm_client']:
+        del sys.modules[name]
+    return source
 
 
 #: Each job parameter that names part of a run's environment, and the

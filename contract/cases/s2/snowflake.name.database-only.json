@@ -1,0 +1,55 @@
+{
+  "format": "sdm-case/1",
+  "id": "snowflake.name.database-only",
+  "status": "acceptance",
+  "slice": "S2",
+  "warehouses": [
+    "snowflake"
+  ],
+  "paths": [
+    "source.open/explicit/snowflake",
+    "schema.from-source/all-tables/snowflake",
+    "query.materialize/indices-binary/snowflake",
+    "client.predict/binary/snowflake"
+  ],
+  "routes": [
+    "schema.from-source/all-tables/snowflake",
+    "schema.from-source/catalog-keys/snowflake",
+    "query.materialize/indices-binary/snowflake",
+    "query.materialize/indices-multiclass/snowflake",
+    "query.materialize/indices-regression/snowflake",
+    "query.materialize/indices-link-prediction/snowflake",
+    "query.materialize/indices-ranking/snowflake",
+    "query.materialize/indices-forecast/snowflake",
+    "client.predict/binary/snowflake",
+    "client.predict/multiclass/snowflake",
+    "client.predict/regression/snowflake",
+    "client.predict/link-prediction/snowflake",
+    "client.predict/ranking/snowflake",
+    "client.predict/forecast/snowflake"
+  ],
+  "cells": [
+    "int64/primary-key",
+    "timestamp-us/time-column"
+  ],
+  "input": {
+    "base": "shop",
+    "named_part": "catalog",
+    "pql": "PREDICT COUNT(orders.*, 0, 30, days) > 0 FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ],
+      "anchor_time": "2024-03-01"
+    }
+  },
+  "until": "predict",
+  "expect": {
+    "outcome": "success",
+    "stage": "predict",
+    "today": "SnowflakeSource(connection, database=...) names no schema, so the old client runs SELECT CURRENT_DATABASE(), CURRENT_SCHEMA() once for the graph and fills only the schema from the session's answer (RE/graph.py:1024-1033); the session is opened in the test schema, so the tables are listed and read there as in snowflake.binary"
+  },
+  "why": "A Snowflake source naming its database alone, the schema read from the session (T3.6 old behaviour row 8, which no C-1 case records: every one names both parts). base.binary's question otherwise. Unsampled: the old client asks SAMPLE ROW for at least 1,000 rows (max_pq_iterations 10 times a context of at least 100, RE/rfm.py:2303), and every table here is smaller, so the draw is the whole table",
+  "source": "written for the second early capture (T3.20) from the reference at 43e55f4f"
+}

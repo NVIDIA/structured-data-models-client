@@ -1,0 +1,56 @@
+{
+  "format": "sdm-case/1",
+  "id": "snowflake.forecast.catalog-keys",
+  "status": "acceptance",
+  "slice": "S2",
+  "warehouses": [
+    "snowflake"
+  ],
+  "paths": [
+    "schema.from-source/all-tables/snowflake",
+    "schema.from-source/catalog-keys/snowflake",
+    "query.materialize/indices-forecast/snowflake",
+    "client.predict/forecast/snowflake"
+  ],
+  "routes": [
+    "schema.from-source/all-tables/snowflake",
+    "schema.from-source/catalog-keys/snowflake",
+    "query.materialize/indices-binary/snowflake",
+    "query.materialize/indices-multiclass/snowflake",
+    "query.materialize/indices-regression/snowflake",
+    "query.materialize/indices-link-prediction/snowflake",
+    "query.materialize/indices-ranking/snowflake",
+    "query.materialize/indices-forecast/snowflake",
+    "client.predict/binary/snowflake",
+    "client.predict/multiclass/snowflake",
+    "client.predict/regression/snowflake",
+    "client.predict/link-prediction/snowflake",
+    "client.predict/ranking/snowflake",
+    "client.predict/forecast/snowflake"
+  ],
+  "cells": [
+    "int32/primary-key",
+    "int32/foreign-key",
+    "timestamp-us/time-column"
+  ],
+  "input": {
+    "base": "declared",
+    "pql": "PREDICT SUM(orders.price, 0, 7, days) FORECAST 2 TIMEFRAMES FOR EACH users.uid",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ],
+      "anchor_time": "2023-03-01"
+    },
+    "quantiles": true
+  },
+  "until": "predict",
+  "expect": {
+    "outcome": "success",
+    "stage": "predict",
+    "today": "a forecast with indices pins its context to indices[0] (RE/rfm.py:2288-2297), so the entity table is read with WHERE uid IN (?) under the qmark paramstyle (SNOW/sampler.py:109-117, SNOW/binding.py:15-38) and never sampled; each step's window is read with ::TIMESTAMP_NTZ bounds (SNOW/sampler.py:423-425)"
+  },
+  "why": "The forecast kind on Snowflake, over the keys and link the catalog declares (uid, buyer); not the shared shop forecast every leg runs (T3.4's), and never sampled, since a forecast with indices reads its entity by key.",
+  "source": "written by T3.6's test author from the reference at 43e55f4f"
+}

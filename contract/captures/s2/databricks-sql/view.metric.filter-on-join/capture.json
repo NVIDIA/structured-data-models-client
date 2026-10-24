@@ -1,0 +1,152 @@
+{
+ "format": "sdm-capture/1",
+ "case": "view.metric.filter-on-join",
+ "leg": "databricks-sql",
+ "recording_commit": "337030f9271d35d9a6f4d207115ee78cea8c25be",
+ "reference_commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+ "versions": {
+  "databricks-sdk": "0.148.0",
+  "databricks-sql-connector": "4.6.0",
+  "duckdb": "1.5.6",
+  "numpy": "2.5.3",
+  "pandas": "3.0.6",
+  "pyarrow": "25.0.1",
+  "python": "3.12.15"
+ },
+ "input_hash": "f932055003cdce7bcc6d59f3ed2bfd07a82c0eadfe3aa4a0acdf512aea74d0b7",
+ "session": {
+  "time_zone": "Etc/UTC",
+  "null_order": "nulls_first"
+ },
+ "reference": {
+  "case": "view.metric.filter-on-join@databricks-sql",
+  "core": null,
+  "driver": {
+   "capture": {
+    "bindings": [],
+    "cursors": 1,
+    "events": [
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 1
+     }
+    ],
+    "incomplete": [],
+    "passed_through": [],
+    "statements": [
+     {
+      "error": null,
+      "handle": 1,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "3b0672218710719c62ea220649f5dd9541791bea36ea2eb64fc801f796a89df3",
+        "method": "fetchall",
+        "rows": 16,
+        "values": {
+         "columns": [
+          "col_name",
+          "data_type",
+          "comment",
+          "metadata"
+         ],
+         "ordered": "ab06c5195725bfff3bab461b01a7b6048fa101c9c71035847ac4d237cc65882b",
+         "types": [
+          "string",
+          "string",
+          "string",
+          "string"
+         ],
+         "unencodable": [],
+         "unordered": "27de504ef3a8d3f00c0f722a6a0fa0d300241d7b3b8033526342f8d85fcca813"
+        }
+       }
+      ],
+      "sql": "DESCRIBE TABLE EXTENDED `{catalog}`.`{schema}`.`view_metric_filter_on_join`",
+      "stage": "from_source"
+     }
+    ]
+   },
+   "query_log": {
+    "bindings": 0,
+    "compared": 1,
+    "differing": [],
+    "statements": 1
+   }
+  },
+  "format": "sdm-observation/1",
+  "host": {
+   "warnings": []
+  },
+  "identity": {
+   "cell": "ref-pandas3",
+   "commit": {
+    "clean": true,
+    "sha": "337030f9271d35d9a6f4d207115ee78cea8c25be"
+   },
+   "contract": null,
+   "inputs": {
+    "bases": "9d69fe4aea2be4a6a2d96ea03f5258147c537927e2c6e6716b6030836ebc62f8",
+    "case": "d73c83cff30a5d0c92acadbd3b803ede109ae039d9837899e53a9fb34b4305d2"
+   },
+   "native": null,
+   "native_loaded": false,
+   "operations": [],
+   "platform": "linux-x86_64",
+   "reference": {
+    "commit": {
+     "clean": true,
+     "sha": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1"
+    },
+    "environment": "4ad1f59a27870d083c270d58969d94b80e97bd128c81ba20396b4599e8ae0efe",
+    "guard": {
+     "after": "passed",
+     "before": "passed"
+    }
+   },
+   "runner": "python-ref",
+   "versions": {
+    "duckdb": "1.5.6",
+    "numpy": "2.5.3",
+    "pandas": "3.0.6",
+    "pyarrow": "25.0.1",
+    "python": "3.12.15"
+   }
+  },
+  "outcome": {
+   "code": "INVALID_REQUEST",
+   "error": "StructuredDataError",
+   "result": "refusal",
+   "stage": "from_source"
+  },
+  "public": {
+   "payloads": [],
+   "result": null,
+   "schema": null
+  }
+ },
+ "tables": [
+  {
+   "name": "orders",
+   "data": "tables/c05c70ac689f492103a392107639ac87a8672462bbc21aaee5c42dfa074e11f6.arrows"
+  },
+  {
+   "name": "users",
+   "data": "tables/137536e36f99fc9dcf9304db4989faed2582f6c7d2cf85ce2c091f371d314b1e.arrows"
+  }
+ ],
+ "derived": [],
+ "draws": [],
+ "statements": [
+  {
+   "text": "DESCRIBE TABLE EXTENDED `{catalog}`.`{schema}`.`view_metric_filter_on_join`",
+   "parameters": [],
+   "result": "tables/df37daba6f80cd1f7491a887534e94e97fd288b0ea1424b14c5c08e6dba676d9.arrows"
+  }
+ ],
+ "loader": []
+}
