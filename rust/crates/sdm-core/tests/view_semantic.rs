@@ -51,14 +51,14 @@ tables:
     base_table: {database: DB, schema: SHOP, table: USERS}
     primary_key: {columns: [USER_ID]}
     dimensions:
-      - {name: USER_ID, expr: user_id, data_type: NUMBER(38,0)}
+      - {name: USER_ID, expr: user_id, data_type: 'NUMBER(38,0)'}
       - {name: COUNTRY, expr: country, data_type: TEXT}
   - name: ORDERS
     base_table: {database: DB, schema: SHOP, table: ORDERS}
     primary_key: {columns: [ORDER_ID]}
     dimensions:
-      - {name: ORDER_ID, expr: order_id, data_type: NUMBER(38,0)}
-      - {name: USER_ID, expr: user_id, data_type: NUMBER(38,0)}
+      - {name: ORDER_ID, expr: order_id, data_type: 'NUMBER(38,0)'}
+      - {name: USER_ID, expr: user_id, data_type: 'NUMBER(38,0)'}
     facts:
       - {name: PRICE_WITH_TAX, expr: price * 1.2, data_type: FLOAT}
 relationships:
@@ -379,7 +379,7 @@ fn semantic_models_never_infer_additional_links_from_column_names() {
 
 #[test]
 fn converted_temporal_facts_reach_the_existing_zoned_window_planner() {
-    let definition = VIEW.replace("relationships:\n", "    time_dimensions:\n      - {name: DAY_TS, expr: DATE_TRUNC('DAY', TS), data_type: TIMESTAMP_LTZ(6)}\nrelationships:\n");
+    let definition = VIEW.replace("relationships:\n", "    time_dimensions:\n      - {name: DAY_TS, expr: \"DATE_TRUNC('DAY', TS)\", data_type: TIMESTAMP_LTZ(6)}\nrelationships:\n");
     let (description, _) = describe_view(&definition, source_spec());
     let orders = description
         .tables
