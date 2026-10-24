@@ -7914,6 +7914,73 @@ entries:
     with its entry. These record departures from the reference's words, so
     they wait for the owner. Approver: owner.
 
+- id: P3E-6
+  title: A Postgres session with no current schema is refused by name, in the old client's words
+  kind: change
+  old_behavior: >-
+    Schema.from_source over a PostgresSource given no schema, on a session
+    whose search path holds no schema that exists (current_schema() null),
+    raises the engine's own ValueError, "No current 'schema' set. Please
+    specify the PostgreSQL schema manually" (Graph.from_postgres), before
+    it reads a table; a built-in error, so the client does not wrap it.
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build, the
+    same words, after the session's schema is read and before any table
+    is, as a StructuredDataError, code INVALID_REQUEST (sentence
+    no_current_schema, T3.7); a materialize of a schema over such a session
+    is refused alike, since every run reads the session's schema (plan B).
+  affected_inputs: >-
+    Schema.from_source and PredictiveQuery.materialize over a PostgresSource
+    given no schema (a Lakebase connection included) whose session's search
+    path names no schema that exists.
+  cases: [T3.7]
+  refs: [T3.7, P3A-1, 'old-behaviour/T3.7-lakebase.md row 17']
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: owner. Measured on Postgres 17 (search_path set to a schema
+    that does not exist) by test_t37_lakebase_is_postgres.py, both routes:
+    the words are equal, the class and code differ. Recommendation: approve;
+    every other refusal of the core route is a StructuredDataError with a
+    code, and the old error class is the engine's, not the client's.
+
+- id: P3E-7
+  title: Postgres reads name the session's schema, read once per run, so P2C-1 and the current_schema() half of P2C-2 no longer apply
+  kind: keep
+  old_behavior: >-
+    The reference reads current_schema() once when a PostgresSource names no
+    schema and qualifies every read with it ("schema"."table"), so a
+    temporary or pg_catalog relation of a table's name never shadows it.
+  new_behavior: >-
+    The core does the same (T3.7): a PostgresSource given no schema has the
+    session's current schema read once per run (describe, and each
+    materialize under plan B, P3A-1) and every statement names it, as
+    "schema"."table" or the schema and table in a catalog read; no
+    statement asks the session for its schema or finds a relation by the
+    search path (to_regclass). A table a temporary table of its name
+    shadows is read from the schema on both routes, where P2C-1 had the
+    core refuse it; Schema.from_source runs the reference's own read,
+    SELECT current_schema(), which P2C-2 recorded the core as leaving out,
+    so compare.py now expects it of a core runner and leaves out only the
+    row counts (KO2-58).
+  affected_inputs: >-
+    Every Schema.from_source and PredictiveQuery.materialize over a
+    PostgresSource given no schema (a Lakebase connection included) on the
+    core route.
+  cases: [T3.7]
+  refs: [T3.7, P2C-1, P2C-2, P3A-1, KO2-58, KO2-63]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: owner. Proposes closing P2C-1 as no longer a difference and
+    narrowing P2C-2 to the row counts the reference reads at materialize;
+    both are owner-approved, so neither is edited here. Held by
+    test_t37_lakebase_is_postgres.py (the shadowed table, read alike on
+    both routes; each run's statements naming the schema, the session asked
+    once) and sdm-data's t37_postgres_schema.rs.
+
 # --- lane G entries (P2G-1..19) ---
 
 - id: P2G-1

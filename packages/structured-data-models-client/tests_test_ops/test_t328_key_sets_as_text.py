@@ -105,7 +105,10 @@ def _keyed(
     }
     fetch = {
         'request': request,
-        'provider': {'provider': 'sql', 'dialect': dialect},
+        # Postgres names its schema, which a source names or reads from its
+        # session (T3.7).
+        'provider': {'provider': 'sql', 'dialect': dialect}
+        | ({'namespace': ['public']} if dialect == 'postgres' else {}),
         'echo': True,
     }
     finished = run(

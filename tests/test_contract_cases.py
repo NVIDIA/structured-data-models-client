@@ -1212,6 +1212,10 @@ def test_the_reference_observations_validate_and_meet_each_expectation(
     # here whatever compare.py can read of it.
     by_case = {o['case']: o['outcome'] for o in observations}
     for case, _ in run_python.load_cases([CASES]):
+        if 'warehouses' in case:
+            # A warehouse-only case has no DuckDB answer: its old-client
+            # answers are its captures (contract/captures/).
+            continue
         outcome = by_case[case['id']]
         expect = case['expect']
         assert expect['outcome'] == outcome['result'], case['id']

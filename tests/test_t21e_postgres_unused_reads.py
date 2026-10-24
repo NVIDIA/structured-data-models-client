@@ -2,11 +2,12 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""T2.1e: on Postgres the reference's two reads whose results it never
-uses, ``SELECT current_schema()`` and each table's
-``SELECT COUNT(*) FROM "schema"."table"``, are not expected of a core
-runner (KO2-58); every other statement is, count by count and statement
-by statement, and DuckDB and SQLite lines are held to every one.
+r"""T2.1e: on Postgres the reference's read whose result it never uses, each
+table's ``SELECT COUNT(*) FROM "schema"."table"``, is not expected of a
+core runner (KO2-58); every other statement is, count by count and
+statement by statement, ``SELECT current_schema()`` included, which the
+core makes too since T3.7, and DuckDB and SQLite lines are held to every
+one.
 """
 
 from __future__ import annotations
@@ -66,7 +67,7 @@ def _without(observation: dict[str, Any], drop: Any) -> dict[str, Any]:
     return changed
 
 
-def test_only_the_two_unused_reads_are_not_expected(
+def test_only_the_unused_row_counts_are_not_expected(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     c = _compare()
@@ -76,10 +77,9 @@ def test_only_the_two_unused_reads_are_not_expected(
     unused = [
         s['sql']
         for s in theirs['driver']['capture']['statements']
-        if s['sql'] == 'SELECT current_schema()'
-        or s['sql'].startswith('SELECT COUNT(*) FROM "public".')
+        if s['sql'].startswith('SELECT COUNT(*) FROM "public".')
     ]
-    assert len(unused) == 3, unused
+    assert len(unused) == 2, unused
     ours = _without(theirs, lambda s: s['sql'] in unused)
     # The core's run without them is every other statement, as expected.
     assert _failures(ours, theirs, 'postgres') == []
@@ -87,13 +87,18 @@ def test_only_the_two_unused_reads_are_not_expected(
     assert any(
         rule == 'sql.count' for rule, _ in _failures(ours, theirs, 'sqlite')
     )
-    # Any other statement missing still fails.
-    setseed = _without(ours, lambda s: s['sql'].startswith('SELECT setseed'))
-    assert any(
-        rule == 'sql.count'
-        for rule, _ in _failures(setseed, theirs, 'postgres')
-    )
-    # And so does one more: the unused read run where none is expected.
+    # Any other statement missing still fails: the session's schema, which
+    # the core reads with the reference's statement (T3.7), and the seed.
+    for missing in ('SELECT current_schema()', 'SELECT setseed'):
+        without = _without(ours, lambda s, m=missing: s['sql'].startswith(m))
+        assert len(without['driver']['capture']['statements']) < len(
+            ours['driver']['capture']['statements']
+        ), missing
+        assert any(
+            rule == 'sql.count'
+            for rule, _ in _failures(without, theirs, 'postgres')
+        ), missing
+    # And so does one more: an unused read run where none is expected.
     extra = copy.deepcopy(ours)
     statements = extra['driver']['capture']['statements']
     statements.append({**statements[-1], 'sql': 'SELECT 1'})

@@ -230,6 +230,23 @@ pub struct Input {
     /// design choice 1), only on a case naming exactly its leg.
     #[serde(default, deserialize_with = "present")]
     pub connect: Option<Connect>,
+    /// The one namespace part the case's source names, the other read from
+    /// the session (the second early capture, T3.20): only beside
+    /// `warehouses` with two namespace parts, never beside `connect`.
+    #[serde(default, deserialize_with = "present")]
+    pub named_part: Option<NamedPart>,
+    /// Statements the run sends on the warehouse leg after the case's
+    /// tables are loaded (T3.20), at least one; only beside `warehouses`.
+    #[serde(default, deserialize_with = "some_statements")]
+    pub warehouse_setup: Option<Vec<String>>,
+}
+
+/// A namespace part a source may name alone.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NamedPart {
+    Catalog,
+    Schema,
 }
 
 /// A view an S2 case's source is: its kind, its name (a placeholder the run
@@ -902,6 +919,21 @@ fn warehouse_problem(case: &Case) -> Option<String> {
             "input.connect runs on {} alone",
             connect.leg().name()
         ));
+    }
+    if input.warehouse_setup.is_some() && legs.is_none() {
+        return Some("input.warehouse_setup needs warehouses".into());
+    }
+    if input.named_part.is_some() {
+        match legs {
+            None => return Some("input.named_part needs warehouses".into()),
+            Some(_) if input.connect.is_some() => {
+                return Some("input.named_part beside input.connect".into());
+            }
+            Some(legs) if legs.contains(&Warehouse::Lakebase) => {
+                return Some("input.named_part on lakebase, whose source names one part".into());
+            }
+            Some(_) => {}
+        }
     }
     None
 }

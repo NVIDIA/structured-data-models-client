@@ -35,8 +35,18 @@ use sdm_data::Data;
 /// The budget of one key set's text, in bytes, on Databricks and Postgres.
 const BUDGET: usize = 900_000;
 
+/// The choice of `dialect`; Postgres's naming its schema, which a source
+/// must name or read from its session (T3.7).
 fn choice(dialect: &str) -> ProviderChoice {
-    serde_json::from_str(&format!(r#"{{"provider":"sql","dialect":"{dialect}"}}"#)).unwrap()
+    let namespace = if dialect == "postgres" {
+        r#","namespace":["public"]"#
+    } else {
+        ""
+    };
+    serde_json::from_str(&format!(
+        r#"{{"provider":"sql","dialect":"{dialect}"{namespace}}}"#
+    ))
+    .unwrap()
 }
 
 /// A lookup of `users` against seeds of a key of `key_type` (as the

@@ -8,7 +8,8 @@ the design's row ("dialect, psycopg provider (Arrow without pandas)", "key
 sets bound as the dialect binds them", "L4 goldens executed", choice 12's
 relation forms) and ``test_the_duckdb_provider.py``, whose vectors this
 reads: each fetch is planned by the core's data layer for Postgres
-(``{'provider': 'sql', 'dialect': 'postgres'}``), answered by the provider
+(``{'provider': 'sql', 'dialect': 'postgres'}``, under the database's
+``public`` schema since T3.7), answered by the provider
 over a ``psycopg`` connection to a real Postgres, admitted by the core and
 echoed back by the test-only fetch. The data is the DuckDB-built tables the
 vectors name, loaded into a database of their own by the contract loader
@@ -78,7 +79,10 @@ KINDS = json.loads(
 )
 #: The provider under test, module and class.
 PROVIDER = ('sdm_client._rust.providers.postgres', 'PostgresProvider')
-POSTGRES = {'provider': 'sql', 'dialect': 'postgres'}
+#: Under the schema each test's database holds its tables in, ``public``,
+#: as every Postgres read names one (T3.7): the source's, or its session's
+#: current one, read once per run.
+POSTGRES = {'provider': 'sql', 'dialect': 'postgres', 'namespace': ['public']}
 
 
 def _loader() -> Any:

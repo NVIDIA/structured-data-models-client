@@ -102,6 +102,13 @@ fn keyed_run(
     )
 }
 
+/// Postgres naming its schema, which a source must name or read from its
+/// session (T3.7).
+fn postgres() -> ProviderChoice {
+    serde_json::from_str(r#"{"provider":"sql","dialect":"postgres","namespace":["public"]}"#)
+        .unwrap()
+}
+
 fn databricks() -> ProviderChoice {
     ProviderChoice::sql("databricks")
 }
@@ -342,7 +349,7 @@ fn bind_s_default_round_trips_one_fetch_of_the_plan_and_the_core_s_key_set() {
     let made = seeds(vec![1, 2, 3]);
     let mut run = keyed_run(
         Arc::new(Unbound(sdm_data::Data::new())),
-        &ProviderChoice::sql("postgres"),
+        &postgres(),
         &["users"],
         made.clone(),
         Arc::clone(&seen),
@@ -355,10 +362,7 @@ fn bind_s_default_round_trips_one_fetch_of_the_plan_and_the_core_s_key_set() {
     };
     let original = seen.lock().unwrap().keys.unwrap();
     let planned = sdm_data::Data::new()
-        .plan(
-            &lookup(&["users"], original),
-            &ProviderChoice::sql("postgres"),
-        )
+        .plan(&lookup(&["users"], original), &postgres())
         .unwrap();
     assert_eq!(step.plan, planned, "the plan as it is");
     let FetchPlan::Sql { statements, .. } = &step.plan else {
@@ -466,7 +470,7 @@ fn chunked_postgres(answers: Vec<FetchResult>) -> Option<Reply> {
     let seen = Arc::new(Mutex::new(Seen::default()));
     let mut run = keyed_run(
         Arc::new(sdm_data::Data::new()),
-        &ProviderChoice::sql("postgres"),
+        &postgres(),
         &["wide_numbers"],
         seeds(many()),
         Arc::clone(&seen),

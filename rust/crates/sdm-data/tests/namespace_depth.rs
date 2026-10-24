@@ -137,7 +137,11 @@ fn a_databricks_source_leaving_any_part_to_the_connection_is_settled_first() {
     }
     assert!(data.unsettled(&choice("databricks", json!(["main", null]))));
     assert!(!data.unsettled(&choice("databricks", json!(["main", "shop"]))));
-    assert!(!data.unsettled(&choice("postgres", json!([]))));
+    // A Postgres source given no schema is settled too, by its session's
+    // current schema (T3.7); one given its schema is not.
+    assert!(data.unsettled(&choice("postgres", json!([]))));
+    assert!(data.unsettled(&choice("postgres", json!([null]))));
+    assert!(!data.unsettled(&choice("postgres", json!(["shop"]))));
     assert!(!data.unsettled(&choice("duckdb", json!([]))));
     assert_eq!(
         data.settled(

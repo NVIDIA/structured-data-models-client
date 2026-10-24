@@ -186,6 +186,34 @@ PRIVATE_PREFIXES = ('SDM_PRIVATE_', 'SDM_LIVE_', PLACEHOLDER_PREFIX)
 #: variable's whole value is searched for at any length.
 SHORTEST = 4
 
+#: The warehouse legs a live run records.
+LEGS = ('databricks-sql', 'databricks-spark', 'snowflake', 'lakebase')
+_BACKTICK = (
+    'a name holds a backtick, which the write guard refuses on Databricks'
+)
+_LINE_BREAK = 'a name holds a line break, which the write guard refuses'
+#: The cases the live run leaves out of a leg by name, with the legs and
+#: the reason: their names hold a character the write guard's one strict
+#: name rule refuses (a backtick on Databricks, a line break anywhere), so
+#: every load of theirs is refused by design (the owner's allowlist
+#: decision). The one list: ``scripts/live/capture_run.py``'s plan leaves
+#: them out, and ``capture_check.py captures`` holds these pairs known not
+#: live, never pending.
+NOT_LIVE: dict[str, tuple[tuple[str, ...], str]] = {
+    **{
+        f'name.backtick-{part}': (
+            ('databricks-sql', 'databricks-spark'),
+            _BACKTICK,
+        )
+        for part in ('aggregation', 'entity', 'feature', 'filter', 'target')
+    },
+    **{
+        f'name.line-break-{part}': (LEGS, _LINE_BREAK)
+        for part in ('aggregation', 'entity', 'feature', 'filter', 'target')
+    },
+}
+
+
 #: The keys of a capture, the required ones and those with a default.
 REQUIRED = (
     'case',
@@ -198,7 +226,15 @@ REQUIRED = (
     'reference',
     'tables',
 )
-OPTIONAL = {'derived': [], 'draws': [], 'statements': [], 'loader': []}
+OPTIONAL = {
+    'derived': [],
+    'draws': [],
+    'statements': [],
+    'loader': [],
+    # Why a capture recorded from a tree that was not clean stands
+    # (capture_check.py's dirty-tree rule), written only when named.
+    'excuse': None,
+}
 
 
 class CaptureError(Exception):
@@ -689,6 +725,8 @@ def _document(
             entry['error'] = scrub.json(statement['error'], f'{where}.error')
         out['statements'].append(entry)
     out['loader'] = scrub.json(list(capture.get('loader', [])), 'loader')
+    if capture.get('excuse'):
+        out['excuse'] = scrub.json(str(capture['excuse']), 'excuse')
     return out, scrub.files
 
 
@@ -802,6 +840,8 @@ def read(path: Path) -> dict[str, Any]:
         for statement in found['statements']
     ]
     back['loader'] = found['loader']
+    if found.get('excuse'):
+        back['excuse'] = found['excuse']
     return back
 
 
@@ -1029,6 +1069,7 @@ def from_recording(
         'derived': derived,
         'draws': draws,
         'statements': statements,
+        **({'excuse': recording['excuse']} if recording.get('excuse') else {}),
     }
 
 

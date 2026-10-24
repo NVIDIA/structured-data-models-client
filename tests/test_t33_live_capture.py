@@ -91,6 +91,7 @@ def test_the_job_template_fills_and_passes_the_runs_check() -> None:
         'CAPTURE_SCHEMA': 'seeded_schema',
         'TEST_DATABASE': 'seeded_catalog',
         'TEST_SCHEMA': 'seeded_schema',
+        'CAPTURE_NAMES': '{}',
     }
     payload = dbx_runs.fill(
         {k: v for k, v in template.items() if not k.startswith('_')}, values
@@ -121,7 +122,7 @@ def test_snowflake_s_plan_creates_a_semantic_view_first(
     assert first['case'] == 'view.semantic.binary'
     statements = '\n'.join(first['statements'])
     assert (
-        'CREATE TABLE "{catalog}"."{schema}"."users" ("USER_ID"' in statements
+        'CREATE TABLE "{catalog}"."{schema}"."USERS" ("USER_ID"' in statements
     )
     assert 'SYSTEM$CREATE_SEMANTIC_VIEW_FROM_YAML' in statements
 
@@ -360,7 +361,7 @@ def test_a_semantic_view_case_loads_creates_and_reads_back_through_live(
 ) -> None:
     # Review r3 (P2): the recording mode's Live loads the case, creates its
     # semantic view and reads every table back on a case-sensitive
-    # Snowflake: the YAML's quoted base tables and unquoted columns resolve.
+    # Snowflake: the YAML's unquoted base tables and columns resolve.
     config = tmp_path / 'live.json'
     config.write_text(
         json.dumps(
@@ -434,6 +435,30 @@ def test_the_job_runs_in_its_notebook_with_its_environment(
 
     assert os.environ['SDM_CAPTURE_SCHEMA'] == 'zq_hidden'
     assert 'SDM_LIVE_TEST_SCHEMA' not in os.environ
+
+
+def test_the_job_sets_the_other_placeholders_from_capture_names(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # T3.20 second capture: the Spark leg's view cases name existing views,
+    # and a view's describe shows its owner, so the job takes the other
+    # placeholders' names as one JSON parameter, set as SDM_CAPTURE_<NAME>.
+    template = json.loads((LIVE / 'capture.job.template.json').read_text())
+    parameters = template['tasks'][0]['notebook_task']['base_parameters']
+    assert capture_run.JOB_NAMES in parameters
+    assert capture_run.JOB_NAMES in (LIVE / 'capture_job.py').read_text()
+    for name in ('SDM_CAPTURE_USER', 'SDM_CAPTURE_SHOP_METRIC_VIEW'):
+        monkeypatch.delenv(name, raising=False)
+    found = capture_run.job_environment(
+        {'capture_names': '{"user": "zq_owner", "shop_metric_view": "c.s.v"}'}
+    )
+    assert found == ['SDM_CAPTURE_SHOP_METRIC_VIEW', 'SDM_CAPTURE_USER']
+    import os
+
+    assert os.environ['SDM_CAPTURE_USER'] == 'zq_owner'
+    for bad in ('["user"]', '{"User": "x"}', '{"user": ""}', '{"user": 1}'):
+        with pytest.raises(SystemExit):
+            capture_run.job_environment({'capture_names': bad})
 
 
 # Round 9 (Claude P1-1, P1-2): the run records what it can.
@@ -592,3 +617,88 @@ def test_a_failed_case_is_recorded_and_the_rest_continue(
         'c': 'ValueError: a driver error outside the runner',
         'd': 'the write guard refused: SELECT SETSEED: SETSEED(), a function on no list',
     }
+
+
+def test_the_job_loads_the_reference_client_in_its_own_process(
+    tmp_path: Path,
+) -> None:
+    # C-1's Spark leg: a notebook's environment reads no .pth file, so the
+    # job puts the checkout's client source first on sys.path in the
+    # recording's own process, over any sdm_client imported already, and
+    # the runner's check that the client is the checkout's passes.
+    import subprocess
+
+    reference = tmp_path / 'reference'
+    client = reference / capture_run.CLIENT_SOURCE / 'sdm_client'
+    client.mkdir(parents=True)
+    (client / '__init__.py').write_text('')
+    stale = tmp_path / 'installed/sdm_client'
+    stale.mkdir(parents=True)
+    (stale / '__init__.py').write_text('')
+    probe = (
+        'import importlib.util, sys; from pathlib import Path; '
+        f'sys.path.insert(0, {str(stale.parent)!r}); import sdm_client; '
+        "spec = importlib.util.spec_from_file_location('c', "
+        f'{str(LIVE / "capture_run.py")!r}); '
+        'capture = importlib.util.module_from_spec(spec); '
+        'spec.loader.exec_module(capture); '
+        f'capture.use_reference_client(Path({str(reference)!r})); '
+        "spec = importlib.util.spec_from_file_location('r', "
+        f'{str(ROOT / "contract/runners/run_python.py")!r}); '
+        'module = importlib.util.module_from_spec(spec); '
+        "sys.modules['r'] = module; spec.loader.exec_module(module); "
+        f'module._require_reference_client(Path({str(reference)!r})); '
+        "print('ok')"
+    )
+    done = subprocess.run(
+        [sys.executable, '-I', '-S', '-c', probe],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert done.stdout.strip() == 'ok', done.stderr[-2000:]
+    # The job writes no .pth file (capture_run.py bootstrap) any more.
+    assert "'bootstrap'" not in (LIVE / 'capture_job.py').read_text()
+    with pytest.raises(SystemExit, match='no reference client'):
+        capture_run.use_reference_client(tmp_path / 'installed')
+
+
+def test_the_job_installs_only_its_hosts_wheels(tmp_path: Path) -> None:
+    # C-1's Spark leg: serverless runs on x86_64 and aarch64 hosts, so the
+    # wheel folder holds both platforms' builds, and the job hands pip only
+    # the ones its own host installs (an unsupported wheel named to pip
+    # fails the whole install).
+    from packaging.tags import Tag
+
+    names = [
+        'structured_data_models_api-1.0.0-py3-none-any.whl',
+        'structured_data_models_relational_engine-1.0.0-cp312-cp312-'
+        'manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl',
+        'structured_data_models_relational_engine-1.0.0-cp312-cp312-'
+        'manylinux_2_28_aarch64.whl',
+        'duckdb-1.5.6-cp312-cp312-manylinux_2_26_aarch64.'
+        'manylinux_2_28_aarch64.whl',
+    ]
+    for name in names:
+        (tmp_path / name).write_bytes(b'')
+    arm = [
+        Tag('cp312', 'cp312', 'manylinux_2_28_aarch64'),
+        Tag('py3', 'none', 'any'),
+    ]
+    chosen = capture_run.installable_wheels(tmp_path, arm)
+    assert [Path(path).name for path in chosen] == sorted(
+        name for name in names if 'x86_64' not in name
+    )
+    x86 = [
+        Tag('cp312', 'cp312', 'manylinux_2_28_x86_64'),
+        Tag('py3', 'none', 'any'),
+    ]
+    assert [
+        Path(path).name
+        for path in capture_run.installable_wheels(tmp_path, x86)
+    ] == sorted(names[:2])
+    # The job hands pip the chosen wheels, never the folder's every wheel.
+    assert (
+        'capture_run.installable_wheels'
+        in (LIVE / 'capture_job.py').read_text()
+    )

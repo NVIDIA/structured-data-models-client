@@ -12,27 +12,26 @@
 //! `PostgresTable` reads them), the preview, the key counts, the column
 //! ranges, the repeated key, the time bounds (`MIN` and `MAX` in the
 //! column's own type, which the core reads after) and the entity sample are
-//! the reference's text but for the relation, which is the core's (design
-//! choice 12): the reference binds the schema it read with
-//! `current_schema()`, a read whose result the core never needs (KO2-58),
-//! and qualifies its `FROM` with it, where the core names the schema in
-//! place. A key lookup and a neighbor read return the reference's columns
-//! (the seed's batch position, the row's columns, its number among its
-//! seed's, `__kumo_row__`, and for a lookup the count of rows holding the
-//! key), their seeds unpacked as below.
+//! the reference's text but for the schema and table of a catalog read,
+//! which the reference binds and the core writes in place. A key lookup and
+//! a neighbor read return the reference's columns (the seed's batch
+//! position, the row's columns, its number among its seed's,
+//! `__kumo_row__`, and for a lookup the count of rows holding the key),
+//! their seeds unpacked as below.
 //!
 //! The catalog answers are the reference's, read by [`read`] into the
-//! contract's catalog answer. A relation is found as the reference finds a
-//! table: a one-part name in `current_schema()` alone, two parts by schema
-//! and table, a view included; a source given its schema (the provider's
-//! namespace, contract v28) has each one-part name read as two parts under
-//! it and its tables listed in it, as the reference reads the schema it
-//! was given; a name the source does not hold there
-//! answers no columns, which the core refuses as the reference refuses a
-//! table it cannot find. A one-part `FROM` reads that table unless the
-//! search path finds a temporary or `pg_catalog` relation of the name
-//! first; such a name also answers no columns ([`regclass`]), so every
-//! statement of a run reads the relation the reference reads, or none.
+//! contract's catalog answer. Every relation is read in two parts, a schema
+//! and a table, as the reference names every table it reads
+//! (`"schema"."table"`, T3.7): a source given its schema (the provider's
+//! namespace, contract v28) has each one-part name read under it; a source
+//! given none has the session's current schema read once per run
+//! (`describe` of its namespace, [`SqlDialect::settles_namespace`]) and
+//! every relation named under that, as the reference reads
+//! `current_schema()` once and names it in every statement. A relation of
+//! one part reaching a plan was read under no schema, since the session
+//! has none, and is refused as the reference refuses it ([`unqualified`]).
+//! A name the source does not hold under its schema answers no columns,
+//! which the core refuses as the reference refuses a table it cannot find.
 //!
 //! A key set is bound as the reference's Postgres sampler binds one: JSON
 //! text in the statement's one parameter, `$1`, unpacked by a common table
@@ -114,12 +113,6 @@ fn seeds_for(table: &Relation) -> String {
 /// (design choice 12).
 const MOST_PARTS: usize = 2;
 
-/// The `FROM` target of `relation`, through the data layer's one rendering
-/// of a relation ([`sql::from`]).
-fn from(request: &DataRequest, field: &str, relation: &Relation) -> Result<String, CoreError> {
-    sql::from(&Postgres, request, field, relation)
-}
-
 /// The Postgres dialect.
 pub(crate) struct Postgres;
 
@@ -176,6 +169,17 @@ impl SqlDialect for Postgres {
     /// one part (design fix C).
     fn namespace_depth(&self) -> usize {
         1
+    }
+
+    /// A source given no schema has the session's current one read once
+    /// per run, and every relation named under it, as the reference reads
+    /// `current_schema()` once and names it in every statement (T3.7).
+    fn settles_namespace(&self) -> bool {
+        true
+    }
+
+    fn unqualified(&self, relation: &Relation) -> Option<CoreError> {
+        unqualified(relation)
     }
 
     fn seeds_for(&self, _request: &DataRequest, table: &Relation) -> String {
@@ -349,48 +353,57 @@ impl SqlDialect for Postgres {
     }
 }
 
-/// The catalog's object id of `relation`, found as the reference finds a
-/// table (`PostgresTable`, its catalog read by schema and table name): a
-/// one-part name in `current_schema()` alone, two parts the schema and the
-/// table so named, each compared as written. Null where the source holds no
-/// such relation, and where the relation the same name reads in a `FROM`
-/// (`to_regclass` over the quoted parts) is another: a temporary or
-/// `pg_catalog` relation of a one-part name, which the search path finds
-/// first, so no statement of the run reads a relation the reference does
-/// not.
-fn regclass(request: &DataRequest, field: &str, relation: &Relation) -> Result<String, CoreError> {
-    let read = text(&from(request, field, relation)?);
-    let (schema, table) = match relation.source.as_slice() {
-        [table] => ("current_schema()".to_owned(), text(table)),
-        [schema, table] => (text(schema), text(table)),
-        _ => {
-            return Err(CoreError::new(
-                Sentence::Internal,
-                "a relation past the parts the dialect takes reached its catalog read",
-            ));
-        }
-    };
-    Ok(format!(
-        "(SELECT c.oid FROM pg_catalog.pg_class c\n         JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace\n         WHERE n.nspname = {schema} AND c.relname = {table}\n           AND c.oid = to_regclass({read}))"
-    ))
+/// The refusal of a relation of one part: every relation is read under a
+/// schema, the source's or the session's current one, so one of one part
+/// reaching a plan was read under none, which the reference refuses before
+/// it reads a table (`Graph.from_postgres`).
+fn unqualified(relation: &Relation) -> Option<CoreError> {
+    (relation.source.len() < MOST_PARTS).then(no_current_schema)
+}
+
+/// The reference's refusal of a source given no schema whose session has
+/// none (`current_schema()` null): `No current 'schema' set. Please
+/// specify the PostgreSQL schema manually`.
+fn no_current_schema() -> CoreError {
+    CoreError::new(
+        Sentence::NoCurrentSchema,
+        "the source names no schema and the session has no current one",
+    )
+    .with_field("database", Detail::text(NAME))
+}
+
+/// The schema a source's tables are listed in: the provider's namespace,
+/// the source's schema or the session's current one the core read (a
+/// namespace deeper than the schema is refused before, by `deeper`), as a
+/// literal; refused where the session has none.
+fn listed_in(namespace: &[String]) -> Result<String, CoreError> {
+    namespace
+        .first()
+        .map(|schema| text(schema))
+        .ok_or_else(no_current_schema)
 }
 
 /// The schema and table a relation names, each a literal for a catalog
-/// read by name, as the reference binds them: a one-part name's schema
-/// `current_schema()`, which the reference reads and binds (KO2-58).
-fn schema_and_name(
-    request: &DataRequest,
-    relation: &Relation,
-) -> Result<(String, String), CoreError> {
-    from(request, "tables", relation)?;
+/// read by name, as the reference binds them.
+fn schema_and_name(relation: &Relation) -> Result<(String, String), CoreError> {
     match relation.source.as_slice() {
-        [table] => Ok(("current_schema()".to_owned(), text(table))),
         [schema, table] => Ok((text(schema), text(table))),
-        _ => Err(CoreError::new(
-            Sentence::Internal,
-            "a relation past the parts the dialect takes reached its catalog read",
-        )),
+        _ => Err(unqualified(relation).unwrap_or_else(|| {
+            CoreError::new(
+                Sentence::Internal,
+                "a relation past the parts the dialect takes reached its catalog read",
+            )
+        })),
     }
+}
+
+/// The catalog's object id of the relation `schema` and `table` name, each
+/// compared as written, as the reference finds a table; null where the
+/// source holds none.
+fn oid(schema: &str, table: &str) -> String {
+    format!(
+        "(SELECT c.oid FROM pg_catalog.pg_class c\n         JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace\n         WHERE n.nspname = {schema} AND c.relname = {table})"
+    )
 }
 
 /// The reference's catalog answers' columns, by name.
@@ -406,6 +419,7 @@ mod catalog {
     pub const CONSTRAINT_TYPE: &str = "constraint_type";
     pub const CONSTRAINT_NAME: &str = "constraint_name";
     pub const ORDINAL_POSITION: &str = "ordinal_position";
+    pub const CURRENT_SCHEMA: &str = "current_schema";
 }
 
 /// The schema a Postgres answer to `request` has: the reference's catalog
@@ -449,7 +463,10 @@ fn expected(request: &DataRequest) -> ExpectedSchema {
             field(k::COLUMN_NAME, Utf8, false),
             field(k::ORDINAL_POSITION, Int32, false),
         ],
-        DescribePart::Indexes | DescribePart::IndexColumns | DescribePart::Namespace => {
+        // The old client's read of the session's schema, null where the
+        // search path holds none.
+        DescribePart::Namespace => vec![field(k::CURRENT_SCHEMA, Utf8, true)],
+        DescribePart::Indexes | DescribePart::IndexColumns => {
             return request.expected();
         }
     };
@@ -573,9 +590,9 @@ fn read(part: DescribePart, batches: &[RecordBatch]) -> Result<CatalogAnswer, Co
                     .collect(),
             ))
         }
-        DescribePart::Indexes | DescribePart::IndexColumns | DescribePart::Namespace => {
-            crate::read::host(part, batches)
-        }
+        // The schema, none where the session has none.
+        DescribePart::Namespace => crate::read::namespace(batches, k::CURRENT_SCHEMA),
+        DescribePart::Indexes | DescribePart::IndexColumns => crate::read::host(part, batches),
     }
 }
 
@@ -617,72 +634,66 @@ fn describe(
     part: DescribePart,
     namespace: &[String],
 ) -> Result<String, CoreError> {
-    // The schema the source's tables are listed in: the provider's
-    // namespace, the source's schema (contract v28), else the current one,
-    // as the reference lists the tables of the schema it was given or read
-    // (a namespace deeper than the schema is refused before, by `deeper`).
-    let schema = namespace.first().map(|schema| text(schema));
-    let one = || regclass(request, "tables", sql::one_table(request, tables)?);
+    let one = || schema_and_name(sql::one_table(request, tables)?);
     Ok(match part {
         // No view is read here (T3.27): only a dialect that reads views answers it.
         DescribePart::ViewDefinition => return Err(views_unread()),
-        // The reference's listing (`PostgresTable`'s, `information_schema`
-        // the base tables of the current schema, by name), as it writes it
-        // but for the schema, which it binds after reading
-        // `current_schema()` and the core names in place (KO2-58).
+        // The reference's listing (`Graph.from_postgres`'s,
+        // `information_schema` the base tables of the schema, by name), as
+        // it writes it but for the schema, which it binds and the core
+        // writes in place.
         DescribePart::Tables if tables.is_empty() => {
             format!(
                 "SELECT table_name\nFROM information_schema.tables\nWHERE table_schema = {}\n  AND table_type = 'BASE TABLE'\nORDER BY table_name",
-                schema.as_deref().unwrap_or("current_schema()"),
+                listed_in(namespace)?,
             )
         }
+        // Each named relation the source holds under its schema.
         DescribePart::Tables => {
             let mut selects = Vec::with_capacity(tables.len());
             for table in tables {
-                let found = regclass(request, "tables", table)?;
+                let (schema, name) = schema_and_name(table)?;
                 selects.push(format!(
-                    "SELECT relname AS table_name\nFROM pg_catalog.pg_class\nWHERE oid = {found}"
+                    "SELECT relname AS table_name\nFROM pg_catalog.pg_class\nWHERE oid = {}",
+                    oid(&schema, &name)
                 ));
             }
             selects.join("\nUNION ALL\n")
         }
         // The reference's three reads of one table (`_get_source_columns`
         // and `_get_source_foreign_keys`), as it writes them but for the
-        // schema and table, which it binds and the core writes in place;
-        // the columns read only where the name reads the relation so found
-        // in a `FROM` ([`regclass`]), so a shadowed name answers none.
+        // schema and table, which it binds and the core writes in place.
         DescribePart::Columns => {
-            let (schema, name) = schema_and_name(request, sql::one_table(request, tables)?)?;
+            let (schema, name) = one()?;
             format!(
-                "SELECT c.column_name, c.data_type, c.udt_name,\n       c.numeric_scale, c.is_nullable, c.table_schema,\n       c.table_name,\n       pg_catalog.format_type(a.atttypid, a.atttypmod)\nFROM information_schema.columns c\nJOIN pg_catalog.pg_namespace n\n  ON n.nspname = c.table_schema\nJOIN pg_catalog.pg_class rel\n  ON rel.relnamespace = n.oid AND rel.relname = c.table_name\nJOIN pg_catalog.pg_attribute a\n  ON a.attrelid = rel.oid AND a.attname = c.column_name\n AND a.attnum > 0 AND NOT a.attisdropped\nWHERE c.table_schema = {schema} AND c.table_name = {name}\n  AND rel.oid = {found}\nORDER BY c.ordinal_position",
-                found = one()?,
+                "SELECT c.column_name, c.data_type, c.udt_name,\n       c.numeric_scale, c.is_nullable, c.table_schema,\n       c.table_name,\n       pg_catalog.format_type(a.atttypid, a.atttypmod)\nFROM information_schema.columns c\nJOIN pg_catalog.pg_namespace n\n  ON n.nspname = c.table_schema\nJOIN pg_catalog.pg_class rel\n  ON rel.relnamespace = n.oid AND rel.relname = c.table_name\nJOIN pg_catalog.pg_attribute a\n  ON a.attrelid = rel.oid AND a.attname = c.column_name\n AND a.attnum > 0 AND NOT a.attisdropped\nWHERE c.table_schema = {schema} AND c.table_name = {name}\nORDER BY c.ordinal_position",
             )
         }
         DescribePart::Keys => {
-            let (schema, name) = schema_and_name(request, sql::one_table(request, tables)?)?;
+            let (schema, name) = one()?;
             format!(
                 "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = {schema} AND tc.table_name = {name}\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE', 'FOREIGN KEY')"
             )
         }
         DescribePart::ForeignKeys => {
-            let (schema, name) = schema_and_name(request, sql::one_table(request, tables)?)?;
+            let (schema, name) = one()?;
             format!(
                 "SELECT tc.constraint_name, kcu.column_name,\n       target_kcu.table_schema, target_kcu.table_name,\n       target_kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN information_schema.key_column_usage target_kcu\n  ON rc.unique_constraint_catalog = target_kcu.constraint_catalog\n AND rc.unique_constraint_schema = target_kcu.constraint_schema\n AND rc.unique_constraint_name = target_kcu.constraint_name\n AND target_kcu.ordinal_position = kcu.position_in_unique_constraint\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = {schema} AND tc.table_name = {name}\nORDER BY tc.constraint_name, kcu.ordinal_position"
             )
         }
-        // The schema a relation of one part is read in, the provider's
-        // namespace or the current one, under which the reference names a
-        // table it cannot find (`PostgresTable.source_name`); none where
-        // the search path holds no schema.
-        DescribePart::Namespace => format!(
-            "SELECT s.n AS {name}\nFROM (SELECT {schema} AS n) s\nWHERE s.n IS NOT NULL",
-            name = identifier(sdm_contract::data::catalog_columns::NAME),
-            schema = schema.as_deref().unwrap_or("current_schema()"),
-        ),
+        // The schema every relation of one part is read in: the source's,
+        // else the session's current one, which the core reads once per run
+        // with the old client's statement (`Graph.from_postgres`), null
+        // where the search path holds no schema.
+        DescribePart::Namespace => match namespace.first() {
+            Some(schema) => format!("SELECT {} AS current_schema", text(schema)),
+            None => "SELECT current_schema()".to_owned(),
+        },
         // Never asked (no index advice is declared), and rendered: the
         // index's columns in order, an expression's position a null name.
         DescribePart::IndexColumns => {
-            let index = one()?;
+            let (schema, name) = one()?;
+            let index = oid(&schema, &name);
             format!(
                 "SELECT a.attname::text AS {name}\nFROM pg_catalog.pg_index i\nCROSS JOIN LATERAL unnest(i.indkey::int2[]) WITH ORDINALITY AS n(attnum, position)\nLEFT JOIN pg_catalog.pg_attribute a\n  ON a.attrelid = i.indrelid AND a.attnum = n.attnum\nWHERE i.indexrelid = {index}\nORDER BY n.position",
                 name = identifier(c::NAME),
@@ -692,12 +703,10 @@ fn describe(
             sql::whole(request, tables)?;
             // Each index of a table of the source's schema, its columns in
             // order, an expression's position a null name (unresolved).
-            let within = match &schema {
-                None => "current_schema()::regnamespace".to_owned(),
-                Some(schema) => format!(
-                    "(SELECT n.oid FROM pg_catalog.pg_namespace n WHERE n.nspname = {schema})"
-                ),
-            };
+            let within = format!(
+                "(SELECT n.oid FROM pg_catalog.pg_namespace n WHERE n.nspname = {})",
+                listed_in(namespace)?
+            );
             format!(
                 "SELECT t.relname::text AS {table},\n       {columns} AS {names}\nFROM pg_catalog.pg_index i\nJOIN pg_catalog.pg_class t ON t.oid = i.indrelid\nWHERE t.relnamespace = {within}\nORDER BY t.relname, i.indexrelid",
                 table = identifier(c::TABLE),

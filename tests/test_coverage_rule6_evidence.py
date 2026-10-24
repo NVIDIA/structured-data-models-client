@@ -280,3 +280,166 @@ def test_the_cell_types_are_pyarrow_s_text_through_the_admission_table() -> (
         table += [(pa.list_view(pa.int32()), 'list')]
     found = {str(arrow): cell_type(str(arrow)) for arrow, _ in table}
     assert found == {str(arrow): cell for arrow, cell in table}
+
+
+def test_a_warehouse_only_case_is_held_to_its_captures_reference_line() -> None:
+    # Codex and Claude T3.20 r1 P1-1: a case with no DuckDB line is held to
+    # the old client's reference line in each of its warehouse captures,
+    # the sample named as the warehouse names the relation; a claim no leg
+    # shows, a case with no capture, and a sample read as rows all fail.
+    coverage = _coverage_module()
+    case = {
+        'id': 'w.case',
+        'cells': ['int64/primary-key', 'timestamp-us/time-column'],
+        'input': {},
+    }
+    sample = 'SELECT "id", "ts" FROM "{catalog}"."{schema}"."ORDERS" LIMIT 1000'
+
+    def line(types: Any) -> dict[str, Any]:
+        result: dict[str, Any] = {'rows': 2}
+        if types is not None:
+            result['schema'] = [
+                {'name': 'id', 'type': types[0]},
+                {'name': 'ts', 'type': types[1]},
+            ]
+        return {
+            'case': 'w.case@snowflake',
+            'outcome': {'result': 'success', 'stage': 'from_source'},
+            'driver': {
+                'capture': {
+                    'statements': [
+                        {
+                            'stage': 'from_source',
+                            'sql': sample,
+                            'results': [result],
+                        }
+                    ]
+                }
+            },
+            'public': {
+                'schema': {
+                    'tables': [
+                        {
+                            'name': 'orders',
+                            'columns': [{'name': 'id'}, {'name': 'ts'}],
+                            'primary_key': 'id',
+                            'time_column': 'ts',
+                        }
+                    ],
+                    'links': [],
+                }
+            },
+        }
+
+    def problems(captured: dict[str, Any]) -> list[str]:
+        report = coverage.Report()
+        coverage.rule_6({'w.case': case}, {}, report, captured)
+        return list(report.problems)
+
+    held = line(('int64', 'timestamp[us]'))
+    assert problems({'w.case': [held]}) == []
+    narrower = line(('int8', 'timestamp[us]'))
+    assert problems({'w.case': [narrower, held]}) == []
+    [one] = problems({'w.case': [narrower]})
+    assert one.startswith('rule 6: case w.case: claims int64/primary-key')
+    [none] = problems({})
+    assert 'no reference observation' in none
+    [rows] = problems({'w.case': [line(None)]})
+    assert 'a sample read as rows' in rows
+
+
+def test_a_row_read_sample_is_typed_by_the_arrow_its_capture_holds() -> None:
+    # T3.20 r2: a Postgres leg's driver reads rows; its capture holds each
+    # read as the Arrow the core's Postgres provider builds from the
+    # driver's type codes, and rule 6 reads that Arrow's types for a sample
+    # its reference line holds as rows.
+    pa = pytest.importorskip('pyarrow')
+    coverage = _coverage_module()
+    sample = 'SELECT "id", "ts" FROM "{schema}"."orders" LIMIT 1000'
+    line = {
+        'case': 'w.case@lakebase',
+        'outcome': {'result': 'success', 'stage': 'from_source'},
+        'driver': {
+            'capture': {
+                'statements': [
+                    {'stage': 'from_source', 'sql': sample, 'results': [{}]}
+                ]
+            }
+        },
+        'public': {
+            'schema': {
+                'tables': [
+                    {
+                        'name': 'orders',
+                        'columns': [{'name': 'id'}, {'name': 'ts'}],
+                        'primary_key': 'id',
+                        'time_column': 'ts',
+                    }
+                ],
+                'links': [],
+            }
+        },
+    }
+    capture = {'statements': [{'text': sample, 'result': 'tables/a.arrows'}]}
+    table = pa.table(
+        {
+            'id': pa.array([1], pa.int32()),
+            'ts': pa.array([0], pa.timestamp('us')),
+        }
+    )
+    sink = pa.BufferOutputStream()
+    with pa.ipc.new_stream(sink, table.schema) as writer:
+        writer.write_table(table)
+    blobs = {'tables/a.arrows': sink.getvalue().to_pybytes()}
+    coverage.row_schemas(capture, line, blobs.get)
+    case = {
+        'id': 'w.case',
+        'cells': ['int32/primary-key', 'timestamp-us/time-column'],
+        'input': {},
+    }
+    report = coverage.Report()
+    coverage.rule_6({'w.case': case}, {}, report, {'w.case': [line]})
+    assert report.problems == []
+
+
+def test_the_captures_tables_are_read_through_one_git_process(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Claude T3.20 r3 P3: each Lakebase sample's Arrow was read with its own
+    # git cat-file, which made a coverage run take minutes; every table of
+    # one commit is read through one git cat-file --batch process.
+    coverage = _coverage_module()
+    started: list[Any] = []
+    real = coverage.subprocess.Popen
+
+    def counting(*args: Any, **kwargs: Any) -> Any:
+        started.append(args[0])
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(coverage.subprocess, 'Popen', counting)
+    paths = [
+        name
+        for name in _git(
+            dict(os.environ),
+            'ls-tree',
+            '-r',
+            '--name-only',
+            'HEAD',
+            'contract/captures/lakebase/base.binary/tables/',
+        ).splitlines()
+    ][:3]
+    assert len(paths) == 3
+    tree = coverage._module('ratchet').Tree(
+        ROOT, _git(dict(os.environ), 'rev-parse', 'HEAD')
+    )
+    blobs = coverage.Blobs(tree)
+    try:
+        read = [blobs.read(path) for path in paths]
+        assert blobs.read('contract/captures/no-such-file') is None
+    finally:
+        blobs.close()
+    assert [args for args in started if 'cat-file' in args] == [
+        ['git', '-C', str(ROOT), 'cat-file', '--batch']
+    ]
+    for path, data in zip(paths, read, strict=True):
+        assert data == (ROOT / path).read_bytes()
