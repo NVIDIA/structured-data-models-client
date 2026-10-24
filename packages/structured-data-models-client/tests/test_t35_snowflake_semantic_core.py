@@ -56,6 +56,7 @@ class _Connection:
 
     def __init__(self) -> None:
         self.requests: list[dict[str, Any]] = []
+        self.plans: list[dict[str, Any]] = []
         self.failure: Exception | None = None
         self.definition: Any = ...
 
@@ -86,6 +87,7 @@ class _RecordedSemanticProvider:
     def __call__(self, step: dict[str, Any], keys: Any = None) -> pa.Table:
         request = step['request']
         self.connection.requests.append(request)
+        self.connection.plans.append(step['plan'])
         assert step['plan']['plan'] == 'sql'
         assert all(
             s['dialect'] == 'snowflake' for s in step['plan']['statements']
@@ -145,7 +147,13 @@ class _RecordedSemanticProvider:
         raise AssertionError(f'unexpected request {request!r}')
 
 
-def _source(monkeypatch: pytest.MonkeyPatch) -> tuple[_Connection, Any]:
+def _source(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    name: str = 'view_semantic_from_source',
+    database: str | None = 'DB',
+    schema: str | None = 'SHOP',
+) -> tuple[_Connection, Any]:
     paths = (
         _routing.FROM_SOURCE_SNOWFLAKE_SEMANTIC_VIEW
         + _routing.MATERIALIZE_SNOWFLAKE_SEMANTIC_VIEW
@@ -156,9 +164,57 @@ def _source(monkeypatch: pytest.MonkeyPatch) -> tuple[_Connection, Any]:
     )
     connection = _Connection()
     model = SnowflakeSource(
-        connection, database='DB', schema='SHOP'
-    ).semantic_model('view_semantic_from_source')
+        connection, database=database, schema=schema
+    ).semantic_model(name)
     return connection, model
+
+
+@pytest.mark.parametrize(
+    ('database', 'namespace', 'name', 'bound'),
+    [
+        (None, None, 'V', 'V'),
+        ('DB', None, 'V', 'DB.V'),
+        (None, 'SHOP', 'V', 'SHOP.V'),
+        ('DB', 'SHOP', 'V', 'DB.SHOP.V'),
+        (None, None, 'SHOP.V', 'SHOP.V'),
+        ('DB', 'SHOP', 'SHOP.V', 'SHOP.V'),
+        ('DB', 'SHOP', 'OTHER.SHOP.V', 'OTHER.SHOP.V'),
+        ('DB', 'SHOP', '"Sales View"', 'DB.SHOP."Sales View"'),
+        ('DB', 'SHOP', '"Sales.View"', '"Sales.View"'),
+        ('DB', 'SHOP', 'OTHER.SHOP."Sales View"', 'OTHER.SHOP."Sales View"'),
+        ('DB', 'SHOP', 'OTHER."Shop.Name"."Sales View"', 'OTHER."Shop.Name"."Sales View"'),
+        ('DB', 'SHOP', '"Customer\'s View"', 'DB.SHOP."Customer\'s View"'),
+    ],
+)
+def test_semantic_lookup_binds_the_supplied_name_and_leaves_resolution_to_snowflake(
+    monkeypatch: pytest.MonkeyPatch,
+    database: str | None,
+    namespace: str | None,
+    name: str,
+    bound: str,
+) -> None:
+    connection, model = _source(
+        monkeypatch, name=name, database=database, schema=namespace
+    )
+    schema = Schema.from_source(model, tables={'people': 'USERS'}, relationships=[])
+    PredictiveQuery('PREDICT people.AGE FOR EACH people.USER_ID', schema).materialize(
+        indices=[0], num_context_samples=4, model='kumo-relational', random_seed=42
+    )
+    definitions = [
+        plan['statements'][0]
+        for request, plan in zip(connection.requests, connection.plans, strict=True)
+        if request['request'] == 'describe' and request['part'] == 'view_definition'
+    ]
+    assert len(definitions) == 2
+    for statement in definitions:
+        assert statement['text'] == 'SELECT SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW(?)'
+        assert statement['params'] == [
+            {'param': 'value', 'value': {'type': 'utf8', 'value': bound}}
+        ]
+    assert not any(
+        request['request'] == 'describe' and request['part'] == 'namespace'
+        for request in connection.requests
+    )
 
 
 def test_recorded_semantic_view_describes_and_materializes_on_the_native_core(
