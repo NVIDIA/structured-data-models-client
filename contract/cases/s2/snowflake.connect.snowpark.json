@@ -29,7 +29,7 @@
     "client.predict/forecast/snowflake"
   ],
   "cells": [
-    "int64/primary-key",
+    "int8/primary-key",
     "timestamp-us/time-column"
   ],
   "input": {

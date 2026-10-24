@@ -28,10 +28,8 @@
     "client.predict/forecast/snowflake"
   ],
   "cells": [
-    "int64/primary-key",
-    "int64/foreign-key",
-    "timestamp-us/time-column",
-    "float64/target"
+    "int8/primary-key",
+    "int8/foreign-key"
   ],
   "input": {
     "base": "shop",
