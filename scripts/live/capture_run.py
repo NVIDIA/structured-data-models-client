@@ -321,9 +321,9 @@ class CaseTimedOut(BaseException):
 def _limited(seconds: float | None) -> Iterator[None]:
     r"""Raises :class:`CaseTimedOut` in the block once ``seconds`` have
     passed, by the interval timer, which interrupts a statement waiting on
-    its driver's socket; no limit for ``None`` or off the main thread,
-    where no signal can be taken."""
-    if not seconds or threading.current_thread() is not threading.main_thread():
+    its driver's socket; no limit for ``None`` or 0. :func:`run` refuses a
+    limit off the main thread, where no signal arrives."""
+    if not seconds:
         yield
         return
 
@@ -353,7 +353,19 @@ def run(
     name, ``recorded`` or ``failed`` and its seconds) and printed, and a
     failure is written to ``DIR/<leg>.failed.json`` at once, so a run cut
     short leaves what it did; a case running past ``case_timeout``
-    seconds fails alone, and the run goes on."""
+    seconds fails alone, and the run goes on; a limit asked for off the
+    main thread is refused before anything runs."""
+    if (
+        case_timeout
+        and threading.current_thread() is not threading.main_thread()
+    ):
+        # The limit is the interval timer's signal, which only the main
+        # thread takes (Claude r1 P2): no run goes on believing itself
+        # limited.
+        raise SystemExit(
+            'a per-case time limit needs the main thread, where the timer '
+            'signal arrives; run there, or pass case_timeout 0 for none'
+        )
     guard = load_guard(guard_path)
     planned = plan(leg, e0)
     missing = [

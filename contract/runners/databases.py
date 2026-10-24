@@ -1684,7 +1684,10 @@ class CaseSchema:
 
     def clear(self) -> None:
         r"""Drops every view, table and type loaded so far, the last
-        first."""
+        first. What the schema held is forgotten before the first drop, so a
+        clear cut short (a case past its time limit, a driver's error)
+        leaves the next load to load again (Codex r1 P1)."""
+        self.loaded = None
         for kind, name in reversed(self.views):
             if kind == 'semantic_view':
                 # Unquoted, as the YAML named it, so Snowflake folds the
@@ -1711,7 +1714,6 @@ class CaseSchema:
         if self.database == 'lakebase':
             self.target.commit()
         self.tables, self.types = [], []
-        self.loaded = None
 
     def create_view(self, kind: str, name: str, yaml: str) -> None:
         r"""The case's view, created in the schema from its YAML under the

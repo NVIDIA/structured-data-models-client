@@ -102,6 +102,11 @@ pub(crate) fn rebuilt(
                     "a held ranking names other than one candidate per question",
                 ));
             }
+            // Every held candidate is one a materialize accepted: the
+            // reference's `_as_literal` and the core's `ranking::literal`
+            // refuse a missing, boolean or non-finite one, which alone have
+            // no JSON text; were either to accept one, this would be
+            // reachable and need a refusal of its own.
             let named = given
                 .iter()
                 .map(|candidate| {

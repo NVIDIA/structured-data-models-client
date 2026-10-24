@@ -516,7 +516,10 @@
       "moved": "T3.26: the host half of the rebuild: a request with no state the core wrote, as plain data (its payloads in order, each question, a ranking's candidates as given through _candidates, an id per later call); the step numbers, candidate positions and names are the core's (sdm-core held.rs)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::positions": {
-      "refactor": "T3.26: the positions the core names a ranking's candidates by, read where predict and _said_of_the_part read them: the state's, or each held candidate's place in the list handed over"
+      "refactor": "T3.26: the positions the core names a ranking's candidates by, read where predict and _said_of_the_part read them: the state's, or each held candidate's place in the list handed over (fix 1: the state's only while it names the request's calls)"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_state": {
+      "moved": "T3.26 fix 1: the core's state is sent only while the request holds the calls it names; a request whose payloads were changed since goes as held, the core rebuilding the rest, as the old client predicts whatever payloads a request holds"
     }
   }
 }

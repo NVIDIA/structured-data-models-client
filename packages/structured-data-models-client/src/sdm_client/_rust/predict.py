@@ -215,12 +215,29 @@ def _adapter(client: SDMClient, model_id: str) -> Any:
     return adapter
 
 
+def _state(request: Request) -> results.CoreRequest | None:
+    r"""The state the core wrote for ``request``, while the request still
+    holds the calls it names: one payload per call, for the request and
+    each part. Else ``None``: a request the core did not materialize, or
+    one whose payloads were changed since, predicted from what it holds
+    (:func:`_held`), as the old client predicts whatever payloads a request
+    holds (T3.26 fix 1, Claude r1 P2)."""
+    state = request._core
+    if state is None:
+        return None
+    calls = 1 + len(state.batches or ())
+    steps = request.parts if request.parts is not None else (request,)
+    if any(len(step.payloads or ()) != calls for step in steps):
+        return None
+    return state
+
+
 def positions(request: Request) -> tuple[int, ...]:
     r"""Each question of a ranking by the position the core names its
     candidate by: among the candidates materialize was given, where the
     core wrote the request's state; else among those the request holds, in
     order, as the core rebuilds them (T3.26)."""
-    state = request._core
+    state = _state(request)
     if state is not None and state.ranking is not None:
         return state.ranking.positions
     rewritten = request._decomposition
@@ -386,7 +403,7 @@ def predict(
     # part (T1.36 fix 21, T2.8), which the core predicts in one run, part by
     # part; a request of more rows than one call scores, as each call's
     # payload (T2.8c), which the core predicts in one run, call by call.
-    state = request._core
+    state = _state(request)
     rewritten = request._decomposition
     ranking = (
         request.parts is not None
