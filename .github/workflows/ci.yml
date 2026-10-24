@@ -2471,6 +2471,9 @@ jobs:
       SDM_REQUIRE_JAVA: '1'
       SDM_POSTGRES_TEST_DSN: postgresql://postgres:postgres@localhost:5432/sdm_test
       SDM_REQUIRE_POSTGRES: '1'
+      # The coverage check's own tests run real Maven, offline, from the
+      # local repository the Java tests' build filled.
+      SDM_MAVEN: mvn
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
@@ -2488,14 +2491,16 @@ jobs:
         with:
           python-version: '3.12'
       # The Java tests, run by the coverage check, which owns the run: it
-      # marks the run's start, runs Maven's verify, and holds each JUnit test
-      # the Java manifest names as a path's (tests:) to that run's Surefire
-      # reports alone, run and not skipped (coverage rule 4's Java half),
-      # never to a report an earlier build left.
+      # empties the Surefire reports directory, runs Maven's verify, and
+      # holds each JUnit test the Java manifest names as a path's (tests:) to
+      # the reports that run left, run and not skipped (coverage rule 4's
+      # Java half).
       - name: The Java tests, and the Java manifest's tests held to their run
         run: |
-          pip install --quiet pyyaml
+          pip install --quiet pyyaml pytest
           python scripts/rust_core/coverage.py --junit-run
+      - name: The coverage check's own Java run, tested
+        run: python -m pytest -q -p no:cacheprovider tests/test_t312_junit_coverage.py
 
   # The JAR-load test (exit 4 of T3.11, locked check 14): the JAR and its
   # runtime dependencies alone, on each JDK and platform the JAR promises,
