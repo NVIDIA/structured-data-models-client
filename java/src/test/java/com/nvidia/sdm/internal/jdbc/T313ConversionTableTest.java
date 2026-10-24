@@ -274,8 +274,9 @@ class T313ConversionTableTest {
   @Test
   void otherJdbcBackendsLoadWithoutTheDatabricksDriver() throws Exception {
     String separator = java.io.File.pathSeparator;
-    String classpath = Arrays.stream(System.getProperty("java.class.path")
-            .split(java.util.regex.Pattern.quote(separator)))
+    String testClasspath = System.getProperty(
+        "surefire.test.class.path", System.getProperty("java.class.path"));
+    String classpath = Arrays.stream(testClasspath.split(java.util.regex.Pattern.quote(separator)))
         .filter(entry -> !java.nio.file.Path.of(entry).getFileName().toString()
             .startsWith("databricks-jdbc-"))
         .collect(java.util.stream.Collectors.joining(separator));
