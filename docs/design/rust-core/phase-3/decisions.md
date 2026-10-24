@@ -184,3 +184,13 @@ The owner subsequently confirmed the missing-anchor behavior already approved by
 | Decision | Scope | Owner answer | Status |
 |---|---|---|---|
 | T39-OWNER-2026-10-24-UTC-TEXT | Canonical UTC text for Postgres zoned timestamp array elements and zoned range bounds on both hosts, preserving scalar timestamps and timezone-free values and leaving caller sessions unchanged | "Use UTC consistently in both hosts (recommended)" after explicit notice that non-UTC old Python text changes | approved by owner 2026-10-24 |
+
+## View SQL representation review, 2026-10-24
+
+Both independent T3.9 round-1 reviewers explicitly approved the bounded representation difference below on `ae3d10da5e3b135c1e8e8f1b7615df4e9ead2b37`.
+This records reviewer authority for equivalent SQL, not owner authorization for different model inputs or semantic definitions.
+P3J-14 remains proposed pending its separate policy decision.
+
+| Decision | Scope | Evidence | Status |
+|---|---|---|---|
+| T39-REVIEW-2026-10-24-P3J12 | P3J-12: derived expressions rendered inside the data layer's relation with the same source rows, filters, expressions, limits and aggregates | `T3.9-sol-broad-r1.md` and `T3.9-sol-focused-r1.md`: `APPROVE-P3J-12` | approved by both independent reviewers 2026-10-24 |

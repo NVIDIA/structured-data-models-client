@@ -10043,18 +10043,23 @@ entries:
     taken from a source column a dimension truncates or casts.
   cases: []
   refs: [T3.5, contract/view-captures.json]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: reviewer
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T39-REVIEW-2026-10-24-P3J12}
   notes: >-
-    Approver: owner. Proposed by T3.5's implementer at stage 2: the
+    Proposed by T3.5's implementer at stage 2: the
     contract is frozen (T3.27) and its preview names its columns, so the
     expression rides in the relation, as it does at every later read
     (old-behaviour row 17). An expression reading a dimension's name rather
     than its source column's would read the source's column inside the
     relation where the old client read the renamed one; Databricks matches
     names without case, and the view renames only by case, so no recorded
-    view reads otherwise.
+    view reads otherwise. Both independent Sol High reviewers explicitly
+    recorded APPROVE-P3J-12 on ae3d10da5e3b135c1e8e8f1b7615df4e9ead2b37.
+    Their approval covers equivalent SQL representation only, with the
+    same expressions, filters, source rows, limits and aggregates; it
+    grants no changed result, refusal, comparison tolerance or arbitrary
+    substitution for recorded statements.
 
 - id: P3J-13
   title: A column the warehouse refuses, and a failed key count, are said by their SQLSTATE
