@@ -7804,18 +7804,23 @@ entries:
   affected_inputs: >-
     SDMClient.predict with the core's predict route forced, of a request
     the core did not materialize.
-  cases: [T3.16]
-  refs: [T3.16]
-  status: proposed
-  approved_by: null
+  cases: [T3.16, T3.26]
+  refs: [T3.16, T3.26]
+  status: rejected
+  approved_by: owner
   decision_ref: null
   notes: >-
     The Phase 3 structure design's open question 3, whose recommendation
-    is this refusal; proposed by T3.16's implementer, never self-approved.
-    Pinned by test_t316_the_schema_as_plain_data.py,
-    test_predict_of_a_request_the_core_never_materialized_asks_to_materialize_again,
-    and test_the_predict_route.py,
-    test_a_request_the_core_did_not_materialize_is_refused_by_name.
+    was this refusal; proposed by T3.16's implementer, never self-approved.
+    Rejected by the owner on 2026-10-23: "I think we should support old
+    cases. Re-materializing is a common use case, and if they update the
+    package we should still be backward compatible". T3.26 removes the
+    refusal: predict on the core rebuilds what it needs of such a request
+    from the request's own payloads, questions and a ranking's candidates
+    (Predict.held, sdm-core's held.rs), and answers as the old client
+    does, held by contract/tests/test_t326_old_requests_predict_on_the_core.py
+    against requests the reference client and the Phase 2 client pickled
+    and one gathered on the old route.
 - id: P3E-4
   title: A column a source gained after the schema was described, added to it by hand, is read on the core route
   kind: change

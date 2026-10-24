@@ -51,6 +51,19 @@ pub(crate) struct LaterCall {
     pub request_id: String,
 }
 
+/// What a `predict` start asks, read from the request state `materialize`
+/// answered or rebuilt from a request the host holds (`crate::held`): the
+/// first call's payload and question, and a forecast's later steps, a
+/// ranking's questions or a request's later calls, as [`Inputs`] holds
+/// them.
+pub(crate) struct Asked {
+    pub payload: Vec<u8>,
+    pub query: String,
+    pub forecast: Option<Vec<LaterStep>>,
+    pub ranking: Option<(Vec<crate::ranking::Question>, Option<u32>)>,
+    pub batches: Option<Vec<LaterCall>>,
+}
+
 /// What a `predict` start gives its body.
 #[derive(Clone)]
 pub(crate) struct Inputs {

@@ -497,14 +497,13 @@ class SDMClient:
         on_the_core = (
             None
             if not request.parts
-            or getattr(request.parts[0], '_core', None) is None
             else _predicts_on_the_core(request.parts[0])
         )
         if on_the_core is not None:
-            # A forecast or a ranking the core gathered, which the core
-            # predicts part by part and puts together (T1.36 fix 21, T2.8),
-            # its refusals said of the part they name, as each part's is
-            # below.
+            # A forecast or a ranking, which the core predicts part by part
+            # and puts together (T1.36 fix 21, T2.8), whether the core
+            # gathered it or not (T3.26), its refusals said of the part they
+            # name, as each part's is below.
             try:
                 merged = on_the_core.predict(self, request, model, outputs)
             except StructuredDataError as error:
@@ -855,8 +854,8 @@ def _predicts_on_the_core(request: Request) -> Any | None:
 
     A request materialized over a DuckDB or SQLite source predicts on the
     core when the routing seam forces its paths there (T1.11d, T2.2); every
-    other call, and every call by default, takes the old route. The bridge refuses, as
-    the seam's own failure, a request the core did not materialize.
+    other call, and every call by default, takes the old route. A request
+    the core did not materialize is predicted from what it holds (T3.26).
     """
     schema = getattr(request, 'schema', None)
     source = getattr(schema, 'source', None)
@@ -896,10 +895,14 @@ def _said_of_the_part(
         if of_the_core:
             return error
         return about_the_part(error, rewritten, step or 1)
-    ranking = None if request._core is None else request._core.ranking
-    positions = () if ranking is None else ranking.positions
+    from sdm_client._rust.predict import positions
+
     by_position = dict(
-        zip(positions, (about for _, about in rewritten.parts), strict=True)
+        zip(
+            positions(request),
+            (about for _, about in rewritten.parts),
+            strict=True,
+        )
     )
     if isinstance(details.get('candidates'), list):
         details['candidates'] = [

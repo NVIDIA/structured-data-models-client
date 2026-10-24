@@ -88,17 +88,36 @@ impl Operation {
                 named
             }
             Operation::Predict(p) => {
-                let mut named = vec![(p.state.payload, Bytes), (p.state.query, Bytes)];
-                for step in p.state.forecast.iter().flatten() {
-                    named.push((step.payload, Bytes));
-                    named.push((step.query, Bytes));
+                let mut named = Vec::new();
+                if let Some(state) = &p.state {
+                    named.push((state.payload, Bytes));
+                    named.push((state.query, Bytes));
+                    for step in state.forecast.iter().flatten() {
+                        named.push((step.payload, Bytes));
+                        named.push((step.query, Bytes));
+                    }
+                    for batch in state.batches.iter().flatten() {
+                        named.push((batch.payload, Bytes));
+                    }
+                    for part in state.ranking.iter().flat_map(|r| &r.parts) {
+                        named.push((part.payload, Bytes));
+                        named.push((part.query, Bytes));
+                    }
                 }
-                for batch in p.state.batches.iter().flatten() {
-                    named.push((batch.payload, Bytes));
-                }
-                for part in p.state.ranking.iter().flat_map(|r| &r.parts) {
-                    named.push((part.payload, Bytes));
-                    named.push((part.query, Bytes));
+                if let Some(held) = &p.held {
+                    named.push((held.payload, Bytes));
+                    named.push((held.query, Bytes));
+                    for call in held.batches.iter().flatten() {
+                        named.push((call.payload, Bytes));
+                    }
+                    if let Some(ranking) = &held.ranking {
+                        named.push((ranking.candidates, Bytes));
+                    }
+                    let parts = held.forecast.iter().flatten();
+                    for part in parts.chain(held.ranking.iter().flat_map(|r| &r.parts)) {
+                        named.push((part.payload, Bytes));
+                        named.push((part.query, Bytes));
+                    }
                 }
                 named
             }
@@ -1191,11 +1210,95 @@ pub struct ForecastStep {
     pub request_id: Option<String>,
 }
 
+/// A request the core did not materialize, as the host holds it
+/// ([`Predict::held`], T3.26): its public contents only, each payload as the
+/// request holds it and each question's text, with what the host was given
+/// of a ranking's candidates. The core rebuilds from it what a
+/// [`RequestState`] gives: a forecast's later steps numbered from 2, in
+/// order; a ranking's questions named by their place among the candidates
+/// held, each by the JSON text of its value, written from the candidate as
+/// `materialize` writes it; the later calls of a request asked in several,
+/// each scoring the rows after the last. No version applies: nothing in it
+/// was written by a core.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct HeldRequest {
+    /// A bytes attachment of the first call's payload as JSON, as the
+    /// request holds it: the request's own, a forecast's first step's, or a
+    /// ranking's first question's.
+    pub payload: AttachmentId,
+    /// The first call's question's text: a bytes attachment of a JSON
+    /// string.
+    pub query: AttachmentId,
+    /// The later calls of a request asked in several, in order, as
+    /// [`RequestState::batches`]. Absent for a request of one call.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub batches: Option<Vec<HeldCall>>,
+    /// A forecast's later steps, in order, as [`RequestState::forecast`].
+    /// Absent for any other request.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub forecast: Option<Vec<HeldPart>>,
+    /// A ranking's candidates and later questions, as
+    /// [`RequestState::ranking`]. Absent for any other request.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ranking: Option<HeldRanking>,
+}
+
+/// A later call of a request held asked in several ([`HeldRequest::batches`]).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct HeldCall {
+    /// A bytes attachment of this call's payload as JSON.
+    pub payload: AttachmentId,
+    /// The id this call carries, which the host draws for each call, as
+    /// [`RequestBatch::request_id`].
+    pub request_id: String,
+}
+
+/// A later part of a request held asked in parts: a forecast's step or a
+/// ranking's question, in order.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct HeldPart {
+    /// A bytes attachment of this part's payload as JSON.
+    pub payload: AttachmentId,
+    /// This part's question's text: a bytes attachment of a JSON string.
+    pub query: AttachmentId,
+    /// The id this part's call carries, as [`ForecastStep::request_id`].
+    pub request_id: String,
+}
+
+/// A ranking held ([`HeldRequest::ranking`]).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct HeldRanking {
+    /// How many candidates each row keeps, as [`Ranking::top_k`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub top_k: Option<u32>,
+    /// The candidate each question asks after, the first question's first,
+    /// one per question: a bytes attachment of a JSON list of
+    /// [`GivenCandidate`]s, as [`Materialize::candidates`] gives them.
+    pub candidates: AttachmentId,
+    /// Each later question, in the order of the candidates.
+    pub parts: Vec<HeldPart>,
+}
+
 /// Send a materialized request to the model and lay out its answer.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Predict {
-    pub state: RequestState,
+    /// The request state `materialize` answered, as the host held it since;
+    /// absent where the host holds a request the core did not
+    /// materialize, which [`Predict::held`] gives instead. A start naming
+    /// both, or neither, is refused.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state: Option<RequestState>,
+    /// A request the core did not materialize, as the host holds it (T3.26,
+    /// owner decision 2026-10-23): one an older client gathered, or this
+    /// one on its old route. The core rebuilds what it predicts from from
+    /// it alone, as the old client predicts what such a request holds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub held: Option<HeldRequest>,
     /// The model id the request is sent to, as the wire names it.
     pub model: String,
     /// The id the request carries in its `metadata.request_id`. The host
@@ -1286,8 +1389,9 @@ pub struct Predicted {
     pub outputs: Vec<String>,
     /// A ranking's candidates no question was sent for, the context sampled
     /// for each holding one answer only (T2.8): each its position among the
-    /// candidates `materialize` was given, in the order named. Empty for
-    /// any other result.
+    /// candidates `materialize` was given (of a request held, among the
+    /// candidates it holds, T3.26), in the order named. Empty for any other
+    /// result.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub unscored_candidates: Vec<u32>,
 }
@@ -1342,6 +1446,18 @@ pub struct Attachments {
     pub ranking_part_payload: StatePayload,
     #[schemars(rename = "RankingPart.query")]
     pub ranking_part_query: String,
+    #[schemars(rename = "HeldRequest.payload")]
+    pub held_request_payload: StatePayload,
+    #[schemars(rename = "HeldRequest.query")]
+    pub held_request_query: String,
+    #[schemars(rename = "HeldCall.payload")]
+    pub held_call_payload: StatePayload,
+    #[schemars(rename = "HeldPart.payload")]
+    pub held_part_payload: StatePayload,
+    #[schemars(rename = "HeldPart.query")]
+    pub held_part_query: String,
+    #[schemars(rename = "HeldRanking.candidates")]
+    pub held_ranking_candidates: Vec<GivenCandidate>,
     #[schemars(rename = "Predicted.metadata")]
     pub predicted_metadata: EndpointMetadata,
 }

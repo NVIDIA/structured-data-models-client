@@ -325,8 +325,8 @@ class Request:
 
     # What a request materialized on the core keeps for predict on the core
     # (``sdm_client._rust.results.CoreRequest``, T3.16): ``None`` for one
-    # the core did not materialize, which predict on the core refuses by
-    # name, asking for it to be materialized again.
+    # the core did not materialize, which predict on the core predicts from
+    # what it holds, as the old client does (T3.26).
     _core: CoreRequest | None = None
 
     def __init__(

@@ -13,7 +13,8 @@
 //! and from whichever value names the attachment: the operation's request,
 //! the request state, a forecast's later step or the sampler state (M1,
 //! T2.1b: the two-line decode of `SamplerState.memo` and the decode of
-//! `ForecastStep.query` were not read before).
+//! `ForecastStep.query` were not read before); and, from T3.26, a request
+//! held, its later parts and its ranking, decoded in `src/held.rs`.
 
 #![allow(
     clippy::disallowed_methods,
@@ -23,7 +24,7 @@
 use serde_json::Value;
 
 /// The attachments the core reads from a `start`, by the lock's names.
-const READ: [&str; 12] = [
+const READ: [&str; 15] = [
     "ValidateQuery.query",
     "ValidateQuery.schema",
     "DescribeSource.source",
@@ -36,21 +37,27 @@ const READ: [&str; 12] = [
     "ForecastStep.query",
     "RankingPart.query",
     "SamplerState.memo",
+    "HeldRequest.query",
+    "HeldPart.query",
+    "HeldRanking.candidates",
 ];
 
 /// The values dispatch reads an attachment's id from, other than an
 /// operation's `request`, and the contract type each is.
-const HOLDERS: [(&str, &str); 4] = [
-    ("request.state.", "RequestState"),
+const HOLDERS: [(&str, &str); 7] = [
+    ("request_state.", "RequestState"),
     ("step.", "ForecastStep"),
     ("part.", "RankingPart"),
     ("state.", "SamplerState"),
+    ("held.", "HeldRequest"),
+    ("held_part.", "HeldPart"),
+    ("held_ranking.", "HeldRanking"),
 ];
 
 /// Each `take_json` of `source` (dispatch's text) as the lock's name of the
 /// attachment it reads and the Rust type it decodes: the operation is the
 /// arm it is in (`Operation::<name>(request)`), the field what it takes
-/// from `request`, and `request.state` is a `RequestState`.
+/// from `request`, and `request_state` is a `RequestState`.
 fn decodes(source: &str) -> Result<Vec<(String, String)>, String> {
     let mut found = Vec::new();
     let mut arm: Option<&str> = None;
@@ -71,14 +78,17 @@ fn decodes(source: &str) -> Result<Vec<(String, String)>, String> {
         }
         // An attachment a message may leave out is read by `take_json_if`
         // into an `Option` of the type the lock names.
-        let (left, right, optional) =
-            if let Some((l, r)) = line.split_once(" = take_json(&mut attachments, ") {
-                (l, r, false)
-            } else if let Some((l, r)) = line.split_once(" = take_json_if(&mut attachments, ") {
-                (l, r, true)
-            } else {
-                continue;
-            };
+        // Read in the arm, or in a function the arm hands its attachments.
+        let (left, right, optional) = if let Some((l, r)) = line
+            .split_once(" = take_json(&mut attachments, ")
+            .or_else(|| line.split_once(" = take_json(attachments, "))
+        {
+            (l, r, false)
+        } else if let Some((l, r)) = line.split_once(" = take_json_if(&mut attachments, ") {
+            (l, r, true)
+        } else {
+            continue;
+        };
         let decoded = left
             .rsplit_once(": ")
             .map(|(_, ty)| ty.to_owned())
@@ -151,8 +161,16 @@ fn mismatches(source: &str) -> Vec<String> {
     problems
 }
 
+/// Dispatch's text, and that of `src/held.rs`, which rebuilds a request
+/// held from the attachments the predict arm hands it (T3.26).
 fn dispatch() -> String {
-    std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/src/dispatch.rs")).unwrap()
+    ["/src/dispatch.rs", "/src/held.rs"]
+        .iter()
+        .map(|file| {
+            std::fs::read_to_string(format!("{}{file}", env!("CARGO_MANIFEST_DIR"))).unwrap()
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 #[test]
@@ -175,7 +193,7 @@ fn a_retyped_or_dropped_decode_fails() {
         ["DescribeSource.source: dispatch decodes SourceDescription, the lock SourceSpec"]
     );
     let dropped = source.replace(
-        "let query: String = take_json(&mut attachments, request.state.query)?;",
+        "let query: String = take_json(attachments, request_state.query)?;",
         "",
     );
     assert_ne!(dropped, source);
@@ -192,7 +210,7 @@ fn a_retyped_or_dropped_decode_fails() {
         ["SamplerState.memo: dispatch decodes SamplerState, the lock SamplerMemo"]
     );
     let dropped = source.replace(
-        "let query: String = take_json(&mut attachments, step.query)?;",
+        "let query: String = take_json(attachments, step.query)?;",
         "",
     );
     assert_ne!(dropped, source);

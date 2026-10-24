@@ -154,7 +154,8 @@ pub fn messages() -> Vec<ControlMessage> {
             }),
         })),
         start(Operation::Predict(Predict {
-            state: state.clone(),
+            state: Some(state.clone()),
+            held: None,
             model: "kumo-relational".into(),
             request_id: "sdm-000000000000".into(),
             outputs: vec!["prediction".into()],
@@ -162,7 +163,8 @@ pub fn messages() -> Vec<ControlMessage> {
             inference_asked: vec![],
         })),
         start(Operation::Predict(Predict {
-            state: state.clone(),
+            state: Some(state.clone()),
+            held: None,
             model: "kumo-relational".into(),
             request_id: "sdm-000000000001".into(),
             outputs: vec![],
