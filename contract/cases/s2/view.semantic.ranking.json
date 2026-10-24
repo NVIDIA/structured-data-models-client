@@ -37,7 +37,7 @@
       "CREATE TABLE items AS SELECT i::BIGINT AS item_id, ['a', 'b', 'c', 'd'][1 + i] AS kind FROM range(4) t(i)",
       "CREATE TABLE buys AS SELECT i::BIGINT AS buy_id, (i % 8)::BIGINT AS user_id, ((i * 3) % 4)::BIGINT AS item_id, TIMESTAMP '2023-01-01' + to_days((i * 5)::INTEGER) AS ts FROM range(120) t(i)"
     ],
-    "pql": "PREDICT LIST_DISTINCT(buys.item_id, 0, 30, days) RANK TOP 2 FOR EACH users.user_id",
+    "pql": "PREDICT LIST_DISTINCT(BUYS.ITEM_ID, 0, 30, days) RANK TOP 2 FOR EACH USERS.USER_ID",
     "materialize": {
       "indices": [
         0,
@@ -63,6 +63,6 @@
     "outcome": "success",
     "stage": "predict"
   },
-  "why": "A ranking over named candidates through a semantic view of three tables and two relationships. The semantic view is created in the test schema from the yaml, each base table named with the {catalog} (the database) and {schema} placeholders the capture writes, no private name; it is read through SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW (RE/graph.py:2056-2060), whose statement is T3.6's to render, and judged on the snowflake leg by T3.6's exit (T3.5 brief, open question 2)",
+  "why": "A ranking over named candidates through a semantic view of three tables and two relationships. The semantic view is created in the test schema from the yaml, each base table named with the {catalog} (the database) and {schema} placeholders the capture writes, no private name; it is read through SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW (RE/graph.py:2056-2060), whose statement is T3.6's to render, and judged on the snowflake leg by T3.6's exit (T3.5 brief, open question 2) The question names the view's tables and columns in upper case, as Snowflake gives back the unquoted names of a semantic view (the second early capture: in lower case the old client refuses the question at materialize).",
   "source": "written by T3.5's test author from the reference at 43e55f4f"
 }
