@@ -122,8 +122,8 @@ def _driver(
     attributes drivers put them in, and what ``provider`` reads of the
     failure where it reads one (its ``error_fields``, the
     :class:`~sdm_connectors.providers.Provider` protocol's hook: a
-    Databricks failure's SQLSTATE its message writes and
-    ``refuses_expression``); the driver's message is not.
+    Databricks failure's SQLSTATE its message writes and its error class);
+    the driver's message is not.
     """
     sqlstate = next(
         (
@@ -150,8 +150,8 @@ def _driver(
         'vendor_code': vendor,
     }
     # What the provider reads of its driver's failure beyond the attributes
-    # above (a Databricks failure's SQLSTATE in its message and
-    # ``refuses_expression``, T3.4), as the reference reads it.
+    # above (a Databricks failure's SQLSTATE in its message, T3.4, and its
+    # error class, T3.27), as the reference reads them.
     read = getattr(provider, 'error_fields', None)
     said = read(error) if callable(read) else None
     if said is not None:

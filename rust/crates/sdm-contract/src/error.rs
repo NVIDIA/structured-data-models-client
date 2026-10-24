@@ -553,12 +553,14 @@ impl CoreWarning {
 
 /// The code a sentence gives: an error's or a warning's; or none, for the
 /// sentence of the part of a question asked in parts an error happened in,
-/// said after the error's own of any code ([`CoreError::part`]).
+/// said after the error's own of any code ([`CoreError::part`]), and for a
+/// note of a semantic model's conversion (`ops::ViewNote`, T3.27).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Code {
     Error(ErrorCode),
     Warning(WarningCode),
     Part,
+    Note,
 }
 
 impl Code {
@@ -567,7 +569,7 @@ impl Code {
         match self {
             Code::Error(code) => Some(code.as_str()),
             Code::Warning(code) => Some(code.as_str()),
-            Code::Part => None,
+            Code::Part | Code::Note => None,
         }
     }
 }
@@ -703,6 +705,8 @@ warning_codes! {
     ContextAnswers = "CONTEXT_ANSWERS",
     NullKeysLeftOut = "NULL_KEYS_LEFT_OUT",
     DateLiteralDayFirst = "DATE_LITERAL_DAY_FIRST",
+    ViewReadInPart = "VIEW_READ_IN_PART",
+    SeedIgnored = "SEED_IGNORED",
 }
 
 sentences! {
@@ -1010,4 +1014,74 @@ sentences! {
     PartForecastStep = "part_forecast_step", Code::Part;
     PartForecastStepOutran = "part_forecast_step_outran", Code::Part;
     PartRankingCandidate = "part_ranking_candidate", Code::Part;
+    ViewsUnread = "views_unread", E::UnsupportedRequest, rule "view";
+    ViewNameInvalid = "view_name_invalid", E::InvalidRequest;
+    ViewNotFound = "view_not_found", E::InvalidRequest;
+    ViewNotAMetricView = "view_not_a_metric_view", E::InvalidRequest;
+    ViewNoDefinition = "view_no_definition", E::InvalidRequest;
+    ViewNotYaml = "view_not_yaml", E::InvalidRequest;
+    ViewNotAMapping = "view_not_a_mapping", E::InvalidRequest;
+    ViewMissesSource = "view_misses_source", E::InvalidRequest;
+    ViewMissesEntry = "view_misses_entry", E::InvalidRequest;
+    ViewNotAList = "view_not_a_list", E::InvalidRequest;
+    ViewNestsItself = "view_nests_itself", E::InvalidRequest;
+    ViewEntryUnhashable = "view_entry_unhashable", E::InvalidRequest;
+    ViewEntryNotText = "view_entry_not_text", E::InvalidRequest;
+    ViewValueTooLarge = "view_value_too_large", E::InvalidRequest;
+    ViewSourceUnsupported = "view_source_unsupported", E::InvalidRequest;
+    ViewSourceUnqualified = "view_source_unqualified", E::InvalidRequest;
+    ViewOnMetricView = "view_on_metric_view", E::InvalidRequest;
+    ViewFilterRefused = "view_filter_refused", E::InvalidRequest;
+    ViewFilterRefusedNoDefault = "view_filter_refused_no_default", E::InvalidRequest;
+    ViewFilterRefusedUntrusted = "view_filter_refused_untrusted", E::InvalidRequest;
+    ViewJoinNameCollides = "view_join_name_collides", E::InvalidRequest;
+    ViewTableCannotHold = "view_table_cannot_hold", E::InvalidRequest;
+    ViewInvalid = "view_invalid", E::InvalidRequest;
+    ViewSemanticNotFound = "view_semantic_not_found", E::InvalidRequest;
+    ViewSemanticDefinitionUnread = "view_semantic_definition_unread", E::InvalidRequest;
+    ViewTableOmitted = "view_table_omitted", E::InvalidRequest;
+    ViewColumnOmitted = "view_column_omitted", E::InvalidRequest;
+    ViewMaterializationIgnored = "view_materialization_ignored", W::ViewReadInPart;
+    ViewFieldsIgnored = "view_fields_ignored", W::ViewReadInPart;
+    ViewJoinNotAMapping = "view_join_not_a_mapping", W::ViewReadInPart;
+    ViewJoinNameless = "view_join_nameless", W::ViewReadInPart;
+    ViewJoinSkipped = "view_join_skipped", W::ViewReadInPart;
+    ViewJoinSkippedWithIt = "view_join_skipped_with_it", W::ViewReadInPart;
+    ViewDimensionNoTable = "view_dimension_no_table", W::ViewReadInPart;
+    ViewDimensionNotAMapping = "view_dimension_not_a_mapping", W::ViewReadInPart;
+    ViewDimensionMisses = "view_dimension_misses", W::ViewReadInPart;
+    ViewDimensionRefused = "view_dimension_refused", W::ViewReadInPart;
+    ViewDimensionMultipleTables = "view_dimension_multiple_tables", W::ViewReadInPart;
+    ViewMeasureRefused = "view_measure_refused", W::ViewReadInPart;
+    ViewMeasureColumnShadowed = "view_measure_column_shadowed", W::ViewReadInPart;
+    ViewColumnRefused = "view_column_refused", W::ViewReadInPart;
+    ViewJoinUnchecked = "view_join_unchecked", W::ViewReadInPart;
+    ViewDerivedKeyReplaced = "view_derived_key_replaced", W::ViewReadInPart;
+    ViewEdgeDropped = "view_edge_dropped", W::ViewReadInPart;
+    ViewCompositeKey = "view_composite_key", W::ViewReadInPart;
+    ViewColumnCrossTable = "view_column_cross_table", W::ViewReadInPart;
+    ViewColumnsCrossTable = "view_columns_cross_table", W::ViewReadInPart;
+    ViewExpressionDropped = "view_expression_dropped", W::ViewReadInPart;
+    ViewExpressionDroppedUntrusted = "view_expression_dropped_untrusted", W::ViewReadInPart;
+    ViewTableExpressionDropped = "view_table_expression_dropped", W::ViewReadInPart;
+    ViewTableExpressionDroppedUntrusted = "view_table_expression_dropped_untrusted", W::ViewReadInPart;
+    ViewRelationshipRefused = "view_relationship_refused", W::ViewReadInPart;
+    ViewMeasureNote = "view_measure_note", Code::Note;
+    ViewTimeColumnNote = "view_time_column_note", Code::Note;
+    ViewTimeColumnNoteAdded = "view_time_column_note_added", Code::Note;
+    ViewTimeColumnNoteRenamed = "view_time_column_note_renamed", Code::Note;
+    ViewParameterNote = "view_parameter_note", Code::Note;
+    NoCurrentSchema = "no_current_schema", E::InvalidRequest;
+    NoCurrentDatabase = "no_current_database", E::InvalidRequest;
+    NullAnchor = "null_anchor", E::InvalidRequest;
+    TableNoColumns = "table_no_columns", E::InvalidRequest;
+    SeedIgnored = "seed_ignored", W::SeedIgnored;
+    ServingValueNotJson = "serving_value_not_json", E::InvalidRequest;
+    ServingPastLimit = "serving_past_limit", E::InvalidRequest;
+    ServingNotJson = "serving_not_json", E::TransportError;
+    ServingNotAnObject = "serving_not_an_object", E::TransportError;
+    ServingRefused = "serving_refused", E::InvalidResponse;
+    ServingCallersFault = "serving_callers_fault", E::InvalidRequest;
+    ServingFailed = "serving_failed", E::InvalidResponse;
+    ServingFailedCoded = "serving_failed_coded", E::InvalidResponse;
 }

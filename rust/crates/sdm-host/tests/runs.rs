@@ -405,7 +405,7 @@ fn fetched_data_is_admitted_and_host_ids_are_scoped_to_their_message() {
     // ...and may name other data 1 in the next; the first id means nothing
     // now.
     let error = ProviderError {
-        refuses_expression: false,
+        error_class: None,
         kind: ErrorKind::DataSource,
         retryable: false,
         sqlstate: None,
@@ -659,6 +659,7 @@ fn request_state_leaves_one_run_as_bytes_and_returns_under_the_host_s_id() {
             outputs: vec!["prediction".into()],
             default_outputs: false,
             inference_asked: vec![],
+            model_endpoint: None,
         }),
         vec![],
     );
@@ -699,6 +700,7 @@ fn request_state_leaves_one_run_as_bytes_and_returns_under_the_host_s_id() {
             provider: ProviderChoice::Sql {
                 dialect: Dialect::new("duckdb"),
                 namespace: Vec::new(),
+                view: None,
             },
             schema: AttachmentId(1),
             query: AttachmentId(2),

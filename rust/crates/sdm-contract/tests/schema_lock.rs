@@ -472,13 +472,15 @@ const JSON: [(&str, &str); 26] = [
 ];
 
 /// The other fields naming an attachment, and why the lock needs no entry.
-const OTHER: [(&str, &str); 8] = [
+const OTHER: [(&str, &str); 10] = [
     (
         "ControlMessage/attached.attachment",
         "a control message: the root schema",
     ),
     ("ControlMessage/call_model.body", "the endpoint's bytes"),
     ("ModelOutcome/response.body", "the endpoint's bytes"),
+    ("ModelAnswer.detail", "the endpoint's or its SDK's text"),
+    ("SqlParam/text.attachment", "Arrow, with its schema"),
     ("Operation/materialize.indices", "Arrow, with its schema"),
     ("FetchOutcome/data.data", "Arrow, with its schema"),
     ("KeySet.attachment", "Arrow, with its schema"),

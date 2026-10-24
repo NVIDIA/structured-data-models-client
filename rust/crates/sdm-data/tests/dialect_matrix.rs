@@ -799,6 +799,7 @@ fn provider(dialect: &str, namespace: &[Option<&str>]) -> ProviderChoice {
     ProviderChoice::Sql {
         dialect: Dialect::new(dialect),
         namespace: namespace.iter().map(|p| p.map(str::to_owned)).collect(),
+        view: None,
     }
 }
 

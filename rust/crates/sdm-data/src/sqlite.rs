@@ -53,7 +53,7 @@ use sdm_contract::data::{
     BATCH_COLUMN, DataRequest, DescribePart, Determinism, ExpectedSchema, IndexAdvice, KeySet,
     MARKED, MATCHES_COLUMN, NullOrder, ProviderCapabilities, Relation, SEED_BATCH,
     SEED_COUNT_UNREAD, SEED_KEY_UNIQUE, SEED_STORED_TIME, TextTimes, TieTerm, field, seed_integer,
-    seed_key_columns,
+    seed_key_columns, views_unread,
 };
 use sdm_contract::ops::Dtype;
 use sdm_contract::{ColumnType, CoreError, Detail, Scalar, Sentence};
@@ -389,6 +389,8 @@ fn describe(
 ) -> Result<String, CoreError> {
     let one = || sql::one_table(request, tables);
     Ok(match part {
+        // No view is read here (T3.27): only a dialect that reads views answers it.
+        DescribePart::ViewDefinition => return Err(views_unread()),
         DescribePart::Tables if tables.is_empty() => {
             "SELECT name FROM sqlite_master WHERE type='table'".to_owned()
         }
@@ -716,6 +718,8 @@ fn read(
 ) -> Result<CatalogAnswer, CoreError> {
     use catalog as c;
     match part {
+        // No view is read here (T3.27): only a dialect that reads views answers it.
+        DescribePart::ViewDefinition => Err(views_unread()),
         DescribePart::Namespace => crate::read::namespace(batches, c::NAME),
         DescribePart::Tables => {
             let mut found = Vec::new();

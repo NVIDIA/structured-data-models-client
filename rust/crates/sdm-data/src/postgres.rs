@@ -67,7 +67,7 @@ use sdm_contract::catalog::{CatalogAnswer, CatalogColumn, CatalogForeignKey, Cat
 use sdm_contract::data::{
     BATCH_COLUMN, DataRequest, DescribePart, Determinism, ExpectedSchema, MATCHES_COLUMN,
     NullOrder, ProviderCapabilities, Relation, SEED_BATCH, TextTimes, TieTerm,
-    catalog_columns as c, field, seed_integer, seed_key_columns,
+    catalog_columns as c, field, seed_integer, seed_key_columns, views_unread,
 };
 use sdm_contract::types::ColumnType;
 use sdm_contract::{CoreError, Detail, Scalar, Sentence};
@@ -410,6 +410,8 @@ fn expected(request: &DataRequest) -> ExpectedSchema {
         _ => return request.expected(),
     };
     let fields = match part {
+        // No view is read here (T3.27): only a dialect that reads views answers it.
+        DescribePart::ViewDefinition => return ExpectedSchema::Discover {},
         DescribePart::Tables => vec![field(k::TABLE_NAME, Utf8, false)],
         DescribePart::Columns => vec![
             field(k::COLUMN_NAME, Utf8, false),
@@ -453,6 +455,8 @@ fn expected(request: &DataRequest) -> ExpectedSchema {
 fn read(part: DescribePart, batches: &[RecordBatch]) -> Result<CatalogAnswer, CoreError> {
     use catalog as k;
     match part {
+        // No view is read here (T3.27): only a dialect that reads views answers it.
+        DescribePart::ViewDefinition => Err(views_unread()),
         DescribePart::Tables => crate::read::tables(batches, k::TABLE_NAME),
         DescribePart::Columns => {
             let mut found = Vec::new();
@@ -608,6 +612,8 @@ fn describe(
     let schema = namespace.first().map(|schema| text(schema));
     let one = || regclass(request, "tables", sql::one_table(request, tables)?);
     Ok(match part {
+        // No view is read here (T3.27): only a dialect that reads views answers it.
+        DescribePart::ViewDefinition => return Err(views_unread()),
         // The reference's listing (`PostgresTable`'s, `information_schema`
         // the base tables of the current schema, by name), as it writes it
         // but for the schema, which it binds after reading

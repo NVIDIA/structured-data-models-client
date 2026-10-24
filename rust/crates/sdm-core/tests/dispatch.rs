@@ -332,6 +332,7 @@ fn the_root_s_data_layer_serves_a_built_in_dialect_or_a_host_provider() {
     let duckdb = ProviderChoice::Sql {
         dialect: Dialect::new("duckdb"),
         namespace: Vec::new(),
+        view: None,
     };
     let access = root.data_access(&duckdb).unwrap();
     // The dialect declares what sdm-data renders for it: every request
@@ -379,6 +380,7 @@ fn the_root_s_data_layer_serves_a_built_in_dialect_or_a_host_provider() {
     let snowflake = ProviderChoice::Sql {
         dialect: Dialect::new("snowflake"),
         namespace: Vec::new(),
+        view: None,
     };
     let err = root.data_access(&snowflake).err().unwrap();
     assert_eq!(
@@ -392,6 +394,7 @@ fn the_root_s_data_layer_serves_a_built_in_dialect_or_a_host_provider() {
     let unknown = ProviderChoice::Sql {
         dialect: Dialect::new("a dialect\nof no name"),
         namespace: Vec::new(),
+        view: None,
     };
     let err = root.data_access(&unknown).err().unwrap();
     assert_eq!(
@@ -700,6 +703,7 @@ fn describe_named(tables: &[(&str, &str)]) -> Result<sdm_core::Run, CoreError> {
     let operation = describe(ProviderChoice::Sql {
         dialect: Dialect::new("duckdb"),
         namespace: Vec::new(),
+        view: None,
     });
     let spec = SourceSpec {
         tables: tables

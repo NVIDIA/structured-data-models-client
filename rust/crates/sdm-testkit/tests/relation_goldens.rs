@@ -61,6 +61,7 @@ fn plan(request: &DataRequest) -> Result<FetchPlan, sdm_contract::CoreError> {
     let duckdb = ProviderChoice::Sql {
         dialect: Dialect::new("duckdb"),
         namespace: Vec::new(),
+        view: None,
     };
     sdm_host::default_root().data_access(&duckdb)?.plan(request)
 }

@@ -38,6 +38,8 @@ pub enum CatalogAnswer {
     /// `namespace`: the parts a relation of one part is read under,
     /// outermost first; none where the source names its tables alone.
     Namespace(Vec<String>),
+    /// `view_definition`: the one semantic model asked for.
+    ViewDefinition(ViewDefinition),
 }
 
 impl CatalogAnswer {
@@ -51,8 +53,35 @@ impl CatalogAnswer {
             CatalogAnswer::Indexes(_) => DescribePart::Indexes,
             CatalogAnswer::IndexColumns(_) => DescribePart::IndexColumns,
             CatalogAnswer::Namespace(_) => DescribePart::Namespace,
+            CatalogAnswer::ViewDefinition(_) => DescribePart::ViewDefinition,
         }
     }
+}
+
+/// A semantic model's definition as its warehouse describes it (T3.27,
+/// design S5), read as the old client reads it: a Databricks metric view's
+/// `DESCRIBE TABLE EXTENDED` (`DB/metric_view.py:1389-1475`), a Snowflake
+/// semantic view's YAML alone. A relation that is no semantic model of the
+/// dialect's kind, or gives no definition, is refused by the dialect's
+/// reader by name, never read as an empty one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ViewDefinition {
+    /// The YAML definition, as written.
+    pub text: String,
+    /// Each parameter's type, by name, in order, as the warehouse describes
+    /// it (Databricks's `# Parameters`), a later one of a name replacing an
+    /// earlier in its place; none where it describes none.
+    pub parameters: Vec<(String, String)>,
+    /// Where the view is: the namespace parts the warehouse names it under
+    /// (Databricks's `Catalog` and `Database`), outermost first, each `None`
+    /// where it says none, which fill the parts a base table the definition
+    /// names leaves out; empty for a dialect whose definition names its
+    /// base tables in full (Snowflake's).
+    pub located: Vec<Option<String>>,
+    /// Each column's type, by name, in order, as the warehouse describes it
+    /// (a metric view's dimensions, its measures left out); none where it
+    /// describes none.
+    pub columns: Vec<(String, String)>,
 }
 
 /// One column as the catalog declares it.

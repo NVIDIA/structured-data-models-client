@@ -3442,6 +3442,17 @@
                 "type": "string"
               }
             },
+            "model_endpoint": {
+              "description": "The model endpoint the host's transport calls, where the core writes\nits envelope and reads its answers (contract v28, T3.27, for T3.13):\na Databricks Model Serving endpoint, by name, with the request size\nthe caller allows it. Left out, the client's own endpoint, as\nbefore.",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ModelEndpoint"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "op": {
               "type": "string",
               "const": "predict"
@@ -3532,7 +3543,7 @@
       ]
     },
     "ProviderChoice": {
-      "description": "The composition root's choice: a built-in SQL provider by dialect, which\ncompiles each request to SQL the host runs, or a host provider that\nanswers the typed requests itself.\n\nA SQL provider's `namespace` (contract v28) is where the source's tables\nare, as the source was given it: the name parts before a table's own,\noutermost first, a Postgres source's schema (`PostgresSource(schema=...)`),\neach `null` where the source names none, which is then the connection's\ncurrent one. Every relation of one part a request names is read under\nit, and the source's tables are listed in it, as the reference\nqualifies each read by the schema it was given (`PostgresTable`). Left\nout, empty or all `null`, the connection's current one, as before v28.\nA dialect takes as many parts as a relation's parts before its table's,\nand refuses by name more, or a part given inside one left `null`.",
+      "description": "The composition root's choice: a built-in SQL provider by dialect, which\ncompiles each request to SQL the host runs, or a host provider that\nanswers the typed requests itself.\n\nA SQL provider's `namespace` (contract v28) is where the source's tables\nare, as the source was given it: the name parts before a table's own,\noutermost first, a Postgres source's schema (`PostgresSource(schema=...)`),\neach `null` where the source names none, which is then the connection's\ncurrent one. Every relation of one part a request names is read under\nit, and the source's tables are listed in it, as the reference\nqualifies each read by the schema it was given (`PostgresTable`). Left\nout, empty or all `null`, the connection's current one, as before v28.\nA dialect takes as many parts as a relation's parts before its table's,\nand refuses by name more, or a part given inside one left `null`.\n\nA SQL provider's `view` (contract v28, T3.27) names the semantic model\nthe source is read through, a Databricks metric view or a Snowflake\nsemantic view by its dialect, as the caller named it, with whether the\ncaller trusts its expressions: its logical tables are then the\nrelations of one part a request names, each the logical table's name.\nLeft out, the source's own tables, as before.",
       "oneOf": [
         {
           "type": "object",
@@ -3548,6 +3559,16 @@
                   "null"
                 ]
               }
+            },
+            "view": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ViewChoice"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "provider": {
               "type": "string",
@@ -3582,6 +3603,23 @@
     "Dialect": {
       "description": "A built-in SQL dialect, by the name the host gives it. The contract\nnames no dialect and knows none (decision E54): which names a build\nserves is the data layer's, which refuses one it does not serve before\nthe run exists ([`DataLayer::capabilities`]).",
       "type": "string"
+    },
+    "ViewChoice": {
+      "description": "The semantic model a SQL provider's source is read through\n([`ProviderChoice::Sql`]'s `view`): its name as the caller gave it, and\nwhether the caller trusts whoever authored it to run its expressions\n(`semantic_model(name, trust_expressions=...)`).",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "trust_expressions": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "trust_expressions"
+      ]
     },
     "ProviderCapabilities": {
       "description": "What a provider answers: a host provider declares it, and the data\nlayer gives it for each SQL dialect it renders.",
@@ -4138,6 +4176,35 @@
         "parts"
       ]
     },
+    "ModelEndpoint": {
+      "description": "The model endpoint a `predict`'s calls go to, as the caller configured\nits transport ([`Predict::model_endpoint`]).",
+      "oneOf": [
+        {
+          "description": "A Databricks Model Serving endpoint: its name, and the most bytes\none request may take once wrapped in the endpoint's envelope\n(`max_request_bytes`, `CL/core/databricks_serving.py:127-148`).",
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "max_request_bytes": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "endpoint": {
+              "type": "string",
+              "const": "serving_endpoint"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "endpoint",
+            "name",
+            "max_request_bytes"
+          ]
+        }
+      ]
+    },
     "ReplyId": {
       "description": "Names one fetch or model call within a run, so its reply can be matched.",
       "type": "integer",
@@ -4190,7 +4257,7 @@
       ]
     },
     "ProviderError": {
-      "description": "A provider's failure: its kind, whether trying again may succeed, and\nthe driver's own SQLSTATE and vendor code. The driver's message and\nfree-text codes stay in the host, since drivers quote values there;\nnothing is matched on text.",
+      "description": "A provider's failure: its kind, whether trying again may succeed, and\nthe driver's own SQLSTATE, vendor code and error class. The driver's\nmessage stays in the host, since drivers quote values there; what the\nfailure means is the data layer's to say ([`DataLayer::failure`]), from\nthese facts, never from text.",
       "type": "object",
       "properties": {
         "kind": {
@@ -4211,9 +4278,12 @@
             "null"
           ]
         },
-        "refuses_expression": {
-          "description": "The source refused the statement for an expression it says or\nreads (contract v28): what the reference's Databricks reader calls\na refused expression, a data error (SQLSTATE class `22`) or a syntax\nor analysis error (class `42`), which it answers by leaving out the\nderived column it could not read. The host sets it from its\ndriver's error, as it reads the driver's SQLSTATE; the core reads no\ntext. Left out, `false`.",
-          "type": "boolean"
+        "error_class": {
+          "description": "The driver's error class, a name of its closed list such as\nDatabricks's `INSUFFICIENT_PERMISSIONS` (contract v28, T3.27), read\nas the old client reads it (`error_class`: the driver's own answer,\nelse the bracketed name its message opens with). Left out, none.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "additionalProperties": false,
@@ -4319,7 +4389,66 @@
             "kind",
             "retryable"
           ]
+        },
+        {
+          "description": "The endpoint failed with no body to hand over, as an SDK's error\nreports it (contract v28, T3.27, for T3.13): what the host was told.",
+          "type": "object",
+          "properties": {
+            "answer": {
+              "$ref": "#/$defs/ModelAnswer"
+            },
+            "outcome": {
+              "type": "string",
+              "const": "failed"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "outcome",
+            "answer"
+          ]
         }
+      ]
+    },
+    "ModelAnswer": {
+      "description": "A model call's failure as the host's transport reported it\n([`ModelOutcome::Failed`]): the HTTP status, and the facts the core\nreads the endpoint's own codes from. The detail can quote the request,\nso it travels as an attachment, and the core reads it only for codes,\nnever repeating it.",
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "integer",
+          "format": "uint16",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "detail": {
+          "description": "A bytes attachment of the error's message or the REST body, as UTF-8\ntext, if any.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AttachmentId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "provider_code": {
+          "description": "The error code the SDK's error carries apart from its message\n(`error_code`), if any.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "provider_error": {
+          "description": "The name of the SDK error's class (`BadRequest`), if any.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "status"
       ]
     },
     "FetchStep": {
@@ -4783,6 +4912,11 @@
           "description": "The namespace a relation of one part is read in, as the source names\na table it holds: one row per part, outermost first, its name\n(contract v28, T3.8): a Postgres source's current schema, under\nwhich the reference names a table it cannot find; no row for a\nsource whose tables are named alone (DuckDB's, SQLite's). Asked only\nto name a table the source lacks.",
           "type": "string",
           "const": "namespace"
+        },
+        {
+          "description": "The definition of the one semantic model named (contract v28, T3.27):\na Databricks metric view's `DESCRIBE TABLE EXTENDED`, a Snowflake\nsemantic view's `SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW`, read into\n[`CatalogAnswer::ViewDefinition`]. Only a SQL provider whose dialect\nreads views is asked it; every other dialect refuses it by name\n([`Sentence::ViewsUnread`]), and a host provider is never asked it.",
+          "type": "string",
+          "const": "view_definition"
         }
       ]
     },
@@ -5113,7 +5247,7 @@
       ]
     },
     "SqlParam": {
-      "description": "A statement's parameter: a scalar, or a key set the statement's text\nreads under `relation`. How the keys come to be read by that name is\nthe dialect's, which `sdm-data` renders and its provider binds: the\nDuckDB provider registers the attachment as a relation of that name; a\nPostgreSQL dialect may bind the keys as JSON text that a common table\nexpression of that name unpacks, as the reference's PostgreSQL sampler\ndoes. `relation` names what the text reads, not an instruction to\nregister an Arrow relation. Where the dialect binds keys as text\n(`DataLayer::bound_keys`, Postgres's), the attachment holds each column\nthe dialect spells otherwise than Arrow's text of its values (a time\nwithout a zone, binary) as that spelling, a `utf8` column of the same\nname, which `keys.columns` still types as the statement reads it; the\nprovider binds each cell as Arrow's text of it.",
+      "description": "A statement's parameter: a scalar, or a key set the statement's text\nreads under `relation`. How the keys come to be read by that name is\nthe dialect's, which `sdm-data` renders and its provider binds: the\nDuckDB provider registers the attachment as a relation of that name; a\nPostgreSQL dialect may bind the keys as JSON text that a common table\nexpression of that name unpacks, as the reference's PostgreSQL sampler\ndoes. `relation` names what the text reads, not an instruction to\nregister an Arrow relation. Where the dialect binds keys as text\n(`DataLayer::bound_keys`, Postgres's), the attachment holds each column\nthe dialect spells otherwise than Arrow's text of its values (a time\nwithout a zone, binary) as that spelling, a `utf8` column of the same\nname, which `keys.columns` still types as the statement reads it; the\nprovider binds each cell as Arrow's text of it.\n\nA `text` parameter (contract v28, T3.27) binds the one text cell of a\none-row, one-column Arrow attachment: a key set the dialect writes as\nJSON text itself, past the control message's size ([`DataLayer::bind`]).\nIn a [`BoundFetch`] the attachment is a local reference the data layer\nchose; the core installs its batch in the run and names it here by the\nrun's own id before the step is sent.",
       "oneOf": [
         {
           "type": "object",
@@ -5151,6 +5285,23 @@
             "param",
             "keys",
             "relation"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "attachment": {
+              "$ref": "#/$defs/AttachmentId"
+            },
+            "param": {
+              "type": "string",
+              "const": "text"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "param",
+            "attachment"
           ]
         }
       ]
@@ -5256,6 +5407,13 @@
             "description": {
               "description": "A bytes attachment of a [`SourceDescription`] as JSON.",
               "$ref": "#/$defs/AttachmentId"
+            },
+            "notes": {
+              "description": "What a semantic model's conversion notes of the schema it gave\n(contract v28, T3.27): each measure as the predictive query it is,\neach time column taken in place of the view's own, each parameter\nread as its default, in order (`Schema.conversion_notes`). Given at\ndescribe only. Left out, none.",
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ViewNote"
+              }
             },
             "op": {
               "type": "string",
@@ -5502,199 +5660,37 @@
         "forecast"
       ]
     },
-    "CoreError": {
-      "description": "An error the core reports.",
+    "ViewNote": {
+      "description": "A note of a semantic model's conversion ([`DescribedSource::notes`]):\nits sentence, a note's ([`crate::Code::Note`]), the fields its template\nnames, and what it is about, so a host shows it only while the schema\nstill holds that: the table it names, and the time column it says was\ntaken, as the old client drops a note of a table not taken or of a\ntime column the table no longer has (`CL/schema.py:1401-1433`).",
       "type": "object",
       "properties": {
-        "kind": {
-          "$ref": "#/$defs/ErrorKind"
-        },
-        "code": {
-          "description": "Stable across releases and languages.",
-          "$ref": "#/$defs/ErrorCode"
-        },
         "sentence": {
-          "description": "What the error says, of [`ErrorCode`]'s sentences: the template each\nhost fills, read only for wording (T3.17).",
           "$ref": "#/$defs/Sentence"
         },
-        "part": {
-          "description": "Where the error happened in a question asked in parts (a forecast's\nstep, a ranking's candidate), a sentence of [`Code::Part`] said after\nthe error's own; none for any other error (T3.17 fix 2).",
-          "anyOf": [
-            {
-              "$ref": "#/$defs/Sentence"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "message": {
-          "description": "For a person to read; not promised, and never holding an input value.",
-          "type": "string"
-        },
         "fields": {
-          "description": "What callers branch on, by name.",
           "type": "object",
           "additionalProperties": {
             "$ref": "#/$defs/Detail"
           }
         },
-        "cause": {
-          "description": "The error this one was raised from.",
-          "anyOf": [
-            {
-              "$ref": "#/$defs/CoreError"
-            },
-            {
-              "type": "null"
-            }
+        "table": {
+          "description": "The schema's table the note is about; none for a note of the whole\nview (a parameter's).",
+          "type": [
+            "string",
+            "null"
           ]
         },
-        "retryable": {
-          "description": "Whether the same call may succeed if tried again; carried from\nprovider and transport errors, false otherwise.",
-          "type": "boolean",
-          "default": false
-        },
-        "drop_held": {
-          "description": "The states the host handed this run that it must drop rather than\nhand back again: the core refused them, so a later run given them\nwould be refused the same way (decision E74). The host follows this\nalone, never reading which field an error names; empty for any\nother error.",
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/HeldState"
-          }
-        },
-        "answered": {
-          "description": "What a request asked in several model calls had been answered when\na later call failed (design choice 1, `main`'s answered parts,\nT2.8c): the error keeps what was paid for, so the rest can be asked\nagain. Absent for any other error.",
-          "anyOf": [
-            {
-              "$ref": "#/$defs/AnsweredParts"
-            },
-            {
-              "type": "null"
-            }
+        "time_column": {
+          "description": "The time column the note says was taken, of `table`.",
+          "type": [
+            "string",
+            "null"
           ]
         }
       },
       "additionalProperties": false,
       "required": [
-        "kind",
-        "code",
-        "sentence",
-        "message"
-      ]
-    },
-    "ErrorCode": {
-      "description": "The codes the core gives: one closed list, so each host's mapping\nmatches every code with no catch-all arm (decision H6). Host and core\nship together, so the list is exhaustive; a new code is a contract\nversion bump. PQL's own diagnostic codes stay strings inside\n`PqlDiagnostic`.",
-      "oneOf": [
-        {
-          "description": "The caller's request is not one the core accepts.",
-          "type": "string",
-          "const": "INVALID_REQUEST"
-        },
-        {
-          "description": "A valid request this core does not support.",
-          "type": "string",
-          "const": "UNSUPPORTED_REQUEST"
-        },
-        {
-          "description": "The model endpoint answered with something the core cannot read.",
-          "type": "string",
-          "const": "INVALID_RESPONSE"
-        },
-        {
-          "description": "The host's configuration of a run is not one the core accepts.",
-          "type": "string",
-          "const": "INVALID_CONFIGURATION"
-        },
-        {
-          "description": "The transport to the model endpoint failed: it could not reach the\nendpoint, or could not read its answer.",
-          "type": "string",
-          "const": "TRANSPORT_ERROR"
-        },
-        {
-          "description": "A defect in the core, a contained panic included.",
-          "type": "string",
-          "const": "INTERNAL_ERROR"
-        },
-        {
-          "description": "The model a request names does not exist.",
-          "type": "string",
-          "const": "UNKNOWN_MODEL"
-        },
-        {
-          "description": "An optional dependency of the host is not installed.",
-          "type": "string",
-          "const": "MISSING_EXTRA"
-        },
-        {
-          "description": "A schema the core cannot work with.",
-          "type": "string",
-          "const": "INVALID_SCHEMA"
-        },
-        {
-          "description": "The endpoint does not support sessions.",
-          "type": "string",
-          "const": "SESSIONS_UNSUPPORTED"
-        },
-        {
-          "description": "An Arrow type outside the closed set.",
-          "type": "string",
-          "const": "UNSUPPORTED_TYPE"
-        },
-        {
-          "description": "A value the admitted type of its column cannot hold, such as a `timestamp[s]` past the microseconds an int64 counts.",
-          "type": "string",
-          "const": "VALUE_OUT_OF_RANGE"
-        },
-        {
-          "description": "A provider answered with a schema other than the one asked for.",
-          "type": "string",
-          "const": "PROVIDER_SCHEMA_MISMATCH"
-        },
-        {
-          "description": "A provider's query failed.",
-          "type": "string",
-          "const": "PROVIDER_ERROR"
-        },
-        {
-          "description": "A reply for an id the run is not waiting on: unknown, stale or already answered.",
-          "type": "string",
-          "const": "UNKNOWN_REPLY"
-        },
-        {
-          "description": "`next` was called before every reply the run asked for arrived.",
-          "type": "string",
-          "const": "REPLY_MISSING"
-        },
-        {
-          "description": "A reply of the wrong kind: a model answer for a fetch, or the other way round.",
-          "type": "string",
-          "const": "WRONG_REPLY"
-        },
-        {
-          "description": "The run was used after it finished.",
-          "type": "string",
-          "const": "RUN_FINISHED"
-        },
-        {
-          "description": "The run was used after it was cancelled.",
-          "type": "string",
-          "const": "RUN_CANCELLED"
-        },
-        {
-          "description": "The run was used after a panic poisoned it.",
-          "type": "string",
-          "const": "RUN_POISONED"
-        },
-        {
-          "description": "A second call reached a run while one was in progress.",
-          "type": "string",
-          "const": "RUN_BUSY"
-        },
-        {
-          "description": "A control message the contract cannot read, larger than the control cap, of the wrong direction, or whose attachments do not match the ids it names.",
-          "type": "string",
-          "const": "INVALID_MESSAGE"
-        }
+        "sentence"
       ]
     },
     "Sentence": {
@@ -6004,7 +6000,77 @@
         "invalid_configuration",
         "part_forecast_step",
         "part_forecast_step_outran",
-        "part_ranking_candidate"
+        "part_ranking_candidate",
+        "views_unread",
+        "view_name_invalid",
+        "view_not_found",
+        "view_not_a_metric_view",
+        "view_no_definition",
+        "view_not_yaml",
+        "view_not_a_mapping",
+        "view_misses_source",
+        "view_misses_entry",
+        "view_not_a_list",
+        "view_nests_itself",
+        "view_entry_unhashable",
+        "view_entry_not_text",
+        "view_value_too_large",
+        "view_source_unsupported",
+        "view_source_unqualified",
+        "view_on_metric_view",
+        "view_filter_refused",
+        "view_filter_refused_no_default",
+        "view_filter_refused_untrusted",
+        "view_join_name_collides",
+        "view_table_cannot_hold",
+        "view_invalid",
+        "view_semantic_not_found",
+        "view_semantic_definition_unread",
+        "view_table_omitted",
+        "view_column_omitted",
+        "view_materialization_ignored",
+        "view_fields_ignored",
+        "view_join_not_a_mapping",
+        "view_join_nameless",
+        "view_join_skipped",
+        "view_join_skipped_with_it",
+        "view_dimension_no_table",
+        "view_dimension_not_a_mapping",
+        "view_dimension_misses",
+        "view_dimension_refused",
+        "view_dimension_multiple_tables",
+        "view_measure_refused",
+        "view_measure_column_shadowed",
+        "view_column_refused",
+        "view_join_unchecked",
+        "view_derived_key_replaced",
+        "view_edge_dropped",
+        "view_composite_key",
+        "view_column_cross_table",
+        "view_columns_cross_table",
+        "view_expression_dropped",
+        "view_expression_dropped_untrusted",
+        "view_table_expression_dropped",
+        "view_table_expression_dropped_untrusted",
+        "view_relationship_refused",
+        "view_measure_note",
+        "view_time_column_note",
+        "view_time_column_note_added",
+        "view_time_column_note_renamed",
+        "view_parameter_note",
+        "no_current_schema",
+        "no_current_database",
+        "null_anchor",
+        "table_no_columns",
+        "seed_ignored",
+        "serving_value_not_json",
+        "serving_past_limit",
+        "serving_not_json",
+        "serving_not_an_object",
+        "serving_refused",
+        "serving_callers_fault",
+        "serving_failed",
+        "serving_failed_coded"
       ]
     },
     "Detail": {
@@ -6018,6 +6084,201 @@
           "items": {
             "$ref": "#/$defs/Scalar"
           }
+        }
+      ]
+    },
+    "CoreError": {
+      "description": "An error the core reports.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/ErrorKind"
+        },
+        "code": {
+          "description": "Stable across releases and languages.",
+          "$ref": "#/$defs/ErrorCode"
+        },
+        "sentence": {
+          "description": "What the error says, of [`ErrorCode`]'s sentences: the template each\nhost fills, read only for wording (T3.17).",
+          "$ref": "#/$defs/Sentence"
+        },
+        "part": {
+          "description": "Where the error happened in a question asked in parts (a forecast's\nstep, a ranking's candidate), a sentence of [`Code::Part`] said after\nthe error's own; none for any other error (T3.17 fix 2).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Sentence"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "message": {
+          "description": "For a person to read; not promised, and never holding an input value.",
+          "type": "string"
+        },
+        "fields": {
+          "description": "What callers branch on, by name.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/Detail"
+          }
+        },
+        "cause": {
+          "description": "The error this one was raised from.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CoreError"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "retryable": {
+          "description": "Whether the same call may succeed if tried again; carried from\nprovider and transport errors, false otherwise.",
+          "type": "boolean",
+          "default": false
+        },
+        "drop_held": {
+          "description": "The states the host handed this run that it must drop rather than\nhand back again: the core refused them, so a later run given them\nwould be refused the same way (decision E74). The host follows this\nalone, never reading which field an error names; empty for any\nother error.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/HeldState"
+          }
+        },
+        "answered": {
+          "description": "What a request asked in several model calls had been answered when\na later call failed (design choice 1, `main`'s answered parts,\nT2.8c): the error keeps what was paid for, so the rest can be asked\nagain. Absent for any other error.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AnsweredParts"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "code",
+        "sentence",
+        "message"
+      ]
+    },
+    "ErrorCode": {
+      "description": "The codes the core gives: one closed list, so each host's mapping\nmatches every code with no catch-all arm (decision H6). Host and core\nship together, so the list is exhaustive; a new code is a contract\nversion bump. PQL's own diagnostic codes stay strings inside\n`PqlDiagnostic`.",
+      "oneOf": [
+        {
+          "description": "The caller's request is not one the core accepts.",
+          "type": "string",
+          "const": "INVALID_REQUEST"
+        },
+        {
+          "description": "A valid request this core does not support.",
+          "type": "string",
+          "const": "UNSUPPORTED_REQUEST"
+        },
+        {
+          "description": "The model endpoint answered with something the core cannot read.",
+          "type": "string",
+          "const": "INVALID_RESPONSE"
+        },
+        {
+          "description": "The host's configuration of a run is not one the core accepts.",
+          "type": "string",
+          "const": "INVALID_CONFIGURATION"
+        },
+        {
+          "description": "The transport to the model endpoint failed: it could not reach the\nendpoint, or could not read its answer.",
+          "type": "string",
+          "const": "TRANSPORT_ERROR"
+        },
+        {
+          "description": "A defect in the core, a contained panic included.",
+          "type": "string",
+          "const": "INTERNAL_ERROR"
+        },
+        {
+          "description": "The model a request names does not exist.",
+          "type": "string",
+          "const": "UNKNOWN_MODEL"
+        },
+        {
+          "description": "An optional dependency of the host is not installed.",
+          "type": "string",
+          "const": "MISSING_EXTRA"
+        },
+        {
+          "description": "A schema the core cannot work with.",
+          "type": "string",
+          "const": "INVALID_SCHEMA"
+        },
+        {
+          "description": "The endpoint does not support sessions.",
+          "type": "string",
+          "const": "SESSIONS_UNSUPPORTED"
+        },
+        {
+          "description": "An Arrow type outside the closed set.",
+          "type": "string",
+          "const": "UNSUPPORTED_TYPE"
+        },
+        {
+          "description": "A value the admitted type of its column cannot hold, such as a `timestamp[s]` past the microseconds an int64 counts.",
+          "type": "string",
+          "const": "VALUE_OUT_OF_RANGE"
+        },
+        {
+          "description": "A provider answered with a schema other than the one asked for.",
+          "type": "string",
+          "const": "PROVIDER_SCHEMA_MISMATCH"
+        },
+        {
+          "description": "A provider's query failed.",
+          "type": "string",
+          "const": "PROVIDER_ERROR"
+        },
+        {
+          "description": "A reply for an id the run is not waiting on: unknown, stale or already answered.",
+          "type": "string",
+          "const": "UNKNOWN_REPLY"
+        },
+        {
+          "description": "`next` was called before every reply the run asked for arrived.",
+          "type": "string",
+          "const": "REPLY_MISSING"
+        },
+        {
+          "description": "A reply of the wrong kind: a model answer for a fetch, or the other way round.",
+          "type": "string",
+          "const": "WRONG_REPLY"
+        },
+        {
+          "description": "The run was used after it finished.",
+          "type": "string",
+          "const": "RUN_FINISHED"
+        },
+        {
+          "description": "The run was used after it was cancelled.",
+          "type": "string",
+          "const": "RUN_CANCELLED"
+        },
+        {
+          "description": "The run was used after a panic poisoned it.",
+          "type": "string",
+          "const": "RUN_POISONED"
+        },
+        {
+          "description": "A second call reached a run while one was in progress.",
+          "type": "string",
+          "const": "RUN_BUSY"
+        },
+        {
+          "description": "A control message the contract cannot read, larger than the control cap, of the wrong direction, or whose attachments do not match the ids it names.",
+          "type": "string",
+          "const": "INVALID_MESSAGE"
         }
       ]
     },

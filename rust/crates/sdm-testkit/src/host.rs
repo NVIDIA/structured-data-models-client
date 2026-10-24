@@ -634,10 +634,12 @@ impl Source<'_> {
             Source::Sqlite(_) => ProviderChoice::Sql {
                 dialect: Dialect::new(Database::Sqlite.name()),
                 namespace: Vec::new(),
+                view: None,
             },
             Source::Replay(_) => ProviderChoice::Sql {
                 dialect: Dialect::new(Database::Postgres.name()),
                 namespace: Vec::new(),
+                view: None,
             },
             // The non-SQL provider, a host provider, as it declares itself.
             Source::Memory(memory, _) => ProviderChoice::Host {
@@ -881,6 +883,7 @@ fn drive(
                             .flat_map(|s| &s.params)
                             .filter_map(|param| match param {
                                 SqlParam::KeySet { keys, .. } => Some(keys),
+                                SqlParam::Text { .. } => None,
                                 SqlParam::Value { .. } => None,
                             })
                             .collect(),
@@ -2077,6 +2080,7 @@ fn predict(
                 .iter()
                 .flat_map(|options| options.keys().cloned())
                 .collect(),
+            model_endpoint: None,
         }),
     }));
     let message = encode(&start).map_err(|_| anyhow!("{}: its start does not encode", case.id))?;

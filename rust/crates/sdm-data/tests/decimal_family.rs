@@ -115,6 +115,7 @@ fn each_request_of_the_decimal_family_renders_its_pinned_statement() {
     let duckdb = ProviderChoice::Sql {
         dialect: Dialect::new("duckdb"),
         namespace: Vec::new(),
+        view: None,
     };
     assert!(!PINS.is_empty());
     for (written, pinned) in PINS {

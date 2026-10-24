@@ -122,6 +122,7 @@ pub fn messages() -> Vec<ControlMessage> {
             provider: sdm_contract::data::ProviderChoice::Sql {
                 dialect: Dialect::new("duckdb"),
                 namespace: Vec::new(),
+                view: None,
             },
             source: AttachmentId(1),
             check_keys: true,
@@ -134,6 +135,7 @@ pub fn messages() -> Vec<ControlMessage> {
             provider: sdm_contract::data::ProviderChoice::Sql {
                 dialect: Dialect::new("duckdb"),
                 namespace: Vec::new(),
+                view: None,
             },
             schema: AttachmentId(1),
             query: AttachmentId(2),
@@ -161,6 +163,7 @@ pub fn messages() -> Vec<ControlMessage> {
             outputs: vec!["prediction".into()],
             default_outputs: false,
             inference_asked: vec![],
+            model_endpoint: None,
         })),
         start(Operation::Predict(Predict {
             state: Some(state.clone()),
@@ -170,6 +173,7 @@ pub fn messages() -> Vec<ControlMessage> {
             outputs: vec![],
             default_outputs: true,
             inference_asked: vec![],
+            model_endpoint: None,
         })),
         ControlMessage::Step(Step::Fetch {
             requests: vec![FetchStep {
@@ -369,7 +373,7 @@ pub fn messages() -> Vec<ControlMessage> {
             id: ReplyId(2),
             outcome: FetchOutcome::Error {
                 error: ProviderError {
-                    refuses_expression: false,
+                    error_class: None,
                     kind: ErrorKind::DataSource,
                     retryable: true,
                     sqlstate: Some("42P01".into()),
@@ -418,6 +422,7 @@ pub fn messages() -> Vec<ControlMessage> {
         ControlMessage::Step(Step::Done {
             result: OperationResult::DescribeSource(DescribedSource {
                 description: AttachmentId(9),
+                notes: Vec::new(),
             }),
         }),
         ControlMessage::Step(Step::Done {
@@ -450,7 +455,7 @@ pub fn messages() -> Vec<ControlMessage> {
             error: CoreError::new(Sentence::Internal, "panicked")
                 .with_field("panic", Detail::Scalar(Scalar::Bool(true)))
                 .caused_by(CoreError::provider(&ProviderError {
-                    refuses_expression: false,
+                    error_class: None,
                     kind: ErrorKind::DataSource,
                     retryable: true,
                     sqlstate: Some("08006".into()),

@@ -217,6 +217,7 @@ fn a_done_carrying_a_source_description_arrives_whole_either_side_of_the_cap() {
         let done = ControlMessage::Step(Step::Done {
             result: OperationResult::DescribeSource(DescribedSource {
                 description: AttachmentId(4),
+                notes: Vec::new(),
             }),
         });
         let mut out = written_whole(&done, false);

@@ -38,6 +38,7 @@ fn duckdb() -> ProviderChoice {
     ProviderChoice::Sql {
         dialect: Dialect::new("duckdb"),
         namespace: Vec::new(),
+        view: None,
     }
 }
 
@@ -59,6 +60,8 @@ fn catalog_columns(part: DescribePart) -> &'static [&'static str] {
         DescribePart::IndexColumns => &[],
         // The contract's own shape: DuckDB names a table alone (T3.8).
         DescribePart::Namespace => &["name"],
+        // DuckDB reads no view's definition; never planned (T3.27).
+        DescribePart::ViewDefinition => &[],
     }
 }
 

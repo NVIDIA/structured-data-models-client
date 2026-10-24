@@ -166,7 +166,9 @@ impl DataLayer for Data {
             ProviderChoice::Host { .. } => Ok(FetchPlan::Host {
                 expect: request.expected(),
             }),
-            ProviderChoice::Sql { dialect, namespace } => {
+            ProviderChoice::Sql {
+                dialect, namespace, ..
+            } => {
                 let dialect = rendered(dialect)?;
                 // The namespace itself, read where a part is left to the
                 // connection inside one given, which the core then reads
@@ -247,7 +249,9 @@ impl DataLayer for Data {
 
     fn unsettled(&self, provider: &ProviderChoice) -> bool {
         match provider {
-            ProviderChoice::Sql { dialect, namespace } => {
+            ProviderChoice::Sql {
+                dialect, namespace, ..
+            } => {
                 given_parts(namespace).is_none()
                     || sql::dialect(dialect.name()).is_some_and(|d| {
                         d.settles_namespace()
@@ -260,9 +264,10 @@ impl DataLayer for Data {
 
     fn settled(&self, provider: &ProviderChoice, parts: Vec<String>) -> ProviderChoice {
         match provider {
-            ProviderChoice::Sql { dialect, .. } => ProviderChoice::Sql {
+            ProviderChoice::Sql { dialect, view, .. } => ProviderChoice::Sql {
                 dialect: dialect.clone(),
                 namespace: parts.into_iter().map(Some).collect(),
+                view: view.clone(),
             },
             ProviderChoice::Host { .. } => provider.clone(),
         }

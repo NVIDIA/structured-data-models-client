@@ -169,6 +169,7 @@ fn predict(state: RequestState, attachments: Attachments) -> Result<Run, CoreErr
                 outputs: vec!["prediction".into()],
                 default_outputs: false,
                 inference_asked: vec![],
+                model_endpoint: None,
             }),
         },
         attachments,

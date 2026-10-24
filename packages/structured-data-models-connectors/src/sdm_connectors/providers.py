@@ -38,7 +38,7 @@ class Provider(Protocol):
     A provider may also say what a driver's failure tells the core beyond
     the attributes every driver sets, with an ``error_fields(error)``
     method answering the contract's provider-error fields (``sqlstate``,
-    ``refuses_expression``) or ``None`` for a failure it does not read;
+    ``error_class``) or ``None`` for a failure it does not read;
     the run loop asks it where the provider has one.
     """
 

@@ -107,11 +107,19 @@ const fn grouped(text: &'static str, group: Group) -> Template {
 pub enum Group {
     TimeColumnsGuessed,
     ColumnsLeftOut,
+    /// What a semantic model's conversion left out, said as one warning
+    /// opened by the model as the host names it
+    /// (`CL/materializers/sources.py:285-294`, T3.27).
+    ViewReadInPart,
 }
 
 impl Group {
     /// Every group.
-    pub const ALL: &'static [Group] = &[Group::TimeColumnsGuessed, Group::ColumnsLeftOut];
+    pub const ALL: &'static [Group] = &[
+        Group::TimeColumnsGuessed,
+        Group::ColumnsLeftOut,
+        Group::ViewReadInPart,
+    ];
 }
 
 /// How a group of warnings is said: the code they share, the fields they
@@ -142,6 +150,13 @@ pub fn grouping(group: Group) -> Grouping {
             opening: "{table} leaves out ",
             between: ", ",
             closing: ": a request carries one scalar value per cell, and these hold none",
+        },
+        Group::ViewReadInPart => Grouping {
+            code: WarningCode::ViewReadInPart,
+            agree: &[],
+            opening: "{host.semantic_model!r} has what a graph cannot hold, so it is read in part:\n- ",
+            between: "\n- ",
+            closing: "",
         },
     }
 }
@@ -201,7 +216,28 @@ advice! {
     SetPrimaryKey = "set_primary_key", ["target_table", "target_column"];
     SkipKeyCheck = "skip_key_check", [];
     SmallerCalls = "smaller_calls", [];
+    TrustExpressions = "trust_expressions", [];
 }
+
+/// The sentences of improvements proposed to the owner and not yet
+/// approved (T3.27; the registered differences P3J-1 to P3J-4 and P3J-9
+/// to P3J-11 (P3J-9 says `view_not_yaml`), and the
+/// Snowflake and semantic-view proposals of the Phase 3 design): in the
+/// table, so approving one needs no contract change, and said by no
+/// producer until the owner says yes.
+pub const PROPOSED: &[Sentence] = &[
+    Sentence::ViewNotYaml,
+    Sentence::ViewMissesEntry,
+    Sentence::ViewNotAList,
+    Sentence::ViewNestsItself,
+    Sentence::ViewEntryUnhashable,
+    Sentence::ViewEntryNotText,
+    Sentence::ViewValueTooLarge,
+    Sentence::ViewSemanticNotFound,
+    Sentence::ViewSemanticDefinitionUnread,
+    Sentence::NoCurrentDatabase,
+    Sentence::NullAnchor,
+];
 
 /// A database a sentence names: by the name the core gives it, as a
 /// product (`backend`), and as the place a table is held (`place`). The
@@ -1042,6 +1078,224 @@ pub fn template(sentence: Sentence) -> Template {
         S::PartRankingCandidate => said(
             r#"This is the question asked for candidate {host.part_candidate!r}, one of {ranking_parts} this ranking is asked as."#,
         ),
+        // A semantic model's conversion (T3.27, `old-behaviour/T3.5-views.md`),
+        // in the old client's words. A `{reason}`, `{lost}`, `{reasons}` or
+        // `{failure}` is a clause the core writes from the old client's
+        // words; a quoted value of the definition (`{source}`, `{join}`,
+        // `{dimension}`, `{filter}`) is the text the old client quoted it
+        // by, Python's, which the core writes.
+        S::ViewsUnread => {
+            said(r#"the core asked the data source for a semantic model, which it does not read"#)
+        }
+        S::ViewNameInvalid => said(r#"Invalid metric view name '{name}'"#),
+        S::ViewNotFound => said(r#"Metric view '{view}' does not exist or you may not see it"#),
+        S::ViewNotAMetricView => said(r#"'{view}' is not a metric view (got type '{got}')"#),
+        S::ViewNoDefinition => said(r#"Could not read the definition of metric view '{view}'"#),
+        S::ViewNotYaml => said(r#"The {view_kind} definition is not readable YAML: {reason}"#),
+        S::ViewNotAMapping => said(r#"The {view_kind} definition is not a YAML mapping"#),
+        S::ViewMissesSource => said(r#"The {view_kind} definition misses a 'source'"#),
+        S::ViewMissesEntry => said(r#"The {view_kind} definition misses '{entry}'"#),
+        S::ViewNotAList => said(r#"The {view_kind} definition's '{section}' is not a list"#),
+        S::ViewNestsItself => said(r#"The {view_kind} definition has a join nested in itself"#),
+        S::ViewEntryUnhashable => {
+            said(r#"The {view_kind} definition's '{entry}' is a list or a mapping"#)
+        }
+        S::ViewEntryNotText => said(r#"The {view_kind} definition's '{entry}' is not text"#),
+        S::ViewValueTooLarge => said(
+            r#"The {view_kind} definition holds a value too large to write in a message or a statement"#,
+        ),
+        S::ViewSourceUnsupported => said(
+            r#"Unsupported metric view source {source}. Only plain table names are supported as the source of a metric view when converting it into a graph. Create a regular view with this query and point the metric view's source at it"#,
+        ),
+        S::ViewSourceUnqualified => {
+            said(r#"Could not fully qualify table '{table}' referenced by metric view '{view}'"#)
+        }
+        S::ViewOnMetricView => said(
+            r#"'{table}' is a metric view; a metric view built on another metric view is not supported, point its source at the underlying table"#,
+        ),
+        S::ViewFilterRefused => said(
+            r#"Cannot apply the metric view filter {filter} since {reason}. The graph would otherwise read rows the view leaves out. Create a regular view with this WHERE clause and point the metric view's source at it"#,
+        ),
+        S::ViewFilterRefusedNoDefault => said(
+            r#"Cannot apply the metric view filter {filter} since {reason}. The graph would otherwise read rows the view leaves out. Create a regular view with this WHERE clause and point the metric view's source at it, or give the parameter a default of its type"#,
+        ),
+        S::ViewFilterRefusedUntrusted => said(
+            r#"Cannot apply the metric view filter {filter} since {reason}. The graph would otherwise read rows the view leaves out. Create a regular view with this WHERE clause and point the metric view's source at it, or pass {advice:trust_expressions()} to apply it if you trust whoever authored the view"#,
+        ),
+        S::ViewJoinNameCollides => said(
+            r#"Cannot convert metric view '{view}' into a graph since the join name '{table}' collides with the name of the source table"#,
+        ),
+        S::ViewTableCannotHold => said(
+            r#"Cannot convert semantic view '{view}' into a graph since its table '{table}' cannot hold what it declares: {reason}"#,
+        ),
+        S::ViewInvalid => {
+            said(r#"Cannot convert {view_kind} '{view}' into a graph since {reason}"#)
+        }
+        S::ViewSemanticNotFound => {
+            said(r#"Semantic view '{view}' does not exist or you may not read it"#)
+        }
+        S::ViewSemanticDefinitionUnread => {
+            said(r#"Could not read the definition of semantic view '{view}'"#)
+        }
+        S::ViewTableOmitted => said(
+            r#"{host.semantic_model!r} no longer gives the table '{table}' this schema holds: {reason}"#,
+        ),
+        S::ViewColumnOmitted => said(
+            r#"{host.semantic_model!r} no longer gives the column '{column}' of table '{table}' this schema holds: {reason}"#,
+        ),
+        S::ViewMaterializationIgnored => grouped(
+            r#"Ignored the 'materialization' section since it cannot be represented in a graph"#,
+            Group::ViewReadInPart,
+        ),
+        S::ViewFieldsIgnored => grouped(
+            r#"Ignored the 'fields' section since the view also has 'dimensions', and {database:backend} reads only those"#,
+            Group::ViewReadInPart,
+        ),
+        S::ViewJoinNotAMapping => grouped(
+            r#"Failed to add join {join} since it is not a mapping"#,
+            Group::ViewReadInPart,
+        ),
+        S::ViewJoinNameless => grouped(
+            r#"Failed to add join {join} since it misses a name"#,
+            Group::ViewReadInPart,
+        ),
+        S::ViewJoinSkipped => grouped(
+            r#"Failed to add join '{join}' since {reason}"#,
+            Group::ViewReadInPart,
+        ),
+        S::ViewJoinSkippedWithIt => grouped(
+            r#"Failed to add join '{join}', and with it {lost}, since {reason}"#,
+            Group::ViewReadInPart,
+        ),
+        S::ViewDimensionNoTable => grouped(
+            r#"Failed to add dimension '{dimension}' since it references no table of the view"#,
+            Group::ViewReadInPart,
+        ),
+        S::ViewDimensionNotAMapping => grouped(
+            r#"Failed to add dimension {dimension} since it is not a mapping"#,
+            Group::ViewReadInPart,
+        ),
+        S::ViewDimensionMisses => grouped(
+            r#"Failed to add dimension {dimension} since it misses a name or expression"#,
+            Group::ViewReadInPart,
+        ),
+        S::ViewDimensionRefused => grouped(
+            r#"Failed to add dimension '{dimension}' since {reason}"#,
+            Group::ViewReadInPart,
+        ),
+        S::ViewDimensionMultipleTables => grouped(
+            r#"Failed to add dimension '{dimension}' since its expression references multiple tables"#,
+            Group::ViewReadInPart,
+        ),
+        S::ViewMeasureRefused => grouped(
+            r#"Failed to add measure '{measure}' since {reason}"#,
+            Group::ViewReadInPart,
+        ),
+        S::ViewMeasureColumnShadowed => grouped(
+            r#"Did not add the column '{column}', which the measure '{measure}' reads, since the dimension '{dimension}' has its name"#,
+            Group::ViewReadInPart,
+        ),
+        S::ViewColumnRefused => grouped(
+            r#"Failed to add column '{column}' to table '{table}': {failure}"#,
+            Group::ViewReadInPart,
+        ),
+        S::ViewJoinUnchecked => grouped(
+            r#"Kept join '{join}' with its key '{key}' unchecked, since counting the keys failed: {failure}"#,
+            Group::ViewReadInPart,
+        ),
+        S::ViewDerivedKeyReplaced => grouped(
+            r#"Replaced the derived column '{key}' of table '{table}' with its physical source column since join '{join}' references it as a key"#,
+            Group::ViewReadInPart,
+        ),
+        S::ViewEdgeDropped => grouped(
+            r#"Failed to add the relationship between '{source_table}' and '{target_table}' since {reason}"#,
+            Group::ViewReadInPart,
+        ),
+        S::ViewCompositeKey => grouped(
+            r#"Failed to add primary key for table '{table}' since composite primary keys are not yet supported"#,
+            Group::ViewReadInPart,
+        ),
+        S::ViewColumnCrossTable => grouped(
+            r#"Failed to add column '{column}' of table '{table}' since its expression references other tables"#,
+            Group::ViewReadInPart,
+        ),
+        S::ViewColumnsCrossTable => grouped(
+            r#"Failed to add columns {columns!r} of table '{table}' since their expressions reference other tables"#,
+            Group::ViewReadInPart,
+        ),
+        S::ViewExpressionDropped => grouped(
+            r#"Failed to add column '{column}' since {reason}, and expressions taken from the metric view are executed as SQL under your warehouse credentials"#,
+            Group::ViewReadInPart,
+        ),
+        S::ViewExpressionDroppedUntrusted => grouped(
+            r#"Failed to add column '{column}' since {reason}, and expressions taken from the metric view are executed as SQL under your warehouse credentials. Pass {advice:trust_expressions()} to keep it if you trust whoever authored the view"#,
+            Group::ViewReadInPart,
+        ),
+        S::ViewTableExpressionDropped => grouped(
+            r#"Failed to add column '{column}' of table '{table}' since {reason}, and expressions taken from the semantic view are executed as SQL under your warehouse credentials"#,
+            Group::ViewReadInPart,
+        ),
+        S::ViewTableExpressionDroppedUntrusted => grouped(
+            r#"Failed to add column '{column}' of table '{table}' since {reason}, and expressions taken from the semantic view are executed as SQL under your warehouse credentials. Pass {advice:trust_expressions()} to keep it if you trust whoever authored the view"#,
+            Group::ViewReadInPart,
+        ),
+        S::ViewRelationshipRefused => grouped(
+            r#"Failed to add relationship '{relationship}' since {reason}"#,
+            Group::ViewReadInPart,
+        ),
+        S::ViewMeasureNote => said(
+            r#"'{measure}' is {function}({table}.{column}, 0, 30, days) over the next 30 days"#,
+        ),
+        S::ViewTimeColumnNote => {
+            said(r#"Took '{column}' as the time column of table '{table}', since {reasons}"#)
+        }
+        S::ViewTimeColumnNoteAdded => said(
+            r#"Took '{column}' as the time column of table '{table}', and added it as a column, since {reasons}"#,
+        ),
+        S::ViewTimeColumnNoteRenamed => said(
+            r#"Took '{column}' as the time column of table '{table}', since {reasons}. It is the source column '{source}', added under a name of its own because a dimension has its name"#,
+        ),
+        S::ViewParameterNote => said(
+            r#"Read the parameter '{parameter}' as its default '{default}', as a query of the view without arguments does"#,
+        ),
+        // Snowflake (T3.27, `old-behaviour/T3.6-snowflake.md`).
+        S::NoCurrentSchema => said(
+            r#"No current 'schema' set. Please specify the {database:backend} schema manually"#,
+        ),
+        S::NoCurrentDatabase => said(
+            r#"No current 'database' set. Please specify the {database:backend} database manually"#,
+        ),
+        S::NullAnchor => said(
+            r#"an entity's anchor time is missing, and a window of the {database:backend} source cannot end at no time; give every entity an anchor time"#,
+        ),
+        S::TableNoColumns => said(r#"Table '{table}' has no columns"#),
+        S::SeedIgnored => said(
+            r#"The '{database}' backend does not support seeded random sampling, so 'random_seed' is ignored when drawing in-context examples. Repeated calls with the same seed may return different predictions."#,
+        ),
+        // A Databricks Model Serving endpoint (T3.27, for T3.13,
+        // `CL/core/databricks_serving.py`).
+        S::ServingValueNotJson => {
+            said(r#"this request carries a value that cannot be sent as JSON: {reason}"#)
+        }
+        S::ServingPastLimit => said(
+            r#"this request is {bytes:,} bytes once wrapped for serving endpoint {endpoint!r}, above the {limit:,} byte limit it accepts. Send fewer rows per call: a smaller num_context_samples, or fewer entities to score"#,
+        ),
+        S::ServingNotJson => {
+            said(r#"serving endpoint {endpoint!r} answered with a response that is not JSON"#)
+        }
+        S::ServingNotAnObject => {
+            said(r#"expected a JSON object from serving endpoint {endpoint!r}, got {got}"#)
+        }
+        S::ServingRefused => {
+            said(r#"serving endpoint {endpoint!r} refused the request ({endpoint_code})"#)
+        }
+        S::ServingCallersFault => {
+            said(r#"serving endpoint {endpoint!r} refused the request (INVALID_REQUEST)"#)
+        }
+        S::ServingFailed => said(r#"serving endpoint {endpoint!r} request failed"#),
+        S::ServingFailedCoded => {
+            said(r#"serving endpoint {endpoint!r} request failed ({provider_code})"#)
+        }
     }
 }
 
@@ -1096,6 +1350,7 @@ pub fn table_json_naming(databases: &[DatabaseNames]) -> String {
                     Code::Error(_) => "error",
                     Code::Warning(_) => "warning",
                     Code::Part => "part",
+                    Code::Note => "note",
                 };
                 SentenceEntry {
                     name: sentence.as_str(),

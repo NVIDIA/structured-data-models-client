@@ -30,6 +30,7 @@ fn provider_choices_round_trip() {
         ProviderChoice::Sql {
             dialect: Dialect::new("duckdb"),
             namespace: Vec::new(),
+            view: None,
         },
         ProviderChoice::Host {
             capabilities: ProviderCapabilities {
@@ -358,7 +359,7 @@ fn a_provider_error_keeps_its_retryability_and_codes_in_the_core_error() {
     use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind};
     for retryable in [true, false] {
         let error = CoreError::provider(&ProviderError {
-            refuses_expression: false,
+            error_class: None,
             kind: ErrorKind::DataSource,
             retryable,
             sqlstate: Some("40001".into()),

@@ -147,7 +147,7 @@ fn a_view_s_definition_is_a_catalog_part() {
     let answer = CatalogAnswer::ViewDefinition(ViewDefinition {
         text: "version: 0.1".into(),
         parameters: vec![("p".into(), "INT".into())],
-        located: vec!["c".into(), "s".into()],
+        located: vec![Some("c".into()), Some("s".into())],
         columns: vec![("d".into(), "string".into())],
     });
     assert_eq!(answer.part(), DescribePart::ViewDefinition);
@@ -161,12 +161,12 @@ fn a_description_carries_its_typed_view_notes_and_none_by_default() {
         "description": 4,
         "notes": [{
             "sentence": "view_parameter_note",
-            "fields": {"parameter": {"text": "region"}, "default": {"text": "EMEA"}}
+            "fields": {"parameter": {"t": "utf8", "v": "region"}, "default": {"t": "utf8", "v": "EMEA"}}
         }, {
             "sentence": "view_time_column_note",
             "fields": {
-                "column": {"text": "ts"}, "table": {"text": "orders"},
-                "reasons": {"text": "a window measure of the view orders by it"}
+                "column": {"t": "utf8", "v": "ts"}, "table": {"t": "utf8", "v": "orders"},
+                "reasons": {"t": "utf8", "v": "a window measure of the view orders by it"}
             },
             "table": "orders", "time_column": "ts"
         }]
@@ -200,7 +200,7 @@ fn a_predict_names_its_serving_endpoint_and_none_is_today_s() {
     }));
     assert_eq!(predict.model_endpoint, None);
     assert!(written(&predict).get("model_endpoint").is_none());
-    predict.model_endpoint = Some(ModelEndpoint::DatabricksServing {
+    predict.model_endpoint = Some(ModelEndpoint::ServingEndpoint {
         name: "kumo-rfm".into(),
         max_request_bytes: 16_000_000,
     });
@@ -208,7 +208,7 @@ fn a_predict_names_its_serving_endpoint_and_none_is_today_s() {
     assert_eq!(
         text["model_endpoint"],
         json!({
-            "endpoint": "databricks_serving", "name": "kumo-rfm",
+            "endpoint": "serving_endpoint", "name": "kumo-rfm",
             "max_request_bytes": 16_000_000
         })
     );
@@ -423,6 +423,9 @@ fn added() -> Vec<(&'static str, Code)> {
         ("view_misses_entry", e(E::InvalidRequest)),
         ("view_not_a_list", e(E::InvalidRequest)),
         ("view_nests_itself", e(E::InvalidRequest)),
+        ("view_entry_unhashable", e(E::InvalidRequest)),
+        ("view_entry_not_text", e(E::InvalidRequest)),
+        ("view_value_too_large", e(E::InvalidRequest)),
         ("view_source_unsupported", e(E::InvalidRequest)),
         ("view_source_unqualified", e(E::InvalidRequest)),
         ("view_on_metric_view", e(E::InvalidRequest)),
@@ -469,9 +472,9 @@ fn added() -> Vec<(&'static str, Code)> {
         ("view_time_column_note_added", Code::Note),
         ("view_time_column_note_renamed", Code::Note),
         ("view_parameter_note", Code::Note),
-        ("snowflake_no_current_schema", e(E::InvalidRequest)),
-        ("snowflake_no_current_database", e(E::InvalidRequest)),
-        ("snowflake_null_anchor", e(E::InvalidRequest)),
+        ("no_current_schema", e(E::InvalidRequest)),
+        ("no_current_database", e(E::InvalidRequest)),
+        ("null_anchor", e(E::InvalidRequest)),
         ("table_no_columns", e(E::InvalidRequest)),
         ("seed_ignored", w(W::SeedIgnored)),
         ("serving_value_not_json", e(E::InvalidRequest)),
@@ -530,10 +533,13 @@ fn a_proposed_improvement_s_sentence_is_marked_and_used_by_none() {
             "view_misses_entry",
             "view_not_a_list",
             "view_nests_itself",
+            "view_entry_unhashable",
+            "view_entry_not_text",
+            "view_value_too_large",
             "view_semantic_not_found",
             "view_semantic_definition_unread",
-            "snowflake_no_current_database",
-            "snowflake_null_anchor",
+            "no_current_database",
+            "null_anchor",
         ]
     );
 }
@@ -575,8 +581,8 @@ fn the_view_sentences_say_the_old_client_s_words() {
         "'{measure}' is {function}({table}.{column}, 0, 30, days) over the next 30 days"
     );
     assert_eq!(
-        said(Sentence::SnowflakeNoCurrentSchema),
-        "No current 'schema' set. Please specify the Snowflake schema manually"
+        said(Sentence::NoCurrentSchema),
+        "No current 'schema' set. Please specify the {database:backend} schema manually"
     );
     assert_eq!(
         said(Sentence::ServingPastLimit),

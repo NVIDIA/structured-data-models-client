@@ -178,6 +178,7 @@ ADVICE: dict[str, Callable[..., str]] = {
     'missing_time': lambda: "'NaT'",
     'result_frame': lambda: 'to_pandas()',
     'smaller_calls': lambda: 'materialize(rows_per_call=N)',
+    'trust_expressions': lambda: 'trust_expressions=True',
 }
 
 #: The sentences that relay a library of this host's own, in that

@@ -698,6 +698,7 @@ fn predicting(version: u32, payload: &str) -> Result<HostRun, CoreError> {
             outputs: vec!["prediction".into()],
             default_outputs: false,
             inference_asked: vec![],
+            model_endpoint: None,
         })),
         Attachments::from([
             (
