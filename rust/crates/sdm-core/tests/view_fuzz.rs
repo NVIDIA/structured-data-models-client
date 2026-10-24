@@ -221,3 +221,35 @@ fn the_bound_counts_the_characters_written() {
     assert!(view_words::value_repr(&document, node).is_err());
     assert!(view_words::value_text(&document, node).is_err());
 }
+
+/// The class the data layer's patterns read `\s` by is derived from the
+/// parser's one rule of white space: it holds exactly the code points the
+/// rule holds, every one of them tested (Codex review 4, P1).
+#[test]
+fn the_patterns_white_space_is_the_one_rule() {
+    let spaces = sdm_core::pql::spaces();
+    let mut members = Vec::new();
+    for range in spaces.class().split("\\x{").skip(1) {
+        let (code, rest) = range.split_once('}').unwrap();
+        let code = u32::from_str_radix(code, 16).unwrap();
+        if rest == "-" {
+            members.push((code, None));
+        } else {
+            match members.last_mut() {
+                Some((_, last @ None)) => *last = Some(code),
+                _ => members.push((code, Some(code))),
+            }
+        }
+    }
+    let held = |code: u32| {
+        members
+            .iter()
+            .any(|&(first, last)| first <= code && code <= last.unwrap_or(first))
+    };
+    for code in 0..=u32::from(char::MAX) {
+        let Some(c) = char::from_u32(code) else {
+            continue;
+        };
+        assert_eq!(held(code), spaces.holds(c), "U+{code:04X}");
+    }
+}

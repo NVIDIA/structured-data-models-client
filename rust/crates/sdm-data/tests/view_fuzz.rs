@@ -18,23 +18,29 @@ use sdm_data::view_expr::{
 use serde_json::Value as Json;
 
 /// Python's white space (`str.isspace`), which the core hands in from
-/// `sdm-pql`: the 29 characters Python 3.12 counts.
-const SPACES: Spaces = Spaces(|c| {
-    matches!(
-        c,
-        '\t'..='\r'
-            | '\u{1c}'..='\u{20}'
-            | '\u{85}'
-            | '\u{a0}'
-            | '\u{1680}'
-            | '\u{2000}'..='\u{200a}'
-            | '\u{2028}'
-            | '\u{2029}'
-            | '\u{202f}'
-            | '\u{205f}'
-            | '\u{3000}'
-    )
-});
+/// `sdm-pql`: the 29 characters Python 3.12 counts, with the class the
+/// patterns are compiled with derived from them.
+fn spaces() -> &'static Spaces {
+    static SPACES: std::sync::LazyLock<Spaces> = std::sync::LazyLock::new(|| {
+        Spaces::new(|c| {
+            matches!(
+                c,
+                '\t'..='\r'
+                    | '\u{1c}'..='\u{20}'
+                    | '\u{85}'
+                    | '\u{a0}'
+                    | '\u{1680}'
+                    | '\u{2000}'..='\u{200a}'
+                    | '\u{2028}'
+                    | '\u{2029}'
+                    | '\u{202f}'
+                    | '\u{205f}'
+                    | '\u{3000}'
+            )
+        })
+    });
+    &SPACES
+}
 
 use sdm_data::view_expr::{Spaces, TextRules};
 
@@ -142,10 +148,10 @@ fn read_every_way(expr: &str, table: &str) {
         Some(ExprDialect::Databricks),
         Some(ExprDialect::Snowflake),
     ] {
-        let _ = unsafe_reason(expr, dialect);
+        let _ = unsafe_reason(expr, dialect, spaces());
     }
     for dialect in [ExprDialect::Databricks, ExprDialect::Snowflake] {
-        let _ = untrusted_call_reason(expr, dialect, &["x", table], SPACES);
+        let _ = untrusted_call_reason(expr, dialect, &["x", table], spaces());
         let _ = view_expr::expression_message(
             "column 'x'",
             expr,
@@ -155,28 +161,32 @@ fn read_every_way(expr: &str, table: &str) {
             &["x"],
             TextRules {
                 quote: &|text: &str| format!("'{text}'"),
-                spaces: SPACES,
+                spaces: spaces(),
             },
         );
     }
-    let _ = name_references(expr);
-    let _ = strip_comments(expr, SPACES);
-    let _ = string_literals(expr);
-    let _ = mask_literals(expr);
-    let _ = qualifier_found(table, expr);
-    let _ = strip_qualifier(table, expr);
-    let _ = metric::references_alias(expr, &[table, "x"]);
-    let _ = metric::strip_alias(expr, &[table], SPACES);
-    let _ = metric::derived_column(expr, SPACES);
-    let _ = metric::renamed_column(expr, SPACES);
-    let _ = metric::wildcard(expr, SPACES);
-    let _ = metric::table_reference(expr, SPACES);
-    let _ = metric::view_name(expr, SPACES);
-    let _ = metric::join_condition(expr, SPACES);
-    let _ = metric::unquote(expr, SPACES);
-    let _ = metric::reads_star(expr);
-    let _ = metric::type_class(expr, SPACES);
-    let _ = metric::check_filter(Some(expr), &[(vec![table.to_owned()], "t".into())], SPACES);
+    let _ = name_references(expr, spaces());
+    let _ = strip_comments(expr, spaces());
+    let _ = string_literals(expr, spaces());
+    let _ = mask_literals(expr, spaces());
+    let _ = qualifier_found(table, expr, spaces());
+    let _ = strip_qualifier(table, expr, spaces());
+    let _ = metric::references_alias(expr, &[table, "x"], spaces());
+    let _ = metric::strip_alias(expr, &[table], spaces());
+    let _ = metric::derived_column(expr, spaces());
+    let _ = metric::renamed_column(expr, spaces());
+    let _ = metric::wildcard(expr, spaces());
+    let _ = metric::table_reference(expr, spaces());
+    let _ = metric::view_name(expr, spaces());
+    let _ = metric::join_condition(expr, spaces());
+    let _ = metric::unquote(expr, spaces());
+    let _ = metric::reads_star(expr, spaces());
+    let _ = metric::type_class(expr, spaces());
+    let _ = metric::check_filter(
+        Some(expr),
+        &[(vec![table.to_owned()], "t".into())],
+        spaces(),
+    );
 }
 
 #[test]
@@ -226,10 +236,10 @@ fn no_expression_panics_a_reader() {
 #[test]
 fn a_pattern_past_the_compiler_s_bounds_is_unreadable() {
     let table = "a".repeat(200_000);
-    assert!(qualifier_found(&table, "x").is_err());
-    assert!(strip_qualifier(&table, "x").is_err());
-    assert!(metric::references_alias("x", &[table.as_str()]).is_err());
-    assert_eq!(qualifier_found("a", "a.x"), Ok(true));
+    assert!(qualifier_found(&table, "x", spaces()).is_err());
+    assert!(strip_qualifier(&table, "x", spaces()).is_err());
+    assert!(metric::references_alias("x", &[table.as_str()], spaces()).is_err());
+    assert_eq!(qualifier_found("a", "a.x", spaces()), Ok(true));
 }
 
 /// No row of `DESCRIBE TABLE EXTENDED` panics its reader.
@@ -256,6 +266,6 @@ fn no_description_panics_its_reader() {
                     .collect()
             })
             .collect();
-        let _ = view_expr::describe::describe_view(&rows, SPACES);
+        let _ = view_expr::describe::describe_view(&rows, spaces());
     }
 }

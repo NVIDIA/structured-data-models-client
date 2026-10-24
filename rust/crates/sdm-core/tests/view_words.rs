@@ -153,7 +153,7 @@ fn a_yaml_value_is_quoted_as_the_old_client_quoted_it() {
 fn an_expression_s_refusal_is_worded_as_the_old_client_worded_it() {
     each(EXPR, "unsafe", 400, |vector| {
         let expr = vector["expr"].as_str().unwrap();
-        let reason = view_expr::unsafe_reason(expr, dialect(&vector["dialect"]))
+        let reason = view_expr::unsafe_reason(expr, dialect(&vector["dialect"]), spaces())
             .map(|r| view_words::expr_reason(&r));
         (reason.as_deref() != vector["reason"].as_str())
             .then(|| format!("{expr:?}: {reason:?} where {}", vector["reason"]))
@@ -196,7 +196,7 @@ fn an_expression_s_refusal_is_worded_as_the_old_client_worded_it() {
 #[test]
 fn unsafe_text_and_untrusted_calls_are_worded_by_name() {
     let reason = |expr: &str| {
-        view_expr::unsafe_reason(expr, Some(ExprDialect::Databricks))
+        view_expr::unsafe_reason(expr, Some(ExprDialect::Databricks), spaces())
             .map(|r| view_words::expr_reason(&r))
     };
     assert_eq!(
