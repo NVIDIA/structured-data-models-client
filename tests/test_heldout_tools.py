@@ -635,3 +635,102 @@ def test_comparator_failure_cannot_be_counted_as_a_clean_run(tmp_path):
     done = tool('counts', run, '--prefix', PREFIX, '--threshold', 4)
     assert done.returncode != 0
     assert 'comparison' in (done.stdout + done.stderr).lower()
+
+
+def test_execute_makes_global_stamp_before_its_first_case_tool(tmp_path):
+    """Actual shell flow, with dummy checkouts and a reader that only checks ordering."""
+    for name in ('git', 'bash'):
+        if shutil.which(name) is None:
+            pytest.skip(f'no {name}')
+    candidate, reference = tmp_path / 'candidate', tmp_path / 'reference'
+    for checkout in (candidate, reference):
+        checkout.mkdir()
+        subprocess.run(['git', 'init', '-q', str(checkout)], check=True)
+        (checkout / 'dummy').write_text('owned test checkout\n')
+        if checkout == candidate:
+            (checkout / 'contract/runners').mkdir(parents=True)
+            (checkout / 'contract/runners/run_python.py').write_text(
+                '# dummy\n'
+            )
+            (checkout / 'docs/design/rust-core').mkdir(parents=True)
+            (checkout / 'docs/design/rust-core/register.yaml').write_text(
+                'entries: []\n'
+            )
+        subprocess.run(['git', '-C', str(checkout), 'add', '.'], check=True)
+        subprocess.run(
+            [
+                'git',
+                '-C',
+                str(checkout),
+                '-c',
+                'user.name=Tool test',
+                '-c',
+                'user.email=test@example.com',
+                'commit',
+                '-q',
+                '--signoff',
+                '-m',
+                'dummy',
+            ],
+            check=True,
+        )
+    reference_sha = subprocess.check_output(
+        ['git', '-C', str(reference), 'rev-parse', 'HEAD'], text=True
+    ).strip()
+    dummy = tmp_path / 'dummy-bundle'
+    dummy.mkdir()
+    stamp = pathlib.Path(str(dummy.resolve()) + '.started')
+    binary = tmp_path / 'bin'
+    binary.mkdir()
+    python = binary / 'python'
+    python.write_text('#!/bin/sh\nexit 0\n')
+    python.chmod(0o700)
+    cargo = binary / 'cargo'
+    cargo.write_text('#!/bin/sh\nexit 0\n')
+    cargo.chmod(0o700)
+    checker = binary / 'case-reader'
+    checker.write_text(
+        f'#!{sys.executable}\nfrom pathlib import Path\nassert Path({str(stamp)!r}).is_file(), "reader ran before marker"\nprint("verified marker precedes case reader")\nraise SystemExit(1)\n'
+    )
+    checker.chmod(0o700)
+    done = subprocess.run(
+        [
+            'bash',
+            str(RUNNER),
+            '--bundle',
+            str(dummy),
+            '--prefix',
+            PREFIX,
+            '--bundle-sha',
+            '0' * 64,
+            '--inputs-sha',
+            '0' * 64,
+            '--candidate',
+            str(candidate),
+            '--reference',
+            str(reference),
+            '--reference-sha',
+            reference_sha,
+            '--python',
+            str(python),
+            '--reference-python',
+            str(python),
+            '--tool-python',
+            str(checker),
+            '--databases',
+            'duckdb',
+            '--out',
+            str(tmp_path / 'out'),
+            '--threshold',
+            '4',
+            '--execute',
+        ],
+        capture_output=True,
+        text=True,
+        env={'PATH': str(binary) + ':/usr/bin:/bin'},
+        timeout=30,
+    )
+    assert done.returncode == 1, done.stdout + done.stderr
+    assert 'verified marker precedes case reader' in done.stdout
+    assert stamp.is_file()
+    assert not list((tmp_path / 'out/cases-orig').glob('*.json'))
