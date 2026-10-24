@@ -72,8 +72,9 @@ capture_check = _module('capture_check')
 
 def _without_plan_b_reads(observation: dict[str, Any]) -> dict[str, Any]:
     r"""``observation``'s projection (``capture_check.py``), its query log's
-    statements counted without the reads plan B adds, by the one rule
-    (``compare.py``'s ``reads_as_it_stands``, register P3A-1)."""
+    statements counted without those the core marked as plan B's reads of
+    a table as it stands (``compare.py``'s ``LOCATE``, the one rule,
+    register P3A-1)."""
     path = ROOT / 'scripts/rust_core/compare.py'
     if 'compare' not in sys.modules:
         spec = importlib.util.spec_from_file_location('compare', path)
@@ -81,8 +82,11 @@ def _without_plan_b_reads(observation: dict[str, Any]) -> dict[str, Any]:
         module = importlib.util.module_from_spec(spec)
         sys.modules['compare'] = module
         spec.loader.exec_module(module)
-    reads = sys.modules['compare'].reads_as_it_stands(
-        observation['driver']['capture']['statements']
+    locate = sys.modules['compare'].LOCATE
+    reads = sum(
+        1
+        for statement in observation['driver']['capture']['statements']
+        if statement.get('purpose') == locate
     )
     projection = capture_check.projection(observation)
     logged = projection['query_log']

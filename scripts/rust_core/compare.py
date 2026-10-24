@@ -2258,45 +2258,27 @@ def _core_payload(
             )
 
 
-def reads_as_it_stands(statements: list[dict[str, Any]]) -> int:
-    r"""How many of ``statements``, a capture's in order, are the reads plan
-    B adds (the owner's decision of 2026-10-24, register P3A-1): each
-    ``materialize`` over a source's tables reads each table as it stands at
-    that run, its catalog, keys and preview, which the old client read once,
-    at ``from_source``, and kept. They are the leading statements of the
-    ``materialize`` stage that each repeat, word for word, a statement the
-    ``from_source`` stage ran. Every comparison of a run's statements with
-    the old client's takes them out by this one rule and holds the rest to
-    the old client's exactly; ``sdm_testkit::plan_b`` is the same rule for
-    the Rust host."""
-    described = [s['sql'] for s in statements if s['stage'] == 'from_source']
-    count = 0
-    for statement in statements:
-        if statement['stage'] != 'materialize':
-            continue
-        if statement['sql'] not in described:
-            break
-        count += 1
-    return count
+#: The mark the core puts on a fetch of plan B's read of a table as it
+#: stands at each materialize (``FetchStep.purpose``, the owner's decision of
+#: 2026-10-24, register P3A-1), which a capture records on each statement
+#: answering it: the reads the old client made once, at ``from_source``.
+LOCATE = 'locate'
 
 
 def _by_stage(
     observation: dict[str, Any], key: str = 'statements'
 ) -> dict[str, list[dict[str, Any]]] | None:
     r"""A runner's statements (or bindings) by the public call they ran
-    in, in order, the reads plan B adds taken out
-    (:func:`reads_as_it_stands`); None when it recorded none (no
-    capture)."""
+    in, in order, but those the core marked as plan B's reads of a table as
+    it stands (:data:`LOCATE`), which the old client made once, at
+    ``from_source``: the one rule, every other statement compared whole,
+    its parameters included; None when it recorded none (no capture)."""
     capture = (observation.get('driver') or {}).get('capture')
     if capture is None:
         return None
-    skipped = (
-        reads_as_it_stands(capture['statements']) if key == 'statements' else 0
-    )
     grouped: dict[str, list[dict[str, Any]]] = {}
     for each in capture[key]:
-        if skipped and each['stage'] == 'materialize':
-            skipped -= 1
+        if each.get('purpose') == LOCATE:
             continue
         grouped.setdefault(each['stage'], []).append(each)
     return grouped

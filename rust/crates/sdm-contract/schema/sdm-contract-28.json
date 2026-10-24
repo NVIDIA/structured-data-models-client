@@ -4341,6 +4341,17 @@
             "string",
             "null"
           ]
+        },
+        "purpose": {
+          "description": "Why the run asks it, where a host or a comparison of the run's\nstatements with the old client's needs to know: `locate`, a read of\na table as it stands at this `materialize` (its namespace, catalog,\nkeys and preview), which the owner's plan B adds and the old client\nmade once, at `from_source` (contract v28, T3.4). Left out, a read\nof the operation's own.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FetchPurpose"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "additionalProperties": false,
@@ -5179,6 +5190,16 @@
             "expect",
             "fields"
           ]
+        }
+      ]
+    },
+    "FetchPurpose": {
+      "description": "Why a run asks a fetch ([`FetchStep::purpose`]).",
+      "oneOf": [
+        {
+          "description": "A read of a table as it stands at this `materialize`.",
+          "type": "string",
+          "const": "locate"
         }
       ]
     },

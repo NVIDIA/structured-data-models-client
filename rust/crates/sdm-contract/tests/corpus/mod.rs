@@ -214,6 +214,7 @@ pub fn messages() -> Vec<ControlMessage> {
                     expect: ExpectedSchema::Discover {},
                 },
                 continuation: None,
+                purpose: None,
             }],
         }),
         ControlMessage::Step(Step::Fetch {
@@ -253,6 +254,7 @@ pub fn messages() -> Vec<ControlMessage> {
                         expect: ExpectedSchema::Discover {},
                     },
                     continuation: None,
+                    purpose: None,
                 },
                 FetchStep {
                     id: ReplyId(3),
@@ -266,6 +268,7 @@ pub fn messages() -> Vec<ControlMessage> {
                         expect: ExpectedSchema::Discover {},
                     },
                     continuation: None,
+                    purpose: None,
                 },
                 FetchStep {
                     id: ReplyId(4),
@@ -285,6 +288,7 @@ pub fn messages() -> Vec<ControlMessage> {
                         expect: ExpectedSchema::Discover {},
                     },
                     continuation: None,
+                    purpose: None,
                 },
                 FetchStep {
                     id: ReplyId(5),
@@ -298,6 +302,7 @@ pub fn messages() -> Vec<ControlMessage> {
                         expect: ExpectedSchema::Discover {},
                     },
                     continuation: None,
+                    purpose: None,
                 },
                 FetchStep {
                     id: ReplyId(6),
@@ -313,6 +318,7 @@ pub fn messages() -> Vec<ControlMessage> {
                         expect: ExpectedSchema::Discover {},
                     },
                     continuation: None,
+                    purpose: None,
                 },
                 FetchStep {
                     id: ReplyId(7),
@@ -324,6 +330,7 @@ pub fn messages() -> Vec<ControlMessage> {
                         expect: ExpectedSchema::Discover {},
                     },
                     continuation: None,
+                    purpose: None,
                 },
                 FetchStep {
                     id: ReplyId(8),
@@ -335,6 +342,7 @@ pub fn messages() -> Vec<ControlMessage> {
                         expect: ExpectedSchema::Discover {},
                     },
                     continuation: None,
+                    purpose: None,
                 },
                 FetchStep {
                     id: ReplyId(9),
@@ -346,6 +354,7 @@ pub fn messages() -> Vec<ControlMessage> {
                         expect: ExpectedSchema::Discover {},
                     },
                     continuation: None,
+                    purpose: None,
                 },
             ],
         }),

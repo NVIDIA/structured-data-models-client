@@ -72,25 +72,15 @@ def _module(name: str) -> ModuleType:
     return module
 
 
-def _module_at(name: str, path: Path) -> ModuleType:
-    if name in sys.modules:
-        return sys.modules[name]
-    spec = importlib.util.spec_from_file_location(name, path)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[name] = module
-    spec.loader.exec_module(module)
-    return module
-
-
 run_python = _module('run_python')
 capture_check = _module('capture_check')
 
 
 def _without_plan_b_reads(observation: dict[str, Any]) -> dict[str, Any]:
     r"""``observation``'s projection (``capture_check.py``), its query log's
-    statements counted without the reads plan B adds, by the one rule
-    (``compare.py``'s ``reads_as_it_stands``, register P3A-1)."""
+    statements counted without those the core marked as plan B's reads of
+    a table as it stands (``compare.py``'s ``LOCATE``, the one rule,
+    register P3A-1)."""
     path = ROOT / 'scripts/rust_core/compare.py'
     if 'compare' not in sys.modules:
         spec = importlib.util.spec_from_file_location('compare', path)
@@ -98,8 +88,11 @@ def _without_plan_b_reads(observation: dict[str, Any]) -> dict[str, Any]:
         module = importlib.util.module_from_spec(spec)
         sys.modules['compare'] = module
         spec.loader.exec_module(module)
-    reads = sys.modules['compare'].reads_as_it_stands(
-        observation['driver']['capture']['statements']
+    locate = sys.modules['compare'].LOCATE
+    reads = sum(
+        1
+        for statement in observation['driver']['capture']['statements']
+        if statement.get('purpose') == locate
     )
     projection = capture_check.projection(observation)
     logged = projection['query_log']
@@ -248,21 +241,14 @@ def test_the_core_s_sql_for_materialize_returns_the_reference_s_results(
     reference = _reference()['driver']['capture']
     recorded = _materialize_recording(monkeypatch)
     # Ten fetches for the schema (test_schema_route.py), then the reads
-    # plan B adds (the one rule, compare.py's reads_as_it_stands, register
+    # the core marks as plan B's (purpose `locate`, the one rule, register
     # P3A-1), then materialize's six, as the reference's sixteen statements.
-    compare = _module_at('compare', ROOT / 'scripts/rust_core/compare.py')
-    fresh = compare.reads_as_it_stands(
-        [
-            {
-                'stage': 'from_source' if at < 10 else 'materialize',
-                'sql': step['plan']['statements'][0]['text'],
-            }
-            for at, (step, _, _) in enumerate(recorded)
-        ]
-    )
+    fresh = sum(1 for step, _, _ in recorded if step.get('purpose') == 'locate')
     assert len(recorded) == 16 + fresh
     assert len(reference['statements']) == 16
-    ours = recorded[10 + fresh :]
+    ours = [
+        entry for entry in recorded[10:] if entry[0].get('purpose') != 'locate'
+    ]
     theirs = reference['statements'][10:]
     bindings = iter(reference['bindings'])
     requests = [step['request']['request'] for step, _, _ in ours]

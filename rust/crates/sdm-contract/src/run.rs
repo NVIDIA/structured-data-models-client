@@ -75,6 +75,22 @@ pub struct FetchStep {
     /// it; left out on a request's first fetch (design choice 1, paging).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub continuation: Option<String>,
+    /// Why the run asks it, where a host or a comparison of the run's
+    /// statements with the old client's needs to know: `locate`, a read of
+    /// a table as it stands at this `materialize` (its namespace, catalog,
+    /// keys and preview), which the owner's plan B adds and the old client
+    /// made once, at `from_source` (contract v28, T3.4). Left out, a read
+    /// of the operation's own.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub purpose: Option<FetchPurpose>,
+}
+
+/// Why a run asks a fetch ([`FetchStep::purpose`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum FetchPurpose {
+    /// A read of a table as it stands at this `materialize`.
+    Locate,
 }
 
 /// Which model endpoint a call goes to.

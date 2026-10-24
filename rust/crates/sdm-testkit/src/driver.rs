@@ -29,6 +29,10 @@ pub struct DriverLog {
     /// The public call the statements now run belong to: `from_source`
     /// for `describe_source`, `materialize`, `predict`.
     pub stage: &'static str,
+    /// Why the core asked the fetch the statements now answer, where it
+    /// said (`FetchStep::purpose`: `locate`, plan B's read of a table as
+    /// it stands, T3.4), recorded on each statement.
+    pub purpose: Option<&'static str>,
     statements: Vec<Value>,
     bindings: Vec<Value>,
     binding_texts: Vec<String>,
@@ -55,14 +59,18 @@ impl DriverLog {
     /// A statement run on `handle`, before it is run; its result or error
     /// is added by [`DriverLog::answered`] or [`DriverLog::failed`].
     pub fn statement(&mut self, handle: usize, sql: &str) {
-        self.statements.push(json!({
+        let mut statement = json!({
             "handle": handle,
             "stage": self.stage,
             "sql": sql,
             "parameters": null,
             "results": [],
             "error": null,
-        }));
+        });
+        if let Some(purpose) = self.purpose {
+            statement["purpose"] = json!(purpose);
+        }
+        self.statements.push(statement);
     }
 
     /// The last statement's result, read whole as Arrow.

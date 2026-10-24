@@ -870,6 +870,9 @@ class _Capture:
         #: schema, in order (T1.24b).
         self.edits: list[dict[str, Any]] = []
         self.fetches: list[dict[str, Any]] = []
+        #: The driver's log of the case, where the capture records one, whose
+        #: statements this marks with each fetch's purpose (T3.4).
+        self.driver_log: Any = None
         #: Each fetch with the answer the host replied with, in the order
         #: replied, for ``--record-fetches`` (the replay's recording, T2.3).
         self.answered: list[dict[str, Any]] = []
@@ -1025,9 +1028,26 @@ class _Capture:
     def stepped(self, step: dict[str, Any]) -> None:
         if step.get('step') == 'fetch':
             self.fetches.extend(
-                {'request': asked['request'], 'plan': asked['plan']}
+                {
+                    'request': asked['request'],
+                    'plan': asked['plan'],
+                    **(
+                        {'purpose': asked['purpose']}
+                        if 'purpose' in asked
+                        else {}
+                    ),
+                }
                 for asked in step['requests']
             )
+            # The statements answering this step are marked with its
+            # purpose, where every fetch of it says one (T3.4).
+            if self.driver_log is not None:
+                purposes = {asked.get('purpose') for asked in step['requests']}
+                self.driver_log.purpose = (
+                    purposes.pop() if len(purposes) == 1 else None
+                )
+        elif self.driver_log is not None:
+            self.driver_log.purpose = None
             for asked in step['requests']:
                 self._asked[asked['id']] = {
                     'request': asked['request'],
@@ -2219,6 +2239,10 @@ class DriverLog:
         self.handles = 0
         #: The public call the runner is making, set by it before each.
         self.stage: str | None = None
+        #: Why the core asked the fetch the statements now answer, where it
+        #: said (``FetchStep.purpose``: ``locate``, plan B's read of a table
+        #: as it stands, T3.4); set by the core's capture at each step.
+        self.purpose: str | None = None
         #: The names of the types the server numbers per run (Postgres's
         #: composite types), by number, for the results' type names.
         self.type_names: dict[int, str] = {}
@@ -2313,6 +2337,8 @@ class _Captured:
         }
         if not isinstance(query, str):
             self._log.incomplete.append('execute:not_text')
+        if self._log.purpose is not None:
+            statement['purpose'] = self._log.purpose
         self._log.statements.append(statement)
         object.__setattr__(self, '_statement', statement)
         try:
@@ -3181,6 +3207,8 @@ class _CapturedWarehouse(_Captured):
         }
         if not isinstance(query, str):
             self._log.incomplete.append('executemany:not_text')
+        if self._log.purpose is not None:
+            statement['purpose'] = self._log.purpose
         self._log.statements.append(statement)
         object.__setattr__(self, '_statement', statement)
         if rows is not None:
@@ -3298,6 +3326,8 @@ class _CapturedPsycopg(_CapturedPostgres):
         }
         if not isinstance(query, str):
             self._log.incomplete.append(f'{method}:not_text')
+        if self._log.purpose is not None:
+            statement['purpose'] = self._log.purpose
         self._log.statements.append(statement)
         return statement
 
@@ -3558,6 +3588,8 @@ class _CapturedSpark:
         }
         if not isinstance(query, str):
             self._log.incomplete.append('sql:not_text')
+        if self._log.purpose is not None:
+            statement['purpose'] = self._log.purpose
         self._log.statements.append(statement)
         try:
             if args is None:
@@ -4570,6 +4602,10 @@ def _call(
         if database == 'duckdb':
             enable_query_log(connection)
         log = DriverLog() if driver_capture else None
+        if log is not None and core_runs is not None:
+            # The core's capture marks each statement of a fetch the core
+            # asked for plan B's read of a table as it stands (T3.4).
+            core_runs.driver_log = log
         if log is not None:
             log.type_names = types
             if keep is not None:

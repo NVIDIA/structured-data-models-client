@@ -865,9 +865,14 @@ fn drive(
             ControlMessage::Step(Step::Done { result }) => return Ok(Ok(result)),
             ControlMessage::Step(Step::Fetch { requests }) => {
                 for step in &requests {
-                    observed
-                        .fetches
-                        .push(json!({"request": step.request, "plan": step.plan}));
+                    let mut fetched = json!({"request": step.request, "plan": step.plan});
+                    // Plan B's read of a table as it stands, marked as the
+                    // core marks it (T3.4), on the fetch and its statements.
+                    log.purpose = step.purpose.map(|_| "locate");
+                    if let Some(purpose) = step.purpose {
+                        fetched["purpose"] = json!(purpose);
+                    }
+                    observed.fetches.push(fetched);
                     // The key sets the step names: a SQL plan's parameters,
                     // or, for a host provider, the request's own.
                     let sets: Vec<&KeySet> = match &step.plan {

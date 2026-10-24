@@ -574,6 +574,7 @@ mod tests {
             request,
             plan,
             continuation: None,
+            purpose: None,
         };
         let schema = Arc::new(Schema::new(vec![
             Field::new("key", DataType::Int64, true),

@@ -1407,42 +1407,65 @@ def _logged(connection: Any) -> int:
     return len(_logged_texts(connection))
 
 
-#: The statements each connection's ``Schema.from_source`` ran, by the
-#: connection's id: what a core run's reads of each table as it stands
-#: repeat (the owner's plan B).
-_DESCRIBED: dict[int, list[str]] = {}
+class _Located:
+    r"""Counts the statements of each fetch the core marks as plan B's read
+    of a table as it stands (``FetchStep.purpose``, ``locate``, register
+    P3A-1): the one rule by which a core run's statements are compared with
+    the old client's, the core's own mark, never the statements' text."""
 
+    def __init__(self) -> None:
+        self.statements = 0
 
-def _described_on(connection: Any) -> None:
-    r"""What ``connection`` logged so far, held as its description's
-    statements."""
-    _DESCRIBED[id(connection)] = _logged_texts(connection)
+    def __enter__(self) -> _Located:
+        from sdm_client._rust import codec, run
 
+        located = self
+        self._native = run.native
 
-def _ran(connection: Any, before: int) -> int:
-    r"""The statements ``connection`` logged since ``before``, the reads
-    plan B adds taken out by its one rule (``compare.py``'s
-    ``reads_as_it_stands``, register P3A-1), so a core run is held to the
-    old client's statements exactly."""
-    texts = _logged_texts(connection)
-    call = texts[before:]
-    statements = [
-        {'stage': 'from_source', 'sql': text}
-        for text in _DESCRIBED.get(id(connection), [])
-    ] + [{'stage': 'materialize', 'sql': text} for text in call]
-    return len(call) - _compare().reads_as_it_stands(statements)
+        class _Handle:
+            def __init__(self, handle: Any) -> None:
+                self._handle = handle
 
+            def next(self) -> Any:
+                control, sent = self._handle.next()
+                step = codec.read(control, sent)
+                if step.get('step') == 'fetch':
+                    for asked in step['requests']:
+                        if asked.get('purpose') == 'locate':
+                            located.statements += len(
+                                asked['plan'].get('statements', [])
+                            )
+                return control, sent
 
-def _compare() -> Any:
-    if 'compare' not in sys.modules:
-        spec = importlib.util.spec_from_file_location(
-            'compare', ROOT / 'scripts/rust_core/compare.py'
-        )
-        assert spec is not None and spec.loader is not None
-        module = importlib.util.module_from_spec(spec)
-        sys.modules['compare'] = module
-        spec.loader.exec_module(module)
-    return sys.modules['compare']
+            def __getattr__(self, name: str) -> Any:
+                return getattr(self._handle, name)
+
+        class _Run:
+            def __init__(self, real: Any) -> None:
+                self._real = real
+
+            def start(self, *arguments: Any) -> Any:
+                return _Handle(self._real.start(*arguments))
+
+            def __getattr__(self, name: str) -> Any:
+                return getattr(self._real, name)
+
+        class _Native:
+            def __init__(self, real: Any) -> None:
+                self._real = real
+                self.Run = _Run(real.Run)
+
+            def __getattr__(self, name: str) -> Any:
+                return getattr(self._real, name)
+
+        imported = self._native
+        run.native = lambda: _Native(imported())  # type: ignore[assignment]
+        return self
+
+    def __exit__(self, *_: Any) -> None:
+        from sdm_client._rust import run
+
+        run.native = self._native  # type: ignore[assignment]
 
 
 def _calls(
@@ -1453,14 +1476,17 @@ def _calls(
     made = []
     for query in queries:
         before = _logged(connection)
-        with warnings.catch_warnings(record=True) as caught:
+        with (
+            warnings.catch_warnings(record=True) as caught,
+            _Located() as located,
+        ):
             warnings.simplefilter('always')
             try:
                 query.materialize(anchor_time=ANCHOR, **arguments)
             except StructuredDataError:
                 pass
         warned = sum('Missing' in str(w.message) for w in caught)
-        made.append((_ran(connection, before), warned))
+        made.append((_logged(connection) - before - located.statements, warned))
     return made
 
 
@@ -1487,7 +1513,6 @@ def _shop_logged() -> tuple[Any, Schema]:
         connection = _connection()
         connection.execute("CALL enable_logging('QueryLog')")
         schema = Schema.from_source(DuckDBSource(connection))
-    _described_on(connection)
     return connection, schema
 
 
@@ -1691,8 +1716,7 @@ def test_every_foreign_key_looked_up_null_is_the_reference_s_request(
                     'items': 'item_id',
                 },
             )
-        _described_on(connection)
-        query = PredictiveQuery(QUERY, schema)
+            query = PredictiveQuery(QUERY, schema)
         return _calls([query, query], connection, indices=[0, 1])
 
     found = _on_both_routes(monkeypatch, made)
@@ -1756,7 +1780,6 @@ def _editable() -> tuple[Any, Schema]:
                 Relationship('extra', 'user_id', 'users', 'user_id'),
             ],
         )
-    _described_on(connection)
     return connection, schema
 
 
@@ -1770,14 +1793,17 @@ def _edited_between_calls(edit: str) -> list[tuple[int, int, str]]:
         if call == 1:
             _edit(schema, edit)
         before = _logged(connection)
-        with warnings.catch_warnings(record=True) as caught:
+        with (
+            warnings.catch_warnings(record=True) as caught,
+            _Located() as located,
+        ):
             warnings.simplefilter('always')
             payload = query.materialize(
                 indices=[0, 1], anchor_time=ANCHOR
             )._payloads[0]
         made.append(
             (
-                _ran(connection, before),
+                _logged(connection) - before - located.statements,
                 sum('Missing' in str(w.message) for w in caught),
                 json.dumps(payload, sort_keys=True, default=str),
             )

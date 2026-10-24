@@ -727,8 +727,21 @@ pub(crate) async fn initialize(
 }
 
 /// `held` as its source holds it now: each relation it names read once
-/// ([`initialize`]), each column by the facts that read gives.
+/// ([`initialize`]), each column by the facts that read gives; every fetch
+/// of it marked as plan B's read of a table as it stands
+/// ([`FetchPurpose::Locate`](sdm_contract::run::FetchPurpose)), so a
+/// comparison of the run with the old client's can take exactly those out.
 async fn as_it_stands(asker: &Asker, held: &HeldSchema) -> Result<SourceDescription, CoreError> {
+    asker.asking_for(Some(sdm_contract::run::FetchPurpose::Locate));
+    let located = read_as_it_stands(asker, held).await;
+    asker.asking_for(None);
+    located
+}
+
+async fn read_as_it_stands(
+    asker: &Asker,
+    held: &HeldSchema,
+) -> Result<SourceDescription, CoreError> {
     let unsettled = asker
         .data()
         .is_some_and(crate::compose::DataAccess::unsettled);
@@ -757,14 +770,23 @@ async fn as_it_stands(asker: &Asker, held: &HeldSchema) -> Result<SourceDescript
             .iter()
             .filter(|t| t.source == *relation)
             .collect();
-        // The whole table, every column its catalog lists and its keys, as
-        // `describe_source` reads it and the reference's engine reads a
-        // table (`sources.py:126-175`); the schema's columns are taken from
-        // it below.
+        // The table's catalog whole, which says which columns the source
+        // holds, and the preview and facts of the columns the schema uses
+        // only, as the reference's gather copies of a table only the
+        // schema's columns (`sources.py:81-88`): one rule for the fresh
+        // read, the columns the schema uses checked against the source's
+        // current facts by the rules describe applies to them, and the
+        // columns it does not use left alone.
+        let mut columns: Vec<String> = Vec::new();
+        for column in tables.iter().flat_map(|t| &t.columns) {
+            if !columns.contains(&column.name) {
+                columns.push(column.name.clone());
+            }
+        }
         let named = NamedTable {
             name: tables[0].name.clone(),
             source: relation.clone(),
-            columns: None,
+            columns: Some(columns),
         };
         let read = crate::discover::table(asker, &named, true, None).await?;
         // Which columns the source holds is its catalog's to say, before

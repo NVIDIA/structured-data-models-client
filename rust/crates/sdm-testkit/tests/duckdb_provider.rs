@@ -746,6 +746,7 @@ fn two_key_sets_bound_to_one_name_are_refused() {
             expect: sdm_contract::data::ExpectedSchema::Discover {},
         },
         continuation: None,
+        purpose: None,
     };
     let keys = |values: &[&str]| {
         let batch = seeds_of(&serde_json::json!({"type": "int64"}), values);
@@ -831,9 +832,10 @@ fn base_regression_s_statements_return_the_reference_s_results() {
         ("materialize".to_owned(), 6),
         ("predict".to_owned(), 0),
     ];
-    // The reads plan B adds taken out (register P3A-1): two tables' catalog,
-    // keys and preview; every statement after them is the reference's.
-    let fresh = sdm_testkit::plan_b::reads_as_it_stands(&ours);
+    // The reads the core marks as plan B's taken out (register P3A-1): two
+    // tables' catalog, keys and preview; every statement after them is the
+    // reference's.
+    let fresh = ours.len() - sdm_testkit::plan_b::as_the_old_client_ran(&ours).len();
     assert_eq!(fresh, 6);
     let ours = sdm_testkit::plan_b::as_the_old_client_ran(&ours);
     assert_eq!(per_stage(&ours), counts);

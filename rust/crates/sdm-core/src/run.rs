@@ -160,6 +160,8 @@ struct Shared {
     /// The schema as the source holds it at this run, once its tables are
     /// read ([`Asker::located`]), for each later part of the run.
     located: Option<sdm_contract::ops::SourceDescription>,
+    /// Why the run asks its fetches now ([`Asker::asking_for`]).
+    purpose: Option<sdm_contract::run::FetchPurpose>,
 }
 
 fn lock(shared: &Mutex<Shared>) -> MutexGuard<'_, Shared> {
@@ -259,6 +261,12 @@ impl Asker {
     /// its tables ([`Asker::locate`]); none before.
     pub(crate) fn located(&self) -> Option<sdm_contract::ops::SourceDescription> {
         lock(&self.shared).located.clone()
+    }
+
+    /// Marks every fetch the run asks from now on with `purpose`, until it
+    /// is cleared (`None`).
+    pub(crate) fn asking_for(&self, purpose: Option<sdm_contract::run::FetchPurpose>) {
+        lock(&self.shared).purpose = purpose;
     }
 
     /// Keeps `located`, the schema as the source holds it at this run, for
@@ -641,11 +649,13 @@ impl Future for Ask {
                 match asked {
                     Asked::Fetch(asked) => {
                         let (request, plan) = (*asked).clone();
+                        let purpose = shared.purpose;
                         shared.fetches.push(FetchStep {
                             id,
                             request,
                             plan,
                             continuation: None,
+                            purpose,
                         });
                         fetch = Some(asked);
                     }
@@ -702,11 +712,13 @@ impl Future for Ask {
                         return Poll::Pending;
                     };
                     let (request, plan) = (*asked).clone();
+                    let purpose = shared.purpose;
                     shared.fetches.push(FetchStep {
                         id: next,
                         request,
                         plan,
                         continuation: Some(continuation),
+                        purpose,
                     });
                     this.state = AskState::Asked {
                         id: next,
