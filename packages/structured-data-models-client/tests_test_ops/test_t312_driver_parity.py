@@ -728,7 +728,7 @@ def databases(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Databases]:
 #: (DuckDB, SQLite), or as the text the Postgres dialect writes of it, one
 #: cell (T3.28).
 KEYS = pa.table({'k': pa.array([1], pa.int64())})
-KEY_TEXT = pa.table({'keys': pa.array(['[["1"]]'], pa.string())})
+KEY_TEXT = pa.table({'keys': pa.array(['[1]'], pa.string())})
 
 
 def _keys(database: str) -> pa.Table:

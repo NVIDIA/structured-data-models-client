@@ -305,7 +305,7 @@ def test_a_postgres_key_set_past_the_budget_is_one_fetch_per_chunk_joined(
         return
     large = VECTORS['large']
     modulo = large['modulo']
-    count = 150_000
+    count = 300_000
     keys = [index % modulo for index in range(count)]
     seen: list[dict[str, Any]] = []
     data = _keyed(
@@ -315,10 +315,9 @@ def test_a_postgres_key_set_past_the_budget_is_one_fetch_per_chunk_joined(
         _seeds(keys),
         seen,
     )
-    # The rows' cells as text, the batch carried in each, split as the old
-    # client splits: one fetch per chunk.
-    rows = [[str(key), str(at)] for at, key in enumerate(keys)]
-    expected = _reference_chunk_rows(rows, BUDGET)
+    # Each key as the old client writes it (``_coerce_id``: an integer),
+    # split as it splits: one fetch per chunk, at the same seeds.
+    expected = _reference_chunk_rows(keys, BUDGET)
     assert len(expected) >= 2
     sent = [_text(each['keys']) for each in seen]
     assert sent == [_reference_dumps(chunk) for chunk in expected]

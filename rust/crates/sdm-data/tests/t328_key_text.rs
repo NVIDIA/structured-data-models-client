@@ -236,9 +236,19 @@ fn a_databricks_text_key_is_written_ascii_only() {
 #[test]
 fn a_databricks_float_or_decimal_key_is_a_double_and_a_whole_decimal_an_integer() {
     let request = lookup(r#"{"type":"float64"}"#, DATABRICKS_USERS);
-    let keys = seeds(Arc::new(Float64Array::from(vec![1.5, 0.1, -2.0])));
+    let keys = seeds(Arc::new(Float64Array::from(vec![
+        1.5,
+        0.1,
+        -2.0,
+        1e16,
+        1e-5,
+        f64::NAN,
+        f64::NEG_INFINITY,
+    ])));
     let (_, bound) = bind_on("databricks", &request, keys);
-    assert_eq!(texts(&bound), ["[1.5,0.1,-2.0]"]);
+    // Each double as the old client's language writes it (`repr`), a NaN
+    // and an infinity as its JSON does.
+    assert_eq!(texts(&bound), ["[1.5,0.1,-2.0,1e+16,1e-05,NaN,-Infinity]"]);
 
     let request = lookup(
         r#"{"type":"decimal128","precision":10,"scale":2}"#,
@@ -298,8 +308,8 @@ fn a_databricks_windowed_key_set_is_an_object_per_seed_its_times_to_the_second()
     assert_eq!(
         texts(&bound),
         [concat!(
-            r#"[{"key":7,"end":"2024-03-01 00:00:00","start":"2024-02-29 00:00:00"},"#,
-            r#"{"key":8,"end":"1970-01-01 00:00:00","start":"1969-12-31 23:59:59"}]"#
+            r#"[{"id":7,"e":"2024-03-01 00:00:00","s":"2024-02-29 00:00:00"},"#,
+            r#"{"id":8,"e":"1970-01-01 00:00:00","s":"1969-12-31 23:59:59"}]"#
         )]
     );
 }
@@ -393,7 +403,8 @@ fn a_postgres_key_set_is_one_text_of_its_rows_cells_its_batch_carried() {
     let request = lookup(r#"{"type":"int64"}"#, r#""users""#);
     let keys = seeds(Arc::new(Int64Array::from(vec![Some(3), None])));
     let (plan, bound) = bind_on("postgres", &request, keys);
-    assert_eq!(texts(&bound), [r#"[["3","0"],[null,"1"]]"#]);
+    // The old client's: each key alone, the batch its position.
+    assert_eq!(texts(&bound), ["[3,null]"]);
     let [fetch] = &bound.fetches[..] else {
         panic!("one fetch")
     };
@@ -410,7 +421,7 @@ fn a_postgres_cell_is_written_as_its_text_its_characters_as_they_are() {
     let request = lookup(r#"{"type":"utf8"}"#, r#""users""#);
     let keys = seeds(Arc::new(StringArray::from(vec!["é\"\n", "\u{7f}"])));
     let (_, bound) = bind_on("postgres", &request, keys);
-    assert_eq!(texts(&bound), ["[[\"é\\\"\\n\",\"0\"],[\"\u{7f}\",\"1\"]]"]);
+    assert_eq!(texts(&bound), [r#"["\u00e9\"\n","\u007f"]"#]);
 
     let request = lookup(
         r#"{"type":"decimal128","precision":10,"scale":2}"#,
@@ -420,17 +431,18 @@ fn a_postgres_cell_is_written_as_its_text_its_characters_as_they_are() {
         .with_precision_and_scale(10, 2)
         .unwrap();
     let (_, bound) = bind_on("postgres", &request, seeds(Arc::new(decimals)));
-    assert_eq!(texts(&bound), [r#"[["1.50","0"],["-0.05","1"]]"#]);
+    // As the old client writes a decimal of a scale: its double's text.
+    assert_eq!(texts(&bound), [r#"["1.5","-0.05"]"#]);
 
     let request = lookup(r#"{"type":"binary"}"#, r#""users""#);
     let binary = BinaryArray::from(vec![&[1_u8, 0xab][..]]);
     let (_, bound) = bind_on("postgres", &request, seeds(Arc::new(binary)));
-    assert_eq!(texts(&bound), [r#"[["\\x01ab","0"]]"#]);
+    assert_eq!(texts(&bound), [r#"["\\x01ab"]"#]);
 
     let request = lookup(r#"{"type":"float64"}"#, r#""users""#);
     let floats = Float64Array::from(vec![2.5, 0.1]);
     let (_, bound) = bind_on("postgres", &request, seeds(Arc::new(floats)));
-    assert_eq!(texts(&bound), [r#"[["2.5","0"],["0.1","1"]]"#]);
+    assert_eq!(texts(&bound), ["[2.5,0.1]"]);
 }
 
 #[test]
@@ -467,20 +479,15 @@ fn a_postgres_seed_time_is_written_as_the_old_client_writes_it() {
     );
     assert_eq!(
         texts(&bound),
-        [r#"[["7","0","2024-03-01T00:00:00.500000","2024-02-29T00:00:00"]]"#]
+        [r#"[{"id":7,"e":"2024-03-01T00:00:00.500000","s":"2024-02-29T00:00:00"}]"#]
     );
 }
 
 #[test]
-fn a_postgres_key_set_past_the_budget_is_split_each_row_keeping_its_batch() {
+fn a_postgres_key_set_past_the_budget_is_split_as_the_old_client_splits_it() {
     let request = lookup(r#"{"type":"int64"}"#, r#""users""#);
-    let keys = many_keys(120_000);
-    let rows: Vec<String> = keys
-        .values()
-        .iter()
-        .enumerate()
-        .map(|(at, key)| format!(r#"["{key}","{at}"]"#))
-        .collect();
+    let keys = many_keys(300_000);
+    let rows: Vec<String> = keys.values().iter().map(i64::to_string).collect();
     let expected = reference_chunks(&rows, BUDGET);
     assert!(expected.len() >= 2, "{}", expected.len());
     let (plan, bound) = bind_on("postgres", &request, seeds(Arc::new(keys)));
@@ -488,15 +495,96 @@ fn a_postgres_key_set_past_the_budget_is_split_each_row_keeping_its_batch() {
         texts(&bound),
         expected.iter().map(|c| joined(c)).collect::<Vec<_>>()
     );
-    // The batch travels in each row, so every chunk's statement is the
-    // plan's own.
-    for fetch in &bound.fetches {
-        let texts: Vec<&str> = statements(&fetch.plan)
-            .iter()
-            .map(|s| s.text.as_str())
-            .collect();
-        let planned: Vec<&str> = statements(&plan).iter().map(|s| s.text.as_str()).collect();
-        assert_eq!(texts, planned);
+    // Each later chunk numbers its seeds from the seeds before it.
+    let original = &statements(&plan).last().unwrap().text;
+    let mut offset = 0;
+    for (fetch, chunk) in bound.fetches.iter().zip(&expected) {
+        let last = &statements(&fetch.plan).last().unwrap().text;
+        if offset == 0 {
+            assert_eq!(last, original);
+        } else {
+            assert_eq!(
+                *last,
+                original.replacen(
+                    "(r.ordinality - 1)::bigint",
+                    &format!("(r.ordinality - 1 + {offset})::bigint"),
+                    1
+                )
+            );
+        }
+        offset += chunk.len();
+    }
+}
+
+#[test]
+fn a_postgres_key_of_several_columns_is_an_array_of_its_values() {
+    let request: DataRequest = serde_json::from_str(
+        r#"{"columns":["v"],"key":["a","b"],"request":"lookup","seeds":{"attachment":2,"columns":[{"name":"key_1","nullable":true,"type":{"type":"int64"}},{"name":"key_2","nullable":true,"type":{"type":"utf8"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["pairs"]}}"#,
+    )
+    .unwrap();
+    let schema = Arc::new(Schema::new(vec![
+        Field::new("key_1", DataType::Int64, true),
+        Field::new("key_2", DataType::Utf8, true),
+        Field::new("batch", DataType::Int64, false),
+    ]));
+    let batch = RecordBatch::try_new(
+        Arc::clone(&schema),
+        vec![
+            Arc::new(Int64Array::from(vec![1, 2])),
+            Arc::new(StringArray::from(vec!["x", "é"])),
+            Arc::new(Int64Array::from(vec![0, 1])),
+        ],
+    )
+    .unwrap();
+    let (_, bound) = bind_on(
+        "postgres",
+        &request,
+        KeyData {
+            schema,
+            batches: vec![batch],
+        },
+    );
+    assert_eq!(texts(&bound), [r#"[[1,"x"],[2,"\u00e9"]]"#]);
+}
+
+#[test]
+fn a_key_set_whose_batches_are_not_its_positions_is_a_named_defect() {
+    // The JSON numbers each seed by its position, as the old client's does.
+    for dialect in ["postgres", "databricks"] {
+        let parts = if dialect == "postgres" {
+            r#""users""#
+        } else {
+            DATABRICKS_USERS
+        };
+        let request = lookup(r#"{"type":"int64"}"#, parts);
+        let mut keys = seeds(Arc::new(Int64Array::from(vec![1, 2])));
+        keys.batches = vec![
+            RecordBatch::try_new(
+                Arc::clone(&keys.schema),
+                vec![
+                    Arc::new(Int64Array::from(vec![1, 2])),
+                    Arc::new(Int64Array::from(vec![0, 0])),
+                ],
+            )
+            .unwrap(),
+        ];
+        let data = Data::new();
+        let provider = choice(dialect);
+        let plan = data.plan(&request, &provider).unwrap();
+        let refused = data
+            .bind(
+                &provider,
+                &request,
+                plan,
+                &BTreeMap::from([(AttachmentId(2), keys)]),
+                reference_float,
+            )
+            .unwrap_err();
+        assert_eq!(
+            refused.code,
+            sdm_contract::ErrorCode::InternalError,
+            "{dialect}"
+        );
     }
 }
 
