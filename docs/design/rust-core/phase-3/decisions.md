@@ -148,7 +148,7 @@ The register's entries P3A-1 to P3A-5, the differences from the old client those
 ## View conversion answers (2026-10-24)
 
 Source: the owner's direct continuation answers recorded in `$SDM_ORCH_STATE/phase-3/owner-answers-2026-10-24-codex.md`, items 11 and 16 and the later answer retiring P3J-7 and P3J-8.
-These decisions cover only the entries listed below; P3J-12 through P3J-14 and the proposed Python emulation allowlist additions remain pending.
+These decisions cover only the entries listed below; they grant no approval to P3J-12 through P3J-15 or the proposed Python emulation allowlist additions.
 
 | # | Decision | Owner's words | Status |
 |---|---|---|---|

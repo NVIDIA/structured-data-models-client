@@ -37,7 +37,7 @@ Each is crate-local until T3.27; none is in `sdm-contract` yet.
 
 The owner approved P3J-1 through P3J-6 and P3J-9 through P3J-11 on 2026-10-24, and explicitly retired P3J-7 and P3J-8 as superseded by P3J-9.
 The exact answers are recorded in the T35-OWNER-2026-10-24 rows of [decisions.md](decisions.md).
-P3J-12 through P3J-14 remain proposed.
+P3J-12, P3J-14 and P3J-15 remain proposed; P3J-13 is retired as superseded after review.
 
 - P3J-1: a definition that is no readable YAML is refused by name.
 - P3J-2: a section that cannot be iterated is refused by name.
@@ -51,8 +51,8 @@ P3J-12 through P3J-14 remain proposed.
 - P3J-10: a default or a quoted value too large to write is refused by name.
 - P3J-11: a cardinality or a table name the old client failed on as a set member or a pattern is refused by name.
 - P3J-12: a metric view's expression is sampled inside the relation the data layer renders (same rows, other text).
-- P3J-13: the proposed loss of driver explanations is no longer implemented after round-1 fixes; the core now preserves driver diagnoses in conversion notes, with codes as the fallback when no message is supplied.
-  The register row remains proposed for decision reconciliation.
+- P3J-13: retired after review as superseded by P3J-15; neither the original loss of context nor the raw-message replacement is implemented.
+- P3J-15: finite safe classifications, requested operation, logical caller context and valid codes replace raw driver explanations, under H17 and KO2-86.
 - P3J-14: a semantic model is read again at each materialize; a table or column it no longer gives is refused by name.
 
 Withdrawn in fix 1, now read as the old client reads them: integers past 128 bits; a composite relationship's tables.
@@ -85,3 +85,13 @@ Refresh resolves each held logical source and uses `held::check_source_types` an
 The direct driver-diagnostic dependency is the T3.6 follow-up `4d11e48e3`, cherry-picked as `d42c92221`; required default-value constructor adjustments retain the old behavior of unrelated providers.
 A typed `DataLayer::view_kind` fact is available before fetching the definition, with an unspecified default for custom layers; the core selects the matching named refusal.
 Package tests and lint remain deferred until both reviewers approve the candidate.
+
+
+## Round 2 diagnostic reassessment
+
+H17 covers warnings as well as errors, and KO2-86 permits caller arguments while keeping row values and driver messages internal.
+The raw-message repair violated that boundary; generic provider-error sanitization did not protect conversion warnings or held-column omission errors.
+Tests-first commit `86c531471` exercises both public operations with cell, driver-message and raw-SQL canaries, and requires useful known-error classification plus logical table/column context.
+One finite core helper now classifies known classes and SQLSTATE values for expression evaluation or join-key counting; it never consumes driver text for output.
+Unknown failures retain the requested operation and safe codes, with free-text class/vendor fields omitted.
+The nonblocking request to isolate the already reviewed `view_kind` hook remains carried to avoid rewriting review history; its definition remains single and coordinated with T3.6.

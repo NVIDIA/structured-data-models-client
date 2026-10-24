@@ -27,7 +27,8 @@ use sdm_schema::view::spec::ViewSpec;
 
 use super::definition::{self, Definition, Dimension, Join, Skipped};
 use super::{
-    Added, Converted, Described, Reading, ViewTable, failed, failure_text, model_columns, preview,
+    Added, Converted, Described, ReadTask, Reading, ViewTable, failed, failure_text, model_columns,
+    preview,
 };
 use crate::discover;
 use crate::pql::yaml_rules;
@@ -412,7 +413,7 @@ impl<'r, 'a> Metric<'r, 'a> {
                 Ok(read) => read,
                 Err(error) => {
                     if self.reading.data.failure(&error).refuses_expression {
-                        return Ok(Some(failure_text(&error)));
+                        return Ok(Some(failure_text(&error, ReadTask::Expression)));
                     }
                     return Err(failed(&error, "preview"));
                 }
@@ -942,7 +943,7 @@ pub(super) async fn convert(
                         let found = match found {
                             Ok(found) => found,
                             Err(error) => {
-                                uncounted = failure_text(&error);
+                                uncounted = failure_text(&error, ReadTask::JoinKeys);
                                 held.clear();
                                 break;
                             }
@@ -963,7 +964,7 @@ pub(super) async fn convert(
                     counts = Some(held);
                 }
             }
-            Err(error) => uncounted = failure_text(&error),
+            Err(error) => uncounted = failure_text(&error, ReadTask::JoinKeys),
         }
     }
 

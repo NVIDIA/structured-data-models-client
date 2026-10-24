@@ -609,18 +609,75 @@ pub(crate) fn failed(error: &ProviderError, request: &str) -> CoreError {
     CoreError::provider(error).with_field("request", Detail::text(request))
 }
 
-/// A refused read's diagnosis. Driver text stays an internal fact until the
-/// core deliberately includes it in this conversion note, as the old client did.
-pub(crate) fn failure_text(error: &ProviderError) -> String {
-    if let Some(message) = &error.driver_message {
-        return message.clone();
+/// The caller-visible operation a failed conversion read was performing.
+#[derive(Clone, Copy)]
+pub(crate) enum ReadTask {
+    Expression,
+    JoinKeys,
+}
+
+/// A finite diagnosis from known codes, with the operation the core requested.
+/// Driver messages and unrecognized free-text fields remain internal (H17,
+/// KO2-86). Table and column context is added by the existing message site.
+pub(crate) fn failure_text(error: &ProviderError, task: ReadTask) -> String {
+    let class = error
+        .error_class
+        .as_deref()
+        .and_then(|c| c.split('.').next());
+    let state = error.sqlstate.as_deref();
+    let reason = match (class, state) {
+        (Some("CAST_INVALID_INPUT" | "CANNOT_PARSE_TIMESTAMP"), _)
+        | (_, Some("22018" | "22007")) => Some("a value could not be converted"),
+        (Some("DIVIDE_BY_ZERO" | "INTERVAL_DIVIDED_BY_ZERO"), _) | (_, Some("22012")) => {
+            Some("division by zero occurred")
+        }
+        (Some("CAST_OVERFLOW" | "NUMERIC_VALUE_OUT_OF_RANGE" | "ARITHMETIC_OVERFLOW"), _)
+        | (_, Some("22003" | "22008")) => Some("a value was outside the supported range"),
+        (Some("UNRESOLVED_COLUMN" | "COLUMN_NOT_FOUND" | "UNRESOLVED_FIELD"), _)
+        | (_, Some("42703" | "42S22")) => Some("a referenced column could not be resolved"),
+        (Some("TABLE_OR_VIEW_NOT_FOUND"), _) | (_, Some("42P01" | "42S02")) => {
+            Some("a referenced table or view could not be resolved")
+        }
+        (Some("INSUFFICIENT_PERMISSIONS" | "PERMISSION_DENIED"), _) | (_, Some("42501")) => {
+            Some("permission was denied")
+        }
+        (Some("PARSE_SYNTAX_ERROR"), _) | (_, Some("42601")) => {
+            Some("the expression's syntax was not accepted")
+        }
+        (Some("DATATYPE_MISMATCH"), _) | (_, Some("42804")) => {
+            Some("the expression used incompatible types")
+        }
+        _ => None,
+    };
+    let (during, action) = match task {
+        ReadTask::Expression => ("evaluating the expression", "evaluate the expression"),
+        ReadTask::JoinKeys => ("counting the join keys", "count the join keys"),
+    };
+    let mut explanation = match reason {
+        Some(reason) => format!("{reason} while {during}"),
+        None => format!("the warehouse could not {action}"),
+    };
+    // SQLSTATE is a five-character code. Vendor codes here are numeric;
+    // neither free-form field may become a second route for driver text.
+    let mut codes = Vec::new();
+    if let Some(state) = state.filter(|s| {
+        s.len() == 5
+            && s.bytes()
+                .all(|b| b.is_ascii_digit() || b.is_ascii_uppercase())
+    }) {
+        codes.push(format!("SQLSTATE: {state}"));
     }
-    match (&error.error_class, &error.sqlstate) {
-        (Some(class), Some(state)) => format!("[{class}] SQLSTATE: {state}"),
-        (Some(class), None) => format!("[{class}]"),
-        (None, Some(state)) => format!("SQLSTATE: {state}"),
-        (None, None) => "the warehouse refused it".to_owned(),
+    if let Some(code) = error
+        .vendor_code
+        .as_deref()
+        .filter(|s| !s.is_empty() && s.len() <= 20 && s.bytes().all(|b| b.is_ascii_digit()))
+    {
+        codes.push(format!("vendor code: {code}"));
     }
+    if !codes.is_empty() {
+        explanation.push_str(&format!(" ({})", codes.join(", ")));
+    }
+    explanation
 }
 
 /// `describe_source` of a semantic model (T3.5): the view converted, the

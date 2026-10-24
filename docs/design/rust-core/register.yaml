@@ -9806,20 +9806,17 @@ entries:
     count fails.
   cases: []
   refs: [T3.5]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: rejected
+  approved_by: reviewer
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-86}
   notes: >-
-    Approver: owner. Proposed in the design (S3) and by T3.5's implementer
-    at stage 2; held by sdm-core/tests/view_captures.rs (a `42501` on an
-    expression's sample).
-
-    The proposed diagnostic loss is no longer implemented after T3.5's
-    round-1 fixes: the host passes ProviderError.driver_message unread and
-    the core includes that diagnosis in expression-refusal and unchecked-key
-    notes. Codes remain the fallback when no message was supplied. This
-    entry stays proposed for decision reconciliation; it grants no approval
-    of the old degraded behavior or of the remaining key-note text change.
+    Withdrawn at the orchestrator's direction after T3.5's broad round-2
+    review: neither this loss of useful context nor its attempted raw-message
+    replacement is implemented. H17 and KO2-86 keep driver messages and row
+    values out of warnings as well as errors. The earlier focused approval
+    does not override that owner policy. Rejected records reviewer-directed
+    retirement as superseded by the safe classification in P3J-15, never
+    owner approval of raw-message disclosure.
 
 - id: P3J-14
   title: A semantic model is read again at each materialize, and what it no longer gives is refused by name
@@ -9850,3 +9847,38 @@ entries:
   notes: >-
     Approver: owner. The owner's plan B as design S5 applies it to views;
     held by sdm-core/tests/view_captures.rs.
+
+
+- id: P3J-15
+  title: Refused view reads use safe classifications and caller context
+  kind: change
+  old_behavior: >-
+    A refused expression column is diagnosed with the driver's text, which
+    may include a cell value and the warehouse statement. A failed join-key
+    count is diagnosed with the driver's exception type.
+  new_behavior: >-
+    The core maps known error classes and SQLSTATE values to finite safe
+    explanations of conversion, division by zero, range, name resolution,
+    permission, syntax or incompatible-type failures. It names the operation
+    it requested and the logical table, column or join at the existing
+    message site. Unknown failures keep that caller context and valid
+    SQLSTATE or numeric vendor codes. Raw driver text, row values and
+    unrecognized free-text diagnostic fields are never copied into the
+    conversion warning or a held-column omission error.
+  affected_inputs: >-
+    A metric-view expression sample refused by the warehouse, or a failed
+    join-key count or repeated-key example read, including a materialize
+    that consequently refuses a logical column held by the schema.
+  cases: [T3.5]
+  refs: [T3.5, H17, KO2-86, P3J-13]
+  status: proposed
+  approved_by: null
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-86}
+  notes: >-
+    Supersedes P3J-13 after the diagnostic design was reassessed against the
+    owner's H17 and KO2-86 scope. Driver-message transport remains internal
+    for data-layer interpretation. This row records the exact explanation
+    difference for review; its policy reference grants no new owner approval
+    of public data disclosure. Public core describe/materialize canary tests
+    require useful classification and caller context while excluding cell
+    values, raw SQL and driver text.
