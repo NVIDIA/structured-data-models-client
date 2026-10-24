@@ -1224,9 +1224,24 @@ impl ProviderChoice {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum SqlTimestampEncoding {
-    /// Timezone-free timestamps as signed microseconds from the Unix
-    /// epoch's wall fields, preserving even a local DST-gap wall time.
-    NaiveMicroseconds,
+    /// Timestamps as signed microseconds: timezone-free wall fields from
+    /// the epoch's wall fields, or a zoned timestamp's physical instant
+    /// from the Unix epoch. The core selects the source kind from actual
+    /// warehouse result metadata, independent of the session or JVM zone.
+    Microseconds,
+}
+
+/// The timestamp meaning used by the core's SQL projection, retained
+/// through key-set binding and chunk re-rendering. A host transfers the
+/// projected integer unchanged for either kind.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum SqlTimestampKind {
+    /// A timestamp's physical instant, measured from the Unix epoch.
+    Instant,
+    /// A timezone-free timestamp's civil fields, measured from the
+    /// epoch's wall fields without assigning any local timezone.
+    WallTime,
 }
 
 /// One output column projected by the SQL data layer for lossless native
@@ -1235,7 +1250,11 @@ pub enum SqlTimestampEncoding {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "conversion", rename_all = "snake_case", deny_unknown_fields)]
 pub enum SqlResultConversion {
-    TimestampMicros { column: u32, name: String },
+    TimestampMicros {
+        column: u32,
+        name: String,
+        source_kind: SqlTimestampKind,
+    },
 }
 
 /// The semantic model a SQL provider's source is read through

@@ -571,9 +571,9 @@ fn chunks_the_provider_answers_in_two_shapes_are_still_refused() {
 #[test]
 fn timestamp_preflight_binds_empty_keys_then_preserves_the_original_lookup() {
     use arrow_array::{StringArray, TimestampMicrosecondArray};
-    use sdm_contract::data::SqlResultConversion;
+    use sdm_contract::data::{SqlResultConversion, SqlTimestampKind};
     let provider: ProviderChoice = serde_json::from_str(
-        r#"{"provider":"sql","dialect":"databricks","timestamp_encoding":"naive_microseconds"}"#,
+        r#"{"provider":"sql","dialect":"databricks","timestamp_encoding":"microseconds"}"#,
     )
     .unwrap();
     let root = CompositionRoot::new(Arc::new(sdm_data::Data::new()));
@@ -651,7 +651,8 @@ fn timestamp_preflight_binds_empty_keys_then_preserves_the_original_lookup() {
         result_conversions,
         &[SqlResultConversion::TimestampMicros {
             column: 2,
-            name: "at".into()
+            name: "at".into(),
+            source_kind: SqlTimestampKind::WallTime,
         }]
     );
     assert!(
@@ -666,7 +667,7 @@ fn timestamp_preflight_binds_empty_keys_then_preserves_the_original_lookup() {
             .last()
             .unwrap()
             .text
-            .contains("CAST(t.`at` AS TIMESTAMP_NTZ)")
+            .contains("DATEDIFF(CAST(t.`at` AS DATE)")
     );
     let batch = RecordBatch::try_from_iter(vec![
         (

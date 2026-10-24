@@ -56,7 +56,7 @@ use sdm_contract::catalog::{CatalogAnswer, CatalogColumn, CatalogForeignKey, Cat
 use sdm_contract::data::{
     DataRequest, DescribePart, Determinism, ExpectedSchema, MARKED, MATCHES_COLUMN, NullOrder,
     ProviderCapabilities, Relation, SEED_BATCH, SEED_COUNT_UNREAD, SEED_KEY, SEED_KEY_UNIQUE,
-    SqlParam, TextTimes, TieTerm, refused, seed_integer, views_unread,
+    SqlParam, SqlTimestampKind, TextTimes, TieTerm, refused, seed_integer, views_unread,
 };
 use sdm_contract::ops::Dtype;
 use sdm_contract::types::ColumnType;
@@ -99,10 +99,17 @@ impl SqlDialect for Databricks {
         NAME
     }
 
-    fn timestamp_micros(&self, value: &str) -> Option<String> {
-        Some(format!(
-            "timestampdiff(MICROSECOND, TIMESTAMP_NTZ '1970-01-01 00:00:00', CAST({value} AS TIMESTAMP_NTZ))"
-        ))
+    fn timestamp_micros(&self, value: &str, kind: SqlTimestampKind) -> Option<String> {
+        Some(match kind {
+            SqlTimestampKind::Instant => format!("UNIX_MICROS({value})"),
+            // NTZ timestamp subtraction can pass through a session-zone
+            // timestamp and normalize nonexistent DST-gap fields. Read
+            // the native NTZ calendar components instead, with integer
+            // arithmetic widened before multiplying. NULL propagates.
+            SqlTimestampKind::WallTime => format!(
+                "(CAST(DATEDIFF(CAST({value} AS DATE), DATE '1970-01-01') AS BIGINT) * 86400000000 + CAST(HOUR({value}) AS BIGINT) * 3600000000 + CAST(MINUTE({value}) AS BIGINT) * 60000000 + CAST(EXTRACT(SECOND FROM {value}) * 1000000 AS BIGINT))"
+            ),
+        })
     }
 
     /// What a Databricks source answers through this layer.

@@ -255,6 +255,8 @@ FUNCTIONS = frozenset(
         # Text and time.
         'LOWER', 'UPPER', 'TRIM', 'REPLACE', 'CHR', 'DATE_TRUNC', 'DATEADD',
         'EXTRACT', 'TIMESTAMPDIFF', 'CONVERT_TIMEZONE',
+        # Core-planned lossless Databricks instant and civil-wall transport.
+        'UNIX_MICROS', 'DATEDIFF', 'HOUR', 'MINUTE',
         # Nested values and their rows.
         'STRUCT', 'NAMED_STRUCT', 'OBJECT', 'ARRAY', 'MAP', 'FLATTEN',
         'TABLE', 'POSEXPLODE', 'JSONB_ARRAY_ELEMENTS',

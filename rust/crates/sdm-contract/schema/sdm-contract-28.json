@@ -3636,9 +3636,9 @@
       "description": "A driver's requested lossless SQL timestamp transport.",
       "oneOf": [
         {
-          "description": "Timezone-free timestamps as signed microseconds from the Unix\nepoch's wall fields, preserving even a local DST-gap wall time.",
+          "description": "Timestamps as signed microseconds: timezone-free wall fields from\nthe epoch's wall fields, or a zoned timestamp's physical instant\nfrom the Unix epoch. The core selects the source kind from actual\nwarehouse result metadata, independent of the session or JVM zone.",
           "type": "string",
-          "const": "naive_microseconds"
+          "const": "microseconds"
         }
       ]
     },
@@ -5408,6 +5408,9 @@
             "name": {
               "type": "string"
             },
+            "source_kind": {
+              "$ref": "#/$defs/SqlTimestampKind"
+            },
             "conversion": {
               "type": "string",
               "const": "timestamp_micros"
@@ -5417,8 +5420,24 @@
           "required": [
             "conversion",
             "column",
-            "name"
+            "name",
+            "source_kind"
           ]
+        }
+      ]
+    },
+    "SqlTimestampKind": {
+      "description": "The timestamp meaning used by the core's SQL projection, retained\nthrough key-set binding and chunk re-rendering. A host transfers the\nprojected integer unchanged for either kind.",
+      "oneOf": [
+        {
+          "description": "A timestamp's physical instant, measured from the Unix epoch.",
+          "type": "string",
+          "const": "instant"
+        },
+        {
+          "description": "A timezone-free timestamp's civil fields, measured from the\nepoch's wall fields without assigning any local timezone.",
+          "type": "string",
+          "const": "wall_time"
         }
       ]
     },

@@ -9778,7 +9778,7 @@ entries:
     The previous proposed loss of the gateway code is repaired under the
     explicit shared serving policy. No host exception class is fabricated.
 - id: P3S-5
-  title: Java reads a Databricks TIMESTAMP as its UTC wall time and a STRUCT, MAP or INTERVAL as the driver's text
+  title: Java reads Databricks nested values through the driver's text
   kind: change
   old_behavior: >-
     The Databricks SQL connector gives Python's provider each column as
@@ -9786,17 +9786,15 @@ entries:
     recorded tables, session zone Etc/UTC), a STRUCT, MAP or ARRAY as
     Arrow's own nested types.
   new_behavior: >-
-    Java's Databricks column reads a TIMESTAMP's instant as its wall time
-    in UTC, and a STRUCT, MAP, INTERVAL or an ARRAY of decimals or time
+    Java's Databricks column currently reads a STRUCT, MAP, INTERVAL or an ARRAY of decimals or time
     stamps as utf8 of the driver's text; every other type as the connector
-    gives it. TIMESTAMP_NTZ outputs use a core-planned schema-only
-    preflight and exact SQL wall-microsecond projection, followed by the
-    explicit indexed BIGINT-to-Arrow timestamp conversion. This bypasses
-    the driver's JVM-zone normalization even for nonexistent DST-gap
-    wall fields. Other live timestamp behavior remains unverified.
+    gives it. The timestamp transport defects are repaired without a
+    compatibility exception: the core selects UNIX_MICROS for a zoned
+    instant and native NTZ calendar-field arithmetic for timezone-free
+    walls, followed by explicit indexed BIGINT-to-Arrow transfer.
+    Both meanings survive non-UTC SQL sessions without changing them.
   affected_inputs: >-
-    Java over a Databricks session whose zone is not UTC with a TIMESTAMP
-    column, or a nested or interval column the core reads as data.
+    Java over a Databricks nested or interval column the core reads as data.
   cases: [T3.13]
   refs: [T3.13]
   status: proposed
@@ -9810,8 +9808,12 @@ entries:
     preserves gap wall fields rather than accepting that corruption;
     the explicit transfer was verified narrowly with the actual released
     driver's integer getter under LA and Berlin JVM zones.
-    The proposed live JDBC probe (B7) settles it: the driver's type names,
-    getters, time zone handling and whether getSQLState() is generic.
+    The bounded live JDBC probe (B7) confirmed the timestamp bugs and
+    replacement SQL against actual Python Arrow in UTC, Los Angeles
+    and Berlin sessions, including gaps, nulls, negative microseconds
+    and years 0001/9999. The remaining nested-value difference is not
+    approved: the core omits numeric/string lists and refuses struct/map,
+    so host text fallback must not turn those into supported text features.
 - id: P3S-6
   title: Java reads a Databricks error class anywhere before the statement the message appends
   kind: change

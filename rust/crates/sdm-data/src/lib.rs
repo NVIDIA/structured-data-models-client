@@ -68,7 +68,8 @@ use std::collections::BTreeMap;
 use sdm_contract::data::{
     AttachmentId, BoundFetch, BoundRequest, DataLayer, DataRequest, DescribePart, Dialect,
     ExpectedSchema, FailureFacts, FetchPlan, KeyData, ProviderCapabilities, ProviderChoice,
-    ProviderError, Relation, SqlResultConversion, SqlStatement, SqlTimestampEncoding, views_unread,
+    ProviderError, Relation, SqlResultConversion, SqlStatement, SqlTimestampEncoding,
+    SqlTimestampKind, views_unread,
 };
 use sdm_contract::view::{ViewTextAnswer, ViewTextAsk};
 use sdm_contract::wording::DatabaseNames;
@@ -215,7 +216,7 @@ impl DataLayer for Data {
         if !matches!(
             provider,
             ProviderChoice::Sql {
-                timestamp_encoding: Some(SqlTimestampEncoding::NaiveMicroseconds),
+                timestamp_encoding: Some(SqlTimestampEncoding::Microseconds),
                 ..
             }
         ) || matches!(
@@ -226,7 +227,10 @@ impl DataLayer for Data {
         ) {
             return Ok(None);
         }
-        if sql_dialect(provider).is_none_or(|d| d.timestamp_micros("value").is_none()) {
+        if sql_dialect(provider).is_none_or(|d| {
+            d.timestamp_micros("value", SqlTimestampKind::WallTime)
+                .is_none()
+        }) {
             return Err(CoreError::new(
                 Sentence::Undeclared,
                 "the data source does not support the requested timestamp transport",
@@ -268,10 +272,22 @@ impl DataLayer for Data {
                     CoreError::new(Sentence::Internal, "a result metadata column has no type")
                 })?;
                 let kind = kind.trim().to_ascii_lowercase();
-                if kind == "timestamp_ntz" || kind.starts_with("timestamp_ntz(") {
+                let source_kind = if kind == "timestamp_ntz" || kind.starts_with("timestamp_ntz(") {
+                    Some(SqlTimestampKind::WallTime)
+                } else if kind == "timestamp"
+                    || kind.starts_with("timestamp(")
+                    || kind == "timestamp_ltz"
+                    || kind.starts_with("timestamp_ltz(")
+                {
+                    Some(SqlTimestampKind::Instant)
+                } else {
+                    None
+                };
+                if let Some(source_kind) = source_kind {
                     conversions.push(SqlResultConversion::TimestampMicros {
                         column: position,
                         name,
+                        source_kind,
                     });
                 }
                 position = position.checked_add(1).ok_or_else(|| {

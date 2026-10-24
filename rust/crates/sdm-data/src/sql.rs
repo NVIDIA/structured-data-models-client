@@ -27,8 +27,8 @@ use sdm_contract::catalog::CatalogAnswer;
 use sdm_contract::data::{
     BATCH_COLUMN, DataRequest, DescribePart, Dialect, ExpectedSchema, FailureFacts, FetchPlan,
     Filter, KeySet, OptionalRequest, ProviderCapabilities, ProviderError, Relation, SEED_BATCH,
-    SqlParam, SqlResultConversion, SqlStatement, TableColumn, TableKey, TieBreak, TieTerm, Window,
-    refuse_derived, refuse_relation, refused, seed_key_columns,
+    SqlParam, SqlResultConversion, SqlStatement, SqlTimestampKind, TableColumn, TableKey, TieBreak,
+    TieTerm, Window, refuse_derived, refuse_relation, refused, seed_key_columns,
 };
 use sdm_contract::ops::Dtype;
 use sdm_contract::{CoreError, Detail, Scalar, Sentence};
@@ -89,9 +89,9 @@ pub(crate) trait SqlDialect: Sync {
     /// The dialect's name on the wire.
     fn name(&self) -> &'static str;
 
-    /// A lossless microsecond encoding of a timezone-free timestamp;
-    /// only a dialect explicitly supporting the transfer supplies one.
-    fn timestamp_micros(&self, _value: &str) -> Option<String> {
+    /// A lossless integer encoding of the timestamp meaning selected
+    /// from warehouse metadata; only supporting dialects supply one.
+    fn timestamp_micros(&self, _value: &str, _kind: SqlTimestampKind) -> Option<String> {
         None
     }
 
@@ -691,7 +691,10 @@ pub(crate) fn plan_projected(
     conversions: &[SqlResultConversion],
 ) -> Result<FetchPlan, CoreError> {
     let d = dialect;
-    if !conversions.is_empty() && d.timestamp_micros("value").is_none() {
+    if !conversions.is_empty()
+        && d.timestamp_micros("value", SqlTimestampKind::WallTime)
+            .is_none()
+    {
         return Err(refused(
             request,
             "timestamp_encoding",
@@ -924,10 +927,12 @@ fn transferred(
 ) -> String {
     for conversion in conversions {
         match conversion {
-            SqlResultConversion::TimestampMicros { column, name }
-                if usize::try_from(*column) == Ok(at) =>
-            {
-                if let Some(value) = d.timestamp_micros(value) {
+            SqlResultConversion::TimestampMicros {
+                column,
+                name,
+                source_kind,
+            } if usize::try_from(*column) == Ok(at) => {
+                if let Some(value) = d.timestamp_micros(value, *source_kind) {
                     return format!("{value} AS {}", d.identifier(name));
                 }
             }

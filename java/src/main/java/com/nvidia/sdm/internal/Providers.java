@@ -55,9 +55,9 @@ public final class Providers {
     choice.put("provider", "sql");
     choice.put("dialect", driver.dialect());
     if (driver == JdbcProvider.Driver.DATABRICKS) {
-      // The driver normalizes native NTZ timestamps through the JVM zone.
-      // The core selects a lossless SQL projection and names its conversion.
-      choice.put("timestamp_encoding", "naive_microseconds");
+      // Native getters can reinterpret timestamps through session or JVM zones.
+      // The core selects the source meaning and a lossless integer projection.
+      choice.put("timestamp_encoding", "microseconds");
     }
     if (source instanceof PostgresSource postgres && postgres.schema().isPresent()) {
       choice.put("namespace", List.of(postgres.schema().get()));

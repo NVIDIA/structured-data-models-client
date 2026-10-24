@@ -61,11 +61,16 @@ These tests use the existing DuckDB fixture to exercise the shared semantics; th
 JDBC conversion tests separately express the required non-UTC JVM and spring DST parity.
 The fake now follows released JDBC 3.4.2's unsupported typed getter and initial JVM-zone timestamp conversion, rather than inventing `LocalDateTime` support.
 A narrow probe with that released driver's actual result-set getters confirms the original ordinary NTZ cast failure and DST-gap normalization.
-The core now plans a schema-only `DESCRIBE QUERY` preflight and exact NTZ wall-microsecond projection, with an explicit output-position conversion to Arrow timestamps.
-The Java host writes only the indicated integer values into timestamp columns and contains no timestamp SQL or date parsing rule.
-The desired gap fields, nulls, zero and negative microseconds survive the released driver's actual integer getter under LA and Berlin JVM zones in a bounded private probe.
-This is focused reproduction evidence; package checks and final live warehouse coverage remain pending.
-A live non-UTC warehouse check and the actual E-7 comparison remain phase-end work.
+A later literal-only real-warehouse probe verified both Python Arrow and released JDBC 3.4.2 in UTC, Los Angeles and Berlin SQL sessions, independently of each child JVM's zone.
+It found ordinary timestamp getters returning session wall fields instead of physical instants, and the earlier NTZ `TIMESTAMPDIFF` projection normalizing a spring-gap value inside a non-UTC SQL session.
+The core now plans a schema-only `DESCRIBE QUERY` preflight followed by source-type-specific integer projections: `UNIX_MICROS` for instants and exact NTZ calendar-component arithmetic for wall fields.
+Integer components are widened before multiplication, and the native NTZ overloads retain microseconds, nulls, negative epochs and the supported year range.
+The source kind remains in each indexed conversion so key-text chunk re-rendering preserves both meanings without double projection.
+The Java host transfers only the indicated integer values into timestamp columns and contains no timestamp SQL, date parsing or session mutation rule.
+The bounded actual-driver probe verified the replacement expressions against Python Arrow for both DST gaps, fractional values, negative epochs, years 0001/9999 and nulls in all three SQL sessions.
+These are focused reproduction and SQL facts; the actual E-7 comparison, original notebooks and phase-end warehouse acceptance remain pending.
+The follow-up regression tests were committed before implementation at `52d22335f`.
+Package checks and builds wait for both reviewers to approve the updated integrated candidate.
 
 The two known nightly Java probe defects were reproduced with the package artifact: the relative classpath failed after changing to scratch, and the load source failed to compile against the current API.
 The corrected classpath loaded the packaged native, and the corrected source compiled on JDK 17.
