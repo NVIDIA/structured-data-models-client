@@ -24,6 +24,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.FutureTask;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -62,13 +63,13 @@ public final class DatabricksServing {
   private final String host;
   private final String endpoint;
   private final Supplier<String> token;
-  private final DatabricksConfig sdk;
+  private final SdkAuthentication sdk;
   private final long maxRequestBytes;
   private final Duration timeout;
   private final HttpClient client;
 
   private DatabricksServing(
-      String host, String endpoint, Supplier<String> token, DatabricksConfig sdk,
+      String host, String endpoint, Supplier<String> token, SdkAuthentication sdk,
       long maxRequestBytes, Duration timeout) {
     this.host = host;
     this.endpoint = endpoint;
@@ -109,7 +110,8 @@ public final class DatabricksServing {
     String name = name(endpoint);
     positiveLimit(maxRequestBytes);
     DatabricksConfig config = Objects.requireNonNull(workspace.config(), "workspace.config");
-    return new DatabricksServing(null, name, null, config, maxRequestBytes, DEFAULT_TIMEOUT);
+    return new DatabricksServing(
+        null, name, null, new SdkAuthentication(config), maxRequestBytes, DEFAULT_TIMEOUT);
   }
 
   /** The endpoint {@code endpoint} in the workspace at {@code host}, with the gateway's limit. */
@@ -250,6 +252,16 @@ public final class DatabricksServing {
 
   private record Authentication(String host, Map<String, String> headers) {}
 
+  /** Shared by timeout copies: a noninterruptible SDK refresh never accumulates more workers. */
+  private static final class SdkAuthentication {
+    final DatabricksConfig config;
+    final Semaphore permit = new Semaphore(1, true);
+
+    SdkAuthentication(DatabricksConfig config) {
+      this.config = config;
+    }
+  }
+
   /** SDK refresh may perform IO: cancellation must bound it as well as the serving body. */
   private Authentication authenticate(long deadline)
       throws Host.EndpointFailed, Host.TransportFailed {
@@ -257,15 +269,34 @@ public final class DatabricksServing {
     if (remaining <= 0) {
       throw new Host.EndpointFailed(504, new byte[0]);
     }
-    FutureTask<Authentication> pending = new FutureTask<>(() -> {
-      Map<String, String> headers = Map.copyOf(sdk.authenticate());
-      return new Authentication(sdk.getHost(), headers);
-    });
-    Thread refresh = new Thread(pending, "sdm-databricks-auth");
-    refresh.setDaemon(true);
-    refresh.start();
     try {
-      return pending.get(remaining, TimeUnit.NANOSECONDS);
+      if (!sdk.permit.tryAcquire(remaining, TimeUnit.NANOSECONDS)) {
+        throw new Host.EndpointFailed(504, new byte[0]);
+      }
+    } catch (InterruptedException error) {
+      Thread.currentThread().interrupt();
+      throw new Host.TransportFailed();
+    }
+    FutureTask<Authentication> pending = new FutureTask<>(() -> {
+      Map<String, String> headers = Map.copyOf(sdk.config.authenticate());
+      return new Authentication(sdk.config.getHost(), headers);
+    });
+    Thread refresh = new Thread(() -> {
+      try {
+        pending.run();
+      } finally {
+        sdk.permit.release();
+      }
+    }, "sdm-databricks-auth-" + Integer.toHexString(System.identityHashCode(sdk)));
+    refresh.setDaemon(true);
+    try {
+      refresh.start();
+    } catch (RuntimeException | Error error) {
+      sdk.permit.release();
+      throw error;
+    }
+    try {
+      return pending.get(Math.max(0, deadline - System.nanoTime()), TimeUnit.NANOSECONDS);
     } catch (TimeoutException error) {
       throw new Host.EndpointFailed(504, new byte[0]);
     } catch (InterruptedException error) {
