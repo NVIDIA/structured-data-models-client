@@ -1712,6 +1712,7 @@ dependencies = [
  "arrow-schema",
  "sdm-contract",
  "sdm-engine",
+ "sdm-pql",
  "sdm-wire",
  "serde_json",
 ]
