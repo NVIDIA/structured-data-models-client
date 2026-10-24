@@ -224,6 +224,153 @@ class T313ConversionTableTest {
   }
 
   @Test
+  void defaultComplexSupportPreservesNumericAndStringArraysBesideScalarColumns()
+      throws Exception {
+    Map<String, Read> got = answered(
+        FakeJdbc.Column.of("id", "BIGINT", 1L, 2L, 3L),
+        FakeJdbc.Column.of("whole", "ARRAY<BIGINT>", "[9007199254740993,null,-7]", null, "[]"),
+        FakeJdbc.Column.of("single", "ARRAY<FLOAT>", "[1.25,null]", null, "[]"),
+        FakeJdbc.Column.of("double", "ARRAY<DOUBLE>", "[1.25,2.5]", null, "[]"),
+        FakeJdbc.Column.of("text", "ARRAY<STRING>",
+            "[\"Zoë\",\"a,b\",\"quote\\\"\",null]", null, "[]"));
+    assertEquals(List.of(1L, 2L, 3L), got.get("id").values());
+    assertEquals(Arrays.asList(9007199254740993L, null, -7L),
+        got.get("whole").values().get(0));
+    assertEquals(Arrays.asList(1.25f, null), got.get("single").values().get(0));
+    assertEquals(List.of(1.25, 2.5), got.get("double").values().get(0));
+    assertEquals("[Zoë, a,b, quote\", null]", got.get("text").values().get(0).toString());
+    for (String name : List.of("whole", "single", "double", "text")) {
+      assertEquals("List", got.get(name).field().getType().toString());
+      assertNull(got.get(name).values().get(1), name);
+      assertEquals(List.of(), got.get(name).values().get(2), name);
+    }
+    assertEquals("Int(64, true)",
+        got.get("whole").field().getChildren().get(0).getType().toString());
+    assertEquals("FloatingPoint(SINGLE)",
+        got.get("single").field().getChildren().get(0).getType().toString());
+    assertEquals("FloatingPoint(DOUBLE)",
+        got.get("double").field().getChildren().get(0).getType().toString());
+    assertEquals("Utf8", got.get("text").field().getChildren().get(0).getType().toString());
+  }
+
+  @Test
+  void enabledComplexSupportReadsNativeArraysWithoutSerializingTheirStrings() throws Exception {
+    Map<String, Read> got = answered(
+        FakeJdbc.Column.of("text", "ARRAY<STRING>",
+            Arrays.asList("Zoë", "a,b", "quote\"", null), List.of(), null));
+    assertEquals("[Zoë, a,b, quote\", null]", got.get("text").values().get(0).toString());
+    assertEquals(List.of(), got.get("text").values().get(1));
+    assertNull(got.get("text").values().get(2));
+  }
+
+  @Test
+  void tinyAndDateArraysReadNativeDriverClassesUnderBothComplexModesAndJvmZones()
+      throws Exception {
+    java.util.TimeZone original = java.util.TimeZone.getDefault();
+    try {
+      for (String zone : List.of("UTC", "America/Los_Angeles", "Europe/Berlin")) {
+        java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone(zone));
+        List<Object> dates = Arrays.asList(LocalDate.parse("1969-12-31"),
+            LocalDate.parse("2024-03-10"), LocalDate.parse("2024-03-31"), null);
+        for (boolean complexEnabled : List.of(false, true)) {
+          Object tiny = complexEnabled ? Arrays.asList("-128", "127", null) : "[-128,127,null]";
+          Object days = complexEnabled ? Arrays.asList(java.sql.Date.valueOf("1969-12-31"),
+              java.sql.Date.valueOf("2024-03-10"), java.sql.Date.valueOf("2024-03-31"), null)
+              : "[-1,19792,19813,null]";
+          Object empty = complexEnabled ? List.of() : "[]";
+          Map<String, Read> got = answered(
+              FakeJdbc.Column.of("tiny", "ARRAY<TINYINT>", tiny, empty, null),
+              FakeJdbc.Column.of("dates", "ARRAY<DATE>", days, empty, null));
+          assertEquals(Arrays.asList((byte) -128, (byte) 127, null),
+              got.get("tiny").values().get(0), zone);
+          assertEquals(dates, got.get("dates").values().get(0), zone);
+          assertEquals("Int(8, true)",
+              got.get("tiny").field().getChildren().get(0).getType().toString());
+          assertEquals("Date(DAY)",
+              got.get("dates").field().getChildren().get(0).getType().toString());
+          for (String name : List.of("tiny", "dates")) {
+            assertEquals(List.of(), got.get(name).values().get(1), zone);
+            assertNull(got.get(name).values().get(2), zone);
+          }
+        }
+      }
+    } finally {
+      java.util.TimeZone.setDefault(original);
+    }
+  }
+
+  @Test
+  void tinyArrayOutOfRangeAndUnknownDateShapesAreNamedDataFailures() {
+    for (String number : List.of("-129", "128")) {
+      java.sql.SQLException refused = assertThrows(java.sql.SQLDataException.class,
+          () -> answered(FakeJdbc.Column.of("tiny", "ARRAY<TINYINT>", List.of(number))));
+      assertEquals("22003", refused.getSQLState());
+      assertTrue(refused.getMessage().contains("TINYINT"));
+    }
+    java.sql.SQLException refused = assertThrows(java.sql.SQLDataException.class,
+        () -> answered(FakeJdbc.Column.of("dates", "ARRAY<DATE>", List.of(7L))));
+    assertEquals("22000", refused.getSQLState());
+    assertTrue(refused.getMessage().contains("java.lang.Long"));
+  }
+
+  @Test
+  void anUnexpectedArrayValueIsRefusedByItsJdbcType() {
+    java.sql.SQLException refused = assertThrows(java.sql.SQLDataException.class,
+        () -> answered(FakeJdbc.Column.of("broken", "ARRAY<BIGINT>", 42L)));
+    assertEquals("22000", refused.getSQLState());
+    assertTrue(refused.getMessage().contains("java.lang.Long"));
+  }
+
+  @Test
+  void otherJdbcBackendsLoadWithoutTheDatabricksDriver() throws Exception {
+    String separator = java.io.File.pathSeparator;
+    String testClasspath = System.getProperty(
+        "surefire.test.class.path", System.getProperty("java.class.path"));
+    String classpath = Arrays.stream(testClasspath.split(java.util.regex.Pattern.quote(separator)))
+        .filter(entry -> !java.nio.file.Path.of(entry).getFileName().toString()
+            .startsWith("databricks-jdbc-"))
+        .collect(java.util.stream.Collectors.joining(separator));
+    Process child = new ProcessBuilder(
+        java.nio.file.Path.of(System.getProperty("java.home"), "bin", "java").toString(),
+        "-cp", classpath, WithoutDatabricksDriver.class.getName())
+        .redirectErrorStream(true).start();
+    boolean finished = child.waitFor(30, java.util.concurrent.TimeUnit.SECONDS);
+    if (!finished) {
+      child.destroyForcibly();
+    }
+    assertTrue(finished, "the JDBC classpath control timed out");
+    String output = new String(child.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+    assertEquals(0, child.exitValue(), output);
+  }
+
+  /** Runs without the optional Databricks driver, using the other providers' shared converter. */
+  public static final class WithoutDatabricksDriver {
+    private WithoutDatabricksDriver() {}
+
+    public static void main(String[] arguments) throws Exception {
+      try {
+        Class.forName("com.databricks.jdbc.api.impl.ComplexDataTypeParser");
+        throw new AssertionError("the Databricks driver must be absent");
+      } catch (ClassNotFoundException expected) {
+        // The classpath deliberately excludes the provided driver.
+      }
+      assertEquals("Int(64, true)", ConversionTable.REVIEWED.postgres("int8", 0, 0)
+          .field("id").getType().toString());
+      try (java.sql.Connection sqlite = java.sql.DriverManager.getConnection("jdbc:sqlite::memory:");
+          java.sql.Statement statement = sqlite.createStatement();
+          java.sql.ResultSet rows = statement.executeQuery("SELECT 7 AS id")) {
+        new JdbcProvider(sqlite, JdbcProvider.Driver.SQLITE);
+        assertEquals(List.of(List.of(7L)), ConversionTable.sqlite(rows).columns());
+      }
+      try (java.sql.Connection duck = java.sql.DriverManager.getConnection("jdbc:duckdb:")) {
+        new JdbcProvider(duck, JdbcProvider.Driver.DUCKDB);
+      }
+      new JdbcProvider(new FakeJdbc.Database(text -> List.of()).connection(),
+          JdbcProvider.Driver.POSTGRES);
+    }
+  }
+
+  @Test
   void theTableSaysWhatEachDatabricksTypeReachesTheCoreAs() {
     for (String type :
         List.of(

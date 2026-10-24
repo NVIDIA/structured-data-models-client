@@ -212,11 +212,16 @@ final class FakeJdbc {
       case "getBytes":
         return (byte[]) value;
       case "getArray":
+        if (value instanceof String) {
+          throw new SQLException("Complex datatype support is disabled",
+              "COMPLEX_DATA_TYPE_ARRAY_CONVERSION_ERROR", 1017);
+        }
         return value == null ? null : array((List<?>) value);
       case "getTimestamp":
         return timestamp(value, args.length > 1 ? (Calendar) args[1] : null);
       case "getObject":
-        return args.length > 1 ? as(value, (Class<?>) args[1]) : value;
+        Object nativeValue = value instanceof List<?> items ? array(items) : value;
+        return args.length > 1 ? as(nativeValue, (Class<?>) args[1]) : nativeValue;
       default:
         throw new AssertionError("ResultSet." + name);
     }
