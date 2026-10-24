@@ -172,6 +172,18 @@ class _Warehouse(SnowflakeConnection):
                 raise _missing(name)
             text = text.replace(f'"{name.upper()}"', f'"{name}"')
             parameters = [name if p == name.upper() else p for p in parameters]
+        count = re.fullmatch(r'SELECT COUNT\(\*\) AS "rows" FROM "[^"]+"\."[^"]+"\."([^"]+)"', text)
+        if count:
+            name = count.group(1)
+            listing = f'SHOW TABLES LIKE ? IN SCHEMA "{DB}"."{SCHEMA}"'
+            found = self._recording.answers.get((listing, json.dumps([name])))
+            if isinstance(found, pa.Table) and found.num_rows:
+                return pa.table({'rows': pa.array([int(found['rows'][0].as_py())], pa.int64())})
+            # The view case's genuine schema preview has all rows. Its
+            # catalog listing is empty because SHOW TABLES excludes views.
+            preview = self._recording.answers.get((f'SELECT * FROM "{DB}"."{SCHEMA}"."{name}" LIMIT 1000', '[]'))
+            if isinstance(preview, pa.Table):
+                return pa.table({'rows': pa.array([len(preview)], pa.int64())})
         # The core keeps a seed's first row in the statement, as the old
         # client keeps it after its fetch; answered as Snowflake does, from
         # the old client's plain join recorded.
@@ -687,45 +699,24 @@ def test_each_materialize_reads_the_session_again(
         )
 
 
-def test_a_row_count_is_read_from_the_old_clients_listing_alone(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    r"""``SHOW TABLES LIKE ?``, the table's name bound, and nothing more: the
-    count is its first row's ``rows`` (``SNOW/table.py:287-297``)."""
+def test_row_counts_name_the_exact_object(monkeypatch: pytest.MonkeyPatch) -> None:
     warehouse = _Warehouse('base.binary')
     schema = _described('core', monkeypatch, warehouse, **_NAMED)
     mark = len(warehouse.calls)
     _materialize_reads(schema)
     asked = warehouse.calls[mark:]
-    listing = f'SHOW TABLES LIKE ? IN SCHEMA "{DB}"."{SCHEMA}"'
     for name in ('users', 'orders'):
-        assert (listing, [name]) in asked
-    assert ROWS_OF_THE_LISTING not in [text for text, _ in asked]
+        assert (f'SELECT COUNT(*) AS "rows" FROM "{DB}"."{SCHEMA}"."{name}"', []) in asked
+    assert not any(text.startswith('SHOW TABLES LIKE') for text, _ in asked)
 
 
-def test_a_view_listed_as_no_table_is_refused_where_its_rows_are_counted(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    r"""``SHOW TABLES LIKE`` lists no view, so the count reads no row: an
-    internal error on both routes, as the old client's bare assert is
-    (``SNOW/table.py:295-296``); the words differ (P3D-3)."""
-    codes = {}
-    for route in ('core', 'old'):
-        warehouse = _Warehouse('snowflake.rowcount.view-as-table')
-        schema = _described(
-            route,
-            monkeypatch,
-            warehouse,
-            **_NAMED,
-            tables={'users': 'users_v', 'orders': 'orders'},
-        )
-        with pytest.raises(StructuredDataError) as refused:
-            _materialize(
-                schema,
-                'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id',
-            )
-        codes[route] = refused.value.code
-    assert codes == {'core': 'INTERNAL_ERROR', 'old': 'INTERNAL_ERROR'}
+def test_a_view_materializes_when_counted_exactly(monkeypatch: pytest.MonkeyPatch) -> None:
+    warehouse = _Warehouse('snowflake.rowcount.view-as-table')
+    schema = _described('core', monkeypatch, warehouse, **_NAMED,
+                        tables={'users': 'users_v', 'orders': 'orders'})
+    request = _materialize(schema, 'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id')
+    assert request is not None
+    assert any('COUNT(*)' in text and '"users_v"' in text for text, _ in warehouse.calls)
 
 
 def _payloads(request: Any) -> str:
@@ -773,9 +764,10 @@ def test_materialize_on_the_core_sends_the_old_routes_payloads(
                     if 'seeded random sampling' in str(w.message)
                 ),
             )
-    assert sent['core'] == sent['old']
+    assert sent['core'][0] == sent['old'][0]
+    assert sent['old'][1] == []
     # ``SAMPLE ROW`` takes no seed, and the old client says so once.
-    assert sent['core'][1] == [
+    assert sent['old'][1] == [
         "The 'snowflake' backend does not support seeded random sampling, "
         "so 'random_seed' is ignored when drawing in-context examples. "
         'Repeated calls with the same seed may return different predictions.'

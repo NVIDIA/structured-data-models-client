@@ -339,30 +339,10 @@ fn an_entity_sample_is_the_old_clients_unseeded_sample_of_rows() {
 }
 
 #[test]
-fn a_row_count_is_the_old_clients_listing_alone() {
-    let p = &named();
-    for (case, name) in [
-        ("base.binary", "users"),
-        ("base.binary", "orders"),
-        ("snowflake.name.upper-case-folded", "USERS"),
-    ] {
-        let source = if name == "USERS" {
-            json!({"source": [DB, SCHEMA, name]})
-        } else {
-            table(name)
-        };
-        let (text, params) = one_recorded(
-            case,
-            p,
-            json!({"request": "count_rows", "table": source, "filters": []}),
-        );
-        assert_eq!(
-            (text, params),
-            (
-                format!(r#"SHOW TABLES LIKE ? IN SCHEMA "{DB}"."{SCHEMA}""#),
-                vec![name.to_owned()]
-            )
-        );
+fn row_counts_name_the_exact_object_and_support_views() {
+    for name in ["users", "user_s", "users%", "USERS", "users_v"] {
+        let got = planned(&named(), json!({"request": "count_rows", "table": table(name), "filters": []})).unwrap();
+        assert_eq!(got, vec![(format!("SELECT COUNT(*) AS \"rows\" FROM \"{DB}\".\"{SCHEMA}\".\"{name}\""), vec![])]);
     }
 }
 
@@ -836,7 +816,7 @@ fn a_session_with_no_current_database_keeps_the_database_the_source_names() {
         json!({"request": "describe", "part": "columns", "tables": [table("users")]}),
     ] {
         let refused = planned(&nowhere, request).unwrap_err();
-        assert_eq!(refused.sentence, Sentence::Internal);
+        assert_eq!(refused.sentence, Sentence::NoCurrentDatabase);
     }
 }
 
@@ -1479,34 +1459,3 @@ fn counts(name: &str, values: ArrayRef) -> Vec<RecordBatch> {
     ]
 }
 
-#[test]
-fn snowflakes_row_count_is_its_listings_first_row_and_any_other_count_one_row() {
-    use arrow_array::Int64Array;
-    let layer = layer();
-    // The listing as the row adapter hands it over: the first row's `rows`,
-    // as the old client reads it (`SNOW/table.py:287-297`).
-    let listing = as_rows(&recorded_result(
-        "base.binary",
-        &format!(r#"SHOW TABLES LIKE ? IN SCHEMA "{DB}"."{SCHEMA}""#),
-        &["users"],
-    ));
-    assert_eq!(layer.row_count(&named(), &listing).unwrap(), Some(8));
-    // No row: the old client's assert, an internal error.
-    let none = vec![listing[0].slice(0, 0)];
-    assert_eq!(
-        layer.row_count(&named(), &none).unwrap_err().sentence,
-        Sentence::Internal
-    );
-    // Every other provider's count is the core's to read, one row of one
-    // count.
-    let duckdb = ProviderChoice::sql("duckdb");
-    assert_eq!(
-        layer
-            .row_count(
-                &duckdb,
-                &counts("rows", Arc::new(Int64Array::from(vec![3, 4])))
-            )
-            .unwrap(),
-        None
-    );
-}

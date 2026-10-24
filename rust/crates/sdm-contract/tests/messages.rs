@@ -361,6 +361,8 @@ fn a_provider_error_keeps_its_retryability_and_codes_in_the_core_error() {
     for retryable in [true, false] {
         let error = CoreError::provider(&ProviderError {
             error_class: None,
+
+            driver_message: None,
             kind: ErrorKind::DataSource,
             retryable,
             sqlstate: Some("40001".into()),
@@ -378,4 +380,19 @@ fn a_provider_error_keeps_its_retryability_and_codes_in_the_core_error() {
     )
     .unwrap();
     assert!(!error.retryable);
+}
+
+#[test]
+fn internal_driver_diagnostics_and_key_enforcement_are_optional_plain_data() {
+    use sdm_contract::data::{DataRequest, DescribePart, ProviderError};
+    let old = serde_json::json!({"kind": "data_source", "retryable": false});
+    let error: ProviderError = serde_json::from_value(old.clone()).unwrap();
+    assert_eq!(error.driver_message, None);
+    let with = serde_json::json!({"driver_message": "Schema DOES NOT EXIST", "kind": "data_source", "retryable": false});
+    let error: ProviderError = serde_json::from_value(with.clone()).unwrap();
+    assert_eq!(serde_json::to_value(error).unwrap(), with);
+    let request: DataRequest = serde_json::from_value(serde_json::json!({
+        "request": "describe", "part": "key_enforcement", "tables": [{"source": ["D", "S", "t"]}]
+    })).unwrap();
+    assert!(matches!(request, DataRequest::Describe { part: DescribePart::KeyEnforcement, .. }));
 }
