@@ -36,6 +36,9 @@ import org.apache.arrow.vector.types.pojo.Field;
  *       int64</td></tr>
  *   <tr><td>Postgres</td><td>by the column's type name ({@link #POSTGRES})</td><td>as Python's
  *       Postgres provider types it from psycopg's registry; a name it does not hold, utf8</td></tr>
+ *   <tr><td>Databricks</td><td>by the column's type name ({@link #DATABRICKS})</td><td>as the
+ *       Databricks SQL connector gives Python's provider its Arrow (C-1's recorded tables); a
+ *       name it does not hold, utf8 of the driver's text</td></tr>
  * </table>
  *
  * <p>An entry can be replaced ({@link #withPostgres}): L5 for Java seeds a unit or scale change
@@ -224,6 +227,201 @@ public final class ConversionTable {
         + (exponent < 0 ? "-" : "+")
         + (Math.abs(exponent) < 10 ? "0" : "")
         + Math.abs(exponent);
+  }
+
+  // --- Databricks ----------------------------------------------------------------------
+
+  /**
+   * The Databricks column, by the type name the Databricks JDBC driver gives a column ({@code
+   * getColumnTypeName}, its parameters left out), as the Databricks SQL connector gives Python's
+   * provider its Arrow ({@code fetchall_arrow}, C-1's recorded tables): each type at its own
+   * width, a null a null whatever the getter reads. The driver's own types are seen only live
+   * (B7); the proposed JDBC probe checks this column against them.
+   */
+  public static final Map<String, String> DATABRICKS = Map.ofEntries(
+      Map.entry("TINYINT", "int8"),
+      Map.entry("SMALLINT", "int16"),
+      Map.entry("INT", "int32 (INTEGER too)"),
+      Map.entry("BIGINT", "int64"),
+      Map.entry("FLOAT", "float32"),
+      Map.entry("DOUBLE", "float64, a NaN kept"),
+      Map.entry("DECIMAL", "decimal128(p, s), the driver's precision and scale, exact"),
+      Map.entry("STRING", "utf8 (VARCHAR and CHAR too)"),
+      Map.entry("BOOLEAN", "bool"),
+      Map.entry("DATE", "date32"),
+      Map.entry("TIMESTAMP", "timestamp[us]: the instant, as its wall time in UTC"),
+      Map.entry("TIMESTAMP_NTZ", "timestamp[us]: its wall time"),
+      Map.entry("BINARY", "binary"),
+      Map.entry("ARRAY", "list of its element's column, for an element of a type above but"
+          + " DECIMAL and the time stamps; else utf8 of the driver's text"),
+      Map.entry("VOID", "null"),
+      Map.entry("any other type (STRUCT, MAP, INTERVAL, VARIANT)", "utf8: the driver's text"));
+
+  /** How one Databricks column is read: its Arrow type and each value's reading. */
+  private interface DatabricksReading {
+    Object read(ResultSet rows, int at) throws SQLException;
+  }
+
+  private record DatabricksColumn(ArrowType type, ArrowType element, DatabricksReading reading) {
+    Field field(String name) {
+      return element == null
+          ? ArrowColumns.field(name, type, null)
+          : ArrowColumns.list(name, ArrowColumns.field("item", element, null));
+    }
+  }
+
+  private static final java.util.Calendar UTC =
+      java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"));
+
+  /** A Databricks result read whole by the Databricks column ({@link #DATABRICKS}). */
+  static Result databricks(ResultSet rows) throws SQLException {
+    ResultSetMetaData meta = rows.getMetaData();
+    int width = meta.getColumnCount();
+    List<DatabricksColumn> columns = new ArrayList<>();
+    List<Field> fields = new ArrayList<>();
+    List<List<Object>> values = new ArrayList<>();
+    for (int at = 1; at <= width; at++) {
+      DatabricksColumn column =
+          databricksColumn(meta.getColumnTypeName(at), meta.getPrecision(at), meta.getScale(at));
+      columns.add(column);
+      fields.add(column.field(meta.getColumnLabel(at)));
+      values.add(new ArrayList<>());
+    }
+    while (rows.next()) {
+      for (int at = 0; at < width; at++) {
+        values.get(at).add(columns.get(at).reading().read(rows, at + 1));
+      }
+    }
+    return new Result(fields, values);
+  }
+
+  /** The bare name of a Databricks type: upper case, its parameters left out. */
+  private static String bare(String type) {
+    String name = type == null ? "" : type.strip().toUpperCase(java.util.Locale.ROOT);
+    int cut = name.length();
+    for (char c : new char[] {'(', '<', ' '}) {
+      int found = name.indexOf(c);
+      if (found >= 0) {
+        cut = Math.min(cut, found);
+      }
+    }
+    return name.substring(0, cut);
+  }
+
+  private static DatabricksColumn databricksColumn(String type, int precision, int scale) {
+    String name = bare(type);
+    ArrowType scalar = databricksScalar(name, precision, scale);
+    if (scalar != null) {
+      return new DatabricksColumn(scalar, null, (rows, at) -> databricksValue(name, scale, rows, at));
+    }
+    int open = type == null ? -1 : type.indexOf('<');
+    int close = type == null ? -1 : type.lastIndexOf('>');
+    if ("ARRAY".equals(name) && open >= 0 && close > open) {
+      String element = bare(type.substring(open + 1, close));
+      if (ARRAY_ELEMENTS.contains(element)) {
+        return new DatabricksColumn(
+            ArrowType.List.INSTANCE,
+            databricksScalar(element, 0, 0),
+            (rows, at) -> databricksArray(element, rows, at));
+      }
+    }
+    if ("VOID".equals(name) || "NULL".equals(name)) {
+      return new DatabricksColumn(ArrowColumns.NULL, null, (rows, at) -> null);
+    }
+    return new DatabricksColumn(ArrowColumns.UTF8, null, (rows, at) -> rows.getString(at));
+  }
+
+  /** The element types an array is read as a list of; any other array is the driver's text. */
+  private static final java.util.Set<String> ARRAY_ELEMENTS = java.util.Set.of(
+      "TINYINT", "BYTE", "SMALLINT", "SHORT", "INT", "INTEGER", "BIGINT", "LONG", "FLOAT", "REAL",
+      "DOUBLE", "STRING", "VARCHAR", "CHAR", "BOOLEAN", "DATE", "BINARY");
+
+  /** The Arrow type of a Databricks scalar type, or null for one that is not a scalar. */
+  private static ArrowType databricksScalar(String name, int precision, int scale) {
+    return switch (name) {
+      case "TINYINT", "BYTE" -> ArrowColumns.INT8;
+      case "SMALLINT", "SHORT" -> ArrowColumns.INT16;
+      case "INT", "INTEGER" -> ArrowColumns.INT32;
+      case "BIGINT", "LONG" -> ArrowColumns.INT64;
+      case "FLOAT", "REAL" -> ArrowColumns.FLOAT32;
+      case "DOUBLE" -> ArrowColumns.FLOAT64;
+      case "DECIMAL", "DEC", "NUMERIC" -> ArrowColumns.decimal(precision, scale);
+      case "STRING", "VARCHAR", "CHAR" -> ArrowColumns.UTF8;
+      case "BOOLEAN" -> ArrowColumns.BOOL;
+      case "DATE" -> ArrowColumns.DATE32;
+      case "TIMESTAMP", "TIMESTAMP_LTZ", "TIMESTAMP_NTZ" -> ArrowColumns.TIMESTAMP_US;
+      case "BINARY" -> ArrowColumns.BINARY;
+      default -> null;
+    };
+  }
+
+  /** One Databricks scalar, as the Java value its Arrow column holds; null for a null. */
+  private static Object databricksValue(String name, int scale, ResultSet rows, int at)
+      throws SQLException {
+    Object value =
+        switch (name) {
+          case "TINYINT", "BYTE" -> rows.getByte(at);
+          case "SMALLINT", "SHORT" -> rows.getShort(at);
+          case "INT", "INTEGER" -> rows.getInt(at);
+          case "BIGINT", "LONG" -> rows.getLong(at);
+          case "FLOAT", "REAL" -> rows.getFloat(at);
+          case "DOUBLE" -> rows.getDouble(at);
+          case "DECIMAL", "DEC", "NUMERIC" -> {
+            BigDecimal read = rows.getBigDecimal(at);
+            yield read == null ? null : read.setScale(scale, java.math.RoundingMode.UNNECESSARY);
+          }
+          case "STRING", "VARCHAR", "CHAR" -> rows.getString(at);
+          case "BOOLEAN" -> rows.getBoolean(at);
+          case "DATE" -> {
+            java.time.LocalDate read = rows.getObject(at, java.time.LocalDate.class);
+            yield read == null ? null : (int) read.toEpochDay();
+          }
+          case "TIMESTAMP", "TIMESTAMP_LTZ" -> {
+            java.sql.Timestamp read = rows.getTimestamp(at, (java.util.Calendar) UTC.clone());
+            yield read == null
+                ? null
+                : Math.floorDiv(read.getTime(), 1000L) * 1_000_000L + read.getNanos() / 1_000L;
+          }
+          case "TIMESTAMP_NTZ" -> {
+            java.time.LocalDateTime read = rows.getObject(at, java.time.LocalDateTime.class);
+            yield read == null
+                ? null
+                : read.toEpochSecond(ZoneOffset.UTC) * 1_000_000L + read.getNano() / 1_000L;
+          }
+          case "BINARY" -> rows.getBytes(at);
+          default -> throw new SQLException("no Databricks scalar of " + name + " is read here");
+        };
+    return rows.wasNull() ? null : value;
+  }
+
+  /** One Databricks array of scalars, each element as its Arrow column holds it. */
+  private static Object databricksArray(String element, ResultSet rows, int at)
+      throws SQLException {
+    java.sql.Array read = rows.getArray(at);
+    if (read == null || rows.wasNull()) {
+      return null;
+    }
+    Object[] items = (Object[]) read.getArray();
+    List<Object> out = new ArrayList<>(items.length);
+    for (Object item : items) {
+      out.add(item == null ? null : databricksElement(element, item));
+    }
+    return out;
+  }
+
+  private static Object databricksElement(String element, Object item) {
+    return switch (element) {
+      case "TINYINT", "BYTE" -> ((Number) item).byteValue();
+      case "SMALLINT", "SHORT" -> ((Number) item).shortValue();
+      case "INT", "INTEGER" -> ((Number) item).intValue();
+      case "BIGINT", "LONG" -> ((Number) item).longValue();
+      case "FLOAT", "REAL" -> ((Number) item).floatValue();
+      case "DOUBLE" -> ((Number) item).doubleValue();
+      case "BOOLEAN" -> (Boolean) item;
+      case "DATE" -> (int) ((java.time.LocalDate) item).toEpochDay();
+      case "BINARY" -> (byte[]) item;
+      default -> item.toString();
+    };
   }
 
   // --- Postgres ------------------------------------------------------------------------

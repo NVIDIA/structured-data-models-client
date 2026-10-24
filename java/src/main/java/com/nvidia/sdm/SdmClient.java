@@ -38,10 +38,12 @@ public final class SdmClient implements AutoCloseable {
   private static final SecureRandom IDS = new SecureRandom();
 
   private final HttpTransport transport;
+  private final DatabricksServing serving;
   private volatile boolean closed;
 
-  private SdmClient(HttpTransport transport) {
+  private SdmClient(HttpTransport transport, DatabricksServing serving) {
     this.transport = transport;
+    this.serving = serving;
   }
 
   /**
@@ -59,12 +61,21 @@ public final class SdmClient implements AutoCloseable {
   public static SdmClient connect(String url, ClientOptions options) {
     Objects.requireNonNull(options, "options");
     return new SdmClient(
-        new HttpTransport(url, options.apiKey(), options.timeout(), options.maxRetries()));
+        new HttpTransport(url, options.apiKey(), options.timeout(), options.maxRetries()), null);
   }
 
-  /** Where this client sends requests. */
+  /**
+   * A client of a Databricks Model Serving endpoint, as Python's {@code
+   * SDMClient.for_databricks_serving}: {@link #predict} works, and the core writes the
+   * endpoint's envelope and reads its every answer and failure (T3.13).
+   */
+  public static SdmClient forDatabricksServing(DatabricksServing serving) {
+    return new SdmClient(null, Objects.requireNonNull(serving, "serving"));
+  }
+
+  /** Where this client sends requests: a URL, or {@code databricks-serving:<endpoint>}. */
   public String url() {
-    return transport.url();
+    return serving != null ? serving.url() : transport.url();
   }
 
   /**
@@ -155,6 +166,10 @@ public final class SdmClient implements AutoCloseable {
     if (outputs == null) {
       operation.put("default_outputs", true);
     }
+    if (serving != null) {
+      // The endpoint whose envelope the core writes and whose answers it reads (T3.13).
+      operation.put("model_endpoint", serving.modelEndpoint());
+    }
     try (Host.Finished finished =
         Host.run(operation, attachments, new Host.Call(null, this::call, Map.of()))) {
       Results.Predicted predicted =
@@ -170,8 +185,15 @@ public final class SdmClient implements AutoCloseable {
     }
   }
 
-  /** One call of the core's, through the transport, its refusal kept for the run's end. */
-  private byte[] call(byte[] body) throws Host.TransportFailed, Host.Refused {
+  /**
+   * One call of the core's, through the transport, its refusal kept for the run's end; to a
+   * serving endpoint, its failure handed to the core, which names it.
+   */
+  private byte[] call(byte[] body)
+      throws Host.TransportFailed, Host.Refused, Host.EndpointFailed {
+    if (serving != null) {
+      return serving.post(body);
+    }
     try {
       return transport.predict(body);
     } catch (HttpTransport.Failed failed) {
@@ -221,6 +243,6 @@ public final class SdmClient implements AutoCloseable {
 
   @Override
   public String toString() {
-    return "SdmClient(" + transport.url() + ")";
+    return "SdmClient(" + url() + ")";
   }
 }

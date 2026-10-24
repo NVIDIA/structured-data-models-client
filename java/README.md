@@ -76,22 +76,24 @@ The API mirrors Python's with Java names and plain data:
 
 | Python | Java |
 |---|---|
-| `DuckDBSource(connection)`, `SQLiteSource`, `PostgresSource(connection, schema=)` | `DuckDbSource.of(connection)`, `SqliteSource.of`, `PostgresSource.of(connection[, schema])`, each over a `java.sql.Connection` the caller keeps open |
+| `DuckDBSource(connection)`, `SQLiteSource`, `PostgresSource(connection, schema=)`, `DatabricksSource(connection, catalog=, schema=)` | `DuckDbSource.of(connection)`, `SqliteSource.of`, `PostgresSource.of(connection[, schema])`, `DatabricksSource.of(connection[, catalog, schema])`, each over a `java.sql.Connection` the caller keeps open |
 | `Schema.from_source(source, tables, primary_keys=, time_columns=, relationships=, check_keys=)` | `Schema.fromSource(source[, FromSourceOptions])` |
 | `schema[t].primary_key = k`, `.time_column = c`, `schema[t][c].stype = s`, `del schema[t][c]`, `schema.relationships = [...]` | `withPrimaryKey`, `withoutPrimaryKey`, `withTimeColumn`, `withoutTimeColumn`, `withStype`, `withoutColumn`, `withRelationships`, `withRelationship`: each a new schema, checked and made by the core; a schema never changes, so `snapshot()` is the schema itself |
 | `schema.tables`, `schema[t]`, `check_consistent()` | `tables()`, `table(name)`, `relationships()`, `checkConsistent()`; `Table` and `Column` |
 | `PredictiveQuery(text, schema).materialize(indices=, anchor_time=, **options)` | `PredictiveQuery.parse(text).materialize(schema, MaterializeOptions)`; an option is a name and a plain value (`option("num_neighbors", List.of(8, 8))`), as a keyword argument |
 | `Request.context_rows`, `predict_rows`, `payloads`, ... | `Request.contextRows()`, `predictRows()`, `payloads()`, `nothingToScore()`, `entityTable()`, ... |
 | `SDMClient(url, api_key, timeout=, max_retries=)`, `capabilities(model)`, `predict(request, model=, outputs=)` | `SdmClient.connect(url[, ClientOptions])`, `capabilities(model)`, `predict(request, model[, outputs])` |
+| `SDMClient.for_databricks_serving(endpoint, workspace_client=, timeout=)` | `SdmClient.forDatabricksServing(DatabricksServing.of(host, endpoint, tokenSupplier[, maxRequestBytes]))`, with `timeout(Duration)`; a caller-supplied token only |
 | `PredictionResult.to_pandas()`, `absent()`, `explanation` | `PredictionResult.read(allocator)` (the core's rows as Arrow, ordered by `row_index`), `absent(requested)`, `explanation()` |
 
-The JDBC drivers are the caller's: DuckDB's (`org.duckdb:duckdb_jdbc`), SQLite's (`org.xerial:sqlite-jdbc`) and Postgres's (`org.postgresql:postgresql`); the JAR ships none.
-What a driver gives reaches the core as the same Arrow Python's drivers give it, by the reviewed conversion table (`com.nvidia.sdm.internal.jdbc.ConversionTable`): DuckDB's own Arrow export; SQLite's columns typed as ADBC SQLite types them; Postgres's by type, as Python's provider types them through psycopg's registry, every value read in text as psycopg reads it.
+The JDBC drivers are the caller's: DuckDB's (`org.duckdb:duckdb_jdbc`), SQLite's (`org.xerial:sqlite-jdbc`), Postgres's (`org.postgresql:postgresql`) and Databricks's (`com.databricks:databricks-jdbc`); the JAR ships none.
+What a driver gives reaches the core as the same Arrow Python's drivers give it, by the reviewed conversion table (`com.nvidia.sdm.internal.jdbc.ConversionTable`): DuckDB's own Arrow export; SQLite's columns typed as ADBC SQLite types them; Postgres's by type, as Python's provider types them through psycopg's registry, every value read in text as psycopg reads it; Databricks's by type, as the Databricks SQL connector gives Python's provider its Arrow.
 The model transport sends the core's call as the bytes the core wrote, over `java.net.http`, retrying a transient failure (429, 502, 503, 504, a dropped connection) as Python's transport does.
 
 Every error is a `StructuredDataException`, as every Python error is a `StructuredDataError`: `code()` is the contract's error code to branch on (`INVALID_REQUEST`, `UNSUPPORTED_REQUEST`, `INTERNAL_ERROR`, ...), and `details()` holds the structured fields the core gave.
 A platform the JAR holds no native library for is refused as `UNSUPPORTED_REQUEST`, naming the platform.
 The model endpoint's own refusal is a `ModelEndpointException`, with the endpoint's status, code, words and other fields, as Python's `NimRequestError`.
+A Databricks serving endpoint's refusal is a `ModelEndpointException` too, under the endpoint's status and its own code, in the core's words, as Python's serving client raises it.
 A panic inside the core is contained: the call raises `INTERNAL_ERROR` with `details().get("panic") == true`, and the JVM goes on.
 
 The core's log events reach SLF4J under the loggers its crates name (`sdm_core`, `sdm_host`, `sdm_data` and their modules), and its warnings under `com.nvidia.sdm.warnings`, at `WARN`.

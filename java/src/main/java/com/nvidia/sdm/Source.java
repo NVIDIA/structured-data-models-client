@@ -12,9 +12,11 @@ import java.sql.Connection;
  * the core's statements on it and never closes it; the caller keeps it open while the schema, a
  * request gathered from it, or a prediction is in use.
  *
- * <p>A source is one of {@link DuckDbSource}, {@link SqliteSource} and {@link PostgresSource}.
+ * <p>A source is one of {@link DuckDbSource}, {@link SqliteSource}, {@link PostgresSource} and
+ * {@link DatabricksSource}.
  */
-public sealed interface Source permits DuckDbSource, SqliteSource, PostgresSource {
+public sealed interface Source
+    permits DuckDbSource, SqliteSource, PostgresSource, DatabricksSource {
   /** The connection the tables are read through. */
   Connection connection();
 }
