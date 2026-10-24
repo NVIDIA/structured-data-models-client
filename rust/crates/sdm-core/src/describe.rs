@@ -738,10 +738,7 @@ pub(crate) async fn initialize(
     } else {
         Vec::new()
     };
-    let mut read_under = Vec::with_capacity(anew.len());
-    let mut found = std::collections::BTreeMap::new();
-    let mut held_columns: std::collections::BTreeMap<Relation, Vec<String>> =
-        std::collections::BTreeMap::new();
+    let mut read_under: Vec<sdm_contract::ops::ReadUnder> = Vec::with_capacity(anew.len());
     for relation in &anew {
         let under = if unsettled && relation.single().is_some() {
             asker.pin(relation, parts.clone());
@@ -749,46 +746,73 @@ pub(crate) async fn initialize(
         } else {
             Vec::new()
         };
+        // One read of the relation, over the columns the schema's tables of
+        // it hold.
+        let Some(first) = description.tables.iter().find(|t| t.source == *relation) else {
+            continue;
+        };
+        let mut columns: Vec<String> = Vec::new();
         for table in description.tables.iter().filter(|t| t.source == *relation) {
-            let named = NamedTable {
-                name: table.name.clone(),
-                source: relation.clone(),
-                columns: Some(table.columns.iter().map(|c| c.name.clone()).collect()),
-            };
-            let read = crate::discover::table(asker, &named, true, None).await?;
-            let rows: usize = read.preview.batches.iter().map(|b| b.num_rows()).sum();
-            if rows == 0 {
-                return Err(infer::empty_table(&asker.read_as(relation)));
+            for column in &table.columns {
+                if !columns.contains(&column.name) {
+                    columns.push(column.name.clone());
+                }
             }
-            held_columns.insert(
-                relation.clone(),
-                read.declared.iter().map(|c| c.name.clone()).collect(),
-            );
-            found.extend(crate::discover::facts_read(&table.name, relation, read)?);
         }
+        let named = NamedTable {
+            name: first.name.clone(),
+            source: relation.clone(),
+            columns: Some(columns),
+        };
+        let read = crate::discover::table(asker, &named, true, None).await?;
+        let rows: usize = read.preview.batches.iter().map(|b| b.num_rows()).sum();
+        if rows == 0 {
+            return Err(infer::empty_table(&asker.read_as(relation)));
+        }
+        let columns = crate::discover::facts_read(&first.name, relation, read)?
+            .into_iter()
+            .map(|((_, name), source)| sdm_contract::ops::KeptColumn { name, source })
+            .collect();
         read_under.push(sdm_contract::ops::ReadUnder {
             relation: relation.clone(),
             namespace: under,
+            columns,
         });
     }
-    // The facts of each column that holds none of a table kept before, read
-    // from the source (its catalog and preview) before the tables are said
-    // located; the checks over what the source holds come after, as the
-    // reference's do.
-    let mut located = match pending {
-        Some(held) => {
-            found.extend(crate::discover::facts(asker, held, &anew).await?);
-            Some(sdm_schema::held::read(held.clone(), &found, false)?.by_the_source())
-        }
-        None => (!anew.is_empty()).then(|| description.clone()),
-    };
-    if let Some(located) = &mut located {
-        for table in &mut located.tables {
-            if let Some(held) = held_columns.get(&table.source) {
-                table.columns.retain(|c| held.contains(&c.name));
+    // The schema each run reads: each table as it was kept or as it was
+    // read anew, only the columns the source held of it then, each of the
+    // type the source gave it then, the caller's meanings kept, as the
+    // reference's engine copies the table it kept for each gather
+    // (`sources.py:72-88`) and sets the schema's meanings on it
+    // (`relational.py:549-551`); a column the caller holds that the table
+    // lacks is no column of it. The checks over what the source holds come
+    // after, as the reference's do.
+    let kept = asker.kept();
+    let tables: Vec<&sdm_contract::ops::ReadUnder> = kept.iter().chain(&read_under).collect();
+    let located = pending
+        .map(|held| -> Result<SourceDescription, CoreError> {
+            let mut found = std::collections::BTreeMap::new();
+            for table in &held.tables {
+                if let Some(read) = tables.iter().find(|r| r.relation == table.source) {
+                    for column in &read.columns {
+                        found.insert(
+                            (table.name.clone(), column.name.clone()),
+                            column.source.clone(),
+                        );
+                    }
+                }
             }
-        }
-    }
+            let mut located = sdm_schema::held::read(held.clone(), &found, false)?.by_the_source();
+            for table in &mut located.tables {
+                if let Some(read) = tables.iter().find(|r| r.relation == table.source) {
+                    table
+                        .columns
+                        .retain(|c| read.columns.iter().any(|kept| kept.name == c.name));
+                }
+            }
+            Ok(located)
+        })
+        .transpose()?;
     asker.tables_located(read_under, located.clone());
     Ok(located)
 }

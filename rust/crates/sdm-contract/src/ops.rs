@@ -601,14 +601,32 @@ pub struct HeldSchema {
     pub read_under: Vec<ReadUnder>,
 }
 
-/// One relation a schema read, and the namespace it read it under
-/// ([`HeldSchema::read_under`]).
+/// One relation a schema read and kept ([`HeldSchema::read_under`]), as the
+/// reference's `EngineTables` keeps the engine's table it read: the
+/// namespace it read it under, and the table as it read it, each column
+/// the source held of it with the facts read of it then (contract v28,
+/// T3.4 fix 13). A later run reads the table as kept: only these columns,
+/// each of the type kept, and asks the source nothing more of it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ReadUnder {
     pub relation: Relation,
     /// Each part, outermost first, as the source answered it.
     pub namespace: Vec<String>,
+    /// The columns kept, in the catalog's order; none where the reading
+    /// keeps no table (such a relation is read anew). Absent from the JSON
+    /// when none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub columns: Vec<KeptColumn>,
+}
+
+/// One column of a kept table ([`ReadUnder::columns`]): its name, and what
+/// the source said of it when the table was kept.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct KeptColumn {
+    pub name: String,
+    pub source: SourceFacts,
 }
 
 /// One table as the host holds it.

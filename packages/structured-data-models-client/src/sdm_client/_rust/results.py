@@ -24,6 +24,7 @@ import dataclasses
 from collections.abc import Mapping
 from typing import Any, TypeVar
 
+from sdm_client._rust import codec
 from sdm_client._rust.codec import CodecError
 from sdm_client.errors import StructuredDataError
 
@@ -350,12 +351,40 @@ class Gathered:
     query: QueryFacts | None
 
 
-def read_under(value: Any) -> dict[str, tuple[str, ...]]:
+@dataclasses.dataclass(frozen=True)
+class Reading:
+    r"""One table a schema read and kept (the contract's ``ReadUnder``, T3.4),
+    as the old route's ``EngineTables`` keeps the engine's table it read:
+    the namespace it was read under, and each column the source held of it
+    with what the source said of it then (:class:`SourceFacts`), in the
+    catalog's order. A later ``materialize`` reads the table as kept."""
+
+    namespace: tuple[str, ...]
+    columns: tuple[tuple[str, SourceFacts], ...] = ()
+
+    def to_contract(self, source_name: str) -> dict[str, Any]:
+        r"""The reading as the contract writes it, of the relation of one
+        part ``source_name``."""
+        written: dict[str, Any] = {
+            'relation': codec.relation(source_name),
+            'namespace': list(self.namespace),
+        }
+        if self.columns:
+            written['columns'] = [
+                {'name': name, 'source': facts.to_contract()}
+                for name, facts in self.columns
+            ]
+        return written
+
+
+def read_under(value: Any) -> dict[str, Reading]:
     r"""The contract's ``read_under`` entries, each relation of one part by
-    its name, with the namespace it was read under."""
-    found: dict[str, tuple[str, ...]] = {}
+    its name, with the namespace it was read under and the columns kept."""
+    found: dict[str, Reading] = {}
     for each in _list(value, 'read_under'):
-        entry = _fields(each, 'a relation read', ('relation', 'namespace'))
+        entry = _fields(
+            each, 'a relation read', ('relation', 'namespace'), ('columns',)
+        )
         relation = _fields(
             entry['relation'],
             'a relation',
@@ -365,9 +394,21 @@ def read_under(value: Any) -> dict[str, tuple[str, ...]]:
         parts = _list(relation['source'], 'source')
         if len(parts) != 1:
             raise CodecError('a relation read is not of one part')
-        found[_text(parts[0], 'source')] = tuple(
-            _text(part, 'namespace')
-            for part in _list(entry['namespace'], 'namespace')
+        columns = []
+        for kept in _list(entry['columns'] or [], 'columns'):
+            column = _fields(kept, 'a column kept', ('name', 'source'))
+            columns.append(
+                (
+                    _text(column['name'], 'name'),
+                    SourceFacts.from_contract(column['source']),
+                )
+            )
+        found[_text(parts[0], 'source')] = Reading(
+            namespace=tuple(
+                _text(part, 'namespace')
+                for part in _list(entry['namespace'], 'namespace')
+            ),
+            columns=tuple(columns),
         )
     return found
 

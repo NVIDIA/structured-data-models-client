@@ -68,8 +68,8 @@ def held_schema(schema: Schema) -> dict[str, Any]:
     # holds a reading of, a table it holds now or not, as its engine reading
     # keeps every table it read.
     under = [
-        {'relation': codec.relation(source_name), 'namespace': list(parts)}
-        for source_name, parts in schema._read_under.items()
+        reading.to_contract(source_name)
+        for source_name, reading in schema._readings.items()
     ]
     if under:
         held_schema['read_under'] = under

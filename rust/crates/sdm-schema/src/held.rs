@@ -179,8 +179,9 @@ fn held_dtype(column: &HeldColumn, facts: &SourceFacts) -> Dtype {
 /// `held` as the schema the core works on: each table the host holds, in its
 /// order, its source, key, time column, repeated keys and links the host's;
 /// each column's meanings the host's, and what the source said of it: the
-/// facts the host holds, else those `found` gives (`materialize`'s reading
-/// of the source), else, with `by_type`, those its data type gives
+/// facts `found` gives (`materialize`'s reading of the source, or of the
+/// table as it was kept), else those the host holds, else, with `by_type`,
+/// those its data type gives
 /// ([`by_data_type`], `edit_schema`'s). A column with neither is left out,
 /// as the reference's engine reads only the columns its source holds. A
 /// table or column the host holds twice is the host's fault,
@@ -218,9 +219,9 @@ pub fn read(
                 .with_field("column", Detail::text(&column.name)));
             }
             let at = (table.name.clone(), column.name.clone());
-            let facts = match facts_held(&table, column) {
+            let facts = match found.get(&at) {
                 Some(facts) => facts.clone(),
-                None => match found.get(&at) {
+                None => match facts_held(&table, column) {
                     Some(facts) => facts.clone(),
                     None if by_type => {
                         unfacted.insert(at.clone());

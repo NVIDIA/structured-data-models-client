@@ -1946,7 +1946,7 @@
       ]
     },
     "ReadUnder": {
-      "description": "One relation a schema read, and the namespace it read it under\n([`HeldSchema::read_under`]).",
+      "description": "One relation a schema read and kept ([`HeldSchema::read_under`]), as the\nreference's `EngineTables` keeps the engine's table it read: the\nnamespace it read it under, and the table as it read it, each column\nthe source held of it with the facts read of it then (contract v28,\nT3.4 fix 13). A later run reads the table as kept: only these columns,\neach of the type kept, and asks the source nothing more of it.",
       "type": "object",
       "properties": {
         "relation": {
@@ -1958,12 +1958,36 @@
           "items": {
             "type": "string"
           }
+        },
+        "columns": {
+          "description": "The columns kept, in the catalog's order; none where the reading\nkeeps no table (such a relation is read anew). Absent from the JSON\nwhen none.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/KeptColumn"
+          }
         }
       },
       "additionalProperties": false,
       "required": [
         "relation",
         "namespace"
+      ]
+    },
+    "KeptColumn": {
+      "description": "One column of a kept table ([`ReadUnder::columns`]): its name, and what\nthe source said of it when the table was kept.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/SourceFacts"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "source"
       ]
     },
     "SchemaEdit": {

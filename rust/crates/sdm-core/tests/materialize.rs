@@ -147,12 +147,35 @@ fn shop() -> SourceDescription {
 }
 
 /// `description` as a host holds it, each column with its facts (T3.16).
+/// `description` as a host holds it once described: each table kept as the
+/// description read it, its columns with what the source said of each, as
+/// a described schema keeps every table its engine read, so a run reads
+/// none of them anew (T3.4 fixes 12 and 13).
 fn held_of(description: &SourceDescription) -> sdm_contract::ops::HeldSchema {
-    sdm_schema::held::held(
+    let mut held = sdm_schema::held::held(
         description,
         &BTreeSet::new(),
         &std::collections::BTreeMap::new(),
-    )
+    );
+    held.read_under = held
+        .tables
+        .iter()
+        .map(|table| sdm_contract::ops::ReadUnder {
+            relation: table.source.clone(),
+            namespace: Vec::new(),
+            columns: table
+                .columns
+                .iter()
+                .filter_map(|column| {
+                    Some(sdm_contract::ops::KeptColumn {
+                        name: column.name.clone(),
+                        source: column.source.clone()?,
+                    })
+                })
+                .collect(),
+        })
+        .collect();
+    held
 }
 
 /// A host provider declaring the requests materialize asks.

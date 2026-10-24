@@ -407,71 +407,57 @@ pub(crate) fn materialize(
                 if progress {
                     asker.says_progress();
                 }
-                // Each table read where this schema read its relation, as the
-                // reference keeps each table it read by its source name: under
-                // the namespace the schema read it under, where the source's
-                // own parts agree with it (`HeldSchema::read_under`); every
-                // other table where the source and its session say now.
-                let pinned: Vec<(sdm_contract::data::Relation, Vec<String>)> = held
-                    .tables
-                    .iter()
-                    .filter_map(|table| {
-                        table.source.single()?;
-                        let read = held
-                            .read_under
-                            .iter()
-                            .find(|r| r.relation == table.source)?;
-                        let data = asker.data()?;
-                        data.keeps(&read.namespace)
-                            .then(|| (table.source.clone(), read.namespace.clone()))
-                    })
-                    .collect();
-                // The tables the schema keeps no reading of, each read in full
-                // once the request's inputs are checked
-                // (`describe::initialize`), as the reference's engine reads
-                // every table it has not kept (`sources.py:61-71`): one of one
-                // part under the parts the session gives, where the provider
-                // leaves parts to the connection, and kept only where its
-                // namespace still agrees (above); any other kept wherever the
-                // schema read it. A host that keeps no record of the tables
-                // its schema read (one taking no notices,
-                // `Materialize::progress`) has every other table taken as
-                // kept: only that record says a table was not.
+                // The tables this schema kept, each as it kept it
+                // (`HeldSchema::read_under`), as the reference's `EngineTables`
+                // keeps the engine's table it read by its source name: a
+                // table of one part under a provider that leaves parts to the
+                // connection only where the source's own parts agree with the
+                // namespace it was read under, and read there. Every other
+                // table is read anew, in full, once the request's inputs are
+                // checked (`describe::initialize`), as the reference's engine
+                // reads every table it has not kept (`sources.py:61-71`).
                 let unsettled = asker
                     .data()
                     .is_some_and(crate::compose::DataAccess::unsettled);
-                let kept = |relation: &sdm_contract::data::Relation| {
-                    if unsettled && relation.single().is_some() {
-                        pinned.iter().any(|(pinned, _)| pinned == relation)
-                    } else {
-                        !progress
-                            || held
-                                .read_under
-                                .iter()
-                                .any(|read| read.relation == *relation)
-                    }
-                };
+                let mut kept: Vec<sdm_contract::ops::ReadUnder> = Vec::new();
                 let mut anew: Vec<sdm_contract::data::Relation> = Vec::new();
                 for table in &held.tables {
-                    if !kept(&table.source) && !anew.contains(&table.source) {
-                        anew.push(table.source.clone());
+                    if kept.iter().any(|k| k.relation == table.source)
+                        || anew.contains(&table.source)
+                    {
+                        continue;
+                    }
+                    let reading = held
+                        .read_under
+                        .iter()
+                        .find(|read| read.relation == table.source && !read.columns.is_empty());
+                    let keeps = reading.is_some_and(|read| {
+                        !(unsettled && table.source.single().is_some())
+                            || asker.data().is_some_and(|data| data.keeps(&read.namespace))
+                    });
+                    match reading {
+                        Some(read) if keeps => kept.push(read.clone()),
+                        _ => anew.push(table.source.clone()),
                     }
                 }
-                for (relation, parts) in pinned {
-                    asker.pin(&relation, parts);
+                for read in &kept {
+                    if unsettled && read.relation.single().is_some() {
+                        asker.pin(&read.relation, read.namespace.clone());
+                    }
+                    // A kept table is read as the columns it was kept with.
+                    asker.guard(
+                        &read.relation,
+                        read.columns.iter().map(|c| c.name.clone()).collect(),
+                    );
                 }
+                asker.keeps(kept);
                 asker.reads_anew(anew);
-                // A column with no facts is read from the source only once the
-                // request's inputs are checked (`describe::initialize`), as the
-                // reference's engine reads its tables after its materializer's
-                // checks; until then the schema is read by its columns' data
-                // types, as an edit reads it.
-                let lacking = !sdm_schema::held::lacking_facts(&held).is_empty();
-                let read = sdm_schema::held::read(
-                    held.clone(),
-                    &std::collections::BTreeMap::new(),
-                    lacking,
-                )?;
+                // Until the request's inputs are checked the schema is read as
+                // the caller holds it, a column with no facts by its data
+                // type, as an edit reads it; once they are, as each table was
+                // kept or read anew (`describe::initialize`).
+                let read =
+                    sdm_schema::held::read(held.clone(), &std::collections::BTreeMap::new(), true)?;
                 // The schema as the caller holds it first, as the reference's
                 // `check_consistent` reads it; then as its engine reads the
                 // source (T3.16 review round 1), where its facts are held.
@@ -479,8 +465,8 @@ pub(crate) fn materialize(
                 sdm_schema::assemble::check_links(&read.description, &read.types)?;
                 let description = read.by_the_source();
                 let source = crate::materialize::fingerprint(&provider, &description)?;
-                // Each table read as the columns its description holds, until
-                // a catalog read says which it holds.
+                // Each table read anew as the columns its description holds,
+                // until its catalog read says which it holds.
                 for table in &description.tables {
                     asker.guard_held(
                         &table.source,
@@ -491,11 +477,8 @@ pub(crate) fn materialize(
                             .collect(),
                     );
                 }
-                crate::materialize::run(
-                    asker,
-                    inputs(description, source, lacking.then_some(held), read.types),
-                )
-                .await
+                crate::materialize::run(asker, inputs(description, source, Some(held), read.types))
+                    .await
             }))
         }
         _ => Err(internal("a materialize run of another operation")),
