@@ -265,6 +265,22 @@ def test_the_spark_session_passes_the_reference_dispatch() -> None:
     assert log.recorder.kept[(0, 0)].num_rows == 1
 
 
+def test_a_connect_case_opens_its_source_by_detection() -> None:
+    # A connect case's user writes Source(connection): the old client's
+    # Schema.from_source refuses the bare connection (CL/schema.py:1665).
+    import sdm_connectors
+
+    class Connection:
+        pass
+
+    captured = run._CapturedPsycopg(Connection(), run.DriverLog())
+    source = run.warehouse_source(
+        'lakebase', captured, {'schema': 's'}, {'connect': 'lakebase'}
+    )
+    assert isinstance(source, sdm_connectors.PostgresSource)
+    assert source.connection is captured
+
+
 def test_psycopg_copy_stream_and_executemany_are_recorded() -> None:
     r"""P2-T2.1a-2: a psycopg statement run by copy, stream or executemany
     is recorded, never passed through unseen."""
@@ -468,7 +484,9 @@ def test_a_complete_capture_passes_and_holds_no_private_name() -> None:
         (lambda line: line['relations'].clear(), 'did not evaluate'),
         (lambda line: line.update(zone=''), 'no session zone'),
         (
-            lambda line: line['versions'].pop('databricks-sql-connector'),
+            lambda line: [
+                line['versions'].pop(name) for name in run._DRIVERS[line['leg']]
+            ],
             "'s driver recorded",
         ),
         (lambda line: line['recording'].update(commit=None), 'no commit'),
