@@ -546,8 +546,9 @@ def test_materialize_on_the_core_sends_the_old_routes_payloads(
             warnings.simplefilter('always')
             sent[route] = (
                 _payloads(_materialize(schema, query)),
+                # The core's warnings carry their code first.
                 sorted(
-                    str(w.message)
+                    re.sub(r'^\[[A-Z_]+\] ', '', str(w.message))
                     for w in shown
                     if 'seeded random sampling' in str(w.message)
                 ),

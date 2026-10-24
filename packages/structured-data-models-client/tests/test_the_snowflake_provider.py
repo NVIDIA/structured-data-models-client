@@ -26,14 +26,14 @@ from typing import Any
 
 import pyarrow as pa
 import pytest
+from sdm_connectors import SnowflakeSource
+from sdm_connectors.providers import PlanNotRun
 from snowflake.connector import SnowflakeConnection
 from snowflake.connector.errors import NotSupportedError, ProgrammingError
 
 from sdm_client._rust import run as rust_run
 from sdm_client._rust.providers import for_source
 from sdm_client._rust.providers.snowflake import SnowflakeProvider
-from sdm_connectors import SnowflakeSource
-from sdm_connectors.providers import PlanNotRun
 
 
 class _Cursor:
