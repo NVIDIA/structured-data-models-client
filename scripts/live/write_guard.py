@@ -55,6 +55,8 @@ Reads (the forms the old client and the runner issue), anywhere:
   <s>]``, ``SHOW IMPORTED KEYS IN TABLE <t>``, ``SHOW PARAMETERS LIKE <p>
   IN SESSION``, ``USE CATALOG | SCHEMA | DATABASE <s>`` and ``ALTER
   SESSION SET <p> = <value>`` of :data:`SESSION_PARAMETERS`.
+- Databricks ``DESCRIBE QUERY <read>`` only when ``<read>`` starts with
+  ``SELECT`` or ``WITH`` and passes the same guarded-read validation.
 
 Writes (the forms the contract loader issues), each target ``<t>`` fully
 qualified in the test schema (``<database>.<schema>.<object>``; Postgres
@@ -870,7 +872,7 @@ class WriteGuard:
             if self.dialect == 'databricks' and s.accept('QUERY'):
                 if _upper(s.peek()) not in ('SELECT', 'WITH'):
                     s.refuse('DESCRIBE QUERY must describe a read')
-                self._held(s.items[s.at:], WRITE_WORDS, s.what, read=True)
+                self._held(s.items[s.at :], WRITE_WORDS, s.what, read=True)
             else:
                 s.expect('TABLE')
                 s.accept('EXTENDED')
