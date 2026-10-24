@@ -42,6 +42,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.arrow.vector.ipc.ArrowReader;
@@ -216,6 +217,44 @@ class T313DatabricksServingTest {
       release.countDown();
       caller.shutdownNow();
       assertTrue(caller.awaitTermination(3, TimeUnit.SECONDS));
+    }
+  }
+
+  @Test
+  void timedOutSdkRefreshesDoNotAccumulateBlockedAuthenticationThreads() throws Exception {
+    CountDownLatch release = new CountDownLatch(1);
+    AtomicReference<Thread> worker = new AtomicReference<>();
+    try (Workspace workspace = new Workspace(body -> Answer.of(200, "{}"))) {
+      WorkspaceClient client = new WorkspaceClient(new DatabricksConfig().setHost(workspace.host())
+          .setCredentialsProvider(CredentialsProvider.from("sdm-test", ignored -> () -> {
+            worker.set(Thread.currentThread());
+            // A driver/network library can ignore interruption until its own IO timeout.
+            while (release.getCount() != 0) {
+              try {
+                release.await(5, TimeUnit.SECONDS);
+              } catch (InterruptedException error) {
+                // Deliberately model that library rather than pretending cancel closes its IO.
+              }
+            }
+            return Map.of("Authorization", "Bearer late-token");
+          })));
+      DatabricksServing serving = DatabricksServing.of(client, ENDPOINT)
+          .timeout(Duration.ofMillis(150));
+      assertEquals(504, assertThrows(Host.EndpointFailed.class,
+          () -> serving.post(new byte[] {'{', '}'})).status());
+      assertEquals(504, assertThrows(Host.EndpointFailed.class,
+          () -> serving.timeout(Duration.ofMillis(150)).post(new byte[] {'{', '}'})).status());
+      String workerName = worker.get().getName();
+      assertEquals(1L, Thread.getAllStackTraces().keySet().stream()
+          .filter(thread -> thread.isAlive() && thread.getName().equals(workerName)).count());
+      assertTrue(workspace.bodies.isEmpty());
+    } finally {
+      release.countDown();
+      Thread refresh = worker.get();
+      if (refresh != null) {
+        refresh.join(3000);
+        assertFalse(refresh.isAlive());
+      }
     }
   }
 
