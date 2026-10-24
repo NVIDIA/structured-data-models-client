@@ -7,8 +7,11 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
+import subprocess
 import sys
+import textwrap
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from typing import Any
@@ -34,26 +37,53 @@ def _module(relative: str) -> ModuleType:
 
 @pytest.mark.parametrize('route', ['old', 'core'])
 def test_smoke_dry_run_reaches_the_requested_implementation(
-    route: str, monkeypatch: pytest.MonkeyPatch
+    route: str, tmp_path: Path
 ) -> None:
-    smoke = _module('scripts/live/rfm_smoke.py')
-    monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
-    original = _routing.route
-    seen: list[tuple[str, str]] = []
+    # The command deliberately blocks sockets and changes logging for its
+    # entire process. Keep those protections out of the pytest process.
+    script = f"""
+    import importlib.util
+    import json
+    import sys
+    from sdm_client import _routing
 
-    def audited(paths: tuple[str, ...]) -> str:
+    original = _routing.route
+    seen = []
+
+    def audited(paths):
         selected = original(paths)
         operation = paths[0].split('/')[0]
         if operation in (
-            'schema.from-source',
-            'query.materialize',
-            'client.predict',
+            'schema.from-source', 'query.materialize', 'client.predict'
         ):
             seen.append((operation, selected))
         return selected
 
-    monkeypatch.setattr(_routing, 'route', audited)
-    assert smoke.main(['--dry-run', '--route', route]) == 0
+    _routing.route = audited
+    spec = importlib.util.spec_from_file_location(
+        'rfm_smoke', {str(ROOT / 'scripts/live/rfm_smoke.py')!r}
+    )
+    smoke = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = smoke
+    spec.loader.exec_module(smoke)
+    status = smoke.main(['--dry-run', '--route', {route!r}])
+    print('route-audit: ' + json.dumps(seen))
+    sys.exit(status)
+    """
+    done = subprocess.run(
+        [sys.executable, '-c', textwrap.dedent(script)],
+        env={
+            key: value
+            for key, value in os.environ.items()
+            if key != _routing.ENVIRONMENT
+        },
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert done.returncode == 0, done.stdout + done.stderr
+    seen = json.loads(done.stdout.split('route-audit: ', 1)[1])
     assert {operation for operation, _ in seen} == {
         'schema.from-source',
         'query.materialize',
