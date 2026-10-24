@@ -7,7 +7,11 @@ from datetime import timedelta, timezone
 
 import pandas as pd
 import pytest
-from sdm_relational_engine.rfm.base.utils import Timestamp, to_datetime
+from sdm_relational_engine.rfm.base.utils import (
+    Timestamp,
+    shift_time,
+    to_datetime,
+)
 
 
 def test_timestamp() -> None:
@@ -66,3 +70,32 @@ def test_to_datetime_does_not_warn_about_already_null_values() -> None:
     with warnings.catch_warnings():
         warnings.simplefilter('error')
         assert to_datetime(ser, 'TS').isna().tolist() == [False, True, True]
+
+
+@pytest.mark.parametrize(
+    'offset',
+    [
+        pd.DateOffset(),
+        pd.DateOffset(days=1),
+        pd.DateOffset(months=1, days=-31),
+        -pd.DateOffset(days=2) * 3,
+        pd.DateOffset(n=0, year=2022),
+        pd.DateOffset(days=0, normalize=True),
+        pd.offsets.MonthEnd(0),
+    ],
+)
+def test_shift_time_moves_by_an_offset_that_moves(
+    offset: pd.DateOffset,
+) -> None:
+    time = pd.Timestamp('2020-02-01 13:30')
+    assert shift_time(time, offset) == time + offset
+
+
+@pytest.mark.parametrize(
+    'offset',
+    [pd.DateOffset(0), pd.DateOffset(days=0), pd.DateOffset(days=1) * 0],
+)
+def test_shift_time_leaves_the_earliest_time_where_it_is(
+    offset: pd.DateOffset,
+) -> None:
+    assert shift_time(pd.Timestamp.min, offset) == pd.Timestamp.min

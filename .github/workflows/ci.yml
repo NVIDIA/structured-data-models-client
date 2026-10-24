@@ -199,17 +199,25 @@ jobs:
           print('\n'.join(names))
           if len(names) != 5:
               sys.exit(f'expected 5 wheels, built {len(names)}')
+          if len({n.split('-')[0] for n in names}) != 5:
+              sys.exit('expected one wheel per distribution')
           if len(versions) != 1:
               sys.exit(f'distributions disagree on the version: {sorted(versions)}')
           pathlib.Path('dist/VERSION').write_text(versions.pop())
           EOF
       # Building each one proves nothing about installing them together. A pin
       # only one distribution carries makes the set unsatisfiable, and the
-      # resolver is the only thing that says so.
+      # resolver is the only thing that says so. Every one is named by file:
+      # once a version is on PyPI, `--find-links` with `==$VERSION` resolves
+      # the published release as readily as the wheel built here. The
+      # pure-Python wheels are named in full; the engine's tag is the runner's,
+      # and the check above leaves exactly one.
       - run: |
           VERSION=$(cat dist/VERSION)
-          pip install --dry-run --find-links "$GITHUB_WORKSPACE/dist" \
-            "structured-data-models-client[relational,sqlite,duckdb]==$VERSION"
+          pip install --dry-run \
+            "dist/structured_data_models_client-$VERSION-py3-none-any.whl[relational,sqlite,duckdb]" \
+            dist/structured_data_models_{api,pql,connectors}-$VERSION-py3-none-any.whl \
+            dist/structured_data_models_relational_engine-$VERSION-*.whl
       # The wheels only: dist/ also carries VERSION for the jobs downstream,
       # and twine refuses anything that is not a distribution.
       - run: pip install --upgrade twine && twine check dist/*.whl
@@ -250,25 +258,16 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # The engine pins its siblings by exact version, which exist only as
-      # wheels on disk; see the release workflow.
+      # The engine pins its siblings by exact version. Its `before-test`
+      # installs these by file before the engine, so the smoke test never
+      # takes the published release of the same version instead.
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: wheels
           path: _sibling_wheels
-      # Only Linux runs in a container, where the engine's
-      # `[tool.cibuildwheel.linux]` already names /project/_sibling_wheels.
-      - name: Point the wheel test environments at the sibling wheels
+      - name: Build only this row's architecture
         shell: bash
-        run: |
-          echo "${{ matrix.archs }}" >> "$GITHUB_ENV"
-          case "${{ runner.os }}" in
-            Linux) ;;
-            # cibuildwheel layers its own `environment` over the host's, so a
-            # plain variable reaches the build and test environments without
-            # displacing what the engine's pyproject sets per platform.
-            *) echo "PIP_FIND_LINKS=${{ github.workspace }}/_sibling_wheels" >> "$GITHUB_ENV" ;;
-          esac
+        run: echo "${{ matrix.archs }}" >> "$GITHUB_ENV"
 
       - uses: pypa/cibuildwheel@b3395e271a35f73dad77f21802abe9b986dfe299 # v4.3.1
         with:
@@ -325,14 +324,40 @@ jobs:
       - run: |
           pip install --upgrade pip pytest requests-mock
           VERSION=$(cat dist/VERSION)
-          pip install --find-links "$GITHUB_WORKSPACE/dist" \
-            "structured-data-models-client[sqlite,duckdb]==$VERSION"
+          pip install \
+            "dist/structured_data_models_client-$VERSION-py3-none-any.whl[sqlite,duckdb]" \
+            dist/structured_data_models_{api,pql,connectors}-$VERSION-py3-none-any.whl
       - name: The installed distribution is what gets imported, and it is typed
         working-directory: /tmp
         run: |
           python - <<'EOF'
-          import pathlib
+          import json, os, pathlib
+          from importlib.metadata import distribution
+          from urllib.parse import urlparse
+          from urllib.request import url2pathname
           import predictive_query, sdm_api, sdm_client, sdm_connectors
+
+          # The same version on PyPI resolves as readily as the wheel built
+          # here, and then this job tests the published release instead.
+          built = pathlib.Path(os.environ['GITHUB_WORKSPACE'], 'dist').resolve()
+          for name in (
+              'structured-data-models-client',
+              'structured-data-models-api',
+              'structured-data-models-pql',
+              'structured-data-models-connectors',
+          ):
+              recorded = distribution(name).read_text('direct_url.json')
+              url = json.loads(recorded or '{}').get('url', '')
+              parsed = urlparse(url)
+              source = (
+                  pathlib.Path(url2pathname(parsed.path)).resolve().parent
+                  if parsed.scheme == 'file'
+                  else None
+              )
+              assert source == built, (
+                  f'{name} was installed from {url or "an index"}, '
+                  f'not from the wheel built here'
+              )
 
           for module in (sdm_api, sdm_client, sdm_connectors, predictive_query):
               location = pathlib.Path(module.__file__).resolve()
@@ -370,8 +395,9 @@ jobs:
       - run: |
           pip install --upgrade pip cyclonedx-bom
           VERSION=$(cat dist/VERSION)
-          pip install --find-links "$GITHUB_WORKSPACE/dist" \
-            "structured-data-models-client[sqlite,duckdb,postgres,databricks,snowflake,s3]==$VERSION"
+          pip install \
+            "dist/structured_data_models_client-$VERSION-py3-none-any.whl[sqlite,duckdb,postgres,databricks,snowflake,s3]" \
+            dist/structured_data_models_{api,pql,connectors}-$VERSION-py3-none-any.whl
           cyclonedx-py environment --of JSON --validate -o dist/sbom.cyclonedx.json
           python -c "import json,sys; d=json.load(open('dist/sbom.cyclonedx.json')); names={c['name'] for c in d.get('components', [])}; missing={'structured-data-models-client','structured-data-models-api','structured-data-models-pql','structured-data-models-connectors'} - names; print(f'{len(names)} components'); sys.exit(f'SBOM missing {sorted(missing)}' if missing else 0)"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

@@ -193,17 +193,25 @@ build:
       print('\n'.join(names))
       if len(names) != 5:
           sys.exit(f'expected 5 wheels, built {len(names)}')
+      if len({n.split('-')[0] for n in names}) != 5:
+          sys.exit('expected one wheel per distribution')
       if len(versions) != 1:
           sys.exit(f'distributions disagree on the version: {sorted(versions)}')
       pathlib.Path('dist/VERSION').write_text(versions.pop())
       EOF
     # Building each one proves nothing about installing them together. A pin
     # that only one distribution carries makes the set unsatisfiable, and the
-    # resolver is the only thing that says so.
+    # resolver is the only thing that says so. Every one is named by file:
+    # once a version is on PyPI, `--find-links` with `==$VERSION` resolves the
+    # published release as readily as the wheel built here.
     - |
       VERSION=$(cat dist/VERSION)
-      pip install --dry-run --find-links "$CI_PROJECT_DIR/dist" \
-        "structured-data-models-client[relational,sqlite,duckdb]==$VERSION"
+      pip install --dry-run \
+        "dist/structured_data_models_client-$VERSION-py3-none-any.whl[relational,sqlite,duckdb]" \
+        "dist/structured_data_models_api-$VERSION-py3-none-any.whl" \
+        "dist/structured_data_models_pql-$VERSION-py3-none-any.whl" \
+        "dist/structured_data_models_connectors-$VERSION-py3-none-any.whl" \
+        dist/structured_data_models_relational_engine-"$VERSION"-*.whl
   artifacts:
     paths:
       - dist/
@@ -245,8 +253,7 @@ wheels:
   variables:
     DOCKER_HOST: tcp://docker:2375
     DOCKER_TLS_CERTDIR: ""
-    # Into the manylinux container too. cibuildwheel prepends passed variables
-    # to the `environment` pyproject sets, so PIP_FIND_LINKS still applies.
+    # Into the manylinux container too, where the smoke test installs.
     CIBW_ENVIRONMENT_PASS_LINUX: PIP_INDEX_URL
   parallel:
     matrix:
@@ -272,7 +279,7 @@ wheels:
       fi
     - pip install -q build 'cibuildwheel==4.3.0'
     # The engine's smoke test installs it against these, which exist nowhere
-    # but here until a release; `[tool.cibuildwheel.linux]` points pip at them.
+    # but here until a release; its `before-test` installs them by file.
     - |
       for package in structured-data-models-api structured-data-models-pql structured-data-models-client structured-data-models-connectors; do
         ( cd "packages/$package" && python -m build --wheel --outdir "$CI_PROJECT_DIR/_sibling_wheels" . )
@@ -336,7 +343,13 @@ installed-wheel:
   script:
     - pip install -q pytest requests-mock pytest-cov
     - VERSION=$(cat dist/VERSION)
-    - pip install -q --find-links "$CI_PROJECT_DIR/dist" "structured-data-models-client[sqlite,duckdb]==$VERSION"
+    # By file: the same version on PyPI resolves as readily as the wheel built
+    # here, and then this job tests the published release instead.
+    - pip install -q
+        "dist/structured_data_models_client-$VERSION-py3-none-any.whl[sqlite,duckdb]"
+        "dist/structured_data_models_api-$VERSION-py3-none-any.whl"
+        "dist/structured_data_models_pql-$VERSION-py3-none-any.whl"
+        "dist/structured_data_models_connectors-$VERSION-py3-none-any.whl"
     # Prove the installed distribution, not the checkout, is what is imported,
     # and that the typed marker survived the build. Written as one script that
     # raises, rather than a chain ending in `|| true`: a check that cannot fail
@@ -344,8 +357,31 @@ installed-wheel:
     - cd /tmp
     - |
       python - <<'EOF'
-      import pathlib
+      import json, os, pathlib
+      from importlib.metadata import distribution
+      from urllib.parse import urlparse
+      from urllib.request import url2pathname
       import predictive_query, sdm_api, sdm_client, sdm_connectors
+
+      built = pathlib.Path(os.environ['CI_PROJECT_DIR'], 'dist').resolve()
+      for name in (
+          'structured-data-models-client',
+          'structured-data-models-api',
+          'structured-data-models-pql',
+          'structured-data-models-connectors',
+      ):
+          recorded = distribution(name).read_text('direct_url.json')
+          url = json.loads(recorded or '{}').get('url', '')
+          parsed = urlparse(url)
+          source = (
+              pathlib.Path(url2pathname(parsed.path)).resolve().parent
+              if parsed.scheme == 'file'
+              else None
+          )
+          assert source == built, (
+              f'{name} was installed from {url or "an index"}, '
+              f'not from the wheel built here'
+          )
 
       for module in (sdm_api, sdm_client, sdm_connectors, predictive_query):
           location = pathlib.Path(module.__file__).resolve()
@@ -412,8 +448,11 @@ sbom:
   script:
     - pip install -q cyclonedx-bom
     - VERSION=$(cat dist/VERSION)
-    - pip install -q --find-links "$CI_PROJECT_DIR/dist"
-        "structured-data-models-client[sqlite,duckdb,postgres,databricks,snowflake,s3]==$VERSION"
+    - pip install -q
+        "dist/structured_data_models_client-$VERSION-py3-none-any.whl[sqlite,duckdb,postgres,databricks,snowflake,s3]"
+        "dist/structured_data_models_api-$VERSION-py3-none-any.whl"
+        "dist/structured_data_models_pql-$VERSION-py3-none-any.whl"
+        "dist/structured_data_models_connectors-$VERSION-py3-none-any.whl"
     - cyclonedx-py environment --of JSON --validate -o "$CI_PROJECT_DIR/dist/sbom.cyclonedx.json"
     - python -c "import json,sys; d=json.load(open('dist/sbom.cyclonedx.json'));
         names={c['name'] for c in d.get('components', [])};

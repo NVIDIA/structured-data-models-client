@@ -164,8 +164,7 @@ class DuckDBSampler(SQLSampler):
 
         with self._connection.cursor() as cursor:
             cursor.register(tmp_name, tmp)
-            cursor.execute(sql)
-            table = cursor.to_arrow_table()
+            table = cursor.sql(sql).to_arrow_table()
 
         batch = table['__kumo_batch__'].to_numpy()
         self._refuse_an_id_scored_twice(
@@ -233,8 +232,7 @@ class DuckDBSampler(SQLSampler):
 
         with self._connection.cursor() as cursor:
             cursor.register(tmp_name, tmp)
-            cursor.execute(sql)
-            table = cursor.to_arrow_table()
+            table = cursor.sql(sql).to_arrow_table()
 
         batch = table['__kumo_batch__'].to_numpy()
         batch_index = table.schema.get_field_index('__kumo_batch__')
@@ -288,8 +286,7 @@ class DuckDBSampler(SQLSampler):
 
         with self._connection.cursor() as cursor:
             cursor.register(tmp_name, tmp)
-            cursor.execute(sql)
-            table = cursor.to_arrow_table()
+            table = cursor.sql(sql).to_arrow_table()
 
         batch = table['__kumo_batch__'].to_numpy()
         batch_index = table.schema.get_field_index('__kumo_batch__')
@@ -412,8 +409,7 @@ class DuckDBSampler(SQLSampler):
             )
 
         with self._connection.cursor() as cursor:
-            cursor.execute(sql, parameters)
-            table = cursor.to_arrow_table()
+            table = cursor.sql(sql, params=parameters).to_arrow_table()
 
         return Table._sanitize(
             df=table.to_pandas(types_mapper=pd.ArrowDtype),
