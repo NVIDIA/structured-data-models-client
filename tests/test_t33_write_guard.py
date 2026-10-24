@@ -432,7 +432,10 @@ def _fake_drivers(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
 
     class SnowflakeConnection:
         def cursor(self) -> SnowflakeCursor:
-            return SnowflakeCursor()
+            # As the connector's: a cursor knows its connection.
+            made = SnowflakeCursor()
+            made.connection = self  # type: ignore[attr-defined]
+            return made
 
         def execute_string(self, text: str) -> list[SnowflakeCursor]:
             seen.append(text)
@@ -449,11 +452,16 @@ def _fake_drivers(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
             return {}
 
     class Session:
-        connection = SnowflakeConnection()
         _session_id = 42
         # What close sends to cancel the session's queries (Snowpark's
         # cancel_all, session.py).
         closing = 'select system$cancel_all_queries(42)'
+
+        def __init__(self) -> None:
+            # As Snowpark's: the session's server connection (_conn) holds
+            # the connector's connection (_conn).
+            self.connection = SnowflakeConnection()
+            self._conn = types.SimpleNamespace(_conn=self.connection)
 
         def sql(self, query: str) -> str:
             seen.append(query)
@@ -1307,3 +1315,31 @@ def test_snowpark_cancels_its_own_queries_only_while_it_closes(
         session.closing = sent
         with pytest.raises(wg.WriteRefused):
             session.close()
+
+
+def test_snowpark_close_admits_its_cancel_only_on_its_own_connection(
+    installed: Any,
+) -> None:
+    # Codex T3.20 r1 P2: while a session closes, its cancel is admitted on
+    # that session's own Snowflake connection alone. The same statement on
+    # another Snowflake connection, a cursor of no connection, a Databricks
+    # cursor or a Spark session is refused, during the close and outside it.
+    d, seen = installed, installed['seen']
+    statement = 'select system$cancel_all_queries(42)'
+    other = d['SnowflakeConnection']()
+    sends = [
+        lambda: other.cursor().execute(statement),
+        lambda: d['SnowflakeCursor']().execute(statement),
+        lambda: d['Cursor']().execute(statement),
+        lambda: d['SparkSession']().sql(statement),
+    ]
+    for send in sends:
+        session = d['Session']()
+        session.cancel_all = send  # type: ignore[method-assign]
+        with pytest.raises(wg.WriteRefused):
+            session.close()
+        with pytest.raises(wg.WriteRefused):
+            send()
+    assert statement not in seen
+    d['Session']().close()
+    assert seen == [statement]
