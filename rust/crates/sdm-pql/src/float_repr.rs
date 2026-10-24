@@ -3,11 +3,20 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! The text Python gives a float, the shortest that reads back to it, in
-//! Python's layout: one of the two emulation modules this crate may hold
+//! Python's layout: one of the emulation modules this crate may hold
 //! (`scripts/rust_core/emulation-allowlist.txt`, Phase 1 decisions A4).
 //! The reference writes a float constant built from a value with it
 //! (`Constant.from_value`); here it writes a float literal's value into
 //! messages, and decides no validity (Phase 1 decisions, E9).
+//!
+//! From T3.5 it also writes the other values the old client's messages
+//! quote (a view definition's YAML values and the pieces of an expression):
+//! [`Shown`], a value as Python held it, with its `repr` and `str`, and
+//! [`text_repr`], a text's `repr`. They decide nothing either: `sdm-core`
+//! words a view's conversion with them.
+
+use crate::conversions::{Clock, date_iso, datetime_iso};
+use crate::printable::NOT_PRINTABLE;
 
 /// The text Python's `repr` gives `x`.
 pub fn float_repr(x: f64) -> String {
@@ -70,6 +79,264 @@ pub fn float_repr(x: f64) -> String {
         )
     };
     format!("{sign}{text}")
+}
+
+/// A value as Python held it, to be written as Python writes it: the
+/// values PyYAML's `safe_load` makes, which the old client's messages quote.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Shown {
+    None,
+    Bool(bool),
+    /// An integer, as its decimal digits, a `-` before them if negative.
+    Int(String),
+    Float(f64),
+    Text(String),
+    Date {
+        year: i32,
+        month: u8,
+        day: u8,
+    },
+    /// A `datetime`, with its offset from UTC in seconds if it has one.
+    DateTime {
+        year: i32,
+        month: u8,
+        day: u8,
+        hour: u8,
+        minute: u8,
+        second: u8,
+        microsecond: u32,
+        offset: Option<i32>,
+    },
+    List(Vec<Shown>),
+    /// A `dict`'s entries in order.
+    Dict(Vec<(Shown, Shown)>),
+    /// A list (`true`) or a `dict` (`false`) inside itself, which Python
+    /// writes as `[...]` or `{...}`.
+    Recursive(bool),
+}
+
+/// A write past a [`Sink`]'s bound.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Full;
+
+/// Text written up to a bound in characters: a write that would pass it
+/// fails, and nothing past it is ever kept.
+pub struct Sink {
+    out: String,
+    room: usize,
+}
+
+impl Sink {
+    /// A sink for at most `room` characters.
+    pub fn new(room: usize) -> Sink {
+        Sink {
+            out: String::new(),
+            room,
+        }
+    }
+
+    pub fn push(&mut self, text: &str) -> Result<(), Full> {
+        let count = text.chars().count();
+        self.room = self.room.checked_sub(count).ok_or(Full)?;
+        self.out.push_str(text);
+        Ok(())
+    }
+
+    pub fn push_char(&mut self, c: char) -> Result<(), Full> {
+        self.room = self.room.checked_sub(1).ok_or(Full)?;
+        self.out.push(c);
+        Ok(())
+    }
+
+    pub fn into_string(self) -> String {
+        self.out
+    }
+}
+
+impl Shown {
+    /// Python's `repr`: `'text'`, `True`, `None`, `[1, 'a']`,
+    /// `{'name': 'x'}`, `datetime.date(2024, 1, 1)`.
+    pub fn repr(&self) -> String {
+        self.repr_within(usize::MAX).unwrap_or_default()
+    }
+
+    /// Python's `str`: a text as itself, a date or time in ISO form with a
+    /// space between them (`2024-01-01 10:00:00`), anything else its
+    /// [`Shown::repr`].
+    pub fn text(&self) -> String {
+        self.text_within(usize::MAX).unwrap_or_default()
+    }
+
+    /// [`Shown::repr`], unless it is longer than `limit` characters, in
+    /// which case no more than `limit` is written.
+    pub fn repr_within(&self, limit: usize) -> Option<String> {
+        let mut sink = Sink::new(limit);
+        self.write_repr(&mut sink).ok()?;
+        Some(sink.into_string())
+    }
+
+    /// [`Shown::text`], unless it is longer than `limit` characters, in
+    /// which case no more than `limit` is written.
+    pub fn text_within(&self, limit: usize) -> Option<String> {
+        let mut sink = Sink::new(limit);
+        self.write_text(&mut sink).ok()?;
+        Some(sink.into_string())
+    }
+
+    fn write_repr(&self, sink: &mut Sink) -> Result<(), Full> {
+        match self {
+            Shown::None => sink.push("None"),
+            Shown::Bool(true) => sink.push("True"),
+            Shown::Bool(false) => sink.push("False"),
+            Shown::Int(n) => sink.push(n),
+            Shown::Float(x) => sink.push(&float_repr(*x)),
+            Shown::Text(text) => write_text_repr(text, sink),
+            Shown::Date { year, month, day } => {
+                sink.push(&format!("datetime.date({year}, {month}, {day})"))
+            }
+            Shown::DateTime {
+                year,
+                month,
+                day,
+                hour,
+                minute,
+                second,
+                microsecond,
+                offset,
+            } => {
+                let mut fields = vec![
+                    year.to_string(),
+                    month.to_string(),
+                    day.to_string(),
+                    hour.to_string(),
+                    minute.to_string(),
+                ];
+                if *second > 0 || *microsecond > 0 {
+                    fields.push(second.to_string());
+                }
+                if *microsecond > 0 {
+                    fields.push(microsecond.to_string());
+                }
+                let zone = match offset {
+                    None => String::new(),
+                    Some(0) => ", tzinfo=datetime.timezone.utc".into(),
+                    Some(seconds) => {
+                        let (days, rest) = (seconds.div_euclid(86_400), seconds.rem_euclid(86_400));
+                        let delta = match (days, rest) {
+                            (0, s) => format!("seconds={s}"),
+                            (d, 0) => format!("days={d}"),
+                            (d, s) => format!("days={d}, seconds={s}"),
+                        };
+                        format!(", tzinfo=datetime.timezone(datetime.timedelta({delta}))")
+                    }
+                };
+                sink.push(&format!("datetime.datetime({}{zone})", fields.join(", ")))
+            }
+            Shown::List(items) => {
+                sink.push_char('[')?;
+                for (at, item) in items.iter().enumerate() {
+                    if at > 0 {
+                        sink.push(", ")?;
+                    }
+                    item.write_repr(sink)?;
+                }
+                sink.push_char(']')
+            }
+            Shown::Dict(pairs) => {
+                sink.push_char('{')?;
+                for (at, (key, value)) in pairs.iter().enumerate() {
+                    if at > 0 {
+                        sink.push(", ")?;
+                    }
+                    key.write_repr(sink)?;
+                    sink.push(": ")?;
+                    value.write_repr(sink)?;
+                }
+                sink.push_char('}')
+            }
+            Shown::Recursive(true) => sink.push("[...]"),
+            Shown::Recursive(false) => sink.push("{...}"),
+        }
+    }
+
+    fn write_text(&self, sink: &mut Sink) -> Result<(), Full> {
+        match self {
+            Shown::Text(text) => sink.push(text),
+            Shown::Date { year, month, day } => sink.push(&date_iso(*year, *month, *day)),
+            Shown::DateTime {
+                year,
+                month,
+                day,
+                hour,
+                minute,
+                second,
+                microsecond,
+                offset,
+            } => sink.push(&datetime_iso(
+                (*year, *month, *day),
+                Clock {
+                    hour: *hour,
+                    minute: *minute,
+                    second: *second,
+                    microsecond: *microsecond,
+                },
+                offset.map(|seconds| i64::from(seconds) * 1_000_000),
+                ' ',
+            )),
+            _ => self.write_repr(sink),
+        }
+    }
+}
+
+/// Python's `repr` of a text: in single quotes unless it holds one and no
+/// double quote, a backslash and that quote escaped, `\t`, `\n` and `\r` as
+/// such, and each character Python does not print as `\xhh`, `\uhhhh` or
+/// `\Uhhhhhhhh`.
+pub fn text_repr(text: &str) -> String {
+    let mut sink = Sink::new(usize::MAX);
+    let _ = write_text_repr(text, &mut sink);
+    sink.into_string()
+}
+
+fn write_text_repr(text: &str, sink: &mut Sink) -> Result<(), Full> {
+    let quote = if text.contains('\'') && !text.contains('"') {
+        '"'
+    } else {
+        '\''
+    };
+    sink.push_char(quote)?;
+    for c in text.chars() {
+        match c {
+            '\\' => sink.push("\\\\")?,
+            '\t' => sink.push("\\t")?,
+            '\n' => sink.push("\\n")?,
+            '\r' => sink.push("\\r")?,
+            _ if c == quote => {
+                sink.push_char('\\')?;
+                sink.push_char(c)?;
+            }
+            _ if printable(c) => sink.push_char(c)?,
+            _ => {
+                let code = u32::from(c);
+                if code < 0x100 {
+                    sink.push(&format!("\\x{code:02x}"))?;
+                } else if code < 0x10000 {
+                    sink.push(&format!("\\u{code:04x}"))?;
+                } else {
+                    sink.push(&format!("\\U{code:08x}"))?;
+                }
+            }
+        }
+    }
+    sink.push_char(quote)
+}
+
+/// Whether Python prints `c` as itself in a `repr` (`str.isprintable`),
+/// by Python 3.12's own table ([`crate::printable`]).
+fn printable(c: char) -> bool {
+    let code = u32::from(c);
+    let at = NOT_PRINTABLE.partition_point(|&(first, _)| first <= code);
+    at == 0 || NOT_PRINTABLE[at - 1].1 < code
 }
 
 #[cfg(test)]

@@ -38,9 +38,11 @@ NOTICES = (
 )
 #: The targets the wheel ships for (design, "Packaging"; KO2-40).
 TARGETS = ('x86_64-unknown-linux-gnu', 'aarch64-unknown-linux-gnu')
-#: The files a crate ships its terms in, at its root.
+#: The files a crate ships its terms in, at its root; `MIT-LICENSE` and
+#: `Apache-LICENSE` are yaml-rust2's names for its two licences (T3.5).
 TERMS = re.compile(
-    r'^(?:licen[cs]e|copying|copyright|notice|unlicense)(?:[-_.].*)?$',
+    r'^(?:(?:mit|apache)[-_])?'
+    r'(?:licen[cs]e|copying|copyright|notice|unlicense)(?:[-_.].*)?$',
     re.IGNORECASE,
 )
 

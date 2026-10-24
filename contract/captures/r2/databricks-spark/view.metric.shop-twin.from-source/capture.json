@@ -1,0 +1,705 @@
+{
+ "format": "sdm-capture/1",
+ "case": "view.metric.shop-twin.from-source",
+ "leg": "databricks-spark",
+ "recording_commit": "792c507229e7652d34d28c84e436d2a44a2f803e",
+ "reference_commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+ "versions": {
+  "databricks-connect": "17.3.14",
+  "duckdb": "1.5.6",
+  "numpy": "2.1.3",
+  "pandas": "2.2.3",
+  "pyarrow": "19.0.1",
+  "pyspark": "4.0.0+databricks.connect.17.3.14",
+  "python": "3.12.3",
+  "runtime": "client.4.10"
+ },
+ "input_hash": "69d1172fd1d023135b5f10dea59d8822db20f223108f26bd8bb5aab18f533f05",
+ "session": {
+  "time_zone": "Etc/UTC",
+  "null_order": "nulls_first"
+ },
+ "reference": {
+  "case": "view.metric.shop-twin.from-source@databricks-spark",
+  "core": null,
+  "driver": {
+   "capture": {
+    "bindings": [],
+    "cursors": 0,
+    "events": [],
+    "incomplete": [],
+    "passed_through": [
+     "spark.version"
+    ],
+    "statements": [
+     {
+      "error": null,
+      "handle": 0,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "46f6b469f0cfb29373c5eba90a668e6f08ac56e7ce4565dadf375895fa0987f8",
+        "method": "collect",
+        "rows": 23,
+        "values": {
+         "columns": [
+          "col_name",
+          "data_type",
+          "comment",
+          "metadata"
+         ],
+         "ordered": "e62f95ce4473b0882c8885fc402ebe275dcbaee79c0c12a554deaf644254b86c",
+         "types": null,
+         "unencodable": [],
+         "unordered": "73b42c76a828b69ce6da3d4cb247d34f0192d22a569f0b46cce5571712212f29"
+        }
+       }
+      ],
+      "sql": "DESCRIBE TABLE EXTENDED `{catalog}`.`{shop_schema}`.`{shop_metric_view_name}`",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 0,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{shop_schema}'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'orders'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "8a8691f9423cc87f7d9350856c3fddb3e437916df0b72a0506d25ef2e0f71521",
+        "method": "collect",
+        "rows": 5,
+        "values": {
+         "columns": [
+          "column_name",
+          "full_data_type",
+          "is_nullable",
+          "table_catalog",
+          "table_schema",
+          "table_name",
+          "table_type"
+         ],
+         "ordered": "6df00047d0fa76c3d34188abab0f7ccbbaf86e1c18e60a1fffbe450a27001d12",
+         "types": null,
+         "unencodable": [],
+         "unordered": "ad5d9f2da0ef32cd56404827dcb4de2ce668e07d5071af351e00dcdfb0b39b1d"
+        }
+       }
+      ],
+      "sql": "SELECT c.column_name, c.full_data_type, c.is_nullable,\n       c.table_catalog, c.table_schema, c.table_name,\n       t.table_type\nFROM `{catalog}`.information_schema.columns c\nJOIN `{catalog}`.information_schema.tables t\n  ON t.table_catalog = c.table_catalog\n AND t.table_schema = c.table_schema\n AND t.table_name = c.table_name\nWHERE c.table_schema = lower(?)\n  AND c.table_name = lower(?)\nORDER BY c.ordinal_position",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 0,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{shop_schema}'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'orders'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "method": "collect",
+        "rows": 0,
+        "values": {
+         "columns": [
+          "constraint_type",
+          "constraint_name",
+          "column_name"
+         ],
+         "ordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+         "types": null,
+         "unencodable": [],
+         "unordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        }
+       }
+      ],
+      "sql": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name\nFROM `{catalog}`.information_schema.table_constraints tc\nJOIN `{catalog}`.information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = lower(?)\n  AND tc.table_name = lower(?)\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE')",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 0,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{shop_schema}'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'users'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "a0cf313fc4ddea9fefa06fc88fe42c3faa6cd3ede8ec7e4ab3825e591d11926d",
+        "method": "collect",
+        "rows": 3,
+        "values": {
+         "columns": [
+          "column_name",
+          "full_data_type",
+          "is_nullable",
+          "table_catalog",
+          "table_schema",
+          "table_name",
+          "table_type"
+         ],
+         "ordered": "8313299664e3d12ba3be7f9368578764731292288aa85911b7d361c0c79a1882",
+         "types": null,
+         "unencodable": [],
+         "unordered": "e280649e720f37fa30eb180e3d8c0c158662e2d064c66632801ea728a290ee40"
+        }
+       }
+      ],
+      "sql": "SELECT c.column_name, c.full_data_type, c.is_nullable,\n       c.table_catalog, c.table_schema, c.table_name,\n       t.table_type\nFROM `{catalog}`.information_schema.columns c\nJOIN `{catalog}`.information_schema.tables t\n  ON t.table_catalog = c.table_catalog\n AND t.table_schema = c.table_schema\n AND t.table_name = c.table_name\nWHERE c.table_schema = lower(?)\n  AND c.table_name = lower(?)\nORDER BY c.ordinal_position",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 0,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{shop_schema}'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'users'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "method": "collect",
+        "rows": 0,
+        "values": {
+         "columns": [
+          "constraint_type",
+          "constraint_name",
+          "column_name"
+         ],
+         "ordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+         "types": null,
+         "unencodable": [],
+         "unordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        }
+       }
+      ],
+      "sql": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name\nFROM `{catalog}`.information_schema.table_constraints tc\nJOIN `{catalog}`.information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = lower(?)\n  AND tc.table_name = lower(?)\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE')",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 0,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{shop_schema}'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'products'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "9185cb6e5be75db151dadfbc922fe47683ebb6bff04e4def0bb48f7e8a6dd761",
+        "method": "collect",
+        "rows": 3,
+        "values": {
+         "columns": [
+          "column_name",
+          "full_data_type",
+          "is_nullable",
+          "table_catalog",
+          "table_schema",
+          "table_name",
+          "table_type"
+         ],
+         "ordered": "95c8363af93ad716b80c5c1fb9996b4fef94f26108e65266ea5397148e390ed1",
+         "types": null,
+         "unencodable": [],
+         "unordered": "fb4020baf2a3b13fa92b213120f97c8878ff35d6e8a1d6ce099c597bf6b75581"
+        }
+       }
+      ],
+      "sql": "SELECT c.column_name, c.full_data_type, c.is_nullable,\n       c.table_catalog, c.table_schema, c.table_name,\n       t.table_type\nFROM `{catalog}`.information_schema.columns c\nJOIN `{catalog}`.information_schema.tables t\n  ON t.table_catalog = c.table_catalog\n AND t.table_schema = c.table_schema\n AND t.table_name = c.table_name\nWHERE c.table_schema = lower(?)\n  AND c.table_name = lower(?)\nORDER BY c.ordinal_position",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 0,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{shop_schema}'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'products'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "method": "collect",
+        "rows": 0,
+        "values": {
+         "columns": [
+          "constraint_type",
+          "constraint_name",
+          "column_name"
+         ],
+         "ordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+         "types": null,
+         "unencodable": [],
+         "unordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        }
+       }
+      ],
+      "sql": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name\nFROM `{catalog}`.information_schema.table_constraints tc\nJOIN `{catalog}`.information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = lower(?)\n  AND tc.table_name = lower(?)\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE')",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 0,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "027f7ef34a7e8a54644f6762218c0965f1510a94f849db4683134e381247a855",
+        "method": "toArrow",
+        "rows": 1000,
+        "schema": [
+         {
+          "name": "order_id",
+          "type": "int64"
+         },
+         {
+          "name": "user_id",
+          "type": "int64"
+         },
+         {
+          "name": "product_id",
+          "type": "int64"
+         },
+         {
+          "name": "quantity",
+          "type": "int64"
+         },
+         {
+          "name": "ordered_at",
+          "type": "timestamp[us, tz=UTC]"
+         }
+        ],
+        "values": {
+         "columns": [
+          "order_id",
+          "user_id",
+          "product_id",
+          "quantity",
+          "ordered_at"
+         ],
+         "ordered": "85a047fa2934e483b0a35bdd796cf2e864142a095059337a3baddd1326afc2a3",
+         "types": null,
+         "unencodable": [],
+         "unordered": "e33e8345e3b415182a13df5f95ec3d6613024cc79c8e66b7dd0e5f10f03420e4"
+        }
+       }
+      ],
+      "sql": "SELECT `order_id`, `user_id`, `product_id`, `quantity`, `ordered_at` FROM `{catalog}`.`{shop_schema}`.`orders` LIMIT 1000",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 0,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "380b6435354c74d35815a5e534fe45d30ade9406accb67b176bac642cc167154",
+        "method": "toArrow",
+        "rows": 40,
+        "schema": [
+         {
+          "name": "user_id",
+          "type": "int64"
+         },
+         {
+          "name": "age",
+          "type": "int64"
+         },
+         {
+          "name": "country",
+          "type": "string"
+         }
+        ],
+        "values": {
+         "columns": [
+          "user_id",
+          "age",
+          "country"
+         ],
+         "ordered": "c21e6dd38b98e40e243a6749d9315fe9206159f24d97ea73b7c4ae862e9962be",
+         "types": null,
+         "unencodable": [],
+         "unordered": "a8807a9d9a8d9555cecdd3f22bc03bb947116d18c7ebf0dca83f39da392218ef"
+        }
+       }
+      ],
+      "sql": "SELECT `user_id`, `age`, `country` FROM `{catalog}`.`{shop_schema}`.`users` LIMIT 1000",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 0,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "1813aa8e5420a0dbef5e2c91b449792bec8787920c223c6a07f88ef7ee16e876",
+        "method": "toArrow",
+        "rows": 12,
+        "schema": [
+         {
+          "name": "product_id",
+          "type": "int64"
+         },
+         {
+          "name": "category",
+          "type": "string"
+         },
+         {
+          "name": "price",
+          "type": "double"
+         }
+        ],
+        "values": {
+         "columns": [
+          "product_id",
+          "category",
+          "price"
+         ],
+         "ordered": "72c1ca8efc52216fffa47a8584affc1e1f6c8883cd332cb6b61602886436db72",
+         "types": null,
+         "unencodable": [],
+         "unordered": "ed4a32bfaff9822bb14daf208c0f4e04a211b046725133ddb920b624bfd8bcdc"
+        }
+       }
+      ],
+      "sql": "SELECT `product_id`, `category`, `price` FROM `{catalog}`.`{shop_schema}`.`products` LIMIT 1000",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 0,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "bc794e3a9cd36f131d288d61e03befe3b38a48fbadf1d5f857d1351883609c1d",
+        "method": "collect",
+        "rows": 2,
+        "values": {
+         "columns": [
+          "k",
+          "n",
+          "d",
+          "z"
+         ],
+         "ordered": "e05ed028c2610439f53f69b0a7f734c30981a6fcca3fcfba59740e8486c01f51",
+         "types": null,
+         "unencodable": [],
+         "unordered": "e05ed028c2610439f53f69b0a7f734c30981a6fcca3fcfba59740e8486c01f51"
+        }
+       }
+      ],
+      "sql": "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT `user_id`) AS d, COUNT(CASE WHEN `user_id` IS NULL THEN 1 END) AS z\nFROM `{catalog}`.`{shop_schema}`.`users`\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT `product_id`) AS d, COUNT(CASE WHEN `product_id` IS NULL THEN 1 END) AS z\nFROM `{catalog}`.`{shop_schema}`.`products`",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 0,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "6e908e0cd7d87055388178da81f1580a7df6578fbf2bc3e40098aff5d3184f1a",
+        "method": "collect",
+        "rows": 1,
+        "values": {
+         "columns": [
+          "COUNT(*)",
+          "MIN(ordered_at)",
+          "MAX(ordered_at)",
+          "COUNT(ordered_at)"
+         ],
+         "ordered": "d66fc9f7dc6315f84bd8545072f34347f25a7d66f723b3f3dae83860052ac2cc",
+         "types": null,
+         "unencodable": [],
+         "unordered": "d66fc9f7dc6315f84bd8545072f34347f25a7d66f723b3f3dae83860052ac2cc"
+        }
+       }
+      ],
+      "sql": "SELECT COUNT(*), MIN(`ordered_at`), MAX(`ordered_at`), COUNT(`ordered_at`)\nFROM `{catalog}`.`{shop_schema}`.`orders`",
+      "stage": "from_source"
+     }
+    ]
+   },
+   "query_log": {
+    "bindings": 0,
+    "compared": 12,
+    "differing": [],
+    "statements": 12
+   }
+  },
+  "format": "sdm-observation/1",
+  "host": {
+   "warnings": []
+  },
+  "identity": {
+   "cell": "dbr17-pandas2",
+   "commit": {
+    "clean": true,
+    "sha": "792c507229e7652d34d28c84e436d2a44a2f803e"
+   },
+   "contract": null,
+   "inputs": {
+    "bases": "9d69fe4aea2be4a6a2d96ea03f5258147c537927e2c6e6716b6030836ebc62f8",
+    "case": "5a88dfefbc407b84ecbe3d2fca0cb03db892c0877577ad8a3cb35d166a9df6d4"
+   },
+   "native": null,
+   "native_loaded": false,
+   "operations": [],
+   "platform": "linux-aarch64",
+   "reference": {
+    "commit": {
+     "clean": true,
+     "sha": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1"
+    },
+    "environment": "1eea9905d5e8df5792760770da31b6d04953ff53a710743bc5f6369097863507",
+    "guard": {
+     "after": "passed",
+     "before": "passed"
+    }
+   },
+   "runner": "python-ref",
+   "versions": {
+    "duckdb": "1.5.6",
+    "numpy": "2.1.3",
+    "pandas": "2.2.3",
+    "pyarrow": "19.0.1",
+    "python": "3.12.3"
+   }
+  },
+  "outcome": {
+   "code": null,
+   "error": null,
+   "result": "success",
+   "stage": "from_source"
+  },
+  "public": {
+   "payloads": [],
+   "result": null,
+   "schema": {
+    "links": [
+     [
+      "orders",
+      "user_id",
+      "users",
+      "user_id"
+     ],
+     [
+      "orders",
+      "product_id",
+      "products",
+      "product_id"
+     ]
+    ],
+    "tables": [
+     {
+      "columns": [
+       {
+        "dtype": "int64",
+        "name": "order_id",
+        "stype": "ID"
+       },
+       {
+        "dtype": "int64",
+        "name": "user_id",
+        "stype": "ID"
+       },
+       {
+        "dtype": "int64",
+        "name": "product_id",
+        "stype": "ID"
+       },
+       {
+        "dtype": "int64",
+        "name": "quantity",
+        "stype": "numerical"
+       },
+       {
+        "dtype": "timestamp[us]",
+        "name": "ordered_at",
+        "stype": "timestamp"
+       }
+      ],
+      "duplicate_keys": null,
+      "name": "orders",
+      "primary_key": null,
+      "time_column": "ordered_at"
+     },
+     {
+      "columns": [
+       {
+        "dtype": "int64",
+        "name": "age",
+        "stype": "numerical"
+       },
+       {
+        "dtype": "string",
+        "name": "country",
+        "stype": "categorical"
+       },
+       {
+        "dtype": "int64",
+        "name": "user_id",
+        "stype": "ID"
+       }
+      ],
+      "duplicate_keys": null,
+      "name": "users",
+      "primary_key": "user_id",
+      "time_column": null
+     },
+     {
+      "columns": [
+       {
+        "dtype": "string",
+        "name": "category",
+        "stype": "categorical"
+       },
+       {
+        "dtype": "float64",
+        "name": "price",
+        "stype": "numerical"
+       },
+       {
+        "dtype": "int64",
+        "name": "product_id",
+        "stype": "ID"
+       }
+      ],
+      "duplicate_keys": null,
+      "name": "products",
+      "primary_key": "product_id",
+      "time_column": null
+     }
+    ]
+   }
+  }
+ },
+ "tables": [
+  {
+   "name": "orders",
+   "data": "tables/853b87e56cb4dd50e4e5b7a37a2ead797a06f0fc5cac4031de9c734eaf43ccfa.arrows"
+  },
+  {
+   "name": "users",
+   "data": "tables/d243c0e0aad9686e6da7d5bbe6a34cb8b00bc709be42604a20cee903e56c6084.arrows"
+  }
+ ],
+ "derived": [],
+ "draws": [],
+ "statements": [
+  {
+   "text": "DESCRIBE TABLE EXTENDED `{catalog}`.`{shop_schema}`.`{shop_metric_view_name}`",
+   "parameters": [],
+   "result": "tables/dcadefdcc8ecb9db767bef82f9e7b6036b959c013b3dc1973cec5e362d41567f.arrows"
+  },
+  {
+   "text": "SELECT c.column_name, c.full_data_type, c.is_nullable,\n       c.table_catalog, c.table_schema, c.table_name,\n       t.table_type\nFROM `{catalog}`.information_schema.columns c\nJOIN `{catalog}`.information_schema.tables t\n  ON t.table_catalog = c.table_catalog\n AND t.table_schema = c.table_schema\n AND t.table_name = c.table_name\nWHERE c.table_schema = lower(?)\n  AND c.table_name = lower(?)\nORDER BY c.ordinal_position",
+   "parameters": [
+    "{shop_schema}",
+    "orders"
+   ],
+   "result": "tables/899d6a73a38655f54c9cb26591b4e8ef446c74f0a008f46d1bf00a9bcb381297.arrows"
+  },
+  {
+   "text": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name\nFROM `{catalog}`.information_schema.table_constraints tc\nJOIN `{catalog}`.information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = lower(?)\n  AND tc.table_name = lower(?)\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE')",
+   "parameters": [
+    "{shop_schema}",
+    "orders"
+   ],
+   "result": "tables/a9b1ee8ad6e21529d27be456649ed4b0a313d9db8d9b56a4c23a74282bc6c7b1.arrows"
+  },
+  {
+   "text": "SELECT c.column_name, c.full_data_type, c.is_nullable,\n       c.table_catalog, c.table_schema, c.table_name,\n       t.table_type\nFROM `{catalog}`.information_schema.columns c\nJOIN `{catalog}`.information_schema.tables t\n  ON t.table_catalog = c.table_catalog\n AND t.table_schema = c.table_schema\n AND t.table_name = c.table_name\nWHERE c.table_schema = lower(?)\n  AND c.table_name = lower(?)\nORDER BY c.ordinal_position",
+   "parameters": [
+    "{shop_schema}",
+    "users"
+   ],
+   "result": "tables/14367a30543b101c6893fec1575c4fa79b05e51935c291b7eb271f2e5381a864.arrows"
+  },
+  {
+   "text": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name\nFROM `{catalog}`.information_schema.table_constraints tc\nJOIN `{catalog}`.information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = lower(?)\n  AND tc.table_name = lower(?)\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE')",
+   "parameters": [
+    "{shop_schema}",
+    "users"
+   ],
+   "result": "tables/a9b1ee8ad6e21529d27be456649ed4b0a313d9db8d9b56a4c23a74282bc6c7b1.arrows"
+  },
+  {
+   "text": "SELECT c.column_name, c.full_data_type, c.is_nullable,\n       c.table_catalog, c.table_schema, c.table_name,\n       t.table_type\nFROM `{catalog}`.information_schema.columns c\nJOIN `{catalog}`.information_schema.tables t\n  ON t.table_catalog = c.table_catalog\n AND t.table_schema = c.table_schema\n AND t.table_name = c.table_name\nWHERE c.table_schema = lower(?)\n  AND c.table_name = lower(?)\nORDER BY c.ordinal_position",
+   "parameters": [
+    "{shop_schema}",
+    "products"
+   ],
+   "result": "tables/bfb5d9a5b28217edce5b23a47826fc7f0660356ebd6b73b79cd9e8facd49cce0.arrows"
+  },
+  {
+   "text": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name\nFROM `{catalog}`.information_schema.table_constraints tc\nJOIN `{catalog}`.information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = lower(?)\n  AND tc.table_name = lower(?)\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE')",
+   "parameters": [
+    "{shop_schema}",
+    "products"
+   ],
+   "result": "tables/a9b1ee8ad6e21529d27be456649ed4b0a313d9db8d9b56a4c23a74282bc6c7b1.arrows"
+  },
+  {
+   "text": "SELECT `order_id`, `user_id`, `product_id`, `quantity`, `ordered_at` FROM `{catalog}`.`{shop_schema}`.`orders` LIMIT 1000",
+   "parameters": [],
+   "result": "tables/027f7ef34a7e8a54644f6762218c0965f1510a94f849db4683134e381247a855.arrows"
+  },
+  {
+   "text": "SELECT `user_id`, `age`, `country` FROM `{catalog}`.`{shop_schema}`.`users` LIMIT 1000",
+   "parameters": [],
+   "result": "tables/380b6435354c74d35815a5e534fe45d30ade9406accb67b176bac642cc167154.arrows"
+  },
+  {
+   "text": "SELECT `product_id`, `category`, `price` FROM `{catalog}`.`{shop_schema}`.`products` LIMIT 1000",
+   "parameters": [],
+   "result": "tables/1813aa8e5420a0dbef5e2c91b449792bec8787920c223c6a07f88ef7ee16e876.arrows"
+  },
+  {
+   "text": "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT `user_id`) AS d, COUNT(CASE WHEN `user_id` IS NULL THEN 1 END) AS z\nFROM `{catalog}`.`{shop_schema}`.`users`\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT `product_id`) AS d, COUNT(CASE WHEN `product_id` IS NULL THEN 1 END) AS z\nFROM `{catalog}`.`{shop_schema}`.`products`",
+   "parameters": [],
+   "result": "tables/3a72c95a9f21468fd976fb1743f987876c2a093ecd9b3ebb49a3865c45121b44.arrows"
+  },
+  {
+   "text": "SELECT COUNT(*), MIN(`ordered_at`), MAX(`ordered_at`), COUNT(`ordered_at`)\nFROM `{catalog}`.`{shop_schema}`.`orders`",
+   "parameters": [],
+   "result": "tables/4429f061171ebfc40bfff798266c6fee2f26de6ef15a72127fd7483abe308fc0.arrows"
+  }
+ ],
+ "loader": []
+}

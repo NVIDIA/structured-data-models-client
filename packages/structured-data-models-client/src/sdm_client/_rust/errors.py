@@ -432,6 +432,29 @@ def _said(sentence: str, fields: dict[str, Any]) -> str:
         return DEFECT.format(sentence=sentence)
 
 
+def decoded(given: Mapping[str, Any]) -> dict[str, Any]:
+    r"""A sentence's fields as the core wrote them, decoded as
+    :func:`render` takes them."""
+    return _fields(given)
+
+
+def source_values(source: Any) -> dict[str, Callable[[dict[str, Any]], Any]]:
+    r"""What a sentence names of the source of the call in progress
+    (``{host.source}``), and, for a semantic model, the model
+    (``{host.semantic_model}``, whose ``repr`` the old client wrote:
+    ``SemanticModel('name' in DatabricksSource(...))``), for
+    :func:`holding`."""
+    values: dict[str, Callable[[dict[str, Any]], Any]] = {
+        'source': lambda fields: source
+    }
+    if getattr(source, 'kind', None) in (
+        'databricks-metric-view',
+        'snowflake-semantic-view',
+    ):
+        values['semantic_model'] = lambda fields: source
+    return values
+
+
 def _fields(given: Mapping[str, Any]) -> dict[str, Any]:
     return {name: _detail(value) for name, value in given.items()}
 
@@ -706,9 +729,7 @@ def warn_from_core(
         else:
             words = groups[key[0]]
             text = (
-                _Words(_fields(first.get('fields', {})), {}).format(
-                    words['opening']
-                )
+                _opening(words['opening'], _fields(first.get('fields', {})))
                 + words['between'].join(said(w) for w in together)
                 + words['closing']
             )
@@ -717,6 +738,16 @@ def warn_from_core(
             category=WARNINGS.get(first['code'], SDMWarning),
             stacklevel=caller_stacklevel(),
         )
+
+
+def _opening(template: str, fields: dict[str, Any]) -> str:
+    r"""A group's opening, over its first warning's fields and the values
+    the call in progress holds (``{host.semantic_model!r}``, T3.5); the
+    defect named where they cannot fill it."""
+    try:
+        return _Words(fields, _HostValues(_held(), fields)).format(template)
+    except (KeyError, IndexError, TypeError, ValueError, AttributeError):
+        return DEFECT.format(sentence=template)
 
 
 def warn_held(held: list[dict[str, Any]]) -> None:

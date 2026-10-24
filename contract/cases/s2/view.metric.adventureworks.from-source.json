@@ -1,0 +1,77 @@
+{
+  "format": "sdm-case/1",
+  "id": "view.metric.adventureworks.from-source",
+  "status": "acceptance",
+  "slice": "S2",
+  "warehouses": [
+    "databricks-sql",
+    "databricks-spark"
+  ],
+  "paths": [
+    "schema.from-source/semantic-model/databricks-metric-view"
+  ],
+  "routes": [
+    "schema.from-source/semantic-model/databricks-metric-view",
+    "query.materialize/indices-binary/databricks-metric-view",
+    "query.materialize/indices-multiclass/databricks-metric-view",
+    "query.materialize/indices-regression/databricks-metric-view",
+    "query.materialize/indices-link-prediction/databricks-metric-view",
+    "query.materialize/indices-ranking/databricks-metric-view",
+    "query.materialize/indices-forecast/databricks-metric-view",
+    "client.predict/binary/databricks-metric-view",
+    "client.predict/multiclass/databricks-metric-view",
+    "client.predict/regression/databricks-metric-view",
+    "client.predict/link-prediction/databricks-metric-view",
+    "client.predict/ranking/databricks-metric-view",
+    "client.predict/forecast/databricks-metric-view"
+  ],
+  "cells": [
+    "int32/foreign-key",
+    "timestamp-us-tz/time-column",
+    "float64/feature"
+  ],
+  "input": {
+    "base": "adventureworks",
+    "pql": "PREDICT COUNT(adventureworks_sales_order_details.*, 0, 90, days) = 0 FOR EACH customers.CustomerID",
+    "materialize": {
+      "indices": [
+        29945,
+        12196,
+        12880,
+        12959,
+        13405,
+        13762,
+        29504,
+        11610,
+        12039,
+        13013,
+        13968,
+        14157,
+        16097,
+        18160,
+        11205,
+        11327,
+        11683,
+        11860,
+        11980,
+        12221,
+        12362,
+        12563,
+        12771,
+        12962,
+        13032
+      ]
+    },
+    "view": {
+      "kind": "metric_view",
+      "name": "{adventureworks_metric_view}"
+    }
+  },
+  "until": "from_source",
+  "expect": {
+    "outcome": "success",
+    "stage": "from_source"
+  },
+  "why": "Schema.from_source(source.semantic_model(view)) on the owner's view, as both AdventureWorks notebooks read it: its source table keeps its catalog name, each join becomes a table named after it, and the measures are conversion notes. The owner's existing AdventureWorks metric view (KO3-21), named by the {adventureworks_metric_view} placeholder the capture resolves from the environment, its name private; it is the quickstart notebook's sales_metrics view (the order lines joined to customers and products, thirteen dimensions, the derived Discounted among them) with a third measure, order_count, over the full AdventureWorks tables of its own schema, so the base loaded into the test schema is not what it reads",
+  "source": "written by T3.5's test author from the reference at 43e55f4f"
+}

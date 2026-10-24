@@ -34,6 +34,7 @@ __all__ = [
     'SnowflakeProvider',
     'SqliteProvider',
     'for_source',
+    'view_choice',
 ]
 
 #: Each kind of source the core reads (``Source.kind``): the built-in SQL
@@ -65,11 +66,52 @@ def for_source(source: Any) -> tuple[dict[str, Any], Any]:
     is meant, under which the core reads each table and lists the source's
     tables, as the reference qualifies each read by them; left out where
     the source names none.
+
+    A semantic model (T3.5, design S6) is read through the source it is
+    kept in, on that source's dialect and provider, and its choice names
+    the model (``view``): its name as given and whether its expressions
+    are trusted. The core reads the model afresh at every run, so the
+    choice is all a schema built from it keeps of it.
+
+    Raises:
+        RouteError: A semantic model whose underlying source has no core provider.
     """
-    dialect, name = _BY_KIND[source.kind]
+    model = _model_of(source)
+    kept = source if model is None else model.source
+    choice: dict[str, Any] = {'provider': 'sql'}
+    if model is not None and kept.kind not in _BY_KIND:
+        from sdm_client._routing import RouteError
+
+        raise RouteError(
+            f'{source!r} is kept in a {kept.kind} source, which the core '
+            'has no provider for'
+        )
+    dialect, name = _BY_KIND[kept.kind]
     made = globals()[name]
-    choice: dict[str, Any] = {'provider': 'sql', 'dialect': dialect}
-    parts = source.namespace_parts()
+    choice['dialect'] = dialect
+    parts = kept.namespace_parts()
     if any(part is not None for part in parts):
         choice['namespace'] = parts
-    return choice, made(source.connection)
+    if model is not None:
+        choice['view'] = view_choice(model)
+    return choice, made(kept.connection)
+
+
+def view_choice(model: Any) -> dict[str, Any]:
+    r"""The contract's ``ViewChoice`` of the semantic model ``model``: its
+    name as the caller gave it, which the core resolves against the
+    namespace, and whether its expressions are trusted."""
+    return {
+        'name': model.name,
+        'trust_expressions': bool(model.trust_expressions),
+    }
+
+
+#: The kinds of a semantic model (``SemanticModel.kind``), each read
+#: through the source it is kept in (``SemanticModel.source``).
+_MODEL_KINDS = frozenset({'databricks-metric-view', 'snowflake-semantic-view'})
+
+
+def _model_of(source: Any) -> Any:
+    r"""``source`` if it is a semantic model, else ``None``."""
+    return source if source.kind in _MODEL_KINDS else None

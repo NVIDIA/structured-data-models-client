@@ -110,12 +110,17 @@ fn provider_and_transport_errors_outside_the_table_are_internal() {
     for kind in ErrorKind::ALL {
         let provided = CoreError::provider(&ProviderError {
             error_class: None,
-            driver_message: None,
+            driver_message: Some("private warehouse diagnostic with a value".into()),
             kind,
             retryable: true,
             sqlstate: Some("42P01".into()),
             vendor_code: None,
         });
+        assert!(
+            !serde_json::to_string(&provided)
+                .unwrap()
+                .contains("private warehouse diagnostic with a value")
+        );
         let carried = CoreError::transport(kind, true);
         for (error, code) in [
             (provided, ErrorCode::ProviderError),

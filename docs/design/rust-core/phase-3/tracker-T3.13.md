@@ -73,7 +73,10 @@ This targeted diagnosis ran no package suite or full CI.
 Canonical binding vectors were regenerated with `contract/tools/t311_java_record.py binding` using lane a's existing test-ops kit; its output exactly reproduced the preserved vector changes.
 
 Package tests and lint wait for two approvals on the final candidate.
-The final metric-view integration waits for T3.5's actual phase landing.
+T3.5 landed at `2565861ea76572314d7ef2698602e64f754830d7` and is merged into this package.
+The shared host root enables metric views, core source facts retain temporal declarations, and Java consumes the core's typed view notes and source names.
+SDK authentication, shared credential/body deadlines and lossless NTZ metadata/projection remain intact across that merge.
+Both reviewers must confirm the integrated final SHA before package checks.
 The real E-7 JDBC/live runner and model comparison remain T3.10's phase-end evidence.
 P3S-2 has the independent broad reviewer's explicit approval for the better malformed-success error.
 P3S-1 and P3S-3 through P3S-6 remain proposed; no approval is inferred from this implementation.

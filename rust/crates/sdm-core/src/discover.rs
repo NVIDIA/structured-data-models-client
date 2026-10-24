@@ -24,13 +24,13 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use sdm_contract::catalog::{CatalogAnswer, CatalogColumn, CatalogKey, KeyKind};
-use sdm_contract::data::{DataRequest, DescribePart, Relation};
+use sdm_contract::data::{DataRequest, DescribePart, ProviderError, Relation};
 use sdm_contract::ops::{HeldSchema, NamedTable, SourceFacts};
 use sdm_contract::{CoreError, Detail, ErrorCode, Scalar, Sentence};
 use sdm_schema::held::ColumnAt;
 use sdm_schema::infer::PREVIEW_ROWS;
 
-use crate::describe::{another_part, ask, describe, table_names};
+use crate::describe::{another_part, ask, attempt, describe, table_names};
 use crate::run::{ArrowData, Asker, FetchResult, Reply, schema_mismatch};
 use crate::{big_integer, exact_number};
 
@@ -258,6 +258,103 @@ pub(crate) async fn table(
     })
 }
 
+/// What the source's catalog declares of one table: its columns, in the
+/// catalog's order. Its keys are read with them, as the old client reads
+/// them, and a semantic model's conversion keys its tables by the view's
+/// joins and keys alone.
+#[derive(Debug, Clone)]
+pub(crate) struct Catalog {
+    pub columns: Vec<CatalogColumn>,
+}
+
+/// One table's catalog alone, as a semantic model's conversion reads a base
+/// table before any of its rows (T3.5, design S5): its columns, then its
+/// keys, asked as [`table`] asks them, never its rows. `Ok(None)` where the
+/// source answers no column, as for a table it does not hold; the
+/// provider's failure, whole, for the caller to read by what it asked
+/// (`DataLayer::failure`). Every later read of the table reads the columns
+/// found ([`Asker::guard`]).
+pub(crate) async fn columns(
+    asker: &Asker,
+    source: &Relation,
+) -> Result<Result<Option<Catalog>, ProviderError>, CoreError> {
+    let asked = |part| DataRequest::Describe {
+        tables: vec![source.clone()],
+        part,
+    };
+    let read = |request: DataRequest, data: ArrowData| asker.read(&request, &data);
+    let (columns, keys) = if asker.capabilities()?.keys_optional {
+        let request = asked(DescribePart::Columns);
+        let columns = match attempt(asker, request.clone()).await? {
+            Ok(data) => read(request, data)?,
+            Err(failed) => return Ok(Err(failed)),
+        };
+        let request = asked(DescribePart::Keys);
+        // A failed read of the keys is read as none.
+        let keys = match attempt(asker, request.clone()).await? {
+            Ok(data) => read(request, data)?,
+            Err(_) => CatalogAnswer::Keys(Vec::new()),
+        };
+        (columns, keys)
+    } else {
+        let requests = [asked(DescribePart::Columns), asked(DescribePart::Keys)];
+        let replies = catalog_replies(asker, &requests).await?;
+        if let Some(error) = replies.iter().find_map(|reply| match reply {
+            Reply::Fetch(FetchResult::Error(error)) => Some(error.clone()),
+            _ => None,
+        }) {
+            return Ok(Err(error));
+        }
+        let mut read_all = requests.into_iter().zip(replies).map(|(request, reply)| {
+            let data = crate::describe::data(reply, request.name())?;
+            read(request, data)
+        });
+        let (Some(columns), Some(keys)) = (read_all.next(), read_all.next()) else {
+            return Err(another_part());
+        };
+        (columns?, keys?)
+    };
+    let declared = declared_columns(columns)?;
+    if declared.is_empty() {
+        return Ok(Ok(None));
+    }
+    asker.guard(source, declared.iter().map(|c| c.name.clone()).collect());
+    key_columns(asker, source, declared_keys(keys)?).await?;
+    Ok(Ok(Some(Catalog { columns: declared })))
+}
+
+/// Ask each distinct concrete catalog read once, as its plan establishes.
+async fn catalog_replies(asker: &Asker, asked: &[DataRequest]) -> Result<Vec<Reply>, CoreError> {
+    let plans: Vec<_> = asked.iter().map(|request| asker.planned(request)).collect();
+    let first: Vec<usize> = (0..asked.len())
+        .map(|i| {
+            (0..i)
+                .find(|&j| {
+                    plans[j]
+                        .as_ref()
+                        .zip(plans[i].as_ref())
+                        .is_some_and(|(left, right)| left.same_catalog_read(right))
+                })
+                .unwrap_or(i)
+        })
+        .collect();
+    let distinct = asked
+        .iter()
+        .zip(&first)
+        .enumerate()
+        .filter(|(i, (_, first))| *i == **first)
+        .map(|(_, (request, _))| request.clone())
+        .collect();
+    let answered = crate::describe::replies(asker, distinct).await?;
+    Ok(first
+        .iter()
+        .map(|&at| {
+            let distinct_before = (0..at).filter(|&j| first[j] == j).count();
+            answered[distinct_before].clone()
+        })
+        .collect())
+}
+
 /// The answers to `requests`, each a catalog read of the one table
 /// `source` names, asked together in one step under each spelling the
 /// source's catalog tries in turn (`DataLayer::spellings`; Snowflake's as
@@ -289,35 +386,7 @@ async fn spelled<const N: usize>(
                 request
             })
             .collect();
-        // Reads whose plans are the same statements are asked once, each
-        // read from the one answer: Snowflake's DESCRIBE TABLE answers a
-        // table's columns and its keys, which the reference reads from one
-        // statement (`SNOW/table.py:123-170`).
-        let plans: Vec<_> = asked.iter().map(|request| asker.planned(request)).collect();
-        let first: Vec<usize> = (0..asked.len())
-            .map(|i| {
-                (0..i)
-                    .find(|&j| plans[j].is_some() && plans[j] == plans[i])
-                    .unwrap_or(i)
-            })
-            .collect();
-        let distinct: Vec<DataRequest> = asked
-            .iter()
-            .zip(&first)
-            .enumerate()
-            .filter(|(i, (_, first))| *i == **first)
-            .map(|(_, (request, _))| request.clone())
-            .collect();
-        let answered = crate::describe::replies(asker, distinct).await?;
-        // The answer of request `i` is that of the distinct request it
-        // shares its plan with, the distinct ones answered in order.
-        let replies: Vec<Reply> = first
-            .iter()
-            .map(|&at| {
-                let distinct_before = (0..at).filter(|&j| first[j] == j).count();
-                answered[distinct_before].clone()
-            })
-            .collect();
+        let replies = catalog_replies(asker, &asked).await?;
         let missing = replies.iter().any(|reply| {
             matches!(reply, Reply::Fetch(FetchResult::Error(error)) if asker.failure(error).not_found)
         });
@@ -385,20 +454,28 @@ fn retained_source_types(preview: &ArrowData, declared: &[CatalogColumn]) -> Vec
         .schema
         .fields()
         .iter()
-        .filter(|f| {
-            big_integer::is_marked(f)
-                || matches!(
-                    f.data_type(),
-                    arrow_schema::DataType::Timestamp(..)
-                        | arrow_schema::DataType::Date32
-                        | arrow_schema::DataType::Date64
-                )
-        })
-        .filter_map(|f| {
-            let column = declared.iter().find(|c| &c.name == f.name())?;
-            Some((column.name.clone(), column.declared_type.clone()))
+        .filter_map(|field| {
+            let column = declared.iter().find(|c| &c.name == field.name())?;
+            retained_source_type(field, &column.declared_type)
+                .map(|kind| (column.name.clone(), kind.to_owned()))
         })
         .collect()
+}
+
+/// The catalog declaration carried by a typed or marked source field.
+/// View conversion uses the same retention policy as ordinary discovery.
+pub(crate) fn retained_source_type<'a>(
+    field: &arrow_schema::Field,
+    declared: &'a str,
+) -> Option<&'a str> {
+    (big_integer::is_marked(field)
+        || matches!(
+            field.data_type(),
+            arrow_schema::DataType::Timestamp(..)
+                | arrow_schema::DataType::Date32
+                | arrow_schema::DataType::Date64
+        ))
+    .then_some(declared)
 }
 
 /// `preview` with each big-integer column the host layer read

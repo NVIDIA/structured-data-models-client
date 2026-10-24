@@ -17,7 +17,7 @@ use std::fmt;
 /// Python refuses to read more digits than this into an `int`
 /// (`sys.get_int_max_str_digits()`), counting leading zeros, and so does the
 /// reference's parser.
-const MAX_STR_DIGITS: usize = 4300;
+pub const MAX_STR_DIGITS: usize = 4300;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PyInt {

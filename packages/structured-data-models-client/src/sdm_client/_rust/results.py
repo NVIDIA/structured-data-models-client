@@ -29,9 +29,9 @@ from sdm_client.errors import StructuredDataError
 
 __all__ = [
     'Batch',
-    'CoreQuery',
     'CorePart',
     'CoreParts',
+    'CoreQuery',
     'CoreRanking',
     'CoreRequest',
     'Described',
@@ -46,6 +46,7 @@ __all__ = [
     'SourceFacts',
     'Step',
     'Validated',
+    'ViewNote',
     'decode',
     'expect',
 ]
@@ -257,9 +258,52 @@ def _validated(read: dict[str, Any]) -> Validated:
 @dataclasses.dataclass(frozen=True)
 class Described:
     r"""``describe_source``'s result: the attachment of the
-    ``SourceDescription``."""
+    ``SourceDescription``, and a semantic model's conversion notes
+    (contract v28, T3.27), each a :class:`ViewNote`, in order; none for any
+    other source."""
 
     description: int
+    notes: tuple[ViewNote, ...] = ()
+
+
+@dataclasses.dataclass(frozen=True)
+class ViewNote:
+    r"""A note of a semantic model's conversion (the contract's
+    ``ViewNote``): its sentence and fields, the schema's table it is about
+    (``None`` for one of the whole model) and the time column it says was
+    taken, so the host shows it only while the schema still holds that."""
+
+    sentence: str
+    fields: dict[str, Any]
+    table: str | None = None
+    time_column: str | None = None
+
+
+def _note(value: Any) -> ViewNote:
+    read = _fields(
+        value, 'a view note', ('sentence',), ('fields', 'table', 'time_column')
+    )
+    fields = read.get('fields', {})
+    if not isinstance(fields, Mapping):
+        raise CodecError("a view note's fields are not an object")
+    return ViewNote(
+        sentence=_text(read['sentence'], "a view note's sentence"),
+        fields=dict(fields),
+        table=_maybe(read.get('table'), _text, "a view note's table"),
+        time_column=_maybe(
+            read.get('time_column'), _text, "a view note's time column"
+        ),
+    )
+
+
+def _described(read: dict[str, Any]) -> Described:
+    return Described(
+        description=_int(read['description'], 'description'),
+        # Left out where there is none, which the reading gives as None.
+        notes=tuple(
+            _note(note) for note in _list(read.get('notes') or [], 'notes')
+        ),
+    )
 
 
 @dataclasses.dataclass(frozen=True)
@@ -464,11 +508,7 @@ def _predicted(read: dict[str, Any]) -> Predicted:
 
 _RESULTS: dict[str, tuple[tuple[str, ...], tuple[str, ...], Any]] = {
     'validate_query': (('accepted', 'diagnostics'), ('query',), _validated),
-    'describe_source': (
-        ('description',),
-        (),
-        lambda read: Described(_int(read['description'], 'description')),
-    ),
+    'describe_source': (('description',), ('notes',), _described),
     'edit_schema': (('schema',), ('declared',), _edited),
     'materialize': (
         ('state',),

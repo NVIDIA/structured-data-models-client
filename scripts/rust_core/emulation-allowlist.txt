@@ -18,8 +18,17 @@
 
 # Python's 4,300-digit limit on reading an integer, which decides validity.
 rust/crates/sdm-pql/src/pyint.rs
-# The text Python's repr gives a float.
+# The text Python's repr gives a float, and from T3.5 the repr and str of the
+# values a view's conversion messages quote (Shown, text_repr).
 rust/crates/sdm-pql/src/float_repr.rs
 # How the reference reads a string literal's escapes, which decides validity
 # (Phase 1 decisions, E9).
 rust/crates/sdm-pql/src/escapes.rs
+# The conversions a view's parameter default goes through, Python 3.12's
+# int(), Decimal formatting and fromisoformat, which decide whether a
+# default is a value of its type (T3.5 fix 2). Approved by owner: T35-OWNER-2026-10-24-EMULATION (original item 7).
+rust/crates/sdm-pql/src/conversions.rs
+# Python 3.12's printable code points (str.isprintable), the table a repr
+# escapes by, generated from Python by contract/fixtures/views/gen_printable.py
+# (T3.5 fix 3). Approved by owner: T35-OWNER-2026-10-24-EMULATION.
+rust/crates/sdm-pql/src/printable.rs

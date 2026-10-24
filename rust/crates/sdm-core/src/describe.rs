@@ -33,7 +33,7 @@ use std::task::{Context, Poll};
 
 use arrow_schema::TimeUnit;
 use sdm_contract::catalog::{CatalogAnswer, CatalogForeignKey, KeyKind};
-use sdm_contract::data::{DataRequest, DescribePart, Relation, TableKey};
+use sdm_contract::data::{DataRequest, DescribePart, ProviderError, Relation, TableKey};
 use sdm_contract::ops::{
     ColumnRef, DescribedSource, HeldSchema, NamedTable, OperationResult, SourceDescription,
     SourceSpec,
@@ -395,7 +395,7 @@ fn check_ranges(read: &ArrowData, asked: &[String], preview: &ArrowData) -> Resu
 /// twice, and each name one the schema may give a table
 /// ([`assemble::check_table_name`]). Refusals are `INVALID_REQUEST`
 /// naming the field.
-fn named_tables(spec: &SourceSpec) -> Result<Vec<NamedTable>, CoreError> {
+pub(crate) fn named_tables(spec: &SourceSpec) -> Result<Vec<NamedTable>, CoreError> {
     let refuse = |sentence, message: &'static str, table: &str| {
         CoreError::new(sentence, message)
             .with_field("field", Detail::text("tables"))
@@ -732,6 +732,21 @@ pub(crate) async fn ask(asker: &Asker, request: DataRequest) -> Result<ArrowData
     data(asker.fetch(request)?.await, name)
 }
 
+/// The data a request's answer holds, or the provider's own error, kept
+/// whole so the data layer can say what it means
+/// (`DataLayer::failure`): a semantic model's conversion reads each failure
+/// by what it asked (design S3).
+pub(crate) async fn attempt(
+    asker: &Asker,
+    request: DataRequest,
+) -> Result<Result<ArrowData, ProviderError>, CoreError> {
+    let name = request.name();
+    match asker.fetch(request)?.await {
+        Reply::Fetch(FetchResult::Error(error)) => Ok(Err(error)),
+        reply => data(reply, name).map(Ok),
+    }
+}
+
 /// The run's asker, its provider's namespace settled first where it leaves
 /// a part to the connection inside one it gives (`DataAccess::unsettled`):
 /// the source's current parts read once (`describe` of its namespace) and
@@ -773,6 +788,7 @@ pub(crate) async fn settled(asker: Asker) -> Result<Asker, CoreError> {
 pub(crate) async fn initialize(
     asker: &Asker,
     pending: Option<&HeldSchema>,
+    facts: &HostFacts,
 ) -> Result<Option<SourceDescription>, CoreError> {
     let Some(held) = pending else {
         return Ok(None);
@@ -780,7 +796,14 @@ pub(crate) async fn initialize(
     if let Some(located) = asker.located() {
         return Ok(Some(located));
     }
-    let located = if asker
+    let located = if asker.data().is_some_and(|data| data.view().is_some()) {
+        // A semantic model, read again as it stands (T3.5, plan B).
+        let reader = text_reader(facts)?;
+        asker.asking_for(Some(sdm_contract::run::FetchPurpose::Locate));
+        let located = crate::view::located(asker, held, &reader).await;
+        asker.asking_for(None);
+        located?
+    } else if asker
         .data()
         .is_some_and(crate::compose::DataAccess::reads_a_source)
     {
@@ -891,25 +914,8 @@ async fn read_as_it_stands(
     let typed = asker
         .data()
         .is_none_or(crate::compose::DataAccess::holds_column_types);
-    for table in held.tables.iter().filter(|_| typed) {
-        for column in &table.columns {
-            let Some(source) = found.get(&(table.name.clone(), column.name.clone())) else {
-                continue;
-            };
-            if source.exact_number.is_none()
-                && !sdm_schema::held::type_matches(&column.dtype, source.dtype)
-            {
-                return Err(CoreError::new(
-                    Sentence::ColumnTypeUnmatched,
-                    "a column's type the caller gave is not the one the source holds",
-                )
-                .with_field("field", Detail::text("schema"))
-                .with_field("table", Detail::text(&table.name))
-                .with_field("column", Detail::text(&column.name))
-                .with_field("dtype", Detail::text(&column.dtype))
-                .with_field("source_dtype", Detail::text(source.dtype.wire_name())));
-            }
-        }
+    if typed {
+        sdm_schema::held::check_source_types(held, &found)?;
     }
     Ok(sdm_schema::held::read(held.clone(), &found, false)?.by_the_source())
 }

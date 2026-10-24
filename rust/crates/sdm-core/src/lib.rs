@@ -27,6 +27,9 @@ pub mod run;
 mod subgraph;
 #[cfg(feature = "test-ops")]
 mod test_ops;
+pub mod view;
+pub mod view_steps;
+pub mod view_words;
 
 pub use compose::{CompositionRoot, DataAccess};
 pub use dispatch::start;

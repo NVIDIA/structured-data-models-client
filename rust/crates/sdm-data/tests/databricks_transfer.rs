@@ -43,8 +43,8 @@ fn ntz_projection_keeps_names_positions_and_all_other_types() {
         limit: 5,
     };
     let choice = provider();
-    let plan = Data.plan(&request, &choice).unwrap();
-    let before = Data
+    let plan = Data::new().plan(&request, &choice).unwrap();
+    let before = Data::new()
         .result_metadata(&choice, &request, &plan)
         .unwrap()
         .unwrap();
@@ -63,7 +63,7 @@ fn ntz_projection_keeps_names_positions_and_all_other_types() {
         ("at`time", "timestamp_ntz"),
         ("zoned", "timestamp"),
     ]);
-    let projected = Data
+    let projected = Data::new()
         .project_result(&choice, &request, &plan, &[types])
         .unwrap();
     let value = serde_json::to_value(&projected).unwrap();
@@ -80,7 +80,8 @@ fn ntz_projection_keeps_names_positions_and_all_other_types() {
     assert!(sql.contains(", `zoned` FROM"));
     let native = ProviderChoice::sql("databricks");
     assert!(
-        Data.result_metadata(&native, &request, &plan)
+        Data::new()
+            .result_metadata(&native, &request, &plan)
             .unwrap()
             .is_none()
     );
@@ -95,9 +96,10 @@ fn metadata_without_ntz_keeps_the_original_plan_exactly() {
         limit: None,
     };
     let choice = provider();
-    let plan = Data.plan(&request, &choice).unwrap();
+    let plan = Data::new().plan(&request, &choice).unwrap();
     assert_eq!(
-        Data.project_result(&choice, &request, &plan, &[metadata(&[("id", "bigint")])])
+        Data::new()
+            .project_result(&choice, &request, &plan, &[metadata(&[("id", "bigint")])])
             .unwrap(),
         plan
     );

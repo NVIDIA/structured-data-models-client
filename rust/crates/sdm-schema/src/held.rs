@@ -165,6 +165,33 @@ pub fn type_matches(name: &str, source: Dtype) -> bool {
     }
 }
 
+/// Check caller types against fresh source facts before applying held meanings.
+/// Exact numeric columns keep their existing role-dependent handling.
+pub fn check_source_types(
+    held: &HeldSchema,
+    found: &BTreeMap<ColumnAt, SourceFacts>,
+) -> Result<(), CoreError> {
+    for table in &held.tables {
+        for column in &table.columns {
+            let Some(source) = found.get(&(table.name.clone(), column.name.clone())) else {
+                continue;
+            };
+            if source.exact_number.is_none() && !type_matches(&column.dtype, source.dtype) {
+                return Err(CoreError::new(
+                    Sentence::ColumnTypeUnmatched,
+                    "a column's type the caller gave is not the one the source holds",
+                )
+                .with_field("field", Detail::text("schema"))
+                .with_field("table", Detail::text(&table.name))
+                .with_field("column", Detail::text(&column.name))
+                .with_field("dtype", Detail::text(&column.dtype))
+                .with_field("source_dtype", Detail::text(source.dtype.wire_name())));
+            }
+        }
+    }
+    Ok(())
+}
+
 /// The kind of value a column of `dtype` holds, which a caller's type and
 /// the source's must share ([`type_matches`]): a number of any width, a
 /// list of numbers, a list of strings, a time or a date, or each other type
