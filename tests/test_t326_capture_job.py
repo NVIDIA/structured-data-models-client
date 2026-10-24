@@ -191,6 +191,27 @@ def test_each_case_s_progress_and_each_failure_are_written_as_the_run_goes(
     assert [json.loads(line)['case'] for line in whole] == list('abcde')
 
 
+def test_the_progress_is_written_whole_as_a_volume_takes_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # T3.20 second capture: a Databricks volume refuses an append to a
+    # file once written (OSError Errno 29, Illegal seek), which stopped the
+    # Spark run after its first case. The progress is rewritten whole.
+    out = tmp_path / 'out'
+    opened = Path.open
+
+    def no_append(self: Path, mode: str = 'r', *a: Any, **k: Any) -> Any:
+        if 'a' in mode:
+            raise OSError(29, 'Illegal seek')
+        return opened(self, mode, *a, **k)
+
+    monkeypatch.setattr(Path, 'open', no_append)
+    imported, _ = _fake_run(tmp_path, monkeypatch, {})
+    assert capture_run.run('lakebase', tmp_path, out) == 0
+    whole = (out / 'lakebase.progress.jsonl').read_text().splitlines()
+    assert [json.loads(line)['case'] for line in whole] == list('abcde')
+
+
 def test_a_case_past_its_time_limit_fails_alone_and_the_run_goes_on(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
