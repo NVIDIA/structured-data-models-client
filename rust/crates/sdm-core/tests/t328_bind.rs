@@ -19,7 +19,7 @@ use std::sync::{Arc, Mutex};
 
 use arrow_array::cast::AsArray;
 use arrow_array::types::Int32Type;
-use arrow_array::{Int32Array, Int64Array, RecordBatch};
+use arrow_array::{Array, Int32Array, Int64Array, RecordBatch};
 use arrow_schema::{DataType, Field, Schema, SchemaRef};
 use sdm_contract::catalog::CatalogAnswer;
 use sdm_contract::data::{
@@ -431,4 +431,129 @@ fn a_host_provider_is_handed_the_core_s_key_set_as_it_was_made() {
     };
     assert_eq!(handed.batches, made.batches);
     assert_eq!(handed.schema, made.schema);
+}
+
+// --- one conversion over the whole answer (fix 4) --------------------------------
+
+/// A Postgres answer of `n`, a declared scale-zero `numeric` past Arrow's
+/// decimals, as the provider hands it over: each value's exact text, its
+/// declared scale marked, after the batch of each seed answered.
+fn wide(batches: &[i64], values: &[&str]) -> FetchResult {
+    let mut marked = std::collections::HashMap::new();
+    marked.insert(
+        sdm_contract::data::DECLARED_SCALE_MARKER.to_owned(),
+        "0".to_owned(),
+    );
+    let schema: SchemaRef = Arc::new(Schema::new(vec![
+        Field::new("__kumo_batch__", DataType::Int64, false),
+        Field::new("n", DataType::Utf8, true).with_metadata(marked),
+    ]));
+    let batch = RecordBatch::try_new(
+        Arc::clone(&schema),
+        vec![
+            Arc::new(Int64Array::from(batches.to_vec())),
+            Arc::new(arrow_array::StringArray::from(values.to_vec())),
+        ],
+    )
+    .unwrap();
+    FetchResult::Data(ArrowData::new(schema, vec![batch]))
+}
+
+/// A Postgres lookup past the budget, its chunks answered by `answers`.
+fn chunked_postgres(answers: Vec<FetchResult>) -> Option<Reply> {
+    let seen = Arc::new(Mutex::new(Seen::default()));
+    let mut run = keyed_run(
+        Arc::new(sdm_data::Data::new()),
+        &ProviderChoice::sql("postgres"),
+        &["wide_numbers"],
+        seeds(many()),
+        Arc::clone(&seen),
+    );
+    let Step::Fetch { requests } = run.next().unwrap() else {
+        panic!("not a fetch")
+    };
+    assert_eq!(requests.len(), answers.len(), "one fetch per chunk");
+    for (step, answer) in requests.iter().zip(answers) {
+        run.submit_fetch(step.id, answer).unwrap();
+    }
+    match run.next() {
+        Ok(Step::Done { .. }) => seen.lock().unwrap().reply.take(),
+        Ok(other) => panic!("not done: {other:?}"),
+        Err(error) => Some(Reply::Fetch(FetchResult::Error(ProviderError {
+            error_class: Some(format!("{:?}", error.code)),
+            kind: ErrorKind::DataSource,
+            retryable: false,
+            sqlstate: None,
+            vendor_code: None,
+        }))),
+    }
+}
+
+#[test]
+fn chunks_of_one_answer_are_read_as_one_answer_small_wide_and_empty() {
+    // A small value in one chunk, a wide one in another, none in a third:
+    // the column is read as the whole answer says (each value's exact
+    // text), as one fetch of all three would read it.
+    let reply = chunked_postgres(vec![
+        wide(&[0], &["1"]),
+        wide(&[1], &["100000000000000000000"]),
+        wide(&[], &[]),
+    ]);
+    let Some(Reply::Fetch(FetchResult::Data(data))) = reply else {
+        panic!("the answer was refused: {reply:?}")
+    };
+    let column = data.schema.field_with_name("n").unwrap();
+    assert_eq!(column.data_type(), &DataType::Utf8);
+    let values: Vec<String> = data
+        .batches
+        .iter()
+        .flat_map(|b| {
+            let n = b.column(1).as_string::<i32>();
+            (0..n.len())
+                .map(|at| n.value(at).to_owned())
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    assert_eq!(values, ["1", "100000000000000000000"]);
+    // Every value small: the whole answer reads as integers.
+    let reply = chunked_postgres(vec![wide(&[0], &["1"]), wide(&[], &[]), wide(&[2], &["7"])]);
+    let Some(Reply::Fetch(FetchResult::Data(data))) = reply else {
+        panic!("the answer was refused: {reply:?}")
+    };
+    assert_eq!(
+        data.schema.field_with_name("n").unwrap().data_type(),
+        &DataType::Int64
+    );
+}
+
+#[test]
+fn chunks_the_provider_answers_in_two_shapes_are_still_refused() {
+    // A source schema that truly differs between chunks is the provider's
+    // fault, refused as before.
+    let other: SchemaRef = Arc::new(Schema::new(vec![
+        Field::new("__kumo_batch__", DataType::Int64, false),
+        Field::new("m", DataType::Int64, true),
+    ]));
+    let differs = FetchResult::Data(ArrowData::new(
+        Arc::clone(&other),
+        vec![
+            RecordBatch::try_new(
+                other,
+                vec![
+                    Arc::new(Int64Array::from(vec![1])),
+                    Arc::new(Int64Array::from(vec![2])),
+                ],
+            )
+            .unwrap(),
+        ],
+    ));
+    let reply = chunked_postgres(vec![wide(&[0], &["1"]), differs, wide(&[], &[])]);
+    let Some(Reply::Fetch(FetchResult::Error(error))) = reply else {
+        panic!("a schema that differs was joined: {reply:?}")
+    };
+    assert_eq!(
+        error.error_class.as_deref(),
+        Some("ProviderSchemaMismatch"),
+        "{error:?}"
+    );
 }

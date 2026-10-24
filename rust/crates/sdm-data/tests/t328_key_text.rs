@@ -104,6 +104,8 @@ fn reference_float(x: f64) -> String {
         (1e16, "1e+16"),
         (1e-5, "1e-05"),
         (123456789.0, "123456789.0"),
+        (12345678901234568.0, "1.2345678901234568e+16"),
+        (0.15, "0.15"),
     ];
     WRITTEN
         .iter()
@@ -399,7 +401,7 @@ fn one_databricks_key_past_the_budget_alone_is_a_chunk_of_its_own() {
 // --- Postgres --------------------------------------------------------------------
 
 #[test]
-fn a_postgres_key_set_is_one_text_of_its_rows_cells_its_batch_carried() {
+fn a_postgres_key_set_is_one_text_of_its_keys_its_batch_its_position() {
     let request = lookup(r#"{"type":"int64"}"#, r#""users""#);
     let keys = seeds(Arc::new(Int64Array::from(vec![Some(3), None])));
     let (plan, bound) = bind_on("postgres", &request, keys);
@@ -417,7 +419,7 @@ fn a_postgres_key_set_is_one_text_of_its_rows_cells_its_batch_carried() {
 }
 
 #[test]
-fn a_postgres_cell_is_written_as_its_text_its_characters_as_they_are() {
+fn a_postgres_key_is_written_as_the_old_client_writes_it_ascii_only() {
     let request = lookup(r#"{"type":"utf8"}"#, r#""users""#);
     let keys = seeds(Arc::new(StringArray::from(vec!["é\"\n", "\u{7f}"])));
     let (_, bound) = bind_on("postgres", &request, keys);
@@ -585,6 +587,112 @@ fn a_key_set_whose_batches_are_not_its_positions_is_a_named_defect() {
             sdm_contract::ErrorCode::InternalError,
             "{dialect}"
         );
+    }
+}
+
+#[test]
+fn a_postgres_decimal_key_is_its_double_s_text_where_that_text_is_its_value() {
+    // The old client reads a decimal key as a double and writes its text
+    // (`_coerce_id`: `str(value)`), so the core writes the same text
+    // wherever it reads back as the decimal's exact value; only a decimal
+    // past a double's digits keeps its own (P3K-1).
+    let cases: [(u8, i8, Vec<i128>, &str); 3] = [
+        (10, 5, vec![1], r#"["1e-05"]"#),
+        (18, 1, vec![100_000_000_000_000_000], r#"["1e+16"]"#),
+        (10, 2, vec![150, 15], r#"["1.5","0.15"]"#),
+    ];
+    for (precision, scale, values, written) in cases {
+        let request = lookup(
+            &format!(r#"{{"type":"decimal128","precision":{precision},"scale":{scale}}}"#),
+            r#""users""#,
+        );
+        let decimals = Decimal128Array::from(values)
+            .with_precision_and_scale(precision, scale)
+            .unwrap();
+        let (_, bound) = bind_on("postgres", &request, seeds(Arc::new(decimals)));
+        assert_eq!(texts(&bound), [written], "{precision},{scale}");
+    }
+    let request = lookup(
+        r#"{"type":"decimal128","precision":38,"scale":10}"#,
+        r#""users""#,
+    );
+    let exact = Decimal128Array::from(vec![123_456_789_012_345_671_234_567_891_i128])
+        .with_precision_and_scale(38, 10)
+        .unwrap();
+    let (_, bound) = bind_on("postgres", &request, seeds(Arc::new(exact)));
+    assert_eq!(texts(&bound), [r#"["12345678901234567.1234567891"]"#]);
+}
+
+#[test]
+fn a_postgres_boolean_date_or_time_key_is_the_old_client_s_text_of_it() {
+    use arrow_array::{BooleanArray, Date32Array};
+    // `str(value)` of the value pandas holds: `True`, a date as a
+    // midnight time stamp, a time stamp with a space before its time.
+    let request = lookup(r#"{"type":"bool"}"#, r#""users""#);
+    let (_, bound) = bind_on(
+        "postgres",
+        &request,
+        seeds(Arc::new(BooleanArray::from(vec![true, false]))),
+    );
+    assert_eq!(texts(&bound), [r#"["True","False"]"#]);
+    let request = lookup(r#"{"type":"date32"}"#, r#""users""#);
+    let (_, bound) = bind_on(
+        "postgres",
+        &request,
+        seeds(Arc::new(Date32Array::from(vec![19_723]))),
+    );
+    assert_eq!(texts(&bound), [r#"["2024-01-01 00:00:00"]"#]);
+    let request = lookup(
+        r#"{"type":"timestamp","unit":"ns","zone":null}"#,
+        r#""users""#,
+    );
+    let (_, bound) = bind_on(
+        "postgres",
+        &request,
+        seeds(Arc::new(TimestampNanosecondArray::from(vec![
+            1_704_164_645_500_000_000,
+        ]))),
+    );
+    assert_eq!(texts(&bound), [r#"["2024-01-02 03:04:05.500000"]"#]);
+}
+
+/// A quoted name holding the text a chunk's offset moves.
+const ORDINALITY: &str = "(r.ordinality - 1)::bigint";
+
+#[test]
+fn a_later_postgres_chunk_moves_its_batches_whatever_its_names_hold() {
+    // A table and a column named as the batch's own expression are quoted
+    // as written, never taken for it.
+    for (table, column) in [(ORDINALITY, "age"), ("users", ORDINALITY)] {
+        let request: DataRequest = serde_json::from_str(&format!(
+            r#"{{"columns":["user_id",{}],"key":["user_id"],"request":"lookup","seeds":{{"attachment":2,"columns":[{{"name":"key","nullable":true,"type":{{"type":"int64"}}}},{{"name":"batch","nullable":false,"type":{{"type":"int64"}}}}]}},"table":{{"source":[{}]}}}}"#,
+            serde_json::to_string(column).unwrap(),
+            serde_json::to_string(table).unwrap(),
+        ))
+        .unwrap();
+        let (plan, bound) = bind_on("postgres", &request, seeds(Arc::new(many_keys(300_000))));
+        assert!(bound.fetches.len() >= 3, "{table}.{column}");
+        let original = &statements(&plan).last().unwrap().text;
+        let quoted = format!("\"{ORDINALITY}\"");
+        let mut offset = 0;
+        for fetch in &bound.fetches {
+            let last = &statements(&fetch.plan).last().unwrap().text;
+            assert_eq!(
+                last.matches(&quoted).count(),
+                original.matches(&quoted).count()
+            );
+            if offset > 0 {
+                assert!(
+                    last.contains(&format!(
+                        "(r.ordinality - 1 + {offset})::bigint AS \"batch\""
+                    )),
+                    "{last}"
+                );
+            }
+            offset += serde_json::from_str::<Vec<i64>>(&text(fetch))
+                .unwrap()
+                .len();
+        }
     }
 }
 
