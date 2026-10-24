@@ -23,7 +23,9 @@ def test_odd_columns_use_only_the_existing_databricks_backtick_exclusion():
     sys.modules[spec.name] = captures
     spec.loader.exec_module(captures)
     case = json.loads(
-        (ROOT / 'contract/cases/s2/databricks.name.odd-columns.json').read_text()
+        (
+            ROOT / 'contract/cases/s2/databricks.name.odd-columns.json'
+        ).read_text()
     )
     assert '`' in json.dumps(case['input'])
     legs, reason = captures.NOT_LIVE[case['id']]
