@@ -1558,12 +1558,9 @@ fn metric_view_physical_time_columns_keep_their_declared_window_kind() {
         .find(|t| t.name == "orders")
         .unwrap();
     let time = orders.columns.iter().find(|c| c.name == "ts").unwrap();
-    assert!(
-        time.declared_type
-            .as_deref()
-            .is_some_and(|kind| kind.eq_ignore_ascii_case("timestamp")),
-        "{time:?}"
-    );
+    // The genuine metric-view catalog declares this column timestamp_ntz.
+    // Keep its wall-time kind, rather than treating it as a zoned instant.
+    assert_eq!(time.declared_type.as_deref(), Some("timestamp_ntz"));
     let graph = sdm_engine::graph::Graph::new(&description).unwrap();
     let request = sdm_engine::sample::by_time(
         graph.table("orders").unwrap(),
@@ -1583,5 +1580,5 @@ fn metric_view_physical_time_columns_keep_their_declared_window_kind() {
     else {
         panic!("no window");
     };
-    assert_eq!(window.source_type, time.declared_type);
+    assert_eq!(window.source_type.as_deref(), Some("timestamp_ntz"));
 }
