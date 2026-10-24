@@ -1,0 +1,66 @@
+{
+ "format": "sdm-capture/1",
+ "recording_commit": "74227a64f306c4c94c773cdfcf8ddee5bbda1b6a",
+ "reference_commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+ "legs": {
+  "snowflake": {
+   "duckdb": "1.5.6",
+   "numpy": "2.5.3",
+   "pandas": "3.0.6",
+   "pyarrow": "25.0.1",
+   "python": "3.12.15",
+   "snowflake-connector-python": "4.8.0",
+   "snowflake-snowpark-python": "1.55.3"
+  }
+ },
+ "cases": {
+  "snowflake.connect.snowpark@snowflake": {
+   "input_hash": "3518bc8f7d020ed474e3ea16cd38c7ce81c790433fb7d6b5a30eb2faf832c22f",
+   "capture": "snowflake.connect.snowpark"
+  },
+  "snowflake.name.database-only@snowflake": {
+   "input_hash": "c49fb203025c7b8b56fed96276f4bb097f52629854bc3c5bc7814a82273b6bf8",
+   "capture": "snowflake.name.database-only"
+  },
+  "view.semantic.binary@snowflake": {
+   "input_hash": "71a95d245222beacfcf902ee02bb242b8d794a6485683a5f3e122156f49d327a",
+   "capture": "view.semantic.binary"
+  },
+  "view.semantic.column-refused@snowflake": {
+   "input_hash": "8f9baefb094d93371201af599fe9ce950040d517dc17c88a3f096efe7484bb33",
+   "capture": "view.semantic.column-refused"
+  },
+  "view.semantic.composite-key@snowflake": {
+   "input_hash": "efa74c7ed3f6781b7c5e1232d055a68e294eff1cf1dfd30b0dfdef56a21d04f6",
+   "capture": "view.semantic.composite-key"
+  },
+  "view.semantic.cross-table-expression@snowflake": {
+   "input_hash": "4b5a4e92ada61946a52941f3e169ccfefe96b69b71d48de4d3153808bf5254a1",
+   "capture": "view.semantic.cross-table-expression"
+  },
+  "view.semantic.forecast@snowflake": {
+   "input_hash": "fbab3ab06009cafa95a5256ac02ef82e2d85e12ef5be95feeec1ab91c72716e0",
+   "capture": "view.semantic.forecast"
+  },
+  "view.semantic.from-source@snowflake": {
+   "input_hash": "750c655c607a1ddcaee68a0ecd01c2c33ea50ac8f1d8d62bd271cb4a06ea6ebd",
+   "capture": "view.semantic.from-source"
+  },
+  "view.semantic.multiclass@snowflake": {
+   "input_hash": "c156aab25b13683805bed119d3d41f131a13d5efbb078395246700798af4f44a",
+   "capture": "view.semantic.multiclass"
+  },
+  "view.semantic.ranking@snowflake": {
+   "input_hash": "2ea5c8c84ef84c1e5c6f08a64bda93990390c749948163eae89da5d4388a1fb1",
+   "capture": "view.semantic.ranking"
+  },
+  "view.semantic.regression@snowflake": {
+   "input_hash": "22f80d89c2e68b16286bedbc49b57cdc8701ddce8b1f22e73015019dce003647",
+   "capture": "view.semantic.regression"
+  },
+  "view.semantic.shop-twin.from-source@snowflake": {
+   "input_hash": "c5dc450800c4b3ef6395bb6b097fdfc151bd40389f603d8afb5f8f45425461ab",
+   "capture": "view.semantic.shop-twin.from-source"
+  }
+ }
+}

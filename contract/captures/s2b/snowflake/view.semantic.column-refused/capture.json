@@ -1,0 +1,239 @@
+{
+ "format": "sdm-capture/1",
+ "case": "view.semantic.column-refused",
+ "leg": "snowflake",
+ "recording_commit": "74227a64f306c4c94c773cdfcf8ddee5bbda1b6a",
+ "reference_commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+ "versions": {
+  "duckdb": "1.5.6",
+  "numpy": "2.5.3",
+  "pandas": "3.0.6",
+  "pyarrow": "25.0.1",
+  "python": "3.12.15",
+  "snowflake-connector-python": "4.8.0",
+  "snowflake-snowpark-python": "1.55.3"
+ },
+ "input_hash": "8f9baefb094d93371201af599fe9ce950040d517dc17c88a3f096efe7484bb33",
+ "session": {
+  "time_zone": "America/Los_Angeles",
+  "null_order": "nulls_last"
+ },
+ "reference": {
+  "case": "view.semantic.column-refused@snowflake",
+  "core": null,
+  "driver": {
+   "capture": {
+    "bindings": [],
+    "cursors": 3,
+    "events": [
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 1
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 2
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 3
+     }
+    ],
+    "incomplete": [],
+    "passed_through": [
+     "_paramstyle"
+    ],
+    "statements": [
+     {
+      "error": null,
+      "handle": 1,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{catalog}.{schema}.view_semantic_column_refused'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "6c2478665a23347ee8946d321b8e99d0861d07623077ee41c489eb25585b4737",
+        "method": "fetchone",
+        "rows": 1,
+        "values": {
+         "columns": [
+          "SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW(?)"
+         ],
+         "ordered": "aaec86e395488de207dd997e71f413c3516e2ae7f5714cd7fa4c2807612a5379",
+         "types": [
+          "2"
+         ],
+         "unencodable": [],
+         "unordered": "aaec86e395488de207dd997e71f413c3516e2ae7f5714cd7fa4c2807612a5379"
+        }
+       }
+      ],
+      "sql": "SELECT SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW(?)",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 2,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "ac74a4e87e0dac8fb9d21172718306af3289dfb84d1817ca49bebe621d463690",
+        "method": "fetchall",
+        "rows": 4,
+        "values": {
+         "columns": [
+          "name",
+          "type",
+          "kind",
+          "null?",
+          "default",
+          "primary key",
+          "unique key",
+          "check",
+          "expression",
+          "comment",
+          "policy name",
+          "privacy domain",
+          "write default"
+         ],
+         "ordered": "7aceafd5725f590b8c252de12e1cda6bc627e1cdefea46da419d2cbd55dde796",
+         "types": [
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "9",
+          "2"
+         ],
+         "unencodable": [],
+         "unordered": "f5404def56780445b8c4e4ca0b67abd2b502867bfcd688fd45d362744af621ba"
+        }
+       }
+      ],
+      "sql": "DESCRIBE TABLE \"{catalog}\".\"{schema}\".\"ORDERS\"",
+      "stage": "from_source"
+     },
+     {
+      "error": "ProgrammingError",
+      "handle": 3,
+      "parameters": null,
+      "results": [],
+      "sql": "SELECT order_id AS \"ORDER_ID\", user_id AS \"USER_ID\", ts AS \"TS\", order_id / 0 AS \"BROKEN\", price AS \"PRICE\", price * 1.2 AS \"PRICE_WITH_TAX\" FROM \"{catalog}\".\"{schema}\".\"ORDERS\" LIMIT 1000",
+      "stage": "from_source"
+     }
+    ]
+   },
+   "query_log": {
+    "bindings": 0,
+    "compared": 3,
+    "differing": [],
+    "statements": 3
+   }
+  },
+  "format": "sdm-observation/1",
+  "host": {
+   "warnings": []
+  },
+  "identity": {
+   "cell": "ref-pandas3",
+   "commit": {
+    "clean": true,
+    "sha": "74227a64f306c4c94c773cdfcf8ddee5bbda1b6a"
+   },
+   "contract": null,
+   "inputs": {
+    "bases": "9d69fe4aea2be4a6a2d96ea03f5258147c537927e2c6e6716b6030836ebc62f8",
+    "case": "fb14b55e0c5b2729f1e83d3be5c5dc7e79485f79a950b1ea74592cd3ef165b99"
+   },
+   "native": null,
+   "native_loaded": false,
+   "operations": [],
+   "platform": "linux-x86_64",
+   "reference": {
+    "commit": {
+     "clean": true,
+     "sha": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1"
+    },
+    "environment": "4ad1f59a27870d083c270d58969d94b80e97bd128c81ba20396b4599e8ae0efe",
+    "guard": {
+     "after": "passed",
+     "before": "passed"
+    }
+   },
+   "runner": "python-ref",
+   "versions": {
+    "duckdb": "1.5.6",
+    "numpy": "2.5.3",
+    "pandas": "3.0.6",
+    "pyarrow": "25.0.1",
+    "python": "3.12.15"
+   }
+  },
+  "outcome": {
+   "code": null,
+   "error": "ProgrammingError",
+   "result": "refusal",
+   "stage": "from_source"
+  },
+  "public": {
+   "payloads": [],
+   "result": null,
+   "schema": null
+  }
+ },
+ "tables": [
+  {
+   "name": "orders",
+   "data": "tables/8049516335da931e918938188572814a7931269038d2cbbe0c185d4e0ab0b94d.arrows"
+  },
+  {
+   "name": "users",
+   "data": "tables/29f7ee10385af2639f3f77371460f1f451776c91f72220d1169412e309a6b8e5.arrows"
+  }
+ ],
+ "derived": [],
+ "draws": [],
+ "statements": [
+  {
+   "text": "SELECT SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW(?)",
+   "parameters": [
+    "{catalog}.{schema}.view_semantic_column_refused"
+   ],
+   "result": "tables/64aa9a4b531814525cf4fb0a700b137d63b50352684893e28c65551e5d99e35f.arrows"
+  },
+  {
+   "text": "DESCRIBE TABLE \"{catalog}\".\"{schema}\".\"ORDERS\"",
+   "parameters": [],
+   "result": "tables/74c34866c72d51676862e9b710be0502bb7b2695e13af17ecb09778a9ddca795.arrows"
+  },
+  {
+   "text": "SELECT order_id AS \"ORDER_ID\", user_id AS \"USER_ID\", ts AS \"TS\", order_id / 0 AS \"BROKEN\", price AS \"PRICE\", price * 1.2 AS \"PRICE_WITH_TAX\" FROM \"{catalog}\".\"{schema}\".\"ORDERS\" LIMIT 1000",
+   "parameters": [],
+   "result": null,
+   "error": "ProgrammingError"
+  }
+ ],
+ "loader": []
+}
