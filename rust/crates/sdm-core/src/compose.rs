@@ -83,12 +83,13 @@ impl DataAccess {
         access
     }
 
-    /// Whether the run's provider reads a source of tables (a SQL dialect):
+    /// Whether the run's provider reads a source of tables (a database the
+    /// data layer reads, [`DataAccess::source_database`]):
     /// a warehouse or database whose tables each `materialize` reads as they
     /// stand (the owner's plan B, T3.4), where a host provider's tables are
     /// the host's own.
     pub fn reads_a_source(&self) -> bool {
-        matches!(self.provider, ProviderChoice::Sql { .. })
+        self.source_database().is_some()
     }
 
     /// What the run's provider answers.
