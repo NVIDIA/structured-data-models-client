@@ -29,7 +29,9 @@
   ],
   "cells": [
     "int8/primary-key",
-    "int8/foreign-key"
+    "int8/foreign-key",
+    "timestamp-us/time-column",
+    "float64/target"
   ],
   "input": {
     "base": "shop",
