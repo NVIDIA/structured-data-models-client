@@ -1211,3 +1211,65 @@ def test_every_refusal_of_an_installed_guard_is_kept(installed: Any) -> None:
         _ = installed['DataFrame']().write
     assert len(wg.REFUSALS) == 2
     assert 'outside the test schema' in wg.REFUSALS[0]
+
+
+#: The core's Postgres reads that bind a seed's time in the window column's
+#: own type (sdm-data's seed CTE, T3.7): the table's row read once, the
+#: seed's value put in place of the column (``jsonb_populate_record``).
+_SEEDS = (
+    'WITH "__sdm_seeds__" AS (\n'
+    '  SELECT (r.value->>0)::bigint AS "key", (r.value->>1)::bigint AS "batch", '
+    'w2."ts" AS "time"\n'
+    '  FROM jsonb_array_elements(%s::jsonb) AS r(value)\n'
+    '  CROSS JOIN (SELECT ROW(t.*)::"live_tests"."orders" AS base '
+    'FROM "live_tests"."orders" AS t LIMIT 1) AS b\n'
+    '  CROSS JOIN LATERAL jsonb_populate_record(b.base, '
+    "jsonb_build_object('ts', r.value->2)) AS w2\n"
+    ')\n'
+    'SELECT s."batch" AS "__kumo_batch__", t."ts"\n'
+    'FROM "__sdm_seeds__" s\n'
+    'JOIN "live_tests"."orders" t\n'
+    '  ON t."user_id" = s."key"\n'
+    ' AND t."ts" <= s."time"'
+)
+
+
+@pytest.mark.parametrize(
+    'sql',
+    [
+        # Each shape inside a write, or changed past what the core writes.
+        'INSERT INTO live_tests.t ' + _SEEDS,
+        _SEEDS.replace('CROSS JOIN (SELECT ROW', 'CROSS JOIN (DELETE ROW'),
+        _SEEDS.replace(
+            '"live_tests"."orders" AS base', '"other"."orders" AS base'
+        ),
+        _SEEDS.replace('::"live_tests"."orders" AS base', '::orders AS base'),
+        _SEEDS.replace('ROW(t.*)::', '(t.*)::'),
+        _SEEDS.replace(
+            '"live_tests"."orders" AS base', '"live_tests"."orders"."x" AS base'
+        ),
+        _SEEDS.replace(
+            'LATERAL jsonb_populate_record', 'jsonb_populate_record'
+        ),
+        _SEEDS.replace(
+            "jsonb_build_object('ts', r.value->2)",
+            "jsonb_build_object('ts', nextval('s'))",
+        ),
+        _SEEDS.replace(
+            "jsonb_build_object('ts', r.value->2)",
+            "jsonb_build_object('ts', pg_sleep(1))",
+        ),
+        "SELECT jsonb_build_object('a', 1)",
+        'SELECT x FROM t CROSS JOIN LATERAL jsonb_populate_record(NULL, '
+        "jsonb_build_object('a', 1)) AS w INTO live_tests.copy",
+    ],
+)
+def test_the_core_s_seed_time_reads_pass_on_postgres_as_reads_only(
+    sql: str,
+) -> None:
+    POSTGRES.check(_SEEDS)
+    with pytest.raises(wg.WriteRefused):
+        POSTGRES.check(sql)
+    # Only Postgres reads them so.
+    with pytest.raises(wg.WriteRefused):
+        DATABRICKS.check(_SEEDS)
