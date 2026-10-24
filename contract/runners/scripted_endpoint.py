@@ -87,6 +87,8 @@ either way.
 from __future__ import annotations
 
 import json
+import os
+import socket
 import threading
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -401,6 +403,14 @@ class _Handler(BaseHTTPRequestHandler):
     do_DELETE = _serve
 
 
+#: The variable naming the address the endpoint listens on.
+HOST_VARIABLE = 'SDM_SCRIPTED_ENDPOINT_HOST'
+
+
+class _ServerV6(ThreadingHTTPServer):
+    address_family = socket.AF_INET6
+
+
 @contextmanager
 def serve(
     fail_call: int | None = None,
@@ -410,6 +420,7 @@ def serve(
     item_metadata: bool = False,
     embeddings: bool = False,
     encode: Callable[[str], bytes] = str.encode,
+    host: str | None = None,
 ) -> Iterator[tuple[str, Received]]:
     r"""The endpoint on a free localhost port: its base URL, and what it
     receives; the call numbered ``fail_call`` is failed, a classification
@@ -418,8 +429,16 @@ def serve(
     for an explanation with one where ``explanation`` does, each item with
     its metadata where ``item_metadata`` does, and a call asking for
     embeddings with one on each item where ``embeddings`` does; each
-    answer's JSON text written to bytes by ``encode``, UTF-8 unless told."""
-    server = ThreadingHTTPServer(('127.0.0.1', 0), _Handler)
+    answer's JSON text written to bytes by ``encode``, UTF-8 unless told.
+
+    It listens on ``host``, else ``SDM_SCRIPTED_ENDPOINT_HOST``, else
+    ``127.0.0.1``: an IPv6 address (``::1``) is served as IPv6, since a
+    host may refuse IPv4 loopback (Databricks serverless, the second early
+    capture)."""
+    host = host or os.environ.get(HOST_VARIABLE) or '127.0.0.1'
+    server = (_ServerV6 if ':' in host else ThreadingHTTPServer)(
+        (host, 0), _Handler
+    )
     received = Received(
         fail_call=fail_call,
         probabilities=probabilities,
@@ -435,7 +454,8 @@ def serve(
     )
     thread.start()
     try:
-        yield f'http://127.0.0.1:{server.server_address[1]}', received
+        where = f'[{host}]' if ':' in host else host
+        yield f'http://{where}:{server.server_address[1]}', received
     finally:
         server.shutdown()
         server.server_close()
