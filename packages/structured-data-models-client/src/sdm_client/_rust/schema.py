@@ -253,12 +253,13 @@ def build(cls: type[Schema], source: Any, described: dict[str, Any]) -> Schema:
         warnings.simplefilter('ignore', SDMWarning)
         schema = cls(built, links, source=source)
     schema._engine_tables = EngineTables()
-    # Where the core read each table, where it read parts the source left
-    # to the connection (`SourceDescription.namespace`): kept by source name
-    # with the schema that read them, as its engine reading is (T3.4).
-    namespace = described.get('namespace')
-    if namespace is not None:
-        schema._keep_readings(
-            {table.source_name: tuple(namespace) for table in built.values()}
-        )
+    # Each table the core read, kept by source name with the schema that
+    # read it, as the old route's `from_source` keeps its engine's reading
+    # of every table: under the parts the source left to the connection
+    # where it read any (`SourceDescription.namespace`), under none where
+    # the source names every part (T3.4).
+    namespace = described.get('namespace') or ()
+    schema._keep_readings(
+        {table.source_name: tuple(namespace) for table in built.values()}
+    )
     return schema

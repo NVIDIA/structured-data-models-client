@@ -426,20 +426,37 @@ pub(crate) fn materialize(
                             .then(|| (table.source.clone(), read.namespace.clone()))
                     })
                     .collect();
-                // The tables the schema holds no reading of, read under the
-                // parts the session gives once the run builds its graph
-                // (`describe::initialize`), where the provider leaves parts
-                // to the connection.
+                // The tables the schema keeps no reading of, each read in full
+                // once the request's inputs are checked
+                // (`describe::initialize`), as the reference's engine reads
+                // every table it has not kept (`sources.py:61-71`): one of one
+                // part under the parts the session gives, where the provider
+                // leaves parts to the connection, and kept only where its
+                // namespace still agrees (above); any other kept wherever the
+                // schema read it. A host that keeps no record of the tables
+                // its schema read (one taking no notices,
+                // `Materialize::progress`) has every other table taken as
+                // kept: only that record says a table was not.
                 let unsettled = asker
                     .data()
                     .is_some_and(crate::compose::DataAccess::unsettled);
-                let anew: Vec<sdm_contract::data::Relation> = held
-                    .tables
-                    .iter()
-                    .filter(|table| unsettled && table.source.single().is_some())
-                    .filter(|table| !pinned.iter().any(|(relation, _)| *relation == table.source))
-                    .map(|table| table.source.clone())
-                    .collect();
+                let kept = |relation: &sdm_contract::data::Relation| {
+                    if unsettled && relation.single().is_some() {
+                        pinned.iter().any(|(pinned, _)| pinned == relation)
+                    } else {
+                        !progress
+                            || held
+                                .read_under
+                                .iter()
+                                .any(|read| read.relation == *relation)
+                    }
+                };
+                let mut anew: Vec<sdm_contract::data::Relation> = Vec::new();
+                for table in &held.tables {
+                    if !kept(&table.source) && !anew.contains(&table.source) {
+                        anew.push(table.source.clone());
+                    }
+                }
                 for (relation, parts) in pinned {
                     asker.pin(&relation, parts);
                 }
