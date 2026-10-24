@@ -427,16 +427,41 @@ public final class ConversionTable {
   /** One Databricks array of scalars, each element as its Arrow column holds it. */
   private static Object databricksArray(String element, ResultSet rows, int at)
       throws SQLException {
-    java.sql.Array read = rows.getArray(at);
-    if (read == null || rows.wasNull()) {
+    Object value = rows.getObject(at);
+    if (value == null || rows.wasNull()) {
       return null;
     }
-    Object[] items = (Object[]) read.getArray();
-    List<Object> out = new ArrayList<>(items.length);
-    for (Object item : items) {
-      out.add(item == null ? null : databricksElement(element, item));
+    java.sql.Array read = databricksNativeArray(element, value);
+    try {
+      Object[] items = (Object[]) read.getArray();
+      List<Object> out = new ArrayList<>(items.length);
+      for (Object item : items) {
+        out.add(item == null ? null : databricksElement(element, item));
+      }
+      return out;
+    } finally {
+      read.free();
     }
-    return out;
+  }
+
+  /**
+   * JDBC 3.4.2 returns native arrays with complex support enabled and JSON text by default.
+   * Its public parser (under {@code api.impl}) is the same native conversion the driver uses
+   * for inline results. Keep that version-specific dependency here: the other JDBC providers
+   * load and run without the optional Databricks driver, and enabled arrays avoid the driver's
+   * lossy string serialization of embedded quotes.
+   */
+  private static java.sql.Array databricksNativeArray(String element, Object value)
+      throws SQLException {
+    if (value instanceof java.sql.Array array) {
+      return array;
+    }
+    if (value instanceof String text) {
+      return new com.databricks.jdbc.api.impl.ComplexDataTypeParser()
+          .parseJsonStringToDbArray(text, "ARRAY<" + element + ">");
+    }
+    throw new java.sql.SQLDataException(
+        "Databricks ARRAY has unsupported JDBC value type: " + value.getClass().getName(), "22000");
   }
 
   private static Object databricksElement(String element, Object item) {
