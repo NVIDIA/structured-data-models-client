@@ -6,12 +6,15 @@
 r"""The routing seam: which public paths run on the old code or the core.
 
 Private, and not API. Every core path of ``scope-python.yaml`` (operation,
-mode and backend) is routed ``'old'`` or ``'core'``, and every default is
-``'old'`` until the Phase 3 switch, which a test holds. A test forces paths
-onto the core with the ``SDM_CORE_ROUTES`` environment variable, path IDs
-separated by commas, read at every call, so a change takes effect at the
-next call. A forced path that is unknown, or that has no core route in this
-build, fails the call with :class:`RouteError`; nothing falls back.
+mode and backend) is routed ``'old'`` or ``'core'``. Covered S0, S1 and S2
+entrypoints default to the core after the Phase 3 switch.
+A test selects routes with ``SDM_CORE_ROUTES``: comma-separated path IDs
+select those paths on the core and the others on the old route; an explicitly
+empty value selects the old route.
+With the variable absent, the build's defaults apply.
+The setting is read at every call, so a change takes effect at the next call.
+A selected path that is unknown, or that has no core route in this build,
+fails the call with :class:`RouteError`; nothing falls back.
 
 A call that may end on several paths, such as validation, which accepts or
 refuses, routes them together: forcing some of them and not the others
@@ -265,9 +268,6 @@ PATHS = (
     'result.merge/merge/any',
 )
 
-#: Where each path runs by default: the old code, until Phase 3.
-ROUTES: dict[str, str] = dict.fromkeys(PATHS, 'old')
-
 #: S0: validation in ``PredictiveQuery.materialize``, accepting or refusing.
 S0 = ('query.validate/accept/any', 'query.validate/refuse/any')
 
@@ -464,6 +464,14 @@ CORE_ROUTED = frozenset(
 )
 
 
+#: The Phase 3 defaults. Other paths retain their route until their slice
+#: is implemented; edits and inspection of a core-held schema inherit its
+#: source route rather than choosing another route at each accessor.
+ROUTES: dict[str, str] = {
+    path: 'core' if path in CORE_ROUTED else 'old' for path in PATHS
+}
+
+
 class RouteError(RuntimeError):
     r"""A path cannot take the route it was given.
 
@@ -497,7 +505,10 @@ def route(paths: tuple[str, ...]) -> str:
             no core route, or forces some of ``paths`` and not the others.
     """
     onto = forced()
-    taken = {'core' if path in onto else ROUTES[path] for path in paths}
+    if ENVIRONMENT in os.environ:
+        taken = {'core' if path in onto else 'old' for path in paths}
+    else:
+        taken = {ROUTES[path] for path in paths}
     if len(taken) != 1:
         raise RouteError(
             f'{ENVIRONMENT} forces some of {list(paths)} onto the core and '

@@ -90,8 +90,8 @@ differs on Databricks.
 
 ## Requirements
 
-Python 3.10 through 3.14. The client, the language and the connectors are pure
-Python and install anywhere.
+Python 3.10 through 3.14.
+The client includes a native Rust core; the language and connectors are Python packages.
 
 The relational engine is a native build, so it ships wheels rather than a
 source distribution: `manylinux_2_28` for x86-64 and aarch64, macOS 11 or newer

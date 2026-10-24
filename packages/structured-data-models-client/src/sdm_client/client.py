@@ -852,10 +852,11 @@ class SDMClient:
 def _predicts_on_the_core(request: Request) -> Any | None:
     r"""The core's ``predict`` bridge, when this call runs on the core.
 
-    A request materialized over a DuckDB or SQLite source predicts on the
-    core when the routing seam forces its paths there (T1.11d, T2.2); every
-    other call, and every call by default, takes the old route. A request
-    the core did not materialize is predicted from what it holds (T3.26).
+    Covered database and warehouse sources predict on the core by default.
+    The migration's explicit routing override can select the old route for
+    comparisons; other sources retain their route until implemented.
+    A request the core did not materialize is predicted from what it holds
+    (T3.26).
     """
     schema = getattr(request, 'schema', None)
     source = getattr(schema, 'source', None)

@@ -5034,7 +5034,9 @@ def run(
     cases = [pair for pair in cases if database in case_legs(pair[0])]
     if not cases:
         raise RunnerFailure(f'no case runs on {database}')
-    os.environ.pop('SDM_CORE_ROUTES', None)
+    # The candidate defaults to the core from T3.10. An old/reference run
+    # selects the legacy code explicitly, including between its cases.
+    os.environ['SDM_CORE_ROUTES'] = ''
     guard = _Guard(reference) if reference is not None else None
     if guard is not None:
         guard.check('before the first case')
@@ -5068,6 +5070,8 @@ def run(
             capture.recording = record_fetches is not None
         if mode == 'python-core':
             os.environ['SDM_CORE_ROUTES'] = ','.join(routes_on(case, database))
+        else:
+            os.environ['SDM_CORE_ROUTES'] = ''
         keep: dict[str, Any] | None = {} if record is not None else None
         try:
             outcome, shown, driver, public, origins = _call(
