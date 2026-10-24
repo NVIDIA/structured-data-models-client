@@ -54,12 +54,18 @@ pub(crate) struct Discovered {
 /// ([`sdm_schema::held::read`]), as the reference's engine reads only the
 /// columns its source holds; a table the source does not hold is refused as
 /// describing it refuses one (`no_such_table`).
+/// A table read in full by [`table`] for a run first (`describe::initialize`)
+/// answers its columns' facts too, and is not read again here (`read`).
 pub(crate) async fn facts(
     asker: &Asker,
     held: &HeldSchema,
+    read: &[Relation],
 ) -> Result<BTreeMap<ColumnAt, SourceFacts>, CoreError> {
     let mut found = BTreeMap::new();
     for (table, lacking) in sdm_schema::held::lacking_facts(held) {
+        if read.contains(&table.source) {
+            continue;
+        }
         let named = NamedTable {
             name: table.name.clone(),
             source: table.source.clone(),
@@ -67,21 +73,34 @@ pub(crate) async fn facts(
         };
         let asked: Vec<String> = lacking.iter().map(|c| (*c).to_owned()).collect();
         let read = self::table(asker, &named, true, Some(&asked)).await?;
-        let types = read.big_types;
-        for (name, mut facts) in sdm_schema::infer::source_facts(
-            &table.source,
-            &read.declared,
-            &read.constraints,
-            &read.preview.schema,
-        )? {
-            facts.declared_type = types
-                .iter()
-                .find(|(column, _)| *column == name)
-                .map(|(_, declared)| declared.clone());
-            found.insert((table.name.clone(), name), facts);
-        }
+        found.extend(facts_read(&table.name, &table.source, read)?);
     }
     Ok(found)
+}
+
+/// The facts of each column [`table`] read of `relation`, the table
+/// `name`, by table and column.
+pub(crate) fn facts_read(
+    name: &str,
+    relation: &Relation,
+    read: Discovered,
+) -> Result<Vec<(ColumnAt, SourceFacts)>, CoreError> {
+    let types = read.big_types;
+    sdm_schema::infer::source_facts(
+        relation,
+        &read.declared,
+        &read.constraints,
+        &read.preview.schema,
+    )?
+    .into_iter()
+    .map(|(column, mut facts)| {
+        facts.declared_type = types
+            .iter()
+            .find(|(named, _)| *named == column)
+            .map(|(_, declared)| declared.clone());
+        Ok(((name.to_owned(), column), facts))
+    })
+    .collect()
 }
 
 /// One table read as `describe_source` reads it, under the name and source

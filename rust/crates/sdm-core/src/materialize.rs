@@ -1723,9 +1723,17 @@ async fn table_rows(memo: &mut Memo<'_>, graph: &Graph) -> Result<(), CoreError>
             },
         )
         .await?;
+        let rows = row_count(&answer)?;
+        // A table of no rows, as the reference's warehouse table refuses
+        // it when its sampler counts it (`databricks/table.py:402-411`).
+        if rows == 0 {
+            return Err(sdm_schema::infer::empty_table(
+                &memo.asker.read_as(&table.source),
+            ));
+        }
         memo.memo.rows.push(MemoRows {
             table: table.name.clone(),
-            rows: row_count(&answer)?,
+            rows,
         });
         counted = true;
     }
@@ -2978,7 +2986,9 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // them (its catalog and preview). On every path, every check over what
     // the source holds comes after: the engine's meanings, time columns
     // and edges ([`kept_checks`]), the graph and what the sampler needs.
-    if let Some(located) = crate::describe::initialize(asker, pending.as_ref()).await? {
+    if let Some(located) =
+        crate::describe::initialize(asker, pending.as_ref(), &description).await?
+    {
         description = located;
         sdm_schema::assemble::mark_keys(&mut description);
     }

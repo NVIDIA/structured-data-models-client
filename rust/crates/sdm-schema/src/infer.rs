@@ -297,7 +297,7 @@ impl InferredTable {
 /// an invalid request, which the reference's unnamed error says it is, not
 /// as a rule the core lacks; the operation and rule stay named, and the
 /// table is named by its source, as the reference's error names it.
-fn empty_table(source: &Relation) -> CoreError {
+pub fn empty_table(source: &Relation) -> CoreError {
     let refused = not_yet("empty_table");
     CoreError::new(Sentence::EmptyTable, "a table of the source holds no rows")
         .with_field("operation", refused.fields["operation"].clone())
