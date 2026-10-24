@@ -42,26 +42,20 @@ pub(super) fn refused(refusal: &sdm_schema::view::spec::ViewRefusal) -> CoreErro
     let error = |sentence| {
         CoreError::new(sentence, refusal.to_string()).with_field("view_kind", kind.clone())
     };
-    match &refusal.reason {
-        R::Yaml(yaml) => {
-            error(Sentence::ViewNotYaml).with_field("reason", Detail::text(yaml.to_string()))
-        }
-        R::NotAMapping => error(Sentence::ViewNotAMapping),
-        R::MissesSource => error(Sentence::ViewMissesSource),
-        R::Misses(entry) => {
-            error(Sentence::ViewMissesEntry).with_field("entry", Detail::text(entry))
-        }
-        R::NotAList(section) => {
-            error(Sentence::ViewNotAList).with_field("section", Detail::text(section))
-        }
-        R::NestsItself => error(Sentence::ViewNestsItself),
-        R::Unhashable(entry) => {
-            error(Sentence::ViewEntryUnhashable).with_field("entry", Detail::text(entry))
-        }
-        R::NotText(entry) => {
-            error(Sentence::ViewEntryNotText).with_field("entry", Detail::text(entry))
-        }
-    }
+    // The old client's own refusals; where it failed unnamed, the view is
+    // refused as one that cannot be converted, with why (the named
+    // refusals P3J-1 to P3J-4 and P3J-11 propose wait for the owner).
+    let reason = match &refusal.reason {
+        R::NotAMapping => return error(Sentence::ViewNotAMapping),
+        R::MissesSource => return error(Sentence::ViewMissesSource),
+        R::Yaml(yaml) => format!("its definition is not readable YAML: {yaml}"),
+        R::Misses(entry) => format!("its definition misses '{entry}'"),
+        R::NotAList(section) => format!("its definition's '{section}' is not a list"),
+        R::NestsItself => "its definition has a join nested in itself".to_owned(),
+        R::Unhashable(entry) => format!("its definition's '{entry}' is a list or a mapping"),
+        R::NotText(entry) => format!("its definition's '{entry}' is not text"),
+    };
+    super::unconvertible(refusal.kind.noun(), reason)
 }
 
 /// Why a joined table cannot be used, as a clause (`unusable_table_reason`,

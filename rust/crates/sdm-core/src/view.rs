@@ -104,10 +104,43 @@ pub(crate) async fn convert(asker: &Asker, reader: &Reader) -> Result<Converted,
         floats,
     };
     let definition = read_definition(&reading, &view).await?;
-    match definition.kind {
+    let converted = match definition.kind {
         ViewKind::Metric => metric::convert(&reading, &view, definition).await,
         ViewKind::Semantic => semantic::convert(&reading, &view, definition).await,
-    }
+    };
+    // A refusal that could not name the view where it was found names it.
+    converted.map_err(|error| {
+        if error.sentence == Sentence::ViewInvalid && !error.fields.contains_key("view") {
+            let reason = match error.fields.get("reason") {
+                Some(Detail::Scalar(Scalar::Utf8(reason))) => reason.clone(),
+                _ => String::new(),
+            };
+            let kind = match error.fields.get("view_kind") {
+                Some(Detail::Scalar(Scalar::Utf8(kind))) => kind.clone(),
+                _ => String::new(),
+            };
+            return CoreError {
+                message: format!(
+                    "Cannot convert {kind} '{}' into a graph since {reason}",
+                    view.name
+                ),
+                ..error
+            }
+            .with_field("view", Detail::text(&view.name));
+        }
+        error
+    })
+}
+
+/// A view that cannot be converted, with why; the routine names the view
+/// ([`convert`]).
+pub(crate) fn unconvertible(kind: &str, reason: String) -> CoreError {
+    CoreError::new(
+        Sentence::ViewInvalid,
+        format!("Cannot convert {kind} into a graph since {reason}"),
+    )
+    .with_field("view_kind", Detail::text(kind))
+    .with_field("reason", Detail::text(reason))
 }
 
 /// What every step of a conversion reads through.

@@ -172,11 +172,10 @@ fn mismatched(asked: &str) -> CoreError {
 
 /// A value too large to quote, refused by name.
 pub fn too_large(_: TooLarge) -> CoreError {
-    CoreError::new(
-        Sentence::ViewValueTooLarge,
-        "The metric view definition holds a value too large to write in a message or a statement",
+    super::unconvertible(
+        "metric view",
+        "its definition holds a value too large to write in a message or a statement".to_owned(),
     )
-    .with_field("view_kind", Detail::text("metric view"))
 }
 
 fn text(
