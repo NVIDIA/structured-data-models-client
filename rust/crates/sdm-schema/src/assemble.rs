@@ -269,7 +269,6 @@ pub fn assemble(
     let mut description = SourceDescription {
         tables: described,
         links: once(links),
-        namespace: None,
     };
     mark_keys(&mut description);
     warnings.extend(guessed_time_columns(&description, &choices, given));

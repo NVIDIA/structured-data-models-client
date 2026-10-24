@@ -83,10 +83,12 @@ impl DataAccess {
         access
     }
 
-    /// Whether the run's provider reads a table under `parts`, the
-    /// namespace it was read under earlier (`DataLayer::keeps`).
-    pub fn keeps(&self, parts: &[String]) -> bool {
-        self.layer.keeps(&self.provider, parts)
+    /// Whether the run's provider reads a source of tables (a SQL dialect):
+    /// a warehouse or database whose tables each `materialize` reads as they
+    /// stand (the owner's plan B, T3.4), where a host provider's tables are
+    /// the host's own.
+    pub fn reads_a_source(&self) -> bool {
+        matches!(self.provider, ProviderChoice::Sql { .. })
     }
 
     /// What the run's provider answers.

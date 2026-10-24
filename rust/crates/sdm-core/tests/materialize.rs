@@ -142,40 +142,16 @@ fn shop() -> SourceDescription {
                 column: "user_id".into(),
             },
         ]],
-        namespace: None,
     }
 }
 
 /// `description` as a host holds it, each column with its facts (T3.16).
-/// `description` as a host holds it once described: each table kept as the
-/// description read it, its columns with what the source said of each, as
-/// a described schema keeps every table its engine read, so a run reads
-/// none of them anew (T3.4 fixes 12 and 13).
 fn held_of(description: &SourceDescription) -> sdm_contract::ops::HeldSchema {
-    let mut held = sdm_schema::held::held(
+    sdm_schema::held::held(
         description,
         &BTreeSet::new(),
         &std::collections::BTreeMap::new(),
-    );
-    held.read_under = held
-        .tables
-        .iter()
-        .map(|table| sdm_contract::ops::ReadUnder {
-            relation: table.source.clone(),
-            namespace: Vec::new(),
-            columns: table
-                .columns
-                .iter()
-                .filter_map(|column| {
-                    Some(sdm_contract::ops::KeptColumn {
-                        name: column.name.clone(),
-                        source: column.source.clone()?,
-                    })
-                })
-                .collect(),
-        })
-        .collect();
-    held
+    )
 }
 
 /// A host provider declaring the requests materialize asks.
@@ -249,7 +225,6 @@ fn materialize_start(
         most_calls: None,
         candidates: None,
         sampler_state: None,
-        progress: false,
     });
     let indices = RecordBatch::try_new(
         Arc::new(Schema::new(vec![Field::new(
@@ -344,6 +319,100 @@ fn catalog(request: &DataRequest) -> Option<FetchResult> {
     }
 }
 
+/// The shop's tables as DuckDB's catalog and a preview answer them, under
+/// either naming ([`shop`], [`renamed`]): each run reads every table of a
+/// source as it stands (the owner's plan B, T3.4), its columns, keys and
+/// first rows, before it samples.
+fn shop_source(request: &DataRequest) -> Option<FetchResult> {
+    let table = |name: &str| {
+        shop()
+            .tables
+            .into_iter()
+            .find(|t| name.ends_with(t.source.single().unwrap_or_default()))
+    };
+    match request {
+        DataRequest::Describe {
+            tables,
+            part: part @ (DescribePart::Columns | DescribePart::Keys),
+        } => {
+            let described = table(tables[0].source.last()?)?;
+            if *part == DescribePart::Keys {
+                let mut names = arrow_array::builder::ListBuilder::new(
+                    arrow_array::builder::StringBuilder::new(),
+                )
+                // DuckDB's own name for a list's item.
+                .with_field(Arc::new(Field::new("l", DataType::Utf8, true)));
+                for key in &described.primary_key {
+                    names.values().append_value(key);
+                }
+                names.append(true);
+                return Some(data(vec![
+                    (
+                        "constraint_type",
+                        Arc::new(StringArray::from(vec!["PRIMARY KEY"])),
+                    ),
+                    ("constraint_column_names", Arc::new(names.finish())),
+                ]));
+            }
+            let declared = |dtype: Dtype| match dtype {
+                Dtype::Int => "BIGINT",
+                Dtype::Float => "DOUBLE",
+                Dtype::Date | Dtype::Time => "TIMESTAMP",
+                _ => "VARCHAR",
+            };
+            let n = described.columns.len();
+            let names: Vec<&str> = described.columns.iter().map(|c| c.name.as_str()).collect();
+            let types: Vec<&str> = described
+                .columns
+                .iter()
+                .map(|c| declared(c.dtype))
+                .collect();
+            let keys: Vec<bool> = described
+                .columns
+                .iter()
+                .map(|c| described.primary_key.contains(&c.name))
+                .collect();
+            Some(data(vec![
+                (
+                    "cid",
+                    Arc::new(arrow_array::Int32Array::from(
+                        (0..n as i32).collect::<Vec<_>>(),
+                    )),
+                ),
+                ("name", Arc::new(StringArray::from(names))),
+                ("type", Arc::new(StringArray::from(types))),
+                (
+                    "notnull",
+                    Arc::new(arrow_array::BooleanArray::from(keys.clone())),
+                ),
+                (
+                    "dflt_value",
+                    Arc::new(StringArray::from(vec![None::<&str>; n])),
+                ),
+                ("pk", Arc::new(arrow_array::BooleanArray::from(keys))),
+            ]))
+        }
+        DataRequest::Preview { columns, .. } => Some(data(
+            columns
+                .iter()
+                .map(|c| -> (&str, ArrayRef) {
+                    let values: ArrayRef = match c.as_str() {
+                        "order_id" | "user_id" => Arc::new(Int64Array::from(vec![1_i64, 2])),
+                        "price" => Arc::new(arrow_array::Float64Array::from(vec![1.5, 2.5])),
+                        "ts" | "born" => Arc::new(TimestampMicrosecondArray::from(vec![
+                            1_672_531_200_000_000,
+                            1_672_617_600_000_000,
+                        ])),
+                        _ => Arc::new(StringArray::from(vec!["US", "DE"])),
+                    };
+                    (c.as_str(), values)
+                })
+                .collect(),
+        )),
+        _ => None,
+    }
+}
+
 /// What [`catalog`] answers, but the indexes in DuckDB's own catalog
 /// shape, which a DuckDB plan expects and `sdm-data` reads (decision E54).
 fn duckdb_catalog(request: &DataRequest) -> Option<FetchResult> {
@@ -427,7 +496,7 @@ fn at_the_sample(
     mut run: Run,
     answer: fn(&DataRequest) -> Option<FetchResult>,
 ) -> Result<DataRequest, CoreError> {
-    for _ in 0..4 {
+    for _ in 0..8 {
         match run.next() {
             Err(err) => return Err(err),
             Ok(Step::Fetch { requests }) => {
@@ -435,7 +504,9 @@ fn at_the_sample(
                     if let DataRequest::SampleEntities { .. } = asked.request {
                         return Ok(asked.request);
                     }
-                    let answer = answer(&asked.request).unwrap();
+                    let answer = answer(&asked.request)
+                        .or_else(|| shop_source(&asked.request))
+                        .unwrap();
                     run.submit_fetch(asked.id, answer).unwrap();
                 }
             }
@@ -784,7 +855,7 @@ fn requests_to_the_sample(
                     part: DescribePart::Indexes,
                     ..
                 } => index_answer(),
-                other => match catalog(other) {
+                other => match catalog(other).or_else(|| shop_source(other)) {
                     Some(answer) => answer,
                     None => return (asked_for, warnings),
                 },
@@ -888,7 +959,13 @@ fn try_steps_sampling(
         for asked in requests {
             seen.push((asked.request.clone(), asked.plan.clone()));
             let answer = match &asked.request {
-                DataRequest::Describe { .. } => index_answer(),
+                DataRequest::Describe {
+                    part: DescribePart::Indexes,
+                    ..
+                } => index_answer(),
+                DataRequest::Describe { .. } | DataRequest::Preview { .. } => {
+                    shop_source(&asked.request).unwrap()
+                }
                 DataRequest::TimeBounds { .. } => catalog(&asked.request).unwrap(),
                 DataRequest::SampleEntities { columns, .. } => sample(columns),
                 DataRequest::Neighbors { columns, .. } => {
@@ -1653,10 +1730,15 @@ fn a_provider_declaring_no_null_order_is_not_asked_for_an_order() {
     )
     .unwrap();
     assert_eq!(rule(&run.next().unwrap_err()), "null_order");
+    // DuckDB's: refused once its tables are read, as the reference's
+    // sampler refuses it when it is built over the tables its engine read.
     let (operation, attachments) = materialize_start(duckdb(), &renamed(), QUERY, None);
     let layer: Arc<dyn DataLayer> = Arc::new(Changed(|c| c.null_order = None));
-    let mut run = materialize_on(layer, operation, attachments).unwrap();
-    assert_eq!(rule(&run.next().unwrap_err()), "null_order");
+    let run = materialize_on(layer, operation, attachments).unwrap();
+    assert_eq!(
+        rule(&at_the_sample(run, duckdb_catalog).unwrap_err()),
+        "null_order"
+    );
 }
 
 #[test]
@@ -1755,11 +1837,19 @@ fn a_provider_without_index_advice_is_neither_asked_for_indexes_nor_warned() {
     let (shipped, warnings) = duckdb_run(Arc::new(sdm_data::Data::new()));
     assert_eq!(warnings, ["MISSING_INDICES"]);
     let shipped = statements(&shipped);
-    assert!(shipped[0].contains("duckdb_indexes()"), "{shipped:?}");
+    // The index read comes once the tables are read as they stand (the
+    // owner's plan B, T3.4), before anything is sampled.
+    let at = shipped
+        .iter()
+        .position(|text| text.contains("duckdb_indexes()"))
+        .unwrap_or_else(|| panic!("{shipped:?}"));
+    assert!(!shipped[at + 1..].iter().any(|t| t.contains("PRAGMA table_info")));
     let (forgotten, warnings) = duckdb_run(Arc::new(Changed(|c| c.index_advice = None)));
     let forgotten = statements(&forgotten);
     assert!(warnings.is_empty(), "{warnings:?}");
-    assert_eq!(forgotten, shipped[1..]);
+    let mut unread = shipped.clone();
+    unread.remove(at);
+    assert_eq!(forgotten, unread);
 }
 
 #[test]

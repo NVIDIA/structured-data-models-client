@@ -438,17 +438,6 @@ pub struct SourceDescription {
     /// the links inferred by name that can join, in that order (decision
     /// E55); in `materialize`'s schema, the host's.
     pub links: Vec<Vec<ColumnRef>>,
-    /// The namespace the tables were read under, each part given, where
-    /// the run read parts the provider left to the connection (a
-    /// Databricks source naming no catalog or schema: the session's
-    /// current ones; contract v28, T3.4): `materialize` reads the same
-    /// tables under it (a host keeps it for each table it described,
-    /// [`HeldSchema::read_under`]), whatever the session's current parts
-    /// are by then, as the reference keeps the tables it described. Left
-    /// out, none was read, and each table is read under the provider's
-    /// own namespace.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub namespace: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -586,47 +575,6 @@ pub struct HeldSchema {
     /// The host's relationships as they stand, each
     /// `[foreign key, referenced key]`.
     pub links: Vec<Vec<ColumnRef>>,
-    /// Where the schema read each relation it read under parts its provider
-    /// left to the connection (a Databricks source naming no catalog or
-    /// schema: [`SourceDescription::namespace`] of the description that read
-    /// it), by relation, once each: `materialize` reads a table of that
-    /// relation there again while the source's own parts agree, whatever
-    /// the session's current parts are by then, as the reference keeps each
-    /// table it read by its source name. A fact of the schema that read the
-    /// relations, not of any table or column: a table adopted from another
-    /// schema, or edited, is read where this schema read its relation, and
-    /// a relation it never read where the source and its session say
-    /// (contract v28, T3.4). Absent from the JSON when none.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub read_under: Vec<ReadUnder>,
-}
-
-/// One relation a schema read and kept ([`HeldSchema::read_under`]), as the
-/// reference's `EngineTables` keeps the engine's table it read: the
-/// namespace it read it under, and the table as it read it, each column
-/// the source held of it with the facts read of it then (contract v28,
-/// T3.4 fix 13). A later run reads the table as kept: only these columns,
-/// each of the type kept, and asks the source nothing more of it.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct ReadUnder {
-    pub relation: Relation,
-    /// Each part, outermost first, as the source answered it.
-    pub namespace: Vec<String>,
-    /// The columns kept, in the catalog's order; none where the reading
-    /// keeps no table (such a relation is read anew). Absent from the JSON
-    /// when none.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub columns: Vec<KeptColumn>,
-}
-
-/// One column of a kept table ([`ReadUnder::columns`]): its name, and what
-/// the source said of it when the table was kept.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct KeptColumn {
-    pub name: String,
-    pub source: SourceFacts,
 }
 
 /// One table as the host holds it.
@@ -943,14 +891,6 @@ pub struct Materialize {
     /// first run.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sampler_state: Option<SamplerState>,
-    /// Whether the host takes the run's notices that ask nothing
-    /// ([`crate::run::Step::InputsChecked`]: the input checks passed and
-    /// nothing is read yet; [`crate::run::Step::TablesLocated`]: the catalog
-    /// and schema each table read anew lives in), to keep the schema's record
-    /// of its tables as the reference keeps its `EngineTables` (contract v28,
-    /// T3.4). Left out, `false`: the run says neither.
-    #[serde(default, skip_serializing_if = "crate::data::is_false")]
-    pub progress: bool,
 }
 
 /// The version of [`SamplerState`]'s format this build writes and reads;

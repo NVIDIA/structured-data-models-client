@@ -19,11 +19,12 @@
 //! unread and a big integer needs widening; requests of one table are
 //! asked together in one step.
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use sdm_contract::catalog::{CatalogAnswer, CatalogColumn, CatalogKey, KeyKind};
 use sdm_contract::data::{DataRequest, DescribePart, Relation};
-use sdm_contract::ops::{NamedTable, SourceFacts};
+use sdm_contract::ops::{HeldSchema, NamedTable, SourceFacts};
 use sdm_contract::{CoreError, Detail, ErrorCode, Scalar, Sentence};
 use sdm_schema::held::ColumnAt;
 use sdm_schema::infer::PREVIEW_ROWS;
@@ -44,6 +45,31 @@ pub(crate) struct Discovered {
     pub preview: ArrowData,
     /// Each big integer's declared type ([`big_integer_types`]).
     pub big_types: Vec<(String, String)>,
+}
+
+/// The facts of each column of `held` that carries none, read from the
+/// source as `describe_source` reads them ([`table`]), by table and column
+/// (T3.16), for a host provider's tables: none asked for a schema whose
+/// columns all carry theirs. A column the source does not hold has none,
+/// and the schema read without it ([`sdm_schema::held::read`]); a table
+/// the source does not hold is refused as describing it refuses one
+/// (`no_such_table`).
+pub(crate) async fn facts(
+    asker: &Asker,
+    held: &HeldSchema,
+) -> Result<BTreeMap<ColumnAt, SourceFacts>, CoreError> {
+    let mut found = BTreeMap::new();
+    for (table, lacking) in sdm_schema::held::lacking_facts(held) {
+        let named = NamedTable {
+            name: table.name.clone(),
+            source: table.source.clone(),
+            columns: Some(table.columns.iter().map(|c| c.name.clone()).collect()),
+        };
+        let asked: Vec<String> = lacking.iter().map(|c| (*c).to_owned()).collect();
+        let read = self::table(asker, &named, true, Some(&asked)).await?;
+        found.extend(facts_read(&table.name, &table.source, read)?);
+    }
+    Ok(found)
 }
 
 /// The facts of each column [`table`] read of `relation`, the table

@@ -56,7 +56,7 @@ if TYPE_CHECKING:
     from predictive_query.time_columns import TimeColumnChoice
     from sdm_connectors import Source
 
-    from sdm_client._rust.results import Reading, SourceFacts
+    from sdm_client._rust.results import SourceFacts
 
 # Semantic types this client can declare. These are the contract's, and match
 # ``predictive_query.Stype`` one for one.
@@ -1034,50 +1034,6 @@ class Schema:
             _require_column(self._tables, link.source_table, link.source_column)
             _require_column(self._tables, link.target_table, link.target_column)
             _require_joinable(self._tables, link)
-
-    @property
-    def _read_under(self) -> Mapping[str, tuple[str, ...]]:
-        r"""Where the core read each of this schema's source tables, by source
-        name (T3.4), held with the engine's reading of them
-        (``EngineTables.readings``) so it lives exactly as long: none for a
-        schema whose engine reading is none yet."""
-        return {
-            name: reading.namespace for name, reading in self._readings.items()
-        }
-
-    @property
-    def _readings(self) -> Mapping[str, Reading]:
-        r"""Each table the core read and kept, by source name, as kept
-        (:attr:`_read_under` with each table's columns, T3.4)."""
-        tables = self._engine_tables
-        return {} if tables is None else tables.readings()
-
-    def _engine_reading(self) -> Any:
-        r"""The schema's engine reading (``EngineTables``), made where there
-        is none yet, as the relational materializer makes it before its
-        first read (``relational.py:555``)."""
-        from sdm_client.materializers.sources import EngineTables
-
-        if self._engine_tables is None:
-            self._engine_tables = EngineTables()
-        return self._engine_tables
-
-    def _keep_readings(
-        self, read: Mapping[str, Reading], *, replace: bool = False
-    ) -> None:
-        r"""Where the core says it read tables, kept with the engine's reading
-        as the old route keeps a table it read (``EngineTables.keep``): an
-        entry for a source name held already left as it is; or, ``replace``,
-        the readings as the core answered them whole (an edit's echo). The
-        engine's reading is made where none is yet, as the relational
-        materializer makes it before its first read."""
-        if not read and (replace is False or self._engine_tables is None):
-            return
-        held = self._engine_reading().readings()
-        if replace:
-            held.clear()
-        for source_name, reading in read.items():
-            held.setdefault(source_name, reading)
 
     def snapshot(self) -> Schema:
         r"""This schema as it stands, so a later edit cannot reach back.

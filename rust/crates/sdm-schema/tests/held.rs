@@ -52,7 +52,6 @@ fn schema() -> HeldSchema {
             duplicate_keys: Some(Scalar::UInt64(3)),
         }],
         links: vec![],
-        read_under: Vec::new(),
     }
 }
 

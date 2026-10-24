@@ -152,7 +152,6 @@ pub fn messages() -> Vec<ControlMessage> {
                 version: 1,
                 memo: AttachmentId(4),
             }),
-            progress: false,
         })),
         start(Operation::Predict(Predict {
             state: Some(state.clone()),

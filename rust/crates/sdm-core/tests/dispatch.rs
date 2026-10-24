@@ -102,7 +102,6 @@ fn attachments_of(operation: &Operation) -> Attachments {
                 json(&SourceDescription {
                     tables: vec![],
                     links: vec![],
-                    namespace: None,
                 }),
             ),
             (m.query, json(&"PREDICT t.c FOR EACH t.id")),
@@ -666,7 +665,6 @@ fn materialize(seed: Option<Seed>) -> Operation {
         most_calls: None,
         candidates: None,
         sampler_state: None,
-        progress: false,
     })
 }
 

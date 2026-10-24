@@ -311,10 +311,6 @@ pub(crate) async fn run(
             table.duplicate_keys = Some(Scalar::UInt64(repeats));
         }
     }
-    // The namespace the run read its tables under, where it read parts
-    // the provider left to the connection, for materialize to read the
-    // same tables (`SourceDescription::namespace`).
-    description.namespace = asker.settled_namespace();
     let bytes = serde_json::to_vec(&description)
         .map_err(|_| internal("a source description does not serialize"))?;
     let id = asker.attach(Attachment::Bytes(bytes))?;
@@ -684,83 +680,91 @@ pub(crate) async fn settled(asker: Asker) -> Result<Asker, CoreError> {
         part: DescribePart::Namespace,
     };
     match describe(&asker, asked).await? {
-        CatalogAnswer::Namespace(parts) => {
-            Ok(asker.with_access(data.settled(parts.clone()), parts))
-        }
+        CatalogAnswer::Namespace(parts) => Ok(asker.with_access(data.settled(parts))),
         _ => Err(another_part()),
     }
 }
 
-/// The schema's record of where its tables live made, past every input
-/// check of the request and before it reads anything, as the reference's
-/// materializer makes its `EngineTables` (`relational.py:520-521`), and
-/// said to the host ([`Asker::inputs_checked`]); then each table the record
-/// holds nothing of read in full, as the reference's engine reads each
-/// table it has not kept before keeping any (`sources.py:61-71`), whether
-/// or not the schema's columns hold their facts: located where the session
-/// says (its namespace read once and the table pinned under it, where the
-/// provider leaves parts to the connection), its catalog read (a table the
-/// source does not hold refused by name), every later read of it naming
-/// the columns the catalog lists ([`Asker::guard`]), and its preview read,
-/// a table of no rows refused (`Table '…' is empty`). Then the facts of
-/// each column that holds none read from the source, and the tables said
-/// located ([`Asker::tables_located`]), before any row is sampled, as the
-/// reference's engine keeps them (`EngineTables.keep`).
+/// The schema the run reads, once every input check of the request is made
+/// and before any row is sampled, where the host handed one to read
+/// (`pending`); none otherwise, the run reading `description` as handed.
 ///
-/// `description` is the run's schema: answered as the source holds it
-/// where the run read a table anew or a column held no facts (`pending`),
-/// each table read anew keeping only the columns its catalog lists, as the
-/// reference's engine copies a kept table for a gather (`sources.py:81-88`).
+/// A source's tables (a SQL provider's) are read as they stand at this run
+/// and nothing of them is remembered between runs (the owner's plan B,
+/// T3.4): each table's location (a part the provider leaves to the
+/// connection read from the session once), its catalog (a table the source
+/// does not hold refused by name, every later read of it naming the
+/// columns the catalog lists, [`Asker::guard`]) and its preview (a table of
+/// no rows refused, `Table '…' is empty`), every column of the schema read
+/// by the type the source holds now, the caller's meanings kept. A column
+/// the schema names that the source does not hold is refused by name
+/// (`column_not_in_source`), and so is a type the caller gave a column
+/// that the source's does not match (`column_type_unmatched`), the owner's
+/// items 1 and 3. A host provider's columns that hold no facts are read
+/// from it, and the schema read without one it does not hold (T3.16).
 /// Once a run, the answer kept for its later parts.
 pub(crate) async fn initialize(
     asker: &Asker,
     pending: Option<&HeldSchema>,
-    description: &SourceDescription,
 ) -> Result<Option<SourceDescription>, CoreError> {
-    asker.inputs_checked();
-    let Some(anew) = asker.uninitialized() else {
-        return Ok(asker.located());
+    let Some(held) = pending else {
+        return Ok(None);
     };
-    // The namespace the session gives, read once where a table of one part
-    // is read anew under a provider that leaves parts to the connection.
+    if let Some(located) = asker.located() {
+        return Ok(Some(located));
+    }
+    let located = if asker
+        .data()
+        .is_some_and(crate::compose::DataAccess::reads_a_source)
+    {
+        as_it_stands(asker, held).await?
+    } else {
+        let found = crate::discover::facts(asker, held).await?;
+        sdm_schema::held::read(held.clone(), &found, false)?.by_the_source()
+    };
+    asker.locate(located.clone());
+    Ok(Some(located))
+}
+
+/// `held` as its source holds it now: each relation it names read once
+/// ([`initialize`]), each column by the facts that read gives.
+async fn as_it_stands(asker: &Asker, held: &HeldSchema) -> Result<SourceDescription, CoreError> {
     let unsettled = asker
         .data()
         .is_some_and(crate::compose::DataAccess::unsettled);
-    let parts = if unsettled && anew.iter().any(|r| r.single().is_some()) {
+    let mut relations: Vec<&Relation> = Vec::new();
+    for table in &held.tables {
+        if !relations.contains(&&table.source) {
+            relations.push(&table.source);
+        }
+    }
+    if unsettled && relations.iter().any(|r| r.single().is_some()) {
         let asked = DataRequest::Describe {
             tables: vec![],
             part: DescribePart::Namespace,
         };
-        match describe(asker, asked).await? {
-            CatalogAnswer::Namespace(parts) => parts,
-            _ => return Err(another_part()),
-        }
-    } else {
-        Vec::new()
-    };
-    let mut read_under: Vec<sdm_contract::ops::ReadUnder> = Vec::with_capacity(anew.len());
-    for relation in &anew {
-        let under = if unsettled && relation.single().is_some() {
+        let CatalogAnswer::Namespace(parts) = describe(asker, asked).await? else {
+            return Err(another_part());
+        };
+        for relation in relations.iter().filter(|r| r.single().is_some()) {
             asker.pin(relation, parts.clone());
-            parts.clone()
-        } else {
-            Vec::new()
-        };
-        // One read of the relation, over the columns the schema's tables of
-        // it hold.
-        let Some(first) = description.tables.iter().find(|t| t.source == *relation) else {
-            continue;
-        };
+        }
+    }
+    let mut found = std::collections::BTreeMap::new();
+    for relation in relations {
+        let tables: Vec<_> = held
+            .tables
+            .iter()
+            .filter(|t| t.source == *relation)
+            .collect();
         let mut columns: Vec<String> = Vec::new();
-        for table in description.tables.iter().filter(|t| t.source == *relation) {
-            for column in &table.columns {
-                if !columns.contains(&column.name) {
-                    columns.push(column.name.clone());
-                }
+        for column in tables.iter().flat_map(|t| &t.columns) {
+            if !columns.contains(&column.name) {
+                columns.push(column.name.clone());
             }
         }
         let named = NamedTable {
-            name: first.name.clone(),
+            name: tables[0].name.clone(),
             source: relation.clone(),
             columns: Some(columns),
         };
@@ -769,52 +773,63 @@ pub(crate) async fn initialize(
         if rows == 0 {
             return Err(infer::empty_table(&asker.read_as(relation)));
         }
-        let columns = crate::discover::facts_read(&first.name, relation, read)?
-            .into_iter()
-            .map(|((_, name), source)| sdm_contract::ops::KeptColumn { name, source })
-            .collect();
-        read_under.push(sdm_contract::ops::ReadUnder {
-            relation: relation.clone(),
-            namespace: under,
-            columns,
-        });
+        for table in &tables {
+            if let Some(column) = table
+                .columns
+                .iter()
+                .find(|c| !read.declared.iter().any(|d| d.name == c.name))
+            {
+                return Err(not_in_source(
+                    &table.name,
+                    &column.name,
+                    &asker.read_as(relation),
+                ));
+            }
+        }
+        let facts = crate::discover::facts_read(&tables[0].name, relation, read)?;
+        for table in &tables {
+            for ((_, column), source) in &facts {
+                found.insert((table.name.clone(), column.clone()), source.clone());
+            }
+        }
     }
-    // The schema each run reads: each table as it was kept or as it was
-    // read anew, only the columns the source held of it then, each of the
-    // type the source gave it then, the caller's meanings kept, as the
-    // reference's engine copies the table it kept for each gather
-    // (`sources.py:72-88`) and sets the schema's meanings on it
-    // (`relational.py:549-551`); a column the caller holds that the table
-    // lacks is no column of it. The checks over what the source holds come
-    // after, as the reference's do.
-    let kept = asker.kept();
-    let tables: Vec<&sdm_contract::ops::ReadUnder> = kept.iter().chain(&read_under).collect();
-    let located = pending
-        .map(|held| -> Result<SourceDescription, CoreError> {
-            let mut found = std::collections::BTreeMap::new();
-            for table in &held.tables {
-                if let Some(read) = tables.iter().find(|r| r.relation == table.source) {
-                    for column in &read.columns {
-                        found.insert(
-                            (table.name.clone(), column.name.clone()),
-                            column.source.clone(),
-                        );
-                    }
-                }
+    for table in &held.tables {
+        for column in &table.columns {
+            let Some(source) = found.get(&(table.name.clone(), column.name.clone())) else {
+                continue;
+            };
+            if source.exact_number.is_none()
+                && !sdm_schema::held::type_matches(&column.dtype, source.dtype)
+            {
+                return Err(CoreError::new(
+                    Sentence::ColumnTypeUnmatched,
+                    "a column's type the caller gave is not the one the source holds",
+                )
+                .with_field("field", Detail::text("schema"))
+                .with_field("table", Detail::text(&table.name))
+                .with_field("column", Detail::text(&column.name))
+                .with_field("dtype", Detail::text(&column.dtype))
+                .with_field("source_dtype", Detail::text(source.dtype.wire_name())));
             }
-            let mut located = sdm_schema::held::read(held.clone(), &found, false)?.by_the_source();
-            for table in &mut located.tables {
-                if let Some(read) = tables.iter().find(|r| r.relation == table.source) {
-                    table
-                        .columns
-                        .retain(|c| read.columns.iter().any(|kept| kept.name == c.name));
-                }
-            }
-            Ok(located)
-        })
-        .transpose()?;
-    asker.tables_located(read_under, located.clone());
-    Ok(located)
+        }
+    }
+    Ok(sdm_schema::held::read(held.clone(), &found, false)?.by_the_source())
+}
+
+/// The refusal of `table.column`, a column of the schema that the source's
+/// `relation` does not hold (the owner's item 1).
+fn not_in_source(table: &str, column: &str, relation: &Relation) -> CoreError {
+    CoreError::new(
+        Sentence::ColumnNotInSource,
+        "a column of the schema is not one its source holds",
+    )
+    .with_field("field", Detail::text("schema"))
+    .with_field("table", Detail::text(table))
+    .with_field("column", Detail::text(column))
+    .with_field(
+        "source",
+        Detail::List(relation.source.iter().cloned().map(Scalar::Utf8).collect()),
+    )
 }
 
 /// The catalog's answer to `request`, a `describe`: fetched, admitted,

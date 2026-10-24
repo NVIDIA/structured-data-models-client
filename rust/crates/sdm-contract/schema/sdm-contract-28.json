@@ -164,39 +164,6 @@
             "step",
             "result"
           ]
-        },
-        {
-          "description": "A notice that asks the host nothing: the request's input checks\npassed and nothing has been read from the source yet; the host now\nstarts the schema's record of its tables where it has none, as the\nreference's materializer makes its `EngineTables` (`relational.py:555`),\nand asks for the next step (contract v28, T3.4).",
-          "type": "object",
-          "properties": {
-            "step": {
-              "type": "string",
-              "const": "inputs_checked"
-            }
-          },
-          "required": [
-            "step"
-          ]
-        },
-        {
-          "description": "A notice that asks the host nothing: the catalog and schema each table\nthe run reads anew lives in are known (its catalog read under the\nsession's parts), as `read_under` says; no row data has been fetched.\nThe host records each, a source name it holds left as it is, as the\nreference's engine keeps its tables (`EngineTables.keep`), and asks\nfor the next step (contract v28, T3.4).",
-          "type": "object",
-          "properties": {
-            "read_under": {
-              "type": "array",
-              "items": {
-                "$ref": "#/$defs/ReadUnder"
-              }
-            },
-            "step": {
-              "type": "string",
-              "const": "tables_located"
-            }
-          },
-          "required": [
-            "step",
-            "read_under"
-          ]
         }
       ],
       "required": [
@@ -769,16 +736,6 @@
             "items": {
               "$ref": "#/$defs/ColumnRef"
             }
-          }
-        },
-        "namespace": {
-          "description": "The namespace the tables were read under, each part given, where\nthe run read parts the provider left to the connection (a\nDatabricks source naming no catalog or schema: the session's\ncurrent ones; contract v28, T3.4): `materialize` reads the same\ntables under it (a host keeps it for each table it described,\n[`HeldSchema::read_under`]), whatever the session's current parts\nare by then, as the reference keeps the tables it described. Left\nout, none was read, and each table is read under the provider's\nown namespace.",
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "type": "string"
           }
         }
       },
@@ -1785,13 +1742,6 @@
               "$ref": "#/$defs/ColumnRef"
             }
           }
-        },
-        "read_under": {
-          "description": "Where the schema read each relation it read under parts its provider\nleft to the connection (a Databricks source naming no catalog or\nschema: [`SourceDescription::namespace`] of the description that read\nit), by relation, once each: `materialize` reads a table of that\nrelation there again while the source's own parts agree, whatever\nthe session's current parts are by then, as the reference keeps each\ntable it read by its source name. A fact of the schema that read the\nrelations, not of any table or column: a table adopted from another\nschema, or edited, is read where this schema read its relation, and\na relation it never read where the source and its session say\n(contract v28, T3.4). Absent from the JSON when none.",
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/ReadUnder"
-          }
         }
       },
       "additionalProperties": false,
@@ -1943,51 +1893,6 @@
         "received",
         "nullable",
         "unique"
-      ]
-    },
-    "ReadUnder": {
-      "description": "One relation a schema read and kept ([`HeldSchema::read_under`]), as the\nreference's `EngineTables` keeps the engine's table it read: the\nnamespace it read it under, and the table as it read it, each column\nthe source held of it with the facts read of it then (contract v28,\nT3.4 fix 13). A later run reads the table as kept: only these columns,\neach of the type kept, and asks the source nothing more of it.",
-      "type": "object",
-      "properties": {
-        "relation": {
-          "$ref": "#/$defs/Relation"
-        },
-        "namespace": {
-          "description": "Each part, outermost first, as the source answered it.",
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "columns": {
-          "description": "The columns kept, in the catalog's order; none where the reading\nkeeps no table (such a relation is read anew). Absent from the JSON\nwhen none.",
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/KeptColumn"
-          }
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "relation",
-        "namespace"
-      ]
-    },
-    "KeptColumn": {
-      "description": "One column of a kept table ([`ReadUnder::columns`]): its name, and what\nthe source said of it when the table was kept.",
-      "type": "object",
-      "properties": {
-        "name": {
-          "type": "string"
-        },
-        "source": {
-          "$ref": "#/$defs/SourceFacts"
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "name",
-        "source"
       ]
     },
     "SchemaEdit": {
@@ -3471,10 +3376,6 @@
                   "type": "null"
                 }
               ]
-            },
-            "progress": {
-              "description": "Whether the host takes the run's notices that ask nothing\n([`crate::run::Step::InputsChecked`]: the input checks passed and\nnothing is read yet; [`crate::run::Step::TablesLocated`]: the catalog\nand schema each table read anew lives in), to keep the schema's record\nof its tables as the reference keeps its `EngineTables` (contract v28,\nT3.4). Left out, `false`: the run says neither.",
-              "type": "boolean"
             },
             "op": {
               "type": "string",
@@ -5834,6 +5735,8 @@
         "link_types",
         "primary_key_as_foreign_key",
         "edge_key_types",
+        "column_not_in_source",
+        "column_type_unmatched",
         "schema_table_twice",
         "schema_column_twice",
         "incompatible_semantic_type",

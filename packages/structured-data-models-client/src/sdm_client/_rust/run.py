@@ -181,17 +181,9 @@ def run(
     given: set[str] | None = None,
     kept: list[dict[str, Any]] | None = None,
     state: dict[str, Any] | None = None,
-    read: Callable[[dict[str, tuple[str, ...]]], None] | None = None,
-    built: Callable[[], Any] | None = None,
 ) -> Finished:
     r"""Runs ``operation`` to its result, with the attachments its fields name.
 
-    ``built`` and ``read``, for a ``materialize`` that asks for its notices
-    (``progress``), are called when the run says its input checks passed and
-    nothing is read yet (``inputs_checked``) and which catalog and schema each
-    table it reads anew lives in (``tables_located``), as they happen, so
-    the caller starts and keeps the schema's record of its tables as the
-    reference keeps its ``EngineTables`` (T3.4).
 
     A warning whose code ``quiet`` names is not shown: the caller has shown
     it already, or decides once the run ends whether to show it, from
@@ -235,9 +227,7 @@ def run(
             state.pop('held', None)
         errors.raise_from_core(refused.control, refused.attachments)
     try:
-        return _steps(
-            core, handle, provider, model, quiet, given, kept, read, built
-        )
+        return _steps(core, handle, provider, model, quiet, given, kept)
     finally:
         if state is not None:
             _keep(core, handle, state)
@@ -282,8 +272,6 @@ def _steps(
     quiet: frozenset[str],
     given: set[str] | None,
     kept: list[dict[str, Any]] | None = None,
-    read: Callable[[dict[str, tuple[str, ...]]], None] | None = None,
-    built: Callable[[], Any] | None = None,
 ) -> Finished:
     r"""The run's steps, each answered, to its result."""
     driver_class: str | None = None
@@ -316,17 +304,6 @@ def _steps(
             )
         if step['step'] == 'done':
             return Finished(step['result'], handle)
-        # What the run says of its graph and tables asks nothing (T3.4).
-        if step['step'] == 'inputs_checked':
-            if built is not None:
-                built()
-            continue
-        if step['step'] == 'tables_located':
-            if read is not None:
-                from sdm_client._rust import results
-
-                read(results.read_under(step['read_under']))
-            continue
         if step['step'] == 'call_model' and model is not None:
             refused = _call(core, handle, step, model)
             continue

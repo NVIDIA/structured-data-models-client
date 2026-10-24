@@ -4,22 +4,22 @@
   "no-inference-config": {
    "described": "4320c2f4b7e79be61f472576d3e4c6ac157bc6e3fbc2f1407effe2acb60ee2f8",
    "warnings": "b52de4793e7622571a0454e7d6350f125f90f10dd4d47b3eb2287312f1ade1d6",
-   "materialize_schema": "566c632f4e9f078f6e97c6b42214c8a6d44cf04c392d039364662475c8bbbd92"
+   "materialize_schema": "f11443de96f329c5077bde456b6ec3583da719321b21cd2a439f93cd06bb3487"
   },
   "no-text": {
    "described": "0907ad6ec67a6e7c4728dab08ac8bc576d14da915c68cee5d2b07d61644e4f02",
    "warnings": "5dfd8f6589bb38a7e067ca20d9b00f52e9636e69a593ddfce7b1fea2ec225370",
-   "materialize_schema": "283d8eb2d22b84d462382825a8535deb68888b0597106761060144464a3da5d2"
+   "materialize_schema": "ef4d00ec2088c696a170da4a25f9adafddbf1db4c78f35354dbb58148abef45d"
   },
   "notebook": {
    "described": "4320c2f4b7e79be61f472576d3e4c6ac157bc6e3fbc2f1407effe2acb60ee2f8",
    "warnings": "b52de4793e7622571a0454e7d6350f125f90f10dd4d47b3eb2287312f1ade1d6",
-   "materialize_schema": "566c632f4e9f078f6e97c6b42214c8a6d44cf04c392d039364662475c8bbbd92"
+   "materialize_schema": "f11443de96f329c5077bde456b6ec3583da719321b21cd2a439f93cd06bb3487"
   },
   "one-hop": {
    "described": "0907ad6ec67a6e7c4728dab08ac8bc576d14da915c68cee5d2b07d61644e4f02",
    "warnings": "a61d868f5ecc892fd21cdc5e34f9fd8729915b88fc5a5ca0e370b942cd28d344",
-   "materialize_schema": "470e3f23f9ab129836df71e044489cb815cb27d078119416e22ec2277fb4c11a"
+   "materialize_schema": "d3c6d388bba09700e95a362a2201b2b44ce42a2a2eec207c49511454fccf2f97"
   }
  }
 }

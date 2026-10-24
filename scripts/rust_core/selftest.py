@@ -3258,11 +3258,8 @@ def scan_cases(results: list[Result]) -> None:
             '    CallModel(ModelCall),\n',
             '    CallModel(ModelCall),\n    SortRows { column: String },\n',
         ),
-        "'sort_rows'",
+        "Step has ['fetch', 'call_model', 'sort_rows', 'done']",
     )
-    # The two notices that ask the host nothing (T3.4, the owner's decision
-    # of 2026-10-23) are the tree's own and pass; any other new step fails.
-    steps('the two notices, which ask the host nothing', lambda r: None, None)
 
     def schema_variant(root: Path) -> None:
         path = next((root / contract / 'schema').glob('sdm-contract-*.json'))
@@ -3278,46 +3275,6 @@ def scan_cases(results: list[Result]) -> None:
         path.write_text(json.dumps(schema, indent=2) + '\n')
 
     steps('a fourth step variant in the schema', schema_variant, "'truthiness'")
-
-    def step_branch(schema: dict) -> dict:
-        return next(
-            branch
-            for branch in schema['oneOf']
-            if branch.get('properties', {}).get('message', {}).get('const')
-            == 'step'
-        )
-
-    def without_notices(root: Path) -> None:
-        path = root / contract / 'schema/sdm-contract-28.json'
-        schema = json.loads(path.read_text())
-        branch = step_branch(schema)
-        branch['oneOf'] = [
-            b
-            for b in branch['oneOf']
-            if b['properties']['step']['const'] not in l0_scan.NOTICE_STEPS
-        ]
-        path.write_text(json.dumps(schema, indent=2) + '\n')
-
-    def with_notices(root: Path) -> None:
-        current = json.loads(
-            (root / contract / 'schema/sdm-contract-28.json').read_text()
-        )
-        notices = [
-            b
-            for b in step_branch(current)['oneOf']
-            if b['properties']['step']['const'] in l0_scan.NOTICE_STEPS
-        ]
-        path = root / contract / 'schema/sdm-contract-27.json'
-        schema = json.loads(path.read_text())
-        step_branch(schema)['oneOf'].extend(notices)
-        path.write_text(json.dumps(schema, indent=2) + '\n')
-
-    # Each schema holds the steps of its version (T3.4, round 9): v28 the two
-    # notices, an earlier version none of them.
-    steps(
-        'v28 without its two notices', without_notices, 'sdm-contract-28.json'
-    )
-    steps('v27 with the two notices', with_notices, 'sdm-contract-27.json')
 
 
 # --- the clippy bans, for real ------------------------------------------------

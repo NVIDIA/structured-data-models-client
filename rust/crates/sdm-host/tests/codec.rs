@@ -195,7 +195,6 @@ fn description_of(size: usize) -> Vec<u8> {
             table: "t".into(),
             column: "c".into(),
         }]],
-        namespace: None,
     };
     let base = serde_json::to_vec(&make(0)).unwrap().len();
     let bytes = serde_json::to_vec(&make(size - base)).unwrap();

@@ -97,11 +97,9 @@ graph; these check the text:
   cannot ban. A parse whose target is only inferred, such as ``s.parse()``
   returned as ``Result<Zoned, _>`` or ``Option<Zoned>``, is not seen; review
   covers it.
-- ``steps``: ``Step`` has exactly the three variants that ask the host
-  something, ``fetch``, ``call_model`` and ``done``, and the two notices
-  that ask it nothing, ``inputs_checked`` and ``tables_located`` (T3.4; the
-  owner's decision of 2026-10-23), in the Rust source and in the locked
-  schema: no step asks the host for language behavior (migration plan, L0).
+- ``steps``: ``Step`` has exactly the three variants ``fetch``,
+  ``call_model`` and ``done``, in the Rust source and in the locked schema:
+  no step asks the host for language behavior (migration plan, L0).
 
 Threat model (decision E56, checkpoint 4): the threat is honest drift by
 cooperating agents, a term, a statement, a skip or an allow written by
@@ -1786,13 +1784,7 @@ def check_bans(root: Path) -> list[str]:
 
 # --- the step variants --------------------------------------------------------
 
-#: The steps that ask the host something, and the notices that ask it
-#: nothing, from contract v28 (T3.4; the owner's decision of 2026-10-23).
-ASKING_STEPS = ('fetch', 'call_model', 'done')
-NOTICE_STEPS = ('inputs_checked', 'tables_located')
-STEP_VARIANTS = ASKING_STEPS + NOTICE_STEPS
-#: The contract version whose schema first holds the notices.
-NOTICES_FROM = 28
+STEP_VARIANTS = ('fetch', 'call_model', 'done')
 _STEP_ENUM = re.compile(r'\bpub\s+enum\s+Step\s*\{')
 CONTRACT = Path('rust/crates/sdm-contract')
 
@@ -1873,17 +1865,10 @@ def check_steps(root: Path) -> list[str]:
         problems.append(f'{CONTRACT}/schema: no contract schema')
     for path in schemas:
         variants = step_variants_in_schema(json.loads(path.read_text()))
-        # Each schema holds its version's steps: the notices from v28.
-        version = re.search(r'sdm-contract-(\d+)\.json$', path.name)
-        wanted = (
-            expected
-            if version is None or int(version.group(1)) >= NOTICES_FROM
-            else sorted(ASKING_STEPS)
-        )
-        if variants is None or sorted(variants) != wanted:
+        if variants is None or sorted(variants) != expected:
             problems.append(
                 f'{path.relative_to(root)}: the step message has {variants}; it '
-                f'has exactly {wanted}'
+                f'has exactly {list(STEP_VARIANTS)}'
             )
     return problems
 

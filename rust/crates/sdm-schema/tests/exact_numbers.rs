@@ -121,7 +121,6 @@ fn shop(users_key: Option<ExactNumber>, orders_key: Option<ExactNumber>) -> Sour
             ),
         ],
         links: Vec::new(),
-        namespace: None,
     }
 }
 

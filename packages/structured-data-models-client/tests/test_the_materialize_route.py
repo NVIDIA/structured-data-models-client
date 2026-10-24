@@ -800,20 +800,6 @@ def test_the_largest_declared_seed_reaches_the_core_exactly() -> None:
         ],
         'links': description['links'],
     }
-    # Each table kept as the description read it, as a described schema
-    # keeps every table its engine read (T3.4 fixes 12 and 13), so the run
-    # reads none of them anew.
-    held['read_under'] = [
-        {
-            'relation': table['source'],
-            'namespace': [],
-            'columns': [
-                {'name': column['name'], 'source': column['source']}
-                for column in table['columns']
-            ],
-        }
-        for table in held['tables']
-    ]
     import pyarrow as pa
 
     asked: list[dict[str, Any]] = []

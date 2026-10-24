@@ -154,6 +154,20 @@ pub fn named_dtype(name: &str) -> Option<Dtype> {
         .map(|(_, dtype)| *dtype)
 }
 
+/// Whether a column the caller gave the data type named `name` can be the
+/// source's column of type `source` (the owner's plan B, item 3, T3.4): the
+/// two of one kind ([`crate::assemble::join_family`] of each wire name), a
+/// name no data type has, or the language's `unsupported`, taking any.
+pub fn type_matches(name: &str, source: Dtype) -> bool {
+    match named_dtype(name) {
+        None | Some(Dtype::Unsupported) => true,
+        Some(given) => {
+            crate::assemble::join_family(given.wire_name())
+                == crate::assemble::join_family(source.wire_name())
+        }
+    }
+}
+
 /// [`named_dtype`], a name no data type has read as [`Dtype::Unsupported`],
 /// which an edit lets through as the old client does
 /// ([`crate::edit::edit`]).
@@ -265,11 +279,7 @@ pub fn read(
         });
     }
     Ok(Read {
-        description: SourceDescription {
-            tables,
-            links,
-            namespace: None,
-        },
+        description: SourceDescription { tables, links },
         unfacted,
         retyped,
         types,
@@ -304,7 +314,6 @@ pub fn held(
             })
             .collect(),
         links: description.links.clone(),
-        read_under: Vec::new(),
     }
 }
 

@@ -863,8 +863,6 @@ fn drive(
         };
         match read(&out).map_err(|_| anyhow!("an unreadable step"))? {
             ControlMessage::Step(Step::Done { result }) => return Ok(Ok(result)),
-            // What the run says of its graph and tables asks nothing.
-            ControlMessage::Step(Step::InputsChecked | Step::TablesLocated { .. }) => {}
             ControlMessage::Step(Step::Fetch { requests }) => {
                 for step in &requests {
                     observed
@@ -1065,10 +1063,8 @@ fn describe_on(
     // case's outcome, as the Python runner records it at from_source.
     let mut schema: SourceDescription = serde_json::from_value(described)
         .map_err(|_| anyhow!("{}: the description is not a SourceDescription", case.id))?;
-    // Each table kept as the description read it, whatever the edits.
-    let kept = edits::kept(&schema);
     for edit in edits {
-        match edit_schema(case, &schema, &kept, edit, source, &mut observed, log)? {
+        match edit_schema(case, &schema, edit, source, &mut observed, log)? {
             Ok(edited) => schema = edited,
             Err(answer) => {
                 observed.answer = answer;
@@ -1116,8 +1112,7 @@ fn describe_on(
     };
     // The schema materialize samples is this host's own description, with
     // the user's edits made: never one the case carries (decision E50).
-    let Some(state) = materialize(case, spec, &schema, &kept, source, &mut observed, log, None)?
-    else {
+    let Some(state) = materialize(case, spec, &schema, source, &mut observed, log, None)? else {
         return Ok(observed);
     };
     if let Some(spec) = case.core.as_ref().and_then(|c| c.predict.as_ref()) {
@@ -1134,14 +1129,13 @@ fn describe_on(
 fn edit_schema(
     case: &Case,
     schema: &SourceDescription,
-    kept: &[sdm_contract::ops::ReadUnder],
     edit: &SchemaEdit,
     source: Source<'_>,
     observed: &mut Observed,
     log: &mut DriverLog,
 ) -> Result<std::result::Result<SourceDescription, Answer>> {
     // What this host sends, as it encodes it, is what it records.
-    let held_bytes = serde_json::to_vec(&edits::held(schema, kept))?;
+    let held_bytes = serde_json::to_vec(&edits::held(schema))?;
     let edit_bytes = serde_json::to_vec(&edit.to_contract())?;
     observed.operations.push("edit_schema".into());
     observed.edits.push(json!({
@@ -1408,12 +1402,10 @@ pub type HeldSampler = (u32, Vec<u8>);
 /// or none when it answered an error. With `sampler`, the sampler state
 /// held there is handed to the run, and the one the run leaves, done or
 /// failed, is put there in its place.
-#[allow(clippy::too_many_arguments)]
 fn materialize(
     case: &Case,
     spec: &MaterializeInput,
     schema: &SourceDescription,
-    kept: &[sdm_contract::ops::ReadUnder],
     source: Source<'_>,
     observed: &mut Observed,
     log: &mut DriverLog,
@@ -1423,7 +1415,6 @@ fn materialize(
         case,
         spec,
         schema,
-        kept,
         source,
         observed,
         log,
@@ -1513,7 +1504,6 @@ fn start_materialize(
     case: &Case,
     spec: &MaterializeInput,
     schema: &SourceDescription,
-    kept: &[sdm_contract::ops::ReadUnder],
     source: Source<'_>,
     observed: &mut Observed,
     log: &mut DriverLog,
@@ -1545,7 +1535,7 @@ fn start_materialize(
     // What this host sends, as it encodes it, is what it records: the
     // description the core last answered, and the schema as this host
     // holds it (decision E67).
-    let schema_bytes = serde_json::to_vec(&edits::held(schema, kept))?;
+    let schema_bytes = serde_json::to_vec(&edits::held(schema))?;
     // Off DuckDB the call is the Python host's on the core route (T2.1d):
     // it sends the validated query as the PQL library writes it back
     // (`to_string()`), which `sdm-pql` writes the same way; a query it does
@@ -1692,7 +1682,6 @@ fn start_materialize(
                     version: *version,
                     memo: AttachmentId(4),
                 }),
-            progress: false,
         }),
     }));
     let message = encode(&start).map_err(|_| anyhow!("{}: its start does not encode", case.id))?;
@@ -1777,7 +1766,6 @@ pub fn materialize_as(
         case,
         materialize_spec,
         &schema,
-        &edits::kept(&schema),
         Source::Duck(&connection),
         &mut observed,
         &mut log,
@@ -1873,7 +1861,6 @@ pub fn materialize_repeatedly_holding(
             case,
             spec,
             &described,
-            &edits::kept(&described),
             Source::Duck(&connection),
             &mut observed,
             &mut log,

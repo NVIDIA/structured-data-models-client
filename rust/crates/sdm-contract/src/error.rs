@@ -761,6 +761,8 @@ sentences! {
     LinkTypes = "link_types", E::InvalidRequest;
     PrimaryKeyAsForeignKey = "primary_key_as_foreign_key", E::InvalidRequest;
     EdgeKeyTypes = "edge_key_types", E::InvalidRequest;
+    ColumnNotInSource = "column_not_in_source", E::InvalidRequest;
+    ColumnTypeUnmatched = "column_type_unmatched", E::InvalidRequest;
     SchemaTableTwice = "schema_table_twice", E::InvalidRequest;
     SchemaColumnTwice = "schema_column_twice", E::InvalidRequest;
     IncompatibleSemanticType = "incompatible_semantic_type", E::InvalidRequest;

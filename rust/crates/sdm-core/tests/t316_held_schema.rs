@@ -28,7 +28,7 @@ use sdm_contract::data::{
 use sdm_contract::facts::PlatformFacts;
 use sdm_contract::ops::{
     ColumnRef, Dtype, EditSchema, ExactNumber, Given, HeldColumn, HeldSchema, HeldTable,
-    KeptColumn, Materialize, Operation, OperationResult, ReadUnder, SchemaEdit, SourceFacts, Stype,
+    Materialize, Operation, OperationResult, SchemaEdit, SourceFacts, Stype,
 };
 use sdm_contract::run::StartRun;
 use sdm_contract::{CONTRACT_VERSION, ColumnType, CoreError, HostFacts, Scalar, Step, Unit};
@@ -124,7 +124,7 @@ fn shop(country_facts: bool, ghost: bool) -> HeldSchema {
     if ghost {
         users.push(held_column("ghost", Dtype::Float, Stype::Numerical, None));
     }
-    let mut held = HeldSchema {
+    HeldSchema {
         tables: vec![
             HeldTable {
                 name: "orders".into(),
@@ -169,31 +169,7 @@ fn shop(country_facts: bool, ghost: bool) -> HeldSchema {
             },
         ],
         links: vec![link(("orders", "user_id"), ("users", "user_id"))],
-        read_under: Vec::new(),
-    };
-    // Each table kept as a description read it (T3.4 fixes 12 and 13),
-    // `users` but where one of its columns holds no facts or the source
-    // lacks one: a schema built anew over it, which reads it anew.
-    held.read_under = held
-        .tables
-        .iter()
-        .filter(|table| table.name == "orders" || (country_facts && !ghost))
-        .map(|table| ReadUnder {
-            relation: table.source.clone(),
-            namespace: Vec::new(),
-            columns: table
-                .columns
-                .iter()
-                .filter_map(|column| {
-                    Some(KeptColumn {
-                        name: column.name.clone(),
-                        source: column.source.clone()?,
-                    })
-                })
-                .collect(),
-        })
-        .collect();
-    held
+    }
 }
 
 fn host() -> ProviderChoice {
@@ -261,7 +237,6 @@ fn materialize(held: &HeldSchema) -> Run {
         most_calls: None,
         candidates: None,
         sampler_state: None,
-        progress: false,
     });
     let indices = RecordBatch::try_new(
         Arc::new(Schema::new(vec![Field::new(
@@ -448,13 +423,7 @@ fn a_column_with_no_facts_is_read_as_describe_reads_it_and_only_it_previewed() {
             _ => None,
         })
         .collect();
-    // A schema built anew over `users` reads it in full, every column it
-    // holds previewed, as the reference's engine reads a table it has not
-    // kept (T3.4 fix 13).
-    assert_eq!(
-        previews,
-        [&vec!["user_id".to_owned(), "country".to_owned()]]
-    );
+    assert_eq!(previews, [&vec!["country".to_owned()]]);
     // Only the table holding such a column is read.
     assert!(!steps.iter().flatten().any(|r| matches!(
         r,

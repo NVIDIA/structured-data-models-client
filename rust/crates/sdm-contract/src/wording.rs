@@ -346,6 +346,12 @@ pub fn template(sentence: Sentence) -> Template {
         S::EdgeKeyTypes => said(
             r#"Edge(src_table={source_table!r}, fkey={source_column!r}, dst_table={target_table!r}) is invalid as foreign key {source_column!r} and primary key {target_column!r} have incompatible data types (got foreign key data type {source_dtype!r} and primary key data type {target_dtype!r})"#,
         ),
+        S::ColumnNotInSource => said(
+            r#"{table}.{column} is a column of the schema that {source!d} does not hold: the source has no such column. Remove it from the schema, or point the table at a source table that holds it."#,
+        ),
+        S::ColumnTypeUnmatched => said(
+            r#"{table}.{column} is given as {dtype!r}, and the source holds it as {source_dtype!r}, which cannot match. Give the column the type the source holds."#,
+        ),
         S::SchemaTableTwice => said(r#"the schema holds table {table!r} twice"#),
         S::SchemaColumnTwice => said(r#"table {table!r} holds column {column!r} twice"#),
         S::IncompatibleSemanticType => said(

@@ -104,7 +104,6 @@ fn shop() -> SourceDescription {
             },
         ],
         links: vec![vec![at("orders", "user_id"), at("users", "user_id")]],
-        namespace: None,
     }
 }
 

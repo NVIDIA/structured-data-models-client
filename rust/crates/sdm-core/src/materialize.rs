@@ -193,11 +193,12 @@ pub(crate) struct Inputs {
     pub memo: Option<SamplerMemo>,
     /// The fingerprint of this provider and description ([`fingerprint`]).
     pub source: String,
-    /// The schema as the host holds it where a column of it holds no facts
-    /// of the source: `description` is then read by the columns' data types,
-    /// and the facts are read once the request's inputs are checked
-    /// (`describe::initialize`), as the reference's engine reads a table
-    /// after its materializer's checks (T3.4).
+    /// The schema as the host holds it, where the run reads its tables once
+    /// the request's inputs are checked (`describe::initialize`): every
+    /// table of a source as it stands at this run (the owner's plan B), or
+    /// a host provider's columns that hold no facts; `description` is read
+    /// until then by the columns' facts, or data types where they hold
+    /// none (T3.4).
     pub pending: Option<sdm_contract::ops::HeldSchema>,
     /// The data type names the host gave its columns (T3.16), which the
     /// request's checks before the source is read take, as the reference's
@@ -2978,17 +2979,14 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // decision E41(k)(iii)).
     let statistic = options::statistic(prediction_statistic.as_deref())?;
     reserved(&description)?;
-    // Every input check of the request made (`inputs_checked`), the
-    // tables are located and kept (`tables_located`), as the reference
-    // makes its `EngineTables` and its engine reads and keeps its tables
-    // (`relational.py:520-522`, `materializers/sources.py:66-71`): a schema
-    // whose columns held no facts is read now, by what the source says of
-    // them (its catalog and preview). On every path, every check over what
-    // the source holds comes after: the engine's meanings, time columns
-    // and edges ([`kept_checks`]), the graph and what the sampler needs.
-    if let Some(located) =
-        crate::describe::initialize(asker, pending.as_ref(), &description).await?
-    {
+    // Every input check of the request made, the tables are read, as the
+    // reference's engine reads its tables (`relational.py:520-522`,
+    // `materializers/sources.py:61-71`): a source's tables as they stand at
+    // this run, a host provider's columns that held no facts. On every
+    // path, every check over what the source holds comes after: the
+    // engine's meanings, time columns and edges ([`kept_checks`]), the
+    // graph and what the sampler needs.
+    if let Some(located) = crate::describe::initialize(asker, pending.as_ref()).await? {
         description = located;
         sdm_schema::assemble::mark_keys(&mut description);
     }

@@ -264,30 +264,6 @@ impl DataLayer for Data {
         }
     }
 
-    fn keeps(&self, provider: &ProviderChoice, parts: &[String]) -> bool {
-        let ProviderChoice::Sql { dialect, namespace } = provider else {
-            return false;
-        };
-        let Some(dialect) = sql::dialect(dialect.name()) else {
-            return false;
-        };
-        let depth = dialect.namespace_depth();
-        if !dialect.settles_namespace() || parts.len() != depth || namespace.len() > depth {
-            return false;
-        }
-        let same = |given: &str, read: &str| match dialect.name_case() {
-            sql::NameCase::Insensitive => given.to_lowercase() == read.to_lowercase(),
-            _ => given == read,
-        };
-        // The provider's parts, innermost aligned with those read.
-        let offset = depth - namespace.len();
-        namespace.iter().enumerate().all(|(at, given)| {
-            given
-                .as_deref()
-                .is_none_or(|given| same(given, &parts[offset + at]))
-        })
-    }
-
     fn read_as(&self, provider: &ProviderChoice, relation: &Relation) -> Relation {
         let parts = match provider {
             ProviderChoice::Sql { namespace, .. } if relation.source.len() == 1 => {

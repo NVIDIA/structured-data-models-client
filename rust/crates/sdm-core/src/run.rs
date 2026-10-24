@@ -154,29 +154,12 @@ struct Shared {
     /// Each table's columns as the source's catalog read them, by the
     /// relation the run names the table by ([`Asker::guard`]).
     guarded: BTreeMap<Relation, Vec<String>>,
-    /// The namespace the run settled its provider's under
-    /// ([`Asker::with_access`]).
-    settled: Option<Vec<String>>,
     /// Each table of one part read under a namespace of its own, by the
     /// relation the run names it by ([`Asker::pin`]).
     pinned: BTreeMap<Relation, Relation>,
-    /// The tables the schema keeps no reading of, read anew by this run
-    /// ([`Asker::reads_anew`]).
-    anew: Vec<Relation>,
-    /// The tables the schema kept, each as it was kept ([`Asker::keeps`]).
-    kept: Vec<sdm_contract::ops::ReadUnder>,
-    /// Whether the run said its inputs are checked, and where each table
-    /// it reads anew lives ([`Asker::inputs_checked`],
-    /// [`Asker::tables_located`]).
-    inputs_checked: bool,
-    initialized: bool,
-    /// The schema read by what the source said of columns that held none
-    /// ([`Asker::located`]).
+    /// The schema as the source holds it at this run, once its tables are
+    /// read ([`Asker::located`]), for each later part of the run.
     located: Option<sdm_contract::ops::SourceDescription>,
-    /// The steps the run said and the host has not been given, in order,
-    /// said only where the host takes them ([`Asker::says_progress`]).
-    progress: Vec<Step>,
-    says_progress: bool,
 }
 
 fn lock(shared: &Mutex<Shared>) -> MutexGuard<'_, Shared> {
@@ -272,70 +255,16 @@ impl Asker {
         request
     }
 
-    /// Names `anew`, the tables of one part the schema holds no reading of,
-    /// which the run reads under the parts the session gives
-    /// ([`Asker::tables_located`]).
-    pub(crate) fn reads_anew(&self, anew: Vec<Relation>) {
-        lock(&self.shared).anew = anew;
-    }
-
-    /// Names `kept`, the tables the schema kept, which the run reads as they
-    /// were kept, asking the source nothing more of them.
-    pub(crate) fn keeps(&self, kept: Vec<sdm_contract::ops::ReadUnder>) {
-        lock(&self.shared).kept = kept;
-    }
-
-    /// The tables the schema kept ([`Asker::keeps`]).
-    pub(crate) fn kept(&self) -> Vec<sdm_contract::ops::ReadUnder> {
-        lock(&self.shared).kept.clone()
-    }
-
-    /// The tables this run reads anew, where it has not said it read them.
-    pub(crate) fn uninitialized(&self) -> Option<Vec<Relation>> {
-        let shared = lock(&self.shared);
-        (!shared.initialized).then(|| shared.anew.clone())
-    }
-
-    /// The schema read by what the source said of its columns that held
-    /// none, once the run has read them ([`Asker::tables_located`]).
+    /// The schema as the source holds it at this run, once the run has read
+    /// its tables ([`Asker::locate`]); none before.
     pub(crate) fn located(&self) -> Option<sdm_contract::ops::SourceDescription> {
         lock(&self.shared).located.clone()
     }
 
-    /// Has the run give its notices of where its tables live to the host,
-    /// which takes them (`Materialize::progress`).
-    pub(crate) fn says_progress(&self) {
-        lock(&self.shared).says_progress = true;
-    }
-
-    /// Says, once, that the request's inputs are checked and nothing is read
-    /// yet ([`Step::InputsChecked`]).
-    pub(crate) fn inputs_checked(&self) {
-        let mut shared = lock(&self.shared);
-        if !shared.inputs_checked {
-            shared.inputs_checked = true;
-            if shared.says_progress {
-                shared.progress.push(Step::InputsChecked);
-            }
-        }
-    }
-
-    /// Says, once, where every table the run reads anew lives, its catalog
-    /// read and its catalog and schema settled, no row fetched
-    /// ([`Step::TablesLocated`]).
-    pub(crate) fn tables_located(
-        &self,
-        read_under: Vec<sdm_contract::ops::ReadUnder>,
-        located: Option<sdm_contract::ops::SourceDescription>,
-    ) {
-        let mut shared = lock(&self.shared);
-        if !shared.initialized {
-            shared.initialized = true;
-            shared.located = located;
-            if shared.says_progress {
-                shared.progress.push(Step::TablesLocated { read_under });
-            }
-        }
+    /// Keeps `located`, the schema as the source holds it at this run, for
+    /// the run's later parts.
+    pub(crate) fn locate(&self, located: sdm_contract::ops::SourceDescription) {
+        lock(&self.shared).located = Some(located);
     }
 
     /// Reads the table `relation`, of one part, names under `parts` on every
@@ -347,18 +276,10 @@ impl Asker {
         lock(&self.shared).pinned.insert(relation.clone(), pinned);
     }
 
-    /// The asker with `data` its run's data access from here on, its
-    /// provider's namespace settled as `parts` ([`Asker::settled_namespace`]).
-    pub(crate) fn with_access(mut self, data: DataAccess, parts: Vec<String>) -> Asker {
+    /// The asker with `data` its run's data access from here on.
+    pub(crate) fn with_access(mut self, data: DataAccess) -> Asker {
         self.data = Some(data);
-        lock(&self.shared).settled = Some(parts);
         self
-    }
-
-    /// The namespace the run settled its provider's under, where it read
-    /// parts the provider left to the connection.
-    pub(crate) fn settled_namespace(&self) -> Option<Vec<String>> {
-        lock(&self.shared).settled.clone()
     }
 
     /// The answer to one data request, planned by the run's data layer for
@@ -831,11 +752,6 @@ pub struct Run {
     /// The run's data access, which reads each admitted answer's values as
     /// the reference reads them (`DataAccess::conform`).
     data: Option<DataAccess>,
-    /// The steps the body said ([`Step::InputsChecked`],
-    /// [`Step::TablesLocated`]) not given yet, each before the step the
-    /// same poll made, which waits in `after`.
-    said: std::collections::VecDeque<Step>,
-    after: Option<Result<Step, CoreError>>,
 }
 
 fn protocol(sentence: Sentence, message: impl Into<String>) -> CoreError {
@@ -881,8 +797,6 @@ impl Run {
             shared,
             opaque_vendor,
             data: access,
-            said: std::collections::VecDeque::new(),
-            after: None,
         }
     }
 
@@ -934,25 +848,6 @@ impl Run {
     // The run protocol names this call `next`; a run is not an iterator.
     #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> Result<Step, CoreError> {
-        // What the body said comes first, in order, then the step the same
-        // poll made.
-        if let Some(said) = self.said.pop_front() {
-            return Ok(said);
-        }
-        if let Some(after) = self.after.take() {
-            return after;
-        }
-        let step = self.step();
-        let said = mem::take(&mut lock(&self.shared).progress);
-        if said.is_empty() {
-            return step;
-        }
-        self.said = said.into();
-        self.after = Some(step);
-        Ok(self.said.pop_front().expect("said is not empty"))
-    }
-
-    fn step(&mut self) -> Result<Step, CoreError> {
         if let Some(err) = self.terminal() {
             return Err(err);
         }
@@ -1125,11 +1020,7 @@ impl Run {
         }
         self.body = None;
         self.state = State::Cancelled;
-        // What the body said and the step after it go with it.
-        self.said.clear();
-        self.after = None;
         let mut shared = lock(&self.shared);
-        shared.progress.clear();
         shared.replies.clear();
         shared.attachments.clear();
         Ok(())
@@ -1144,9 +1035,6 @@ impl Run {
             return Err(err);
         }
         self.body = None;
-        // What the body said and the step after it go with it.
-        self.said.clear();
-        self.after = None;
         self.state = State::Finished;
         lock(&self.shared).replies.clear();
         Ok(())

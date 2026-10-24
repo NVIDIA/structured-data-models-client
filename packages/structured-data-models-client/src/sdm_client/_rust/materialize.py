@@ -344,9 +344,6 @@ def gather(
     operation = {
         'op': 'materialize',
         'provider': choice,
-        # The run's steps of progress, which keep the schema's engine
-        # reading as the reference keeps it (T3.4).
-        'progress': True,
         'schema': 1,
         'query': 2,
         'indices': 3,
@@ -402,12 +399,6 @@ def gather(
         attachments,
         provider=provider,
         state=materializer._core_sampler_state,
-        # The schema's engine reading made when the run builds its graph, a
-        # schema of a source's alone, and where it read its tables kept when
-        # it says so, as the reference's materializer makes and keeps them
-        # (`relational.py:554-556`, T3.4).
-        read=schema._keep_readings,
-        built=None if schema.source is None else schema._engine_reading,
     )
     gathered = results.expect(finished.result, results.Gathered)
     state = gathered.state

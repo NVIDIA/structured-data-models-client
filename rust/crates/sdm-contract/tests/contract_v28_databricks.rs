@@ -97,25 +97,26 @@ fn the_warehouse_samplers_fields_are_optional_and_round_trip() {
     assert!(error.refuses_expression);
 }
 
-/// The namespace a description's tables were read under, where the run
-/// read parts the provider left to the connection, travels with the
-/// description, so materialize reads the same tables (round 2's Codex
-/// P0-2); left out, none was read.
+/// A description, a held schema and a materialize carry no shape or
+/// location of a table between runs: each `materialize` reads every table
+/// as it stands (the owner's plan B, T3.4), so a namespace, a reading or a
+/// notices flag is no field of theirs.
 #[test]
-fn a_description_carries_the_namespace_its_tables_were_read_under() {
-    use sdm_contract::ops::SourceDescription;
-    let described: SourceDescription = serde_json::from_value(serde_json::json!({
-        "tables": [], "links": [], "namespace": ["main", "shop"]
-    }))
-    .unwrap();
-    assert_eq!(
-        described.namespace,
-        Some(vec!["main".to_owned(), "shop".to_owned()])
+fn nothing_of_a_table_s_shape_travels_between_runs() {
+    use sdm_contract::ops::{HeldSchema, SourceDescription};
+    assert!(
+        serde_json::from_value::<SourceDescription>(serde_json::json!({
+            "tables": [], "links": [], "namespace": ["main", "shop"]
+        }))
+        .is_err()
     );
-    let plain: SourceDescription =
-        serde_json::from_value(serde_json::json!({"tables": [], "links": []})).unwrap();
-    assert_eq!(plain.namespace, None);
-    assert!(!serde_json::to_string(&plain).unwrap().contains("namespace"));
+    assert!(
+        serde_json::from_value::<HeldSchema>(serde_json::json!({
+            "tables": [], "links": [],
+            "read_under": [{"relation": {"source": ["t"]}, "namespace": []}]
+        }))
+        .is_err()
+    );
 }
 
 /// The columns a catalog read found, marked on a relation (round 2's
@@ -170,27 +171,12 @@ fn a_found_relation_is_its_catalog_s_columns_or_refused() {
     }
 }
 
-/// A run says, as steps of their own that ask nothing, when it builds its
-/// graph (the host then makes the schema's engine reading) and when it has
-/// read every table it reads anew (the host then keeps where it read them),
-/// the two moments the reference's materializer writes its engine reading
-/// (round 8's P0).
+/// A run asks its host for data, a model call, or nothing more: there is
+/// no step that only tells the host something (the owner's plan B, T3.4).
 #[test]
-fn a_run_says_when_it_builds_its_graph_and_when_its_tables_are_read() {
+fn a_run_has_no_notice_steps() {
     use sdm_contract::run::Step;
-    let built: Step =
-        serde_json::from_value(serde_json::json!({"step": "inputs_checked"})).unwrap();
-    assert_eq!(built, Step::InputsChecked);
-    let read: Step = serde_json::from_value(serde_json::json!({
-        "step": "tables_located",
-        "read_under": [{"relation": {"source": ["orders"]}, "namespace": ["main", "shop"]}]
-    }))
-    .unwrap();
-    let Step::TablesLocated { read_under } = read else {
-        panic!("not the tables' step");
-    };
-    assert_eq!(
-        read_under[0].namespace,
-        vec!["main".to_owned(), "shop".to_owned()]
-    );
+    for step in ["inputs_checked", "tables_located"] {
+        assert!(serde_json::from_value::<Step>(serde_json::json!({"step": step})).is_err());
+    }
 }

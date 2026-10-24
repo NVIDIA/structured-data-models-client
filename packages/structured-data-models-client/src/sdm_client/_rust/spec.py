@@ -63,17 +63,7 @@ def held_schema(schema: Schema) -> dict[str, Any]:
         if repeated is not None:
             held['duplicate_keys'] = codec.integer('u64', int(repeated))
         tables.append(held)
-    held_schema: dict[str, Any] = {'tables': tables, 'links': _links(schema)}
-    # Where the schema read each relation it read (T3.4), every one it
-    # holds a reading of, a table it holds now or not, as its engine reading
-    # keeps every table it read.
-    under = [
-        reading.to_contract(source_name)
-        for source_name, reading in schema._readings.items()
-    ]
-    if under:
-        held_schema['read_under'] = under
-    return held_schema
+    return {'tables': tables, 'links': _links(schema)}
 
 
 def _links(schema: Schema) -> list[list[dict[str, str]]]:

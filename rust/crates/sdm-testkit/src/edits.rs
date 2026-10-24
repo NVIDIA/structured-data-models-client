@@ -151,50 +151,10 @@ impl SchemaEdit {
     }
 }
 
-/// What the source said of `column` of `table`, as a host holds it.
-fn facts(
-    table: &sdm_contract::ops::DescribedTable,
-    column: &sdm_contract::ops::DescribedColumn,
-) -> SourceFacts {
-    SourceFacts {
-        relation: table.source.clone(),
-        dtype: column.dtype,
-        received: column.received.clone(),
-        nullable: column.nullable,
-        unique: column.unique,
-        declared_type: column.declared_type.clone(),
-        exact_number: column.exact_number,
-    }
-}
-
-/// Every table `described` read, kept as it read it: its namespace, and
-/// its columns with what the source said of each (T3.4 fixes 12 and 13),
-/// as the Python host's described schema keeps each table its engine read.
-/// Kept as described, whatever edits the schema takes after.
-pub fn kept(described: &SourceDescription) -> Vec<sdm_contract::ops::ReadUnder> {
-    described
-        .tables
-        .iter()
-        .map(|table| sdm_contract::ops::ReadUnder {
-            relation: table.source.clone(),
-            namespace: described.namespace.clone().unwrap_or_default(),
-            columns: table
-                .columns
-                .iter()
-                .map(|column| sdm_contract::ops::KeptColumn {
-                    name: column.name.clone(),
-                    source: facts(table, column),
-                })
-                .collect(),
-        })
-        .collect()
-}
-
 /// The schema as this host holds it, as plain data (T3.16): the
 /// description the core last answered, each column's data type by its wire
-/// name and with what the source said of it, and the tables it keeps
-/// (`kept`, [`kept`]).
-pub fn held(described: &SourceDescription, kept: &[sdm_contract::ops::ReadUnder]) -> HeldSchema {
+/// name and with what the source said of it.
+pub fn held(described: &SourceDescription) -> HeldSchema {
     HeldSchema {
         tables: described
             .tables
@@ -210,7 +170,15 @@ pub fn held(described: &SourceDescription, kept: &[sdm_contract::ops::ReadUnder]
                         dtype: column.dtype.wire_name().to_owned(),
                         stype: column.stype,
                         stype_before_key: column.stype_before_key,
-                        source: Some(facts(table, column)),
+                        source: Some(SourceFacts {
+                            relation: table.source.clone(),
+                            dtype: column.dtype,
+                            received: column.received.clone(),
+                            nullable: column.nullable,
+                            unique: column.unique,
+                            declared_type: column.declared_type.clone(),
+                            exact_number: column.exact_number,
+                        }),
                     })
                     .collect(),
                 primary_key: table.primary_key.clone(),
@@ -219,7 +187,6 @@ pub fn held(described: &SourceDescription, kept: &[sdm_contract::ops::ReadUnder]
             })
             .collect(),
         links: described.links.clone(),
-        read_under: kept.to_vec(),
     }
 }
 
@@ -257,6 +224,5 @@ pub fn described(held: &HeldSchema) -> Option<SourceDescription> {
     Some(SourceDescription {
         tables,
         links: held.links.clone(),
-        namespace: None,
     })
 }
