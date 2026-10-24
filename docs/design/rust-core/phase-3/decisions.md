@@ -135,7 +135,8 @@ Private names in the owner's words are replaced by a bracketed description; the 
 ## Warehouse table shape (2026-10-24)
 
 Source: the owner's answers on 2026-10-24 to the orchestrator's question on how a schema reused across materialize calls reads a warehouse table that changed (A, keep what the first read found, as the old client does; or B, read each table as it stands at every run), and the items listed with it.
-The register's entries P3A-1 to P3A-4 name these rows; they stay proposed until the owner approves each.
+These rows record the owner's decisions, which the owner made on 2026-10-24.
+The register's entries P3A-1 to P3A-5, the differences from the old client those decisions lead to, name these rows and stay proposed until the owner approves each entry.
 
 | # | Decision | Owner's words | Status |
 |---|---|---|---|

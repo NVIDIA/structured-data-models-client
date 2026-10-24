@@ -9085,9 +9085,12 @@ entries:
     materialize over a source's tables (a SQL provider's: DuckDB, SQLite,
     Postgres, Databricks) keeps nothing of a table between runs: each run
     reads each table's location (a part the source leaves to the session
-    read from the session at this run), its catalog and its preview, and
-    reads every column of the schema by the type the source holds now, the
-    caller's meanings kept (the owner's plan B, T3.4 fix 14). A schema's
+    read from the session at this run), its catalog whole and a preview of
+    the columns the schema uses, and reads every column of the schema by
+    the type the source holds now, the caller's meanings kept (the owner's
+    plan B, T3.4 fix 14). The columns the schema uses are checked against
+    the source's current facts with the same rules describe applies to
+    those columns; columns the schema does not use are ignored. A schema's
     snapshots, pickles, copies and edits carry no table's shape. Rows were
     always read at each run on both routes.
   affected_inputs: >-
@@ -9109,12 +9112,13 @@ entries:
     table shape: B" ("Ok, I'm convinced. Let's plan B.") (decisions.md KO3-59). Held by
     test_databricks_from_source.py (the _KEPT expectations: the old route
     reads where it kept each table, the core where the session says now)
-    and test_t316_the_schema_as_it_stands.py. The comparisons of a run's
-    statements with the old client's take the reads this adds out by one
-    rule, the leading statements of a materialize that repeat, word for
-    word, a statement from_source ran (sdm_testkit::plan_b, and
-    compare.py's reads_as_it_stands for the Python tools), and hold every
-    statement after them to the old client's exactly: the families' sql
+    and test_t316_the_schema_as_it_stands.py. Each fetch of the reads this
+    adds carries the core's own mark (FetchStep.purpose, locate), which
+    both capture hosts record on the statements answering it; the
+    comparisons of a run's statements with the old client's drop only the
+    core's statements so marked (sdm_testkit::plan_b, and compare.py's
+    _by_stage for the Python tools), never the reference's, and hold
+    every other statement, parameters included, exactly: the families' sql
     and vector tests (t132a to t132e on the Rust host, their twins in
     contract/tests), duckdb_provider.rs, the materialize and predict
     route tests, and compare.py's own comparisons.
