@@ -1444,22 +1444,6 @@ fn the_schemas_hybrid_tables_are_listed_and_read_as_the_old_client_reads_them() 
     );
 }
 
-/// A one-column count answer of `values`, of Arrow `data_type`.
-fn counts(name: &str, values: ArrayRef) -> Vec<RecordBatch> {
-    vec![
-        RecordBatch::try_new(
-            Arc::new(Schema::new(vec![Field::new(
-                name,
-                values.data_type().clone(),
-                true,
-            )])),
-            vec![values],
-        )
-        .unwrap(),
-    ]
-}
-
-
 #[test]
 fn independent_foreign_keys_to_one_primary_key_stay_independent() {
     let statement = format!("SHOW IMPORTED KEYS IN TABLE \"{DB}\".\"{SCHEMA}\".\"orders\"");
@@ -1472,4 +1456,32 @@ fn independent_foreign_keys_to_one_primary_key_stay_independent() {
     let CatalogAnswer::ForeignKeys(keys) = read(json!({"request": "describe", "part": "foreign_keys", "tables": [table("orders")]}), &rows).unwrap() else { panic!("keys") };
     assert_eq!(keys.len(), 2);
     assert_ne!(keys[0].key, keys[1].key);
+}
+
+#[test]
+fn zoned_windows_keep_utc_bounds_at_non_utc_dst_edges() {
+    for end in ["2026-03-08 09:59:59", "2026-03-08 10:00:00", "2026-11-01 08:59:59", "2026-11-01 09:00:00"] {
+        let payload = format!("[[1, \"{end}\"]]");
+        let request = json!({
+            "request": "neighbors", "table": table("orders"), "key": ["user_id"], "columns": ["ts"],
+            "seeds": {"attachment": 2, "columns": seeds_json(&[
+                ("key", json!({"type": "int64"})), ("batch", json!({"type": "int64"})), ("end", time_type())], &[])},
+            "window": {"column": "ts", "source_type": "TIMESTAMP_LTZ(6)", "lower": null,
+                "upper": {"seed_column": "end", "inclusive": true}}, "per_seed": null, "order": null});
+        let sent = bound(request, recorded_seeds(&payload));
+        assert_eq!(sent[0].1, payload);
+        assert_eq!(sent[0].2, vec![end.to_owned()]);
+        assert!(sent[0].0.contains("CONVERT_TIMEZONE('UTC', \"ts\")::TIMESTAMP_NTZ"));
+    }
+}
+
+#[test]
+fn an_unreadable_semantic_definition_is_refused_by_name() {
+    let batch = RecordBatch::try_new(
+        Arc::new(Schema::new(vec![Field::new("yaml", DataType::Utf8, true)])),
+        vec![Arc::new(StringArray::from(vec![None::<&str>])) as ArrayRef],
+    ).unwrap();
+    let error = read(json!({"request": "describe", "part": "view_definition", "tables": [table("v")]}), &[batch]).unwrap_err();
+    assert_eq!(error.sentence, Sentence::ViewSemanticDefinitionUnread);
+    assert_eq!(error.fields["view"], Detail::text("v"));
 }

@@ -13,9 +13,9 @@ fn sql(dialect: &str, source_type: &str) -> String {
         "request": "neighbors", "table": {"source": ["D", "S", "orders"]},
         "key": ["user_id"], "columns": ["ts"],
         "seeds": {"attachment": 1, "columns": [
-            {"name": "key", "column_type": {"type": "int64"}, "nullable": false},
-            {"name": "batch", "column_type": {"type": "int64"}, "nullable": false},
-            {"name": "end", "column_type": {"type": "timestamp", "unit": "ns", "zone": null}, "nullable": true}
+            {"name": "key", "type": {"type": "int64"}, "nullable": false},
+            {"name": "batch", "type": {"type": "int64"}, "nullable": false},
+            {"name": "end", "type": {"type": "timestamp", "unit": "ns", "zone": null}, "nullable": true}
         ]},
         "window": {"column": "ts", "source_type": source_type, "lower": null,
                    "upper": {"seed_column": "end", "inclusive": true}},

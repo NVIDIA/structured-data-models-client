@@ -811,3 +811,14 @@ def test_hybrid_enforcement_requires_exact_optional_evidence(
         with pytest.raises(Exception):  # noqa: B017, PT011 - each route's error
             _described(route, monkeypatch, warehouse, **_NAMED, tables={'users': 'users'})
         assert any('COUNT(DISTINCT "uid")' in text for text, _ in warehouse.calls)
+
+
+@pytest.mark.parametrize(('case', 'kind'), [('base.binary', 'TIMESTAMP_NTZ'), ('time.timestamptz', 'TIMESTAMP_LTZ')])
+def test_described_timestamp_facts_keep_the_current_catalog_type(
+    case: str, kind: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    schema = _described('core', monkeypatch, _Warehouse(case), **_NAMED)
+    facts = schema['orders']['ts']._source
+    assert facts is not None
+    assert facts.declared_type is not None
+    assert facts.declared_type.startswith(kind)
