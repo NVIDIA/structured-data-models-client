@@ -169,6 +169,10 @@ impl SqlDialect for Databricks {
         Some(crate::view_expr::ExprDialect::Databricks)
     }
 
+    fn view_kind(&self) -> Option<sdm_contract::view::ViewKind> {
+        Some(sdm_contract::view::ViewKind::Metric)
+    }
+
     /// A metric view's described column type by the table type map
     /// (`DatabricksTable._to_dtype`, old-behaviour row 41).
     fn declared_type(&self, data_type: &str) -> sdm_contract::view::DeclaredType {

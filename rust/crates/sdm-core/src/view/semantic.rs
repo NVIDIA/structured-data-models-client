@@ -447,6 +447,13 @@ pub(super) async fn convert(
                     primary_key: None,
                 })
                 .map_err(|e| super::invalid(view, "semantic view", &e))?;
+            tables.push(ViewTable::new(
+                name.clone(),
+                pending.written.clone(),
+                Catalog {
+                    columns: Vec::new(),
+                },
+            ));
             continue;
         };
         let previewed = table.infer(reading, &[])?;
@@ -573,6 +580,7 @@ pub(super) async fn convert(
             ),
         );
     }
+    let time_choices = super::time_choices(&model, &times);
     let times = super::settle_times(&model, times);
     model
         .validate()
@@ -586,6 +594,7 @@ pub(super) async fn convert(
     Ok(Converted {
         description,
         relations,
+        time_choices,
         notes: Vec::new(),
         warnings,
         omitted_tables: Vec::new(),

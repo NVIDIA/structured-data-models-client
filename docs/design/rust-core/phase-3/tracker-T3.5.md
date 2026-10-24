@@ -51,7 +51,8 @@ P3J-12 through P3J-14 remain proposed.
 - P3J-10: a default or a quoted value too large to write is refused by name.
 - P3J-11: a cardinality or a table name the old client failed on as a set member or a pattern is refused by name.
 - P3J-12: a metric view's expression is sampled inside the relation the data layer renders (same rows, other text).
-- P3J-13: a refused column and a failed key count are said by error class and SQLSTATE, never the driver's text.
+- P3J-13: the proposed loss of driver explanations is no longer implemented after round-1 fixes; the core now preserves driver diagnoses in conversion notes, with codes as the fallback when no message is supplied.
+  The register row remains proposed for decision reconciliation.
 - P3J-14: a semantic model is read again at each materialize; a table or column it no longer gives is refused by name.
 
 Withdrawn in fix 1, now read as the old client reads them: integers past 128 bits; a composite relationship's tables.
@@ -73,3 +74,14 @@ The ordered routine `sdm-core/src/view.rs` over these pieces, the wiring, provid
 - Python: the semantic model's routes, its provider choice, `conversion_notes` and the model's sentences.
 - Open: Snowflake's statements and type map are T3.6's; whichever package lands second enables the semantic-view routes.
 - `ProviderChoice::view` now reads the held view through the contract's accessor (T3.27 follow-up); the core no longer decodes its serialized contract form.
+
+
+## Round 1 fixes
+
+Tests-first commits `0059eaf05` and `82be37d5d` cover logical aliases and swapped names, caller overrides, refresh type compatibility, vendor diagnostics, duplicate-example failure and an unread empty semantic table.
+Converted logical source facts now use the common schema assembly stage for key/time overrides, relationship checking and key marking, with name inference disabled for semantic models.
+The conversion retains its pre-settlement time choices so relationship replacement and table selection can settle them again.
+Refresh resolves each held logical source and uses `held::check_source_types` and `held::read`, preserving the shared numeric-width and exact-number policy.
+The direct driver-diagnostic dependency is the T3.6 follow-up `4d11e48e3`, cherry-picked as `d42c92221`; required default-value constructor adjustments retain the old behavior of unrelated providers.
+A typed `DataLayer::view_kind` fact is available before fetching the definition, with an unspecified default for custom layers; the core selects the matching named refusal.
+Package tests and lint remain deferred until both reviewers approve the candidate.

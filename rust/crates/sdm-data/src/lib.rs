@@ -282,6 +282,10 @@ impl DataLayer for Data {
         }
     }
 
+    fn view_kind(&self, provider: &ProviderChoice) -> Option<sdm_contract::view::ViewKind> {
+        sql_dialect(provider)?.view_kind()
+    }
+
     fn failure(&self, provider: &ProviderChoice, error: &ProviderError) -> FailureFacts {
         sql_dialect(provider).map_or_else(FailureFacts::default, |dialect| dialect.failure(error))
     }

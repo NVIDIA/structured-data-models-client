@@ -1412,6 +1412,13 @@ pub trait DataLayer: Send + Sync {
         relation.clone()
     }
 
+    /// The kind of semantic model this provider reads, known before fetching
+    /// its definition. Unspecified by default for custom data layers.
+    fn view_kind(&self, provider: &ProviderChoice) -> Option<crate::view::ViewKind> {
+        let _ = provider;
+        None
+    }
+
     /// What the run's provider's failure says, as facts each step of the
     /// core reads the one of that fits what it asked (contract v28, T3.27,
     /// design S3): a spelling retry reads `not_found`, a join's table read

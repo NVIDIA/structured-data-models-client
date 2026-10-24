@@ -60,6 +60,8 @@ pub(crate) struct Converted {
     pub description: SourceDescription,
     /// Each logical table's relation, as this run reads it.
     pub relations: Vec<(String, Relation)>,
+    /// Time choices before schema selection and caller relationship overrides.
+    pub time_choices: BTreeMap<String, infer::TimeChoice>,
     /// The notes of the conversion (`Schema.conversion_notes`).
     pub notes: Vec<ViewNote>,
     /// What the view loses, in order, each a warning of the group "read in
@@ -196,6 +198,14 @@ async fn read_definition(reading: &Reading<'_>, view: &ViewChoice) -> Result<Des
     let answer = match attempt(reading.asker, request.clone()).await? {
         Ok(data) => reading.asker.read(&request, &data)?,
         Err(failed) => {
+            if reading.data.view_kind() == Some(ViewKind::Semantic) {
+                let name = relation.dotted();
+                return Err(CoreError::new(
+                    Sentence::ViewSemanticNotFound,
+                    format!("Semantic view '{name}' does not exist or you may not read it"),
+                )
+                .with_field("view", Detail::text(name)));
+            }
             let facts = reading.data.failure(&failed);
             if facts.unusable == Some(sdm_contract::data::Unusable::Missing) || facts.not_found {
                 return Err(view_not_found(&relation));
@@ -599,10 +609,12 @@ pub(crate) fn failed(error: &ProviderError, request: &str) -> CoreError {
     CoreError::provider(error).with_field("request", Detail::text(request))
 }
 
-/// A refused read as the core words it in a note in place of the driver's
-/// text (design S3, proposed): its error class and SQLSTATE, as the
-/// warehouse gives them.
+/// A refused read's diagnosis. Driver text stays an internal fact until the
+/// core deliberately includes it in this conversion note, as the old client did.
 pub(crate) fn failure_text(error: &ProviderError) -> String {
+    if let Some(message) = &error.driver_message {
+        return message.clone();
+    }
     match (&error.error_class, &error.sqlstate) {
         (Some(class), Some(state)) => format!("[{class}] SQLSTATE: {state}"),
         (Some(class), None) => format!("[{class}]"),
@@ -619,36 +631,117 @@ pub(crate) async fn describe_source(
     spec: SourceSpec,
     reader: &Reader,
 ) -> Result<OperationResult, CoreError> {
+    // Validate schema names through the ordinary source boundary before reads.
+    let named = crate::describe::named_tables(&spec)?;
     let converted = convert(&asker, reader).await?;
     let mut description = converted.description;
-    let named: Vec<String> = spec.tables.iter().map(|t| t.name.clone()).collect();
-    if !named.is_empty() {
-        let offered: Vec<String> = description.tables.iter().map(|t| t.name.clone()).collect();
-        let absent: Vec<String> = named
-            .iter()
-            .filter(|n| !offered.contains(n))
-            .cloned()
-            .collect();
-        if !absent.is_empty() {
-            let mut sorted = offered.clone();
-            sorted.sort();
-            return Err(CoreError::new(
-                Sentence::ViewTablesAbsent,
-                "tables named are not tables of the semantic model",
-            )
-            .with_field(
-                "absent",
-                Detail::List(absent.into_iter().map(Scalar::Utf8).collect()),
-            )
-            .with_field(
-                "offered",
-                Detail::List(sorted.into_iter().map(Scalar::Utf8).collect()),
-            ));
-        }
-        description.tables.retain(|t| named.contains(&t.name));
+    let chosen = if named.is_empty() {
         description
-            .links
-            .retain(|link| link.iter().all(|end| named.contains(&end.table)));
+            .tables
+            .iter()
+            .map(|table| sdm_contract::ops::NamedTable {
+                name: table.name.clone(),
+                source: table.source.clone(),
+                columns: None,
+            })
+            .collect()
+    } else {
+        named
+    };
+    let mut absent: Vec<_> = chosen
+        .iter()
+        .filter(|named| !description.tables.iter().any(|t| t.source == named.source))
+        .map(|named| named.source.dotted())
+        .collect();
+    if !absent.is_empty() {
+        absent.sort();
+        absent.dedup();
+        let mut offered: Vec<_> = description.tables.iter().map(|t| t.name.clone()).collect();
+        offered.sort();
+        return Err(CoreError::new(
+            Sentence::ViewTablesAbsent,
+            "tables named are not tables of the semantic model",
+        )
+        .with_field(
+            "absent",
+            Detail::List(absent.into_iter().map(Scalar::Utf8).collect()),
+        )
+        .with_field(
+            "offered",
+            Detail::List(offered.into_iter().map(Scalar::Utf8).collect()),
+        ));
+    }
+    // The last alias of each model table names its links and notes, exactly
+    // as the reference's as_named map; table copies retain caller order.
+    let aliases: BTreeMap<_, _> = chosen
+        .iter()
+        .map(|named| (named.source.dotted(), named.name.clone()))
+        .collect();
+    let tables = chosen
+        .iter()
+        .map(|named| {
+            let mut table = description
+                .tables
+                .iter()
+                .find(|t| t.source == named.source)
+                .expect("the logical source was found")
+                .clone();
+            table.name.clone_from(&named.name);
+            table
+        })
+        .collect();
+    description.tables = tables;
+    description.links = description
+        .links
+        .into_iter()
+        .filter_map(|link| {
+            link.into_iter()
+                .map(|end| {
+                    Some(ColumnRef {
+                        table: aliases.get(&end.table)?.clone(),
+                        column: end.column,
+                    })
+                })
+                .collect::<Option<Vec<_>>>()
+        })
+        .collect();
+    let choices = chosen
+        .iter()
+        .map(|named| {
+            converted
+                .time_choices
+                .get(&named.source.dotted())
+                .cloned()
+                .unwrap_or_default()
+        })
+        .collect();
+    let assembled = sdm_schema::assemble::assemble_converted(
+        description,
+        choices,
+        &spec.primary_keys,
+        &spec.time_columns,
+        spec.relationships.as_deref(),
+    )?;
+    description = assembled.description;
+    let notes = converted
+        .notes
+        .into_iter()
+        .filter_map(|mut note| {
+            if let Some(table) = &note.table {
+                let alias = aliases.get(table)?;
+                note.table = Some(alias.clone());
+                let shown = if note.sentence == Sentence::ViewMeasureNote {
+                    crate::view_words::pql_name(alias)
+                } else {
+                    alias.clone()
+                };
+                note.fields.insert("table".to_owned(), Detail::text(shown));
+            }
+            Some(note)
+        })
+        .collect();
+    for warning in assembled.warnings {
+        asker.warn(warning);
     }
     for warning in converted.warnings {
         asker.warn(warning);
@@ -660,7 +753,7 @@ pub(crate) async fn describe_source(
     let id = asker.attach(Attachment::Bytes(bytes))?;
     Ok(OperationResult::DescribeSource(DescribedSource {
         description: id,
-        notes: converted.notes,
+        notes,
     }))
 }
 
@@ -677,18 +770,19 @@ pub(crate) async fn located(
     reader: &Reader,
 ) -> Result<SourceDescription, CoreError> {
     let converted = convert(asker, reader).await?;
-    let mut tables = Vec::with_capacity(held.tables.len());
+    let mut located = held.clone();
+    let mut found = BTreeMap::new();
     for table in &held.tables {
         let Some(fresh) = converted
             .description
             .tables
             .iter()
-            .find(|t| t.name == table.name)
+            .find(|t| t.source == table.source)
         else {
             let reason = converted
                 .omitted_tables
                 .iter()
-                .find(|(name, _)| *name == table.name)
+                .find(|(name, _)| Some(name.as_str()) == table.source.single())
                 .map_or_else(
                     || "the view no longer names it".to_owned(),
                     |(_, why)| why.clone(),
@@ -706,16 +800,17 @@ pub(crate) async fn located(
         let relation = converted
             .relations
             .iter()
-            .find(|(name, _)| *name == table.name)
+            .find(|(name, _)| Some(name.as_str()) == table.source.single())
             .map(|(_, r)| r.clone())
             .ok_or_else(|| internal("a view's table has no relation"))?;
-        let mut columns = Vec::with_capacity(table.columns.len());
         for column in &table.columns {
             let Some(now) = fresh.columns.iter().find(|c| c.name == column.name) else {
                 let reason = converted
                     .omitted_columns
                     .iter()
-                    .find(|(t, c, _)| *t == table.name && *c == column.name)
+                    .find(|(t, c, _)| {
+                        Some(t.as_str()) == table.source.single() && *c == column.name
+                    })
                     .map_or_else(
                         || "the view no longer names it".to_owned(),
                         |(_, _, why)| why.clone(),
@@ -732,26 +827,20 @@ pub(crate) async fn located(
                 .with_field("column", Detail::text(&column.name))
                 .with_field("reason", Detail::text(reason)));
             };
-            let mut kept = now.clone();
-            // The caller's meaning and type stand, as a schema's own do.
-            kept.stype = column.stype;
-            kept.stype_before_key = column.stype_before_key;
-            columns.push(kept);
+            found.insert(
+                (table.name.clone(), column.name.clone()),
+                sdm_schema::held::facts_of(&relation, now),
+            );
         }
-        tables.push(DescribedTable {
-            name: table.name.clone(),
-            source: relation,
-            columns,
-            primary_key: table.primary_key.clone(),
-            time_column: table.time_column.clone(),
-            time_column_inferred: None,
-            duplicate_keys: table.duplicate_keys.clone(),
-        });
+        let current = located
+            .tables
+            .iter_mut()
+            .find(|t| t.name == table.name)
+            .ok_or_else(|| internal("a held logical table disappeared during refresh"))?;
+        current.source = relation;
     }
-    Ok(SourceDescription {
-        tables,
-        links: held.links.clone(),
-    })
+    sdm_schema::held::check_source_types(held, &found)?;
+    Ok(sdm_schema::held::read(located, &found, false)?.by_the_source())
 }
 
 /// The rows a preview of `relation` reads, `columns` in order, or the
@@ -835,6 +924,31 @@ pub(crate) fn invalid(view: &ViewChoice, kind: &str, refusal: &ModelRefusal) -> 
     .with_field("view_kind", Detail::text(kind))
     .with_field("view", Detail::text(&view.name))
     .with_field("reason", Detail::text(reason))
+}
+
+/// Preserve the conversion's choices for common schema assembly after aliases,
+/// table selection, keys and explicit relationship replacement are known.
+fn time_choices(
+    model: &ViewModel,
+    times: &BTreeMap<String, (Option<String>, Option<String>)>,
+) -> BTreeMap<String, infer::TimeChoice> {
+    times
+        .iter()
+        .map(|(name, (column, fallback))| {
+            let key = model.table(name).and_then(|t| t.primary_key.as_ref());
+            let permitted = |candidate: &Option<String>| {
+                candidate.as_ref().filter(|c| Some(*c) != key).cloned()
+            };
+            (
+                name.clone(),
+                infer::TimeChoice {
+                    column: permitted(column),
+                    fallback: permitted(fallback),
+                    ..infer::TimeChoice::default()
+                },
+            )
+        })
+        .collect()
 }
 
 /// Each table's time column once the links are known

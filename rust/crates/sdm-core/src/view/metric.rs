@@ -931,7 +931,7 @@ pub(super) async fn convert(
                     let repeats = rows.saturating_sub(distinct + missing);
                     let mut example = None;
                     if repeats > 0 {
-                        let found = crate::describe::ask(
+                        let found = crate::describe::attempt(
                             reading.asker,
                             DataRequest::RepeatedKey {
                                 table: key.table.clone(),
@@ -939,6 +939,14 @@ pub(super) async fn convert(
                             },
                         )
                         .await?;
+                        let found = match found {
+                            Ok(found) => found,
+                            Err(error) => {
+                                uncounted = failure_text(&error);
+                                held.clear();
+                                break;
+                            }
+                        };
                         example = sdm_schema::keys::example(&found.batches)
                             .and_then(|row| row.first().map(scalar_repr));
                     }
@@ -951,7 +959,9 @@ pub(super) async fn convert(
                         example,
                     ));
                 }
-                counts = Some(held);
+                if held.len() == keys.len() {
+                    counts = Some(held);
+                }
             }
             Err(error) => uncounted = failure_text(&error),
         }
@@ -1212,6 +1222,7 @@ pub(super) async fn convert(
             ),
         );
     }
+    let time_choices = super::time_choices(&model, &times);
     let times = super::settle_times(&model, times);
     model
         .validate()
@@ -1230,6 +1241,7 @@ pub(super) async fn convert(
     Ok(Converted {
         description,
         relations,
+        time_choices,
         notes,
         warnings,
         omitted_tables,

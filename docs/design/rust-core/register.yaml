@@ -9814,6 +9814,13 @@ entries:
     at stage 2; held by sdm-core/tests/view_captures.rs (a `42501` on an
     expression's sample).
 
+    The proposed diagnostic loss is no longer implemented after T3.5's
+    round-1 fixes: the host passes ProviderError.driver_message unread and
+    the core includes that diagnosis in expression-refusal and unchecked-key
+    notes. Codes remain the fallback when no message was supplied. This
+    entry stays proposed for decision reconciliation; it grants no approval
+    of the old degraded behavior or of the remaining key-note text change.
+
 - id: P3J-14
   title: A semantic model is read again at each materialize, and what it no longer gives is refused by name
   kind: change

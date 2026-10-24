@@ -144,6 +144,11 @@ pub(crate) trait SqlDialect: Sync {
         None
     }
 
+    /// The semantic model kind this dialect reads, before its definition.
+    fn view_kind(&self) -> Option<sdm_contract::view::ViewKind> {
+        None
+    }
+
     /// A semantic model's declared column type read by the dialect's type
     /// map (T3.5); unknown, the default, left to the sampled values.
     fn declared_type(&self, _data_type: &str) -> sdm_contract::view::DeclaredType {

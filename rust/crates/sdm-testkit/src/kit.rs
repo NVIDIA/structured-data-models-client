@@ -87,6 +87,7 @@ impl Source {
                     let batch =
                         concat_batches(&fetched.schema, &fetched.batches).map_err(|_| {
                             ProviderError {
+                                driver_message: None,
                                 error_class: None,
                                 kind: ErrorKind::Internal,
                                 retryable: false,

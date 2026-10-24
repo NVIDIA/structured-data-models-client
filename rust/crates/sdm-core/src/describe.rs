@@ -380,7 +380,7 @@ fn check_ranges(read: &ArrowData, asked: &[String], preview: &ArrowData) -> Resu
 /// twice, and each name one the schema may give a table
 /// ([`assemble::check_table_name`]). Refusals are `INVALID_REQUEST`
 /// naming the field.
-fn named_tables(spec: &SourceSpec) -> Result<Vec<NamedTable>, CoreError> {
+pub(crate) fn named_tables(spec: &SourceSpec) -> Result<Vec<NamedTable>, CoreError> {
     let refuse = |sentence, message: &'static str, table: &str| {
         CoreError::new(sentence, message)
             .with_field("field", Detail::text("tables"))
@@ -866,25 +866,8 @@ async fn read_as_it_stands(
     let typed = asker
         .data()
         .is_none_or(crate::compose::DataAccess::holds_column_types);
-    for table in held.tables.iter().filter(|_| typed) {
-        for column in &table.columns {
-            let Some(source) = found.get(&(table.name.clone(), column.name.clone())) else {
-                continue;
-            };
-            if source.exact_number.is_none()
-                && !sdm_schema::held::type_matches(&column.dtype, source.dtype)
-            {
-                return Err(CoreError::new(
-                    Sentence::ColumnTypeUnmatched,
-                    "a column's type the caller gave is not the one the source holds",
-                )
-                .with_field("field", Detail::text("schema"))
-                .with_field("table", Detail::text(&table.name))
-                .with_field("column", Detail::text(&column.name))
-                .with_field("dtype", Detail::text(&column.dtype))
-                .with_field("source_dtype", Detail::text(source.dtype.wire_name())));
-            }
-        }
+    if typed {
+        sdm_schema::held::check_source_types(held, &found)?;
     }
     Ok(sdm_schema::held::read(held.clone(), &found, false)?.by_the_source())
 }

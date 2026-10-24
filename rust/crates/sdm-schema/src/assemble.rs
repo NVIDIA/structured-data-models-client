@@ -184,35 +184,46 @@ pub fn assemble(
     given: Given<'_>,
     duplicates: Option<Scalar>,
 ) -> Result<Assembled, CoreError> {
-    let mut warnings = Vec::new();
-    let mut choices: Vec<TimeChoice> = tables.iter().map(|t| t.time.clone()).collect();
-    let mut described: Vec<DescribedTable> = tables
+    let choices = tables.iter().map(|t| t.time.clone()).collect();
+    let described = tables
         .into_iter()
-        .map(|table| DescribedTable {
-            name: table.name,
-            source: table.source,
-            columns: table
-                .columns
-                .into_iter()
-                .map(|c| DescribedColumn {
-                    name: c.name,
-                    received: c.received,
-                    dtype: c.dtype,
-                    stype: c.stype,
-                    stype_before_key: c.stype_before_key,
-                    nullable: c.nullable,
-                    unique: c.unique,
-                    declared_type: None,
-                    exact_number: c.exact_number,
-                })
-                .collect(),
-            primary_key: table.primary_key,
-            time_column: table.time_column,
-            time_column_inferred: None,
-            duplicate_keys: duplicates.clone(),
-        })
+        .map(|t| described_table(t, duplicates.clone()))
         .collect();
+    assemble_described(described, choices, declared, given, true)
+}
 
+/// Assemble logical source facts already converted by a semantic model.
+/// Caller overrides use the same rules as ordinary sources, and model links
+/// are the only inferred links: column names do not imply additional ones.
+pub fn assemble_converted(
+    mut description: SourceDescription,
+    choices: Vec<TimeChoice>,
+    primary_keys: &BTreeMap<String, ops::Given<Option<Vec<String>>>>,
+    time_columns: &BTreeMap<String, ops::Given<Option<String>>>,
+    relationships: Option<&[Link]>,
+) -> Result<Assembled, CoreError> {
+    apply_described_keys_and_times(&mut description.tables, primary_keys, time_columns)?;
+    let timed = time_columns.keys().cloned().collect();
+    assemble_described(
+        description.tables,
+        choices,
+        description.links,
+        Given {
+            time_columns: Some(&timed),
+            relationships,
+        },
+        false,
+    )
+}
+
+fn assemble_described(
+    mut described: Vec<DescribedTable>,
+    mut choices: Vec<TimeChoice>,
+    declared: Vec<Link>,
+    given: Given<'_>,
+    infer_by_name: bool,
+) -> Result<Assembled, CoreError> {
+    let mut warnings = Vec::new();
     let links = if let Some(given) = given.relationships {
         // The caller's, each held to the columns and the join as given,
         // each column of exact numbers read as the links given read it.
@@ -229,10 +240,14 @@ pub fn assemble(
             .filter_map(|link| link.first())
             .map(|f| (f.table.as_str(), f.column.as_str()))
             .collect();
-        let by_name: Vec<Link> = by_name(&described)
-            .into_iter()
-            .filter(|link| !covered.contains(&(link[0].table.as_str(), link[0].column.as_str())))
-            .collect();
+        let by_name: Vec<Link> = if infer_by_name {
+            by_name(&described)
+        } else {
+            Vec::new()
+        }
+        .into_iter()
+        .filter(|link| !covered.contains(&(link[0].table.as_str(), link[0].column.as_str())))
+        .collect();
         let mut links = Vec::new();
         for link in declared.iter().cloned().chain(by_name) {
             match joins(&described, &link, &HostTypes::default()) {
@@ -278,6 +293,33 @@ pub fn assemble(
         description,
         warnings,
     })
+}
+
+/// A table's inferred source facts as the common schema description.
+fn described_table(table: InferredTable, duplicates: Option<Scalar>) -> DescribedTable {
+    DescribedTable {
+        name: table.name,
+        source: table.source,
+        columns: table
+            .columns
+            .into_iter()
+            .map(|c| DescribedColumn {
+                name: c.name,
+                received: c.received,
+                dtype: c.dtype,
+                stype: c.stype,
+                stype_before_key: c.stype_before_key,
+                nullable: c.nullable,
+                unique: c.unique,
+                declared_type: None,
+                exact_number: c.exact_number,
+            })
+            .collect(),
+        primary_key: table.primary_key,
+        time_column: table.time_column,
+        time_column_inferred: None,
+        duplicate_keys: duplicates,
+    }
 }
 
 /// The refusal of a relationship given (`_checked_links`): it names a
@@ -393,14 +435,39 @@ pub fn apply_keys_and_times(
     primary_keys: &BTreeMap<String, ops::Given<Option<Vec<String>>>>,
     time_columns: &BTreeMap<String, ops::Given<Option<String>>>,
 ) -> Result<(), CoreError> {
+    if primary_keys.is_empty() && time_columns.is_empty() {
+        return Ok(());
+    }
+    let mut described: Vec<_> = tables
+        .iter()
+        .cloned()
+        .map(|t| described_table(t, None))
+        .collect();
+    apply_described_keys_and_times(&mut described, primary_keys, time_columns)?;
+    for (table, updated) in tables.iter_mut().zip(described) {
+        table.primary_key = updated.primary_key;
+        table.time_column = updated.time_column;
+        for (column, updated) in table.columns.iter_mut().zip(updated.columns) {
+            column.stype = updated.stype;
+            column.stype_before_key = updated.stype_before_key;
+        }
+    }
+    Ok(())
+}
+
+fn apply_described_keys_and_times(
+    tables: &mut [DescribedTable],
+    primary_keys: &BTreeMap<String, ops::Given<Option<Vec<String>>>>,
+    time_columns: &BTreeMap<String, ops::Given<Option<String>>>,
+) -> Result<(), CoreError> {
     let find =
-        |tables: &mut [InferredTable], name: &str, field: &str| -> Result<usize, CoreError> {
+        |tables: &mut [DescribedTable], name: &str, field: &str| -> Result<usize, CoreError> {
             tables
                 .iter()
                 .position(|t| t.name == name)
                 .ok_or_else(|| no_table(name, field, tables.iter().map(|t| t.name.as_str())))
         };
-    let columns_of = |table: &InferredTable| -> Vec<String> {
+    let columns_of = |table: &DescribedTable| -> Vec<String> {
         table.columns.iter().map(|c| c.name.clone()).collect()
     };
     for (name, key) in primary_keys {
@@ -414,7 +481,7 @@ pub fn apply_keys_and_times(
         };
         let table = &mut tables[at];
         for column in key {
-            if table.column(column).is_none() {
+            if !table.columns.iter().any(|c| c.name == *column) {
                 return Err(no_column(name, column, "primary_keys", &columns_of(table)));
             }
         }
@@ -437,7 +504,11 @@ pub fn apply_keys_and_times(
         // holds each: able to identify a row, and not the time column.
         let time = table.time_column.clone();
         for column in key {
-            let keyed = table.column(column).expect("the column was found");
+            let keyed = table
+                .columns
+                .iter()
+                .find(|c| c.name == *column)
+                .expect("the column was found");
             if !can_identify(keyed.dtype) {
                 return Err(key_cannot_identify(
                     name,
@@ -492,7 +563,7 @@ pub fn apply_keys_and_times(
             }
             ops::Given::Value(Some(column)) => column,
         };
-        if table.column(column).is_none() {
+        if !table.columns.iter().any(|c| c.name == *column) {
             return Err(no_column(name, column, "time_columns", &columns_of(table)));
         }
         if table.primary_key.contains(column) {

@@ -101,6 +101,11 @@ impl DataAccess {
         self.provider.view().cloned()
     }
 
+    /// The kind of model the provider reads, before its definition is fetched.
+    pub fn view_kind(&self) -> Option<sdm_contract::view::ViewKind> {
+        self.layer.view_kind(&self.provider)
+    }
+
     /// The name forms the catalog read of `relation` tries, in order
     /// (`DataLayer::spellings`).
     pub fn spellings(&self, relation: &Relation) -> Vec<Relation> {
