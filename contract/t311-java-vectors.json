@@ -3,6 +3,14 @@
  "binding": {
   "contract": 28,
   "errors": {
+   "ENDPOINT_REFUSED": {
+    "code": "ENDPOINT_REFUSED",
+    "digest": "a1ee0a2a32b1a03406eeb4825373543b80f50da25e529003fe4a0ba2bb603213",
+    "error": "{\"code\": \"ENDPOINT_REFUSED\", \"kind\": \"model_endpoint\", \"message\": \"t311\", \"retryable\": false, \"sentence\": \"serving_refused\"}",
+    "kind": "model_endpoint",
+    "retryable": false,
+    "template": "serving endpoint {endpoint!r} refused the request ({endpoint_code})"
+   },
    "INTERNAL_ERROR": {
     "code": "INTERNAL_ERROR",
     "digest": "3a194be1f5e28c37b05dfed4e60fcac8874843459deb0c33ce8adba4de0b8d10",
@@ -149,11 +157,11 @@
    },
    "UNSUPPORTED_REQUEST": {
     "code": "UNSUPPORTED_REQUEST",
-    "digest": "543061b23a0061fefaac5f9c05d43ed6c3bbbeedad94cad25e90495d6d8a66f5",
-    "error": "{\"code\": \"UNSUPPORTED_REQUEST\", \"kind\": \"unsupported\", \"message\": \"t311\", \"retryable\": false, \"sentence\": \"fallback_no_column\"}",
+    "digest": "a19165aa27dc7265fd1c254840be31ecc81d6ec2eb19c0a429b44ea7f93adfbc",
+    "error": "{\"code\": \"UNSUPPORTED_REQUEST\", \"kind\": \"unsupported\", \"message\": \"t311\", \"retryable\": false, \"sentence\": \"key_set_type_unbound\"}",
     "kind": "unsupported",
     "retryable": false,
-    "template": "the in-memory fallback of this data source cannot count the rows of a table with no column"
+    "template": "the core asked the data source to match keys of a type its SQL does not bind as text"
    },
    "UNSUPPORTED_TYPE": {
     "code": "UNSUPPORTED_TYPE",
