@@ -8995,8 +8995,12 @@ entries:
     PGTZ in the Python process.
   new_behavior: >-
     Java's Postgres provider writes the same text, the instant in the zone
-    psycopg resolves the session's TimeZone to, so on sessions of one zone
-    both hosts write the same text. pgjdbc sets the session's zone to the
+    psycopg resolves the session's TimeZone to, read from the zone data
+    Python reads (its zone lookup roots, then the core's bundled copy, as
+    Python falls back to its tzdata package; sdm_host::session_zone_offset),
+    so on sessions of one zone both hosts write the same text: measured in
+    every zone pg_timezone_names and pg_timezone_abbrevs name, and
+    posixrules, localtime and Factory, at historic instants and DST edges. pgjdbc sets the session's zone to the
     JVM's default zone when it connects, replacing the default psycopg's
     session would have, and the server's default cannot be read back from
     the connection without a privileged role (pg_file_settings). So on a

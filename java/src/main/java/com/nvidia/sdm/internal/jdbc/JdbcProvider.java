@@ -255,11 +255,25 @@ public final class JdbcProvider implements Host.Provider {
     // Every value read in text, as psycopg reads it: a binary transfer the caller's connection
     // forces is off for this read's statements, and given back after.
     PgSession.Forced forcedBinary = PgSession.binaryOff(connection);
+    ArrowReader read;
     try {
-      return postgresRead(planned, keys, allocator, trace);
-    } finally {
-      PgSession.restoreBinary(connection, forcedBinary);
+      read = postgresRead(planned, keys, allocator, trace);
+    } catch (Exception | Error failed) {
+      // The read's own failure is the one told; a failure to restore rides on it.
+      try {
+        PgSession.restoreBinary(connection, forcedBinary);
+      } catch (SQLException restoring) {
+        failed.addSuppressed(restoring);
+      }
+      throw failed;
     }
+    try {
+      PgSession.restoreBinary(connection, forcedBinary);
+    } catch (SQLException restoring) {
+      read.close();
+      throw restoring;
+    }
+    return read;
   }
 
   private ArrowReader postgresRead(
@@ -390,7 +404,8 @@ public final class JdbcProvider implements Host.Provider {
   private static final class Session implements ConversionTable.Session {
     private final Connection connection;
     private String intervalStyle;
-    private java.time.ZoneId zone;
+    private String zone;
+    private List<String> roots;
 
     Session(Connection connection) {
       this.connection = connection;
@@ -405,17 +420,13 @@ public final class JdbcProvider implements Host.Provider {
     }
 
     @Override
-    public java.time.ZoneId zone() throws SQLException {
+    public int offsetSeconds(long micros) throws SQLException {
       if (zone == null) {
-        String name = PgSession.parameter(connection, "TimeZone");
-        zone =
-            name != null
-                    && !"UTC".equals(name)
-                    && java.time.ZoneId.getAvailableZoneIds().contains(name)
-                ? java.time.ZoneId.of(name)
-                : java.time.ZoneOffset.UTC;
+        zone = String.valueOf(PgSession.parameter(connection, "TimeZone"));
+        roots = com.nvidia.sdm.internal.HostFacts.zoneRootPaths();
       }
-      return zone;
+      Integer offset = com.nvidia.sdm.internal.NativeCore.sessionZoneOffset(zone, roots, micros);
+      return offset == null ? 0 : offset;
     }
   }
 

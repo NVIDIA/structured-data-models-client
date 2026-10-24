@@ -91,6 +91,15 @@ public final class HostFacts {
     }
   }
 
+  /** The lookup roots' paths ({@link #zoneRoots}), in order, as a zone is looked up in them. */
+  public static List<String> zoneRootPaths() {
+    List<String> paths = new ArrayList<>();
+    for (Map<String, Object> root : zoneRoots()) {
+      paths.add((String) root.get("path"));
+    }
+    return paths;
+  }
+
   /** The lookup roots that exist, in {@code TZPATH}'s order, with their versions. */
   static List<Map<String, Object>> zoneRoots() {
     List<Map<String, Object>> roots = new ArrayList<>();

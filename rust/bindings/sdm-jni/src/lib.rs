@@ -591,6 +591,32 @@ pub extern "system" fn Java_com_nvidia_sdm_internal_NativeCore_jsonText0<'caller
     })
 }
 
+/// The UTC offset, in seconds, at `micros` in the zone a psycopg session
+/// whose `TimeZone` is the UTF-8 `name` reads in, through the lookup roots
+/// (a JSON list of paths) (`sdm_host::session_zone_offset`, T3.12 fix 3);
+/// `jint::MIN` where Python's `ZoneInfo` finds no such zone.
+#[allow(unsafe_code)]
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_nvidia_sdm_internal_NativeCore_sessionZoneOffset0<'caller>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    name: JByteArray<'caller>,
+    roots: JByteArray<'caller>,
+    micros: jlong,
+) -> jint {
+    entry(&mut unowned, |env| {
+        let name = env.convert_byte_array(&name)?;
+        let roots = env.convert_byte_array(&roots)?;
+        let roots: Vec<String> =
+            serde_json::from_slice(&roots).map_err(|_| Failure::Usage("the zone lookup roots"))?;
+        let roots: Vec<std::path::PathBuf> = roots.into_iter().map(Into::into).collect();
+        let Ok(name) = std::str::from_utf8(&name) else {
+            return Ok(jint::MIN);
+        };
+        Ok(sdm_host::session_zone_offset(name, &roots, micros).unwrap_or(jint::MIN))
+    })
+}
+
 /// Sets the most verbose level the logging bridge passes on: 0 none, 1
 /// error, 2 warn, 3 info, 4 debug, 5 trace. Java sets it at each run start
 /// from SLF4J's configuration, so a change there takes effect.

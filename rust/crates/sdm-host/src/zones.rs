@@ -193,3 +193,30 @@ impl Zones for ZoneResolver {
         self.resolve(name).map_err(|_| UnknownZone)
     }
 }
+
+/// The UTC offset, in seconds, at the instant `micros` (microseconds since
+/// the epoch) in the zone a psycopg session whose `TimeZone` is `name`
+/// reads a `timestamptz` in (psycopg's `get_tzinfo`): `UTC` itself, else
+/// the zone Python's `ZoneInfo` finds under exactly that name, through the
+/// same lookup roots (the host's `zone_roots`, then the bundled database,
+/// as Python falls back to its `tzdata` package); `None` where it finds
+/// none, where psycopg reads the instant in UTC. For a host whose driver
+/// writes such a value as text (T3.12 fix 3), so the zone data is the one
+/// Python reads, never the host's own.
+pub fn session_zone_offset(name: &str, roots: &[PathBuf], micros: i64) -> Option<i32> {
+    if name == "UTC" {
+        return Some(0);
+    }
+    let resolver = ZoneResolver::new(roots.iter().map(|path| ZoneRoot {
+        path: path.clone(),
+        version: None,
+    }));
+    let zone = resolver.lookup(name).ok()?.0;
+    // Python's ZoneInfo reads the name as written, a file's name, so another
+    // spelling of a zone is no zone to it.
+    if zone.iana_name() != Some(name) {
+        return None;
+    }
+    let at = jiff::Timestamp::from_microsecond(micros).ok()?;
+    Some(zone.to_offset(at).seconds())
+}
