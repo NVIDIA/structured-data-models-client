@@ -77,6 +77,7 @@ import functools
 import importlib.util
 import json
 import re
+import subprocess
 import sys
 from collections import Counter
 from pathlib import Path
@@ -341,44 +342,76 @@ def read_captures(
     except _module('ratchet').Unreadable as error:
         report.fail('read', str(error))
         return found
-    for name in names:
-        case_id, leg = name.split('/')[-2], name.split('/')[-3]
-        try:
-            capture = _json(_text(tree, name), name)
-        except Unreadable as error:
-            report.fail('read', str(error))
-            continue
-        line = capture.get('reference') if isinstance(capture, dict) else None
-        if not (
-            isinstance(capture, dict)
-            and capture.get('format') == CAPTURE_FORMAT
-            and capture.get('case') == case_id
-            and capture.get('leg') == leg
-            and isinstance(line, dict)
-            and line.get('case') == f'{case_id}@{leg}'
-        ):
-            report.fail('read', f'{name}: not a capture of {case_id} on {leg}')
-            continue
-        base = name.rpartition('/')[0]
-        row_schemas(
-            capture,
-            line,
-            lambda path, base=base: _blob(tree, f'{base}/{path}'),
-        )
-        found.setdefault(case_id, []).append(line)
+    blobs = Blobs(tree)
+    try:
+        for name in names:
+            _read_capture(tree, report, name, blobs, found)
+    finally:
+        blobs.close()
     return found
 
 
-def _blob(tree: Any, path: str) -> bytes | None:
-    r"""A file of ``tree`` as bytes, or None when it has none there."""
-    import subprocess
+def _read_capture(
+    tree: Any,
+    report: Report,
+    name: str,
+    blobs: Blobs,
+    found: dict[str, list[dict[str, Any]]],
+) -> None:
+    r"""One capture of :func:`read_captures`, its line added to ``found``."""
+    case_id, leg = name.split('/')[-2], name.split('/')[-3]
+    try:
+        capture = _json(_text(tree, name), name)
+    except Unreadable as error:
+        report.fail('read', str(error))
+        return
+    line = capture.get('reference') if isinstance(capture, dict) else None
+    if not (
+        isinstance(capture, dict)
+        and capture.get('format') == CAPTURE_FORMAT
+        and capture.get('case') == case_id
+        and capture.get('leg') == leg
+        and isinstance(line, dict)
+        and line.get('case') == f'{case_id}@{leg}'
+    ):
+        report.fail('read', f'{name}: not a capture of {case_id} on {leg}')
+        return
+    base = name.rpartition('/')[0]
+    row_schemas(capture, line, lambda path: blobs.read(f'{base}/{path}'))
+    found.setdefault(case_id, []).append(line)
 
-    done = subprocess.run(
-        ['git', '-C', str(tree.repo), 'cat-file', 'blob', f'{tree.sha}:{path}'],
-        capture_output=True,
-        check=False,
-    )
-    return done.stdout if done.returncode == 0 else None
+
+class Blobs:
+    r"""A commit's files as bytes (the captures' Arrow tables), read through
+    one ``git cat-file --batch`` process (:meth:`close` ends it)."""
+
+    def __init__(self, tree: Any) -> None:
+        self.tree = tree
+        self._batch: subprocess.Popen[bytes] | None = None
+
+    def read(self, path: str) -> bytes | None:
+        r"""The file at ``path``, or None when the commit has none there."""
+        if self._batch is None:
+            self._batch = subprocess.Popen(
+                ['git', '-C', str(self.tree.repo), 'cat-file', '--batch'],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+            )
+        assert self._batch.stdin is not None and self._batch.stdout is not None
+        self._batch.stdin.write(f'{self.tree.sha}:{path}\n'.encode())
+        self._batch.stdin.flush()
+        header = self._batch.stdout.readline().split()
+        if len(header) != 3:
+            return None
+        data = self._batch.stdout.read(int(header[2]))
+        self._batch.stdout.read(1)
+        return data if header[1] == b'blob' else None
+
+    def close(self) -> None:
+        if self._batch is not None:
+            self._batch.kill()
+            self._batch.wait()
+            self._batch = None
 
 
 def row_schemas(

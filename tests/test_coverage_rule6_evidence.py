@@ -438,6 +438,8 @@ def test_the_captures_tables_are_read_through_one_git_process(
         assert blobs.read('contract/captures/no-such-file') is None
     finally:
         blobs.close()
-    assert len(started) == 1
+    assert [args for args in started if 'cat-file' in args] == [
+        ['git', '-C', str(ROOT), 'cat-file', '--batch']
+    ]
     for path, data in zip(paths, read, strict=True):
         assert data == (ROOT / path).read_bytes()
