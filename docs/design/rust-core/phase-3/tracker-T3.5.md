@@ -57,8 +57,8 @@ P3J-12, P3J-14 and P3J-15 remain proposed; P3J-13 is retired as superseded after
 
 Withdrawn in fix 1, now read as the old client reads them: integers past 128 bits; a composite relationship's tables.
 
-Fix 2 proposes `sdm-pql/src/conversions.rs` and fix 3 proposes generated `sdm-pql/src/printable.rs` in `scripts/rust_core/emulation-allowlist.txt`.
-The preserved implementation contains these additions, but the owner requested a short explanation (original item 7) and has not approved them.
+Fix 2 adds `sdm-pql/src/conversions.rs` and fix 3 adds generated `sdm-pql/src/printable.rs` in `scripts/rust_core/emulation-allowlist.txt`.
+The owner approved these two bounded additions on 2026-10-24: "Approve these two files" (T35-OWNER-2026-10-24-EMULATION).
 Do not treat the coordinator's direction as the owner approval H21 requires.
 
 ## Stage 2 (after T3.27)

@@ -148,13 +148,14 @@ The register's entries P3A-1 to P3A-5, the differences from the old client those
 ## View conversion answers (2026-10-24)
 
 Source: the owner's direct continuation answers recorded in `$SDM_ORCH_STATE/phase-3/owner-answers-2026-10-24-codex.md`, items 11 and 16 and the later answer retiring P3J-7 and P3J-8.
-These decisions cover only the entries listed below; they grant no approval to P3J-12 through P3J-15 or the proposed Python emulation allowlist additions.
+These decisions cover only the entries and the two emulation files listed below; they grant no approval to P3J-12 through P3J-15.
 
 | # | Decision | Owner's words | Status |
 |---|---|---|---|
 | T35-OWNER-2026-10-24-ERRORS | Item 11: approve the clearer view errors P3J-1 through P3J-5 and P3J-9 through P3J-11 as presented | "Approved" | approved by owner 2026-10-24 |
 | T35-OWNER-2026-10-24-YAML | Item 16: approve the YAML scanner differences P3J-6 as presented | "Approved" | approved by owner 2026-10-24 |
 | T35-OWNER-2026-10-24-RETIRED | Retire P3J-7 and P3J-8 as obsolete proposals replaced by P3J-9; the register uses rejected for a retired entry, without claiming restored Python parity | "Ok retire 7/8 as superseded." | approved by owner 2026-10-24 |
+| T35-OWNER-2026-10-24-EMULATION | Original item 7: approve only `sdm-pql/src/conversions.rs` and generated `sdm-pql/src/printable.rs` on the emulation allowlist, for number/date parsing and text escaping of view defaults shared by Python and Java | "Approve these two files" | approved by owner 2026-10-24 |
 
 ## Kickoff answers
 
