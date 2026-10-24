@@ -91,6 +91,7 @@ def test_the_job_template_fills_and_passes_the_runs_check() -> None:
         'CAPTURE_SCHEMA': 'seeded_schema',
         'TEST_DATABASE': 'seeded_catalog',
         'TEST_SCHEMA': 'seeded_schema',
+        'CAPTURE_NAMES': '{}',
     }
     payload = dbx_runs.fill(
         {k: v for k, v in template.items() if not k.startswith('_')}, values
@@ -434,6 +435,30 @@ def test_the_job_runs_in_its_notebook_with_its_environment(
 
     assert os.environ['SDM_CAPTURE_SCHEMA'] == 'zq_hidden'
     assert 'SDM_LIVE_TEST_SCHEMA' not in os.environ
+
+
+def test_the_job_sets_the_other_placeholders_from_capture_names(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # T3.20 second capture: the Spark leg's view cases name existing views,
+    # and a view's describe shows its owner, so the job takes the other
+    # placeholders' names as one JSON parameter, set as SDM_CAPTURE_<NAME>.
+    template = json.loads((LIVE / 'capture.job.template.json').read_text())
+    parameters = template['tasks'][0]['notebook_task']['base_parameters']
+    assert capture_run.JOB_NAMES in parameters
+    assert capture_run.JOB_NAMES in (LIVE / 'capture_job.py').read_text()
+    for name in ('SDM_CAPTURE_USER', 'SDM_CAPTURE_SHOP_METRIC_VIEW'):
+        monkeypatch.delenv(name, raising=False)
+    found = capture_run.job_environment(
+        {'capture_names': '{"user": "zq_owner", "shop_metric_view": "c.s.v"}'}
+    )
+    assert found == ['SDM_CAPTURE_SHOP_METRIC_VIEW', 'SDM_CAPTURE_USER']
+    import os
+
+    assert os.environ['SDM_CAPTURE_USER'] == 'zq_owner'
+    for bad in ('["user"]', '{"User": "x"}', '{"user": ""}', '{"user": 1}'):
+        with pytest.raises(SystemExit):
+            capture_run.job_environment({'capture_names': bad})
 
 
 # Round 9 (Claude P1-1, P1-2): the run records what it can.

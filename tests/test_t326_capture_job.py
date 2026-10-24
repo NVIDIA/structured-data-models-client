@@ -239,6 +239,7 @@ def test_each_leg_s_job_timeout_is_the_template_s(
         'CAPTURE_SCHEMA=seeded_schema',
         'TEST_DATABASE=seeded_catalog',
         'TEST_SCHEMA=seeded_schema',
+        'CAPTURE_NAMES={}',
     ]
     template = json.loads((LIVE / 'capture.job.template.json').read_text())
     timeouts = template['_timeout_seconds']
