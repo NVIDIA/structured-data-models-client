@@ -183,22 +183,35 @@ public final class HttpTransport {
    * @throws Failed the answer is past {@link #MAX_RESPONSE_BYTES}, or the call was interrupted
    */
   private HttpResponse<byte[]> attempt(HttpRequest built) throws IOException, Failed {
-    CompletableFuture<HttpResponse<byte[]>> pending =
-        client.sendAsync(built, info -> new Capped());
     try {
-      return pending.get(timeout.toNanos(), TimeUnit.NANOSECONDS);
+      return exchange(client, built, info -> new Capped(), timeout.toNanos());
+    } catch (TooLarge e) {
+      throw new Failed("the response body exceeds the " + MAX_RESPONSE_BYTES + " byte limit");
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new Failed("the request was interrupted");
+    }
+  }
+
+  /**
+   * One HTTP exchange, including the complete body, within the given remaining budget.
+   * Cancels the exchange on timeout or interruption; callers select their own retry policy.
+   */
+  public static HttpResponse<byte[]> exchange(
+      HttpClient client, HttpRequest request, HttpResponse.BodyHandler<byte[]> body,
+      long remainingNanos) throws IOException, InterruptedException {
+    CompletableFuture<HttpResponse<byte[]>> pending =
+        client.sendAsync(request, body);
+    try {
+      return pending.get(remainingNanos, TimeUnit.NANOSECONDS);
     } catch (TimeoutException e) {
       pending.cancel(true);
       throw new HttpTimeoutException("the attempt timed out");
     } catch (InterruptedException e) {
       pending.cancel(true);
-      Thread.currentThread().interrupt();
-      throw new Failed("the request was interrupted");
+      throw e;
     } catch (ExecutionException e) {
       Throwable cause = e.getCause();
-      if (cause instanceof TooLarge) {
-        throw new Failed("the response body exceeds the " + MAX_RESPONSE_BYTES + " byte limit");
-      }
       if (cause instanceof IOException failed) {
         throw failed;
       }

@@ -5,12 +5,14 @@
 package com.nvidia.sdm;
 
 import com.nvidia.sdm.internal.Host;
+import com.nvidia.sdm.internal.HttpTransport;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.net.http.HttpTimeoutException;
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Locale;
@@ -147,16 +149,26 @@ public final class DatabricksServing {
     URI target = URI.create(host + "/serving-endpoints/" + endpoint + "/invocations");
     long deadline = System.nanoTime() + timeout.toNanos();
     for (int attempt = 1; ; attempt++) {
+      String credential = token.get();
+      long remaining = deadline - System.nanoTime();
+      if (remaining <= 0) {
+        throw new Host.EndpointFailed(504, new byte[0]);
+      }
       HttpRequest request =
           HttpRequest.newBuilder(target)
-              .timeout(timeout)
-              .header("Authorization", "Bearer " + token.get())
+              .timeout(Duration.ofNanos(remaining))
+              .header("Authorization", "Bearer " + credential)
               .header("Content-Type", "application/json")
               .POST(HttpRequest.BodyPublishers.ofByteArray(body))
               .build();
       long pause;
       try {
-        HttpResponse<byte[]> response = client.send(request, HttpResponse.BodyHandlers.ofByteArray());
+        HttpResponse<byte[]> response = HttpTransport.exchange(
+            client, request, HttpResponse.BodyHandlers.ofByteArray(),
+            Math.max(0, deadline - System.nanoTime()));
+        if (System.nanoTime() - deadline >= 0) {
+          throw new Host.EndpointFailed(504, new byte[0]);
+        }
         int status = response.statusCode();
         if (status >= 200 && status < 300) {
           return response.body();
@@ -165,6 +177,8 @@ public final class DatabricksServing {
           throw new Host.EndpointFailed(status, response.body());
         }
         pause = retryAfter(response.headers().firstValue("Retry-After").orElse(null));
+      } catch (HttpTimeoutException e) {
+        throw new Host.EndpointFailed(504, new byte[0]);
       } catch (IOException e) {
         pause = Math.min(10, attempt) * 1000L;
       } catch (InterruptedException e) {
