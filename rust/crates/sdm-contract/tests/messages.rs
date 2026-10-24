@@ -41,6 +41,7 @@ fn provider_choices_round_trip() {
                 derived_relations: false,
                 neighbor_lookback: false,
                 keys_optional: false,
+                key_enforcement: false,
                 sample_rows: false,
                 optional: BTreeSet::from([OptionalRequest::Preview, OptionalRequest::CountRows]),
                 max_keys_per_request: Some(10_000),
@@ -361,7 +362,6 @@ fn a_provider_error_keeps_its_retryability_and_codes_in_the_core_error() {
     for retryable in [true, false] {
         let error = CoreError::provider(&ProviderError {
             error_class: None,
-
             driver_message: None,
             kind: ErrorKind::DataSource,
             retryable,
@@ -388,11 +388,18 @@ fn internal_driver_diagnostics_and_key_enforcement_are_optional_plain_data() {
     let old = serde_json::json!({"kind": "data_source", "retryable": false});
     let error: ProviderError = serde_json::from_value(old.clone()).unwrap();
     assert_eq!(error.driver_message, None);
-    let with = serde_json::json!({"driver_message": "Schema DOES NOT EXIST", "kind": "data_source", "retryable": false});
+    let with = serde_json::json!({"driver_message": "Schema DOES NOT EXIST", "kind": "data_source", "retryable": false, "sqlstate": null, "vendor_code": null});
     let error: ProviderError = serde_json::from_value(with.clone()).unwrap();
     assert_eq!(serde_json::to_value(error).unwrap(), with);
     let request: DataRequest = serde_json::from_value(serde_json::json!({
         "request": "describe", "part": "key_enforcement", "tables": [{"source": ["D", "S", "t"]}]
-    })).unwrap();
-    assert!(matches!(request, DataRequest::Describe { part: DescribePart::KeyEnforcement, .. }));
+    }))
+    .unwrap();
+    assert!(matches!(
+        request,
+        DataRequest::Describe {
+            part: DescribePart::KeyEnforcement,
+            ..
+        }
+    ));
 }

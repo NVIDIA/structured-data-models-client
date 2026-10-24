@@ -24,14 +24,13 @@
 //! - the answers of `SHOW` and `DESCRIBE` come as text, which the provider's
 //!   row adapter builds (the connector gives them as rows only), each read
 //!   by its position in the result, as the reference reads the rows;
-//! - a table's row count, the reference's `SHOW TABLES LIKE ?` listing,
-//!   whose first row's `rows` the core reads;
+//! - an exact aggregate row count, also supporting views (approved P3D-2/3);
 //! - an entity sample `SAMPLE ROW (<n> ROWS)`, at most 1,000,000 rows,
 //!   which takes no seed (owner option C);
 //! - a declared type read by the reference's type map ([`declared_dtype`]);
 //! - the connector's Arrow conformed as the reference reads its frames
 //!   ([`conform`]);
-//! - a failure with errno 2003, an object Snowflake cannot resolve, is
+//! - a failure with errno 2003 or a diagnostic containing "does not exist" is
 //!   "not found", which the core's spelling retry reads; a name's
 //!   spellings are as given, then all its parts upper-cased, once.
 //!
@@ -133,6 +132,7 @@ impl SqlDialect for Snowflake {
             // (`SNOW/sampler.py:281-305`).
             neighbor_lookback: true,
             keys_optional: false,
+            key_enforcement: true,
         }
     }
 
@@ -224,29 +224,7 @@ impl SqlDialect for Snowflake {
         format!("COUNT(DISTINCT {})", quoted.join(", "))
     }
 
-    /// The reference's count (`SNOW/table.py:287-297`): the schema's
-    /// listing of tables named like the table, its name bound, whose first
-    /// row's `rows` is the count.
-    fn count_rows_statement(
-        &self,
-        relation: &Relation,
-        table: &str,
-        filtered: &str,
-    ) -> (String, Vec<SqlParam>) {
-        match relation.source.as_slice() {
-            [database, schema, name] if filtered.is_empty() && !relation.is_derived() => (
-                format!(
-                    "SHOW TABLES LIKE ? IN SCHEMA {}.{}",
-                    self.identifier(database),
-                    self.identifier(schema)
-                ),
-                vec![text_param(name)],
-            ),
-            _ => (self.count_rows(table, filtered), vec![]),
-        }
-    }
-
-    /// `SAMPLE ROW` takes no seed: any is taken, and none is written.
+    /// `SAMPLE ROW` ignores the optional seed.
     fn sample_seed(&self, _request: &DataRequest, _seed: &Scalar) -> Result<i128, CoreError> {
         Ok(0)
     }
@@ -408,11 +386,15 @@ impl SqlDialect for Snowflake {
         conform(schema, batches)
     }
 
-    /// Errno 2003 alone says an object is not found: a login, permission
-    /// or connection failure says nothing of the name asked.
+    /// The reference retries errno 2003 or a diagnostic containing "does
+    /// not exist". Driver text remains internal and is never echoed.
     fn failure(&self, error: &ProviderError) -> FailureFacts {
         FailureFacts {
-            not_found: error.vendor_code.as_deref() == Some(MISSING_OBJECT),
+            not_found: error.vendor_code.as_deref() == Some(MISSING_OBJECT)
+                || error
+                    .driver_message
+                    .as_deref()
+                    .is_some_and(|text| text.to_lowercase().contains("does not exist")),
             ..FailureFacts::default()
         }
     }
@@ -464,8 +446,17 @@ fn bounds<'a>(read: &SeedRead<'a>) -> Vec<(&'static str, &'static str, &'a str)>
 
 /// The window's column, quoted.
 fn window_column(read: &SeedRead<'_>) -> String {
-    read.window
-        .map_or_else(String::new, |w| identifier(&w.column))
+    read.window.map_or_else(String::new, |w| {
+        let column = identifier(&w.column);
+        if w.source_type.as_deref().is_some_and(|t| {
+            let kind = t.trim().to_uppercase();
+            kind.starts_with("TIMESTAMP_LTZ") || kind.starts_with("TIMESTAMP_TZ")
+        }) {
+            format!("CONVERT_TIMEZONE('UTC', {column})::TIMESTAMP_NTZ")
+        } else {
+            column
+        }
+    })
 }
 
 /// The window's bounds over every seed, one bound parameter each, joined by
@@ -549,7 +540,8 @@ fn joined(read: &SeedRead<'_>) -> String {
 /// (`SNOW/sampler.py:216`, `:306-309`, `:398-404`): a lookup's seed its key
 /// alone, a neighbor read's an array of its key and its window's bounds;
 /// a key coerced as the reference coerces it, a bound its wall clock to the
-/// second, a missing one `NaN` (pandas' `NaT` formatted).
+/// second. A missing bound is JSON null, preserving its entity while its
+/// window reaches no temporal rows (P3D-8).
 fn key_rows(
     request: &DataRequest,
     schema: &SchemaRef,
@@ -566,9 +558,9 @@ fn key_rows(
             "a key of several columns is read as the reference reads none",
         ));
     }
-    let order: Vec<(usize, bool)> = key_text::fields(names.iter().copied(), request)
+    let order: Vec<usize> = key_text::fields(names.iter().copied(), request)
         .into_iter()
-        .filter_map(|(column, _)| Some((schema.index_of(column).ok()?, column == SEED_KEY)))
+        .filter_map(|(column, _)| schema.index_of(column).ok())
         .collect();
     let lookup = matches!(request, DataRequest::Lookup { .. });
     let mut rows = Vec::new();
@@ -576,14 +568,7 @@ fn key_rows(
         for row in 0..batch.num_rows() {
             let cells: Vec<String> = order
                 .iter()
-                .map(|&(at, key)| {
-                    let column = batch.column(at);
-                    if !key && column.is_null(row) {
-                        "NaN".to_owned()
-                    } else {
-                        key_text::json_cell(column, row, float_text)
-                    }
-                })
+                .map(|&at| key_text::json_cell(batch.column(at), row, float_text))
                 .collect();
             rows.push(if lookup {
                 cells.join(", ")
@@ -660,7 +645,7 @@ fn unqualified(relation: &Relation) -> Option<CoreError> {
             .with_field("table", Detail::text(table))
             .with_field("in_database", Detail::text(database)),
         ),
-        _ => Some(no_current_schema()),
+        _ => Some(no_current_database()),
     }
 }
 
@@ -703,7 +688,11 @@ fn describe(
         // kind of table, in the warehouse's order (`RE/graph.py:1042-1051`).
         DescribePart::Tables if tables.is_empty() => {
             let [database, schema] = namespace else {
-                return Err(no_current_schema());
+                return Err(if namespace.is_empty() {
+                    no_current_database()
+                } else {
+                    no_current_schema()
+                });
             };
             let pad = " ".repeat(20);
             (
@@ -733,6 +722,21 @@ fn describe(
             format!("SHOW IMPORTED KEYS IN TABLE {}", rendered(one()?)),
             vec![],
         ),
+        DescribePart::KeyEnforcement => {
+            let table = one()?;
+            let namespace = &table.source[..table.source.len() - 1];
+            (
+                format!(
+                    "SHOW TABLES IN SCHEMA {}",
+                    namespace
+                        .iter()
+                        .map(|p| identifier(p))
+                        .collect::<Vec<_>>()
+                        .join(".")
+                ),
+                vec![],
+            )
+        }
         // A semantic view's YAML (`RE/graph.py:2054-2060`), its name bound:
         // a name with a dot as given, already qualified, otherwise under the
         // source's database and schema (`CL/materializers/sources.py:
@@ -818,18 +822,27 @@ fn read(
             Ok(CatalogAnswer::Keys(keys))
         }
         DescribePart::ForeignKeys => imported_keys(batches),
+        DescribePart::KeyEnforcement => key_enforcement(batches),
         DescribePart::ViewDefinition => {
             let yaml = batches
                 .iter()
                 .find(|b| b.num_rows() > 0)
-                .map(|batch| text_at(batch, 0).map(|column| text(&column, 0)))
-                .transpose()?
-                .flatten()
+                .and_then(|batch| text_at(batch, 0).ok().and_then(|column| text(&column, 0)))
+                .filter(|text| !text.is_empty())
                 .ok_or_else(|| {
+                    let view = match request {
+                        DataRequest::Describe { tables, .. } => tables
+                            .first()
+                            .and_then(|t| t.source.last())
+                            .map(String::as_str)
+                            .unwrap_or_default(),
+                        _ => "",
+                    };
                     CoreError::new(
-                        Sentence::Internal,
+                        Sentence::ViewSemanticDefinitionUnread,
                         "a semantic view's definition is not a text",
                     )
+                    .with_field("view", Detail::text(view))
                 })?;
             Ok(CatalogAnswer::ViewDefinition(ViewDefinition {
                 kind: ViewKind::Semantic,
@@ -849,13 +862,16 @@ fn read(
 
 /// The session's database and schema, the schema left out where it has
 /// none (no table can then be read under it, and the plan says so); a
-/// session with no current database is refused, never read as no parts.
+/// missing database yields no parts so the source's named database can
+/// still be retained before namespace validation.
 fn session(batches: &[RecordBatch]) -> Result<CatalogAnswer, CoreError> {
     let batch = batches
         .iter()
         .find(|b| b.num_rows() > 0)
         .ok_or_else(no_current_database)?;
-    let database = text(&text_at(batch, 0)?, 0).ok_or_else(no_current_database)?;
+    let Some(database) = text(&text_at(batch, 0)?, 0) else {
+        return Ok(CatalogAnswer::Namespace(Vec::new()));
+    };
     let schema = text(&text_at(batch, 1)?, 0);
     Ok(CatalogAnswer::Namespace(
         std::iter::once(database).chain(schema).collect(),
@@ -863,13 +879,42 @@ fn session(batches: &[RecordBatch]) -> Result<CatalogAnswer, CoreError> {
 }
 
 /// A session with no current database: the reference's bare `assert`
-/// (`RE/graph.py:1030-1032`), an internal error here too until the owner
-/// approves the named refusal proposed (`no_current_database`).
+/// (`RE/graph.py:1030-1032`), replaced by the approved named refusal.
 fn no_current_database() -> CoreError {
     CoreError::new(
-        Sentence::Internal,
+        Sentence::NoCurrentDatabase,
         "the session has no current database and the source names none",
     )
+    .with_field("database", Detail::text(NAME))
+}
+
+/// The schema-wide listing is optional evidence. Field names are read
+/// without case, as the connector's descriptions are read by the reference.
+fn key_enforcement(batches: &[RecordBatch]) -> Result<CatalogAnswer, CoreError> {
+    let mut names = Vec::new();
+    for batch in batches {
+        let at = |name: &str| {
+            batch
+                .schema()
+                .fields()
+                .iter()
+                .position(|f| f.name().eq_ignore_ascii_case(name))
+        };
+        let (Some(name), Some(hybrid)) = (at("name"), at("is_hybrid")) else {
+            return Ok(CatalogAnswer::KeyEnforcement(Vec::new()));
+        };
+        let (Ok(name), Ok(hybrid)) = (text_at(batch, name), text_at(batch, hybrid)) else {
+            return Ok(CatalogAnswer::KeyEnforcement(Vec::new()));
+        };
+        for row in 0..batch.num_rows() {
+            if text(&hybrid, row).is_some_and(|v| v.trim().eq_ignore_ascii_case("Y")) {
+                if let Some(name) = text(&name, row) {
+                    names.push(name);
+                }
+            }
+        }
+    }
+    Ok(CatalogAnswer::KeyEnforcement(names))
 }
 
 /// One row of `DESCRIBE TABLE`, as the reference reads it.
@@ -905,9 +950,9 @@ fn described(batches: &[RecordBatch]) -> Result<Vec<Described>, CoreError> {
 
 /// The rows of `SHOW IMPORTED KEYS IN TABLE`, by position: the referenced
 /// table (columns 1 to 3, joined with dots, unquoted) and column (4), the
-/// referencing column (8), numbered by the referenced key's name (13), so a
-/// key whose name several rows share, a key of several columns, is one key
-/// the core links by none (`SNOW/table.py:174-189`).
+/// referencing column (8), numbered by the referencing key's name (12), so a
+/// composite constraint stays grouped, while independent constraints to
+/// the same target stay independent (approved P3D-6).
 fn imported_keys(batches: &[RecordBatch]) -> Result<CatalogAnswer, CoreError> {
     let mut names: Vec<String> = Vec::new();
     let mut keys = Vec::new();
@@ -919,14 +964,14 @@ fn imported_keys(batches: &[RecordBatch]) -> Result<CatalogAnswer, CoreError> {
             column(3)?,
             column(4)?,
             column(8)?,
-            column(13)?,
+            column(12)?,
         );
         for row in 0..batch.num_rows() {
-            let pk_name = text(&name, row).unwrap_or_default();
-            let key = match names.iter().position(|n| *n == pk_name) {
+            let fk_name = text(&name, row).unwrap_or_default();
+            let key = match names.iter().position(|n| *n == fk_name) {
                 Some(at) => at,
                 None => {
-                    names.push(pk_name);
+                    names.push(fk_name);
                     names.len() - 1
                 }
             };

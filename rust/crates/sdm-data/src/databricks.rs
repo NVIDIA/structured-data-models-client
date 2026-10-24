@@ -134,6 +134,7 @@ impl SqlDialect for Databricks {
             // The reference carries on without keys its catalog fails to
             // read (`DatabricksTable`'s key reads).
             keys_optional: true,
+            key_enforcement: false,
         }
     }
 
@@ -497,7 +498,7 @@ fn describe(
     let one = || CatalogTarget::of(request, sql::one_table(request, tables)?);
     Ok(match part {
         // No view is read here (T3.27): only a dialect that reads views answers it.
-        DescribePart::ViewDefinition => return Err(views_unread()),
+        DescribePart::KeyEnforcement | DescribePart::ViewDefinition => return Err(views_unread()),
         // The source's namespace, one row per part, outermost first, each
         // given or the session's current one.
         DescribePart::Namespace => {
@@ -649,7 +650,24 @@ fn seed_cte(d: &Databricks, read: &SeedRead<'_>) -> Result<String, CoreError> {
                 "string"
             };
             fields.push(format!("{field}:{kind}"));
-            selects.push(format!("col.{field} AS {}", d.identifier(column)));
+            let value = if *column == SEED_KEY {
+                format!("col.{field}")
+            } else {
+                match read
+                    .window
+                    .and_then(|w| w.source_type.as_deref())
+                    .map(|t| t.trim().to_uppercase())
+                {
+                    Some(kind) if kind.starts_with("TIMESTAMP_NTZ") || kind == "DATE" => {
+                        format!("CAST(col.{field} AS TIMESTAMP_NTZ)")
+                    }
+                    Some(kind) if kind.starts_with("TIMESTAMP") => {
+                        format!("CAST(CONCAT(col.{field}, 'Z') AS TIMESTAMP)")
+                    }
+                    _ => format!("col.{field}"),
+                }
+            };
+            selects.push(format!("{value} AS {}", d.identifier(column)));
         }
         (
             format!("array<struct<{}>>", fields.join(",")),
@@ -718,7 +736,7 @@ pub(crate) fn read(
 ) -> Result<CatalogAnswer, CoreError> {
     match part {
         // No view is read here (T3.27): only a dialect that reads views answers it.
-        DescribePart::ViewDefinition => Err(views_unread()),
+        DescribePart::KeyEnforcement | DescribePart::ViewDefinition => Err(views_unread()),
         DescribePart::Namespace => {
             crate::read::namespace(batches, sdm_contract::data::catalog_columns::NAME)
         }

@@ -44,8 +44,8 @@ pub(crate) struct Discovered {
     /// The first rows of the columns read, each big integer in its whole
     /// column's tier and each exact number in its role's type.
     pub preview: ArrowData,
-    /// Each big integer's declared type ([`big_integer_types`]).
-    pub big_types: Vec<(String, String)>,
+    /// Each big integer's and temporal column's catalog type ([`retained_source_types`]).
+    pub source_types: Vec<(String, String)>,
 }
 
 /// The facts of each column of `held` that carries none, read from the
@@ -80,7 +80,7 @@ pub(crate) fn facts_read(
     relation: &Relation,
     read: Discovered,
 ) -> Result<Vec<(ColumnAt, SourceFacts)>, CoreError> {
-    let types = read.big_types;
+    let types = read.source_types;
     sdm_schema::infer::source_facts(
         relation,
         &read.declared,
@@ -207,7 +207,7 @@ pub(crate) async fn table(
             declared,
             constraints,
             preview: ArrowData::new(Arc::new(arrow_schema::Schema::empty()), Vec::new()),
-            big_types: Vec::new(),
+            source_types: Vec::new(),
         });
     }
     if let Some(previewed) = previewed {
@@ -220,7 +220,7 @@ pub(crate) async fn table(
                 declared,
                 constraints,
                 preview: ArrowData::new(Arc::new(arrow_schema::Schema::empty()), Vec::new()),
-                big_types: Vec::new(),
+                source_types: Vec::new(),
             });
         }
     }
@@ -249,12 +249,12 @@ pub(crate) async fn table(
     // A column of numbers handed over as their text, by its role: a
     // key's text, any other's doubles (crate::exact_number).
     let preview = exact_number::settle(preview, &constraints)?;
-    let big_types = big_integer_types(&preview, &declared);
+    let source_types = retained_source_types(&preview, &declared);
     Ok(Discovered {
         declared,
         constraints,
         preview,
-        big_types,
+        source_types,
     })
 }
 
@@ -377,14 +377,23 @@ pub(crate) fn falls_back(failed: &CoreError) -> bool {
 /// read from an opaque type and marked ([`crate::big_integer`]), by name:
 /// what the described schema keeps (`DescribedColumn::declared_type`), so a
 /// `decimal128(38, 0)` seed is joined to such a key in the key's own type
-/// with no statement `materialize` adds (register P1B-43). Every other
-/// column keeps none, and joins as before part 3.
-fn big_integer_types(preview: &ArrowData, declared: &[CatalogColumn]) -> Vec<(String, String)> {
+/// with no statement `materialize` adds (register P1B-43). Temporal columns
+/// also retain their declaration so a dialect can distinguish zoned
+/// instants from wall clocks when it renders a window.
+fn retained_source_types(preview: &ArrowData, declared: &[CatalogColumn]) -> Vec<(String, String)> {
     preview
         .schema
         .fields()
         .iter()
-        .filter(|f| big_integer::is_marked(f))
+        .filter(|f| {
+            big_integer::is_marked(f)
+                || matches!(
+                    f.data_type(),
+                    arrow_schema::DataType::Timestamp(..)
+                        | arrow_schema::DataType::Date32
+                        | arrow_schema::DataType::Date64
+                )
+        })
         .filter_map(|f| {
             let column = declared.iter().find(|c| &c.name == f.name())?;
             Some((column.name.clone(), column.declared_type.clone()))

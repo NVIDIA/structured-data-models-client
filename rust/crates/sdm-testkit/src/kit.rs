@@ -88,6 +88,7 @@ impl Source {
                         concat_batches(&fetched.schema, &fetched.batches).map_err(|_| {
                             ProviderError {
                                 error_class: None,
+                                driver_message: None,
                                 kind: ErrorKind::Internal,
                                 retryable: false,
                                 sqlstate: None,

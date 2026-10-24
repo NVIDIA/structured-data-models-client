@@ -692,7 +692,6 @@ fn a_scan_the_provider_fails_is_the_requests_failure() {
         |_| {
             FetchResult::Error(ProviderError {
                 error_class: None,
-
                 driver_message: None,
                 kind: ErrorKind::DataSource,
                 retryable: true,

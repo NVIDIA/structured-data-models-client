@@ -145,23 +145,21 @@ pub(crate) fn flag(flags: &BooleanArray, row: usize) -> bool {
 
 /// Each table's name, in order, from the text column `name`.
 pub(crate) fn tables(batches: &[RecordBatch], name: &str) -> Result<CatalogAnswer, CoreError> {
-    let mut found = Vec::new();
-    for batch in batches {
-        let names = strings(batch, name)?;
-        found.extend((0..batch.num_rows()).filter_map(|row| text(names, row)));
-    }
-    Ok(CatalogAnswer::Tables(found))
+    Ok(CatalogAnswer::Tables(text_names(batches, name)?))
 }
 
-/// A `namespace` answer: the parts of `name`'s rows, in order, a row with
-/// none left out.
+/// A `namespace` answer: parts in order, a row with none left out.
 pub(crate) fn namespace(batches: &[RecordBatch], name: &str) -> Result<CatalogAnswer, CoreError> {
+    Ok(CatalogAnswer::Namespace(text_names(batches, name)?))
+}
+
+fn text_names(batches: &[RecordBatch], name: &str) -> Result<Vec<String>, CoreError> {
     let mut found = Vec::new();
     for batch in batches {
         let names = strings(batch, name)?;
         found.extend((0..batch.num_rows()).filter_map(|row| text(names, row)));
     }
-    Ok(CatalogAnswer::Namespace(found))
+    Ok(found)
 }
 
 /// The columns of a `columns` answer, by role.
@@ -265,6 +263,10 @@ pub(crate) fn host(
         // No view is read here (T3.27): only a dialect that reads views answers it.
         DescribePart::ViewDefinition => Err(views_unread()),
         DescribePart::Namespace => namespace(batches, c::NAME),
+        DescribePart::KeyEnforcement => Ok(CatalogAnswer::KeyEnforcement(text_names(
+            batches,
+            c::TABLE,
+        )?)),
         DescribePart::Tables => tables(batches, c::TABLE),
         DescribePart::Columns => columns(
             batches,

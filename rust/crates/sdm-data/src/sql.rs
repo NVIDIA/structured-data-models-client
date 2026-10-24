@@ -204,19 +204,6 @@ pub(crate) trait SqlDialect: Sync {
         )
     }
 
-    /// The statement counting `relation`'s rows (`table` its rendering)
-    /// where `filtered` holds, with the parameters it binds:
-    /// [`SqlDialect::count_rows`], unless the dialect reads its count from a
-    /// listing of its catalog, as the reference's Snowflake engine does.
-    fn count_rows_statement(
-        &self,
-        _relation: &Relation,
-        table: &str,
-        filtered: &str,
-    ) -> (String, Vec<SqlParam>) {
-        (self.count_rows(table, filtered), vec![])
-    }
-
     /// What follows a preview's `FROM` before its `LIMIT`: nothing, unless
     /// the dialect reads the first rows in an order of its own.
     fn preview_order(&self) -> &'static str {
@@ -792,15 +779,10 @@ pub(crate) fn plan(
             }
             text
         }
-        DataRequest::CountRows { table, filters } => {
-            let (count, bound) = d.count_rows_statement(
-                table,
-                &from(d, request, "table", table)?,
-                &conditions(d, request, filters, " ")?,
-            );
-            params = bound;
-            count
-        }
+        DataRequest::CountRows { table, filters } => d.count_rows(
+            &from(d, request, "table", table)?,
+            &conditions(d, request, filters, " ")?,
+        ),
     };
     let statement = |text: String, params: Vec<SqlParam>| SqlStatement {
         dialect: Dialect::new(d.name()),

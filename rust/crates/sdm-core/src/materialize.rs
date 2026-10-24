@@ -71,9 +71,9 @@ use arrow_array::{Array, ArrayRef, RecordBatch, TimestampNanosecondArray, UInt32
 use arrow_schema::{DataType, TimeUnit as ArrowUnit};
 use sdm_contract::catalog::{CatalogAnswer, IndexCoverage};
 use sdm_contract::data::{
-    AttachmentId, BATCH_COLUMN, DataRequest, DescribePart, Determinism, Filter, IndexAdvice,
-    KeySet, MATCHES_COLUMN, NullOrder, OptionalRequest, ProviderChoice, SEED_STORED_TIME,
-    TableColumn, TextTimes,
+    AttachmentId, BATCH_COLUMN, DataRequest, DescribePart, Filter, IndexAdvice, KeySet,
+    MATCHES_COLUMN, NullOrder, OptionalRequest, ProviderChoice, SEED_STORED_TIME, TableColumn,
+    TextTimes,
 };
 use sdm_contract::ops::{
     ColumnRef, ForecastStep, Materialized, MemoBounds, MemoRows, MemoStoredTime, OperationResult,
@@ -1758,27 +1758,15 @@ async fn table_rows(memo: &mut Memo<'_>, graph: &Graph) -> Result<(), CoreError>
     Ok(())
 }
 
-/// The rows a `count_rows` answer counts: its first row's column `rows`
-/// where it names one, else its first column, an integer of any width not
-/// below zero, or its text (a catalog listing a provider hands over as text,
-/// Snowflake's `SHOW TABLES LIKE`, whose first row the reference reads,
-/// `SNOW/table.py:287-297`). An answer of no row is an internal error, as
-/// the reference's assert on the listing is (`SNOW/table.py:295-296`).
+/// One aggregate row whose first column holds a nonnegative integer count.
 fn row_count(answer: &ArrowData) -> Result<u64, CoreError> {
     let batch = one_batch(answer)?;
     let unread =
         || crate::run::schema_mismatch("expected", None, "a row count is not one row of one count");
-    if batch.num_columns() == 0 {
+    if batch.num_rows() != 1 || batch.num_columns() == 0 {
         return Err(unread());
     }
-    if batch.num_rows() == 0 {
-        return Err(internal(
-            "the source answered no row to count: it lists no table of the name asked",
-        ));
-    }
-    let column = batch
-        .column_by_name("rows")
-        .unwrap_or_else(|| batch.column(0));
+    let column = batch.column(0);
     if column.is_null(0) {
         return Err(unread());
     }
@@ -1790,8 +1778,6 @@ fn row_count(answer: &ArrowData) -> Result<u64, CoreError> {
         values.value(0).into()
     } else if let Some(values) = column.as_primitive_opt::<arrow_array::types::Decimal128Type>() {
         values.value(0)
-    } else if let Some(values) = column.as_string_opt::<i32>() {
-        values.value(0).trim().parse().map_err(|_| unread())?
     } else {
         return Err(unread());
     };
@@ -3252,23 +3238,8 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
             column: time.clone(),
         });
     }
-    // A provider whose sample takes no seed draws anew at each call
-    // whatever seed is asked: said before its draw, unless the call asked
-    // for none, as the reference's warehouse sampler says it once
-    // (`SNOW/sampler.py:87-90`, `RE/base/sql_sampler.py:233-249`).
-    if !unseeded && asker.capabilities()?.sampling == Determinism::Unseeded {
-        asker.warn(CoreWarning {
-            fields: [(
-                "database".to_owned(),
-                Detail::text(asker.source_database().unwrap_or_default()),
-            )]
-            .into(),
-            ..CoreWarning::new(
-                Sentence::SeedIgnored,
-                "the provider's sample takes no seed, so the seed asked is not used",
-            )
-        });
-    }
+    // Seeds are optional. An unseeded provider documents its limitation
+    // without issuing a routine warning for the default seed (P3D-13).
     let sampled = read_times.read(
         asker,
         entity,

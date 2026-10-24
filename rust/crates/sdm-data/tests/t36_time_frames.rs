@@ -22,15 +22,26 @@ fn sql(dialect: &str, source_type: &str) -> String {
         "per_seed": null, "order": null
     })).unwrap();
     let FetchPlan::Sql { statements, .. } = Data::new()
-        .plan(&request, &ProviderChoice::sql(dialect)).unwrap() else { panic!("SQL") };
-    statements.into_iter().map(|s| s.text).collect::<Vec<_>>().join("\n")
+        .plan(&request, &ProviderChoice::sql(dialect))
+        .unwrap()
+    else {
+        panic!("SQL")
+    };
+    statements
+        .into_iter()
+        .map(|s| s.text)
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 #[test]
 fn snowflake_zoned_windows_compare_utc_and_wall_clocks_stay_unchanged() {
     for kind in ["TIMESTAMP_LTZ(6)", "TIMESTAMP_TZ(9)"] {
         let text = sql("snowflake", kind);
-        assert!(text.contains("CONVERT_TIMEZONE('UTC', \"ts\")::TIMESTAMP_NTZ"), "{text}");
+        assert!(
+            text.contains("CONVERT_TIMEZONE('UTC', \"ts\")::TIMESTAMP_NTZ"),
+            "{text}"
+        );
         assert!(!text.contains("ALTER SESSION"));
     }
     for kind in ["TIMESTAMP_NTZ(9)", "DATE"] {
@@ -43,7 +54,10 @@ fn snowflake_zoned_windows_compare_utc_and_wall_clocks_stay_unchanged() {
 fn databricks_zoned_bounds_name_utc_and_ntz_bounds_name_wall_time() {
     for kind in ["TIMESTAMP", "TIMESTAMP_LTZ"] {
         let text = sql("databricks", kind);
-        assert!(text.contains("CAST(CONCAT(col.e, 'Z') AS TIMESTAMP)"), "{text}");
+        assert!(
+            text.contains("CAST(CONCAT(col.e, 'Z') AS TIMESTAMP)"),
+            "{text}"
+        );
         assert!(!text.contains("SET TIME ZONE"));
     }
     for kind in ["TIMESTAMP_NTZ", "DATE"] {

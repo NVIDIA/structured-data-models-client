@@ -165,6 +165,7 @@ fn host() -> ProviderChoice {
             derived_relations: false,
             neighbor_lookback: false,
             keys_optional: false,
+            key_enforcement: false,
             sample_rows: false,
             optional: BTreeSet::from([
                 OptionalRequest::TimeBounds,

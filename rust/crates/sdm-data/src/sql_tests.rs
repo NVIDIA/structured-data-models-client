@@ -194,6 +194,7 @@ impl SqlDialect for Plain {
             derived_relations: false,
             neighbor_lookback: false,
             keys_optional: false,
+            key_enforcement: false,
             sample_rows: false,
             optional: Default::default(),
             max_keys_per_request: None,
@@ -402,6 +403,7 @@ fn a_new_dialect_gets_every_shared_shape_by_implementing_the_trait() {
         columns: names(&["a", "at"]),
         seeds: seeds.clone(),
         window: Some(Window {
+            source_type: None,
             column: "at".into(),
             lower: None,
             upper: Some(SeedBound {

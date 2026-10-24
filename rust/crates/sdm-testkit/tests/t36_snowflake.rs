@@ -1513,10 +1513,19 @@ fn an_unreadable_semantic_definition_is_refused_by_name() {
     ];
     for values in columns {
         let batch = RecordBatch::try_new(
-            Arc::new(Schema::new(vec![Field::new("yaml", values.data_type().clone(), true)])),
+            Arc::new(Schema::new(vec![Field::new(
+                "yaml",
+                values.data_type().clone(),
+                true,
+            )])),
             vec![values],
-        ).unwrap();
-        let error = read(json!({"request": "describe", "part": "view_definition", "tables": [table("v")]}), &[batch]).unwrap_err();
+        )
+        .unwrap();
+        let error = read(
+            json!({"request": "describe", "part": "view_definition", "tables": [table("v")]}),
+            &[batch],
+        )
+        .unwrap_err();
         assert_eq!(error.sentence, Sentence::ViewSemanticDefinitionUnread);
         assert_eq!(error.fields["view"], Detail::text("v"));
     }
