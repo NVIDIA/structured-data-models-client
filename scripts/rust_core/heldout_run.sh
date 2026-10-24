@@ -288,7 +288,7 @@ case ",$databases," in *,databricks-spark,*)
   if [ -z "${HELDOUT_SPARK_PAYLOAD:-}" ] || [ -z "${HELDOUT_SPARK_VOLUME:-}" ]; then
     problem 'Spark requires HELDOUT_SPARK_PAYLOAD and HELDOUT_SPARK_VOLUME'
   elif ! (
-    if [ -n "${HELDOUT_DATABRICKS_SPARK_ENV:-}" ]; then set -a; source "$HELDOUT_DATABRICKS_SPARK_ENV"; fi
+    if [ -n "${HELDOUT_DATABRICKS_SPARK_ENV:-}" ]; then set -a; source "$HELDOUT_DATABRICKS_SPARK_ENV" || exit $?; fi
     "$py_cand" -I "$candidate/scripts/live/capture_run.py" heldout-spark --plan \
       --mode python-core --cases "$out/cases" --out "$out/spark.jsonl" \
       --payload "$HELDOUT_SPARK_PAYLOAD" --volume "$HELDOUT_SPARK_VOLUME" \
@@ -408,7 +408,7 @@ with_environment() { # DATABASE COMMAND...
   name=${name//-/_}
   env_file=${!name:-}
   (
-    if [ -n "$env_file" ]; then set -a; source "$env_file"; fi
+    if [ -n "$env_file" ]; then set -a; source "$env_file" || return $?; fi
     "$@"
   )
 }
