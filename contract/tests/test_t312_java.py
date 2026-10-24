@@ -412,6 +412,7 @@ def test_t312_a_java_path_s_test_is_one_junit_ran(tmp_path: Path) -> None:
     # invocations by its method's name; never Java source read by a regex.
     coverage = _tool('coverage')
     file = 'java/src/test/java/com/nvidia/sdm/T312PredictTest.java'
+    (tmp_path / coverage.JUNIT_MARKER).touch()
     reports = _reports(
         tmp_path,
         [
@@ -446,12 +447,127 @@ def test_t312_a_java_path_s_test_is_one_junit_ran(tmp_path: Path) -> None:
 def test_t312_a_disabled_java_test_claims_nothing(tmp_path: Path) -> None:
     coverage = _tool('coverage')
     file = 'java/src/test/java/com/nvidia/sdm/T312PredictTest.java'
+    (tmp_path / coverage.JUNIT_MARKER).touch()
     reports = _reports(
         tmp_path, [('com.nvidia.sdm.T312PredictTest', 'switchedOff', True)]
     )
     assert coverage.junit_problem(
         f'{file}#switchedOff', coverage.junit_ran(reports)
     ) == ('not a test JUnit ran (target/surefire-reports)')
+
+
+def test_t312_a_report_older_than_the_run_claims_nothing(
+    tmp_path: Path,
+) -> None:
+    # Codex T3.12 r6 P1-1: only the reports the run the check started
+    # wrote count; one left from an earlier build does not, nor do reports
+    # with no run's marker at all.
+    import os
+
+    coverage = _tool('coverage')
+    _reports(tmp_path, [('com.nvidia.sdm.Old', 'stale', False)])
+    stale = tmp_path / 'TEST-com.nvidia.sdm.Old.xml'
+    os.utime(stale, (1_000_000_000, 1_000_000_000))
+    try:
+        coverage.junit_ran(tmp_path)
+    except coverage.Unreadable:
+        pass
+    else:
+        raise AssertionError('reports with no run marker were read')
+    (tmp_path / coverage.JUNIT_MARKER).touch()
+    assert coverage.junit_ran(tmp_path) == set()
+
+
+def test_t312_a_java_test_named_but_not_written_fails_at_landing() -> None:
+    # Claude T3.12 r6 P2: a cheap local guard, the method's name in its
+    # file, so a misnamed test fails at landing, not at the next full run.
+    coverage = _tool('coverage')
+    file = 'java/src/test/java/com/nvidia/sdm/T312PredictTest.java'
+    assert (
+        coverage._test_problem(
+            f'{file}#anExplanationIsReadFromTheResult', ROOT, 'java'
+        )
+        is None
+    )
+    assert coverage._test_problem(
+        f'{file}#noSuchMethodAnywhere', ROOT, 'java'
+    ) == ('no test the tree defines')
+
+
+def test_t312_a_test_removed_between_two_builds_fails_coverage(
+    tmp_path: Path,
+) -> None:
+    # Codex T3.12 r6 P1-1, end to end: two successful Maven builds of one
+    # project, the claimed test's @Test removed between them; the check,
+    # owning its Maven run, fails the second.
+    maven = os.environ.get('SDM_MAVEN')
+    if not maven:
+        assert not os.environ.get('SDM_REQUIRE_JAVA'), (
+            'SDM_REQUIRE_JAVA but no SDM_MAVEN'
+        )
+        return
+    java = tmp_path / 'java'
+    sources = java / 'src/test/java/com/nvidia/sdm'
+    sources.mkdir(parents=True)
+    (java / 'pom.xml').write_text(
+        '<project xmlns="http://maven.apache.org/POM/4.0.0"><modelVersion>4.0.0'
+        '</modelVersion><groupId>t312</groupId><artifactId>stale</artifactId>'
+        '<version>1</version><properties><maven.compiler.release>17'
+        '</maven.compiler.release></properties><dependencies><dependency>'
+        '<groupId>org.junit.jupiter</groupId><artifactId>junit-jupiter</artifactId>'
+        '<version>5.13.4</version><scope>test</scope></dependency></dependencies>'
+        '<build><plugins><plugin><groupId>org.apache.maven.plugins</groupId>'
+        '<artifactId>maven-surefire-plugin</artifactId><version>3.5.3</version>'
+        '</plugin></plugins></build></project>',
+        encoding='utf-8',
+    )
+    covered = sources / 'CoveredTest.java'
+    covered.write_text(
+        'package com.nvidia.sdm; import org.junit.jupiter.api.Test; '
+        'class CoveredTest { @Test void covered() {} }',
+        encoding='utf-8',
+    )
+    (sources / 'ControlTest.java').write_text(
+        'package com.nvidia.sdm; import org.junit.jupiter.api.Test; '
+        'class ControlTest { @Test void control() {} }',
+        encoding='utf-8',
+    )
+    manifest = tmp_path / 'docs/design/rust-core/phase-0/scope-java.yaml'
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text(
+        'paths:\n- id: covered/default/sqlite\n  tests:\n'
+        '  - java/src/test/java/com/nvidia/sdm/CoveredTest.java#covered\n',
+        encoding='utf-8',
+    )
+
+    def checked() -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [
+                sys.executable,
+                str(ROOT / 'scripts/rust_core/coverage.py'),
+                '--repo',
+                str(tmp_path),
+                '--junit-run',
+                '--maven',
+                maven,
+                '--maven-arg=-o',
+                '--maven-arg=-q',
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=600,
+        )
+
+    first = checked()
+    assert first.returncode == 0, first.stdout + first.stderr
+    covered.write_text(
+        'package com.nvidia.sdm; class CoveredTest { void covered() {} }',
+        encoding='utf-8',
+    )
+    second = checked()
+    assert second.returncode == 1, second.stdout + second.stderr
+    assert 'CoveredTest.java#covered: not a test JUnit ran' in second.stdout
 
 
 def test_t312_the_java_test_job_holds_the_java_manifest_to_its_run() -> None:
@@ -461,12 +577,12 @@ def test_t312_the_java_test_job_holds_the_java_manifest_to_its_run() -> None:
         (ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8')
     )['jobs']
     steps = [str(step.get('run', '')) for step in jobs['java-test']['steps']]
-    verify = next(at for at, run in enumerate(steps) if 'pom.xml verify' in run)
+    # The check owns the Java test run: it marks the run's start, runs
+    # Maven's verify itself, and reads only that run's reports.
     assert any(
-        'scripts/rust_core/coverage.py --junit-reports java/target/surefire-reports'
-        in run
-        for run in steps[verify + 1 :]
+        'scripts/rust_core/coverage.py --junit-run' in run for run in steps
     ), steps
+    assert not any('pom.xml verify' in run for run in steps), steps
 
 
 def test_t312_a_python_path_takes_no_java_test_and_a_java_path_no_pytest() -> (
