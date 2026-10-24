@@ -39,6 +39,10 @@ pub enum CatalogAnswer {
     /// `namespace`: the parts a relation of one part is read under,
     /// outermost first; none where the source names its tables alone.
     Namespace(Vec<String>),
+    /// `key_enforcement`: exact table names in the named table's namespace
+    /// whose declared primary keys are enforced. Counting alone uses this
+    /// fact, never lookup duplicate checks.
+    KeyEnforcement(Vec<String>),
     /// `view_definition`: the one semantic model asked for.
     ViewDefinition(ViewDefinition),
 }
@@ -48,6 +52,7 @@ impl CatalogAnswer {
     pub fn part(&self) -> DescribePart {
         match self {
             CatalogAnswer::Tables(_) => DescribePart::Tables,
+            CatalogAnswer::KeyEnforcement(_) => DescribePart::KeyEnforcement,
             CatalogAnswer::Columns(_) => DescribePart::Columns,
             CatalogAnswer::Keys(_) => DescribePart::Keys,
             CatalogAnswer::ForeignKeys(_) => DescribePart::ForeignKeys,

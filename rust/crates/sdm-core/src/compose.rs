@@ -172,6 +172,18 @@ impl DataAccess {
         self.layer.read_as(&self.provider, relation)
     }
 
+    /// What the run's provider's failure says (`DataLayer::failure`): the
+    /// facts the step that asked reads the one of that fits it.
+    pub fn failure(&self, error: &ProviderError) -> FailureFacts {
+        self.layer.failure(&self.provider, error)
+    }
+
+    /// The name forms the catalog read of `relation`, as the run's
+    /// provider reads it, tries in order (`DataLayer::spellings`).
+    pub fn spellings(&self, relation: &Relation) -> Vec<Relation> {
+        self.layer.spellings(&self.provider, relation)
+    }
+
     /// An admitted answer of the run's provider, its values read as the
     /// reference reads them where the provider hands over the driver's own
     /// (`DataLayer::conform`, T2.14d); the answer as it is where the data

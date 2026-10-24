@@ -50,13 +50,8 @@
 //! chunk's statement adding the seeds before it to `pos`, as the
 //! reference's `_flatten` moves each chunk's batches.
 
-use std::collections::BTreeMap;
-use std::sync::Arc;
-
-use arrow_array::cast::AsArray;
-use arrow_array::types::TimestampNanosecondType;
-use arrow_array::{Array, ArrayRef, Float64Array, Int64Array, RecordBatch, StringArray};
-use arrow_schema::{DataType, Field as ArrowField, Schema, SchemaRef};
+use arrow_array::RecordBatch;
+use arrow_schema::SchemaRef;
 use sdm_contract::catalog::{CatalogAnswer, CatalogColumn, CatalogForeignKey, CatalogKey, KeyKind};
 use sdm_contract::data::{
     DataRequest, DescribePart, Determinism, ExpectedSchema, MARKED, MATCHES_COLUMN, NullOrder,
@@ -66,9 +61,11 @@ use sdm_contract::data::{
 use sdm_contract::ops::Dtype;
 use sdm_contract::types::ColumnType;
 use sdm_contract::{CoreError, Detail, Scalar, Sentence};
+use std::collections::BTreeMap;
 
 use crate::json;
 use crate::key_text;
+use crate::read::{text, text_at};
 use crate::sql::{self, NameCase, Sample, SeedRead, SqlDialect, not_taken};
 
 /// The dialect's name on the wire.
@@ -137,6 +134,7 @@ impl SqlDialect for Databricks {
             // The reference carries on without keys its catalog fails to
             // read (`DatabricksTable`'s key reads).
             keys_optional: true,
+            key_enforcement: false,
         }
     }
 
@@ -557,6 +555,7 @@ fn describe(
 ) -> Result<(String, Vec<SqlParam>), CoreError> {
     let one = || CatalogTarget::of(request, sql::one_table(request, tables)?);
     Ok(match part {
+        DescribePart::KeyEnforcement => return Err(views_unread()),
         // A metric view's description, as the reference asks it, each part
         // of its name quoted (`DB/metric_view.py:1440-1450`).
         DescribePart::ViewDefinition => {
@@ -717,7 +716,24 @@ fn seed_cte(d: &Databricks, read: &SeedRead<'_>) -> Result<String, CoreError> {
                 "string"
             };
             fields.push(format!("{field}:{kind}"));
-            selects.push(format!("col.{field} AS {}", d.identifier(column)));
+            let value = if *column == SEED_KEY {
+                format!("col.{field}")
+            } else {
+                match read
+                    .window
+                    .and_then(|w| w.source_type.as_deref())
+                    .map(|t| t.trim().to_uppercase())
+                {
+                    Some(kind) if kind.starts_with("TIMESTAMP_NTZ") || kind == "DATE" => {
+                        format!("CAST(col.{field} AS TIMESTAMP_NTZ)")
+                    }
+                    Some(kind) if kind.starts_with("TIMESTAMP") => {
+                        format!("CAST(CONCAT(col.{field}, 'Z') AS TIMESTAMP)")
+                    }
+                    _ => format!("col.{field}"),
+                }
+            };
+            selects.push(format!("{value} AS {}", d.identifier(column)));
         }
         (
             format!("array<struct<{}>>", fields.join(",")),
@@ -787,7 +803,7 @@ pub(crate) fn read(
     match part {
         // Read only with the white space its sections are read by
         // ([`read_view`]).
-        DescribePart::ViewDefinition => Err(views_unread()),
+        DescribePart::KeyEnforcement | DescribePart::ViewDefinition => Err(views_unread()),
         DescribePart::Namespace => {
             crate::read::namespace(batches, sdm_contract::data::catalog_columns::NAME)
         }
@@ -795,7 +811,7 @@ pub(crate) fn read(
             let mut names = Vec::new();
             for batch in batches {
                 let column = text_at(batch, 0)?;
-                names.extend((0..batch.num_rows()).filter_map(|row| value(&column, row)));
+                names.extend((0..batch.num_rows()).filter_map(|row| text(&column, row)));
             }
             Ok(CatalogAnswer::Tables(names))
         }
@@ -811,9 +827,9 @@ pub(crate) fn read(
                 let columns = text_at(batch, 2)?;
                 for row in 0..batch.num_rows() {
                     let entry = constraints
-                        .entry(value(&names, row).unwrap_or_default())
-                        .or_insert_with(|| (value(&kinds, row).unwrap_or_default(), vec![]));
-                    entry.1.push(value(&columns, row).unwrap_or_default());
+                        .entry(text(&names, row).unwrap_or_default())
+                        .or_insert_with(|| (text(&kinds, row).unwrap_or_default(), vec![]));
+                    entry.1.push(text(&columns, row).unwrap_or_default());
                 }
             }
             Ok(CatalogAnswer::Keys(
@@ -844,17 +860,17 @@ pub(crate) fn read(
                 let tables = text_at(batch, 4)?;
                 let referenced = text_at(batch, 5)?;
                 for row in 0..batch.num_rows() {
-                    let name = value(&names, row).unwrap_or_default();
+                    let name = text(&names, row).unwrap_or_default();
                     let key = CatalogForeignKey {
                         key: 0,
                         referenced_table: format!(
                             "{}.{}.{}",
-                            value(&catalogs, row).unwrap_or_default(),
-                            value(&schemas, row).unwrap_or_default(),
-                            value(&tables, row).unwrap_or_default()
+                            text(&catalogs, row).unwrap_or_default(),
+                            text(&schemas, row).unwrap_or_default(),
+                            text(&tables, row).unwrap_or_default()
                         ),
-                        columns: vec![value(&columns, row).unwrap_or_default()],
-                        referenced_columns: vec![value(&referenced, row).unwrap_or_default()],
+                        columns: vec![text(&columns, row).unwrap_or_default()],
+                        referenced_columns: vec![text(&referenced, row).unwrap_or_default()],
                     };
                     match keys.iter_mut().find(|(n, _)| *n == name) {
                         Some((_, rows)) => rows.push(key),
@@ -916,7 +932,7 @@ fn read_columns(
         let tables = text_at(batch, 5)?;
         let kinds = text_at(batch, 6)?;
         for row in 0..batch.num_rows() {
-            if found.is_empty() && value(&kinds, row).as_deref() == Some("METRIC_VIEW") {
+            if found.is_empty() && text(&kinds, row).as_deref() == Some("METRIC_VIEW") {
                 let mut refusal = CoreError::new(
                     Sentence::MetricViewAsTable,
                     "a metric view is read as a table; its measures have no value per row",
@@ -929,19 +945,19 @@ fn read_columns(
                         .and_then(|relation| relation.source.last().cloned()),
                     _ => None,
                 };
-                if let Some(table) = named.or_else(|| value(&tables, row)) {
+                if let Some(table) = named.or_else(|| text(&tables, row)) {
                     refusal = refusal.with_field("metric_view", Detail::text(table));
                 }
                 return Err(refusal);
             }
             found.push(CatalogColumn {
-                name: value(&names, row).unwrap_or_default(),
-                declared_type: value(&types, row).unwrap_or_default(),
-                not_null: value(&nullable, row).is_some_and(|n| n.trim().to_uppercase() == "NO"),
+                name: text(&names, row).unwrap_or_default(),
+                declared_type: text(&types, row).unwrap_or_default(),
+                not_null: text(&nullable, row).is_some_and(|n| n.trim().to_uppercase() == "NO"),
                 primary_key: false,
                 key_nullable: false,
                 unique: false,
-                dtype: value(&types, row).and_then(|declared| declared_dtype(&declared)),
+                dtype: text(&types, row).and_then(|declared| declared_dtype(&declared)),
             });
         }
     }
@@ -1040,14 +1056,6 @@ pub(crate) fn declared_dtype(declared: &str) -> Option<Dtype> {
     None
 }
 
-fn unread(at: usize) -> CoreError {
-    CoreError::new(
-        Sentence::Internal,
-        "a catalog answer's column is missing or not text",
-    )
-    .with_field("position", Detail::text(at.to_string()))
-}
-
 /// A relation's name as the reference quotes a metric view's, each part
 /// in backticks, joined by dots (`RE/graph.py:1512-1518`).
 fn quoted_name(relation: &Relation) -> String {
@@ -1080,7 +1088,7 @@ pub(crate) fn read_view(
             .map(|at| text_at(batch, at))
             .collect::<Result<_, _>>()?;
         for row in 0..batch.num_rows() {
-            rows.push(cells.iter().map(|cell| value(cell, row)).collect());
+            rows.push(cells.iter().map(|cell| text(cell, row)).collect());
         }
     }
     match describe_view(&rows, spaces) {
@@ -1105,29 +1113,6 @@ pub(crate) fn read_view(
         )
         .with_field("view", Detail::text(&view))),
     }
-}
-
-/// The column at `at` of `batch` as text: a string column, or a column of
-/// nulls (a current schema a session has none of).
-fn text_at(batch: &RecordBatch, at: usize) -> Result<StringArray, CoreError> {
-    let column = batch.columns().get(at).ok_or_else(|| unread(at))?;
-    if let Some(strings) = column.as_string_opt::<i32>() {
-        return Ok(strings.clone());
-    }
-    if let Some(strings) = column.as_string_opt::<i64>() {
-        return Ok(strings.iter().collect());
-    }
-    if let Some(strings) = column.as_string_view_opt() {
-        return Ok(strings.iter().collect());
-    }
-    if *column.data_type() == DataType::Null {
-        return Ok(StringArray::new_null(column.len()));
-    }
-    Err(unread(at))
-}
-
-fn value(strings: &StringArray, row: usize) -> Option<String> {
-    (!strings.is_null(row)).then(|| strings.value(row).to_owned())
 }
 
 /// The percentage of a table's rows the reference samples to draw `n`:
@@ -1217,14 +1202,10 @@ pub(crate) fn percent_text(x: f64) -> String {
 /// integer (or a decimal of scale 0) `bigint`, a float (or a decimal with
 /// a fraction) `double`, any other `string`.
 fn element_type(column_type: &ColumnType) -> &'static str {
-    use ColumnType as T;
-    match column_type {
-        T::Int8 | T::Int16 | T::Int32 | T::Int64 | T::Uint8 | T::Uint16 | T::Uint32 | T::Uint64 => {
-            "bigint"
-        }
-        T::Decimal128 { scale: 0, .. } | T::Decimal256 { scale: 0, .. } => "bigint",
-        T::Float32 | T::Float64 | T::Decimal128 { .. } | T::Decimal256 { .. } => "double",
-        _ => "string",
+    match key_text::key_type(column_type) {
+        key_text::KeyType::Integer => "bigint",
+        key_text::KeyType::Double => "double",
+        key_text::KeyType::Text => "string",
     }
 }
 
@@ -1238,7 +1219,7 @@ pub(crate) fn key_rows(
     float_text: fn(f64) -> String,
 ) -> Result<Vec<String>, CoreError> {
     key_text::in_batch_order(schema, batches)?;
-    let (schema, batches) = coerced(schema, batches)?;
+    let (schema, batches) = key_text::coerced(schema, batches)?;
     let named = key_text::fields(
         schema.fields().iter().map(|field| field.name().as_str()),
         request,
@@ -1252,7 +1233,7 @@ pub(crate) fn key_rows(
     let mut rows = Vec::new();
     for batch in &batches {
         for row in 0..batch.num_rows() {
-            let cell = |at: usize| json_cell(batch.column(at), row, float_text);
+            let cell = |at: usize| key_text::json_cell(batch.column(at), row, float_text);
             rows.push(match &order[..] {
                 [(at, _)] => cell(*at),
                 several => format!(
@@ -1267,233 +1248,6 @@ pub(crate) fn key_rows(
         }
     }
     Ok(rows)
-}
-
-/// One cell of a key set [`coerced`] for its JSON, as JSON: an integer's
-/// digits, a double as `float_text` writes it, a text's string, ASCII
-/// only, `null`.
-fn json_cell(column: &ArrayRef, row: usize, float_text: fn(f64) -> String) -> String {
-    if column.is_null(row) {
-        return "null".to_owned();
-    }
-    if let Some(integers) = column.as_primitive_opt::<arrow_array::types::Int64Type>() {
-        return integers.value(row).to_string();
-    }
-    if let Some(doubles) = column.as_primitive_opt::<arrow_array::types::Float64Type>() {
-        return json::number(doubles.value(row), float_text);
-    }
-    json::string(column.as_string::<i32>().value(row), true)
-}
-
-/// A key set as this dialect writes it (the module's documentation): the
-/// batch left out, the key coerced as the reference coerces it for its
-/// JSON (`_coerce_id`), each seed time its wall clock's text to the
-/// second.
-fn coerced(
-    schema: &SchemaRef,
-    batches: &[RecordBatch],
-) -> Result<(SchemaRef, Vec<RecordBatch>), CoreError> {
-    let unbound = || {
-        CoreError::new(
-            Sentence::Internal,
-            "a key set holds a column this dialect does not bind",
-        )
-    };
-    let mut fields = Vec::new();
-    for field in schema.fields() {
-        if field.name() == SEED_BATCH {
-            continue;
-        }
-        let bound = if field.name() == SEED_KEY {
-            match key_kind(field.data_type()) {
-                "bigint" => DataType::Int64,
-                "double" => DataType::Float64,
-                _ => DataType::Utf8,
-            }
-        } else {
-            match field.data_type() {
-                DataType::Timestamp(_, None) => DataType::Utf8,
-                _ => return Err(unbound()),
-            }
-        };
-        fields.push(ArrowField::new(field.name(), bound, true));
-    }
-    let out = Arc::new(Schema::new(fields));
-    let mut rewritten = Vec::with_capacity(batches.len());
-    for batch in batches {
-        let mut columns: Vec<ArrayRef> = Vec::new();
-        for (at, field) in schema.fields().iter().enumerate() {
-            if field.name() == SEED_BATCH {
-                continue;
-            }
-            let column = batch.column(at);
-            let bound: ArrayRef = if field.name() == SEED_KEY {
-                match key_kind(field.data_type()) {
-                    "bigint" => arrow_cast(column, &DataType::Int64)?,
-                    "double" => arrow_cast(column, &DataType::Float64)?,
-                    _ => arrow_cast(column, &DataType::Utf8)?,
-                }
-            } else {
-                let times = arrow_cast(
-                    column,
-                    &DataType::Timestamp(arrow_schema::TimeUnit::Nanosecond, None),
-                )?;
-                let times = times.as_primitive::<TimestampNanosecondType>();
-                Arc::new(
-                    times
-                        .iter()
-                        .map(|t| t.map(wall_clock_text))
-                        .collect::<StringArray>(),
-                )
-            };
-            columns.push(bound);
-        }
-        rewritten.push(RecordBatch::try_new(Arc::clone(&out), columns).map_err(|_| unbound())?);
-    }
-    Ok((out, rewritten))
-}
-
-/// The element type of a key of Arrow type `data_type` ([`element_type`]).
-fn key_kind(data_type: &DataType) -> &'static str {
-    match ColumnType::from_arrow("key", data_type) {
-        Ok(column_type) => element_type(&column_type),
-        Err(_) => "string",
-    }
-}
-
-fn arrow_cast(column: &ArrayRef, to: &DataType) -> Result<ArrayRef, CoreError> {
-    if column.data_type() == to {
-        return Ok(Arc::clone(column));
-    }
-    let converted: ArrayRef = match to {
-        DataType::Int64 => Arc::new(
-            (0..column.len())
-                .map(|row| integer_at(column, row))
-                .collect::<Option<Vec<_>>>()
-                .map(Int64Array::from)
-                .ok_or_else(|| {
-                    CoreError::new(
-                        Sentence::Internal,
-                        "a key is not an integer the binding writes",
-                    )
-                })?,
-        ),
-        DataType::Float64 => Arc::new(
-            (0..column.len())
-                .map(|row| float_at(column, row))
-                .collect::<Float64Array>(),
-        ),
-        _ => Arc::new(
-            (0..column.len())
-                .map(|row| text_cell(column, row))
-                .collect::<Option<Vec<_>>>()
-                .map(StringArray::from)
-                .ok_or_else(|| {
-                    CoreError::new(
-                        Sentence::KeySetTypeUnbound,
-                        "a key of this type is not one the binding writes as text",
-                    )
-                })?,
-        ),
-    };
-    Ok(converted)
-}
-
-/// Row `row` of an integer or scale-0 decimal column as an `i64`; `Some`
-/// of `None` for a null.
-fn integer_at(column: &ArrayRef, row: usize) -> Option<Option<i64>> {
-    use arrow_array::types as t;
-    if column.is_null(row) {
-        return Some(None);
-    }
-    let value: i128 = match column.data_type() {
-        DataType::Int8 => column.as_primitive::<t::Int8Type>().value(row).into(),
-        DataType::Int16 => column.as_primitive::<t::Int16Type>().value(row).into(),
-        DataType::Int32 => column.as_primitive::<t::Int32Type>().value(row).into(),
-        DataType::Int64 => column.as_primitive::<t::Int64Type>().value(row).into(),
-        DataType::UInt8 => column.as_primitive::<t::UInt8Type>().value(row).into(),
-        DataType::UInt16 => column.as_primitive::<t::UInt16Type>().value(row).into(),
-        DataType::UInt32 => column.as_primitive::<t::UInt32Type>().value(row).into(),
-        DataType::UInt64 => column.as_primitive::<t::UInt64Type>().value(row).into(),
-        DataType::Decimal128(_, 0) => column.as_primitive::<t::Decimal128Type>().value(row),
-        _ => return None,
-    };
-    i64::try_from(value).ok().map(Some)
-}
-
-/// Row `row` of a numeric column as a double, as the reference's `float`
-/// of it.
-#[allow(
-    clippy::cast_precision_loss,
-    reason = "a number to the nearest double, as the reference converts it"
-)]
-fn float_at(column: &ArrayRef, row: usize) -> Option<f64> {
-    use arrow_array::types as t;
-    if column.is_null(row) {
-        return None;
-    }
-    Some(match column.data_type() {
-        DataType::Float16 => column.as_primitive::<t::Float16Type>().value(row).to_f64(),
-        DataType::Float32 => f64::from(column.as_primitive::<t::Float32Type>().value(row)),
-        DataType::Float64 => column.as_primitive::<t::Float64Type>().value(row),
-        DataType::Decimal128(_, scale) => {
-            let value = column.as_primitive::<t::Decimal128Type>().value(row);
-            format!("{value}e-{scale}").parse().ok()?
-        }
-        _ => integer_at(column, row).flatten()? as f64,
-    })
-}
-
-/// Row `row` of a text column; `Some(None)` for a null, `None` for a
-/// column of another type, which no key this dialect binds as text holds.
-fn text_cell(column: &ArrayRef, row: usize) -> Option<Option<String>> {
-    if column.is_null(row) {
-        return Some(None);
-    }
-    if let Some(strings) = column.as_string_opt::<i32>() {
-        return Some(Some(strings.value(row).to_owned()));
-    }
-    if let Some(strings) = column.as_string_opt::<i64>() {
-        return Some(Some(strings.value(row).to_owned()));
-    }
-    if let Some(strings) = column.as_string_view_opt() {
-        return Some(Some(strings.value(row).to_owned()));
-    }
-    None
-}
-
-/// A wall clock in nanoseconds since the epoch as its text to the second,
-/// `%Y-%m-%d %H:%M:%S`, as the reference writes a bound.
-fn wall_clock_text(nanos: i64) -> String {
-    let seconds = nanos.div_euclid(1_000_000_000);
-    let days = seconds.div_euclid(86_400);
-    let of_day = seconds.rem_euclid(86_400);
-    let (year, month, day) = civil_from_days(days);
-    format!(
-        "{year:04}-{month:02}-{day:02} {:02}:{:02}:{:02}",
-        of_day / 3600,
-        (of_day % 3600) / 60,
-        of_day % 60
-    )
-}
-
-/// The proleptic Gregorian date `days` after 1970-01-01.
-fn civil_from_days(days: i64) -> (i64, u32, u32) {
-    let z = days + 719_468;
-    let era = z.div_euclid(146_097);
-    let doe = z.rem_euclid(146_097);
-    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
-    let y = yoe + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = doy - (153 * mp + 2) / 5 + 1;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 };
-    let year = if m <= 2 { y + 1 } else { y };
-    (
-        year,
-        u32::try_from(m).unwrap_or(1),
-        u32::try_from(d).unwrap_or(1),
-    )
 }
 
 #[cfg(test)]
@@ -1577,7 +1331,10 @@ mod tests {
 
     #[test]
     fn a_key_set_is_bound_as_the_reference_writes_its_json() {
+        use std::sync::Arc;
+
         use arrow_array::{Int32Array, Int64Array, TimestampNanosecondArray};
+        use arrow_schema::{DataType, Field as ArrowField, Schema};
         let schema = Arc::new(Schema::new(vec![
             ArrowField::new(SEED_KEY, DataType::Int32, true),
             ArrowField::new(SEED_BATCH, DataType::Int64, false),
@@ -1606,15 +1363,5 @@ mod tests {
                 r#"{"id":4,"e":null}"#
             ]
         );
-    }
-
-    #[test]
-    fn a_wall_clock_is_written_to_the_second() {
-        assert_eq!(wall_clock_text(0), "1970-01-01 00:00:00");
-        assert_eq!(
-            wall_clock_text(1_709_251_199_999_999_999),
-            "2024-02-29 23:59:59"
-        );
-        assert_eq!(wall_clock_text(-1), "1969-12-31 23:59:59");
     }
 }

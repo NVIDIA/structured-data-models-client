@@ -17,8 +17,11 @@
 //! makes. `dialect_matrix.jsonl` holds one line per case, recorded from
 //! the dialects at the phase head the refactor started from (e6c3791b).
 //!
-//! A deliberate SQL change fails here, as it fails a golden: the failure
-//! prints each changed line ready to paste, as the dialect now renders it.
+//! A deliberate SQL change fails here, as it fails a golden. Regenerate
+//! with `SDM_DIALECT_MATRIX_WRITE=1 cargo test -p sdm-data --test dialect_matrix
+//! every_request_kind_renders_as_recorded_on_every_dialect -- --exact`.
+//! The explicit write mode exports the same `rendered()` answers used by
+//! the check; review the generated answer diff and keep the inputs intact.
 
 use sdm_contract::data::{
     DataLayer, DataRequest, DescribePart, Dialect, Filter, KeySet, ProviderChoice, Relation,
@@ -30,14 +33,14 @@ use sdm_contract::{ColumnType, Field, Scalar, Unit};
 use sdm_data::Data;
 use serde_json::{Value, json};
 
-/// The recorded matrix, read at build time: the core's crates do no I/O,
-/// their tests included.
+/// The recorded matrix is compiled into ordinary checks. Only the
+/// explicitly requested test-only generator writes the fixture.
 const RECORDED: &str = include_str!("dialect_matrix.jsonl");
 
-/// The dialects held: the four this build renders (Databricks from T3.4),
-/// and two it refuses (one it knows by name, one it does not).
-const RENDERED: [&str; 4] = ["duckdb", "sqlite", "postgres", "databricks"];
-const REFUSED: [&str; 2] = ["snowflake", "nope"];
+/// The dialects held: the five this build renders (Databricks from T3.4,
+/// Snowflake from T3.6), and one it refuses, a name it does not know.
+const RENDERED: [&str; 5] = ["duckdb", "sqlite", "postgres", "databricks", "snowflake"];
+const REFUSED: [&str; 1] = ["nope"];
 
 fn relation(parts: &[&str]) -> Relation {
     Relation {
@@ -505,21 +508,25 @@ fn neighbors() -> Vec<DataRequest> {
     };
     let windows = [
         Window {
+            source_type: None,
             column: "at".to_owned(),
             lower: bound("start", false),
             upper: bound("end", true),
         },
         Window {
+            source_type: None,
             column: "at".to_owned(),
             lower: bound("start", true),
             upper: bound("end", false),
         },
         Window {
+            source_type: None,
             column: "at".to_owned(),
             lower: None,
             upper: bound("end", true),
         },
         Window {
+            source_type: None,
             column: "at".to_owned(),
             lower: bound("start", false),
             upper: None,
@@ -884,8 +891,20 @@ fn rendered() -> Vec<String> {
 }
 
 #[test]
+#[allow(
+    clippy::disallowed_methods,
+    reason = "test-only snapshot regeneration explicitly requested by SDM_DIALECT_MATRIX_WRITE=1"
+)]
 fn every_request_kind_renders_as_recorded_on_every_dialect() {
     let now = rendered();
+    if std::env::var_os("SDM_DIALECT_MATRIX_WRITE").as_deref() == Some(std::ffi::OsStr::new("1")) {
+        std::fs::write(
+            concat!(env!("CARGO_MANIFEST_DIR"), "/tests/dialect_matrix.jsonl"),
+            now.join("\n") + "\n",
+        )
+        .unwrap();
+        return;
+    }
     let recorded: Vec<&str> = RECORDED.lines().filter(|l| !l.is_empty()).collect();
     if now.iter().map(String::as_str).eq(recorded.iter().copied()) {
         return;

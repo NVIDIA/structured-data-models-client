@@ -23,6 +23,7 @@ from sdm_client._rust.providers.databricks import (
 )
 from sdm_client._rust.providers.duckdb import DuckDBProvider
 from sdm_client._rust.providers.postgres import PostgresProvider
+from sdm_client._rust.providers.snowflake import SnowflakeProvider
 from sdm_client._rust.providers.sqlite import SqliteProvider
 
 __all__ = [
@@ -30,6 +31,7 @@ __all__ = [
     'DatabricksSqlProvider',
     'DuckDBProvider',
     'PostgresProvider',
+    'SnowflakeProvider',
     'SqliteProvider',
     'for_source',
     'view_choice',
@@ -44,6 +46,7 @@ _BY_KIND: dict[str, tuple[str, str]] = {
     'postgres': ('postgres', 'PostgresProvider'),
     'databricks-sql': ('databricks', 'DatabricksSqlProvider'),
     'databricks-spark': ('databricks', 'DatabricksSparkProvider'),
+    'snowflake': ('snowflake', 'SnowflakeProvider'),
 }
 
 
@@ -52,12 +55,14 @@ def for_source(source: Any) -> tuple[dict[str, Any], Any]:
     answering its fetches, by the source's kind (``Source.kind``, design fix
     F): its built-in SQL dialect, DuckDB's, SQLite's (T2.2), Postgres's
     (T2.3) or Databricks's (T3.4, a SQL warehouse or a Spark session), on
-    its connection.
+    its connection, or Snowflake's (T3.6, a connector connection or a
+    Snowpark session's own).
 
     The choice carries the source's namespace (contract v28,
     ``Source.namespace_parts()``, design fix C): the schema a
     ``PostgresSource`` was given, the catalog and schema of a
-    ``DatabricksSource``, each ``None`` where the connection's current one
+    ``DatabricksSource``, the database and schema of a ``SnowflakeSource``,
+    each ``None`` where the connection's current one
     is meant, under which the core reads each table and lists the source's
     tables, as the reference qualifies each read by them; left out where
     the source names none.

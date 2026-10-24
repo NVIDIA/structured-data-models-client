@@ -211,5 +211,14 @@ def test_the_built_core_reports_its_providers_as_plain_data() -> None:
     assert isinstance(providers, tuple)
     assert all(isinstance(name, str) for name in providers)
     assert 'duckdb' in providers
-    assert set(providers) <= {'duckdb', 'sqlite', 'postgres'}
+    # A database the case format names: Databricks's two legs from T3.4,
+    # Snowflake's from T3.6.
+    assert set(providers) <= {
+        'duckdb',
+        'sqlite',
+        'postgres',
+        'databricks-sql',
+        'databricks-spark',
+        'snowflake',
+    }
     assert not hasattr(sdm_client, 'PROVIDERS')

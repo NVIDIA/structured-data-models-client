@@ -527,14 +527,10 @@ pub struct DescribedColumn {
     /// Whether the catalog declares a primary or unique key of this one
     /// column, which the source refuses to repeat.
     pub unique: bool,
-    /// The column's type as the source's catalog declares it (`describe`
-    /// columns' `type`, as the source spells it), kept only for a
-    /// big-integer column the host layer read from an opaque extension type
-    /// (a HUGEINT, UHUGEINT or VARINT, marked [`crate::data::BIG_INTEGER_MARKER`]):
-    /// a key the data layer joins a `decimal128(38, 0)` seed to in the key's
-    /// own type, so `materialize` asks the source nothing more (register
-    /// P1B-43). `None` for every other column, which joins as before part
-    /// 3, and absent from the JSON.
+    /// The source's catalog declaration, retained for temporal columns
+    /// so a dialect can distinguish zoned instants from NTZ wall clocks,
+    /// and for opaque big-integer columns so key joins cast to the source
+    /// type (register P1B-43). Other columns keep none. Absent when none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub declared_type: Option<String>,
     /// Set for a column of numbers the host provider handed over as their

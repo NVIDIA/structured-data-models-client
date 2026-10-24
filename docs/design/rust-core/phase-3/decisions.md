@@ -161,3 +161,20 @@ These decisions cover only the entries and the two emulation files listed below;
 ## Kickoff answers
 
 None yet beyond the rows above: the open questions are in [design.md](design.md), "Owner questions", each with a recommendation.
+
+## Snowflake continuation answers (2026-10-24)
+
+These rows preserve the owner's scoped continuation answers.
+The owner subsequently confirmed the missing-anchor behavior already approved by both independent round-1 reviewers: retain the entity with empty temporal history and continue other rows.
+
+| # | Decision | Owner's words | Status |
+|---|---|---|---|
+| T36-OWNER-2026-10-24-COUNTS | P3D-2 and P3D-3: count exact Snowflake objects, including views, with the explained query cost | "Approved, but why was there a wildcard match in the old client? Was it for semantic views, or just poorly written code?"; after context on view cost, "Ok" | approved by owner 2026-10-24 |
+| T36-OWNER-2026-10-24-ERRORS | P3D-4, P3D-5 and P3D-9: named namespace and semantic-view errors | "Approved" for no current database and unreadable semantic views; item 11 "Approved" includes P3D-5 | approved by owner 2026-10-24 |
+| T36-OWNER-2026-10-24-FKS | P3D-6: preserve independent foreign keys to the same target | "Ok" after the explanation of the two independent keys | approved by owner 2026-10-24 |
+| T36-OWNER-2026-10-24-UTC | P3D-7: compare zoned Snowflake and Databricks instants in UTC, preserving NTZ wall time, and report the non-UTC checks | "If possible, sure do this. But double-check what we're dong with Databricks"; "Ok, let me know about this." | approved by owner 2026-10-24 |
+| T36-OWNER-2026-10-24-REFRESH | P3D-12: refresh run-local metadata and namespace resolution per materialize, not a full database reload | "Yep." | approved by owner 2026-10-24 |
+| T36-OWNER-2026-10-24-DIAGNOSTICS | Repair internal driver-message transport and preserve old namespace retry behavior | "Ok sounds good." | approved by owner 2026-10-24 |
+| T36-OWNER-2026-10-24-SEED | Remove the routine Snowflake seed warning, since the seed is optional, and document the limitation | "The question is, are users expected to provide a seed? If not, I'd suggest not having a warning at all." | approved by owner 2026-10-24 |
+| T36-OWNER-2026-10-24-HYBRID | Detect enforced hybrid-table primary keys and preserve the old client's counting behavior | "Yes, check them." | approved by owner 2026-10-24 |
+| T36-OWNER-2026-10-24-ANCHORS | P3D-8 and P3K-2: retain an entity with a missing anchor, use empty temporal history, continue other rows, and invent no replacement timestamp | "Use empty window history" | approved by owner 2026-10-24 |

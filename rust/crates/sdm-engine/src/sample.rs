@@ -423,6 +423,7 @@ pub fn by_fkey(
             .as_ref()
             .map(|time| sdm_contract::data::Window {
                 column: time.clone(),
+                source_type: table.column(time).and_then(|c| c.declared_type.clone()),
                 lower: None,
                 upper: Some(SeedBound {
                     seed_column: SEED_TIME.into(),
@@ -457,6 +458,7 @@ pub fn by_time(
         columns,
         seeds: typed(seeds, table, fkey),
         window: Some(sdm_contract::data::Window {
+            source_type: table.column(&time).and_then(|c| c.declared_type.clone()),
             column: time,
             lower: start.then(|| SeedBound {
                 seed_column: SEED_START.into(),

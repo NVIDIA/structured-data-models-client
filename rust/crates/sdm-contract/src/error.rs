@@ -386,8 +386,8 @@ impl CoreError {
 
     /// The error a provider's failure becomes: its kind and retryability,
     /// with the driver's SQLSTATE and vendor code as fields. The driver's
-    /// message is not part of the contract, since drivers quote values in
-    /// it.
+    /// diagnostic remains internal and is omitted from this public error,
+    /// since drivers quote values in it.
     ///
     /// A kind `PROVIDER_ERROR` does not carry gives `INTERNAL_ERROR`
     /// instead (decision E22).

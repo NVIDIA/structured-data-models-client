@@ -97,6 +97,8 @@ def test_every_core_path_of_the_manifest_is_routed_and_every_default_is_old() ->
     # same calls over a SQLite source, from T2.3 over a Postgres one, and
     # from T3.4 over a Databricks SQL warehouse and a Spark session, and
     # from T3.5 over a Databricks metric view.
+    # from T3.4 over a Databricks SQL warehouse and a Spark session, and from
+    # T3.6 over a Snowflake source.
     assert _routing.CORE_ROUTED == set(
         _routing.S0
         # From T3.12, a model's capabilities, from the core's table.
@@ -125,6 +127,11 @@ def test_every_core_path_of_the_manifest_is_routed_and_every_default_is_old() ->
         + _routing.FROM_SOURCE_DATABRICKS_METRIC_VIEW
         + _routing.MATERIALIZE_DATABRICKS_METRIC_VIEW
         + _routing.PREDICT_DATABRICKS_METRIC_VIEW
+        # From T3.6, over a Snowflake connection or a Snowpark session.
+        + _routing.FROM_SOURCE_SNOWFLAKE
+        + _routing.FROM_SOURCE_SNOWFLAKE_TABLES
+        + _routing.MATERIALIZE_SNOWFLAKE
+        + _routing.PREDICT_SNOWFLAKE
     )
     assert set(_routing.CORE_ROUTED) <= set(core)
     assert _routing.route(_routing.S0) == 'old'
@@ -189,10 +196,10 @@ def test_the_route_is_read_at_every_call(
         # A host path is never routed.
         ('source.open/explicit/duckdb', 'source.open/explicit/duckdb'),
         # A core path with no core route in this build (SQLite's has one
-        # from T2.2, Postgres's from T2.3).
+        # from T2.2, Postgres's from T2.3, Snowflake's from T3.6).
         (
-            'client.predict/regression/snowflake',
-            'client.predict/regression/snowflake',
+            'client.predict/regression/snowflake-semantic-view',
+            'client.predict/regression/snowflake-semantic-view',
         ),
     ],
 )

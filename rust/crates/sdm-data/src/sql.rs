@@ -25,15 +25,15 @@ use std::collections::BTreeSet;
 use arrow_array::RecordBatch;
 use sdm_contract::catalog::CatalogAnswer;
 use sdm_contract::data::{
-    BATCH_COLUMN, DataRequest, DescribePart, Dialect, ExpectedSchema, FetchPlan, Filter, KeySet,
-    OptionalRequest, ProviderCapabilities, Relation, SEED_BATCH, SqlParam, SqlStatement,
-    TableColumn, TableKey, TieBreak, TieTerm, Window, refuse_derived, refuse_relation, refused,
-    seed_key_columns,
+    BATCH_COLUMN, DataRequest, DescribePart, Dialect, ExpectedSchema, FailureFacts, FetchPlan,
+    Filter, KeySet, OptionalRequest, ProviderCapabilities, ProviderError, Relation, SEED_BATCH,
+    SqlParam, SqlStatement, TableColumn, TableKey, TieBreak, TieTerm, Window, refuse_derived,
+    refuse_relation, refused, seed_key_columns,
 };
 use sdm_contract::ops::Dtype;
 use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 
-use crate::{databricks, duckdb, postgres, quote, sqlite};
+use crate::{databricks, duckdb, postgres, quote, snowflake, sqlite};
 
 /// The dialects this build renders, in the order `PROVIDERS` names them.
 pub(crate) static DIALECTS: &[&dyn SqlDialect] = &[
@@ -41,18 +41,18 @@ pub(crate) static DIALECTS: &[&dyn SqlDialect] = &[
     &sqlite::Sqlite,
     &postgres::Postgres,
     &databricks::Databricks,
+    &snowflake::Snowflake,
 ];
 
 /// How a dialect's source compares the names of its namespace and
-/// relations (design fix C): as written, without regard to case (Unity
-/// Catalog's, which stores them in lower case), or upper-cased when
-/// unquoted (Snowflake's, T3.6).
-#[allow(dead_code, reason = "Snowflake's rule, T3.6")]
+/// relations (design fix C): as written, or without regard to case (Unity
+/// Catalog's, which stores them in lower case). Snowflake compares a
+/// quoted name as written, and every name is quoted; which spellings of a
+/// name its catalog read tries is [`SqlDialect::spellings`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum NameCase {
     AsWritten,
     Insensitive,
-    UpperWhenUnquoted,
 }
 
 /// The dialect of `name`, if this build renders it.
@@ -123,6 +123,14 @@ pub(crate) trait SqlDialect: Sync {
     /// current ones.
     fn settles_namespace(&self) -> bool {
         false
+    }
+
+    /// Settle a namespace from the catalog answer. Most namespace reads
+    /// already resolve and align all supplied parts, so their full answer
+    /// is retained. A dialect returning raw session parts overlays its
+    /// supplied parts here instead.
+    fn settled_namespace(&self, _given: &[Option<String>], resolved: Vec<String>) -> Vec<String> {
+        resolved
     }
 
     /// The refusal of `relation` where it names fewer parts than the
@@ -304,6 +312,13 @@ pub(crate) trait SqlDialect: Sync {
         Ok(read.joined())
     }
 
+    /// A neighbor read with neither a limit per seed nor an order: every
+    /// row each seed's key and window hold, as every dialect but one that
+    /// writes the reference's own statement writes it.
+    fn neighbors_all(&self, read: &SeedRead<'_>) -> String {
+        read.joined()
+    }
+
     /// The key lookup: one row per seed whose key the table holds.
     fn lookup(&self, read: &SeedRead<'_>) -> String;
 
@@ -356,6 +371,18 @@ pub(crate) trait SqlDialect: Sync {
 
     // --- what the core asks of a provider (`DataLayer`) -------------------------
 
+    /// What a provider's failure says (`DataLayer::failure`): no fact, the
+    /// default, so every failure stays the provider's error.
+    fn failure(&self, _error: &ProviderError) -> FailureFacts {
+        FailureFacts::default()
+    }
+
+    /// The name forms the catalog read of `relation` tries, in order
+    /// (`DataLayer::spellings`): as given alone, the default.
+    fn spellings(&self, relation: &Relation) -> Vec<Relation> {
+        vec![relation.clone()]
+    }
+
     /// The answer's values conformed to the reference's reading, if the
     /// dialect changes any (`DataLayer::conform`).
     fn conform(
@@ -390,6 +417,25 @@ pub(crate) trait SqlDialect: Sync {
         _float_text: fn(f64) -> String,
     ) -> Result<Option<Vec<String>>, CoreError> {
         Ok(None)
+    }
+
+    /// What separates two seeds in the key set's JSON array, as the old
+    /// client's `json.dumps` writes it: `,` (its compact form), unless the
+    /// dialect's reference writes its default `, ` (Snowflake's).
+    fn key_separator(&self) -> &'static str {
+        ","
+    }
+
+    /// The parameters a key set's statement binds after its text, read
+    /// from the whole key set as the core made it: none, the default;
+    /// Snowflake's window bounds over every seed (`WHERE t <= ? AND t > ?`).
+    fn key_bounds(
+        &self,
+        _request: &DataRequest,
+        _schema: &arrow_schema::SchemaRef,
+        _batches: &[RecordBatch],
+    ) -> Result<Vec<SqlParam>, CoreError> {
+        Ok(vec![])
     }
 
     /// The bytes one statement's key set text may hold before the key set
@@ -742,7 +788,7 @@ pub(crate) fn plan(
             no_columns(request, columns)?;
             let body = match (per_seed, order) {
                 (Some(limit), Some(TieBreak(terms))) => d.neighbors_per_seed(&read, *limit, terms),
-                (None, None) => read.joined(),
+                (None, None) => d.neighbors_all(&read),
                 _ => d.neighbors_unpaired(&read)?,
             };
             format!("{prelude}{body}")

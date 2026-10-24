@@ -523,7 +523,8 @@ def test_a_databricks_failure_reaches_the_core_with_its_state_and_class(
     assert 'refuses_expression' not in provided
     assert provided['kind'] == 'data_source'
     assert driver == f'{type(error).__module__}.{type(error).__qualname__}'
-    # The host passes the diagnostic unread; the core chooses where it is useful.
+    # The internal diagnostic is passed unread, independently of the
+    # structured state and class. Public errors sanitize it in the core.
     assert provided['driver_message'] == str(error)
 
 

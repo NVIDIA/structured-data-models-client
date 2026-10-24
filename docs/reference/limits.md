@@ -173,6 +173,10 @@ defensible default for a temporal model; plan for a recency window rather than
 for a representative sample, and gather more context if you need the older
 anchors.
 
+Snowflake samples rows without a warehouse seed.
+`random_seed` is optional, and setting it does not make Snowflake's warehouse row sample reproducible.
+Repeated predictions can therefore differ even with the same seed.
+
 ## What a deployment serves
 
 `capabilities()` describes **this client** and reports `source='sdk'`. It is

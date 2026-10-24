@@ -130,6 +130,7 @@ impl SqlDialect for Postgres {
             derived_relations: false,
             neighbor_lookback: false,
             keys_optional: false,
+            key_enforcement: false,
             sample_rows: false,
             optional: sql::rendered(),
             max_keys_per_request: None,
@@ -437,7 +438,9 @@ fn expected(request: &DataRequest) -> ExpectedSchema {
     };
     let fields = match part {
         // No view is read here (T3.27): only a dialect that reads views answers it.
-        DescribePart::ViewDefinition => return ExpectedSchema::Discover {},
+        DescribePart::KeyEnforcement | DescribePart::ViewDefinition => {
+            return ExpectedSchema::Discover {};
+        }
         DescribePart::Tables => vec![field(k::TABLE_NAME, Utf8, false)],
         DescribePart::Columns => vec![
             field(k::COLUMN_NAME, Utf8, false),
@@ -485,7 +488,7 @@ fn read(part: DescribePart, batches: &[RecordBatch]) -> Result<CatalogAnswer, Co
     use catalog as k;
     match part {
         // No view is read here (T3.27): only a dialect that reads views answers it.
-        DescribePart::ViewDefinition => Err(views_unread()),
+        DescribePart::KeyEnforcement | DescribePart::ViewDefinition => Err(views_unread()),
         DescribePart::Tables => crate::read::tables(batches, k::TABLE_NAME),
         DescribePart::Columns => {
             let mut found = Vec::new();
@@ -637,7 +640,7 @@ fn describe(
     let one = || schema_and_name(sql::one_table(request, tables)?);
     Ok(match part {
         // No view is read here (T3.27): only a dialect that reads views answers it.
-        DescribePart::ViewDefinition => return Err(views_unread()),
+        DescribePart::KeyEnforcement | DescribePart::ViewDefinition => return Err(views_unread()),
         // The reference's listing (`Graph.from_postgres`'s,
         // `information_schema` the base tables of the schema, by name), as
         // it writes it but for the schema, which it binds and the core

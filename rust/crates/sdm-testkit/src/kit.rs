@@ -89,6 +89,7 @@ impl Source {
                             ProviderError {
                                 driver_message: None,
                                 error_class: None,
+                                driver_message: None,
                                 kind: ErrorKind::Internal,
                                 retryable: false,
                                 sqlstate: None,

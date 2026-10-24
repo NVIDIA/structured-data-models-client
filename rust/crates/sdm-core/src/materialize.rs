@@ -813,6 +813,18 @@ pub(crate) fn named<'a>(batch: &'a RecordBatch, name: &str) -> Result<&'a ArrayR
     })
 }
 
+/// The column of an answer the core names by its own alias, `name`, as
+/// the source folds an unquoted one (`sdm_schema::catalog::result_column`).
+pub(crate) fn aliased<'a>(batch: &'a RecordBatch, name: &str) -> Result<&'a ArrayRef, CoreError> {
+    sdm_schema::catalog::result_column(batch, name).ok_or_else(|| {
+        crate::run::schema_mismatch(
+            "expected",
+            Some(name),
+            "an answer lacks a column it asked for",
+        )
+    })
+}
+
 /// A time column's values in nanoseconds, a zone-less timestamp's only.
 fn times_ns(array: &ArrayRef, column: &str) -> Result<Vec<Option<i64>>, CoreError> {
     times_ns_from(array, column, false)
@@ -1276,8 +1288,10 @@ fn times_of_day_unread(asker: &Asker, table: &Table, name: &str, array: &ArrayRe
 }
 
 /// The batch positions a `neighbors` or `lookup` answer names.
+/// Its column is the core's own alias, found as the source folds it
+/// (Snowflake's `__KUMO_BATCH__`, the reference's unquoted alias).
 pub(crate) fn batches(batch: &RecordBatch, seeds: usize) -> Result<Vec<usize>, CoreError> {
-    let column = named(batch, BATCH_COLUMN)?;
+    let column = aliased(batch, BATCH_COLUMN)?;
     let values = column
         .as_primitive_opt::<Int64Type>()
         .ok_or_else(|| crate::run::schema_mismatch("expected", Some(BATCH_COLUMN), "not int64"))?;
@@ -1632,7 +1646,7 @@ async fn read_bounds(
     // A position of either width: DuckDB writes the literal as an `int32`,
     // SQLite's driver reads every integer as an `int64`.
     let positions: Vec<Option<i64>> = {
-        let column = named(&batch, BOUNDS_POSITION)?;
+        let column = aliased(&batch, BOUNDS_POSITION)?;
         if let Some(values) = column.as_primitive_opt::<Int32Type>() {
             values.iter().map(|v| v.map(i64::from)).collect()
         } else if let Some(values) = column.as_primitive_opt::<Int64Type>() {
@@ -1645,8 +1659,8 @@ async fn read_bounds(
             ));
         }
     };
-    let mins = times.bounds(named(&batch, BOUNDS_MIN)?, BOUNDS_MIN, true)?;
-    let maxs = times.bounds(named(&batch, BOUNDS_MAX)?, BOUNDS_MAX, false)?;
+    let mins = times.bounds(aliased(&batch, BOUNDS_MIN)?, BOUNDS_MIN, true)?;
+    let maxs = times.bounds(aliased(&batch, BOUNDS_MAX)?, BOUNDS_MAX, false)?;
     let mut out = vec![None; tables.len()];
     for row in 0..batch.num_rows() {
         let at = positions[row]
@@ -1744,8 +1758,7 @@ async fn table_rows(memo: &mut Memo<'_>, graph: &Graph) -> Result<(), CoreError>
     Ok(())
 }
 
-/// The rows a `count_rows` answer counts: its one row's first column, an
-/// integer of any width not below zero.
+/// One aggregate row whose first column holds a nonnegative integer count.
 fn row_count(answer: &ArrowData) -> Result<u64, CoreError> {
     let batch = one_batch(answer)?;
     let unread =
@@ -3225,6 +3238,8 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
             column: time.clone(),
         });
     }
+    // Seeds are optional. An unseeded provider documents its limitation
+    // without issuing a routine warning for the default seed (P3D-13).
     let sampled = read_times.read(
         asker,
         entity,
@@ -4828,6 +4843,35 @@ fn key_scalar(array: &dyn Array, row: usize) -> Scalar {
 
 #[cfg(test)]
 mod tests {
+
+    /// An aggregate count is one row of one integer: a second row is the
+    /// provider's answer not reading, never its first row taken (T3.6
+    /// round 1; a catalog listing's first row is its dialect's to read).
+    #[test]
+    fn an_aggregate_count_is_exactly_one_row() {
+        use arrow_array::Int64Array;
+        let data = |values: Vec<i64>| {
+            let schema =
+                std::sync::Arc::new(arrow_schema::Schema::new(vec![arrow_schema::Field::new(
+                    "rows",
+                    DataType::Int64,
+                    false,
+                )]));
+            let batch = RecordBatch::try_new(
+                std::sync::Arc::clone(&schema),
+                vec![std::sync::Arc::new(Int64Array::from(values))],
+            )
+            .unwrap();
+            ArrowData::new(schema, vec![batch])
+        };
+        assert_eq!(super::row_count(&data(vec![8])).unwrap(), 8);
+        for answer in [data(vec![8, 9]), data(vec![])] {
+            assert_eq!(
+                super::row_count(&answer).unwrap_err().sentence,
+                Sentence::ProviderSchemaMismatch
+            );
+        }
+    }
     use super::*;
     use sdm_contract::ErrorCode;
     use sdm_contract::pql::TimeUnit;

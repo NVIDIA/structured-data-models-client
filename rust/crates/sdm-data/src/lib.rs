@@ -51,6 +51,7 @@ mod pg_values;
 mod postgres;
 mod quote;
 mod read;
+mod snowflake;
 mod sql;
 #[cfg(test)]
 mod sql_tests;
@@ -74,16 +75,14 @@ use sdm_contract::wording::DatabaseNames;
 use sdm_contract::{CoreError, Detail, Sentence};
 use sql::SqlDialect;
 
-/// The SQL dialects this build knows by name. It renders DuckDB's,
-/// SQLite's and Postgres's (T2.2, T2.3); the others are refused by name,
-/// as a dialect it has no rendering for, and a name it does not know is
-/// refused without being repeated.
+/// The SQL dialects this build knows by name, each of which it renders;
+/// a name it does not know is refused without being repeated.
 const KNOWN: &[&str] = &[
     duckdb::NAME,
     sqlite::NAME,
     postgres::NAME,
     databricks::NAME,
-    "snowflake",
+    snowflake::NAME,
 ];
 
 /// The databases this build's data layer provides for, by the names the
@@ -101,6 +100,8 @@ pub const PROVIDERS: &[&str] = &[
     // both run the one `databricks` dialect (T3.4).
     "databricks-sql",
     "databricks-spark",
+    // A connector connection or a Snowpark session's (T3.6).
+    snowflake::NAME,
 ];
 
 /// Each database a sentence may name (`{database:backend}`,
@@ -129,7 +130,7 @@ pub const DATABASE_NAMES: &[DatabaseNames] = &[
         place: "remote data backend",
     },
     DatabaseNames {
-        name: "snowflake",
+        name: snowflake::NAME,
         backend: "Snowflake",
         place: "remote data backend",
     },
@@ -271,13 +272,26 @@ impl DataLayer for Data {
         }
     }
 
+    /// The full namespace answer, settled by its dialect: an already
+    /// resolved answer is retained; raw session parts are combined with
+    /// supplied parts according to that dialect's namespace alignment.
     fn settled(&self, provider: &ProviderChoice, parts: Vec<String>) -> ProviderChoice {
         match provider {
-            ProviderChoice::Sql { dialect, view, .. } => ProviderChoice::Sql {
-                dialect: dialect.clone(),
-                namespace: parts.into_iter().map(Some).collect(),
-                view: view.clone(),
-            },
+            ProviderChoice::Sql {
+                dialect,
+                namespace,
+                view,
+            } => {
+                let parts = match sql_dialect(provider) {
+                    Some(dialect) => dialect.settled_namespace(namespace, parts),
+                    None => parts,
+                };
+                ProviderChoice::Sql {
+                    dialect: dialect.clone(),
+                    namespace: parts.into_iter().map(Some).collect(),
+                    view: view.clone(),
+                }
+            }
             ProviderChoice::Host { .. } => provider.clone(),
         }
     }
@@ -302,6 +316,10 @@ impl DataLayer for Data {
         Ok(view_expr::answer(ask, dialect, spaces, &|data_type| {
             sql.declared_type(data_type)
         }))
+    }
+
+    fn spellings(&self, provider: &ProviderChoice, relation: &Relation) -> Vec<Relation> {
+        sql_dialect(provider).map_or_else(|| vec![relation.clone()], |d| d.spellings(relation))
     }
 
     fn read_as(&self, provider: &ProviderChoice, relation: &Relation) -> Relation {
