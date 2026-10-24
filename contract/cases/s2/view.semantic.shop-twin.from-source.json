@@ -25,9 +25,9 @@
     "client.predict/forecast/snowflake-semantic-view"
   ],
   "cells": [
-    "int64/primary-key",
-    "int64/foreign-key",
-    "timestamp-us/time-column"
+    "int8/primary-key",
+    "int8/foreign-key",
+    "timestamp-ns/time-column"
   ],
   "input": {
     "base": "shop",
