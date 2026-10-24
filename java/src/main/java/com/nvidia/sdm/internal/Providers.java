@@ -54,6 +54,10 @@ public final class Providers {
           "namespace",
           Arrays.asList(databricks.catalog().orElse(null), databricks.schema().orElse(null)));
     }
+    if (source instanceof DatabricksSource databricks && databricks.semanticModel().isPresent()) {
+      choice.put("view", Map.of("name", databricks.semanticModel().orElseThrow(),
+          "trust_expressions", databricks.trustExpressions()));
+    }
     return new Chosen(choice, new JdbcProvider(source.connection(), driver));
   }
 }

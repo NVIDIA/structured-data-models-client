@@ -21,11 +21,20 @@ public final class DatabricksSource implements Source {
   private final Connection connection;
   private final String catalog;
   private final String schema;
+  private final String semanticModel;
+  private final boolean trustExpressions;
 
   private DatabricksSource(Connection connection, String catalog, String schema) {
+    this(connection, catalog, schema, null, false);
+  }
+
+  private DatabricksSource(Connection connection, String catalog, String schema,
+      String semanticModel, boolean trustExpressions) {
     this.connection = Objects.requireNonNull(connection, "connection");
     this.catalog = catalog;
     this.schema = schema;
+    this.semanticModel = semanticModel;
+    this.trustExpressions = trustExpressions;
   }
 
   /** The tables of {@code connection}'s current catalog and schema. */
@@ -39,6 +48,22 @@ public final class DatabricksSource implements Source {
    */
   public static DatabricksSource of(Connection connection, String catalog, String schema) {
     return new DatabricksSource(connection, catalog, schema);
+  }
+
+  /** A metric view in this source's namespace, interpreted by the core. */
+  public DatabricksSource semanticModel(String name, boolean trustExpressions) {
+    return new DatabricksSource(connection, catalog, schema,
+        Objects.requireNonNull(name, "name"), trustExpressions);
+  }
+
+  /** The metric view, when one was given. */
+  public Optional<String> semanticModel() {
+    return Optional.ofNullable(semanticModel);
+  }
+
+  /** Whether the caller allows the metric view's expressions without validation. */
+  public boolean trustExpressions() {
+    return trustExpressions;
   }
 
   @Override

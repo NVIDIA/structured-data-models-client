@@ -26,7 +26,7 @@ import org.slf4j.LoggerFactory;
  * StructuredDataException}, its code and fields the core's. Not part of the API.
  *
  * <p>A provider's failure reaches the core as the contract's {@code ProviderError}: its kind,
- * whether it may be retried, its SQLSTATE and vendor code, never the driver's text (decision
+ * whether it may be retried, its SQLSTATE and vendor code and an internal driver diagnostic; the diagnostic is never public (decision
  * H17); the error the run then ends with names the driver's exception class ({@code
  * driver_class}). A model's {@link TransportFailed} is told to the core as the contract's
  * transport error; a {@link Refused} call is told as its status, and once the core ends the run,
@@ -66,6 +66,9 @@ public final class Host {
     default Map<String, Object> failure(Exception failure) {
       Map<String, Object> facts = new LinkedHashMap<>();
       if (failure instanceof java.sql.SQLException sql) {
+        if (sql.getMessage() != null) {
+          facts.put("driver_message", sql.getMessage());
+        }
         if (sql.getSQLState() != null) {
           facts.put("sqlstate", sql.getSQLState());
         }
@@ -423,12 +426,15 @@ public final class Host {
       Map<String, Object> provided = new LinkedHashMap<>();
       provided.put("kind", "data_source");
       provided.put("retryable", failure instanceof java.sql.SQLTransientException);
-      // What the failure tells the core, as its provider reads it; never its text.
+      // Internal facts go to the core; its public provider error sanitizes driver text.
       Map<String, Object> facts = provider.failure(failure);
       provided.put("sqlstate", facts.get("sqlstate"));
       provided.put("vendor_code", facts.get("vendor_code"));
       if (facts.get("error_class") != null) {
         provided.put("error_class", facts.get("error_class"));
+      }
+      if (facts.get("driver_message") != null) {
+        provided.put("driver_message", facts.get("driver_message"));
       }
       outcome.put("outcome", "error");
       outcome.put("error", provided);

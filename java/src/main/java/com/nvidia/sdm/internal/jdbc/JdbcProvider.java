@@ -637,12 +637,16 @@ public final class JdbcProvider implements Host.Provider {
    * vendor_code}); on Databricks, the SQLSTATE its message writes where the driver gives none, and
    * the error class its message names ({@code error_class}), as Python's provider reads them
    * ({@code sql_state}, {@code error_class}), from the message before the statement Databricks
-   * appends. Nothing else of the message is kept. Any other exception tells nothing.
+   * appends. The original message passes unread as internal {@code driver_message}; the core
+   * sanitizes its public errors. Any other exception tells nothing.
    */
   public Map<String, Object> failure(Exception failure) {
     Map<String, Object> facts = new LinkedHashMap<>();
     if (!(failure instanceof SQLException sql)) {
       return facts;
+    }
+    if (sql.getMessage() != null) {
+      facts.put("driver_message", sql.getMessage());
     }
     String head =
         sql.getMessage() == null ? "" : SQL_CONTEXT.split(sql.getMessage(), 2)[0];
