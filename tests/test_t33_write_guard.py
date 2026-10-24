@@ -450,10 +450,20 @@ def _fake_drivers(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
 
     class Session:
         connection = SnowflakeConnection()
+        _session_id = 42
+        # What close sends to cancel the session's queries (Snowpark's
+        # cancel_all, session.py).
+        closing = 'select system$cancel_all_queries(42)'
 
         def sql(self, query: str) -> str:
             seen.append(query)
             return query
+
+        def cancel_all(self) -> None:
+            self.connection.cursor().execute(self.closing)
+
+        def close(self) -> None:
+            self.cancel_all()
 
     class Cursor:
         def execute(self, operation: str, parameters: Any = None) -> None:
@@ -1278,3 +1288,22 @@ def test_the_old_clients_trusted_bitmap_sample_passes() -> None:
     ):
         with pytest.raises(wg.WriteRefused):
             DATABRICKS.check(sql)
+
+
+def test_snowpark_cancels_its_own_queries_only_while_it_closes(
+    installed: Any,
+) -> None:
+    # T3.20 second capture (snowflake.connect.snowpark): Session.close
+    # sends select system$cancel_all_queries(<its id>). That one statement
+    # passes while its session closes; sent at any other time, for another
+    # session, or as anything else during close, it is refused.
+    d, seen = installed, installed['seen']
+    d['Session']().close()
+    assert seen[-1] == 'select system$cancel_all_queries(42)'
+    with pytest.raises(wg.WriteRefused):
+        d['Session']().cancel_all()
+    for sent in ('select system$cancel_all_queries(43)', OUTSIDE):
+        session = d['Session']()
+        session.closing = sent
+        with pytest.raises(wg.WriteRefused):
+            session.close()
