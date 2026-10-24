@@ -1166,6 +1166,74 @@
     ],
     "read_under": [
      {
+      "columns": [
+       {
+        "name": "order_id",
+        "source": {
+         "dtype": "int",
+         "nullable": true,
+         "received": {
+          "type": "int64"
+         },
+         "relation": {
+          "source": [
+           "orders"
+          ]
+         },
+         "unique": false
+        }
+       },
+       {
+        "name": "user_id",
+        "source": {
+         "dtype": "int",
+         "nullable": true,
+         "received": {
+          "type": "int64"
+         },
+         "relation": {
+          "source": [
+           "orders"
+          ]
+         },
+         "unique": false
+        }
+       },
+       {
+        "name": "price",
+        "source": {
+         "dtype": "float",
+         "nullable": true,
+         "received": {
+          "type": "float64"
+         },
+         "relation": {
+          "source": [
+           "orders"
+          ]
+         },
+         "unique": false
+        }
+       },
+       {
+        "name": "ts",
+        "source": {
+         "dtype": "date",
+         "nullable": true,
+         "received": {
+          "type": "timestamp",
+          "unit": "us",
+          "zone": null
+         },
+         "relation": {
+          "source": [
+           "orders"
+          ]
+         },
+         "unique": false
+        }
+       }
+      ],
       "namespace": [],
       "relation": {
        "source": [
@@ -1174,6 +1242,56 @@
       }
      },
      {
+      "columns": [
+       {
+        "name": "user_id",
+        "source": {
+         "dtype": "int",
+         "nullable": true,
+         "received": {
+          "type": "int64"
+         },
+         "relation": {
+          "source": [
+           "users"
+          ]
+         },
+         "unique": false
+        }
+       },
+       {
+        "name": "age",
+        "source": {
+         "dtype": "int",
+         "nullable": true,
+         "received": {
+          "type": "int32"
+         },
+         "relation": {
+          "source": [
+           "users"
+          ]
+         },
+         "unique": false
+        }
+       },
+       {
+        "name": "country",
+        "source": {
+         "dtype": "string",
+         "nullable": true,
+         "received": {
+          "type": "utf8"
+         },
+         "relation": {
+          "source": [
+           "users"
+          ]
+         },
+         "unique": false
+        }
+       }
+      ],
       "namespace": [],
       "relation": {
        "source": [
