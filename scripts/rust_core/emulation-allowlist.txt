@@ -29,3 +29,8 @@ rust/crates/sdm-pql/src/escapes.rs
 # default is a value of its type (T3.5 fix 2, by the coordinator's direction;
 # its decisions row is the owner's).
 rust/crates/sdm-pql/src/conversions.rs
+# Python 3.12's printable code points (str.isprintable), the table a repr
+# escapes by, generated from Python by contract/fixtures/views/gen_printable.py
+# (T3.5 fix 3, by the coordinator's direction; its decisions row is the
+# owner's).
+rust/crates/sdm-pql/src/printable.rs

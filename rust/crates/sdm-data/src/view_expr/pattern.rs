@@ -9,7 +9,10 @@
 //! - `\s` is the old client's white space, which holds the four separators
 //!   U+001C to U+001F that Rust's `\s` does not (T3.5 fix 1): read either
 //!   way, `WITH\x1cx AS (x)` would open a sub-query for the warehouse and
-//!   none for the check;
+//!   none for the check. This is a pattern's class, written into each
+//!   fixed pattern once it is compiled; the same white space as a test of
+//!   a character, for `strip` and `split`, is `sdm-pql`'s rule, which the
+//!   core hands in ([`super::Spaces`]);
 //! - a match is total: a pattern that runs out of its backtracking budget
 //!   answers [`Unreadable::TooDeep`], never "no match", so no check can
 //!   accept an expression because a pattern failed on it. Each caller

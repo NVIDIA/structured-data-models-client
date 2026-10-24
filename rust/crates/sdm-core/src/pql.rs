@@ -1035,8 +1035,11 @@ pub struct TooLarge;
 /// have, for the collections met again inside themselves.
 const QUOTE_DEPTH: usize = 2 * sdm_schema::view::yaml::MAX_DEPTH;
 
-/// What a quote may still spend, in characters, and the nodes it is
-/// inside.
+/// What a quote may still spend, and the nodes it is inside. Each value
+/// spends the fewest characters it can be written in (a text its own,
+/// a date ten), so a quote that runs out would be longer than the bound;
+/// the text itself is then written up to the bound exactly
+/// ([`parser::float_repr::Shown::repr_within`]).
 struct Quote {
     budget: usize,
     open: Vec<sdm_schema::view::yaml::NodeId>,
@@ -1069,16 +1072,18 @@ fn shown(
     use sdm_schema::view::yaml::Value;
     let value = document.value(node);
     if quote.on_path.contains(&node) {
-        quote.spend(5)?;
+        quote.spend(1)?;
         return Ok(Shown::Recursive(!matches!(value, Value::Map(_))));
     }
     if quote.open.len() >= QUOTE_DEPTH {
         return Err(TooLarge);
     }
     quote.spend(match value {
-        Value::Str(text) => text.len() + 2,
+        Value::Str(text) => text.chars().count(),
         Value::Int(n) => n.text().len(),
-        _ => 8,
+        Value::Date(_) => 10,
+        Value::Timestamp(_) => 19,
+        _ => 1,
     })?;
     quote.open.push(node);
     quote.on_path.insert(node);
@@ -1128,7 +1133,9 @@ pub(crate) fn value_repr(
     document: &sdm_schema::view::yaml::Document,
     node: sdm_schema::view::yaml::NodeId,
 ) -> Result<String, TooLarge> {
-    Ok(shown(document, node, &mut Quote::new())?.repr())
+    shown(document, node, &mut Quote::new())?
+        .repr_within(parser::conversions::LONGEST_TEXT)
+        .ok_or(TooLarge)
 }
 
 /// Python's `str` of a view definition's value, as the old client wrote
@@ -1137,7 +1144,9 @@ pub(crate) fn value_text(
     document: &sdm_schema::view::yaml::Document,
     node: sdm_schema::view::yaml::NodeId,
 ) -> Result<String, TooLarge> {
-    Ok(shown(document, node, &mut Quote::new())?.text())
+    shown(document, node, &mut Quote::new())?
+        .text_within(parser::conversions::LONGEST_TEXT)
+        .ok_or(TooLarge)
 }
 
 /// Python's `repr` of a text, as the old client quotes a piece of an
@@ -1151,7 +1160,36 @@ pub(crate) fn text_repr(text: &str) -> String {
 pub fn yaml_rules() -> sdm_schema::view::yaml::Rules {
     sdm_schema::view::yaml::Rules {
         most_digits: parser::conversions::MAX_STR_DIGITS,
+        day_ordinal: parser::conversions::day_ordinal,
     }
+}
+
+/// Python's white space (`str.isspace`), from the parser's one rule of
+/// it, as the data layer's view checks take it (T3.5).
+pub fn spaces() -> sdm_data::view_expr::Spaces {
+    sdm_data::view_expr::Spaces(parser::syntax::is_space)
+}
+
+/// `date.isoformat()` of a view definition's date, from the parser's one
+/// writer of it (T3.5).
+pub(crate) fn date_iso(date: &sdm_schema::view::yaml::Date) -> String {
+    parser::conversions::date_iso(date.year, date.month, date.day)
+}
+
+/// `datetime.isoformat(separator)` of a view definition's date and time,
+/// from the parser's one writer of it (T3.5).
+pub(crate) fn datetime_iso(moment: &sdm_schema::view::yaml::Timestamp, separator: char) -> String {
+    parser::conversions::datetime_iso(
+        (moment.date.year, moment.date.month, moment.date.day),
+        parser::conversions::Clock {
+            hour: moment.hour,
+            minute: moment.minute,
+            second: moment.second,
+            microsecond: moment.microsecond,
+        },
+        moment.offset.map(|seconds| i64::from(seconds) * 1_000_000),
+        separator,
+    )
 }
 
 /// The conversions of a parameter's default, as the old client's Python
