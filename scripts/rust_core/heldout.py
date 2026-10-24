@@ -664,13 +664,10 @@ def _approved(path: Path | None) -> set[str]:
     return approved
 
 
-def cmd_compare(args: argparse.Namespace) -> int:
-    """The normal comparator on all cases, plus the authored Java subset."""
+def _comparison_tool() -> Any:
+    """The existing comparator, also used by targeted orchestration tests."""
     import importlib.util
-    import shutil
 
-    run: Path = args.run_dir
-    java = _java_legs(args)
     spec = importlib.util.spec_from_file_location(
         'heldout_compare', ROOT / 'scripts/rust_core/compare.py'
     )
@@ -678,51 +675,64 @@ def cmd_compare(args: argparse.Namespace) -> int:
     comparator = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = comparator
     spec.loader.exec_module(comparator)
+    return comparator
+
+
+def cmd_compare(args: argparse.Namespace) -> int:
+    """The normal comparator on all cases, plus Java's exact admitted legs."""
+    import shutil
+    import tempfile
+
+    run: Path = args.run_dir
+    java = _java_legs(args)
+    comparator = _comparison_tool()
     regular = [run / (who + '.jsonl') for who in RUNNERS]
-    java_files = []
-    subset = run / 'java-compare'
-    if java:
-        subset.mkdir()
-        (subset / 'cases').mkdir()
-        ids = {case_of(key) for key in java}
-        for path in case_files(run / 'cases', args.prefix):
-            if json.loads(path.read_text())['id'] in ids:
-                shutil.copyfile(path, subset / 'cases' / path.name)
-        for who in ('python-ref', 'python-core', 'java'):
-            rows = _observations(run / (who + '.jsonl'))
-            selected = [
-                value for key, value in rows.items() if case_of(key) in ids
-            ]
-            target = subset / (who + '.jsonl')
-            target.write_text(
-                ''.join(json.dumps(row) + '\n' for row in selected)
-            )
-            if who != 'python-ref':
-                java_files.append(target)
     failed = False
-    for database in _databases(args.databases) or list(DATABASES):
-        expected = expected_legs(run, args.prefix, [database]) or {}
-        if not any(expected.values()):
-            continue
-        comparisons = [(run / 'cases', run / 'python-ref.jsonl', regular)]
-        if any(database_of(key) == database for key in java):
-            comparisons.append(
-                (subset / 'cases', subset / 'python-ref.jsonl', java_files)
-            )
-        for cases, reference, files in comparisons:
-            report = comparator.compare(
-                [cases],
-                reference,
-                files,
-                register_file=run / 'register-at-run-start.yaml',
-                improvements=run / 'register-at-run-start.yaml',
-                database=database,
-            )
-            for line in report.notes:
-                print(line)
-            for line in report.texts:
-                print('DIFFERS ' + line)
-            failed |= bool(report.failures)
+    with tempfile.TemporaryDirectory(
+        prefix='java-compare-', dir=run
+    ) as temporary:
+        for database in _databases(args.databases) or list(DATABASES):
+            expected = expected_legs(run, args.prefix, [database]) or {}
+            if not any(expected.values()):
+                continue
+            comparisons = [(run / 'cases', run / 'python-ref.jsonl', regular)]
+            admitted = {key for key in java if database_of(key) == database}
+            if admitted:
+                subset = Path(temporary) / database
+                (subset / 'cases').mkdir(parents=True)
+                ids = {case_of(key) for key in admitted}
+                for path in case_files(run / 'cases', args.prefix):
+                    if json.loads(path.read_text())['id'] in ids:
+                        shutil.copyfile(path, subset / 'cases' / path.name)
+                java_files = []
+                for who in ('python-ref', 'python-core', 'java'):
+                    rows = _observations(run / (who + '.jsonl'))
+                    selected = [
+                        value for key, value in rows.items() if key in admitted
+                    ]
+                    target = subset / (who + '.jsonl')
+                    target.write_text(
+                        ''.join(json.dumps(row) + '\n' for row in selected)
+                    )
+                    if who != 'python-ref':
+                        java_files.append(target)
+                comparisons.append(
+                    (subset / 'cases', subset / 'python-ref.jsonl', java_files)
+                )
+            for cases, reference, files in comparisons:
+                report = comparator.compare(
+                    [cases],
+                    reference,
+                    files,
+                    register_file=run / 'register-at-run-start.yaml',
+                    improvements=run / 'register-at-run-start.yaml',
+                    database=database,
+                )
+                for line in report.notes:
+                    print(line)
+                for line in report.texts:
+                    print('DIFFERS ' + line)
+                failed |= bool(report.failures)
     return int(failed)
 
 
@@ -785,6 +795,10 @@ def cmd_counts(args: argparse.Namespace) -> int:
                 rf'{re.escape(key)}:\s*(?:python-core|rust-host|java)\b', text
             )
             for text in texts
+            # Report.fail marks permanently diagnostic rules with this
+            # prefix; Report.demote uses 'diagnostic:' for gate rules on
+            # a diagnostic case. Only the latter belong in H11's union.
+            if text.startswith(('DIFFERS ', 'diagnostic: '))
         ):
             differing.add(key)
     for name in runners:

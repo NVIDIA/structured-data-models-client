@@ -414,6 +414,7 @@ with_environment() { # DATABASE COMMAND...
 }
 python_leg() { # MODE DATABASE CASE_DIRECTORY OUT
   local run_mode=$1 db=$2 cases_dir=$3 target=$4
+  local raw_target=$target
   local selection=0
   has_cases "$db" "$cases_dir" || selection=$?
   case "$selection" in 0) ;; 3) return 0 ;; *) return "$selection" ;; esac
@@ -433,10 +434,16 @@ python_leg() { # MODE DATABASE CASE_DIRECTORY OUT
       options+=(--guard-live)
       [ "$run_mode" != python-ref ] || options+=(--record "$target.record.jsonl") ;;
   esac
+  case "$db:$run_mode" in
+    databricks-sql:python-core | snowflake:python-core | lakebase:python-core) raw_target=$target.raw ;;
+  esac
   if [ "$run_mode" = python-core ] && [ "$db" != duckdb ] && [ "$db" != sqlite ]; then
     options+=(--record-fetches "$out/legs/fetches.$db.jsonl")
   fi
-  with_environment "$db" "$py" -I "$runpy" --mode "$run_mode" --database "$db" "${options[@]}" --out "$target" "$cases_dir" || return $?
+  with_environment "$db" "$py" -I "$runpy" --mode "$run_mode" --database "$db" "${options[@]}" --out "$raw_target" "$cases_dir" || return $?
+  if [ "$raw_target" != "$target" ]; then
+    with_environment "$db" "$py_cand" -I "$runpy" publish --database "$db" --on "$raw_target" --out "$target" || return $?
+  fi
   if [ "$run_mode" = python-ref ]; then
     case "$db" in
       databricks-sql | snowflake | lakebase)
@@ -448,15 +455,21 @@ rust_host() { # DATABASE: existing Rust journey, using actual host fetches
   local selection=0
   has_cases "$1" "$out/cases" || selection=$?
   case "$selection" in 0) ;; 3) return 0 ;; *) return "$selection" ;; esac
-  local where=()
+  local where=() target raw_target
+  target=$(leg_file rust-host "$1")
+  raw_target=$target
   case "$1" in
     duckdb) ;;
     sqlite) where=(--database sqlite) ;;
     *) where=(--replay "$out/legs/fetches.$1.jsonl" --replay-leg "$1") ;;
   esac
+  case "$1" in databricks-* | snowflake | lakebase) raw_target=$target.raw ;; esac
   (cd "$candidate/rust" && cargo run -q -p sdm-testkit --bin sdm-contract-run \
-    --locked -- "${where[@]+"${where[@]}"}" --out "$(leg_file rust-host "$1")" \
-    "$out/cases")
+    --locked -- "${where[@]+"${where[@]}"}" --out "$raw_target" \
+    "$out/cases") || return $?
+  if [ "$raw_target" != "$target" ]; then
+    with_environment "$1" "$py_cand" -I "$runpy" publish --database "$1" --on "$raw_target" --out "$target"
+  fi
 }
 java_host() { # DATABASE: exact authored subset through existing Java CLI
   "$py_cand" -I - "$candidate/contract/runners" "$out/cases" "$java_ids" "$1" "$(leg_file java "$1")" <<'PYJAVA'
@@ -464,9 +477,9 @@ import json, os, pathlib, sys
 sys.path.insert(0, sys.argv[1])
 import run_java
 ids = {line.strip() for line in pathlib.Path(sys.argv[3]).read_text().splitlines() if line.strip()}
-paths = [p for p in pathlib.Path(sys.argv[2]).glob('*.json') if json.loads(p.read_text())['id'] in ids]
+paths = [p for p in pathlib.Path(sys.argv[2]).glob('*.json') if json.loads(p.read_text())['id'] in ids and run_java.on_java(json.loads(p.read_text()), sys.argv[4])]
 rows = run_java.run(paths, jar=pathlib.Path(os.environ['SDM_JAVA_JAR']),
-    lib=pathlib.Path(os.environ['HELDOUT_JAVA_CLASSPATH']), drivers=pathlib.Path(os.environ['HELDOUT_JAVA_DRIVERS']), database=sys.argv[4])
+    lib=pathlib.Path(os.environ['HELDOUT_JAVA_CLASSPATH']), drivers=pathlib.Path(os.environ['HELDOUT_JAVA_DRIVERS']), database=sys.argv[4]) if paths else []
 pathlib.Path(sys.argv[5]).write_text(''.join(json.dumps(row) + '\n' for row in rows))
 PYJAVA
 }

@@ -221,7 +221,14 @@ if mode:
         leg,
         '--guard-live',
         '--out',
-        str(output / 'observations.jsonl'),
+        str(
+            output
+            / (
+                'observations.raw.jsonl'
+                if mode == 'python-core'
+                else 'observations.jsonl'
+            )
+        ),
     ]
     if mode == 'python-ref':
         arguments += [
@@ -234,6 +241,18 @@ if mode:
         arguments += ['--record-fetches', str(output / 'fetches.jsonl')]
     cases = dbutils.widgets.get('case_dir')
     status = runner.main([*arguments, cases])
+    if status == 0 and mode == 'python-core':
+        status = runner.main(
+            [
+                'publish',
+                '--database',
+                leg,
+                '--on',
+                str(output / 'observations.raw.jsonl'),
+                '--out',
+                str(output / 'observations.jsonl'),
+            ]
+        )
     if status == 0 and mode == 'python-ref':
         checker = capture_run._module('capture_check')
         status = checker.recording_main(
