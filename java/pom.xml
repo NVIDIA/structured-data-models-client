@@ -184,6 +184,9 @@
         <version>3.4.2</version>
         <configuration>
           <archive>
+            <manifest>
+              <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
+            </manifest>
             <manifestEntries>
               <Automatic-Module-Name>com.nvidia.sdm</Automatic-Module-Name>
             </manifestEntries>

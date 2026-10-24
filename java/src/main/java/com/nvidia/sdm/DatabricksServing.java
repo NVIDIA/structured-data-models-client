@@ -4,6 +4,9 @@
 
 package com.nvidia.sdm;
 
+import com.databricks.sdk.WorkspaceClient;
+import com.databricks.sdk.core.DatabricksConfig;
+import com.databricks.sdk.core.UserAgent;
 import com.nvidia.sdm.internal.Host;
 import com.nvidia.sdm.internal.HttpTransport;
 import java.io.IOException;
@@ -19,14 +22,18 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.FutureTask;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.function.Supplier;
 
 /**
  * A Databricks Model Serving endpoint a client predicts through ({@link
  * SdmClient#forDatabricksServing}), as Python's {@code SDMClient.for_databricks_serving}: the
  * endpoint is named, not addressed, inside the workspace at {@code host}, and called with the
- * token the caller's supplier gives at each call.
+ * official SDK's unified authentication, or a token supplied by the caller.
  *
  * <p>The core writes each call's envelope (the one {@code request_json} row the served model
  * reads), weighs it against {@link #maxRequestBytes}, and reads every answer and failure, as
@@ -35,12 +42,9 @@ import java.util.function.Supplier;
  * finds unavailable (503), or one that cannot reach it, is tried again, as the Databricks SDK
  * tries one, until the timeout runs out.
  *
- * <p>Known limit: a caller-supplied token only; Python's client also takes the SDK's other ways
- * to authenticate.
- *
  * <pre>{@code
  * DatabricksServing serving =
- *     DatabricksServing.of("https://<workspace host>", "kumo-rfm", () -> token);
+ *     DatabricksServing.of(new WorkspaceClient(), "kumo-rfm");
  * try (SdmClient client = SdmClient.forDatabricksServing(serving)) {
  *   PredictionResult result = client.predict(request, SdmClient.KUMO_RELATIONAL);
  * }
@@ -58,18 +62,54 @@ public final class DatabricksServing {
   private final String host;
   private final String endpoint;
   private final Supplier<String> token;
+  private final DatabricksConfig sdk;
   private final long maxRequestBytes;
   private final Duration timeout;
   private final HttpClient client;
 
   private DatabricksServing(
-      String host, String endpoint, Supplier<String> token, long maxRequestBytes, Duration timeout) {
+      String host, String endpoint, Supplier<String> token, DatabricksConfig sdk,
+      long maxRequestBytes, Duration timeout) {
     this.host = host;
     this.endpoint = endpoint;
     this.token = token;
+    this.sdk = sdk;
     this.maxRequestBytes = maxRequestBytes;
     this.timeout = timeout;
     this.client = HttpClient.newBuilder().connectTimeout(timeout).build();
+  }
+
+  /**
+   * Uses the official SDK's default unified authentication: environment, configuration profile,
+   * or any other authentication method the SDK supports.
+   */
+  public static DatabricksServing of(String endpoint) {
+    String name = name(endpoint);
+    try {
+      return of(new WorkspaceClient(), name);
+    } catch (RuntimeException error) {
+      throw configuration("Databricks SDK authentication could not be configured");
+    }
+  }
+
+  /** Uses {@code workspace}'s official SDK configuration and refreshed authentication headers. */
+  public static DatabricksServing of(WorkspaceClient workspace, String endpoint) {
+    return of(workspace, endpoint, MAX_REQUEST_BYTES);
+  }
+
+  /**
+   * Uses an existing official SDK workspace client, preserving all its authentication methods
+   * and headers, without passing the core's request or response through the SDK's JSON codecs.
+   * The SDK discovers or refreshes credentials at each attempt; the serving deadline includes
+   * that work. The caller retains ownership of the SDK client and configuration.
+   */
+  public static DatabricksServing of(
+      WorkspaceClient workspace, String endpoint, long maxRequestBytes) {
+    Objects.requireNonNull(workspace, "workspace");
+    String name = name(endpoint);
+    positiveLimit(maxRequestBytes);
+    DatabricksConfig config = Objects.requireNonNull(workspace.config(), "workspace.config");
+    return new DatabricksServing(null, name, null, config, maxRequestBytes, DEFAULT_TIMEOUT);
   }
 
   /** The endpoint {@code endpoint} in the workspace at {@code host}, with the gateway's limit. */
@@ -92,11 +132,8 @@ public final class DatabricksServing {
     Objects.requireNonNull(token, "token");
     String base = base(host);
     String name = name(endpoint);
-    if (maxRequestBytes <= 0) {
-      throw configuration(
-          "max_request_bytes must be a positive integer, got " + maxRequestBytes);
-    }
-    return new DatabricksServing(base, name, token, maxRequestBytes, DEFAULT_TIMEOUT);
+    positiveLimit(maxRequestBytes);
+    return new DatabricksServing(base, name, token, null, maxRequestBytes, DEFAULT_TIMEOUT);
   }
 
   /** This endpoint, each attempt and its retries bounded by {@code timeout}. */
@@ -104,7 +141,7 @@ public final class DatabricksServing {
     if (timeout == null || timeout.isNegative() || timeout.isZero()) {
       throw configuration("timeout must be a positive duration");
     }
-    return new DatabricksServing(host, endpoint, token, maxRequestBytes, timeout);
+    return new DatabricksServing(host, endpoint, token, sdk, maxRequestBytes, timeout);
   }
 
   /** The serving endpoint's name. */
@@ -146,21 +183,33 @@ public final class DatabricksServing {
    * @throws Host.TransportFailed the call was interrupted
    */
   byte[] post(byte[] body) throws Host.EndpointFailed, Host.TransportFailed {
-    URI target = URI.create(host + "/serving-endpoints/" + endpoint + "/invocations");
     long deadline = System.nanoTime() + timeout.toNanos();
     for (int attempt = 1; ; attempt++) {
-      String credential = token.get();
+      Authentication authentication = sdk == null
+          ? new Authentication(host, Map.of("Authorization", "Bearer " + token.get()))
+          : authenticate(deadline);
       long remaining = deadline - System.nanoTime();
       if (remaining <= 0) {
         throw new Host.EndpointFailed(504, new byte[0]);
       }
-      HttpRequest request =
-          HttpRequest.newBuilder(target)
-              .timeout(Duration.ofNanos(remaining))
-              .header("Authorization", "Bearer " + credential)
-              .header("Content-Type", "application/json")
-              .POST(HttpRequest.BodyPublishers.ofByteArray(body))
-              .build();
+      // Native SDK authentication can discover the workspace host. Validate it afterwards,
+      // before any credential is sent, and on every attempt if the caller edits its config.
+      URI target = URI.create(base(authentication.host())
+          + "/serving-endpoints/" + endpoint + "/invocations");
+      HttpRequest request;
+      try {
+        HttpRequest.Builder builder = HttpRequest.newBuilder(target)
+            .timeout(Duration.ofNanos(remaining));
+        authentication.headers().forEach(builder::header);
+        request = builder
+            .setHeader("Content-Type", "application/json")
+            .setHeader("User-Agent", userAgent())
+            .POST(HttpRequest.BodyPublishers.ofByteArray(body))
+            .build();
+      } catch (IllegalArgumentException error) {
+        // Header validation diagnostics can quote the invalid credential.
+        throw new Host.TransportFailed();
+      }
       long pause;
       try {
         HttpResponse<byte[]> response = HttpTransport.exchange(
@@ -196,6 +245,51 @@ public final class DatabricksServing {
         Thread.currentThread().interrupt();
         throw new Host.TransportFailed();
       }
+    }
+  }
+
+  private record Authentication(String host, Map<String, String> headers) {}
+
+  /** SDK refresh may perform IO: cancellation must bound it as well as the serving body. */
+  private Authentication authenticate(long deadline)
+      throws Host.EndpointFailed, Host.TransportFailed {
+    long remaining = deadline - System.nanoTime();
+    if (remaining <= 0) {
+      throw new Host.EndpointFailed(504, new byte[0]);
+    }
+    FutureTask<Authentication> pending = new FutureTask<>(() -> {
+      Map<String, String> headers = Map.copyOf(sdk.authenticate());
+      return new Authentication(sdk.getHost(), headers);
+    });
+    Thread refresh = new Thread(pending, "sdm-databricks-auth");
+    refresh.setDaemon(true);
+    refresh.start();
+    try {
+      return pending.get(remaining, TimeUnit.NANOSECONDS);
+    } catch (TimeoutException error) {
+      throw new Host.EndpointFailed(504, new byte[0]);
+    } catch (InterruptedException error) {
+      Thread.currentThread().interrupt();
+      throw new Host.TransportFailed();
+    } catch (ExecutionException error) {
+      // SDK diagnostics can carry credentials and configuration. They stay internal.
+      throw new Host.TransportFailed();
+    } finally {
+      pending.cancel(true);
+    }
+  }
+
+  /** Keep the SDK's identity without mutating its process-wide product setting. */
+  private static String userAgent() {
+    String version = DatabricksServing.class.getPackage().getImplementationVersion();
+    return "structured-data-models-client/" + (version == null ? "development" : version)
+        + " " + UserAgent.asString();
+  }
+
+  private static void positiveLimit(long maxRequestBytes) {
+    if (maxRequestBytes <= 0) {
+      throw configuration(
+          "max_request_bytes must be a positive integer, got " + maxRequestBytes);
     }
   }
 

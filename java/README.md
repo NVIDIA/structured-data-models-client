@@ -84,7 +84,7 @@ The API mirrors Python's with Java names and plain data:
 | `PredictiveQuery(text, schema).materialize(indices=, anchor_time=, **options)` | `PredictiveQuery.parse(text).materialize(schema, MaterializeOptions)`; an option is a name and a plain value (`option("num_neighbors", List.of(8, 8))`), as a keyword argument |
 | `Request.context_rows`, `predict_rows`, `payloads`, ... | `Request.contextRows()`, `predictRows()`, `payloads()`, `nothingToScore()`, `entityTable()`, ... |
 | `SDMClient(url, api_key, timeout=, max_retries=)`, `capabilities(model)`, `predict(request, model=, outputs=)` | `SdmClient.connect(url[, ClientOptions])`, `capabilities(model)`, `predict(request, model[, outputs])` |
-| `SDMClient.for_databricks_serving(endpoint, workspace_client=, timeout=)` | `SdmClient.forDatabricksServing(DatabricksServing.of(host, endpoint, tokenSupplier[, maxRequestBytes]))`, with `timeout(Duration)`; a caller-supplied token only |
+| `SDMClient.for_databricks_serving(endpoint, workspace_client=, timeout=)` | `SdmClient.forDatabricksServing(DatabricksServing.of(endpoint))`, or `DatabricksServing.of(workspaceClient, endpoint[, maxRequestBytes])` with the official SDK's unified authentication; `timeout(Duration)` bounds the call |
 | `PredictionResult.to_pandas()`, `absent()`, `explanation` | `PredictionResult.read(allocator)` (the core's rows as Arrow, ordered by `row_index`), `absent(requested)`, `explanation()` |
 
 The JDBC drivers are the caller's: DuckDB's (`org.duckdb:duckdb_jdbc`), SQLite's (`org.xerial:sqlite-jdbc`), Postgres's (`org.postgresql:postgresql`) and Databricks's (`com.databricks:databricks-jdbc`); the JAR ships none.
