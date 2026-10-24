@@ -12,6 +12,10 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.databricks.sdk.WorkspaceClient;
+import com.databricks.sdk.core.CredentialsProvider;
+import com.databricks.sdk.core.DatabricksConfig;
+import com.databricks.sdk.core.DatabricksException;
 import com.nvidia.sdm.internal.ArrowData;
 import com.nvidia.sdm.internal.Host;
 import com.nvidia.sdm.internal.Json;
@@ -22,6 +26,8 @@ import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.sql.Connection;
 import java.time.Duration;
 import java.time.LocalDate;
@@ -40,6 +46,7 @@ import java.util.function.Function;
 import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.arrow.vector.ipc.ArrowReader;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 /**
  * Predicting through a Databricks Model Serving endpoint from Java (T3.13): {@link
@@ -70,6 +77,8 @@ class T313DatabricksServingTest {
     final List<byte[]> bodies = Collections.synchronizedList(new ArrayList<>());
     final List<String> paths = Collections.synchronizedList(new ArrayList<>());
     final List<Map<String, String>> headers = Collections.synchronizedList(new ArrayList<>());
+    final List<String> userAgents = Collections.synchronizedList(new ArrayList<>());
+    final List<String> managementTokens = Collections.synchronizedList(new ArrayList<>());
     private final HttpServer server;
 
     @SafeVarargs
@@ -79,6 +88,14 @@ class T313DatabricksServingTest {
       server.createContext(
           "/",
           exchange -> {
+            if (exchange.getRequestURI().getPath().equals("/.well-known/databricks-config")) {
+              byte[] metadata = "{}".getBytes(StandardCharsets.UTF_8);
+              exchange.sendResponseHeaders(200, metadata.length);
+              try (OutputStream out = exchange.getResponseBody()) {
+                out.write(metadata);
+              }
+              return;
+            }
             byte[] body;
             try (InputStream in = exchange.getRequestBody()) {
               body = in.readAllBytes();
@@ -90,6 +107,9 @@ class T313DatabricksServingTest {
               seen.put(name, exchange.getRequestHeaders().getFirst(name));
             }
             headers.add(seen);
+            userAgents.add(exchange.getRequestHeaders().getFirst("User-Agent"));
+            managementTokens.add(
+                exchange.getRequestHeaders().getFirst("X-Databricks-Azure-SP-Management-Token"));
             int at = call.getAndIncrement();
             Answer answer =
                 at < answers.length ? answers[at].apply(body) : served(body);
@@ -113,6 +133,89 @@ class T313DatabricksServingTest {
     @Override
     public void close() {
       server.stop(0);
+    }
+  }
+
+  @Test
+  void officialSdkAuthenticationRefreshesEveryHeaderWithoutRewritingTheCoreBytes()
+      throws Exception {
+    AtomicInteger refreshes = new AtomicInteger();
+    try (Workspace workspace = new Workspace(body -> Answer.of(200, "{}"))) {
+      DatabricksConfig config = new DatabricksConfig().setHost(workspace.host())
+          .setCredentialsProvider(CredentialsProvider.from("sdm-test", ignored -> () -> Map.of(
+              "Authorization", "Bearer sdk-" + refreshes.incrementAndGet(),
+              "X-Databricks-Azure-SP-Management-Token", "management-scope")));
+      DatabricksServing serving = DatabricksServing.of(new WorkspaceClient(config), ENDPOINT);
+      byte[] body = "{\"opaque\":\"\\u00e9\"}".getBytes(StandardCharsets.UTF_8);
+      serving.post(body);
+      serving.post(body);
+      assertEquals("Bearer sdk-1", workspace.headers.get(0).get("Authorization"));
+      assertEquals("Bearer sdk-2", workspace.headers.get(1).get("Authorization"));
+      assertEquals(List.of("management-scope", "management-scope"), workspace.managementTokens);
+      assertArrayEquals(body, workspace.bodies.get(0));
+      assertArrayEquals(body, workspace.bodies.get(1));
+      for (String agent : workspace.userAgents) {
+        assertTrue(agent.contains("structured-data-models-client/"), agent);
+        assertTrue(agent.contains("databricks-sdk-java/"), agent);
+      }
+    }
+  }
+
+  @Test
+  void aNamedOfficialSdkProfileSuppliesTheCredentials(@TempDir Path temporary) throws Exception {
+    try (Workspace workspace = new Workspace(body -> Answer.of(200, "{}"))) {
+      Path profile = temporary.resolve("databrickscfg");
+      Files.writeString(profile,
+          "[serving-test]\nhost = " + workspace.host() + "\ntoken = profile-token\n");
+      WorkspaceClient client = new WorkspaceClient(new DatabricksConfig()
+          .setConfigFile(profile.toString()).setProfile("serving-test"));
+      DatabricksServing.of(client, ENDPOINT, 1234).timeout(Duration.ofSeconds(2))
+          .post(new byte[] {'{', '}'});
+      assertEquals("Bearer profile-token", workspace.headers.get(0).get("Authorization"));
+    }
+  }
+
+  @Test
+  void sdkAuthenticationFailuresDoNotExposeTheirCredentialDiagnostic() throws Exception {
+    try (Workspace workspace = new Workspace(body -> Answer.of(200, "{}"))) {
+      WorkspaceClient client = new WorkspaceClient(new DatabricksConfig().setHost(workspace.host())
+          .setCredentialsProvider(CredentialsProvider.from("sdm-test", ignored -> () -> {
+            throw new DatabricksException(SECRET);
+          })));
+      Host.TransportFailed error = assertThrows(Host.TransportFailed.class,
+          () -> DatabricksServing.of(client, ENDPOINT).post(new byte[] {'{', '}'}));
+      assertFalse(String.valueOf(error).contains(SECRET));
+      assertTrue(workspace.bodies.isEmpty());
+    }
+  }
+
+  @Test
+  void theServingDeadlineIncludesSdkCredentialRefresh() throws Exception {
+    CountDownLatch refreshing = new CountDownLatch(1);
+    CountDownLatch release = new CountDownLatch(1);
+    ExecutorService caller = Executors.newSingleThreadExecutor();
+    try (Workspace workspace = new Workspace(body -> Answer.of(200, "{}"))) {
+      WorkspaceClient client = new WorkspaceClient(new DatabricksConfig().setHost(workspace.host())
+          .setCredentialsProvider(CredentialsProvider.from("sdm-test", ignored -> () -> {
+            refreshing.countDown();
+            try {
+              release.await(5, TimeUnit.SECONDS);
+            } catch (InterruptedException error) {
+              Thread.currentThread().interrupt();
+            }
+            return Map.of("Authorization", "Bearer late-token");
+          })));
+      DatabricksServing serving = DatabricksServing.of(client, ENDPOINT)
+          .timeout(Duration.ofMillis(150));
+      Future<Host.EndpointFailed> result = caller.submit(() -> assertThrows(
+          Host.EndpointFailed.class, () -> serving.post(new byte[] {'{', '}'})));
+      assertTrue(refreshing.await(1, TimeUnit.SECONDS));
+      assertEquals(504, result.get(1, TimeUnit.SECONDS).status());
+      assertTrue(workspace.bodies.isEmpty());
+    } finally {
+      release.countDown();
+      caller.shutdownNow();
+      assertTrue(caller.awaitTermination(3, TimeUnit.SECONDS));
     }
   }
 
