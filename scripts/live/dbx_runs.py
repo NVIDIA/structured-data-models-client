@@ -28,7 +28,9 @@ the Databricks CLI (``databricks ... -o json``) and only ever:
 ``spec`` fills a job template's ``<KEY>`` placeholders (``<FOLDER>``,
 ``<NOTEBOOK>``, ``<VOLUME_DIR>``, ``<SHA>``, ``<SHA7>``, ``<TARGET>``,
 ``<SPARK_VERSION>``, ``<NODE_TYPE>``, ``<POLICY_ID>``, ``<USER>``,
-``<UUID>`` and any ``--set``), merges the cluster extras into
+``<UUID>`` and any ``--set``), sets the run's and each task's timeout from
+the template's ``_timeout_seconds`` by ``--set LEG=...`` where it has one
+(refusing a leg it does not time), merges the cluster extras into
 ``new_cluster``, checks the result as ``submit`` would, and writes it to a
 new file, mode 0600, that it never prints; a file that exists is refused.
 ``submit`` prints the run ID; ``wait`` polls until every run ends and prints
@@ -283,7 +285,17 @@ def run_spec(arguments: argparse.Namespace) -> int:
     for pair in arguments.set:
         key, _, value = pair.partition('=')
         values[key] = value
+    timeouts = template.pop('_timeout_seconds', None)
     payload = fill(template, values)
+    if timeouts is not None:
+        # A template timing each leg (capture.job.template.json): the
+        # run's and each task's timeout are the leg's.
+        leg = values.get('LEG')
+        if leg not in timeouts:
+            raise Refused(f'the template names no timeout for the leg {leg!r}')
+        payload['timeout_seconds'] = int(timeouts[leg])
+        for task in payload.get('tasks', []):
+            task['timeout_seconds'] = int(timeouts[leg])
     extra = cluster_extra(arguments)
     for task in payload.get('tasks', []):
         if 'new_cluster' in task:
