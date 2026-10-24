@@ -446,15 +446,6 @@
     "packages/structured-data-models-client/src/sdm_client/result.py::<module>": {
       "gone": "T2.14c: the file leaves the freeze, the core route entering none of its ledgered functions (measured: python-core on every case and database under coverage)"
     },
-    "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_described_now": {
-      "gone": "T3.16 (fix A): no second describe in Python; the core reads from the source the facts of a column that carries none (sdm-core's discover)"
-    },
-    "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_derived": {
-      "gone": "T3.17: the wording it derived (one key column or several, a table's place, the first five entities) is the core's choice of sentence and its fields"
-    },
-    "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::CoreQuery.to_string": {
-      "gone": "T3.16 (fix D): CoreQuery moved to _rust/results.py with the host's other typed results"
-    },
     "packages/structured-data-models-client/src/sdm_client/schema.py::Column.__setattr__": {
       "refactor": "T3.16 (fix A): the core's edit gate reads the columns' source facts"
     },
