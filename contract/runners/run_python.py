@@ -3690,9 +3690,14 @@ class WarehouseTarget:
         self.view = dict(view) if view is not None else None
 
 
-def _quoted(leg: str, names: Mapping[str, str], table: str) -> str:
+def _quoted(
+    leg: str, names: Mapping[str, str], table: str, fold: bool = False
+) -> str:
     r"""``table`` in the test schema, qualified and quoted as ``leg``'s
-    engine reads it, its name exactly as the case's DuckDB data has it."""
+    engine reads it, its name exactly as the case's DuckDB data has it, or
+    with ``fold`` in upper case, as the loader stored it."""
+    if fold:
+        table = table.upper()
     if leg in ('databricks-sql', 'databricks-spark'):
         parts = [names.get('catalog', ''), names.get('schema', ''), table]
         return '.'.join('`' + part.replace('`', '``') + '`' for part in parts)
@@ -3933,7 +3938,13 @@ class Live:
                     raw_arrow(
                         leg,
                         writer,
-                        f'SELECT * FROM {_quoted(leg, self.names, name)}',
+                        'SELECT * FROM '
+                        + _quoted(
+                            leg,
+                            self.names,
+                            name,
+                            loader.folds(leg, given.get('view')),
+                        ),
                     ),
                 )
                 for name in self.table_names
