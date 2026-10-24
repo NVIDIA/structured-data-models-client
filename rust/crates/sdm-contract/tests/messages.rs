@@ -362,7 +362,7 @@ fn a_provider_error_keeps_its_retryability_and_codes_in_the_core_error() {
     for retryable in [true, false] {
         let error = CoreError::provider(&ProviderError {
             error_class: None,
-            driver_message: None,
+            driver_message: Some("secret driver value does not exist".into()),
             kind: ErrorKind::DataSource,
             retryable,
             sqlstate: Some("40001".into()),
@@ -373,6 +373,9 @@ fn a_provider_error_keeps_its_retryability_and_codes_in_the_core_error() {
         assert_eq!(error.retryable, retryable);
         assert_eq!(error.fields["sqlstate"], Detail::text("40001"));
         assert_eq!(error.fields["vendor_code"], Detail::text("1213"));
+        let public = serde_json::to_string(&error).unwrap();
+        assert!(!public.contains("secret driver value"));
+        assert!(!public.contains("driver_message"));
     }
     // An error written without the field is not retryable.
     let error: CoreError = serde_json::from_str(

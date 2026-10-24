@@ -819,7 +819,7 @@ def test_materialize_on_the_core_sends_the_old_routes_payloads(
                 ),
             )
     assert sent['core'][0] == sent['old'][0]
-    assert sent['old'][1] == []
+    assert sent['core'][1] == []
     # ``SAMPLE ROW`` takes no seed, and the old client says so once.
     assert sent['old'][1] == [
         "The 'snowflake' backend does not support seeded random sampling, "

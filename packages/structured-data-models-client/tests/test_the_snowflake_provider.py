@@ -266,8 +266,8 @@ def test_a_drivers_errno_is_the_provider_errors_vendor_code() -> None:
     )
     assert provided['vendor_code'] == '2003'
     assert provided['sqlstate'] == '02000'
-    # The driver's message stays in the host.
-    assert 'does not exist' not in repr(provided)
+    # Hosts pass the diagnostic unread; only the data layer interprets it.
+    assert provided['driver_message'] == str(error)
     assert driver == 'snowflake.connector.errors.ProgrammingError'
 
 

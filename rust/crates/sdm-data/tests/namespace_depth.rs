@@ -171,3 +171,42 @@ fn a_table_named_in_full_is_read_whatever_the_provider_leaves_out() {
         "SELECT COUNT(*) FROM `main`.`shop`.`orders`"
     );
 }
+
+/// Namespace reads on Databricks already resolve both parts and align a
+/// shorthand to the innermost part. Settlement must retain that answer.
+#[test]
+fn databricks_settlement_preserves_full_resolved_namespaces() {
+    let data = Data::new();
+    for (given, resolved) in [
+        (json!([null]), vec!["main", "public"]),
+        (json!([null, null]), vec!["main", "public"]),
+        (json!(["shop"]), vec!["main", "shop"]),
+        (json!([null, "shop"]), vec!["main", "shop"]),
+        (json!(["kept", null]), vec!["kept", "public"]),
+        (json!(["kept", "shop"]), vec!["kept", "shop"]),
+    ] {
+        let provider = choice("databricks", given.clone());
+        let settled = data.settled(&provider, resolved.iter().map(|p| (*p).to_owned()).collect());
+        assert_eq!(settled, choice("databricks", json!(resolved)), "{given}");
+        let FetchPlan::Sql { statements, .. } = data.plan(&preview(), &settled).unwrap() else { panic!("SQL") };
+        assert!(statements[0].text.contains(&format!("FROM `{}`.`{}`.`t`", resolved[0], resolved[1])));
+        let request: DataRequest = serde_json::from_value(json!({"request": "describe", "part": "tables", "tables": []})).unwrap();
+        let FetchPlan::Sql { statements, .. } = data.plan(&request, &settled).unwrap() else { panic!("SQL") };
+        assert!(statements[0].text.contains(&format!("`{}`.information_schema.tables", resolved[0])));
+        assert!(statements[0].params.contains(&SqlParam::Value { value: Scalar::Utf8(resolved[1].to_owned()) }));
+    }
+}
+
+#[test]
+fn snowflake_raw_session_settlement_fills_short_namespaces_without_truncation() {
+    let data = Data::new();
+    for (given, expected) in [
+        (json!([null]), json!(["SESSION_DB", "SESSION_SCHEMA"])),
+        (json!(["NAMED_DB"]), json!(["NAMED_DB", "SESSION_SCHEMA"])),
+        (json!(["NAMED_DB", null]), json!(["NAMED_DB", "SESSION_SCHEMA"])),
+        (json!([null, "NAMED_SCHEMA"]), json!(["SESSION_DB", "NAMED_SCHEMA"])),
+    ] {
+        assert_eq!(data.settled(&choice("snowflake", given), vec!["SESSION_DB".into(), "SESSION_SCHEMA".into()]), choice("snowflake", expected));
+    }
+    assert_eq!(data.settled(&choice("snowflake", json!(["NAMED_DB", null])), vec![]), choice("snowflake", json!(["NAMED_DB"])));
+}
