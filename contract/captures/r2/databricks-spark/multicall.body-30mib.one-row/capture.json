@@ -1,0 +1,504 @@
+{
+ "format": "sdm-capture/1",
+ "case": "multicall.body-30mib.one-row",
+ "leg": "databricks-spark",
+ "recording_commit": "792c507229e7652d34d28c84e436d2a44a2f803e",
+ "reference_commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+ "versions": {
+  "databricks-connect": "17.3.14",
+  "duckdb": "1.5.6",
+  "numpy": "2.1.3",
+  "pandas": "2.2.3",
+  "pyarrow": "19.0.1",
+  "pyspark": "4.0.0+databricks.connect.17.3.14",
+  "python": "3.12.3",
+  "runtime": "client.4.10"
+ },
+ "input_hash": "664b90e3c6d458e45e7a81065a18628e1fd9f9a9d77b85b4162da7d07d5439d6",
+ "session": {
+  "time_zone": "Etc/UTC",
+  "null_order": "nulls_first"
+ },
+ "reference": {
+  "case": "multicall.body-30mib.one-row@databricks-spark",
+  "core": null,
+  "driver": {
+   "capture": {
+    "bindings": [],
+    "cursors": 0,
+    "events": [],
+    "incomplete": [],
+    "passed_through": [
+     "spark.version"
+    ],
+    "statements": [
+     {
+      "error": null,
+      "handle": 0,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{schema}'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "7d42f373f8dd97782a536fb36230d6db414b7b24173009178829b222089b1386",
+        "method": "collect",
+        "rows": 1,
+        "values": {
+         "columns": [
+          "table_name"
+         ],
+         "ordered": "3f7cc644d4eae981125679e4a3ae3f0e0c1ae9a713247d766e6c1993e5d87b15",
+         "types": null,
+         "unencodable": [],
+         "unordered": "3f7cc644d4eae981125679e4a3ae3f0e0c1ae9a713247d766e6c1993e5d87b15"
+        }
+       }
+      ],
+      "sql": "\n                    SELECT table_name\n                    FROM `{catalog}`.information_schema.tables\n                    WHERE table_schema = ?\n                      AND table_type != 'METRIC_VIEW'\n                    ",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 0,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{schema}'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'users'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "0a461249028ec92754c9c7388d227ae1b2bb3c361493ba85c877a76c58f26ac4",
+        "method": "collect",
+        "rows": 3,
+        "values": {
+         "columns": [
+          "column_name",
+          "full_data_type",
+          "is_nullable",
+          "table_catalog",
+          "table_schema",
+          "table_name",
+          "table_type"
+         ],
+         "ordered": "0d3003d4d848409e58f7541e9d015f159724f1282401d06336b736856b8efbc4",
+         "types": null,
+         "unencodable": [],
+         "unordered": "113062f5c5462737f03e3ed8a97279662ab6796c6b53ae5532052396339cee7b"
+        }
+       }
+      ],
+      "sql": "SELECT c.column_name, c.full_data_type, c.is_nullable,\n       c.table_catalog, c.table_schema, c.table_name,\n       t.table_type\nFROM `{catalog}`.information_schema.columns c\nJOIN `{catalog}`.information_schema.tables t\n  ON t.table_catalog = c.table_catalog\n AND t.table_schema = c.table_schema\n AND t.table_name = c.table_name\nWHERE c.table_schema = lower(?)\n  AND c.table_name = lower(?)\nORDER BY c.ordinal_position",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 0,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{schema}'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'users'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "method": "collect",
+        "rows": 0,
+        "values": {
+         "columns": [
+          "constraint_type",
+          "constraint_name",
+          "column_name"
+         ],
+         "ordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+         "types": null,
+         "unencodable": [],
+         "unordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        }
+       }
+      ],
+      "sql": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name\nFROM `{catalog}`.information_schema.table_constraints tc\nJOIN `{catalog}`.information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = lower(?)\n  AND tc.table_name = lower(?)\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE')",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 0,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "c94b7e74bd2c07d0b1dc82a40de6979f76d8bc0ddb925b72d3d070c57a91e4d8",
+        "method": "toArrow",
+        "rows": 1000,
+        "schema": [
+         {
+          "name": "user_id",
+          "type": "int64"
+         },
+         {
+          "name": "score",
+          "type": "double"
+         },
+         {
+          "name": "cat",
+          "type": "string"
+         }
+        ],
+        "values": {
+         "columns": [
+          "user_id",
+          "score",
+          "cat"
+         ],
+         "ordered": "9feae2a8ebc9b9b726c49492489e092fb97ab0407940cc2abeacb9c043ca104e",
+         "types": null,
+         "unencodable": [],
+         "unordered": "32771e83aabe30c8576da3ac6eb05199a27f3fa193d6672ddab80e132b237460"
+        }
+       }
+      ],
+      "sql": "SELECT `user_id`, `score`, `cat` FROM `{catalog}`.`{schema}`.`users` LIMIT 1000",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 0,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{schema}'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'users'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "method": "collect",
+        "rows": 0,
+        "values": {
+         "columns": [
+          "constraint_name",
+          "column_name",
+          "table_catalog",
+          "table_schema",
+          "table_name",
+          "column_name"
+         ],
+         "ordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+         "types": null,
+         "unencodable": [],
+         "unordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        }
+       }
+      ],
+      "sql": "SELECT tc.constraint_name, kcu.column_name,\n       ccu.table_catalog, ccu.table_schema,\n       ccu.table_name, ccu.column_name\nFROM `{catalog}`.information_schema.table_constraints tc\nJOIN `{catalog}`.information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN `{catalog}`.information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN `{catalog}`.information_schema.constraint_column_usage ccu\n  ON rc.unique_constraint_catalog = ccu.constraint_catalog\n AND rc.unique_constraint_schema = ccu.constraint_schema\n AND rc.unique_constraint_name = ccu.constraint_name\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = lower(?)\n  AND tc.table_name = lower(?)",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 0,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "4a167a5f7dcae4415e516d552e9f18af0c544254f9f97e01d085b0f2732f7d61",
+        "method": "collect",
+        "rows": 1,
+        "values": {
+         "columns": [
+          "k",
+          "n",
+          "d",
+          "z"
+         ],
+         "ordered": "bd3393f33861501ef3de8a0da52e8d35cd0013b8cf014b0531e1913004a8a1bd",
+         "types": null,
+         "unencodable": [],
+         "unordered": "bd3393f33861501ef3de8a0da52e8d35cd0013b8cf014b0531e1913004a8a1bd"
+        }
+       }
+      ],
+      "sql": "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT `user_id`) AS d, COUNT(CASE WHEN `user_id` IS NULL THEN 1 END) AS z\nFROM `{catalog}`.`{schema}`.`users`",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 0,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "8e2a0af73e4cab15e71320efa25768399770691d2b2eb3ce858abfd65cf555db",
+        "method": "first",
+        "rows": 1,
+        "values": {
+         "columns": [
+          "COUNT(*)"
+         ],
+         "ordered": "4a5168d272c544ef50b61b32b35d37ba22ff40cc5843aa1a19ddbaf98afb9d92",
+         "types": null,
+         "unencodable": [],
+         "unordered": "4a5168d272c544ef50b61b32b35d37ba22ff40cc5843aa1a19ddbaf98afb9d92"
+        }
+       }
+      ],
+      "sql": "SELECT COUNT(*) FROM `{catalog}`.`{schema}`.`users`",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 0,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "2d679c4ad539d14c571b623292b3015e838f7b39114aa3bcda9ddca90b4a39d1",
+        "method": "toArrow",
+        "rows": 1010,
+        "schema": [
+         {
+          "name": "user_id",
+          "type": "int64"
+         },
+         {
+          "name": "score",
+          "type": "double"
+         }
+        ],
+        "values": {
+         "columns": [
+          "user_id",
+          "score"
+         ],
+         "ordered": "fbe979139d87b1f6825811494d240f2a813a30e0b3cebefced41cfdbc1b0760a",
+         "types": null,
+         "unencodable": [],
+         "unordered": "e783c6253f176222e1668357eb84522f236c22942259b3916245bbab68c94291"
+        }
+       }
+      ],
+      "sql": "SELECT `user_id`, `score`\nFROM `{catalog}`.`{schema}`.`users`\nTABLESAMPLE (100.0 PERCENT) REPEATABLE (42)\nWHERE `user_id` IS NOT NULL\nLIMIT 10000",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 0,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'[281,324,439,514,82,61,822,743,573,2,975,472,676,331,250,729,239,700,150,747,147,297,45,260,25,253,717,268,199,381,51,623,413,125,914,647,98,754,100,902,876,576,7,143,179,990,561,192,127,899,461,931,379,618,803,644,336,947,952,135,998,55,792,874,725,83,273,171,858,895,455,838,230,307,180,252,961,527,340,218,767,608,613,906,419,824,965,629,116,703,742,986,973,844,627,680,512,482,395,866,509,356,388,429,772,614,425,136,463,591,128,926,733,36,248,152,592,203,448,915,531,714,142,924,166,38,243,761,447,745,245,474,557,151,796,96,79,806,193,632,663,236,1004,869,346,563,946,131,601,30,468,846,1005,567,285,939,954,382,238,302,650,315,701,972,881,420,232,759,890,800,66,306,911,554,501,402,360,498,635,805,696,321,933,427,129,21,603,304,607,417,130,966,35,471,877,86,146,394,532,222,978,989,588,352,88,827,551,276,719,6,542,993,197,788,11,921,350,834,562,330,470,354,120,115,29,408,765,206,9,328,185,862,91,464,659,496,224,154,126,664,310,278,585,660,940,868,776,43,960,387,804,984,726,231,572,830,511,887,201,671,552,107,898,169,690,457,241,409,119,857,845,956,426,839,541,808,319,536,666,880,826,334,208,0,686,156,28,777,771,444,368,579,80,963,593,274,762,101,71,479,77,643,977,799,795,938,92,390,259,794,807,164,244,435,693,421,445,363,784,815,848,62,885,739,653,819,950,44,163,900,371,153,219,213,670,12,56,133,581,305,380,344,343,288,326,225,493,849,454,962,865,434,299,545,888,797,367,802,683,770,312,204,217,48,704,716,513,14,842,712,841,782,176,901,173,1008,565,433,987,691,159,773,50,373,8,550,814,298,365,198,60,361,289,638,817,424,734,757,964,575,237,783,904,758,891,20,674,271,780,775,539,789,945,183,140,393,202,677,657,124,995,59,467,596,558,697,871,480,64,234,882,728,715,476,40,994,610,953,598,988,917,132,72,138,121,46,811,184,53,724,33,982,580,26,415,710,781,374,431,751,673,168,843,399,755,172,269,605,258,740,886,723,144,478,220,863,85,875,713,636,867,997,907,226,110,530,684,912,570,406,738,959,377,351,174,974,793,155,744,769,825,631,47,679,400,97,750,787,211,309,925,854,3,556,692,753,357,668,422,612,345,256,145,920,488,722,90,469,569,441,108,404,338,68,584,544,709,546,737,756,194,935,798,864,58,462,620,261,398,764,897,459,976,656,589,943,235,280,957,785,582,293,538,178,516,916,967,229,353,84,616,823,559,879,695,282,522,438,160,74,748,626,1003,200,766,517,816,941,295,423,118,337,595,999,215,934,54,624,746,856,652,774,446,284,630,883,99,139,818,320,246,23,191,505,264,833,465,801,619,645,662,810,520,436,430,262,242,707,831,884,594,646,486,103,414,327,104,853,698,850,443,678,31,893,383,254,17,24,355,688,378,913,778,568,460,19,162,16,909,308,1002,495,325,73,75,515,840,971,577,923,892,283,574,456,708,639,466,658,694,919,27,249,292,477,265,944,247,741,228,705,655,889,294,22,210,89,661,148,485,196,682,927,134,524,981,67,494,870,497,918,519,768,625,937,537,604,358,731,489,233,109,985,412,291,181,587,847,405,391,165,449,855,209,401,649,473,149,969,70,255,37,428,896,566,318,681,980,322,727,1007,1001,158,1009,95,348,487,175,341,813,186,930,263,411,257,835,316,251,1006,600,506,78,240,760,376,214,549,418,894,270,13,492,161,392,216,207,606,685,112,507,18,665,523,157,205,335,458,223,992,578,521,362,905,510,571,929,407,829,4,94,560,481,499,323,93,852,860,763,389,397,564,32,386,364,667,453,440,640,633,227,369,642,416,452,81,836,820,872,370,311,450,52,922,342,540,267,721,106,122,396,951,533,730,384,105,266,347,190,873,859,39,339,188,403,525,189,812,87,732,483,5,597,699,942,442,903,861,385,332,790,359,590,504,948,375,878,114,170,851,123,301,615,602,711,786,928,508,718,599,221,654,111,475,484,329,279,277,349,936,187,65,996,611,583,1000,69,410,689,637,177,736,968,117,586,372,10,628,991,669,63,735,500,1,42,634,529,167,809,821,76,313,296,502,490,720,837,543,641,979,617,290,779,910,212,555,983,672,317,57,791,535,932,272,15,432,503,828,621,137,702,287,451,528,300,752,622,955,195,34,286,314,970,547,333,182,49,518,102,687,651,41,553,366,534,275,675,832,303,113,749,908,0]'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "cdcccfce38c5d8a49effe1fe84969330f091639396f9325f4f4cd7a41eae119f",
+        "method": "toArrow",
+        "rows": 1001,
+        "schema": [
+         {
+          "name": "__KUMO_BATCH__",
+          "type": "int32"
+         },
+         {
+          "name": "user_id",
+          "type": "int64"
+         },
+         {
+          "name": "cat",
+          "type": "string"
+         }
+        ],
+        "values": {
+         "columns": [
+          "__KUMO_BATCH__",
+          "user_id",
+          "cat"
+         ],
+         "ordered": "7b919a8f85030d1d665d0609b953200486d38e6789e5d4b6a028d79cb116cd5f",
+         "types": null,
+         "unencodable": [],
+         "unordered": "4087733d412ca7d5e194846c9651c757423f38868af7b03377bc34718b8773ce"
+        }
+       }
+      ],
+      "sql": "WITH TMP AS (\n  SELECT pos AS __KUMO_BATCH__, col AS __KUMO_ID__\n  FROM posexplode(from_json(?, 'array<bigint>'))\n)\nSELECT TMP.__KUMO_BATCH__ as __KUMO_BATCH__, `user_id`, `cat`\nFROM TMP\nJOIN `{catalog}`.`{schema}`.`users`\n  ON `user_id` = TMP.__KUMO_ID__",
+      "stage": "materialize"
+     }
+    ]
+   },
+   "query_log": {
+    "bindings": 0,
+    "compared": 9,
+    "differing": [],
+    "statements": 9
+   }
+  },
+  "format": "sdm-observation/1",
+  "host": {
+   "warnings": [
+    "SDMWarning"
+   ]
+  },
+  "identity": {
+   "cell": "dbr17-pandas2",
+   "commit": {
+    "clean": true,
+    "sha": "792c507229e7652d34d28c84e436d2a44a2f803e"
+   },
+   "contract": null,
+   "inputs": {
+    "bases": "9d69fe4aea2be4a6a2d96ea03f5258147c537927e2c6e6716b6030836ebc62f8",
+    "case": "cdf619166e2bbc28db994150cf9fabd73e07bf22f7dfcde325d91a527adc94ff"
+   },
+   "native": null,
+   "native_loaded": false,
+   "operations": [],
+   "platform": "linux-aarch64",
+   "reference": {
+    "commit": {
+     "clean": true,
+     "sha": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1"
+    },
+    "environment": "1eea9905d5e8df5792760770da31b6d04953ff53a710743bc5f6369097863507",
+    "guard": {
+     "after": "passed",
+     "before": "passed"
+    }
+   },
+   "runner": "python-ref",
+   "versions": {
+    "duckdb": "1.5.6",
+    "numpy": "2.1.3",
+    "pandas": "2.2.3",
+    "pyarrow": "19.0.1",
+    "python": "3.12.3"
+   }
+  },
+  "outcome": {
+   "code": "INVALID_REQUEST",
+   "error": "StructuredDataError",
+   "result": "refusal",
+   "stage": "materialize"
+  },
+  "public": {
+   "payloads": [],
+   "result": null,
+   "schema": {
+    "links": [],
+    "tables": [
+     {
+      "columns": [
+       {
+        "dtype": "int64",
+        "name": "user_id",
+        "stype": "ID"
+       },
+       {
+        "dtype": "float64",
+        "name": "score",
+        "stype": "numerical"
+       },
+       {
+        "dtype": "string",
+        "name": "cat",
+        "stype": "categorical"
+       }
+      ],
+      "duplicate_keys": 0,
+      "name": "users",
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    ]
+   }
+  }
+ },
+ "tables": [
+  {
+   "name": "users",
+   "data": "tables/19ffaf91392f4ed055d9f229583ca3862a543692ef99c745e2ebbbbd2ec55443.arrows"
+  }
+ ],
+ "derived": [],
+ "draws": [
+  {
+   "table": "`{catalog}`.`{schema}`.`users`",
+   "seed": 42,
+   "fraction": "100.0",
+   "rows": "tables/2d679c4ad539d14c571b623292b3015e838f7b39114aa3bcda9ddca90b4a39d1.arrows",
+   "statement": "SELECT `user_id`, `score`\nFROM `{catalog}`.`{schema}`.`users`\nTABLESAMPLE (100.0 PERCENT) REPEATABLE (42)\nWHERE `user_id` IS NOT NULL\nLIMIT 10000"
+  }
+ ],
+ "statements": [
+  {
+   "text": "\n                    SELECT table_name\n                    FROM `{catalog}`.information_schema.tables\n                    WHERE table_schema = ?\n                      AND table_type != 'METRIC_VIEW'\n                    ",
+   "parameters": [
+    "{schema}"
+   ],
+   "result": "tables/c3294daffc93d5ebe10bf39d9674e42ec36a7436112d6f0675b1dab5ba7515bf.arrows"
+  },
+  {
+   "text": "SELECT c.column_name, c.full_data_type, c.is_nullable,\n       c.table_catalog, c.table_schema, c.table_name,\n       t.table_type\nFROM `{catalog}`.information_schema.columns c\nJOIN `{catalog}`.information_schema.tables t\n  ON t.table_catalog = c.table_catalog\n AND t.table_schema = c.table_schema\n AND t.table_name = c.table_name\nWHERE c.table_schema = lower(?)\n  AND c.table_name = lower(?)\nORDER BY c.ordinal_position",
+   "parameters": [
+    "{schema}",
+    "users"
+   ],
+   "result": "tables/72cbc16044de003bb9a15a1d4dff17a8e7bd7ea88a4a595f6234c76b27b0cbc2.arrows"
+  },
+  {
+   "text": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name\nFROM `{catalog}`.information_schema.table_constraints tc\nJOIN `{catalog}`.information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = lower(?)\n  AND tc.table_name = lower(?)\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE')",
+   "parameters": [
+    "{schema}",
+    "users"
+   ],
+   "result": "tables/a9b1ee8ad6e21529d27be456649ed4b0a313d9db8d9b56a4c23a74282bc6c7b1.arrows"
+  },
+  {
+   "text": "SELECT `user_id`, `score`, `cat` FROM `{catalog}`.`{schema}`.`users` LIMIT 1000",
+   "parameters": [],
+   "result": "tables/c94b7e74bd2c07d0b1dc82a40de6979f76d8bc0ddb925b72d3d070c57a91e4d8.arrows"
+  },
+  {
+   "text": "SELECT tc.constraint_name, kcu.column_name,\n       ccu.table_catalog, ccu.table_schema,\n       ccu.table_name, ccu.column_name\nFROM `{catalog}`.information_schema.table_constraints tc\nJOIN `{catalog}`.information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN `{catalog}`.information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN `{catalog}`.information_schema.constraint_column_usage ccu\n  ON rc.unique_constraint_catalog = ccu.constraint_catalog\n AND rc.unique_constraint_schema = ccu.constraint_schema\n AND rc.unique_constraint_name = ccu.constraint_name\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = lower(?)\n  AND tc.table_name = lower(?)",
+   "parameters": [
+    "{schema}",
+    "users"
+   ],
+   "result": "tables/20f15ac1990704c5987a1d4d0665748f628a6190f23b46a604f83785978df5a3.arrows"
+  },
+  {
+   "text": "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT `user_id`) AS d, COUNT(CASE WHEN `user_id` IS NULL THEN 1 END) AS z\nFROM `{catalog}`.`{schema}`.`users`",
+   "parameters": [],
+   "result": "tables/5fc1cd4a3a7cbdb14963387c400a1e87a18305f5c29381f8bef83959b29115ca.arrows"
+  },
+  {
+   "text": "SELECT COUNT(*) FROM `{catalog}`.`{schema}`.`users`",
+   "parameters": [],
+   "result": "tables/bd52c02670478a63433af69a6dcb404f891beb25d5540d5419559b4f69f2b977.arrows"
+  },
+  {
+   "text": "SELECT `user_id`, `score`\nFROM `{catalog}`.`{schema}`.`users`\nTABLESAMPLE (100.0 PERCENT) REPEATABLE (42)\nWHERE `user_id` IS NOT NULL\nLIMIT 10000",
+   "parameters": [],
+   "result": "tables/2d679c4ad539d14c571b623292b3015e838f7b39114aa3bcda9ddca90b4a39d1.arrows"
+  },
+  {
+   "text": "WITH TMP AS (\n  SELECT pos AS __KUMO_BATCH__, col AS __KUMO_ID__\n  FROM posexplode(from_json(?, 'array<bigint>'))\n)\nSELECT TMP.__KUMO_BATCH__ as __KUMO_BATCH__, `user_id`, `cat`\nFROM TMP\nJOIN `{catalog}`.`{schema}`.`users`\n  ON `user_id` = TMP.__KUMO_ID__",
+   "parameters": [
+    "[281,324,439,514,82,61,822,743,573,2,975,472,676,331,250,729,239,700,150,747,147,297,45,260,25,253,717,268,199,381,51,623,413,125,914,647,98,754,100,902,876,576,7,143,179,990,561,192,127,899,461,931,379,618,803,644,336,947,952,135,998,55,792,874,725,83,273,171,858,895,455,838,230,307,180,252,961,527,340,218,767,608,613,906,419,824,965,629,116,703,742,986,973,844,627,680,512,482,395,866,509,356,388,429,772,614,425,136,463,591,128,926,733,36,248,152,592,203,448,915,531,714,142,924,166,38,243,761,447,745,245,474,557,151,796,96,79,806,193,632,663,236,1004,869,346,563,946,131,601,30,468,846,1005,567,285,939,954,382,238,302,650,315,701,972,881,420,232,759,890,800,66,306,911,554,501,402,360,498,635,805,696,321,933,427,129,21,603,304,607,417,130,966,35,471,877,86,146,394,532,222,978,989,588,352,88,827,551,276,719,6,542,993,197,788,11,921,350,834,562,330,470,354,120,115,29,408,765,206,9,328,185,862,91,464,659,496,224,154,126,664,310,278,585,660,940,868,776,43,960,387,804,984,726,231,572,830,511,887,201,671,552,107,898,169,690,457,241,409,119,857,845,956,426,839,541,808,319,536,666,880,826,334,208,0,686,156,28,777,771,444,368,579,80,963,593,274,762,101,71,479,77,643,977,799,795,938,92,390,259,794,807,164,244,435,693,421,445,363,784,815,848,62,885,739,653,819,950,44,163,900,371,153,219,213,670,12,56,133,581,305,380,344,343,288,326,225,493,849,454,962,865,434,299,545,888,797,367,802,683,770,312,204,217,48,704,716,513,14,842,712,841,782,176,901,173,1008,565,433,987,691,159,773,50,373,8,550,814,298,365,198,60,361,289,638,817,424,734,757,964,575,237,783,904,758,891,20,674,271,780,775,539,789,945,183,140,393,202,677,657,124,995,59,467,596,558,697,871,480,64,234,882,728,715,476,40,994,610,953,598,988,917,132,72,138,121,46,811,184,53,724,33,982,580,26,415,710,781,374,431,751,673,168,843,399,755,172,269,605,258,740,886,723,144,478,220,863,85,875,713,636,867,997,907,226,110,530,684,912,570,406,738,959,377,351,174,974,793,155,744,769,825,631,47,679,400,97,750,787,211,309,925,854,3,556,692,753,357,668,422,612,345,256,145,920,488,722,90,469,569,441,108,404,338,68,584,544,709,546,737,756,194,935,798,864,58,462,620,261,398,764,897,459,976,656,589,943,235,280,957,785,582,293,538,178,516,916,967,229,353,84,616,823,559,879,695,282,522,438,160,74,748,626,1003,200,766,517,816,941,295,423,118,337,595,999,215,934,54,624,746,856,652,774,446,284,630,883,99,139,818,320,246,23,191,505,264,833,465,801,619,645,662,810,520,436,430,262,242,707,831,884,594,646,486,103,414,327,104,853,698,850,443,678,31,893,383,254,17,24,355,688,378,913,778,568,460,19,162,16,909,308,1002,495,325,73,75,515,840,971,577,923,892,283,574,456,708,639,466,658,694,919,27,249,292,477,265,944,247,741,228,705,655,889,294,22,210,89,661,148,485,196,682,927,134,524,981,67,494,870,497,918,519,768,625,937,537,604,358,731,489,233,109,985,412,291,181,587,847,405,391,165,449,855,209,401,649,473,149,969,70,255,37,428,896,566,318,681,980,322,727,1007,1001,158,1009,95,348,487,175,341,813,186,930,263,411,257,835,316,251,1006,600,506,78,240,760,376,214,549,418,894,270,13,492,161,392,216,207,606,685,112,507,18,665,523,157,205,335,458,223,992,578,521,362,905,510,571,929,407,829,4,94,560,481,499,323,93,852,860,763,389,397,564,32,386,364,667,453,440,640,633,227,369,642,416,452,81,836,820,872,370,311,450,52,922,342,540,267,721,106,122,396,951,533,730,384,105,266,347,190,873,859,39,339,188,403,525,189,812,87,732,483,5,597,699,942,442,903,861,385,332,790,359,590,504,948,375,878,114,170,851,123,301,615,602,711,786,928,508,718,599,221,654,111,475,484,329,279,277,349,936,187,65,996,611,583,1000,69,410,689,637,177,736,968,117,586,372,10,628,991,669,63,735,500,1,42,634,529,167,809,821,76,313,296,502,490,720,837,543,641,979,617,290,779,910,212,555,983,672,317,57,791,535,932,272,15,432,503,828,621,137,702,287,451,528,300,752,622,955,195,34,286,314,970,547,333,182,49,518,102,687,651,41,553,366,534,275,675,832,303,113,749,908,0]"
+   ],
+   "result": "tables/cdcccfce38c5d8a49effe1fe84969330f091639396f9325f4f4cd7a41eae119f.arrows"
+  }
+ ],
+ "loader": []
+}
