@@ -37,7 +37,10 @@ tracing.workspace = true
 
 [dev-dependencies]
 arrow-array.workspace = true
+# The recordings' rows (T3.5's view captures): Arrow IPC streams in base64.
+arrow-ipc.workspace = true
 arrow-schema.workspace = true
+base64.workspace = true
 serde_stacker.workspace = true
 
 [lints]

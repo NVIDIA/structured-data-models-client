@@ -23,6 +23,7 @@ use sdm_contract::CoreError;
 use sdm_contract::data::{DataLayer, ProviderChoice};
 use sdm_contract::view::{ViewTextAnswer, ViewTextAsk};
 use sdm_core::pql::{spaces, yaml_rules};
+use sdm_core::view::definition::{self as view_definition, Dimension};
 use sdm_core::view_steps::{self, JoinJudgement};
 use sdm_core::view_words;
 use sdm_data::Data;
@@ -405,4 +406,168 @@ fn a_join_keeps_what_it_says_as_written() {
         panic!()
     };
     assert_eq!(shops.join.as_ref().unwrap().keys, JoinKeys::UsingSeveral);
+}
+
+/// Each dimension as the old answer writes it.
+fn dimension_json(dimension: &Dimension) -> Json {
+    match dimension {
+        Dimension::Wildcard { alias, excluded } => {
+            serde_json::json!({"wildcard": alias, "excluded": excluded})
+        }
+        Dimension::Column { name, alias, expr } => {
+            serde_json::json!({"name": name, "alias": alias, "expr": expr})
+        }
+    }
+}
+
+/// The definition read whole as the routine reads it (`view::definition`,
+/// stage 2): its parameters read with the types the warehouse described,
+/// a source column of a parameter's name taking it out, then the joins,
+/// the filter, the dimensions and the measures, each with what it says, as
+/// the old client's `parse_metric_view` answered.
+#[test]
+fn each_definition_reads_whole_as_the_old_client_read_it() {
+    let mut wrong = Vec::new();
+    let mut read_whole = 0;
+    for vector in &vectors() {
+        let definition = vector["definition"].as_str().unwrap();
+        let Ok(mut spec) = metric::parse(definition, &yaml_rules()) else {
+            continue;
+        };
+        if view_steps::fact_source(&spec, &ask).unwrap().is_err() {
+            continue;
+        }
+        let described: Vec<(String, String)> = vector["parameter_types"]
+            .as_object()
+            .map(|types| {
+                types
+                    .iter()
+                    .map(|(name, t)| (name.clone(), t.as_str().unwrap().to_owned()))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let mut parameters = view_steps::parameters(&spec, &described, &ask).unwrap();
+        if !parameters.is_empty() {
+            let columns = if vector["source_columns"].is_array() {
+                texts(&vector["source_columns"])
+            } else {
+                Vec::new()
+            };
+            parameters.retain(|(folded, _)| !columns.iter().any(|c| c.to_lowercase() == *folded));
+        }
+        let read = match view_definition::read(&mut spec, &parameters, &ask, "databricks") {
+            Ok(read) => read,
+            Err(error) => {
+                if vector.get("spec").is_some() {
+                    wrong.push(format!("{definition:?}: refused {error:?}"));
+                }
+                continue;
+            }
+        };
+        let read = match read {
+            Ok(read) => read,
+            Err(refused) => {
+                let said = refused.error().message;
+                if vector["error"]["type"] != "UnsupportedFilterError"
+                    || vector["error"]["message"].as_str() != Some(said.as_str())
+                {
+                    wrong.push(format!("{definition:?}: {said} where {}", vector["error"]));
+                }
+                continue;
+            }
+        };
+        let Some(old) = vector.get("spec") else {
+            wrong.push(format!("{definition:?}: read where {}", vector["error"]));
+            continue;
+        };
+        read_whole += 1;
+        let columns: Vec<Json> = read.dimensions.iter().map(dimension_json).collect();
+        if Json::Array(columns.clone()) != old["columns"] {
+            wrong.push(format!(
+                "{definition:?}: columns {columns:?} where {}",
+                old["columns"]
+            ));
+        }
+        if read.filter.as_deref() != old["filter"].as_str() {
+            wrong.push(format!(
+                "{definition:?}: filter {:?} where {}",
+                read.filter, old["filter"]
+            ));
+        }
+        let notes: Vec<Json> = read
+            .notes
+            .iter()
+            .map(|(n, t)| serde_json::json!([n, t]))
+            .collect();
+        if Json::Array(notes.clone()) != old["notes"] {
+            wrong.push(format!(
+                "{definition:?}: notes {notes:?} where {}",
+                old["notes"]
+            ));
+        }
+        let measures: Vec<Json> = read
+            .measures
+            .iter()
+            .map(|m| {
+                serde_json::json!({
+                    "name": m.name,
+                    "inputs": m.inputs.iter().map(|(a, c)| vec![a, c]).collect::<Vec<_>>(),
+                    "aggregation": m.aggregation.as_ref().map(|(f, c)| serde_json::json!([f, c])),
+                })
+            })
+            .collect();
+        if Json::Array(measures.clone()) != old["measures"] {
+            wrong.push(format!(
+                "{definition:?}: measures {measures:?} where {}",
+                old["measures"]
+            ));
+        }
+        let messages: Vec<String> = read.messages.iter().map(|m| m.message.clone()).collect();
+        if messages != texts(&old["messages"]) {
+            wrong.push(format!(
+                "{definition:?}: messages {messages:?} where {}",
+                old["messages"]
+            ));
+        }
+        let skipped: Vec<Json> = read
+            .skipped
+            .iter()
+            .map(|s| {
+                serde_json::json!({
+                    "alias": s.alias, "reason": s.reason, "nested": s.nested,
+                    "dimensions": s.dimensions,
+                    "message": view_definition::skipped_warning(s).message,
+                })
+            })
+            .collect();
+        let old_skipped: Vec<Json> = old["skipped_joins"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|s| {
+                serde_json::json!({
+                    "alias": s["alias"], "reason": s["reason"], "nested": s["nested"],
+                    "dimensions": s["dimensions"], "message": s["message"],
+                })
+            })
+            .collect();
+        if skipped != old_skipped {
+            wrong.push(format!(
+                "{definition:?}: skipped {skipped:?} where {old_skipped:?}"
+            ));
+        }
+        if read.window_orders != texts(&old["window_orders"]) {
+            wrong.push(format!(
+                "{definition:?}: orders {:?} where {}",
+                read.window_orders, old["window_orders"]
+            ));
+        }
+    }
+    assert!(read_whole > 140, "{read_whole} definitions read whole");
+    assert!(
+        wrong.is_empty(),
+        "{} differences:\n{}",
+        wrong.len(),
+        wrong.join("\n")
+    );
 }

@@ -1642,9 +1642,11 @@ version = "1.0.0"
 dependencies = [
  "arrow-array",
  "arrow-buffer",
+ "arrow-ipc",
  "arrow-row",
  "arrow-schema",
  "arrow-select",
+ "base64 0.22.1",
  "jiff",
  "sdm-contract",
  "sdm-data",

@@ -95,7 +95,8 @@ def test_every_core_path_of_the_manifest_is_routed_and_every_default_is_old() ->
     # with indices over a DuckDB source's schema, and from T1.11d, predict
     # of a request materialized over one, have core routes; from T2.2 the
     # same calls over a SQLite source, from T2.3 over a Postgres one, and
-    # from T3.4 over a Databricks SQL warehouse and a Spark session.
+    # from T3.4 over a Databricks SQL warehouse and a Spark session, and
+    # from T3.5 over a Databricks metric view.
     assert _routing.CORE_ROUTED == set(
         _routing.S0
         # From T3.12, a model's capabilities, from the core's table.
@@ -120,6 +121,10 @@ def test_every_core_path_of_the_manifest_is_routed_and_every_default_is_old() ->
         + _routing.FROM_SOURCE_DATABRICKS_SPARK_TABLES
         + _routing.MATERIALIZE_DATABRICKS_SPARK
         + _routing.PREDICT_DATABRICKS_SPARK
+        # From T3.5, a Databricks metric view's, on either connection.
+        + _routing.FROM_SOURCE_DATABRICKS_METRIC_VIEW
+        + _routing.MATERIALIZE_DATABRICKS_METRIC_VIEW
+        + _routing.PREDICT_DATABRICKS_METRIC_VIEW
     )
     assert set(_routing.CORE_ROUTED) <= set(core)
     assert _routing.route(_routing.S0) == 'old'
