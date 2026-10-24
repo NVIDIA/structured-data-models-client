@@ -7854,6 +7854,11 @@ entries:
     and added back, is sampled alike on both routes (held by
     test_a_column_added_by_hand_to_a_described_schema_is_edited_and_sampled).
     Proposed as an improvement; never self-approved.
+    Under the owner's plan B (T3.4 fix 14, P3A-1) every materialize reads
+    each table as it stands, so a column the source gained is sent when
+    the schema names it and a column the schema names that the source
+    lacks is refused (P3A-2): this entry is that rule's case, for the
+    owner to close as superseded by P3A-1 and P3A-2.
 
 - id: P3E-5
   title: A refusal the core route said only in its code's sentence now says what it refuses
@@ -9063,3 +9068,128 @@ entries:
     caller's session). The driver parity test holds the text equal on
     sessions of the same zone, a zone Python does not name (GMT+3) among
     them.
+
+# --- Phase 3 lane A entries (P3A-1..19) ---
+- id: P3A-1
+  title: On a source of tables, each materialize reads every table as it stands, its location, columns and types
+  kind: change
+  old_behavior: >-
+    The reference keeps what its engine read of each table (EngineTables,
+    materializers/sources.py:36-71): Schema.from_source keeps what it
+    described, and a schema built anew keeps what its first materialize
+    read, so every later materialize of that schema reads each table where
+    it read it then (a part the source leaves to the session as the session
+    said then), with the columns and types it read then.
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build, a
+    materialize over a source's tables (a SQL provider's: DuckDB, SQLite,
+    Postgres, Databricks) keeps nothing of a table between runs: each run
+    reads each table's location (a part the source leaves to the session
+    read from the session at this run), its catalog and its preview, and
+    reads every column of the schema by the type the source holds now, the
+    caller's meanings kept (the owner's plan B, T3.4 fix 14). A schema's
+    snapshots, pickles, copies and edits carry no table's shape. Rows were
+    always read at each run on both routes.
+  affected_inputs: >-
+    A schema reused across materialize calls after the warehouse table
+    changed (a column added, dropped or retyped) or after the session's
+    current catalog or schema changed, where the source leaves that part to
+    the session; and every materialize of a source's schema, which now
+    reads each table's catalog and preview as well as its rows.
+  cases: [T3.4]
+  refs: [T3.4, P3E-4, P3A-2, P3A-3, P3A-4]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: owner. Decision: the owner's answers of 2026-10-24, "warehouse
+    table shape: B" ("Ok, I'm convinced. Let's plan B."), to be recorded as
+    a decisions row and named in decision_ref. Held by
+    test_databricks_from_source.py (the _KEPT expectations: the old route
+    reads where it kept each table, the core where the session says now)
+    and test_t316_the_schema_as_it_stands.py.
+- id: P3A-2
+  title: A column the schema names that the source does not hold is refused by name on the core route
+  kind: change
+  old_behavior: >-
+    The reference copies each table its engine read keeping only the
+    schema's columns the source holds (materializers/sources.py:81-88), so
+    a column the schema names that the source does not hold (one the source
+    dropped, or one the caller added by hand that it never held) is left out
+    of the request silently.
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build, such
+    a column is refused at materialize, INVALID_REQUEST, sentence
+    column_not_in_source, naming the table, the column and the source's
+    table ("users.age is a column of the schema that 'main.shop.users' does
+    not hold: the source has no such column. ..."), never dropped or added
+    silently (the owner's plan B, item 1, T3.4 fix 14).
+  affected_inputs: >-
+    PredictiveQuery.materialize with the core's materialize route forced,
+    over a source's schema naming a column its table does not hold when the
+    run reads it.
+  cases: [T3.4]
+  refs: [T3.4, P3A-1]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: owner. Decision: the owner's answers of 2026-10-24, item 1
+    ("1. Sure": a named error, not silently dropped), to be recorded as a
+    decisions row. Held by test_databricks_from_source.py and
+    test_t316_the_schema_as_plain_data.py.
+- id: P3A-3
+  title: A type the caller gave a column that the source's does not match is refused by name on the core route
+  kind: change
+  old_behavior: >-
+    The reference's engine reads each column by the type its source holds
+    and sets the caller's meaning on it (relational.py:549-551): a column
+    the caller retyped by hand is sampled as the source holds it, or
+    refused for a meaning the source's type cannot carry ("Column 'age'
+    received an incompatible semantic type ...").
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build, a
+    column whose type the caller gave is not of the kind the source holds
+    now (a number, a string, a time, ...; a name no data type has, or
+    unsupported, taking any) is refused at materialize, INVALID_REQUEST,
+    sentence column_type_unmatched ("users.age is given as 'string', and
+    the source holds it as 'int64', which cannot match. Give the column the
+    type the source holds.") (the owner's plan B, item 3, T3.4 fix 14).
+  affected_inputs: >-
+    PredictiveQuery.materialize with the core's materialize route forced,
+    over a source's schema with a column retyped by hand, or retyped in the
+    source since, to a type of another kind.
+  cases: [T3.4]
+  refs: [T3.4, P3A-1]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: owner. Decision: the owner's answers of 2026-10-24, item 3
+    ("3. Sure": a named error), to be recorded as a decisions row. Held by
+    test_t316_the_schema_as_it_stands.py and
+    test_t316_the_schema_as_plain_data.py.
+- id: P3A-4
+  title: A query object materialized twice reads each table again on the core route, where the reference reuses the graph its first materialize built
+  kind: change
+  old_behavior: >-
+    The reference's PredictiveQuery keeps the relational materializer's
+    model, and with it the graph its first materialize built over the
+    tables its engine read (RelationalMaterializer._get_model,
+    relational.py:409-418): a second materialize of the same object reads
+    no table again.
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build, each
+    materialize reads each table as it stands (P3A-1), the same object's
+    second materialize included.
+  affected_inputs: >-
+    One PredictiveQuery object materialized more than once over a source
+    whose tables or session changed in between.
+  cases: [T3.4]
+  refs: [T3.4, P3A-1]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: owner. Decision: the owner's answers of 2026-10-24, item 6
+    ("6. Hmm ok": register and confirm), to be recorded as a decisions row.
