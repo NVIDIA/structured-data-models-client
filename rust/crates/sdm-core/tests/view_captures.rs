@@ -282,6 +282,7 @@ struct Edits {
 /// A provider's failure under `sqlstate`.
 fn refusal(sqlstate: &str) -> FetchResult {
     FetchResult::Error(ProviderError {
+        driver_message: None,
         kind: sdm_contract::ErrorKind::DataSource,
         retryable: false,
         sqlstate: Some(sqlstate.to_owned()),
@@ -297,9 +298,15 @@ fn replay(document: &Json, case: &Json) -> Replayed {
 /// The run of `case`, its statements answered by the recording: in order
 /// where `strict`, else wherever the recording holds each.
 fn replay_with(document: &Json, case: &Json, edits: &Edits, strict: bool) -> Replayed {
-    replay_spec(document, case, edits, strict, json!({
-        "tables": [], "primary_keys": {}, "time_columns": {}
-    }))
+    replay_spec(
+        document,
+        case,
+        edits,
+        strict,
+        json!({
+            "tables": [], "primary_keys": {}, "time_columns": {}
+        }),
+    )
 }
 
 fn replay_spec(document: &Json, case: &Json, edits: &Edits, strict: bool, spec: Json) -> Replayed {
@@ -433,6 +440,7 @@ fn replay_spec(document: &Json, case: &Json, edits: &Edits, strict: bool, spec: 
                             FetchResult::Data(as_expected(data, asked.plan.expect()))
                         }
                         None => FetchResult::Error(ProviderError {
+                            driver_message: None,
                             kind: sdm_contract::ErrorKind::Internal,
                             retryable: false,
                             sqlstate: None,
@@ -825,8 +833,13 @@ fn materialize_over(
     held: &sdm_contract::ops::HeldSchema,
     edits: &Edits,
 ) -> Located {
-    materialize_query(document, case, held, edits,
-        "PREDICT COUNT(orders.*, 0, 30, days) > 0 FOR EACH users.user_id")
+    materialize_query(
+        document,
+        case,
+        held,
+        edits,
+        "PREDICT COUNT(orders.*, 0, 30, days) > 0 FOR EACH users.user_id",
+    )
 }
 
 fn materialize_query(
@@ -889,10 +902,7 @@ fn materialize_query(
             ),
             (
                 AttachmentId(2),
-                Attachment::Bytes(
-                    serde_json::to_vec(query)
-                    .unwrap(),
-                ),
+                Attachment::Bytes(serde_json::to_vec(query).unwrap()),
             ),
             (
                 AttachmentId(3),
@@ -1103,7 +1113,6 @@ fn a_dimension_removed_is_refused_and_one_changed_read_as_it_now_reads() {
     );
 }
 
-
 #[test]
 fn logical_table_aliases_and_swapped_names_survive_describe_and_materialize() {
     let document = captures();
@@ -1118,19 +1127,43 @@ fn logical_table_aliases_and_swapped_names_survive_describe_and_materialize() {
         });
         let replayed = replay_spec(&document, recorded, &Edits::default(), true, spec);
         let description = replayed.ended.unwrap();
-        assert_eq!(description.tables.iter().map(|t| t.name.as_str()).collect::<Vec<_>>(),
-            [buyers, transactions]);
-        assert_eq!(description.tables[0].source, sdm_contract::data::Relation::named("users"));
+        assert_eq!(
+            description
+                .tables
+                .iter()
+                .map(|t| t.name.as_str())
+                .collect::<Vec<_>>(),
+            [buyers, transactions]
+        );
+        assert_eq!(
+            description.tables[0].source,
+            sdm_contract::data::Relation::named("users")
+        );
         assert_eq!(description.tables[0].primary_key, ["user_id"]);
-        assert_eq!(description.tables[1].source, sdm_contract::data::Relation::named("orders"));
+        assert_eq!(
+            description.tables[1].source,
+            sdm_contract::data::Relation::named("orders")
+        );
         assert_eq!(description.links[0][0].table, transactions);
         assert_eq!(description.links[0][1].table, buyers);
-        let query = format!("PREDICT COUNT({transactions}.*, 0, 30, days) > 0 FOR EACH {buyers}.user_id");
+        let query =
+            format!("PREDICT COUNT({transactions}.*, 0, 30, days) > 0 FOR EACH {buyers}.user_id");
         let Located::Past(request) = materialize_query(
-            &document, recorded, &held(&description), &Edits::default(), &query,
-        ) else { panic!("aliased view schema did not reach sampling"); };
-        assert!(request.relations().iter().any(|(_, r)| r.source.last().is_some_and(|s| s == "orders")),
-            "{request:?}");
+            &document,
+            recorded,
+            &held(&description),
+            &Edits::default(),
+            &query,
+        ) else {
+            panic!("aliased view schema did not reach sampling");
+        };
+        assert!(
+            request
+                .relations()
+                .iter()
+                .any(|(_, r)| r.source.last().is_some_and(|s| s == "orders")),
+            "{request:?}"
+        );
     }
 }
 
@@ -1142,21 +1175,48 @@ fn a_views_caller_overrides_use_common_key_time_and_relationship_rules() {
         "tables": [], "primary_keys": {"orders": ["order_id"]},
         "time_columns": {"orders": null}, "relationships": []
     });
-    let description = replay_spec(&document, recorded, &Edits::default(), true, spec).ended.unwrap();
-    let orders = description.tables.iter().find(|t| t.name == "orders").unwrap();
+    let description = replay_spec(&document, recorded, &Edits::default(), true, spec)
+        .ended
+        .unwrap();
+    let orders = description
+        .tables
+        .iter()
+        .find(|t| t.name == "orders")
+        .unwrap();
     assert_eq!(orders.primary_key, ["order_id"]);
     assert_eq!(orders.time_column, None);
     assert_eq!(orders.duplicate_keys, None);
     assert!(description.links.is_empty());
-    assert_ne!(orders.columns.iter().find(|c| c.name == "user_id").unwrap().stype,
-        sdm_contract::ops::Stype::Id);
+    let original = described(&document, "view.metric.from-source");
+    let source = original
+        .tables
+        .iter()
+        .find(|t| t.name == "orders")
+        .unwrap()
+        .columns
+        .iter()
+        .find(|c| c.name == "user_id")
+        .unwrap();
+    assert_eq!(
+        orders
+            .columns
+            .iter()
+            .find(|c| c.name == "user_id")
+            .unwrap()
+            .stype,
+        source.stype_before_key.unwrap_or(source.stype)
+    );
 
-    for (primary, time) in [(json!({"absent": ["id"]}), json!({})),
+    for (primary, time) in [
+        (json!({"absent": ["id"]}), json!({})),
         (json!({"orders": ["absent"]}), json!({})),
         (json!({"orders": null}), json!({})),
-        (json!({}), json!({"orders": "absent"}))] {
+        (json!({}), json!({"orders": "absent"})),
+    ] {
         let spec = json!({"tables": [], "primary_keys": primary, "time_columns": time});
-        let error = replay_spec(&document, recorded, &Edits::default(), true, spec).ended.unwrap_err();
+        let error = replay_spec(&document, recorded, &Edits::default(), true, spec)
+            .ended
+            .unwrap_err();
         assert_eq!(error.code, ErrorCode::InvalidRequest, "{error:?}");
     }
 }
@@ -1168,33 +1228,97 @@ fn view_refresh_checks_held_types_and_accepts_compatible_numeric_widths() {
     let original = held(&described(&document, "view.metric.from-source"));
     for dtype in ["string", "int32", "float32"] {
         let mut schema = original.clone();
-        schema.tables.iter_mut().find(|t| t.name == "orders").unwrap()
-            .columns.iter_mut().find(|c| c.name == "order_id").unwrap().dtype = dtype.into();
+        schema
+            .tables
+            .iter_mut()
+            .find(|t| t.name == "orders")
+            .unwrap()
+            .columns
+            .iter_mut()
+            .find(|c| c.name == "order_id")
+            .unwrap()
+            .dtype = dtype.into();
         let result = materialize_over(&document, recorded, &schema, &Edits::default());
         if dtype == "string" {
-            let Located::Ended(error) = result else { panic!("incompatible type sampled"); };
+            let Located::Ended(error) = result else {
+                panic!("incompatible type sampled");
+            };
             assert_eq!(error.sentence, sdm_contract::Sentence::ColumnTypeUnmatched);
-            assert_eq!(error.fields.get("dtype"), Some(&sdm_contract::Detail::text("string")));
+            assert_eq!(
+                error.fields.get("dtype"),
+                Some(&sdm_contract::Detail::text("string"))
+            );
         } else {
-            assert!(matches!(result, Located::Past(_)), "compatible numeric type refused");
+            assert!(
+                matches!(result, Located::Past(_)),
+                "compatible numeric type refused"
+            );
         }
     }
     // The same logical dimension becomes numeric when the view's expression changes.
+    let definition_rows = rows(
+        &document,
+        recorded["statements"][0]["result"].as_str().unwrap(),
+    );
     let edits = Edits {
         definition: Some(("THEN 'high' ELSE 'low' END", "THEN 1 ELSE 0 END")),
-        answer: Some(Box::new(|request| match request {
+        answer: Some(Box::new(move |request| match request {
+            DataRequest::Describe {
+                part: sdm_contract::data::DescribePart::ViewDefinition,
+                ..
+            } => {
+                let mut data = definition_rows.clone();
+                data.batches = data
+                    .batches
+                    .iter()
+                    .map(|batch| {
+                        let names = batch
+                            .column(0)
+                            .as_any()
+                            .downcast_ref::<arrow_array::StringArray>()
+                            .unwrap();
+                        let types = batch
+                            .column(1)
+                            .as_any()
+                            .downcast_ref::<arrow_array::StringArray>()
+                            .unwrap();
+                        let mut columns = batch.columns().to_vec();
+                        columns[1] = Arc::new(arrow_array::StringArray::from_iter(
+                            (0..batch.num_rows()).map(|row| {
+                                if names.value(row) == "price_band" {
+                                    Some("bigint")
+                                } else {
+                                    types.iter().nth(row).unwrap()
+                                }
+                            }),
+                        ));
+                        RecordBatch::try_new(batch.schema(), columns).unwrap()
+                    })
+                    .collect();
+                Some(FetchResult::Data(data))
+            }
             DataRequest::Preview { columns, .. } if columns == &["price_band".to_owned()] => {
-                let batch = RecordBatch::try_from_iter([("price_band",
-                    Arc::new(arrow_array::Int64Array::from(vec![1, 0])) as arrow_array::ArrayRef)]).unwrap();
-                Some(FetchResult::Data(ArrowData::new(batch.schema(), vec![batch])))
+                let batch = RecordBatch::try_from_iter([(
+                    "price_band",
+                    Arc::new(arrow_array::Int64Array::from(vec![1, 0])) as arrow_array::ArrayRef,
+                )])
+                .unwrap();
+                Some(FetchResult::Data(ArrowData::new(
+                    batch.schema(),
+                    vec![batch],
+                )))
             }
             _ => None,
         })),
     };
-    let Located::Ended(error) = materialize_over(&document, recorded, &original, &edits)
-    else { panic!("changed incompatible dimension reached sampling"); };
+    let Located::Ended(error) = materialize_over(&document, recorded, &original, &edits) else {
+        panic!("changed incompatible dimension reached sampling");
+    };
     assert_eq!(error.sentence, sdm_contract::Sentence::ColumnTypeUnmatched);
-    assert_eq!(error.fields.get("column"), Some(&sdm_contract::Detail::text("price_band")));
+    assert_eq!(
+        error.fields.get("column"),
+        Some(&sdm_contract::Detail::text("price_band"))
+    );
 }
 
 #[test]
@@ -1202,16 +1326,31 @@ fn a_refused_expression_keeps_the_warehouses_diagnosis() {
     let document = captures();
     let edits = Edits {
         definition: None,
-        answer: Some(Box::new(|request| samples(request).then(|| FetchResult::Error(
-            serde_json::from_value(json!({"kind": "data_source", "retryable": false,
-                "sqlstate": "22018", "driver_message": "Cannot cast price 'unknown' to DOUBLE"})).unwrap()
-        )))),
+        answer: Some(Box::new(|request| {
+            samples(request).then(|| {
+                FetchResult::Error(
+                    serde_json::from_value(json!({"kind": "data_source", "retryable": false,
+                "sqlstate": "22018", "driver_message": "Cannot cast price 'unknown' to DOUBLE"}))
+                    .unwrap(),
+                )
+            })
+        })),
     };
-    let replayed = replay_with(&document, case(&document, "view.metric.from-source"), &edits, false);
+    let replayed = replay_with(
+        &document,
+        case(&document, "view.metric.from-source"),
+        &edits,
+        false,
+    );
     assert!(replayed.ended.is_ok(), "{:?}", replayed.ended);
-    assert!(replayed.warnings.iter().any(|w| w.fields.values().any(|v|
-        v == &sdm_contract::Detail::text("Cannot cast price 'unknown' to DOUBLE"))),
-        "{:?}", replayed.warnings);
+    assert!(
+        replayed.warnings.iter().any(|w| w
+            .fields
+            .values()
+            .any(|v| v == &sdm_contract::Detail::text("Cannot cast price 'unknown' to DOUBLE"))),
+        "{:?}",
+        replayed.warnings
+    );
 }
 
 #[test]
@@ -1223,19 +1362,49 @@ fn a_failed_duplicate_example_keeps_joins_unchecked() {
             DataRequest::KeyCounts { keys } => {
                 let n = keys.len();
                 let batch = RecordBatch::try_from_iter([
-                    ("k", Arc::new(arrow_array::Int32Array::from_iter_values(0..n as i32)) as arrow_array::ArrayRef),
-                    ("n", Arc::new(arrow_array::Int64Array::from(vec![10; n])) as arrow_array::ArrayRef),
-                    ("d", Arc::new(arrow_array::Int64Array::from(vec![9; n])) as arrow_array::ArrayRef),
-                    ("z", Arc::new(arrow_array::Int64Array::from(vec![0; n])) as arrow_array::ArrayRef),
-                ]).unwrap();
-                Some(FetchResult::Data(ArrowData::new(batch.schema(), vec![batch])))
+                    (
+                        "k",
+                        Arc::new(arrow_array::Int32Array::from_iter_values(0..n as i32))
+                            as arrow_array::ArrayRef,
+                    ),
+                    (
+                        "n",
+                        Arc::new(arrow_array::Int64Array::from(vec![10; n]))
+                            as arrow_array::ArrayRef,
+                    ),
+                    (
+                        "d",
+                        Arc::new(arrow_array::Int64Array::from(vec![9; n]))
+                            as arrow_array::ArrayRef,
+                    ),
+                    (
+                        "z",
+                        Arc::new(arrow_array::Int64Array::from(vec![0; n]))
+                            as arrow_array::ArrayRef,
+                    ),
+                ])
+                .unwrap();
+                Some(FetchResult::Data(ArrowData::new(
+                    batch.schema(),
+                    vec![batch],
+                )))
             }
             DataRequest::RepeatedKey { .. } => Some(refusal("42501")),
             _ => None,
         })),
     };
-    let replayed = replay_with(&document, case(&document, "view.metric.from-source"), &edits, false);
+    let replayed = replay_with(
+        &document,
+        case(&document, "view.metric.from-source"),
+        &edits,
+        false,
+    );
     let description = replayed.ended.unwrap();
     assert_eq!(description.links.len(), 1);
-    assert!(replayed.warnings.iter().any(|w| w.sentence == sdm_contract::Sentence::ViewJoinUnchecked));
+    assert!(
+        replayed
+            .warnings
+            .iter()
+            .any(|w| w.sentence == sdm_contract::Sentence::ViewJoinUnchecked)
+    );
 }

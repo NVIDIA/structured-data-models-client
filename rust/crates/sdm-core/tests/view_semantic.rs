@@ -126,6 +126,10 @@ impl DataLayer for Fake {
         })
     }
 
+    fn view_kind(&self, _: &ProviderChoice) -> Option<ViewKind> {
+        Some(ViewKind::Semantic)
+    }
+
     fn view_text(&self, _: &ProviderChoice, ask: ViewTextAsk) -> Result<ViewTextAnswer, CoreError> {
         Ok(sdm_data::view_expr::answer(
             ask,
@@ -194,7 +198,7 @@ fn table_of(request: &DataRequest) -> Option<String> {
         .and_then(|(_, relation)| relation.source.last().cloned())
 }
 
-fn describe_view(definition: &str, spec: serde_json::Value) -> (SourceDescription, Vec<(String, String)>) {
+fn semantic_run(definition: &str, spec: serde_json::Value) -> sdm_core::Run {
     let fake = Fake {
         definition: definition.to_owned(),
         catalogs: BTreeMap::from([
@@ -207,7 +211,7 @@ fn describe_view(definition: &str, spec: serde_json::Value) -> (SourceDescriptio
         "view": {"name": "DB.SHOP.SHOP_VIEW", "trust_expressions": false},
     }))
     .unwrap();
-    let mut run = start(
+    start(
         &CompositionRoot::new(Arc::new(fake)),
         StartRun {
             contract: CONTRACT_VERSION,
@@ -224,7 +228,14 @@ fn describe_view(definition: &str, spec: serde_json::Value) -> (SourceDescriptio
         )]),
         Arc::new(NoZones),
     )
-    .unwrap();
+    .unwrap()
+}
+
+fn describe_view(
+    definition: &str,
+    spec: serde_json::Value,
+) -> (SourceDescription, Vec<(String, String)>) {
+    let mut run = semantic_run(definition, spec);
     let mut read: Vec<(String, String)> = Vec::new();
     let description: SourceDescription = loop {
         match run.next().unwrap() {
@@ -259,8 +270,10 @@ fn describe_view(definition: &str, spec: serde_json::Value) -> (SourceDescriptio
 
 #[test]
 fn each_table_is_finished_before_the_next_is_read() {
-    let (description, read) = describe_view(VIEW,
-        json!({"tables": [], "primary_keys": {}, "time_columns": {}}));
+    let (description, read) = describe_view(
+        VIEW,
+        json!({"tables": [], "primary_keys": {}, "time_columns": {}}),
+    );
     // Every read of USERS before the first of ORDERS.
     let first_orders = read.iter().position(|(t, _)| t == "ORDERS").unwrap();
     assert!(
@@ -282,15 +295,63 @@ fn each_table_is_finished_before_the_next_is_read() {
     assert!(orders.columns.iter().any(|c| c.name == "PRICE_WITH_TAX"));
 }
 
-
 #[test]
 fn a_semantic_table_with_no_columns_or_key_does_not_read_or_break_other_tables() {
     let definition = VIEW.replace("tables:\n", "tables:\n  - name: UNUSED\n    base_table: {database: DB, schema: SHOP, table: NEVER_READ}\n");
-    let (description, read) = describe_view(&definition,
+    let (description, read) = describe_view(
+        &definition,
         json!({"tables": [{"name": "people", "source": {"source": ["USERS"]}}],
-            "primary_keys": {}, "time_columns": {}}));
+            "primary_keys": {}, "time_columns": {}}),
+    );
     assert_eq!(description.tables.len(), 1);
     assert_eq!(description.tables[0].name, "people");
     assert_eq!(description.tables[0].source, Relation::named("USERS"));
     assert!(!read.iter().any(|(name, _)| name == "NEVER_READ"));
+}
+
+#[test]
+fn a_failed_semantic_definition_fetch_uses_its_prefetch_kind() {
+    let mut run = semantic_run(
+        VIEW,
+        json!({"tables": [], "primary_keys": {}, "time_columns": {}}),
+    );
+    let Step::Fetch { requests } = run.next().unwrap() else {
+        panic!("definition was not fetched");
+    };
+    assert_eq!(requests.len(), 1);
+    assert!(matches!(
+        requests[0].request,
+        DataRequest::Describe {
+            part: DescribePart::ViewDefinition,
+            ..
+        }
+    ));
+    run.submit_fetch(
+        requests[0].id,
+        FetchResult::Error(
+            serde_json::from_value(json!({
+                "kind": "data_source", "retryable": false, "sqlstate": "42501",
+                "driver_message": "No permission to read this semantic view"
+            }))
+            .unwrap(),
+        ),
+    )
+    .unwrap();
+    let error = run.next().unwrap_err();
+    assert_eq!(error.sentence, sdm_contract::Sentence::ViewSemanticNotFound);
+    assert_eq!(
+        error.fields.get("view"),
+        Some(&sdm_contract::Detail::text("DB.SHOP.SHOP_VIEW"))
+    );
+}
+
+#[test]
+fn semantic_models_never_infer_additional_links_from_column_names() {
+    let definition = VIEW.split("relationships:").next().unwrap();
+    let (description, _) = describe_view(
+        definition,
+        json!({"tables": [], "primary_keys": {}, "time_columns": {}}),
+    );
+    assert_eq!(description.tables.len(), 2);
+    assert!(description.links.is_empty(), "{:?}", description.links);
 }

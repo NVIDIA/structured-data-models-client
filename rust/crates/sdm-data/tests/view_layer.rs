@@ -205,6 +205,7 @@ fn a_layer_that_reads_no_view_refuses_one_by_name() {
 
 fn failed(sqlstate: Option<&str>, class: Option<&str>) -> ProviderError {
     ProviderError {
+        driver_message: None,
         kind: ErrorKind::DataSource,
         retryable: false,
         sqlstate: sqlstate.map(str::to_owned),
@@ -357,10 +358,12 @@ fn a_metric_view_s_definition_is_read_as_the_old_client_read_it() {
     }
 }
 
-
 #[test]
 fn a_views_kind_is_known_before_its_definition_is_fetched() {
     let data = Data::reading_views(spaces());
-    assert_eq!(data.view_kind(&ProviderChoice::sql("databricks")), Some(ViewKind::Metric));
+    assert_eq!(
+        data.view_kind(&ProviderChoice::sql("databricks")),
+        Some(ViewKind::Metric)
+    );
     assert_eq!(data.view_kind(&ProviderChoice::sql("duckdb")), None);
 }
