@@ -110,10 +110,16 @@ fn the_shared_codec_preserves_the_call_and_the_recorded_reference_logical_payloa
     let reference_call = reference["dataframe_records"][0][REQUEST_COLUMN]
         .as_str()
         .unwrap();
-    assert_eq!(
-        serde_json::from_str::<serde_json::Value>(actual_call).unwrap(),
-        serde_json::from_str::<serde_json::Value>(reference_call).unwrap()
-    );
+    let mut actual_value: serde_json::Value = serde_json::from_str(actual_call).unwrap();
+    let reference_value: serde_json::Value = serde_json::from_str(reference_call).unwrap();
+    // The model's Python JSON reader reads the integer token -0 as 0.
+    // serde_json represents -0 as a floating number instead, so account
+    // for this one known representation difference in this fixture only.
+    // The independent assertion below still requires every original token.
+    assert_eq!(actual_value["b"][3].as_f64(), Some(0.0));
+    assert_eq!(reference_value["b"][3].as_i64(), Some(0));
+    actual_value["b"][3] = reference_value["b"][3].clone();
+    assert_eq!(actual_value, reference_value);
     assert_eq!(
         sdm_wire::json::read(actual_call.as_bytes()).unwrap(),
         sdm_wire::json::read(call.as_bytes()).unwrap()
@@ -132,7 +138,7 @@ fn the_shared_codec_preserves_the_call_and_the_recorded_reference_logical_payloa
 #[test]
 fn the_caller_s_limit_counts_the_wrapped_envelope_at_its_boundary() {
     // A limit other than the gateway's 16,000,000, met exactly and missed
-    // by one, on a call whose escaped Unicode grows sevenfold once wrapped.
+    // by one, with Unicode, quotes and backslashes in the wrapped call.
     let call = concat!(
         r#"{"rows":["é😀\""#,
         "Sup3rSecret-CustomerValue-9f2a",
