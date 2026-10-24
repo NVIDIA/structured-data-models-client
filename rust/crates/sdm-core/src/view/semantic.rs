@@ -22,7 +22,9 @@ use sdm_contract::data::{Relation, ViewChoice};
 use sdm_contract::view::{DeclaredType, ViewTextAnswer, ViewTextAsk};
 use sdm_contract::{CoreError, CoreWarning, Detail, Scalar, Sentence};
 use sdm_schema::infer::Previewed;
-use sdm_schema::view::model::{ModelColumn, ModelTable, RelationshipStep, ViewModel};
+use sdm_schema::view::model::{
+    LinkFailure, ModelColumn, ModelTable, RelationshipRefusal, RelationshipStep, ViewModel,
+};
 use sdm_schema::view::semantic;
 use sdm_schema::view::spec::{PrimaryKey, Section, Source, TableSpec, ViewSpec};
 use sdm_schema::view::yaml::NodeId;
@@ -354,10 +356,11 @@ pub(super) async fn convert(
                 omitted_columns.push((name.clone(), column_name, reason));
                 continue;
             }
-            let declared = match column.data_type {
+            let declared_type = column.data_type.map(|node| text(&spec, node)).transpose()?;
+            let declared = match &declared_type {
                 None => None,
-                Some(node) => match reading.ask(ViewTextAsk::DeclaredType {
-                    data_type: text(&spec, node)?,
+                Some(data_type) => match reading.ask(ViewTextAsk::DeclaredType {
+                    data_type: data_type.clone(),
                 })? {
                     ViewTextAnswer::DeclaredType(DeclaredType::Known(dtype)) => Some(dtype),
                     ViewTextAnswer::DeclaredType(DeclaredType::Unsupported) => {
@@ -372,6 +375,7 @@ pub(super) async fn convert(
                 column: None,
                 expr: Some(expr),
                 declared,
+                declared_type,
             });
         }
         match cross.as_slice() {
@@ -533,29 +537,40 @@ pub(super) async fn convert(
         let left_key = text(&spec, read.left_column)?;
         let right_table = text(&spec, read.right_table)?;
         let right_key = text(&spec, read.right_column)?;
-        let left_key_column = match tables.iter_mut().find(|t| t.name == left_table) {
-            Some(table) if table.catalog_column(&left_key).is_some() => {
-                source_rows(reading, table).await?;
-                let previewed = table.infer(reading, &[source_column(&left_key)]);
-                previewed.ok().and_then(|p| {
-                    p.table().column(&left_key).map(|c| ModelColumn {
-                        name: c.name.clone(),
-                        expr: None,
-                        dtype: c.dtype,
-                        stype: c.stype,
-                    })
-                })
-            }
-            _ => None,
-        };
-        let step = RelationshipStep {
+        let mut step = RelationshipStep {
             left_table: left_table.clone(),
             left_key: left_key.clone(),
             right_table,
             right_key,
-            left_key_column,
+            left_key_column: None,
         };
-        if let Err(refusal) = model.add_relationship(step) {
+        let mut result = model.add_relationship(step.clone());
+        if matches!(
+            result,
+            Err(RelationshipRefusal::NotLinked(
+                LinkFailure::NoSourceColumn { .. }
+            ))
+        ) {
+            step.left_key_column = match tables.iter_mut().find(|t| t.name == left_table) {
+                Some(table) if table.catalog_column(&left_key).is_some() => {
+                    source_rows(reading, table).await?;
+                    table
+                        .infer(reading, &[source_column(&left_key)])
+                        .ok()
+                        .and_then(|p| {
+                            p.table().column(&left_key).map(|c| ModelColumn {
+                                name: left_key.clone(),
+                                dtype: c.dtype,
+                                stype: c.stype,
+                                expr: None,
+                            })
+                        })
+                }
+                _ => None,
+            };
+            result = model.add_relationship(step);
+        }
+        if let Err(refusal) = result {
             warnings.push(refuse(view_words::relationship_reason_text(&refusal)));
         }
     }
@@ -609,5 +624,6 @@ fn source_column(name: &str) -> Added {
         column: Some(name.to_owned()),
         expr: None,
         declared: None,
+        declared_type: None,
     }
 }

@@ -50,7 +50,7 @@
 //! chunk's statement adding the seeds before it to `pos`, as the
 //! reference's `_flatten` moves each chunk's batches.
 
-use arrow_array::RecordBatch;
+use arrow_array::{RecordBatch, StringArray};
 use arrow_schema::SchemaRef;
 use sdm_contract::catalog::{CatalogAnswer, CatalogColumn, CatalogForeignKey, CatalogKey, KeyKind};
 use sdm_contract::data::{

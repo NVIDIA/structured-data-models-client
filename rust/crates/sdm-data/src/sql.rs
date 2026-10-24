@@ -175,14 +175,6 @@ pub(crate) trait SqlDialect: Sync {
         Err(sdm_contract::data::views_unread())
     }
 
-    /// What a provider's failure says (design S3); none, the default.
-    fn failure(
-        &self,
-        _error: &sdm_contract::data::ProviderError,
-    ) -> sdm_contract::data::FailureFacts {
-        sdm_contract::data::FailureFacts::default()
-    }
-
     /// A derived relation's `FROM` (contract v28), `source` the rendering
     /// of the relation it reads; `None` for a dialect that reads none, where
     /// a derived relation is refused by name (`derived_relations` is false

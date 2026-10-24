@@ -677,6 +677,7 @@ pub(super) async fn convert(
                                 name,
                                 expr: None,
                                 declared: None,
+                                declared_type: None,
                             },
                         );
                     }
@@ -706,6 +707,7 @@ pub(super) async fn convert(
                             column: Some(real),
                             expr: None,
                             declared: None,
+                            declared_type: None,
                         },
                     );
                 } else if let Some(verdict) = metric.verdict(expr, columns)? {
@@ -730,6 +732,11 @@ pub(super) async fn convert(
                             column: None,
                             expr: Some(expr.clone()),
                             declared: declared(reading, &described.columns, name)?,
+                            declared_type: described
+                                .columns
+                                .iter()
+                                .find(|(n, _)| n == name)
+                                .map(|(_, t)| t.clone()),
                         },
                     );
                 }
@@ -778,6 +785,7 @@ pub(super) async fn convert(
                         column: Some(column.clone()),
                         expr: None,
                         declared: None,
+                        declared_type: None,
                     },
                 ),
                 Some(same) if same.expr.is_some() => warnings.push(
@@ -1277,6 +1285,7 @@ fn source_model_column(
         column: Some(column),
         expr: None,
         declared: None,
+        declared_type: None,
     };
     let mut alone = ViewTable::new(
         table.name.clone(),

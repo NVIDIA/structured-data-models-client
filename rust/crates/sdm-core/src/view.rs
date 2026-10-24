@@ -260,6 +260,8 @@ pub(crate) struct Added {
     pub expr: Option<String>,
     /// The type the view declares for it, if any.
     pub declared: Option<Dtype>,
+    /// The original declaration retained for temporal and marked source facts.
+    pub declared_type: Option<String>,
 }
 
 /// A logical table as the conversion builds it: the base table it reads,
@@ -419,8 +421,16 @@ impl ViewTable {
         relation
     }
 
-    /// The values read of the column `name`: its sample, or the source's
-    /// rows of it.
+    /// The field sampled or read for the column `name`.
+    pub fn field(&self, name: &str) -> Option<&Field> {
+        if let Some((_, field, _)) = self.sampled.iter().find(|(n, _, _)| n == name) {
+            return Some(field);
+        }
+        let rows = self.rows.as_ref()?;
+        Some(rows.schema.field(rows.schema.index_of(name).ok()?))
+    }
+
+    /// The values read of a column, from its sample or the source rows.
     pub fn values(&self, name: &str) -> Option<(Field, ArrayRef)> {
         if let Some((_, field, array)) = self.sampled.iter().find(|(n, _, _)| n == name) {
             return Some((field.clone(), Arc::clone(array)));
@@ -432,7 +442,7 @@ impl ViewTable {
             .iter()
             .map(|b| Arc::clone(b.column(index)))
             .collect();
-        let field = rows.schema.field(index).clone();
+        let field = self.field(name)?.clone();
         let joined =
             arrow_select::concat::concat(&arrays.iter().map(|a| a.as_ref()).collect::<Vec<_>>())
                 .ok()?;
@@ -562,7 +572,15 @@ pub(crate) fn describe(
                     .then_some(before),
                 nullable,
                 unique: false,
-                declared_type: None,
+                declared_type: table.field(&column.name).and_then(|field| {
+                    let declared =
+                        added.and_then(|a| a.declared_type.as_deref()).or_else(|| {
+                            table
+                                .catalog_column(&column.name)
+                                .map(|c| c.declared_type.as_str())
+                        })?;
+                    crate::discover::retained_source_type(field, declared).map(str::to_owned)
+                }),
                 exact_number: None,
             });
         }
@@ -1043,6 +1061,7 @@ pub(crate) fn sync(table: &mut ViewTable, logical: &ModelTable) {
                 if column.expr.is_none() && added.expr.is_some() {
                     added.expr = None;
                     added.column = source;
+                    added.declared_type = None;
                     table.sampled.retain(|(name, _, _)| *name != column.name);
                 }
             }
@@ -1051,6 +1070,7 @@ pub(crate) fn sync(table: &mut ViewTable, logical: &ModelTable) {
                 column: source,
                 expr: None,
                 declared: None,
+                declared_type: None,
             }),
         }
     }
@@ -1286,6 +1306,7 @@ fn time_pass(
                 column: Some(column),
                 expr: None,
                 declared: None,
+                declared_type: None,
             };
             let mut tried = extra.borrow().clone();
             tried.push((added.clone(), field.clone(), Arc::clone(&array)));

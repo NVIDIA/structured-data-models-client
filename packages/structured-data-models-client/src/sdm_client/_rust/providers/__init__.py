@@ -74,8 +74,7 @@ def for_source(source: Any) -> tuple[dict[str, Any], Any]:
     choice is all a schema built from it keeps of it.
 
     Raises:
-        RouteError: A Snowflake semantic view, whose dialect and provider
-            are T3.6's and not in this build.
+        RouteError: A semantic model whose underlying source has no core provider.
     """
     model = _model_of(source)
     kept = source if model is None else model.source
@@ -85,7 +84,7 @@ def for_source(source: Any) -> tuple[dict[str, Any], Any]:
 
         raise RouteError(
             f'{source!r} is kept in a {kept.kind} source, which the core '
-            'reads from T3.6 on'
+            'has no provider for'
         )
     dialect, name = _BY_KIND[kept.kind]
     made = globals()[name]

@@ -72,7 +72,7 @@ The ordered routine `sdm-core/src/view.rs` over these pieces, the wiring, provid
 - `sdm-data`: the contract's view types, `view_text`, Databricks's `failure` facts and `DESCRIBE TABLE EXTENDED`.
 - Parity: every Databricks SQL warehouse capture of T3.20's recordings (`contract/view-captures.json`, written by `contract/fixtures/views/captures.py`), each statement in the old client's order and the schema it gave.
 - Python: the semantic model's routes, its provider choice, `conversion_notes` and the model's sentences.
-- Open: Snowflake's statements and type map are T3.6's; whichever package lands second enables the semantic-view routes.
+- Snowflake statements and type map come from landed T3.6; the second-landing integration enables the semantic-view routes through the same core conversion port.
 - `ProviderChoice::view` now reads the held view through the contract's accessor (T3.27 follow-up); the core no longer decodes its serialized contract form.
 
 
@@ -114,3 +114,18 @@ All new source-spec builders in the metric and semantic replay fixtures now use 
 The alias fixture assumed physical orders would be counted first despite placing users first in schema order; it now observes both physical mappings at the existing first-read boundary, once in each schema order.
 The original alias, link, note, override and refusal assertions are retained, and the first post-refresh request is explicitly checked as `CountRows`.
 No product code or recorded data changed, and no package checks run again before renewed approvals.
+
+
+## Snowflake second-landing integration
+
+The landed T3.6 head `1e29e07a6` is merged after the typed replay fixture correction `51008d1aa`.
+Tests-first commit `45baf0fa4` replaces the deferred Snowflake routing case and exercises public describe and complete materialize on the native core with genuine S2 catalog and preview observations.
+The bounded fake provider supplies recorded rows and key reads without executing SQL, calling a warehouse, skipping, or delegating to the previous engine.
+Named missing and unreadable semantic definitions retain the core diagnostic boundary.
+Snowflake supplies its typed semantic-view kind, expression dialect, existing declaration map, definition reader and derived relation renderer.
+Both ordinary discovery and view conversion use the same SQL catalog-plan coalescer and temporal declaration retention policy; host catalog requests remain distinct.
+View relationships first use the existing logical-model validator and fetch a source key only when that validator reports the key is absent.
+Physical and derived temporal declarations now flow through existing source facts into the shared window planner, retaining the zoned timestamp kind required by the landed Snowflake and Databricks UTC handling.
+The canonical schema generator preserved the landed version-28 schema hash, and the canonical dialect-matrix exporter changed only Snowflake's derived-relation capability.
+The exporter build also exposed a duplicate default trait method and a missing Databricks array import after the merge; both mechanical integration defects are corrected.
+No package checks or lint run before renewed dual review.
