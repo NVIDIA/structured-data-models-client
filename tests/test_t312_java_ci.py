@@ -84,7 +84,15 @@ def test_t312_l5_for_java_runs_beside_the_postgres_leg() -> None:
     ]
     assert len(steps) == 1
     assert steps[0]['env']['SDM_REQUIRE_POSTGRES'] == '1'
+    assert steps[0]['env']['SDM_REQUIRE_JAVA'] == '1'
     assert 'native-test-ops' in steps[0]['run']
+    # The driver-by-driver parity with Python's providers runs beside it.
+    assert 'tests_test_ops/test_t312_driver_parity.py' in steps[0]['run']
+    # Codex T3.12 r1 P2-7: the step changes directory before pytest reads
+    # the JAR, so its path is the checkout's, absolute.
+    assert steps[0]['env']['SDM_JAVA_JAR'].startswith(
+        '${{ github.workspace }}/'
+    ), steps[0]['env']['SDM_JAVA_JAR']
 
 
 def test_t312_the_java_tests_run_with_postgres_required() -> None:

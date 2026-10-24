@@ -2355,4 +2355,42 @@ mod tests {
         assert_eq!(asked.rows[1].rankings, response.predictions[1].rankings);
         assert_eq!(asked.rows[0].prediction, Answer::None);
     }
+
+    /// T3.12 fix 1 (Codex P0-3): every output the result looks for that
+    /// the answer left out, in the order [`LOOKED_FOR`] names them, as
+    /// [`absent`] reads each, for a host to read off the result rather
+    /// than keep a copy of the rule: an empty quantiles mapping on every
+    /// row is left out; an answer of no rows leaves out nothing.
+    #[test]
+    fn every_output_an_answer_leaves_out_is_read_once_for_the_hosts() {
+        let read = |text: &str| sdm_wire::json::read(text.as_bytes()).unwrap();
+        let payload = read(
+            r#"{"task": {"kind": "regression", "target": {"dtype": "float64"}},
+                "predict": {"instance_table": {"columns": ["instance_id"],
+                                              "rows": [[0], [1]]}}}"#,
+        );
+        let spell = |x: f64| x.to_string();
+        let answer = read(
+            r#"{"id": "r1", "model": "kumo-relational", "metadata": {},
+                "predictions": [
+                  {"row_index": 0, "id": "0", "prediction": 1.0, "quantiles": {}},
+                  {"row_index": 1, "id": "1", "prediction": 2.0, "quantiles": {}}]}"#,
+        );
+        let part = layout(&payload, &PredictionResponse::read(&answer).unwrap(), spell).unwrap();
+        assert_eq!(
+            left_out(&part),
+            ["probabilities", "scores", "rankings", "quantiles", "explanation", "embeddings"]
+        );
+        let named: Vec<String> = ["quantiles", "prediction", "quantiles", "no_such_output"]
+            .map(String::from)
+            .to_vec();
+        assert_eq!(absent(&part, &named), ["quantiles"]);
+        let none = read(r#"{"id": "r1", "model": "kumo-relational", "metadata": {}, "predictions": []}"#);
+        let empty = read(
+            r#"{"task": {"kind": "regression", "target": {"dtype": "float64"}},
+                "predict": {"instance_table": {"columns": ["instance_id"], "rows": []}}}"#,
+        );
+        let part = layout(&empty, &PredictionResponse::read(&none).unwrap(), spell).unwrap();
+        assert!(left_out(&part).is_empty());
+    }
 }

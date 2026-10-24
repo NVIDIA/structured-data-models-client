@@ -179,8 +179,8 @@ public final class ContractRunner {
    * L5 for Java: each fetch step the call names (the core's own plans, as the Python test
    * recorded them), answered by the JDBC provider on the database, read by the reviewed
    * conversion table or, with a {@code seed}, by the table with one Postgres type read as another
-   * (a unit or scale change in one driver's path): each answer as an Arrow IPC stream in base64,
-   * or the provider's failure.
+   * (a unit or scale change in one driver's path), any key sets ({@code keys}, by attachment)
+   * handed over: each answer as an Arrow IPC stream in base64, or the provider's failure.
    */
   @SuppressWarnings("unchecked")
   private static Map<String, Object> fetches(Map<?, ?> call) throws Exception {
@@ -205,7 +205,16 @@ public final class ContractRunner {
       for (Object step : (List<?>) call.get("steps")) {
         Map<String, Object> answer = new LinkedHashMap<>();
         try {
-          ArrowReader read = provider.answer((Map<String, Object>) step, Map.of(), ArrowData.allocator());
+          // The key sets handed over, each an Arrow IPC stream in base64, read afresh per step.
+          Map<Integer, ArrowReader> keys = new LinkedHashMap<>();
+          if (call.get("keys") instanceof Map<?, ?> given) {
+            for (Map.Entry<?, ?> each : given.entrySet()) {
+              keys.put(
+                  Integer.valueOf(String.valueOf(each.getKey())),
+                  ArrowData.reader(Base64.getDecoder().decode((String) each.getValue()), ArrowData.allocator()));
+            }
+          }
+          ArrowReader read = provider.answer((Map<String, Object>) step, keys, ArrowData.allocator());
           answer.put("arrow", Base64.getEncoder().encodeToString(ArrowData.ipc(read)));
         } catch (Exception failed) {
           answer.put("error", failed.getClass().getName());

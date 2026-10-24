@@ -89,6 +89,26 @@ def test_t312_a_case_java_s_types_cannot_say_has_no_leg_and_is_registered() -> (
         assert not run_java.on_java(_case(name), 'duckdb'), name
 
 
+def test_t312_a_java_row_on_a_duckdb_line_moves_from_no_outcome() -> None:
+    # Claude T3.12 r1 P2-2: no baseline holds a Java line, so a row on a
+    # DuckDB line (``<case>``, which only a baseline would hold) moves from
+    # ``none``, the ratchet's old outcome for it; a SQLite or Postgres
+    # line's moves from python-ref's line, as every core runner's does.
+    import yaml
+
+    assert not list((ROOT / 'contract/baselines').glob('*/java.jsonl'))
+    register = yaml.safe_load(REGISTER.read_text(encoding='utf-8'))
+    wrong = [
+        f'{entry["id"]}: {item["case"]} old {item["old"]}'
+        for entry in register['entries']
+        for item in entry.get('case_outcomes') or []
+        if item.get('runner') == 'java'
+        and '@' not in item['case']
+        and item.get('old') != 'none'
+    ]
+    assert not wrong, wrong
+
+
 def test_t312_duckdb_s_log_counts_a_key_set_kept_as_a_table_once() -> None:
     import pyarrow as pa
 
@@ -329,19 +349,119 @@ def _tool(name: str) -> Any:
     return module
 
 
+class _Tree:
+    r"""A candidate tree of the given files (``coverage``'s ``root``)."""
+
+    def __init__(self, files: dict[str, str]) -> None:
+        self.files = files
+
+    def read(self, path: str) -> str:
+        return self.files[path]
+
+
 def test_t312_a_java_path_s_test_is_a_junit_method_the_tree_defines() -> None:
     coverage = _tool('coverage')
     given = 'java/src/test/java/com/nvidia/sdm/T312SchemaTest.java'
     assert (
         coverage._test_problem(
-            f'{given}#theShopIsDescribedAsTheReferenceDescribesIt', ROOT
+            f'{given}#theShopIsDescribedAsTheReferenceDescribesIt', ROOT, 'java'
         )
         is None
     )
-    assert coverage._test_problem(f'{given}#noSuchMethod', ROOT) == (
+    assert coverage._test_problem(f'{given}#noSuchMethod', ROOT, 'java') == (
         'no test the tree defines'
     )
-    assert coverage._test_problem('java/Other.java#x', ROOT) is not None
+    assert coverage._test_problem('java/Other.java#x', ROOT, 'java') is not None
+    # A parameterized test, its source annotation between, is a test.
+    parameterized = 'java/src/test/java/com/nvidia/sdm/T312PredictTest.java'
+    assert (
+        coverage._test_problem(
+            f'{parameterized}#eachKindOfQueryIsMaterializedAndPredicted',
+            ROOT,
+            'java',
+        )
+        is None
+    )
+
+
+def test_t312_a_java_method_that_is_no_junit_test_claims_nothing() -> None:
+    # Codex T3.12 r1 P1-5: a method with no JUnit annotation is no test.
+    coverage = _tool('coverage')
+    path = 'java/src/test/java/com/nvidia/sdm/Helpers.java'
+    tree = _Tree(
+        {
+            path: 'class Helpers {\n'
+            '  @Test\n'
+            '  void aTest() {}\n'
+            '\n'
+            '  void helper() {}\n'
+            '\n'
+            '  @Test\n'
+            '  @Timeout(5)\n'
+            '  public void anotherTest() {}\n'
+            '}\n'
+        }
+    )
+    assert coverage._test_problem(f'{path}#aTest', tree, 'java') is None
+    assert coverage._test_problem(f'{path}#anotherTest', tree, 'java') is None
+    assert coverage._test_problem(f'{path}#helper', tree, 'java') == (
+        'no test the tree defines'
+    )
+
+
+def test_t312_a_python_path_takes_no_java_test_and_a_java_path_no_pytest() -> (
+    None
+):
+    # Codex T3.12 r1 P1-5: a Python path claimed by a Java test alone is
+    # neither a valid claim (rule 4) nor covered (the S1 rule).
+    import copy
+
+    import yaml
+
+    coverage = _tool('coverage')
+    java_test = (
+        'java/src/test/java/com/nvidia/sdm/T312SchemaTest.java'
+        '#theShopIsDescribedAsTheReferenceDescribesIt'
+    )
+    assert coverage._test_problem(java_test, ROOT, 'python') is not None
+    pytest_test = 'contract/tests/test_t312_java.py::test_t312_a_ranking_or_a_forecast_has_no_java_leg'
+    assert coverage._test_problem(pytest_test, ROOT, 'java') is not None
+    manifests = {
+        language: yaml.safe_load(
+            (
+                ROOT / f'docs/design/rust-core/phase-0/scope-{language}.yaml'
+            ).read_text(encoding='utf-8')
+        )
+        for language in ('python', 'java')
+    }
+    broken = copy.deepcopy(manifests)
+    [path] = [
+        p
+        for p in broken['python']['paths']
+        if p['slice'] == 'S1' and not p.get('tests')
+    ][:1]
+    path['cases'] = []
+    path['tests'] = [java_test]
+    assert path['id'] in coverage.uncovered(broken, {}, 'python', 'S1')
+    report = coverage.Report()
+    coverage.rule_4(broken, {}, report)
+    assert any(java_test in p for p in report.problems), report.problems
+    # The manifest's own schema refuses it too, by its language.
+    import jsonschema
+
+    schema = json.loads(
+        (ROOT / 'docs/design/rust-core/phase-0/scope.schema.json').read_text(
+            encoding='utf-8'
+        )
+    )
+    errors = list(
+        jsonschema.Draft202012Validator(schema).iter_errors(broken['python'])
+    )
+    assert errors, 'a Python path claiming a Java test passed the schema'
+    java = copy.deepcopy(manifests['java'])
+    [claimed] = [p for p in java['paths'] if p.get('tests')][:1]
+    claimed['tests'] = [pytest_test]
+    assert list(jsonschema.Draft202012Validator(schema).iter_errors(java))
 
 
 def test_t312_what_only_the_core_keeps_is_taken_out_of_java_s_lines_too() -> (

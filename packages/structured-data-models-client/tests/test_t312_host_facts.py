@@ -109,3 +109,33 @@ def test_the_cores_capabilities_are_the_clients() -> None:
             assert (
                 tuple(given) if isinstance(value, tuple) else given
             ) == value, (name, field)
+
+
+def test_the_core_route_describes_each_model_from_the_core_s_table(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Claude T3.12 r1 P2-1: the capability table is the core's alone; the
+    # client's description on its core route is read from it, so a change
+    # to the core's table is what the client describes.
+    from sdm_client import SDMClient
+
+    read = json.loads(_native.capabilities())
+    changed = {
+        'models': [
+            {**model, 'tasks': ['only-in-the-core']} for model in read['models']
+        ]
+    }
+    monkeypatch.setattr(_native, 'capabilities', lambda: json.dumps(changed))
+    monkeypatch.setenv(
+        'SDM_CORE_ROUTES', 'client.capabilities/capabilities/any'
+    )
+    client = SDMClient(url='http://localhost:8000')
+    for model in read['models']:
+        described = client.capabilities(model['model'])
+        assert described.tasks == ('only-in-the-core',), model['model']
+        assert described.outputs == tuple(model['outputs'])
+        assert described.source == 'sdk'
+    # A name the core's table holds no model of is refused as before.
+    with pytest.raises(Exception) as refused:
+        client.capabilities('no-such-model')
+    assert type(refused.value).__name__ != 'KeyError'
