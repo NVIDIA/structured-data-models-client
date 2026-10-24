@@ -32,6 +32,7 @@ pub mod describe;
 mod lex;
 pub mod metric;
 mod names;
+mod pattern;
 mod qualifier;
 mod words;
 

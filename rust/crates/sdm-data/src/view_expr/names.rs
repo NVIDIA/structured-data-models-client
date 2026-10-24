@@ -65,7 +65,7 @@ impl std::error::Error for Unreadable {}
 /// An expression that does not parse as the scan reads SQL is refused,
 /// since a failed reading of a form makes its word a column.
 pub fn name_references(expr: &str) -> Result<Vec<NameReference>, Unreadable> {
-    let tokens = lex(expr, Some(ExprDialect::Databricks))
+    let tokens = lex(expr, Some(ExprDialect::Databricks))?
         .into_iter()
         .filter(|token| token.kind != Kind::Comment)
         .collect();

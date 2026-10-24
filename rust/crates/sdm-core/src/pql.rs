@@ -1023,15 +1023,24 @@ pub fn float_text(x: f64) -> String {
     parser::float_repr::float_repr(x)
 }
 
-/// The value a view definition holds, as the parser's text helpers take
-/// it.
-fn shown(value: &sdm_schema::view::yaml::Value) -> parser::float_repr::Shown {
+/// A node of a view definition, as the parser's text helpers take it: a
+/// collection met again inside itself is Python's `[...]` or `{...}`.
+fn shown(
+    document: &sdm_schema::view::yaml::Document,
+    node: sdm_schema::view::yaml::NodeId,
+    open: &mut Vec<sdm_schema::view::yaml::NodeId>,
+) -> parser::float_repr::Shown {
     use parser::float_repr::Shown;
     use sdm_schema::view::yaml::Value;
-    match value {
+    let value = document.value(node);
+    if open.contains(&node) {
+        return Shown::Recursive(!matches!(value, Value::Map(_)));
+    }
+    open.push(node);
+    let shown = match value {
         Value::Null => Shown::None,
         Value::Bool(flag) => Shown::Bool(*flag),
-        Value::Int(n) => Shown::Int(*n),
+        Value::Int(n) => Shown::Int(n.text().to_owned()),
         Value::Float(x) => Shown::Float(*x),
         Value::Str(text) => Shown::Text(text.clone()),
         Value::Bytes(bytes) => Shown::Bytes(bytes.clone()),
@@ -1050,22 +1059,46 @@ fn shown(value: &sdm_schema::view::yaml::Value) -> parser::float_repr::Shown {
             microsecond: moment.microsecond,
             offset: moment.offset,
         },
-        Value::Seq(items) => Shown::List(items.iter().map(shown).collect()),
-        Value::Map(pairs) => Shown::Dict(pairs.iter().map(|(k, v)| (shown(k), shown(v))).collect()),
-    }
+        Value::Seq(items) => Shown::List(items.iter().map(|n| shown(document, *n, open)).collect()),
+        Value::Map(pairs) => Shown::Dict(
+            pairs
+                .iter()
+                .map(|(k, v)| (shown(document, *k, open), shown(document, *v, open)))
+                .collect(),
+        ),
+        Value::Set(members) => {
+            Shown::Set(members.iter().map(|n| shown(document, *n, open)).collect())
+        }
+        Value::Pairs(pairs) => Shown::List(
+            pairs
+                .iter()
+                .map(|(k, v)| {
+                    Shown::Tuple(vec![shown(document, *k, open), shown(document, *v, open)])
+                })
+                .collect(),
+        ),
+    };
+    open.pop();
+    shown
 }
 
 /// The text the old client's messages quote a view definition's value by,
 /// Python's `repr` of what PyYAML made of it ([`sdm_pql::float_repr`]),
 /// from here, the one module that names the parser (T3.5).
-pub(crate) fn value_repr(value: &sdm_schema::view::yaml::Value) -> String {
-    shown(value).repr()
+pub(crate) fn value_repr(
+    document: &sdm_schema::view::yaml::Document,
+    node: sdm_schema::view::yaml::NodeId,
+) -> String {
+    shown(document, node, &mut Vec::new()).repr()
 }
 
 /// Python's `str` of a view definition's value, as the old client wrote
 /// it into a message or a parameter's default (T3.5).
-pub(crate) fn value_text(value: &sdm_schema::view::yaml::Value) -> String {
-    shown(value).text()
+pub(crate) fn value_text(
+    document: &sdm_schema::view::yaml::Document,
+    node: sdm_schema::view::yaml::NodeId,
+) -> String {
+    shown(document, node, &mut Vec::new()).text()
 }
 
 /// Python's `repr` of a text, as the old client quotes a piece of an

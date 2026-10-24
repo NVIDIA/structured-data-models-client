@@ -14,15 +14,14 @@
 
 use std::sync::LazyLock;
 
-use fancy_regex::Regex;
-
 use super::check::{ExprRefusal, unsafe_reason};
 use super::lex::{bare_name, string_literals};
 use super::names::{Unreadable, name_references};
-use super::{ExprDialect, stripped};
+use super::pattern::{Pattern, Read};
+use super::{ExprDialect, spacing, stripped};
 
-fn pattern(text: &str) -> Regex {
-    Regex::new(text).unwrap()
+fn pattern(text: &str) -> Pattern {
+    Pattern::new(text)
 }
 
 /// A part of a name: backticked, or a run Databricks reads as a name.
@@ -35,7 +34,7 @@ fn chain() -> String {
     format!(r"(?:{ident})(?:\s*\.\s*(?:{ident}))*")
 }
 
-static TABLE_REFERENCE: LazyLock<Regex> = LazyLock::new(|| {
+static TABLE_REFERENCE: LazyLock<Pattern> = LazyLock::new(|| {
     let ident = ident();
     pattern(&format!(
         r"^\s*({ident})(?:\.({ident}))?(?:\.({ident}))?\s*$"
@@ -43,31 +42,31 @@ static TABLE_REFERENCE: LazyLock<Regex> = LazyLock::new(|| {
 });
 // An unquoted part of a view's name is any run of characters but a dot, a
 // backtick and white space, as a caller writes `my-catalog` unquoted.
-static VIEW_NAME: LazyLock<Regex> = LazyLock::new(|| {
+static VIEW_NAME: LazyLock<Pattern> = LazyLock::new(|| {
     let part = r"`(?:[^`]|``)+`|[^\s.`]+";
     pattern(&format!(r"^\s*({part})(?:\.({part}))?(?:\.({part}))?\s*$"))
 });
-static JOIN_CONDITION: LazyLock<Regex> = LazyLock::new(|| {
+static JOIN_CONDITION: LazyLock<Pattern> = LazyLock::new(|| {
     let chain = chain();
     pattern(&format!(r"^\s*({chain})\s*=\s*({chain})\s*$"))
 });
-static IDENT: LazyLock<Regex> = LazyLock::new(|| pattern(&ident()));
-static WHOLE_IDENT: LazyLock<Regex> = LazyLock::new(|| pattern(&format!("^(?:{})$", ident())));
-static CHAIN: LazyLock<Regex> = LazyLock::new(|| pattern(&chain()));
+static IDENT: LazyLock<Pattern> = LazyLock::new(|| pattern(&ident()));
+static WHOLE_IDENT: LazyLock<Pattern> = LazyLock::new(|| pattern(&format!("^(?:{})$", ident())));
+static CHAIN: LazyLock<Pattern> = LazyLock::new(|| pattern(&chain()));
 // `- expr: source.*` or `- expr: customers.* EXCEPT (a, b)`.
-static WILDCARD: LazyLock<Regex> = LazyLock::new(|| {
+static WILDCARD: LazyLock<Pattern> = LazyLock::new(|| {
     let chain = chain();
     pattern(&format!(
         r"(?i)^\s*({chain})\s*\.\s*\*(?:\s*EXCEPT\s*\(\s*({chain}(?:\s*,\s*{chain})*)\s*\))?\s*$"
     ))
 });
-static RENAMED: LazyLock<Regex> =
+static RENAMED: LazyLock<Pattern> =
     LazyLock::new(|| pattern(r"^(?:`((?:[^`]|``)+)`|([A-Za-z_]\w*))$"));
-static WHOLE_BARE_NAME: LazyLock<Regex> =
+static WHOLE_BARE_NAME: LazyLock<Pattern> =
     LazyLock::new(|| pattern(&format!("^(?:{})$", bare_name())));
 // What a timestamp dimension may wrap a column in and still say when the
 // row happened: a truncation, or a cast to a date or time.
-static DERIVATIONS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
+static DERIVATIONS: LazyLock<Vec<Pattern>> = LazyLock::new(|| {
     let time = "(?:date|timestamp(?:_ntz|_ltz)?)";
     [
         r#"\(\s*(?P<inner>.+)\s*\)"#.to_owned(),
@@ -82,29 +81,36 @@ static DERIVATIONS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
     .collect()
 });
 // The first part of a name, backticked or not.
-static FIRST_PART: LazyLock<Regex> =
+static FIRST_PART: LazyLock<Pattern> =
     LazyLock::new(|| pattern(r"^(?:`(?:``|[^`])*`|[A-Za-z0-9_]+)"));
-static SIMPLE_MEASURE: LazyLock<Regex> = LazyLock::new(|| {
+static SIMPLE_MEASURE: LazyLock<Pattern> = LazyLock::new(|| {
     pattern(&format!(
         r"(?i)^\s*(sum|avg|min|max|count)\s*\(\s*(distinct\s+)?(\*|1|{})\s*\)\s*$",
         chain()
     ))
 });
-static INTEGER_TEXT: LazyLock<Regex> = LazyLock::new(|| pattern(r"^[+-]?\d+$"));
-static DECIMAL_TYPE: LazyLock<Regex> =
+static INTEGER_TEXT: LazyLock<Pattern> = LazyLock::new(|| pattern(r"^[+-]?\d+$"));
+static DECIMAL_TYPE: LazyLock<Pattern> =
     LazyLock::new(|| pattern(r"^(?:decimal|dec|numeric)(?:\(\s*\d+\s*(?:,\s*\d+\s*)?\))?$"));
-static STRING_TYPE: LazyLock<Regex> =
+static STRING_TYPE: LazyLock<Pattern> =
     LazyLock::new(|| pattern(r"^(?:string|(?:var)?char\(\s*\d+\s*\))$"));
 
 const SOURCE_ALIAS: &str = "source";
+
+/// The old client's words for the `fields` section passed over for the
+/// `dimensions` (`DB/metric_view.py:953-957`), which name the warehouse.
+pub const FIELDS_IGNORED: &str = "Ignored the 'fields' section since the view also has 'dimensions', and Databricks reads \
+     only those";
 const INTEGER_TYPES: &[&str] = &[
     "bigint", "byte", "int", "integer", "long", "short", "smallint", "tinyint",
 ];
 const FLOAT_TYPES: &[&str] = &["double", "float", "real"];
 const TIMESTAMP_TYPES: &[&str] = &["timestamp", "timestamp_ltz", "timestamp_ntz"];
 
-fn matches(regex: &Regex, text: &str) -> bool {
-    regex.is_match(text).unwrap_or(false)
+/// Whether `pattern` matches, where a failed match may only refuse: a name
+/// not read as one, a type with no literal, no derived column.
+fn matches(pattern: &Pattern, text: &str) -> bool {
+    pattern.is_match(text).unwrap_or(false)
 }
 
 /// One side of a join condition: the (dot-joined) table alias or join path
@@ -127,12 +133,12 @@ pub fn unquote(name: &str) -> String {
     }
 }
 
-fn name_parts(regex: &Regex, name: &str) -> Option<Vec<String>> {
-    let captures = regex.captures(name).ok()??;
+fn name_parts(pattern: &Pattern, name: &str) -> Option<Vec<String>> {
+    let groups = pattern.groups(name).ok()??;
     Some(
         (1..=3)
-            .filter_map(|group| captures.get(group))
-            .map(|part| unquote(part.as_str()))
+            .filter_map(|group| groups.get(group))
+            .map(|part| unquote(&name[part]))
             .collect(),
     )
 }
@@ -151,9 +157,10 @@ pub fn view_name(name: &str) -> Option<Vec<String>> {
 
 fn key_ref(chain: &str) -> KeyRef {
     let mut parts: Vec<String> = IDENT
-        .find_iter(chain)
-        .filter_map(Result::ok)
-        .map(|part| unquote(part.as_str()))
+        .find_all(chain)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|part| unquote(&chain[part]))
         .collect();
     let column = parts.pop().unwrap_or_default();
     KeyRef {
@@ -165,35 +172,38 @@ fn key_ref(chain: &str) -> KeyRef {
 /// A single-column equality join condition's two sides; `None` for any
 /// other (`parse_join_condition`).
 pub fn join_condition(condition: &str) -> Option<[KeyRef; 2]> {
-    let captures = JOIN_CONDITION.captures(condition).ok()??;
+    let groups = JOIN_CONDITION.groups(condition).ok()??;
     Some([
-        key_ref(captures.get(1)?.as_str()),
-        key_ref(captures.get(2)?.as_str()),
+        key_ref(&condition[groups.get(1)?]),
+        key_ref(&condition[groups.get(2)?]),
     ])
 }
 
 /// A wildcard dimension, `alias.*` or `alias.* EXCEPT (a, b)`: the folded
 /// path it names, and the columns it leaves out, unquoted.
 pub fn wildcard(expr: &str) -> Option<(Vec<String>, Vec<String>)> {
-    let captures = WILDCARD.captures(expr).ok()??;
+    let groups = WILDCARD.groups(expr).ok()??;
+    let named = &expr[groups.get(1)?];
     let path = IDENT
-        .find_iter(captures.get(1)?.as_str())
-        .filter_map(Result::ok)
-        .map(|part| unquote(part.as_str()).to_lowercase())
+        .find_all(named)
+        .ok()?
+        .into_iter()
+        .map(|part| unquote(&named[part]).to_lowercase())
         .collect();
-    let excluded = captures.get(2).map_or_else(Vec::new, |list| {
-        CHAIN
-            .find_iter(list.as_str())
-            .filter_map(Result::ok)
-            .filter_map(|chain| {
-                IDENT
-                    .find_iter(chain.as_str())
-                    .filter_map(Result::ok)
-                    .last()
-                    .map(|last| unquote(last.as_str()))
-            })
-            .collect()
-    });
+    let excluded = match groups.get(2) {
+        None => Vec::new(),
+        Some(list) => {
+            let list = &expr[list];
+            let mut excluded = Vec::new();
+            for chain in CHAIN.find_all(list).ok()? {
+                let chain = &list[chain];
+                if let Some(last) = IDENT.find_all(chain).ok()?.pop() {
+                    excluded.push(unquote(&chain[last]));
+                }
+            }
+            excluded
+        }
+    };
     Some((path, excluded))
 }
 
@@ -209,7 +219,7 @@ fn quoted_variants(part: &str) -> String {
 
 /// The pattern of a qualifier `path.` in any case, not after a name's
 /// character, a backtick, `$` or a dot (`_path_pattern`).
-fn path_pattern<S: AsRef<str>>(path: &[S]) -> Regex {
+fn path_pattern<S: AsRef<str>>(path: &[S]) -> Pattern {
     let chain = path
         .iter()
         .map(|part| format!("(?:{})", quoted_variants(part.as_ref())))
@@ -219,37 +229,37 @@ fn path_pattern<S: AsRef<str>>(path: &[S]) -> Regex {
 }
 
 /// `expr` with each string literal emptied (`_masked_strings`).
-fn masked_strings(expr: &str) -> String {
+fn masked_strings(expr: &str) -> Read<String> {
     let mut out = String::with_capacity(expr.len());
     let mut last = 0;
-    for span in string_literals(expr) {
+    for span in string_literals(expr)? {
         out.push_str(&expr[last..span.start]);
         out.push_str("''");
         last = span.end;
     }
     out.push_str(&expr[last..]);
-    out
+    Ok(out)
 }
 
 /// Whether `expr` reads a column of the table `path` names, outside its
 /// literals (`references_alias`).
-pub fn references_alias<S: AsRef<str>>(expr: &str, path: &[S]) -> bool {
-    matches(&path_pattern(path), &masked_strings(expr))
+pub fn references_alias<S: AsRef<str>>(expr: &str, path: &[S]) -> Result<bool, Unreadable> {
+    path_pattern(path).is_match(&masked_strings(expr)?)
 }
 
 /// `expr` with every qualifier `path.` taken out, its literals as they are,
 /// trimmed (`strip_alias_qualifier`).
-pub fn strip_alias<S: AsRef<str>>(expr: &str, path: &[S]) -> String {
+pub fn strip_alias<S: AsRef<str>>(expr: &str, path: &[S]) -> Result<String, Unreadable> {
     let pattern = path_pattern(path);
     let mut out = String::with_capacity(expr.len());
     let mut last = 0;
-    for span in string_literals(expr) {
-        out.push_str(&pattern.replace_all(&expr[last..span.start], ""));
+    for span in string_literals(expr)? {
+        out.push_str(&pattern.replace_all(&expr[last..span.start], "")?);
         out.push_str(&expr[span.clone()]);
         last = span.end;
     }
-    out.push_str(&pattern.replace_all(&expr[last..], ""));
-    stripped(&out).to_owned()
+    out.push_str(&pattern.replace_all(&expr[last..], "")?);
+    Ok(stripped(&out).to_owned())
 }
 
 /// The column `expr` truncates or casts to a date or time, as
@@ -267,14 +277,14 @@ fn column_under(expr: &str) -> Option<String> {
         return Some(unquote(expr));
     }
     for derivation in DERIVATIONS.iter() {
-        let Ok(Some(captures)) = derivation.captures(expr) else {
+        let Ok(Some(groups)) = derivation.groups(expr) else {
             continue;
         };
-        let inner = captures.name("inner").unwrap().as_str();
+        let inner = &expr[groups.name("inner").unwrap()];
         // `.+` reaches past a bracket that closes early, as in
         // `date(a) - date(b)`, so what it holds must balance.
         let mut depth: i64 = 0;
-        for c in masked_strings(inner).chars() {
+        for c in masked_strings(inner).ok()?.chars() {
             depth += match c {
                 '(' => 1,
                 ')' => -1,
@@ -296,10 +306,11 @@ fn column_under(expr: &str) -> Option<String> {
 /// The column an expression is, if it is one column and nothing else
 /// (`_renamed_column`).
 pub fn renamed_column(expr: &str) -> Option<String> {
-    let captures = RENAMED.captures(stripped(expr)).ok()??;
-    match (captures.get(1), captures.get(2)) {
-        (Some(quoted), _) => Some(quoted.as_str().replace("``", "`")),
-        (None, Some(bare)) => Some(bare.as_str().to_owned()),
+    let expr = stripped(expr);
+    let groups = RENAMED.groups(expr).ok()??;
+    match (groups.get(1), groups.get(2)) {
+        (Some(quoted), _) => Some(expr[quoted].replace("``", "`")),
+        (None, Some(bare)) => Some(expr[bare].to_owned()),
         _ => None,
     }
 }
@@ -316,7 +327,8 @@ pub struct ParameterDefault {
 #[derive(Clone, Debug, PartialEq)]
 pub enum DefaultKind {
     Bool(bool),
-    Int(i128),
+    /// An integer: its text is its decimal digits.
+    Int,
     /// A date with no time of day: its text is its ISO form.
     Date,
     /// A date and time: its text is its ISO form with a space, and its
@@ -341,7 +353,8 @@ pub enum DefaultRefusal {
 pub fn default_text(data_type: &str, default: &ParameterDefault) -> Result<String, DefaultRefusal> {
     let folded = data_type
         .to_lowercase()
-        .split_whitespace()
+        .split(spacing)
+        .filter(|part| !part.is_empty())
         .collect::<Vec<_>>()
         .join(" ");
     let string_type = matches(&STRING_TYPE, &folded);
@@ -353,7 +366,7 @@ pub fn default_text(data_type: &str, default: &ParameterDefault) -> Result<Strin
         (lower == "true" || lower == "false").then_some(lower)
     } else if INTEGER_TYPES.contains(&folded.as_str()) {
         match default.kind {
-            DefaultKind::Int(n) => Some(n.to_string()),
+            DefaultKind::Int => Some(default.text.clone()),
             _ if matches(&INTEGER_TEXT, text) => integer_text(text),
             _ => None,
         }
@@ -685,7 +698,8 @@ pub fn read_parameters(
             (Some(default), Some(data_type)) => match default_text(&data_type, default) {
                 Ok(text) => {
                     let sql_type = data_type
-                        .split_whitespace()
+                        .split(spacing)
+                        .filter(|part| !part.is_empty())
                         .collect::<Vec<_>>()
                         .join(" ")
                         .to_uppercase();
@@ -769,10 +783,8 @@ pub fn substitute_fields(
         };
         let start = reference.span.start;
         let first = FIRST_PART
-            .find(&out[start..])
-            .ok()
-            .flatten()
-            .map_or(start, |m| start + m.end());
+            .find(&out[start..])?
+            .map_or(start, |m| start + m.end);
         out.replace_range(start..first, &format!("({field})"));
     }
     Ok((out, refused))
@@ -794,6 +806,8 @@ pub enum FilterRefusal {
     Unsafe(ExprRefusal),
     /// It reads a joined table, by alias.
     JoinedTable(String),
+    /// A pattern the check reads it by failed on it.
+    Unreadable(Unreadable),
 }
 
 /// The filter, trimmed, if it can be applied to the source table alone
@@ -810,9 +824,11 @@ pub fn check_filter(
     if let Some(reason) = unsafe_reason(filter, Some(ExprDialect::Databricks)) {
         return Err(FilterRefusal::Unsafe(reason));
     }
-    let masked = masked_strings(filter);
+    let masked = masked_strings(filter).map_err(FilterRefusal::Unreadable)?;
     for (path, alias) in candidates {
-        if alias != SOURCE_ALIAS && references_alias(&masked, path) {
+        if alias != SOURCE_ALIAS
+            && references_alias(&masked, path).map_err(FilterRefusal::Unreadable)?
+        {
             return Err(FilterRefusal::JoinedTable(alias.clone()));
         }
     }
@@ -902,9 +918,11 @@ pub fn read_measures(
         let Some(expr) = &measure.expr else {
             continue;
         };
-        let expr = super::strip_comments(expr);
-        let names = match name_references(&expr) {
-            Ok(names) => names,
+        let (expr, names) = match super::strip_comments(expr).and_then(|expr| {
+            let names = name_references(&expr)?;
+            Ok((expr, names))
+        }) {
+            Ok(read) => read,
             Err(error) => {
                 left_out.push(MeasureRefusal {
                     name: measure.name.clone(),
@@ -1002,11 +1020,11 @@ fn aggregation<'a>(
     if window {
         return None;
     }
-    let masked = masked_strings(expr);
-    let captures = SIMPLE_MEASURE.captures(&masked).ok()??;
-    let function = captures.get(1)?.as_str().to_uppercase();
-    let distinct = captures.get(2).is_some();
-    let argument = captures.get(3)?.as_str();
+    let masked = masked_strings(expr).ok()?;
+    let groups = SIMPLE_MEASURE.groups(&masked).ok()??;
+    let function = masked[groups.get(1)?].to_uppercase();
+    let distinct = groups.get(2).is_some();
+    let argument = &masked[groups.get(3)?];
     if argument == "*" || argument == "1" {
         return (function == "COUNT" && !distinct).then(|| ("COUNT".to_owned(), None));
     }
