@@ -198,19 +198,20 @@ def test_the_route_is_read_at_every_call(
         (f'{CORE},nope', 'nope'),
         # A host path is never routed.
         ('source.open/explicit/duckdb', 'source.open/explicit/duckdb'),
-        # A core path with no core route in this build (SQLite's has one
-        # from T2.2, Postgres's from T2.3, Snowflake's from T3.6).
+        # Trained models remain a known core path without an implementation
+        # in Phase 3; warehouse and semantic-view prediction now have routes.
         (
-            'client.predict/regression/snowflake-semantic-view',
-            'client.predict/regression/snowflake-semantic-view',
+            'client.fit/regression/duckdb',
+            'client.fit/regression/duckdb',
         ),
     ],
 )
 def test_an_unknown_or_unrouted_forced_path_fails_the_call(
     monkeypatch: pytest.MonkeyPatch, setting: str, named: str
 ) -> None:
-    if named.startswith('client.predict'):
+    if named.startswith('client.'):
         assert named in _routing.ROUTES
+        assert named not in _routing.CORE_ROUTED
     monkeypatch.setenv(_routing.ENVIRONMENT, setting)
     query = PredictiveQuery(ACCEPTED, {'users': _users()})
     with pytest.raises(_routing.RouteError, match=named):
