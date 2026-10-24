@@ -509,7 +509,23 @@ impl Data {
                 {
                     return sql::plan(dialect, request, &[], offset);
                 }
-                let namespace = qualifying(request, namespace)?;
+                let namespace = if matches!(
+                    request,
+                    DataRequest::Describe {
+                        part: DescribePart::ViewDefinition,
+                        ..
+                    }
+                ) && dialect.view_kind()
+                    == Some(sdm_contract::view::ViewKind::Semantic)
+                {
+                    // The semantic lookup binds a name, prefixed only by
+                    // the source parts explicitly supplied by its caller.
+                    // Missing parts are the warehouse's to resolve, even
+                    // where a physical relation would need a namespace read.
+                    namespace.iter().flatten().cloned().collect()
+                } else {
+                    qualifying(request, namespace)?
+                };
                 deeper(request, &namespace, dialect.namespace_depth())?;
                 sql::plan(
                     dialect,

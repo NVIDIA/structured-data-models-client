@@ -188,9 +188,14 @@ async fn read_definition(reading: &Reading<'_>, view: &ViewChoice) -> Result<Des
             ));
         }
     };
-    // The name's missing parts are the source's, as the caller named them;
-    // the warehouse resolves any it leaves out.
-    let relation = reading.asker.read_as(&Relation::of(parts));
+    let relation = Relation::of(parts);
+    // A metric definition describes a relation under its source namespace.
+    // A semantic definition instead binds opaque lookup text: its data
+    // layer qualifies that argument, leaving missing parts to the warehouse.
+    let relation = match reading.data.view_kind() {
+        Some(ViewKind::Semantic) => relation,
+        _ => reading.asker.read_as(&relation),
+    };
     let request = DataRequest::Describe {
         tables: vec![relation.clone()],
         part: DescribePart::ViewDefinition,

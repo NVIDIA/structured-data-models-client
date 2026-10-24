@@ -166,7 +166,13 @@ pub fn answer(
         substitute_parameters, table_reference, type_class, view_name, wildcard,
     };
     match ask {
-        ViewTextAsk::ViewName { name } => ViewTextAnswer::Names(view_name(&name, spaces)),
+        ViewTextAsk::ViewName { name } => ViewTextAnswer::Names(match dialect {
+            ExprDialect::Databricks => view_name(&name, spaces),
+            // Snowflake's semantic lookup takes the supplied name as bound
+            // text, including its own quotes, spaces and dots. The warehouse
+            // resolves it; the metric-view identifier grammar does not.
+            ExprDialect::Snowflake => Some(vec![name]),
+        }),
         ViewTextAsk::TableReference { name } => {
             ViewTextAnswer::Names(table_reference(&name, spaces))
         }

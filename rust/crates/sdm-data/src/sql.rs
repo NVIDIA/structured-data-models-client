@@ -669,7 +669,20 @@ pub(crate) fn plan(
     let text = match request {
         DataRequest::Describe { tables, part } => {
             for table in tables {
-                from(d, request, "tables", table)?;
+                if *part == DescribePart::ViewDefinition
+                    && d.view_kind() == Some(sdm_contract::view::ViewKind::Semantic)
+                {
+                    // A semantic definition lookup binds its name as text;
+                    // it does not render a physical FROM relation. Retain
+                    // the structural rule, leaving namespace resolution to
+                    // the warehouse function the dialect calls.
+                    if let Some(refusal) = refuse_relation(request, "tables", table, d.most_parts())
+                    {
+                        return Err(refusal);
+                    }
+                } else {
+                    from(d, request, "tables", table)?;
+                }
             }
             let (text, bound) = d.describe(request, tables, *part, namespace)?;
             params = bound;
