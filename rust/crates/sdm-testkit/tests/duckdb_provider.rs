@@ -207,8 +207,10 @@ fn base_regression_s_schema_completes_on_the_pure_rust_host() {
     );
     assert!(tables.iter().all(|t| t["duplicate_keys"]["v"] == "0"));
     // One fetch per statement the reference runs: ten in Schema.from_source,
-    // six in materialize (T1.11c).
-    assert_eq!(observed.fetches.len(), 16);
+    // six in materialize (T1.11c); and the six of the two tables' catalogs
+    // and previews each materialize reads again, as the source holds them
+    // at that run (the owner's plan B, T3.4).
+    assert_eq!(observed.fetches.len(), 22);
     // The whole description, the request state with its payload, the
     // inputs and the step trace are the ones python-core records
     // (contract/pinned, which contract/tests holds python-core to), so CI
@@ -814,7 +816,7 @@ fn base_regression_s_statements_return_the_reference_s_results() {
         .as_array()
         .unwrap()
         .clone();
-    let ours = driver["capture"]["statements"].as_array().unwrap().clone();
+    let mut ours = driver["capture"]["statements"].as_array().unwrap().clone();
     let per_stage = |statements: &[Value]| -> Vec<(String, usize)> {
         ["from_source", "materialize", "predict"]
             .iter()
@@ -829,14 +831,29 @@ fn base_regression_s_statements_return_the_reference_s_results() {
         ("materialize".to_owned(), 6),
         ("predict".to_owned(), 0),
     ];
+    // Each materialize reads each table as the source holds it at that run
+    // (the owner's plan B, T3.4, register P3A-1): its catalog, its keys and
+    // its preview, six statements before the reference's six, which read
+    // what the description read.
+    const FRESH: usize = 6;
+    let first = ours
+        .iter()
+        .position(|s| s["stage"] == "materialize")
+        .expect("a materialize statement");
+    let fresh: Vec<Value> = ours.drain(first..first + FRESH).collect();
+    assert!(
+        fresh.iter().all(|s| s["stage"] == "materialize"),
+        "{fresh:?}"
+    );
     assert_eq!(per_stage(&ours), counts);
     assert_eq!(per_stage(&theirs), counts);
     // The record is complete: DuckDB logged the same statements, and the
     // three bindings, and every text it logs as written is the one run.
     let logged = &driver["query_log"];
-    assert_eq!(logged["statements"], 16);
+    assert_eq!(logged["statements"], 16 + FRESH);
     assert_eq!(logged["bindings"], 3);
-    assert_eq!(logged["compared"], 14);
+    // Of the six read again, the four whose text DuckDB logs as written.
+    assert_eq!(logged["compared"], 14 + 4);
     assert_eq!(logged["differing"], serde_json::json!([]));
     assert_eq!(driver["capture"]["bindings"].as_array().unwrap().len(), 3);
     for (position, (a, b)) in ours.iter().zip(&theirs).enumerate() {

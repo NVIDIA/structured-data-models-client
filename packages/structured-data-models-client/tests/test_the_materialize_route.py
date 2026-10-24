@@ -1437,6 +1437,20 @@ def _on_both_routes(
     return found
 
 
+#: The statements a core run reads each table of a DuckDB source with, as
+#: the source holds it at that run (the owner's plan B, T3.4, register
+#: P3A-1): its catalog, its keys and its preview.
+_READ_AS_IT_STANDS = 3
+
+
+def _as_it_stands(
+    calls: list[tuple[int, int]], tables: int
+) -> list[tuple[int, int]]:
+    r"""``calls``, the old route's statements per call, as the core runs
+    them: each call reading each of ``tables`` tables as it stands first."""
+    return [(n + _READ_AS_IT_STANDS * tables, w) for n, w in calls]
+
+
 def _shop_logged() -> tuple[Any, Schema]:
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
@@ -1458,8 +1472,9 @@ def test_a_second_call_runs_the_reference_s_statements(
         query = PredictiveQuery(QUERY, schema)
         return _calls([query] * 3, connection, indices=[0, 1])
 
-    for found in _on_both_routes(monkeypatch, made):
-        assert found == [(6, 1), (4, 0), (4, 0)]
+    core, *old = _on_both_routes(monkeypatch, made)
+    assert core == _as_it_stands([(6, 1), (4, 0), (4, 0)], 2)
+    assert all(each == [(6, 1), (4, 0), (4, 0)] for each in old)
 
 
 def test_two_materializers_each_check_their_source_once(
@@ -1473,8 +1488,9 @@ def test_two_materializers_each_check_their_source_once(
         two = PredictiveQuery(QUERY, schema)
         return _calls([one, two, one, two], connection, indices=[0, 1])
 
-    for found in _on_both_routes(monkeypatch, made):
-        assert found == [(6, 1), (6, 1), (4, 0), (4, 0)]
+    core, *old = _on_both_routes(monkeypatch, made)
+    assert core == _as_it_stands([(6, 1), (6, 1), (4, 0), (4, 0)], 2)
+    assert all(each == [(6, 1), (6, 1), (4, 0), (4, 0)] for each in old)
 
 
 def test_a_call_the_core_refuses_before_its_check_leaves_it_to_the_next(
@@ -1489,10 +1505,16 @@ def test_a_call_the_core_refuses_before_its_check_leaves_it_to_the_next(
     connection, schema = _shop_logged()
     query = PredictiveQuery(QUERY, schema)
     assert _calls([query], connection, indices=[0, 1], num_hops=7) == [(0, 0)]
-    assert _calls([query], connection, indices=[0, 1]) == [(6, 1)]
+    assert _calls([query], connection, indices=[0, 1]) == _as_it_stands(
+        [(6, 1)], 2
+    )
     other = PredictiveQuery(QUERY, schema)
-    assert _calls([other], connection, indices=[None, 1]) == [(1, 1)]
-    assert _calls([other], connection, indices=[0, 1]) == [(5, 0)]
+    assert _calls([other], connection, indices=[None, 1]) == _as_it_stands(
+        [(1, 1)], 2
+    )
+    assert _calls([other], connection, indices=[0, 1]) == _as_it_stands(
+        [(5, 0)], 2
+    )
 
 
 #: A source whose order lines refer to items as well as users, the items
@@ -1649,9 +1671,9 @@ def test_every_foreign_key_looked_up_null_is_the_reference_s_request(
         query = PredictiveQuery(QUERY, schema)
         return _calls([query, query], connection, indices=[0, 1])
 
-    found = _on_both_routes(monkeypatch, made)
-    assert found[0] == [(7, 1), (5, 0)]
-    assert all(each == found[0] for each in found)
+    core, *old = _on_both_routes(monkeypatch, made)
+    assert core == _as_it_stands([(7, 1), (5, 0)], 3)
+    assert all(each == [(7, 1), (5, 0)] for each in old)
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     core = _deeper('UPDATE orders SET item_id = NULL', edit=False)._payloads[0]
     monkeypatch.delenv(_routing.ENVIRONMENT)
@@ -1752,10 +1774,9 @@ def test_a_schema_edited_between_two_calls_is_sampled_as_edited(
     # sends.
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     core = _edited_between_calls(edit)
-    assert [made[:2] for made in core] == [
-        (7, 1),
-        (6, 1) if edit == 'link' else (7, 1),
-    ]
+    assert [made[:2] for made in core] == _as_it_stands(
+        [(7, 1), (6, 1) if edit == 'link' else (7, 1)], 3
+    )
     assert core[0][2] != core[1][2]
     monkeypatch.delenv(_routing.ENVIRONMENT)
     if importlib.util.find_spec('sdm_relational_engine') is None:
@@ -1763,7 +1784,10 @@ def test_a_schema_edited_between_two_calls_is_sampled_as_edited(
             _edited_between_calls(edit)
         return
     old = _edited_between_calls(edit)
-    assert old[0] == core[0]
+    # The same request; the core read each of the three tables as it
+    # stands first (plan B).
+    assert old[0][2] == core[0][2]
+    assert _as_it_stands([old[0][:2]], 3) == [core[0][:2]]
     assert old[1][:2] == (5, 0)
     assert old[1][2] == old[0][2]
     with warnings.catch_warnings():
@@ -1799,10 +1823,9 @@ def test_a_state_the_core_refuses_is_not_handed_back_again(
         query.materialize(indices=[0, 1], anchor_time=ANCHOR)
     assert refused.value.code in ('INVALID_REQUEST', 'INVALID_MESSAGE')
     assert 'held' not in query._relational_materializer._core_sampler_state
-    assert _calls([query, query], connection, indices=[0, 1]) == [
-        (6, 1),
-        (4, 0),
-    ]
+    assert _calls([query, query], connection, indices=[0, 1]) == _as_it_stands(
+        [(6, 1), (4, 0)], 2
+    )
 
 
 @pytest.mark.parametrize('said', [True, False])

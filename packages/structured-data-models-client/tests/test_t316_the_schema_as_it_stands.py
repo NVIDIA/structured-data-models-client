@@ -524,8 +524,13 @@ def test_a_meaning_the_source_s_type_cannot_carry_is_refused_in_the_old_client_s
         return 'sampled'
 
     outcomes = _both(monkeypatch, act)
-    assert outcomes['core'] == outcomes['old']
     assert 'received an incompatible semantic type' in outcomes['old'][2]
+    # The core reads the column as the source holds it at each run (the
+    # owner's plan B, T3.4), and refuses the type the caller gave it that
+    # the source's does not match by name (the owner's item 3).
+    assert outcomes['core'][1] == 'INVALID_REQUEST'
+    assert f'{table}.{column} is given as' in outcomes['core'][2]
+    assert 'the source holds it as' in outcomes['core'][2]
 
 
 def test_a_meaning_the_caller_s_type_cannot_carry_is_refused_in_the_old_client_s_words(
@@ -702,14 +707,18 @@ def test_a_column_the_source_changed_since_it_was_described_is_read_as_it_stands
             connection.execute(
                 "ALTER TABLE users ADD COLUMN plan VARCHAR DEFAULT 'NEW_FEATURE'"
             )
-            schema['users'].columns['plan'] = Column('plan', 'string', 'text')
+            schema['users'].columns['plan'] = Column(
+                'plan', 'string', 'categorical'
+            )
         else:
             connection.execute(
                 'ALTER TABLE users ALTER COLUMN age TYPE VARCHAR'
             )
             connection.execute("UPDATE users SET age = 'NEW_FEATURE'")
             if how == 'retyped':
-                schema['users'].columns['age'] = Column('age', 'string', 'text')
+                schema['users'].columns['age'] = Column(
+                    'age', 'string', 'categorical'
+                )
         return _attempted(schema)
 
     core = _both(monkeypatch, act)['core']

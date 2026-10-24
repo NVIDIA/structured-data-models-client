@@ -394,39 +394,13 @@ def test_materialize_after_the_session_moved_reads_where_the_session_says_now(
     materialized after the session moved to ``other`` reads ``other``'s
     tables on the core, which keeps no table's location between runs (plan
     B), where the old route reads ``shop``'s, which it kept."""
-    import pandas as pd
-
-    from sdm_client import PredictiveQuery
-
-    if route == 'core':
-        monkeypatch.setenv(
-            _routing.ENVIRONMENT,
-            ','.join(
-                _routing.FROM_SOURCE_DATABRICKS_SQL
-                + _routing.MATERIALIZE_DATABRICKS_SQL
-            ),
-        )
-    connection = _Connection()
+    _route(route, monkeypatch)
+    connection = _SessionConnection()
     schema = Schema.from_source(DatabricksSource(connection, catalog='main'))
     connection.schema = 'other'
-    described = len(connection.asked)
-    # Not every sampling statement of either route is recorded; what the
-    # run reads before it stops is what is held here.
-    try:
-        PredictiveQuery(
-            'PREDICT COUNT(orders.*, 0, 30, days) > 0 FOR EACH users.user_id',
-            schema,
-        ).materialize(indices=[0, 1], anchor_time=pd.Timestamp('2024-03-01'))
-    except Exception:  # noqa: BLE001, S110 - the reads are what is held
-        pass
-    read = [
-        text
-        for text in connection.asked[described:]
-        if '`orders`' in text or '`users`' in text
-    ]
-    assert read, connection.asked[described:]
-    where = '`main`.`shop`.' if route == 'old' else '`main`.`other`.'
-    assert all(where in text for text in read), read
+    read = _reads(schema, connection)
+    assert read, connection.asked
+    assert all(where[:2] == _KEPT[route] for where in read), read
 
 
 def _route(route: str, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1389,7 +1363,7 @@ def test_a_column_the_source_does_not_hold_is_left_out_of_every_read(
     with pytest.raises(StructuredDataError) as refused:
         _materialized(schema)
     _assert_no_such_column(refused.value, 'users', column)
-    assert not any(column in text for text, _ in connection.calls[mark:])
+    assert not any(f'`{column}`' in text for text, _ in connection.calls[mark:])
 
 
 @pytest.mark.parametrize('dtype', ['int8', 'int128', 'float16', 'float8'])
@@ -1832,7 +1806,9 @@ def test_a_column_the_source_gained_is_sent_only_where_the_schema_names_it(
     )
     connection.added = True
     if named:
-        schema['users'].columns['plan'] = Column('plan', 'string', 'text')
+        schema['users'].columns['plan'] = Column(
+            'plan', 'string', 'categorical'
+        )
     request = _materialized(schema)
     users = request.payloads[0]['schema']['related_tables']['users']['columns']
     sent = named and route == 'core'

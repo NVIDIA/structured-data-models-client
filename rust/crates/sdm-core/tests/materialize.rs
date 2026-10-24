@@ -1843,7 +1843,11 @@ fn a_provider_without_index_advice_is_neither_asked_for_indexes_nor_warned() {
         .iter()
         .position(|text| text.contains("duckdb_indexes()"))
         .unwrap_or_else(|| panic!("{shipped:?}"));
-    assert!(!shipped[at + 1..].iter().any(|t| t.contains("PRAGMA table_info")));
+    assert!(
+        !shipped[at + 1..]
+            .iter()
+            .any(|t| t.contains("PRAGMA table_info"))
+    );
     let (forgotten, warnings) = duckdb_run(Arc::new(Changed(|c| c.index_advice = None)));
     let forgotten = statements(&forgotten);
     assert!(warnings.is_empty(), "{warnings:?}");

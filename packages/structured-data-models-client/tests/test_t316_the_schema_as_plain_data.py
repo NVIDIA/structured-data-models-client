@@ -125,6 +125,19 @@ def _payload(
     return json.loads(json.dumps(list(request._payloads), default=str))
 
 
+def _said(schema: Schema) -> Any:
+    r"""[`_payload`], a refusal as its code and its words."""
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            request = PredictiveQuery(QUERY, schema).materialize(
+                indices=[0, 1, 2], anchor_time=ANCHOR
+            )
+    except StructuredDataError as refused:
+        return (refused.code, str(refused))
+    return json.loads(json.dumps(list(request._payloads), default=str))
+
+
 def _both(
     monkeypatch: pytest.MonkeyPatch, act: Callable[[], Any]
 ) -> dict[str, Any]:
@@ -200,16 +213,22 @@ def test_a_hand_built_column_its_source_lacks_is_left_unread_as_the_old_client_l
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # The old client reads each table in place, as its source holds it, and
-    # a column the schema names that the source lacks is never read.
+    # a column the schema names that the source lacks is never read: the
+    # old route leaves it out silently; the core, reading each table as the
+    # source holds it at each run, refuses it by name (the owner's plan B,
+    # item 1, T3.4).
     source = _shop()
-    outcomes = _both(
-        monkeypatch,
-        lambda: _payload(
+
+    def act() -> Any:
+        return _said(
             _hand_built(source, ghost=Column('ghost', 'float64', 'numerical'))
-        ),
-    )
+        )
+
+    outcomes = _both(monkeypatch, act)
     assert isinstance(outcomes['old'], list), outcomes['old']
-    assert outcomes['core'] == outcomes['old']
+    assert outcomes['core'][0] == 'INVALID_REQUEST', outcomes['core']
+    assert 'users.ghost' in outcomes['core'][1]
+    assert 'the source has no such column' in outcomes['core'][1]
 
 
 def test_a_described_column_retyped_by_hand_is_sampled_as_its_source_holds_it(
@@ -217,15 +236,19 @@ def test_a_described_column_retyped_by_hand_is_sampled_as_its_source_holds_it(
 ) -> None:
     source = _shop()
 
+    # The old route samples the column as its source holds it; the core
+    # refuses by name the type the caller gave it that the source's does not
+    # match (the owner's plan B, item 3, T3.4).
     def act() -> Any:
         schema = _described(source)
         schema['users']['age'].dtype = 'string'
         schema['users']['age'].stype = 'categorical'
-        return _payload(schema)
+        return _said(schema)
 
     outcomes = _both(monkeypatch, act)
     assert isinstance(outcomes['old'], list), outcomes['old']
-    assert outcomes['core'] == outcomes['old']
+    assert outcomes['core'][0] == 'INVALID_REQUEST', outcomes['core']
+    assert 'users.age is given as' in outcomes['core'][1]
 
 
 def test_a_table_pointed_at_another_source_table_samples_that_table(
