@@ -2484,17 +2484,18 @@ jobs:
         with:
           name: java-test-ops-native
           path: java/target/natives/linux-x86_64
-      - run: mvn -B -f java/pom.xml verify
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.12'
-      # Each JUnit test the Java manifest names as a path's (tests:) is one
-      # this run ran and did not skip, by Surefire's reports: coverage rule
-      # 4's Java half, decided by what JUnit ran, never by reading source.
-      - name: The Java manifest's tests, held to this run
+      # The Java tests, run by the coverage check, which owns the run: it
+      # marks the run's start, runs Maven's verify, and holds each JUnit test
+      # the Java manifest names as a path's (tests:) to that run's Surefire
+      # reports alone, run and not skipped (coverage rule 4's Java half),
+      # never to a report an earlier build left.
+      - name: The Java tests, and the Java manifest's tests held to their run
         run: |
           pip install --quiet pyyaml
-          python scripts/rust_core/coverage.py --junit-reports java/target/surefire-reports
+          python scripts/rust_core/coverage.py --junit-run
 
   # The JAR-load test (exit 4 of T3.11, locked check 14): the JAR and its
   # runtime dependencies alone, on each JDK and platform the JAR promises,
