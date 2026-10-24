@@ -70,6 +70,36 @@ def test_an_empty_java_warehouse_selection_fails_before_starting_a_jvm(
         run_java.run([], jar=tmp_path / 'absent.jar', database='databricks-sql')
 
 
+def test_shared_configuration_failures_use_the_concise_java_cli_error(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def fail(*args: object, **kwargs: object) -> list[dict[str, Any]]:
+        raise run_java.run_python.RunnerFailure('missing live configuration')
+
+    monkeypatch.setattr(run_java, 'run', fail)
+    output = tmp_path / 'old.jsonl'
+    output.write_text('stale output')
+    assert (
+        run_java.main(
+            [
+                '--jar',
+                str(tmp_path / 'package.jar'),
+                '--out',
+                str(output),
+                '--database',
+                'databricks-sql',
+            ]
+        )
+        == 1
+    )
+    assert not output.exists()
+    assert (
+        capsys.readouterr().err == 'run_java.py: missing live configuration\n'
+    )
+
+
 def test_private_jdbc_configuration_requires_the_resolved_test_namespace() -> (
     None
 ):
