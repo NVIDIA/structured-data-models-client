@@ -878,10 +878,22 @@ async fn read_as_it_stands(
         if rows == 0 {
             return Err(infer::empty_table(&asker.read_as(relation)));
         }
+        let received_schema = Arc::clone(&read.preview.schema);
         let facts = crate::discover::facts_read(&tables[0].name, relation, read)?;
         for table in &tables {
             for ((_, column), source) in &facts {
-                found.insert((table.name.clone(), column.clone()), source.clone());
+                let mut source = source.clone();
+                let held_facts = table
+                    .columns
+                    .iter()
+                    .find(|held| held.name == *column)
+                    .and_then(|held| sdm_schema::held::facts_held(table, held));
+                if let (Some(held_facts), Ok(field)) =
+                    (held_facts, received_schema.field_with_name(column))
+                {
+                    crate::big_integer::preserve_tier(held_facts, &mut source, field);
+                }
+                found.insert((table.name.clone(), column.clone()), source);
             }
         }
     }
