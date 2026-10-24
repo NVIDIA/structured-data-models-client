@@ -153,6 +153,8 @@ def _observations(path: Path) -> dict[str, dict[str, Any]]:
     for line in path.read_text(encoding='utf-8').splitlines():
         if line.strip():
             o = json.loads(line)
+            if o['case'] in out:
+                raise SystemExit(f'{path.name}: duplicate observation')
             out[o['case']] = o
     return out
 
@@ -334,12 +336,17 @@ def cmd_expect(args: argparse.Namespace) -> int:
     if guesses_file.exists():
         raise SystemExit(f'{guesses_file} exists; it is never overwritten')
     observed = _observations(args.ref_jsonl)
+    loader = _head_loader(ROOT / 'contract')
     guesses, changed = {}, 0
     for path in case_files(args.orig_dir, args.prefix):
         case = json.loads(path.read_text(encoding='utf-8'))
-        if case['id'] not in observed:
+        keys = [
+            loader.case_key(case['id'], leg) for leg in loader.case_legs(case)
+        ]
+        key = next((key for key in keys if key in observed), None)
+        if key is None:
             raise SystemExit(f'{path.name}: no python-ref observation')
-        new = expect_of(observed[case['id']]['outcome'])
+        new = expect_of(observed[key]['outcome'])
         old = case.get('expect') or {}
         guesses[case['id']] = case.get('expect')
         changed += {k: v for k, v in old.items() if k in new} != new
@@ -380,7 +387,15 @@ def cmd_same(args: argparse.Namespace) -> int:
 #: The databases a leg may be on, in the order a case's legs are listed:
 #: DuckDB's leg keyed by the bare case id, every other ``<id>@<database>``
 #: (``run_python.case_key``).
-DATABASES = ('duckdb', 'sqlite', 'postgres')
+DATABASES = (
+    'duckdb',
+    'sqlite',
+    'postgres',
+    'databricks-sql',
+    'databricks-spark',
+    'snowflake',
+    'lakebase',
+)
 #: The runners that run on DuckDB alone (the old client, T2.1a fix 4): their
 #: legs elsewhere are not expected.
 DUCKDB_ONLY = ('python-old',)
@@ -402,18 +417,22 @@ def _leg_order(key: str) -> tuple[int, str]:
     return known, key
 
 
-def _missing(value: str | None) -> tuple[str | None, str]:
+def _missing(
+    value: str | None, runners: tuple[str, ...] = RUNNERS
+) -> tuple[str | None, str]:
     if value is None:
         return None, ''
     runner, _, why = value.partition('=')
-    if runner not in RUNNERS:
-        raise SystemExit(f'--missing: {runner!r} is not one of {RUNNERS}')
+    if runner not in runners:
+        raise SystemExit(f'--missing: {runner!r} is not one of {runners}')
     return runner, why or 'no reason given'
 
 
-def _legs(run: Path, gone: str | None) -> dict[str, dict[str, dict]]:
+def _legs(
+    run: Path, gone: str | None, runners: tuple[str, ...] = RUNNERS
+) -> dict[str, dict[str, dict]]:
     legs = {}
-    for runner in RUNNERS:
+    for runner in runners:
         if runner == gone:
             legs[runner] = {}
             continue
@@ -446,14 +465,18 @@ def leg_keys(
     return {c: sorted(keys or {c}, key=_leg_order) for c, keys in found.items()}
 
 
-def _expected(runner: str, key: str) -> bool:
+def _expected(
+    runner: str, key: str, java: frozenset[str] = frozenset()
+) -> bool:
     r"""Whether ``runner`` is expected to observe the leg ``key``."""
+    if runner == 'java':
+        return key in java
     return runner not in DUCKDB_ONLY or database_of(key) == 'duckdb'
 
 
 def _differences(compare_log: Path, prefix: str) -> dict[str, list[str]]:
     leg = re.compile(
-        rf'(?<![\w.-]){re.escape(prefix)}[A-Za-z0-9_.-]+(?:@[a-z]+)?'
+        rf'(?<![\w.-]){re.escape(prefix)}[A-Za-z0-9_.-]+(?:@[a-z][a-z0-9-]*)?'
     )
     found: dict[str, list[str]] = {}
     if not compare_log.is_file():
@@ -488,9 +511,10 @@ def expected_legs(
     if databases is None:
         return None
     out: dict[str, set[str]] = {}
+    loader = _head_loader(ROOT / 'contract')
     for path in case_files(run / 'cases', prefix):
         case = json.loads(path.read_text(encoding='utf-8'))
-        runs_on = case.get('databases', list(DATABASES))
+        runs_on = loader.case_legs(case)
         out[case['id']] = {
             case['id'] if d == 'duckdb' else f'{case["id"]}@{d}'
             for d in databases
@@ -516,10 +540,12 @@ def _case_ids(run: Path, prefix: str) -> list[str]:
     )
 
 
-def _partial_note(gone: str | None, why: str) -> list[str]:
+def _partial_note(
+    gone: str | None, why: str, runners: tuple[str, ...] = RUNNERS
+) -> list[str]:
     if gone is None:
         return []
-    kept = ', '.join(r for r in RUNNERS if r != gone)
+    kept = ', '.join(r for r in runners if r != gone)
     return [
         f'**Partial: the {gone} leg is missing ({why}); the owner rules.** '
         f'The counts below cover {kept} only.',
@@ -535,21 +561,60 @@ def _per_database(keys: list[str]) -> str:
     return ', '.join(f'{d} {count[d]}' for d in order)
 
 
-def _cell(runner: str, key: str, gone: str | None, obs: dict) -> str:
+def _cell(
+    runner: str,
+    key: str,
+    gone: str | None,
+    obs: dict,
+    java: frozenset[str] = frozenset(),
+) -> str:
     r"""A runner's cell of a leg's row in ``report.md``."""
     if runner == gone:
         return 'NOT RUN'
-    if key not in obs[runner] and not _expected(runner, key):
+    if key not in obs[runner] and not _expected(runner, key, java):
         return 'not run there'
     return _class(obs[runner].get(key))
 
 
+def _java_legs(args: argparse.Namespace) -> frozenset[str]:
+    """The authored subset, admitted by the actual Java runner's policy."""
+    path = getattr(args, 'java_case_ids', None)
+    if path is None:
+        return frozenset()
+    names = path.read_text().splitlines()
+    ids = {line.strip() for line in names if line.strip()}
+    if not ids or len(ids) != len([line for line in names if line.strip()]):
+        raise SystemExit('--java-case-ids must hold unique case IDs')
+    chosen = {}
+    for path in case_files(args.run_dir / 'cases', args.prefix):
+        case = json.loads(path.read_text())
+        chosen[case['id']] = case
+    if not ids <= chosen.keys():
+        raise SystemExit('an authored Java case is missing from the bundle')
+    runner = _head_loader(ROOT / 'contract', name='run_java')
+    loader = _head_loader(ROOT / 'contract')
+    databases = _databases(args.databases) or list(DATABASES)
+    found = set()
+    for cid in sorted(ids):
+        legs = [leg for leg in databases if runner.on_java(chosen[cid], leg)]
+        if not legs:
+            raise SystemExit(f'{cid}: authored Java case has no admitted leg')
+        found.update(loader.case_key(cid, leg) for leg in legs)
+    return frozenset(found)
+
+
 def cmd_report(args: argparse.Namespace) -> int:
     run: Path = args.run_dir
-    gone, why = _missing(args.missing)
+    java = _java_legs(args)
+    runners = (
+        (*RUNNERS, 'java') if getattr(args, 'java_case_ids', None) else RUNNERS
+    )
+    gone, why = _missing(args.missing, runners)
     cases = _case_ids(run, args.prefix)
     ref = _observations(run / 'python-ref.jsonl')
-    obs = _legs(run, gone)
+    obs = _legs(run, gone, runners)
+    if 'java' in obs and set(obs['java']) - java:
+        raise SystemExit('Java observed a case outside its authored subset')
     legs = leg_keys(
         cases,
         ref,
@@ -560,19 +625,19 @@ def cmd_report(args: argparse.Namespace) -> int:
     rows = []
     for c in cases:
         for key in legs[c]:
-            cells = (_cell(w, key, gone, obs) for w in RUNNERS)
+            cells = (_cell(w, key, gone, obs, java) for w in runners)
             rows.append(
                 (key, _class(ref.get(key)), *cells, len(diffs.get(key, [])))
             )
     differing = sorted({case_of(k) for k in diffs if case_of(k) in legs})
     every = [k for c in cases for k in legs[c]]
     lines = [
-        *_partial_note(gone, why),
+        *_partial_note(gone, why, runners),
         '| case (leg) | python-ref | '
-        + ' | '.join(RUNNERS)
+        + ' | '.join(runners)
         + ' | compare lines '
         '| entry approved before the run |',
-        '|---' * (len(RUNNERS) + 4) + '|',
+        '|---' * (len(runners) + 4) + '|',
         *('| ' + ' | '.join(str(x) for x in row) + ' | |' for row in rows),
         '',
         f'cases: {len(cases)}; legs: {len(every)} ({_per_database(every)}); '
@@ -599,12 +664,81 @@ def _approved(path: Path | None) -> set[str]:
     return approved
 
 
+def cmd_compare(args: argparse.Namespace) -> int:
+    """The normal comparator on all cases, plus the authored Java subset."""
+    import importlib.util
+    import shutil
+
+    run: Path = args.run_dir
+    java = _java_legs(args)
+    spec = importlib.util.spec_from_file_location(
+        'heldout_compare', ROOT / 'scripts/rust_core/compare.py'
+    )
+    assert spec is not None and spec.loader is not None
+    comparator = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = comparator
+    spec.loader.exec_module(comparator)
+    regular = [run / (who + '.jsonl') for who in RUNNERS]
+    java_files = []
+    subset = run / 'java-compare'
+    if java:
+        subset.mkdir()
+        (subset / 'cases').mkdir()
+        ids = {case_of(key) for key in java}
+        for path in case_files(run / 'cases', args.prefix):
+            if json.loads(path.read_text())['id'] in ids:
+                shutil.copyfile(path, subset / 'cases' / path.name)
+        for who in ('python-ref', 'python-core', 'java'):
+            rows = _observations(run / (who + '.jsonl'))
+            selected = [
+                value for key, value in rows.items() if case_of(key) in ids
+            ]
+            target = subset / (who + '.jsonl')
+            target.write_text(
+                ''.join(json.dumps(row) + '\n' for row in selected)
+            )
+            if who != 'python-ref':
+                java_files.append(target)
+    failed = False
+    for database in _databases(args.databases) or list(DATABASES):
+        expected = expected_legs(run, args.prefix, [database]) or {}
+        if not any(expected.values()):
+            continue
+        comparisons = [(run / 'cases', run / 'python-ref.jsonl', regular)]
+        if any(database_of(key) == database for key in java):
+            comparisons.append(
+                (subset / 'cases', subset / 'python-ref.jsonl', java_files)
+            )
+        for cases, reference, files in comparisons:
+            report = comparator.compare(
+                [cases],
+                reference,
+                files,
+                register_file=run / 'register-at-run-start.yaml',
+                improvements=run / 'register-at-run-start.yaml',
+                database=database,
+            )
+            for line in report.notes:
+                print(line)
+            for line in report.texts:
+                print('DIFFERS ' + line)
+            failed |= bool(report.failures)
+    return int(failed)
+
+
 def cmd_counts(args: argparse.Namespace) -> int:
     run: Path = args.run_dir
-    gone, why = _missing(args.missing)
+    java = _java_legs(args)
+    runners = (
+        (*RUNNERS, 'java') if getattr(args, 'java_case_ids', None) else RUNNERS
+    )
+    core_runners = (*CORE_RUNNERS, 'java') if java else CORE_RUNNERS
+    gone, why = _missing(args.missing, runners)
     cases = _case_ids(run, args.prefix)
     ref = _observations(run / 'python-ref.jsonl')
-    obs = _legs(run, gone)
+    obs = _legs(run, gone, runners)
+    if 'java' in obs and set(obs['java']) - java:
+        raise SystemExit('Java observed a case outside its authored subset')
     legs = leg_keys(
         cases,
         ref,
@@ -612,6 +746,8 @@ def cmd_counts(args: argparse.Namespace) -> int:
         expected=expected_legs(run, args.prefix, _databases(args.databases)),
     )
     every = [k for c in cases for k in legs[c]]
+    if any(key not in ref for key in every):
+        raise SystemExit('a required reference observation is missing')
     approved = _approved(args.approved)
 
     def ok(key: str) -> bool:
@@ -620,14 +756,21 @@ def cmd_counts(args: argparse.Namespace) -> int:
     compare_log = run / 'compare.txt'
     gating = []
     if compare_log.is_file():
-        gating = [
-            line
-            for line in compare_log.read_text(encoding='utf-8').splitlines()
-            if line.startswith('DIFFERS ')
-        ]
+        log = compare_log.read_text(encoding='utf-8').splitlines()
+        if any(line.startswith('Traceback ') for line in log):
+            raise SystemExit('comparison failed; this is not held-out evidence')
+        gating = [line for line in log if line.startswith('DIFFERS ')]
+        parsed = _differences(compare_log, args.prefix)
+        if any(
+            not any(line in texts for texts in parsed.values())
+            for line in gating
+        ):
+            raise SystemExit(
+                'comparison has an invalid input or global failure'
+            )
     header = args.header.read_text().rstrip() if args.header else ''
     out = [header, ''] if header else []
-    out += [*_partial_note(gone, why)]
+    out += [*_partial_note(gone, why, runners)]
     out += [
         f'cases: {len(cases)}; legs: {len(every)} ({_per_database(every)}); '
         f'gating DIFFERS lines in compare.txt: {len(gating)} (held-out '
@@ -636,12 +779,20 @@ def cmd_counts(args: argparse.Namespace) -> int:
         '',
     ]
     panics, new_refusals, differing = set(), set(), set()
-    for name in RUNNERS:
+    for key, texts in _differences(compare_log, args.prefix).items():
+        if key in every and any(
+            re.search(
+                rf'{re.escape(key)}:\s*(?:python-core|rust-host|java)\b', text
+            )
+            for text in texts
+        ):
+            differing.add(key)
+    for name in runners:
         if name == gone:
             out += [f'## {name}', f'- not run: {why}', '']
             continue
         o = obs[name]
-        mine = [k for k in every if k in o or _expected(name, k)]
+        mine = [k for k in every if k in o or _expected(name, k, java)]
         crash = [
             k
             for k in mine
@@ -658,7 +809,7 @@ def cmd_counts(args: argparse.Namespace) -> int:
             and o[k]['outcome']['result'] == 'refusal'
         ]
         title = name
-        if name in CORE_RUNNERS:
+        if name in core_runners:
             panics |= set(crash)
             new_refusals |= set(newref)
             differing |= set(diff)
@@ -685,7 +836,9 @@ def cmd_counts(args: argparse.Namespace) -> int:
     crashed = sorted(panics, key=_leg_order)
     nogo = bool(panics) or bool(refusals) or len(unapproved) > args.threshold
     summary = [
-        'On either core runner (python-core, rust-host), on every database '
+        'On the core runners ('
+        + ', '.join(core_runners)
+        + '), on every database '
         '(a case counts once, however many of its legs differ):',
         f'- panics: {len(crashed)} {crashed}',
         f'- new refusals with no approval: {len(refusals)} {refusals}',
@@ -697,7 +850,7 @@ def cmd_counts(args: argparse.Namespace) -> int:
         '',
         (
             'counts: PARTIAL (a leg is missing; the owner rules)'
-            if gone in CORE_RUNNERS
+            if gone in core_runners
             else f'counts: {"NO-GO" if nogo else "within the threshold"}'
         )
         + (
@@ -710,7 +863,7 @@ def cmd_counts(args: argparse.Namespace) -> int:
     (run / 'counts.md').write_text('\n'.join(out) + '\n', encoding='utf-8')
     print('\n'.join(summary))
     print(f'written: {run / "counts.md"}')
-    if gone in CORE_RUNNERS:
+    if gone in core_runners:
         return 3
     return 1 if nogo else 0
 
@@ -761,13 +914,13 @@ def converted(
     return out, applied
 
 
-def _head_loader(contract: Path) -> Any:
+def _head_loader(contract: Path, name: str = 'run_python') -> Any:
     r"""The head's case loader (``run_python.load_cases``): the case schema
     and the checks past it, as every runner reads a case."""
     import importlib.util
 
-    path = contract / 'runners' / 'run_python.py'
-    spec = importlib.util.spec_from_file_location('heldout_run_python', path)
+    path = contract / 'runners' / f'{name}.py'
+    spec = importlib.util.spec_from_file_location(f'heldout_{name}', path)
     if spec is None or spec.loader is None:
         raise SystemExit(f'{path}: cannot be loaded')
     module = importlib.util.module_from_spec(spec)
@@ -965,6 +1118,13 @@ def _parser() -> argparse.ArgumentParser:
     prefix(p)
     p.add_argument('--missing', metavar='RUNNER=REASON')
     p.add_argument('--databases', metavar='LIST')
+    p.add_argument('--java-case-ids', type=Path)
+
+    p = command('compare', cmd_compare)
+    p.add_argument('run_dir', type=Path)
+    prefix(p)
+    p.add_argument('--databases', metavar='LIST')
+    p.add_argument('--java-case-ids', type=Path)
 
     p = command('counts', cmd_counts)
     p.add_argument('run_dir', type=Path)
@@ -974,6 +1134,7 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument('--header', type=Path)
     p.add_argument('--missing', metavar='RUNNER=REASON')
     p.add_argument('--databases', metavar='LIST')
+    p.add_argument('--java-case-ids', type=Path)
 
     p = command('convert', cmd_convert)
     p.add_argument('orig_dir', type=Path)

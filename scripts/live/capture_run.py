@@ -762,6 +762,143 @@ def job_environment(parameters: dict[str, str]) -> list[str]:
     return found
 
 
+def heldout_spark(
+    mode: str,
+    cases: Path,
+    out: Path,
+    *,
+    payload: Path,
+    volume: str,
+    commit: str,
+    reference_commit: str,
+    stamp: Path,
+    record: Path | None = None,
+    record_fetches: Path | None = None,
+    plan: bool = False,
+) -> int:
+    """The existing one-time capture notebook, on an already-started draw.
+
+    The caller prepares the ordinary dbx_runs payload and final source/wheel
+    staging first. Cases are uploaded only after the one global stamp, never
+    during planning. Each invocation uses a fresh subdirectory and job token.
+    """
+    import subprocess
+    import uuid
+
+    if not plan and (
+        not stamp.is_file() or f'candidate {commit}\n' not in stamp.read_text()
+    ):
+        raise SystemExit('no matching global held-out started marker')
+    if mode not in ('python-ref', 'python-core'):
+        raise SystemExit(
+            'Spark held-out mode must be python-ref or python-core'
+        )
+    spec = importlib.util.spec_from_file_location(
+        'heldout_dbx_runs', ROOT / 'scripts/live/dbx_runs.py'
+    )
+    assert spec is not None and spec.loader is not None
+    jobs = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(jobs)
+    profile = jobs.setting(argparse.Namespace(), 'profile')
+    allowed = Path(jobs.setting(argparse.Namespace(), 'volume_dir'))
+    destination = Path(volume)
+    if (
+        not destination.is_absolute()
+        or not destination.is_relative_to(allowed)
+        or '..' in destination.parts
+    ):
+        raise SystemExit(
+            'held-out staging must be inside the authorized volume'
+        )
+    held = json.loads(payload.read_text())
+    tasks = held.get('tasks') or []
+    if len(tasks) != 1:
+        raise SystemExit(
+            'held-out Spark needs one existing capture-notebook task'
+        )
+    parameters = tasks[0]['notebook_task']['base_parameters']
+    if parameters.get('commit') != commit or not parameters.get(
+        'candidate_wheel_dir'
+    ):
+        raise SystemExit(
+            'Spark payload must name final source and candidate wheels'
+        )
+    stage = str(destination / ('heldout-' + uuid.uuid4().hex))
+    parameters.update(
+        {
+            'leg': 'databricks-spark',
+            'mode': mode,
+            'case_dir': stage + '/cases',
+            'out_dir': stage + '/output',
+            'heldout_marker': stage + '/started',
+            'reference_commit': reference_commit,
+        }
+    )
+    held['idempotency_token'] = str(uuid.uuid4())
+    folder = jobs.setting(argparse.Namespace(), 'folder')
+    policy = (
+        jobs.setting(argparse.Namespace(), 'policy_id')
+        if 'new_cluster' in tasks[0]
+        else ''
+    )
+    jobs.check(held, folder, policy)
+    if plan:
+        return 0
+
+    def copy(source: str, target: str, recursive: bool = False) -> None:
+        options = ['--recursive'] if recursive else []
+        subprocess.run(
+            [
+                'databricks',
+                '--profile',
+                profile,
+                'fs',
+                'cp',
+                *options,
+                source,
+                target,
+            ],
+            check=True,
+            stdin=subprocess.DEVNULL,
+        )
+
+    subprocess.run(
+        ['databricks', '--profile', profile, 'fs', 'mkdirs', 'dbfs:' + stage],
+        check=True,
+        stdin=subprocess.DEVNULL,
+    )
+    copy(str(stamp), 'dbfs:' + stage + '/started')
+    copy(str(cases), 'dbfs:' + stage + '/cases', recursive=True)
+    local_payload = out.with_suffix(out.suffix + '.job.json')
+    with local_payload.open('x') as stream:
+        json.dump(held, stream)
+    result = jobs.cli(
+        profile, 'jobs', 'submit', '--no-wait', '--json', json.dumps(held)
+    )
+    run_id = int(result['run_id'])
+    print(f'held-out Spark {mode} run {run_id}', flush=True)
+    status_path = out.with_suffix(out.suffix + '.job-status.json')
+    with status_path.open('x') as stream, contextlib.redirect_stdout(stream):
+        status = jobs.run_wait(
+            argparse.Namespace(
+                profile=profile,
+                run_ids=[run_id],
+                show_url=False,
+                poll=30,
+                max_wait=int(held.get('timeout_seconds') or 36000),
+            )
+        )
+    if status or jobs.collect(profile, run_id, False).get('output') != 'passed':
+        return 1
+    copy('dbfs:' + stage + '/output/observations.jsonl', str(out))
+    copy('dbfs:' + stage + '/output/identity.json', str(out) + '.identity.json')
+    if record is not None:
+        copy('dbfs:' + stage + '/output/recording.jsonl', str(record))
+    if record_fetches is not None:
+        copy('dbfs:' + stage + '/output/fetches.jsonl', str(record_fetches))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
     commands = parser.add_subparsers(dest='command', required=True)
@@ -789,7 +926,35 @@ def main(argv: list[str] | None = None) -> int:
     )
     booting.add_argument('--reference', type=Path, required=True)
     booting.add_argument('--site', type=Path, required=True)
+    spark = commands.add_parser(
+        'heldout-spark',
+        help='run an already-stamped held-out leg in the existing one-time notebook',
+    )
+    spark.add_argument(
+        '--mode', choices=['python-ref', 'python-core'], required=True
+    )
+    for name in ('cases', 'out', 'payload', 'stamp'):
+        spark.add_argument('--' + name, type=Path, required=True)
+    for name in ('volume', 'commit', 'reference-commit'):
+        spark.add_argument('--' + name, required=True)
+    spark.add_argument('--record', type=Path)
+    spark.add_argument('--record-fetches', type=Path)
+    spark.add_argument('--plan', action='store_true')
     arguments = parser.parse_args(argv)
+    if arguments.command == 'heldout-spark':
+        return heldout_spark(
+            arguments.mode,
+            arguments.cases,
+            arguments.out,
+            payload=arguments.payload,
+            volume=arguments.volume,
+            commit=arguments.commit,
+            reference_commit=arguments.reference_commit,
+            stamp=arguments.stamp,
+            record=arguments.record,
+            record_fetches=arguments.record_fetches,
+            plan=arguments.plan,
+        )
     if arguments.command == 'bootstrap':
         print(
             f'wrote {bootstrap_reference(arguments.reference, arguments.site)}'

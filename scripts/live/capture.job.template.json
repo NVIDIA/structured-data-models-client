@@ -15,6 +15,7 @@
           "repo_dir": "<REPO_DIR>",
           "reference_dir": "<REFERENCE_DIR>",
           "wheel_dir": "<VOLUME_DIR>/reference-wheels/",
+          "candidate_wheel_dir": "<VOLUME_DIR>/candidate-wheels/",
           "out_dir": "<VOLUME_DIR>/captures-<SHA7>/",
           "live_config": "<LIVE_CONFIG>",
           "capture_catalog": "<CAPTURE_CATALOG>",

@@ -5384,6 +5384,17 @@ def environment_refusal(
     return None
 
 
+def _capture_run() -> Any:
+    """The live runner's existing driver and loader write guard."""
+    path = REPO / 'scripts/live/capture_run.py'
+    spec = importlib.util.spec_from_file_location('runner_live_guard', path)
+    assert spec is not None and spec.loader is not None
+    loaded = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = loaded
+    spec.loader.exec_module(loaded)
+    return loaded
+
+
 def main(argv: list[str] | None = None) -> int:
     given = sys.argv[1:] if argv is None else argv
     if given[:1] == ['legs']:
@@ -5392,6 +5403,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--mode', choices=MODES, required=True)
     parser.add_argument('--reference', type=Path)
     parser.add_argument('--out', type=Path, required=True)
+    parser.add_argument(
+        '--guard-live',
+        action='store_true',
+        help='install the existing live write guard before any warehouse driver is opened',
+    )
     parser.add_argument(
         '--inventory',
         action='append',
@@ -5433,6 +5449,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument('cases', type=Path, nargs='*')
     arguments = parser.parse_args(argv)
+    if arguments.guard_live and arguments.database not in WAREHOUSES:
+        parser.error('--guard-live needs a warehouse database')
     if arguments.mode != 'python-ref':
         refused = environment_refusal(os.environ)
         if refused is not None:
@@ -5448,7 +5466,13 @@ def main(argv: list[str] | None = None) -> int:
     partial.unlink(missing_ok=True)
     if arguments.record is not None:
         arguments.record.unlink(missing_ok=True)
+    undo = None
     try:
+        if arguments.guard_live:
+            helper = _capture_run()
+            undo = helper.install_guard(
+                arguments.database, helper.load_guard(), _sibling('databases')
+            )
         cases = load_cases(arguments.cases) if arguments.cases else []
         cases.extend(inventory_cases(arguments.inventory))
         if not cases:
@@ -5462,9 +5486,16 @@ def main(argv: list[str] | None = None) -> int:
             record_fetches=arguments.record_fetches,
             record=arguments.record,
         )
+        if arguments.guard_live and helper.environment_failure(observations):
+            raise RunnerFailure(
+                'warehouse environment failure, not product evidence'
+            )
     except RunnerFailure as failure:
         print(f'runner failure: {failure}', file=sys.stderr)
         return 1
+    finally:
+        if undo is not None:
+            undo()
     partial.write_text(
         ''.join(
             json.dumps(item, sort_keys=True) + '\n' for item in observations
