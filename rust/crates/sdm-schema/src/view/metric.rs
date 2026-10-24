@@ -14,8 +14,8 @@
 //! core asks in the old client's order. So a section is read here as the
 //! old client iterates it (`for x in section or []`, a list's items, a
 //! mapping's keys, a text's characters), an entry that is no mapping or
-//! misses a name is kept in its place with its `repr` for the message, and
-//! nothing is dropped.
+//! misses a name is kept in its place with its value, which the core's
+//! message quotes, and nothing is dropped.
 
 use std::fmt;
 
@@ -62,14 +62,14 @@ pub struct Parameter {
 /// An entry of a `joins` section.
 #[derive(Clone, Debug, PartialEq)]
 pub enum JoinItem {
-    /// No mapping, with its `repr` (`:828-832`).
+    /// No mapping, with its value (`:828-832`).
     NotAMapping {
-        repr: String,
+        cfg: Value,
     },
-    /// A mapping with no text `name` (`:834-839`), with its `repr`, and
-    /// its nested joins, which a skipped parent still names (`:817-823`).
+    /// A mapping with no text `name` (`:834-839`), and its nested joins,
+    /// which a skipped parent still names (`:817-823`).
     Nameless {
-        repr: String,
+        cfg: Value,
         joins: Vec<JoinItem>,
     },
     Join(Join),
@@ -88,19 +88,20 @@ pub struct Join {
 }
 
 /// A join's `cardinality` (`:862-865`), `many_to_one` when absent.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Cardinality {
     ManyToOne,
     OneToMany,
-    /// Any other, as Python's `str` writes it.
-    Unsupported(String),
+    /// Any other value.
+    Unsupported(Value),
 }
 
 /// What a join is joined on (`:867-891`).
 #[derive(Clone, Debug, PartialEq)]
 pub enum JoinKeys {
-    /// `using` with one column, the column as Python's `str` writes it.
-    Using(String),
+    /// `using` with one column, as given (Python's `str` of it names the
+    /// column).
+    Using(Value),
     /// `using` with any other number of columns, or no list.
     UsingSeveral,
     /// No `using`: the `on`, or the value of the key `true` a bare `on:`
@@ -111,14 +112,14 @@ pub enum JoinKeys {
 /// An entry of the dimensions.
 #[derive(Clone, Debug, PartialEq)]
 pub enum DimensionItem {
-    /// No mapping, with its `repr` (`:959-963`).
-    NotAMapping { repr: String },
-    /// A mapping: its `name` and `expr`, null when absent, and its `repr`
-    /// for the message of one that misses either (`:991-996`).
+    /// No mapping, with its value (`:959-963`).
+    NotAMapping { cfg: Value },
+    /// A mapping: its `name` and `expr`, null when absent, and the mapping,
+    /// which the message of one that misses either quotes (`:991-996`).
     Dimension {
         name: Value,
         expr: Value,
-        repr: String,
+        cfg: Value,
     },
 }
 
@@ -198,9 +199,9 @@ pub fn parse(definition: &str) -> Result<MetricView, MetricRefusal> {
                 Value::Map(_) => DimensionItem::Dimension {
                     name: entry.get("name").cloned().unwrap_or(Value::Null),
                     expr: entry.get("expr").cloned().unwrap_or(Value::Null),
-                    repr: entry.repr(),
+                    cfg: entry.clone(),
                 },
-                _ => DimensionItem::NotAMapping { repr: entry.repr() },
+                _ => DimensionItem::NotAMapping { cfg: entry.clone() },
             })
             .collect(),
         fields_ignored: dimensions_cfg.is_some() && fields_cfg.is_some(),
@@ -247,12 +248,12 @@ fn joins(section: Option<&Value>) -> Result<Vec<JoinItem>, MetricRefusal> {
         .into_iter()
         .map(|cfg| {
             if !matches!(cfg, Value::Map(_)) {
-                return Ok(JoinItem::NotAMapping { repr: cfg.repr() });
+                return Ok(JoinItem::NotAMapping { cfg });
             }
             let nested = joins(cfg.get("joins"))?;
             let Some(name) = cfg.get("name").and_then(Value::as_str) else {
                 return Ok(JoinItem::Nameless {
-                    repr: cfg.repr(),
+                    cfg: cfg.clone(),
                     joins: nested,
                 });
             };
@@ -260,13 +261,13 @@ fn joins(section: Option<&Value>) -> Result<Vec<JoinItem>, MetricRefusal> {
                 None => Cardinality::ManyToOne,
                 Some(Value::Str(text)) if text == "many_to_one" => Cardinality::ManyToOne,
                 Some(Value::Str(text)) if text == "one_to_many" => Cardinality::OneToMany,
-                Some(other) => Cardinality::Unsupported(other.text_form()),
+                Some(other) => Cardinality::Unsupported(other.clone()),
             };
             let keys = match cfg.get("using") {
                 None | Some(Value::Null) => JoinKeys::On(on(&cfg)),
-                Some(Value::Str(column)) => JoinKeys::Using(column.clone()),
+                Some(column @ Value::Str(_)) => JoinKeys::Using(column.clone()),
                 Some(Value::Seq(columns)) if columns.len() == 1 => {
-                    JoinKeys::Using(columns[0].text_form())
+                    JoinKeys::Using(columns[0].clone())
                 }
                 Some(_) => JoinKeys::UsingSeveral,
             };

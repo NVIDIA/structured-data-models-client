@@ -1023,6 +1023,57 @@ pub fn float_text(x: f64) -> String {
     parser::float_repr::float_repr(x)
 }
 
+/// The value a view definition holds, as the parser's text helpers take
+/// it.
+fn shown(value: &sdm_schema::view::yaml::Value) -> parser::float_repr::Shown {
+    use parser::float_repr::Shown;
+    use sdm_schema::view::yaml::Value;
+    match value {
+        Value::Null => Shown::None,
+        Value::Bool(flag) => Shown::Bool(*flag),
+        Value::Int(n) => Shown::Int(*n),
+        Value::Float(x) => Shown::Float(*x),
+        Value::Str(text) => Shown::Text(text.clone()),
+        Value::Bytes(bytes) => Shown::Bytes(bytes.clone()),
+        Value::Date(date) => Shown::Date {
+            year: date.year,
+            month: date.month,
+            day: date.day,
+        },
+        Value::Timestamp(moment) => Shown::DateTime {
+            year: moment.date.year,
+            month: moment.date.month,
+            day: moment.date.day,
+            hour: moment.hour,
+            minute: moment.minute,
+            second: moment.second,
+            microsecond: moment.microsecond,
+            offset: moment.offset,
+        },
+        Value::Seq(items) => Shown::List(items.iter().map(shown).collect()),
+        Value::Map(pairs) => Shown::Dict(pairs.iter().map(|(k, v)| (shown(k), shown(v))).collect()),
+    }
+}
+
+/// The text the old client's messages quote a view definition's value by,
+/// Python's `repr` of what PyYAML made of it ([`sdm_pql::float_repr`]),
+/// from here, the one module that names the parser (T3.5).
+pub(crate) fn value_repr(value: &sdm_schema::view::yaml::Value) -> String {
+    shown(value).repr()
+}
+
+/// Python's `str` of a view definition's value, as the old client wrote
+/// it into a message or a parameter's default (T3.5).
+pub(crate) fn value_text(value: &sdm_schema::view::yaml::Value) -> String {
+    shown(value).text()
+}
+
+/// Python's `repr` of a text, as the old client quotes a piece of an
+/// expression or a name (T3.5).
+pub(crate) fn text_repr(text: &str) -> String {
+    parser::float_repr::text_repr(text)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -3,11 +3,17 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! The text Python gives a float, the shortest that reads back to it, in
-//! Python's layout: one of the two emulation modules this crate may hold
+//! Python's layout: one of the emulation modules this crate may hold
 //! (`scripts/rust_core/emulation-allowlist.txt`, Phase 1 decisions A4).
 //! The reference writes a float constant built from a value with it
 //! (`Constant.from_value`); here it writes a float literal's value into
 //! messages, and decides no validity (Phase 1 decisions, E9).
+//!
+//! From T3.5 it also writes the other values the old client's messages
+//! quote (a view definition's YAML values and the pieces of an expression):
+//! [`Shown`], a value as Python held it, with its `repr` and `str`, and
+//! [`text_repr`], a text's `repr`. They decide nothing either: `sdm-core`
+//! words a view's conversion with them.
 
 /// The text Python's `repr` gives `x`.
 pub fn float_repr(x: f64) -> String {
@@ -70,6 +76,229 @@ pub fn float_repr(x: f64) -> String {
         )
     };
     format!("{sign}{text}")
+}
+
+/// A value as Python held it, to be written as Python writes it: the
+/// values PyYAML's `safe_load` makes, which the old client's messages quote.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Shown {
+    None,
+    Bool(bool),
+    Int(i128),
+    Float(f64),
+    Text(String),
+    Bytes(Vec<u8>),
+    Date {
+        year: i32,
+        month: u8,
+        day: u8,
+    },
+    /// A `datetime`, with its offset from UTC in seconds if it has one.
+    DateTime {
+        year: i32,
+        month: u8,
+        day: u8,
+        hour: u8,
+        minute: u8,
+        second: u8,
+        microsecond: u32,
+        offset: Option<i32>,
+    },
+    List(Vec<Shown>),
+    /// A `dict`'s entries in order.
+    Dict(Vec<(Shown, Shown)>),
+}
+
+impl Shown {
+    /// Python's `repr`: `'text'`, `True`, `None`, `[1, 'a']`,
+    /// `{'name': 'x'}`, `datetime.date(2024, 1, 1)`.
+    pub fn repr(&self) -> String {
+        match self {
+            Shown::None => "None".into(),
+            Shown::Bool(true) => "True".into(),
+            Shown::Bool(false) => "False".into(),
+            Shown::Int(n) => n.to_string(),
+            Shown::Float(x) => float_repr(*x),
+            Shown::Text(text) => text_repr(text),
+            Shown::Bytes(bytes) => bytes_repr(bytes),
+            Shown::Date { year, month, day } => format!("datetime.date({year}, {month}, {day})"),
+            Shown::DateTime {
+                year,
+                month,
+                day,
+                hour,
+                minute,
+                second,
+                microsecond,
+                offset,
+            } => {
+                let mut fields = vec![
+                    year.to_string(),
+                    month.to_string(),
+                    day.to_string(),
+                    hour.to_string(),
+                    minute.to_string(),
+                ];
+                if *second > 0 || *microsecond > 0 {
+                    fields.push(second.to_string());
+                }
+                if *microsecond > 0 {
+                    fields.push(microsecond.to_string());
+                }
+                let zone = match offset {
+                    None => String::new(),
+                    Some(0) => ", tzinfo=datetime.timezone.utc".into(),
+                    Some(seconds) => {
+                        let (days, rest) = (seconds.div_euclid(86_400), seconds.rem_euclid(86_400));
+                        let delta = match (days, rest) {
+                            (0, s) => format!("seconds={s}"),
+                            (d, 0) => format!("days={d}"),
+                            (d, s) => format!("days={d}, seconds={s}"),
+                        };
+                        format!(", tzinfo=datetime.timezone(datetime.timedelta({delta}))")
+                    }
+                };
+                format!("datetime.datetime({}{zone})", fields.join(", "))
+            }
+            Shown::List(items) => format!(
+                "[{}]",
+                items.iter().map(Shown::repr).collect::<Vec<_>>().join(", ")
+            ),
+            Shown::Dict(pairs) => format!(
+                "{{{}}}",
+                pairs
+                    .iter()
+                    .map(|(key, value)| format!("{}: {}", key.repr(), value.repr()))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        }
+    }
+
+    /// Python's `str`: a text as itself, a date or time in ISO form with a
+    /// space between them (`2024-01-01 10:00:00`), anything else its
+    /// [`Shown::repr`].
+    pub fn text(&self) -> String {
+        match self {
+            Shown::Text(text) => text.clone(),
+            Shown::Date { year, month, day } => format!("{year:04}-{month:02}-{day:02}"),
+            Shown::DateTime {
+                year,
+                month,
+                day,
+                hour,
+                minute,
+                second,
+                microsecond,
+                offset,
+            } => {
+                let mut text =
+                    format!("{year:04}-{month:02}-{day:02} {hour:02}:{minute:02}:{second:02}");
+                if *microsecond > 0 {
+                    text.push_str(&format!(".{microsecond:06}"));
+                }
+                if let Some(offset) = offset {
+                    let sign = if *offset < 0 { '-' } else { '+' };
+                    let seconds = offset.unsigned_abs();
+                    text.push_str(&format!(
+                        "{sign}{:02}:{:02}",
+                        seconds / 3600,
+                        seconds / 60 % 60
+                    ));
+                    if seconds % 60 > 0 {
+                        text.push_str(&format!(":{:02}", seconds % 60));
+                    }
+                }
+                text
+            }
+            _ => self.repr(),
+        }
+    }
+}
+
+fn bytes_repr(bytes: &[u8]) -> String {
+    let quote = if bytes.contains(&b'\'') && !bytes.contains(&b'"') {
+        '"'
+    } else {
+        '\''
+    };
+    let mut text = format!("b{quote}");
+    for &b in bytes {
+        match b {
+            b'\\' => text.push_str("\\\\"),
+            b'\t' => text.push_str("\\t"),
+            b'\n' => text.push_str("\\n"),
+            b'\r' => text.push_str("\\r"),
+            _ if char::from(b) == quote => {
+                text.push('\\');
+                text.push(quote);
+            }
+            0x20..=0x7E => text.push(char::from(b)),
+            _ => text.push_str(&format!("\\x{b:02x}")),
+        }
+    }
+    text.push(quote);
+    text
+}
+
+/// Python's `repr` of a text: in single quotes unless it holds one and no
+/// double quote, a backslash and that quote escaped, `\t`, `\n` and `\r` as
+/// such, and each character Python does not print as `\xhh`, `\uhhhh` or
+/// `\Uhhhhhhhh`.
+pub fn text_repr(text: &str) -> String {
+    let quote = if text.contains('\'') && !text.contains('"') {
+        '"'
+    } else {
+        '\''
+    };
+    let mut out = String::with_capacity(text.len() + 2);
+    out.push(quote);
+    for c in text.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '\t' => out.push_str("\\t"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            _ if c == quote => {
+                out.push('\\');
+                out.push(c);
+            }
+            _ if printable(c) => out.push(c),
+            _ => {
+                let code = u32::from(c);
+                if code < 0x100 {
+                    out.push_str(&format!("\\x{code:02x}"));
+                } else if code < 0x10000 {
+                    out.push_str(&format!("\\u{code:04x}"));
+                } else {
+                    out.push_str(&format!("\\U{code:08x}"));
+                }
+            }
+        }
+    }
+    out.push(quote);
+    out
+}
+
+/// Whether Python prints `c` as itself in a `repr` (`str.isprintable`):
+/// not a control or format character, a separator other than the space,
+/// a private-use character, a surrogate or a noncharacter. Unassigned code
+/// points, which Python also escapes, are not told apart: the core has no
+/// table of Unicode's assignments.
+fn printable(c: char) -> bool {
+    let code = u32::from(c);
+    if code < 0x80 {
+        return (0x20..0x7F).contains(&code);
+    }
+    !(c.is_control()
+        || matches!(code,
+            0xA0 | 0xAD | 0x1680 | 0x2000..=0x200F | 0x2028..=0x202F | 0x205F..=0x2064
+            | 0x2066..=0x206F | 0x3000 | 0xFEFF | 0xFFF9..=0xFFFB | 0x600..=0x605 | 0x61C
+            | 0x6DD | 0x70F | 0x890..=0x891 | 0x8E2 | 0x180E | 0x110BD | 0x110CD
+            | 0x13430..=0x1343F | 0x1BCA0..=0x1BCA3 | 0x1D173..=0x1D17A | 0xE0001
+            | 0xE0020..=0xE007F | 0xE000..=0xF8FF | 0xF0000..=0xFFFFD
+            | 0x100000..=0x10FFFD | 0xFDD0..=0xFDEF)
+        || code & 0xFFFE == 0xFFFE)
 }
 
 #[cfg(test)]
