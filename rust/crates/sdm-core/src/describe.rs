@@ -747,27 +747,6 @@ pub(crate) async fn attempt(
     }
 }
 
-/// [`attempt`] of several requests asked together in one step: each answer's
-/// data, in order, or the first provider's error.
-pub(crate) async fn attempt_all(
-    asker: &Asker,
-    requests: Vec<DataRequest>,
-) -> Result<Result<Vec<ArrowData>, ProviderError>, CoreError> {
-    let names: Vec<&'static str> = requests.iter().map(DataRequest::name).collect();
-    let asks = requests
-        .into_iter()
-        .map(|request| asker.fetch(request))
-        .collect::<Result<Vec<_>, _>>()?;
-    let mut answers = Vec::with_capacity(names.len());
-    for (reply, name) in Together::new(asks).await.into_iter().zip(names) {
-        match reply {
-            Reply::Fetch(FetchResult::Error(error)) => return Ok(Err(error)),
-            reply => answers.push(data(reply, name)?),
-        }
-    }
-    Ok(Ok(answers))
-}
-
 /// The run's asker, its provider's namespace settled first where it leaves
 /// a part to the connection inside one it gives (`DataAccess::unsettled`):
 /// the source's current parts read once (`describe` of its namespace) and
