@@ -30,6 +30,13 @@ import org.junit.jupiter.api.Test;
  * its own code, none where it has none, as Python raises {@code NimRequestError}.
  */
 class T313HostTest {
+  @Test
+  void theHostReportsItsSqlWarehouseProviderButNoSparkProvider() {
+    assertEquals(java.util.List.of("duckdb", "sqlite", "postgres", "databricks-sql"),
+        Host.PROVIDERS);
+    assertFalse(Host.PROVIDERS.contains("databricks-spark"));
+  }
+
   private static Connection connection() {
     return (Connection)
         Proxy.newProxyInstance(
