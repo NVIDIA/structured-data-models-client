@@ -85,8 +85,9 @@ policy names under ``reach``. A diagnostic rule only reports. The rules:
   a statement the policy's ``ordered`` names, otherwise as a multiset;
   between the core runners, each statement's result likewise. On
   Postgres the reference's two reads whose results it never uses, the
-  current schema's name and each table's row count, are not expected
-  (KO2-58), every other statement is. A runner's
+  the read whose result it never uses, each table's row count, is not
+  expected (KO2-58), every other statement is: the current schema's name
+  too, which the core reads alike since T3.7. A runner's
   record of what ran (the driver capture on a Python runner, the
   provider's own record on ``rust-host``) must be complete, its counts
   equal to DuckDB's own query log; ``rust-host`` is held to the public
@@ -2284,11 +2285,11 @@ def _by_stage(
     return grouped
 
 
-#: The reference's two reads on Postgres whose results it never uses, which
-#: the core does not make (KO2-58, approved by the owner on 2026-10-17):
-#: the current schema's name, and each table's row count.
+#: The reference's read on Postgres whose result it never uses, which the
+#: core does not make (KO2-58, approved by the owner on 2026-10-17): each
+#: table's row count. Its read of the current schema's name the core makes
+#: too, with the same statement, since T3.7.
 _POSTGRES_UNUSED_READS = (
-    re.compile(r'SELECT current_schema\(\)'),
     re.compile(r'SELECT COUNT\(\*\) FROM "(?:[^"]|"")+"\."(?:[^"]|"")+"'),
 )
 
@@ -2297,7 +2298,7 @@ def _expected_statements(
     statements: list[dict[str, Any]], database: str
 ) -> list[dict[str, Any]]:
     r"""The reference's ``statements`` of one public call that a core runner
-    is expected to match: on Postgres, all but the two reads whose results
+    is expected to match: on Postgres, all but the reads whose results
     the reference never uses (:data:`_POSTGRES_UNUSED_READS`, KO2-58), each
     with no parameters; every one elsewhere."""
     if database != 'postgres':

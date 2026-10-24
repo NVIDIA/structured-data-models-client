@@ -124,6 +124,13 @@ pub(crate) trait SqlDialect: Sync {
         false
     }
 
+    /// The refusal of `relation` where it names fewer parts than the
+    /// dialect reads every relation in: none by default, a relation of
+    /// fewer parts read where the connection finds it.
+    fn unqualified(&self, _relation: &Relation) -> Option<CoreError> {
+        None
+    }
+
     /// How the source compares names (design fix C): as written.
     fn name_case(&self) -> NameCase {
         NameCase::AsWritten
@@ -346,7 +353,9 @@ pub(crate) fn not_taken(request: &DataRequest, field: &str, message: &str) -> Co
 /// (design choice 12): each part of `relation` quoted alone by the
 /// dialect, never split on a dot, joined by dots. A relation of no part,
 /// or of more than the dialect's [`SqlDialect::most_parts`], is refused by
-/// name (rule `relation`, [`refuse_relation`]) as `field` of `request`.
+/// name (rule `relation`, [`refuse_relation`]) as `field` of `request`, and
+/// one of fewer parts than the dialect reads as the dialect says
+/// ([`SqlDialect::unqualified`]).
 pub(crate) fn from(
     dialect: &dyn SqlDialect,
     request: &DataRequest,
@@ -354,6 +363,9 @@ pub(crate) fn from(
     relation: &Relation,
 ) -> Result<String, CoreError> {
     if let Some(refusal) = refuse_relation(request, field, relation, dialect.most_parts()) {
+        return Err(refusal);
+    }
+    if let Some(refusal) = dialect.unqualified(relation) {
         return Err(refusal);
     }
     let renders = dialect.capabilities().derived_relations;
