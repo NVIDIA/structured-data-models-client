@@ -109,8 +109,7 @@ def shift_time(time: pd.Timestamp, offset: pd.DateOffset) -> pd.Timestamp:
     :obj:`pandas.Timestamp.min`, the anchor of a graph without a time column,
     out of range.
     """
-    reference = pd.Timestamp('2000-01-01')
-    if reference + offset == reference:
+    if offset.n == 0 or (offset.kwds and not any(offset.kwds.values())):
         return time
     return time + offset
 
