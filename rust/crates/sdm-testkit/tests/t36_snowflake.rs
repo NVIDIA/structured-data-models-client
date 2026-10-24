@@ -1287,7 +1287,7 @@ fn a_float_or_text_key_is_cast_and_written_as_the_old_client_writes_it() {
         keys(Arc::new(StringArray::from(vec!["a\"b", "é"]))),
     );
     assert!(found[0].0.contains("f.value::VARCHAR as __KUMO_ID__"));
-    assert_eq!(found[0].1, r#"["a\"b", "é"]"#);
+    assert_eq!(found[0].1, "[\"a\\\"b\", \"\\u00e9\"]");
 }
 
 #[test]
