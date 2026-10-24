@@ -40,12 +40,19 @@ class T313ConversionTableTest {
 
   /** The answer of a provider over {@code columns}, by column name. */
   private static Map<String, Read> answered(FakeJdbc.Column... columns) throws Exception {
+    return answeredWithConversions(List.of(), columns);
+  }
+
+  private static Map<String, Read> answeredWithConversions(
+      List<Map<String, Object>> conversions, FakeJdbc.Column... columns) throws Exception {
     FakeJdbc.Database database = new FakeJdbc.Database(text -> List.of(columns));
     JdbcProvider provider =
         new JdbcProvider(database.connection(), JdbcProvider.Driver.DATABRICKS);
     ArrowReader answer =
         provider.answer(
-            T313DatabricksProviderTest.plan(T313DatabricksProviderTest.statement("SELECT *")),
+            Map.of("plan", Map.of("plan", "sql", "statements",
+                List.of(T313DatabricksProviderTest.statement("SELECT *")),
+                "result_conversions", conversions)),
             new HashMap<>(),
             ArrowData.allocator());
     Map<String, Read> out = new LinkedHashMap<>();
@@ -137,9 +144,12 @@ class T313ConversionTableTest {
         Instant after = Instant.parse("2024-03-10T10:00:00.654321Z");
         LocalDateTime wall = LocalDateTime.parse("2024-03-10T02:30:00.123456");
         LocalDateTime europeanGap = LocalDateTime.parse("2024-03-31T02:30:00.654321");
-        Map<String, Read> got = answered(
+        Map<String, Read> got = answeredWithConversions(
+            List.of(Map.of("conversion", "timestamp_micros", "column", 1, "name", "unzoned")),
             FakeJdbc.Column.of("zoned", "TIMESTAMP", before, after),
-            FakeJdbc.Column.of("unzoned", "TIMESTAMP_NTZ", wall, europeanGap));
+            FakeJdbc.Column.of("unzoned", "BIGINT",
+                wall.toEpochSecond(java.time.ZoneOffset.UTC) * 1_000_000L + wall.getNano() / 1000,
+                europeanGap.toEpochSecond(java.time.ZoneOffset.UTC) * 1_000_000L + europeanGap.getNano() / 1000));
         assertEquals(List.of(LocalDateTime.ofInstant(before, java.time.ZoneOffset.UTC),
             LocalDateTime.ofInstant(after, java.time.ZoneOffset.UTC)), got.get("zoned").values(), zone);
         assertEquals(List.of(wall, europeanGap), got.get("unzoned").values(), zone);
