@@ -82,6 +82,21 @@ class T313HostTest {
   }
 
   @Test
+  void aMetricViewsWarningsAndErrorsCanNameTheSource() {
+    DatabricksSource view = DatabricksSource.of(connection(), "main", "sales")
+        .semanticModel("revenue", false);
+    Map<String, java.util.function.Function<Map<String, Object>, Object>> held = Providers.held(view);
+    assertEquals(view, held.get("source").apply(Map.of()));
+    assertEquals(view, held.get("semantic_model").apply(Map.of()));
+    assertFalse(Providers.held(DatabricksSource.of(connection())).containsKey("semantic_model"));
+    String said = Wording.warnings(java.util.List.of(Map.of(
+        "code", "VIEW_READ_IN_PART", "sentence", "view_materialization_ignored")), held).get(0).text();
+    assertTrue(said.contains("revenue"), said);
+    assertTrue(said.contains("has what a graph cannot hold"), said);
+    assertFalse(said.contains("cannot fill"), said);
+  }
+
+  @Test
   void aDriverDiagnosticDoesNotEscapeTheCoreProviderError() {
     TestOps.required();
     Host.Provider provider = (request, keys, allocator) -> {
