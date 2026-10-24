@@ -621,3 +621,17 @@ def test_runner_stamps_before_loading_or_digesting_any_case():
         text.index('echo "== preconditions') : text.index('snapshot()')
     ]
     assert '"${heldout[@]}" digests' not in preflight
+
+
+def test_comparator_failure_cannot_be_counted_as_a_clean_run(tmp_path):
+    rows = [
+        observation('dummy.' + letter, 'success', 'materialize')
+        for letter in 'abc'
+    ]
+    run = run_dir(tmp_path, rows)
+    (run / 'compare.txt').write_text(
+        'Traceback (most recent call last):\nRuntimeError: comparator failed\n'
+    )
+    done = tool('counts', run, '--prefix', PREFIX, '--threshold', 4)
+    assert done.returncode != 0
+    assert 'comparison' in (done.stdout + done.stderr).lower()
