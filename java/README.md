@@ -86,7 +86,7 @@ The API mirrors Python's with Java names and plain data:
 | `PredictionResult.to_pandas()`, `absent()`, `explanation` | `PredictionResult.read(allocator)` (the core's rows as Arrow, ordered by `row_index`), `absent(requested)`, `explanation()` |
 
 The JDBC drivers are the caller's: DuckDB's (`org.duckdb:duckdb_jdbc`), SQLite's (`org.xerial:sqlite-jdbc`) and Postgres's (`org.postgresql:postgresql`); the JAR ships none.
-What a driver gives reaches the core as the same Arrow Python's drivers give it, by the reviewed conversion table (`com.nvidia.sdm.internal.jdbc.ConversionTable`): DuckDB's own Arrow export; SQLite's columns typed as ADBC SQLite types them; Postgres's by type name, as Python's provider types them.
+What a driver gives reaches the core as the same Arrow Python's drivers give it, by the reviewed conversion table (`com.nvidia.sdm.internal.jdbc.ConversionTable`): DuckDB's own Arrow export; SQLite's columns typed as ADBC SQLite types them; Postgres's by type, as Python's provider types them through psycopg's registry, every value read in text as psycopg reads it.
 The model transport sends the core's call as the bytes the core wrote, over `java.net.http`, retrying a transient failure (429, 502, 503, 504, a dropped connection) as Python's transport does.
 
 Every error is a `StructuredDataException`, as every Python error is a `StructuredDataError`: `code()` is the contract's error code to branch on (`INVALID_REQUEST`, `UNSUPPORTED_REQUEST`, `INTERNAL_ERROR`, ...), and `details()` holds the structured fields the core gave.

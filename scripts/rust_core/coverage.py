@@ -424,36 +424,55 @@ def generated(
     return out
 
 
-#: A client test's pytest node ID, ``<file>::<test>``, or, for the Java
-#: manifest's paths (T3.12), a JUnit test method, ``<file>#<method>``.
-_TEST = re.compile(
-    r'(?P<file>[A-Za-z0-9_./-]+\.py)::(?P<name>test_[A-Za-z0-9_]+)'
-    r'|(?P<java>java/src/test/java/[A-Za-z0-9_./-]+\.java)#(?P<method>[A-Za-z0-9_]+)'
-)
+#: A client test's ID, by the manifest's language: for Python a pytest node
+#: ID, ``<file>::<test>``; for Java (T3.12) a JUnit test method,
+#: ``java/src/test/java/<file>.java#<method>``. A manifest names only its
+#: own language's tests: a Java test exercises no Python path, and none of
+#: Python's a Java one.
+_TESTS = {
+    'python': re.compile(
+        r'(?P<file>[A-Za-z0-9_./-]+\.py)::(?P<name>test_[A-Za-z0-9_]+)'
+    ),
+    'java': re.compile(
+        r'(?P<file>java/src/test/java/[A-Za-z0-9_./-]+\.java)#(?P<name>[A-Za-z0-9_]+)'
+    ),
+}
+#: How a file defines the test, by language: a pytest function; a JUnit
+#: method, ``@Test`` or ``@ParameterizedTest`` on it (other annotations, each
+#: on its own line, and modifiers between), so a helper method is no test.
+_DEFINED = {
+    'python': r'^\s*def {name}\(',
+    'java': (
+        r'^\s*@(?:org\.junit\.jupiter\.api\.|org\.junit\.jupiter\.params\.)?'
+        r'(?:Test|ParameterizedTest)\b[^\n]*\n'
+        r'(?:\s*@[^\n]*\n)*'
+        r'\s*(?:(?:public|protected|private|static|final)\s+)*void {name}\('
+    ),
+}
+#: Each language's form, as a problem names it.
+_FORM = {
+    'python': '<file>::<test>',
+    'java': 'java/src/test/java/<file>.java#<method>',
+}
 
 
-def _test_problem(test: str, root: Any) -> str | None:
-    r"""Why a claimed client test is no test the tree defines, or None:
+def _test_problem(test: str, root: Any, language: str = 'python') -> str | None:
+    r"""Why ``test`` names no test of ``language`` the tree defines, or None.
     ``root`` is the candidate's tree (its ``read``) or a directory."""
-    found = _TEST.fullmatch(test)
+    found = _TESTS[language].fullmatch(test)
     if found is None:
-        return 'not <file>::<test> or <file>.java#<method>'
+        return f'not {_FORM[language]}'
     if root is None:
         root = HERE.parents[1]
-    path = found['file'] or found['java']
     try:
         source = (
-            (root / path).read_text(encoding='utf-8')
+            (root / found['file']).read_text(encoding='utf-8')
             if isinstance(root, Path)
-            else root.read(path)
+            else root.read(found['file'])
         )
     except Exception:  # noqa: BLE001 - an unreadable file defines no test
         source = None
-    defined = (
-        rf'^\s*def {found["name"]}\('
-        if found['file']
-        else rf'^\s*void {found["method"]}\('
-    )
+    defined = _DEFINED[language].format(name=re.escape(found['name']))
     if not source or not re.search(defined, source, re.M):
         return 'no test the tree defines'
     return None
@@ -485,7 +504,7 @@ def rule_4(
     for language, manifest in sorted(manifests.items()):
         for path, tests in sorted(tested(manifest).items()):
             for test in tests:
-                problem = _test_problem(test, root)
+                problem = _test_problem(test, root, language)
                 if problem is not None:
                     report.fail(
                         'rule 4', f'{language}: path {path}: {test}: {problem}'
@@ -534,7 +553,12 @@ def uncovered(
     if manifest is None:
         return []
     made = generated(language, manifest, corpus)
-    claimed = tested(manifest)
+    # A claim only in the manifest's own language's form counts.
+    form = _TESTS.get(language)
+    claimed = {
+        path: [t for t in tests if form is not None and form.fullmatch(t)]
+        for path, tests in tested(manifest).items()
+    }
     gated = SLICES[: SLICES.index(active) + 1]
     return [
         str(item['id'])

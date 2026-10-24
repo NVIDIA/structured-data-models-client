@@ -30,6 +30,10 @@ mod test_ops;
 pub use compose::{CompositionRoot, DataAccess};
 pub use dispatch::start;
 pub use edit::{dtype_names, meanings, wire_names};
+/// The text a float is spelled in, as the reference's language writes it
+/// (Python's `repr`): for a host that hands the data layer a value to
+/// write as the reference does (T3.12 fix 1).
+pub use pql::float_text;
 pub use run::{
     ArrowData, Ask, Asker, Attachment, AttachmentIds, Attachments, FetchResult, ModelResult, Reply,
     Run, RunState,

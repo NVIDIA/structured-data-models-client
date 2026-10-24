@@ -380,6 +380,33 @@ fn read_reference_text(
     })
 }
 
+/// A JSON value as the reference's Postgres provider hands it over: the
+/// JSON text of the value its driver read (`json.dumps` of it: compact,
+/// ASCII only, a float as `float_text` writes it), a JSON null none;
+/// `None` (outer) where `text` is not JSON. For a host whose driver gives
+/// the server's text of a `json` or `jsonb` value (T3.12 fix 1), so how
+/// the value is read stays here.
+pub fn json_text(text: &str, float_text: fn(f64) -> String) -> Option<Option<String>> {
+    let mut reader = Reader {
+        text,
+        bytes: text.as_bytes(),
+        at: 0,
+    };
+    let value = reader.value(0)?;
+    reader.space();
+    if reader.at != reader.bytes.len() {
+        return None;
+    }
+    Some(match value {
+        Json::Null => None,
+        value => {
+            let mut out = String::new();
+            write(&value, float_text, &mut out);
+            Some(out)
+        }
+    })
+}
+
 /// Compact JSON, ASCII only, as the reference writes a nested value.
 fn write(value: &Json, float_text: fn(f64) -> String, out: &mut String) {
     match value {
@@ -839,12 +866,17 @@ mod tests {
         let written = |json: &str| json_text(json, |f| format!("{f:?}"));
         assert_eq!(
             written("{\"a\": 1, \"b\": [1.0, 1E2, -0, \"\\u00e9\\ud800\"], \"a\": 2}"),
-            Some(Some("{\"a\":2,\"b\":[1.0,100.0,0,\"\\u00e9\\ud800\"]}".into()))
+            Some(Some(
+                "{\"a\":2,\"b\":[1.0,100.0,0,\"\\u00e9\\ud800\"]}".into()
+            ))
         );
         assert_eq!(written("null"), Some(None));
         assert_eq!(written(" \"text\" "), Some(Some("\"text\"".into())));
         assert_eq!(written("true"), Some(Some("true".into())));
-        assert_eq!(written("12345678901234567890"), Some(Some("12345678901234567890".into())));
+        assert_eq!(
+            written("12345678901234567890"),
+            Some(Some("12345678901234567890".into()))
+        );
         assert_eq!(written("[null, {}]"), Some(Some("[null,{}]".into())));
         let deep = format!("{}{}", "[".repeat(920), "]".repeat(920));
         assert_eq!(written(&deep), Some(Some(deep.clone())));

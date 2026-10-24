@@ -1019,7 +1019,7 @@ pub(crate) fn quote_name(name: &str) -> String {
 /// parser's float text, the shortest digits that read back to the double
 /// ([`sdm_pql::float_repr`]). The payload and the answer's layout take it
 /// from here, the one module that names the parser.
-pub(crate) fn float_text(x: f64) -> String {
+pub fn float_text(x: f64) -> String {
     parser::float_repr::float_repr(x)
 }
 

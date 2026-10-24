@@ -233,10 +233,12 @@ public final class JdbcProvider implements Host.Provider {
   // --- Postgres -------------------------------------------------------------------------
 
   /**
-   * The statements run in a transaction of their own as the reference's reads take one (none
-   * under autocommit, else a savepoint, so a failed read leaves the caller's transaction usable),
-   * each binding its key set as its one parameter ({@link KeySets#postgresText}), and the last
-   * one's rows read by the Postgres column of the conversion table.
+   * The statements run in a transaction as the reference's reads take one (psycopg's {@code
+   * connection.transaction()}): none under autocommit; outside a transaction, one of its own,
+   * committed, or rolled back if the read fails; inside the caller's, a savepoint, so a failed read
+   * leaves the caller's transaction usable and the caller's work is the caller's to commit. Each
+   * statement binds its key set as its one parameter ({@link KeySets#postgresText}), every value
+   * read in text, and the last one's rows are read by the Postgres column of the conversion table.
    */
   private ArrowReader postgres(
       List<Planned> planned, Map<Integer, KeySets.Keys> keys, BufferAllocator allocator)
@@ -250,8 +252,10 @@ public final class JdbcProvider implements Host.Provider {
         throw new PlanNotRun("a statement binding more than one key set");
       }
     }
-    boolean own = !connection.getAutoCommit();
-    Savepoint savepoint = own ? connection.setSavepoint() : null;
+    boolean managed = !connection.getAutoCommit();
+    Savepoint savepoint =
+        managed && PgSession.inTransaction(connection) ? connection.setSavepoint() : null;
+    boolean own = managed && savepoint == null;
     try {
       ArrowReader answer = null;
       for (int at = 0; at < planned.size(); at++) {
@@ -278,15 +282,19 @@ public final class JdbcProvider implements Host.Provider {
       }
       if (savepoint != null) {
         connection.releaseSavepoint(savepoint);
+      } else if (own) {
+        connection.commit();
       }
       return answer;
     } catch (Exception e) {
-      if (savepoint != null) {
-        try {
+      try {
+        if (savepoint != null) {
           connection.rollback(savepoint);
-        } catch (SQLException ignored) {
-          // The read's own failure is the one told.
+        } else if (own) {
+          connection.rollback();
         }
+      } catch (SQLException ignored) {
+        // The read's own failure is the one told.
       }
       throw e;
     }
@@ -301,13 +309,25 @@ public final class JdbcProvider implements Host.Provider {
       throws SQLException, PlanNotRun {
     if (statement.relations().isEmpty()) {
       Statement plain = connection.createStatement();
-      plain.setEscapeProcessing(false);
+      try {
+        plain.setEscapeProcessing(false);
+        PgSession.inText(plain);
+      } catch (SQLException e) {
+        plain.close();
+        throw e;
+      }
       return plain;
     }
     KeySets.Keys bound = keys.get(statement.relations().values().iterator().next());
     PreparedStatement prepared =
         connection.prepareStatement(KeySets.jdbcText(statement.text()));
-    prepared.setString(1, KeySets.postgresText(bound));
+    try {
+      PgSession.inText(prepared);
+      prepared.setString(1, KeySets.postgresText(bound));
+    } catch (SQLException | RuntimeException e) {
+      prepared.close();
+      throw e;
+    }
     return prepared;
   }
 
@@ -326,13 +346,14 @@ public final class JdbcProvider implements Host.Provider {
   }
 
   private ArrowReader postgresRows(ResultSet rows, BufferAllocator allocator) throws Exception {
-    List<Object[]> described = ConversionTable.described(rows.getMetaData());
+    List<ConversionTable.Described> described =
+        ConversionTable.described(connection, rows.getMetaData());
     List<ConversionTable.Column> columns = new ArrayList<>();
     List<org.apache.arrow.vector.types.pojo.Field> fields = new ArrayList<>();
     for (int at = 0; at < described.size(); at++) {
-      Object[] column = described.get(at);
+      ConversionTable.Described column = described.get(at);
       ConversionTable.Column reading =
-          table.postgres((String) column[0], (Integer) column[1], (Integer) column[2]);
+          table.postgres(column.oid(), column.precision(), column.scale());
       columns.add(reading);
       fields.add(reading.field(rows.getMetaData().getColumnLabel(at + 1)));
     }
@@ -340,12 +361,31 @@ public final class JdbcProvider implements Host.Provider {
     for (int at = 0; at < columns.size(); at++) {
       values.add(new ArrayList<>());
     }
+    ConversionTable.Session session = new Session(connection);
     while (rows.next()) {
       for (int at = 0; at < columns.size(); at++) {
-        values.get(at).add(columns.get(at).read(rows, at + 1));
+        values.get(at).add(columns.get(at).read(rows, at + 1, session));
       }
     }
     return built(new ConversionTable.Result(fields, values), allocator);
+  }
+
+  /** The session a Postgres result is read in: its {@code IntervalStyle}, asked once. */
+  private static final class Session implements ConversionTable.Session {
+    private final Connection connection;
+    private String intervalStyle;
+
+    Session(Connection connection) {
+      this.connection = connection;
+    }
+
+    @Override
+    public String intervalStyle() throws SQLException {
+      if (intervalStyle == null) {
+        intervalStyle = String.valueOf(PgSession.parameter(connection, "IntervalStyle"));
+      }
+      return intervalStyle;
+    }
   }
 
   // --- shared ---------------------------------------------------------------------------

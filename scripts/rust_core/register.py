@@ -268,6 +268,17 @@ def reference_refusals(root: Path) -> dict[str, str]:
     }
 
 
+def reference_codes(root: Path) -> dict[str, str | None]:
+    r"""The code of each line the committed reference refuses, by the
+    line's key: a row whose old outcome is ``none`` keeps the reference's
+    own refusal where its code is the same (T3.12 fix 1)."""
+    return {
+        case: outcome.get('code')
+        for case, outcome in _reference_lines(root).items()
+        if outcome.get('result') == 'refusal'
+    }
+
+
 def _reference_lines(root: Path) -> dict[str, dict[str, Any]]:
     found: dict[str, dict[str, Any]] = {}
     for path in sorted((root / REFERENCE).glob('*.jsonl')):
@@ -367,6 +378,7 @@ def problems(
     inventory = inventory_ids(root)
     accepted = reference_outcomes(root)
     refused = reference_refusals(root)
+    codes = reference_codes(root)
     for entry in entries:
         where = entry['id']
         for case in entry['cases']:
@@ -412,7 +424,7 @@ def problems(
                         )
         for outcome in entry.get('case_outcomes', []):
             found += _outcome_problems(
-                entry, outcome, corpus, accepted, refused
+                entry, outcome, corpus, accepted, refused, codes
             )
         for key in ('more_exact', 'fewer_deprecations'):
             for item in entry.get(key, []):
@@ -502,6 +514,7 @@ def _outcome_problems(
     corpus: dict[str, Any],
     accepted: dict[str, str],
     refused: dict[str, str] | None = None,
+    codes: dict[str, str | None] | None = None,
 ) -> list[str]:
     where = f'{entry["id"]}: {outcome["case"]} on {outcome["runner"]}'
     found = []
@@ -511,6 +524,19 @@ def _outcome_problems(
     if case not in corpus and outcome['new'] != 'removed':
         found.append(f'{where}: not a corpus case')
     old, new = parse_outcome(outcome['old']), parse_outcome(outcome['new'])
+    if outcome['old'] == 'none' and codes is not None:
+        # A line no baseline holds (a runner's first) moves from the
+        # committed reference's outcome, as the ratchet moves it: its
+        # refusal, code and call, or its answer (T3.12 fix 1).
+        key = str(outcome['case'])
+        if accepted.get(key) == 'success':
+            old = {'result': 'success', 'code': None, 'stage': None}
+        elif key in codes:
+            old = {
+                'result': 'refusal',
+                'code': codes[key],
+                'stage': (refused or {}).get(key),
+            }
     if new is not None and new['code'] == PANIC:
         found.append(f'{where}: no entry accepts {PANIC}, a panic')
     calls = outcome.get('statements_differ')

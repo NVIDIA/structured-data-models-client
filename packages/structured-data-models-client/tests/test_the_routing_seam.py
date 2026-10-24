@@ -97,6 +97,8 @@ def test_every_core_path_of_the_manifest_is_routed_and_every_default_is_old() ->
     # same calls over a SQLite source, and from T2.3 over a Postgres one.
     assert _routing.CORE_ROUTED == set(
         _routing.S0
+        # From T3.12, a model's capabilities, from the core's table.
+        + _routing.CAPABILITIES
         + _routing.FROM_SOURCE_DUCKDB
         + _routing.FROM_SOURCE_DUCKDB_TABLES
         + _routing.MATERIALIZE_DUCKDB

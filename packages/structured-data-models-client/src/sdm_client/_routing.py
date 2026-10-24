@@ -357,9 +357,14 @@ PREDICT = {
     'postgres': PREDICT_POSTGRES,
 }
 
+#: ``SDMClient.capabilities``: each model described from the core's table
+#: (T3.12).
+CAPABILITIES = ('client.capabilities/capabilities/any',)
+
 #: The paths this build can run on the core.
 CORE_ROUTED = frozenset(
     S0
+    + CAPABILITIES
     + FROM_SOURCE_DUCKDB
     + FROM_SOURCE_DUCKDB_TABLES
     + MATERIALIZE_DUCKDB

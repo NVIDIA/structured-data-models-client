@@ -3831,7 +3831,7 @@ entries:
   - {case: base.regression, cell: ref-pandas3, runner: python-core, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance as the reference answers it'}
   - {case: base.regression, cell: ref-pandas3, runner: python-old, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance as the reference answers it'}
   - {case: base.regression, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'success', summary: 'admitted to acceptance as the reference answers it'}
-  - {case: base.regression, cell: ref-pandas3, runner: java, old: 'success', new: 'success', summary: 'admitted to acceptance as the reference answers it'}
+  - {case: base.regression, cell: ref-pandas3, runner: java, old: 'none', new: 'success', summary: 'admitted to acceptance as the reference answers it'}
 
 # --- The sampler's kept behaviors (T1.27) ------------------------------------
 
@@ -4986,7 +4986,7 @@ entries:
   - {case: empty.entity-without-facts, cell: ref-pandas3, runner: python-core, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: empty.entity-without-facts, cell: ref-pandas3, runner: python-old, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: empty.entity-without-facts, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
-  - {case: empty.entity-without-facts, cell: ref-pandas3, runner: java, old: 'success', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: empty.entity-without-facts, cell: ref-pandas3, runner: java, old: 'none', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: empty.fact-table, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal INVALID_REQUEST at from_source (StructuredDataError)', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: empty.fact-table, cell: ref-pandas3, runner: python-old, old: 'none', new: 'refusal - at from_source (RuntimeError)', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: empty.fact-table, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal INVALID_REQUEST', summary: 'admitted to acceptance, each runner held to its observed outcome'}
@@ -4998,23 +4998,23 @@ entries:
   - {case: key.declared-int32, cell: ref-pandas3, runner: python-core, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: key.declared-int32, cell: ref-pandas3, runner: python-old, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: key.declared-int32, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
-  - {case: key.declared-int32, cell: ref-pandas3, runner: java, old: 'success', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: key.declared-int32, cell: ref-pandas3, runner: java, old: 'none', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: key.uint64-above-int64-max, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: key.uint64-above-int64-max, cell: ref-pandas3, runner: python-old, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: key.uint64-above-int64-max, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'refusal INVALID_REQUEST', summary: 'admitted to acceptance, each runner held to its observed outcome'}
-  - {case: key.uint64-above-int64-max, cell: ref-pandas3, runner: java, old: 'refusal INVALID_REQUEST', new: 'refusal INVALID_REQUEST', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: key.uint64-above-int64-max, cell: ref-pandas3, runner: java, old: 'none', new: 'refusal INVALID_REQUEST', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: key.uint64-small, cell: ref-pandas3, runner: python-core, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: key.uint64-small, cell: ref-pandas3, runner: python-old, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: key.uint64-small, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
-  - {case: key.uint64-small, cell: ref-pandas3, runner: java, old: 'success', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: key.uint64-small, cell: ref-pandas3, runner: java, old: 'none', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: key.uint8, cell: ref-pandas3, runner: python-core, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: key.uint8, cell: ref-pandas3, runner: python-old, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: key.uint8, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
-  - {case: key.uint8, cell: ref-pandas3, runner: java, old: 'success', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: key.uint8, cell: ref-pandas3, runner: java, old: 'none', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: key.varchar, cell: ref-pandas3, runner: python-core, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: key.varchar, cell: ref-pandas3, runner: python-old, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: key.varchar, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
-  - {case: key.varchar, cell: ref-pandas3, runner: java, old: 'success', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: key.varchar, cell: ref-pandas3, runner: java, old: 'none', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: nested.fixed-array, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: nested.fixed-array, cell: ref-pandas3, runner: python-old, old: 'none', new: 'refusal - at from_source (RuntimeError)', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: nested.fixed-array, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
@@ -5022,7 +5022,7 @@ entries:
   - {case: nested.list-int, cell: ref-pandas3, runner: python-core, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: nested.list-int, cell: ref-pandas3, runner: python-old, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: nested.list-int, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
-  - {case: nested.list-int, cell: ref-pandas3, runner: java, old: 'success', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: nested.list-int, cell: ref-pandas3, runner: java, old: 'none', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: nested.map, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal UNSUPPORTED_REQUEST at from_source (UnsupportedRequestError)', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: nested.map, cell: ref-pandas3, runner: python-old, old: 'none', new: 'refusal - at from_source (RuntimeError)', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: nested.map, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal UNSUPPORTED_REQUEST', summary: 'admitted to acceptance, each runner held to its observed outcome'}
@@ -5038,23 +5038,23 @@ entries:
   - {case: null.feature-all-null, cell: ref-pandas3, runner: python-core, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: null.feature-all-null, cell: ref-pandas3, runner: python-old, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: null.feature-all-null, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
-  - {case: null.feature-all-null, cell: ref-pandas3, runner: java, old: 'success', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: null.feature-all-null, cell: ref-pandas3, runner: java, old: 'none', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: null.some-foreign-keys, cell: ref-pandas3, runner: python-core, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: null.some-foreign-keys, cell: ref-pandas3, runner: python-old, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: null.some-foreign-keys, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
-  - {case: null.some-foreign-keys, cell: ref-pandas3, runner: java, old: 'success', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: null.some-foreign-keys, cell: ref-pandas3, runner: java, old: 'none', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: null.some-times, cell: ref-pandas3, runner: python-core, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: null.some-times, cell: ref-pandas3, runner: python-old, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: null.some-times, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
-  - {case: null.some-times, cell: ref-pandas3, runner: java, old: 'success', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: null.some-times, cell: ref-pandas3, runner: java, old: 'none', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: null.target-all-null, cell: ref-pandas3, runner: python-core, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: null.target-all-null, cell: ref-pandas3, runner: python-old, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: null.target-all-null, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
-  - {case: null.target-all-null, cell: ref-pandas3, runner: java, old: 'success', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: null.target-all-null, cell: ref-pandas3, runner: java, old: 'none', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: refuse.unknown-column, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: refuse.unknown-column, cell: ref-pandas3, runner: python-old, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: refuse.unknown-column, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'refusal INVALID_REQUEST', summary: 'admitted to acceptance, each runner held to its observed outcome'}
-  - {case: refuse.unknown-column, cell: ref-pandas3, runner: java, old: 'refusal INVALID_REQUEST', new: 'refusal INVALID_REQUEST', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: refuse.unknown-column, cell: ref-pandas3, runner: java, old: 'none', new: 'refusal INVALID_REQUEST', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: key.decimal-18-0, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: key.decimal-18-0, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: key.decimal-18-0, cell: ref-pandas3, runner: java, old: 'none', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
@@ -5117,7 +5117,7 @@ entries:
   - {case: feature.bool, cell: ref-pandas3, runner: python-core, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: feature.bool, cell: ref-pandas3, runner: python-old, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: feature.bool, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
-  - {case: feature.bool, cell: ref-pandas3, runner: java, old: 'success', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: feature.bool, cell: ref-pandas3, runner: java, old: 'none', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: time.date, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: time.date, cell: ref-pandas3, runner: python-old, old: 'none', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: time.date, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
@@ -5151,11 +5151,11 @@ entries:
   - {case: time.timestamp-ns, cell: ref-pandas3, runner: python-core, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: time.timestamp-ns, cell: ref-pandas3, runner: python-old, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: time.timestamp-ns, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
-  - {case: time.timestamp-ns, cell: ref-pandas3, runner: java, old: 'success', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: time.timestamp-ns, cell: ref-pandas3, runner: java, old: 'none', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: time.timestamp-s, cell: ref-pandas3, runner: python-core, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: time.timestamp-s, cell: ref-pandas3, runner: python-old, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: time.timestamp-s, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
-  - {case: time.timestamp-s, cell: ref-pandas3, runner: java, old: 'success', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: time.timestamp-s, cell: ref-pandas3, runner: java, old: 'none', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: time.timestamptz, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: time.timestamptz, cell: ref-pandas3, runner: python-old, old: 'none', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: time.timestamptz, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
@@ -6146,7 +6146,7 @@ entries:
   case_outcomes:
   - {case: decimal.class-target-38-18, cell: ref-pandas3, runner: python-core, old: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', new: 'success at predict', summary: 'T2.0c exact decimals: a decimal class target answered, as the reference at 6298913c answers it'}
   - {case: decimal.class-target-38-18, cell: ref-pandas3, runner: rust-host, old: 'refusal UNSUPPORTED_REQUEST', new: 'success', summary: 'T2.0c exact decimals: a decimal class target answered, as the reference at 6298913c answers it'}
-  - {case: decimal.class-target-38-18, cell: ref-pandas3, runner: java, old: 'refusal UNSUPPORTED_REQUEST', new: 'success', summary: 'T2.0c exact decimals: a decimal class target answered, as the reference at 6298913c answers it'}
+  - {case: decimal.class-target-38-18, cell: ref-pandas3, runner: java, old: 'none', new: 'success', summary: 'T2.0c exact decimals: a decimal class target answered, as the reference at 6298913c answers it'}
 
 - id: P2B-2
   title: The core refuses a source column a query cannot name, which the reference leaves out, until T2.18
@@ -7330,39 +7330,39 @@ entries:
   - {case: edit.accepted-meaning-key-links, cell: ref-pandas3, runner: python-core, old: 'success at materialize', new: 'success at materialize', summary: 'admitted as an acceptance case (T2.12): the outcome as baselined, the case file its status and paths'}
   - {case: edit.accepted-meaning-key-links, cell: ref-pandas3, runner: python-old, old: 'success at materialize', new: 'success at materialize', summary: 'admitted as an acceptance case (T2.12): the outcome as baselined, the case file its status and paths'}
   - {case: edit.accepted-meaning-key-links, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'success', summary: 'admitted as an acceptance case (T2.12): the outcome as baselined, the case file its status and paths'}
-  - {case: edit.accepted-meaning-key-links, cell: ref-pandas3, runner: java, old: 'success', new: 'success', summary: 'admitted as an acceptance case (T2.12): the outcome as baselined, the case file its status and paths'}
+  - {case: edit.accepted-meaning-key-links, cell: ref-pandas3, runner: java, old: 'none', new: 'success', summary: 'admitted as an acceptance case (T2.12): the outcome as baselined, the case file its status and paths'}
   - {case: edit.key-missing-column, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at from_source (StructuredDataError)', new: 'refusal INVALID_REQUEST at from_source (StructuredDataError)', summary: 'admitted as an acceptance case (T2.12): the outcome as baselined, the case file its status and paths'}
   - {case: edit.key-missing-column, cell: ref-pandas3, runner: python-old, old: 'refusal INVALID_REQUEST at from_source (StructuredDataError)', new: 'refusal INVALID_REQUEST at from_source (StructuredDataError)', summary: 'admitted as an acceptance case (T2.12): the outcome as baselined, the case file its status and paths'}
   - {case: edit.key-missing-column, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'refusal INVALID_REQUEST', summary: 'admitted as an acceptance case (T2.12): the outcome as baselined, the case file its status and paths'}
-  - {case: edit.key-missing-column, cell: ref-pandas3, runner: java, old: 'refusal INVALID_REQUEST', new: 'refusal INVALID_REQUEST', summary: 'admitted as an acceptance case (T2.12): the outcome as baselined, the case file its status and paths'}
+  - {case: edit.key-missing-column, cell: ref-pandas3, runner: java, old: 'none', new: 'refusal INVALID_REQUEST', summary: 'admitted as an acceptance case (T2.12): the outcome as baselined, the case file its status and paths'}
   - {case: edit.key-time-column, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at from_source (StructuredDataError)', new: 'refusal INVALID_REQUEST at from_source (StructuredDataError)', summary: 'admitted as an acceptance case (T2.12): the outcome as baselined, the case file its status and paths'}
   - {case: edit.key-time-column, cell: ref-pandas3, runner: python-old, old: 'refusal INVALID_REQUEST at from_source (StructuredDataError)', new: 'refusal INVALID_REQUEST at from_source (StructuredDataError)', summary: 'admitted as an acceptance case (T2.12): the outcome as baselined, the case file its status and paths'}
   - {case: edit.key-time-column, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'refusal INVALID_REQUEST', summary: 'admitted as an acceptance case (T2.12): the outcome as baselined, the case file its status and paths'}
-  - {case: edit.key-time-column, cell: ref-pandas3, runner: java, old: 'refusal INVALID_REQUEST', new: 'refusal INVALID_REQUEST', summary: 'admitted as an acceptance case (T2.12): the outcome as baselined, the case file its status and paths'}
+  - {case: edit.key-time-column, cell: ref-pandas3, runner: java, old: 'none', new: 'refusal INVALID_REQUEST', summary: 'admitted as an acceptance case (T2.12): the outcome as baselined, the case file its status and paths'}
   - {case: edit.leave-out-the-key, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at from_source (StructuredDataError)', new: 'refusal INVALID_REQUEST at from_source (StructuredDataError)', summary: 'admitted as an acceptance case (T2.12): the outcome as baselined, the case file its status and paths'}
   - {case: edit.leave-out-the-key, cell: ref-pandas3, runner: python-old, old: 'refusal INVALID_REQUEST at from_source (StructuredDataError)', new: 'refusal INVALID_REQUEST at from_source (StructuredDataError)', summary: 'admitted as an acceptance case (T2.12): the outcome as baselined, the case file its status and paths'}
   - {case: edit.leave-out-the-key, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'refusal INVALID_REQUEST', summary: 'admitted as an acceptance case (T2.12): the outcome as baselined, the case file its status and paths'}
-  - {case: edit.leave-out-the-key, cell: ref-pandas3, runner: java, old: 'refusal INVALID_REQUEST', new: 'refusal INVALID_REQUEST', summary: 'admitted as an acceptance case (T2.12): the outcome as baselined, the case file its status and paths'}
+  - {case: edit.leave-out-the-key, cell: ref-pandas3, runner: java, old: 'none', new: 'refusal INVALID_REQUEST', summary: 'admitted as an acceptance case (T2.12): the outcome as baselined, the case file its status and paths'}
   - {case: edit.link-not-the-key, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at from_source (StructuredDataError)', new: 'refusal INVALID_REQUEST at from_source (StructuredDataError)', summary: 'admitted as an acceptance case (T2.12): the outcome as baselined, the case file its status and paths'}
   - {case: edit.link-not-the-key, cell: ref-pandas3, runner: python-old, old: 'refusal INVALID_REQUEST at from_source (StructuredDataError)', new: 'refusal INVALID_REQUEST at from_source (StructuredDataError)', summary: 'admitted as an acceptance case (T2.12): the outcome as baselined, the case file its status and paths'}
   - {case: edit.link-not-the-key, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'refusal INVALID_REQUEST', summary: 'admitted as an acceptance case (T2.12): the outcome as baselined, the case file its status and paths'}
-  - {case: edit.link-not-the-key, cell: ref-pandas3, runner: java, old: 'refusal INVALID_REQUEST', new: 'refusal INVALID_REQUEST', summary: 'admitted as an acceptance case (T2.12): the outcome as baselined, the case file its status and paths'}
+  - {case: edit.link-not-the-key, cell: ref-pandas3, runner: java, old: 'none', new: 'refusal INVALID_REQUEST', summary: 'admitted as an acceptance case (T2.12): the outcome as baselined, the case file its status and paths'}
   - {case: edit.meaning-not-carried, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at from_source (StructuredDataError)', new: 'refusal INVALID_REQUEST at from_source (StructuredDataError)', summary: 'admitted as an acceptance case (T2.12): the outcome as baselined, the case file its status and paths'}
   - {case: edit.meaning-not-carried, cell: ref-pandas3, runner: python-old, old: 'refusal INVALID_REQUEST at from_source (StructuredDataError)', new: 'refusal INVALID_REQUEST at from_source (StructuredDataError)', summary: 'admitted as an acceptance case (T2.12): the outcome as baselined, the case file its status and paths'}
   - {case: edit.meaning-not-carried, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'refusal INVALID_REQUEST', summary: 'admitted as an acceptance case (T2.12): the outcome as baselined, the case file its status and paths'}
-  - {case: edit.meaning-not-carried, cell: ref-pandas3, runner: java, old: 'refusal INVALID_REQUEST', new: 'refusal INVALID_REQUEST', summary: 'admitted as an acceptance case (T2.12): the outcome as baselined, the case file its status and paths'}
+  - {case: edit.meaning-not-carried, cell: ref-pandas3, runner: java, old: 'none', new: 'refusal INVALID_REQUEST', summary: 'admitted as an acceptance case (T2.12): the outcome as baselined, the case file its status and paths'}
   - {case: edit.meaning-unknown, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at from_source (StructuredDataError)', new: 'refusal INVALID_REQUEST at from_source (StructuredDataError)', summary: 'admitted as an acceptance case (T2.12): the outcome as baselined, the case file its status and paths'}
   - {case: edit.meaning-unknown, cell: ref-pandas3, runner: python-old, old: 'refusal INVALID_REQUEST at from_source (StructuredDataError)', new: 'refusal INVALID_REQUEST at from_source (StructuredDataError)', summary: 'admitted as an acceptance case (T2.12): the outcome as baselined, the case file its status and paths'}
   - {case: edit.meaning-unknown, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'refusal INVALID_REQUEST', summary: 'admitted as an acceptance case (T2.12): the outcome as baselined, the case file its status and paths'}
-  - {case: edit.meaning-unknown, cell: ref-pandas3, runner: java, old: 'refusal INVALID_REQUEST', new: 'refusal INVALID_REQUEST', summary: 'admitted as an acceptance case (T2.12): the outcome as baselined, the case file its status and paths'}
+  - {case: edit.meaning-unknown, cell: ref-pandas3, runner: java, old: 'none', new: 'refusal INVALID_REQUEST', summary: 'admitted as an acceptance case (T2.12): the outcome as baselined, the case file its status and paths'}
   - {case: edit.time-column-not-a-time, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at from_source (StructuredDataError)', new: 'refusal INVALID_REQUEST at from_source (StructuredDataError)', summary: 'admitted as an acceptance case (T2.12): the outcome as baselined, the case file its status and paths'}
   - {case: edit.time-column-not-a-time, cell: ref-pandas3, runner: python-old, old: 'refusal INVALID_REQUEST at from_source (StructuredDataError)', new: 'refusal INVALID_REQUEST at from_source (StructuredDataError)', summary: 'admitted as an acceptance case (T2.12): the outcome as baselined, the case file its status and paths'}
   - {case: edit.time-column-not-a-time, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'refusal INVALID_REQUEST', summary: 'admitted as an acceptance case (T2.12): the outcome as baselined, the case file its status and paths'}
-  - {case: edit.time-column-not-a-time, cell: ref-pandas3, runner: java, old: 'refusal INVALID_REQUEST', new: 'refusal INVALID_REQUEST', summary: 'admitted as an acceptance case (T2.12): the outcome as baselined, the case file its status and paths'}
+  - {case: edit.time-column-not-a-time, cell: ref-pandas3, runner: java, old: 'none', new: 'refusal INVALID_REQUEST', summary: 'admitted as an acceptance case (T2.12): the outcome as baselined, the case file its status and paths'}
   - {case: edit.time-column-text, cell: ref-pandas3, runner: python-core, old: 'success at materialize', new: 'success at materialize', summary: 'admitted as an acceptance case (T2.12): the outcome as baselined, the case file its status and paths'}
   - {case: edit.time-column-text, cell: ref-pandas3, runner: python-old, old: 'success at materialize', new: 'success at materialize', summary: 'admitted as an acceptance case (T2.12): the outcome as baselined, the case file its status and paths'}
   - {case: edit.time-column-text, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'success', summary: 'admitted as an acceptance case (T2.12): the outcome as baselined, the case file its status and paths'}
-  - {case: edit.time-column-text, cell: ref-pandas3, runner: java, old: 'success', new: 'success', summary: 'admitted as an acceptance case (T2.12): the outcome as baselined, the case file its status and paths'}
+  - {case: edit.time-column-text, cell: ref-pandas3, runner: java, old: 'none', new: 'success', summary: 'admitted as an acceptance case (T2.12): the outcome as baselined, the case file its status and paths'}
 
 - id: P2E-4
   title: On Postgres a primary or foreign key of several columns the catalog declares is read as no key, as on DuckDB and SQLite, where the reference fails unnamed
@@ -7466,7 +7466,7 @@ entries:
   case_outcomes:
   - {case: rule.composite-key-given, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', statements_differ: [materialize], summary: "the DuckDB line: refused at materialize as the reference refuses it, without the reference's read of the folded key"}
   - {case: rule.composite-key-given, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'refusal INVALID_REQUEST', statements_differ: [materialize], summary: "the DuckDB line: refused at materialize as the reference refuses it, without the reference's read of the folded key"}
-  - {case: rule.composite-key-given, cell: ref-pandas3, runner: java, old: 'refusal INVALID_REQUEST', new: 'refusal INVALID_REQUEST', statements_differ: [materialize], summary: "the DuckDB line: refused at materialize as the reference refuses it, without the reference's read of the folded key"}
+  - {case: rule.composite-key-given, cell: ref-pandas3, runner: java, old: 'none', new: 'refusal INVALID_REQUEST', statements_differ: [materialize], summary: "the DuckDB line: refused at materialize as the reference refuses it, without the reference's read of the folded key"}
   - {case: rule.composite-key-given@postgres, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', statements_differ: [materialize], summary: "the Postgres line: refused at materialize as the reference refuses it, without the reference's read of the folded key"}
   - {case: rule.composite-key-given@postgres, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'refusal INVALID_REQUEST', statements_differ: [materialize], summary: "the Postgres line: refused at materialize as the reference refuses it, without the reference's read of the folded key"}
   - {case: rule.composite-key-given@postgres, cell: ref-pandas3, runner: java, old: 'refusal INVALID_REQUEST', new: 'refusal INVALID_REQUEST', statements_differ: [materialize], summary: "the Postgres line: refused at materialize as the reference refuses it, without the reference's read of the folded key"}
@@ -8842,7 +8842,7 @@ entries:
   - {case: sample.num-neighbors.minus-one, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal INVALID_REQUEST', summary: 'num_neighbors=[-1] refused by name, where the reference''s DuckDB sampler keeps no referring rows and answers'}
   - {case: sample.num-neighbors.minus-one, cell: ref-pandas3, runner: java, old: 'none', new: 'refusal INVALID_REQUEST', summary: 'num_neighbors=[-1] refused by name, where the reference''s DuckDB sampler keeps no referring rows and answers'}
   - {case: sample.num-neighbors.minus-one, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'refusal INVALID_REQUEST', statements_differ: [materialize], summary: 'num_neighbors=[-1] refused by name, where the reference''s DuckDB sampler keeps no referring rows and answers'}
-  - {case: sample.num-neighbors.minus-one, cell: ref-pandas3, runner: java, old: 'success', new: 'refusal INVALID_REQUEST', statements_differ: [materialize], summary: 'num_neighbors=[-1] refused by name, where the reference''s DuckDB sampler keeps no referring rows and answers'}
+  - {case: sample.num-neighbors.minus-one, cell: ref-pandas3, runner: java, old: 'none', new: 'refusal INVALID_REQUEST', statements_differ: [materialize], summary: 'num_neighbors=[-1] refused by name, where the reference''s DuckDB sampler keeps no referring rows and answers'}
   - {case: sample.num-neighbors.minus-one@sqlite, cell: ref-pandas3, runner: python-core, old: 'success at predict', new: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', statements_differ: [materialize], summary: 'num_neighbors=[-1] refused by name, where the reference''s SQLite keeps every referring row (LIMIT -1) and answers'}
   - {case: sample.num-neighbors.minus-one@sqlite, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'refusal INVALID_REQUEST', statements_differ: [materialize], summary: 'num_neighbors=[-1] refused by name, where the reference''s SQLite keeps every referring row (LIMIT -1) and answers'}
   - {case: sample.num-neighbors.minus-one@sqlite, cell: ref-pandas3, runner: java, old: 'success', new: 'refusal INVALID_REQUEST', statements_differ: [materialize], summary: 'num_neighbors=[-1] refused by name, where the reference''s SQLite keeps every referring row (LIMIT -1) and answers'}
@@ -8922,3 +8922,86 @@ entries:
     Proposed by T3.12's implementer for the owner: a better error (at
     compile time) in the owner's sense of KO3-41, and no input the Java API
     takes is refused that the reference accepts.
+
+- id: JV-2
+  title: An anonymous Postgres record is refused by name on Java, where Python's provider writes Python's repr of it
+  kind: change
+  old_behavior: >-
+    Python's Postgres provider reads a column of the anonymous record type
+    (a ROW(...) expression; no table's column holds one) through psycopg,
+    which reads it as a tuple of texts, and hands the core Python's text of
+    that tuple, ('1', 'x').
+  new_behavior: >-
+    Java's Postgres provider refuses such a column by name (the reference's
+    driver reads it as a value this client has no faithful spelling of),
+    never handing the server's text (1,x) as if it were the reference's.
+    A user's composite type, which psycopg's registry does not name, is
+    read as the server's text on both hosts.
+  affected_inputs: >-
+    A statement whose result has a column of the anonymous record type
+    (OID 2249) or an array of it. The core writes no such statement; a
+    table column cannot be of this type.
+  cases: []
+  refs: [T3.12, packages/structured-data-models-client/tests_test_ops/test_t312_driver_parity.py]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Proposed by T3.12's implementer for the owner (fix round 1): Python's
+    repr of a string depends on Unicode's printable classes, which differ
+    between Python's and the JVM's Unicode versions, so a Java copy could
+    not match it value for value. The driver parity test holds this
+    difference as stated.
+
+- id: JV-3
+  title: A Postgres JSON value nested past Python's recursion limit is read on Java, where Python's provider fails
+  kind: change
+  old_behavior: >-
+    Python's Postgres provider reads a json or jsonb value through psycopg,
+    whose json.loads fails on a value nested past Python's recursion limit
+    (about 1,000 levels); the read fails as a provider error.
+  new_behavior: >-
+    Java's Postgres provider hands the core's JSON text of the value
+    (sdm_host::json_value_text, the reference's text of it), which the
+    core reads to 2,000 levels, the depth the core's reader takes; past
+    that it is refused by name on both hosts. To about 1,000 levels both
+    hosts hand the same text.
+  affected_inputs: >-
+    A Postgres json or jsonb value nested between about 1,000 and 2,000
+    levels deep.
+  cases: []
+  refs: [T3.12, packages/structured-data-models-client/tests_test_ops/test_t312_driver_parity.py]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Proposed by T3.12's implementer for the owner (fix round 1, Codex P1-4:
+    the JSON rule is the core's alone). Python's limit depends on the
+    interpreter's stack in use when it reads, so no fixed depth matches it.
+
+- id: JV-4
+  title: A Postgres zoned time written as text is spelled in the session's zone, which pgjdbc sets to the JVM's
+  kind: change
+  old_behavior: >-
+    Python's Postgres provider writes an element of a timestamptz array, and
+    a bound of a tstzrange, as Python's text of the datetime psycopg read,
+    in the session's zone; psycopg leaves the session's zone the server's
+    default.
+  new_behavior: >-
+    Java's Postgres provider writes the same text in the session's zone,
+    value for value as Python's on a session of the same zone; pgjdbc sets
+    the session's zone to the JVM's default zone, so on a JVM whose zone is
+    not the server's default the text names the same instant in another
+    zone. A timestamptz column (not text) is the instant in UTC on both.
+  affected_inputs: >-
+    A timestamptz array or tstzrange column read on a JVM whose default zone
+    is not the Postgres server's default zone.
+  cases: []
+  refs: [T3.12, packages/structured-data-models-client/tests_test_ops/test_t312_driver_parity.py]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Proposed by T3.12's implementer for the owner (fix round 1, Codex P2-8):
+    the reference's own text depends on its session's zone; the core keeps
+    no feature of these columns' text (a list of text is no feature).

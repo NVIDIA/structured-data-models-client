@@ -124,12 +124,13 @@ class T312ConversionTableTest {
 
   /** psycopg's timedelta of each, as days, seconds and microseconds (probed). */
   @Test
-  void anIntervalIsReadAsPsycopgReadsIt() {
+  void anIntervalIsReadAsPsycopgReadsIt() throws Exception {
     long[][] expected = {{32, 10800, 0}, {-2, 86399, 0}, {365, 0, 0}, {0, 0, 500000}, {422, 14706, 789000}, {-1, 86399, 999999}};
     String[] given = {"1 mon 2 days 03:00:00", "-1 days -00:00:01", "1 year", "00:00:00.5", "1 year 2 mons -3 days +04:05:06.789", "-00:00:00.000001"};
     for (int at = 0; at < given.length; at++) {
       long micros = (expected[at][0] * 86_400L + expected[at][1]) * 1_000_000L + expected[at][2];
-      assertEquals(micros, PostgresText.intervalMicros(given[at]), given[at]);
+      PostgresText.Delta read = PostgresText.interval(given[at], "postgres");
+      assertEquals(micros, read.days() * 86_400_000_000L + read.micros(), given[at]);
     }
   }
 

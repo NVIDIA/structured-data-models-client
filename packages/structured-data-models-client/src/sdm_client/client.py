@@ -404,7 +404,15 @@ class SDMClient:
         live connection, and it is not the endpoint's own answer. Use
         :meth:`models` for that.
         """
-        return describe(self._spec(model))
+        from sdm_client import _routing
+
+        spec = self._spec(model)
+        if _routing.route(_routing.CAPABILITIES) == 'core':
+            # The core's table, the one both hosts describe a model from.
+            from sdm_client._rust.capabilities import described
+
+            return described(spec.model_id)
+        return describe(spec)
 
     def health_ready(self) -> bool:
         r"""Whether the NIM answers ``GET /v1/health/ready`` with 200."""

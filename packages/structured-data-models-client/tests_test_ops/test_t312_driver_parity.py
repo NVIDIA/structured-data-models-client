@@ -448,11 +448,9 @@ KNOWN = {
     # An anonymous record, which no table's column holds: psycopg reads it
     # as a tuple of texts and the provider writes Python's repr of it.
     'record': ('python', 'JV-2'),
-    # An interval past a timedelta's days: psycopg's C loader wraps it.
-    'interval past a timedelta': ('python', 'JV-3'),
     # A JSON value nested past Python's recursion limit, which the core
     # reads (to 2,000) and Python's reader does not.
-    "json past Python's reader": ('java', 'JV-5'),
+    "json past Python's reader": ('java', 'JV-3'),
 }
 
 
@@ -684,15 +682,11 @@ def _shown(answer: pa.Table | str) -> str:
 def test_java_hands_the_core_what_python_s_provider_hands_it(
     databases: Databases, database: str
 ) -> None:
-    import yaml
-
-    register = yaml.safe_load(
-        (ROOT / 'docs/design/rust-core/register.yaml').read_text(
-            encoding='utf-8'
-        )
+    register = (ROOT / 'docs/design/rust-core/register.yaml').read_text(
+        encoding='utf-8'
     )
-    entries = {entry['id'] for entry in register['entries']}
-    assert {entry for _, entry in KNOWN.values()} <= entries
+    for _, entry in KNOWN.values():
+        assert f'\n- id: {entry}\n' in register, entry
     java = _java()
     if java is None or (database == 'postgres' and databases.scoped is None):
         return

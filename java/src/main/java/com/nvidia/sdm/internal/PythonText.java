@@ -18,22 +18,13 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Text written as the reference's Python driver path writes it, where the Arrow that reaches the
- * core holds that text: a JSON value Postgres gave, read by Python's {@code json.loads} and
- * written back by {@code json.dumps(value, separators=(',', ':'))} (ASCII only, a float as
- * Python's {@code repr} of it), as the Python provider hands one over. Not part of the API.
+ * Text written as the Python host writes it: a request's payload, the JSON the core wrote, read by
+ * Python's {@code json.loads} and written back by {@code json.dumps(value, allow_nan=False)}
+ * (ASCII only, a float as Python's {@code repr} of it), as the Python host sends one. Not part of
+ * the API.
  */
 public final class PythonText {
   private PythonText() {}
-
-  /**
-   * The JSON text {@code text} as Python's {@code json.loads} reads it and {@code json.dumps(...,
-   * separators=(',', ':'))} writes it back, as the Python Postgres provider hands a JSON value
-   * over.
-   */
-  public static String json(String text) {
-    return dumps(new Reader(text).document(), ",", ":", true);
-  }
 
   /**
    * The JSON {@code bytes} as Python's {@code json.loads} reads them and {@code json.dumps(...,

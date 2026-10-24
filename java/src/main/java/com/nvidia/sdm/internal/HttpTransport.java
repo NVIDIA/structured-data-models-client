@@ -8,7 +8,7 @@ import com.nvidia.sdm.ModelEndpointException;
 import com.nvidia.sdm.StructuredDataException;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
+import java.nio.ByteBuffer;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.http.HttpClient;
@@ -16,8 +16,15 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.net.http.HttpTimeoutException;
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Flow;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 /**
  * The model transport over {@code java.net.http}, the Java twin of the Python host's {@code
@@ -26,7 +33,7 @@ import java.util.Set;
  * 10, "Model calls"), and gives back the endpoint's answer as the bytes it sent, which the core
  * reads. A transient failure (a status of 429, 502, 503 or 504, or a connection that failed) is
  * tried again with exponential backoff, a {@code Retry-After} the endpoint sends honoured up to a
- * minute; a status of 400 or more is the endpoint's refusal ({@link ModelEndpointException}); an
+ * minute; the timeout bounds each attempt whole, its answer's body included; a status of 400 or more is the endpoint's refusal ({@link ModelEndpointException}); an
  * endpoint that cannot be reached, or an answer past 64 MiB or that is not a JSON object, is a
  * failed transport ({@link Failed}). Not part of the API.
  */
@@ -134,9 +141,9 @@ public final class HttpTransport {
     }
     HttpRequest built = request.build();
     for (int attempt = 0; ; attempt++) {
-      HttpResponse<InputStream> response;
+      HttpResponse<byte[]> response;
       try {
-        response = client.send(built, HttpResponse.BodyHandlers.ofInputStream());
+        response = attempt(built);
       } catch (HttpTimeoutException e) {
         if (attempt < maxRetries) {
           backoff(attempt, null);
@@ -149,12 +156,9 @@ public final class HttpTransport {
           continue;
         }
         throw new Failed("the request failed: " + e.getClass().getSimpleName());
-      } catch (InterruptedException e) {
-        Thread.currentThread().interrupt();
-        throw new Failed("the request was interrupted");
       }
       int status = response.statusCode();
-      byte[] content = capped(response);
+      byte[] content = response.body();
       if (RETRY_STATUS.contains(status) && attempt < maxRetries) {
         backoff(attempt, response.headers().firstValue("Retry-After").orElse(null));
         continue;
@@ -167,6 +171,85 @@ public final class HttpTransport {
       }
       checkObject(content);
       return content;
+    }
+  }
+
+  /**
+   * One attempt, its answer read whole within the timeout: headers and body alike, so an endpoint
+   * that holds its body back, or never ends it, times out, its exchange given up.
+   *
+   * @throws HttpTimeoutException the attempt did not end within the timeout
+   * @throws IOException the endpoint could not be reached or its answer read
+   * @throws Failed the answer is past {@link #MAX_RESPONSE_BYTES}, or the call was interrupted
+   */
+  private HttpResponse<byte[]> attempt(HttpRequest built) throws IOException, Failed {
+    CompletableFuture<HttpResponse<byte[]>> pending =
+        client.sendAsync(built, info -> new Capped());
+    try {
+      return pending.get(timeout.toNanos(), TimeUnit.NANOSECONDS);
+    } catch (TimeoutException e) {
+      pending.cancel(true);
+      throw new HttpTimeoutException("the attempt timed out");
+    } catch (InterruptedException e) {
+      pending.cancel(true);
+      Thread.currentThread().interrupt();
+      throw new Failed("the request was interrupted");
+    } catch (ExecutionException e) {
+      Throwable cause = e.getCause();
+      if (cause instanceof TooLarge) {
+        throw new Failed("the response body exceeds the " + MAX_RESPONSE_BYTES + " byte limit");
+      }
+      if (cause instanceof IOException failed) {
+        throw failed;
+      }
+      throw new IOException(cause == null ? e : cause);
+    }
+  }
+
+  /** An answer past {@link #MAX_RESPONSE_BYTES}. */
+  private static final class TooLarge extends IOException {
+    private static final long serialVersionUID = 1L;
+  }
+
+  /** The answer's body, read whole, given up past {@link #MAX_RESPONSE_BYTES}. */
+  private static final class Capped implements HttpResponse.BodySubscriber<byte[]> {
+    private final CompletableFuture<byte[]> body = new CompletableFuture<>();
+    private final ByteArrayOutputStream out = new ByteArrayOutputStream();
+    private Flow.Subscription subscription;
+
+    @Override
+    public CompletionStage<byte[]> getBody() {
+      return body;
+    }
+
+    @Override
+    public void onSubscribe(Flow.Subscription given) {
+      subscription = given;
+      given.request(Long.MAX_VALUE);
+    }
+
+    @Override
+    public void onNext(List<ByteBuffer> items) {
+      for (ByteBuffer item : items) {
+        if (out.size() + item.remaining() > MAX_RESPONSE_BYTES) {
+          subscription.cancel();
+          body.completeExceptionally(new TooLarge());
+          return;
+        }
+        byte[] chunk = new byte[item.remaining()];
+        item.get(chunk);
+        out.write(chunk, 0, chunk.length);
+      }
+    }
+
+    @Override
+    public void onError(Throwable error) {
+      body.completeExceptionally(error);
+    }
+
+    @Override
+    public void onComplete() {
+      body.complete(out.toByteArray());
     }
   }
 
@@ -185,23 +268,6 @@ public final class HttpTransport {
     }
     if (!(read instanceof Map<?, ?>)) {
       throw new Failed("expected a JSON object from the endpoint");
-    }
-  }
-
-  private static byte[] capped(HttpResponse<InputStream> response) throws Failed {
-    try (InputStream in = response.body()) {
-      ByteArrayOutputStream out = new ByteArrayOutputStream();
-      byte[] chunk = new byte[64 * 1024];
-      int read;
-      while ((read = in.read(chunk)) >= 0) {
-        if (out.size() + read > MAX_RESPONSE_BYTES) {
-          throw new Failed("the response body exceeds the " + MAX_RESPONSE_BYTES + " byte limit");
-        }
-        out.write(chunk, 0, read);
-      }
-      return out.toByteArray();
-    } catch (IOException e) {
-      throw new Failed("the response could not be read: " + e.getClass().getSimpleName());
     }
   }
 

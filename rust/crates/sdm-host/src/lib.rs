@@ -31,6 +31,52 @@ pub use sdm_core::{
 };
 pub use zones::{ZoneError, ZoneResolver, ZoneRoot, ZoneSource};
 
+/// A Postgres `json` or `jsonb` value, given as the server's text, as the
+/// reference's provider hands it to the core (`sdm_data::json_text`, the
+/// reference's float text): for a host whose driver gives the server's
+/// text (T3.12 fix 1), so how the value is read stays in the data layer.
+/// `None` where the text is not JSON; `Some(None)` for a JSON null.
+pub fn json_value_text(text: &str) -> Option<Option<String>> {
+    let read = || sdm_data::json_text(text, sdm_core::float_text);
+    // The reader recurses once per level: a deep value is read on a stack
+    // of its own, as the core reads a deep query, a shallow one on the
+    // caller's (a JVM thread's stack is small).
+    if nesting(text) > SHALLOW {
+        sdm_core::pql::on_adapter_stack(read)
+    } else {
+        read()
+    }
+}
+
+/// The deepest nesting read on the caller's stack.
+const SHALLOW: usize = 64;
+
+/// How deep `text`'s arrays and objects nest, its strings skipped.
+fn nesting(text: &str) -> usize {
+    let (mut depth, mut deepest, mut quoted, mut escaped) = (0usize, 0usize, false, false);
+    for byte in text.bytes() {
+        if quoted {
+            match byte {
+                _ if escaped => escaped = false,
+                b'\\' => escaped = true,
+                b'"' => quoted = false,
+                _ => {}
+            }
+            continue;
+        }
+        match byte {
+            b'"' => quoted = true,
+            b'[' | b'{' => {
+                depth += 1;
+                deepest = deepest.max(depth);
+            }
+            b']' | b'}' => depth = depth.saturating_sub(1),
+            _ => {}
+        }
+    }
+    deepest
+}
+
 /// The table of what every sentence says, which a binding exports as the
 /// JSON it is (`sdm_contract::wording`, T3.17): a host reads it once and
 /// fills each error's and warning's sentence from it, formatting nothing
