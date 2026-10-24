@@ -218,6 +218,9 @@ public final class ContractRunner {
           answer.put("arrow", Base64.getEncoder().encodeToString(ArrowData.ipc(read)));
         } catch (Exception failed) {
           answer.put("error", failed.getClass().getName());
+          // The SQLSTATE a driver's refusal names, as Python's provider's carries it.
+          answer.put(
+              "sqlstate", failed instanceof java.sql.SQLException sql ? sql.getSQLState() : null);
         }
         answers.add(answer);
       }

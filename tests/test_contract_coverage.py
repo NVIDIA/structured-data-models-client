@@ -134,7 +134,10 @@ def build(repo: Path) -> tuple[Path, str]:
     # from T3.2), which the copy's tree must define as the candidate's does.
     for manifest in (PYTHON, JAVA):
         text = (ROOT / manifest).read_text(encoding='utf-8')
-        for name in sorted(set(re.findall(r'([\w./-]+\.py)::', text))):
+        claimed = re.findall(r'([\w./-]+\.py)::', text) + re.findall(
+            r'(java/src/test/java/[\w./-]+\.java)#', text
+        )
+        for name in sorted(set(claimed)):
             (repo / name).parent.mkdir(parents=True, exist_ok=True)
             (repo / name).write_bytes((ROOT / name).read_bytes())
     landed = commit(

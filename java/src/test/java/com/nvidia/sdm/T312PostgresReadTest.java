@@ -140,4 +140,80 @@ class T312PostgresReadTest {
           1, rows(connection, step("SET IntervalStyle = 'postgres'", "SELECT '1 day'::interval AS v")));
     }
   }
+
+  /** The first column's values of a read, as the Arrow vector gives them. */
+  private static List<Object> values(Connection connection, Map<String, Object> step) throws Exception {
+    JdbcProvider provider =
+        new JdbcProvider(connection, JdbcProvider.Driver.POSTGRES, ConversionTable.REVIEWED);
+    List<Object> out = new ArrayList<>();
+    try (ArrowReader read = provider.answer(step, Map.of(), ArrowData.allocator())) {
+      while (read.loadNextBatch()) {
+        org.apache.arrow.vector.FieldVector column = read.getVectorSchemaRoot().getVector(0);
+        for (int row = 0; row < column.getValueCount(); row++) {
+          Object value = column.getObject(row);
+          out.add(value == null ? null : value.toString());
+        }
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Claude T3.12 r2 P1-1: a float4 is the double of the server's text, as psycopg reads it, an
+   * exact tie of the shortest digits included (Postgres writes {@code 1.03528336e+08}).
+   */
+  @Test
+  void aFloat4IsTheDoubleOfTheServersText() throws Exception {
+    try (Connection connection = T312Shop.open("postgres")) {
+      assertEquals(
+          List.of("1.03528336E8"), values(connection, step("SELECT '103528336'::float4 AS v")));
+      assertEquals(
+          List.of("[1.03528336E8]"),
+          values(connection, step("SELECT '{103528336}'::float4[] AS v")));
+    }
+  }
+
+  /**
+   * Claude T3.12 r2 P1-2: on a connection that forces binary transfer ({@code
+   * prepareThreshold=-1}) every value is still read in text, and the connection keeps its own
+   * setting.
+   */
+  @Test
+  void aConnectionForcingBinaryIsStillReadInText() throws Exception {
+    try (Connection shop = T312Shop.open("postgres")) {
+      java.net.URI uri = java.net.URI.create(System.getenv("SDM_POSTGRES_TEST_DSN"));
+      String[] user = uri.getUserInfo().split(":", 2);
+      try (Connection connection =
+          java.sql.DriverManager.getConnection(
+              shop.getMetaData().getURL() + "?prepareThreshold=-1", user[0], user[1])) {
+        org.postgresql.jdbc.PgConnection pg =
+            connection.unwrap(org.postgresql.jdbc.PgConnection.class);
+        assertTrue(pg.getForceBinary());
+        for (int run = 0; run < 7; run++) {
+          assertEquals(List.of("00:00"), values(connection, step("SELECT '00:00-08'::timetz AS v")));
+          assertEquals(List.of("12300"), values(connection, step("SELECT '12345'::numeric(5,-2) AS v")));
+          assertEquals(List.of("(1,2)"), values(connection, step("SELECT '(1,2)'::point AS v")));
+          assertEquals(List.of("[1]"), values(connection, step("SELECT '{1}'::oid[] AS v")));
+        }
+        assertTrue(pg.getForceBinary());
+      }
+    }
+  }
+
+  /**
+   * Codex T3.12 r2 P0-1: a zoned range is written in the zone psycopg reads the session's in:
+   * UTC for a zone Python does not name ({@code GMT+3}), the named zone otherwise.
+   */
+  @Test
+  void aZonedRangeIsWrittenInTheZonePsycopgReadsIn() throws Exception {
+    try (Connection connection = T312Shop.open("postgres")) {
+      String range = "SELECT '[2024-01-01 00:00+00,2024-01-02 00:00+00)'::tstzrange AS v";
+      assertEquals(
+          List.of("[2024-01-01 00:00:00+00:00, 2024-01-02 00:00:00+00:00)"),
+          values(connection, step("SET TimeZone = 'GMT+3'", range)));
+      assertEquals(
+          List.of("[2024-01-01 05:30:00+05:30, 2024-01-02 05:30:00+05:30)"),
+          values(connection, step("SET TimeZone = 'Asia/Kolkata'", range)));
+    }
+  }
 }
