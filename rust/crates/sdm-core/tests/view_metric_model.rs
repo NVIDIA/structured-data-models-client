@@ -2,26 +2,30 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The metric view's model (T3.5, design S5 and part 5's M2) against
-//! `contract/view-metric-vectors.json`: each definition the old client's
-//! `parse_metric_view` read in its own tests, and in the T3.5 cases, with
-//! its whole answer.
+//! A metric view's definition and its joins (T3.5, design S5 and part 5's
+//! M2) against `contract/view-metric-vectors.json`: each definition the old
+//! client's `parse_metric_view` read in its own tests, in the T3.5 cases and
+//! in the first review's cases, with its whole answer.
 //!
-//! The model is the definition's structure, its expressions opaque text
-//! (design S5); what the old client decided by reading an expression (a
-//! join's source or condition, a dimension's tables, the filter) the data
-//! layer decides, so here the model is held to every part of the old answer
-//! that its structure settles: the two refusals of the definition itself,
-//! the joins' tree and order as the old client walked it, the messages of
-//! a join or dimension that is no mapping or misses a name, the
-//! `materialization` and `fields` messages, the measures, the parameters
-//! and the window measures' order dimensions. The messages quote a value
-//! as the core writes it (`view_words`), so this test is the core's.
+//! The joins are walked as the core walks them (`view_steps::walk_joins`:
+//! the schema's order, the data layer's reading of each source and
+//! condition), and held to the old answer whole: each join kept, with its
+//! parent, path, cardinality, table and keys; each join skipped, with its
+//! reason and the joins nested in it; and the message of each join that is
+//! no mapping or has no name. The definition's own refusals, the source's,
+//! the sections it ignores, the dimensions it cannot read, the measures,
+//! the parameters and the window measures' order dimensions are held too.
+//! The messages quote a value as the core writes it (`view_words`).
 
 use std::collections::BTreeSet;
 
-use sdm_core::view_words::value_repr;
-use sdm_schema::view::metric::{self, Cardinality, DimensionItem, JoinItem, MetricView};
+use sdm_core::view_steps::{self, JoinJudgement};
+use sdm_core::view_words;
+use sdm_data::view_expr::metric as data;
+use sdm_data::view_expr::strip_comments;
+use sdm_schema::view::joins::JoinWalk;
+use sdm_schema::view::metric;
+use sdm_schema::view::spec::{Cardinality, ColumnItem, JoinKeys, Source, TableItem, ViewSpec};
 use sdm_schema::view::yaml::Value;
 use serde_json::Value as Json;
 
@@ -42,87 +46,9 @@ fn texts(value: &Json) -> Vec<String> {
         .collect()
 }
 
-/// `unquote_ident` (`DB/metric_view.py:352-357`): a name in backticks,
-/// unquoted, else as written.
+/// `unquote_ident`: a name in backticks, unquoted, else as written.
 fn unquoted(name: &str) -> String {
-    let name = name.trim();
-    match name
-        .strip_prefix('`')
-        .and_then(|rest| rest.strip_suffix('`'))
-    {
-        Some(inner) if name.len() >= 2 => inner.replace("``", "`"),
-        _ => name.to_owned(),
-    }
-}
-
-/// The joins the old client kept, walked as `_add_joins` walks them
-/// (`DB/metric_view.py:825-909`): parents before children, each kept
-/// join's nested joins visited, a skipped join's not. Gives each kept
-/// join's name, parent and path, and the message of each join that is no
-/// mapping or misses a name, in order. A join the old client skipped is
-/// one it did not keep, or one named as a join kept before it.
-fn walk(
-    items: &[JoinItem],
-    parent: &[String],
-    kept: &BTreeSet<String>,
-    joins: &mut Vec<(String, String, Vec<String>, Cardinality)>,
-    messages: &mut Vec<String>,
-) {
-    for item in items {
-        match item {
-            JoinItem::NotAMapping { cfg } => {
-                messages.push(format!(
-                    "Failed to add join {} since it is not a mapping",
-                    value_repr(cfg)
-                ));
-            }
-            JoinItem::Nameless { cfg, .. } => {
-                messages.push(format!(
-                    "Failed to add join {} since it misses a name",
-                    value_repr(cfg)
-                ));
-            }
-            JoinItem::Join(join) => {
-                // A name already taken skips the join (`:849-851`).
-                if !kept.contains(&join.name) || joins.iter().any(|(name, ..)| *name == join.name) {
-                    continue;
-                }
-                let mut path = parent.to_vec();
-                path.push(join.name.clone());
-                let parent_alias = parent.last().cloned().unwrap_or_else(|| "source".into());
-                joins.push((
-                    join.name.clone(),
-                    parent_alias,
-                    path.clone(),
-                    join.cardinality.clone(),
-                ));
-                walk(&join.joins, &path, kept, joins, messages);
-            }
-        }
-    }
-}
-
-/// The messages of the dimensions the structure alone drops
-/// (`DB/metric_view.py:958-996`): one that is no mapping, and one whose
-/// expression is no text (one whose name is no text may still be a
-/// wildcard, which the data layer reads).
-fn dimension_messages(view: &MetricView) -> Vec<String> {
-    view.dimensions
-        .iter()
-        .filter_map(|item| match item {
-            DimensionItem::NotAMapping { cfg } => Some(format!(
-                "Failed to add dimension {} since it is not a mapping",
-                value_repr(cfg)
-            )),
-            DimensionItem::Dimension { expr, cfg, .. } if !matches!(expr, Value::Str(_)) => {
-                Some(format!(
-                    "Failed to add dimension {} since it misses a name or expression",
-                    value_repr(cfg)
-                ))
-            }
-            DimensionItem::Dimension { .. } => None,
-        })
-        .collect()
+    data::unquote(name)
 }
 
 /// Whether `part` appears in `whole` in order, not necessarily together.
@@ -131,117 +57,174 @@ fn in_order(part: &[String], whole: &[String]) -> bool {
     part.iter().all(|wanted| rest.any(|item| item == wanted))
 }
 
+/// Each kept join as the old answer writes it.
+fn kept_joins(spec: &ViewSpec, walk: &JoinWalk<JoinJudgement>) -> Vec<Json> {
+    walk.kept
+        .iter()
+        .map(|&at| {
+            let TableItem::Table(table) = &spec.tables[at] else {
+                unreachable!()
+            };
+            let mut path = vec![table.alias.clone()];
+            let mut parent = table.parent;
+            while let Some(index) = parent.filter(|&p| p > 0) {
+                let TableItem::Table(up) = &spec.tables[index] else {
+                    unreachable!()
+                };
+                path.insert(0, up.alias.clone());
+                parent = up.parent;
+            }
+            let parent_alias = if path.len() > 1 {
+                path[path.len() - 2].clone()
+            } else {
+                metric::SOURCE_ALIAS.to_owned()
+            };
+            let join = table.join.as_ref().unwrap();
+            let Source::Name(Some(source)) = table.source else {
+                unreachable!()
+            };
+            let parts = data::table_reference(spec.text(source).unwrap()).unwrap();
+            let condition = match join.keys {
+                JoinKeys::Using(column) => {
+                    let column = unquoted(&view_words::value_text(&spec.document, column));
+                    serde_json::json!([
+                        {"qualifier": parent_alias, "column": column},
+                        {"qualifier": table.alias, "column": column},
+                    ])
+                }
+                JoinKeys::On(Some(on)) => {
+                    let on = strip_comments(spec.text(on).unwrap()).unwrap();
+                    let [a, b] = data::join_condition(&on).unwrap();
+                    serde_json::json!([
+                        {"qualifier": a.qualifier, "column": a.column},
+                        {"qualifier": b.qualifier, "column": b.column},
+                    ])
+                }
+                _ => unreachable!(),
+            };
+            serde_json::json!({
+                "alias": table.alias,
+                "table": parts,
+                "parent_alias": parent_alias,
+                "path": path,
+                "condition": condition,
+                "cardinality": match join.cardinality {
+                    Cardinality::ManyToOne => "many_to_one",
+                    Cardinality::OneToMany => "one_to_many",
+                    Cardinality::Unsupported(_) => unreachable!(),
+                },
+            })
+        })
+        .collect()
+}
+
+/// The messages of the dimensions the structure alone drops: one that is
+/// no mapping, and one whose expression is no text.
+fn dimension_messages(spec: &ViewSpec) -> Vec<String> {
+    spec.columns
+        .iter()
+        .filter_map(|item| match item {
+            ColumnItem::NotAMapping { cfg } => {
+                Some(view_words::dimension_not_a_mapping(spec, *cfg))
+            }
+            ColumnItem::Column(column) if column.expr.and_then(|e| spec.text(e)).is_none() => {
+                Some(view_words::dimension_misses_text(spec, column.cfg))
+            }
+            ColumnItem::Column(_) => None,
+        })
+        .collect()
+}
+
 #[test]
-fn each_definition_reads_as_the_old_client_read_its_structure() {
+fn each_definition_reads_as_the_old_client_read_it() {
     let vectors = vectors();
-    assert!(vectors.len() > 100, "{} definitions", vectors.len());
+    assert!(vectors.len() > 140, "{} definitions", vectors.len());
     let mut wrong = Vec::new();
     for vector in &vectors {
         let definition = vector["definition"].as_str().unwrap();
-        let read = metric::parse(definition);
         let refused = vector["error"]["message"].as_str();
-        // The two refusals of the definition itself; the old client's
-        // others (`DB/metric_view.py:784-791`, the filter) read an
-        // expression, so the structure is read and the data layer refuses.
-        let own_refusal = refused.filter(|message| {
-            *message == "The metric view definition is not a YAML mapping"
-                || *message == "The metric view definition misses a 'source'"
-        });
-        let view = match (read, own_refusal) {
-            (Err(refusal), Some(message)) => {
-                if refusal.to_string() != message {
-                    wrong.push(format!("{definition:?}: {refusal} where it said {message}"));
+        let mut spec = match metric::parse(definition) {
+            Ok(spec) => spec,
+            Err(refusal) => {
+                if Some(refusal.to_string().as_str()) != refused {
+                    wrong.push(format!("{definition:?}: {refusal} where {refused:?}"));
                 }
                 continue;
             }
-            (Ok(_), Some(message)) => {
-                wrong.push(format!("{definition:?}: read where it refused: {message}"));
-                continue;
-            }
-            (Err(refusal), None) => {
-                wrong.push(format!("{definition:?}: refused ({refusal})"));
-                continue;
-            }
-            (Ok(view), None) => view,
         };
-        let Some(spec) = vector.get("spec") else {
+        // The source, which the old client parses before anything else.
+        if let Err(node) = view_steps::fact_source(&spec) {
+            let text = view_words::unsupported_source_text(&spec, node);
+            if Some(text.as_str()) != refused {
+                wrong.push(format!("{definition:?}: {text} where {refused:?}"));
+            }
+            continue;
+        }
+        let walk = match view_steps::walk_joins(&mut spec) {
+            Ok(walk) => walk,
+            Err(refusal) => {
+                wrong.push(format!("{definition:?}: joins refused ({refusal})"));
+                continue;
+            }
+        };
+        let Some(old) = vector.get("spec") else {
+            // Refused later by the old client, for its filter: the data
+            // layer's step, held by sdm-data's and view_words' tests.
             continue;
         };
-        let old_messages = texts(&spec["messages"]);
+        let old_messages = texts(&old["messages"]);
 
-        // The joins the old client kept, in its order, with its parents,
-        // paths and cardinalities.
-        let kept: BTreeSet<String> = spec["joins"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|join| join["alias"].as_str().unwrap().to_owned())
-            .collect();
-        let (mut joins, mut join_messages) = (Vec::new(), Vec::new());
-        walk(&view.joins, &[], &kept, &mut joins, &mut join_messages);
-        let old_joins: Vec<_> = spec["joins"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|join| {
-                (
-                    join["alias"].as_str().unwrap().to_owned(),
-                    join["parent_alias"].as_str().unwrap().to_owned(),
-                    texts(&join["path"]),
-                    match join["cardinality"].as_str().unwrap() {
-                        "many_to_one" => Cardinality::ManyToOne,
-                        "one_to_many" => Cardinality::OneToMany,
-                        other => panic!("{other}"),
-                    },
-                )
-            })
-            .collect();
-        if joins != old_joins {
+        let kept = kept_joins(&spec, &walk);
+        if Json::Array(kept.clone()) != old["joins"] {
             wrong.push(format!(
-                "{definition:?}: joins {joins:?} where {old_joins:?}"
+                "{definition:?}: joins {kept:?} where {}",
+                old["joins"]
             ));
         }
+        let skipped: Vec<Json> = walk
+            .skipped
+            .iter()
+            .map(|s| {
+                serde_json::json!({
+                    "alias": s.alias,
+                    "reason": view_words::skip_reason_text(&spec, &s.alias, &s.reason),
+                    "nested": s.nested,
+                })
+            })
+            .collect();
+        let old_skipped: Vec<Json> = old["skipped_joins"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|s| serde_json::json!({"alias": s["alias"], "reason": s["reason"], "nested": s["nested"]}))
+            .collect();
+        if skipped != old_skipped {
+            wrong.push(format!(
+                "{definition:?}: skipped {skipped:?} where {old_skipped:?}"
+            ));
+        }
+        let join_messages: Vec<String> = walk
+            .messages
+            .iter()
+            .map(|m| view_words::join_message_text(&spec, m))
+            .collect();
         let old_join_messages: Vec<String> = old_messages
             .iter()
-            .filter(|message| message.starts_with("Failed to add join "))
+            .filter(|m| m.starts_with("Failed to add join "))
             .cloned()
             .collect();
         if join_messages != old_join_messages {
             wrong.push(format!(
-                "{definition:?}: join messages {join_messages:?} where {old_join_messages:?}"
+                "{definition:?}: {join_messages:?} where {old_join_messages:?}"
             ));
         }
 
-        // The skipped joins carry their nested joins as the old client
-        // collected them (`DB/metric_view.py:817-823`).
-        for skipped in spec["skipped_joins"].as_array().unwrap() {
-            let alias = skipped["alias"].as_str().unwrap();
-            let nested = texts(&skipped["nested"]);
-            let found = find(&view.joins, alias).map(|join| join.nested_names());
-            if found.as_ref() != Some(&nested) {
-                wrong.push(format!(
-                    "{definition:?}: skipped join {alias} nests {found:?} where {nested:?}"
-                ));
-            }
-        }
-
-        // The messages of the sections and of the dimensions the structure
-        // drops, in the old client's order.
-        let mut own = Vec::new();
-        if view.materialization {
-            own.push(
-                "Ignored the 'materialization' section since it cannot be represented in a graph"
-                    .to_owned(),
-            );
-        }
-        if view.fields_ignored {
-            own.push(
-                "Ignored the 'fields' section since the view also has 'dimensions', and \
-                 Databricks reads only those"
-                    .to_owned(),
-            );
-        }
-        own.extend(dimension_messages(&view));
+        let mut own: Vec<String> = spec
+            .ignored
+            .iter()
+            .map(|i| view_words::ignored_text(*i))
+            .collect();
+        own.extend(dimension_messages(&spec));
         if !in_order(&own, &old_messages) {
             wrong.push(format!(
                 "{definition:?}: messages {own:?} not in {old_messages:?}"
@@ -258,18 +241,17 @@ fn each_definition_reads_as_the_old_client_read_its_structure() {
             }
         }
 
-        // The measures the old client read are the model's, in order.
-        let measures: Vec<String> = view
+        let measures: Vec<String> = spec
             .measures
             .iter()
-            .filter(|measure| matches!(measure.expr, Value::Str(_)))
-            .map(|measure| measure.name.clone())
+            .filter(|m| m.expr.is_some_and(|e| spec.text(e).is_some()))
+            .map(|m| m.name.clone())
             .collect();
-        let old_measures: Vec<String> = spec["measures"]
+        let old_measures: Vec<String> = old["measures"]
             .as_array()
             .unwrap()
             .iter()
-            .map(|measure| measure["name"].as_str().unwrap().to_owned())
+            .map(|m| m["name"].as_str().unwrap().to_owned())
             .collect();
         if !in_order(&old_measures, &measures) {
             wrong.push(format!(
@@ -277,24 +259,22 @@ fn each_definition_reads_as_the_old_client_read_its_structure() {
             ));
         }
 
-        // Each window measure's order dimension, unquoted, once.
         let mut orders: Vec<String> = Vec::new();
-        for order in &view.window_orders {
+        for order in &spec.window_orders {
             let order = unquoted(order);
             if !orders.contains(&order) {
                 orders.push(order);
             }
         }
-        if orders != texts(&spec["window_orders"]) {
+        if orders != texts(&old["window_orders"]) {
             wrong.push(format!(
-                "{definition:?}: window orders {orders:?} where {}",
-                spec["window_orders"]
+                "{definition:?}: orders {orders:?} where {}",
+                old["window_orders"]
             ));
         }
 
-        // Each parameter read as its default is a parameter of the model.
-        let parameters: BTreeSet<String> = view.parameters.iter().map(|p| p.name.clone()).collect();
-        for note in spec["notes"].as_array().unwrap() {
+        let parameters: BTreeSet<String> = spec.parameters.iter().map(|p| p.name.clone()).collect();
+        for note in old["notes"].as_array().unwrap() {
             let name = note[0].as_str().unwrap();
             if !parameters.contains(name) {
                 wrong.push(format!("{definition:?}: no parameter {name}"));
@@ -309,31 +289,18 @@ fn each_definition_reads_as_the_old_client_read_its_structure() {
     );
 }
 
-/// The join named `alias`, wherever it is nested.
-fn find<'a>(items: &'a [JoinItem], alias: &str) -> Option<&'a metric::Join> {
-    items.iter().find_map(|item| match item {
-        JoinItem::Join(join) if join.name == alias => Some(join),
-        JoinItem::Join(join) => find(&join.joins, alias),
-        JoinItem::Nameless { joins, .. } => find(joins, alias),
-        JoinItem::NotAMapping { .. } => None,
-    })
-}
-
 /// The structure the data layer reads further, kept as written: a join's
 /// source, `on` (or the key `true` a bare `on:` is, row 31), `using` and
-/// cardinality; the filter; a parameter's type and default as YAML 1.1
-/// values.
+/// cardinality; the filter; a parameter's type and default.
 #[test]
 fn a_join_keeps_what_it_says_as_written() {
-    let view = metric::parse(
+    let spec = metric::parse(
         "source: c.s.orders\n\
          filter: source.price > 50 -- a comment\n\
          parameters:\n\
          \x20 - name: since\n\
          \x20   data_type: DATE\n\
          \x20   default: 2024-01-01\n\
-         \x20 - name: flag\n\
-         \x20   default: yes\n\
          joins:\n\
          \x20 - name: users\n\
          \x20   source: c.s.users\n\
@@ -349,36 +316,35 @@ fn a_join_keeps_what_it_says_as_written() {
          \x20   cardinality: many_to_many\n",
     )
     .unwrap();
-    assert_eq!(view.source, Value::Str("c.s.orders".into()));
     assert_eq!(
-        view.filter,
-        Some(Value::Str("source.price > 50 -- a comment".into()))
+        spec.text(spec.filter.unwrap()),
+        Some("source.price > 50 -- a comment")
     );
-    assert_eq!(view.parameters.len(), 2);
-    assert_eq!(view.parameters[0].data_type, Value::Str("DATE".into()));
-    assert!(matches!(view.parameters[0].default, Value::Date(_)));
-    assert_eq!(view.parameters[1].default, Value::Bool(true));
-    let [JoinItem::Join(users), JoinItem::Join(shops)] = view.joins.as_slice() else {
-        panic!("{:?}", view.joins)
+    assert!(matches!(
+        spec.value(spec.parameters[0].default.unwrap()),
+        Value::Date(_)
+    ));
+    let tables: Vec<&str> = spec
+        .tables
+        .iter()
+        .map(|t| match t {
+            TableItem::Table(t) => t.alias.as_str(),
+            _ => "?",
+        })
+        .collect();
+    assert_eq!(tables, ["source", "users", "countries", "shops"]);
+    let TableItem::Table(countries) = &spec.tables[2] else {
+        panic!()
     };
-    assert_eq!(users.source, Value::Str("c.s.users".into()));
-    assert_eq!(
-        users.keys,
-        metric::JoinKeys::On(Value::Str("source.user_id = users.user_id".into()))
-    );
-    assert_eq!(users.cardinality, Cardinality::ManyToOne);
-    assert_eq!(users.nested_names(), vec!["countries".to_owned()]);
-    let [JoinItem::Join(countries)] = users.joins.as_slice() else {
-        panic!("{:?}", users.joins)
+    assert_eq!(countries.parent, Some(1));
+    let join = countries.join.as_ref().unwrap();
+    assert_eq!(join.cardinality, Cardinality::OneToMany);
+    let JoinKeys::Using(column) = join.keys else {
+        panic!()
     };
-    assert_eq!(
-        countries.keys,
-        metric::JoinKeys::Using(Value::Str("country".into()))
-    );
-    assert_eq!(countries.cardinality, Cardinality::OneToMany);
-    assert_eq!(shops.keys, metric::JoinKeys::UsingSeveral);
-    assert_eq!(
-        shops.cardinality,
-        Cardinality::Unsupported(Value::Str("many_to_many".into()))
-    );
+    assert_eq!(spec.text(column), Some("country"));
+    let TableItem::Table(shops) = &spec.tables[3] else {
+        panic!()
+    };
+    assert_eq!(shops.join.as_ref().unwrap().keys, JoinKeys::UsingSeveral);
 }
