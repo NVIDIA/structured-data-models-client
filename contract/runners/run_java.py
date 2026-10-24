@@ -7,7 +7,7 @@ r"""The Java runner of the contract cases (design choice 10, "Tests").
 
     python3 -I contract/runners/run_java.py --out FILE [--jar JAR]
         [--classpath DIR] [--drivers DIR] [--native LIBRARY] [--java JAVA]
-        [--database duckdb|sqlite|postgres] [CASE_OR_DIRECTORY...]
+        [--database duckdb|sqlite|postgres|databricks-sql] [CASE_OR_DIRECTORY...]
 
 It reads each case with the Python runner's case reader
 (``run_python.load_cases``), so both hosts read the same files the same
@@ -20,11 +20,10 @@ file turns each answer into an observation in
 the checkpoint's comparator as rust-host's are.
 
 A Java leg runs exactly where the Java host has a provider for it (design
-choice 10): S0's cases, which read no data, from T3.11; from T3.12 an S1
-case on DuckDB, SQLite and Postgres (``--database``), whose paths are all
-Java's (``scope-java.yaml``: no ranking or forecast) and whose inputs Java's
-types can say (:data:`UNSAID`). A case on no Java leg is not run, and is
-named on stderr.
+choice 10): S0, S1's local databases and, from T3.13, the manifest-covered
+Databricks SQL warehouse and metric-view cases. Spark, ranking and forecast
+have no Java leg. A case on no Java leg is named on stderr; a warehouse
+selection admitting no cases fails rather than passing an empty campaign.
 
 An S1 case's data is loaded as the Python runner loads it: on DuckDB the
 Java program runs the case's base and setup statements itself, in memory;
@@ -42,6 +41,15 @@ runner's own capture (``_Capture``) and canonical values
 endpoint received must be, byte for byte, the call the core wrote: the
 transport sends the core's bytes unchanged (choice 10, "Model calls"),
 else a runner failure.
+
+Databricks uses the same ``SDM_LIVE_CONFIG`` and guarded Python warehouse
+loader as ``run_python.py``. The SQL leg additionally requires a private
+``jdbc`` object beside its Python connection configuration, with ``url``
+and string-valued ``properties`` for the released Databricks JDBC driver.
+Resolved test catalog/schema select both the JDBC session namespace and
+the public source. Java's connection checks every executed SQL statement
+with the existing live write guard, narrowed to read-only statements.
+Observations pass through the existing private-name placeholder writer.
 
 The Java outcome is the core's answer as the route maps it, as rust-host's
 is: an accepted query a success, a refused one ``INVALID_REQUEST``, a raised
@@ -89,8 +97,8 @@ FLAGS = (
     '--enable-native-access=ALL-UNNAMED',
     '--add-opens=java.base/java.nio=ALL-UNNAMED',
 )
-#: The databases the Java host has a provider for (T3.12).
-PROVIDERS: tuple[str, ...] = ('duckdb', 'sqlite', 'postgres')
+#: The databases the Java host has a provider for (T3.12, T3.13).
+PROVIDERS: tuple[str, ...] = ('duckdb', 'sqlite', 'postgres', 'databricks-sql')
 #: Each S1 case Java's types cannot say, and why: the call is refused at
 #: compile time in Java, so the case has no Java leg (register JV-1).
 UNSAID = {
@@ -108,37 +116,48 @@ class RunnerFailure(Exception):
 
 
 def java_paths() -> frozenset[str]:
-    r"""The S0 and S1 paths of Java's manifest."""
+    r"""The S0, S1 and S2 paths of Java's manifest."""
     import yaml
 
     manifest = yaml.safe_load(JAVA_MANIFEST.read_text(encoding='utf-8'))
     return frozenset(
         str(item['id'])
         for item in manifest['paths']
-        if item['slice'] in ('S0', 'S1')
+        if item['slice'] in ('S0', 'S1', 'S2')
     )
 
 
 def on_java(
     case: dict[str, Any], database: str = 'duckdb', paths: Any = None
 ) -> bool:
-    r"""Whether the case runs on the Java leg of ``database``: an S0 case
-    (validation, which reads no data) on DuckDB's, or an S1 case on a
-    database it runs on, whose paths are all Java's, whose inputs Java's
-    types can say (:data:`UNSAID`)."""
+    r"""Whether every claimed path is admitted on this actual Java leg."""
     core = case.get('core') or {}
     if case.get('slice') == 'S0' and 'validate_query' in core:
         return database == 'duckdb'
-    if case.get('slice') != 'S1' or database not in PROVIDERS:
+    if case.get('slice') not in ('S1', 'S2') or database not in PROVIDERS:
         return False
     if case['id'] in UNSAID:
         return False
-    if database not in run_python.case_databases(case):
+    legs = (
+        run_python.case_warehouses(case)
+        if database == 'databricks-sql'
+        else run_python.case_databases(case)
+    )
+    if database not in legs:
+        return False
+    # S2 cases claim multiple warehouse legs in one file. Other legs'
+    # claims are not evidence this Java SQL run can produce.
+    claimed = [
+        path
+        for path in case.get('paths', [])
+        if path.rsplit('/', 1)[-1] not in run_python.WAREHOUSES
+        or path.rsplit('/', 1)[-1] == database
+    ]
+    if not claimed:
         return False
     known = java_paths() if paths is None else paths
     return all(
-        run_python.on_database(path, database) in known
-        for path in case['paths']
+        run_python.on_database(path, database) in known for path in claimed
     )
 
 
@@ -184,6 +203,7 @@ def s1_call(
         'case': case['id'],
         'database': database,
         'connect': connect,
+        'source': connect.get('source', {}),
         # DuckDB's data is built by the program, in memory, as the Python
         # runner builds it; elsewhere it is loaded before.
         'setup': [*bases[given['base']], *given.get('setup', [])]
@@ -211,6 +231,99 @@ def _compare() -> Any:
     sys.modules.setdefault('sdm_compare', module)
     spec.loader.exec_module(module)
     return module
+
+
+def _capture_run() -> Any:
+    r"""The existing live loader/driver guard installer."""
+    import importlib.util
+
+    name = 'sdm_java_capture_run'
+    if name not in sys.modules:
+        spec = importlib.util.spec_from_file_location(
+            name, REPO / 'scripts/live/capture_run.py'
+        )
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        spec.loader.exec_module(module)
+    return sys.modules[name]
+
+
+def jdbc_configuration(
+    spec: dict[str, Any], names: dict[str, str]
+) -> dict[str, Any]:
+    r"""Private JDBC options, with the same resolved fixture namespace."""
+    if not names.get('catalog') or not names.get('schema'):
+        raise RunnerFailure('a Java SQL run needs its test catalog and schema')
+    jdbc = spec.get('jdbc')
+    if (
+        not isinstance(jdbc, dict)
+        or not isinstance(jdbc.get('url'), str)
+        or not jdbc['url'].startswith('jdbc:databricks://')
+        or not isinstance(jdbc.get('properties'), dict)
+        or any(
+            not isinstance(key, str) or not isinstance(value, str)
+            for key, value in jdbc['properties'].items()
+        )
+    ):
+        raise RunnerFailure(
+            'the live configuration needs Databricks JDBC options'
+        )
+    return {
+        'url': jdbc['url'],
+        'properties': {
+            **jdbc['properties'],
+            'ConnCatalog': names['catalog'],
+            'ConnSchema': names['schema'],
+        },
+        'guard_python': sys.executable,
+        'guard_program': str(Path(__file__).resolve()),
+    }
+
+
+def source_configuration(
+    case: dict[str, Any], names: dict[str, str]
+) -> dict[str, Any]:
+    r"""The case's public source configuration, without guessing a view."""
+    given = case['input']
+    view = given.get('view')
+    metric = any(
+        path.endswith('/databricks-metric-view') for path in case['paths']
+    )
+    if metric and (
+        not isinstance(view, dict)
+        or view.get('kind') != 'metric_view'
+        or not view.get('name')
+    ):
+        raise RunnerFailure('a Java metric view case must name its metric view')
+    named = given.get('named_part')
+    return {
+        'catalog': names['catalog'] if named in (None, 'catalog') else None,
+        'schema': names['schema'] if named in (None, 'schema') else None,
+        'view': view,
+    }
+
+
+def check_sql(sql: str) -> None:
+    r"""The existing validator, narrowed to reads for the Java connection."""
+    guard = _capture_run().load_guard()
+    try:
+        own = guard.WriteGuard('databricks')
+        items = guard.tokens(sql, 'databricks')
+        if (
+            not items
+            or items[0].kind != 'word'
+            or items[0].text.upper()
+            not in ('SELECT', 'WITH', 'SHOW', 'DESCRIBE', 'DESC')
+        ):
+            raise guard.WriteRefused(
+                'the Java case connection admits reads only'
+            )
+        own.check(sql)
+    except guard.WriteRefused:
+        raise RunnerFailure(
+            'the Java SQL read guard refused a statement'
+        ) from None
 
 
 def java_binary(given: str | None) -> str:
@@ -543,7 +656,7 @@ def described(
     array's element name and ``[]``."""
     if database == 'sqlite':
         return [str(field.type) for field in table.schema]
-    if database == 'duckdb':
+    if database in ('duckdb', 'databricks-sql'):
         return [str(column['type']) for column in columns]
     shown = []
     for column in columns:
@@ -661,6 +774,29 @@ def loaded(
     the program builds it; a new SQLite file, or a new Postgres database on
     ``SDM_POSTGRES_TEST_DSN``'s server, loaded from the case's DuckDB tables
     by the contract loader, as the Python runner loads them; removed after."""
+    if database == 'databricks-sql':
+        spec, names, _ = run_python.live_configuration(database)
+        connect = jdbc_configuration(spec, names)
+        resolved = run_python.resolve_placeholders(case)
+        connect['source'] = source_configuration(resolved, names)
+        capture = _capture_run()
+        guard = capture.load_guard()
+        undo = capture.install_guard(
+            database, guard, run_python._sibling('databases')
+        )
+        live = None
+        try:
+            live = run_python.Live(case, bases, database)
+            yield connect
+            if getattr(guard, 'REFUSALS', ()):
+                raise RunnerFailure(
+                    'the fixture loader guard refused a statement'
+                )
+        finally:
+            if live is not None:
+                live.close()
+            undo()
+        return
     if database == 'duckdb':
         yield {}
         return
@@ -738,6 +874,10 @@ def run(
         if not on_java(case, database, known):
             print(f'{case["id"]}: no Java leg on {database}', file=sys.stderr)
     if not chosen:
+        if database == 'databricks-sql':
+            raise RunnerFailure(
+                'no Java cases are admitted on the SQL warehouse leg'
+            )
         return []
     program = Program(
         java=java_binary(java),
@@ -757,6 +897,10 @@ def run(
                     case, digest, program.ask(call_of(case)), commit
                 )
             else:
+                private = None
+                if database == 'databricks-sql':
+                    _, names, secrets = run_python.live_configuration(database)
+                    private = run_python.Placeheld(names, secrets)
                 given = case['input']
                 with (
                     loaded(case, bases, database) as connect,
@@ -770,7 +914,15 @@ def run(
                     ) as (url, received),
                 ):
                     answer = program.ask(
-                        s1_call(case, database, bases, connect, url)
+                        s1_call(
+                            run_python.resolve_placeholders(case)
+                            if database == 'databricks-sql'
+                            else case,
+                            database,
+                            bases,
+                            connect,
+                            url,
+                        )
                     )
                 made = s1_observation(
                     case,
@@ -781,6 +933,12 @@ def run(
                     commit,
                     received,
                 )
+                if private is not None:
+                    made = private.value(made)
+                    if private.leaked(json.dumps(made, sort_keys=True)):
+                        raise RunnerFailure(
+                            'a Java observation retained private configuration'
+                        )
             problem = run_python._invalid(validate, made)
             if problem is not None:
                 raise RunnerFailure(
@@ -793,6 +951,12 @@ def run(
 
 
 def main(argv: list[str] | None = None) -> int:
+    if (sys.argv[1:] if argv is None else argv) == ['--check-databricks-read']:
+        try:
+            check_sql(sys.stdin.read())
+        except RunnerFailure:
+            return 1
+        return 0
     parser = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     parser.add_argument('--jar', type=Path)
     parser.add_argument('--classpath', type=Path)

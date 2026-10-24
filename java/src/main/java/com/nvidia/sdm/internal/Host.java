@@ -34,7 +34,8 @@ import org.slf4j.LoggerFactory;
  */
 public final class Host {
   /** The databases the Java host has a provider for, and so the Java legs its cases run on. */
-  public static final List<String> PROVIDERS = List.of("duckdb", "sqlite", "postgres");
+  public static final List<String> PROVIDERS =
+      List.of("duckdb", "sqlite", "postgres", "databricks-sql");
 
   /** The largest control message, in bytes, in either direction. */
   public static final int CONTROL_CAP = 64 * 1024;
