@@ -149,3 +149,15 @@ def test_a_genuine_fetch_failure_passes_full_recording_validation() -> None:
     ):
         statements[-1]['error'] = 'ArrowInvalid'
     assert check.capture_problems(line, case, tables) == []
+
+
+def test_the_produced_dirty_excuse_passes_full_recording_validation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    reason = 'the permitted diagnostic change'
+    monkeypatch.setenv('SDM_RECORD_EXCUSE', reason)
+    # Build anew so the real capture_line producer reads the explanation.
+    case, line, tables = OWN._built_capture.__wrapped__()
+    line['observation']['identity']['commit']['clean'] = False
+    assert line['recording']['excuse'] == reason
+    assert check.capture_problems(line, case, tables) == []

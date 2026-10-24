@@ -535,24 +535,37 @@ def test_one_dirty_excuse_reaches_the_recording_and_its_checker(
     answered = runner.run
     reason = 'the permitted diagnostic change'
     previous = 'the previous environment value'
-    monkeypatch.setenv('SDM_RECORD_EXCUSE', reason if source == 'environment' else previous)
+    expected = reason if source == 'environment' else previous
+    monkeypatch.setenv('SDM_RECORD_EXCUSE', expected)
     monkeypatch.setattr(capture_run, 'dirty_trees', lambda *trees: ['dirty'])
     checker = capture_run._module('capture_check')
 
     def run(mode: str, cases: Any, reference: Any, **options: Any) -> Any:
         lines = answered(mode, cases, reference, **options)
         # capture_line reads precisely this variable into recording.excuse.
-        options['record'].write_text(json.dumps({
-            'case': cases[0][0]['id'],
-            'recording': {'excuse': os.environ.get('SDM_RECORD_EXCUSE')},
-            'identity': {'commit': {'clean': False}},
-        }))
+        options['record'].write_text(
+            json.dumps(
+                {
+                    'case': cases[0][0]['id'],
+                    'recording': {
+                        'excuse': os.environ.get('SDM_RECORD_EXCUSE')
+                    },
+                    'identity': {'commit': {'clean': False}},
+                }
+            )
+        )
         return lines
 
     def validate(arguments: list[str]) -> int:
-        line = json.loads(Path(arguments[arguments.index('--capture') + 1]).read_text())
+        recording = Path(arguments[arguments.index('--capture') + 1])
+        line = json.loads(recording.read_text())
         assert line['recording']['excuse'] == reason
-        assert checker._dirty_problems(line['case'], line['identity'], line['recording']) == []
+        assert (
+            checker._dirty_problems(
+                line['case'], line['identity'], line['recording']
+            )
+            == []
+        )
         return 0
 
     monkeypatch.setattr(runner, 'run', run)
@@ -560,4 +573,4 @@ def test_one_dirty_excuse_reaches_the_recording_and_its_checker(
     options = {'dirty_excuse': reason} if source == 'option' else {}
     assert capture_run.run('lakebase', tmp_path, tmp_path / 'out', **options) == 0
     assert imported == list('abcde')
-    assert os.environ['SDM_RECORD_EXCUSE'] == (reason if source == 'environment' else previous)
+    assert os.environ['SDM_RECORD_EXCUSE'] == expected
