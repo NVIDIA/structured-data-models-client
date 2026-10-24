@@ -68,6 +68,7 @@ relationships:
 /// passed to the test as a host provider's request, each catalog answer
 /// the test's tables'.
 struct Fake {
+    definition: String,
     catalogs: BTreeMap<String, Vec<&'static str>>,
 }
 
@@ -98,7 +99,7 @@ impl DataLayer for Fake {
         Ok(match part {
             DescribePart::ViewDefinition => CatalogAnswer::ViewDefinition(ViewDefinition {
                 kind: ViewKind::Semantic,
-                text: VIEW.to_owned(),
+                text: self.definition.clone(),
                 parameters: vec![],
                 located: vec![],
                 columns: vec![],
@@ -193,9 +194,9 @@ fn table_of(request: &DataRequest) -> Option<String> {
         .and_then(|(_, relation)| relation.source.last().cloned())
 }
 
-#[test]
-fn each_table_is_finished_before_the_next_is_read() {
+fn describe_view(definition: &str, spec: serde_json::Value) -> (SourceDescription, Vec<(String, String)>) {
     let fake = Fake {
+        definition: definition.to_owned(),
         catalogs: BTreeMap::from([
             ("USERS".to_owned(), vec!["USER_ID", "COUNTRY"]),
             ("ORDERS".to_owned(), vec!["ORDER_ID", "USER_ID", "PRICE"]),
@@ -206,7 +207,6 @@ fn each_table_is_finished_before_the_next_is_read() {
         "view": {"name": "DB.SHOP.SHOP_VIEW", "trust_expressions": false},
     }))
     .unwrap();
-    let spec = json!({"tables": [], "primary_keys": {}, "time_columns": {}});
     let mut run = start(
         &CompositionRoot::new(Arc::new(fake)),
         StartRun {
@@ -254,6 +254,13 @@ fn each_table_is_finished_before_the_next_is_read() {
             Step::CallModel(_) => panic!("a description called a model"),
         }
     };
+    (description, read)
+}
+
+#[test]
+fn each_table_is_finished_before_the_next_is_read() {
+    let (description, read) = describe_view(VIEW,
+        json!({"tables": [], "primary_keys": {}, "time_columns": {}}));
     // Every read of USERS before the first of ORDERS.
     let first_orders = read.iter().position(|(t, _)| t == "ORDERS").unwrap();
     assert!(
@@ -273,4 +280,17 @@ fn each_table_is_finished_before_the_next_is_read() {
     let orders = &description.tables[1];
     assert_eq!(orders.primary_key, ["ORDER_ID"]);
     assert!(orders.columns.iter().any(|c| c.name == "PRICE_WITH_TAX"));
+}
+
+
+#[test]
+fn a_semantic_table_with_no_columns_or_key_does_not_read_or_break_other_tables() {
+    let definition = VIEW.replace("tables:\n", "tables:\n  - name: UNUSED\n    base_table: {database: DB, schema: SHOP, table: NEVER_READ}\n");
+    let (description, read) = describe_view(&definition,
+        json!({"tables": [{"name": "people", "source": {"source": ["USERS"]}}],
+            "primary_keys": {}, "time_columns": {}}));
+    assert_eq!(description.tables.len(), 1);
+    assert_eq!(description.tables[0].name, "people");
+    assert_eq!(description.tables[0].source, Relation::named("USERS"));
+    assert!(!read.iter().any(|(name, _)| name == "NEVER_READ"));
 }
