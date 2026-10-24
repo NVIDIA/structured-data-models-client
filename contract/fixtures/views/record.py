@@ -1423,31 +1423,89 @@ def _iso_texts() -> list[str]:
     crossed, then a deterministic shuffle of their pieces."""
     import random
 
-    dates = ['2024-01-01', '20240101', '2024-W01', '2024-W01-2', '2024W01',
-             '2024W012', '2024-1-1', '9999-12-31', '0001-01-01', '9999-W52-7',
-             '2024-02-30', '2024-W53', '2020-W53-1', '2024-13-01', '2024-01']
+    dates = [
+        '2024-01-01',
+        '20240101',
+        '2024-W01',
+        '2024-W01-2',
+        '2024W01',
+        '2024W012',
+        '2024-1-1',
+        '9999-12-31',
+        '0001-01-01',
+        '9999-W52-7',
+        '2024-02-30',
+        '2024-W53',
+        '2020-W53-1',
+        '2024-13-01',
+        '2024-01',
+    ]
     separators = ['T', ' ', 'x', 't', '_', '\u00e9', '', '  ']
-    clocks = ['10', '10:30', '1030', '10:30:15', '103015', '10:30:15.5',
-              '10:30:15,5', '10:30:15.1234567', '12.5', '12:34.5', '24:00',
-              '23:59:60', '1', '10:3', '10:30:1', '103', '10::30',
-              '10:30:15.', '10:30:15 ', ' 10:30']
-    zones = ['', 'Z', 'z', ' Z', '+05:30', '+0530', ' +0530', '-05', '+05',
-             '+01:60', '+00:00', '-00:00', '+00:00:00.5', '+23:59',
-             '+24:00', '+05:30:15', '+05:30:15.25', '+5', '+05:3', 'Z ',
-             '+05:30 ', '-0530.5']
+    clocks = [
+        '10',
+        '10:30',
+        '1030',
+        '10:30:15',
+        '103015',
+        '10:30:15.5',
+        '10:30:15,5',
+        '10:30:15.1234567',
+        '12.5',
+        '12:34.5',
+        '24:00',
+        '23:59:60',
+        '1',
+        '10:3',
+        '10:30:1',
+        '103',
+        '10::30',
+        '10:30:15.',
+        '10:30:15 ',
+        ' 10:30',
+    ]
+    zones = [
+        '',
+        'Z',
+        'z',
+        ' Z',
+        '+05:30',
+        '+0530',
+        ' +0530',
+        '-05',
+        '+05',
+        '+01:60',
+        '+00:00',
+        '-00:00',
+        '+00:00:00.5',
+        '+23:59',
+        '+24:00',
+        '+05:30:15',
+        '+05:30:15.25',
+        '+5',
+        '+05:3',
+        'Z ',
+        '+05:30 ',
+        '-0530.5',
+    ]
     texts = []
     for date in dates:
         texts.append(date)
         for separator in separators[:4]:
             for clock in clocks:
-                texts += [f'{date}{separator}{clock}{zone}' for zone in zones[:3]]
+                texts += [
+                    f'{date}{separator}{clock}{zone}' for zone in zones[:3]
+                ]
             for zone in zones:
-                texts += [f'{date}{separator}{clock}{zone}' for clock in clocks[3:7]]
+                texts += [
+                    f'{date}{separator}{clock}{zone}' for clock in clocks[3:7]
+                ]
         texts += [f'{date}{separator}10:30' for separator in separators[4:]]
     rng = random.Random(35)
     pieces = [*dates, *separators, *clocks, *zones, '-', ':', '.', '0', '1']
     for _ in range(2000):
-        texts.append(''.join(rng.choice(pieces) for _ in range(rng.randint(1, 5))))
+        texts.append(
+            ''.join(rng.choice(pieces) for _ in range(rng.randint(1, 5)))
+        )
     return list(dict.fromkeys(texts))
 
 
@@ -1458,21 +1516,71 @@ def _numeric_texts() -> list[str]:
     texts = []
     for zero in _DIGIT_ZEROS:
         one, two = chr(ord(zero) + 1), chr(ord(zero) + 2)
-        texts += [f'{one}{two}', f'-{one}{two}', f'{one}{two}.{one}',
-                  f'{one}_{two}', f'{one}e{two}']
+        texts += [
+            f'{one}{two}',
+            f'-{one}{two}',
+            f'{one}{two}.{one}',
+            f'{one}_{two}',
+            f'{one}e{two}',
+        ]
     texts += [
-        '0', '-0', '+0', '00', '007', '1_000', '1__000', '_1', '1_', '1.5',
-        '.5', '5.', '1e3', '1E+3', '1e-3', '1.50', '-0.0', '1e999999999999999999',
-        '1e1000000000000000000', '1e-999999999999999999', '12e999999999999999998',
-        '1e9223372036854775807', '1.0e-9223372036854775808', 'inf', 'Infinity',
-        '-inf', 'nan', 'NaN123', 'sNaN', '1e', 'e1', '1.2.3', '+-1', ' 7 ',
-        '\x1c7\x1f', '\u20037', '1_000.000_1', '1e1_0', '9' * 4300, '9' * 4301,
-        '1' + '0' * 4299 + '_0', '0x10', '1 2', '',
+        '0',
+        '-0',
+        '+0',
+        '00',
+        '007',
+        '1_000',
+        '1__000',
+        '_1',
+        '1_',
+        '1.5',
+        '.5',
+        '5.',
+        '1e3',
+        '1E+3',
+        '1e-3',
+        '1.50',
+        '-0.0',
+        '1e999999999999999999',
+        '1e1000000000000000000',
+        '1e-999999999999999999',
+        '12e999999999999999998',
+        '1e9223372036854775807',
+        '1.0e-9223372036854775808',
+        'inf',
+        'Infinity',
+        '-inf',
+        'nan',
+        'NaN123',
+        'sNaN',
+        '1e',
+        'e1',
+        '1.2.3',
+        '+-1',
+        ' 7 ',
+        '\x1c7\x1f',
+        '\u20037',
+        '1_000.000_1',
+        '1e1_0',
+        '9' * 4300,
+        '9' * 4301,
+        '1' + '0' * 4299 + '_0',
+        '0x10',
+        '1 2',
+        '',
     ]
     return list(dict.fromkeys(texts))
 
 
-DEFAULT_TYPES_FIX2 = ('TIMESTAMP', 'DATE', 'DOUBLE', 'DECIMAL(10,2)', 'INT', 'BOOLEAN', 'STRING')
+DEFAULT_TYPES_FIX2 = (
+    'TIMESTAMP',
+    'DATE',
+    'DOUBLE',
+    'DECIMAL(10,2)',
+    'INT',
+    'BOOLEAN',
+    'STRING',
+)
 
 
 def _probe_fix2() -> None:
@@ -1490,13 +1598,26 @@ def _probe_fix2() -> None:
             except (ValueError, MemoryError):
                 pass
     for text in _numeric_texts():
-        for data_type in ('DOUBLE', 'DECIMAL(10,2)', 'INT', 'TIMESTAMP', 'STRING'):
+        for data_type in (
+            'DOUBLE',
+            'DECIMAL(10,2)',
+            'INT',
+            'TIMESTAMP',
+            'STRING',
+        ):
             try:
                 metric._default_text(data_type, text)
             except (ValueError, MemoryError):
                 pass
-    for value in ('|\n    #hello', '|\n    hi\n...', '>\n    #hello', '|+\n    a\n    ',
-                  '"2024-01-01T12.5"', '"\u0661\u0662"', '1e9223372036854775807'):
+    for value in (
+        '|\n    #hello',
+        '|\n    hi\n...',
+        '>\n    #hello',
+        '|+\n    a\n    ',
+        '"2024-01-01T12.5"',
+        '"\u0661\u0662"',
+        '1e9223372036854775807',
+    ):
         for data_type in ('STRING', 'TIMESTAMP', 'DOUBLE', 'INT'):
             # The parameter last, its default ending the text with no line
             # break, as the second reviews wrote it.
