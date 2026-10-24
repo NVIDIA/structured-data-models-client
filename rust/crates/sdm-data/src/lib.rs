@@ -30,6 +30,9 @@
 //! expressions), so no other crate does. `l0_scan.py`'s `dialects` check
 //! keeps them here.
 //!
+//! [`view_expr`] checks the expressions a metric or semantic view holds,
+//! as each dialect reads them, before any reaches a statement (T3.5).
+//!
 //! The statements are written once, in [`sql`]'s shared builder, over its
 //! `SqlDialect` trait (T3.18, design fix E): each dialect's module holds
 //! only what differs, and [`Data`] finds a dialect by its name in one
@@ -50,6 +53,7 @@ mod sql;
 #[cfg(test)]
 mod sql_tests;
 mod sqlite;
+pub mod view_expr;
 
 pub use keys::canonical_decimal_text;
 pub use pg_values::json_text;
