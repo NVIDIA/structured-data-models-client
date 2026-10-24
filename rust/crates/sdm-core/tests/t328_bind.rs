@@ -439,14 +439,16 @@ fn a_host_provider_is_handed_the_core_s_key_set_as_it_was_made() {
 /// decimals, as the provider hands it over: each value's exact text, its
 /// declared scale marked, after the batch of each seed answered.
 fn wide(batches: &[i64], values: &[&str]) -> FetchResult {
-    let mut marked = std::collections::HashMap::new();
-    marked.insert(
-        sdm_contract::data::DECLARED_SCALE_MARKER.to_owned(),
-        "0".to_owned(),
-    );
     let schema: SchemaRef = Arc::new(Schema::new(vec![
         Field::new("__kumo_batch__", DataType::Int64, false),
-        Field::new("n", DataType::Utf8, true).with_metadata(marked),
+        Field::new("n", DataType::Utf8, true).with_metadata(
+            [(
+                sdm_contract::data::DECLARED_SCALE_MARKER.to_owned(),
+                "0".to_owned(),
+            )]
+            .into_iter()
+            .collect(),
+        ),
     ]));
     let batch = RecordBatch::try_new(
         Arc::clone(&schema),

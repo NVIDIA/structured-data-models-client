@@ -343,27 +343,9 @@ impl SqlDialect for Postgres {
     }
 
     /// The reference's budget of a key set's JSON text (`_chunk_rows`,
-    /// `PG/sampler.py:125-182`); each row carries its batch, so a chunk's
-    /// statement is the plan's own.
+    /// `PG/sampler.py:125-182`).
     fn key_budget(&self) -> Option<usize> {
         Some(key_text::BUDGET)
-    }
-
-    /// The statement with its seeds' batches counted from `offset`, the
-    /// seeds before its chunk, as the reference's `_flatten` moves a
-    /// chunk's batches.
-    fn chunk_text(&self, text: &str, offset: usize) -> Result<String, CoreError> {
-        if offset == 0 {
-            return Ok(text.to_owned());
-        }
-        let at = batch_select(0);
-        if text.matches(&at).count() != 1 {
-            return Err(CoreError::new(
-                Sentence::Internal,
-                "a statement binding a key set does not number its seeds once",
-            ));
-        }
-        Ok(text.replacen(&at, &batch_select(offset), 1))
     }
 }
 
@@ -819,7 +801,7 @@ fn seed_cte(read: &SeedRead<'_>) -> Result<String, CoreError> {
                 }
             }
         } else if column.name == SEED_BATCH {
-            batch_select(0)
+            batch_select(read.offset)
         } else {
             let path = Path::root().field(&fields[column.name.as_str()]);
             if let Some(window) = window.filter(|w| {

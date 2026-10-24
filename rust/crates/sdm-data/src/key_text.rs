@@ -6,8 +6,8 @@
 //! dialect whose statement reads its key set from a text parameter
 //! (Databricks's `posexplode(from_json(?, ...))`, Postgres's
 //! `jsonb_array_elements($1::jsonb)`), written here once over the
-//! dialect's hooks ([`SqlDialect::key_rows`], [`SqlDialect::key_budget`],
-//! [`SqlDialect::chunk_text`]), so no provider writes or splits one.
+//! dialect's hooks ([`SqlDialect::key_rows`], [`SqlDialect::key_budget`]),
+//! so no provider writes or splits one.
 //!
 //! [`bind`] answers `DataLayer::bind` for every built-in dialect: a plan
 //! binding no key set, or one whose dialect binds the core's Arrow key set
@@ -20,8 +20,9 @@
 //! past the budget alone is a chunk of its own. Each chunk is one fetch:
 //! the plan with the key set's parameter a text parameter naming a local
 //! reference, its text a one-row, one-column text batch under that
-//! reference, and each statement reading it as the dialect reads a chunk
-//! whose first seed is at that offset of the key set. The core installs
+//! reference, and its statements rendered for a chunk whose first seed is
+//! at that offset of the key set (`sql::plan`), never found in rendered
+//! text. The core installs
 //! each batch as one of its run's attachments, never in the control
 //! message, sends the fetches in one step and joins their answers in
 //! order.
@@ -142,6 +143,7 @@ pub(crate) fn bind(
     plan: FetchPlan,
     keys: &BTreeMap<AttachmentId, KeyData>,
     float_text: fn(f64) -> String,
+    render: &dyn Fn(usize) -> Result<FetchPlan, CoreError>,
 ) -> Result<BoundRequest, CoreError> {
     let as_it_is = |plan| BoundRequest {
         fetches: vec![BoundFetch {
@@ -182,10 +184,26 @@ pub(crate) fn bind(
     let mut fetches = Vec::new();
     let mut offset = 0;
     for chunk in chunks(&rows, dialect.key_budget()) {
+        // A later chunk's statements rendered with its seeds' first batch.
+        let rendered;
+        let statements = if offset == 0 {
+            statements
+        } else {
+            rendered = render(offset)?;
+            match &rendered {
+                FetchPlan::Sql { statements, .. } => statements,
+                FetchPlan::Host { .. } => {
+                    return Err(CoreError::new(
+                        Sentence::Internal,
+                        "a chunk of a SQL plan rendered as a host's",
+                    ));
+                }
+            }
+        };
         let statements = statements
             .iter()
-            .map(|statement| chunked(dialect, statement, attachment, offset))
-            .collect::<Result<Vec<_>, CoreError>>()?;
+            .map(|statement| chunked(statement, attachment))
+            .collect();
         fetches.push(BoundFetch {
             plan: FetchPlan::Sql {
                 statements,
@@ -198,37 +216,24 @@ pub(crate) fn bind(
     Ok(BoundRequest { fetches })
 }
 
-/// `statement`, binding `attachment` as a text parameter that names the
-/// fetch's text, read as a chunk whose first seed is at `offset`; a
-/// statement binding no key set as it is.
-fn chunked(
-    dialect: &dyn SqlDialect,
-    statement: &SqlStatement,
-    attachment: AttachmentId,
-    offset: usize,
-) -> Result<SqlStatement, CoreError> {
-    let mut binds = false;
+/// `statement` binding `attachment` as a text parameter that names the
+/// fetch's text; a statement binding no key set as it is.
+fn chunked(statement: &SqlStatement, attachment: AttachmentId) -> SqlStatement {
     let params = statement
         .params
         .iter()
         .map(|param| match param {
             SqlParam::KeySet { keys, .. } if keys.attachment == attachment => {
-                binds = true;
                 SqlParam::Text { attachment: TEXT }
             }
             other => other.clone(),
         })
         .collect();
-    let text = if binds {
-        dialect.chunk_text(&statement.text, offset)?
-    } else {
-        statement.text.clone()
-    };
-    Ok(SqlStatement {
+    SqlStatement {
         dialect: statement.dialect.clone(),
-        text,
+        text: statement.text.clone(),
         params,
-    })
+    }
 }
 
 /// `rows` split as the old client splits a key set (the module's

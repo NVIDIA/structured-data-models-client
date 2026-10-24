@@ -398,24 +398,6 @@ impl SqlDialect for Databricks {
     fn key_budget(&self) -> Option<usize> {
         Some(key_text::BUDGET)
     }
-
-    /// The statement with its key set's positions moved by `offset`, the
-    /// seeds before its chunk (`pos + <offset>`), as the reference's
-    /// `_flatten` moves a chunk's batches.
-    fn chunk_text(&self, text: &str, offset: usize) -> Result<String, CoreError> {
-        if offset == 0 {
-            return Ok(text.to_owned());
-        }
-        let head = |offset| format!("WITH {TMP} AS (\n  SELECT {}", batch_select(offset));
-        text.strip_prefix(&head(0))
-            .map(|rest| format!("{}{rest}", head(offset)))
-            .ok_or_else(|| {
-                CoreError::new(
-                    Sentence::Internal,
-                    "a statement binding a key set does not open with its key set",
-                )
-            })
-    }
 }
 
 /// `name` as a Databricks identifier.
@@ -650,7 +632,7 @@ fn seed_cte(d: &Databricks, read: &SeedRead<'_>) -> Result<String, CoreError> {
     }
     // The fields as the old client names them (`id`, `e`, `s`), unquoted
     // as it writes them, each read under its seed column's own name.
-    let batch = batch_select(0);
+    let batch = batch_select(read.offset);
     let (schema, selects) = if times.is_empty() {
         (
             format!("array<{element}>"),
@@ -1495,17 +1477,6 @@ mod tests {
                 r#"{"id":4,"e":null}"#
             ]
         );
-    }
-
-    #[test]
-    fn a_later_chunk_s_statement_moves_its_positions_by_the_seeds_before_it() {
-        let text = format!("WITH {TMP} AS (\n  SELECT pos AS `batch`, col AS `key`\n)\nSELECT 1");
-        assert_eq!(Databricks.chunk_text(&text, 0).unwrap(), text);
-        assert_eq!(
-            Databricks.chunk_text(&text, 7).unwrap(),
-            text.replace("pos AS", "pos + 7 AS")
-        );
-        assert!(Databricks.chunk_text("SELECT 1", 7).is_err());
     }
 
     #[test]

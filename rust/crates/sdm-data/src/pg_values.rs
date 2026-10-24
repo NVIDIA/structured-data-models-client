@@ -669,7 +669,16 @@ pub(crate) fn key_rows(
     let mut rows = Vec::new();
     for batch in batches {
         for row in 0..batch.num_rows() {
-            let cell = |at: usize| key_json(batch.column(at).as_ref(), row, names[at], float_text);
+            let cell = |at: usize| {
+                let column = batch.column(at).as_ref();
+                if key_at.contains(&at) {
+                    key_json(column, row, names[at], float_text)
+                } else {
+                    key_cell(column, row, names[at]).map(|text| {
+                        text.map_or_else(|| "null".to_owned(), |t| json::string(&t, true))
+                    })
+                }
+            };
             let id = match &key_at[..] {
                 [one] => cell(*one)?,
                 several => format!(
@@ -695,11 +704,15 @@ pub(crate) fn key_rows(
     Ok(rows)
 }
 
-/// One cell of a key set as the old client's JSON writes it: an integer as
-/// a number, a double as `float_text` writes it, a decimal of a scale as a
-/// string of its digits (with `.0` where it has no fraction, as its double
-/// is written), of no scale as a number; a boolean as JSON's; anything
-/// else as a string of its text ([`key_cell`]), ASCII only; a null `null`.
+/// One key of a key set as the old client's JSON writes it
+/// (`_coerce_id` of the value pandas holds): an integer as a number; a
+/// double as `float_text` writes it; a decimal of a scale as the text of its
+/// double (`str(float)`) where that text reads back as its exact value, else
+/// its own digits (exact keys, P3K-1), of no scale as a number; a boolean
+/// as `True` or `False`; a date as its midnight's time stamp and a time
+/// stamp with a space before its time (`str(Timestamp)`), a zoned one in
+/// UTC; anything else as its text ([`key_cell`]); each text ASCII only; a
+/// null `null`.
 fn key_json(
     array: &dyn Array,
     row: usize,
@@ -710,6 +723,7 @@ fn key_json(
     if array.is_null(row) {
         return Ok("null".to_owned());
     }
+    let text = || Ok::<_, CoreError>(key_cell(array, row, column)?.unwrap_or_default());
     Ok(match array.data_type() {
         DataType::Int8
         | DataType::Int16
@@ -719,7 +733,8 @@ fn key_json(
         | DataType::UInt16
         | DataType::UInt32
         | DataType::UInt64
-        | DataType::Boolean => key_cell(array, row, column)?.unwrap_or_default(),
+        | DataType::Decimal128(_, 0)
+        | DataType::Decimal256(_, 0) => text()?,
         DataType::Float32 => json::number(
             f64::from(array.as_primitive::<t::Float32Type>().value(row)),
             float_text,
@@ -728,27 +743,73 @@ fn key_json(
             array.as_primitive::<t::Float64Type>().value(row),
             float_text,
         ),
-        DataType::Decimal128(_, 0) | DataType::Decimal256(_, 0) => {
-            key_cell(array, row, column)?.unwrap_or_default()
+        DataType::Decimal128(..) | DataType::Decimal256(..) => {
+            json::string(&double_text(&text()?, float_text), true)
         }
-        DataType::Decimal128(..) | DataType::Decimal256(..) => json::string(
-            &fractional(&key_cell(array, row, column)?.unwrap_or_default()),
+        DataType::Boolean => json::string(
+            if array.as_boolean().value(row) {
+                "True"
+            } else {
+                "False"
+            },
             true,
         ),
-        _ => json::string(&key_cell(array, row, column)?.unwrap_or_default(), true),
+        DataType::Date32 | DataType::Date64 => json::string(&format!("{} 00:00:00", text()?), true),
+        DataType::Timestamp(_, None) => json::string(&text()?.replacen('T', " ", 1), true),
+        DataType::Timestamp(_, Some(_)) => {
+            let utc = text()?;
+            let utc = utc.strip_suffix('Z').unwrap_or(&utc);
+            json::string(&format!("{utc}+00:00"), true)
+        }
+        _ => json::string(&text()?, true),
     })
 }
 
-/// A decimal's text, its scale's digits after the point, as its double's
-/// is written: no trailing zero, and `.0` where it has no fraction.
-fn fractional(text: &str) -> String {
-    let Some((whole, fraction)) = text.split_once('.') else {
-        return format!("{text}.0");
-    };
-    match fraction.trim_end_matches('0') {
-        "" => format!("{whole}.0"),
-        kept => format!("{whole}.{kept}"),
+/// A decimal's text, `exact`, as its double's text (`float_text`) where
+/// that reads back as the same value, else its own digits with no trailing
+/// zero after the point.
+fn double_text(exact: &str, float_text: fn(f64) -> String) -> String {
+    if let Ok(double) = exact.parse::<f64>()
+        && double.is_finite()
+    {
+        let written = float_text(double);
+        if decimal_value(&written) == decimal_value(exact) {
+            return written;
+        }
     }
+    match exact.split_once('.') {
+        Some((whole, fraction)) => match fraction.trim_end_matches('0') {
+            "" => format!("{whole}.0"),
+            kept => format!("{whole}.{kept}"),
+        },
+        None => format!("{exact}.0"),
+    }
+}
+
+/// A decimal number's text as its value: its sign, its significant digits
+/// and the power of ten of its last; `None` for text that is no number.
+fn decimal_value(text: &str) -> Option<(bool, String, i64)> {
+    let (negative, text) = match text.strip_prefix('-') {
+        Some(rest) => (true, rest),
+        None => (false, text.strip_prefix('+').unwrap_or(text)),
+    };
+    let (mantissa, exponent) = match text.split_once(['e', 'E']) {
+        Some((mantissa, exponent)) => (mantissa, exponent.parse::<i64>().ok()?),
+        None => (text, 0),
+    };
+    let (whole, fraction) = mantissa.split_once('.').unwrap_or((mantissa, ""));
+    if !(whole.chars().chain(fraction.chars())).all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    let digits = format!("{whole}{fraction}");
+    let mut power = exponent - i64::try_from(fraction.len()).ok()?;
+    let trimmed = digits.trim_start_matches('0');
+    if trimmed.is_empty() {
+        return Some((false, String::new(), 0));
+    }
+    let kept = trimmed.trim_end_matches('0');
+    power += i64::try_from(trimmed.len() - kept.len()).ok()?;
+    Some((negative, kept.to_owned(), power))
 }
 
 /// One cell of a key set as the text Postgres's input function reads: a

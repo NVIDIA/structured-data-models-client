@@ -158,6 +158,9 @@ struct Shared {
     memo: Option<SamplerMemo>,
     /// Answered, not yet taken by the body.
     replies: BTreeMap<ReplyId, Reply>,
+    /// The fetches whose answers are kept as the provider handed them over,
+    /// a chunk's ([`Ask::raw`]), read once the request's chunks are joined.
+    raw: BTreeSet<ReplyId>,
     /// Each table's columns as the source's catalog read them, by the
     /// relation the run names the table by ([`Asker::guard`]).
     guarded: BTreeMap<Relation, Vec<String>>,
@@ -333,6 +336,7 @@ impl Asker {
                 seeds,
             ))),
             budget: None,
+            raw: false,
         })
     }
 
@@ -507,15 +511,26 @@ impl Asker {
         {
             return self.ask_planned(request, plan);
         }
+        let expect = plans
+            .first()
+            .map_or(ExpectedSchema::Discover {}, |plan| plan.expect().clone());
+        let parts = plans
+            .into_iter()
+            .map(|plan| {
+                let mut part = self.ask_planned(request.clone(), plan);
+                part.raw = true;
+                Part::Asking(Box::new(part))
+            })
+            .collect();
         Ask {
             shared: Arc::clone(&self.shared),
-            state: AskState::Chunks(
-                plans
-                    .into_iter()
-                    .map(|plan| Part::Asking(self.ask_planned(request.clone(), plan)))
-                    .collect(),
-            ),
+            state: AskState::Chunks(Box::new(Chunked {
+                parts,
+                data: self.data.clone(),
+                expect,
+            })),
             budget: None,
+            raw: false,
         }
     }
 
@@ -524,6 +539,7 @@ impl Asker {
             shared: Arc::clone(&self.shared),
             state: AskState::New(Asked::Fetch(Box::new((request, plan)))),
             budget: None,
+            raw: false,
         }
     }
 
@@ -537,6 +553,7 @@ impl Asker {
                 body,
             }),
             budget: None,
+            raw: false,
         }
     }
 
@@ -616,6 +633,10 @@ pub struct Ask {
     state: AskState,
     /// What the answer may hold, checked as each page arrives.
     budget: Option<Box<Budget>>,
+    /// A chunk of a request asked as several (T3.28): its answer is kept as
+    /// the provider handed it over, read (`DataAccess::conform`) and held
+    /// to its schema only once the request's chunks are joined.
+    raw: bool,
 }
 
 /// What one fetch's answer may hold, the in-memory fallback's limits on a
@@ -653,15 +674,24 @@ fn past(budget: &Option<Box<Budget>>, data: &ArrowData) -> Option<CoreError> {
 /// One fetch of a request the data layer bound into several
 /// ([`Asker::ask_bound`]): asked, or answered and kept until all are.
 enum Part {
-    Asking(Ask),
+    Asking(Box<Ask>),
     Answered(Reply),
+}
+
+/// A request asked as several fetches ([`AskState::Chunks`]).
+struct Chunked {
+    parts: Vec<Part>,
+    data: Option<DataAccess>,
+    expect: ExpectedSchema,
 }
 
 enum AskState {
     New(Asked),
     /// Asked as several fetches in one step, each a chunk of the request's
-    /// key set (T3.28), whose answers are the request's, in order.
-    Chunks(Vec<Part>),
+    /// key set (T3.28), whose answers, joined in order, are the request's
+    /// one answer: read as the run reads an answer (`data`, its
+    /// `conform`) and held to `expect`, once, over the whole.
+    Chunks(Box<Chunked>),
     /// Answered by the in-memory fallback (T2.6), which asks its own
     /// requests of the host through the run.
     Fallback(Pin<Box<dyn Future<Output = Reply> + Send>>),
@@ -718,6 +748,8 @@ fn add_part(
 /// data, else every answer's data joined in order and held to `budget`.
 fn poll_parts(
     parts: &mut Vec<Part>,
+    data: Option<&DataAccess>,
+    expect: &ExpectedSchema,
     shared: &Mutex<Shared>,
     budget: &Option<Box<Budget>>,
     context: &mut Context<'_>,
@@ -725,7 +757,7 @@ fn poll_parts(
     let mut pending = false;
     for part in parts.iter_mut() {
         if let Part::Asking(ask) = part {
-            match Pin::new(ask).poll(context) {
+            match Pin::new(ask.as_mut()).poll(context) {
                 Poll::Ready(reply) => *part = Part::Answered(reply),
                 Poll::Pending => pending = true,
             }
@@ -756,6 +788,25 @@ fn poll_parts(
             .get_or_insert_with(|| internal("a request bound into no fetch"));
         return Poll::Pending;
     };
+    // One reading of the whole answer, as one fetch's is read (each value
+    // as the reference reads it, then held to the schema expected), so a
+    // rule that reads a column by all its values reads the request's.
+    let read = match data {
+        Some(access) => {
+            let given = whole.clone();
+            let read = crate::pql::on_adapter_stack(|| access.conform(whole));
+            drop(given);
+            read
+        }
+        None => Ok(whole),
+    };
+    let whole = match read.and_then(|whole| check_expected(expect, &whole).map(|()| whole)) {
+        Ok(whole) => whole,
+        Err(err) => {
+            lock(shared).exhausted.get_or_insert(err);
+            return Poll::Pending;
+        }
+    };
     if let Some(err) = past(budget, &whole) {
         lock(shared).exhausted.get_or_insert(err);
         return Poll::Pending;
@@ -773,8 +824,20 @@ impl Future for Ask {
         if let AskState::Fallback(answer) = &mut this.state {
             return answer.as_mut().poll(context);
         }
-        if let AskState::Chunks(parts) = &mut this.state {
-            return poll_parts(parts, &this.shared, &this.budget, context);
+        if let AskState::Chunks(chunked) = &mut this.state {
+            let Chunked {
+                parts,
+                data,
+                expect,
+            } = chunked.as_mut();
+            return poll_parts(
+                parts,
+                data.as_ref(),
+                expect,
+                &this.shared,
+                &this.budget,
+                context,
+            );
         }
         let mut shared = lock(&this.shared);
         match mem::replace(&mut this.state, AskState::Answered) {
@@ -788,6 +851,9 @@ impl Future for Ask {
                 match asked {
                     Asked::Fetch(asked) => {
                         let (request, plan) = (*asked).clone();
+                        if this.raw {
+                            shared.raw.insert(id);
+                        }
                         let purpose = shared.purpose;
                         shared.fetches.push(FetchStep {
                             id,
@@ -850,6 +916,9 @@ impl Future for Ask {
                     let Some(next) = next_reply(&mut shared) else {
                         return Poll::Pending;
                     };
+                    if this.raw {
+                        shared.raw.insert(next);
+                    }
                     let (request, plan) = (*asked).clone();
                     let purpose = shared.purpose;
                     shared.fetches.push(FetchStep {
@@ -1090,6 +1159,16 @@ impl Run {
         }
         match &mut self.state {
             State::AwaitingFetch(pending) if pending.contains_key(&id) => {
+                // A chunk's answer is read with the request's other chunks,
+                // once they are joined ([`poll_parts`]).
+                if lock(&self.shared).raw.remove(&id) {
+                    pending.remove(&id);
+                    if pending.is_empty() {
+                        self.state = State::Ready;
+                    }
+                    lock(&self.shared).replies.insert(id, Reply::Fetch(result));
+                    return Ok(());
+                }
                 // Its values read as the reference reads them, before it is
                 // held to the schema expected (T2.14d), on a stack of their
                 // own: a JSON value is read by a reader that recurses once

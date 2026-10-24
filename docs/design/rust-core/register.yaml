@@ -9247,30 +9247,46 @@ entries:
     memo to the source as the run resolves it, so a run after the change
     starts afresh.
 - id: P3K-1
-  title: A Postgres key set of decimals past a double's digits may split a few seeds off where the old client splits it, each seed the same value
+  title: A few kinds of key are written otherwise than the old client writes them, so a key set of them near the budget can split at other seeds, each seed the same value
   kind: change
   old_behavior: >-
-    The old client writes a Postgres key of a numeric column of a scale as
-    the text of its double (_coerce_id, str(value)), and splits the key
-    set past 900,000 characters of its JSON (_chunk_rows,
-    PG/sampler.py:125-182).
+    The old client writes a Databricks or Postgres key set as json.dumps of
+    each key as _coerce_id makes it from the value pandas holds, and splits
+    it past 900,000 characters of that text (_chunk_rows, DB/sampler.py:32-44,
+    PG/sampler.py:125-182). A Postgres numeric column that is a primary,
+    unique or foreign key in the database is typed a string
+    (PG/table.py:247-252), so its key is str of the Decimal the driver
+    reads: "12345" as a JSON string, "1.50" with its scale's zeros, "1E-7"
+    in Decimal's exponent form. A zoned time stamp key is written in the
+    session's offset. A Databricks windowed seed whose anchor is missing
+    writes its bound as NaN (strftime of a missing time).
   new_behavior: >-
-    The core writes every Databricks and Postgres key set as the old client
-    does (T3.28) and splits it at the same seeds, but a decimal key with
-    more digits than a double holds, which it writes with its exact digits
-    (exact keys, design choice 5, KO2-35), so that key set's text, and
-    where a chunk ends near the budget, can differ. A key of several
-    columns, which the old client never binds, is written as an array of
-    its values.
+    The core writes every key set as the old client does (T3.28): the same
+    fields (id, e, s), doubles as Python's repr, a decimal of a scale as its
+    double's text where that reads back as its exact value, booleans as
+    True and False, dates and time stamps as str of a pandas Timestamp,
+    ASCII only, and splits at the same seeds; except that a Postgres
+    numeric key is written as the old client writes one that is not a
+    database key (a number for a scale of 0, its double's text for a
+    scale), the core not knowing which constraint the column carries; a
+    decimal with more digits than a double holds keeps its exact digits
+    (exact keys, design choice 5, KO2-35); a zoned time stamp key is
+    written in UTC (+00:00); and a missing Databricks anchor is null (as
+    T3.4 wrote it). Every seed reads as the same value, so no answer
+    changes; only such a key set's text, and where a chunk ends near the
+    budget, can differ.
   affected_inputs: >-
-    A Postgres key set of decimal keys of more than about 15 significant
-    digits, near or past 900,000 bytes of JSON.
+    A Postgres key set over a numeric column the database declares a
+    primary, unique or foreign key, or of decimals past about 15
+    significant digits, or of zoned time stamps; a Databricks windowed key
+    set with a missing anchor; each near or past 900,000 bytes of JSON for
+    the split to differ.
   cases: [T3.28]
   refs: [T3.28, KO2-35]
   status: proposed
   approved_by: null
   decision_ref: null
   notes: >-
-    Approver: owner. Writing such a key as its double's text would lose the
-    exact match the core keeps (KO2-35); the core's seed reads as the
-    exact key.
+    Approver: owner. Reviewed in T3.28 round 1 (Codex P2, Claude P2-2).
+    Writing a decimal past a double's digits as its double's text would
+    lose the exact match the core keeps (KO2-35).
