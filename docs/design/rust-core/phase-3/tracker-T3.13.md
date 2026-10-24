@@ -75,6 +75,9 @@ The real E-7 JDBC/live runner and model comparison remain T3.10's phase-end evid
 P3S-2 has the independent broad reviewer's explicit approval for the better malformed-success error.
 P3S-1 and P3S-3 through P3S-7 remain proposed; no approval is inferred from this implementation.
 P3S-8 records the focused reviewer's nonblocking large-diagnostic control-limit finding for follow-up.
+The owner subsequently requires the official Databricks Java SDK and all authentication methods it supports.
+The serving client now accepts `WorkspaceClient` or default SDK authentication, forwards refreshed headers while preserving the core's bytes, and includes SDK credential refresh in the serving deadline.
+P3S-7 is retired rather than accepted; requests identify the client without mutating the SDK's global product setting.
 JV-4's startup-session timezone difference remains proposed and is handed to T3.9 for policy resolution; the existing same-zone offset helper does not fix it.
 
 ## Round 1 follow-up

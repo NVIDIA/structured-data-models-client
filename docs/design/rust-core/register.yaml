@@ -9835,19 +9835,26 @@ entries:
     authenticates in every way the SDK takes (a notebook's identity, OAuth,
     a token) and names structured-data-models-client in its User-Agent.
   new_behavior: >-
-    Java's DatabricksServing takes a token supplier only (the design's
-    known limit) and sends java.net.http's own User-Agent. It retries a
-    429, a 503 and an unreachable endpoint until its timeout, as the SDK
-    does, the deadline a 504.
+    Withdrawn: Java's DatabricksServing accepts the official Databricks
+    SDK WorkspaceClient or its default unified authentication, forwarding
+    refreshed SDK authentication headers without changing core request or
+    response bytes. The existing token-supplier factory remains available.
+    Requests identify structured-data-models-client and retain the SDK's
+    User-Agent identity without changing its global product setting.
   affected_inputs: >-
     Java callers of a Databricks serving endpoint.
   cases: [T3.13]
   refs: [T3.13]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: rejected
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T313-OWNER-2026-10-24-SDK-AUTH}
   notes: >-
-    Approver: owner. Proposed by T3.13's implementer, never self-approved.
+    Owner requires the official Java library and every authentication
+    method it supports rather than accepting the proposed token-only
+    limitation. Retirement does not approve narrower authentication or
+    altered prediction semantics. SDK credential refresh and the serving
+    exchange share the call's overall deadline; failures omit raw SDK
+    credential diagnostics.
 
 - id: P3S-8
   title: An unusually long JDBC diagnostic can exceed the host control limit

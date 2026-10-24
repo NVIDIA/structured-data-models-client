@@ -174,3 +174,4 @@ This records that bounded approval only; both package approvals and postapproval
 | # | Decision | Reviewer evidence | Status |
 |---|---|---|---|
 | T313-REVIEW-P3S-2 | A malformed successful serving reply whose JSON is a list or scalar produces the core's named `TRANSPORT_ERROR` rather than an escaping SDK crash | `T3.13-sol-broad-r1.md`: `APPROVE-P3S-2` | approved by independent reviewer 2026-10-24 |
+| T313-OWNER-2026-10-24-SDK-AUTH | Use Databricks' official Java SDK and its supported authentication methods; retire the token-only and missing-client-identity proposal P3S-7 | "We should use the native java library provided by Databricks. If it supports more than token auth, we should support it" | approved by owner 2026-10-24 |
