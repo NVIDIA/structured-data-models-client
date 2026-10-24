@@ -21,6 +21,7 @@ base.binary's): the core route describes the source as the old route does
 from __future__ import annotations
 
 import base64
+import copy
 import json
 import re
 import sys
@@ -726,6 +727,13 @@ class _CompletingWarehouse(_SessionWarehouse):
             found = super().answer(operation, parameters)
         except AssertionError:
             text = _normal(operation)
+            if text.startswith('SELECT ') and not parameters:
+                # A read the capture does not hold, such as the folded key
+                # of a table keyed by several columns, over the same rows.
+                text = re.sub(r'`main`\.`\w+`\.', '', text).replace('`', '"')
+                found = self._db.execute(text).to_arrow_table()
+                self.calls[-1] = (_normal(operation), list(parameters))
+                return found
             if not text.startswith('WITH TMP AS ( SELECT pos AS '):
                 raise
             keys = json.loads(parameters[0])
@@ -1396,3 +1404,199 @@ def test_a_link_over_a_type_name_the_client_reads_joins_before_the_source_is_rea
     _fresh(schema, 'orders')
     schema['orders'].columns['user_id'] = Column('user_id', dtype, 'ID')
     assert _where_read(schema, connection) == {('main', 'shop')}
+
+
+def _asked(schema: Schema, **how: Any) -> Any:
+    r"""``_materialized``'s question, asked with the call's arguments
+    changed as ``how`` says."""
+    import pandas as pd
+
+    from sdm_client import PredictiveQuery
+
+    asked: dict[str, Any] = {
+        'indices': [0, 1],
+        'anchor_time': pd.Timestamp('2024-03-01'),
+    }
+    asked.update(how)
+    return PredictiveQuery(
+        'PREDICT COUNT(orders.*, 0, 30, days) > 0 FOR EACH users.user_id',
+        schema,
+    ).materialize(**asked)
+
+
+def _retyped(
+    table: str, column: str, dtype: str, stype: str, *, unlinked: bool = False
+) -> Any:
+    r"""A change of ``table.column`` to ``dtype`` meaning ``stype``. Where
+    its setter would refuse the meaning on the type it holds, the meaning
+    is set first, so that only the request's checks see the pair; where
+    ``unlinked``, the links are taken off for the change and put back past
+    the schema's setter, so that only the request's checks see them."""
+
+    def change(schema: Schema) -> None:
+        links = list(schema.relationships)
+        if unlinked:
+            schema.relationships = []
+        held = schema[table][column]
+        from sdm_client.schema import supports_dtype
+
+        if supports_dtype(stype, held.dtype):
+            held.stype = stype
+            held.dtype = dtype
+        else:
+            held.dtype = dtype
+            held.stype = stype
+        if unlinked:
+            for link in links:
+                list.append(schema.relationships, link)
+
+    return change
+
+
+def _linked(*link: str) -> Any:
+    r"""A relationship appended past the checks the schema's list makes,
+    as the old client's ``check_consistent`` is there to find one."""
+    from sdm_client import Relationship
+
+    def change(schema: Schema) -> None:
+        list.append(schema.relationships, Relationship(*link))
+
+    return change
+
+
+def _keyed(table: str, key: Any) -> Any:
+    def change(schema: Schema) -> None:
+        schema[table].primary_key = key
+
+    return change
+
+
+def _added(table: str, column: str, link: bool) -> Any:
+    r"""A column the source does not hold added by hand, and linked to its
+    own table's key where ``link`` says."""
+    from sdm_client import Column, Relationship
+
+    def change(schema: Schema) -> None:
+        schema[table].columns[column] = Column(column, 'int64', 'ID')
+        if link:
+            key = schema[table].primary_key
+            schema.relationships.append(Relationship(table, column, table, key))
+
+    return change
+
+
+def _asking(**how: Any) -> Any:
+    def change(schema: Schema) -> dict[str, Any]:
+        return how
+
+    return change
+
+
+#: Each refusal the old route makes from ``PredictiveQuery.materialize`` to
+#: its sampler's first count, by the side of its engine's reads it makes it
+#: on (the tracker's table): ``before`` refuses having read nothing, so a
+#: retry after the session moved reads there; ``after`` refuses once its
+#: engine read and kept the tables, so a retry reads where it read them.
+_SIDES = {
+    'unknown_option': (_asking(no_such_option=1), 'before'),
+    'empty_indices': (_asking(indices=[]), 'before'),
+    'statistic': (_asking(prediction_statistic='mode'), 'before'),
+    'rows_per_call': (_asking(rows_per_call=0), 'before'),
+    'reserved_wire_name': (_added('users', 'instance_id', False), 'before'),
+    'empty_num_neighbors': (_asking(num_neighbors=[]), 'before'),
+    'meaning_on_the_caller_s_type': (
+        _retyped('users', 'age', 'string', 'numerical'),
+        'before',
+    ),
+    'link_to_a_column_not_held': (
+        _linked('orders', 'nothing', 'users', 'user_id'),
+        'before',
+    ),
+    'link_to_a_column_not_the_key': (
+        _linked('orders', 'price', 'users', 'age'),
+        'before',
+    ),
+    'link_types_on_the_caller_s_types': (
+        _retyped('orders', 'user_id', 'string', 'ID', unlinked=True),
+        'before',
+    ),
+    'primary_key_as_foreign_key': (_keyed('orders', 'user_id'), 'after'),
+    'time_column_type': (_retyped('orders', 'ts', 'string', 'text'), 'after'),
+    'meaning_on_the_source_s_type': (
+        _retyped('users', 'age', 'string', 'text'),
+        'after',
+    ),
+    'composite_key': (_keyed('orders', ['order_id', 'user_id']), 'after'),
+    'link_from_a_column_the_source_lacks': (
+        _added('orders', 'buyer', True),
+        'after',
+    ),
+}
+
+
+@pytest.mark.parametrize('case', sorted(_SIDES))
+@pytest.mark.parametrize('route', ['core', 'old'])
+def test_each_refusal_is_made_on_the_old_route_s_side_of_the_reads(
+    route: str, case: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""Each refusal the old route makes before its engine reads the
+    source refuses having read nothing, and a retry after the session moved
+    reads where the session says; each it makes once its engine read and
+    kept the tables refuses having read them, and a retry reads them where
+    it did (round 11: Codex's P0 primary key and time column retries, and
+    one case per row of the tracker's table that refuses)."""
+    from sdm_client.errors import StructuredDataError
+
+    _route(route, monkeypatch)
+    connection = _CompletingConnection()
+    schema = _rebuilt(connection)
+    columns = {
+        name: {
+            column: copy.copy(held) for column, held in table.columns.items()
+        }
+        for name, table in schema.tables.items()
+    }
+    keys = {name: table.primary_key for name, table in schema.tables.items()}
+    links = list(schema.relationships)
+    change, side = _SIDES[case]
+    how = change(schema) or {}
+    mark = len(connection.calls)
+    with pytest.raises(StructuredDataError) as refused:
+        _asked(schema, **how)
+    assert refused.value.code != 'INTERNAL_ERROR', str(refused.value)
+    assert (len(connection.calls) > mark) == (side == 'after'), str(
+        refused.value
+    )
+    # The schema put right, its record of where it read its tables kept.
+    schema.relationships = []
+    for name, held in columns.items():
+        for column in [c for c in schema[name].columns if c not in held]:
+            del schema[name][column]
+        for column, original in held.items():
+            schema[name].columns[column] = copy.copy(original)
+        schema[name].primary_key = keys[name]
+    schema.relationships = links
+    connection.schema = 'other'
+    where = ('main', 'shop') if side == 'after' else ('main', 'other')
+    assert _where_read(schema, connection) == {where}
+
+
+@pytest.mark.parametrize('route', ['core', 'old'])
+def test_too_many_entities_are_refused_before_the_source_is_read(
+    route: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""More entities than one ``materialize`` holds are refused from the
+    count alone, before the old route's engine reads anything
+    (``relational.py:339``): the tracker's entity-count row."""
+    from sdm_client.errors import StructuredDataError
+    from sdm_client.materializers import relational
+
+    _route(route, monkeypatch)
+    monkeypatch.setattr(relational, 'MOST_ENTITIES', 1)
+    connection = _CompletingConnection()
+    schema = _rebuilt(connection)
+    mark = len(connection.calls)
+    with pytest.raises(StructuredDataError) as refused:
+        _asked(schema)
+    assert refused.value.code == 'UNSUPPORTED_REQUEST'
+    assert len(connection.calls) == mark
