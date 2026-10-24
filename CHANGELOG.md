@@ -22,8 +22,6 @@ these packages. All five distributions share one version and one entry.
   emulated, and each is smoke-tested on the architecture it targets. The
   release no longer builds aarch64 under QEMU, which also takes a privileged
   container image out of the release path.
-- `structured-data-models-client` holds `pandas` below 3.1, and this release
-  is tested against 3.0.
 
 ### Fixed
 
@@ -33,6 +31,9 @@ these packages. All five distributions share one version and one entry.
 - A relational prediction over a graph without a time column works on pandas
   3.1. Its anchor is the earliest timestamp pandas holds, and 3.1 refused to
   take even an empty date offset from it.
+- A request's description leaves out a wire table carrying an integer past
+  the float range on every pandas release. pandas 3.1 had started to build
+  a frame around one, where earlier releases refused it.
 
 ## 1.0.0 - 2026-10-15
 
