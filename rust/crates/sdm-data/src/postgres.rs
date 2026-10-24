@@ -920,7 +920,9 @@ impl Path {
 /// The Postgres type a seed key of `column_type` is read as, for an
 /// integer or a decimal: `bigint` or `numeric`, which Postgres compares
 /// with the joined key's integers and decimals by value, so equal values
-/// of any scale join; `None` for any other (a float, a text, a time), read
+/// of any scale join; floating seeds are numeric too, so an integral seed
+/// joins an integer column without making nearby integers equal as doubles.
+/// `None` for any other (a text or a time), read
 /// in the joined column's declared type ([`seed_cte`]), so a `real` key
 /// compares as a `real` and a `uuid` as a `uuid`, as the reference casts its
 /// seeds to the column's type.
@@ -928,7 +930,7 @@ fn key_type(column_type: &sdm_contract::ColumnType) -> Option<&'static str> {
     use sdm_contract::ColumnType as T;
     Some(match column_type {
         T::Int8 | T::Int16 | T::Int32 | T::Int64 | T::Uint8 | T::Uint16 | T::Uint32 => "bigint",
-        T::Uint64 | T::Decimal128 { .. } | T::Decimal256 { .. } => "numeric",
+        T::Uint64 | T::Float32 | T::Float64 | T::Decimal128 { .. } | T::Decimal256 { .. } => "numeric",
         _ => return None,
     })
 }
