@@ -197,20 +197,14 @@ def _step(*statements: tuple[str, list[dict[str, Any]]]) -> dict[str, Any]:
     }
 
 
-def _key_set(
-    attachment: int, relation: str = '__sdm_seeds__'
-) -> dict[str, Any]:
-    return {
-        'param': 'key_set',
-        'keys': {
-            'attachment': attachment,
-            'columns': [
-                {'name': 'key', 'nullable': True, 'type': {'type': 'int64'}},
-                {'name': 'batch', 'nullable': False, 'type': {'type': 'int64'}},
-            ],
-        },
-        'relation': relation,
-    }
+def _key_text(attachment: int) -> dict[str, Any]:
+    r"""A key set's parameter as the core plans it on Databricks (T3.28):
+    the JSON text the core wrote, a one-cell attachment."""
+    return {'param': 'text', 'attachment': attachment}
+
+
+def _cell(text: str) -> Any:
+    return pa.table({'keys': pa.array([text], pa.string())})
 
 
 def _table(answer: Any) -> Any:
@@ -255,15 +249,9 @@ def test_each_provider_hands_back_the_recorded_arrow_as_recorded(
     assert expected.num_rows > 0
     for leg, provider, fake in _providers_over_the_capture(recorded):
         if kind == 'lookup':
-            keys = json.loads(statement['parameters'][0])
-            attachment = pa.table(
-                {
-                    'key': pa.array(keys, pa.int64()),
-                    'batch': pa.array(range(len(keys)), pa.int64()),
-                }
-            )
             answer = provider(
-                _step((statement['text'], [_key_set(7)])), {7: attachment}
+                _step((statement['text'], [_key_text(7)])),
+                {7: _cell(statement['parameters'][0])},
             )
         else:
             params = [_text(p) for p in statement['parameters']]
@@ -300,35 +288,19 @@ def test_a_statement_without_parameters_binds_none() -> None:
         assert not bound, leg
 
 
-def test_a_key_set_is_bound_as_one_compact_json_parameter() -> None:
+def test_a_key_set_s_text_is_bound_as_one_parameter_as_written() -> None:
     r"""A key set is bound as the old client binds it (DB/sampler.py:39,
-    :116-160): one JSON text parameter, written with no whitespace, an array
-    of one element per key-set row, in the key set's order, each holding its
-    row's key."""
+    :116-160): one JSON text parameter, which the core writes (T3.28) and
+    the provider binds as it was handed, byte for byte."""
     recorded = _recorded()
     statement = _statement('base.binary', 'lookup')
-    keys = json.loads(statement['parameters'][0])
-    attachment = pa.table(
-        {
-            'key': pa.array(keys, pa.int64()),
-            'batch': pa.array(range(len(keys)), pa.int64()),
-        }
-    )
+    (payload,) = statement['parameters']
     for leg, provider, fake in _providers_over_the_capture(recorded):
-        provider(_step((statement['text'], [_key_set(3)])), {3: attachment})
+        provider(
+            _step((statement['text'], [_key_text(3)])), {3: _cell(payload)}
+        )
         ((_, bound),) = _ran(fake)
-        (payload,) = list(bound)
-        assert isinstance(payload, str), leg
-        decoded = json.loads(payload)
-        assert json.dumps(decoded, separators=(',', ':')) == payload, leg
-        assert isinstance(decoded, list) and len(decoded) == len(keys), leg
-        for element, key in zip(decoded, keys, strict=True):
-            if isinstance(element, dict):
-                element = list(element.values())
-            if isinstance(element, list):
-                assert key in element, leg
-            else:
-                assert element == key, leg
+        assert list(bound) == [payload], leg
 
 
 def test_an_empty_result_keeps_its_schema() -> None:

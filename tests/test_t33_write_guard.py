@@ -1510,6 +1510,45 @@ def test_the_core_s_seed_time_reads_pass_on_postgres_as_reads_only(
         DATABRICKS.check(_SEEDS)
 
 
+#: T3.28's seed reads: the old client's JSON rows (a bare key, or ``id``
+#: and the window's ``e``), each seed's batch its position ``WITH
+#: ORDINALITY``, a later chunk's counted from its offset.
+def _t328_seeds(offset: str) -> list[str]:
+    windowed = (
+        _SEEDS.replace(
+            '(r.value->>0)::bigint AS "key", (r.value->>1)::bigint AS "batch"',
+            '(r.value->>\'id\')::bigint AS "key", '
+            f'(r.ordinality - 1{offset})::bigint AS "batch"',
+        )
+        .replace(
+            'jsonb_array_elements(%s::jsonb) AS r(value)',
+            'jsonb_array_elements(%s::jsonb) WITH ORDINALITY AS r(value, ordinality)',
+        )
+        .replace('r.value->2)', "r.value->'e')")
+    )
+    bare = (
+        'WITH "__sdm_seeds__" AS (\n'
+        '  SELECT (r.value #>> \'{}\')::bigint AS "key", '
+        f'(r.ordinality - 1{offset})::bigint AS "batch"\n'
+        '  FROM jsonb_array_elements(%s::jsonb) WITH ORDINALITY '
+        'AS r(value, ordinality)\n)\n'
+        'SELECT s."batch" AS "__kumo_batch__", t."ts"\n'
+        'FROM "__sdm_seeds__" s\n'
+        'JOIN "live_tests"."orders" t\n  ON t."user_id" = s."key"'
+    )
+    return [windowed, bare]
+
+
+@pytest.mark.parametrize('offset', ['', ' + 900000'])
+def test_t328_s_seed_reads_pass_on_postgres_as_reads_only(offset: str) -> None:
+    guard = _seeding()
+    for sql in _t328_seeds(offset):
+        assert 'WITH ORDINALITY' in sql
+        guard.check(sql)
+        with pytest.raises(wg.WriteRefused):
+            guard.check('INSERT INTO live_tests.t ' + sql)
+
+
 #: A row of the loader's table, read by its alias, converted with a
 #: seed's value.
 _BY_ALIAS = (

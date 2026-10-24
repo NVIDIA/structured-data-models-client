@@ -816,7 +816,13 @@ async fn read_as_it_stands(
             }
         }
     }
-    for table in &held.tables {
+    // A source whose columns hold affinities only (SQLite's) holds no type
+    // a caller's must match: the old client reads its values as the
+    // caller's type (T3.28).
+    let typed = asker
+        .data()
+        .is_none_or(crate::compose::DataAccess::holds_column_types);
+    for table in held.tables.iter().filter(|_| typed) {
         for column in &table.columns {
             let Some(source) = found.get(&(table.name.clone(), column.name.clone())) else {
                 continue;

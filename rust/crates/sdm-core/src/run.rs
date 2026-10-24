@@ -29,8 +29,8 @@ use arrow_array::RecordBatch;
 use arrow_schema::SchemaRef;
 use sdm_contract::catalog::CatalogAnswer;
 use sdm_contract::data::{
-    AttachmentId, DataRequest, ExpectedSchema, FetchPlan, ProviderCapabilities, ProviderError,
-    Relation, RelationColumn,
+    AttachmentId, DataRequest, ExpectedSchema, FetchPlan, KeyData, ProviderCapabilities,
+    ProviderError, Relation, RelationColumn,
 };
 use sdm_contract::ops::{OperationResult, SAMPLER_STATE_VERSION, SamplerMemo, SamplerState};
 use sdm_contract::run::{Endpoint, FetchStep, ModelCall, ReplyId};
@@ -156,11 +156,11 @@ struct Shared {
     /// The sampler memo the operation leaves for the host (decision E52),
     /// as it last kept it.
     memo: Option<SamplerMemo>,
-    /// The key sets bound as the run's provider binds them
-    /// (`DataAccess::bound_keys`), each once.
-    bound: BTreeSet<AttachmentId>,
     /// Answered, not yet taken by the body.
     replies: BTreeMap<ReplyId, Reply>,
+    /// The fetches whose answers are kept as the provider handed them over,
+    /// a chunk's ([`Ask::raw`]), read once the request's chunks are joined.
+    raw: BTreeSet<ReplyId>,
     /// Each table's columns as the source's catalog read them, by the
     /// relation the run names the table by ([`Asker::guard`]).
     guarded: BTreeMap<Relation, Vec<String>>,
@@ -301,8 +301,10 @@ impl Asker {
     }
 
     /// The answer to one data request, planned by the run's data layer for
-    /// its provider (decision H14); a request the plan refuses, or an
-    /// operation that names no provider, is the error.
+    /// its provider (decision H14) and bound as the provider binds it, one
+    /// fetch or several asked in one step, their answers joined in order
+    /// (T3.28); a request the plan refuses, or an operation that names no
+    /// provider, is the error.
     pub fn fetch(&self, request: DataRequest) -> Result<Ask, CoreError> {
         let Some(data) = &self.data else {
             return Err(internal(
@@ -312,8 +314,8 @@ impl Asker {
         let request = self.guarded(request);
         let limits = match data.route(&request)? {
             Route::Plan(plan) => {
-                self.bind_keys(data, &plan)?;
-                return Ok(self.ask_planned(request, plan));
+                let plans = self.bind(data, &request, plan)?;
+                return Ok(self.ask_bound(request, plans));
             }
             Route::Fallback(limits) => limits,
         };
@@ -334,6 +336,7 @@ impl Asker {
                 seeds,
             ))),
             budget: None,
+            raw: false,
         })
     }
 
@@ -348,26 +351,61 @@ impl Asker {
         Ok(ask)
     }
 
-    /// Each key set `plan` binds, as the run's provider binds it where its
-    /// dialect binds keys as text (`DataAccess::bound_keys`, T2.14d): the
-    /// attachment replaced, once, before the host takes it.
-    fn bind_keys(&self, data: &DataAccess, plan: &FetchPlan) -> Result<(), CoreError> {
-        for attachment in plan.key_sets() {
-            let mut shared = lock(&self.shared);
-            if shared.bound.contains(&attachment) {
-                continue;
+    /// `plan` bound as the run's provider binds it (`DataAccess::bind`,
+    /// T3.28): the key sets it names handed to the data layer as the core
+    /// made them; each batch a fetch binds installed as one of the run's
+    /// attachments, its fetch's plan naming it by that id; and each key set
+    /// the core made that no fetch names any longer taken back, so the host
+    /// is handed only what it binds. The plans of the fetches, in order.
+    fn bind(
+        &self,
+        data: &DataAccess,
+        request: &DataRequest,
+        plan: FetchPlan,
+    ) -> Result<Vec<FetchPlan>, CoreError> {
+        let named: BTreeSet<AttachmentId> = plan.key_sets().into_iter().collect();
+        let keys: BTreeMap<AttachmentId, KeyData> = {
+            let shared = lock(&self.shared);
+            named
+                .iter()
+                .filter_map(|id| match shared.attachments.get(id) {
+                    Some(Attachment::Arrow(made)) => Some((
+                        *id,
+                        KeyData {
+                            schema: Arc::clone(&made.schema),
+                            batches: made.batches.clone(),
+                        },
+                    )),
+                    _ => None,
+                })
+                .collect()
+        };
+        let bound = data.bind(request, plan, &keys)?;
+        let mut shared = lock(&self.shared);
+        let mut plans = Vec::with_capacity(bound.fetches.len());
+        for fetch in bound.fetches {
+            let mut installed = BTreeMap::new();
+            for (local, batch) in fetch.batches {
+                let id = attach(
+                    &mut shared,
+                    Attachment::Arrow(ArrowData::new(batch.schema, batch.batches)),
+                )?;
+                installed.insert(local, id);
             }
-            let Some(Attachment::Arrow(made)) = shared.attachments.get(&attachment) else {
-                continue;
-            };
-            if let Some(bound) = data.bound_keys(made)? {
-                shared
-                    .attachments
-                    .insert(attachment, Attachment::Arrow(bound));
+            let mut plan = fetch.plan;
+            plan.rename_attachments(&installed);
+            let known =
+                |id: &AttachmentId| named.contains(id) || installed.values().any(|made| made == id);
+            if !plan.key_sets().iter().all(known) {
+                return Err(internal("a bound fetch binds a batch it does not hold"));
             }
-            shared.bound.insert(attachment);
+            plans.push(plan);
         }
-        Ok(())
+        let still: BTreeSet<AttachmentId> = plans.iter().flat_map(FetchPlan::key_sets).collect();
+        for id in named.difference(&still) {
+            shared.attachments.remove(id);
+        }
+        Ok(plans)
     }
 
     /// The Arrow data the body attached as `id`, taken back before the host
@@ -464,11 +502,44 @@ impl Asker {
         self.ask_planned(request, plan)
     }
 
+    /// The answer to `request`, asked as the fetches `plans` bind it into,
+    /// in one step: their answers joined in order, and the first that
+    /// failed, in order, failing it.
+    fn ask_bound(&self, request: DataRequest, mut plans: Vec<FetchPlan>) -> Ask {
+        if plans.len() == 1
+            && let Some(plan) = plans.pop()
+        {
+            return self.ask_planned(request, plan);
+        }
+        let expect = plans
+            .first()
+            .map_or(ExpectedSchema::Discover {}, |plan| plan.expect().clone());
+        let parts = plans
+            .into_iter()
+            .map(|plan| {
+                let mut part = self.ask_planned(request.clone(), plan);
+                part.raw = true;
+                Part::Asking(Box::new(part))
+            })
+            .collect();
+        Ask {
+            shared: Arc::clone(&self.shared),
+            state: AskState::Chunks(Box::new(Chunked {
+                parts,
+                data: self.data.clone(),
+                expect,
+            })),
+            budget: None,
+            raw: false,
+        }
+    }
+
     fn ask_planned(&self, request: DataRequest, plan: FetchPlan) -> Ask {
         Ask {
             shared: Arc::clone(&self.shared),
             state: AskState::New(Asked::Fetch(Box::new((request, plan)))),
             budget: None,
+            raw: false,
         }
     }
 
@@ -482,6 +553,7 @@ impl Asker {
                 body,
             }),
             budget: None,
+            raw: false,
         }
     }
 
@@ -561,6 +633,10 @@ pub struct Ask {
     state: AskState,
     /// What the answer may hold, checked as each page arrives.
     budget: Option<Box<Budget>>,
+    /// A chunk of a request asked as several (T3.28): its answer is kept as
+    /// the provider handed it over, read (`DataAccess::conform`) and held
+    /// to its schema only once the request's chunks are joined.
+    raw: bool,
 }
 
 /// What one fetch's answer may hold, the in-memory fallback's limits on a
@@ -595,8 +671,27 @@ fn past(budget: &Option<Box<Budget>>, data: &ArrowData) -> Option<CoreError> {
     budget.as_ref().and_then(|budget| budget.exceeded(data))
 }
 
+/// One fetch of a request the data layer bound into several
+/// ([`Asker::ask_bound`]): asked, or answered and kept until all are.
+enum Part {
+    Asking(Box<Ask>),
+    Answered(Reply),
+}
+
+/// A request asked as several fetches ([`AskState::Chunks`]).
+struct Chunked {
+    parts: Vec<Part>,
+    data: Option<DataAccess>,
+    expect: ExpectedSchema,
+}
+
 enum AskState {
     New(Asked),
+    /// Asked as several fetches in one step, each a chunk of the request's
+    /// key set (T3.28), whose answers, joined in order, are the request's
+    /// one answer: read as the run reads an answer (`data`, its
+    /// `conform`) and held to `expect`, once, over the whole.
+    Chunks(Box<Chunked>),
     /// Answered by the in-memory fallback (T2.6), which asks its own
     /// requests of the host through the run.
     Fallback(Pin<Box<dyn Future<Output = Reply> + Send>>),
@@ -624,18 +719,99 @@ fn next_reply(shared: &mut Shared) -> Option<ReplyId> {
 /// `page` added to the pages read before it, which it must match in
 /// schema: a provider's pages are one answer (design choice 1, paging).
 fn add_page(pages: Option<ArrowData>, page: ArrowData) -> Result<ArrowData, CoreError> {
-    let Some(mut pages) = pages else {
-        return Ok(page);
+    add_part(pages, page, "page")
+}
+
+/// `more`, a `part` of an answer (a page, a chunk's answer), added to the
+/// parts read before it, which it must match in schema.
+fn add_part(
+    earlier: Option<ArrowData>,
+    more: ArrowData,
+    part: &str,
+) -> Result<ArrowData, CoreError> {
+    let Some(mut earlier) = earlier else {
+        return Ok(more);
     };
-    if pages.schema != page.schema || pages.received != page.received {
+    if earlier.schema != more.schema || earlier.received != more.received {
         return Err(schema_mismatch(
-            "pages",
+            &format!("{part}s"),
             None,
-            "a page of the answer has another schema than the pages before it",
+            &format!("a {part} of the answer has another schema than the {part}s before it"),
         ));
     }
-    pages.batches.extend(page.batches);
-    Ok(pages)
+    earlier.batches.extend(more.batches);
+    Ok(earlier)
+}
+
+/// A request asked as several fetches, `parts`, polled: pending until
+/// every part is answered; then the first answer, in order, that is not
+/// data, else every answer's data joined in order and held to `budget`.
+fn poll_parts(
+    parts: &mut Vec<Part>,
+    data: Option<&DataAccess>,
+    expect: &ExpectedSchema,
+    shared: &Mutex<Shared>,
+    budget: &Option<Box<Budget>>,
+    context: &mut Context<'_>,
+) -> Poll<Reply> {
+    let mut pending = false;
+    for part in parts.iter_mut() {
+        if let Part::Asking(ask) = part {
+            match Pin::new(ask.as_mut()).poll(context) {
+                Poll::Ready(reply) => *part = Part::Answered(reply),
+                Poll::Pending => pending = true,
+            }
+        }
+    }
+    if pending {
+        return Poll::Pending;
+    }
+    let mut joined = None;
+    for part in mem::take(parts) {
+        let Part::Answered(reply) = part else {
+            unreachable!("every part is answered")
+        };
+        match reply {
+            Reply::Fetch(FetchResult::Data(data)) => match add_part(joined, data, "chunk") {
+                Ok(more) => joined = Some(more),
+                Err(err) => {
+                    lock(shared).exhausted.get_or_insert(err);
+                    return Poll::Pending;
+                }
+            },
+            other => return Poll::Ready(other),
+        }
+    }
+    let Some(whole) = joined else {
+        lock(shared)
+            .exhausted
+            .get_or_insert_with(|| internal("a request bound into no fetch"));
+        return Poll::Pending;
+    };
+    // One reading of the whole answer, as one fetch's is read (each value
+    // as the reference reads it, then held to the schema expected), so a
+    // rule that reads a column by all its values reads the request's.
+    let read = match data {
+        Some(access) => {
+            let given = whole.clone();
+            let read = crate::pql::on_adapter_stack(|| access.conform(whole));
+            drop(given);
+            read
+        }
+        None => Ok(whole),
+    };
+    let whole = match read.and_then(|whole| check_expected(expect, &whole).map(|()| whole)) {
+        Ok(whole) => whole,
+        Err(err) => {
+            lock(shared).exhausted.get_or_insert(err);
+            return Poll::Pending;
+        }
+    };
+    if let Some(err) = past(budget, &whole) {
+        lock(shared).exhausted.get_or_insert(err);
+        return Poll::Pending;
+    }
+    Poll::Ready(Reply::Fetch(FetchResult::Data(whole)))
 }
 
 impl Future for Ask {
@@ -643,9 +819,25 @@ impl Future for Ask {
 
     fn poll(self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<Reply> {
         let this = self.get_mut();
-        // The fallback's own asks lock the run's state as they are polled.
+        // The fallback's own asks, and a chunked request's fetches, lock the
+        // run's state as they are polled.
         if let AskState::Fallback(answer) = &mut this.state {
             return answer.as_mut().poll(context);
+        }
+        if let AskState::Chunks(chunked) = &mut this.state {
+            let Chunked {
+                parts,
+                data,
+                expect,
+            } = chunked.as_mut();
+            return poll_parts(
+                parts,
+                data.as_ref(),
+                expect,
+                &this.shared,
+                &this.budget,
+                context,
+            );
         }
         let mut shared = lock(&this.shared);
         match mem::replace(&mut this.state, AskState::Answered) {
@@ -659,6 +851,9 @@ impl Future for Ask {
                 match asked {
                     Asked::Fetch(asked) => {
                         let (request, plan) = (*asked).clone();
+                        if this.raw {
+                            shared.raw.insert(id);
+                        }
                         let purpose = shared.purpose;
                         shared.fetches.push(FetchStep {
                             id,
@@ -721,6 +916,9 @@ impl Future for Ask {
                     let Some(next) = next_reply(&mut shared) else {
                         return Poll::Pending;
                     };
+                    if this.raw {
+                        shared.raw.insert(next);
+                    }
                     let (request, plan) = (*asked).clone();
                     let purpose = shared.purpose;
                     shared.fetches.push(FetchStep {
@@ -754,7 +952,7 @@ impl Future for Ask {
                 },
                 Some(reply) => Poll::Ready(reply),
             },
-            AskState::Fallback(_) => unreachable!("polled above"),
+            AskState::Fallback(_) | AskState::Chunks(_) => unreachable!("polled above"),
             AskState::Answered => panic!("a request's reply was awaited after it was taken"),
         }
     }
@@ -961,6 +1159,16 @@ impl Run {
         }
         match &mut self.state {
             State::AwaitingFetch(pending) if pending.contains_key(&id) => {
+                // A chunk's answer is read with the request's other chunks,
+                // once they are joined ([`poll_parts`]).
+                if lock(&self.shared).raw.remove(&id) {
+                    pending.remove(&id);
+                    if pending.is_empty() {
+                        self.state = State::Ready;
+                    }
+                    lock(&self.shared).replies.insert(id, Reply::Fetch(result));
+                    return Ok(());
+                }
                 // Its values read as the reference reads them, before it is
                 // held to the schema expected (T2.14d), on a stack of their
                 // own: a JSON value is read by a reader that recurses once

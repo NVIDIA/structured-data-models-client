@@ -8,20 +8,22 @@
 //! The root holds one `Arc<dyn DataLayer>`, which `sdm_host::default_root`
 //! builds; swapping the data layer replaces that one value. A run takes the
 //! provider its operation names, with the capabilities the layer gives for
-//! it, asks for data only through [`DataAccess::plan`], and reads a
+//! it, asks for data only through [`DataAccess::plan`] (bound as the
+//! provider binds it, [`DataAccess::bind`]), and reads a
 //! catalog answer only through [`DataAccess::read`], into the contract's
 //! dialect-neutral shape (decision E54). Nothing in the core matches on a
 //! backend's name: what a provider takes is what its capabilities say, and
 //! the core refuses by reading them (the requests it declared; from T1.22,
 //! the largest seed it samples with, register entry RS-7).
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use arrow_array::RecordBatch;
 use sdm_contract::catalog::CatalogAnswer;
 use sdm_contract::data::{
-    DataLayer, DataRequest, FallbackLimits, FetchPlan, ProviderCapabilities, ProviderChoice,
-    Relation, refuse_derived, seed_integer,
+    AttachmentId, BoundRequest, DataLayer, DataRequest, FallbackLimits, FetchPlan, KeyData,
+    ProviderCapabilities, ProviderChoice, Relation, refuse_derived, seed_integer,
 };
 use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 
@@ -91,6 +93,12 @@ impl DataAccess {
         self.layer.reads_tables_as_they_stand(&self.provider)
     }
 
+    /// Whether the run's provider's source holds a type per column that a
+    /// caller's type must match (`DataLayer::holds_column_types`).
+    pub fn holds_column_types(&self) -> bool {
+        self.layer.holds_column_types(&self.provider)
+    }
+
     /// What the run's provider answers.
     pub fn capabilities(&self) -> &ProviderCapabilities {
         &self.capabilities
@@ -154,13 +162,19 @@ impl DataAccess {
         }
     }
 
-    /// A key set as the run's provider binds it (`DataLayer::bound_keys`,
-    /// T2.14d), or `None` where it binds the key set the core made.
-    pub fn bound_keys(&self, keys: &ArrowData) -> Result<Option<ArrowData>, CoreError> {
-        Ok(self
-            .layer
-            .bound_keys(&self.provider, &keys.schema, &keys.batches)?
-            .map(|(schema, batches)| ArrowData::new(schema, batches)))
+    /// `plan`, the run's provider's answer to `request`, bound as the
+    /// provider binds it with the key sets `keys` it names
+    /// (`DataLayer::bind`, T3.28): one fetch or more, each with the
+    /// batches it binds by local reference, a double written as the
+    /// reference's language writes one ([`crate::pql::float_text`]).
+    pub fn bind(
+        &self,
+        request: &DataRequest,
+        plan: FetchPlan,
+        keys: &BTreeMap<AttachmentId, KeyData>,
+    ) -> Result<BoundRequest, CoreError> {
+        self.layer
+            .bind(&self.provider, request, plan, keys, crate::pql::float_text)
     }
 
     /// How the run's provider answers `request`. A request whose fields

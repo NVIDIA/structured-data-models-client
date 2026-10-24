@@ -36,22 +36,25 @@
 //! A key set is bound as the reference's Postgres sampler binds one: JSON
 //! text in the statement's one parameter, `$1`, unpacked by a common table
 //! expression named as the plan's relation ([`SEEDS`]; `P1 d:131`). The
-//! provider writes the key set's rows as a JSON array of rows, each row an
-//! array of its cells' texts in the key set's column order (null for a
-//! null), which Postgres's own input functions read ([`seed_cte`]): an
-//! integer or decimal key as `bigint` or `numeric`, so the join compares
-//! the two keys by value, exactly (an integer and a `numeric` meet when
-//! their values are equal, whatever their scales, and two `numeric` values
-//! float64 would merge stay apart; design choice 5, lesson 19, KO2-35);
-//! any other key (a float, a text) in the joined column's own declared
-//! type, put in place of that column in one row of the table
-//! (`jsonb_populate_record`), so a `real` key compares as a `real` and a
-//! `uuid`, an enum or a `varchar` key as itself (the reference casts to
-//! the type it read from the catalog);
+//! dialect writes it as the reference writes it (`pg_values::key_rows`,
+//! T3.28): each seed its key alone, or an object of `id` and the window's
+//! bounds `e` and `s`, its batch its position (`WITH ORDINALITY`), split
+//! past the reference's budget as it splits one ([`crate::key_text`]),
+//! each later chunk's statement counting its batches from the seeds before
+//! it; the provider binds the text it is handed. Postgres's own input
+//! functions read each value ([`seed_cte`]): an integer or decimal key as
+//! `bigint` or `numeric`, so the join compares the two keys by value,
+//! exactly (an integer and a `numeric` meet when their values are equal,
+//! whatever their scales, and two `numeric` values float64 would merge
+//! stay apart; design choice 5, lesson 19, KO2-35); any other key (a
+//! float, a text) in the joined column's own declared type, put in place
+//! of that column in one row of the table (`jsonb_populate_record`), so a
+//! `real` key compares as a `real` and a `uuid`, an enum or a `varchar` key
+//! as itself (the reference casts to the type it read from the catalog);
 //! the batch as `bigint`; a seed time in the window column's own type, the
 //! column compared in that type and ordered by it, as the reference does
 //! (a text time column by its text, the seed's time in the text pandas
-//! writes it, which the provider writes).
+//! writes it).
 //!
 //! The statements are built once, by the shared builder ([`crate::sql`]),
 //! through [`Postgres`]'s hooks (T3.18): only what is Postgres's own is
@@ -71,6 +74,7 @@ use sdm_contract::data::{
 use sdm_contract::types::ColumnType;
 use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 
+use crate::key_text;
 use crate::pg_values;
 use crate::quote::identifier;
 use crate::sql::{self, Sample, SeedRead, SqlDialect};
@@ -332,12 +336,20 @@ impl SqlDialect for Postgres {
         pg_values::conform(schema, batches, float_text)
     }
 
-    fn bound_keys(
+    fn key_rows(
         &self,
+        request: &DataRequest,
         schema: &arrow_schema::SchemaRef,
         batches: &[RecordBatch],
-    ) -> Result<Option<sql::Batches>, CoreError> {
-        pg_values::bound_keys(schema, batches)
+        float_text: fn(f64) -> String,
+    ) -> Result<Option<Vec<String>>, CoreError> {
+        pg_values::key_rows(request, schema, batches, float_text).map(Some)
+    }
+
+    /// The reference's budget of a key set's JSON text (`_chunk_rows`,
+    /// `PG/sampler.py:125-182`).
+    fn key_budget(&self) -> Option<usize> {
+        Some(key_text::BUDGET)
     }
 }
 
@@ -752,49 +764,6 @@ fn seed_cte(read: &SeedRead<'_>) -> Result<String, CoreError> {
     let (request, key, seeds, window) = (read.request, read.key, read.seeds, read.window);
     let row_type = &read.table;
     let seed_keys = seed_key_columns(key.len());
-    let mut selects = Vec::with_capacity(seeds.columns.len());
-    let mut built = Vec::with_capacity(key.len());
-    let mut timed = Vec::new();
-    for (position, column) in seeds.columns.iter().enumerate() {
-        let cell = format!("r.value->>{position}");
-        let read = if let Some(at) = seed_keys.iter().position(|k| *k == column.name) {
-            match key_type(&column.column_type) {
-                Some(kind) => format!("({cell})::{kind}"),
-                None => {
-                    built.push(format!("{}, r.value->{position}", text(&key[at])));
-                    format!("k.{}", identifier(&key[at]))
-                }
-            }
-        } else if column.name == SEED_BATCH {
-            format!("({cell})::bigint")
-        } else if let Some(window) = window.filter(|w| {
-            [&w.lower, &w.upper]
-                .into_iter()
-                .flatten()
-                .any(|bound| bound.seed_column == column.name)
-        }) {
-            let alias = format!("w{position}");
-            timed.push(format!(
-                "\n  CROSS JOIN LATERAL jsonb_populate_record(b.base, jsonb_build_object({}, r.value->{position})) AS {alias}",
-                text(&window.column)
-            ));
-            format!("{alias}.{}", identifier(&window.column))
-        } else {
-            match &column.column_type {
-                sdm_contract::ColumnType::Timestamp { zone: None, .. } => {
-                    format!("({cell})::timestamp")
-                }
-                _ => {
-                    return Err(sql::not_taken(
-                        request,
-                        "seeds",
-                        "a seed column past the key, the batch and zone-less times",
-                    ));
-                }
-            }
-        };
-        selects.push(format!("{read} AS {}", identifier(&column.name)));
-    }
     let carried = seeds
         .columns
         .iter()
@@ -806,6 +775,73 @@ fn seed_cte(read: &SeedRead<'_>) -> Result<String, CoreError> {
             "seeds",
             "the seeds do not carry every key column",
         ));
+    }
+    // Each seed as the old client writes it (`pg_values::key_rows`): its
+    // key alone, or an object of `id` and the window's bounds.
+    let others: Vec<&str> = seeds
+        .columns
+        .iter()
+        .map(|c| c.name.as_str())
+        .filter(|name| !seed_keys.iter().any(|k| k == name) && *name != SEED_BATCH)
+        .collect();
+    let fields: BTreeMap<&str, String> = key_text::fields(others.iter().copied(), request)
+        .into_iter()
+        .collect();
+    let id = if others.is_empty() {
+        Path::root()
+    } else {
+        Path::root().field("id")
+    };
+    let mut selects = Vec::with_capacity(seeds.columns.len());
+    let mut built = Vec::with_capacity(key.len());
+    let mut timed = Vec::new();
+    for (position, column) in seeds.columns.iter().enumerate() {
+        let read = if let Some(at) = seed_keys.iter().position(|k| *k == column.name) {
+            let path = if key.len() == 1 {
+                id.clone()
+            } else {
+                id.at(at)
+            };
+            match key_type(&column.column_type) {
+                Some(kind) => format!("({})::{kind}", path.text),
+                None => {
+                    built.push(format!("{}, {}", text(&key[at]), path.json));
+                    format!("k.{}", identifier(&key[at]))
+                }
+            }
+        } else if column.name == SEED_BATCH {
+            batch_select(read.offset)
+        } else {
+            let path = Path::root().field(&fields[column.name.as_str()]);
+            if let Some(window) = window.filter(|w| {
+                [&w.lower, &w.upper]
+                    .into_iter()
+                    .flatten()
+                    .any(|bound| bound.seed_column == column.name)
+            }) {
+                let alias = format!("w{position}");
+                timed.push(format!(
+                    "\n  CROSS JOIN LATERAL jsonb_populate_record(b.base, jsonb_build_object({}, {})) AS {alias}",
+                    text(&window.column),
+                    path.json
+                ));
+                format!("{alias}.{}", identifier(&window.column))
+            } else {
+                match &column.column_type {
+                    sdm_contract::ColumnType::Timestamp { zone: None, .. } => {
+                        format!("({})::timestamp", path.text)
+                    }
+                    _ => {
+                        return Err(sql::not_taken(
+                            request,
+                            "seeds",
+                            "a seed column past the key, the batch and zone-less times",
+                        ));
+                    }
+                }
+            }
+        };
+        selects.push(format!("{read} AS {}", identifier(&column.name)));
     }
     // A value is read in its column's own type by putting it in place of
     // that column in one row of the table (`b.base`, the row built from the
@@ -827,10 +863,55 @@ fn seed_cte(read: &SeedRead<'_>) -> Result<String, CoreError> {
     }
     typed.push_str(&timed.concat());
     Ok(format!(
-        "WITH {name} AS (\n  SELECT {selects}\n  FROM jsonb_array_elements($1::jsonb) AS r(value){typed}\n)\n",
+        "WITH {name} AS (\n  SELECT {selects}\n  FROM jsonb_array_elements($1::jsonb) WITH ORDINALITY AS r(value, ordinality){typed}\n)\n",
         name = identifier(&read.seeds_name),
         selects = selects.join(", "),
     ))
+}
+
+/// The seed's batch, its position in the JSON array (from 1, as `WITH
+/// ORDINALITY` counts) moved to count from `offset`, the seeds of the
+/// chunks before its own, as the reference's `_json_cte` and `_flatten`
+/// number it.
+fn batch_select(offset: usize) -> String {
+    if offset == 0 {
+        "(r.ordinality - 1)::bigint".to_owned()
+    } else {
+        format!("(r.ordinality - 1 + {offset})::bigint")
+    }
+}
+
+/// Where a seed's value is in its JSON row, as `jsonb` and as text.
+#[derive(Clone)]
+struct Path {
+    json: String,
+    text: String,
+}
+
+impl Path {
+    /// The row itself, a bare value.
+    fn root() -> Path {
+        Path {
+            json: "r.value".to_owned(),
+            text: "r.value #>> '{}'".to_owned(),
+        }
+    }
+
+    /// The field `name` of an object.
+    fn field(&self, name: &str) -> Path {
+        Path {
+            json: format!("{}->{}", self.json, text(name)),
+            text: format!("{}->>{}", self.json, text(name)),
+        }
+    }
+
+    /// The element `at` of an array.
+    fn at(&self, at: usize) -> Path {
+        Path {
+            json: format!("{}->{at}", self.json),
+            text: format!("{}->>{at}", self.json),
+        }
+    }
 }
 
 /// The Postgres type a seed key of `column_type` is read as, for an

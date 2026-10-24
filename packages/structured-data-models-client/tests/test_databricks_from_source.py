@@ -726,8 +726,11 @@ class _CompletingWarehouse(_SessionWarehouse):
             if not text.startswith('WITH TMP AS ( SELECT pos AS '):
                 raise
             keys = json.loads(parameters[0])
+            # Each field of the old client's JSON (``id``, ``e``, ``s``) under
+            # the seed column the statement reads it as.
+            named = dict(re.findall(r'col\.(\w+) AS `(\w+)`', text))
             seeds = pd.DataFrame(
-                keys
+                [{named.get(f, f): v for f, v in key.items()} for key in keys]
                 if keys and isinstance(keys[0], dict)
                 else [{'key': key} for key in keys]
             )
@@ -1641,8 +1644,13 @@ def _seeded_over(db: Any, text: str, parameters: list[Any]) -> pa.Table:
     import pandas as pd
 
     keys = json.loads(parameters[0])
+    # The core reads the old client's fields under its seed columns' names.
+    named = dict(re.findall(r'col\.(\w+) AS `(\w+)`', text))
     seeds = pd.DataFrame(
-        keys
+        [
+            {**key, **{named[f]: v for f, v in key.items() if f in named}}
+            for key in keys
+        ]
         if keys and isinstance(keys[0], dict)
         else [{'key': key} for key in keys]
     )

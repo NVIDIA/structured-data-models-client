@@ -9,8 +9,9 @@
 //! A dialect (`duckdb.rs`, `sqlite.rs`, `postgres.rs`) implements the
 //! trait, and holds only what differs: its name and capabilities, its
 //! quoting, the name parts a relation takes and whether its source reads
-//! under a namespace, how a key set is named, bound and joined, how a time
-//! is cast, the seeded sample, the per-seed neighbor read and the key
+//! under a namespace, how a key set is named, bound and joined (written as
+//! JSON text where the statement reads it so, [`crate::key_text`]), how a
+//! time is cast, the seeded sample, the per-seed neighbor read and the key
 //! lookup, its catalog statements and the reading of their answers, and
 //! the quirks the core asks of a provider. A warehouse dialect (T3.4
 //! onward) plugs in the same way: one more `impl SqlDialect` and one more
@@ -328,14 +329,36 @@ pub(crate) trait SqlDialect: Sync {
         Ok(None)
     }
 
-    /// A key set as the dialect's provider binds it, if it changes any
-    /// (`DataLayer::bound_keys`).
-    fn bound_keys(
+    /// Whether the source holds a type per column that a caller's type
+    /// must match: `true`, the default; SQLite's columns hold affinities
+    /// only (`DataLayer::holds_column_types`).
+    fn holds_column_types(&self) -> bool {
+        true
+    }
+
+    // --- a key set bound as text (T3.28, [`crate::key_text`]) -------------------
+
+    /// Each seed of the key set `request` reads, `schema` and `batches` as
+    /// the core made it, as the JSON its statement reads, in order, a
+    /// double written as `float_text` writes it, where the dialect binds
+    /// its key sets as JSON text the statement unpacks; `None`, the
+    /// default, where its provider binds the core's Arrow key set as a
+    /// relation (DuckDB, SQLite).
+    fn key_rows(
         &self,
+        _request: &DataRequest,
         _schema: &arrow_schema::SchemaRef,
         _batches: &[RecordBatch],
-    ) -> Result<Option<Batches>, CoreError> {
+        _float_text: fn(f64) -> String,
+    ) -> Result<Option<Vec<String>>, CoreError> {
         Ok(None)
+    }
+
+    /// The bytes one statement's key set text may hold before the key set
+    /// is split into chunks, one fetch each; `None`, the default: never
+    /// split.
+    fn key_budget(&self) -> Option<usize> {
+        None
     }
 }
 
@@ -463,6 +486,10 @@ pub(crate) struct SeedRead<'a> {
     pub columns: &'a [String],
     pub seeds: &'a KeySet,
     pub window: Option<&'a Window>,
+    /// The seeds of the chunks before this statement's own (T3.28): the
+    /// batch of its key set's first seed, which a dialect numbering seeds
+    /// by their position in the key set's JSON counts from.
+    pub offset: usize,
 }
 
 impl SeedRead<'_> {
@@ -551,11 +578,14 @@ impl SeedRead<'_> {
 }
 
 /// The statements answering `request` in `dialect`, with the schema its
-/// answer has; `namespace` the provider's, for a dialect that takes one.
+/// answer has; `namespace` the provider's, for a dialect that takes one; a
+/// key set's seeds numbered from `offset`, a later chunk's (T3.28,
+/// [`crate::key_text`]), else 0.
 pub(crate) fn plan(
     dialect: &dyn SqlDialect,
     request: &DataRequest,
     namespace: &[String],
+    offset: usize,
 ) -> Result<FetchPlan, CoreError> {
     let d = dialect;
     let mut before = Vec::new();
@@ -659,7 +689,16 @@ pub(crate) fn plan(
             per_seed,
             order,
         } => {
-            let read = seed_read(d, request, table, key, columns, seeds, window.as_ref())?;
+            let read = seed_read(
+                d,
+                request,
+                table,
+                key,
+                columns,
+                seeds,
+                window.as_ref(),
+                offset,
+            )?;
             let prelude = d.seeds_prelude(&read)?;
             params.push(key_set(&read));
             no_columns(request, columns)?;
@@ -676,7 +715,7 @@ pub(crate) fn plan(
             columns,
             seeds,
         } => {
-            let read = seed_read(d, request, table, key, columns, seeds, None)?;
+            let read = seed_read(d, request, table, key, columns, seeds, None, offset)?;
             let prelude = d.seeds_prelude(&read)?;
             params.push(key_set(&read));
             no_columns(request, columns)?;
@@ -817,7 +856,9 @@ fn time_bounds(
     Ok(selects.join("\nUNION ALL\n"))
 }
 
-/// A read of `table` against `seeds`, its table rendered.
+/// A read of `table` against `seeds`, its table rendered, its seeds
+/// numbered from `offset`.
+#[allow(clippy::too_many_arguments, reason = "each a part of the read")]
 fn seed_read<'a>(
     d: &'a dyn SqlDialect,
     request: &'a DataRequest,
@@ -826,6 +867,7 @@ fn seed_read<'a>(
     columns: &'a [String],
     seeds: &'a KeySet,
     window: Option<&'a Window>,
+    offset: usize,
 ) -> Result<SeedRead<'a>, CoreError> {
     let seeds_name = d.seeds_for(request, table);
     Ok(SeedRead {
@@ -837,6 +879,7 @@ fn seed_read<'a>(
         columns,
         seeds,
         window,
+        offset,
     })
 }
 

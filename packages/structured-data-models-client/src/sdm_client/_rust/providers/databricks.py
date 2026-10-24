@@ -17,45 +17,35 @@ reference's sampler binds them (``DB/sampler.py``).
 The statements are the core's (``sdm-data`` renders Databricks' SQL); this
 module writes none. A statement's parameters are bound in order: a scalar
 as the Python value the contract's scalar holds (:mod:`..codec`), a key set
-(the seeds of a ``neighbors`` or ``lookup`` request, an Arrow attachment the
-run loop hands over by id) as one JSON text, as the reference binds it
-(``_dumps``): a key set of one column a JSON array of its values, of
-several a JSON array of objects keyed by column name in column order. A key
-set whose JSON is past the reference's budget of the warehouse's parameter
-size is split into chunks as the reference splits it (``_chunk_rows``), the
-statement run once per chunk and the results stitched into one batch space
-by :data:`BATCH_COLUMN` (``_flatten``). A plan this provider cannot run, one
-for a host provider or another dialect, one naming a key set it was not
-handed, or binding two in one statement, raises, and the run loop hands the
-core a provider error.
+(the seeds of a ``neighbors`` or ``lookup`` request) as the one JSON text the
+core wrote of it (T3.28), handed over as a one-cell attachment the run loop
+passes by id, bound as it was handed. The core writes that text as the
+reference binds it (``_dumps``) and splits a key set past the reference's
+budget of the warehouse's parameter size into one fetch per chunk
+(``_chunk_rows``, ``_flatten``), so this provider neither writes nor splits
+one. A plan this provider cannot run, one for a host provider or another
+dialect, one naming a text it was not handed, or one binding the core's
+Arrow key set, raises, and the run loop hands the core a provider error.
 
 What a Databricks failure says (its SQLSTATE, and whether it refused an
 expression) is read by :func:`error_fields`, as the reference reads it
 (``DB/errors.py``), for the run loop to hand the core.
 
-It imports nothing of pandas; it reads a key set with pyarrow, the
+It imports nothing of pandas; it reads a key set's text with pyarrow, the
 client's base dependency.
 """
 
 from __future__ import annotations
 
 import datetime
-import json
 import re
 from collections.abc import Mapping
 from typing import Any
 
 from sdm_connectors import providers
-from sdm_connectors.providers import PlanNotRun, arrow_table
+from sdm_connectors.providers import PlanNotRun
 
 from sdm_client._rust import codec
-
-#: The budget of a key set's JSON text, in bytes, below the warehouse's
-#: native parameter limit of 1 MB (the reference's ``_chunk_rows``).
-PARAMETER_BUDGET = 900_000
-#: The result column numbering each row's seed within the key set bound
-#: (the contract's ``BATCH_COLUMN``).
-BATCH_COLUMN = '__kumo_batch__'
 
 
 class DatabricksProvider:
@@ -64,11 +54,8 @@ class DatabricksProvider:
     ``cursor()`` is a context manager with ``execute(sql, parameters=...)``
     and ``fetchall_arrow()``."""
 
-    def __init__(
-        self, connection: Any, *, budget: int = PARAMETER_BUDGET
-    ) -> None:
+    def __init__(self, connection: Any) -> None:
         self._connection = connection
-        self._budget = budget
 
     @staticmethod
     def error_fields(error: BaseException) -> dict[str, Any] | None:
@@ -80,30 +67,13 @@ class DatabricksProvider:
         self, step: dict[str, Any], keys: Mapping[int, Any] | None = None
     ) -> Any:
         statements = providers.statements(step, 'databricks')
-        # Each key set read once, however many statements bind it.
-        read: dict[int, list[Any]] = {}
-        *before, (text, chunks) = [
-            _bound(statement, keys, read, self._budget)
-            for statement in statements
-        ]
-        if any(len(earlier) != 1 for _, earlier in before):
-            raise PlanNotRun(
-                'a key set past the parameter budget in a statement whose '
-                'rows are not the answer'
-            )
+        # Each text read once, however many statements bind it.
+        read: dict[int, str] = {}
+        bound = [_bound(statement, keys, read) for statement in statements]
         with self._connection.cursor() as cursor:
-            for earlier_text, earlier in before:
-                _execute(cursor, earlier_text, earlier[0][1])
-            if len(chunks) == 1:
-                _execute(cursor, text, chunks[0][1])
-                return cursor.fetchall_arrow()
-            tables = []
-            for offset, values in chunks:
-                _execute(cursor, text, values)
-                tables.append(_shifted(cursor.fetchall_arrow(), offset))
-        import pyarrow as pa
-
-        return pa.concat_tables(tables)
+            for statement, values in zip(statements, bound, strict=True):
+                _execute(cursor, statement['text'], values)
+            return cursor.fetchall_arrow()
 
 
 class DatabricksSqlProvider(DatabricksProvider):
@@ -117,7 +87,7 @@ class DatabricksSparkProvider(DatabricksProvider):
     (its checks and its refusal of a session whose frames cannot return
     Arrow included), or a ``SparkConnection`` already."""
 
-    def __init__(self, session: Any, *, budget: int = PARAMETER_BUDGET) -> None:
+    def __init__(self, session: Any) -> None:
         from sdm_connectors.backends.spark import SparkConnection
 
         connection = (
@@ -125,26 +95,18 @@ class DatabricksSparkProvider(DatabricksProvider):
             if isinstance(session, SparkConnection)
             else SparkConnection(session)
         )
-        super().__init__(connection, budget=budget)
-
-
-#: One statement's parameters, per chunk: the offset of the chunk's first
-#: seed in the key set, and the values bound.
-_Chunks = list[tuple[int, list[Any]]]
+        super().__init__(connection)
 
 
 def _bound(
     statement: dict[str, Any],
     keys: Mapping[int, Any] | None,
-    read: dict[int, list[Any]],
-    budget: int,
-) -> tuple[str, _Chunks]:
-    r"""A statement's text, and its parameters' values per chunk: one chunk
-    unless it binds a key set past ``budget``. ``read`` holds the rows of
-    each key set read so far, by attachment."""
+    read: dict[int, str],
+) -> list[Any]:
+    r"""A statement's parameters' values, in order: each scalar's, and each
+    key set's text as it was handed (``providers.text``). ``read`` holds
+    each text read so far, by attachment."""
     values: list[Any] = []
-    at: int | None = None
-    rows: list[Any] = []
     for param in statement['params']:
         if param['param'] == 'value':
             try:
@@ -154,26 +116,13 @@ def _bound(
                     'a parameter the contract does not hold'
                 ) from None
             continue
-        if param['param'] != 'key_set':
+        if param['param'] != 'text':
             raise PlanNotRun('a parameter of an unknown kind')
-        if at is not None:
-            raise PlanNotRun('a statement binding more than one key set')
-        attachment, stream = providers.key_set(param, keys)
-        at = len(values)
+        attachment = param['attachment']
         if attachment not in read:
-            read[attachment] = _rows(arrow_table(stream))
-        rows = read[attachment]
-        values.append(None)
-    if at is None:
-        return statement['text'], [(0, values)]
-    chunks: _Chunks = []
-    offset = 0
-    for chunk in _chunk_rows(rows, budget):
-        chunk_values = list(values)
-        chunk_values[at] = _dumps(chunk)
-        chunks.append((offset, chunk_values))
-        offset += len(chunk)
-    return statement['text'], chunks
+            read[attachment] = providers.text(param, keys)[1]
+        values.append(read[attachment])
+    return values
 
 
 def _execute(cursor: Any, text: str, values: list[Any]) -> None:
@@ -184,63 +133,6 @@ def _execute(cursor: Any, text: str, values: list[Any]) -> None:
         cursor.execute(text, parameters=values)
     else:
         cursor.execute(text)
-
-
-def _json_default(obj: Any) -> Any:
-    r"""A value JSON has no form of, as the reference writes it: a NumPy
-    scalar as its Python value, anything else as its ``str``."""
-    if hasattr(obj, 'item'):
-        return obj.item()
-    return str(obj)
-
-
-def _dumps(obj: Any) -> str:
-    r"""Compact JSON text, as the reference's ``_dumps`` writes it, so the
-    chunks' size accounting is the text's length exactly."""
-    return json.dumps(obj, separators=(',', ':'), default=_json_default)
-
-
-def _chunk_rows(rows: list[Any], budget: int) -> list[list[Any]]:
-    r"""``rows`` split into chunks whose JSON text stays within ``budget``
-    bytes, as the reference's ``_chunk_rows`` splits them: each row counted
-    as its JSON text and one separator, the enclosing brackets as two, and
-    never an empty chunk unless there is no row."""
-    chunks: list[list[Any]] = []
-    current: list[Any] = []
-    current_bytes = 2
-    for row in rows:
-        size = len(_dumps(row)) + 1
-        if current and current_bytes + size > budget:
-            chunks.append(current)
-            current, current_bytes = [], 2
-        current.append(row)
-        current_bytes += size
-    if current:
-        chunks.append(current)
-    return chunks or [[]]
-
-
-def _rows(table: Any) -> list[Any]:
-    r"""A key set's rows as the reference binds them: a key set of one
-    column its values, of several an object per row keyed by column name in
-    column order; each value as Python reads it from Arrow."""
-    if table.num_columns == 1:
-        return list(table.column(0).to_pylist())
-    return list(table.to_pylist())
-
-
-def _shifted(table: Any, offset: int) -> Any:
-    r"""A chunk's result, its :data:`BATCH_COLUMN` moved by ``offset``, the
-    position of the chunk's first seed in the whole key set, as an
-    ``int64`` column, as the reference's ``_flatten`` moves it."""
-    import pyarrow as pa
-    import pyarrow.compute as pc
-
-    index = table.schema.get_field_index(BATCH_COLUMN)
-    if index < 0:
-        raise PlanNotRun('a chunked statement whose rows carry no batch')
-    batch = pc.add(table.column(index).cast(pa.int64()), offset)
-    return table.set_column(index, BATCH_COLUMN, batch)
 
 
 _EPOCH = datetime.datetime(1970, 1, 1)

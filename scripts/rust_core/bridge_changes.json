@@ -270,10 +270,10 @@
       "moved": "T3.17: a warning says its sentence; fix 1: host-held values from the call in progress (holding), the a and I conversions and the to() pairing"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::<module>": {
-      "refactor": "T3.4 fix 1 (design fix F): PlanNotRun, the plan checks and the key-set reader imported from sdm_connectors.providers, not defined here; T3.20 (frozen at T3.7): the Arrow building's constants and functions moved unchanged into postgres_arrow.py, BATCH_ROWS and rows_arrow imported from it"
+      "moved": "T3.28: the key set's JSON text is the core's (sdm-data pg_values::key_rows, split past the budget by key_text); _bound_text and the arrow_table import gone; T3.20 (frozen at T3.7): the Arrow building's constants and functions moved unchanged into postgres_arrow.py, BATCH_ROWS and rows_arrow imported from it"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::PostgresProvider.__call__": {
-      "refactor": "T3.4 fix 1 and 5 (design fix F): the plan and key-set checks through sdm_connectors.providers.statements and key_set, which hands back the key set it checked; the same rules and messages"
+      "moved": "T3.28: binds the one text the core wrote of the key set, read by sdm_connectors.providers.text, in place of writing it from the Arrow key set"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::PostgresProvider.__init__": {
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
@@ -339,7 +339,7 @@
       "moved": "T2.11: context_anchor_time written for the core as anchor_time is (a ts scalar), the literal 'entity' and none as they are, any other value as the text 'unreadable', which the core refuses where the engine refuses it (sdm-request options); no type check here"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_bound_text": {
-      "moved": "T2.14b (with T2.14d, MID2 P2-3): the moved key_set_json's host half: the key set's rows as a JSON array of Arrow's text of each cell, the cells the reference spells otherwise already that text from the core (pg_values::bound_keys)"
+      "moved": "T3.28: the key set's rows as JSON text of each cell, written by the core (sdm-data pg_values::key_rows)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_field": {
       "gone": "T3.20 (frozen at T3.7): moved unchanged into the frozen _rust/providers/postgres_arrow.py as field, its body unchanged, its name public for the recorder"

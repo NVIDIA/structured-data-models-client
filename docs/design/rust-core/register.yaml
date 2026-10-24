@@ -9313,3 +9313,87 @@ entries:
     fixed, at the orchestrator's direction. The fix it points to keys the
     memo to the source as the run resolves it, so a run after the change
     starts afresh.
+- id: P3K-1
+  title: A few kinds of key are spelled otherwise than the old client spells them, so a key set of them near the budget can split at other seeds
+  kind: change
+  old_behavior: >-
+    The old client writes a Databricks or Postgres key set as json.dumps of
+    each key as _coerce_id makes it from the value pandas holds, and splits
+    it past 900,000 characters of that text (_chunk_rows, DB/sampler.py:32-44,
+    PG/sampler.py:125-182). A Postgres numeric column that a single-column
+    primary, unique or foreign key constraint names is typed a string
+    (PostgresTable._get_source_columns, PG/table.py:225-252, which skips a
+    constraint naming more than one column), so its key is str of the
+    Decimal the driver reads: "12345" as a JSON string, "1.50" with its
+    scale's zeros, "1E-7" in Decimal's exponent form. A zoned time stamp
+    key is written in the session's offset.
+  new_behavior: >-
+    The core writes every key set as the old client does (T3.28): the same
+    fields (id, e, s), doubles as Python's repr, a decimal of a scale as its
+    double's text where that reads back as its exact value, booleans as
+    True and False, dates and time stamps as str of a pandas Timestamp,
+    ASCII only, and splits at the same seeds; except that a Postgres numeric
+    key is written as the old client writes one no single-column constraint
+    names (a number for a scale of 0, its double's text for a scale: 12345,
+    "1.5", "1e-07"), the core not knowing which constraint the column
+    carries, and a zoned time stamp key is written in UTC (+00:00). Each of
+    these spellings reads as the same value as the old client's (numeric
+    values compare equal; both zoned spellings carry their offset and read
+    as the same timestamptz instant), so no answer changes: only such a key
+    set's text, and where a chunk ends near the budget, can differ. Two
+    other differences can change an answer and are recorded apart: exact
+    decimals past a double's digits (P2C-3, KO2-35) and a missing
+    Databricks window anchor (P3K-2).
+  affected_inputs: >-
+    A Postgres key set over a numeric column a single-column database
+    constraint names, or of zoned time stamps; near or past 900,000 bytes of
+    JSON for the split to differ.
+  cases: [T3.28]
+  refs: [T3.28, P2C-3, P3K-2]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: owner. Reviewed in T3.28 rounds 1 and 2 (Codex, Claude): the
+    reference's own _coerce_id and Postgres casts show each spelling reads
+    as the same value. A decimal key past a double's digits stays exact, as
+    the owner approved in P2C-3 (KO2-35): the core's seed matches the exact
+    key where the old client's rounded seed
+    ("1.2345678901234568e+16" for 12345678901234567.1234567891) can match
+    another row or none; that changed answer is P2C-3's, not proposed here.
+- id: P3K-2
+  title: A Databricks windowed seed with a missing anchor is left out of the answer where the old client's query can fail
+  kind: change
+  old_behavior: >-
+    The old client's _by_time writes a missing anchor (an entity with no
+    time of its own under anchor_time='entity') into the seed's e and s
+    fields as NaN (strftime of a missing time), which from_json reads as
+    the string "NaN" in fields declared string (allowNonNumericNumbers,
+    true by default). With ANSI mode on and a TIMESTAMP window column, the
+    comparison casts "NaN" to a time stamp and the query fails with
+    CAST_INVALID_INPUT; with ANSI off it reads as null and the seed holds
+    no row.
+  new_behavior: >-
+    The core writes a missing anchor as JSON null (as T3.4 wrote it before
+    T3.28), which reads as SQL NULL: the seed holds no row, and the query
+    answers for every other seed, whether ANSI mode is on or off. Where the
+    old client's query fails (ANSI on, a TIMESTAMP window column), the core
+    answers; elsewhere the answers are the same.
+  affected_inputs: >-
+    A Databricks neighbor read with a time window (an upper bound, or both)
+    whose seeds include an entity with a missing anchor, on a warehouse or
+    session with ANSI mode on and a TIMESTAMP window column. Verified on
+    local Spark 3.5.7 by T3.28's round-2 review (seeds [1, 2], anchors
+    [NaT, 2024-01-02], source times 2024-01-01 12:00:00, upper-only and
+    bounded windows), not on a live warehouse.
+  cases: [T3.28]
+  refs: [T3.4, T3.28]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: owner. Introduced by T3.4's Databricks key-set writer, kept
+    by T3.28 and found in its round-2 review (Codex P1). The design's T3.6
+    proposes a named refusal for a null anchor before any read (P3D-8); the
+    owner may decide both together, which would refuse this case on both
+    warehouses instead of answering it.

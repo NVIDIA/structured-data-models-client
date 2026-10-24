@@ -152,6 +152,14 @@ fn pragma(
 pub(crate) struct Sqlite;
 
 impl SqlDialect for Sqlite {
+    /// SQLite holds no column types, only affinities: a declared type
+    /// steers how a value is stored, never which values the column holds,
+    /// and the old client reads any column as the type its caller gives
+    /// (`SQLiteTable._to_dtype` by affinity, `_sanitize` by the caller's).
+    fn holds_column_types(&self) -> bool {
+        false
+    }
+
     fn name(&self) -> &'static str {
         NAME
     }
