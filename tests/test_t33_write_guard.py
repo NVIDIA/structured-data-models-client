@@ -72,6 +72,41 @@ def test_the_approved_utc_projection_is_a_pure_read() -> None:
 @pytest.mark.parametrize(
     'sql',
     [
+        'SELECT UNIX_MICROS(`instant`) FROM `other`.s.t',
+        "SELECT CAST(DATEDIFF(CAST(`wall` AS DATE), DATE '1970-01-01') "
+        'AS BIGINT) * 86400000000 + CAST(HOUR(`wall`) AS BIGINT) * 3600000000 '
+        '+ CAST(MINUTE(`wall`) AS BIGINT) * 60000000 '
+        '+ CAST(EXTRACT(SECOND FROM `wall`) * 1000000 AS BIGINT) FROM `other`.s.t',
+    ],
+)
+def test_lossless_instant_and_civil_timestamp_functions_are_pure_reads(
+    sql: str,
+) -> None:
+    DATABRICKS.check(sql)
+
+
+@pytest.mark.parametrize(
+    'function', ['UNIX_MICROS', 'DATEDIFF', 'HOUR', 'MINUTE']
+)
+@pytest.mark.parametrize(
+    'template',
+    [
+        'SELECT other.s.{function}(1)',
+        'SELECT `{function}`(1)',
+        'SELECT {function}(1); DELETE FROM other.s.t',
+    ],
+)
+def test_lossless_timestamp_function_names_do_not_allow_other_calls_or_writes(
+    function: str,
+    template: str,
+) -> None:
+    with pytest.raises(wg.WriteRefused):
+        DATABRICKS.check(template.format(function=function))
+
+
+@pytest.mark.parametrize(
+    'sql',
+    [
         'DESCRIBE QUERY DELETE FROM other.s.t',
         'DESCRIBE QUERY CREATE TABLE other.s.t (id INT)',
         'DESCRIBE QUERY SELECT 1; DELETE FROM other.s.t',

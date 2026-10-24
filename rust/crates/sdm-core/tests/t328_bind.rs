@@ -701,3 +701,96 @@ fn timestamp_preflight_binds_empty_keys_then_preserves_the_original_lookup() {
         Some(Reply::Fetch(FetchResult::Data(_)))
     ));
 }
+
+#[test]
+fn both_timestamp_kinds_survive_first_and_later_key_text_chunks_without_reprojection() {
+    use arrow_array::StringArray;
+    let provider: ProviderChoice = serde_json::from_str(
+        r#"{"provider":"sql","dialect":"databricks","timestamp_encoding":"microseconds"}"#,
+    )
+    .unwrap();
+    let root = CompositionRoot::new(Arc::new(sdm_data::Data::new()));
+    let mut run = Run::with_data(root.data_access(&provider).unwrap(), |asker| async move {
+        let id = asker.attach(Attachment::Arrow(seeds(many())))?;
+        let mut request = lookup(USERS, id);
+        if let DataRequest::Lookup { columns, .. } = &mut request {
+            columns.extend(["wall".into(), "instant".into()]);
+        }
+        asker.fetch(request)?.await;
+        Ok(done())
+    });
+    let Step::Fetch { requests } = run.next().unwrap() else {
+        panic!("metadata fetch")
+    };
+    assert_eq!(requests.len(), 1);
+    let metadata = &requests[0];
+    assert_eq!(cell(run.take_attachment(text_param(metadata))), "[]");
+    let batch = RecordBatch::try_from_iter(vec![
+        (
+            "col_name",
+            Arc::new(StringArray::from(vec![
+                "__kumo_batch__",
+                "user_id",
+                "wall",
+                "instant",
+                "__kumo_matches__",
+            ])) as arrow_array::ArrayRef,
+        ),
+        (
+            "data_type",
+            Arc::new(StringArray::from(vec![
+                "int",
+                "bigint",
+                "timestamp_ntz",
+                "timestamp",
+                "bigint",
+            ])) as arrow_array::ArrayRef,
+        ),
+    ])
+    .unwrap();
+    run.submit_fetch(
+        metadata.id,
+        FetchResult::Data(ArrowData::new(batch.schema(), vec![batch])),
+    )
+    .unwrap();
+    let Step::Fetch { requests } = run.next().unwrap() else {
+        panic!("chunked data fetches")
+    };
+    assert!(requests.len() >= 3);
+    let mut offsets = Vec::new();
+    for request in &requests {
+        let FetchPlan::Sql {
+            statements,
+            result_conversions,
+            ..
+        } = &request.plan
+        else {
+            panic!("SQL")
+        };
+        assert_eq!(
+            serde_json::to_value(result_conversions).unwrap(),
+            serde_json::json!([
+                {"conversion":"timestamp_micros","column":2,"name":"wall","source_kind":"wall_time"},
+                {"conversion":"timestamp_micros","column":3,"name":"instant","source_kind":"instant"},
+            ])
+        );
+        let text = &statements.last().unwrap().text;
+        assert_eq!(
+            text.matches("UNIX_MICROS(t.`instant`)").count(),
+            1,
+            "{text}"
+        );
+        assert_eq!(
+            text.matches("DATEDIFF(CAST(t.`wall` AS DATE)").count(),
+            1,
+            "{text}"
+        );
+        assert!(!text.starts_with("DESCRIBE QUERY"));
+        assert!(!text.contains("TIMESTAMPDIFF(MICROSECOND"));
+        offsets.push(offset(text));
+        let payload = cell(run.take_attachment(text_param(request)));
+        assert!(payload.len() <= BUDGET);
+    }
+    assert_eq!(offsets[0], 0);
+    assert!(offsets.windows(2).all(|pair| pair[0] < pair[1]));
+}
