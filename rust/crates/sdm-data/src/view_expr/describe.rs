@@ -42,7 +42,7 @@ pub enum DescribeRefusal {
 
 /// The rows of a section, by the section's lower-case header without its
 /// `#`; the columns under the empty header.
-fn sections(rows: &[Vec<Option<String>>], spaces: Spaces) -> Vec<(String, Vec<(String, String)>)> {
+fn sections(rows: &[Vec<Option<String>>], spaces: &Spaces) -> Vec<(String, Vec<(String, String)>)> {
     let mut sections: Vec<(String, Vec<(String, String)>)> = vec![(String::new(), Vec::new())];
     let mut current: Option<usize> = Some(0);
     for row in rows {
@@ -102,7 +102,7 @@ fn by_name(pairs: impl IntoIterator<Item = (String, String)>) -> Vec<(String, St
 /// after its statement).
 pub fn describe_view(
     rows: &[Vec<Option<String>>],
-    spaces: Spaces,
+    spaces: &Spaces,
 ) -> Result<ViewDescription, DescribeRefusal> {
     let sections = sections(rows, spaces);
     let section = |header: &str| {

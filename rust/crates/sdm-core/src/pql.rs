@@ -1165,9 +1165,12 @@ pub fn yaml_rules() -> sdm_schema::view::yaml::Rules {
 }
 
 /// Python's white space (`str.isspace`), from the parser's one rule of
-/// it, as the data layer's view checks take it (T3.5).
-pub fn spaces() -> sdm_data::view_expr::Spaces {
-    sdm_data::view_expr::Spaces(parser::syntax::is_space)
+/// it, as the data layer's view checks take it, with the class its
+/// patterns are compiled with derived from it once (T3.5).
+pub fn spaces() -> &'static sdm_data::view_expr::Spaces {
+    static SPACES: std::sync::LazyLock<sdm_data::view_expr::Spaces> =
+        std::sync::LazyLock::new(|| sdm_data::view_expr::Spaces::new(parser::syntax::is_space));
+    &SPACES
 }
 
 /// `date.isoformat()` of a view definition's date, from the parser's one

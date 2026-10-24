@@ -7,10 +7,10 @@
 //! so no two can disagree about where a literal ends. A `Str` is data, and
 //! a `Quoted` token is a name.
 
-use std::sync::LazyLock;
+use std::borrow::Cow;
 
 use super::names::Unreadable;
-use super::pattern::{Pattern, Read};
+use super::pattern::{Lazy, Pattern, Read};
 use super::{ExprDialect, Spaces};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -79,16 +79,17 @@ enum Lexeme {
 /// run of digits or letters overflows the pattern engine's stack on (T3.5
 /// fix 1); since the lookahead only asks that the run of name characters
 /// end there, it is decided on that run exactly.
+#[derive(Clone)]
 enum Matcher {
     Pattern(Pattern),
     DatabricksNumber,
     DatabricksName,
 }
 
-const ESCAPED_STRING: &str = r"'(?:''|\\[\s\S]|[^'\\])*'";
-const ESCAPED_DOUBLE: &str = r#""(?:""|\\[\s\S]|[^"\\])*""#;
+const ESCAPED_STRING: &str = r"'(?:''|\\(?s:.)|[^'\\])*'";
+const ESCAPED_DOUBLE: &str = r#""(?:""|\\(?s:.)|[^"\\])*""#;
 const BACKTICKED: &str = r"`(?:``|[^`])*`";
-const DOLLARS: &str = r"\$\$[\s\S]*?\$\$";
+const DOLLARS: &str = r"\$\$(?s:.)*?\$\$";
 const WORD: &str = r"[A-Za-z_][\w$]*";
 /// Databricks reads a run of letters, digits and `_` as a name unless the
 /// whole run is a number, as `1e5`, `2d` and `10L` are.
@@ -160,9 +161,9 @@ fn whole_number(run: &str) -> bool {
 
 /// `BARE_NAME` at the start of `text`, decided on its run: the run, unless
 /// the whole run is a number.
-fn name_length(text: &str) -> Read<Option<usize>> {
+fn name_length(text: &str, spaces: &Spaces) -> Read<Option<usize>> {
     let Some(end) = run(text) else {
-        return fallback(&bare_name(), text);
+        return fallback(&bare_name(), text, spaces);
     };
     Ok((end > 0 && !whole_number(&text[..end])).then_some(end))
 }
@@ -171,9 +172,9 @@ fn name_length(text: &str) -> Read<Option<usize>> {
 /// order: digits, a signed exponent and a suffix, with nothing asked of what
 /// follows; a decimal with an optional exponent and suffix, which must end
 /// the run; a whole number, which must be the whole run.
-fn number_length(text: &str) -> Read<Option<usize>> {
+fn number_length(text: &str, spaces: &Spaces) -> Read<Option<usize>> {
     let Some(end) = run(text) else {
-        return fallback(&databricks_number(), text);
+        return fallback(&databricks_number(), text, spaces);
     };
     let bytes = text.as_bytes();
     let digits_at = |at: usize| {
@@ -239,8 +240,8 @@ fn number_length(text: &str) -> Read<Option<usize>> {
 }
 
 /// The pattern's own answer, for the runs it alone reads right.
-fn fallback(pattern: &str, text: &str) -> Read<Option<usize>> {
-    Ok(Pattern::new(&format!("^(?:{pattern})"))
+fn fallback(pattern: &str, text: &str, spaces: &Spaces) -> Read<Option<usize>> {
+    Ok(Pattern::new(&format!("^(?:{pattern})"), spaces)
         .find(text)?
         .map(|span| span.end))
 }
@@ -261,12 +262,13 @@ fn loose_words() -> Vec<(Lexeme, String)> {
 /// A dialect's lexemes, each its own pattern anchored at the token's
 /// start, tried in the order the old client's alternation tries them, so the
 /// first that matches wins as it does there.
+#[derive(Clone)]
 struct Lexer {
     lexemes: Vec<(Lexeme, Matcher)>,
 }
 
 impl Lexer {
-    fn new(own: Vec<(Lexeme, String)>) -> Lexer {
+    fn new(own: Vec<(Lexeme, String)>, spaces: &Spaces) -> Lexer {
         // `?::` is Databricks' try-cast, read wherever `::` is.
         let everywhere = [
             (
@@ -274,7 +276,7 @@ impl Lexer {
                 r"<=>|<=|>=|<>|\?::|::|->|=>|[.:(),\[\]<>]".to_owned(),
             ),
             (Lexeme::Space, r"\s+".to_owned()),
-            (Lexeme::Is(Kind::Other), r"[\s\S]".to_owned()),
+            (Lexeme::Is(Kind::Other), r"(?s:.)".to_owned()),
         ];
         Lexer {
             lexemes: own
@@ -284,7 +286,7 @@ impl Lexer {
                     let matcher = match text.as_str() {
                         DATABRICKS_NUMBER => Matcher::DatabricksNumber,
                         DATABRICKS_NAME => Matcher::DatabricksName,
-                        _ => Matcher::Pattern(Pattern::new(&format!("^(?:{text})"))),
+                        _ => Matcher::Pattern(Pattern::new(&format!("^(?:{text})"), spaces)),
                     };
                     (lexeme, matcher)
                 })
@@ -293,12 +295,12 @@ impl Lexer {
     }
 
     /// The first lexeme matching at the start of `text`, and its length.
-    fn next(&self, text: &str) -> Read<(Lexeme, usize)> {
+    fn next(&self, text: &str, spaces: &Spaces) -> Read<(Lexeme, usize)> {
         for (lexeme, matcher) in &self.lexemes {
             let length = match matcher {
                 Matcher::Pattern(pattern) => pattern.find(text)?.map(|span| span.end),
-                Matcher::DatabricksNumber => number_length(text)?,
-                Matcher::DatabricksName => name_length(text)?,
+                Matcher::DatabricksNumber => number_length(text, spaces)?,
+                Matcher::DatabricksName => name_length(text, spaces)?,
             };
             if let Some(length) = length {
                 return Ok((*lexeme, length));
@@ -309,26 +311,29 @@ impl Lexer {
     }
 }
 
-fn lexer(dialect: Option<ExprDialect>) -> &'static Lexer {
-    static DATABRICKS: LazyLock<Lexer> = LazyLock::new(|| {
-        Lexer::new(vec![
-            // A line comment goes on past a backslash ending its line.
-            (Lexeme::Is(Kind::Comment), r"--(?:\\\n|[^\r\n])*".into()),
-            // A raw string takes no escapes; double quotes delimit a
-            // string, not a name.
-            (
-                Lexeme::Is(Kind::Str),
-                format!(r#"[rR]'[^']*'|[rR]"[^"]*"|{ESCAPED_STRING}|{ESCAPED_DOUBLE}"#),
-            ),
-            (Lexeme::Is(Kind::Quoted), BACKTICKED.into()),
-            (Lexeme::Open, r"/\*".into()),
-            (Lexeme::Is(Kind::Number), DATABRICKS_NUMBER.to_owned()),
-            (Lexeme::Is(Kind::Word), DATABRICKS_NAME.to_owned()),
-        ])
+fn lexer(dialect: Option<ExprDialect>, spaces: &Spaces) -> Cow<'static, Lexer> {
+    static DATABRICKS: Lazy<Lexer> = Lazy::new(|spaces| {
+        Lexer::new(
+            vec![
+                // A line comment goes on past a backslash ending its line.
+                (Lexeme::Is(Kind::Comment), r"--(?:\\\n|[^\r\n])*".into()),
+                // A raw string takes no escapes; double quotes delimit a
+                // string, not a name.
+                (
+                    Lexeme::Is(Kind::Str),
+                    format!(r#"[rR]'[^']*'|[rR]"[^"]*"|{ESCAPED_STRING}|{ESCAPED_DOUBLE}"#),
+                ),
+                (Lexeme::Is(Kind::Quoted), BACKTICKED.into()),
+                (Lexeme::Open, r"/\*".into()),
+                (Lexeme::Is(Kind::Number), DATABRICKS_NUMBER.to_owned()),
+                (Lexeme::Is(Kind::Word), DATABRICKS_NAME.to_owned()),
+            ],
+            spaces,
+        )
     });
     // Double quotes delimit a name, which takes no escapes. Snowflake
     // refuses a backtick, so reading one as a quote hides nothing from it.
-    static SNOWFLAKE: LazyLock<Lexer> = LazyLock::new(|| {
+    static SNOWFLAKE: Lazy<Lexer> = Lazy::new(|spaces| {
         let mut own = vec![
             (Lexeme::Is(Kind::Comment), r"(?:--|//)[^\r\n]*".to_owned()),
             (Lexeme::Is(Kind::Str), format!("{DOLLARS}|{ESCAPED_STRING}")),
@@ -338,10 +343,10 @@ fn lexer(dialect: Option<ExprDialect>) -> &'static Lexer {
             ),
         ];
         own.extend(loose_words());
-        Lexer::new(own)
+        Lexer::new(own, spaces)
     });
     // What a check that knows no dialect reads as quoted.
-    static NEITHER: LazyLock<Lexer> = LazyLock::new(|| {
+    static NEITHER: Lazy<Lexer> = Lazy::new(|spaces| {
         let mut own = vec![
             (Lexeme::Is(Kind::Comment), r"--[^\r\n]*".to_owned()),
             (
@@ -351,12 +356,12 @@ fn lexer(dialect: Option<ExprDialect>) -> &'static Lexer {
             (Lexeme::Is(Kind::Quoted), BACKTICKED.to_owned()),
         ];
         own.extend(loose_words());
-        Lexer::new(own)
+        Lexer::new(own, spaces)
     });
     match dialect {
-        Some(ExprDialect::Databricks) => &DATABRICKS,
-        Some(ExprDialect::Snowflake) => &SNOWFLAKE,
-        None => &NEITHER,
+        Some(ExprDialect::Databricks) => DATABRICKS.get(spaces),
+        Some(ExprDialect::Snowflake) => SNOWFLAKE.get(spaces),
+        None => NEITHER.get(spaces),
     }
 }
 
@@ -388,12 +393,12 @@ fn comment_end(expr: &str, start: usize, nested: bool) -> Option<usize> {
 /// The tokens of `expr` as `dialect` reads them, spaces left out. A quote
 /// or `/*` that is never closed is a token of kind `Other`. A pattern that
 /// fails on the text makes it unreadable.
-pub(crate) fn lex(expr: &str, dialect: Option<ExprDialect>) -> Read<Vec<Token>> {
-    let lexer = lexer(dialect);
+pub(crate) fn lex(expr: &str, dialect: Option<ExprDialect>, spaces: &Spaces) -> Read<Vec<Token>> {
+    let lexer = lexer(dialect, spaces);
     let mut tokens = Vec::new();
     let mut at = 0;
     while at < expr.len() {
-        let (lexeme, length) = lexer.next(&expr[at..])?;
+        let (lexeme, length) = lexer.next(&expr[at..], spaces)?;
         let mut end = at + length;
         let kind = match lexeme {
             Lexeme::Space => None,
@@ -425,10 +430,10 @@ pub(crate) fn lex(expr: &str, dialect: Option<ExprDialect>) -> Read<Vec<Token>> 
 /// A Databricks expression with each comment replaced by a space, trimmed
 /// by Python's white space, `spaces` (`strip_comments`). A comment hides
 /// nothing from a check of what is left, and what is left is what runs.
-pub fn strip_comments(expr: &str, spaces: Spaces) -> Result<String, Unreadable> {
+pub fn strip_comments(expr: &str, spaces: &Spaces) -> Result<String, Unreadable> {
     let mut out = String::with_capacity(expr.len());
     let mut last = 0;
-    for token in lex(expr, Some(ExprDialect::Databricks))? {
+    for token in lex(expr, Some(ExprDialect::Databricks), spaces)? {
         if token.kind == Kind::Comment {
             out.push_str(&expr[last..token.start]);
             out.push(' ');
@@ -440,10 +445,15 @@ pub fn strip_comments(expr: &str, spaces: Spaces) -> Result<String, Unreadable> 
 }
 
 /// `expr` with each string literal and quoted name replaced by `mask`.
-pub(crate) fn masked(expr: &str, dialect: Option<ExprDialect>, mask: &str) -> Read<String> {
+pub(crate) fn masked(
+    expr: &str,
+    dialect: Option<ExprDialect>,
+    mask: &str,
+    spaces: &Spaces,
+) -> Read<String> {
     let mut out = String::with_capacity(expr.len());
     let mut last = 0;
-    for token in lex(expr, dialect)? {
+    for token in lex(expr, dialect, spaces)? {
         if matches!(token.kind, Kind::Str | Kind::Quoted) {
             out.push_str(&expr[last..token.start]);
             out.push_str(mask);
@@ -456,8 +466,11 @@ pub(crate) fn masked(expr: &str, dialect: Option<ExprDialect>, mask: &str) -> Re
 
 /// Where each string literal of a Databricks expression starts and ends,
 /// in bytes.
-pub fn string_literals(expr: &str) -> Result<Vec<std::ops::Range<usize>>, Unreadable> {
-    Ok(lex(expr, Some(ExprDialect::Databricks))?
+pub fn string_literals(
+    expr: &str,
+    spaces: &Spaces,
+) -> Result<Vec<std::ops::Range<usize>>, Unreadable> {
+    Ok(lex(expr, Some(ExprDialect::Databricks), spaces)?
         .into_iter()
         .filter(|token| token.kind == Kind::Str)
         .map(|token| token.start..token.end)
