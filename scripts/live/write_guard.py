@@ -997,23 +997,29 @@ REFUSALS: list[str] = []
 #: Snowpark's ``Session.close``: while it runs, the one statement it sends
 #: to cancel its own session's queries is admitted (:func:`_closing`).
 SESSION_CLOSE = ('snowflake.snowpark.session', 'Session', 'close')
-#: The statement the closing session may send, exactly, or ``None``.
-_CLOSING: contextvars.ContextVar[str | None] = contextvars.ContextVar(
-    'sdm_write_guard_closing', default=None
+#: While a Snowpark session closes, the one statement it may send and the
+#: Snowflake connection it may send it on, or ``None``.
+_CLOSING: contextvars.ContextVar[tuple[str, Any] | None] = (
+    contextvars.ContextVar('sdm_write_guard_closing', default=None)
 )
 
 
 def _closing(original: Any) -> Any:
     r"""Snowpark's ``Session.close``, admitting while it runs exactly
     ``select system$cancel_all_queries(<its session id>)``, the statement
-    its ``cancel_all`` sends, and nothing else."""
+    its ``cancel_all`` sends, on the session's own Snowflake connection
+    (``Session._conn._conn``), and nothing else."""
 
     @functools.wraps(original)
     def close(self: Any, *arguments: Any, **keywords: Any) -> Any:
         session_id = getattr(self, '_session_id', None)
+        server = getattr(self, '_conn', None)
+        connection = getattr(server, '_conn', None)
         admitted = (
-            f'select system$cancel_all_queries({session_id})'
-            if isinstance(session_id, int) and not isinstance(session_id, bool)
+            (f'select system$cancel_all_queries({session_id})', connection)
+            if isinstance(session_id, int)
+            and not isinstance(session_id, bool)
+            and connection is not None
             else None
         )
         token = _CLOSING.set(admitted)
@@ -1024,6 +1030,18 @@ def _closing(original: Any) -> Any:
 
     setattr(close, _MARK, True)
     return close
+
+
+def _closing_admits(dialect: str, cursor: Any, text: str) -> bool:
+    r"""Whether ``text`` on ``cursor`` is the closing Snowpark session's
+    own cancel: a Snowflake cursor of that session's connection."""
+    closing = _CLOSING.get()
+    if closing is None or dialect != 'snowflake':
+        return False
+    statement, connection = closing
+    return (
+        text == statement and getattr(cursor, 'connection', None) is connection
+    )
 
 
 def _keeping(function: Any) -> Any:
@@ -1071,7 +1089,10 @@ def _text(owner: Any, statement: Any) -> str:
 
 
 def _guarded(
-    original: Any, check: Callable[[str], None], spark: bool = False
+    original: Any,
+    check: Callable[[str], None],
+    spark: bool = False,
+    dialect: str = '',
 ) -> Any:
     @functools.wraps(original)
     def guarded(self: Any, *arguments: Any, **keywords: Any) -> Any:
@@ -1087,8 +1108,7 @@ def _guarded(
                 raise WriteRefused('a statement the guard cannot find')
             statement = keywords[given[0]]
         text = _text(self, statement)
-        closing = _CLOSING.get()
-        if closing is None or text != closing:
+        if not _closing_admits(dialect, self, text):
             check(text)
         return original(self, *arguments, **keywords)
 
@@ -1271,7 +1291,9 @@ def install(guards: Mapping[str, WriteGuard | None]) -> Callable[[], None]:
                 _wrap(
                     cls,
                     attribute,
-                    functools.partial(_guarded, check=check, spark=spark),
+                    functools.partial(
+                        _guarded, check=check, spark=spark, dialect=dialect
+                    ),
                 )
         module_name, class_name, attributes = SPARK_CONNECT
         cls = _class(module_name, class_name)
