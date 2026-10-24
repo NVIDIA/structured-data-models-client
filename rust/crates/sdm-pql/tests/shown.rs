@@ -160,3 +160,37 @@ fn cycles_are_written_as_python_writes_them() {
     let big = "1".repeat(50);
     assert_eq!(Shown::Int(big.clone()).text(), big);
 }
+
+/// A text is written up to its bound exactly: one character over, it is
+/// refused, and nothing past the bound is built (Codex review 3, P1-4).
+#[test]
+fn a_text_is_written_up_to_its_bound_exactly() {
+    let value = Shown::List(vec![
+        Shown::Text("é".repeat(3)),
+        Shown::Text("\0".into()),
+        Shown::Date {
+            year: 2024,
+            month: 1,
+            day: 1,
+        },
+    ]);
+    let repr = value.repr();
+    assert_eq!(repr, "['ééé', '\\x00', datetime.date(2024, 1, 1)]");
+    let length = repr.chars().count();
+    assert_eq!(value.repr_within(length).as_deref(), Some(repr.as_str()));
+    assert_eq!(value.repr_within(length - 1), None);
+    let text = Shown::Text("é".repeat(5));
+    assert_eq!(text.text_within(5).as_deref(), Some("ééééé"));
+    assert_eq!(text.text_within(4), None);
+}
+
+/// Python 3.12 escapes an unassigned code point, a format character and a
+/// soft hyphen in a `repr` (Codex review 3, P0-2).
+#[test]
+fn python_s_printability_is_its_own_table() {
+    assert_eq!(text_repr("\u{378}"), "'\\u0378'");
+    assert_eq!(text_repr("\u{e0001}"), "'\\U000e0001'");
+    assert_eq!(text_repr("\u{ad}"), "'\\xad'");
+    assert_eq!(text_repr("\u{2066}"), "'\\u2066'");
+    assert_eq!(text_repr("\u{1F600}"), "'\u{1F600}'");
+}

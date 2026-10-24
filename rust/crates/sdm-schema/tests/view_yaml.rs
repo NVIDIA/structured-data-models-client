@@ -20,12 +20,12 @@
 //! texts `yaml-rust2` scans otherwise than PyYAML are registered
 //! differences (P3J-6), each named below and held to what the core does.
 
-use sdm_schema::view::yaml::{self, Document, MAX_DEPTH, NodeId, Outside, Rules, Value};
+use sdm_schema::view::yaml::{self, Document, MAX_DEPTH, NodeId, Outside, Value};
 use serde_json::Value as Json;
 
-/// Python's limit on an integer's digits, which the core hands in from
-/// `sdm-pql` (`sdm_core::pql::yaml_rules`).
-const RULES: Rules = Rules { most_digits: 4300 };
+mod rules;
+
+use rules::RULES;
 
 fn load(text: &str) -> Result<Document, yaml::YamlError> {
     yaml::load(text, &RULES)
@@ -69,8 +69,8 @@ fn typed(document: &Document, node: NodeId, open: &mut Vec<NodeId>) -> Json {
         Value::Int(n) => ("int", Json::String(n.text().to_owned())),
         Value::Float(x) => ("float", Json::String(float_key(*x))),
         Value::Str(text) => ("str", Json::String(text.clone())),
-        Value::Date(date) => ("date", Json::String(date.isoformat())),
-        Value::Timestamp(moment) => ("datetime", Json::String(moment.isoformat())),
+        Value::Date(date) => ("date", Json::String(rules::date_iso(date))),
+        Value::Timestamp(moment) => ("datetime", Json::String(rules::datetime_iso(moment))),
         Value::Seq(items) => {
             open.push(node);
             let items = items.iter().map(|n| typed(document, *n, open)).collect();
@@ -149,6 +149,7 @@ fn outside_as_recorded(vector: &Json, what: &Outside) -> bool {
         Outside::Expansion => false,
         Outside::LongInteger => vector["repr_error"] == true,
         Outside::LineBreak => text.contains(['\u{85}', '\u{2028}', '\u{2029}']),
+        Outside::FlowDash => text.contains('-'),
     }
 }
 
@@ -317,7 +318,6 @@ fn yaml_outside_the_subset_is_refused_by_name() {
         refused("v: !!omap [{a: 1}]"),
         Some(Outside::Tag("!!omap".into()))
     );
-    assert_eq!(refused("v: !!str x"), Some(Outside::Tag("!!str".into())));
     assert_eq!(refused("v: ! x"), Some(Outside::Tag("!".into())));
     assert_eq!(refused("b: &b {k: 1}\nv:\n  <<: *b"), Some(Outside::Merge));
     assert_eq!(refused("v: &a {? *a : x}"), Some(Outside::CollectionKey));
@@ -359,4 +359,82 @@ fn a_replaced_value_is_still_read() {
     let loaded = load("v: {a: 1, a: 2}").unwrap();
     let v = loaded.get(loaded.root(), "v").unwrap();
     assert!(matches!(loaded.value(loaded.get(v, "a").unwrap()), Value::Int(n) if n.text() == "2"));
+}
+
+/// A block scalar's chomping is its header's, read from its indicator,
+/// never from an indicator in the header's comment (Codex review 3, P0-1).
+#[test]
+fn a_block_header_s_comment_is_no_indicator() {
+    let value = |text: &str| {
+        let loaded = load(text).unwrap();
+        loaded
+            .text(loaded.get(loaded.root(), "v").unwrap())
+            .unwrap()
+            .to_owned()
+    };
+    assert_eq!(value("v: |- # |+\n  hello\n"), "hello");
+    assert_eq!(value("v: |+ # |-\n  hello\n\n"), "hello\n\n");
+    assert_eq!(value("v: | # >-\n  hello\n"), "hello\n");
+    // PyYAML refuses a comment that touches the header, as `yaml-rust2`.
+    assert!(load("v: |-#c\n  a\n").is_err());
+    assert_eq!(value("\"a|b\": x\nv: |+ # |\n  a\n\n"), "a\n\n");
+}
+
+/// `!!str` makes text of a scalar, as PyYAML does; a lone `-` in a flow
+/// collection is refused by name (the third reviews).
+#[test]
+fn a_str_tag_reads_as_text_and_a_flow_dash_is_named() {
+    let value = |text: &str| {
+        let loaded = load(text).unwrap();
+        loaded
+            .value(loaded.get(loaded.root(), "v").unwrap())
+            .clone()
+    };
+    assert_eq!(
+        value("v: !!str 2024-01-01"),
+        Value::Str("2024-01-01".into())
+    );
+    assert_eq!(value("v: !!str 0x1f"), Value::Str("0x1f".into()));
+    assert_eq!(value("v: !!str"), Value::Str(String::new()));
+    assert_eq!(value("v: !!str |\n  a"), Value::Str("a".into()));
+    let refused = load("v: !!str [a]").unwrap_err();
+    assert_eq!(refused.outside, None);
+    for text in ["v: [-]", "v: {a: -}", "v: [x, -, y]", "v: [ - ]"] {
+        assert_eq!(
+            load(text).unwrap_err().outside,
+            Some(Outside::FlowDash),
+            "{text}"
+        );
+    }
+}
+
+/// Block nesting is refused by name past the bound, a million levels as
+/// promptly as two hundred and one, with no recursion to overflow (Claude
+/// review 3, P1-1).
+#[test]
+fn deep_block_nesting_is_refused_by_name() {
+    for levels in [MAX_DEPTH + 1, 3_000, 1_000_000] {
+        let mut text = String::from("v:\n");
+        text.push_str(&"- ".repeat(levels));
+        text.push_str("1\n");
+        assert_eq!(
+            load(&text).unwrap_err().outside,
+            Some(Outside::Nesting),
+            "{levels}"
+        );
+        let mut text = String::from("source: c.s.t\n");
+        for level in 0..levels.min(1_000) {
+            text.push_str(&" ".repeat(level));
+            text.push_str(&format!("k{level}:\n"));
+        }
+        assert_eq!(
+            load(&text).unwrap_err().outside,
+            Some(Outside::Nesting),
+            "{levels}"
+        );
+    }
+    let mut shallow = String::from("v:\n");
+    shallow.push_str(&"- ".repeat(MAX_DEPTH - 2));
+    shallow.push_str("1\n");
+    assert!(load(&shallow).is_ok());
 }

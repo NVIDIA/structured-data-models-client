@@ -193,3 +193,31 @@ fn a_semantic_view_passes_through_the_metric_steps() {
     let walk = view_steps::walk_joins(&mut spec).unwrap();
     assert!(walk.kept.is_empty() && walk.skipped.is_empty());
 }
+
+/// The bound on a written value is its characters, exactly (Codex review
+/// 3, P1-4): a default of 2,100,000 `é` is read whole; a quoted text of
+/// 1,100,000 escaped NULs, 4,400,002 characters, and 200,000 aliases of a
+/// date are refused by name, never built past the bound.
+#[test]
+fn the_bound_counts_the_characters_written() {
+    let wide = format!("v: \"{}\"", "é".repeat(2_100_000));
+    let document = yaml::load(&wide, &yaml_rules()).unwrap();
+    let node = document.get(document.root(), "v").unwrap();
+    let text = view_steps::default_text("STRING", &document, node).unwrap();
+    assert_eq!(text.chars().count(), 2_100_000);
+    let nuls = format!("v: \"{}\"", "\\0".repeat(1_100_000));
+    let document = yaml::load(&nuls, &yaml_rules()).unwrap();
+    let node = document.get(document.root(), "v").unwrap();
+    assert!(view_words::value_repr(&document, node).is_err());
+    assert_eq!(
+        view_words::value_text(&document, node).map(|t| t.len()),
+        Ok(1_100_000)
+    );
+    let mut dates = String::from("v: [&d 2024-01-01");
+    dates.push_str(&", *d".repeat(200_000));
+    dates.push(']');
+    let document = yaml::load(&dates, &yaml_rules()).unwrap();
+    let node = document.get(document.root(), "v").unwrap();
+    assert!(view_words::value_repr(&document, node).is_err());
+    assert!(view_words::value_text(&document, node).is_err());
+}

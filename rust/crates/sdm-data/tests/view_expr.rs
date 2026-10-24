@@ -18,6 +18,27 @@
 use sdm_data::view_expr::{self, ExprDialect};
 use serde_json::Value as Json;
 
+/// Python's white space (`str.isspace`), which the core hands in from
+/// `sdm-pql`: the 29 characters Python 3.12 counts.
+const SPACES: Spaces = Spaces(|c| {
+    matches!(
+        c,
+        '\t'..='\r'
+            | '\u{1c}'..='\u{20}'
+            | '\u{85}'
+            | '\u{a0}'
+            | '\u{1680}'
+            | '\u{2000}'..='\u{200a}'
+            | '\u{2028}'
+            | '\u{2029}'
+            | '\u{202f}'
+            | '\u{205f}'
+            | '\u{3000}'
+    )
+});
+
+use sdm_data::view_expr::Spaces;
+
 const VECTORS: &str = include_str!("../../../../contract/view-expr-vectors.json");
 
 fn document() -> Json {
@@ -76,7 +97,7 @@ fn calls_are_trusted_where_the_old_client_trusted_them() {
         let expr = vector["expr"].as_str().unwrap();
         let dialect = dialect(&vector["dialect"]).unwrap();
         let columns = texts(&vector["columns"]);
-        let refused = view_expr::untrusted_call_reason(expr, dialect, &columns).is_some();
+        let refused = view_expr::untrusted_call_reason(expr, dialect, &columns, SPACES).is_some();
         (refused != vector["reason"].is_string())
             .then(|| format!("{expr:?} ({dialect:?}, {columns:?}): refused {refused}"))
     });
@@ -114,7 +135,7 @@ fn names_are_read_as_the_old_client_read_them() {
 fn comments_are_stripped_as_databricks_drops_them() {
     each("strip_comments", 150, |vector| {
         let expr = vector["expr"].as_str().unwrap();
-        let out = view_expr::strip_comments(expr).unwrap();
+        let out = view_expr::strip_comments(expr, SPACES).unwrap();
         (out != vector["out"].as_str().unwrap())
             .then(|| format!("{expr:?}: {out:?} where {}", vector["out"]))
     });
@@ -194,7 +215,8 @@ fn a_long_token_is_answered_as_the_old_client_answered_it() {
             ("snowflake", ExprDialect::Snowflake),
         ] {
             let refused =
-                view_expr::untrusted_call_reason(&called, dialect, &["x", "y", "z"]).is_some();
+                view_expr::untrusted_call_reason(&called, dialect, &["x", "y", "z"], SPACES)
+                    .is_some();
             if refused != vector["calls"][key].is_string() {
                 wrong.push(format!("calls {key}: refused {refused}"));
             }
@@ -227,9 +249,9 @@ fn a_megabyte_of_any_token_is_answered() {
             let _ = view_expr::unsafe_reason(&expr, dialect);
         }
         for dialect in [ExprDialect::Databricks, ExprDialect::Snowflake] {
-            let _ = view_expr::untrusted_call_reason(&expr, dialect, &["x"]);
+            let _ = view_expr::untrusted_call_reason(&expr, dialect, &["x"], SPACES);
         }
         let _ = view_expr::name_references(&expr);
-        let _ = view_expr::strip_comments(&expr);
+        let _ = view_expr::strip_comments(&expr, SPACES);
     }
 }

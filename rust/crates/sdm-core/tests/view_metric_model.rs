@@ -19,7 +19,7 @@
 
 use std::collections::BTreeSet;
 
-use sdm_core::pql::yaml_rules;
+use sdm_core::pql::{spaces, yaml_rules};
 use sdm_core::view_steps::{self, JoinJudgement};
 use sdm_core::view_words;
 use sdm_data::view_expr::metric as data;
@@ -51,7 +51,7 @@ fn texts(value: &Json) -> Vec<String> {
 
 /// `unquote_ident`: a name in backticks, unquoted, else as written.
 fn unquoted(name: &str) -> String {
-    data::unquote(name)
+    data::unquote(name, spaces())
 }
 
 /// Whether `part` appears in `whole` in order, not necessarily together.
@@ -86,7 +86,7 @@ fn kept_joins(spec: &ViewSpec, walk: &JoinWalk<JoinJudgement>) -> Vec<Json> {
             let Source::Name(Some(source)) = table.source else {
                 unreachable!()
             };
-            let parts = data::table_reference(spec.text(source).unwrap()).unwrap();
+            let parts = data::table_reference(spec.text(source).unwrap(), spaces()).unwrap();
             let condition = match join.keys {
                 JoinKeys::Using(column) => {
                     let column = unquoted(&view_words::value_text(&spec.document, column).unwrap());
@@ -96,8 +96,8 @@ fn kept_joins(spec: &ViewSpec, walk: &JoinWalk<JoinJudgement>) -> Vec<Json> {
                     ])
                 }
                 JoinKeys::On(Some(on)) => {
-                    let on = strip_comments(spec.text(on).unwrap()).unwrap();
-                    let [a, b] = data::join_condition(&on).unwrap();
+                    let on = strip_comments(spec.text(on).unwrap(), spaces()).unwrap();
+                    let [a, b] = data::join_condition(&on, spaces()).unwrap();
                     serde_json::json!([
                         {"qualifier": a.qualifier, "column": a.column},
                         {"qualifier": b.qualifier, "column": b.column},

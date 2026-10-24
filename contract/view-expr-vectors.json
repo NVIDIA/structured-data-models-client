@@ -198394,6 +198394,46 @@
    "references": []
   },
   {
+   "expr": "CAST('hello' AS STRING)",
+   "references": []
+  },
+  {
+   "expr": "CAST('hello\n\n' AS STRING)",
+   "references": []
+  },
+  {
+   "expr": "CAST('hello\n' AS STRING)",
+   "references": []
+  },
+  {
+   "expr": "CAST('[\\'\\\\u0378\\', \\'\\\\U000e0001\\', \\'a\\\\xadb\\']' AS STRING)",
+   "references": []
+  },
+  {
+   "expr": "CAST('{\\'k\\': \\'\\\\u2066\\'}' AS STRING)",
+   "references": []
+  },
+  {
+   "expr": "CAST('0e5' AS STRING)",
+   "references": []
+  },
+  {
+   "expr": "CAST('0' AS DOUBLE)",
+   "references": []
+  },
+  {
+   "expr": "CAST('0e999999999999999999' AS STRING)",
+   "references": []
+  },
+  {
+   "expr": "CAST('2024-01-01' AS STRING)",
+   "references": []
+  },
+  {
+   "expr": "CAST('2024-01-01' AS DATE)",
+   "references": []
+  },
+  {
    "expr": "source.order_id",
    "references": [
     {
@@ -201044,6 +201084,66 @@
    "expr": "CAST('1e9223372036854775807' AS STRING)",
    "literals": [
     "'1e9223372036854775807'"
+   ]
+  },
+  {
+   "expr": "CAST('hello' AS STRING)",
+   "literals": [
+    "'hello'"
+   ]
+  },
+  {
+   "expr": "CAST('hello\n\n' AS STRING)",
+   "literals": [
+    "'hello\n\n'"
+   ]
+  },
+  {
+   "expr": "CAST('hello\n' AS STRING)",
+   "literals": [
+    "'hello\n'"
+   ]
+  },
+  {
+   "expr": "CAST('[\\'\\\\u0378\\', \\'\\\\U000e0001\\', \\'a\\\\xadb\\']' AS STRING)",
+   "literals": [
+    "'[\\'\\\\u0378\\', \\'\\\\U000e0001\\', \\'a\\\\xadb\\']'"
+   ]
+  },
+  {
+   "expr": "CAST('{\\'k\\': \\'\\\\u2066\\'}' AS STRING)",
+   "literals": [
+    "'{\\'k\\': \\'\\\\u2066\\'}'"
+   ]
+  },
+  {
+   "expr": "CAST('0e5' AS STRING)",
+   "literals": [
+    "'0e5'"
+   ]
+  },
+  {
+   "expr": "CAST('0' AS DOUBLE)",
+   "literals": [
+    "'0'"
+   ]
+  },
+  {
+   "expr": "CAST('0e999999999999999999' AS STRING)",
+   "literals": [
+    "'0e999999999999999999'"
+   ]
+  },
+  {
+   "expr": "CAST('2024-01-01' AS STRING)",
+   "literals": [
+    "'2024-01-01'"
+   ]
+  },
+  {
+   "expr": "CAST('2024-01-01' AS DATE)",
+   "literals": [
+    "'2024-01-01'"
    ]
   },
   {
