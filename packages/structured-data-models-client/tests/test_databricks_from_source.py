@@ -1314,7 +1314,7 @@ def test_a_run_cancelled_after_a_notice_gives_no_later_step(
             {
                 'message': 'start',
                 'contract': _native.CONTRACT_VERSION,
-                'facts': facts.host_facts(_native.is_posix_zone),
+                'facts': facts.host_facts(_native),
                 'operation': operation,
             }
         )
