@@ -25,7 +25,7 @@
 //!   row adapter builds (the connector gives them as rows only), each read
 //!   by its position in the result, as the reference reads the rows;
 //! - a table's row count, the reference's `SHOW TABLES LIKE ?` listing,
-//!   then its `rows` column, first row, read back with `RESULT_SCAN`;
+//!   whose first row's `rows` the core reads;
 //! - an entity sample `SAMPLE ROW (<n> ROWS)`, at most 1,000,000 rows,
 //!   which takes no seed (owner option C);
 //! - a declared type read by the reference's type map ([`declared_dtype`]);
@@ -83,11 +83,6 @@ const MISSING_OBJECT: &str = "2003";
 /// The reference's read of the session's database and schema
 /// (`RE/graph.py:1024-1033`).
 const SESSION: &str = "SELECT CURRENT_DATABASE(), CURRENT_SCHEMA()";
-
-/// The row count's second statement: the first row's `rows` of the
-/// listing before it (`SNOW/table.py:287-297`).
-const ROWS_OF_THE_LISTING: &str =
-    r#"SELECT "rows" FROM TABLE(RESULT_SCAN(LAST_QUERY_ID())) LIMIT 1"#;
 
 /// The name a statement reads its unpacked key set by, the reference's.
 const TMP: &str = "TMP";
@@ -180,27 +175,24 @@ impl SqlDialect for Snowflake {
     }
 
     /// The reference's count (`SNOW/table.py:287-297`): the schema's
-    /// listing of tables named like the table, its name bound, then the
-    /// listing's `rows`, first row.
-    fn count_rows_statements(
+    /// listing of tables named like the table, its name bound, whose first
+    /// row's `rows` is the count.
+    fn count_rows_statement(
         &self,
         relation: &Relation,
         table: &str,
         filtered: &str,
-    ) -> Vec<(String, Vec<SqlParam>)> {
+    ) -> (String, Vec<SqlParam>) {
         match relation.source.as_slice() {
-            [database, schema, name] if filtered.is_empty() && !relation.is_derived() => vec![
-                (
-                    format!(
-                        "SHOW TABLES LIKE ? IN SCHEMA {}.{}",
-                        self.identifier(database),
-                        self.identifier(schema)
-                    ),
-                    vec![text_param(name)],
+            [database, schema, name] if filtered.is_empty() && !relation.is_derived() => (
+                format!(
+                    "SHOW TABLES LIKE ? IN SCHEMA {}.{}",
+                    self.identifier(database),
+                    self.identifier(schema)
                 ),
-                (ROWS_OF_THE_LISTING.to_owned(), vec![]),
-            ],
-            _ => vec![(self.count_rows(table, filtered), vec![])],
+                vec![text_param(name)],
+            ),
+            _ => (self.count_rows(table, filtered), vec![]),
         }
     }
 

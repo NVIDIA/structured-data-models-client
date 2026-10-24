@@ -9347,6 +9347,13 @@ entries:
     a login or permission failure never does, on both routes) and
     t36_snowflake.rs. Recommendation: approve; the core keys no meaning
     on a driver's text, which may quote anything.
+    Why it cannot match through the T3.27 contract: the old client's second
+    test reads the driver's message, which never leaves the host (the
+    provider error carries only kind, retryable, sqlstate, vendor code and
+    error class, decision H17). The data layer's failure facts are read
+    from those fields alone, so "not found" from the text would need the
+    Python provider to match the text (forbidden: no error meaning in a
+    provider) or a new field in sdm-contract (no package edits it).
 
 - id: P3D-2
   title: A Snowflake table's row count is read from the old client's LIKE listing, wildcards and case included (proposed - count the exact name)
@@ -9358,9 +9365,8 @@ entries:
     wildcards, so a sibling table can answer (Users beside USERS, user_s
     beside users), and that count sizes the neighbour look-back window.
   new_behavior: >-
-    The core sends the same listing, then reads its first row's rows column
-    back with SELECT "rows" FROM TABLE(RESULT_SCAN(LAST_QUERY_ID())) LIMIT 1
-    (P3D-11), so it counts as the old client counts. Proposed for the owner:
+    The core sends the same listing and reads its first row's rows column,
+    so it counts as the old client counts. Proposed for the owner:
     count the exact name instead, SELECT COUNT(*) FROM the table, which is
     never another table's and also answers for a view (P3D-3).
   affected_inputs: >-
@@ -9376,7 +9382,7 @@ entries:
     matches the old client. Recommendation: approve with P3D-3.
 
 - id: P3D-3
-  title: A Snowflake view counted for its rows is refused as an answer that does not read, where the old client failed with a bare assert
+  title: A Snowflake view counted for its rows is an internal error on both routes, in the core's words (proposed - count it)
   kind: change
   old_behavior: >-
     SHOW TABLES lists no view, so counting a view's rows finds no row and
@@ -9385,10 +9391,11 @@ entries:
     building this request: AssertionError: ", at materialize.
   new_behavior: >-
     On the core route, which only SDM_CORE_ROUTES forces in this build, the
-    count's second statement reads no row, and the core refuses the answer
-    by name at materialize: PROVIDER_SCHEMA_MISMATCH (a row count is not one
-    row of one count). Proposed for the owner with P3D-2: count the view's
-    rows with COUNT(*), so a view used as a table materializes.
+    listing reads no row and the core fails the same way, INTERNAL_ERROR at
+    materialize, in its own words ("the source answered no row to count: it
+    lists no table of the name asked"). Proposed for the owner with P3D-2:
+    count the view's rows with COUNT(*), so a view used as a table
+    materializes.
   affected_inputs: >-
     PredictiveQuery.materialize over a SnowflakeSource whose schema holds a
     view as a table (DESCRIBE TABLE resolves a view, so it describes).
@@ -9398,10 +9405,9 @@ entries:
   approved_by: null
   decision_ref: null
   notes: >-
-    Approver: owner. Held by test_snowflake_from_source.py (the view's
-    materialize refused, PROVIDER_SCHEMA_MISMATCH). Both refuse; the code
-    and words differ, as for every refusal the core names where the old
-    client reported INTERNAL_ERROR (old-behaviour row 56).
+    Approver: owner. Held by test_snowflake_from_source.py (INTERNAL_ERROR
+    on both routes). The code and class match; the words differ, since the
+    core cannot say the reference's Python exception.
 
 - id: P3D-4
   title: A Snowflake session with no current database is an internal error on both routes (proposed - a named refusal)
@@ -9567,30 +9573,6 @@ entries:
     Approver: owner. The semantic model reaches the core with T3.5; T3.6
     writes its read statement and reader (t36_snowflake.rs).
 
-- id: P3D-11
-  title: The core reads a Snowflake row count's listing back with RESULT_SCAN, one statement more than the old client sends
-  kind: change
-  old_behavior: >-
-    The reference sends SHOW TABLES LIKE ? IN SCHEMA and reads the first
-    row's rows column on the client (SNOW/table.py:287-297).
-  new_behavior: >-
-    On the core route, which only SDM_CORE_ROUTES forces in this build, the
-    core sends the same listing, then SELECT "rows" FROM
-    TABLE(RESULT_SCAN(LAST_QUERY_ID())) LIMIT 1 on the same session, so the
-    count reaches the core as the one row of one count every provider
-    answers; the count is the old client's.
-  affected_inputs: >-
-    Every PredictiveQuery.materialize over a SnowflakeSource on the core
-    route (one more statement per table counted).
-  cases: [T3.6]
-  refs: [T3.6, P3D-2]
-  status: proposed
-  approved_by: null
-  decision_ref: null
-  notes: >-
-    Approver: reviewer. Gone if the owner approves P3D-2 (COUNT(*) is one
-    statement). Held by t36_snowflake.rs and test_snowflake_from_source.py.
-
 - id: P3D-12
   title: On a Snowflake source each materialize reads the session and resolves each table's spelling again (plan B)
   kind: change
@@ -9645,9 +9627,10 @@ entries:
   approved_by: null
   decision_ref: null
   notes: >-
-    Approver: owner. A warning once per run is the core's rule for every
-    warning a run gives; the sampler memo the host keeps (decision E52)
-    carries no flag for it.
+    Approver: owner. Matching needs state kept between runs of one query
+    object: the sampler memo the host keeps (decision E52) is the only
+    such state, and its contract type has no field saying the warning was
+    given (a contract change, which no package makes).
 
 - id: P3D-14
   title: The core does not list a Snowflake schema's hybrid tables, and counts every declared key
@@ -9672,6 +9655,16 @@ entries:
   approved_by: null
   decision_ref: null
   notes: >-
-    Approver: reviewer. No answer differs on the recorded cases (every
-    table plain); what SHOW TABLES says of a hybrid table is old-behaviour
-    open question 3.
+    Approver: owner. No answer differs on the recorded cases (every table
+    plain); what SHOW TABLES says of a hybrid table is old-behaviour open
+    question 3.
+    Why it cannot match through the T3.27 contract: whether a table is
+    hybrid is not in its DESCRIBE TABLE, and the contract has no catalog
+    part asking whether a table enforces its key (DescribePart's tables,
+    columns, keys, foreign keys, indexes, index columns, namespace and view
+    definition; Tables answers which tables exist, which the core asks
+    only to word a refusal). The old client also asks it lazily, once per
+    schema, only for a table whose declared key is within the key counted,
+    and reads a failed listing as no hybrid table; a plan's statements fail
+    together, so no rendering of the Keys read can say that. Matching needs
+    a new DescribePart (an sdm-contract change).

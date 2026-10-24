@@ -203,18 +203,17 @@ pub(crate) trait SqlDialect: Sync {
         )
     }
 
-    /// The statements counting `relation`'s rows (`table` its rendering)
-    /// where `filtered` holds, each with the parameters it binds, the last
-    /// one's answer the count: [`SqlDialect::count_rows`] alone, unless the
-    /// dialect reads its count from a listing of its catalog, as the
-    /// reference's Snowflake engine does.
-    fn count_rows_statements(
+    /// The statement counting `relation`'s rows (`table` its rendering)
+    /// where `filtered` holds, with the parameters it binds:
+    /// [`SqlDialect::count_rows`], unless the dialect reads its count from a
+    /// listing of its catalog, as the reference's Snowflake engine does.
+    fn count_rows_statement(
         &self,
         _relation: &Relation,
         table: &str,
         filtered: &str,
-    ) -> Vec<(String, Vec<SqlParam>)> {
-        vec![(self.count_rows(table, filtered), vec![])]
+    ) -> (String, Vec<SqlParam>) {
+        (self.count_rows(table, filtered), vec![])
     }
 
     /// What follows a preview's `FROM` before its `LIMIT`: nothing, unless
@@ -673,7 +672,7 @@ pub(crate) fn plan(
                 rows: *rows,
             });
             let sample = statements.pop().unwrap_or_default();
-            before = statements.into_iter().map(|text| (text, vec![])).collect();
+            before = statements;
             sample
         }
         DataRequest::Neighbors {
@@ -729,13 +728,11 @@ pub(crate) fn plan(
             text
         }
         DataRequest::CountRows { table, filters } => {
-            let mut statements = d.count_rows_statements(
+            let (count, bound) = d.count_rows_statement(
                 table,
                 &from(d, request, "table", table)?,
                 &conditions(d, request, filters, " ")?,
             );
-            let (count, bound) = statements.pop().unwrap_or_default();
-            before = statements;
             params = bound;
             count
         }
@@ -747,7 +744,7 @@ pub(crate) fn plan(
     };
     let mut statements: Vec<SqlStatement> = before
         .into_iter()
-        .map(|(text, params)| statement(text, params))
+        .map(|text| statement(text, vec![]))
         .collect();
     statements.push(statement(text, params));
     Ok(FetchPlan::Sql {

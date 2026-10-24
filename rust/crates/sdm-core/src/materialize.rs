@@ -1756,16 +1756,27 @@ async fn table_rows(memo: &mut Memo<'_>, graph: &Graph) -> Result<(), CoreError>
     Ok(())
 }
 
-/// The rows a `count_rows` answer counts: its one row's first column, an
-/// integer of any width not below zero.
+/// The rows a `count_rows` answer counts: its first row's column `rows`
+/// where it names one, else its first column, an integer of any width not
+/// below zero, or its text (a catalog listing a provider hands over as text,
+/// Snowflake's `SHOW TABLES LIKE`, whose first row the reference reads,
+/// `SNOW/table.py:287-297`). An answer of no row is an internal error, as
+/// the reference's assert on the listing is (`SNOW/table.py:295-296`).
 fn row_count(answer: &ArrowData) -> Result<u64, CoreError> {
     let batch = one_batch(answer)?;
     let unread =
         || crate::run::schema_mismatch("expected", None, "a row count is not one row of one count");
-    if batch.num_rows() != 1 || batch.num_columns() == 0 {
+    if batch.num_columns() == 0 {
         return Err(unread());
     }
-    let column = batch.column(0);
+    if batch.num_rows() == 0 {
+        return Err(internal(
+            "the source answered no row to count: it lists no table of the name asked",
+        ));
+    }
+    let column = batch
+        .column_by_name("rows")
+        .unwrap_or_else(|| batch.column(0));
     if column.is_null(0) {
         return Err(unread());
     }
@@ -1777,6 +1788,8 @@ fn row_count(answer: &ArrowData) -> Result<u64, CoreError> {
         values.value(0).into()
     } else if let Some(values) = column.as_primitive_opt::<arrow_array::types::Decimal128Type>() {
         values.value(0)
+    } else if let Some(values) = column.as_string_opt::<i32>() {
+        values.value(0).trim().parse().map_err(|_| unread())?
     } else {
         return Err(unread());
     };
