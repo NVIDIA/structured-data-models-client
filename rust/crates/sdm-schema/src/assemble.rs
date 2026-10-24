@@ -969,19 +969,31 @@ pub fn mark_keys(description: &mut SourceDescription) {
     }
 }
 
-/// Refuses a schema whose links cannot join (`Schema.check_consistent`'s
-/// relationships, each column's type read by the name `types` gives it), as
-/// `INVALID_REQUEST`; then, as the reference's engine
-/// refuses the graph it is handed (`Graph._edge_error`), a link whose
-/// foreign key is its own table's primary key (T1.24b: found by the E49
-/// differential, a key named on a link's foreign key).
+/// Refuses a schema whose links cannot join, as the reference's
+/// `Schema.check_consistent` refuses the caller's schema before its engine
+/// reads anything (`_check_relationships`, `schema.py:971`): each link names
+/// a table and column the schema holds at each end, joins its target's
+/// primary key of one column, and its two columns' types, read by the name
+/// `types` gives them (the host's, T3.16), are of one family
+/// (`_require_joinable`), each refusal naming the link as the reference's
+/// does (T3.16 review round 3).
 pub fn check_links(description: &SourceDescription, types: &HostTypes) -> Result<(), CoreError> {
-    // One join check, the relationships edit's ([`checked`]), its refusal
-    // naming the link and both types as the reference's
-    // `_require_joinable` does (T3.16 review round 3).
     for link in &description.links {
         checked(&description.tables, link, types)?;
     }
+    Ok(())
+}
+
+/// Refuses the edges the reference's engine refuses when it validates the
+/// graph it built over the tables it read (`Graph.validate`'s
+/// `_edge_error`, run as `KumoRelational` is built, `relational.py:418`),
+/// each in its order: a foreign key that is its own table's primary key
+/// (T1.24b: found by the E49 differential), then a foreign key and the key
+/// it refers to holding values of two kinds, a number and a string, by the
+/// types the source holds (`description`'s, read after the tables are
+/// kept). The rest of `_edge_error` (an edge whose column or target key is
+/// gone) is refused earlier, by [`check_links`] and the graph's build.
+pub fn check_edges(description: &SourceDescription) -> Result<(), CoreError> {
     for link in &description.links {
         let [foreign, referenced] = link.as_slice() else {
             continue;
@@ -998,8 +1010,36 @@ pub fn check_links(description: &SourceDescription, types: &HostTypes) -> Result
                     "a relationship's foreign key is its table's primary key",
                     "relationships",
                 ),
-                &[foreign.clone(), referenced.clone()],
+                link,
             ));
+        }
+        let (Some(source), Some(target)) = (
+            column(&description.tables, foreign),
+            column(&description.tables, referenced),
+        ) else {
+            continue;
+        };
+        // The engine's kinds: a number (any integer or float) or a string;
+        // the join family of each type's wire name tells them apart.
+        let kind = |dtype: Dtype| join_family(dtype.wire_name()).to_owned();
+        if kind(source.dtype) != kind(target.dtype) {
+            let name = |dtype: Dtype| {
+                serde_json::to_value(dtype)
+                    .ok()
+                    .and_then(|v| v.as_str().map(str::to_owned))
+                    .unwrap_or_default()
+            };
+            return Err(named_link(
+                invalid(
+                    Sentence::EdgeKeyTypes,
+                    "a relationship's two keys hold values of two kinds in the source",
+                    "relationships",
+                ),
+                link,
+            )
+            .with_field("reason", Detail::text("edge_key_types"))
+            .with_field("source_dtype", Detail::text(name(source.dtype)))
+            .with_field("target_dtype", Detail::text(name(target.dtype))));
         }
     }
     Ok(())

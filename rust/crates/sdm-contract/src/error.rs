@@ -760,6 +760,7 @@ sentences! {
     LinkCompositeKey = "link_composite_key", E::InvalidRequest;
     LinkTypes = "link_types", E::InvalidRequest;
     PrimaryKeyAsForeignKey = "primary_key_as_foreign_key", E::InvalidRequest;
+    EdgeKeyTypes = "edge_key_types", E::InvalidRequest;
     SchemaTableTwice = "schema_table_twice", E::InvalidRequest;
     SchemaColumnTwice = "schema_column_twice", E::InvalidRequest;
     IncompatibleSemanticType = "incompatible_semantic_type", E::InvalidRequest;
