@@ -370,7 +370,9 @@ POSTGRES: list[tuple[str, list[str]]] = [
         ],
     ),
     # The end of time ("no end"), past the last instant the zone data
-    # holds, in zones Python names (Claude T3.12 r5 P0-1).
+    # holds, in zones Python names (Claude T3.12 r5 P0-1); east of UTC the
+    # last instant a datetime holds there (23:59:59+05:30), as the server
+    # writes a later one in year 10000, which both refuse.
     (
         'the end of time in America/Los_Angeles',
         [
@@ -406,9 +408,9 @@ POSTGRES: list[tuple[str, list[str]]] = [
         [
             "SET TimeZone = 'Asia/Kolkata'",
             'SELECT '
-            "'[2020-01-01 00:00+00,9999-12-31 23:59:59+00)'::tstzrange AS r, "
-            "'{[2020-01-01 00:00+00,9999-12-31 23:59:59+00)}'::tstzmultirange AS m, "
-            '\'{"9999-12-30 22:00:00+00","9999-12-30 22:00:01+00","9999-12-31 23:59:59+00"}\'::timestamptz[] AS a',
+            "'[2020-01-01 00:00+00,9999-12-31 18:29:59+00)'::tstzrange AS r, "
+            "'{[2020-01-01 00:00+00,9999-12-31 18:29:59+00)}'::tstzmultirange AS m, "
+            '\'{"9999-12-30 22:00:00+00","9999-12-30 22:00:01+00","9999-12-31 18:29:59+00"}\'::timestamptz[] AS a',
         ],
     ),
     (

@@ -437,115 +437,13 @@ _TESTS = {
         r'(?P<file>java/src/test/java/[A-Za-z0-9_./-]+\.java)#(?P<name>[A-Za-z0-9_]+)'
     ),
 }
-#: How a file defines the test, by language: a pytest function; a JUnit
-#: method, ``@Test`` or ``@ParameterizedTest`` on it (other annotations, each
-#: on its own line, between), neither private, static nor abstract, which
-#: JUnit runs only in a class it runs (:func:`_runs_in`).
+#: How a file defines the test, for Python: a pytest function. A Java
+#: test is the one JUnit ran, as Surefire's reports of the Java test run
+#: record it (:func:`junit_ran`, :func:`junit_problem`), never read from the
+#: source.
 _DEFINED = {
     'python': r'^\s*def {name}\(',
-    # The method's whole run of annotations, each on lines of its own, then
-    # its modifiers: the run is held to JUnit's rule in _test_problem.
-    'java': (
-        r'^[ \t]*(?P<annotations>(?:@[^\n]*\n[ \t]*)+)'
-        r'(?:(?:public|protected|final)\s+)*void {name}\('
-    ),
 }
-
-#: An annotation that makes a method a test JUnit runs, and one that keeps
-#: it from running.
-_TEST_ANNOTATION = re.compile(
-    r'@(?:org\.junit\.jupiter\.(?:api|params)\.)?(?:Test|ParameterizedTest)\b(?!\.)'
-)
-_DISABLED = re.compile(r'@(?:org\.junit\.jupiter\.api\.)?Disabled\b')
-
-
-def _unicode_unescaped(source: str) -> str:
-    r"""Java ``source`` with its Unicode escapes translated, as the compiler
-    reads them before anything else (JLS 3.3): a backslash an even number of
-    backslashes precede, one ``u`` or more, four hexadecimal digits."""
-    out: list[str] = []
-    i = 0
-    run = 0
-    while i < len(source):
-        c = source[i]
-        if c == '\\' and run % 2 == 0:
-            found = re.match(r'\\u+([0-9a-fA-F]{4})', source[i:])
-            if found:
-                out.append(chr(int(found.group(1), 16)))
-                i += found.end()
-                run = 0
-                continue
-        run = run + 1 if c == '\\' else 0
-        out.append(c)
-        i += 1
-    return ''.join(out)
-
-
-def _blanked(source: str) -> str:
-    r"""Java ``source`` with its comments and its string and character
-    literals as spaces, line breaks kept, so only live code is read."""
-    out = list(source)
-    i = 0
-    while i < len(source):
-        if source.startswith('//', i):
-            end = source.find('\n', i)
-            end = len(source) if end < 0 else end
-        elif source.startswith('/*', i):
-            end = source.find('*/', i + 2)
-            end = len(source) if end < 0 else end + 2
-        elif source.startswith('"""', i):
-            # A text block ends at the first triple quote no backslash
-            # escapes.
-            end = i + 3
-            while end < len(source) and not source.startswith('"""', end):
-                end += 2 if source[end] == '\\' else 1
-            end = min(end + 3, len(source))
-        elif source[i] in '"\'':
-            end = i + 1
-            while end < len(source) and source[end] not in (source[i], '\n'):
-                end += 2 if source[end] == '\\' else 1
-            end += 1
-        else:
-            i += 1
-            continue
-        for at in range(i, min(end, len(source))):
-            if out[at] != '\n':
-                out[at] = ' '
-        i = end
-    return ''.join(out)
-
-
-def _runs_in(source: str, at: int) -> bool:
-    r"""Whether JUnit runs a method declared at ``at`` of a Java ``source``
-    already :func:`_blanked`: in the file's class, not abstract, or in a
-    ``@Nested`` class within it, neither private, static nor abstract, and
-    in no other block; no class around it ``@Disabled``."""
-    stack: list[str] = []
-    header = 0
-    for i, c in enumerate(source[:at]):
-        if c == '{':
-            stack.append(source[header:i])
-            header = i + 1
-        elif c == '}':
-            if stack:
-                stack.pop()
-            header = i + 1
-        elif c == ';':
-            header = i + 1
-    if not stack or not all(re.search(r'\bclass\b', h) for h in stack):
-        return False
-    if re.search(r'\babstract\b', stack[0]):
-        return False
-    if any(
-        re.search(r'@(?:org\.junit\.jupiter\.api\.)?Disabled\b', h)
-        for h in stack
-    ):
-        return False
-    return all(
-        re.search(r'@(?:org\.junit\.jupiter\.api\.)?Nested\b', h)
-        and not re.search(r'\b(?:static|abstract|private)\b', h)
-        for h in stack[1:]
-    )
 
 
 #: Each language's form, as a problem names it.
@@ -571,22 +469,74 @@ def _test_problem(test: str, root: Any, language: str = 'python') -> str | None:
         )
     except Exception:  # noqa: BLE001 - an unreadable file defines no test
         source = None
+    if language == 'java':
+        # The file is the tree's; that JUnit ran the method is the Java
+        # test run's to say (junit_problem).
+        return None if source else 'no test the tree defines'
     defined = _DEFINED[language].format(name=re.escape(found['name']))
-    if language == 'java' and source:
-        # Live code only, and a method JUnit runs: not @Disabled, in a class
-        # it runs.
-        live = _blanked(_unicode_unescaped(source))
-        runs = [
-            m
-            for m in re.finditer(defined, live, re.M)
-            if _TEST_ANNOTATION.search(m['annotations'])
-            and not _DISABLED.search(m['annotations'])
-            and _runs_in(live, m.start())
-        ]
-        return None if runs else 'no test the tree defines'
     if not source or not re.search(defined, source, re.M):
         return 'no test the tree defines'
     return None
+
+
+def junit_ran(reports: Path) -> set[tuple[str, str]]:
+    r"""Each test JUnit ran and did not skip, as Surefire's reports in
+    ``reports`` (``TEST-*.xml``) record it: its class and its method's name
+    (a parameterized test's invocations, ``name(String)[1]``, by the name
+    before its parameters)."""
+    import xml.etree.ElementTree as ElementTree
+
+    ran: set[tuple[str, str]] = set()
+    for path in sorted(reports.glob('TEST-*.xml')):
+        for case in ElementTree.parse(path).getroot().iter('testcase'):
+            if case.find('skipped') is not None:
+                continue
+            name = re.split(r'[(\[]', case.get('name', ''), maxsplit=1)[0]
+            ran.add((case.get('classname', ''), name))
+    return ran
+
+
+def junit_problem(test: str, ran: set[tuple[str, str]]) -> str | None:
+    r"""Why the Java test ``test`` (``java/src/test/java/<file>.java#<method>``)
+    is no test JUnit ran, by :func:`junit_ran`, or None: its file's class,
+    or a class nested in it, ran the method, and did not skip it."""
+    found = _TESTS['java'].fullmatch(test)
+    if found is None:
+        return f'not {_FORM["java"]}'
+    name = (
+        found['file'].removeprefix('java/src/test/java/').removesuffix('.java')
+    )
+    owner = name.replace('/', '.')
+    if any(
+        method == found['name']
+        and (cls == owner or cls.startswith(owner + '$'))
+        for cls, method in ran
+    ):
+        return None
+    return 'not a test JUnit ran (target/surefire-reports)'
+
+
+def junit_check(repo: Path, reports: Path, report: Report) -> None:
+    r"""Each test the Java manifest names, held to the Java test run whose
+    Surefire reports are in ``reports`` (the java-test job, after ``mvn
+    verify``): rule 4's Java half."""
+    if not list(reports.glob('TEST-*.xml')):
+        report.fail('rule 4', f'java: no Surefire report in {reports}')
+        return
+    ran = junit_ran(reports)
+    try:
+        manifest = _yaml(
+            (repo / MANIFESTS['java']).read_text(encoding='utf-8'),
+            MANIFESTS['java'],
+        )
+    except (OSError, Unreadable) as error:
+        report.fail('read', str(error))
+        return
+    for path, tests in sorted(tested(manifest).items()):
+        for test in tests:
+            problem = junit_problem(test, ran)
+            if problem is not None:
+                report.fail('rule 4', f'java: path {path}: {test}: {problem}')
 
 
 def rule_4(
@@ -1317,7 +1267,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--check', action='store_true')
     parser.add_argument('--repo', type=Path)
     parser.add_argument('--rev', default='HEAD')
-    parser.add_argument('--checkpoint', required=True)
+    parser.add_argument('--checkpoint')
+    parser.add_argument(
+        '--junit-reports',
+        type=Path,
+        metavar='DIR',
+        help="the Java test run's Surefire reports: holds each Java test the "
+        'manifest names to that run (run test, not skipped), and nothing else',
+    )
     parser.add_argument(
         '--gate',
         action='append',
@@ -1326,6 +1283,19 @@ def main(argv: list[str] | None = None) -> int:
         'java:S1 (T3.2); default python:S0, the active slice',
     )
     arguments = parser.parse_args(argv)
+    if arguments.junit_reports is not None:
+        junit = Report()
+        junit_check(
+            arguments.repo or Path(__file__).resolve().parents[2],
+            arguments.junit_reports,
+            junit,
+        )
+        for problem in junit.problems:
+            print(problem)
+        print(f'coverage: {"FAIL" if junit.problems else "ok"} (JUnit run)')
+        return 1 if junit.problems else 0
+    if arguments.checkpoint is None:
+        parser.error('--checkpoint is required')
     if not arguments.check and not arguments.gate:
         parser.error('give --check, --gate LANGUAGE:SLICE, or both')
     gates = []
