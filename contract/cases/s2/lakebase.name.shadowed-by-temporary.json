@@ -1,0 +1,64 @@
+{
+  "format": "sdm-case/1",
+  "id": "lakebase.name.shadowed-by-temporary",
+  "status": "acceptance",
+  "slice": "S2",
+  "warehouses": [
+    "lakebase"
+  ],
+  "paths": [
+    "schema.from-source/tables/lakebase",
+    "query.materialize/indices-regression/lakebase",
+    "client.predict/regression/lakebase"
+  ],
+  "routes": [
+    "schema.from-source/tables/lakebase",
+    "schema.from-source/catalog-keys/lakebase",
+    "query.materialize/indices-binary/lakebase",
+    "query.materialize/indices-multiclass/lakebase",
+    "query.materialize/indices-regression/lakebase",
+    "query.materialize/indices-link-prediction/lakebase",
+    "query.materialize/indices-ranking/lakebase",
+    "query.materialize/indices-forecast/lakebase",
+    "client.predict/binary/lakebase",
+    "client.predict/multiclass/lakebase",
+    "client.predict/regression/lakebase",
+    "client.predict/link-prediction/lakebase",
+    "client.predict/ranking/lakebase",
+    "client.predict/forecast/lakebase"
+  ],
+  "cells": [
+    "int64/primary-key",
+    "int64/foreign-key",
+    "timestamp-us/time-column",
+    "float64/target"
+  ],
+  "input": {
+    "base": "shop",
+    "from_source": {
+      "tables": {
+        "users": "users",
+        "orders": "orders"
+      }
+    },
+    "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ],
+      "anchor_time": "2024-03-01"
+    },
+    "warehouse_setup": [
+      "CREATE TEMPORARY TABLE users (user_id BIGINT, note TEXT)"
+    ]
+  },
+  "until": "predict",
+  "expect": {
+    "outcome": "success",
+    "stage": "predict",
+    "today": "the old client names the schema in every statement, \"schema\".\"users\" (PG/table.py:146-177; RE/base/sql_sampler.py:80-83), so the session's temporary users table, which an unqualified users resolves to first, is never read"
+  },
+  "why": "A one-part name hidden by a temporary table of the same name in the case's own session (T3.7 table row 21, open question 3; the design's fix P2-MID2-6): the run's warehouse setup creates it on the Lakebase connection the old client then reads through, with other columns than the schema's users",
+  "source": "written for the second early capture (T3.20) from the reference at 43e55f4f"
+}

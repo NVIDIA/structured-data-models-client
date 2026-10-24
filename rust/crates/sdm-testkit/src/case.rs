@@ -235,6 +235,10 @@ pub struct Input {
     /// `warehouses` with two namespace parts, never beside `connect`.
     #[serde(default, deserialize_with = "present")]
     pub named_part: Option<NamedPart>,
+    /// Statements the run sends on the warehouse leg after the case's
+    /// tables are loaded (T3.20), at least one; only beside `warehouses`.
+    #[serde(default, deserialize_with = "some_statements")]
+    pub warehouse_setup: Option<Vec<String>>,
 }
 
 /// A namespace part a source may name alone.
@@ -915,6 +919,9 @@ fn warehouse_problem(case: &Case) -> Option<String> {
             "input.connect runs on {} alone",
             connect.leg().name()
         ));
+    }
+    if input.warehouse_setup.is_some() && legs.is_none() {
+        return Some("input.warehouse_setup needs warehouses".into());
     }
     if input.named_part.is_some() {
         match legs {

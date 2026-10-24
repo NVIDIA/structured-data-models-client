@@ -27,6 +27,7 @@ which ``sdm-testkit``'s key binders implement too; both run the vector.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import math
@@ -266,6 +267,11 @@ TYPE_MAP: dict[str, dict[str, str]] = {
 #: write outside the one test schema; the live runs set it
 #: (``scripts/live/capture_run.py``), and offline it is ``None``.
 WRITE_GUARD: Callable[[str], None] | None = None
+#: The live write guard's case-setup scope (its ``setup``), set with
+#: :data:`WRITE_GUARD`: a case's warehouse setup runs within it, where
+#: alone the guard admits a view in the test schema and a Postgres
+#: temporary table.
+WRITE_GUARD_SETUP: Callable[[], Any] | None = None
 
 
 def guarded(statement: str) -> str:
@@ -1764,6 +1770,30 @@ class CaseSchema:
             )
         self.views.append((kind, name))
 
+    def run_setup(self, statements: list[str]) -> None:
+        r"""The case's warehouse setup, after its tables and view: each
+        statement run in the write guard's setup scope; a view it creates
+        is dropped with the case's own (``CREATE VIEW <t> AS ...``)."""
+        scope = WRITE_GUARD_SETUP or contextlib.nullcontext
+        for statement in statements:
+            with scope():
+                self._run(statement)
+            created = re.match(
+                r'\s*CREATE\s+VIEW\s+(\S+)\s+AS\b', statement, re.I
+            )
+            if created:
+                last = re.findall(
+                    r'"(?:[^"]|"")*"|`(?:[^`]|``)*`|[^.]+', created.group(1)
+                )[-1]
+                name = (
+                    last[1:-1].replace(last[0] * 2, last[0])
+                    if last[0] in '"`'
+                    else last
+                )
+                self.views.append(('view', name))
+        if self.database == 'lakebase':
+            self.target.commit()
+
     def load(self, duck: Any, fold: bool = False) -> list[str]:
         r"""The case's tables in the schema, alone; :func:`load`'s notes;
         with ``fold``, its columns named as Snowflake stores unquoted names.
@@ -1855,6 +1885,7 @@ def load_leg(duck: Any, leg: str, target: Any) -> list[str]:
     notes = schema.load(duck, folds(leg, view))
     if view and view.get('yaml'):
         schema.create_view(view['kind'], view['name'], view['yaml'])
+    schema.run_setup(list(getattr(target, 'setup', None) or []))
     # The old client reads every table of the schema when a case names
     # none: a table this case did not load (an earlier, killed run's; the
     # other Databricks leg's, loading the same schema) is refused by name,
