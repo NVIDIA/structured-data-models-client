@@ -1464,7 +1464,12 @@ fn a_failed_duplicate_example_keeps_joins_unchecked() {
                     vec![batch],
                 )))
             }
-            DataRequest::RepeatedKey { .. } => Some(refusal("42501")),
+            DataRequest::RepeatedKey { .. } => Some(FetchResult::Error(
+                serde_json::from_value(json!({"kind": "data_source", "retryable": false,
+                    "sqlstate": "42501", "vendor_code": "2003",
+                    "driver_message": "key-cell-canary in SELECT key-driver-sql-canary"}))
+                .unwrap(),
+            )),
             _ => None,
         })),
     };
@@ -1476,6 +1481,17 @@ fn a_failed_duplicate_example_keeps_joins_unchecked() {
     );
     let description = replayed.ended.unwrap();
     assert_eq!(description.links.len(), 1);
+    let warnings = serde_json::to_string(&replayed.warnings).unwrap();
+    assert!(
+        warnings.contains("counting the join keys")
+            && warnings.contains("42501")
+            && warnings.contains("2003"),
+        "{warnings}"
+    );
+    assert!(
+        !warnings.contains("key-cell-canary") && !warnings.contains("key-driver-sql-canary"),
+        "{warnings}"
+    );
     assert!(
         replayed
             .warnings
