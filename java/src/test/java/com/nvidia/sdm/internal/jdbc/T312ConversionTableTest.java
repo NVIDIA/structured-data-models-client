@@ -17,7 +17,6 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import org.apache.arrow.vector.types.pojo.Field;
@@ -183,15 +182,7 @@ class T312ConversionTableTest {
         KeySets.jdbcText("SELECT $1::jsonb, '$1 ?', \"a$1\", ? FROM t"));
     assertThrows(JdbcProvider.PlanNotRun.class, () -> KeySets.jdbcText("SELECT 1"));
     assertThrows(JdbcProvider.PlanNotRun.class, () -> KeySets.jdbcText("SELECT $1, $1"));
-    List<List<Object>> columns = new ArrayList<>();
-    columns.add(Arrays.asList(1L, null));
-    columns.add(Arrays.asList("é\"", 2.5));
-    KeySets.Keys keys =
-        new KeySets.Keys(
-            new byte[0],
-            List.of(ArrowColumns.field("a", ArrowColumns.INT64, null), ArrowColumns.field("b", ArrowColumns.UTF8, null)),
-            columns);
-    assertEquals("[[\"1\",\"é\\\"\"],[null,\"2.5\"]]", KeySets.postgresText(keys));
+    // The key set's text is the core's (T3.28): the provider writes none.
   }
 
   @Test

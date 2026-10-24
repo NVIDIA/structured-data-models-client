@@ -16,20 +16,19 @@ read leaves the caller's connection usable.
 
 A key set a plan names (the seeds of a ``neighbors`` or ``lookup``
 request) is bound as the dialect binds it: the statement's one parameter,
-``$1``, as JSON text, an array of the key set's rows, each an array of its
-cells in the key set's column order (``null`` for a null), which the
-statement reads in the source's own types. The core hands the key set over
-with the cells the reference spells otherwise than Arrow's text of them
-(a time without a zone, binary) already as that text (``sdm-data``'s
-Postgres value rules, T2.14d), and each cell is written as Arrow's text of
-it.
+``$1``, the JSON text the core wrote of it (T3.28: each seed as the old
+client writes it, which the statement reads in the source's own types),
+handed over as a one-cell attachment and bound as it was handed; the core
+splits a key set past the reference's budget into one fetch per chunk, so
+this provider neither writes nor splits one.
 psycopg writes a parameter ``%s`` and a ``%`` as ``%%``, so such a
 statement's text is given to it so written (:func:`_psycopg_text`), its
 ``$1`` the one outside quotes; one holding no such ``$1``, or several, is
 not run. A plan this
-provider cannot run, one for a host provider, one with a scalar parameter
-or more than one key set in a statement, or one naming a key set it was
-not handed, raises, and the run loop hands the core a provider error.
+provider cannot run, one for a host provider, one with a scalar parameter,
+the core's Arrow key set or more than one text in a statement, or one
+naming a text it was not handed, raises, and the run loop hands the core a
+provider error.
 
 Each result column's Arrow type is read from the column's Postgres type,
 by the type's name in the driver's registry, never by its number (a type
@@ -51,13 +50,12 @@ whatever the session's zone.
 
 from __future__ import annotations
 
-import json
 from collections.abc import Mapping
 from contextlib import nullcontext
 from typing import Any
 
 from sdm_connectors import providers
-from sdm_connectors.providers import PlanNotRun, arrow_table
+from sdm_connectors.providers import PlanNotRun
 
 from sdm_client._rust.providers.postgres_arrow import BATCH_ROWS, rows_arrow
 
@@ -83,8 +81,9 @@ class PostgresProvider:
             if not params:
                 bound.append(None)
                 continue
-            _, stream = providers.key_set(params[0], keys)
-            bound.append(_bound_text(arrow_table(stream)))
+            if params[0]['param'] == 'value':
+                raise PlanNotRun('a plan with a scalar parameter')
+            bound.append(providers.text(params[0], keys)[1])
         connection = self._connection
         with _own_transaction(connection), connection.cursor() as cursor:
             for statement, text in zip(statements, bound, strict=True):
@@ -160,19 +159,3 @@ def _result(cursor: Any, connection: Any, batch_rows: int) -> Any:
     # One read of every row, as the reference reads a result
     # (``fetchall``), built into batches of at most ``batch_rows``.
     return rows_arrow(description, cursor.fetchall(), connection, batch_rows)
-
-
-def _bound_text(table: Any) -> str:
-    r"""A key set as the dialect binds it: a JSON array of its rows, each
-    an array of its cells' texts in the table's column order, ``null`` for
-    a null. Each cell's text is Arrow's text of the value (pyarrow's cast),
-    the core having handed over as their text the columns the reference
-    spells otherwise (a time without a zone, binary)."""
-    import pyarrow as pa
-    import pyarrow.compute as pc
-
-    columns = [
-        pc.cast(column, pa.string()).to_pylist() for column in table.columns
-    ]
-    rows = [list(row) for row in zip(*columns, strict=True)] if columns else []
-    return json.dumps(rows, separators=(',', ':'), ensure_ascii=False)

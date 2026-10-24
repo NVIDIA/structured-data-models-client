@@ -11,8 +11,9 @@ carries on the user's own driver and hands back the last one's result as
 Arrow. What differs per driver, how a statement is executed and how a key
 set reaches it, stays in that driver's provider
 (``sdm_client._rust.providers``); what a plan must be for a SQL provider to
-run it, how a key set the core sent is read, and the refusal of a plan
-that is not, are here, so no two providers hold their own copy.
+run it, how a key set the core sent is read (as Arrow, or as the one text
+the core wrote of it), and the refusal of a plan that is not, are here, so
+no two providers hold their own copy.
 
 It imports nothing of the client, which depends on this package, never
 the reverse, and nothing of pandas; it reads a key set with pyarrow.
@@ -82,6 +83,41 @@ def key_set(
     return attachment, keys[attachment]
 
 
+def text(
+    param: dict[str, Any], keys: Mapping[int, Any] | None
+) -> tuple[int, str]:
+    r"""The text ``param`` binds, one of ``keys``: its attachment id and
+    the one text cell of the one-row, one-column Arrow attachment handed
+    over under it, a key set the core wrote as its dialect's JSON (T3.28),
+    which a provider binds as it is.
+
+    Raises:
+        PlanNotRun: The parameter is not a text, names one not handed over,
+            or the attachment is not one text cell.
+    """
+    if param['param'] != 'text':
+        raise PlanNotRun('a parameter that is not a text')
+    attachment = param['attachment']
+    if keys is None or attachment not in keys:
+        raise PlanNotRun('a plan naming a key set not handed over')
+    import pyarrow as pa
+
+    table = arrow_table(keys[attachment])
+    if (
+        table.num_columns != 1
+        or table.num_rows != 1
+        or not (
+            pa.types.is_string(table.schema.field(0).type)
+            or pa.types.is_large_string(table.schema.field(0).type)
+        )
+    ):
+        raise PlanNotRun('a key set that is not one text')
+    cell = table.column(0)[0].as_py()
+    if not isinstance(cell, str):
+        raise PlanNotRun('a key set that is not one text')
+    return attachment, cell
+
+
 def bound_relations(
     statements: list[dict[str, Any]], keys: Mapping[int, Any] | None
 ) -> dict[str, int]:
@@ -125,4 +161,5 @@ __all__ = [
     'bound_relations',
     'key_set',
     'statements',
+    'text',
 ]

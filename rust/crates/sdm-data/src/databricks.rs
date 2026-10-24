@@ -37,14 +37,18 @@
 //! key lookup's duplicates removed after the fetch) the statement does the
 //! same in SQL, so the answer is the contract's.
 //!
-//! A key set's binding: [`bound_keys`] hands the provider the key set as
-//! the statement reads it, the batch column left out (the position in the
-//! JSON array is the batch, the seeds being in batch order from 0), a key
-//! as the reference coerces it (`_coerce_id`: an integer, a double, else
-//! text), each seed time as its wall clock's text to the second
-//! (`%Y-%m-%d %H:%M:%S`, as the reference writes its bounds). The
-//! provider writes a key set of one column as a JSON array of its values,
-//! and one of several as a JSON array of objects keyed by column name.
+//! A key set's binding (T3.28): [`key_rows`] writes each seed as the
+//! old client's JSON writes it (`_dumps`, ASCII only), the batch
+//! column left out (the position in the JSON array is the batch, the seeds
+//! being in batch order from 0), a key as the reference coerces it
+//! (`_coerce_id`: an integer, a double, else text), each seed time as its
+//! wall clock's text to the second (`%Y-%m-%d %H:%M:%S`, as the reference
+//! writes its bounds): a key set of one column a JSON array of its values,
+//! of several a JSON array of objects keyed by column name. Past the
+//! reference's budget of the warehouse's parameter size the key set is
+//! split as the reference splits it ([`crate::key_text`]), each later
+//! chunk's statement adding the seeds before it to `pos`, as the
+//! reference's `_flatten` moves each chunk's batches.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -63,6 +67,8 @@ use sdm_contract::ops::Dtype;
 use sdm_contract::types::ColumnType;
 use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 
+use crate::json;
+use crate::key_text;
 use crate::read::{text, text_at};
 use crate::sql::{self, NameCase, Sample, SeedRead, SqlDialect, not_taken};
 
@@ -105,9 +111,9 @@ impl SqlDialect for Databricks {
             samples_by_key_dtype: false,
             reads_nan_as_missing: false,
             optional: sql::rendered(),
-            // The provider splits a key set past the warehouse's parameter
-            // size into several statements itself, as the reference's
-            // `_chunk_rows` does, so the core sends any number.
+            // A key set past the warehouse's parameter size is split into
+            // several fetches, as the reference's `_chunk_rows` splits it
+            // ([`crate::key_text`]), so the core sends any number.
             max_keys_per_request: None,
             // `TABLESAMPLE ... REPEATABLE (seed)` draws the same rows of
             // the same table (register entry RS-6, KO3-41).
@@ -378,12 +384,20 @@ impl SqlDialect for Databricks {
         read(request, part, batches)
     }
 
-    fn bound_keys(
+    fn key_rows(
         &self,
+        request: &DataRequest,
         schema: &SchemaRef,
         batches: &[RecordBatch],
-    ) -> Result<Option<sql::Batches>, CoreError> {
-        bound_keys(schema, batches)
+        float_text: fn(f64) -> String,
+    ) -> Result<Option<Vec<String>>, CoreError> {
+        key_rows(request, schema, batches, float_text).map(Some)
+    }
+
+    /// The reference's budget of a key set's JSON text, below the
+    /// warehouse's native parameter limit of 1 MB (`_chunk_rows`).
+    fn key_budget(&self) -> Option<usize> {
+        Some(key_text::BUDGET)
     }
 }
 
@@ -617,18 +631,29 @@ fn seed_cte(d: &Databricks, read: &SeedRead<'_>) -> Result<String, CoreError> {
             ));
         }
     }
-    let batch = format!("pos AS {}", d.identifier(SEED_BATCH));
+    // The fields as the old client names them (`id`, `e`, `s`), unquoted
+    // as it writes them, each read under its seed column's own name.
+    let batch = batch_select(read.offset);
     let (schema, selects) = if times.is_empty() {
         (
             format!("array<{element}>"),
             format!("{batch}, col AS {}", d.identifier(SEED_KEY)),
         )
     } else {
-        let mut fields = vec![format!("{}:{element}", d.identifier(SEED_KEY))];
-        let mut selects = vec![batch, format!("col.{0} AS {0}", d.identifier(SEED_KEY))];
-        for time in &times {
-            fields.push(format!("{}:string", d.identifier(time)));
-            selects.push(format!("col.{0} AS {0}", d.identifier(time)));
+        let named = key_text::fields(
+            std::iter::once(SEED_KEY).chain(times.iter().copied()),
+            read.request,
+        );
+        let mut fields = Vec::new();
+        let mut selects = vec![batch];
+        for (column, field) in &named {
+            let kind = if *column == SEED_KEY {
+                element
+            } else {
+                "string"
+            };
+            fields.push(format!("{field}:{kind}"));
+            selects.push(format!("col.{field} AS {}", d.identifier(column)));
         }
         (
             format!("array<struct<{}>>", fields.join(",")),
@@ -638,6 +663,17 @@ fn seed_cte(d: &Databricks, read: &SeedRead<'_>) -> Result<String, CoreError> {
     Ok(format!(
         "WITH {TMP} AS (\n  SELECT {selects}\n  FROM posexplode(from_json(?, '{schema}'))\n)\n"
     ))
+}
+
+/// The unpacked key set's batch, its position in the JSON array moved by
+/// `offset`, the seeds of the chunks before its own.
+fn batch_select(offset: usize) -> String {
+    let batch = identifier(SEED_BATCH);
+    if offset == 0 {
+        format!("pos AS {batch}")
+    } else {
+        format!("pos + {offset} AS {batch}")
+    }
 }
 
 /// A Databricks answer to a `describe` of `part`, read as the reference
@@ -1033,14 +1069,71 @@ fn element_type(column_type: &ColumnType) -> &'static str {
     }
 }
 
-/// A key set as this dialect binds it ([`bound_keys`] in the module's
-/// doc): the batch left out, the key coerced as the reference coerces it
-/// for its JSON (`_coerce_id`), each seed time its wall clock's text to the
-/// second. `None` for a key set holding nothing to rewrite.
-pub(crate) fn bound_keys(
+/// Each seed of a key set as the JSON this dialect binds it as (the
+/// module's documentation), in order: the old client's `_dumps` of its
+/// rows, a double as `float_text` writes it.
+pub(crate) fn key_rows(
+    request: &DataRequest,
     schema: &SchemaRef,
     batches: &[RecordBatch],
-) -> Result<Option<(SchemaRef, Vec<RecordBatch>)>, CoreError> {
+    float_text: fn(f64) -> String,
+) -> Result<Vec<String>, CoreError> {
+    key_text::in_batch_order(schema, batches)?;
+    let (schema, batches) = coerced(schema, batches)?;
+    let named = key_text::fields(
+        schema.fields().iter().map(|field| field.name().as_str()),
+        request,
+    );
+    let order: Vec<(usize, String)> = named
+        .iter()
+        .filter_map(|(column, field)| {
+            Some((schema.index_of(column).ok()?, json::string(field, true)))
+        })
+        .collect();
+    let mut rows = Vec::new();
+    for batch in &batches {
+        for row in 0..batch.num_rows() {
+            let cell = |at: usize| json_cell(batch.column(at), row, float_text);
+            rows.push(match &order[..] {
+                [(at, _)] => cell(*at),
+                several => format!(
+                    "{{{}}}",
+                    several
+                        .iter()
+                        .map(|(at, field)| format!("{field}:{}", cell(*at)))
+                        .collect::<Vec<_>>()
+                        .join(",")
+                ),
+            });
+        }
+    }
+    Ok(rows)
+}
+
+/// One cell of a key set [`coerced`] for its JSON, as JSON: an integer's
+/// digits, a double as `float_text` writes it, a text's string, ASCII
+/// only, `null`.
+fn json_cell(column: &ArrayRef, row: usize, float_text: fn(f64) -> String) -> String {
+    if column.is_null(row) {
+        return "null".to_owned();
+    }
+    if let Some(integers) = column.as_primitive_opt::<arrow_array::types::Int64Type>() {
+        return integers.value(row).to_string();
+    }
+    if let Some(doubles) = column.as_primitive_opt::<arrow_array::types::Float64Type>() {
+        return json::number(doubles.value(row), float_text);
+    }
+    json::string(column.as_string::<i32>().value(row), true)
+}
+
+/// A key set as this dialect writes it (the module's documentation): the
+/// batch left out, the key coerced as the reference coerces it for its
+/// JSON (`_coerce_id`), each seed time its wall clock's text to the
+/// second.
+fn coerced(
+    schema: &SchemaRef,
+    batches: &[RecordBatch],
+) -> Result<(SchemaRef, Vec<RecordBatch>), CoreError> {
     let unbound = || {
         CoreError::new(
             Sentence::Internal,
@@ -1098,7 +1191,7 @@ pub(crate) fn bound_keys(
         }
         rewritten.push(RecordBatch::try_new(Arc::clone(&out), columns).map_err(|_| unbound())?);
     }
-    Ok(Some((out, rewritten)))
+    Ok((out, rewritten))
 }
 
 /// The element type of a key of Arrow type `data_type` ([`element_type`]).
@@ -1315,6 +1408,14 @@ mod tests {
         }
     }
 
+    /// A neighbor read whose window's upper bound is the seeds' `time`.
+    fn windowed() -> DataRequest {
+        serde_json::from_str(
+            r#"{"columns":["ts"],"key":["user_id"],"order":null,"per_seed":null,"request":"neighbors","seeds":{"attachment":2,"columns":[{"name":"key","nullable":true,"type":{"type":"int32"}},{"name":"batch","nullable":false,"type":{"type":"int64"}},{"name":"time","nullable":true,"type":{"type":"timestamp","unit":"ns","zone":null}}]},"table":{"source":["c","s","orders"]},"window":{"column":"ts","lower":null,"upper":{"inclusive":true,"seed_column":"time"}}}"#,
+        )
+        .unwrap()
+    }
+
     #[test]
     fn a_key_set_is_bound_as_the_reference_writes_its_json() {
         use arrow_array::{Int32Array, Int64Array, TimestampNanosecondArray};
@@ -1339,16 +1440,13 @@ mod tests {
             ],
         )
         .unwrap();
-        let (bound, batches) = bound_keys(&schema, &[batch]).unwrap().unwrap();
-        let names: Vec<&str> = bound.fields().iter().map(|f| f.name().as_str()).collect();
-        assert_eq!(names, [SEED_KEY, "time"]);
-        let keys = batches[0]
-            .column(0)
-            .as_primitive::<arrow_array::types::Int64Type>();
-        assert_eq!(keys.values().to_vec(), [3, 4]);
-        let times = batches[0].column(1).as_string::<i32>();
-        assert_eq!(times.value(0), "2024-03-01 00:00:00");
-        assert!(times.is_null(1));
+        assert_eq!(
+            key_rows(&windowed(), &schema, &[batch], |x| format!("{x:?}")).unwrap(),
+            [
+                r#"{"id":3,"e":"2024-03-01 00:00:00"}"#,
+                r#"{"id":4,"e":null}"#
+            ]
+        );
     }
 
     #[test]

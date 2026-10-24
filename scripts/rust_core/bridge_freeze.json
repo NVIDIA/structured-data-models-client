@@ -298,16 +298,13 @@
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py": {
       "<module>": {
-        "fingerprint": "73cedc3f25379a0ef67978fd56bdbe471ab01cd8985fd7d262ff883e7f4872e4"
+        "fingerprint": "c9d86a4f0f9663e0207aa985419d54d449a09112086936ea7965c0f6fb39c5fc"
       },
       "PostgresProvider.__call__": {
-        "fingerprint": "0863e31498d184173e461f2c5f8cb8006dc356570e2d81b854205a4bc1449512"
+        "fingerprint": "375fad0fd5eb50c5bad6c4278798fbbe9cfabc54c58bf6232d8c75da028ad26f"
       },
       "PostgresProvider.__init__": {
         "fingerprint": "3e278560d028fd3cf21e43d5d3da95154b0daf3e1dc8cca7683d4ca59c9f97f4"
-      },
-      "_bound_text": {
-        "fingerprint": "89c9d59cf663fd14adb697c36944a1b5a534d4bceb4e7762b3e719c1e2fa819b"
       },
       "_own_transaction": {
         "fingerprint": "223bfb1d59011dcd424a1deafdb3a04f4dccdb0546daccf2ab5b981647467684"

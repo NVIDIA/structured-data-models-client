@@ -282,7 +282,7 @@ impl SqlDialect for Plain {
 
 /// `request`'s statements on [`Plain`].
 fn plain(request: &DataRequest) -> Result<Vec<String>, CoreError> {
-    match sql::plan(&Plain, request, &[])? {
+    match sql::plan(&Plain, request, &[], 0)? {
         FetchPlan::Sql { statements, .. } => {
             assert!(statements.iter().all(|s| s.dialect.name() == "plain"));
             Ok(statements.into_iter().map(|s| s.text).collect())
@@ -457,7 +457,7 @@ fn a_catalog_statement_keeps_the_parameters_its_dialect_binds() {
         tables: vec![relation(&["Orders"])],
         part: DescribePart::Columns,
     };
-    let FetchPlan::Sql { statements, .. } = sql::plan(&Plain, &request, &[]).unwrap() else {
+    let FetchPlan::Sql { statements, .. } = sql::plan(&Plain, &request, &[], 0).unwrap() else {
         panic!("a dialect planned a host fetch");
     };
     let [statement] = statements.as_slice() else {
@@ -481,6 +481,7 @@ fn a_catalog_statement_keeps_the_parameters_its_dialect_binds() {
             part: DescribePart::Tables,
         },
         &[],
+        0,
     )
     .unwrap() else {
         panic!("a dialect planned a host fetch");
