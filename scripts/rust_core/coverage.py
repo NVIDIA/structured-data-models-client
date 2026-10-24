@@ -483,35 +483,16 @@ def _test_problem(test: str, root: Any, language: str = 'python') -> str | None:
     return None
 
 
-#: The file in the reports directory marking the start of the Java test
-#: run the check owns (:func:`junit_run`): only a report written after it
-#: is that run's.
-JUNIT_MARKER = '.coverage-junit-run'
-
-
 def junit_ran(reports: Path) -> set[tuple[str, str]]:
-    r"""Each test JUnit ran and did not skip in the run the check owns, as
-    Surefire's reports in ``reports`` (``TEST-*.xml``) record it: its class
-    and its method's name (a parameterized test's invocations,
-    ``name(String)[1]``, by the name before its parameters). A report older
-    than the run's marker (:data:`JUNIT_MARKER`), one an earlier build left,
-    is no report of this run.
-
-    Raises:
-        Unreadable: ``reports`` holds no run's marker.
-    """
+    r"""Each test JUnit ran and did not skip, as Surefire's reports in
+    ``reports`` (``TEST-*.xml``) record it: its class and its method's name
+    (a parameterized test's invocations, ``name(String)[1]``, by the name
+    before its parameters). Only :func:`junit_run` reads them, from a
+    directory its own Maven run filled."""
     import xml.etree.ElementTree as ElementTree
 
-    marker = reports / JUNIT_MARKER
-    if not marker.is_file():
-        raise Unreadable(
-            f'{reports}: no marker of the Java test run this check owns'
-        )
-    started = marker.stat().st_mtime_ns
     ran: set[tuple[str, str]] = set()
     for path in sorted(reports.glob('TEST-*.xml')):
-        if path.stat().st_mtime_ns < started:
-            continue
         for case in ElementTree.parse(path).getroot().iter('testcase'):
             if case.find('skipped') is not None:
                 continue
@@ -541,15 +522,17 @@ def junit_problem(test: str, ran: set[tuple[str, str]]) -> str | None:
 
 
 def junit_run(repo: Path, command: list[str], report: Report) -> None:
-    r"""The Java test run the check owns: its start marked in the reports
-    directory (:data:`JUNIT_MARKER`), Maven's ``verify`` (``command``) run in
-    ``repo``, then each test the Java manifest names held to that run's
-    reports alone (:func:`junit_check`)."""
+    r"""The Java test run the check owns: the Surefire reports directory
+    emptied (that directory alone; the rest of the build directory, the
+    natives a CI job put there among it, stays), Maven's ``verify``
+    (``command``) run in ``repo``, then each test the Java manifest names
+    held to the reports that run left (:func:`junit_check`), and no other."""
+    import shutil
     import subprocess
 
     reports = repo / 'java/target/surefire-reports'
-    reports.mkdir(parents=True, exist_ok=True)
-    (reports / JUNIT_MARKER).write_text('', encoding='utf-8')
+    if reports.is_dir():
+        shutil.rmtree(reports)
     ran = subprocess.run(command, cwd=repo, check=False)
     if ran.returncode != 0:
         report.fail(
@@ -561,13 +544,9 @@ def junit_run(repo: Path, command: list[str], report: Report) -> None:
 
 def junit_check(repo: Path, reports: Path, report: Report) -> None:
     r"""Each test the Java manifest names, held to the Java test run whose
-    Surefire reports are in ``reports`` (the java-test job, after ``mvn
-    verify``): rule 4's Java half."""
-    try:
-        ran = junit_ran(reports)
-    except Unreadable as error:
-        report.fail('rule 4', f'java: {error}')
-        return
+    Surefire reports :func:`junit_run` left in ``reports``: rule 4's Java
+    half."""
+    ran = junit_ran(reports)
     try:
         manifest = _yaml(
             (repo / MANIFESTS['java']).read_text(encoding='utf-8'),
@@ -1326,13 +1305,6 @@ def main(argv: list[str] | None = None) -> int:
         help="an argument to Maven's run",
     )
     parser.add_argument(
-        '--junit-reports',
-        type=Path,
-        metavar='DIR',
-        help="the Java test run's Surefire reports: holds each Java test the "
-        'manifest names to that run (run test, not skipped), and nothing else',
-    )
-    parser.add_argument(
         '--gate',
         action='append',
         metavar='LANGUAGE:SLICE',
@@ -1340,24 +1312,21 @@ def main(argv: list[str] | None = None) -> int:
         'java:S1 (T3.2); default python:S0, the active slice',
     )
     arguments = parser.parse_args(argv)
-    if arguments.junit_run or arguments.junit_reports is not None:
+    if arguments.junit_run:
         junit = Report()
         root = arguments.repo or Path(__file__).resolve().parents[2]
-        if arguments.junit_run:
-            junit_run(
-                root,
-                [
-                    arguments.maven,
-                    '-B',
-                    *arguments.maven_arg,
-                    '-f',
-                    'java/pom.xml',
-                    'verify',
-                ],
-                junit,
-            )
-        else:
-            junit_check(root, arguments.junit_reports, junit)
+        junit_run(
+            root,
+            [
+                arguments.maven,
+                '-B',
+                *arguments.maven_arg,
+                '-f',
+                'java/pom.xml',
+                'verify',
+            ],
+            junit,
+        )
         for problem in junit.problems:
             print(problem)
         print(f'coverage: {"FAIL" if junit.problems else "ok"} (JUnit run)')
