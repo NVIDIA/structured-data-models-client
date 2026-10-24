@@ -224,6 +224,46 @@ class T313ConversionTableTest {
   }
 
   @Test
+  void defaultComplexSupportPreservesNumericAndStringArraysBesideScalarColumns()
+      throws Exception {
+    Map<String, Read> got = answered(
+        FakeJdbc.Column.of("id", "BIGINT", 1L, 2L, 3L),
+        FakeJdbc.Column.of("whole", "ARRAY<BIGINT>", "[9007199254740993,null,-7]", null, "[]"),
+        FakeJdbc.Column.of("single", "ARRAY<FLOAT>", "[1.25,null]", null, "[]"),
+        FakeJdbc.Column.of("double", "ARRAY<DOUBLE>", "[1.25,2.5]", null, "[]"),
+        FakeJdbc.Column.of("text", "ARRAY<STRING>",
+            "[\"Zoë\",\"a,b\",\"quote\\\"\",null]", null, "[]"));
+    assertEquals(List.of(1L, 2L, 3L), got.get("id").values());
+    assertEquals(Arrays.asList(9007199254740993L, null, -7L),
+        got.get("whole").values().get(0));
+    assertEquals(Arrays.asList(1.25f, null), got.get("single").values().get(0));
+    assertEquals(List.of(1.25, 2.5), got.get("double").values().get(0));
+    assertEquals("[Zoë, a,b, quote\", null]", got.get("text").values().get(0).toString());
+    for (String name : List.of("whole", "single", "double", "text")) {
+      assertEquals("List", got.get(name).field().getType().toString());
+      assertNull(got.get(name).values().get(1), name);
+      assertEquals(List.of(), got.get(name).values().get(2), name);
+    }
+    assertEquals("Int(64, true)",
+        got.get("whole").field().getChildren().get(0).getType().toString());
+    assertEquals("FloatingPoint(SINGLE)",
+        got.get("single").field().getChildren().get(0).getType().toString());
+    assertEquals("FloatingPoint(DOUBLE)",
+        got.get("double").field().getChildren().get(0).getType().toString());
+    assertEquals("Utf8", got.get("text").field().getChildren().get(0).getType().toString());
+  }
+
+  @Test
+  void enabledComplexSupportReadsNativeArraysWithoutSerializingTheirStrings() throws Exception {
+    Map<String, Read> got = answered(
+        FakeJdbc.Column.of("text", "ARRAY<STRING>",
+            Arrays.asList("Zoë", "a,b", "quote\"", null), List.of(), null));
+    assertEquals("[Zoë, a,b, quote\", null]", got.get("text").values().get(0).toString());
+    assertEquals(List.of(), got.get("text").values().get(1));
+    assertNull(got.get("text").values().get(2));
+  }
+
+  @Test
   void theTableSaysWhatEachDatabricksTypeReachesTheCoreAs() {
     for (String type :
         List.of(
