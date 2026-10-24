@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import re
 import sys
 import time
 import types
@@ -270,3 +271,95 @@ def test_each_leg_s_job_timeout_is_the_template_s(
     arguments.set = ['LEG=snowflake', *filled]
     with pytest.raises(dbx_runs.Refused, match='timeout'):
         dbx_runs.run_spec(arguments)
+
+
+class _Warehouse:
+    r"""A Databricks test schema standing in for the warehouse: the tables
+    each ``CREATE TABLE`` makes and each ``DROP TABLE`` removes; told to,
+    it fails the second drop it is sent, after the first went through."""
+
+    NAME = re.compile(
+        r'^(CREATE|DROP) TABLE (?:IF EXISTS )?`cat`\.`sch`\.`(\w+)`'
+    )
+
+    def __init__(self) -> None:
+        self.tables: set[str] = set()
+        self.drops = 0
+        self.fail: Any = None
+
+    def __call__(self, statement: str) -> None:
+        found = self.NAME.match(statement)
+        if found is None:
+            return
+        kind, table = found.groups()
+        if kind == 'DROP':
+            self.drops += 1
+            if self.fail is not None and self.drops == 2:
+                self.fail()
+            self.tables.discard(table)
+        else:
+            self.tables.add(table)
+
+
+@pytest.mark.parametrize('exit', ['timeout', 'driver error'])
+def test_a_case_cut_short_mid_clear_leaves_the_next_case_to_load_again(
+    exit: str,
+) -> None:
+    # Codex r1 P1: case A loads; case B, other tables, is cut short while
+    # its load clears A's (past its time limit, or by a driver error);
+    # case A again finds A's tables gone, and loads them.
+    warehouse = _Warehouse()
+    schema = databases.CaseSchema('databricks', warehouse, ('cat', 'sch'))
+    schema.load(_duck(*SHOP))
+    assert warehouse.tables == {'users', 'orders'}
+    other = (*SHOP[:1], 'INSERT INTO users VALUES (1, 21), (2, 30)', *SHOP[2:])
+    warehouse.drops = 0
+    if exit == 'timeout':
+        warehouse.fail = lambda: time.sleep(30)
+        with pytest.raises(capture_run.CaseTimedOut):
+            with capture_run._limited(0.3):
+                schema.load(_duck(*other))
+    else:
+
+        def refused() -> None:
+            raise RuntimeError('the driver lost its connection')
+
+        warehouse.fail = refused
+        with pytest.raises(RuntimeError):
+            schema.load(_duck(*other))
+    # One of A's tables is gone.
+    assert warehouse.tables != {'users', 'orders'}
+    warehouse.fail = None
+    schema.load(_duck(*SHOP))
+    assert warehouse.tables == {'users', 'orders'}
+
+
+def test_a_case_limit_off_the_main_thread_is_refused_by_name(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Claude r1 P2: no signal reaches a thread other than the main one, so
+    # a run asked to limit each case there refuses to start, saying why,
+    # rather than running with no limit; asked for none, it runs.
+    import threading
+
+    _fake_run(tmp_path, monkeypatch, {})
+    outcome: dict[str, Any] = {}
+
+    def run(limit: float | None) -> None:
+        try:
+            outcome[limit] = capture_run.run(
+                'lakebase',
+                tmp_path,
+                tmp_path / f'out-{limit}',
+                case_timeout=limit,
+            )
+        except SystemExit as refused:
+            outcome[limit] = str(refused)
+
+    for limit in (5.0, None):
+        worker = threading.Thread(target=run, args=(limit,))
+        worker.start()
+        worker.join()
+    assert 'main thread' in outcome[5.0]
+    assert not (tmp_path / 'out-5.0').exists()
+    assert outcome[None] == 0
