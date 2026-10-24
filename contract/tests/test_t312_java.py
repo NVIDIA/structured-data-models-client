@@ -489,10 +489,29 @@ def test_t312_a_java_method_that_is_no_junit_test_claims_nothing() -> None:
             '  @Test\n'
             '  void inAString() {}\n'
             '  """;\n'
+            '\n'
+            '  @Disabled\n'
+            '  @Test\n'
+            '  void disabledFirst() {}\n'
+            '\n'
+            '  @DisplayName("shown")\n'
+            '  @Test\n'
+            '  void displayed() {}\n'
+            '\n'
+            '  String block = """\n'
+            '  a \\""" quote\n'
+            '  @Test\n'
+            '  void inAnEscapedBlock() {}\n'
+            '  """;\n'
+            '\n'
+            '  \\u002f\\u002a\n'
+            '  @Test\n'
+            '  void inAUnicodeComment() {}\n'
+            '  \\u002a\\u002f\n'
             '}\n'
         }
     )
-    for runs in ('aTest', 'anotherTest', 'nestedOne'):
+    for runs in ('aTest', 'anotherTest', 'nestedOne', 'displayed'):
         assert coverage._test_problem(f'{path}#{runs}', tree, 'java') is None, (
             runs
         )
@@ -510,6 +529,12 @@ def test_t312_a_java_method_that_is_no_junit_test_claims_nothing() -> None:
         'disabledOne',
         'inADisabledClass',
         'inAString',
+        # Claude T3.12 r4 P1-2 and Codex r4 P1-1: @Disabled above @Test, a
+        # method in a text block past an escaped triple quote, a method in a
+        # comment Unicode escapes spell.
+        'disabledFirst',
+        'inAnEscapedBlock',
+        'inAUnicodeComment',
     ):
         assert coverage._test_problem(f'{path}#{never}', tree, 'java') == (
             'no test the tree defines'
