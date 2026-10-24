@@ -109,14 +109,15 @@ fn predict_run_setting(
     inference_asked: &[&str],
 ) -> Result<Run, CoreError> {
     let operation = Operation::Predict(Predict {
-        state: RequestState {
+        state: Some(RequestState {
             version,
             payload: AttachmentId(1),
             query: AttachmentId(2),
             forecast: None,
             batches: None,
             ranking: None,
-        },
+        }),
+        held: None,
         model: model.into(),
         request_id: "sdm-0123456789ab".into(),
         outputs: outputs.iter().map(|o| (*o).to_owned()).collect(),
@@ -217,7 +218,7 @@ fn a_ranking_s_state_naming_its_candidates_out_of_order_is_refused_by_name() {
     // given back under other candidates' names.
     let run = |first: u32, later: u32| {
         let operation = Operation::Predict(Predict {
-            state: RequestState {
+            state: Some(RequestState {
                 version: REQUEST_STATE_VERSION,
                 payload: AttachmentId(1),
                 query: AttachmentId(2),
@@ -235,7 +236,8 @@ fn a_ranking_s_state_naming_its_candidates_out_of_order_is_refused_by_name() {
                         request_id: Some("sdm-0123456789ac".into()),
                     }],
                 }),
-            },
+            }),
+            held: None,
             model: "kumo-relational".into(),
             request_id: "sdm-0123456789ab".into(),
             outputs: vec![],

@@ -312,6 +312,27 @@
         "RankingPart.query": {
           "type": "string"
         },
+        "HeldRequest.payload": {
+          "$ref": "#/$defs/StatePayload"
+        },
+        "HeldRequest.query": {
+          "type": "string"
+        },
+        "HeldCall.payload": {
+          "$ref": "#/$defs/StatePayload"
+        },
+        "HeldPart.payload": {
+          "$ref": "#/$defs/StatePayload"
+        },
+        "HeldPart.query": {
+          "type": "string"
+        },
+        "HeldRanking.candidates": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/GivenCandidate"
+          }
+        },
         "Predicted.metadata": {
           "$ref": "#/$defs/EndpointMetadata"
         }
@@ -337,6 +358,12 @@
         "RequestBatch.payload",
         "RankingPart.payload",
         "RankingPart.query",
+        "HeldRequest.payload",
+        "HeldRequest.query",
+        "HeldCall.payload",
+        "HeldPart.payload",
+        "HeldPart.query",
+        "HeldRanking.candidates",
         "Predicted.metadata"
       ]
     },
@@ -3298,7 +3325,26 @@
           "type": "object",
           "properties": {
             "state": {
-              "$ref": "#/$defs/RequestState"
+              "description": "The request state `materialize` answered, as the host held it since;\nabsent where the host holds a request the core did not\nmaterialize, which [`Predict::held`] gives instead. A start naming\nboth, or neither, is refused.",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/RequestState"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "held": {
+              "description": "A request the core did not materialize, as the host holds it (T3.26,\nowner decision 2026-10-23): one an older client gathered, or this\none on its old route. The core rebuilds what it predicts from from\nit alone, as the old client predicts what such a request holds.",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/HeldRequest"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "model": {
               "description": "The model id the request is sent to, as the wire names it.",
@@ -3334,7 +3380,6 @@
           "additionalProperties": false,
           "required": [
             "op",
-            "state",
             "model",
             "request_id",
             "outputs"
@@ -3862,6 +3907,130 @@
         "value",
         "payload",
         "query"
+      ]
+    },
+    "HeldRequest": {
+      "description": "A request the core did not materialize, as the host holds it\n([`Predict::held`], T3.26): its public contents only, each payload as the\nrequest holds it and each question's text, with what the host was given\nof a ranking's candidates. The core rebuilds from it what a\n[`RequestState`] gives: a forecast's later steps numbered from 2, in\norder; a ranking's questions named by their place among the candidates\nheld, each by the JSON text of its value, written from the candidate as\n`materialize` writes it; the later calls of a request asked in several,\neach scoring the rows after the last. No version applies: nothing in it\nwas written by a core.",
+      "type": "object",
+      "properties": {
+        "payload": {
+          "description": "A bytes attachment of the first call's payload as JSON, as the\nrequest holds it: the request's own, a forecast's first step's, or a\nranking's first question's.",
+          "$ref": "#/$defs/AttachmentId"
+        },
+        "query": {
+          "description": "The first call's question's text: a bytes attachment of a JSON\nstring.",
+          "$ref": "#/$defs/AttachmentId"
+        },
+        "batches": {
+          "description": "The later calls of a request asked in several, in order, as\n[`RequestState::batches`]. Absent for a request of one call.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/HeldCall"
+          }
+        },
+        "forecast": {
+          "description": "A forecast's later steps, in order, as [`RequestState::forecast`].\nAbsent for any other request.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/HeldPart"
+          }
+        },
+        "ranking": {
+          "description": "A ranking's candidates and later questions, as\n[`RequestState::ranking`]. Absent for any other request.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HeldRanking"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "payload",
+        "query"
+      ]
+    },
+    "HeldCall": {
+      "description": "A later call of a request held asked in several ([`HeldRequest::batches`]).",
+      "type": "object",
+      "properties": {
+        "payload": {
+          "description": "A bytes attachment of this call's payload as JSON.",
+          "$ref": "#/$defs/AttachmentId"
+        },
+        "request_id": {
+          "description": "The id this call carries, which the host draws for each call, as\n[`RequestBatch::request_id`].",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "payload",
+        "request_id"
+      ]
+    },
+    "HeldPart": {
+      "description": "A later part of a request held asked in parts: a forecast's step or a\nranking's question, in order.",
+      "type": "object",
+      "properties": {
+        "payload": {
+          "description": "A bytes attachment of this part's payload as JSON.",
+          "$ref": "#/$defs/AttachmentId"
+        },
+        "query": {
+          "description": "This part's question's text: a bytes attachment of a JSON string.",
+          "$ref": "#/$defs/AttachmentId"
+        },
+        "request_id": {
+          "description": "The id this part's call carries, as [`ForecastStep::request_id`].",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "payload",
+        "query",
+        "request_id"
+      ]
+    },
+    "HeldRanking": {
+      "description": "A ranking held ([`HeldRequest::ranking`]).",
+      "type": "object",
+      "properties": {
+        "top_k": {
+          "description": "How many candidates each row keeps, as [`Ranking::top_k`].",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "candidates": {
+          "description": "The candidate each question asks after, the first question's first,\none per question: a bytes attachment of a JSON list of\n[`GivenCandidate`]s, as [`Materialize::candidates`] gives them.",
+          "$ref": "#/$defs/AttachmentId"
+        },
+        "parts": {
+          "description": "Each later question, in the order of the candidates.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/HeldPart"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "candidates",
+        "parts"
       ]
     },
     "ReplyId": {
@@ -5043,7 +5212,7 @@
               }
             },
             "unscored_candidates": {
-              "description": "A ranking's candidates no question was sent for, the context sampled\nfor each holding one answer only (T2.8): each its position among the\ncandidates `materialize` was given, in the order named. Empty for\nany other result.",
+              "description": "A ranking's candidates no question was sent for, the context sampled\nfor each holding one answer only (T2.8): each its position among the\ncandidates `materialize` was given (of a request held, among the\ncandidates it holds, T3.26), in the order named. Empty for any other\nresult.",
               "type": "array",
               "items": {
                 "type": "integer",

@@ -24,13 +24,13 @@
       "moved": "T3.17 fix 1: the source with no table is the core's sentence, filled with the source as a host value; the Python sentence is gone"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::<module>": {
-      "moved": "T3.17: the unscored candidates' sentence is the core's, named with the candidates as given (host values)"
+      "moved": "T3.26: the materialize_again refusal is gone: a request the core did not materialize is handed over as plain data (_held, Predict.held) and the core rebuilds what it predicts from (sdm-core held.rs); RANKING read from decompose to tell a ranking by its decomposition"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_id": {
       "moved": "T1.36 fix 8: the host's half of the moved entity reading: a row's id as the core's id_as_written column gives it (the JSON text of the reference's item value, read as the transport reads JSON), else the id column's value, a missing one None; no rule of its own, as _as_answered for a prediction"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::predict": {
-      "moved": "T3.17: host values in place of the words callback"
+      "moved": "T3.26: no refusal of a request the core did not materialize; its state, or what it holds (_from_state or _held), is handed over, the core rebuilding the rest; a ranking told by its decomposition"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_carry_the_answers": {
       "moved": "T2.13: the carried answers' explanation, which the core puts on the result's schema with the model and metadata, handed to _result as the result's; no rule added"
@@ -39,7 +39,7 @@
       "moved": "T2.11: an answer's embeddings, which the core reads and lays out (sdm-wire response, sdm-request predict), handed into each PredictionItem as the tuple the bindings hold; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/client.py::SDMClient._answer_in_parts": {
-      "refactor": "T3.16 (fix D): reads Request._core, a typed CoreRequest"
+      "moved": "T3.26: a forecast or a ranking the core did not gather goes to the core too, which predicts it from what it holds"
     },
     "packages/structured-data-models-client/src/sdm_client/query.py::<module>": {
       "moved": "T3.17 fix 1: imports the decimal spelling a candidate's sentence names as a host value"
@@ -517,6 +517,15 @@
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::holding": {
       "moved": "T3.17 fix 1: the host-held values ({host.<name>}) a call supplies for the core's sentences, in place of the host writing its own sentence"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_from_state": {
+      "refactor": "T3.26: the request state predict sent before, moved out of predict unchanged"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_held": {
+      "moved": "T3.26: the host half of the rebuild: a request with no state the core wrote, as plain data (its payloads in order, each question, a ranking's candidates as given through _candidates, an id per later call); the step numbers, candidate positions and names are the core's (sdm-core held.rs)"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::positions": {
+      "refactor": "T3.26: the positions the core names a ranking's candidates by, read where predict and _said_of_the_part read them: the state's, or each held candidate's place in the list handed over"
     }
   }
 }

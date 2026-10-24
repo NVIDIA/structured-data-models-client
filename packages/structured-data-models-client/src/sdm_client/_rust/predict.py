@@ -67,6 +67,7 @@ from typing import TYPE_CHECKING, Any
 
 from sdm_client._rust import codec, errors, results
 from sdm_client._rust.run import Refused, TransportFailed, run
+from sdm_client.decompose import RANKING
 from sdm_client.errors import NimRequestError, StructuredDataError
 
 if TYPE_CHECKING:
@@ -214,6 +215,146 @@ def _adapter(client: SDMClient, model_id: str) -> Any:
     return adapter
 
 
+def positions(request: Request) -> tuple[int, ...]:
+    r"""Each question of a ranking by the position the core names its
+    candidate by: among the candidates materialize was given, where the
+    core wrote the request's state; else among those the request holds, in
+    order, as the core rebuilds them (T3.26)."""
+    state = request._core
+    if state is not None and state.ranking is not None:
+        return state.ranking.positions
+    rewritten = request._decomposition
+    return tuple(range(len(rewritten.parts))) if rewritten is not None else ()
+
+
+def _from_state(
+    request: Request, state: results.CoreRequest
+) -> tuple[dict[str, Any], dict[int, Any]]:
+    r"""The request state the core wrote for ``request``, as ``predict``
+    names it, and its attachments: the payloads and questions the request
+    holds, each later call's or part's with the id drawn for it."""
+    from sdm_client.adapters.relational import _request_id
+
+    steps = request.parts if request.parts is not None else (request,)
+    [(payload, query), *later] = [
+        ((step.payloads or ())[0], step.query) for step in steps
+    ]
+    named: dict[str, Any] = {'version': state.version, 'payload': 1, 'query': 2}
+    attachments = {1: _payload(payload), 2: codec.attachment(query)}
+    if state.batches is not None:
+        # Each later call's payload, the rows the core gathered it to score,
+        # and its own id, drawn as the adapter draws one for every call, in
+        # call order (T2.8c).
+        named['batches'] = []
+        for at, (more, rows) in enumerate(
+            zip((request.payloads or ())[1:], state.batches, strict=True),
+            start=3,
+        ):
+            attachments[at] = _payload(more)
+            named['batches'].append(
+                {'payload': at, 'rows': rows, 'request_id': _request_id()}
+            )
+    ranking = state.ranking
+    if request.parts is not None and ranking is not None:
+        named['ranking'] = {
+            'candidate': ranking.positions[0],
+            'value': ranking.values[0],
+            'parts': [],
+        }
+        if ranking.top_k is not None:
+            named['ranking']['top_k'] = ranking.top_k
+        for number, ((more, asked), position, value) in enumerate(
+            zip(later, ranking.positions[1:], ranking.values[1:], strict=True),
+            start=2,
+        ):
+            at = 2 * number - 1
+            attachments[at] = _payload(more)
+            attachments[at + 1] = codec.attachment(asked)
+            # Each question's call its own id, drawn as the adapter draws
+            # one for every call, in order.
+            named['ranking']['parts'].append(
+                {
+                    'candidate': position,
+                    'value': value,
+                    'payload': at,
+                    'query': at + 1,
+                    'request_id': _request_id(),
+                }
+            )
+    elif request.parts is not None:
+        named['forecast'] = []
+        for number, (more, asked) in enumerate(later, start=2):
+            at = 2 * number - 1
+            attachments[at] = _payload(more)
+            attachments[at + 1] = codec.attachment(asked)
+            # Each step's call its own id, drawn as the adapter draws one
+            # for every call, in step order (T1.36 fix 24).
+            named['forecast'].append(
+                {
+                    'step': number,
+                    'payload': at,
+                    'query': at + 1,
+                    'request_id': _request_id(),
+                }
+            )
+    return named, attachments
+
+
+def _held(request: Request) -> tuple[dict[str, Any], dict[int, Any]]:
+    r"""``request``, which holds no state the core wrote, as ``predict``
+    names a request held (T3.26), and its attachments: what the old client
+    sends of it, its payloads in order and each question's text, and, for
+    a ranking, the candidate each question asks after as the caller gave
+    it (:func:`materialize._candidates`), each later call's or part's with
+    the id drawn for it. A part of a forecast or a ranking is one call,
+    which every client gathers it as (``refuse_a_part_that_would_take_
+    several_calls``)."""
+    from sdm_client._rust.materialize import _candidates
+    from sdm_client.adapters.relational import _request_id
+
+    rewritten = request._decomposition
+    if request.parts is None or rewritten is None:
+        first, *calls = request.payloads or ()
+        named: dict[str, Any] = {'payload': 1, 'query': 2}
+        attachments = {1: _payload(first), 2: codec.attachment(request.query)}
+        if calls:
+            # Each later call's payload and its own id, drawn as the
+            # adapter draws one for every call, in call order.
+            named['batches'] = []
+            for at, call in enumerate(calls, start=3):
+                attachments[at] = _payload(call)
+                named['batches'].append(
+                    {'payload': at, 'request_id': _request_id()}
+                )
+        return named, attachments
+    [(payload, query), *later] = [
+        ((part.payloads or ())[0], part.query) for part in request.parts
+    ]
+    named = {'payload': 1, 'query': 2}
+    attachments = {1: _payload(payload), 2: codec.attachment(query)}
+    parts = []
+    for number, (more, asked) in enumerate(later, start=2):
+        at = 2 * number - 1
+        attachments[at] = _payload(more)
+        attachments[at + 1] = codec.attachment(asked)
+        # Each part's call its own id, drawn as the adapter draws one for
+        # every call, in order.
+        parts.append(
+            {'payload': at, 'query': at + 1, 'request_id': _request_id()}
+        )
+    if rewritten.kind == RANKING:
+        at = 2 * len(request.parts) + 1
+        attachments[at] = codec.attachment(
+            _candidates([about for _, about in rewritten.parts])
+        )
+        named['ranking'] = {'candidates': at, 'parts': parts}
+        if rewritten.top is not None:
+            named['ranking']['top_k'] = rewritten.top
+    else:
+        named['forecast'] = parts
+    return named, attachments
+
+
 def predict(
     client: SDMClient,
     request: Request,
@@ -222,11 +363,16 @@ def predict(
 ) -> PredictionResult:
     r"""The answer to ``request``, predicted on the core.
 
+    A request the core materialized is predicted from the state the core
+    wrote (``Request._core``); any other, one an older client gathered or
+    this one gathered on its old route, holding no such state (T3.26,
+    owner decision 2026-10-23), from what it holds, as the old client
+    predicts it: the host hands the core the request's payloads, questions
+    and a ranking's candidates (:func:`_held`), and the core rebuilds the
+    rest.
+
     Raises:
-        StructuredDataError: ``INVALID_REQUEST`` naming the rule
-            ``materialize_again`` for a request not materialized on the core,
-            which holds no request state the core wrote, or one holding other
-            payloads than the core wrote (T3.16); the core's refusal, as :mod:`.errors` maps it
+        StructuredDataError: the core's refusal, as :mod:`.errors` maps it
             (the model and output checks, the context's, and what it does
             not predict yet, ``UNSUPPORTED_REQUEST`` naming the rule); a
             model given as neither a model handle nor an id; and the
@@ -236,50 +382,29 @@ def predict(
     from sdm_client.adapters.relational import _request_id
     from sdm_client.models import spec_for
 
-    state = request._core
-    if state is None:
-        # A request the core did not materialize (one the old route built,
-        # or pickled before it could hold the core's state) holds nothing
-        # the core can predict from: refused by name, the caller told what
-        # to do (the structure design's open question 3, T3.16).
-        raise StructuredDataError(
-            'this request was not materialized on the core, so it holds '
-            'nothing the core can predict from; materialize it again',
-            code='INVALID_REQUEST',
-            details={'rule': 'materialize_again'},
-        )
-    # A forecast or a ranking the core gathered is held as one request per
-    # part (T1.36 fix 21, T2.8), which the core predicts in one run, part
-    # by part; a request of more rows than one call scores, as each call's
+    # A forecast or a ranking gathered in parts is held as one request per
+    # part (T1.36 fix 21, T2.8), which the core predicts in one run, part by
+    # part; a request of more rows than one call scores, as each call's
     # payload (T2.8c), which the core predicts in one run, call by call.
-    steps = request.parts if request.parts is not None else (request,)
-    batched = state.batches
-    held = []
-    for step in steps:
-        payloads = step.payloads
-        if payloads is None or len(payloads) != 1 + len(batched or ()):
-            # Payloads other than the ones the core wrote with its state.
-            raise StructuredDataError(
-                'this request holds other payloads than materialize wrote '
-                'on the core; materialize it again',
-                code='INVALID_REQUEST',
-                details={'rule': 'materialize_again'},
-            )
-        held.append((payloads[0], step.query))
-    [(payload, query), *later] = held
-    ranking = state.ranking
-    # A ranking's candidates, by their position among those given, as the
-    # caller gave them: the core names each by its position.
+    state = request._core
+    rewritten = request._decomposition
+    ranking = (
+        request.parts is not None
+        and rewritten is not None
+        and rewritten.kind == RANKING
+    )
+    # A ranking's candidates, by the position the core names each by, as
+    # the caller gave them: the values only this host holds.
     given: dict[int, Any] = (
-        {}
-        if ranking is None or request._decomposition is None
-        else dict(
+        dict(
             zip(
-                ranking.positions,
-                (about for _, about in request._decomposition.parts),
+                positions(request),
+                (about for _, about in rewritten.parts),
                 strict=True,
             )
         )
+        if ranking and rewritten is not None
+        else {}
     )
     # A model handle is the host's object; its id, or the id given, is the
     # core's to check.
@@ -338,7 +463,6 @@ def predict(
 
     operation: dict[str, Any] = {
         'op': 'predict',
-        'state': {'version': state.version, 'payload': 1, 'query': 2},
         'model': model_id,
         'request_id': _request_id(),
         # The outputs the caller named, or that it named none (the core then
@@ -353,69 +477,10 @@ def predict(
     }
     if outputs is None:
         operation['default_outputs'] = True
-    attachments = {
-        1: _payload(payload),
-        2: codec.attachment(query),
-    }
-    if batched is not None:
-        # Each later call's payload, the rows the core gathered it to score,
-        # and its own id, drawn as the adapter draws one for every call, in
-        # call order (T2.8c).
-        operation['state']['batches'] = []
-        for at, (more, rows) in enumerate(
-            zip((request.payloads or ())[1:], batched, strict=True), start=3
-        ):
-            attachments[at] = _payload(more)
-            operation['state']['batches'].append(
-                {'payload': at, 'rows': rows, 'request_id': _request_id()}
-            )
-    if request.parts is not None and ranking is not None:
-        operation['state']['ranking'] = {
-            'candidate': ranking.positions[0],
-            'value': ranking.values[0],
-            'parts': [],
-        }
-        if ranking.top_k is not None:
-            operation['state']['ranking']['top_k'] = ranking.top_k
-        for number, ((more, asked), position, named) in enumerate(
-            zip(
-                later,
-                ranking.positions[1:],
-                ranking.values[1:],
-                strict=True,
-            ),
-            start=2,
-        ):
-            at = 2 * number - 1
-            attachments[at] = _payload(more)
-            attachments[at + 1] = codec.attachment(asked)
-            # Each question's call its own id, drawn as the adapter draws
-            # one for every call, in order.
-            operation['state']['ranking']['parts'].append(
-                {
-                    'candidate': position,
-                    'value': named,
-                    'payload': at,
-                    'query': at + 1,
-                    'request_id': _request_id(),
-                }
-            )
-    elif request.parts is not None:
-        operation['state']['forecast'] = []
-        for number, (more, asked) in enumerate(later, start=2):
-            at = 2 * number - 1
-            attachments[at] = _payload(more)
-            attachments[at + 1] = codec.attachment(asked)
-            # Each step's call its own id, drawn as the adapter draws one
-            # for every call, in step order (T1.36 fix 24).
-            operation['state']['forecast'].append(
-                {
-                    'step': number,
-                    'payload': at,
-                    'query': at + 1,
-                    'request_id': _request_id(),
-                }
-            )
+    if state is None:
+        operation['held'], attachments = _held(request)
+    else:
+        operation['state'], attachments = _from_state(request, state)
 
     # The candidates the core names by position, as the caller gave them:
     # the values only this host holds, which its sentences name.
@@ -434,7 +499,7 @@ def predict(
         raise
     answered = results.expect(finished.result, results.Predicted)
     metadata = json.loads(finished.take(answered.metadata))
-    if ranking is not None:
+    if ranking:
         # The core's rows are ordered by row_index; a ranking's items keep
         # the order the answers named them in.
         ranked = sorted(

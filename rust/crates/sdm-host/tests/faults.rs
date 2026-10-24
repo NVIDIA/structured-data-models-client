@@ -684,14 +684,15 @@ fn predicting(version: u32, payload: &str) -> Result<HostRun, CoreError> {
     HostRun::start(
         &sdm_host::default_root(),
         &start_message(Operation::Predict(Predict {
-            state: RequestState {
+            state: Some(RequestState {
                 version,
                 payload: AttachmentId(1),
                 query: AttachmentId(2),
                 forecast: None,
                 batches: None,
                 ranking: None,
-            },
+            }),
+            held: None,
             model: "kumo-relational".into(),
             request_id: "sdm-000000000000".into(),
             outputs: vec!["prediction".into()],

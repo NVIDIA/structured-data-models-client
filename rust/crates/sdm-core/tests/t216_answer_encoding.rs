@@ -305,14 +305,15 @@ fn payload_text() -> String {
 
 fn predict_run() -> Run {
     let operation = Operation::Predict(Predict {
-        state: RequestState {
+        state: Some(RequestState {
             version: REQUEST_STATE_VERSION,
             payload: AttachmentId(1),
             query: AttachmentId(2),
             forecast: None,
             batches: None,
             ranking: None,
-        },
+        }),
+        held: None,
         model: "kumo-relational".into(),
         request_id: "sdm-0123456789ab".into(),
         outputs: vec!["prediction".to_owned()],

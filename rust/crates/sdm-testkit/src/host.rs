@@ -2006,7 +2006,7 @@ fn predict(
         contract: CONTRACT_VERSION,
         facts: facts()?,
         operation: Operation::Predict(Predict {
-            state: RequestState {
+            state: Some(RequestState {
                 version: state.version,
                 payload: AttachmentId(1),
                 query: AttachmentId(2),
@@ -2053,7 +2053,8 @@ fn predict(
                         })
                         .collect(),
                 }),
-            },
+            }),
+            held: None,
             model: spec.model.clone(),
             request_id: REQUEST_ID.into(),
             // The outputs the case's caller named, as the Python host

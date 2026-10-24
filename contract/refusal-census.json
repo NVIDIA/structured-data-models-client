@@ -664,7 +664,7 @@
           ],
           "anchor_time": "2024-03-01",
           "inference_config": {
-            "num_estimators": 1e400
+            "num_estimators": Infinity
           }
         }
       },
@@ -774,38 +774,6 @@
         }
       },
       "until": "materialize"
-    },
-    {
-      "site": "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::predict#1",
-      "why": "a request the core never materialized (built on the old route, or pickled before it could hold the core's state) predicted on the core, refused by name, rule materialize_again (T3.16, P3E-3); a case runs materialize and predict on one route, so not reached this way; held by the client's test_t316_the_schema_as_plain_data.py and test_the_predict_route.py",
-      "input": {
-        "base": "shop",
-        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
-        "materialize": {
-          "indices": [
-            0,
-            1
-          ],
-          "anchor_time": "2024-03-01"
-        }
-      },
-      "until": "predict"
-    },
-    {
-      "site": "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::predict#2",
-      "why": "a request holding other payloads than the core's materialize wrote, predicted on the core, refused by name, rule materialize_again (T3.16); a case's request is the one materialize wrote, so not reached this way",
-      "input": {
-        "base": "shop",
-        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
-        "materialize": {
-          "indices": [
-            0,
-            1
-          ],
-          "anchor_time": "2024-03-01"
-        }
-      },
-      "until": "predict"
     }
   ]
 }
