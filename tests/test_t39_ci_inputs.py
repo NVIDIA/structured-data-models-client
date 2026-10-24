@@ -18,6 +18,21 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def test_the_general_client_matrix_has_the_legacy_route_dependency() -> None:
+    jobs = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text())[
+        'jobs'
+    ]
+    job = jobs['test']
+    assert 'engine-wheels' in job['needs']
+    assert any(
+        (step.get('with') or {}).get('name') == 'engine-wheels-linux-x86_64'
+        for step in job['steps']
+    )
+    commands = '\n'.join(step.get('run', '') for step in job['steps'])
+    assert '[test,relational]' in commands
+    assert 'engine/*-"$tag"-*.whl' in commands
+
+
 @pytest.mark.parametrize('name', ['installed-wheel', 'forced-routes'])
 def test_legacy_client_suites_install_the_candidate_engine(name: str) -> None:
     jobs = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text())[
