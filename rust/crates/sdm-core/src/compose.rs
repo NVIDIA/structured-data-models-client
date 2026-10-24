@@ -106,17 +106,6 @@ impl DataAccess {
         self.layer.view_kind(&self.provider)
     }
 
-    /// The name forms the catalog read of `relation` tries, in order
-    /// (`DataLayer::spellings`).
-    pub fn spellings(&self, relation: &Relation) -> Vec<Relation> {
-        self.layer.spellings(&self.provider, relation)
-    }
-
-    /// What the run's provider's failure says (`DataLayer::failure`).
-    pub fn failure(&self, error: &ProviderError) -> FailureFacts {
-        self.layer.failure(&self.provider, error)
-    }
-
     /// The data layer's answer to a question of a semantic model's text, in
     /// the run's provider's dialect (`DataLayer::view_text`).
     pub fn view_text(&self, ask: ViewTextAsk) -> Result<ViewTextAnswer, CoreError> {
