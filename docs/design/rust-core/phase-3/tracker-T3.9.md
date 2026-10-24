@@ -2,7 +2,7 @@
 
 ## Production corrections
 
-Postgres zoned text uses canonical UTC on Python and Java under the explicit owner decision T39-OWNER-2026-10-24-UTC-TEXT.
+Postgres zoned text uses canonical UTC on Python and Java under the explicit owner decision T39-OWNER-2026-10-24-UTC-TEXT-1.
 The public materialize path previously emitted different range feature strings for the same instants on UTC and Los Angeles sessions.
 The conversion preserves microseconds, nulls, empty and open ranges, and readable wall dates whose UTC year is outside Python's datetime range.
 Scalar timestamp columns and timezone-free values retain their existing conversion, and caller sessions are unchanged.

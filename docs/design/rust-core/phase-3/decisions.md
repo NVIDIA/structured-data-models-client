@@ -152,11 +152,11 @@ These decisions cover only the entries and the two emulation files listed below;
 
 | # | Decision | Owner's words | Status |
 |---|---|---|---|
-| T35-OWNER-2026-10-24-ERRORS | Item 11: approve the clearer view errors P3J-1 through P3J-5 and P3J-9 through P3J-11 as presented | "Approved" | approved by owner 2026-10-24 |
-| T35-OWNER-2026-10-24-YAML | Item 16: approve the YAML scanner differences P3J-6 as presented | "Approved" | approved by owner 2026-10-24 |
-| T35-OWNER-2026-10-24-RETIRED | Retire P3J-7 and P3J-8 as obsolete proposals replaced by P3J-9; the register uses rejected for a retired entry, without claiming restored Python parity | "Ok retire 7/8 as superseded." | approved by owner 2026-10-24 |
-| T35-OWNER-2026-10-24-LOOKUP-ERRORS | Item 17: P3D-4 named error for no current database and P3D-9 named errors when a semantic view is missing or its definition cannot be read | "Approved" for no current database and "Approved" for unreadable semantic views | approved by owner 2026-10-24 |
-| T35-OWNER-2026-10-24-EMULATION | Original item 7: approve only `sdm-pql/src/conversions.rs` and generated `sdm-pql/src/printable.rs` on the emulation allowlist, for number/date parsing and text escaping of view defaults shared by Python and Java | "Approve these two files" | approved by owner 2026-10-24 |
+| T35-OWNER-2026-10-24-ERRORS-1 | Item 11: approve the clearer view errors P3J-1 through P3J-5 and P3J-9 through P3J-11 as presented | "Approved" | approved by owner 2026-10-24 |
+| T35-OWNER-2026-10-24-YAML-1 | Item 16: approve the YAML scanner differences P3J-6 as presented | "Approved" | approved by owner 2026-10-24 |
+| T35-OWNER-2026-10-24-RETIRED-1 | Retire P3J-7 and P3J-8 as obsolete proposals replaced by P3J-9; the register uses rejected for a retired entry, without claiming restored Python parity | "Ok retire 7/8 as superseded." | approved by owner 2026-10-24 |
+| T35-OWNER-2026-10-24-LOOKUP-ERRORS-1 | Item 17: P3D-4 named error for no current database and P3D-9 named errors when a semantic view is missing or its definition cannot be read | "Approved" for no current database and "Approved" for unreadable semantic views | approved by owner 2026-10-24 |
+| T35-OWNER-2026-10-24-EMULATION-1 | Original item 7: approve only `sdm-pql/src/conversions.rs` and generated `sdm-pql/src/printable.rs` on the emulation allowlist, for number/date parsing and text escaping of view defaults shared by Python and Java | "Approve these two files" | approved by owner 2026-10-24 |
 
 ## Kickoff answers
 
@@ -169,21 +169,21 @@ The owner subsequently confirmed the missing-anchor behavior already approved by
 
 | # | Decision | Owner's words | Status |
 |---|---|---|---|
-| T36-OWNER-2026-10-24-COUNTS | P3D-2 and P3D-3: count exact Snowflake objects, including views, with the explained query cost | "Approved, but why was there a wildcard match in the old client? Was it for semantic views, or just poorly written code?"; after context on view cost, "Ok" | approved by owner 2026-10-24 |
-| T36-OWNER-2026-10-24-ERRORS | P3D-4, P3D-5 and P3D-9: named namespace and semantic-view errors | "Approved" for no current database and unreadable semantic views; item 11 "Approved" includes P3D-5 | approved by owner 2026-10-24 |
-| T36-OWNER-2026-10-24-FKS | P3D-6: preserve independent foreign keys to the same target | "Ok" after the explanation of the two independent keys | approved by owner 2026-10-24 |
-| T36-OWNER-2026-10-24-UTC | P3D-7: compare zoned Snowflake and Databricks instants in UTC, preserving NTZ wall time, and report the non-UTC checks | "If possible, sure do this. But double-check what we're dong with Databricks"; "Ok, let me know about this." | approved by owner 2026-10-24 |
-| T36-OWNER-2026-10-24-REFRESH | P3D-12: refresh run-local metadata and namespace resolution per materialize, not a full database reload | "Yep." | approved by owner 2026-10-24 |
-| T36-OWNER-2026-10-24-DIAGNOSTICS | Repair internal driver-message transport and preserve old namespace retry behavior | "Ok sounds good." | approved by owner 2026-10-24 |
-| T36-OWNER-2026-10-24-SEED | Remove the routine Snowflake seed warning, since the seed is optional, and document the limitation | "The question is, are users expected to provide a seed? If not, I'd suggest not having a warning at all." | approved by owner 2026-10-24 |
-| T36-OWNER-2026-10-24-HYBRID | Detect enforced hybrid-table primary keys and preserve the old client's counting behavior | "Yes, check them." | approved by owner 2026-10-24 |
-| T36-OWNER-2026-10-24-ANCHORS | P3D-8 and P3K-2: retain an entity with a missing anchor, use empty temporal history, continue other rows, and invent no replacement timestamp | "Use empty window history" | approved by owner 2026-10-24 |
+| T36-OWNER-2026-10-24-COUNTS-1 | P3D-2 and P3D-3: count exact Snowflake objects, including views, with the explained query cost | "Approved, but why was there a wildcard match in the old client? Was it for semantic views, or just poorly written code?"; after context on view cost, "Ok" | approved by owner 2026-10-24 |
+| T36-OWNER-2026-10-24-ERRORS-1 | P3D-4, P3D-5 and P3D-9: named namespace and semantic-view errors | "Approved" for no current database and unreadable semantic views; item 11 "Approved" includes P3D-5 | approved by owner 2026-10-24 |
+| T36-OWNER-2026-10-24-FKS-1 | P3D-6: preserve independent foreign keys to the same target | "Ok" after the explanation of the two independent keys | approved by owner 2026-10-24 |
+| T36-OWNER-2026-10-24-UTC-1 | P3D-7: compare zoned Snowflake and Databricks instants in UTC, preserving NTZ wall time, and report the non-UTC checks | "If possible, sure do this. But double-check what we're dong with Databricks"; "Ok, let me know about this." | approved by owner 2026-10-24 |
+| T36-OWNER-2026-10-24-REFRESH-1 | P3D-12: refresh run-local metadata and namespace resolution per materialize, not a full database reload | "Yep." | approved by owner 2026-10-24 |
+| T36-OWNER-2026-10-24-DIAGNOSTICS-1 | Repair internal driver-message transport and preserve old namespace retry behavior | "Ok sounds good." | approved by owner 2026-10-24 |
+| T36-OWNER-2026-10-24-SEED-1 | Remove the routine Snowflake seed warning, since the seed is optional, and document the limitation | "The question is, are users expected to provide a seed? If not, I'd suggest not having a warning at all." | approved by owner 2026-10-24 |
+| T36-OWNER-2026-10-24-HYBRID-1 | Detect enforced hybrid-table primary keys and preserve the old client's counting behavior | "Yes, check them." | approved by owner 2026-10-24 |
+| T36-OWNER-2026-10-24-ANCHORS-1 | P3D-8 and P3K-2: retain an entity with a missing anchor, use empty temporal history, continue other rows, and invent no replacement timestamp | "Use empty window history" | approved by owner 2026-10-24 |
 
 ## Postgres zoned text, 2026-10-24
 
 | Decision | Scope | Owner answer | Status |
 |---|---|---|---|
-| T39-OWNER-2026-10-24-UTC-TEXT | Canonical UTC text for Postgres zoned timestamp array elements and zoned range bounds on both hosts, preserving scalar timestamps and timezone-free values and leaving caller sessions unchanged | "Use UTC consistently in both hosts (recommended)" after explicit notice that non-UTC old Python text changes | approved by owner 2026-10-24 |
+| T39-OWNER-2026-10-24-UTC-TEXT-1 | Canonical UTC text for Postgres zoned timestamp array elements and zoned range bounds on both hosts, preserving scalar timestamps and timezone-free values and leaving caller sessions unchanged | "Use UTC consistently in both hosts (recommended)" after explicit notice that non-UTC old Python text changes | approved by owner 2026-10-24 |
 
 ## View SQL representation review, 2026-10-24
 

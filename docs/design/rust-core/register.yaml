@@ -9123,7 +9123,7 @@ entries:
     - java/src/test/java/com/nvidia/sdm/internal/jdbc/T39PostgresUtcTextTest.java
   status: approved
   approved_by: owner
-  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T39-OWNER-2026-10-24-UTC-TEXT}
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T39-OWNER-2026-10-24-UTC-TEXT-1}
   notes: >-
     The owner explicitly chose "Use UTC consistently in both hosts
     (recommended)" after being told that this changes old Python text in
@@ -9385,12 +9385,12 @@ entries:
   refs: [T3.4, T3.28]
   status: approved
   approved_by: owner
-  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T36-OWNER-2026-10-24-ANCHORS}
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T36-OWNER-2026-10-24-ANCHORS-1}
   notes: >-
     Both independent Sol 6.1 High round-1 reviews of candidate 870d18da5
     explicitly approved P3D-8 and P3K-2 under the standing better-support
     rule. The owner subsequently confirmed this exact policy with
-    "Use empty window history" (T36-OWNER-2026-10-24-ANCHORS).
+    "Use empty window history" (T36-OWNER-2026-10-24-ANCHORS-1).
     Missing anchors retain the entity and its nonwindow data, read no
     temporal history, and let valid anchors proceed without a fabricated
     date. Mixed null/valid anchor coverage is included. The earlier
@@ -9418,7 +9418,7 @@ entries:
   refs: [T3.6, 'old-behaviour/T3.6-snowflake.md row 14', 'design-remaining.md S3']
   status: rejected
   approved_by: owner
-  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T36-OWNER-2026-10-24-DIAGNOSTICS}
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T36-OWNER-2026-10-24-DIAGNOSTICS-1}
   notes: >-
     Withdrawn after restoring parity through the optional driver_message contract field. This does not approve the former lost-retry proposal.
 
@@ -9440,7 +9440,7 @@ entries:
   refs: [T3.6, 'old-behaviour/T3.6-snowflake.md rows 36, 48', 'design-remaining.md T3.6 part 6']
   status: approved
   approved_by: owner
-  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T36-OWNER-2026-10-24-COUNTS}
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T36-OWNER-2026-10-24-COUNTS-1}
   notes: >-
     Approved by the owner on 2026-10-24. The old client used SHOW TABLES LIKE as a metadata count optimization; source inspection does not establish why it selected LIKE.
 
@@ -9461,7 +9461,7 @@ entries:
   refs: [T3.6, 'old-behaviour/T3.6-snowflake.md row 37', P3D-2]
   status: approved
   approved_by: owner
-  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T36-OWNER-2026-10-24-COUNTS}
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T36-OWNER-2026-10-24-COUNTS-1}
   notes: >-
     Approved after explaining query cost. Fake provider coverage uses recorded view metadata and recorded base-table rows for reads after the old failure; no live performance claim is made.
 
@@ -9482,7 +9482,7 @@ entries:
   refs: [T3.6, 'old-behaviour/T3.6-snowflake.md row 9', 'design-remaining.md T3.6 part 6']
   status: approved
   approved_by: owner
-  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T36-OWNER-2026-10-24-ERRORS}
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T36-OWNER-2026-10-24-ERRORS-1}
   notes: >-
     Named refusal approved by the owner; the reference has a bare AssertionError. A named database with no schema retains the existing missing-schema messages.
 
@@ -9505,7 +9505,7 @@ entries:
   refs: [T3.6, P3E-6, 'old-behaviour/T3.6-snowflake.md row 10']
   status: approved
   approved_by: owner
-  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T36-OWNER-2026-10-24-ERRORS}
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T36-OWNER-2026-10-24-ERRORS-1}
   notes: >-
     Approved as the scoped clearer-error proposal. Tests cover named and discovered tables on an empty session.
 
@@ -9527,7 +9527,7 @@ entries:
   refs: [T3.6, 'old-behaviour/T3.6-snowflake.md row 28', 'design-remaining.md T3.6 part 6']
   status: approved
   approved_by: owner
-  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T36-OWNER-2026-10-24-FKS}
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T36-OWNER-2026-10-24-FKS-1}
   notes: >-
     Approved by the owner on 2026-10-24. The composite-key recorded case is preserved and a two-independent-constraint regression is added.
 
@@ -9548,7 +9548,7 @@ entries:
   refs: [T3.6, 'old-behaviour/T3.6-snowflake.md row 53', 'design-remaining.md T3.6 part 5, part 6']
   status: approved
   approved_by: owner
-  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T36-OWNER-2026-10-24-UTC}
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T36-OWNER-2026-10-24-UTC-1}
   notes: >-
     The owner authorized both warehouses. Narrow regressions include UTC bounds at Los Angeles DST edges and NTZ/DATE controls. Non-UTC/DST live checks have not run and require the separate authorized matrix.
 
@@ -9569,12 +9569,12 @@ entries:
   refs: [T3.6, 'old-behaviour/T3.6-snowflake.md row 49', 'design-remaining.md T3.6 part 6']
   status: approved
   approved_by: owner
-  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T36-OWNER-2026-10-24-ANCHORS}
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T36-OWNER-2026-10-24-ANCHORS-1}
   notes: >-
     Both independent Sol 6.1 High round-1 reviews of candidate 870d18da5
     explicitly approved P3D-8 and P3K-2 under the standing better-support
     rule. The owner subsequently confirmed this exact policy with
-    "Use empty window history" (T36-OWNER-2026-10-24-ANCHORS).
+    "Use empty window history" (T36-OWNER-2026-10-24-ANCHORS-1).
     Missing anchors retain the entity and its nonwindow data, read no
     temporal history, and let valid anchors proceed without a fabricated
     date. Mixed null/valid anchor coverage is included. The earlier
@@ -9598,7 +9598,7 @@ entries:
   refs: [T3.6, T3.5, 'design-remaining.md T3.6 part 6']
   status: approved
   approved_by: owner
-  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T36-OWNER-2026-10-24-ERRORS}
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T36-OWNER-2026-10-24-ERRORS-1}
   notes: >-
     Approved scoped errors. T3.6 provides the dialect definition reader; the semantic source route and failed-fetch mapping depend on T3.5 and must be verified on the integrated candidate.
 
@@ -9621,7 +9621,7 @@ entries:
   refs: [T3.6, P3A-1, KO3-59]
   status: approved
   approved_by: owner
-  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T36-OWNER-2026-10-24-REFRESH}
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T36-OWNER-2026-10-24-REFRESH-1}
   notes: >-
     Approved by the owner after clarifying the scope. Fresh metadata must not be described as absence of all query-object state; the sampler memo has its existing lifetime.
 
@@ -9642,7 +9642,7 @@ entries:
   refs: [T3.6, P3A-4, 'old-behaviour/T3.6-snowflake.md row 41']
   status: approved
   approved_by: owner
-  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T36-OWNER-2026-10-24-SEED}
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T36-OWNER-2026-10-24-SEED-1}
   notes: >-
     Seed is optional and defaults to 42 in the old engine. The owner directed removing the warning when a seed is not required; explicit None already suppressed the old warning.
 
@@ -9663,7 +9663,7 @@ entries:
   refs: [T3.6, 'old-behaviour/T3.6-snowflake.md rows 31, 32']
   status: rejected
   approved_by: owner
-  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T36-OWNER-2026-10-24-HYBRID}
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T36-OWNER-2026-10-24-HYBRID-1}
   notes: >-
     Withdrawn after restoring the old client's capability. An enforced stored primary key does not guarantee uniqueness of role-visible masked lookup values; this fact is consumed only by key counting.
 
@@ -9687,7 +9687,7 @@ entries:
   refs: [T3.5, contract/view-yaml-vectors.json]
   status: approved
   approved_by: owner
-  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T35-OWNER-2026-10-24-ERRORS}
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T35-OWNER-2026-10-24-ERRORS-1}
   notes: >-
     Approved by the owner on 2026-10-24, item 11 ("Approved").
     Proposed by T3.5's implementer (stage 1; both reviews of
@@ -9717,7 +9717,7 @@ entries:
   refs: [T3.5, contract/view-metric-vectors.json]
   status: approved
   approved_by: owner
-  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T35-OWNER-2026-10-24-ERRORS}
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T35-OWNER-2026-10-24-ERRORS-1}
   notes: >-
     Approved by the owner on 2026-10-24, item 11 ("Approved").
     Proposed by T3.5's implementer. A named refusal where the
@@ -9746,7 +9746,7 @@ entries:
   refs: [T3.5]
   status: approved
   approved_by: owner
-  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T35-OWNER-2026-10-24-ERRORS}
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T35-OWNER-2026-10-24-ERRORS-1}
   notes: >-
     Approved by the owner on 2026-10-24, item 11 ("Approved").
     Proposed by T3.5's implementer. Two differences proposed
@@ -9771,7 +9771,7 @@ entries:
   refs: [T3.5]
   status: approved
   approved_by: owner
-  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T35-OWNER-2026-10-24-ERRORS}
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T35-OWNER-2026-10-24-ERRORS-1}
   notes: >-
     Approved by the owner on 2026-10-24, item 11 ("Approved").
     Proposed by T3.5's implementer (fix 1, from the reviews'
@@ -9806,7 +9806,7 @@ entries:
   refs: [T3.5, contract/view-expr-vectors.json]
   status: approved
   approved_by: owner
-  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T35-OWNER-2026-10-24-ERRORS}
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T35-OWNER-2026-10-24-ERRORS-1}
   notes: >-
     Approved by the owner on 2026-10-24, item 11 ("Approved").
     Proposed by T3.5's implementer (fix 1; Claude review 1,
@@ -9838,7 +9838,7 @@ entries:
   refs: [T3.5, contract/view-yaml-vectors.json]
   status: approved
   approved_by: owner
-  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T35-OWNER-2026-10-24-YAML}
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T35-OWNER-2026-10-24-YAML-1}
   notes: >-
     Approved by the owner on 2026-10-24, item 16 ("Approved").
     Proposed by T3.5's implementer (fix 1; Claude review 1,
@@ -9862,7 +9862,7 @@ entries:
   refs: [T3.5]
   status: rejected
   approved_by: owner
-  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T35-OWNER-2026-10-24-RETIRED}
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T35-OWNER-2026-10-24-RETIRED-1}
   notes: >-
     Approver: owner. Proposed by T3.5's implementer (fix 1; Codex review 1,
     P1-5). Superseded at fix 2 by P3J-9: the core no longer reads `!!set`,
@@ -9888,7 +9888,7 @@ entries:
   refs: [T3.5, contract/view-yaml-vectors.json]
   status: rejected
   approved_by: owner
-  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T35-OWNER-2026-10-24-RETIRED}
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T35-OWNER-2026-10-24-RETIRED-1}
   notes: >-
     Approver: owner. Proposed by T3.5's implementer (fix 1). A decimal
     integer past 4,300 digits is refused as PyYAML refuses it. Superseded
@@ -9937,7 +9937,7 @@ entries:
   refs: [T3.5, contract/view-yaml-vectors.json, contract/view-metric-vectors.json]
   status: approved
   approved_by: owner
-  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T35-OWNER-2026-10-24-ERRORS}
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T35-OWNER-2026-10-24-ERRORS-1}
   notes: >-
     Approved by the owner on 2026-10-24, item 11 ("Approved").
     Proposed by T3.5's implementer at fix 2, by the
@@ -9980,7 +9980,7 @@ entries:
   refs: [T3.5, contract/view-step-vectors.json]
   status: approved
   approved_by: owner
-  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T35-OWNER-2026-10-24-ERRORS}
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T35-OWNER-2026-10-24-ERRORS-1}
   notes: >-
     Approved by the owner on 2026-10-24, item 11 ("Approved").
     Proposed by T3.5's implementer at fix 2 (Codex review
@@ -10010,7 +10010,7 @@ entries:
   refs: [T3.5]
   status: approved
   approved_by: owner
-  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T35-OWNER-2026-10-24-ERRORS}
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T35-OWNER-2026-10-24-ERRORS-1}
   notes: >-
     Approved by the owner on 2026-10-24, item 11 ("Approved").
     Proposed by T3.5's implementer at fix 2: a named
