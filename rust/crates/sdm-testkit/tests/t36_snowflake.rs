@@ -1039,3 +1039,293 @@ fn snowflake_declares_what_the_old_clients_sampler_does() {
     let names: Vec<&str> = fields.iter().map(|f| f.name.as_str()).collect();
     assert_eq!(names, ["K", "N", "D", "Z"]);
 }
+
+// --- the key reads -------------------------------------------------------------
+
+/// `text`, `%Y-%m-%d %H:%M:%S`, as nanoseconds since the epoch.
+fn wall_clock(text: &str) -> i64 {
+    let number = |range: std::ops::Range<usize>| text[range].parse::<i64>().unwrap();
+    let (y, m, d) = (number(0..4), number(5..7), number(8..10));
+    let (y, m) = if m <= 2 { (y - 1, m + 9) } else { (y, m - 3) };
+    let era = y.div_euclid(400);
+    let yoe = y - era * 400;
+    let doy = (153 * m + 2) / 5 + d - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    let days = era * 146_097 + doe - 719_468;
+    let seconds = days * 86_400 + number(11..13) * 3600 + number(14..16) * 60 + number(17..19);
+    seconds * 1_000_000_000
+}
+
+/// The seeds the old client's JSON `payload` holds: each id, and each of
+/// the window's bounds where the rows carry them, in batch order.
+fn recorded_seeds(payload: &str) -> sdm_contract::data::KeyData {
+    use arrow_array::{Int64Array, TimestampNanosecondArray};
+    let rows: Vec<Value> = serde_json::from_str(payload).unwrap();
+    let id = |row: &Value| match row {
+        Value::Array(cells) => cells[0].as_i64().unwrap(),
+        cell => cell.as_i64().unwrap(),
+    };
+    let time = |row: &Value, at: usize| wall_clock(row[at].as_str().unwrap());
+    let mut fields = vec![
+        Field::new("key", DataType::Int64, true),
+        Field::new("batch", DataType::Int64, false),
+    ];
+    let mut columns: Vec<ArrayRef> = vec![
+        Arc::new(rows.iter().map(id).collect::<Int64Array>()),
+        Arc::new(Int64Array::from_iter_values(0..rows.len() as i64)),
+    ];
+    let width = rows[0].as_array().map_or(0, Vec::len);
+    for (at, name) in [(1, "end"), (2, "start")] {
+        if at < width {
+            fields.push(Field::new(
+                name,
+                DataType::Timestamp(TimeUnit::Nanosecond, None),
+                false,
+            ));
+            columns.push(Arc::new(TimestampNanosecondArray::from_iter_values(
+                rows.iter().map(|row| time(row, at)),
+            )));
+        }
+    }
+    let schema = Arc::new(Schema::new(fields));
+    let batch = RecordBatch::try_new(Arc::clone(&schema), columns).unwrap();
+    sdm_contract::data::KeyData {
+        schema,
+        batches: vec![batch],
+    }
+}
+
+/// `request` planned and bound on Snowflake with `keys` its seeds: each
+/// fetch's statements, the text each binds and its other parameters.
+fn bound(request: Value, keys: sdm_contract::data::KeyData) -> Vec<(String, String, Vec<String>)> {
+    use sdm_contract::data::{AttachmentId, KeyData};
+    let request: DataRequest = serde_json::from_value(request).unwrap();
+    let plan = layer().plan(&request, &named()).unwrap();
+    let handed: std::collections::BTreeMap<AttachmentId, KeyData> =
+        [(AttachmentId(2), keys)].into();
+    let bound = layer()
+        .bind(&named(), &request, plan, &handed, |x| format!("{x:?}"))
+        .unwrap();
+    let mut found = Vec::new();
+    for fetch in bound.fetches {
+        let FetchPlan::Sql { statements, .. } = fetch.plan else {
+            panic!("not SQL");
+        };
+        for statement in statements {
+            let mut text = String::new();
+            let mut others = Vec::new();
+            for param in statement.params {
+                match param {
+                    SqlParam::Text { attachment } => {
+                        let batch = &fetch.batches[&attachment].batches[0];
+                        text = batch.column(0).as_string::<i32>().value(0).to_owned();
+                    }
+                    SqlParam::Value {
+                        value: Scalar::Utf8(value),
+                    } => others.push(value),
+                    other => panic!("an unexpected parameter {other:?}"),
+                }
+            }
+            found.push((statement.text, text, others));
+        }
+    }
+    found
+}
+
+/// The recorded key read of `case` whose text starts so and contains
+/// `marker`: its text, its key set's JSON and its other parameters.
+fn recorded_key_read(case: &str, marker: &str) -> (String, String, Vec<String>) {
+    let (text, params) = recorded(case)
+        .into_iter()
+        .find(|(text, _)| text.contains("FLATTEN") && text.contains(marker))
+        .unwrap_or_else(|| panic!("{case} recorded no key read with {marker:?}"));
+    (text, params[0].clone(), params[1..].to_vec())
+}
+
+fn seeds_json(columns: &[(&str, Value)], flags: &[(&str, &str)]) -> Value {
+    Value::Array(
+        columns
+            .iter()
+            .map(|(name, column_type)| {
+                let metadata: serde_json::Map<String, Value> = flags
+                    .iter()
+                    .filter(|(column, _)| column == name)
+                    .map(|(_, flag)| ((*flag).to_owned(), json!("true")))
+                    .collect();
+                let mut column =
+                    json!({"name": name, "nullable": *name != "batch", "type": column_type});
+                if !metadata.is_empty() {
+                    column["metadata"] = Value::Object(metadata);
+                }
+                column
+            })
+            .collect(),
+    )
+}
+
+fn time_type() -> Value {
+    json!({"type": "timestamp", "unit": "ns", "zone": null})
+}
+
+#[test]
+fn a_window_read_by_time_is_the_old_clients_statement_and_json() {
+    let (text, payload, others) = recorded_key_read("base.binary", "\"ts\"\nFROM TMP");
+    let request = json!({
+        "request": "neighbors", "table": table("orders"), "key": ["user_id"],
+        "columns": ["ts"],
+        "seeds": {"attachment": 2, "columns": seeds_json(&[
+            ("key", json!({"type": "int64"})), ("batch", json!({"type": "int64"})),
+            ("end", time_type()), ("start", time_type())], &[])},
+        "window": {"column": "ts",
+                   "lower": {"seed_column": "start", "inclusive": false},
+                   "upper": {"seed_column": "end", "inclusive": true}},
+        "per_seed": null, "order": null});
+    assert_eq!(
+        bound(request, recorded_seeds(&payload)),
+        vec![(text, payload, others)]
+    );
+}
+
+#[test]
+fn a_neighbor_read_is_the_old_clients_statement_and_json() {
+    let (text, payload, others) = recorded_key_read("base.binary", "QUALIFY");
+    let term = |column: &str, time: bool| json!({"column": column, "as_timestamp": time, "descending": time, "nulls_last": true});
+    let request = json!({
+        "request": "neighbors", "table": table("orders"), "key": ["user_id"],
+        "columns": ["order_id", "user_id", "price", "ts"],
+        "seeds": {"attachment": 2, "columns": seeds_json(&[
+            ("key", json!({"type": "int64"})), ("batch", json!({"type": "int64"})),
+            ("end", time_type()), ("start", time_type())], &[])},
+        "window": {"column": "ts",
+                   "lower": {"seed_column": "start", "inclusive": false},
+                   "upper": {"seed_column": "end", "inclusive": true}},
+        "per_seed": 32, "order": [term("ts", true), term("order_id", false)]});
+    assert_eq!(
+        bound(request, recorded_seeds(&payload)),
+        vec![(text, payload, others)]
+    );
+}
+
+#[test]
+fn a_key_lookup_is_the_old_clients_statement_and_json_one_row_per_seed() {
+    let (text, payload, others) = recorded_key_read("base.binary", "f.value::NUMBER");
+    let lookup = |flags: &[(&str, &str)]| {
+        json!({
+            "request": "lookup", "table": table("users"), "key": ["user_id"],
+            "columns": ["user_id", "age", "country"],
+            "seeds": {"attachment": 2, "columns": seeds_json(&[
+                ("key", json!({"type": "int64"})), ("batch", json!({"type": "int64"}))], flags)}})
+    };
+    // A key the source keeps unique: the old client's plain join.
+    assert_eq!(
+        bound(
+            lookup(&[("key", "sdm:key_unique")]),
+            recorded_seeds(&payload)
+        ),
+        vec![(text.clone(), payload.clone(), others.clone())]
+    );
+    // Any other: the old client's first row of each seed, and how many rows
+    // hold its key, which the old client counts after its fetch
+    // (`SNOW/sampler.py:246-260`), here in the statement.
+    let (select, rest) = text.split_once("\nFROM TMP").unwrap();
+    let counted = format!(
+        "{select}, COUNT(*) OVER (PARTITION BY TMP.__KUMO_BATCH__) AS \"__kumo_matches__\"\nFROM TMP{rest}\nQUALIFY ROW_NUMBER() OVER (PARTITION BY TMP.__KUMO_BATCH__ ORDER BY \"user_id\") = 1"
+    );
+    assert_eq!(
+        bound(lookup(&[]), recorded_seeds(&payload)),
+        vec![(counted, payload.clone(), others.clone())]
+    );
+    // A count not read: the first row of each seed alone.
+    let first = format!(
+        "{text}\nQUALIFY ROW_NUMBER() OVER (PARTITION BY TMP.__KUMO_BATCH__ ORDER BY \"user_id\") = 1"
+    );
+    assert_eq!(
+        bound(
+            lookup(&[("batch", "sdm:count_unread")]),
+            recorded_seeds(&payload)
+        ),
+        vec![(first, payload, others)]
+    );
+}
+
+#[test]
+fn a_float_or_text_key_is_cast_and_written_as_the_old_client_writes_it() {
+    use arrow_array::{Float64Array, Int64Array};
+    let lookup = |key_type: Value| {
+        json!({
+            "request": "lookup", "table": table("users"), "key": ["user_id"],
+            "columns": ["user_id"],
+            "seeds": {"attachment": 2, "columns": seeds_json(&[
+                ("key", key_type), ("batch", json!({"type": "int64"}))],
+                &[("key", "sdm:key_unique")])}})
+    };
+    let keys = |column: ArrayRef| {
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("key", column.data_type().clone(), true),
+            Field::new("batch", DataType::Int64, false),
+        ]));
+        let rows = column.len() as i64;
+        sdm_contract::data::KeyData {
+            batches: vec![
+                RecordBatch::try_new(
+                    Arc::clone(&schema),
+                    vec![column, Arc::new(Int64Array::from_iter_values(0..rows))],
+                )
+                .unwrap(),
+            ],
+            schema,
+        }
+    };
+    let found = bound(
+        lookup(json!({"type": "float64"})),
+        keys(Arc::new(Float64Array::from(vec![1.5, 2.0]))),
+    );
+    assert!(found[0].0.contains("f.value::FLOAT as __KUMO_ID__"));
+    assert_eq!(found[0].1, "[1.5, 2.0]");
+    let found = bound(
+        lookup(json!({"type": "utf8"})),
+        keys(Arc::new(StringArray::from(vec!["a\"b", "é"]))),
+    );
+    assert!(found[0].0.contains("f.value::VARCHAR as __KUMO_ID__"));
+    assert_eq!(found[0].1, r#"["a\"b", "é"]"#);
+}
+
+#[test]
+fn a_missing_anchor_is_written_as_the_old_clients_nan() {
+    use arrow_array::{Int64Array, TimestampNanosecondArray};
+    let schema = Arc::new(Schema::new(vec![
+        Field::new("key", DataType::Int64, true),
+        Field::new("batch", DataType::Int64, false),
+        Field::new("end", DataType::Timestamp(TimeUnit::Nanosecond, None), true),
+    ]));
+    let keys = sdm_contract::data::KeyData {
+        batches: vec![
+            RecordBatch::try_new(
+                Arc::clone(&schema),
+                vec![
+                    Arc::new(Int64Array::from(vec![0, 1])),
+                    Arc::new(Int64Array::from(vec![0, 1])),
+                    Arc::new(TimestampNanosecondArray::from(vec![
+                        None,
+                        Some(wall_clock("2024-03-01 00:00:00")),
+                    ])),
+                ],
+            )
+            .unwrap(),
+        ],
+        schema,
+    };
+    let request = json!({
+        "request": "neighbors", "table": table("orders"), "key": ["user_id"],
+        "columns": ["ts"],
+        "seeds": {"attachment": 2, "columns": seeds_json(&[
+            ("key", json!({"type": "int64"})), ("batch", json!({"type": "int64"})),
+            ("end", time_type())], &[])},
+        "window": {"column": "ts", "lower": null,
+                   "upper": {"seed_column": "end", "inclusive": true}},
+        "per_seed": null, "order": null});
+    let found = bound(request, keys);
+    assert_eq!(found[0].1, r#"[[0, NaN], [1, "2024-03-01 00:00:00"]]"#);
+    assert!(found[0].0.ends_with("WHERE \"ts\" <= ?"));
+    assert_eq!(found[0].2, vec!["2024-03-01 00:00:00".to_owned()]);
+}

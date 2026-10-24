@@ -170,7 +170,20 @@ class _Warehouse(SnowflakeConnection):
                 raise _missing(name)
             text = text.replace(f'"{name.upper()}"', f'"{name}"')
             parameters = [name if p == name.upper() else p for p in parameters]
+        # The core keeps a seed's first row in the statement, as the old
+        # client keeps it after its fetch; answered as Snowflake does, from
+        # the old client's plain join recorded.
+        first = re.search(
+            r'\nQUALIFY ROW_NUMBER\(\) OVER \(PARTITION BY TMP\.__KUMO_BATCH__ '
+            r'ORDER BY [^\n]*\) = 1$',
+            text,
+        )
+        counted = _COUNTED in text
+        if first is not None:
+            text = text[: first.start()].replace(_COUNTED, '')
         found = self._recording.answers.get((text, json.dumps(parameters)))
+        if first is not None and isinstance(found, pa.Table):
+            found = _first_of_each_seed(found, counted)
         if found is None:
             raise AssertionError(
                 f'no recorded answer for {text!r} {parameters!r}'
@@ -182,6 +195,33 @@ class _Warehouse(SnowflakeConnection):
 
     def asked(self, since: int = 0) -> list[str]:
         return [text for text, _ in self.calls[since:]]
+
+
+#: The core's count of the rows holding each seed's key, in a lookup.
+_COUNTED = (
+    ', COUNT(*) OVER (PARTITION BY TMP.__KUMO_BATCH__) AS "__kumo_matches__"'
+)
+
+
+def _first_of_each_seed(table: pa.Table, counted: bool) -> pa.Table:
+    r"""``table``, a lookup's rows, its first row of each seed, with how
+    many rows each seed's key holds where ``counted``."""
+    batches = table.column('__KUMO_BATCH__').to_pylist()
+    seen: dict[Any, int] = {}
+    held: dict[Any, int] = {}
+    for at, batch in enumerate(batches):
+        seen.setdefault(batch, at)
+        held[batch] = held.get(batch, 0) + 1
+    first = table.take(sorted(seen.values()))
+    if counted:
+        first = first.append_column(
+            '__kumo_matches__',
+            pa.array(
+                [held[b] for b in first.column('__KUMO_BATCH__').to_pylist()],
+                pa.int64(),
+            ),
+        )
+    return first
 
 
 class Session:

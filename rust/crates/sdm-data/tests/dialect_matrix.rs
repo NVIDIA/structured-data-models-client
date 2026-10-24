@@ -956,11 +956,6 @@ fn the_matrix_holds_every_request_kind_and_catalog_part_on_every_dialect() {
             "scan",
             "time_bounds",
         ] {
-            // Snowflake binds no key set until the core writes its JSON
-            // (T3.28): every read against one is refused by name for now.
-            if dialect == "snowflake" && matches!(kind, "lookup" | "neighbors") {
-                continue;
-            }
             let answers: Vec<Value> = requests
                 .iter()
                 .filter(|r| r.name() == kind)
