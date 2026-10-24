@@ -188,6 +188,40 @@ mod tests {
     }
 
     #[test]
+    fn a_refreshed_big_integer_keeps_the_tier_its_held_schema_accepted() {
+        use sdm_contract::ops::{Dtype, SourceFacts};
+        use sdm_contract::ColumnType;
+        let old = SourceFacts {
+            relation: serde_json::from_str(r#"{"source":["t"]}"#).unwrap(),
+            dtype: Dtype::Int,
+            received: ColumnType::Int64,
+            nullable: true,
+            unique: false,
+            declared_type: Some("HUGEINT".into()),
+            exact_number: None,
+        };
+        let mut refreshed = old.clone();
+        refreshed.received = ColumnType::Decimal128 { precision: 38, scale: 0 };
+        refreshed.nullable = false;
+        refreshed.unique = true;
+        preserve_tier(&old, &mut refreshed, &marked("n", DECIMAL));
+        assert_eq!(refreshed.received, ColumnType::Int64);
+        assert!(!refreshed.nullable);
+        assert!(refreshed.unique);
+
+        let mut ordinary_old = old.clone();
+        ordinary_old.declared_type = None;
+        let mut ordinary_new = refreshed.clone();
+        ordinary_new.received = ColumnType::Decimal128 { precision: 38, scale: 0 };
+        preserve_tier(&ordinary_old, &mut ordinary_new, &marked("n", DECIMAL));
+        assert_eq!(ordinary_new.received, ColumnType::Decimal128 { precision: 38, scale: 0 });
+
+        let mut unmarked = ordinary_new.clone();
+        preserve_tier(&old, &mut unmarked, &Field::new("n", DECIMAL, true));
+        assert_eq!(unmarked, ordinary_new);
+    }
+
+    #[test]
     fn a_narrower_fetch_widens_and_a_wider_one_is_refused() {
         let ints: ArrayRef = Arc::new(Int64Array::from(vec![Some(-7), None]));
         let field = marked("f", DataType::Int64);
