@@ -95,3 +95,12 @@ Tests-first commit `86c531471` exercises both public operations with cell, drive
 One finite core helper now classifies known classes and SQLSTATE values for expression evaluation or join-key counting; it never consumes driver text for output.
 Unknown failures retain the requested operation and safe codes, with free-text class/vendor fields omitted.
 The nonblocking request to isolate the already reviewed `view_kind` hook remains carried to avoid rewriting review history; its definition remains single and coordinated with T3.6.
+
+
+## Approved-candidate check follow-up
+
+The exact cached `contract_t327` target on `aff13e7cc` reported 18 passes and one failure because the proposal metadata still listed the now-approved `ViewSemanticNotFound` sentence used by the core.
+The private reproduction log is `$SDM_ORCH_STATE/phase-3/t35-contract-t327-aff13-repro.log`.
+Tests-first commit `cd32de6b1` pins the owner-approved named view/lookup refusals as released, while preserving the full producer scan and the unapproved blanket null-anchor refusal.
+The metadata now follows the existing T35-OWNER-2026-10-24-ERRORS approval and the narrowly recorded LOOKUP-ERRORS approval; wire identities, templates and runtime diagnostics are unchanged.
+No package checks run again until both reviewers approve the updated candidate.
