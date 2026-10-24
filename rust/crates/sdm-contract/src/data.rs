@@ -1688,10 +1688,11 @@ pub enum ExpectedSchema {
 }
 
 /// A provider's failure: its kind, whether trying again may succeed, and
-/// the driver's own SQLSTATE, vendor code and error class. The driver's
-/// message stays in the host, since drivers quote values there; what the
-/// failure means is the data layer's to say ([`DataLayer::failure`]), from
-/// these facts, never from text.
+/// the driver's own SQLSTATE, vendor code and error class, and its message
+/// as a diagnostic for the data layer alone. What the failure means is the
+/// data layer's to say ([`DataLayer::failure`]), from these facts; the
+/// message is never echoed into an error the core gives, since drivers
+/// quote values there (decision H17).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ProviderError {
@@ -1705,4 +1706,11 @@ pub struct ProviderError {
     /// else the bracketed name its message opens with). Left out, none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error_class: Option<String>,
+    /// The driver's message, passed through by the host unread (contract
+    /// v28, T3.6): an internal diagnostic only [`DataLayer::failure`] reads,
+    /// where the old client reads a failure by its text (Snowflake's
+    /// "does not exist", `SNOW/table.py:34-45`), and never echoed into a
+    /// public error (decision H17). Left out, none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub driver_message: Option<String>,
 }

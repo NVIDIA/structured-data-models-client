@@ -246,6 +246,7 @@ pub fn answer_logged(
 ) -> Result<Fetched, ProviderError> {
     let failed = || ProviderError {
         error_class: None,
+        driver_message: None,
         kind: ErrorKind::DataSource,
         retryable: false,
         sqlstate: None,

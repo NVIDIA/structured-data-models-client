@@ -406,6 +406,7 @@ fn fetched_data_is_admitted_and_host_ids_are_scoped_to_their_message() {
     // now.
     let error = ProviderError {
         error_class: None,
+        driver_message: None,
         kind: ErrorKind::DataSource,
         retryable: false,
         sqlstate: None,
