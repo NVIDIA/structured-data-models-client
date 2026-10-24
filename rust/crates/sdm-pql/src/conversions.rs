@@ -245,6 +245,10 @@ pub fn decimal_text(text: &str) -> Result<String, Unconverted> {
         .filter(|&&c| c != b'.')
         .map(|&c| char::from(c))
         .collect();
+    // `'f'` writes a zero of a positive exponent as `0`, its sign kept.
+    if coefficient == "0" && exp > 0 {
+        exp = 0;
+    }
     let sign = if negative { "-" } else { "" };
     let places = digits as i128 + exp;
     let length = sign.len() as i128
@@ -317,6 +321,15 @@ fn days_in(year: i32, month: i32) -> i32 {
         4 | 6 | 9 | 11 => 30,
         _ => 31,
     }
+}
+
+/// The day a valid date is, counted from 0001-01-01 as 1 (`ymd_to_ord`),
+/// or `None` for a date `datetime.date` refuses: the one calendar the
+/// core reads dates by, which a view's YAML reader takes from here
+/// (`sdm_schema::view::yaml::Rules`).
+pub fn day_ordinal(year: i32, month: u8, day: u8) -> Option<i64> {
+    let (month, day) = (i32::from(month), i32::from(day));
+    valid_date(year, month, day).then(|| ordinal(year, month, day))
 }
 
 /// Days since 0001-01-01 counted from 1 (`ymd_to_ord`).
@@ -454,10 +467,10 @@ fn read_clock(text: &Bytes, start: usize, end: usize) -> Result<([i32; 4], bool)
 
 /// A time of day read: the hour, minute, second and microsecond, and the
 /// offset's seconds and microseconds if one is written.
-type Clock = ([i32; 4], Option<(i64, i64)>);
+type TimeRead = ([i32; 4], Option<(i64, i64)>);
 
 /// `parse_isoformat_time` from `start` over `len` bytes.
-fn read_time(text: &Bytes, start: usize, len: usize) -> Option<Clock> {
+fn read_time(text: &Bytes, start: usize, len: usize) -> Option<TimeRead> {
     let end = start + len;
     let mut zone = start;
     loop {
@@ -536,8 +549,61 @@ fn valid_date(year: i32, month: i32, day: i32) -> bool {
         && day <= days_in(year, month)
 }
 
-fn date_iso(year: i32, month: i32, day: i32) -> String {
+/// `date.isoformat()`: `2024-01-01`, the one writer of a date's ISO text.
+pub fn date_iso(year: i32, month: u8, day: u8) -> String {
     format!("{year:04}-{month:02}-{day:02}")
+}
+
+/// A time of day.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Clock {
+    pub hour: u8,
+    pub minute: u8,
+    pub second: u8,
+    pub microsecond: u32,
+}
+
+/// `datetime.isoformat(separator)`, the one writer of a date and time's
+/// ISO text: the date, the separator, the clock, `.ffffff` if it has
+/// microseconds, and the offset from UTC, in microseconds, as `+HH:MM`,
+/// with `:SS` if it has seconds and `.ffffff` if it has microseconds.
+pub fn datetime_iso(
+    (year, month, day): (i32, u8, u8),
+    clock: Clock,
+    offset: Option<i64>,
+    separator: char,
+) -> String {
+    let mut text = format!(
+        "{}{separator}{:02}:{:02}:{:02}",
+        date_iso(year, month, day),
+        clock.hour,
+        clock.minute,
+        clock.second
+    );
+    if clock.microsecond > 0 {
+        text.push_str(&format!(".{:06}", clock.microsecond));
+    }
+    if let Some(offset) = offset {
+        let sign = if offset < 0 { '-' } else { '+' };
+        let micros = offset.unsigned_abs();
+        let (seconds, fraction) = (micros / 1_000_000, micros % 1_000_000);
+        text.push_str(&format!(
+            "{sign}{:02}:{:02}",
+            seconds / 3600,
+            seconds / 60 % 60
+        ));
+        if fraction > 0 {
+            text.push_str(&format!(":{:02}.{fraction:06}", seconds % 60));
+        } else if seconds % 60 > 0 {
+            text.push_str(&format!(":{:02}", seconds % 60));
+        }
+    }
+    text
+}
+
+/// A field of a date or time read and checked, as a byte.
+fn small(value: i32) -> u8 {
+    u8::try_from(value).unwrap_or(0)
 }
 
 /// `date.fromisoformat(text).isoformat()`.
@@ -551,7 +617,7 @@ pub fn date_text(text: &str) -> Result<String, Unconverted> {
     if !valid_date(year, month, day) {
         return Err(Unconverted::Invalid);
     }
-    Ok(date_iso(year, month, day))
+    Ok(date_iso(year, small(month), small(day)))
 }
 
 /// `datetime.fromisoformat(text).isoformat(' ')`.
@@ -611,36 +677,19 @@ pub fn datetime_text(text: &str) -> Result<String, Unconverted> {
     Ok(moment_iso(&moment))
 }
 
-/// `isoformat(' ')`: the date, a space, the clock, `.ffffff` if it has
-/// microseconds, and the offset as `+HH:MM`, with `:SS` and `.ffffff` if
-/// it has them.
+/// `isoformat(' ')` of a date and time read and checked.
 fn moment_iso(moment: &Moment) -> String {
-    let mut text = format!(
-        "{} {:02}:{:02}:{:02}",
-        date_iso(moment.year, moment.month, moment.day),
-        moment.hour,
-        moment.minute,
-        moment.second
-    );
-    if moment.microsecond > 0 {
-        text.push_str(&format!(".{:06}", moment.microsecond));
-    }
-    if let Some(offset) = moment.offset {
-        let sign = if offset < 0 { '-' } else { '+' };
-        let micros = offset.unsigned_abs();
-        let (seconds, fraction) = (micros / 1_000_000, micros % 1_000_000);
-        text.push_str(&format!(
-            "{sign}{:02}:{:02}",
-            seconds / 3600,
-            seconds / 60 % 60
-        ));
-        if fraction > 0 {
-            text.push_str(&format!(":{:02}.{fraction:06}", seconds % 60));
-        } else if seconds % 60 > 0 {
-            text.push_str(&format!(":{:02}", seconds % 60));
-        }
-    }
-    text
+    datetime_iso(
+        (moment.year, small(moment.month), small(moment.day)),
+        Clock {
+            hour: small(moment.hour),
+            minute: small(moment.minute),
+            second: small(moment.second),
+            microsecond: u32::try_from(moment.microsecond).unwrap_or(0),
+        },
+        moment.offset,
+        ' ',
+    )
 }
 
 #[cfg(test)]

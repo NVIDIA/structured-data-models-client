@@ -15,6 +15,9 @@
 //! [`text_repr`], a text's `repr`. They decide nothing either: `sdm-core`
 //! words a view's conversion with them.
 
+use crate::conversions::{Clock, date_iso, datetime_iso};
+use crate::printable::NOT_PRINTABLE;
+
 /// The text Python's `repr` gives `x`.
 pub fn float_repr(x: f64) -> String {
     if x.is_nan() {
@@ -112,18 +115,85 @@ pub enum Shown {
     Recursive(bool),
 }
 
+/// A write past a [`Sink`]'s bound.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Full;
+
+/// Text written up to a bound in characters: a write that would pass it
+/// fails, and nothing past it is ever kept.
+pub struct Sink {
+    out: String,
+    room: usize,
+}
+
+impl Sink {
+    /// A sink for at most `room` characters.
+    pub fn new(room: usize) -> Sink {
+        Sink {
+            out: String::new(),
+            room,
+        }
+    }
+
+    pub fn push(&mut self, text: &str) -> Result<(), Full> {
+        let count = text.chars().count();
+        self.room = self.room.checked_sub(count).ok_or(Full)?;
+        self.out.push_str(text);
+        Ok(())
+    }
+
+    pub fn push_char(&mut self, c: char) -> Result<(), Full> {
+        self.room = self.room.checked_sub(1).ok_or(Full)?;
+        self.out.push(c);
+        Ok(())
+    }
+
+    pub fn into_string(self) -> String {
+        self.out
+    }
+}
+
 impl Shown {
     /// Python's `repr`: `'text'`, `True`, `None`, `[1, 'a']`,
     /// `{'name': 'x'}`, `datetime.date(2024, 1, 1)`.
     pub fn repr(&self) -> String {
+        self.repr_within(usize::MAX).unwrap_or_default()
+    }
+
+    /// Python's `str`: a text as itself, a date or time in ISO form with a
+    /// space between them (`2024-01-01 10:00:00`), anything else its
+    /// [`Shown::repr`].
+    pub fn text(&self) -> String {
+        self.text_within(usize::MAX).unwrap_or_default()
+    }
+
+    /// [`Shown::repr`], unless it is longer than `limit` characters, in
+    /// which case no more than `limit` is written.
+    pub fn repr_within(&self, limit: usize) -> Option<String> {
+        let mut sink = Sink::new(limit);
+        self.write_repr(&mut sink).ok()?;
+        Some(sink.into_string())
+    }
+
+    /// [`Shown::text`], unless it is longer than `limit` characters, in
+    /// which case no more than `limit` is written.
+    pub fn text_within(&self, limit: usize) -> Option<String> {
+        let mut sink = Sink::new(limit);
+        self.write_text(&mut sink).ok()?;
+        Some(sink.into_string())
+    }
+
+    fn write_repr(&self, sink: &mut Sink) -> Result<(), Full> {
         match self {
-            Shown::None => "None".into(),
-            Shown::Bool(true) => "True".into(),
-            Shown::Bool(false) => "False".into(),
-            Shown::Int(n) => n.clone(),
-            Shown::Float(x) => float_repr(*x),
-            Shown::Text(text) => text_repr(text),
-            Shown::Date { year, month, day } => format!("datetime.date({year}, {month}, {day})"),
+            Shown::None => sink.push("None"),
+            Shown::Bool(true) => sink.push("True"),
+            Shown::Bool(false) => sink.push("False"),
+            Shown::Int(n) => sink.push(n),
+            Shown::Float(x) => sink.push(&float_repr(*x)),
+            Shown::Text(text) => write_text_repr(text, sink),
+            Shown::Date { year, month, day } => {
+                sink.push(&format!("datetime.date({year}, {month}, {day})"))
+            }
             Shown::DateTime {
                 year,
                 month,
@@ -160,32 +230,39 @@ impl Shown {
                         format!(", tzinfo=datetime.timezone(datetime.timedelta({delta}))")
                     }
                 };
-                format!("datetime.datetime({}{zone})", fields.join(", "))
+                sink.push(&format!("datetime.datetime({}{zone})", fields.join(", ")))
             }
-            Shown::List(items) => format!(
-                "[{}]",
-                items.iter().map(Shown::repr).collect::<Vec<_>>().join(", ")
-            ),
-            Shown::Dict(pairs) => format!(
-                "{{{}}}",
-                pairs
-                    .iter()
-                    .map(|(key, value)| format!("{}: {}", key.repr(), value.repr()))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ),
-            Shown::Recursive(true) => "[...]".into(),
-            Shown::Recursive(false) => "{...}".into(),
+            Shown::List(items) => {
+                sink.push_char('[')?;
+                for (at, item) in items.iter().enumerate() {
+                    if at > 0 {
+                        sink.push(", ")?;
+                    }
+                    item.write_repr(sink)?;
+                }
+                sink.push_char(']')
+            }
+            Shown::Dict(pairs) => {
+                sink.push_char('{')?;
+                for (at, (key, value)) in pairs.iter().enumerate() {
+                    if at > 0 {
+                        sink.push(", ")?;
+                    }
+                    key.write_repr(sink)?;
+                    sink.push(": ")?;
+                    value.write_repr(sink)?;
+                }
+                sink.push_char('}')
+            }
+            Shown::Recursive(true) => sink.push("[...]"),
+            Shown::Recursive(false) => sink.push("{...}"),
         }
     }
 
-    /// Python's `str`: a text as itself, a date or time in ISO form with a
-    /// space between them (`2024-01-01 10:00:00`), anything else its
-    /// [`Shown::repr`].
-    pub fn text(&self) -> String {
+    fn write_text(&self, sink: &mut Sink) -> Result<(), Full> {
         match self {
-            Shown::Text(text) => text.clone(),
-            Shown::Date { year, month, day } => format!("{year:04}-{month:02}-{day:02}"),
+            Shown::Text(text) => sink.push(text),
+            Shown::Date { year, month, day } => sink.push(&date_iso(*year, *month, *day)),
             Shown::DateTime {
                 year,
                 month,
@@ -195,27 +272,18 @@ impl Shown {
                 second,
                 microsecond,
                 offset,
-            } => {
-                let mut text =
-                    format!("{year:04}-{month:02}-{day:02} {hour:02}:{minute:02}:{second:02}");
-                if *microsecond > 0 {
-                    text.push_str(&format!(".{microsecond:06}"));
-                }
-                if let Some(offset) = offset {
-                    let sign = if *offset < 0 { '-' } else { '+' };
-                    let seconds = offset.unsigned_abs();
-                    text.push_str(&format!(
-                        "{sign}{:02}:{:02}",
-                        seconds / 3600,
-                        seconds / 60 % 60
-                    ));
-                    if seconds % 60 > 0 {
-                        text.push_str(&format!(":{:02}", seconds % 60));
-                    }
-                }
-                text
-            }
-            _ => self.repr(),
+            } => sink.push(&datetime_iso(
+                (*year, *month, *day),
+                Clock {
+                    hour: *hour,
+                    minute: *minute,
+                    second: *second,
+                    microsecond: *microsecond,
+                },
+                offset.map(|seconds| i64::from(seconds) * 1_000_000),
+                ' ',
+            )),
+            _ => self.write_repr(sink),
         }
     }
 }
@@ -225,59 +293,50 @@ impl Shown {
 /// such, and each character Python does not print as `\xhh`, `\uhhhh` or
 /// `\Uhhhhhhhh`.
 pub fn text_repr(text: &str) -> String {
+    let mut sink = Sink::new(usize::MAX);
+    let _ = write_text_repr(text, &mut sink);
+    sink.into_string()
+}
+
+fn write_text_repr(text: &str, sink: &mut Sink) -> Result<(), Full> {
     let quote = if text.contains('\'') && !text.contains('"') {
         '"'
     } else {
         '\''
     };
-    let mut out = String::with_capacity(text.len() + 2);
-    out.push(quote);
+    sink.push_char(quote)?;
     for c in text.chars() {
         match c {
-            '\\' => out.push_str("\\\\"),
-            '\t' => out.push_str("\\t"),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
+            '\\' => sink.push("\\\\")?,
+            '\t' => sink.push("\\t")?,
+            '\n' => sink.push("\\n")?,
+            '\r' => sink.push("\\r")?,
             _ if c == quote => {
-                out.push('\\');
-                out.push(c);
+                sink.push_char('\\')?;
+                sink.push_char(c)?;
             }
-            _ if printable(c) => out.push(c),
+            _ if printable(c) => sink.push_char(c)?,
             _ => {
                 let code = u32::from(c);
                 if code < 0x100 {
-                    out.push_str(&format!("\\x{code:02x}"));
+                    sink.push(&format!("\\x{code:02x}"))?;
                 } else if code < 0x10000 {
-                    out.push_str(&format!("\\u{code:04x}"));
+                    sink.push(&format!("\\u{code:04x}"))?;
                 } else {
-                    out.push_str(&format!("\\U{code:08x}"));
+                    sink.push(&format!("\\U{code:08x}"))?;
                 }
             }
         }
     }
-    out.push(quote);
-    out
+    sink.push_char(quote)
 }
 
-/// Whether Python prints `c` as itself in a `repr` (`str.isprintable`):
-/// not a control or format character, a separator other than the space,
-/// a private-use character, a surrogate or a noncharacter. Unassigned code
-/// points, which Python also escapes, are not told apart: the core has no
-/// table of Unicode's assignments.
+/// Whether Python prints `c` as itself in a `repr` (`str.isprintable`),
+/// by Python 3.12's own table ([`crate::printable`]).
 fn printable(c: char) -> bool {
     let code = u32::from(c);
-    if code < 0x80 {
-        return (0x20..0x7F).contains(&code);
-    }
-    !(c.is_control()
-        || matches!(code,
-            0xA0 | 0xAD | 0x1680 | 0x2000..=0x200F | 0x2028..=0x202F | 0x205F..=0x2064
-            | 0x2066..=0x206F | 0x3000 | 0xFEFF | 0xFFF9..=0xFFFB | 0x600..=0x605 | 0x61C
-            | 0x6DD | 0x70F | 0x890..=0x891 | 0x8E2 | 0x180E | 0x110BD | 0x110CD
-            | 0x13430..=0x1343F | 0x1BCA0..=0x1BCA3 | 0x1D173..=0x1D17A | 0xE0001
-            | 0xE0020..=0xE007F | 0xE000..=0xF8FF | 0xF0000..=0xFFFFD
-            | 0x100000..=0x10FFFD | 0xFDD0..=0xFDEF)
-        || code & 0xFFFE == 0xFFFE)
+    let at = NOT_PRINTABLE.partition_point(|&(first, _)| first <= code);
+    at == 0 || NOT_PRINTABLE[at - 1].1 < code
 }
 
 #[cfg(test)]

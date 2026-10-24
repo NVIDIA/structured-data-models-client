@@ -38,7 +38,7 @@ use std::sync::LazyLock;
 
 use regex::Regex;
 use yaml_rust2::parser::{Event, MarkedEventReceiver, Parser, Tag};
-use yaml_rust2::scanner::{Marker, Scanner, TScalarStyle, TokenType};
+use yaml_rust2::scanner::{Marker, ScanError, Scanner, TScalarStyle, TokenType};
 
 /// How deep collections may nest, counting the document's own and each
 /// alias's: below the 255 flow levels `yaml-rust2` scans and the about
@@ -49,12 +49,15 @@ pub const MAX_DEPTH: usize = 200;
 /// what it names, so that no walk of it is unbounded.
 pub const MAX_VALUES: u64 = 1 << 22;
 
-/// What reading takes from the host: the most decimal digits Python reads
-/// into an integer (`sys.get_int_max_str_digits()`), which the core hands
-/// in from `sdm-pql`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// What reading takes from the host, which the core hands in from
+/// `sdm-pql`, the one place each rule is written: the most decimal digits
+/// Python reads into an integer (`sys.get_int_max_str_digits()`), and the
+/// calendar, a valid date's day counted from 0001-01-01 or `None` for a
+/// date Python refuses.
+#[derive(Clone, Copy, Debug)]
 pub struct Rules {
     pub most_digits: usize,
+    pub day_ordinal: fn(i32, u8, u8) -> Option<i64>,
 }
 
 /// A node of a [`Document`].
@@ -136,6 +139,9 @@ pub enum Outside {
     Expansion,
     /// An integer of more decimal digits than Python writes.
     LongInteger,
+    /// A plain `-` alone as a flow collection's member (`[-]`), which
+    /// PyYAML reads as text and `yaml-rust2` refuses.
+    FlowDash,
     /// A line break of YAML 1.1 only (U+0085, U+2028, U+2029), which
     /// PyYAML reads as one and `yaml-rust2`, of YAML 1.2, does not.
     LineBreak,
@@ -158,6 +164,7 @@ impl fmt::Display for Outside {
                 f.write_str("an integer of more digits than an integer is written with")
             }
             Outside::LineBreak => f.write_str("a line break of U+0085, U+2028 or U+2029"),
+            Outside::FlowDash => f.write_str("a plain '-' alone in a flow collection"),
         }
     }
 }
@@ -348,7 +355,7 @@ pub fn load(text: &str, rules: &Rules) -> Result<Document, YamlError> {
     if text.contains(['\u{85}', '\u{2028}', '\u{2029}']) {
         return Err(outside(Outside::LineBreak));
     }
-    refuse_duplicate_anchors(text)?;
+    let indicators = scan(text)?;
     // `yaml-rust2` reads a block scalar ending the text without a line
     // break as if it had one, more than one where a line of spaces ends it;
     // the text is read with the break, and each block scalar's line breaks
@@ -360,20 +367,30 @@ pub fn load(text: &str, rules: &Rules) -> Result<Document, YamlError> {
         broken = format!("{text}\n");
         &broken
     };
-    let mut composer = Composer::default();
-    let parsed = Parser::new_from_str(read).load(&mut composer, true);
-    // What the composer refused came before what the scanner did.
-    if let Some(reason) = composer.error {
-        return Err(reason);
-    }
-    parsed.map_err(|scan| {
-        // `yaml-rust2` stops at 255 flow levels, past the bound.
-        if scan.info() == "recursion limit exceeded" {
-            outside(Outside::Nesting)
-        } else {
-            error(scan.to_string())
+    let mut composer = Composer {
+        indicators,
+        ..Composer::default()
+    };
+    // The parser's events, one by one: its `load` composes by recursion,
+    // a frame for each level, which a deep text would overflow; the
+    // composer refuses past `MAX_DEPTH`, and reading stops at its first
+    // refusal.
+    let mut parser = Parser::new_from_str(read);
+    loop {
+        match parser.next_token() {
+            Ok((event, mark)) => {
+                let end = event == Event::StreamEnd;
+                composer.on_event(event, mark);
+                if let Some(reason) = composer.error {
+                    return Err(reason);
+                }
+                if end {
+                    break;
+                }
+            }
+            Err(scan) => return Err(scan_error(&scan)),
         }
-    })?;
+    }
     composer.block_breaks(text);
     let root = match composer.documents.as_slice() {
         [] => None,
@@ -391,20 +408,89 @@ fn readable(c: char) -> bool {
         || u32::from(c) >= 0x10000
 }
 
-/// PyYAML's composer refuses an anchor named twice in a document, where
-/// `yaml-rust2` lets the second replace the first.
-fn refuse_duplicate_anchors(text: &str) -> Result<(), YamlError> {
+/// A scanner's refusal, by name where it is YAML outside the subset.
+fn scan_error(scan: &ScanError) -> YamlError {
+    match scan.info() {
+        // `yaml-rust2` stops at 255 flow levels, past the bound.
+        "recursion limit exceeded" => outside(Outside::Nesting),
+        // A plain `-` alone as a flow collection's member, which PyYAML
+        // reads as the text `-` and `yaml-rust2` refuses.
+        "plain scalar cannot start with '-' followed by ,[]{}"
+        | "\"-\" is only valid inside a block" => outside(Outside::FlowDash),
+        _ => error(scan.to_string()),
+    }
+}
+
+/// One pass of the scanner over the text, before it is parsed: PyYAML's
+/// composer refuses an anchor named twice in a document, where `yaml-rust2`
+/// lets the second replace the first; and each block scalar's indicator,
+/// the `|` or `>` its header starts with, is found where it stands, after
+/// the token before it, as PyYAML's scanner reads it (`None` where it is
+/// not found so).
+fn scan(text: &str) -> Result<Vec<Option<usize>>, YamlError> {
     let mut named: BTreeSet<String> = BTreeSet::new();
+    let mut indicators = Vec::new();
+    // Where the token before the next one ends, in characters.
+    let mut after: usize = 0;
+    let chars: Vec<char> = text.chars().collect();
+    // How deep the collections open: past the bound the text is refused
+    // here, before the scanner walks the rest of a deep text.
+    let mut depth: usize = 0;
     for token in Scanner::new(text.chars()) {
-        match token.1 {
+        let at = token.0.index();
+        match &token.1 {
+            TokenType::BlockSequenceStart
+            | TokenType::BlockMappingStart
+            | TokenType::FlowSequenceStart
+            | TokenType::FlowMappingStart => {
+                depth += 1;
+                if depth > MAX_DEPTH {
+                    return Err(outside(Outside::Nesting));
+                }
+            }
+            TokenType::BlockEnd | TokenType::FlowSequenceEnd | TokenType::FlowMappingEnd => {
+                depth = depth.saturating_sub(1);
+            }
             TokenType::DocumentStart | TokenType::DocumentEnd => named.clear(),
             TokenType::Anchor(name) if !named.insert(name.clone()) => {
                 return Err(error(format!("the anchor '{name}' is named twice")));
             }
+            TokenType::Scalar(TScalarStyle::Literal | TScalarStyle::Folded, _) => {
+                indicators.push(indicator(&chars, after));
+            }
             _ => {}
         }
+        // Where the next token's header search starts: `yaml-rust2`
+        // marks some tokens at their start and some past them (a `- ` at
+        // the space after it), so the search skips their characters.
+        after = at;
     }
-    Ok(())
+    Ok(indicators)
+}
+
+/// The block scalar indicator from character `from`, the mark of the
+/// token before it: the first character past that token's own (an
+/// indicator of `-`, `:` or `?`, `---`, an anchor's or a tag's name),
+/// white space, line breaks and comments, if it is `|` or `>`.
+fn indicator(chars: &[char], from: usize) -> Option<usize> {
+    let mut at = from;
+    loop {
+        match chars.get(at)? {
+            ' ' | '\t' | '\n' | '\r' | '-' | ':' | '?' => at += 1,
+            '&' | '!' => {
+                while !matches!(chars.get(at), None | Some(' ' | '\t' | '\n' | '\r')) {
+                    at += 1;
+                }
+            }
+            '#' => {
+                while !matches!(chars.get(at), None | Some('\n' | '\r')) {
+                    at += 1;
+                }
+            }
+            '|' | '>' => return Some(at),
+            _ => return None,
+        }
+    }
 }
 
 /// A node as composed, its kind resolved, before any value is made.
@@ -431,6 +517,7 @@ enum Frame {
 struct Block {
     node: usize,
     at: usize,
+    indicator: Option<usize>,
 }
 
 /// Builds each document's nodes from the parser's events, once each: an
@@ -453,6 +540,8 @@ struct Composer {
     documents: Vec<usize>,
     error: Option<YamlError>,
     blocks: Vec<Block>,
+    /// Each block scalar's indicator, in order, from the scanner's pass.
+    indicators: Vec<Option<usize>>,
 }
 
 impl Composer {
@@ -544,7 +633,7 @@ impl Composer {
             let Raw::Scalar { text: value, .. } = &self.nodes[block.node] else {
                 continue;
             };
-            if let Some(kept) = block_value(text, block.at, value) {
+            if let Some(kept) = block_value(text, block.indicator, block.at, value) {
                 self.nodes[block.node] = Raw::Scalar {
                     text: kept,
                     kind: None,
@@ -599,60 +688,58 @@ fn line_start(text: &str, at: usize) -> usize {
 /// at the start of `header`, `None` for a line that is no header.
 fn chomping(header: &str) -> Option<Option<bool>> {
     let header = header.split(['\n', '\r']).next().unwrap_or("");
-    let mut chars = header.chars();
+    let mut chars = header.chars().peekable();
     if !matches!(chars.next(), Some('|' | '>')) {
         return None;
     }
-    let rest = chars.as_str();
-    let modifiers: String = rest
-        .chars()
-        .take_while(|c| matches!(c, '+' | '-' | '0'..='9'))
-        .collect();
-    let after = rest[modifiers.len()..].trim_start_matches([' ', '\t']);
-    if !(after.is_empty() || after.starts_with('#')) {
-        return None;
-    }
-    Some(if modifiers.contains('+') {
-        Some(true)
-    } else if modifiers.contains('-') {
-        Some(false)
-    } else {
-        None
-    })
-}
-
-/// The header of the block scalar whose content starts on the line at
-/// byte `content`: the nearest line above it that is not blank, its
-/// indicator the last `|` or `>` before its modifiers and comment. Its
-/// chomping, and the byte its line ends at.
-fn header_above(text: &str, content: usize) -> Option<(Option<bool>, usize)> {
-    let mut end = line_start(text, content);
-    loop {
-        let before = end.checked_sub(1)?;
-        let start = line_start(text, before);
-        let line = text[start..before].trim_end_matches('\r');
-        if !line.chars().all(|c| c == ' ') {
-            // The indicator is the last `|` or `>` from which the rest of
-            // the line reads as a header.
-            let keep = line
-                .char_indices()
-                .rev()
-                .filter(|(_, c)| matches!(c, '|' | '>'))
-                .find_map(|(at, _)| chomping(&line[at..]))?;
-            return Some((keep, start + line.len()));
+    // `scan_block_scalar_indicators`: a chomping sign and an indentation
+    // digit, either first, each at most once, nothing else.
+    let sign = |c: Option<&char>| match c {
+        Some('+') => Some(Some(true)),
+        Some('-') => Some(Some(false)),
+        _ => None,
+    };
+    let digit = |c: Option<&char>| matches!(c, Some('1'..='9'));
+    let mut keep = None;
+    if let Some(chomp) = sign(chars.peek()) {
+        keep = chomp;
+        chars.next();
+        if digit(chars.peek()) {
+            chars.next();
         }
-        end = start;
+    } else if digit(chars.peek()) {
+        chars.next();
+        if let Some(chomp) = sign(chars.peek()) {
+            keep = chomp;
+            chars.next();
+        }
     }
+    // `scan_block_scalar_ignored_line`: spaces, then a comment or nothing.
+    let after: String = chars.collect();
+    let after = after.trim_start_matches(' ');
+    (after.is_empty() || after.starts_with('#')).then_some(keep)
 }
 
 /// The value of a block scalar as PyYAML reads it (`scan_block_scalar`),
-/// `yaml-rust2` having read it as `value` and marked it at character
-/// `at`; `None` where the text cannot be read so, the value left as is.
+/// its header's indicator at character `indicator`, `yaml-rust2` having
+/// read it as `value` and marked its content at character `at`; `None`
+/// where the text cannot be read so, the value left as is.
 /// Its content is `yaml-rust2`'s without the breaks that end it; after the
 /// content comes its last line's break unless it is stripped, and the
 /// breaks of the blank lines after it if it is kept.
-fn block_value(text: &str, at: usize, value: &str) -> Option<String> {
-    let mark = text.char_indices().nth(at).map_or(text.len(), |(b, _)| b);
+fn block_value(text: &str, indicator: Option<usize>, at: usize, value: &str) -> Option<String> {
+    let byte = |chars: usize| {
+        text.char_indices()
+            .nth(chars)
+            .map_or(text.len(), |(b, _)| b)
+    };
+    let mark = byte(at);
+    let header = byte(indicator?);
+    let keep = chomping(&text[header..])?;
+    let header_end = header
+        + text[header..]
+            .find(['\n', '\r'])
+            .unwrap_or(text.len() - header);
     let blank = |line: &str| line.chars().all(|c| c == ' ');
     let content = value.trim_end_matches('\n');
     if content.is_empty() && !value.is_empty() && !value.ends_with('\n') {
@@ -661,17 +748,7 @@ fn block_value(text: &str, at: usize, value: &str) -> Option<String> {
     if content.is_empty() {
         // No content: kept, the breaks of the blank lines after the
         // header; else nothing.
-        let (keep, header_end) = match chomping(&text[mark..]) {
-            Some(keep) => (
-                keep,
-                mark + text[mark..].find(['\n', '\r']).unwrap_or(text.len() - mark),
-            ),
-            None => header_above(text, mark)?,
-        };
-        if keep != Some(true) {
-            return Some(String::new());
-        }
-        if header_end >= text.len() {
+        if keep != Some(true) || header_end >= text.len() {
             return Some(String::new());
         }
         let lines = lines_from(text, header_end);
@@ -683,7 +760,6 @@ fn block_value(text: &str, at: usize, value: &str) -> Option<String> {
             .count();
         return Some("\n".repeat(breaks));
     }
-    let (keep, _) = header_above(text, mark)?;
     let start = line_start(text, mark);
     let indent = text[start..mark].chars().count();
     if !blank(&text[start..mark]) {
@@ -724,11 +800,16 @@ impl MarkedEventReceiver for Composer {
         }
         match event {
             Event::Scalar(text, style, anchor, tag) => {
-                if let Some(tag) = tag {
-                    self.error = Some(outside(Outside::Tag(written(&tag))));
-                    return;
-                }
-                let kind = (style == TScalarStyle::Plain).then(|| implicit(&text));
+                // `!!str` makes text of what it tags, as PyYAML's
+                // constructor does; any other tag is outside the subset.
+                let kind = match tag {
+                    Some(tag) if is_str(&tag) => None,
+                    Some(tag) => {
+                        self.error = Some(outside(Outside::Tag(written(&tag))));
+                        return;
+                    }
+                    None => (style == TScalarStyle::Plain).then(|| implicit(&text)),
+                };
                 if kind == Some("merge") {
                     self.error = Some(outside(Outside::Merge));
                     return;
@@ -736,15 +817,22 @@ impl MarkedEventReceiver for Composer {
                 let block = matches!(style, TScalarStyle::Literal | TScalarStyle::Folded);
                 let node = self.open(anchor, Raw::Scalar { text, kind });
                 if block {
+                    let indicator = self.indicators.get(self.blocks.len()).copied().flatten();
                     self.blocks.push(Block {
                         node,
                         at: mark.index(),
+                        indicator,
                     });
                 }
                 self.add(node);
             }
             Event::SequenceStart(_, Some(tag)) | Event::MappingStart(_, Some(tag)) => {
-                self.error = Some(outside(Outside::Tag(written(&tag))));
+                self.error = Some(if is_str(&tag) {
+                    // PyYAML's constructor makes text only of a scalar.
+                    error("a list or a mapping is tagged as text")
+                } else {
+                    outside(Outside::Tag(written(&tag)))
+                });
             }
             Event::SequenceStart(anchor, None) => self.start(anchor, Raw::Seq(Vec::new())),
             Event::MappingStart(anchor, None) => self.start(anchor, Raw::Map(Vec::new())),
@@ -762,6 +850,11 @@ impl MarkedEventReceiver for Composer {
             | Event::DocumentEnd => {}
         }
     }
+}
+
+/// Whether a tag is `!!str`.
+fn is_str(tag: &Tag) -> bool {
+    tag.handle == "tag:yaml.org,2002:" && tag.suffix == "str"
 }
 
 /// A tag as written: `!!binary` for YAML's own, which `yaml-rust2`
@@ -852,7 +945,7 @@ fn construct(raw: Vec<Raw>, root: Option<usize>, rules: &Rules) -> Result<Docume
     // Keys are scalars, made above.
     for (at, node) in raw.iter().enumerate() {
         if let Raw::Map(pairs) = node {
-            values[at] = Value::Map(mapping(&values, pairs));
+            values[at] = Value::Map(mapping(&values, pairs, rules));
         }
     }
     Ok(Document {
@@ -872,18 +965,18 @@ fn scalar(text: &str, kind: Option<&str>, rules: &Rules) -> Result<Value, YamlEr
         )),
         Some("int") => Value::Int(integer(text, rules)?),
         Some("float") => Value::Float(float(text)?),
-        Some("timestamp") => timestamp(text)?,
+        Some("timestamp") => timestamp(text, rules)?,
         Some(_) => return Err(error(format!("no value can be made of '{text}' here"))),
     })
 }
 
 /// `construct_mapping`: a key equal to an earlier one keeps that one's
 /// place and takes the later value; a `=` key is text.
-fn mapping(values: &[Value], pairs: &[(usize, usize)]) -> Vec<(NodeId, NodeId)> {
+fn mapping(values: &[Value], pairs: &[(usize, usize)], rules: &Rules) -> Vec<(NodeId, NodeId)> {
     let mut entries: Vec<(NodeId, NodeId)> = Vec::new();
     let mut places: BTreeMap<KeyOf, usize> = BTreeMap::new();
     for &(key, value) in pairs {
-        let of = KeyOf::of(&values[key]);
+        let of = KeyOf::of(&values[key], rules);
         match places.get(&of) {
             Some(&at) => entries[at].1 = NodeId(value),
             None => {
@@ -916,7 +1009,7 @@ enum KeyOf {
 }
 
 impl KeyOf {
-    fn of(value: &Value) -> KeyOf {
+    fn of(value: &Value, rules: &Rules) -> KeyOf {
         match value {
             Value::Null => KeyOf::Null,
             Value::Bool(flag) => KeyOf::Integer(if *flag { "1" } else { "0" }.into()),
@@ -929,24 +1022,20 @@ impl KeyOf {
             Value::Float(x) => KeyOf::Float(x.to_bits()),
             Value::Str(text) => KeyOf::Text(text.clone()),
             Value::Date(date) => KeyOf::Date(*date),
-            Value::Timestamp(moment) if moment.offset.is_some() => KeyOf::Instant(instant(moment)),
+            Value::Timestamp(moment) if moment.offset.is_some() => {
+                KeyOf::Instant(instant(moment, rules))
+            }
             Value::Timestamp(moment) => KeyOf::Naive(*moment),
             Value::Seq(_) | Value::Map(_) => KeyOf::Other,
         }
     }
 }
 
-/// A time with an offset as microseconds since 0001-01-01 00:00 UTC.
-fn instant(moment: &Timestamp) -> i128 {
+/// A time with an offset as microseconds since 0001-01-01 00:00 UTC, its
+/// day by the host's calendar.
+fn instant(moment: &Timestamp, rules: &Rules) -> i128 {
     let date = moment.date;
-    let y = i128::from(date.year) - 1;
-    let before: [i128; 12] = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
-    let leap = date.year % 4 == 0 && (date.year % 100 != 0 || date.year % 400 == 0);
-    let month = usize::from(date.month.clamp(1, 12)) - 1;
-    let mut days = y * 365 + y / 4 - y / 100 + y / 400 + before[month] + i128::from(date.day);
-    if date.month > 2 && leap {
-        days += 1;
-    }
+    let days = i128::from((rules.day_ordinal)(date.year, date.month, date.day).unwrap_or(0));
     let seconds = days * 86_400
         + i128::from(moment.hour) * 3600
         + i128::from(moment.minute) * 60
@@ -1078,9 +1167,8 @@ fn decimal(limbs: &[u64]) -> String {
 }
 
 /// Python's `int(text, base)` for what reaches it here, its sign taken
-/// off: digits of the base, surrounding white space allowed.
-fn radix(text: &str, base: u32) -> Option<Vec<u64>> {
-    let digits = text.trim();
+/// off: digits of the base alone, as PyYAML's resolver lets through.
+fn radix(digits: &str, base: u32) -> Option<Vec<u64>> {
     if digits.is_empty() {
         return None;
     }
@@ -1105,9 +1193,8 @@ fn float(text: &str) -> Result<f64, YamlError> {
         Some(_) => (1.0, value.as_str()),
         None => return Err(refused()),
     };
-    let parse = |part: &str| -> Result<f64, YamlError> {
-        part.trim().parse::<f64>().map_err(|_| refused())
-    };
+    let parse =
+        |part: &str| -> Result<f64, YamlError> { part.parse::<f64>().map_err(|_| refused()) };
     match rest {
         ".inf" => Ok(sign * f64::INFINITY),
         ".nan" => Ok(f64::NAN),
@@ -1125,7 +1212,7 @@ fn float(text: &str) -> Result<f64, YamlError> {
 
 /// `construct_yaml_timestamp`: a date alone, or a date and time with a
 /// fraction cut to microseconds and an offset or `Z`.
-fn timestamp(text: &str) -> Result<Value, YamlError> {
+fn timestamp(text: &str, rules: &Rules) -> Result<Value, YamlError> {
     static PATTERN: LazyLock<Option<Regex>> = LazyLock::new(|| {
         Regex::new(
             r"^(?P<year>[0-9][0-9][0-9][0-9])-(?P<month>[0-9][0-9]?)-(?P<day>[0-9][0-9]?)(?:(?:[Tt]|[ \t]+)(?P<hour>[0-9][0-9]?):(?P<minute>[0-9][0-9]):(?P<second>[0-9][0-9])(?:\.(?P<fraction>[0-9]*))?(?:[ \t]*(?P<tz>Z|(?P<tz_sign>[-+])(?P<tz_hour>[0-9][0-9]?)(?::(?P<tz_minute>[0-9][0-9]))?))?)?$",
@@ -1150,8 +1237,7 @@ fn timestamp(text: &str) -> Result<Value, YamlError> {
         month: small(number("month"))?,
         day: small(number("day"))?,
     };
-    if date.year < 1 || !(1..=12).contains(&date.month) || date.day < 1 || date.day > days_in(date)
-    {
+    if (rules.day_ordinal)(date.year, date.month, date.day).is_none() {
         return Err(refused());
     }
     if groups.name("hour").is_none() {
@@ -1190,51 +1276,4 @@ fn timestamp(text: &str) -> Result<Value, YamlError> {
         microsecond,
         offset,
     }))
-}
-
-fn days_in(date: Date) -> u8 {
-    let leap = date.year % 4 == 0 && (date.year % 100 != 0 || date.year % 400 == 0);
-    match date.month {
-        2 if leap => 29,
-        2 => 28,
-        4 | 6 | 9 | 11 => 30,
-        _ => 31,
-    }
-}
-
-impl Date {
-    /// The ISO 8601 text: `2024-01-01`.
-    pub fn isoformat(&self) -> String {
-        format!("{:04}-{:02}-{:02}", self.year, self.month, self.day)
-    }
-}
-
-impl Timestamp {
-    /// The ISO 8601 text: `2024-01-01T10:00:00`, with `.ffffff` for a
-    /// fraction and `+HH:MM` for an offset.
-    pub fn isoformat(&self) -> String {
-        let mut text = format!(
-            "{}T{:02}:{:02}:{:02}",
-            self.date.isoformat(),
-            self.hour,
-            self.minute,
-            self.second
-        );
-        if self.microsecond > 0 {
-            text.push_str(&format!(".{:06}", self.microsecond));
-        }
-        if let Some(offset) = self.offset {
-            let sign = if offset < 0 { '-' } else { '+' };
-            let seconds = offset.unsigned_abs();
-            text.push_str(&format!(
-                "{sign}{:02}:{:02}",
-                seconds / 3600,
-                seconds / 60 % 60
-            ));
-            if seconds % 60 > 0 {
-                text.push_str(&format!(":{:02}", seconds % 60));
-            }
-        }
-        text
-    }
 }

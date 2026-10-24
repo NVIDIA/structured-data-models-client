@@ -18,7 +18,7 @@ use super::check::{ExprRefusal, unsafe_reason};
 use super::lex::{bare_name, string_literals};
 use super::names::{Unreadable, name_references};
 use super::pattern::{Pattern, Read};
-use super::{ExprDialect, spacing, stripped};
+use super::{ExprDialect, Spaces};
 
 fn pattern(text: &str) -> Pattern {
     Pattern::new(text)
@@ -121,8 +121,8 @@ pub struct KeyRef {
 }
 
 /// A name without its backticks, if it is backticked (`unquote_ident`).
-pub fn unquote(name: &str) -> String {
-    let name = stripped(name);
+pub fn unquote(name: &str, spaces: Spaces) -> String {
+    let name = spaces.strip(name);
     match name
         .strip_prefix('`')
         .and_then(|rest| rest.strip_suffix('`'))
@@ -132,34 +132,34 @@ pub fn unquote(name: &str) -> String {
     }
 }
 
-fn name_parts(pattern: &Pattern, name: &str) -> Option<Vec<String>> {
+fn name_parts(pattern: &Pattern, name: &str, spaces: Spaces) -> Option<Vec<String>> {
     let groups = pattern.groups(name).ok()??;
     Some(
         (1..=3)
             .filter_map(|group| groups.get(group))
-            .map(|part| unquote(&name[part]))
+            .map(|part| unquote(&name[part], spaces))
             .collect(),
     )
 }
 
 /// A plain, one-to-three-part table name's parts, unquoted; `None` for
 /// anything else, a query say (`parse_table_reference`).
-pub fn table_reference(name: &str) -> Option<Vec<String>> {
-    name_parts(&TABLE_REFERENCE, name)
+pub fn table_reference(name: &str, spaces: Spaces) -> Option<Vec<String>> {
+    name_parts(&TABLE_REFERENCE, name, spaces)
 }
 
 /// A metric view's name as a caller passes it, its parts unquoted; an
 /// unquoted part may hold what SQL reads only quoted (`parse_view_name`).
-pub fn view_name(name: &str) -> Option<Vec<String>> {
-    name_parts(&VIEW_NAME, name)
+pub fn view_name(name: &str, spaces: Spaces) -> Option<Vec<String>> {
+    name_parts(&VIEW_NAME, name, spaces)
 }
 
-fn key_ref(chain: &str) -> KeyRef {
+fn key_ref(chain: &str, spaces: Spaces) -> KeyRef {
     let mut parts: Vec<String> = IDENT
         .find_all(chain)
         .unwrap_or_default()
         .into_iter()
-        .map(|part| unquote(&chain[part]))
+        .map(|part| unquote(&chain[part], spaces))
         .collect();
     let column = parts.pop().unwrap_or_default();
     KeyRef {
@@ -170,24 +170,24 @@ fn key_ref(chain: &str) -> KeyRef {
 
 /// A single-column equality join condition's two sides; `None` for any
 /// other (`parse_join_condition`).
-pub fn join_condition(condition: &str) -> Option<[KeyRef; 2]> {
+pub fn join_condition(condition: &str, spaces: Spaces) -> Option<[KeyRef; 2]> {
     let groups = JOIN_CONDITION.groups(condition).ok()??;
     Some([
-        key_ref(&condition[groups.get(1)?]),
-        key_ref(&condition[groups.get(2)?]),
+        key_ref(&condition[groups.get(1)?], spaces),
+        key_ref(&condition[groups.get(2)?], spaces),
     ])
 }
 
 /// A wildcard dimension, `alias.*` or `alias.* EXCEPT (a, b)`: the folded
 /// path it names, and the columns it leaves out, unquoted.
-pub fn wildcard(expr: &str) -> Option<(Vec<String>, Vec<String>)> {
+pub fn wildcard(expr: &str, spaces: Spaces) -> Option<(Vec<String>, Vec<String>)> {
     let groups = WILDCARD.groups(expr).ok()??;
     let named = &expr[groups.get(1)?];
     let path = IDENT
         .find_all(named)
         .ok()?
         .into_iter()
-        .map(|part| unquote(&named[part]).to_lowercase())
+        .map(|part| unquote(&named[part], spaces).to_lowercase())
         .collect();
     let excluded = match groups.get(2) {
         None => Vec::new(),
@@ -197,7 +197,7 @@ pub fn wildcard(expr: &str) -> Option<(Vec<String>, Vec<String>)> {
             for chain in CHAIN.find_all(list).ok()? {
                 let chain = &list[chain];
                 if let Some(last) = IDENT.find_all(chain).ok()?.pop() {
-                    excluded.push(unquote(&chain[last]));
+                    excluded.push(unquote(&chain[last], spaces));
                 }
             }
             excluded
@@ -248,7 +248,11 @@ pub fn references_alias<S: AsRef<str>>(expr: &str, path: &[S]) -> Result<bool, U
 
 /// `expr` with every qualifier `path.` taken out, its literals as they are,
 /// trimmed (`strip_alias_qualifier`).
-pub fn strip_alias<S: AsRef<str>>(expr: &str, path: &[S]) -> Result<String, Unreadable> {
+pub fn strip_alias<S: AsRef<str>>(
+    expr: &str,
+    path: &[S],
+    spaces: Spaces,
+) -> Result<String, Unreadable> {
     let pattern = path_pattern(path)?;
     let mut out = String::with_capacity(expr.len());
     let mut last = 0;
@@ -258,22 +262,22 @@ pub fn strip_alias<S: AsRef<str>>(expr: &str, path: &[S]) -> Result<String, Unre
         last = span.end;
     }
     out.push_str(&pattern.replace_all(&expr[last..], "")?);
-    Ok(stripped(&out).to_owned())
+    Ok(spaces.strip(&out).to_owned())
 }
 
 /// The column `expr` truncates or casts to a date or time, as
 /// `order_date` in `DATE_TRUNC('MONTH', order_date)`; `None` for anything
 /// else, a bare column included (`derived_column`).
-pub fn derived_column(expr: &str) -> Option<String> {
-    let column = column_under(expr)?;
-    let bare = stripped(expr).trim_matches(['(', ')', ' ']);
+pub fn derived_column(expr: &str, spaces: Spaces) -> Option<String> {
+    let column = column_under(expr, spaces)?;
+    let bare = spaces.strip(expr).trim_matches(['(', ')', ' ']);
     (!matches(&WHOLE_IDENT, bare)).then_some(column)
 }
 
-fn column_under(expr: &str) -> Option<String> {
-    let expr = stripped(expr);
+fn column_under(expr: &str, spaces: Spaces) -> Option<String> {
+    let expr = spaces.strip(expr);
     if matches(&WHOLE_IDENT, expr) {
-        return Some(unquote(expr));
+        return Some(unquote(expr, spaces));
     }
     for derivation in DERIVATIONS.iter() {
         let Ok(Some(groups)) = derivation.groups(expr) else {
@@ -294,7 +298,7 @@ fn column_under(expr: &str) -> Option<String> {
             }
         }
         if depth == 0
-            && let Some(column) = column_under(inner)
+            && let Some(column) = column_under(inner, spaces)
         {
             return Some(column);
         }
@@ -304,8 +308,8 @@ fn column_under(expr: &str) -> Option<String> {
 
 /// The column an expression is, if it is one column and nothing else
 /// (`_renamed_column`).
-pub fn renamed_column(expr: &str) -> Option<String> {
-    let expr = stripped(expr);
+pub fn renamed_column(expr: &str, spaces: Spaces) -> Option<String> {
+    let expr = spaces.strip(expr);
     let groups = RENAMED.groups(expr).ok()??;
     match (groups.get(1), groups.get(2)) {
         (Some(quoted), _) => Some(expr[quoted].replace("``", "`")),
@@ -335,11 +339,9 @@ pub enum TypeClass {
 }
 
 /// The class of `data_type`.
-pub fn type_class(data_type: &str) -> TypeClass {
-    let folded = data_type
-        .to_lowercase()
-        .split(spacing)
-        .filter(|part| !part.is_empty())
+pub fn type_class(data_type: &str, spaces: Spaces) -> TypeClass {
+    let folded = spaces
+        .split(&data_type.to_lowercase())
         .collect::<Vec<_>>()
         .join(" ");
     if folded == "boolean" {
@@ -425,6 +427,7 @@ pub fn read_parameters<D>(
     inputs: &[ParameterInput<D>],
     described: &[(String, String)],
     convert: impl Fn(&str, &D) -> Result<String, DefaultRefusal>,
+    spaces: Spaces,
 ) -> Vec<(String, Parameter)> {
     let mut parameters: Vec<(String, Parameter)> = Vec::new();
     for input in inputs {
@@ -440,9 +443,8 @@ pub fn read_parameters<D>(
             (Some(_), None) => Err(Unread::NoType),
             (Some(default), Some(data_type)) => match convert(&data_type, default) {
                 Ok(text) => {
-                    let sql_type = data_type
-                        .split(spacing)
-                        .filter(|part| !part.is_empty())
+                    let sql_type = spaces
+                        .split(&data_type)
                         .collect::<Vec<_>>()
                         .join(" ")
                         .to_uppercase();
@@ -560,8 +562,9 @@ pub enum FilterRefusal {
 pub fn check_filter(
     filter: Option<&str>,
     candidates: &[(Vec<String>, String)],
+    spaces: Spaces,
 ) -> Result<String, FilterRefusal> {
-    let Some(filter) = filter.filter(|f| !stripped(f).is_empty()) else {
+    let Some(filter) = filter.filter(|f| !spaces.strip(f).is_empty()) else {
         return Err(FilterRefusal::NotACondition);
     };
     if let Some(reason) = unsafe_reason(filter, Some(ExprDialect::Databricks)) {
@@ -575,7 +578,7 @@ pub fn check_filter(
             return Err(FilterRefusal::JoinedTable(alias.clone()));
         }
     }
-    Ok(stripped(filter).to_owned())
+    Ok(spaces.strip(filter).to_owned())
 }
 
 /// A measure as the core hands it over: an entry of `measures` that is a
@@ -631,6 +634,7 @@ pub fn read_measures(
     dimensions: &[(String, DimensionRef)],
     refused: &[String],
     parameters: &[String],
+    spaces: Spaces,
 ) -> (Vec<MeasureRead>, Vec<MeasureRefusal>) {
     let paths: Vec<(Vec<String>, &str)> = {
         let mut paths: Vec<(Vec<String>, &str)> = Vec::new();
@@ -661,7 +665,7 @@ pub fn read_measures(
         let Some(expr) = &measure.expr else {
             continue;
         };
-        let (expr, names) = match super::strip_comments(expr).and_then(|expr| {
+        let (expr, names) = match super::strip_comments(expr, spaces).and_then(|expr| {
             let names = name_references(&expr)?;
             Ok((expr, names))
         }) {
@@ -741,7 +745,7 @@ pub fn read_measures(
         if tables.len() > 1 || !tables.iter().all(readable) {
             inputs.clear();
         }
-        let aggregation = aggregation(measure.window, &expr, &inputs, &dimension);
+        let aggregation = aggregation(measure.window, &expr, &inputs, &dimension, spaces);
         read.push(MeasureRead {
             name: measure.name.clone(),
             inputs,
@@ -759,6 +763,7 @@ fn aggregation<'a>(
     expr: &str,
     inputs: &[(String, String)],
     dimension: &dyn Fn(&str) -> Option<&'a DimensionRef>,
+    spaces: Spaces,
 ) -> Option<(String, Option<String>)> {
     if window {
         return None;
@@ -771,7 +776,7 @@ fn aggregation<'a>(
     if argument == "*" || argument == "1" {
         return (function == "COUNT" && !distinct).then(|| ("COUNT".to_owned(), None));
     }
-    let column = match dimension(&unquote(argument).to_lowercase()) {
+    let column = match dimension(&unquote(argument, spaces).to_lowercase()) {
         Some(d) if d.alias == SOURCE_ALIAS => d.name.clone(),
         _ if inputs.len() == 1 && inputs[0].0 == SOURCE_ALIAS => inputs[0].1.clone(),
         _ => return None,

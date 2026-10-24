@@ -14,6 +14,8 @@
 //! The statement itself is the Databricks dialect's, written with the rest
 //! of its catalog statements once that dialect lands (T3.4).
 
+use super::Spaces;
+
 /// What the description says.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ViewDescription {
@@ -40,21 +42,21 @@ pub enum DescribeRefusal {
 
 /// The rows of a section, by the section's lower-case header without its
 /// `#`; the columns under the empty header.
-fn sections(rows: &[Vec<Option<String>>]) -> Vec<(String, Vec<(String, String)>)> {
+fn sections(rows: &[Vec<Option<String>>], spaces: Spaces) -> Vec<(String, Vec<(String, String)>)> {
     let mut sections: Vec<(String, Vec<(String, String)>)> = vec![(String::new(), Vec::new())];
     let mut current: Option<usize> = Some(0);
     for row in rows {
         let name = row
             .first()
             .and_then(Option::as_deref)
-            .map_or(String::new(), |cell| super::stripped(cell).to_owned());
+            .map_or(String::new(), |cell| spaces.strip(cell).to_owned());
         let value = row
             .get(1)
             .and_then(Option::as_deref)
             .unwrap_or("")
             .to_owned();
-        if name.starts_with('#') && super::stripped(&value).is_empty() {
-            let header = super::stripped(name.trim_start_matches('#')).to_lowercase();
+        if name.starts_with('#') && spaces.strip(&value).is_empty() {
+            let header = spaces.strip(name.trim_start_matches('#')).to_lowercase();
             // Spark heads the rows of some sections with `# col_name`.
             if header != "col_name" {
                 current = Some(match sections.iter().position(|(h, _)| *h == header) {
@@ -98,8 +100,11 @@ fn by_name(pairs: impl IntoIterator<Item = (String, String)>) -> Vec<(String, St
 /// Reads a metric view's description from the rows of `DESCRIBE TABLE
 /// EXTENDED`, each its cells as text or null (`read_metric_view_definition`
 /// after its statement).
-pub fn describe_view(rows: &[Vec<Option<String>>]) -> Result<ViewDescription, DescribeRefusal> {
-    let sections = sections(rows);
+pub fn describe_view(
+    rows: &[Vec<Option<String>>],
+    spaces: Spaces,
+) -> Result<ViewDescription, DescribeRefusal> {
+    let sections = sections(rows, spaces);
     let section = |header: &str| {
         sections
             .iter()

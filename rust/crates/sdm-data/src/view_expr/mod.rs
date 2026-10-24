@@ -71,8 +71,8 @@ impl ViewKind {
 /// trust, and unless `trust_expressions`, a call that is not trusted, with
 /// the way out. `column` names the column as the message does (`column
 /// 'x'`, or `column 'x' of table 't'`); `columns` are the columns of the
-/// table the expression is evaluated on; `quote` writes a piece of the
-/// expression as the old client quoted it, which the core hands in.
+/// table the expression is evaluated on; `text` holds Python's rules the
+/// core hands in.
 pub fn expression_message<S: AsRef<str>>(
     column: &str,
     expr: &str,
@@ -80,15 +80,15 @@ pub fn expression_message<S: AsRef<str>>(
     dialect: ExprDialect,
     trust_expressions: bool,
     columns: &[S],
-    quote: &dyn Fn(&str) -> String,
+    text: TextRules<'_>,
 ) -> Option<String> {
     let mut hatch = "";
     let mut reason = unsafe_reason(expr, Some(dialect));
     if reason.is_none() && !trust_expressions {
-        reason = untrusted_call_reason(expr, dialect, columns);
+        reason = untrusted_call_reason(expr, dialect, columns, text.spaces);
         hatch = ". Pass trust_expressions=True to keep it if you trust whoever authored the view";
     }
-    let reason = reason?.words(quote);
+    let reason = reason?.words(text.quote);
     Some(format!(
         "Failed to add {column} since {reason}, and expressions taken from the {} are executed \
          as SQL under your warehouse credentials{hatch}",
@@ -96,18 +96,34 @@ pub fn expression_message<S: AsRef<str>>(
     ))
 }
 
-/// Whether `c` is white space as the old client's `str.strip` reads it:
-/// Unicode's white space, and the four separators U+001C to U+001F.
-fn spacing(c: char) -> bool {
-    c.is_whitespace() || ('\u{1C}'..='\u{1F}').contains(&c)
+/// The Python text rules the core hands in to word an expression's
+/// refusal: how the old client quoted a piece of it (`repr`), and white
+/// space.
+#[derive(Clone, Copy)]
+pub struct TextRules<'a> {
+    pub quote: &'a dyn Fn(&str) -> String,
+    pub spaces: Spaces,
 }
 
-/// `text.rstrip()`.
-fn rstrip(text: &str) -> &str {
-    text.trim_end_matches(spacing)
-}
+/// White space as the old client's Python reads it (`str.isspace`, what
+/// `strip`, `rstrip` and `split` take off): the rule is `sdm-pql`'s, the
+/// one place it is written, and the core hands it in.
+#[derive(Clone, Copy, Debug)]
+pub struct Spaces(pub fn(char) -> bool);
 
-/// `text.strip()`.
-fn stripped(text: &str) -> &str {
-    text.trim_matches(spacing)
+impl Spaces {
+    /// `text.strip()`.
+    pub(crate) fn strip(self, text: &str) -> &str {
+        text.trim_matches(self.0)
+    }
+
+    /// `text.rstrip()`.
+    pub(crate) fn rstrip(self, text: &str) -> &str {
+        text.trim_end_matches(self.0)
+    }
+
+    /// `text.split()`: the words between runs of white space.
+    pub(crate) fn split(self, text: &str) -> impl Iterator<Item = &str> {
+        text.split(self.0).filter(|part| !part.is_empty())
+    }
 }

@@ -11,7 +11,7 @@ use super::lex::{Kind, lex, masked};
 use super::names::Unreadable;
 use super::pattern::{Pattern, Read};
 use super::words::{self, has};
-use super::{ExprDialect, rstrip};
+use super::{ExprDialect, Spaces};
 
 /// Why an expression is refused (old-behaviour rows 64 to 66), typed so
 /// the core words it as the old client did (`sdm-core::view_words`).
@@ -307,8 +307,8 @@ fn closes_a_case(lead: &str) -> Read<bool> {
 /// qualified name, a type after `::`, the field of `EXTRACT`, the `END` of
 /// an open `CASE`, or a bare word naming one of `columns` the parser cannot
 /// read as grammar instead.
-fn follows_a_value(lead: &str, columns: &[String]) -> Read<bool> {
-    let lead = rstrip(lead);
+fn follows_a_value(lead: &str, columns: &[String], spaces: Spaces) -> Read<bool> {
+    let lead = spaces.rstrip(lead);
     let Some(last_char) = lead.chars().last() else {
         return Ok(false);
     };
@@ -332,7 +332,7 @@ fn follows_a_value(lead: &str, columns: &[String]) -> Read<bool> {
         return Ok(true);
     }
     if word == "end" {
-        return Ok(closes_a_case(before)? && follows_a_value(before, columns)?);
+        return Ok(closes_a_case(before)? && follows_a_value(before, columns, spaces)?);
     }
     // A table may name a column `where`, which the parser still reads as
     // WHERE.
@@ -341,8 +341,8 @@ fn follows_a_value(lead: &str, columns: &[String]) -> Read<bool> {
 
 /// Whether `CASE` before `group` starts `CASE (x) WHEN ...`: where a CASE
 /// can start, and a WHEN follows the bracket (`_opens_a_simple_case`).
-fn opens_a_simple_case(lead: &str, group: &str) -> Read<bool> {
-    let lead = rstrip(lead);
+fn opens_a_simple_case(lead: &str, group: &str, spaces: Spaces) -> Read<bool> {
+    let lead = spaces.rstrip(lead);
     if let Some(c) = lead.chars().last()
         && c != '('
         && c != ','
@@ -366,22 +366,28 @@ fn opens_a_simple_case(lead: &str, group: &str) -> Read<bool> {
 /// Whether `word`, followed by `(`, is a keyword rather than a call
 /// (`_acts_as_keyword`): `NOT` always; `CASE` where a CASE may start; any
 /// other where a keyword may stand.
-fn acts_as_keyword(word: &str, lead: &str, group: &str, columns: &[String]) -> Read<bool> {
+fn acts_as_keyword(
+    word: &str,
+    lead: &str,
+    group: &str,
+    columns: &[String],
+    spaces: Spaces,
+) -> Read<bool> {
     match word {
         "not" => Ok(true),
-        "case" => opens_a_simple_case(lead, group),
-        _ => in_keyword_position(word, lead, columns),
+        "case" => opens_a_simple_case(lead, group, spaces),
+        _ => in_keyword_position(word, lead, columns, spaces),
     }
 }
 
 /// Whether `word` sits where a keyword may: after a value, or after a
 /// keyword SQL writes it after, that one itself in keyword position
 /// (`_in_keyword_position`).
-fn in_keyword_position(word: &str, lead: &str, columns: &[String]) -> Read<bool> {
-    if follows_a_value(lead, columns)? {
+fn in_keyword_position(word: &str, lead: &str, columns: &[String], spaces: Spaces) -> Read<bool> {
+    if follows_a_value(lead, columns, spaces)? {
         return Ok(true);
     }
-    let lead = rstrip(lead);
+    let lead = spaces.rstrip(lead);
     let Some((start, previous)) = first(&LAST_TOKEN, lead)? else {
         return Ok(false);
     };
@@ -392,13 +398,13 @@ fn in_keyword_position(word: &str, lead: &str, columns: &[String]) -> Read<bool>
     if before == "case" {
         return Ok(true);
     }
-    in_keyword_position(&before, &lead[..start], columns)
+    in_keyword_position(&before, &lead[..start], columns, spaces)
 }
 
 /// Whether the word after `lead` stands where only a type can: after
 /// `::`, or after an `AS` directly inside `CAST(` or `TRY_CAST(`
 /// (`_names_a_type`).
-fn names_a_type(lead: &str) -> Read<bool> {
+fn names_a_type(lead: &str, spaces: Spaces) -> Read<bool> {
     if AFTER_DOUBLE_COLON.is_match(lead)? {
         return Ok(true);
     }
@@ -413,7 +419,7 @@ fn names_a_type(lead: &str) -> Read<bool> {
             _ => 0,
         };
         if depth < 0 {
-            let opener = rstrip(&lead[..index]);
+            let opener = spaces.rstrip(&lead[..index]);
             return Ok(match first(&LAST_TOKEN, opener)? {
                 Some((start, name)) => {
                     CASTS.contains(&name.to_lowercase().as_str())
@@ -427,7 +433,7 @@ fn names_a_type(lead: &str) -> Read<bool> {
 }
 
 /// The folded names `text` binds in lambdas, as in `x -> x + 1`.
-fn lambda_parameters(text: &str) -> Read<Vec<String>> {
+fn lambda_parameters(text: &str, spaces: Spaces) -> Read<Vec<String>> {
     let mut names = Vec::new();
     for groups in LAMBDA_PARAMETERS.groups_all(text)? {
         let Some(bound) = groups.get(1).or_else(|| groups.get(2)) else {
@@ -436,7 +442,7 @@ fn lambda_parameters(text: &str) -> Read<Vec<String>> {
         names.extend(
             text[bound]
                 .split(',')
-                .map(|name| super::stripped(name).to_lowercase()),
+                .map(|name| spaces.strip(name).to_lowercase()),
         );
     }
     Ok(names)
@@ -450,15 +456,17 @@ fn lambda_parameters(text: &str) -> Read<Vec<String>> {
 /// its plain name; a quoted or qualified name, or `IDENTIFIER()`, can name
 /// anything and is refused. A session word (`current_user`) is refused,
 /// bare or quoted, unless one of `columns` names it where the dialect
-/// lets the column win (Databricks only). Apply [`unsafe_reason`] first,
+/// lets the column win (Databricks only); `spaces` is Python's white
+/// space, which the core hands in. Apply [`unsafe_reason`] first,
 /// which establishes that every quote is paired. An expression the check
 /// cannot read is refused.
 pub fn untrusted_call_reason<S: AsRef<str>>(
     expr: &str,
     dialect: ExprDialect,
     columns: &[S],
+    spaces: Spaces,
 ) -> Option<ExprRefusal> {
-    calls_read(expr, dialect, columns)
+    calls_read(expr, dialect, columns, spaces)
         .unwrap_or_else(|unreadable| Some(ExprRefusal::Unreadable(unreadable)))
 }
 
@@ -466,6 +474,7 @@ fn calls_read<S: AsRef<str>>(
     expr: &str,
     dialect: ExprDialect,
     columns: &[S],
+    spaces: Spaces,
 ) -> Read<Option<ExprRefusal>> {
     let trusted = match dialect {
         ExprDialect::Databricks => words::DATABRICKS_FUNCTIONS,
@@ -474,12 +483,12 @@ fn calls_read<S: AsRef<str>>(
     let text = masked(expr, Some(dialect), &QUOTED.to_string())?;
     let named: Vec<String> = columns.iter().map(|c| c.as_ref().to_lowercase()).collect();
     let mut visible = named.clone();
-    visible.extend(lambda_parameters(&text)?);
+    visible.extend(lambda_parameters(&text, spaces)?);
     for (index, c) in text.char_indices() {
         if c != '(' {
             continue;
         }
-        let before = rstrip(&text[..index]);
+        let before = spaces.rstrip(&text[..index]);
         let Some(last) = before.chars().last() else {
             continue;
         };
@@ -507,11 +516,11 @@ fn calls_read<S: AsRef<str>>(
             return Ok(Some(ExprRefusal::Identifier));
         }
         if has(words::KEYWORDS, &folded)
-            && acts_as_keyword(&folded, &before[..start], &text[index..], &visible)?
+            && acts_as_keyword(&folded, &before[..start], &text[index..], &visible, spaces)?
         {
             continue;
         }
-        if has(words::TYPE_NAMES, &folded) && names_a_type(&before[..start])? {
+        if has(words::TYPE_NAMES, &folded) && names_a_type(&before[..start], spaces)? {
             continue;
         }
         if !has(trusted, &folded) {

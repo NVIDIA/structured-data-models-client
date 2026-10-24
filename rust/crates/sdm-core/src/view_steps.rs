@@ -21,7 +21,7 @@ use sdm_schema::view::yaml::{Document, NodeId, Value};
 use crate::pql::conversions::{
     Unconverted, date_text, datetime_text, decimal_text, int_text, strip,
 };
-use crate::pql::value_text;
+use crate::pql::{date_iso, datetime_iso, spaces, value_text};
 
 /// Why the data layer refuses a join's source or condition.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -45,7 +45,7 @@ pub fn fact_source(spec: &ViewSpec) -> Result<Vec<String>, Option<NodeId>> {
         return Err(None);
     };
     spec.text(*node)
-        .and_then(table_reference)
+        .and_then(|name| table_reference(name, spaces()))
         .ok_or(Some(*node))
 }
 
@@ -58,7 +58,7 @@ pub fn default_text(
     document: &Document,
     default: NodeId,
 ) -> Result<String, DefaultRefusal> {
-    let class = type_class(data_type);
+    let class = type_class(data_type, spaces());
     let value = document.value(default);
     // `str(default)`, which a text too large to write refuses.
     let text = || value_text(document, default).map_err(|_| DefaultRefusal::TooLong);
@@ -84,13 +84,13 @@ pub fn default_text(
         (TypeClass::Integer, Value::Int(n)) => Ok(n.text().to_owned()),
         (TypeClass::Integer, _) => converted(int_text(&text()?)),
         (TypeClass::Decimal, _) => converted(decimal_text(&text()?)),
-        (TypeClass::String, Value::Date(date)) => Ok(date.isoformat()),
-        (TypeClass::String, Value::Timestamp(moment)) => Ok(moment.isoformat()),
+        (TypeClass::String, Value::Date(date)) => Ok(date_iso(date)),
+        (TypeClass::String, Value::Timestamp(moment)) => Ok(datetime_iso(moment, 'T')),
         (TypeClass::String, _) => text(),
-        (TypeClass::Date, Value::Date(date)) => Ok(date.isoformat()),
+        (TypeClass::Date, Value::Date(date)) => Ok(date_iso(date)),
         (TypeClass::Date, _) => converted(date_text(strip(&text()?))),
         (TypeClass::Timestamp, Value::Timestamp(_)) => text(),
-        (TypeClass::Timestamp, Value::Date(date)) => Ok(date.isoformat()),
+        (TypeClass::Timestamp, Value::Date(date)) => Ok(date_iso(date)),
         (TypeClass::Timestamp, _) => converted(datetime_text(strip(&text()?))),
         (TypeClass::NoLiteral, _) => Err(DefaultRefusal::NoLiteral),
     }
@@ -115,9 +115,12 @@ pub fn parameter_inputs(spec: &ViewSpec) -> Vec<ParameterInput<NodeId>> {
 /// The `parameters` section read (`_read_parameters`), by folded name,
 /// the types Databricks describes, `described`, winning.
 pub fn parameters(spec: &ViewSpec, described: &[(String, String)]) -> Vec<(String, Parameter)> {
-    read_parameters(&parameter_inputs(spec), described, |data_type, default| {
-        default_text(data_type, &spec.document, *default)
-    })
+    read_parameters(
+        &parameter_inputs(spec),
+        described,
+        |data_type, default| default_text(data_type, &spec.document, *default),
+        spaces(),
+    )
 }
 
 /// The joins kept and skipped (`_add_joins`): a source read as a plain
@@ -129,14 +132,14 @@ pub fn walk_joins(spec: &mut ViewSpec) -> Result<JoinWalk<JoinJudgement>, ViewRe
         |spec, source| {
             source
                 .and_then(|node| spec.text(node))
-                .and_then(table_reference)
+                .and_then(|name| table_reference(name, spaces()))
                 .map(|_| ())
                 .ok_or(JoinJudgement::NotPlainSource)
         },
         |spec, on| {
             on.and_then(|node| spec.text(node))
-                .and_then(|text| strip_comments(text).ok())
-                .and_then(|text| join_condition(&text))
+                .and_then(|text| strip_comments(text, spaces()).ok())
+                .and_then(|text| join_condition(&text, spaces()))
                 .map(|_| ())
                 .ok_or(JoinJudgement::NotSingleEquality)
         },

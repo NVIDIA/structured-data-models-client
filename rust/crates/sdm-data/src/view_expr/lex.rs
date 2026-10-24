@@ -11,7 +11,7 @@ use std::sync::LazyLock;
 
 use super::names::Unreadable;
 use super::pattern::{Pattern, Read};
-use super::{ExprDialect, stripped};
+use super::{ExprDialect, Spaces};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Kind {
@@ -423,9 +423,9 @@ pub(crate) fn lex(expr: &str, dialect: Option<ExprDialect>) -> Read<Vec<Token>> 
 }
 
 /// A Databricks expression with each comment replaced by a space, trimmed
-/// (`strip_comments`). A comment hides nothing from a check of what is
-/// left, and what is left is what runs.
-pub fn strip_comments(expr: &str) -> Result<String, Unreadable> {
+/// by Python's white space, `spaces` (`strip_comments`). A comment hides
+/// nothing from a check of what is left, and what is left is what runs.
+pub fn strip_comments(expr: &str, spaces: Spaces) -> Result<String, Unreadable> {
     let mut out = String::with_capacity(expr.len());
     let mut last = 0;
     for token in lex(expr, Some(ExprDialect::Databricks))? {
@@ -436,7 +436,7 @@ pub fn strip_comments(expr: &str) -> Result<String, Unreadable> {
         }
     }
     out.push_str(&expr[last..]);
-    Ok(stripped(&out).to_owned())
+    Ok(spaces.strip(&out).to_owned())
 }
 
 /// `expr` with each string literal and quoted name replaced by `mask`.
