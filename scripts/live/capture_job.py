@@ -37,7 +37,7 @@ alone (``capture_run.run``).
 Widgets (job base parameters): leg, campaign (c1 or e0), repo_dir,
 reference_dir, wheel_dir, out_dir, live_config,
 capture_catalog, capture_schema, test_database, test_schema,
-case_timeout, commit.
+case_timeout, commit, capture_names (the other placeholders' names, JSON).
 """
 
 import sys
@@ -60,6 +60,7 @@ WIDGETS = (
     'test_schema',
     'case_timeout',
     'commit',
+    'capture_names',
 )
 for name in WIDGETS:
     dbutils.widgets.text(name, '', name)
@@ -106,7 +107,10 @@ import capture_run
 
 capture_run.use_reference_client(Path(dbutils.widgets.get('reference_dir')))
 names = capture_run.job_environment(
-    {name: dbutils.widgets.get(name) for name in capture_run.JOB_ENVIRONMENT}
+    {
+        name: dbutils.widgets.get(name)
+        for name in (*capture_run.JOB_ENVIRONMENT, capture_run.JOB_NAMES)
+    }
 )
 print(f'the run reads {len(names)} variable(s) from its job parameters')
 status = capture_run.run(
