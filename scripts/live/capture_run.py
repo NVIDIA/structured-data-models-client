@@ -49,6 +49,7 @@ import contextlib
 import importlib.util
 import json
 import os
+import re
 import signal
 import sys
 import threading
@@ -297,9 +298,11 @@ def install_guard(leg: str, guard: ModuleType, loader: Any) -> Any:
             )
     undo = guard.install(guards)
     loader.WRITE_GUARD = guard._keeping(own.check)
+    loader.WRITE_GUARD_SETUP = getattr(guard, 'setup', None)
 
     def uninstall() -> None:
         loader.WRITE_GUARD = None
+        loader.WRITE_GUARD_SETUP = None
         undo()
 
     return uninstall
@@ -575,16 +578,38 @@ JOB_ENVIRONMENT = {
 }
 
 
+#: The job parameter holding the other placeholders' private names, a JSON
+#: object by placeholder name (``{"user": ..., "shop_metric_view": ...}``),
+#: each set as ``SDM_CAPTURE_<NAME>``: an existing view's name, its
+#: schema, the view owner the warehouse's describe shows.
+JOB_NAMES = 'capture_names'
+
+
 def job_environment(parameters: dict[str, str]) -> list[str]:
     r"""Sets the run's environment from a job's parameters
-    (:data:`JOB_ENVIRONMENT`), each given one; no value is printed.
-    Returns the variables set."""
+    (:data:`JOB_ENVIRONMENT`, and each placeholder's name of
+    :data:`JOB_NAMES`), each given one; no value is printed. A name that
+    is not a placeholder's (``[a-z][a-z0-9_]*``), or a value that is not
+    text, is refused by its key. Returns the variables set."""
     found = []
     for parameter, variable in JOB_ENVIRONMENT.items():
         value = (parameters.get(parameter) or '').strip()
         if value:
             os.environ[variable] = value
             found.append(variable)
+    names = json.loads((parameters.get(JOB_NAMES) or '').strip() or '{}')
+    if not isinstance(names, dict):
+        raise SystemExit(f'{JOB_NAMES} is not a JSON object')
+    for key, value in sorted(names.items()):
+        if not (
+            re.fullmatch(r'[a-z][a-z0-9_]*', key)
+            and isinstance(value, str)
+            and value.strip()
+        ):
+            raise SystemExit(f'{JOB_NAMES}: {key!r} is no placeholder name')
+        variable = 'SDM_CAPTURE_' + key.upper()
+        os.environ[variable] = value.strip()
+        found.append(variable)
     return found
 
 
