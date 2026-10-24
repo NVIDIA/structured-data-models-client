@@ -47,7 +47,7 @@
     "view": {
       "kind": "metric_view",
       "name": "view_metric_wildcards_nested_join",
-      "yaml": "version: 0.1\nsource: \"`{catalog}`.`{schema}`.orders\"\njoins:\n  - name: users\n    source: \"`{catalog}`.`{schema}`.users\"\n    on: source.user_id = users.user_id\n    joins:\n      - name: countries\n        source: \"`{catalog}`.`{schema}`.countries\"\n        on: users.country = countries.country\ndimensions:\n  - expr: source.* EXCEPT (price)\n  - expr: users.* EXCEPT (age)\n  - name: region\n    expr: users.countries.region\nmeasures:\n  - name: revenue\n    expr: SUM(source.price)\n"
+      "yaml": "version: 0.1\nsource: \"`{catalog}`.`{schema}`.orders\"\njoins:\n  - name: users\n    source: \"`{catalog}`.`{schema}`.users\"\n    on: source.user_id = users.user_id\n    joins:\n      - name: countries\n        source: \"`{catalog}`.`{schema}`.countries\"\n        on: users.country = countries.country\ndimensions:\n  - expr: source.* EXCEPT (price)\n  - expr: users.* EXCEPT (age, user_id)\n  - name: region\n    expr: users.countries.region\nmeasures:\n  - name: revenue\n    expr: SUM(source.price)\n"
     }
   },
   "until": "from_source",
