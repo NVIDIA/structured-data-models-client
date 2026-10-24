@@ -33,7 +33,7 @@
   ],
   "input": {
     "base": "shop",
-    "pql": "PREDICT SUM(orders.price, 0, 7, days) FORECAST 2 TIMEFRAMES FOR EACH users.user_id",
+    "pql": "PREDICT SUM(ORDERS.PRICE, 0, 7, days) FORECAST 2 TIMEFRAMES FOR EACH USERS.USER_ID",
     "materialize": {
       "indices": [
         0,
@@ -53,6 +53,6 @@
     "outcome": "success",
     "stage": "predict"
   },
-  "why": "A forecast through a semantic view, timed by its time dimension. The semantic view is created in the test schema from the yaml, each base table named with the {catalog} (the database) and {schema} placeholders the capture writes, no private name; it is read through SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW (RE/graph.py:2056-2060), whose statement is T3.6's to render, and judged on the snowflake leg by T3.6's exit (T3.5 brief, open question 2)",
+  "why": "A forecast through a semantic view, timed by its time dimension. The semantic view is created in the test schema from the yaml, each base table named with the {catalog} (the database) and {schema} placeholders the capture writes, no private name; it is read through SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW (RE/graph.py:2056-2060), whose statement is T3.6's to render, and judged on the snowflake leg by T3.6's exit (T3.5 brief, open question 2) The question names the view's tables and columns in upper case, as Snowflake gives back the unquoted names of a semantic view (the second early capture: in lower case the old client refuses the question at materialize).",
   "source": "written by T3.5's test author from the reference at 43e55f4f"
 }
