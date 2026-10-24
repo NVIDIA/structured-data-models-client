@@ -4872,6 +4872,35 @@ fn key_scalar(array: &dyn Array, row: usize) -> Scalar {
 
 #[cfg(test)]
 mod tests {
+
+    /// An aggregate count is one row of one integer: a second row is the
+    /// provider's answer not reading, never its first row taken (T3.6
+    /// round 1; a catalog listing's first row is its dialect's to read).
+    #[test]
+    fn an_aggregate_count_is_exactly_one_row() {
+        use arrow_array::Int64Array;
+        let data = |values: Vec<i64>| {
+            let schema =
+                std::sync::Arc::new(arrow_schema::Schema::new(vec![arrow_schema::Field::new(
+                    "rows",
+                    DataType::Int64,
+                    false,
+                )]));
+            let batch = RecordBatch::try_new(
+                std::sync::Arc::clone(&schema),
+                vec![std::sync::Arc::new(Int64Array::from(values))],
+            )
+            .unwrap();
+            ArrowData::new(schema, vec![batch])
+        };
+        assert_eq!(super::row_count(&data(vec![8])).unwrap(), 8);
+        for answer in [data(vec![8, 9]), data(vec![])] {
+            assert_eq!(
+                super::row_count(&answer).unwrap_err().sentence,
+                Sentence::ProviderSchemaMismatch
+            );
+        }
+    }
     use super::*;
     use sdm_contract::ErrorCode;
     use sdm_contract::pql::TimeUnit;

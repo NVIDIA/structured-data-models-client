@@ -803,8 +803,41 @@ fn the_tables_and_the_session_are_read_from_their_answers() {
         read(ask.clone(), &current(Some("D"), None)).unwrap(),
         CatalogAnswer::Namespace(vec!["D".to_owned()])
     );
-    // No current database: refused, never read as a name of no parts.
-    assert!(read(ask, &current(None, Some("S"))).is_err());
+    // No current database: no part, so a database the source names is kept
+    // and the schema is refused as missing (`RE/graph.py:1030-1040`), and
+    // one it does not name is an internal error, as the old client's
+    // assert is (P3D-4).
+    assert_eq!(
+        read(ask.clone(), &current(None, Some("S"))).unwrap(),
+        CatalogAnswer::Namespace(vec![])
+    );
+    assert_eq!(
+        read(ask, &current(None, None)).unwrap(),
+        CatalogAnswer::Namespace(vec![])
+    );
+}
+
+#[test]
+fn a_session_with_no_current_database_keeps_the_database_the_source_names() {
+    let layer = layer();
+    let settled = layer.settled(&snowflake(&[Some(DB), None]), vec![]);
+    assert_eq!(settled, snowflake(&[Some(DB)]));
+    let refused = planned(
+        &settled,
+        json!({"request": "describe", "part": "tables", "tables": []}),
+    )
+    .unwrap_err();
+    assert_eq!(refused.sentence, Sentence::NoCurrentSchema);
+    // A source naming no database on such a session: the old client's bare
+    // assert, an internal error here (P3D-4).
+    let nowhere = layer.settled(&snowflake(&[None, None]), vec![]);
+    for request in [
+        json!({"request": "describe", "part": "tables", "tables": []}),
+        json!({"request": "describe", "part": "columns", "tables": [table("users")]}),
+    ] {
+        let refused = planned(&nowhere, request).unwrap_err();
+        assert_eq!(refused.sentence, Sentence::Internal);
+    }
 }
 
 #[test]
@@ -933,30 +966,63 @@ fn the_connectors_arrow_is_read_as_the_old_client_reads_it() {
 // --- the data layer's answers ------------------------------------------------
 
 fn failed(vendor_code: Option<&str>, sqlstate: Option<&str>) -> ProviderError {
+    said(vendor_code, sqlstate, None)
+}
+
+fn said(vendor_code: Option<&str>, sqlstate: Option<&str>, message: Option<&str>) -> ProviderError {
     ProviderError {
         kind: ErrorKind::DataSource,
         retryable: false,
         sqlstate: sqlstate.map(str::to_owned),
         vendor_code: vendor_code.map(str::to_owned),
         error_class: None,
+        driver_message: message.map(str::to_owned),
     }
 }
 
 #[test]
-fn only_snowflakes_errno_2003_says_an_object_is_not_found() {
+fn errno_2003_or_a_message_saying_does_not_exist_says_an_object_is_not_found() {
     let layer = layer();
     let p = &named();
+    // The old client's `_is_missing_object_error` (`SNOW/table.py:34-45`):
+    // errno 2003, or the driver's message saying "does not exist", in any
+    // case.
     assert!(
         layer
             .failure(p, &failed(Some("2003"), Some("02000")))
             .not_found
     );
     assert!(layer.failure(p, &failed(Some("2003"), None)).not_found);
+    assert!(
+        layer
+            .failure(
+                p,
+                &said(
+                    Some("2043"),
+                    Some("02000"),
+                    Some("Object does not exist, or operation cannot be performed.")
+                )
+            )
+            .not_found
+    );
+    assert!(
+        layer
+            .failure(p, &said(None, None, Some("Schema 'X' DOES NOT EXIST")))
+            .not_found
+    );
     // A login, a permission or a connection failure says nothing of the
     // table, so no other spelling is tried.
-    for code in ["390100", "390114", "3001", "250001", "2043"] {
+    for (code, message) in [
+        ("390100", "Incorrect username or password was specified."),
+        ("390114", "Authentication token has expired."),
+        ("3001", "Insufficient privileges to operate on table."),
+        ("250001", "Could not connect to Snowflake backend."),
+        ("2043", "Operation cannot be performed."),
+    ] {
         assert!(
-            !layer.failure(p, &failed(Some(code), None)).not_found,
+            !layer
+                .failure(p, &said(Some(code), None, Some(message)))
+                .not_found,
             "{code}"
         );
     }
@@ -1017,6 +1083,8 @@ fn snowflake_declares_what_the_old_clients_sampler_does() {
     assert!(capabilities.neighbor_lookback);
     assert!(!capabilities.sample_rows);
     assert!(!capabilities.keys_optional);
+    // The schema's hybrid tables are asked before a key is counted.
+    assert!(capabilities.key_enforcement);
     assert!(!capabilities.derived_relations);
     assert!(capabilities.fallback.is_none());
     assert_eq!(layer.source_database(&named()), Some("snowflake"));
@@ -1328,4 +1396,117 @@ fn a_missing_anchor_is_written_as_the_old_clients_nan() {
     assert_eq!(found[0].1, r#"[[0, NaN], [1, "2024-03-01 00:00:00"]]"#);
     assert!(found[0].0.ends_with("WHERE \"ts\" <= ?"));
     assert_eq!(found[0].2, vec!["2024-03-01 00:00:00".to_owned()]);
+}
+
+// --- key enforcement and the row count ----------------------------------------
+
+#[test]
+fn the_schemas_hybrid_tables_are_listed_and_read_as_the_old_client_reads_them() {
+    let p = &named();
+    // Asked of a table, answered for its schema (`SNOW/table.py:264-285`).
+    let (text, params) = one_recorded(
+        "key.declared-int32",
+        p,
+        json!({"request": "describe", "part": "key_enforcement", "tables": [table("users")]}),
+    );
+    assert_eq!(text, format!(r#"SHOW TABLES IN SCHEMA "{DB}"."{SCHEMA}""#));
+    assert!(params.is_empty());
+    let ask = json!({"request": "describe", "part": "key_enforcement", "tables": [table("users")]});
+    // The recorded listing, every table plain: none enforces its key.
+    let listing = as_rows(&recorded_result(
+        "key.declared-int32",
+        &format!(r#"SHOW TABLES IN SCHEMA "{DB}"."{SCHEMA}""#),
+        &[],
+    ));
+    assert_eq!(
+        read(ask.clone(), &listing).unwrap(),
+        CatalogAnswer::KeyEnforcement(vec![])
+    );
+    // A hybrid table by its name, `is_hybrid` `Y` after strip and
+    // upper-case, read by column name.
+    let rows = |names: Vec<&str>, hybrid: Vec<&str>| {
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("created_on", DataType::Utf8, true),
+            Field::new("name", DataType::Utf8, true),
+            Field::new("is_hybrid", DataType::Utf8, true),
+        ]));
+        vec![
+            RecordBatch::try_new(
+                schema,
+                vec![
+                    Arc::new(StringArray::from(vec![None::<&str>; names.len()])) as ArrayRef,
+                    Arc::new(StringArray::from(names)) as ArrayRef,
+                    Arc::new(StringArray::from(hybrid)) as ArrayRef,
+                ],
+            )
+            .unwrap(),
+        ]
+    };
+    assert_eq!(
+        read(
+            ask.clone(),
+            &rows(vec!["users", "orders"], vec![" y ", "N"])
+        )
+        .unwrap(),
+        CatalogAnswer::KeyEnforcement(vec!["users".to_owned()])
+    );
+    // A listing without those columns says no table enforces its key.
+    let other = vec![
+        RecordBatch::try_new(
+            Arc::new(Schema::new(vec![Field::new("name", DataType::Utf8, true)])),
+            vec![Arc::new(StringArray::from(vec!["users"])) as ArrayRef],
+        )
+        .unwrap(),
+    ];
+    assert_eq!(
+        read(ask, &other).unwrap(),
+        CatalogAnswer::KeyEnforcement(vec![])
+    );
+}
+
+/// A one-column count answer of `values`, of Arrow `data_type`.
+fn counts(name: &str, values: ArrayRef) -> Vec<RecordBatch> {
+    vec![
+        RecordBatch::try_new(
+            Arc::new(Schema::new(vec![Field::new(
+                name,
+                values.data_type().clone(),
+                true,
+            )])),
+            vec![values],
+        )
+        .unwrap(),
+    ]
+}
+
+#[test]
+fn snowflakes_row_count_is_its_listings_first_row_and_any_other_count_one_row() {
+    use arrow_array::Int64Array;
+    let layer = layer();
+    // The listing as the row adapter hands it over: the first row's `rows`,
+    // as the old client reads it (`SNOW/table.py:287-297`).
+    let listing = as_rows(&recorded_result(
+        "base.binary",
+        &format!(r#"SHOW TABLES LIKE ? IN SCHEMA "{DB}"."{SCHEMA}""#),
+        &["users"],
+    ));
+    assert_eq!(layer.row_count(&named(), &listing).unwrap(), Some(8));
+    // No row: the old client's assert, an internal error.
+    let none = vec![listing[0].slice(0, 0)];
+    assert_eq!(
+        layer.row_count(&named(), &none).unwrap_err().sentence,
+        Sentence::Internal
+    );
+    // Every other provider's count is the core's to read, one row of one
+    // count.
+    let duckdb = ProviderChoice::sql("duckdb");
+    assert_eq!(
+        layer
+            .row_count(
+                &duckdb,
+                &counts("rows", Arc::new(Int64Array::from(vec![3, 4])))
+            )
+            .unwrap(),
+        None
+    );
 }

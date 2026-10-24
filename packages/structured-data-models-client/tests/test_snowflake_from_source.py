@@ -454,19 +454,174 @@ def test_a_failure_that_is_not_a_missing_object_tries_no_other_spelling(
     assert '"USERS"' not in ' '.join(_describes(warehouse))
 
 
-def test_only_errno_2003_tries_another_spelling_on_the_core(
+def _missing_schema_once() -> _Warehouse:
+    r"""A warehouse whose tables are stored upper-cased, each named in
+    lower case failing with errno 2043 and a message saying "does not
+    exist", as a missing schema fails."""
+    warehouse = _Warehouse('base.binary')
+    warehouse.upper = {'users', 'orders'}
+    for name in warehouse.upper:
+        warehouse.fail[f'DESCRIBE TABLE "{DB}"."{SCHEMA}"."{name}"'] = (
+            ProgrammingError(
+                msg='Schema does not exist.', errno=2043, sqlstate='02000'
+            )
+        )
+    return warehouse
+
+
+def test_a_failure_whose_message_says_does_not_exist_tries_the_upper_spelling(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    r"""The old client also retries a failure whose text says "does not
-    exist" (``SNOW/table.py:34-45``); the core keys on errno 2003 alone
-    (registered, proposed: design S3)."""
-    warehouse = _Warehouse('base.binary')
-    warehouse.fail[f'DESCRIBE TABLE "{DB}"."{SCHEMA}"."users"'] = (
-        ProgrammingError(msg='Schema does not exist.', errno=2043)
-    )
-    with pytest.raises(StructuredDataError):
-        _described('core', monkeypatch, warehouse, **_NAMED, tables=_TABLES)
-    assert '"USERS"' not in ' '.join(_describes(warehouse))
+    r"""The old client retries on errno 2003 or a message saying "does not
+    exist" (``SNOW/table.py:34-45``), and so does the core: both routes
+    find the tables upper-cased and describe them alike."""
+    described = {}
+    for route in ('core', 'old'):
+        warehouse = _missing_schema_once()
+        described[route] = _projection(
+            _described(route, monkeypatch, warehouse, **_NAMED, tables=_TABLES)
+        )
+        assert f'DESCRIBE TABLE {_UPPER}."USERS"' in _describes(warehouse)
+    assert described['core'] == described['old']
+
+
+class _MaskedHybrid(_Warehouse):
+    r"""snowflake.forecast.catalog-keys' warehouse whose ``users`` is a
+    hybrid table, its enforced key ``uid`` masked for the reading role to
+    twelve zeroes: counted, it would repeat."""
+
+    def __init__(self) -> None:
+        super().__init__('snowflake.forecast.catalog-keys')
+
+    def answer(self, text: str, parameters: list[Any]) -> pa.Table:
+        if text == f'SHOW TABLES IN SCHEMA "{DB}"."{SCHEMA}"':
+            self.calls.append((text, parameters))
+            return pa.table(
+                {'name': ['users', 'orders'], 'is_hybrid': ['Y', 'N']}
+            )
+        if 'COUNT(DISTINCT "uid")' in text:
+            self.calls.append((text, parameters))
+            return pa.table({'K': [0], 'N': [12], 'D': [1], 'Z': [0]})
+        if 'HAVING COUNT(*) > 1' in text:
+            self.calls.append((text, parameters))
+            return pa.table({'uid': [0]})
+        found = super().answer(text, parameters)
+        if text.endswith('LIMIT 1000') and '"users"' in text:
+            at = found.column_names.index('uid')
+            return found.set_column(
+                at,
+                found.schema.field(at),
+                pa.array([0] * len(found), type=found.column(at).type),
+            )
+        return found
+
+
+def test_a_hybrid_tables_enforced_key_is_not_counted_on_either_route(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    r"""The old client lists the schema's hybrid tables once before it
+    counts a key holding a declared primary key, and counts no key a hybrid
+    table enforces (``SNOW/table.py:219-285``): a masked enforced key keeps
+    its table's key on both routes, never refused as repeating."""
+    described = {}
+    for route in ('core', 'old'):
+        warehouse = _MaskedHybrid()
+        schema = _described(
+            route, monkeypatch, warehouse, **_NAMED, tables={'users': 'users'}
+        )
+        described[route] = _projection(schema)
+        assert schema['users'].primary_key == 'uid'
+        asked = warehouse.asked()
+        assert asked.count(f'SHOW TABLES IN SCHEMA "{DB}"."{SCHEMA}"') == 1
+        assert not [text for text in asked if 'COUNT(DISTINCT "uid")' in text]
+    assert described['core'] == described['old']
+
+
+class _NoSession(_Warehouse):
+    r"""base.binary's warehouse on a connection opened with no database and
+    no schema: the session answers two nulls."""
+
+    def answer(self, text: str, parameters: list[Any]) -> pa.Table:
+        if text == 'SELECT CURRENT_DATABASE(), CURRENT_SCHEMA()':
+            self.calls.append((text, parameters))
+            return pa.table(
+                {
+                    'CURRENT_DATABASE()': pa.array([None], pa.string()),
+                    'CURRENT_SCHEMA()': pa.array([None], pa.string()),
+                }
+            )
+        return super().answer(text, parameters)
+
+
+@pytest.mark.parametrize(
+    ('tables', 'words'),
+    [
+        (
+            None,
+            "No current 'schema' set. Please specify the Snowflake schema "
+            'manually',
+        ),
+        (
+            _TABLES,
+            f"Unspecified 'schema' for table 'users' in database '{DB}'",
+        ),
+    ],
+    ids=['listed', 'named'],
+)
+def test_a_database_named_on_a_session_with_none_is_kept_and_the_schema_refused(
+    tables: dict[str, str] | None,
+    words: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    r"""The old client keeps the database the source names
+    (``database or result[0]``, ``RE/graph.py:1030-1031``) and refuses the
+    missing schema in its words (``:1035-1040``, ``SNOW/table.py:88-93``):
+    so does the core, as a StructuredDataError (P3D-5)."""
+    said = {}
+    for route in ('core', 'old'):
+        given: dict[str, Any] = {'database': DB}
+        if tables is not None:
+            given['tables'] = tables
+        with pytest.raises(Exception) as refused:  # noqa: PT011
+            _described(route, monkeypatch, _NoSession(), **given)
+        said[route] = str(refused.value)
+    assert words in said['core']
+    assert words in said['old']
+
+
+class _TypedEmpty(_Warehouse):
+    r"""empty.fact-table's warehouse, its empty preview answered as the
+    connector builds it for ``force_return_table=True``: the columns typed
+    from the result's metadata, no row (``result_set.py:288``); and none for
+    ``force_return_table=False``, as the old client asks."""
+
+    def __init__(self) -> None:
+        super().__init__('empty.fact-table')
+        self._typed = _Warehouse('base.binary')
+
+    def answer(self, text: str, parameters: list[Any]) -> pa.Table:
+        found = super().answer(text, parameters)
+        if text.endswith('LIMIT 1000') and found.num_columns == 0:
+            return self._typed.answer(text, parameters).slice(0, 0)
+        return found
+
+
+def test_an_empty_table_is_refused_at_describe_on_both_routes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    r"""Parity row 26: an empty table is refused at describe on both routes,
+    its words the old client's; the class and code differ (P3D-15)."""
+    raised = {}
+    for route in ('core', 'old'):
+        with pytest.raises(Exception) as refused:  # noqa: PT011
+            _described(route, monkeypatch, _TypedEmpty(), **_NAMED)
+        raised[route] = refused.value
+    assert f"Table '{DB}.{SCHEMA}.orders' is empty" in str(raised['old'])
+    assert type(raised['old']).__name__ == 'RuntimeError'
+    assert isinstance(raised['core'], StructuredDataError)
+    assert raised['core'].code == 'INVALID_REQUEST'
+    assert 'orders' in str(raised['core'])
+    assert 'is empty' in str(raised['core'])
 
 
 def _materialize(schema: Schema, query: str | None = None) -> Any:
