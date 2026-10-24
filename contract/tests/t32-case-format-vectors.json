@@ -41,7 +41,8 @@
     {"why": "num_context_samples of 5", "set": [{"path": ["input", "materialize", "num_context_samples"], "value": 5}]},
     {"why": "num_context_samples of 0, an input the reference refuses, carried as a case", "set": [{"path": ["input", "materialize", "num_context_samples"], "value": 0}]},
     {"why": "num_context_samples as a boolean, an input the reference refuses, carried as a case", "set": [{"path": ["input", "materialize", "num_context_samples"], "value": true}]},
-    {"why": "input.named_part: a source naming its catalog alone, the schema read from the session (T3.20)", "set": [{"path": ["input", "named_part"], "value": "catalog"}]}
+    {"why": "input.named_part: a source naming its catalog alone, the schema read from the session (T3.20)", "set": [{"path": ["input", "named_part"], "value": "catalog"}]},
+    {"why": "input.warehouse_setup: a view the run creates in the test schema (T3.20)", "set": [{"path": ["input", "warehouse_setup"], "value": ["CREATE VIEW `{catalog}`.`{schema}`.`v` AS SELECT * FROM `{catalog}`.`{schema}`.`users`"]}]}
   ],
   "refused": [
     {"why": "warehouses empty", "set": [{"path": ["warehouses"], "value": []}]},
@@ -67,6 +68,7 @@
     {"why": "num_context_samples a list", "set": [{"path": ["input", "materialize", "num_context_samples"], "value": [5]}]},
     {"why": "input.named_part naming a part there is none of", "set": [{"path": ["input", "named_part"], "value": "database"}]},
     {"why": "input.named_part beside input.connect", "set": [{"path": ["input", "named_part"], "value": "schema"}, {"path": ["input", "connect"], "value": "warehouse"}]},
-    {"why": "input.named_part on lakebase, whose source names one part", "set": [{"path": ["warehouses"], "value": ["lakebase"]}, {"path": ["input", "named_part"], "value": "schema"}]}
+    {"why": "input.named_part on lakebase, whose source names one part", "set": [{"path": ["warehouses"], "value": ["lakebase"]}, {"path": ["input", "named_part"], "value": "schema"}]},
+    {"why": "input.warehouse_setup empty", "set": [{"path": ["input", "warehouse_setup"], "value": []}]}
   ]
 }

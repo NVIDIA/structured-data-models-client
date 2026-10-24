@@ -548,6 +548,8 @@ def warehouse_problem(case: dict[str, Any]) -> str | None:
     connect = given.get('connect')
     if connect is not None and legs != [CONNECT_LEGS[connect]]:
         return f'input/connect {connect} runs on {CONNECT_LEGS[connect]} alone'
+    if 'warehouse_setup' in given and legs is None:
+        return 'input/warehouse_setup needs warehouses'
     if 'named_part' in given:
         if legs is None or connect is not None:
             return 'input/named_part needs warehouses and no connect'
@@ -2762,7 +2764,7 @@ PLACEHOLDER = re.compile(r'\{([a-z][a-z0-9_]*)\}')
 #: The parts of a case's ``input`` the placeholders are resolved in: what
 #: names the warehouse's objects. ``base`` and ``setup`` build the data in a
 #: local DuckDB, and ``pql`` and ``materialize`` name no warehouse object.
-_RESOLVED_IN = ('from_source', 'edits', 'view')
+_RESOLVED_IN = ('from_source', 'edits', 'view', 'warehouse_setup')
 #: The environment variable naming the live configuration file, a JSON file
 #: outside the repository that only the orchestrator writes (C-1, E-0, E-1;
 #: :func:`live_configuration`).
@@ -3734,10 +3736,12 @@ class WarehouseTarget:
         connection: Any,
         names: Mapping[str, str],
         view: Mapping[str, Any] | None,
+        setup: list[str] | None = None,
     ) -> None:
         self.connection = connection
         self.names = dict(names)
         self.view = dict(view) if view is not None else None
+        self.setup = list(setup or [])
 
 
 def _quoted(
@@ -4002,7 +4006,12 @@ class Live:
             loader.load(
                 duck,
                 leg,
-                WarehouseTarget(writer, self.names, given.get('view')),
+                WarehouseTarget(
+                    writer,
+                    self.names,
+                    given.get('view'),
+                    given.get('warehouse_setup'),
+                ),
             )
             self.tables = [
                 (
