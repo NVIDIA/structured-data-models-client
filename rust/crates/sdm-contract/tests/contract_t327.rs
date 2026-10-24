@@ -839,3 +839,24 @@ fn the_view_sentences_say_the_old_client_s_words() {
         "trust_expressions"
     );
 }
+
+/// A SQL choice's semantic model is read through its accessor (T3.5's
+/// contract follow-up); a choice naming none, or a host provider, has none.
+#[test]
+fn a_choice_s_view_is_read_by_its_accessor() {
+    let read: sdm_contract::data::ProviderChoice = serde_json::from_value(serde_json::json!({
+        "provider": "sql", "dialect": "databricks",
+        "view": {"name": "c.s.v", "trust_expressions": true},
+    }))
+    .unwrap();
+    let view = read.view().unwrap();
+    assert_eq!(
+        (view.name.as_str(), view.trust_expressions),
+        ("c.s.v", true)
+    );
+    assert!(
+        sdm_contract::data::ProviderChoice::sql("databricks")
+            .view()
+            .is_none()
+    );
+}
