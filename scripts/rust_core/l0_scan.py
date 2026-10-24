@@ -11,8 +11,9 @@ graph; these check the text:
 
 - ``vocabulary``: no Python-emulation vocabulary in the shipped code of the
   domain crates and ``sdm-host`` outside the modules on
-  ``emulation-allowlist.txt`` (decisions H21, E18), which must all sit in the
-  parser crate. Comments and ``#[cfg(test)]`` modules are not read; an
+  ``emulation-allowlist.txt`` (decisions H21, E18), in the parser crate
+  apart from the single serving-codec exception named below. Comments and
+  ``#[cfg(test)]`` modules are not read; an
   identifier made of the words ``py``, ``python``, ``pandas``, ``numpy`` and
   the like, a ``py``-prefixed Python type name (``pyint``, ``pystr``), a
   dunder name, or a string literal naming Python, pandas, NumPy or pyarrow,
@@ -155,6 +156,10 @@ PARSER_CRATE = 'sdm-pql'
 SQL_FREE_CRATES = ('sdm-schema', 'sdm-engine', 'sdm-request', 'sdm-core')
 DEV_CRATES = ('sdm-testkit',)
 ALLOWLIST = Path('scripts/rust_core/emulation-allowlist.txt')
+# Exact leaf exception only: T313-OWNER-2026-10-24-SERVING-EMULATION.
+# The decision is pending until the owner explicitly approves it; no
+# neighboring module or directory is admitted by this location.
+SERVING_EMULATION_LEAF = Path('rust/crates/sdm-request/src/serving_compat.rs')
 
 
 @dataclass(frozen=True)
@@ -438,7 +443,7 @@ def read_allowlist(root: Path, parser: str) -> tuple[list[Path], list[str]]:
             problems.append(f'{ALLOWLIST}:{number}: {line} does not exist')
             continue
         parser_src = Path('rust/crates') / parser / 'src'
-        if parser_src not in entry.parents:
+        if parser_src not in entry.parents and entry != SERVING_EMULATION_LEAF:
             problems.append(
                 f'{ALLOWLIST}:{number}: {line} is outside {parser_src}; '
                 'emulation stays in the parser crate (H21)'

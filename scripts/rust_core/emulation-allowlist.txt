@@ -32,3 +32,8 @@ rust/crates/sdm-pql/src/conversions.rs
 # escapes by, generated from Python by contract/fixtures/views/gen_printable.py
 # (T3.5 fix 3). Approved by owner: T35-OWNER-2026-10-24-EMULATION.
 rust/crates/sdm-pql/src/printable.rs
+# Pending owner approval: T313-OWNER-2026-10-24-SERVING-EMULATION.
+# One bounded request-crate leaf preserving the serving codec's exact JSON
+# bytes/limit boundaries and diagnostic scalar/text interpretation.
+# This is the sole exception to H21's parser-crate location rule.
+rust/crates/sdm-request/src/serving_compat.rs

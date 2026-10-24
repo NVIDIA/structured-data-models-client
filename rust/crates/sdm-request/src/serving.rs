@@ -36,6 +36,7 @@ use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 use sdm_wire::json::{self, Value, is_integer_token};
 
 use crate::predict::bad_response;
+use crate::serving_compat::{fold, is_present, is_space, value_type, write_json, write_text};
 
 /// The column the served model reads a request from. Renaming it breaks
 /// every endpoint already deployed.
@@ -95,7 +96,7 @@ pub fn envelope(
         .with_field("reason", Detail::text(e.category))
     })?;
     let mut payload = String::new();
-    python_json(&read, float_repr, &mut payload).map_err(|reason| {
+    write_json(&read, float_repr, &mut payload).map_err(|reason| {
         CoreError::new(
             Sentence::ServingValueNotJson,
             "the call carries a value with no JSON form",
@@ -106,7 +107,7 @@ pub fn envelope(
     out.push_str(r#"{"dataframe_records":[{""#);
     out.push_str(REQUEST_COLUMN);
     out.push_str(r#"":"#);
-    python_text(&payload, &mut out);
+    write_text(&payload, &mut out);
     out.push_str("}]}");
     let size = out.len() as u64;
     if size > max_request_bytes {
@@ -176,7 +177,7 @@ pub fn answer(endpoint: &str, body: &[u8]) -> Result<Value, CoreError> {
             Sentence::ServingNotAnObject,
             "the serving endpoint's answer is not a JSON object",
         )
-        .with_field("got", Detail::text(python_type(&read))));
+        .with_field("got", Detail::text(value_type(&read))));
     }
     match read.get("status") {
         Some(Value::Number(token)) if is_integer_token(token) => match status_at_least_400(token) {
@@ -243,7 +244,7 @@ fn in_band(endpoint: &str, status: u16, answer: &Value) -> CoreError {
     if status >= 500 {
         // `detail or title`, as Python's truthiness reads it.
         let reported = match detail {
-            Some(d) if truthy(d) => Some(d),
+            Some(d) if is_present(d) => Some(d),
             _ => answer.get("title"),
         };
         if let Some(diagnosis) = reported.and_then(Value::as_text).and_then(diagnosis_in) {
@@ -440,7 +441,7 @@ fn leading_code(text: &str) -> Option<&str> {
         return None;
     }
     let next = text[run..].strip_prefix(": ")?.chars().next()?;
-    (!python_space(next)).then(|| &text[..run])
+    (!is_space(next)).then(|| &text[..run])
 }
 
 /// Whether `code` is shaped as an error code, enum-like enough to be no
@@ -460,50 +461,11 @@ fn code_shaped(code: &str) -> bool {
 /// (`_diagnosis_in`): its wording found in the text, compared as Python's
 /// `casefold` compares.
 fn diagnosis_in(reported: &str) -> Option<&'static str> {
-    let folded = casefold(reported);
+    let folded = fold(reported);
     THE_CALLERS_TO_FIX
         .iter()
         .find(|(wording, _)| folded.contains(wording))
         .map(|(_, code)| *code)
-}
-
-/// `text` case-folded as Python's `str.casefold` folds it, as far as the
-/// wordings of [`THE_CALLERS_TO_FIX`] can tell: lower case, with the long
-/// s and the Latin ligatures folded to their letters.
-fn casefold(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    for c in text.chars() {
-        match c {
-            'ſ' => out.push('s'),
-            'ß' | 'ẞ' => out.push_str("ss"),
-            'ﬀ' => out.push_str("ff"),
-            'ﬁ' => out.push_str("fi"),
-            'ﬂ' => out.push_str("fl"),
-            'ﬃ' => out.push_str("ffi"),
-            'ﬄ' => out.push_str("ffl"),
-            'ﬅ' | 'ﬆ' => out.push_str("st"),
-            _ => out.extend(c.to_lowercase()),
-        }
-    }
-    out
-}
-
-/// Whether Python's `str.isspace` (the `\s` of a text pattern) takes `c`:
-/// Unicode's white space, and the information separators.
-fn python_space(c: char) -> bool {
-    c.is_whitespace() || ('\u{1c}'..='\u{1f}').contains(&c)
-}
-
-/// Whether Python's `bool` takes `value` as true.
-fn truthy(value: &Value) -> bool {
-    match value {
-        Value::Null => false,
-        Value::Bool(b) => *b,
-        Value::Number(token) => token.parse::<f64>().ok().is_none_or(|n| n != 0.0),
-        Value::Text(text) => !text.is_empty(),
-        Value::Array(items) => !items.is_empty(),
-        Value::Object(members) => !members.is_empty(),
-    }
 }
 
 /// An integer status token's value where it is 400 or more (an in-band
@@ -522,106 +484,8 @@ fn status_at_least_400(token: &str) -> Option<u16> {
     }
 }
 
-/// The name of the Python type `json.loads` reads `value` as.
-fn python_type(value: &Value) -> &'static str {
-    match value {
-        Value::Null => "NoneType",
-        Value::Bool(_) => "bool",
-        Value::Number(token) if is_integer_token(token) => "int",
-        Value::Number(_) => "float",
-        Value::Text(_) => "str",
-        Value::Array(_) => "list",
-        Value::Object(_) => "dict",
-    }
-}
-
 fn count(n: u64) -> Detail {
     Detail::Scalar(Scalar::UInt64(n))
-}
-
-// --- Writing as Python's `json.dumps` writes ----------------------------------
-
-/// `value` as `json.dumps(value, allow_nan=False, separators=(',', ':'))`
-/// writes what `json.loads` read of it: members in order, an integer as
-/// its digits (`-0` as `0`), a float as its `repr`, every text escaped to
-/// ASCII; an error naming a float past a double's range, which Python
-/// refuses to write.
-fn python_json(
-    value: &Value,
-    float_repr: fn(f64) -> String,
-    out: &mut String,
-) -> Result<(), &'static str> {
-    match value {
-        Value::Null => out.push_str("null"),
-        Value::Bool(true) => out.push_str("true"),
-        Value::Bool(false) => out.push_str("false"),
-        Value::Number(token) if is_integer_token(token) => {
-            if token.trim_start_matches('-').bytes().all(|b| b == b'0') {
-                out.push('0');
-            } else {
-                out.push_str(token);
-            }
-        }
-        Value::Number(token) => {
-            let number: f64 = token.parse().map_err(|_| "not_a_number")?;
-            if !number.is_finite() {
-                return Err("out_of_range_float");
-            }
-            out.push_str(&float_repr(number));
-        }
-        Value::Text(text) => python_text(text, out),
-        Value::Array(items) => {
-            out.push('[');
-            for (i, item) in items.iter().enumerate() {
-                if i > 0 {
-                    out.push(',');
-                }
-                python_json(item, float_repr, out)?;
-            }
-            out.push(']');
-        }
-        Value::Object(members) => {
-            out.push('{');
-            for (i, (name, member)) in members.iter().enumerate() {
-                if i > 0 {
-                    out.push(',');
-                }
-                python_text(name, out);
-                out.push(':');
-                python_json(member, float_repr, out)?;
-            }
-            out.push('}');
-        }
-    }
-    Ok(())
-}
-
-/// `text` as a JSON string Python writes with `ensure_ascii`: a quote and
-/// a backslash escaped, the five control characters JSON names by letter
-/// by it, any other character outside space to tilde as `\u` and four
-/// lower-case hex digits, one past the BMP as its surrogate pair.
-fn python_text(text: &str, out: &mut String) {
-    use std::fmt::Write;
-    out.push('"');
-    for c in text.chars() {
-        match c {
-            '"' => out.push_str("\\\""),
-            '\\' => out.push_str("\\\\"),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\t' => out.push_str("\\t"),
-            '\u{8}' => out.push_str("\\b"),
-            '\u{c}' => out.push_str("\\f"),
-            ' '..='~' => out.push(c),
-            _ => {
-                let mut units = [0u16; 2];
-                for unit in c.encode_utf16(&mut units) {
-                    let _ = write!(out, "\\u{unit:04x}");
-                }
-            }
-        }
-    }
-    out.push('"');
 }
 
 #[cfg(test)]
@@ -690,7 +554,7 @@ mod tests {
             (Value::Array(vec![]), false),
             (Value::Object(vec![]), false),
         ] {
-            assert_eq!(truthy(&value), truth, "{value:?}");
+            assert_eq!(is_present(&value), truth, "{value:?}");
         }
     }
 }

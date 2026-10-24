@@ -25,3 +25,4 @@ pub mod payload;
 pub mod predict;
 pub mod ranking;
 pub mod serving;
+mod serving_compat;
