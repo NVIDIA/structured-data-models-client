@@ -217,6 +217,13 @@ pub fn session_zone_offset(name: &str, roots: &[PathBuf], micros: i64) -> Option
     if zone.iana_name() != Some(name) {
         return None;
     }
+    // An instant past the last one the zone data holds (9999-12-30T22:00Z)
+    // is in the zone still: its offset there, as no zone changes offset in
+    // the last day of 9999 (Python's ZoneInfo reads it by the zone's rule).
+    let micros = micros.clamp(
+        jiff::Timestamp::MIN.as_second() * 1_000_000,
+        jiff::Timestamp::MAX.as_second() * 1_000_000,
+    );
     let at = jiff::Timestamp::from_microsecond(micros).ok()?;
     Some(zone.to_offset(at).seconds())
 }
