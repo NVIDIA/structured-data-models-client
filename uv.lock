@@ -3040,7 +3040,7 @@ requires-dist = [
     { name = "numpy" },
     { name = "openai", marker = "extra == 'explain'", specifier = ">=1.40" },
     { name = "packaging", marker = "extra == 'test'" },
-    { name = "pandas", specifier = "<3.1" },
+    { name = "pandas" },
     { name = "pooch", marker = "extra == 'relbench'" },
     { name = "pooch", marker = "extra == 'test'" },
     { name = "pyarrow", specifier = ">=10.0.1" },

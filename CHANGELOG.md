@@ -22,16 +22,17 @@ these packages. All five distributions share one version and one entry.
   emulated, and each is smoke-tested on the architecture it targets. The
   release no longer builds aarch64 under QEMU, which also takes a privileged
   container image out of the release path.
-- `structured-data-models-client` and the relational engine hold `pandas`
-  below 3.1. The 3.1 release raises taking a date offset from the earliest
-  timestamp, which the engine does for every graph without a time column,
-  and this release is tested against 3.0.
+- `structured-data-models-client` holds `pandas` below 3.1, and this release
+  is tested against 3.0.
 
 ### Fixed
 
 - DuckDB 2.0 no longer warns on every read. The relational engine and
   `read_table` read a DuckDB result through a relation rather than the DB-API
   cursor, which 2.0 warns makes an extra copy of the rows.
+- A relational prediction over a graph without a time column works on pandas
+  3.1. Its anchor is the earliest timestamp pandas holds, and 3.1 refused to
+  take even an empty date offset from it.
 
 ## 1.0.0 - 2026-10-15
 

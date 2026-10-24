@@ -102,6 +102,19 @@ def to_datetime(ser: pd.Series, column_name: str | None = None) -> pd.Series:
     return ser
 
 
+def shift_time(time: pd.Timestamp, offset: pd.DateOffset) -> pd.Timestamp:
+    r"""``time`` moved by ``offset``, unchanged by an offset that moves nothing.
+
+    pandas 3.1 takes even an empty offset through microseconds, which puts
+    :obj:`pandas.Timestamp.min`, the anchor of a graph without a time column,
+    out of range.
+    """
+    reference = pd.Timestamp('2000-01-01')
+    if reference + offset == reference:
+        return time
+    return time + offset
+
+
 _MIN_DAYS_IN_MONTH = 28
 _MAX_DAYS_IN_MONTH = 31
 _MIN_DAYS_IN_YEAR = 365
