@@ -1,0 +1,1126 @@
+{
+ "format": "sdm-capture/1",
+ "case": "view.metric.adventureworks.from-source",
+ "leg": "databricks-sql",
+ "recording_commit": "792c507229e7652d34d28c84e436d2a44a2f803e",
+ "reference_commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+ "versions": {
+  "databricks-sdk": "0.148.0",
+  "databricks-sql-connector": "4.6.0",
+  "duckdb": "1.5.6",
+  "numpy": "2.5.3",
+  "pandas": "3.0.6",
+  "pyarrow": "25.0.1",
+  "python": "3.12.15"
+ },
+ "input_hash": "50f25bb236aa5e55dc01fc45bd33bc328e3315bb6e51d59484b24a30cb01fc4b",
+ "session": {
+  "time_zone": "Etc/UTC",
+  "null_order": "nulls_first"
+ },
+ "reference": {
+  "case": "view.metric.adventureworks.from-source@databricks-sql",
+  "core": null,
+  "driver": {
+   "capture": {
+    "bindings": [],
+    "cursors": 10,
+    "events": [
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 1
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 2
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 3
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 4
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 5
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 6
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 7
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 8
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 9
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 10
+     }
+    ],
+    "incomplete": [],
+    "passed_through": [],
+    "statements": [
+     {
+      "error": null,
+      "handle": 1,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "f6c26cb9abcf7267fe4fc31c08b17075a3aec253154ca615c738727f839216fe",
+        "method": "fetchall",
+        "rows": 30,
+        "values": {
+         "columns": [
+          "col_name",
+          "data_type",
+          "comment",
+          "metadata"
+         ],
+         "ordered": "0b6207ccede5c05ec4d8a21208490816f040f256215ab30f37aa88ea252eb336",
+         "types": [
+          "string",
+          "string",
+          "string",
+          "string"
+         ],
+         "unencodable": [],
+         "unordered": "54046ea017d290d93dde30e4df49208c1fe302a8aab2134c63a820cf88390858"
+        }
+       }
+      ],
+      "sql": "DESCRIBE TABLE EXTENDED `{catalog}`.`{adventureworks_schema}`.`adventureworks_sales_metrics`",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 2,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{adventureworks_schema}'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'adventureworks_sales_order_details'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "6a148139eb2790774fb6358dce85b2b29fc6cd3f40d493ed080bb646b17bf316",
+        "method": "fetchall",
+        "rows": 13,
+        "values": {
+         "columns": [
+          "column_name",
+          "full_data_type",
+          "is_nullable",
+          "table_catalog",
+          "table_schema",
+          "table_name",
+          "table_type"
+         ],
+         "ordered": "49c5b4b0c5793d4e10676211f78a87cbee306ba089329ce0212503fedc73b8ef",
+         "types": [
+          "string",
+          "string",
+          "string",
+          "string",
+          "string",
+          "string",
+          "string"
+         ],
+         "unencodable": [],
+         "unordered": "ec6c1ce125fda51b42255df803ff7ad7b256e09ca9c055c4163f6009bfc911a9"
+        }
+       }
+      ],
+      "sql": "SELECT c.column_name, c.full_data_type, c.is_nullable,\n       c.table_catalog, c.table_schema, c.table_name,\n       t.table_type\nFROM `{catalog}`.information_schema.columns c\nJOIN `{catalog}`.information_schema.tables t\n  ON t.table_catalog = c.table_catalog\n AND t.table_schema = c.table_schema\n AND t.table_name = c.table_name\nWHERE c.table_schema = lower(?)\n  AND c.table_name = lower(?)\nORDER BY c.ordinal_position",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 2,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{adventureworks_schema}'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'adventureworks_sales_order_details'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "method": "fetchall",
+        "rows": 0,
+        "values": {
+         "columns": [
+          "constraint_type",
+          "constraint_name",
+          "column_name"
+         ],
+         "ordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+         "types": [
+          "string",
+          "string",
+          "string"
+         ],
+         "unencodable": [],
+         "unordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        }
+       }
+      ],
+      "sql": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name\nFROM `{catalog}`.information_schema.table_constraints tc\nJOIN `{catalog}`.information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = lower(?)\n  AND tc.table_name = lower(?)\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE')",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 3,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{adventureworks_schema}'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'adventureworks_customers'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "3dfdb383ca89bd0e66b2b70e97bfebe0ab127d30b952cea709820ddb6dc457d9",
+        "method": "fetchall",
+        "rows": 7,
+        "values": {
+         "columns": [
+          "column_name",
+          "full_data_type",
+          "is_nullable",
+          "table_catalog",
+          "table_schema",
+          "table_name",
+          "table_type"
+         ],
+         "ordered": "44ac377b93696c60ad47da6ee72142e6170c194fee0ab89c819189d6f36c2484",
+         "types": [
+          "string",
+          "string",
+          "string",
+          "string",
+          "string",
+          "string",
+          "string"
+         ],
+         "unencodable": [],
+         "unordered": "2659f599adfd268eba404c6d0fac19d348e58b1a844848a68cf147b5fa18c775"
+        }
+       }
+      ],
+      "sql": "SELECT c.column_name, c.full_data_type, c.is_nullable,\n       c.table_catalog, c.table_schema, c.table_name,\n       t.table_type\nFROM `{catalog}`.information_schema.columns c\nJOIN `{catalog}`.information_schema.tables t\n  ON t.table_catalog = c.table_catalog\n AND t.table_schema = c.table_schema\n AND t.table_name = c.table_name\nWHERE c.table_schema = lower(?)\n  AND c.table_name = lower(?)\nORDER BY c.ordinal_position",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 3,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{adventureworks_schema}'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'adventureworks_customers'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "method": "fetchall",
+        "rows": 0,
+        "values": {
+         "columns": [
+          "constraint_type",
+          "constraint_name",
+          "column_name"
+         ],
+         "ordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+         "types": [
+          "string",
+          "string",
+          "string"
+         ],
+         "unencodable": [],
+         "unordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        }
+       }
+      ],
+      "sql": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name\nFROM `{catalog}`.information_schema.table_constraints tc\nJOIN `{catalog}`.information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = lower(?)\n  AND tc.table_name = lower(?)\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE')",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 4,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{adventureworks_schema}'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'adventureworks_products'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "f8b9259bb67e0049da9f4ddf8b5adbc93241312ab8c2e99c0982a85c6284b291",
+        "method": "fetchall",
+        "rows": 25,
+        "values": {
+         "columns": [
+          "column_name",
+          "full_data_type",
+          "is_nullable",
+          "table_catalog",
+          "table_schema",
+          "table_name",
+          "table_type"
+         ],
+         "ordered": "10971048daea061e2811bb16b2c522d596a601e8d8575143da291b8c7fb03f8d",
+         "types": [
+          "string",
+          "string",
+          "string",
+          "string",
+          "string",
+          "string",
+          "string"
+         ],
+         "unencodable": [],
+         "unordered": "4b496d8c1cb7161db20a0de03baff7133aa02d11e220fb59e29222c1b9d662dc"
+        }
+       }
+      ],
+      "sql": "SELECT c.column_name, c.full_data_type, c.is_nullable,\n       c.table_catalog, c.table_schema, c.table_name,\n       t.table_type\nFROM `{catalog}`.information_schema.columns c\nJOIN `{catalog}`.information_schema.tables t\n  ON t.table_catalog = c.table_catalog\n AND t.table_schema = c.table_schema\n AND t.table_name = c.table_name\nWHERE c.table_schema = lower(?)\n  AND c.table_name = lower(?)\nORDER BY c.ordinal_position",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 4,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{adventureworks_schema}'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'adventureworks_products'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "method": "fetchall",
+        "rows": 0,
+        "values": {
+         "columns": [
+          "constraint_type",
+          "constraint_name",
+          "column_name"
+         ],
+         "ordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+         "types": [
+          "string",
+          "string",
+          "string"
+         ],
+         "unencodable": [],
+         "unordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        }
+       }
+      ],
+      "sql": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name\nFROM `{catalog}`.information_schema.table_constraints tc\nJOIN `{catalog}`.information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = lower(?)\n  AND tc.table_name = lower(?)\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE')",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 5,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "121a63e8fef4d05318d0acce2727c593279c119e2ba77eeb58a8f3a990ba96c0",
+        "method": "fetchall_arrow",
+        "rows": 1000,
+        "schema": [
+         {
+          "name": "SalesOrderID",
+          "type": "int32"
+         },
+         {
+          "name": "SalesOrderDetailID",
+          "type": "int32"
+         },
+         {
+          "name": "CarrierTrackingNumber",
+          "type": "string"
+         },
+         {
+          "name": "OrderQty",
+          "type": "int32"
+         },
+         {
+          "name": "ProductID",
+          "type": "int32"
+         },
+         {
+          "name": "SpecialOfferID",
+          "type": "int32"
+         },
+         {
+          "name": "UnitPrice",
+          "type": "double"
+         },
+         {
+          "name": "UnitPriceDiscount",
+          "type": "double"
+         },
+         {
+          "name": "LineTotal",
+          "type": "double"
+         },
+         {
+          "name": "rowguid",
+          "type": "string"
+         },
+         {
+          "name": "ModifiedDate",
+          "type": "timestamp[us, tz=Etc/UTC]"
+         },
+         {
+          "name": "CustomerID",
+          "type": "int32"
+         },
+         {
+          "name": "OrderDate",
+          "type": "timestamp[us, tz=Etc/UTC]"
+         }
+        ],
+        "values": {
+         "columns": [
+          "SalesOrderID",
+          "SalesOrderDetailID",
+          "CarrierTrackingNumber",
+          "OrderQty",
+          "ProductID",
+          "SpecialOfferID",
+          "UnitPrice",
+          "UnitPriceDiscount",
+          "LineTotal",
+          "rowguid",
+          "ModifiedDate",
+          "CustomerID",
+          "OrderDate"
+         ],
+         "ordered": "b58b8a4be4898ea1460ccd09f48b01f485d0eb6d0581b5dab409ac1fc0189f09",
+         "types": [
+          "int",
+          "int",
+          "string",
+          "int",
+          "int",
+          "int",
+          "double",
+          "double",
+          "double",
+          "string",
+          "timestamp",
+          "int",
+          "timestamp"
+         ],
+         "unencodable": [],
+         "unordered": "3d8bd6e91e5bf802574ef3c28efeae0a7e5ce9c5e99c1691ef1f6d7fab3b2b1b"
+        }
+       }
+      ],
+      "sql": "SELECT `SalesOrderID`, `SalesOrderDetailID`, `CarrierTrackingNumber`, `OrderQty`, `ProductID`, `SpecialOfferID`, `UnitPrice`, `UnitPriceDiscount`, `LineTotal`, `rowguid`, `ModifiedDate`, `CustomerID`, `OrderDate` FROM `{catalog}`.`{adventureworks_schema}`.`adventureworks_sales_order_details` LIMIT 1000",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 6,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "2a0f0d34d20a4f2c4b784db3e120508f1f45edf5350363731f10237a2f784090",
+        "method": "fetchall_arrow",
+        "rows": 1000,
+        "schema": [
+         {
+          "name": "Discounted",
+          "type": "bool"
+         }
+        ],
+        "values": {
+         "columns": [
+          "Discounted"
+         ],
+         "ordered": "9d42991d56dc22cae64d107a3ad17c663e88b56b8f3792f128ef148da4bca1f9",
+         "types": [
+          "boolean"
+         ],
+         "unencodable": [],
+         "unordered": "2f211101995c124c4fea3c645b73e1ff0964f13832d1eccb1e1e229d4579296b"
+        }
+       }
+      ],
+      "sql": "SELECT UnitPriceDiscount > 0 AS `Discounted` FROM `{catalog}`.`{adventureworks_schema}`.`adventureworks_sales_order_details` LIMIT 1000",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 7,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "a9b12e529a7d91a41c5d0622d1f389bddadd90f5d9166cb95fba2d9c3c12308f",
+        "method": "fetchall_arrow",
+        "rows": 1000,
+        "schema": [
+         {
+          "name": "CustomerID",
+          "type": "int32"
+         },
+         {
+          "name": "PersonID",
+          "type": "int32"
+         },
+         {
+          "name": "StoreID",
+          "type": "int32"
+         },
+         {
+          "name": "TerritoryID",
+          "type": "int32"
+         },
+         {
+          "name": "AccountNumber",
+          "type": "string"
+         },
+         {
+          "name": "rowguid",
+          "type": "string"
+         },
+         {
+          "name": "ModifiedDate",
+          "type": "timestamp[us, tz=Etc/UTC]"
+         }
+        ],
+        "values": {
+         "columns": [
+          "CustomerID",
+          "PersonID",
+          "StoreID",
+          "TerritoryID",
+          "AccountNumber",
+          "rowguid",
+          "ModifiedDate"
+         ],
+         "ordered": "c1e27e3edf569e55d13813890840a74cf364ba5bfe6695cd81b24fe023fada9c",
+         "types": [
+          "int",
+          "int",
+          "int",
+          "int",
+          "string",
+          "string",
+          "timestamp"
+         ],
+         "unencodable": [],
+         "unordered": "6a1138238848cb271c3800b31adc9434eb964cc31089bd6520d8d3e69a0c5e88"
+        }
+       }
+      ],
+      "sql": "SELECT `CustomerID`, `PersonID`, `StoreID`, `TerritoryID`, `AccountNumber`, `rowguid`, `ModifiedDate` FROM `{catalog}`.`{adventureworks_schema}`.`adventureworks_customers` LIMIT 1000",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 8,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "7e139a80b1777a02c500c69865d3fff5a446b2fc2cb0d4682106d7552543c23a",
+        "method": "fetchall_arrow",
+        "rows": 504,
+        "schema": [
+         {
+          "name": "ProductID",
+          "type": "int32"
+         },
+         {
+          "name": "Name",
+          "type": "string"
+         },
+         {
+          "name": "ProductNumber",
+          "type": "string"
+         },
+         {
+          "name": "MakeFlag",
+          "type": "int32"
+         },
+         {
+          "name": "FinishedGoodsFlag",
+          "type": "int32"
+         },
+         {
+          "name": "Color",
+          "type": "string"
+         },
+         {
+          "name": "SafetyStockLevel",
+          "type": "int32"
+         },
+         {
+          "name": "ReorderPoint",
+          "type": "int32"
+         },
+         {
+          "name": "StandardCost",
+          "type": "double"
+         },
+         {
+          "name": "ListPrice",
+          "type": "double"
+         },
+         {
+          "name": "Size",
+          "type": "string"
+         },
+         {
+          "name": "SizeUnitMeasureCode",
+          "type": "string"
+         },
+         {
+          "name": "WeightUnitMeasureCode",
+          "type": "string"
+         },
+         {
+          "name": "Weight",
+          "type": "double"
+         },
+         {
+          "name": "DaysToManufacture",
+          "type": "int32"
+         },
+         {
+          "name": "ProductLine",
+          "type": "string"
+         },
+         {
+          "name": "Class",
+          "type": "string"
+         },
+         {
+          "name": "Style",
+          "type": "string"
+         },
+         {
+          "name": "ProductSubcategoryID",
+          "type": "int32"
+         },
+         {
+          "name": "ProductModelID",
+          "type": "int32"
+         },
+         {
+          "name": "SellStartDate",
+          "type": "timestamp[us, tz=Etc/UTC]"
+         },
+         {
+          "name": "SellEndDate",
+          "type": "timestamp[us, tz=Etc/UTC]"
+         },
+         {
+          "name": "DiscontinuedDate",
+          "type": "timestamp[us, tz=Etc/UTC]"
+         },
+         {
+          "name": "rowguid",
+          "type": "string"
+         },
+         {
+          "name": "ModifiedDate",
+          "type": "timestamp[us, tz=Etc/UTC]"
+         }
+        ],
+        "values": {
+         "columns": [
+          "ProductID",
+          "Name",
+          "ProductNumber",
+          "MakeFlag",
+          "FinishedGoodsFlag",
+          "Color",
+          "SafetyStockLevel",
+          "ReorderPoint",
+          "StandardCost",
+          "ListPrice",
+          "Size",
+          "SizeUnitMeasureCode",
+          "WeightUnitMeasureCode",
+          "Weight",
+          "DaysToManufacture",
+          "ProductLine",
+          "Class",
+          "Style",
+          "ProductSubcategoryID",
+          "ProductModelID",
+          "SellStartDate",
+          "SellEndDate",
+          "DiscontinuedDate",
+          "rowguid",
+          "ModifiedDate"
+         ],
+         "ordered": "faee30f09b0a0f22d78f79fcb160aaf6f305f6f1522de967d003441fccd9241f",
+         "types": [
+          "int",
+          "string",
+          "string",
+          "int",
+          "int",
+          "string",
+          "int",
+          "int",
+          "double",
+          "double",
+          "string",
+          "string",
+          "string",
+          "double",
+          "int",
+          "string",
+          "string",
+          "string",
+          "int",
+          "int",
+          "timestamp",
+          "timestamp",
+          "timestamp",
+          "string",
+          "timestamp"
+         ],
+         "unencodable": [],
+         "unordered": "b5f229762a802960d8b042ddfb479ad95339ad0015b2b87722b87bc2a654355e"
+        }
+       }
+      ],
+      "sql": "SELECT `ProductID`, `Name`, `ProductNumber`, `MakeFlag`, `FinishedGoodsFlag`, `Color`, `SafetyStockLevel`, `ReorderPoint`, `StandardCost`, `ListPrice`, `Size`, `SizeUnitMeasureCode`, `WeightUnitMeasureCode`, `Weight`, `DaysToManufacture`, `ProductLine`, `Class`, `Style`, `ProductSubcategoryID`, `ProductModelID`, `SellStartDate`, `SellEndDate`, `DiscontinuedDate`, `rowguid`, `ModifiedDate` FROM `{catalog}`.`{adventureworks_schema}`.`adventureworks_products` LIMIT 1000",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 9,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "26426eb08bfe8ffff0d3e39dfca47372cca7af53626845ba392192e56349daa9",
+        "method": "fetchall",
+        "rows": 2,
+        "values": {
+         "columns": [
+          "k",
+          "n",
+          "d",
+          "z"
+         ],
+         "ordered": "d815a673a3836b04e416896c6ebd9f072e253fb1f895f7da1aa5456377aa6dbe",
+         "types": [
+          "int",
+          "bigint",
+          "bigint",
+          "bigint"
+         ],
+         "unencodable": [],
+         "unordered": "d815a673a3836b04e416896c6ebd9f072e253fb1f895f7da1aa5456377aa6dbe"
+        }
+       }
+      ],
+      "sql": "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT `CustomerID`) AS d, COUNT(CASE WHEN `CustomerID` IS NULL THEN 1 END) AS z\nFROM `{catalog}`.`{adventureworks_schema}`.`adventureworks_customers`\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT `ProductID`) AS d, COUNT(CASE WHEN `ProductID` IS NULL THEN 1 END) AS z\nFROM `{catalog}`.`{adventureworks_schema}`.`adventureworks_products`",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 10,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "dc2e5150774db733c108864df9e248ea9a80d89b8bf6241ef9797c19ceafac1b",
+        "method": "fetchall",
+        "rows": 1,
+        "values": {
+         "columns": [
+          "count(1)",
+          "min(OrderDate)",
+          "max(OrderDate)",
+          "count(OrderDate)"
+         ],
+         "ordered": "51b80153d5a8cf755cd3900b8293d287796c3c631676165bf6de34fbaa866fe5",
+         "types": [
+          "bigint",
+          "timestamp",
+          "timestamp",
+          "bigint"
+         ],
+         "unencodable": [],
+         "unordered": "51b80153d5a8cf755cd3900b8293d287796c3c631676165bf6de34fbaa866fe5"
+        }
+       }
+      ],
+      "sql": "SELECT COUNT(*), MIN(`OrderDate`), MAX(`OrderDate`), COUNT(`OrderDate`)\nFROM `{catalog}`.`{adventureworks_schema}`.`adventureworks_sales_order_details`",
+      "stage": "from_source"
+     }
+    ]
+   },
+   "query_log": {
+    "bindings": 0,
+    "compared": 13,
+    "differing": [],
+    "statements": 13
+   }
+  },
+  "format": "sdm-observation/1",
+  "host": {
+   "warnings": []
+  },
+  "identity": {
+   "cell": "ref-pandas3",
+   "commit": {
+    "clean": true,
+    "sha": "792c507229e7652d34d28c84e436d2a44a2f803e"
+   },
+   "contract": null,
+   "inputs": {
+    "bases": "9d69fe4aea2be4a6a2d96ea03f5258147c537927e2c6e6716b6030836ebc62f8",
+    "case": "1dd1257389cd53fe69eddb32e8c52df07bfe46c3cbaea75b51b9b5ecd57a397f"
+   },
+   "native": null,
+   "native_loaded": false,
+   "operations": [],
+   "platform": "linux-x86_64",
+   "reference": {
+    "commit": {
+     "clean": true,
+     "sha": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1"
+    },
+    "environment": "4ad1f59a27870d083c270d58969d94b80e97bd128c81ba20396b4599e8ae0efe",
+    "guard": {
+     "after": "passed",
+     "before": "passed"
+    }
+   },
+   "runner": "python-ref",
+   "versions": {
+    "duckdb": "1.5.6",
+    "numpy": "2.5.3",
+    "pandas": "3.0.6",
+    "pyarrow": "25.0.1",
+    "python": "3.12.15"
+   }
+  },
+  "outcome": {
+   "code": null,
+   "error": null,
+   "result": "success",
+   "stage": "from_source"
+  },
+  "public": {
+   "payloads": [],
+   "result": null,
+   "schema": {
+    "links": [
+     [
+      "adventureworks_sales_order_details",
+      "CustomerID",
+      "customers",
+      "CustomerID"
+     ],
+     [
+      "adventureworks_sales_order_details",
+      "ProductID",
+      "products",
+      "ProductID"
+     ]
+    ],
+    "tables": [
+     {
+      "columns": [
+       {
+        "dtype": "int64",
+        "name": "SalesOrderDetailID",
+        "stype": "ID"
+       },
+       {
+        "dtype": "int64",
+        "name": "SalesOrderID",
+        "stype": "ID"
+       },
+       {
+        "dtype": "timestamp[us]",
+        "name": "OrderDate",
+        "stype": "timestamp"
+       },
+       {
+        "dtype": "int64",
+        "name": "OrderQty",
+        "stype": "categorical"
+       },
+       {
+        "dtype": "float64",
+        "name": "UnitPrice",
+        "stype": "categorical"
+       },
+       {
+        "dtype": "float64",
+        "name": "LineTotal",
+        "stype": "numerical"
+       },
+       {
+        "dtype": "bool",
+        "name": "Discounted",
+        "stype": "categorical"
+       },
+       {
+        "dtype": "int64",
+        "name": "CustomerID",
+        "stype": "ID"
+       },
+       {
+        "dtype": "int64",
+        "name": "ProductID",
+        "stype": "ID"
+       }
+      ],
+      "duplicate_keys": null,
+      "name": "adventureworks_sales_order_details",
+      "primary_key": null,
+      "time_column": "OrderDate"
+     },
+     {
+      "columns": [
+       {
+        "dtype": "int64",
+        "name": "TerritoryID",
+        "stype": "ID"
+       },
+       {
+        "dtype": "int64",
+        "name": "StoreID",
+        "stype": "ID"
+       },
+       {
+        "dtype": "int64",
+        "name": "CustomerID",
+        "stype": "ID"
+       }
+      ],
+      "duplicate_keys": null,
+      "name": "customers",
+      "primary_key": "CustomerID",
+      "time_column": null
+     },
+     {
+      "columns": [
+       {
+        "dtype": "string",
+        "name": "Color",
+        "stype": "categorical"
+       },
+       {
+        "dtype": "float64",
+        "name": "ListPrice",
+        "stype": "numerical"
+       },
+       {
+        "dtype": "string",
+        "name": "ProductLine",
+        "stype": "categorical"
+       },
+       {
+        "dtype": "int64",
+        "name": "ProductSubcategoryID",
+        "stype": "ID"
+       },
+       {
+        "dtype": "int64",
+        "name": "ProductID",
+        "stype": "ID"
+       }
+      ],
+      "duplicate_keys": null,
+      "name": "products",
+      "primary_key": "ProductID",
+      "time_column": null
+     }
+    ]
+   }
+  }
+ },
+ "tables": [
+  {
+   "name": "adventureworks_customers",
+   "data": "tables/b65f3ad7c5d6cf47edfe6b3b170873b35c03bb1ea1fe9abb0ddd9ba455539355.arrows"
+  },
+  {
+   "name": "adventureworks_products",
+   "data": "tables/19a25254f64be9209977210d17bc5b59dc440a7b8a15669a2b32d4aab8033b0b.arrows"
+  },
+  {
+   "name": "adventureworks_sales_order_details",
+   "data": "tables/d67876e1b737b145e662ed2a4d0ffe84ac7bc2eb63024533911b5deb9724f24f.arrows"
+  },
+  {
+   "name": "adventureworks_sales_order_headers",
+   "data": "tables/3331835fc13e7093d014b2fe135df2c3bc55cc51a15d4b7882342a56b97926c1.arrows"
+  }
+ ],
+ "derived": [],
+ "draws": [],
+ "statements": [
+  {
+   "text": "DESCRIBE TABLE EXTENDED `{catalog}`.`{adventureworks_schema}`.`adventureworks_sales_metrics`",
+   "parameters": [],
+   "result": "tables/0b3484b57f959cacf2882126483f8a1a520a119b74424e2d0aff12562f747481.arrows"
+  },
+  {
+   "text": "SELECT c.column_name, c.full_data_type, c.is_nullable,\n       c.table_catalog, c.table_schema, c.table_name,\n       t.table_type\nFROM `{catalog}`.information_schema.columns c\nJOIN `{catalog}`.information_schema.tables t\n  ON t.table_catalog = c.table_catalog\n AND t.table_schema = c.table_schema\n AND t.table_name = c.table_name\nWHERE c.table_schema = lower(?)\n  AND c.table_name = lower(?)\nORDER BY c.ordinal_position",
+   "parameters": [
+    "{adventureworks_schema}",
+    "adventureworks_sales_order_details"
+   ],
+   "result": "tables/ffed4c9324d2a656ad40e3cc22f634118e0ead214f07a3b71129b03464b6cdec.arrows"
+  },
+  {
+   "text": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name\nFROM `{catalog}`.information_schema.table_constraints tc\nJOIN `{catalog}`.information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = lower(?)\n  AND tc.table_name = lower(?)\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE')",
+   "parameters": [
+    "{adventureworks_schema}",
+    "adventureworks_sales_order_details"
+   ],
+   "result": "tables/a9b1ee8ad6e21529d27be456649ed4b0a313d9db8d9b56a4c23a74282bc6c7b1.arrows"
+  },
+  {
+   "text": "SELECT c.column_name, c.full_data_type, c.is_nullable,\n       c.table_catalog, c.table_schema, c.table_name,\n       t.table_type\nFROM `{catalog}`.information_schema.columns c\nJOIN `{catalog}`.information_schema.tables t\n  ON t.table_catalog = c.table_catalog\n AND t.table_schema = c.table_schema\n AND t.table_name = c.table_name\nWHERE c.table_schema = lower(?)\n  AND c.table_name = lower(?)\nORDER BY c.ordinal_position",
+   "parameters": [
+    "{adventureworks_schema}",
+    "adventureworks_customers"
+   ],
+   "result": "tables/0a1f15142ce0d2bc7ca24c297bb8363b4c3f3f3c19e6afcf3bc1166fc631bb0e.arrows"
+  },
+  {
+   "text": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name\nFROM `{catalog}`.information_schema.table_constraints tc\nJOIN `{catalog}`.information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = lower(?)\n  AND tc.table_name = lower(?)\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE')",
+   "parameters": [
+    "{adventureworks_schema}",
+    "adventureworks_customers"
+   ],
+   "result": "tables/a9b1ee8ad6e21529d27be456649ed4b0a313d9db8d9b56a4c23a74282bc6c7b1.arrows"
+  },
+  {
+   "text": "SELECT c.column_name, c.full_data_type, c.is_nullable,\n       c.table_catalog, c.table_schema, c.table_name,\n       t.table_type\nFROM `{catalog}`.information_schema.columns c\nJOIN `{catalog}`.information_schema.tables t\n  ON t.table_catalog = c.table_catalog\n AND t.table_schema = c.table_schema\n AND t.table_name = c.table_name\nWHERE c.table_schema = lower(?)\n  AND c.table_name = lower(?)\nORDER BY c.ordinal_position",
+   "parameters": [
+    "{adventureworks_schema}",
+    "adventureworks_products"
+   ],
+   "result": "tables/9bde4b43ec81510196fae6938fdd1c8c8451ef544d5a351daf7c6af635f6c440.arrows"
+  },
+  {
+   "text": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name\nFROM `{catalog}`.information_schema.table_constraints tc\nJOIN `{catalog}`.information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = lower(?)\n  AND tc.table_name = lower(?)\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE')",
+   "parameters": [
+    "{adventureworks_schema}",
+    "adventureworks_products"
+   ],
+   "result": "tables/a9b1ee8ad6e21529d27be456649ed4b0a313d9db8d9b56a4c23a74282bc6c7b1.arrows"
+  },
+  {
+   "text": "SELECT `SalesOrderID`, `SalesOrderDetailID`, `CarrierTrackingNumber`, `OrderQty`, `ProductID`, `SpecialOfferID`, `UnitPrice`, `UnitPriceDiscount`, `LineTotal`, `rowguid`, `ModifiedDate`, `CustomerID`, `OrderDate` FROM `{catalog}`.`{adventureworks_schema}`.`adventureworks_sales_order_details` LIMIT 1000",
+   "parameters": [],
+   "result": "tables/121a63e8fef4d05318d0acce2727c593279c119e2ba77eeb58a8f3a990ba96c0.arrows"
+  },
+  {
+   "text": "SELECT UnitPriceDiscount > 0 AS `Discounted` FROM `{catalog}`.`{adventureworks_schema}`.`adventureworks_sales_order_details` LIMIT 1000",
+   "parameters": [],
+   "result": "tables/2a0f0d34d20a4f2c4b784db3e120508f1f45edf5350363731f10237a2f784090.arrows"
+  },
+  {
+   "text": "SELECT `CustomerID`, `PersonID`, `StoreID`, `TerritoryID`, `AccountNumber`, `rowguid`, `ModifiedDate` FROM `{catalog}`.`{adventureworks_schema}`.`adventureworks_customers` LIMIT 1000",
+   "parameters": [],
+   "result": "tables/a9b12e529a7d91a41c5d0622d1f389bddadd90f5d9166cb95fba2d9c3c12308f.arrows"
+  },
+  {
+   "text": "SELECT `ProductID`, `Name`, `ProductNumber`, `MakeFlag`, `FinishedGoodsFlag`, `Color`, `SafetyStockLevel`, `ReorderPoint`, `StandardCost`, `ListPrice`, `Size`, `SizeUnitMeasureCode`, `WeightUnitMeasureCode`, `Weight`, `DaysToManufacture`, `ProductLine`, `Class`, `Style`, `ProductSubcategoryID`, `ProductModelID`, `SellStartDate`, `SellEndDate`, `DiscontinuedDate`, `rowguid`, `ModifiedDate` FROM `{catalog}`.`{adventureworks_schema}`.`adventureworks_products` LIMIT 1000",
+   "parameters": [],
+   "result": "tables/7e139a80b1777a02c500c69865d3fff5a446b2fc2cb0d4682106d7552543c23a.arrows"
+  },
+  {
+   "text": "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT `CustomerID`) AS d, COUNT(CASE WHEN `CustomerID` IS NULL THEN 1 END) AS z\nFROM `{catalog}`.`{adventureworks_schema}`.`adventureworks_customers`\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT `ProductID`) AS d, COUNT(CASE WHEN `ProductID` IS NULL THEN 1 END) AS z\nFROM `{catalog}`.`{adventureworks_schema}`.`adventureworks_products`",
+   "parameters": [],
+   "result": "tables/9468885152a9ef6cac2db8e09930764b194174ad7c71aee4fd569e3cd2f33ed5.arrows"
+  },
+  {
+   "text": "SELECT COUNT(*), MIN(`OrderDate`), MAX(`OrderDate`), COUNT(`OrderDate`)\nFROM `{catalog}`.`{adventureworks_schema}`.`adventureworks_sales_order_details`",
+   "parameters": [],
+   "result": "tables/cd437118ed193723260ccb275dd3b065e732556d148129c3a2819a2853998432.arrows"
+  }
+ ],
+ "loader": []
+}
