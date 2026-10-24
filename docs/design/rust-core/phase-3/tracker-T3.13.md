@@ -69,5 +69,7 @@ Canonical binding vectors were regenerated with `contract/tools/t311_java_record
 Package tests and lint wait for two approvals on the final candidate.
 The final metric-view integration waits for T3.5's actual phase landing.
 The real E-7 JDBC/live runner and model comparison remain T3.10's phase-end evidence.
-P3S-1 through P3S-7 remain proposed; no approval is inferred from this implementation.
+P3S-2 has the independent broad reviewer's explicit approval for the better malformed-success error.
+P3S-1 and P3S-3 through P3S-7 remain proposed; no approval is inferred from this implementation.
+P3S-8 records the focused reviewer's nonblocking large-diagnostic control-limit finding for follow-up.
 JV-4's startup-session timezone difference remains proposed and is handed to T3.9 for policy resolution; the existing same-zone offset helper does not fix it.

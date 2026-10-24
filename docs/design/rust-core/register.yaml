@@ -9712,12 +9712,14 @@ entries:
     boolean.
   cases: [T3.13]
   refs: [T3.13]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: reviewer
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T313-REVIEW-P3S-2}
   notes: >-
-    Approver: owner. Proposed by T3.13's implementer, never self-approved:
-    a named error where the old client crashes.
+    The independent broad Sol High reviewer explicitly APPROVE-P3S-2 in
+    T3.13-sol-broad-r1.md for candidate 7ddfd7b5: a named error where the
+    old client crashes. This approves only the malformed-success error,
+    not other P3S differences or the package's blocking review findings.
 - id: P3S-3
   title: A serving refusal's details name its code and leave out an endpoint code it has none of
   kind: change
@@ -9837,3 +9839,31 @@ entries:
   decision_ref: null
   notes: >-
     Approver: owner. Proposed by T3.13's implementer, never self-approved.
+
+- id: P3S-8
+  title: An unusually long JDBC diagnostic can exceed the host control limit
+  kind: change
+  old_behavior: >-
+    The old Python warehouse route reports the database driver's failure
+    with its native diagnostic and codes.
+  new_behavior: >-
+    Java includes the original JDBC diagnostic in ProviderError's internal
+    driver_message. If the serialized fetch reply exceeds the 65536-byte
+    host control limit, the host reports INTERNAL_ERROR before the core
+    can interpret the independent SQLSTATE, vendor code or error class.
+    The diagnostic is not exposed as public core error text.
+  affected_inputs: >-
+    A JDBC failure containing an unusually long echoed statement or value
+    that makes the fetch reply exceed the control-message budget.
+  cases: [T3.13]
+  refs: [T3.6, T3.13]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: owner. P2 carry-forward identified by independent focused
+    review F3 in T3.13-sol-focused-r1.md for candidate 7ddfd7b5.
+    Proposed follow-up: specify one bounded internal diagnostic policy
+    shared by hosts that retains the independent structured failure facts;
+    a complete diagnostic would require an attachment contract.
+    No truncation or new public diagnostic policy is approved here.

@@ -165,3 +165,12 @@ The owner subsequently confirmed the missing-anchor behavior already approved by
 | T36-OWNER-2026-10-24-SEED | Remove the routine Snowflake seed warning, since the seed is optional, and document the limitation | "The question is, are users expected to provide a seed? If not, I'd suggest not having a warning at all." | approved by owner 2026-10-24 |
 | T36-OWNER-2026-10-24-HYBRID | Detect enforced hybrid-table primary keys and preserve the old client's counting behavior | "Yes, check them." | approved by owner 2026-10-24 |
 | T36-OWNER-2026-10-24-ANCHORS | P3D-8 and P3K-2: retain an entity with a missing anchor, use empty temporal history, continue other rows, and invent no replacement timestamp | "Use empty window history" | approved by owner 2026-10-24 |
+
+## T3.13 independent review decisions, 2026-10-24
+
+The broad Sol High review of candidate `7ddfd7b5d0216c9e67ab832845eb731116bed564` explicitly approved the following improvement.
+This records that bounded approval only; both package approvals and postapproval checks remain required.
+
+| # | Decision | Reviewer evidence | Status |
+|---|---|---|---|
+| T313-REVIEW-P3S-2 | A malformed successful serving reply whose JSON is a list or scalar produces the core's named `TRANSPORT_ERROR` rather than an escaping SDK crash | `T3.13-sol-broad-r1.md`: `APPROVE-P3S-2` | approved by independent reviewer 2026-10-24 |
