@@ -3,7 +3,9 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# The checks to run before pushing a Rust core change (decision E43).
+# Explicit checks for an approved Rust core change (decision E43).
+# Automatic push hooks enforce ownership and protected refs only; package
+# checks run after both reviews, under the owner's 2026-10-24 instruction.
 #
 # The cheap tier, about a minute once the Rust build is warm, runs the guards
 # CI runs in lint, hygiene, rust-lint and rust-test that need no CI service,
@@ -42,7 +44,7 @@
 # so it refuses a worktree with uncommitted or untracked changes.
 #
 # --install-hook makes this the pre-push hook of the current worktree only:
-# the hook, in the clone's shared hooks directory, runs the cheap tier for
+# the hook, in the clone's shared hooks directory, checks ownership for
 # the worktrees listed beside it and does nothing more in any other; in
 # every worktree it first refuses a push to rust-core, main or
 # rust-core-reference without the owner's token (T3.0, the owner's Q14).
@@ -145,7 +147,7 @@ print(
 )
 sys.exit(1)
 PY
-# The cheap tier runs in the worktrees listed in prepush-worktrees beside
+# Ownership checks run in the worktrees listed in prepush-worktrees beside
 # this file; in any other worktree of the clone it does nothing more, but a
 # push to a lane ref is refused there: the lane check (lane.py check, which
 # holds every lane commit to the lane's package) runs only in the lane's own
@@ -191,7 +193,7 @@ EOF
   chmod +x "$msg_hook"
   touch "$list"
   grep -qxF "$root" "$list" || echo "$root" >>"$list"
-  echo "prepush.sh: the pre-push hook runs the cheap tier in $root, and the commit-msg hook checks fix commits there"
+  echo "prepush.sh: the pre-push hook checks ownership in $root, and the commit-msg hook checks fix commits there"
   echo "  (hook $hook; to stop, remove that line from $list)"
   exit 0
 fi
@@ -210,6 +212,15 @@ if [ "$pushed_refs" = 1 ]; then
       exit 1
     fi
   fi
+  # Review candidates must be pushable without running package checks.
+  # Keep the ownership check and active-handoff refusal; the installed
+  # hook separately protects main, rust-core and rust-core-reference.
+  refs_file=$(mktemp "${TMPDIR:-/tmp}/sdm-push-refs.XXXXXX") || exit 2
+  trap 'rm -f "$refs_file"' EXIT
+  cat >"$refs_file" || exit 2
+  python3 scripts/rust_core/lane.py check --pushed-refs "$refs_file" || exit 1
+  echo 'prepush: push safety passed; package checks wait for both reviews'
+  exit 0
 fi
 
 names=()
