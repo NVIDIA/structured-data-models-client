@@ -8919,7 +8919,7 @@ entries:
   approved_by: null
   decision_ref: null
   notes: >-
-    Proposed by T3.12's implementer for the owner: a better error (at
+    Approver: owner. Proposed by T3.12's implementer: a better error (at
     compile time) in the owner's sense of KO3-41, and no input the Java API
     takes is refused that the reference accepts.
 
@@ -8947,61 +8947,75 @@ entries:
   approved_by: null
   decision_ref: null
   notes: >-
-    Proposed by T3.12's implementer for the owner (fix round 1): Python's
+    Approver: owner. Proposed by T3.12's implementer (fix round 1): Python's
     repr of a string depends on Unicode's printable classes, which differ
     between Python's and the JVM's Unicode versions, so a Java copy could
     not match it value for value. The driver parity test holds this
     difference as stated.
 
 - id: JV-3
-  title: A Postgres JSON value nested past Python's recursion limit is read on Java, where Python's provider fails
+  title: A Postgres JSON value nested past the core's 2,000 levels is handed over as the server's text on Java
   kind: change
   old_behavior: >-
-    Python's Postgres provider reads a json or jsonb value through psycopg,
-    whose json.loads fails on a value nested past Python's recursion limit
-    (about 1,000 levels); the read fails as a provider error.
+    Python's Postgres provider reads a json or jsonb value through psycopg
+    and writes it back as compact JSON at any depth the pinned runtime's
+    reader takes (in cell-ref-pandas3, CPython 3.12, 3,000 levels and
+    more); the core then reads that text to 2,000 levels and refuses a
+    deeper value by name, so the public call refuses it.
   new_behavior: >-
     Java's Postgres provider hands the core's JSON text of the value
-    (sdm_host::json_value_text, the reference's text of it), which the
-    core reads to 2,000 levels, the depth the core's reader takes; past
-    that it is refused by name on both hosts. To about 1,000 levels both
-    hosts hand the same text.
+    (sdm_host::json_value_text, the same text Python's provider hands over)
+    to 2,000 levels, and past them the server's own text, which the core
+    refuses by name as it refuses Python's. What the public calls answer is
+    the same on both hosts at every depth; only the text the provider hands
+    over past 2,000 levels differs, and the core reads neither. Each read is
+    on a stack of its own, so no depth overflows a JVM thread's stack.
   affected_inputs: >-
-    A Postgres json or jsonb value nested between about 1,000 and 2,000
-    levels deep.
+    A Postgres json or jsonb value nested more than 2,000 levels deep.
   cases: []
   refs: [T3.12, packages/structured-data-models-client/tests_test_ops/test_t312_driver_parity.py]
   status: proposed
   approved_by: null
   decision_ref: null
   notes: >-
-    Proposed by T3.12's implementer for the owner (fix round 1, Codex P1-4:
-    the JSON rule is the core's alone). Python's limit depends on the
-    interpreter's stack in use when it reads, so no fixed depth matches it.
+    Approver: owner. Proposed by T3.12's implementer (fix rounds 1 and 2,
+    Codex P1-4: the JSON rule is the core's alone). The driver parity test
+    holds the difference at 2,100 levels, and holds 920 and 1,500 levels
+    equal; DeepJsonMain holds the public call on a 256 KiB stack.
 
 - id: JV-4
-  title: A Postgres zoned time written as text is spelled in the session's zone, which pgjdbc sets to the JVM's
+  title: A Postgres zoned time written as text names the session's zone, which pgjdbc sets to the JVM's
   kind: change
   old_behavior: >-
-    Python's Postgres provider writes an element of a timestamptz array, and
-    a bound of a tstzrange, as Python's text of the datetime psycopg read,
-    in the session's zone; psycopg leaves the session's zone the server's
-    default.
+    Python's Postgres provider writes an element of a timestamptz array,
+    and a bound of a tstzrange or tstzmultirange, as Python's text of the
+    datetime psycopg read: the instant in the session's TimeZone where
+    Python's ZoneInfo names it, else in UTC. psycopg leaves the session's
+    zone libpq's default: the server's, role's or database's setting, or
+    PGTZ in the Python process.
   new_behavior: >-
-    Java's Postgres provider writes the same text in the session's zone,
-    value for value as Python's on a session of the same zone; pgjdbc sets
-    the session's zone to the JVM's default zone, so on a JVM whose zone is
-    not the server's default the text names the same instant in another
-    zone. A timestamptz column (not text) is the instant in UTC on both.
+    Java's Postgres provider writes the same text, the instant in the zone
+    psycopg resolves the session's TimeZone to, so on sessions of one zone
+    both hosts write the same text. pgjdbc sets the session's zone to the
+    JVM's default zone when it connects, replacing the default psycopg's
+    session would have, and the server's default cannot be read back from
+    the connection without a privileged role (pg_file_settings). So on a
+    JVM whose zone is not that default, the text names the same instant in
+    another zone. A scalar tstzrange or tstzmultirange is kept as a text
+    feature, so the feature's values in the payload differ; a timestamptz
+    column, read as the instant in UTC, is the same on both.
   affected_inputs: >-
-    A timestamptz array or tstzrange column read on a JVM whose default zone
-    is not the Postgres server's default zone.
+    A tstzrange or tstzmultirange column, or a timestamptz array, read on a
+    JVM whose default zone is not the zone a psycopg session to the same
+    database would have.
   cases: []
   refs: [T3.12, packages/structured-data-models-client/tests_test_ops/test_t312_driver_parity.py]
   status: proposed
   approved_by: null
   decision_ref: null
   notes: >-
-    Proposed by T3.12's implementer for the owner (fix round 1, Codex P2-8):
-    the reference's own text depends on its session's zone; the core keeps
-    no feature of these columns' text (a list of text is no feature).
+    Approver: owner. Proposed by T3.12's implementer (fix rounds 1 and 2,
+    Codex P2-8 and r2 P2-6; Claude r2 confirmed no fix short of changing the
+    caller's session). The driver parity test holds the text equal on
+    sessions of the same zone, a zone Python does not name (GMT+3) among
+    them.

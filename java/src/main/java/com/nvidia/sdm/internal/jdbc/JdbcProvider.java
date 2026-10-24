@@ -252,6 +252,22 @@ public final class JdbcProvider implements Host.Provider {
         throw new PlanNotRun("a statement binding more than one key set");
       }
     }
+    // Every value read in text, as psycopg reads it: a binary transfer the caller's connection
+    // forces is off for this read's statements, and given back after.
+    PgSession.Forced forcedBinary = PgSession.binaryOff(connection);
+    try {
+      return postgresRead(planned, keys, allocator, trace);
+    } finally {
+      PgSession.restoreBinary(connection, forcedBinary);
+    }
+  }
+
+  private ArrowReader postgresRead(
+      List<Planned> planned,
+      Map<Integer, KeySets.Keys> keys,
+      BufferAllocator allocator,
+      Trace trace)
+      throws Exception {
     boolean managed = !connection.getAutoCommit();
     Savepoint savepoint =
         managed && PgSession.inTransaction(connection) ? connection.setSavepoint() : null;
@@ -370,10 +386,11 @@ public final class JdbcProvider implements Host.Provider {
     return built(new ConversionTable.Result(fields, values), allocator);
   }
 
-  /** The session a Postgres result is read in: its {@code IntervalStyle}, asked once. */
+  /** The session a Postgres result is read in: its {@code IntervalStyle} and zone, asked once. */
   private static final class Session implements ConversionTable.Session {
     private final Connection connection;
     private String intervalStyle;
+    private java.time.ZoneId zone;
 
     Session(Connection connection) {
       this.connection = connection;
@@ -385,6 +402,20 @@ public final class JdbcProvider implements Host.Provider {
         intervalStyle = String.valueOf(PgSession.parameter(connection, "IntervalStyle"));
       }
       return intervalStyle;
+    }
+
+    @Override
+    public java.time.ZoneId zone() throws SQLException {
+      if (zone == null) {
+        String name = PgSession.parameter(connection, "TimeZone");
+        zone =
+            name != null
+                    && !"UTC".equals(name)
+                    && java.time.ZoneId.getAvailableZoneIds().contains(name)
+                ? java.time.ZoneId.of(name)
+                : java.time.ZoneOffset.UTC;
+      }
+      return zone;
     }
   }
 

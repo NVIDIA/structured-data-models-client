@@ -190,7 +190,7 @@ class T312PostgresReadTest {
             connection.unwrap(org.postgresql.jdbc.PgConnection.class);
         assertTrue(pg.getForceBinary());
         for (int run = 0; run < 7; run++) {
-          assertEquals(List.of("00:00"), values(connection, step("SELECT '00:00-08'::timetz AS v")));
+          assertEquals(List.of("0"), values(connection, step("SELECT '00:00-08'::timetz AS v")));
           assertEquals(List.of("12300"), values(connection, step("SELECT '12345'::numeric(5,-2) AS v")));
           assertEquals(List.of("(1,2)"), values(connection, step("SELECT '(1,2)'::point AS v")));
           assertEquals(List.of("[1]"), values(connection, step("SELECT '{1}'::oid[] AS v")));

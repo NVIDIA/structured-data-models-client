@@ -292,16 +292,17 @@ final class PostgresText {
   /** How a range's bound is read and written: Python's {@code str} of what psycopg read. */
   @FunctionalInterface
   interface Bound {
-    String text(String given) throws SQLDataException;
+    String text(String given, ConversionTable.Session session) throws java.sql.SQLException;
   }
 
   /**
    * Python's {@code str} of psycopg's {@code Range}: its bounds' brackets around each bound's
    * {@code str} (an unbounded side {@code None}), {@code empty} for an empty range.
    */
-  static String pyRange(String text, Bound bound) throws SQLDataException {
+  static String pyRange(String text, Bound bound, ConversionTable.Session session)
+      throws java.sql.SQLException {
     List<String> read = new ArrayList<>();
-    int end = range(text, 0, bound, read);
+    int end = range(text, 0, bound, session, read);
     if (end != text.length()) {
       throw refused("a range it cannot parse");
     }
@@ -309,8 +310,9 @@ final class PostgresText {
   }
 
   /** One range read from {@code at}: its Python text added to {@code out}; where it ends. */
-  private static int range(String text, int at, Bound bound, List<String> out)
-      throws SQLDataException {
+  private static int range(
+      String text, int at, Bound bound, ConversionTable.Session session, List<String> out)
+      throws java.sql.SQLException {
     if (text.startsWith("empty", at)) {
       out.add("empty");
       return at + 5;
@@ -320,21 +322,24 @@ final class PostgresText {
     if (!found.lookingAt()) {
       throw refused("a range it cannot parse");
     }
-    String lower = side(found.group(2), found.group(3), bound);
-    String upper = side(found.group(4), found.group(5), bound);
+    String lower = side(found.group(2), found.group(3), bound, session);
+    String upper = side(found.group(4), found.group(5), bound, session);
     out.add(found.group(1) + lower + ", " + upper + found.group(6));
     return found.end();
   }
 
-  private static String side(String quoted, String plain, Bound bound) throws SQLDataException {
+  private static String side(
+      String quoted, String plain, Bound bound, ConversionTable.Session session)
+      throws java.sql.SQLException {
     if (quoted != null) {
-      return bound.text(UNDOUBLE.matcher(quoted).replaceAll("$1"));
+      return bound.text(UNDOUBLE.matcher(quoted).replaceAll("$1"), session);
     }
-    return plain == null ? "None" : bound.text(plain);
+    return plain == null ? "None" : bound.text(plain, session);
   }
 
   /** Python's {@code str} of psycopg's {@code Multirange}: its ranges', braced. */
-  static String pyMultirange(String text, Bound bound) throws SQLDataException {
+  static String pyMultirange(String text, Bound bound, ConversionTable.Session session)
+      throws java.sql.SQLException {
     if (!text.startsWith("{")) {
       throw refused("a multirange it cannot parse");
     }
@@ -344,7 +349,7 @@ final class PostgresText {
     List<String> read = new ArrayList<>();
     int at = 1;
     while (true) {
-      at = range(text, at, bound, read);
+      at = range(text, at, bound, session, read);
       if (at >= text.length()) {
         throw refused("a multirange it cannot parse");
       }
