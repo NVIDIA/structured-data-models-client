@@ -7,10 +7,12 @@
 //! made of `RE/view_expr.py` and of the Snowflake qualifier helpers of
 //! `RE/graph.py`, with its answer, and each word of the old word tables
 //! (the dialects' allow-lists, keywords, type names, session words) put to
-//! the same checks. Each answer, and each reason's text, is the old
-//! client's.
+//! the same checks. Here each answer is held to whether the old client
+//! refused, and the names, literals and qualifiers it read; each reason's
+//! text is the core's to write and is held there
+//! (`sdm-core/tests/view_words.rs`).
 
-use sdm_data::view_expr::{self, ExprDialect, ViewKind};
+use sdm_data::view_expr::{self, ExprDialect};
 use serde_json::Value as Json;
 
 const VECTORS: &str = include_str!("../../../../contract/view-expr-vectors.json");
@@ -56,32 +58,24 @@ fn each(kind: &str, least: usize, check: impl Fn(&Json) -> Option<String>) {
 }
 
 #[test]
-fn unsafe_text_is_refused_as_the_old_client_refused_it() {
+fn unsafe_text_is_refused_where_the_old_client_refused_it() {
     each("unsafe", 400, |vector| {
         let expr = vector["expr"].as_str().unwrap();
-        let reason = view_expr::unsafe_reason(expr, dialect(&vector["dialect"]));
-        (reason.as_deref() != vector["reason"].as_str()).then(|| {
-            format!(
-                "{expr:?} ({}): {reason:?} where {}",
-                vector["dialect"], vector["reason"]
-            )
-        })
+        let refused = view_expr::unsafe_reason(expr, dialect(&vector["dialect"])).is_some();
+        (refused != vector["reason"].is_string())
+            .then(|| format!("{expr:?} ({}): refused {refused}", vector["dialect"]))
     });
 }
 
 #[test]
-fn calls_are_trusted_as_the_old_client_trusted_them() {
+fn calls_are_trusted_where_the_old_client_trusted_them() {
     each("calls", 10_000, |vector| {
         let expr = vector["expr"].as_str().unwrap();
         let dialect = dialect(&vector["dialect"]).unwrap();
         let columns = texts(&vector["columns"]);
-        let reason = view_expr::untrusted_call_reason(expr, dialect, &columns);
-        (reason.as_deref() != vector["reason"].as_str()).then(|| {
-            format!(
-                "{expr:?} ({dialect:?}, {columns:?}): {reason:?} where {}",
-                vector["reason"]
-            )
-        })
+        let refused = view_expr::untrusted_call_reason(expr, dialect, &columns).is_some();
+        (refused != vector["reason"].is_string())
+            .then(|| format!("{expr:?} ({dialect:?}, {columns:?}): refused {refused}"))
     });
 }
 
@@ -162,81 +156,4 @@ fn snowflake_qualifiers_are_read_outside_literals() {
         (out != vector["out"].as_str().unwrap())
             .then(|| format!("{table:?} from {expr:?}: {out:?} where {}", vector["out"]))
     });
-}
-
-#[test]
-fn a_dropped_expression_is_worded_as_the_old_client_worded_it() {
-    each("expr_message", 30, |vector| {
-        let view = match vector["view"].as_str().unwrap() {
-            "metric view" => ViewKind::MetricView,
-            "semantic view" => ViewKind::SemanticView,
-            other => panic!("{other}"),
-        };
-        let columns = texts(&vector["columns"]);
-        let message = view_expr::expression_message(
-            vector["column"].as_str().unwrap(),
-            vector["expr"].as_str().unwrap(),
-            view,
-            dialect(&vector["dialect"]).unwrap(),
-            vector["trust_expressions"].as_bool().unwrap(),
-            &columns,
-        );
-        (message.as_deref() != vector["message"].as_str()).then(|| format!("{vector}: {message:?}"))
-    });
-}
-
-/// Rows 64 and 65 by name: what `trust_expressions` never accepts.
-#[test]
-fn unsafe_text_is_refused_whatever_the_trust() {
-    let databricks = Some(ExprDialect::Databricks);
-    assert_eq!(
-        view_expr::unsafe_reason("x; DROP TABLE t", databricks).as_deref(),
-        Some("it contains ';'")
-    );
-    assert_eq!(
-        view_expr::unsafe_reason("trim(FROM users.country)", databricks).as_deref(),
-        Some("it contains a sub-query")
-    );
-    assert_eq!(
-        view_expr::unsafe_reason("'a' || $$b$$", databricks).as_deref(),
-        Some("it contains '$$', which Databricks SQL does not quote with")
-    );
-    let message = view_expr::expression_message(
-        "column 'x'",
-        "trim(FROM users.country)",
-        ViewKind::MetricView,
-        ExprDialect::Databricks,
-        true,
-        &["country"],
-    );
-    assert_eq!(
-        message.as_deref(),
-        Some(
-            "Failed to add column 'x' since it contains a sub-query, and expressions taken \
-             from the metric view are executed as SQL under your warehouse credentials"
-        )
-    );
-}
-
-/// Row 66 by name: a call off the allow-list is refused unless trusted.
-#[test]
-fn a_function_off_the_allow_list_is_refused() {
-    assert_eq!(
-        view_expr::untrusted_call_reason("secret('s', 'k')", ExprDialect::Databricks, &["x"])
-            .as_deref(),
-        Some("it calls 'secret', which is not a pure built-in SQL function")
-    );
-    assert_eq!(
-        view_expr::untrusted_call_reason(
-            "CASE WHEN price > 100 THEN 'high' ELSE 'low' END",
-            ExprDialect::Databricks,
-            &["price"]
-        ),
-        None
-    );
-    assert_eq!(
-        view_expr::untrusted_call_reason("SYSTEM$WAIT(10)", ExprDialect::Snowflake, &["x"])
-            .as_deref(),
-        Some("it calls 'SYSTEM$WAIT', which is not a pure built-in SQL function")
-    );
 }

@@ -6,8 +6,9 @@
 //! row 69) against `contract/view-yaml-vectors.json`: what PyYAML 6.0.3's
 //! `safe_load` made of each text, YAML 1.1's values included (`yes`, `on`
 //! and `off` booleans, `017` octal, `1:30` base 60, `1e3` text and
-//! `1.0e+3` a float), with the value's Python `repr` and `str`, which the
-//! old client's messages quote. A text PyYAML refused is refused.
+//! `1.0e+3` a float). A text PyYAML refused is refused. The texts the old
+//! client's messages quote a value by are the core's to write
+//! (`sdm-pql/tests/shown.rs`, `sdm-core/tests/view_words.rs`).
 
 use sdm_schema::view::yaml::{self, Value};
 use serde_json::Value as Json;
@@ -21,7 +22,7 @@ fn typed(value: &Value) -> Json {
         Value::Null => return serde_json::json!({"t": "null"}),
         Value::Bool(flag) => ("bool", Json::Bool(*flag)),
         Value::Int(number) => ("int", Json::String(number.to_string())),
-        Value::Float(_) => ("float", Json::String(value.repr())),
+        Value::Float(x) => ("float", Json::String(float_key(*x))),
         Value::Str(text) => ("str", Json::String(text.clone())),
         Value::Bytes(_) => ("bytes", Json::String(base64(value))),
         Value::Date(date) => ("date", Json::String(date.isoformat())),
@@ -38,6 +39,37 @@ fn typed(value: &Value) -> Json {
         ),
     };
     serde_json::json!({"t": kind, "v": inner})
+}
+
+/// A float as the comparison reads it: the value, its sign and NaN told
+/// apart, whatever digits wrote it.
+fn float_key(x: f64) -> String {
+    if x.is_nan() {
+        "nan".into()
+    } else {
+        format!("{:?}", x)
+    }
+}
+
+/// A recorded float's text, Python's `repr`, read as [`float_key`] writes.
+fn recorded_float(text: &str) -> String {
+    float_key(text.parse().unwrap())
+}
+
+/// The recorded typed value, its floats keyed as [`float_key`] writes.
+fn recorded(value: &Json) -> Json {
+    match value["t"].as_str() {
+        Some("float") => {
+            serde_json::json!({"t": "float", "v": recorded_float(value["v"].as_str().unwrap())})
+        }
+        Some("list") => {
+            serde_json::json!({"t": "list", "v": value["v"].as_array().unwrap().iter().map(recorded).collect::<Vec<_>>()})
+        }
+        Some("map") => {
+            serde_json::json!({"t": "map", "v": value["v"].as_array().unwrap().iter().map(|pair| Json::Array(vec![recorded(&pair[0]), recorded(&pair[1])])).collect::<Vec<_>>()})
+        }
+        _ => value.clone(),
+    }
 }
 
 /// The standard base64 of a bytes value, as the recorder writes it.
@@ -82,26 +114,11 @@ fn each_text_reads_as_pyyaml_read_it() {
             }
             (_, Err(error)) => wrong.push(format!("{text:?}: refused ({error})")),
             (_, Ok(value)) => {
-                if typed(&value) != vector["value"] {
+                let expected = recorded(&vector["value"]);
+                if typed(&value) != expected {
                     wrong.push(format!(
-                        "{text:?}: {} where PyYAML read {}",
-                        typed(&value),
-                        vector["value"]
-                    ));
-                }
-                if value.repr() != vector["repr"].as_str().unwrap() {
-                    wrong.push(format!(
-                        "{text:?}: repr {} where Python's is {}",
-                        value.repr(),
-                        vector["repr"]
-                    ));
-                }
-                if let Some(text_form) = vector["str"].as_str()
-                    && value.text_form() != text_form
-                {
-                    wrong.push(format!(
-                        "{text:?}: str {} where Python's is {text_form}",
-                        value.text_form()
+                        "{text:?}: {} where PyYAML read {expected}",
+                        typed(&value)
                     ));
                 }
             }
