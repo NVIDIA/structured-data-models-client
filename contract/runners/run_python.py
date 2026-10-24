@@ -2406,7 +2406,7 @@ class _Captured:
             }
             kept = answer
         statement['results'].append(result)
-        _keep(self._log, statement, kept, names)
+        _keep(self._log, statement, kept, names, cursor=self._driver)
         return answer
 
     def fetchall(self, *arguments: Any, **keywords: Any) -> Any:
@@ -3136,14 +3136,51 @@ class Recorder:
         self.kept: dict[tuple[int, int], Any] = {}
 
 
+#: The core's Postgres provider's Arrow mapping, which the recording mode
+#: keeps a psycopg read as (loaded by its path: the recording runs beside a
+#: reference client, which has no such provider).
+POSTGRES_ARROW = (
+    REPO
+    / 'packages/structured-data-models-client/src/sdm_client/_rust/providers'
+    / 'postgres_arrow.py'
+)
+
+
+def _postgres_arrow() -> Any:
+    name = 'run_python_postgres_arrow'
+    if name in sys.modules:
+        return sys.modules[name]
+    spec = importlib.util.spec_from_file_location(name, POSTGRES_ARROW)
+    if spec is None or spec.loader is None:
+        raise RunnerFailure("the Postgres provider's Arrow mapping is missing")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _psycopg_cursor(driver: Any) -> bool:
+    r"""Whether ``driver`` is a psycopg cursor holding a result: its rows
+    are kept as the Postgres provider types them (:func:`_keep`)."""
+    return (
+        type(driver).__module__.split('.', 1)[0] == 'psycopg'
+        and getattr(driver, 'description', None) is not None
+        and hasattr(driver, 'connection')
+    )
+
+
 def _keep(
     log: DriverLog,
     statement: dict[str, Any],
     answer: Any,
     names: Iterable[str] | None = None,
+    cursor: Any = None,
 ) -> None:
     r"""Keeps the result just recorded on ``statement`` for the recording
-    mode (``log.recorder``); nothing without one."""
+    mode (``log.recorder``); nothing without one. A psycopg ``cursor``'s
+    rows are kept as the Arrow the core's Postgres provider builds from the
+    driver's type codes (``postgres_arrow.rows_arrow``), not as the types
+    Arrow would infer from the values."""
     recorder = log.recorder
     if recorder is None:
         return
@@ -3157,6 +3194,12 @@ def _keep(
     key = (position, len(statement['results']) - 1)
     if hasattr(answer, 'schema') and hasattr(answer, 'num_rows'):
         recorder.kept[key] = answer
+    elif cursor is not None and _psycopg_cursor(cursor):
+        recorder.kept[key] = _postgres_arrow().rows_arrow(
+            cursor.description,
+            [tuple(row) for row in answer],
+            cursor.connection,
+        )
     else:
         recorder.kept[key] = (list(names or []), [tuple(row) for row in answer])
 
