@@ -526,6 +526,29 @@ def test_a_capture_from_a_dirty_tree_fails_unless_an_excuse_names_it() -> None:
         assert check.capture_problems(dirty, case, tables) == []
 
 
+def test_a_case_the_live_run_leaves_out_by_name_is_not_live_not_pending() -> (
+    None
+):
+    # T3.20 r2: the cases the live run leaves out by name on a leg (their
+    # names hold what the write guard refuses there) are known not live on
+    # that leg, listed with the reason, and never pending: the locked run
+    # does not fail on them. On a leg the list does not name, the case is
+    # pending as any other.
+    case, _, _ = _capture()
+    left = copy.deepcopy(case)
+    left['id'] = 'name.backtick-target'
+    problems, pending, not_live = check.captures(
+        [case, left], [], ['databricks-sql']
+    )
+    assert problems == []
+    assert pending == ['base.binary@databricks-sql']
+    assert [entry.split(':', 1)[0] for entry in not_live] == [
+        'name.backtick-target@databricks-sql'
+    ]
+    assert 'backtick' in not_live[0]
+    assert check.NOT_LIVE['name.line-break-target'][0] == check.LEGS
+
+
 def test_a_case_changed_after_its_capture_is_pending_live() -> None:
     case, line, _ = _capture()
     problems, pending = check.recordings([case], [line], ['databricks-sql'])
