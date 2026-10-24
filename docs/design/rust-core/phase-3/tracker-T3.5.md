@@ -37,7 +37,10 @@ Each is crate-local until T3.27; none is in `sdm-contract` yet.
 
 The owner approved P3J-1 through P3J-6 and P3J-9 through P3J-11 on 2026-10-24, and explicitly retired P3J-7 and P3J-8 as superseded by P3J-9.
 The exact answers are recorded in the T35-OWNER-2026-10-24 rows of [decisions.md](decisions.md).
-P3J-12, P3J-14 and P3J-15 remain proposed; P3J-13 is retired as superseded after review.
+P3J-12 and P3J-14 remain proposed; P3J-13 is retired as superseded after review.
+P3J-15 has both independent reviewers' explicit APPROVE-P3J-15 on a678ddf2c90507e234a637b7e4231e1eee6df2ec, reaffirmed in both final round-3 reports.
+That approval covers only finite safe classifications, requested-operation and logical caller context, and validated codes under H17 and KO2-86.
+It is reviewer approval of the bounded diagnostic improvement, without new owner authorization or permission to disclose driver text.
 
 - P3J-1: a definition that is no readable YAML is refused by name.
 - P3J-2: a section that cannot be iterated is refused by name.

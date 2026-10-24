@@ -18,6 +18,43 @@ Fresh nullability, uniqueness and catalog facts remain current, while a later fe
 Ordinary numeric-width compatibility remains unchanged.
 The existing public DuckDB regression reproduced the lost refusal before the fix.
 
+## Dispatched comparison gates
+
+The saved nightly's SQLite rust-host, SQLite Python-core and floor DuckDB jobs reported 50, 71 and 174 difference lines across 18, 20 and 25 cases respectively.
+Every reported case and runner already has an exact approved outcome row in the register.
+The common failure was that `ratchet.py where` returned no checkpoint for `workflow_dispatch`, so those jobs compared against the original reference without its approved deviations.
+The floor job explicitly reported that it was running without the ratchet.
+The original `where` CLI reproduced that empty result under the nightly event and phase-ref environment.
+
+A dispatched phase head now names `--base HEAD`.
+The existing checkpoint resolver reads that landing's recorded base and rejects an unlanded head as a self-comparison.
+Dispatched topics retain the phase-remote base, and dispatched epic runs retain the merged phase's reviewed checkpoint.
+Push behavior and unrelated events are unchanged.
+
+| Saved difference | Existing exact approval |
+|---|---|
+| The twelve backtick, dot and line-break name cases, plus `rank.odd-column` | P2E-1 and KO2-36 |
+| SQLite unsigned keys beyond int64 | P2B-12, explicitly reviewer-approved |
+| SQLite time-of-day text feature | P2B-13 and KO2-61 |
+| SQLite empty fact table and bad text time | P2B-10 and P2B-11 |
+| DuckDB large text keys and fixed arrays | P1B-33 and P1B-9 |
+| DuckDB empty, map, struct, union and interval errors | P1B-11, P1B-10, P1B-7 and P1B-8 |
+| Seven-hop error subclass on both databases | P1B-20 |
+| LIST_DISTINCT of a foreign key refused before the endpoint | P2E-19 and KO2-75 |
+| DuckDB bad text dates reported as provider failures | DT-12 |
+
+No new outcome approval, reference observation, case expectation or comparison exclusion was added for these failures.
+The actual saved rust-host SQLite artifact was downloaded for inspection; the nightly did not publish the failed Python observation files.
+This classification does not claim a successful rerun of those jobs.
+
+## View decision reconciliation
+
+P3J-15's stale proposed status is corrected to the two reviewers' existing explicit approval of finite safe diagnostics on a678ddf2c90507e234a637b7e4231e1eee6df2ec.
+Both reviewers reaffirmed that exact scope in their final round-3 reports.
+P3J-12 and P3J-14 remain proposed pending explicit review of equivalent expression placement and the precise view refresh behavior.
+The owner's Plan B and output-safety policies do not supply blanket approval of new register entries.
+Java P3S entries remain owned by the Java package until it lands; its existing P3S-2 reviewer approval and P3S-7 retirement must be preserved, with the other unresolved entries assessed on their actual evidence.
+
 ## Validation state
 
 Regression tests precede each production change.

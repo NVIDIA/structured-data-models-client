@@ -10140,8 +10140,8 @@ entries:
     that consequently refuses a logical column held by the schema.
   cases: [T3.5]
   refs: [T3.5, H17, KO2-86, P3J-13]
-  status: proposed
-  approved_by: null
+  status: approved
+  approved_by: reviewer
   decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-86}
   notes: >-
     Supersedes P3J-13 after the diagnostic design was reassessed against the
@@ -10151,3 +10151,8 @@ entries:
     of public data disclosure. Public core describe/materialize canary tests
     require useful classification and caller context while excluding cell
     values, raw SQL and driver text.
+    Both independent Sol reviewers explicitly recorded APPROVE-P3J-15 on
+    a678ddf2c90507e234a637b7e4231e1eee6df2ec, reaffirmed in their final
+    round-3 reports. Their approval covers only finite safe classifications,
+    requested-operation and logical caller context, and validated codes;
+    it grants no raw-driver disclosure or new owner authorization.
