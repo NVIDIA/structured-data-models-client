@@ -9,10 +9,10 @@
 //! `contract/view-expr-vectors.json`, `view-yaml-vectors.json` and
 //! `view-step-vectors.json`. T3.27 turns each into a `Sentence`.
 
-use sdm_core::pql::yaml_rules;
+use sdm_core::pql::{spaces, yaml_rules};
 use sdm_core::{view_steps, view_words};
 use sdm_data::view_expr::metric::{self as data, DefaultRefusal, FilterRefusal};
-use sdm_data::view_expr::{self, ExprDialect, ViewKind};
+use sdm_data::view_expr::{self, ExprDialect, TextRules, ViewKind};
 use sdm_schema::view::metric;
 use sdm_schema::view::model::{self, Edge, EdgeFacts, MeasureNote, TimeColumnNote};
 use sdm_schema::view::yaml::{self, Document, NodeId, Value};
@@ -161,9 +161,13 @@ fn an_expression_s_refusal_is_worded_as_the_old_client_worded_it() {
     each(EXPR, "calls", 10_000, |vector| {
         let expr = vector["expr"].as_str().unwrap();
         let columns = texts(&vector["columns"]);
-        let reason =
-            view_expr::untrusted_call_reason(expr, dialect(&vector["dialect"]).unwrap(), &columns)
-                .map(|r| view_words::expr_reason(&r));
+        let reason = view_expr::untrusted_call_reason(
+            expr,
+            dialect(&vector["dialect"]).unwrap(),
+            &columns,
+            spaces(),
+        )
+        .map(|r| view_words::expr_reason(&r));
         (reason.as_deref() != vector["reason"].as_str())
             .then(|| format!("{expr:?}: {reason:?} where {}", vector["reason"]))
     });
@@ -179,7 +183,10 @@ fn an_expression_s_refusal_is_worded_as_the_old_client_worded_it() {
             dialect(&vector["dialect"]).unwrap(),
             vector["trust_expressions"].as_bool().unwrap(),
             &texts(&vector["columns"]),
-            &view_words::quote,
+            TextRules {
+                quote: &view_words::quote,
+                spaces: spaces(),
+            },
         );
         (message.as_deref() != vector["message"].as_str()).then(|| format!("{vector}: {message:?}"))
     });
@@ -216,7 +223,10 @@ fn unsafe_text_and_untrusted_calls_are_worded_by_name() {
             ExprDialect::Databricks,
             true,
             &["country"],
-            &view_words::quote,
+            TextRules {
+                quote: &view_words::quote,
+                spaces: spaces(),
+            },
         )
         .as_deref(),
         Some(
@@ -224,9 +234,13 @@ fn unsafe_text_and_untrusted_calls_are_worded_by_name() {
              from the metric view are executed as SQL under your warehouse credentials"
         )
     );
-    let call =
-        view_expr::untrusted_call_reason("secret('s', 'k')", ExprDialect::Databricks, &["x"])
-            .map(|r| view_words::expr_reason(&r));
+    let call = view_expr::untrusted_call_reason(
+        "secret('s', 'k')",
+        ExprDialect::Databricks,
+        &["x"],
+        spaces(),
+    )
+    .map(|r| view_words::expr_reason(&r));
     assert_eq!(
         call.as_deref(),
         Some("it calls 'secret', which is not a pure built-in SQL function")
@@ -320,7 +334,7 @@ fn a_filter_and_a_measure_are_refused_in_the_old_client_s_words() {
             .map(|pair| (texts(&pair[0]), pair[1].as_str().unwrap().to_owned()))
             .collect();
         let refusal: FilterRefusal =
-            data::check_filter(document.text(filter), &candidates).unwrap_err();
+            data::check_filter(document.text(filter), &candidates, spaces()).unwrap_err();
         let text = view_words::filter_refusal_text(&document, filter, &refusal).unwrap();
         (text != error["message"].as_str().unwrap())
             .then(|| format!("{text} where {}", error["message"]))
@@ -375,6 +389,7 @@ fn a_filter_and_a_measure_are_refused_in_the_old_client_s_words() {
             &dimensions,
             &texts(&vector["refused"]),
             &texts(&vector["parameters"]),
+            spaces(),
         );
         let got: Vec<String> = refused
             .iter()
@@ -520,9 +535,13 @@ fn a_long_token_s_refusal_is_worded_as_the_old_client_worded_it() {
             part(1).repeat(r[4].as_u64().unwrap() as usize),
             part(3)
         );
-        let reason =
-            view_expr::untrusted_call_reason(&called, ExprDialect::Databricks, &["x", "y", "z"])
-                .map(|r| view_words::expr_reason(&r));
+        let reason = view_expr::untrusted_call_reason(
+            &called,
+            ExprDialect::Databricks,
+            &["x", "y", "z"],
+            spaces(),
+        )
+        .map(|r| view_words::expr_reason(&r));
         (reason.as_deref() != vector["calls"]["databricks"].as_str())
             .then(|| format!("{r}: {reason:?}"))
     });

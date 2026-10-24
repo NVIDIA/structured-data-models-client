@@ -19,11 +19,12 @@ use sdm_schema::view::spec::{
     ColumnItem, PrimaryKey, RefusalReason, RelationshipItem, Section, Source, TableItem,
     ViewRefusal, ViewSpec,
 };
-use sdm_schema::view::yaml::{Rules, Value};
+use sdm_schema::view::yaml::Value;
 use serde_json::Value as Json;
 
-/// Python's limit on an integer's digits, as the core hands it in.
-const RULES: Rules = Rules { most_digits: 4300 };
+mod rules;
+
+use rules::RULES;
 
 /// A definition read whole, in the old client's order.
 fn read(source: &str) -> Result<ViewSpec, ViewRefusal> {

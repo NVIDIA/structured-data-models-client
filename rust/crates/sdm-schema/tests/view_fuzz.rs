@@ -9,13 +9,15 @@
 //! read whole. A reader may refuse any of them; none may panic.
 
 use sdm_schema::view::joins;
-use sdm_schema::view::yaml::{self, Rules};
+use sdm_schema::view::yaml;
 use sdm_schema::view::{metric, semantic};
 use serde_json::Value as Json;
 
 const VECTORS: &str = include_str!("../../../../contract/view-yaml-vectors.json");
 
-const RULES: Rules = Rules { most_digits: 4300 };
+mod rules;
+
+use rules::RULES;
 
 /// The pieces the texts are made of.
 const PIECES: &[&str] = &[
@@ -156,6 +158,10 @@ fn read_every_way(text: &str) {
 
 #[test]
 fn no_text_panics_a_reader() {
+    // A million levels of block nesting, which a recursive parser
+    // overflows its stack on.
+    read_every_way(&format!("v:\n{}1\n", "- ".repeat(1_000_000)));
+    read_every_way(&format!("{}1\n", "[".repeat(1_000_000)));
     let mut rng = Rng(0x9e37_79b9_7f4a_7c15);
     for _ in 0..20_000 {
         let length = 1 + rng.below(40);

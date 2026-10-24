@@ -1632,12 +1632,82 @@ def _probe_fix2() -> None:
                 pass
 
 
+# The cases of T3.5's third reviews (fix 3): a chomping indicator in a
+# block header's comment, zeros with positive exponents, `!!str`, a lone
+# `-` in a flow collection, block nesting, and texts holding characters
+# Python escapes in a `repr`, unassigned code points among them.
+_ESCAPED_SAMPLE = [
+    code for code in range(0x80, 0x30000, 97) if not 0xD800 <= code <= 0xDFFF
+]
+FIX3_YAML_INPUTS = (
+    'v: |- # |+\n  hello\n',
+    'v: |+ # |-\n  hello\n\n',
+    'v: | # >-\n  hello\n',
+    'v: > # |+\n  a\n  b\n\n',
+    'v: |2- # |+ >\n   a\n\n',
+    'v: |-#c\n  a\n',
+    'v: !!str 2024-01-01',
+    'v: !!str',
+    'v: !!str [a]',
+    'v: !!str |\n  a',
+    'v: !!str 0x1f',
+    'v: [-]',
+    'v: {a: -}',
+    'v: [x, -, y]',
+    'v: [ - ]',
+    'v:\n' + ''.join(' ' * i + '-\n' for i in range(250)),
+    'v: ["\\u0378", "\\U000e0001", "\\u00ad", "\\u2066"]',
+    'v: [' + ', '.join(f'"\\U{code:08x}"' for code in _ESCAPED_SAMPLE) + ']',
+)
+
+FIX3_DECIMALS = (
+    '0e5', '-0e3', '0.0e2', '00e2', '0E+5', '0.00e3', '\u0660E+1',
+    '0e4194304', '0e999999999999999999', '-0.0e-2', '0e-3',
+)  # fmt: skip
+
+
+def _probe_fix3() -> None:
+    r"""Puts the third reviews' cases to the old client: zeros with
+    positive exponents through `_default_text`, and metric views whose
+    STRING or DOUBLE default is a block scalar with an indicator in its
+    header's comment, a list of escaped characters, or such a zero."""
+    import sdm_relational_engine.rfm.backend.databricks.metric_view as metric
+
+    for text in FIX3_DECIMALS:
+        for data_type in ('DOUBLE', 'DECIMAL(10,2)', 'INT', 'STRING'):
+            try:
+                metric._default_text(data_type, text)
+            except (ValueError, MemoryError):
+                pass
+    for value in (
+        '|- # |+\n    hello\n',
+        '|+ # |-\n    hello\n\n',
+        '| # >-\n    hello\n',
+        '["\\u0378", "\\U000e0001", "a\\u00adb"]',
+        '{k: "\\u2066"}',
+        "'0e5'",
+        "'0e999999999999999999'",
+        '!!str 2024-01-01',
+    ):
+        for data_type in ('STRING', 'DOUBLE', 'DATE'):
+            text = (
+                'source: c.s.t\ndimensions:\n- name: x\n  expr: p\n'
+                f'parameters:\n- name: p\n  data_type: {data_type}\n'
+                f'  default: {value}'
+            )
+            try:
+                metric.parse_metric_view(text)
+            except Exception:  # noqa: BLE001, S110 - recorded by the wrapper
+                pass
+
+
 def pytest_sessionfinish(session: Any) -> None:
     out = Path(session.config.getoption('--record-out'))
     _probe_words()
     _probe_helpers()
     _probe_fix1()
     _probe_fix2()
+    _probe_fix3()
     from sdm_relational_engine.rfm.backend.databricks import metric_view
 
     cases = case_texts(session.config.getoption('--record-cases'))
@@ -1720,6 +1790,7 @@ def pytest_sessionfinish(session: Any) -> None:
     texts = dict.fromkeys(YAML_INPUTS)
     texts.update(dict.fromkeys(FIX1_YAML_INPUTS))
     texts.update(dict.fromkeys(FIX2_YAML_INPUTS))
+    texts.update(dict.fromkeys(FIX3_YAML_INPUTS))
     texts.update(dict.fromkeys(semantic_texts()))
     texts.update(dict.fromkeys(text for _, text in cases))
     texts.update(RECORDER.yaml_texts)

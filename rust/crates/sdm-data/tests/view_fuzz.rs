@@ -17,6 +17,27 @@ use sdm_data::view_expr::{
 };
 use serde_json::Value as Json;
 
+/// Python's white space (`str.isspace`), which the core hands in from
+/// `sdm-pql`: the 29 characters Python 3.12 counts.
+const SPACES: Spaces = Spaces(|c| {
+    matches!(
+        c,
+        '\t'..='\r'
+            | '\u{1c}'..='\u{20}'
+            | '\u{85}'
+            | '\u{a0}'
+            | '\u{1680}'
+            | '\u{2000}'..='\u{200a}'
+            | '\u{2028}'
+            | '\u{2029}'
+            | '\u{202f}'
+            | '\u{205f}'
+            | '\u{3000}'
+    )
+});
+
+use sdm_data::view_expr::{Spaces, TextRules};
+
 const EXPR: &str = include_str!("../../../../contract/view-expr-vectors.json");
 
 /// The pieces the expressions are made of.
@@ -124,7 +145,7 @@ fn read_every_way(expr: &str, table: &str) {
         let _ = unsafe_reason(expr, dialect);
     }
     for dialect in [ExprDialect::Databricks, ExprDialect::Snowflake] {
-        let _ = untrusted_call_reason(expr, dialect, &["x", table]);
+        let _ = untrusted_call_reason(expr, dialect, &["x", table], SPACES);
         let _ = view_expr::expression_message(
             "column 'x'",
             expr,
@@ -132,27 +153,30 @@ fn read_every_way(expr: &str, table: &str) {
             dialect,
             false,
             &["x"],
-            &|text: &str| format!("'{text}'"),
+            TextRules {
+                quote: &|text: &str| format!("'{text}'"),
+                spaces: SPACES,
+            },
         );
     }
     let _ = name_references(expr);
-    let _ = strip_comments(expr);
+    let _ = strip_comments(expr, SPACES);
     let _ = string_literals(expr);
     let _ = mask_literals(expr);
     let _ = qualifier_found(table, expr);
     let _ = strip_qualifier(table, expr);
     let _ = metric::references_alias(expr, &[table, "x"]);
-    let _ = metric::strip_alias(expr, &[table]);
-    let _ = metric::derived_column(expr);
-    let _ = metric::renamed_column(expr);
-    let _ = metric::wildcard(expr);
-    let _ = metric::table_reference(expr);
-    let _ = metric::view_name(expr);
-    let _ = metric::join_condition(expr);
-    let _ = metric::unquote(expr);
+    let _ = metric::strip_alias(expr, &[table], SPACES);
+    let _ = metric::derived_column(expr, SPACES);
+    let _ = metric::renamed_column(expr, SPACES);
+    let _ = metric::wildcard(expr, SPACES);
+    let _ = metric::table_reference(expr, SPACES);
+    let _ = metric::view_name(expr, SPACES);
+    let _ = metric::join_condition(expr, SPACES);
+    let _ = metric::unquote(expr, SPACES);
     let _ = metric::reads_star(expr);
-    let _ = metric::type_class(expr);
-    let _ = metric::check_filter(Some(expr), &[(vec![table.to_owned()], "t".into())]);
+    let _ = metric::type_class(expr, SPACES);
+    let _ = metric::check_filter(Some(expr), &[(vec![table.to_owned()], "t".into())], SPACES);
 }
 
 #[test]
@@ -232,6 +256,6 @@ fn no_description_panics_its_reader() {
                     .collect()
             })
             .collect();
-        let _ = view_expr::describe::describe_view(&rows);
+        let _ = view_expr::describe::describe_view(&rows, SPACES);
     }
 }

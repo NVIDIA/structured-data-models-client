@@ -2026,14 +2026,14 @@
   {
    "expr": "source.status = ''",
    "path": [
-    "nested"
+    "promos"
    ],
    "found": false
   },
   {
    "expr": "source.status = ''",
    "path": [
-    "promos"
+    "nested"
    ],
    "found": false
   },
@@ -2047,16 +2047,16 @@
   {
    "expr": "promos.kind",
    "path": [
-    "nested"
-   ],
-   "found": false
-  },
-  {
-   "expr": "promos.kind",
-   "path": [
     "promos"
    ],
    "found": true
+  },
+  {
+   "expr": "kind",
+   "path": [
+    "nested"
+   ],
+   "found": false
   },
   {
    "expr": "kind",
@@ -2075,16 +2075,16 @@
   {
    "expr": "nested.name",
    "path": [
-    "nested"
-   ],
-   "found": true
-  },
-  {
-   "expr": "name",
-   "path": [
     "promos"
    ],
    "found": false
+  },
+  {
+   "expr": "nested.name",
+   "path": [
+    "nested"
+   ],
+   "found": true
   },
   {
    "expr": "name",
@@ -2103,14 +2103,14 @@
   {
    "expr": "flag = 1",
    "path": [
-    "nested"
+    "promos"
    ],
    "found": false
   },
   {
    "expr": "flag = 1",
    "path": [
-    "promos"
+    "nested"
    ],
    "found": false
   },
@@ -2131,14 +2131,14 @@
   {
    "expr": "source.amount",
    "path": [
-    "nested"
+    "promos"
    ],
    "found": false
   },
   {
    "expr": "source.amount",
    "path": [
-    "promos"
+    "nested"
    ],
    "found": false
   },
@@ -2826,6 +2826,13 @@
    "expr": "name",
    "path": [
     "payments"
+   ],
+   "found": false
+  },
+  {
+   "expr": "name",
+   "path": [
+    "promos"
    ],
    "found": false
   },
@@ -3548,6 +3555,76 @@
   },
   {
    "expr": "CAST('1e9223372036854775807' AS STRING)",
+   "path": [
+    "source"
+   ],
+   "found": false
+  },
+  {
+   "expr": "CAST('hello' AS STRING)",
+   "path": [
+    "source"
+   ],
+   "found": false
+  },
+  {
+   "expr": "CAST('hello\n\n' AS STRING)",
+   "path": [
+    "source"
+   ],
+   "found": false
+  },
+  {
+   "expr": "CAST('hello\n' AS STRING)",
+   "path": [
+    "source"
+   ],
+   "found": false
+  },
+  {
+   "expr": "CAST('[\\'\\\\u0378\\', \\'\\\\U000e0001\\', \\'a\\\\xadb\\']' AS STRING)",
+   "path": [
+    "source"
+   ],
+   "found": false
+  },
+  {
+   "expr": "CAST('{\\'k\\': \\'\\\\u2066\\'}' AS STRING)",
+   "path": [
+    "source"
+   ],
+   "found": false
+  },
+  {
+   "expr": "CAST('0e5' AS STRING)",
+   "path": [
+    "source"
+   ],
+   "found": false
+  },
+  {
+   "expr": "CAST('0' AS DOUBLE)",
+   "path": [
+    "source"
+   ],
+   "found": false
+  },
+  {
+   "expr": "CAST('0e999999999999999999' AS STRING)",
+   "path": [
+    "source"
+   ],
+   "found": false
+  },
+  {
+   "expr": "CAST('2024-01-01' AS STRING)",
+   "path": [
+    "source"
+   ],
+   "found": false
+  },
+  {
+   "expr": "CAST('2024-01-01' AS DATE)",
    "path": [
     "source"
    ],
@@ -160130,6 +160207,757 @@
   {
    "data_type": "DOUBLE",
    "default": {
+    "t": "str",
+    "v": "0e5"
+   },
+   "default_str": "0e5",
+   "default_repr": "'0e5'",
+   "text": "0"
+  },
+  {
+   "data_type": "DECIMAL(10,2)",
+   "default": {
+    "t": "str",
+    "v": "0e5"
+   },
+   "default_str": "0e5",
+   "default_repr": "'0e5'",
+   "text": "0"
+  },
+  {
+   "data_type": "INT",
+   "default": {
+    "t": "str",
+    "v": "0e5"
+   },
+   "default_str": "0e5",
+   "default_repr": "'0e5'",
+   "error": {
+    "type": "ValueError",
+    "message": "its default '0e5' is not of type INT"
+   }
+  },
+  {
+   "data_type": "STRING",
+   "default": {
+    "t": "str",
+    "v": "0e5"
+   },
+   "default_str": "0e5",
+   "default_repr": "'0e5'",
+   "text": "0e5"
+  },
+  {
+   "data_type": "DOUBLE",
+   "default": {
+    "t": "str",
+    "v": "-0e3"
+   },
+   "default_str": "-0e3",
+   "default_repr": "'-0e3'",
+   "text": "-0"
+  },
+  {
+   "data_type": "DECIMAL(10,2)",
+   "default": {
+    "t": "str",
+    "v": "-0e3"
+   },
+   "default_str": "-0e3",
+   "default_repr": "'-0e3'",
+   "text": "-0"
+  },
+  {
+   "data_type": "INT",
+   "default": {
+    "t": "str",
+    "v": "-0e3"
+   },
+   "default_str": "-0e3",
+   "default_repr": "'-0e3'",
+   "error": {
+    "type": "ValueError",
+    "message": "its default '-0e3' is not of type INT"
+   }
+  },
+  {
+   "data_type": "STRING",
+   "default": {
+    "t": "str",
+    "v": "-0e3"
+   },
+   "default_str": "-0e3",
+   "default_repr": "'-0e3'",
+   "text": "-0e3"
+  },
+  {
+   "data_type": "DOUBLE",
+   "default": {
+    "t": "str",
+    "v": "0.0e2"
+   },
+   "default_str": "0.0e2",
+   "default_repr": "'0.0e2'",
+   "text": "0"
+  },
+  {
+   "data_type": "DECIMAL(10,2)",
+   "default": {
+    "t": "str",
+    "v": "0.0e2"
+   },
+   "default_str": "0.0e2",
+   "default_repr": "'0.0e2'",
+   "text": "0"
+  },
+  {
+   "data_type": "INT",
+   "default": {
+    "t": "str",
+    "v": "0.0e2"
+   },
+   "default_str": "0.0e2",
+   "default_repr": "'0.0e2'",
+   "error": {
+    "type": "ValueError",
+    "message": "its default '0.0e2' is not of type INT"
+   }
+  },
+  {
+   "data_type": "STRING",
+   "default": {
+    "t": "str",
+    "v": "0.0e2"
+   },
+   "default_str": "0.0e2",
+   "default_repr": "'0.0e2'",
+   "text": "0.0e2"
+  },
+  {
+   "data_type": "DOUBLE",
+   "default": {
+    "t": "str",
+    "v": "00e2"
+   },
+   "default_str": "00e2",
+   "default_repr": "'00e2'",
+   "text": "0"
+  },
+  {
+   "data_type": "DECIMAL(10,2)",
+   "default": {
+    "t": "str",
+    "v": "00e2"
+   },
+   "default_str": "00e2",
+   "default_repr": "'00e2'",
+   "text": "0"
+  },
+  {
+   "data_type": "INT",
+   "default": {
+    "t": "str",
+    "v": "00e2"
+   },
+   "default_str": "00e2",
+   "default_repr": "'00e2'",
+   "error": {
+    "type": "ValueError",
+    "message": "its default '00e2' is not of type INT"
+   }
+  },
+  {
+   "data_type": "STRING",
+   "default": {
+    "t": "str",
+    "v": "00e2"
+   },
+   "default_str": "00e2",
+   "default_repr": "'00e2'",
+   "text": "00e2"
+  },
+  {
+   "data_type": "DOUBLE",
+   "default": {
+    "t": "str",
+    "v": "0E+5"
+   },
+   "default_str": "0E+5",
+   "default_repr": "'0E+5'",
+   "text": "0"
+  },
+  {
+   "data_type": "DECIMAL(10,2)",
+   "default": {
+    "t": "str",
+    "v": "0E+5"
+   },
+   "default_str": "0E+5",
+   "default_repr": "'0E+5'",
+   "text": "0"
+  },
+  {
+   "data_type": "INT",
+   "default": {
+    "t": "str",
+    "v": "0E+5"
+   },
+   "default_str": "0E+5",
+   "default_repr": "'0E+5'",
+   "error": {
+    "type": "ValueError",
+    "message": "its default '0E+5' is not of type INT"
+   }
+  },
+  {
+   "data_type": "STRING",
+   "default": {
+    "t": "str",
+    "v": "0E+5"
+   },
+   "default_str": "0E+5",
+   "default_repr": "'0E+5'",
+   "text": "0E+5"
+  },
+  {
+   "data_type": "DOUBLE",
+   "default": {
+    "t": "str",
+    "v": "0.00e3"
+   },
+   "default_str": "0.00e3",
+   "default_repr": "'0.00e3'",
+   "text": "0"
+  },
+  {
+   "data_type": "DECIMAL(10,2)",
+   "default": {
+    "t": "str",
+    "v": "0.00e3"
+   },
+   "default_str": "0.00e3",
+   "default_repr": "'0.00e3'",
+   "text": "0"
+  },
+  {
+   "data_type": "INT",
+   "default": {
+    "t": "str",
+    "v": "0.00e3"
+   },
+   "default_str": "0.00e3",
+   "default_repr": "'0.00e3'",
+   "error": {
+    "type": "ValueError",
+    "message": "its default '0.00e3' is not of type INT"
+   }
+  },
+  {
+   "data_type": "STRING",
+   "default": {
+    "t": "str",
+    "v": "0.00e3"
+   },
+   "default_str": "0.00e3",
+   "default_repr": "'0.00e3'",
+   "text": "0.00e3"
+  },
+  {
+   "data_type": "DOUBLE",
+   "default": {
+    "t": "str",
+    "v": "٠E+1"
+   },
+   "default_str": "٠E+1",
+   "default_repr": "'٠E+1'",
+   "text": "0"
+  },
+  {
+   "data_type": "DECIMAL(10,2)",
+   "default": {
+    "t": "str",
+    "v": "٠E+1"
+   },
+   "default_str": "٠E+1",
+   "default_repr": "'٠E+1'",
+   "text": "0"
+  },
+  {
+   "data_type": "INT",
+   "default": {
+    "t": "str",
+    "v": "٠E+1"
+   },
+   "default_str": "٠E+1",
+   "default_repr": "'٠E+1'",
+   "error": {
+    "type": "ValueError",
+    "message": "its default '٠E+1' is not of type INT"
+   }
+  },
+  {
+   "data_type": "STRING",
+   "default": {
+    "t": "str",
+    "v": "٠E+1"
+   },
+   "default_str": "٠E+1",
+   "default_repr": "'٠E+1'",
+   "text": "٠E+1"
+  },
+  {
+   "data_type": "DOUBLE",
+   "default": {
+    "t": "str",
+    "v": "0e4194304"
+   },
+   "default_str": "0e4194304",
+   "default_repr": "'0e4194304'",
+   "text": "0"
+  },
+  {
+   "data_type": "DECIMAL(10,2)",
+   "default": {
+    "t": "str",
+    "v": "0e4194304"
+   },
+   "default_str": "0e4194304",
+   "default_repr": "'0e4194304'",
+   "text": "0"
+  },
+  {
+   "data_type": "INT",
+   "default": {
+    "t": "str",
+    "v": "0e4194304"
+   },
+   "default_str": "0e4194304",
+   "default_repr": "'0e4194304'",
+   "error": {
+    "type": "ValueError",
+    "message": "its default '0e4194304' is not of type INT"
+   }
+  },
+  {
+   "data_type": "STRING",
+   "default": {
+    "t": "str",
+    "v": "0e4194304"
+   },
+   "default_str": "0e4194304",
+   "default_repr": "'0e4194304'",
+   "text": "0e4194304"
+  },
+  {
+   "data_type": "DOUBLE",
+   "default": {
+    "t": "str",
+    "v": "0e999999999999999999"
+   },
+   "default_str": "0e999999999999999999",
+   "default_repr": "'0e999999999999999999'",
+   "text": "0"
+  },
+  {
+   "data_type": "DECIMAL(10,2)",
+   "default": {
+    "t": "str",
+    "v": "0e999999999999999999"
+   },
+   "default_str": "0e999999999999999999",
+   "default_repr": "'0e999999999999999999'",
+   "text": "0"
+  },
+  {
+   "data_type": "INT",
+   "default": {
+    "t": "str",
+    "v": "0e999999999999999999"
+   },
+   "default_str": "0e999999999999999999",
+   "default_repr": "'0e999999999999999999'",
+   "error": {
+    "type": "ValueError",
+    "message": "its default '0e999999999999999999' is not of type INT"
+   }
+  },
+  {
+   "data_type": "STRING",
+   "default": {
+    "t": "str",
+    "v": "0e999999999999999999"
+   },
+   "default_str": "0e999999999999999999",
+   "default_repr": "'0e999999999999999999'",
+   "text": "0e999999999999999999"
+  },
+  {
+   "data_type": "DOUBLE",
+   "default": {
+    "t": "str",
+    "v": "-0.0e-2"
+   },
+   "default_str": "-0.0e-2",
+   "default_repr": "'-0.0e-2'",
+   "text": "-0.000"
+  },
+  {
+   "data_type": "DECIMAL(10,2)",
+   "default": {
+    "t": "str",
+    "v": "-0.0e-2"
+   },
+   "default_str": "-0.0e-2",
+   "default_repr": "'-0.0e-2'",
+   "text": "-0.000"
+  },
+  {
+   "data_type": "INT",
+   "default": {
+    "t": "str",
+    "v": "-0.0e-2"
+   },
+   "default_str": "-0.0e-2",
+   "default_repr": "'-0.0e-2'",
+   "error": {
+    "type": "ValueError",
+    "message": "its default '-0.0e-2' is not of type INT"
+   }
+  },
+  {
+   "data_type": "STRING",
+   "default": {
+    "t": "str",
+    "v": "-0.0e-2"
+   },
+   "default_str": "-0.0e-2",
+   "default_repr": "'-0.0e-2'",
+   "text": "-0.0e-2"
+  },
+  {
+   "data_type": "DOUBLE",
+   "default": {
+    "t": "str",
+    "v": "0e-3"
+   },
+   "default_str": "0e-3",
+   "default_repr": "'0e-3'",
+   "text": "0.000"
+  },
+  {
+   "data_type": "DECIMAL(10,2)",
+   "default": {
+    "t": "str",
+    "v": "0e-3"
+   },
+   "default_str": "0e-3",
+   "default_repr": "'0e-3'",
+   "text": "0.000"
+  },
+  {
+   "data_type": "INT",
+   "default": {
+    "t": "str",
+    "v": "0e-3"
+   },
+   "default_str": "0e-3",
+   "default_repr": "'0e-3'",
+   "error": {
+    "type": "ValueError",
+    "message": "its default '0e-3' is not of type INT"
+   }
+  },
+  {
+   "data_type": "STRING",
+   "default": {
+    "t": "str",
+    "v": "0e-3"
+   },
+   "default_str": "0e-3",
+   "default_repr": "'0e-3'",
+   "text": "0e-3"
+  },
+  {
+   "data_type": "STRING",
+   "default": {
+    "t": "str",
+    "v": "hello"
+   },
+   "default_str": "hello",
+   "default_repr": "'hello'",
+   "text": "hello"
+  },
+  {
+   "data_type": "DOUBLE",
+   "default": {
+    "t": "str",
+    "v": "hello"
+   },
+   "default_str": "hello",
+   "default_repr": "'hello'",
+   "error": {
+    "type": "ValueError",
+    "message": "its default 'hello' is not of type DOUBLE"
+   }
+  },
+  {
+   "data_type": "DATE",
+   "default": {
+    "t": "str",
+    "v": "hello"
+   },
+   "default_str": "hello",
+   "default_repr": "'hello'",
+   "error": {
+    "type": "ValueError",
+    "message": "its default 'hello' is not of type DATE"
+   }
+  },
+  {
+   "data_type": "STRING",
+   "default": {
+    "t": "str",
+    "v": "hello\n\n"
+   },
+   "default_str": "hello\n\n",
+   "default_repr": "'hello\\n\\n'",
+   "text": "hello\n\n"
+  },
+  {
+   "data_type": "DOUBLE",
+   "default": {
+    "t": "str",
+    "v": "hello\n\n"
+   },
+   "default_str": "hello\n\n",
+   "default_repr": "'hello\\n\\n'",
+   "error": {
+    "type": "ValueError",
+    "message": "its default 'hello\\n\\n' is not of type DOUBLE"
+   }
+  },
+  {
+   "data_type": "DATE",
+   "default": {
+    "t": "str",
+    "v": "hello\n\n"
+   },
+   "default_str": "hello\n\n",
+   "default_repr": "'hello\\n\\n'",
+   "error": {
+    "type": "ValueError",
+    "message": "its default 'hello\\n\\n' is not of type DATE"
+   }
+  },
+  {
+   "data_type": "STRING",
+   "default": {
+    "t": "str",
+    "v": "hello\n"
+   },
+   "default_str": "hello\n",
+   "default_repr": "'hello\\n'",
+   "text": "hello\n"
+  },
+  {
+   "data_type": "DOUBLE",
+   "default": {
+    "t": "str",
+    "v": "hello\n"
+   },
+   "default_str": "hello\n",
+   "default_repr": "'hello\\n'",
+   "error": {
+    "type": "ValueError",
+    "message": "its default 'hello\\n' is not of type DOUBLE"
+   }
+  },
+  {
+   "data_type": "DATE",
+   "default": {
+    "t": "str",
+    "v": "hello\n"
+   },
+   "default_str": "hello\n",
+   "default_repr": "'hello\\n'",
+   "error": {
+    "type": "ValueError",
+    "message": "its default 'hello\\n' is not of type DATE"
+   }
+  },
+  {
+   "data_type": "STRING",
+   "default": {
+    "t": "list",
+    "v": [
+     {
+      "t": "str",
+      "v": "͸"
+     },
+     {
+      "t": "str",
+      "v": "󠀁"
+     },
+     {
+      "t": "str",
+      "v": "a­b"
+     }
+    ]
+   },
+   "default_str": "['\\u0378', '\\U000e0001', 'a\\xadb']",
+   "default_repr": "['\\u0378', '\\U000e0001', 'a\\xadb']",
+   "text": "['\\u0378', '\\U000e0001', 'a\\xadb']"
+  },
+  {
+   "data_type": "DOUBLE",
+   "default": {
+    "t": "list",
+    "v": [
+     {
+      "t": "str",
+      "v": "͸"
+     },
+     {
+      "t": "str",
+      "v": "󠀁"
+     },
+     {
+      "t": "str",
+      "v": "a­b"
+     }
+    ]
+   },
+   "default_str": "['\\u0378', '\\U000e0001', 'a\\xadb']",
+   "default_repr": "['\\u0378', '\\U000e0001', 'a\\xadb']",
+   "error": {
+    "type": "ValueError",
+    "message": "its default ['\\u0378', '\\U000e0001', 'a\\xadb'] is not of type DOUBLE"
+   }
+  },
+  {
+   "data_type": "DATE",
+   "default": {
+    "t": "list",
+    "v": [
+     {
+      "t": "str",
+      "v": "͸"
+     },
+     {
+      "t": "str",
+      "v": "󠀁"
+     },
+     {
+      "t": "str",
+      "v": "a­b"
+     }
+    ]
+   },
+   "default_str": "['\\u0378', '\\U000e0001', 'a\\xadb']",
+   "default_repr": "['\\u0378', '\\U000e0001', 'a\\xadb']",
+   "error": {
+    "type": "ValueError",
+    "message": "its default ['\\u0378', '\\U000e0001', 'a\\xadb'] is not of type DATE"
+   }
+  },
+  {
+   "data_type": "STRING",
+   "default": {
+    "t": "map",
+    "v": [
+     [
+      {
+       "t": "str",
+       "v": "k"
+      },
+      {
+       "t": "str",
+       "v": "⁦"
+      }
+     ]
+    ]
+   },
+   "default_str": "{'k': '\\u2066'}",
+   "default_repr": "{'k': '\\u2066'}",
+   "text": "{'k': '\\u2066'}"
+  },
+  {
+   "data_type": "DOUBLE",
+   "default": {
+    "t": "map",
+    "v": [
+     [
+      {
+       "t": "str",
+       "v": "k"
+      },
+      {
+       "t": "str",
+       "v": "⁦"
+      }
+     ]
+    ]
+   },
+   "default_str": "{'k': '\\u2066'}",
+   "default_repr": "{'k': '\\u2066'}",
+   "error": {
+    "type": "ValueError",
+    "message": "its default {'k': '\\u2066'} is not of type DOUBLE"
+   }
+  },
+  {
+   "data_type": "DATE",
+   "default": {
+    "t": "map",
+    "v": [
+     [
+      {
+       "t": "str",
+       "v": "k"
+      },
+      {
+       "t": "str",
+       "v": "⁦"
+      }
+     ]
+    ]
+   },
+   "default_str": "{'k': '\\u2066'}",
+   "default_repr": "{'k': '\\u2066'}",
+   "error": {
+    "type": "ValueError",
+    "message": "its default {'k': '\\u2066'} is not of type DATE"
+   }
+  },
+  {
+   "data_type": "DATE",
+   "default": {
+    "t": "str",
+    "v": "0e5"
+   },
+   "default_str": "0e5",
+   "default_repr": "'0e5'",
+   "error": {
+    "type": "ValueError",
+    "message": "its default '0e5' is not of type DATE"
+   }
+  },
+  {
+   "data_type": "DATE",
+   "default": {
+    "t": "str",
+    "v": "0e999999999999999999"
+   },
+   "default_str": "0e999999999999999999",
+   "default_repr": "'0e999999999999999999'",
+   "error": {
+    "type": "ValueError",
+    "message": "its default '0e999999999999999999' is not of type DATE"
+   }
+  },
+  {
+   "data_type": "DOUBLE",
+   "default": {
     "t": "int",
     "v": "50"
    },
@@ -163271,6 +164099,1278 @@
         },
         {
          "t": "str",
+         "v": "p"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "data_type"
+        },
+        {
+         "t": "str",
+         "v": "STRING"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "default"
+        },
+        {
+         "t": "str",
+         "v": "hello"
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "types": {},
+   "read": {
+    "p": [
+     "p",
+     "CAST('hello' AS STRING)",
+     "hello"
+    ]
+   }
+  },
+  {
+   "parameters": {
+    "t": "list",
+    "v": [
+     {
+      "t": "map",
+      "v": [
+       [
+        {
+         "t": "str",
+         "v": "name"
+        },
+        {
+         "t": "str",
+         "v": "p"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "data_type"
+        },
+        {
+         "t": "str",
+         "v": "DOUBLE"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "default"
+        },
+        {
+         "t": "str",
+         "v": "hello"
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "types": {},
+   "read": {
+    "p": [
+     "p",
+     null,
+     "its default 'hello' is not of type DOUBLE"
+    ]
+   }
+  },
+  {
+   "parameters": {
+    "t": "list",
+    "v": [
+     {
+      "t": "map",
+      "v": [
+       [
+        {
+         "t": "str",
+         "v": "name"
+        },
+        {
+         "t": "str",
+         "v": "p"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "data_type"
+        },
+        {
+         "t": "str",
+         "v": "DATE"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "default"
+        },
+        {
+         "t": "str",
+         "v": "hello"
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "types": {},
+   "read": {
+    "p": [
+     "p",
+     null,
+     "its default 'hello' is not of type DATE"
+    ]
+   }
+  },
+  {
+   "parameters": {
+    "t": "list",
+    "v": [
+     {
+      "t": "map",
+      "v": [
+       [
+        {
+         "t": "str",
+         "v": "name"
+        },
+        {
+         "t": "str",
+         "v": "p"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "data_type"
+        },
+        {
+         "t": "str",
+         "v": "STRING"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "default"
+        },
+        {
+         "t": "str",
+         "v": "hello\n\n"
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "types": {},
+   "read": {
+    "p": [
+     "p",
+     "CAST('hello\n\n' AS STRING)",
+     "hello\n\n"
+    ]
+   }
+  },
+  {
+   "parameters": {
+    "t": "list",
+    "v": [
+     {
+      "t": "map",
+      "v": [
+       [
+        {
+         "t": "str",
+         "v": "name"
+        },
+        {
+         "t": "str",
+         "v": "p"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "data_type"
+        },
+        {
+         "t": "str",
+         "v": "DOUBLE"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "default"
+        },
+        {
+         "t": "str",
+         "v": "hello\n\n"
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "types": {},
+   "read": {
+    "p": [
+     "p",
+     null,
+     "its default 'hello\\n\\n' is not of type DOUBLE"
+    ]
+   }
+  },
+  {
+   "parameters": {
+    "t": "list",
+    "v": [
+     {
+      "t": "map",
+      "v": [
+       [
+        {
+         "t": "str",
+         "v": "name"
+        },
+        {
+         "t": "str",
+         "v": "p"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "data_type"
+        },
+        {
+         "t": "str",
+         "v": "DATE"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "default"
+        },
+        {
+         "t": "str",
+         "v": "hello\n\n"
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "types": {},
+   "read": {
+    "p": [
+     "p",
+     null,
+     "its default 'hello\\n\\n' is not of type DATE"
+    ]
+   }
+  },
+  {
+   "parameters": {
+    "t": "list",
+    "v": [
+     {
+      "t": "map",
+      "v": [
+       [
+        {
+         "t": "str",
+         "v": "name"
+        },
+        {
+         "t": "str",
+         "v": "p"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "data_type"
+        },
+        {
+         "t": "str",
+         "v": "STRING"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "default"
+        },
+        {
+         "t": "str",
+         "v": "hello\n"
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "types": {},
+   "read": {
+    "p": [
+     "p",
+     "CAST('hello\n' AS STRING)",
+     "hello\n"
+    ]
+   }
+  },
+  {
+   "parameters": {
+    "t": "list",
+    "v": [
+     {
+      "t": "map",
+      "v": [
+       [
+        {
+         "t": "str",
+         "v": "name"
+        },
+        {
+         "t": "str",
+         "v": "p"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "data_type"
+        },
+        {
+         "t": "str",
+         "v": "DOUBLE"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "default"
+        },
+        {
+         "t": "str",
+         "v": "hello\n"
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "types": {},
+   "read": {
+    "p": [
+     "p",
+     null,
+     "its default 'hello\\n' is not of type DOUBLE"
+    ]
+   }
+  },
+  {
+   "parameters": {
+    "t": "list",
+    "v": [
+     {
+      "t": "map",
+      "v": [
+       [
+        {
+         "t": "str",
+         "v": "name"
+        },
+        {
+         "t": "str",
+         "v": "p"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "data_type"
+        },
+        {
+         "t": "str",
+         "v": "DATE"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "default"
+        },
+        {
+         "t": "str",
+         "v": "hello\n"
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "types": {},
+   "read": {
+    "p": [
+     "p",
+     null,
+     "its default 'hello\\n' is not of type DATE"
+    ]
+   }
+  },
+  {
+   "parameters": {
+    "t": "list",
+    "v": [
+     {
+      "t": "map",
+      "v": [
+       [
+        {
+         "t": "str",
+         "v": "name"
+        },
+        {
+         "t": "str",
+         "v": "p"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "data_type"
+        },
+        {
+         "t": "str",
+         "v": "STRING"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "default"
+        },
+        {
+         "t": "list",
+         "v": [
+          {
+           "t": "str",
+           "v": "͸"
+          },
+          {
+           "t": "str",
+           "v": "󠀁"
+          },
+          {
+           "t": "str",
+           "v": "a­b"
+          }
+         ]
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "types": {},
+   "read": {
+    "p": [
+     "p",
+     "CAST('[\\'\\\\u0378\\', \\'\\\\U000e0001\\', \\'a\\\\xadb\\']' AS STRING)",
+     "['\\u0378', '\\U000e0001', 'a\\xadb']"
+    ]
+   }
+  },
+  {
+   "parameters": {
+    "t": "list",
+    "v": [
+     {
+      "t": "map",
+      "v": [
+       [
+        {
+         "t": "str",
+         "v": "name"
+        },
+        {
+         "t": "str",
+         "v": "p"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "data_type"
+        },
+        {
+         "t": "str",
+         "v": "DOUBLE"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "default"
+        },
+        {
+         "t": "list",
+         "v": [
+          {
+           "t": "str",
+           "v": "͸"
+          },
+          {
+           "t": "str",
+           "v": "󠀁"
+          },
+          {
+           "t": "str",
+           "v": "a­b"
+          }
+         ]
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "types": {},
+   "read": {
+    "p": [
+     "p",
+     null,
+     "its default ['\\u0378', '\\U000e0001', 'a\\xadb'] is not of type DOUBLE"
+    ]
+   }
+  },
+  {
+   "parameters": {
+    "t": "list",
+    "v": [
+     {
+      "t": "map",
+      "v": [
+       [
+        {
+         "t": "str",
+         "v": "name"
+        },
+        {
+         "t": "str",
+         "v": "p"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "data_type"
+        },
+        {
+         "t": "str",
+         "v": "DATE"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "default"
+        },
+        {
+         "t": "list",
+         "v": [
+          {
+           "t": "str",
+           "v": "͸"
+          },
+          {
+           "t": "str",
+           "v": "󠀁"
+          },
+          {
+           "t": "str",
+           "v": "a­b"
+          }
+         ]
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "types": {},
+   "read": {
+    "p": [
+     "p",
+     null,
+     "its default ['\\u0378', '\\U000e0001', 'a\\xadb'] is not of type DATE"
+    ]
+   }
+  },
+  {
+   "parameters": {
+    "t": "list",
+    "v": [
+     {
+      "t": "map",
+      "v": [
+       [
+        {
+         "t": "str",
+         "v": "name"
+        },
+        {
+         "t": "str",
+         "v": "p"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "data_type"
+        },
+        {
+         "t": "str",
+         "v": "STRING"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "default"
+        },
+        {
+         "t": "map",
+         "v": [
+          [
+           {
+            "t": "str",
+            "v": "k"
+           },
+           {
+            "t": "str",
+            "v": "⁦"
+           }
+          ]
+         ]
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "types": {},
+   "read": {
+    "p": [
+     "p",
+     "CAST('{\\'k\\': \\'\\\\u2066\\'}' AS STRING)",
+     "{'k': '\\u2066'}"
+    ]
+   }
+  },
+  {
+   "parameters": {
+    "t": "list",
+    "v": [
+     {
+      "t": "map",
+      "v": [
+       [
+        {
+         "t": "str",
+         "v": "name"
+        },
+        {
+         "t": "str",
+         "v": "p"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "data_type"
+        },
+        {
+         "t": "str",
+         "v": "DOUBLE"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "default"
+        },
+        {
+         "t": "map",
+         "v": [
+          [
+           {
+            "t": "str",
+            "v": "k"
+           },
+           {
+            "t": "str",
+            "v": "⁦"
+           }
+          ]
+         ]
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "types": {},
+   "read": {
+    "p": [
+     "p",
+     null,
+     "its default {'k': '\\u2066'} is not of type DOUBLE"
+    ]
+   }
+  },
+  {
+   "parameters": {
+    "t": "list",
+    "v": [
+     {
+      "t": "map",
+      "v": [
+       [
+        {
+         "t": "str",
+         "v": "name"
+        },
+        {
+         "t": "str",
+         "v": "p"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "data_type"
+        },
+        {
+         "t": "str",
+         "v": "DATE"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "default"
+        },
+        {
+         "t": "map",
+         "v": [
+          [
+           {
+            "t": "str",
+            "v": "k"
+           },
+           {
+            "t": "str",
+            "v": "⁦"
+           }
+          ]
+         ]
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "types": {},
+   "read": {
+    "p": [
+     "p",
+     null,
+     "its default {'k': '\\u2066'} is not of type DATE"
+    ]
+   }
+  },
+  {
+   "parameters": {
+    "t": "list",
+    "v": [
+     {
+      "t": "map",
+      "v": [
+       [
+        {
+         "t": "str",
+         "v": "name"
+        },
+        {
+         "t": "str",
+         "v": "p"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "data_type"
+        },
+        {
+         "t": "str",
+         "v": "STRING"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "default"
+        },
+        {
+         "t": "str",
+         "v": "0e5"
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "types": {},
+   "read": {
+    "p": [
+     "p",
+     "CAST('0e5' AS STRING)",
+     "0e5"
+    ]
+   }
+  },
+  {
+   "parameters": {
+    "t": "list",
+    "v": [
+     {
+      "t": "map",
+      "v": [
+       [
+        {
+         "t": "str",
+         "v": "name"
+        },
+        {
+         "t": "str",
+         "v": "p"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "data_type"
+        },
+        {
+         "t": "str",
+         "v": "DOUBLE"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "default"
+        },
+        {
+         "t": "str",
+         "v": "0e5"
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "types": {},
+   "read": {
+    "p": [
+     "p",
+     "CAST('0' AS DOUBLE)",
+     "0"
+    ]
+   }
+  },
+  {
+   "parameters": {
+    "t": "list",
+    "v": [
+     {
+      "t": "map",
+      "v": [
+       [
+        {
+         "t": "str",
+         "v": "name"
+        },
+        {
+         "t": "str",
+         "v": "p"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "data_type"
+        },
+        {
+         "t": "str",
+         "v": "DATE"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "default"
+        },
+        {
+         "t": "str",
+         "v": "0e5"
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "types": {},
+   "read": {
+    "p": [
+     "p",
+     null,
+     "its default '0e5' is not of type DATE"
+    ]
+   }
+  },
+  {
+   "parameters": {
+    "t": "list",
+    "v": [
+     {
+      "t": "map",
+      "v": [
+       [
+        {
+         "t": "str",
+         "v": "name"
+        },
+        {
+         "t": "str",
+         "v": "p"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "data_type"
+        },
+        {
+         "t": "str",
+         "v": "STRING"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "default"
+        },
+        {
+         "t": "str",
+         "v": "0e999999999999999999"
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "types": {},
+   "read": {
+    "p": [
+     "p",
+     "CAST('0e999999999999999999' AS STRING)",
+     "0e999999999999999999"
+    ]
+   }
+  },
+  {
+   "parameters": {
+    "t": "list",
+    "v": [
+     {
+      "t": "map",
+      "v": [
+       [
+        {
+         "t": "str",
+         "v": "name"
+        },
+        {
+         "t": "str",
+         "v": "p"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "data_type"
+        },
+        {
+         "t": "str",
+         "v": "DOUBLE"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "default"
+        },
+        {
+         "t": "str",
+         "v": "0e999999999999999999"
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "types": {},
+   "read": {
+    "p": [
+     "p",
+     "CAST('0' AS DOUBLE)",
+     "0"
+    ]
+   }
+  },
+  {
+   "parameters": {
+    "t": "list",
+    "v": [
+     {
+      "t": "map",
+      "v": [
+       [
+        {
+         "t": "str",
+         "v": "name"
+        },
+        {
+         "t": "str",
+         "v": "p"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "data_type"
+        },
+        {
+         "t": "str",
+         "v": "DATE"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "default"
+        },
+        {
+         "t": "str",
+         "v": "0e999999999999999999"
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "types": {},
+   "read": {
+    "p": [
+     "p",
+     null,
+     "its default '0e999999999999999999' is not of type DATE"
+    ]
+   }
+  },
+  {
+   "parameters": {
+    "t": "list",
+    "v": [
+     {
+      "t": "map",
+      "v": [
+       [
+        {
+         "t": "str",
+         "v": "name"
+        },
+        {
+         "t": "str",
+         "v": "p"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "data_type"
+        },
+        {
+         "t": "str",
+         "v": "STRING"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "default"
+        },
+        {
+         "t": "str",
+         "v": "2024-01-01"
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "types": {},
+   "read": {
+    "p": [
+     "p",
+     "CAST('2024-01-01' AS STRING)",
+     "2024-01-01"
+    ]
+   }
+  },
+  {
+   "parameters": {
+    "t": "list",
+    "v": [
+     {
+      "t": "map",
+      "v": [
+       [
+        {
+         "t": "str",
+         "v": "name"
+        },
+        {
+         "t": "str",
+         "v": "p"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "data_type"
+        },
+        {
+         "t": "str",
+         "v": "DOUBLE"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "default"
+        },
+        {
+         "t": "str",
+         "v": "2024-01-01"
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "types": {},
+   "read": {
+    "p": [
+     "p",
+     null,
+     "its default '2024-01-01' is not of type DOUBLE"
+    ]
+   }
+  },
+  {
+   "parameters": {
+    "t": "list",
+    "v": [
+     {
+      "t": "map",
+      "v": [
+       [
+        {
+         "t": "str",
+         "v": "name"
+        },
+        {
+         "t": "str",
+         "v": "p"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "data_type"
+        },
+        {
+         "t": "str",
+         "v": "DATE"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "default"
+        },
+        {
+         "t": "str",
+         "v": "2024-01-01"
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "types": {},
+   "read": {
+    "p": [
+     "p",
+     "CAST('2024-01-01' AS DATE)",
+     "2024-01-01"
+    ]
+   }
+  },
+  {
+   "parameters": {
+    "t": "list",
+    "v": [
+     {
+      "t": "map",
+      "v": [
+       [
+        {
+         "t": "str",
+         "v": "name"
+        },
+        {
+         "t": "str",
          "v": "min_price"
         }
        ],
@@ -164974,6 +167074,328 @@
     ]
    },
    "out": "p",
+   "used": [
+    "p"
+   ]
+  },
+  {
+   "expr": "p",
+   "parameters": {
+    "p": [
+     "p",
+     "CAST('hello' AS STRING)",
+     "hello"
+    ]
+   },
+   "out": "CAST('hello' AS STRING)",
+   "used": [
+    "p"
+   ]
+  },
+  {
+   "expr": "p",
+   "parameters": {
+    "p": [
+     "p",
+     null,
+     "its default 'hello' is not of type DOUBLE"
+    ]
+   },
+   "out": "p",
+   "used": [
+    "p"
+   ]
+  },
+  {
+   "expr": "p",
+   "parameters": {
+    "p": [
+     "p",
+     null,
+     "its default 'hello' is not of type DATE"
+    ]
+   },
+   "out": "p",
+   "used": [
+    "p"
+   ]
+  },
+  {
+   "expr": "p",
+   "parameters": {
+    "p": [
+     "p",
+     "CAST('hello\n\n' AS STRING)",
+     "hello\n\n"
+    ]
+   },
+   "out": "CAST('hello\n\n' AS STRING)",
+   "used": [
+    "p"
+   ]
+  },
+  {
+   "expr": "p",
+   "parameters": {
+    "p": [
+     "p",
+     null,
+     "its default 'hello\\n\\n' is not of type DOUBLE"
+    ]
+   },
+   "out": "p",
+   "used": [
+    "p"
+   ]
+  },
+  {
+   "expr": "p",
+   "parameters": {
+    "p": [
+     "p",
+     null,
+     "its default 'hello\\n\\n' is not of type DATE"
+    ]
+   },
+   "out": "p",
+   "used": [
+    "p"
+   ]
+  },
+  {
+   "expr": "p",
+   "parameters": {
+    "p": [
+     "p",
+     "CAST('hello\n' AS STRING)",
+     "hello\n"
+    ]
+   },
+   "out": "CAST('hello\n' AS STRING)",
+   "used": [
+    "p"
+   ]
+  },
+  {
+   "expr": "p",
+   "parameters": {
+    "p": [
+     "p",
+     null,
+     "its default 'hello\\n' is not of type DOUBLE"
+    ]
+   },
+   "out": "p",
+   "used": [
+    "p"
+   ]
+  },
+  {
+   "expr": "p",
+   "parameters": {
+    "p": [
+     "p",
+     null,
+     "its default 'hello\\n' is not of type DATE"
+    ]
+   },
+   "out": "p",
+   "used": [
+    "p"
+   ]
+  },
+  {
+   "expr": "p",
+   "parameters": {
+    "p": [
+     "p",
+     "CAST('[\\'\\\\u0378\\', \\'\\\\U000e0001\\', \\'a\\\\xadb\\']' AS STRING)",
+     "['\\u0378', '\\U000e0001', 'a\\xadb']"
+    ]
+   },
+   "out": "CAST('[\\'\\\\u0378\\', \\'\\\\U000e0001\\', \\'a\\\\xadb\\']' AS STRING)",
+   "used": [
+    "p"
+   ]
+  },
+  {
+   "expr": "p",
+   "parameters": {
+    "p": [
+     "p",
+     null,
+     "its default ['\\u0378', '\\U000e0001', 'a\\xadb'] is not of type DOUBLE"
+    ]
+   },
+   "out": "p",
+   "used": [
+    "p"
+   ]
+  },
+  {
+   "expr": "p",
+   "parameters": {
+    "p": [
+     "p",
+     null,
+     "its default ['\\u0378', '\\U000e0001', 'a\\xadb'] is not of type DATE"
+    ]
+   },
+   "out": "p",
+   "used": [
+    "p"
+   ]
+  },
+  {
+   "expr": "p",
+   "parameters": {
+    "p": [
+     "p",
+     "CAST('{\\'k\\': \\'\\\\u2066\\'}' AS STRING)",
+     "{'k': '\\u2066'}"
+    ]
+   },
+   "out": "CAST('{\\'k\\': \\'\\\\u2066\\'}' AS STRING)",
+   "used": [
+    "p"
+   ]
+  },
+  {
+   "expr": "p",
+   "parameters": {
+    "p": [
+     "p",
+     null,
+     "its default {'k': '\\u2066'} is not of type DOUBLE"
+    ]
+   },
+   "out": "p",
+   "used": [
+    "p"
+   ]
+  },
+  {
+   "expr": "p",
+   "parameters": {
+    "p": [
+     "p",
+     null,
+     "its default {'k': '\\u2066'} is not of type DATE"
+    ]
+   },
+   "out": "p",
+   "used": [
+    "p"
+   ]
+  },
+  {
+   "expr": "p",
+   "parameters": {
+    "p": [
+     "p",
+     "CAST('0e5' AS STRING)",
+     "0e5"
+    ]
+   },
+   "out": "CAST('0e5' AS STRING)",
+   "used": [
+    "p"
+   ]
+  },
+  {
+   "expr": "p",
+   "parameters": {
+    "p": [
+     "p",
+     "CAST('0' AS DOUBLE)",
+     "0"
+    ]
+   },
+   "out": "CAST('0' AS DOUBLE)",
+   "used": [
+    "p"
+   ]
+  },
+  {
+   "expr": "p",
+   "parameters": {
+    "p": [
+     "p",
+     null,
+     "its default '0e5' is not of type DATE"
+    ]
+   },
+   "out": "p",
+   "used": [
+    "p"
+   ]
+  },
+  {
+   "expr": "p",
+   "parameters": {
+    "p": [
+     "p",
+     "CAST('0e999999999999999999' AS STRING)",
+     "0e999999999999999999"
+    ]
+   },
+   "out": "CAST('0e999999999999999999' AS STRING)",
+   "used": [
+    "p"
+   ]
+  },
+  {
+   "expr": "p",
+   "parameters": {
+    "p": [
+     "p",
+     null,
+     "its default '0e999999999999999999' is not of type DATE"
+    ]
+   },
+   "out": "p",
+   "used": [
+    "p"
+   ]
+  },
+  {
+   "expr": "p",
+   "parameters": {
+    "p": [
+     "p",
+     "CAST('2024-01-01' AS STRING)",
+     "2024-01-01"
+    ]
+   },
+   "out": "CAST('2024-01-01' AS STRING)",
+   "used": [
+    "p"
+   ]
+  },
+  {
+   "expr": "p",
+   "parameters": {
+    "p": [
+     "p",
+     null,
+     "its default '2024-01-01' is not of type DOUBLE"
+    ]
+   },
+   "out": "p",
+   "used": [
+    "p"
+   ]
+  },
+  {
+   "expr": "p",
+   "parameters": {
+    "p": [
+     "p",
+     "CAST('2024-01-01' AS DATE)",
+     "2024-01-01"
+    ]
+   },
+   "out": "CAST('2024-01-01' AS DATE)",
    "used": [
     "p"
    ]
@@ -167265,6 +169687,116 @@
    "refused": null
   },
   {
+   "expr": "CAST('hello' AS STRING)",
+   "fields": {},
+   "qualifiers": [
+    [
+     "source"
+    ]
+   ],
+   "out": "CAST('hello' AS STRING)",
+   "refused": null
+  },
+  {
+   "expr": "CAST('hello\n\n' AS STRING)",
+   "fields": {},
+   "qualifiers": [
+    [
+     "source"
+    ]
+   ],
+   "out": "CAST('hello\n\n' AS STRING)",
+   "refused": null
+  },
+  {
+   "expr": "CAST('hello\n' AS STRING)",
+   "fields": {},
+   "qualifiers": [
+    [
+     "source"
+    ]
+   ],
+   "out": "CAST('hello\n' AS STRING)",
+   "refused": null
+  },
+  {
+   "expr": "CAST('[\\'\\\\u0378\\', \\'\\\\U000e0001\\', \\'a\\\\xadb\\']' AS STRING)",
+   "fields": {},
+   "qualifiers": [
+    [
+     "source"
+    ]
+   ],
+   "out": "CAST('[\\'\\\\u0378\\', \\'\\\\U000e0001\\', \\'a\\\\xadb\\']' AS STRING)",
+   "refused": null
+  },
+  {
+   "expr": "CAST('{\\'k\\': \\'\\\\u2066\\'}' AS STRING)",
+   "fields": {},
+   "qualifiers": [
+    [
+     "source"
+    ]
+   ],
+   "out": "CAST('{\\'k\\': \\'\\\\u2066\\'}' AS STRING)",
+   "refused": null
+  },
+  {
+   "expr": "CAST('0e5' AS STRING)",
+   "fields": {},
+   "qualifiers": [
+    [
+     "source"
+    ]
+   ],
+   "out": "CAST('0e5' AS STRING)",
+   "refused": null
+  },
+  {
+   "expr": "CAST('0' AS DOUBLE)",
+   "fields": {},
+   "qualifiers": [
+    [
+     "source"
+    ]
+   ],
+   "out": "CAST('0' AS DOUBLE)",
+   "refused": null
+  },
+  {
+   "expr": "CAST('0e999999999999999999' AS STRING)",
+   "fields": {},
+   "qualifiers": [
+    [
+     "source"
+    ]
+   ],
+   "out": "CAST('0e999999999999999999' AS STRING)",
+   "refused": null
+  },
+  {
+   "expr": "CAST('2024-01-01' AS STRING)",
+   "fields": {},
+   "qualifiers": [
+    [
+     "source"
+    ]
+   ],
+   "out": "CAST('2024-01-01' AS STRING)",
+   "refused": null
+  },
+  {
+   "expr": "CAST('2024-01-01' AS DATE)",
+   "fields": {},
+   "qualifiers": [
+    [
+     "source"
+    ]
+   ],
+   "out": "CAST('2024-01-01' AS DATE)",
+   "refused": null
+  },
+  {
    "expr": "source.order_id",
    "fields": {},
    "qualifiers": [
@@ -168155,6 +170687,46 @@
    "star": false
   },
   {
+   "expr": "CAST('hello' AS STRING)",
+   "star": false
+  },
+  {
+   "expr": "CAST('hello\n\n' AS STRING)",
+   "star": false
+  },
+  {
+   "expr": "CAST('hello\n' AS STRING)",
+   "star": false
+  },
+  {
+   "expr": "CAST('[\\'\\\\u0378\\', \\'\\\\U000e0001\\', \\'a\\\\xadb\\']' AS STRING)",
+   "star": false
+  },
+  {
+   "expr": "CAST('{\\'k\\': \\'\\\\u2066\\'}' AS STRING)",
+   "star": false
+  },
+  {
+   "expr": "CAST('0e5' AS STRING)",
+   "star": false
+  },
+  {
+   "expr": "CAST('0' AS DOUBLE)",
+   "star": false
+  },
+  {
+   "expr": "CAST('0e999999999999999999' AS STRING)",
+   "star": false
+  },
+  {
+   "expr": "CAST('2024-01-01' AS STRING)",
+   "star": false
+  },
+  {
+   "expr": "CAST('2024-01-01' AS DATE)",
+   "star": false
+  },
+  {
    "expr": "source.order_id",
    "star": false
   },
@@ -168407,15 +170979,15 @@
     ],
     [
      [
-      "nested"
-     ],
-     "nested"
-    ],
-    [
-     [
       "promos"
      ],
      "promos"
+    ],
+    [
+     [
+      "nested"
+     ],
+     "nested"
     ],
     [
      [
@@ -170985,15 +173557,15 @@
     ],
     [
      [
-      "nested"
-     ],
-     "nested"
-    ],
-    [
-     [
       "promos"
      ],
      "promos"
+    ],
+    [
+     [
+      "nested"
+     ],
+     "nested"
     ],
     [
      [
@@ -176390,6 +178962,276 @@
    "candidates": [
     [
      [
+      "source"
+     ],
+     "source"
+    ]
+   ],
+   "kept": [],
+   "dimensions": {
+    "x": [
+     "x",
+     "source",
+     "CAST('hello' AS STRING)"
+    ]
+   },
+   "refused": [],
+   "parameters": [
+    "p"
+   ],
+   "read": [],
+   "messages": []
+  },
+  {
+   "measures": {
+    "t": "null"
+   },
+   "candidates": [
+    [
+     [
+      "source"
+     ],
+     "source"
+    ]
+   ],
+   "kept": [],
+   "dimensions": {
+    "x": [
+     "x",
+     "source",
+     "CAST('hello\n\n' AS STRING)"
+    ]
+   },
+   "refused": [],
+   "parameters": [
+    "p"
+   ],
+   "read": [],
+   "messages": []
+  },
+  {
+   "measures": {
+    "t": "null"
+   },
+   "candidates": [
+    [
+     [
+      "source"
+     ],
+     "source"
+    ]
+   ],
+   "kept": [],
+   "dimensions": {
+    "x": [
+     "x",
+     "source",
+     "CAST('hello\n' AS STRING)"
+    ]
+   },
+   "refused": [],
+   "parameters": [
+    "p"
+   ],
+   "read": [],
+   "messages": []
+  },
+  {
+   "measures": {
+    "t": "null"
+   },
+   "candidates": [
+    [
+     [
+      "source"
+     ],
+     "source"
+    ]
+   ],
+   "kept": [],
+   "dimensions": {
+    "x": [
+     "x",
+     "source",
+     "CAST('[\\'\\\\u0378\\', \\'\\\\U000e0001\\', \\'a\\\\xadb\\']' AS STRING)"
+    ]
+   },
+   "refused": [],
+   "parameters": [
+    "p"
+   ],
+   "read": [],
+   "messages": []
+  },
+  {
+   "measures": {
+    "t": "null"
+   },
+   "candidates": [
+    [
+     [
+      "source"
+     ],
+     "source"
+    ]
+   ],
+   "kept": [],
+   "dimensions": {
+    "x": [
+     "x",
+     "source",
+     "CAST('{\\'k\\': \\'\\\\u2066\\'}' AS STRING)"
+    ]
+   },
+   "refused": [],
+   "parameters": [
+    "p"
+   ],
+   "read": [],
+   "messages": []
+  },
+  {
+   "measures": {
+    "t": "null"
+   },
+   "candidates": [
+    [
+     [
+      "source"
+     ],
+     "source"
+    ]
+   ],
+   "kept": [],
+   "dimensions": {
+    "x": [
+     "x",
+     "source",
+     "CAST('0e5' AS STRING)"
+    ]
+   },
+   "refused": [],
+   "parameters": [
+    "p"
+   ],
+   "read": [],
+   "messages": []
+  },
+  {
+   "measures": {
+    "t": "null"
+   },
+   "candidates": [
+    [
+     [
+      "source"
+     ],
+     "source"
+    ]
+   ],
+   "kept": [],
+   "dimensions": {
+    "x": [
+     "x",
+     "source",
+     "CAST('0' AS DOUBLE)"
+    ]
+   },
+   "refused": [],
+   "parameters": [
+    "p"
+   ],
+   "read": [],
+   "messages": []
+  },
+  {
+   "measures": {
+    "t": "null"
+   },
+   "candidates": [
+    [
+     [
+      "source"
+     ],
+     "source"
+    ]
+   ],
+   "kept": [],
+   "dimensions": {
+    "x": [
+     "x",
+     "source",
+     "CAST('0e999999999999999999' AS STRING)"
+    ]
+   },
+   "refused": [],
+   "parameters": [
+    "p"
+   ],
+   "read": [],
+   "messages": []
+  },
+  {
+   "measures": {
+    "t": "null"
+   },
+   "candidates": [
+    [
+     [
+      "source"
+     ],
+     "source"
+    ]
+   ],
+   "kept": [],
+   "dimensions": {
+    "x": [
+     "x",
+     "source",
+     "CAST('2024-01-01' AS STRING)"
+    ]
+   },
+   "refused": [],
+   "parameters": [
+    "p"
+   ],
+   "read": [],
+   "messages": []
+  },
+  {
+   "measures": {
+    "t": "null"
+   },
+   "candidates": [
+    [
+     [
+      "source"
+     ],
+     "source"
+    ]
+   ],
+   "kept": [],
+   "dimensions": {
+    "x": [
+     "x",
+     "source",
+     "CAST('2024-01-01' AS DATE)"
+    ]
+   },
+   "refused": [],
+   "parameters": [
+    "p"
+   ],
+   "read": [],
+   "messages": []
+  },
+  {
+   "measures": {
+    "t": "null"
+   },
+   "candidates": [
+    [
+     [
       "users"
      ],
      "users"
@@ -177298,8 +180140,8 @@
     "id"
    ],
    "parent_columns": [
-    "amount",
-    "dim_id"
+    "dim_id",
+    "amount"
    ],
    "keys": [
     "source",
@@ -177326,12 +180168,12 @@
     ]
    },
    "child_columns": [
-    "name",
-    "CustomerID"
+    "CustomerID",
+    "name"
    ],
    "parent_columns": [
-    "amount",
-    "CustomerID"
+    "CustomerID",
+    "amount"
    ],
    "keys": [
     "source",

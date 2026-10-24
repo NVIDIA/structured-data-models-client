@@ -12,6 +12,27 @@
 use sdm_data::view_expr::describe::{self, DescribeRefusal};
 use serde_json::Value as Json;
 
+/// Python's white space (`str.isspace`), which the core hands in from
+/// `sdm-pql`: the 29 characters Python 3.12 counts.
+const SPACES: Spaces = Spaces(|c| {
+    matches!(
+        c,
+        '\t'..='\r'
+            | '\u{1c}'..='\u{20}'
+            | '\u{85}'
+            | '\u{a0}'
+            | '\u{1680}'
+            | '\u{2000}'..='\u{200a}'
+            | '\u{2028}'
+            | '\u{2029}'
+            | '\u{202f}'
+            | '\u{205f}'
+            | '\u{3000}'
+    )
+});
+
+use sdm_data::view_expr::Spaces;
+
 const VECTORS: &str = include_str!("../../../../contract/view-step-vectors.json");
 
 fn pairs(value: &Json) -> Vec<(String, String)> {
@@ -42,7 +63,7 @@ fn a_description_is_read_as_the_old_client_read_it() {
                     .collect()
             })
             .collect();
-        let read = describe::describe_view(&rows);
+        let read = describe::describe_view(&rows, SPACES);
         match (read, vector.get("error")) {
             (Ok(description), None) => {
                 let expected = (
@@ -100,7 +121,7 @@ fn a_description_missing_its_type_or_text_is_refused() {
         row("View Text", "source: t"),
     ];
     assert_eq!(
-        describe::describe_view(&no_type).unwrap_err(),
+        describe::describe_view(&no_type, SPACES).unwrap_err(),
         DescribeRefusal::NotAMetricView { got: None }
     );
     let no_text = vec![
@@ -109,7 +130,7 @@ fn a_description_missing_its_type_or_text_is_refused() {
         row("View Text", ""),
     ];
     assert_eq!(
-        describe::describe_view(&no_text).unwrap_err(),
+        describe::describe_view(&no_text, SPACES).unwrap_err(),
         DescribeRefusal::NoDefinition
     );
     let twice = vec![
@@ -119,7 +140,7 @@ fn a_description_missing_its_type_or_text_is_refused() {
         row("View Text", "source: u"),
         row("Catalog", "c"),
     ];
-    let read = describe::describe_view(&twice).unwrap();
+    let read = describe::describe_view(&twice, SPACES).unwrap();
     assert_eq!(read.definition, "source: t");
     assert_eq!(read.catalog.as_deref(), Some("c"));
     assert_eq!(read.schema, None);
