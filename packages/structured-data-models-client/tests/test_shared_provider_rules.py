@@ -71,3 +71,25 @@ def test_a_key_set_name_binds_one_key_set_however_often_it_is_named() -> None:
     two = [{'params': [param(1)]}, {'params': [param(2)]}]
     with pytest.raises(shared.PlanNotRun, match='two key sets to one name'):
         shared.bound_relations(two, keys)
+
+
+def test_a_key_set_s_text_is_read_by_the_one_shared_reader() -> None:
+    r"""A key set the dialect writes as text (T3.28) is handed over as a
+    one-cell text attachment; every provider binding one reads it here."""
+    import pyarrow as pa
+
+    param = {'param': 'text', 'attachment': 4}
+    with pytest.raises(shared.PlanNotRun, match='not handed over'):
+        shared.text(param, {})
+    cell = pa.table({'keys': pa.array(['[1,2]'], pa.string())})
+    assert shared.text(param, {4: cell}) == (4, '[1,2]')
+    for bad in (
+        pa.table({'keys': pa.array(['[1]', '[2]'], pa.string())}),
+        pa.table({'keys': pa.array([None], pa.string())}),
+        pa.table({'keys': pa.array([1], pa.int64())}),
+        pa.table({'a': ['[1]'], 'b': ['[2]']}),
+    ):
+        with pytest.raises(shared.PlanNotRun, match='not one text'):
+            shared.text(param, {4: bad})
+    with pytest.raises(shared.PlanNotRun, match='not a text'):
+        shared.text({'param': 'value', 'value': {}}, {})

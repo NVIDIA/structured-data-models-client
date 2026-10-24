@@ -724,8 +724,15 @@ def databases(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Databases]:
         made.drop()
 
 
-#: The key set a bound statement binds: one column, one row.
+#: The key set a bound statement binds: one column, one row, as Arrow
+#: (DuckDB, SQLite), or as the text the Postgres dialect writes of it, one
+#: cell (T3.28).
 KEYS = pa.table({'k': pa.array([1], pa.int64())})
+KEY_TEXT = pa.table({'keys': pa.array(['[["1"]]'], pa.string())})
+
+
+def _keys(database: str) -> pa.Table:
+    return KEY_TEXT if database == 'postgres' else KEYS
 
 
 def _steps(database: str, statements: list[str], bound: bool) -> dict[str, Any]:
@@ -741,17 +748,16 @@ def _steps(database: str, statements: list[str], bound: bool) -> dict[str, Any]:
             text = f'SELECT * FROM ({last["text"]}) AS q WHERE $1::jsonb IS NOT NULL'
         else:
             text = f'SELECT * FROM ({last["text"]}) AS q WHERE EXISTS (SELECT 1 FROM {relation})'
-        planned[-1] = {
-            'dialect': database,
-            'text': text,
-            'params': [
-                {
-                    'param': 'key_set',
-                    'relation': relation,
-                    'keys': {'attachment': 1},
-                }
-            ],
-        }
+        param = (
+            {'param': 'text', 'attachment': 1}
+            if database == 'postgres'
+            else {
+                'param': 'key_set',
+                'relation': relation,
+                'keys': {'attachment': 1},
+            }
+        )
+        planned[-1] = {'dialect': database, 'text': text, 'params': [param]}
     return {'plan': {'plan': 'sql', 'statements': planned}}
 
 
@@ -763,9 +769,11 @@ class Refused(NamedTuple):
     said: str
 
 
-def _python_answer(provider: Any, step: dict[str, Any]) -> pa.Table | Refused:
+def _python_answer(
+    provider: Any, step: dict[str, Any], database: str
+) -> pa.Table | Refused:
     try:
-        answer = provider(step, {1: KEYS})
+        answer = provider(step, {1: _keys(database)})
     except Exception as error:  # noqa: BLE001 - judged by its SQLSTATE
         return Refused(
             getattr(error, 'sqlstate', None), f'{type(error).__name__}: {error}'
@@ -789,8 +797,9 @@ def _java_answers(
         options=(f'-Duser.timezone={ZONE}',),
     )
     sink = pa.BufferOutputStream()
-    with pa.ipc.new_stream(sink, KEYS.schema) as writer:
-        writer.write_table(KEYS)
+    keys = _keys(database)
+    with pa.ipc.new_stream(sink, keys.schema) as writer:
+        writer.write_table(keys)
     try:
         answer = program.ask(
             {
@@ -919,7 +928,7 @@ def test_java_hands_the_core_what_python_s_provider_hands_it(
                     f'{name} ({"bound" if bound else "plain"}, run {run + 1})'
                 )
     provider = databases.python(database)
-    mine = [_python_answer(provider, step) for step in steps]
+    mine = [_python_answer(provider, step, database) for step in steps]
     theirs = _java_answers(java, databases, database, steps)
     # Each case's difference once, naming the runs it showed in.
     problems: dict[str, list[str]] = {}
@@ -1005,7 +1014,7 @@ def test_zoned_text_is_python_s_in_every_zone_postgres_names(
         for name in names
     ]
     provider = databases.python('postgres')
-    mine = [_python_answer(provider, step) for step in steps]
+    mine = [_python_answer(provider, step, 'postgres') for step in steps]
     theirs = _java_answers(java, databases, 'postgres', steps)
     differ = []
     for name, a, b in zip(names, mine, theirs, strict=True):

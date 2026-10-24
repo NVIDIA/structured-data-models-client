@@ -8,7 +8,7 @@ connection, whose cursor records ``execute(sql, parameters)`` and answers
 ``fetchall_arrow()``, and a Spark session (``.sql()``, ``.version``, a frame
 with ``toArrow()``) wrapped in ``sdm_connectors``' ``SparkConnection``. What
 is checked is what the provider binds, as the reference's sampler binds it
-(``DB/sampler.py``: ``_dumps``, ``_chunk_rows``, ``_flatten``), what it
+(the key set's text the core wrote, T3.28, and the scalars), what it
 answers, how the client tells the connections apart and routes them, and
 how a Databricks failure reaches the core.
 """
@@ -16,7 +16,6 @@ how a Databricks failure reaches the core.
 from __future__ import annotations
 
 import datetime
-import json
 from decimal import Decimal
 from typing import Any
 
@@ -27,9 +26,7 @@ from sdm_connectors.backends.spark import SparkConnection
 
 from sdm_client import _routing
 from sdm_client._rust import providers
-from sdm_client._rust.providers import databricks
 from sdm_client._rust.providers.databricks import (
-    BATCH_COLUMN,
     DatabricksProvider,
     DatabricksSparkProvider,
     DatabricksSqlProvider,
@@ -38,34 +35,6 @@ from sdm_client._rust.providers.databricks import (
 from sdm_client._rust.run import _driver
 
 Answer = Any
-
-
-# The reference's own key-set rules (DB/sampler.py:32-44, 116-136 at
-# 43e55f4f), transcribed as the oracle.
-def _reference_default(obj: Any) -> Any:
-    if hasattr(obj, 'item'):
-        return obj.item()
-    return str(obj)
-
-
-def _reference_dumps(obj: Any) -> str:
-    return json.dumps(obj, separators=(',', ':'), default=_reference_default)
-
-
-def _reference_chunk_rows(rows: list, max_bytes: int) -> list[list]:
-    chunks: list[list] = []
-    current: list = []
-    current_bytes = 2
-    for row in rows:
-        size = len(_reference_dumps(row)) + 1
-        if current and current_bytes + size > max_bytes:
-            chunks.append(current)
-            current, current_bytes = [], 2
-        current.append(row)
-        current_bytes += size
-    if current:
-        chunks.append(current)
-    return chunks or [[]]
 
 
 class _Cursor:
@@ -148,6 +117,10 @@ def _step(*statements: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _text(attachment: int = 7) -> dict[str, Any]:
+    return {'param': 'text', 'attachment': attachment}
+
+
 def _key_set(attachment: int = 7) -> dict[str, Any]:
     return {
         'param': 'key_set',
@@ -160,16 +133,9 @@ def _value(scalar: dict[str, Any]) -> dict[str, Any]:
     return {'param': 'value', 'value': scalar}
 
 
-def _batches(sql: str, parameters: Any) -> Any:
-    r"""An answer numbering each seed of the key set bound first, as the
-    statement's ``posexplode`` does: its position, and the seed."""
-    seeds = json.loads(parameters[0])
-    return pa.table(
-        {
-            BATCH_COLUMN: pa.array(range(len(seeds)), pa.int32()),
-            'seed': pa.array(seeds, pa.int64()),
-        }
-    )
+def _cell(text: str) -> Any:
+    r"""A key set's text as the core hands it over: one text cell."""
+    return pa.table({'keys': pa.array([text], pa.string())})
 
 
 @pytest.mark.parametrize('which', [0, 1], ids=CONNECTIONS)
@@ -270,125 +236,30 @@ def test_scalars_are_bound_as_python_values_in_order(which: int) -> None:
     assert zoned.utcoffset() == datetime.timedelta(hours=5, minutes=30)
 
 
-@pytest.mark.parametrize(
-    'columns, rows',
-    [
-        (
-            {'id': pa.array([1, 2, None, 2**62], pa.int64())},
-            [1, 2, None, 2**62],
-        ),
-        (
-            {'id': pa.array(['a', 'é', 'line\nbreak', '"q"', None])},
-            ['a', 'é', 'line\nbreak', '"q"', None],
-        ),
-        ({'id': pa.array([1.5, 0.1, -0.0])}, [1.5, 0.1, -0.0]),
-        (
-            {
-                'id': pa.array([1, 2], pa.int64()),
-                'at': pa.array(['x', None]),
-            },
-            [{'id': 1, 'at': 'x'}, {'id': 2, 'at': None}],
-        ),
-    ],
-    ids=['ints', 'text', 'floats', 'two-columns'],
-)
 @pytest.mark.parametrize('which', [0, 1], ids=CONNECTIONS)
-def test_a_key_set_is_bound_as_the_reference_s_compact_json(
-    which: int, columns: dict[str, Any], rows: list[Any]
-) -> None:
+def test_a_key_set_s_text_is_bound_as_the_core_wrote_it(which: int) -> None:
+    # The core writes the key set's JSON (T3.28): the provider binds the
+    # one cell it is handed where the text parameter is, as it is.
     connection, executed = _both(lambda sql, _: pa.table({'a': [1]}))[which]
-    keys = pa.table(columns)
-    DatabricksProvider(connection)(
+    text = '[{"key":1,"end":"2024-03-01 00:00:00"},{"key":2,"end":null}]'
+    answer = DatabricksProvider(connection)(
         _step(
             _statement(
                 'SELECT * FROM posexplode(from_json(?, ...)) WHERE t <= ?',
-                _key_set(),
+                _text(),
                 _value({'t': 'i64', 'v': '3'}),
             )
         ),
-        {7: keys},
+        {7: _cell(text)},
     )
-    [(_, bound)] = executed
-    payload = json.dumps(rows, separators=(',', ':'))
-    # Byte for byte, the key set first where its marker is, the bound after.
-    assert bound == [payload, 3]
-    assert bound[0] == _reference_dumps(rows)
-    assert bound[0].isascii()
-
-
-@pytest.mark.parametrize('which', [0, 1], ids=CONNECTIONS)
-def test_a_key_set_past_the_budget_runs_once_per_chunk_its_batches_moved(
-    which: int,
-) -> None:
-    connection, executed = _both(_batches)[which]
-    seeds = [7, 123, 4567, 89, 1, 23456, 78, 9, 1011, 12, 0, 99999]
-    budget = 20
-    expected = _reference_chunk_rows(seeds, budget)
-    assert len(expected) > 2
-    answer = DatabricksProvider(connection, budget=budget)(
-        _step(
-            _statement(
-                'SELECT * FROM posexplode(from_json(?, ...)) WHERE t <= ?',
-                _key_set(),
-                _value({'t': 'i64', 'v': '5'}),
-            )
-        ),
-        {7: pa.table({'id': pa.array(seeds, pa.int64())})},
-    )
-    # One statement per chunk, each bound the reference's chunk's text.
-    assert [bound for _, bound in executed] == [
-        [_reference_dumps(chunk), 5] for chunk in expected
+    assert executed == [
+        (
+            'SELECT * FROM posexplode(from_json(?, ...)) WHERE t <= ?',
+            [text, 3],
+        )
     ]
-    assert all(len(bound[0]) <= budget for _, bound in executed)
-    # The batches in one space: each seed at its position in the key set.
-    assert answer.column(BATCH_COLUMN).type == pa.int64()
-    assert answer.column(BATCH_COLUMN).to_pylist() == list(range(len(seeds)))
-    assert answer.column('seed').to_pylist() == seeds
-    assert answer.schema.names == [BATCH_COLUMN, 'seed']
-
-
-def test_one_chunk_runs_once_and_keeps_the_driver_s_answer() -> None:
-    connection, executed = _both(_batches)[0]
-    keys = pa.table({'id': pa.array([1, 2, 3], pa.int64())})
-    answer = DatabricksProvider(connection)(
-        _step(_statement('SELECT ?', _key_set())), {7: keys}
-    )
-    assert executed == [('SELECT ?', ['[1,2,3]'])]
-    # Not moved, so its batch keeps the driver's type.
-    assert answer.column(BATCH_COLUMN).type == pa.int32()
-
-
-def test_an_empty_key_set_is_bound_as_an_empty_array() -> None:
-    connection, executed = _both(_batches)[0]
-    keys = pa.table({'id': pa.array([], pa.int64())})
-    DatabricksProvider(connection)(
-        _step(_statement('SELECT ?', _key_set())), {7: keys}
-    )
-    assert executed == [('SELECT ?', ['[]'])]
-
-
-def test_chunking_is_the_reference_s_on_a_wide_key_set() -> None:
-    rows = [{'a': index, 'b': 'x' * (index % 17)} for index in range(4000)]
-    keys = pa.table(
-        {
-            'a': pa.array([row['a'] for row in rows], pa.int64()),
-            'b': pa.array([row['b'] for row in rows]),
-        }
-    )
-    sent: list[str] = []
-
-    def answer(sql: str, parameters: Any) -> Any:
-        sent.append(parameters[0])
-        return _batches(sql, [json.dumps([0] * len(json.loads(parameters[0])))])
-
-    budget = 10_000
-    DatabricksProvider(_Warehouse(answer), budget=budget)(
-        _step(_statement('SELECT ?', _key_set())), {7: keys}
-    )
-    assert sent == [
-        _reference_dumps(chunk) for chunk in _reference_chunk_rows(rows, budget)
-    ]
-    assert databricks.PARAMETER_BUDGET == 900_000
+    # One statement, one answer: the driver's, as it came.
+    assert answer.to_pydict() == {'a': [1]}
 
 
 @pytest.mark.parametrize(
@@ -401,11 +272,21 @@ def test_chunking_is_the_reference_s_on_a_wide_key_set() -> None:
             None,
             'another dialect',
         ),
-        (_step(_statement('SELECT ?', _key_set())), {}, 'not handed over'),
+        (_step(_statement('SELECT ?', _text())), {}, 'not handed over'),
         (
-            _step(_statement('SELECT ?, ?', _key_set(), _key_set())),
+            _step(_statement('SELECT ?', _key_set())),
             {7: pa.table({'id': [1]})},
-            'more than one key set',
+            'unknown kind',
+        ),
+        (
+            _step(_statement('SELECT ?', _text())),
+            {7: pa.table({'keys': ['[1]', '[2]']})},
+            'not one text',
+        ),
+        (
+            _step(_statement('SELECT ?', _text())),
+            {7: pa.table({'keys': pa.array([1], pa.int64())})},
+            'not one text',
         ),
         (
             _step(_statement('SELECT ?', _value({'t': 'nope', 'v': '1'}))),
@@ -428,7 +309,9 @@ def test_chunking_is_the_reference_s_on_a_wide_key_set() -> None:
         'empty',
         'dialect',
         'missing',
-        'two-key-sets',
+        'arrow-key-set',
+        'two-cells',
+        'not-text',
         'bad-scalar',
         'nanos',
     ],
@@ -440,29 +323,6 @@ def test_a_plan_the_provider_cannot_run_raises_before_running(
     with pytest.raises(PlanNotRun, match=match):
         DatabricksProvider(connection)(step, keys)
     assert connection.executed == []
-
-
-def test_a_chunked_key_set_before_the_answer_is_not_run() -> None:
-    connection = _Warehouse(_batches)
-    keys = pa.table({'id': pa.array(range(100), pa.int64())})
-    with pytest.raises(PlanNotRun, match='not the answer'):
-        DatabricksProvider(connection, budget=20)(
-            _step(
-                _statement('SELECT ?', _key_set()),
-                _statement('SELECT 1'),
-            ),
-            {7: keys},
-        )
-    assert connection.executed == []
-
-
-def test_a_chunked_answer_without_batches_is_refused() -> None:
-    connection = _Warehouse(lambda sql, _: pa.table({'a': [1]}))
-    keys = pa.table({'id': pa.array(range(100), pa.int64())})
-    with pytest.raises(PlanNotRun, match='no batch'):
-        DatabricksProvider(connection, budget=20)(
-            _step(_statement('SELECT ?', _key_set())), {7: keys}
-        )
 
 
 #: A notebook's Spark session as ``sdm_connectors`` recognises one, by its
@@ -701,7 +561,7 @@ def test_a_provider_with_no_reading_of_failures_leaves_them_as_drivers_set_them(
 
 
 class _Once:
-    """A key set's Arrow stream, as the core hands one over: read once."""
+    """A text's Arrow stream, as the core hands one over: read once."""
 
     def __init__(self, table: Any) -> None:
         self._table = table
@@ -709,17 +569,17 @@ class _Once:
 
     def __arrow_c_stream__(self, requested_schema: Any = None) -> Any:
         self.reads += 1
-        assert self.reads == 1, 'a key set read twice'
+        assert self.reads == 1, 'a text read twice'
         return self._table.__arrow_c_stream__(requested_schema)
 
 
-def test_a_key_set_two_statements_bind_is_read_once() -> None:
-    connection = _Warehouse(_batches)
-    keys = _Once(pa.table({'id': pa.array([4, 5], pa.int64())}))
+def test_a_text_two_statements_bind_is_read_once() -> None:
+    connection = _Warehouse(lambda sql, _: pa.table({'a': [1]}))
+    keys = _Once(_cell('[4,5]'))
     DatabricksProvider(connection)(
         _step(
-            _statement('CACHE ?', _key_set()),
-            _statement('SELECT ?', _key_set()),
+            _statement('CACHE ?', _text()),
+            _statement('SELECT ?', _text()),
         ),
         {7: keys},
     )

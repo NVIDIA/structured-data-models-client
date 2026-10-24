@@ -293,8 +293,17 @@ def test_keys_that_collide_as_float64_bind_join_and_answer_exactly(
     for case in cases:
         exact = _seeds(case['type'], case['values'])
         data, seen = _keyed(vectors_db, case['request'], exact)
+        # The key set travels as the dialect's JSON text (T3.28): one
+        # cell, each row its key's and its batch's text, exact.
         [handed] = seen['keys'].values()
-        assert handed.equals(exact), case['column']
+        assert (handed.num_rows, handed.num_columns) == (1, 1), case['column']
+        rows = json.loads(handed.column(0)[0].as_py())
+        assert [Decimal(key) for key, _ in rows] == [
+            Decimal(value) for value in case['values']
+        ], case['column']
+        assert [int(batch) for _, batch in rows] == list(
+            range(len(case['values']))
+        ), case['column']
         assert _each_seed_finds_its_own_row(data, case['labels']), case[
             'column'
         ]
