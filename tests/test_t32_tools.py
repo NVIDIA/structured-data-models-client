@@ -55,6 +55,7 @@ import functools
 import hashlib
 import importlib.util
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -631,3 +632,25 @@ def test_t32_result_rows_are_compared_as_text_where_the_digest_is_excused(
     assert judged('a' * 64) == []
     differs = judged('b' * 64)
     assert any('text_digest' in text for text in differs), differs
+
+
+def test_the_locked_run_reads_only_the_capture_manifests(
+    tmp_path: Path,
+) -> None:
+    r"""T3.20: the locked run hands ``capture_check.py captures`` each leg's
+    ``manifest.json``, never a capture's own ``capture.json``, which the
+    check refuses as a manifest ("no legs or cases")."""
+    text = (RUST_CORE / 'gate.sh').read_text(encoding='utf-8')
+    [found] = re.findall(r'find "\$candidate/contract/captures"[^)\n]*', text)
+    leg = tmp_path / 'contract/captures/s2/snowflake'
+    (leg / 'a.case').mkdir(parents=True)
+    (leg / 'manifest.json').write_text('{}')
+    (leg / 'a.case/capture.json').write_text('{}')
+    listed = subprocess.run(
+        ['bash', '-c', found.replace('-print0', '-print')],
+        env={'candidate': str(tmp_path), 'PATH': os.environ['PATH']},
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.split()
+    assert listed == [str(leg / 'manifest.json')]

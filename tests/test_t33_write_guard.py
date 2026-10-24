@@ -433,7 +433,10 @@ def _fake_drivers(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
 
     class SnowflakeConnection:
         def cursor(self) -> SnowflakeCursor:
-            return SnowflakeCursor()
+            # As the connector's: a cursor knows its connection.
+            made = SnowflakeCursor()
+            made.connection = self  # type: ignore[attr-defined]
+            return made
 
         def execute_string(self, text: str) -> list[SnowflakeCursor]:
             seen.append(text)
@@ -450,11 +453,26 @@ def _fake_drivers(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
             return {}
 
     class Session:
-        connection = SnowflakeConnection()
+        _session_id = 42
+        # What close sends to cancel the session's queries (Snowpark's
+        # cancel_all, session.py).
+        closing = 'select system$cancel_all_queries(42)'
+
+        def __init__(self) -> None:
+            # As Snowpark's: the session's server connection (_conn) holds
+            # the connector's connection (_conn).
+            self.connection = SnowflakeConnection()
+            self._conn = types.SimpleNamespace(_conn=self.connection)
 
         def sql(self, query: str) -> str:
             seen.append(query)
             return query
+
+        def cancel_all(self) -> None:
+            self.connection.cursor().execute(self.closing)
+
+        def close(self) -> None:
+            self.cancel_all()
 
     class Cursor:
         def execute(self, operation: str, parameters: Any = None) -> None:
@@ -1214,6 +1232,211 @@ def test_every_refusal_of_an_installed_guard_is_kept(installed: Any) -> None:
     assert 'outside the test schema' in wg.REFUSALS[0]
 
 
+def test_the_old_clients_sampled_derived_table_read_passes() -> None:
+    # C-1 (databricks-sql, rule.key-name-form): the old client samples a
+    # renamed source as a derived table, `FROM (SELECT ...) TABLESAMPLE`.
+    # That read passes; a write dressed with the same sample, and a
+    # TABLESAMPLE after any other parenthesis, are still refused.
+    read = (
+        'SELECT `a`, `b`\n'
+        'FROM (SELECT source.`id` AS `a`, source.`x` AS `b` '
+        'FROM `other`.`s`.`t` AS source)\n'
+        'TABLESAMPLE (100.0 PERCENT) REPEATABLE (42)\n'
+        'WHERE `a` IS NOT NULL\nLIMIT 10000'
+    )
+    DATABRICKS.check(read)
+    for sql in (
+        'CREATE TABLE `other`.s.u AS SELECT * FROM (SELECT * FROM '
+        '`other`.s.t) TABLESAMPLE (5 PERCENT)',
+        'INSERT INTO `other`.s.u SELECT * FROM (SELECT * FROM '
+        '`other`.s.t) TABLESAMPLE (5 PERCENT)',
+        'SELECT * FROM `other`.s.t WHERE (a > 1) TABLESAMPLE (5 PERCENT)',
+        'SELECT * FROM (VALUES (1)) TABLESAMPLE (5 PERCENT)',
+    ):
+        with pytest.raises(wg.WriteRefused):
+            DATABRICKS.check(sql)
+
+
+def test_the_old_clients_join_onto_a_derived_table_passes() -> None:
+    # C-1 (databricks-sql, rule.key-name-form): the old client joins its
+    # batch onto a renamed source as a derived table, `JOIN (SELECT ...)`.
+    # That read passes; a write inside or around it, and a JOIN onto any
+    # other parenthesis, are still refused.
+    read = (
+        'WITH TMP AS (\nSELECT * FROM `other`.`s`.`ids`\n)\n'
+        'SELECT TMP.__KUMO_BATCH__ as __KUMO_BATCH__, `a`\nFROM TMP\n'
+        'JOIN (SELECT source.`id` AS `a` FROM `other`.`s`.`t` AS source)\n'
+        '  ON `a` = TMP.__KUMO_ID__'
+    )
+    DATABRICKS.check(read)
+    for sql in (
+        'INSERT INTO `other`.s.u SELECT * FROM `other`.s.v JOIN '
+        '(SELECT * FROM `other`.s.t) ON 1 = 1',
+        'CREATE TABLE `other`.s.u AS SELECT * FROM `other`.s.v JOIN '
+        '(SELECT * FROM `other`.s.t) ON 1 = 1',
+        'SELECT * FROM `other`.s.v JOIN (DELETE FROM `other`.s.t) ON 1 = 1',
+        'SELECT * FROM `other`.s.v JOIN (VALUES (1)) ON 1 = 1',
+    ):
+        with pytest.raises(wg.WriteRefused):
+            DATABRICKS.check(sql)
+
+
+def test_the_old_clients_trusted_bitmap_sample_passes() -> None:
+    # T3.20 second capture (view.metric.trusted-function): with
+    # trust_expressions=True the old client samples the view's
+    # bitmap_bucket_number dimension. That pure read passes; a write
+    # calling it is still refused.
+    DATABRICKS.check(
+        'SELECT bitmap_bucket_number(source.`order_id`) AS `bucket`\n'
+        'FROM `other`.`s`.`orders` AS source\nLIMIT 1000'
+    )
+    for sql in (
+        'CREATE TABLE `other`.s.u AS SELECT bitmap_bucket_number(1) AS b',
+        'INSERT INTO `other`.s.u SELECT bitmap_bucket_number(`id`) '
+        'FROM `other`.s.t',
+    ):
+        with pytest.raises(wg.WriteRefused):
+            DATABRICKS.check(sql)
+
+
+def test_snowpark_cancels_its_own_queries_only_while_it_closes(
+    installed: Any,
+) -> None:
+    # T3.20 second capture (snowflake.connect.snowpark): Session.close
+    # sends select system$cancel_all_queries(<its id>). That one statement
+    # passes while its session closes; sent at any other time, for another
+    # session, or as anything else during close, it is refused.
+    d, seen = installed, installed['seen']
+    d['Session']().close()
+    assert seen[-1] == 'select system$cancel_all_queries(42)'
+    with pytest.raises(wg.WriteRefused):
+        d['Session']().cancel_all()
+    for sent in ('select system$cancel_all_queries(43)', OUTSIDE):
+        session = d['Session']()
+        session.closing = sent
+        with pytest.raises(wg.WriteRefused):
+            session.close()
+
+
+def test_snowpark_close_admits_its_cancel_only_on_its_own_connection(
+    installed: Any,
+) -> None:
+    # Codex T3.20 r1 P2: while a session closes, its cancel is admitted on
+    # that session's own Snowflake connection alone. The same statement on
+    # another Snowflake connection, a cursor of no connection, a Databricks
+    # cursor or a Spark session is refused, during the close and outside it.
+    d, seen = installed, installed['seen']
+    statement = 'select system$cancel_all_queries(42)'
+    other = d['SnowflakeConnection']()
+    sends = [
+        lambda: other.cursor().execute(statement),
+        lambda: d['SnowflakeCursor']().execute(statement),
+        lambda: d['Cursor']().execute(statement),
+        lambda: d['SparkSession']().sql(statement),
+    ]
+    for send in sends:
+        session = d['Session']()
+        session.cancel_all = send  # type: ignore[method-assign]
+        with pytest.raises(wg.WriteRefused):
+            session.close()
+        with pytest.raises(wg.WriteRefused):
+            send()
+    assert statement not in seen
+    d['Session']().close()
+    assert seen == [statement]
+    # The recording mode hands Snowpark its capture of the connection,
+    # which keeps the driver's connection as its _driver: the cursor the
+    # capture makes is the driver connection's, and its cancel passes.
+    session = d['Session']()
+    capture = types.SimpleNamespace(
+        _driver=session.connection, cursor=session.connection.cursor
+    )
+    session._conn = types.SimpleNamespace(_conn=capture)
+    session.close()
+    assert seen == [statement, statement]
+    # The connector runs a cursor's statement through its connection's
+    # cmd_query, which the guard checks too: the same connection passes.
+    session = d['Session']()
+    session.cancel_all = (  # type: ignore[method-assign]
+        lambda: session.connection.cmd_query(statement, 1, None)
+    )
+    session.close()
+    assert seen == [statement] * 3
+
+
+def test_a_plain_view_is_admitted_only_in_the_loaders_setup_in_the_test_schema() -> (
+    None
+):
+    # T3.20 second capture (snowflake.rowcount.view-as-table): the
+    # loader's case setup creates a view over a case table in the test
+    # schema. Admitted there; anywhere else, outside the setup, or over a
+    # write, it is refused.
+    view = (
+        'CREATE VIEW REVIEW_DB.LIVE_TESTS.USERS_V AS '
+        'SELECT * FROM REVIEW_DB.LIVE_TESTS.USERS'
+    )
+    with wg.setup():
+        SNOWFLAKE.check(view)
+        DATABRICKS.check(
+            'CREATE VIEW `review-catalog`.live_tests.v AS '
+            'SELECT * FROM `review-catalog`.live_tests.t'
+        )
+    refused = [
+        (SNOWFLAKE, view, False),
+        (
+            SNOWFLAKE,
+            'CREATE VIEW OTHER_DB.PUBLIC.USERS_V AS '
+            'SELECT * FROM REVIEW_DB.LIVE_TESTS.USERS',
+            True,
+        ),
+        (SNOWFLAKE, 'CREATE VIEW USERS_V AS SELECT 1', True),
+        (
+            SNOWFLAKE,
+            'CREATE OR REPLACE VIEW REVIEW_DB.LIVE_TESTS.USERS_V AS SELECT 1',
+            True,
+        ),
+        (
+            SNOWFLAKE,
+            'CREATE VIEW REVIEW_DB.LIVE_TESTS.V AS '
+            'SELECT * FROM REVIEW_DB.LIVE_TESTS.T; DROP TABLE OTHER_DB.P.T',
+            True,
+        ),
+    ]
+    for guard, sql, in_setup in refused:
+        with pytest.raises(wg.WriteRefused):
+            if in_setup:
+                with wg.setup():
+                    guard.check(sql)
+            else:
+                guard.check(sql)
+
+
+def test_a_temporary_table_is_admitted_only_in_the_loaders_lakebase_setup() -> (
+    None
+):
+    # T3.20 second capture (lakebase.name.shadowed-by-temporary): the
+    # loader's case setup creates a session-only table on the Lakebase
+    # connection. Admitted there; outside the setup, in a schema, on
+    # another dialect, or with anything else TEMPORARY, it is refused.
+    table = 'CREATE TEMPORARY TABLE users (user_id BIGINT, note TEXT)'
+    with wg.setup():
+        POSTGRES.check(table)
+    refused = [
+        (POSTGRES, table, False),
+        (POSTGRES, 'CREATE TEMPORARY TABLE public.users (i BIGINT)', True),
+        (POSTGRES, 'CREATE TEMPORARY TABLE u AS SELECT 1', True),
+        (POSTGRES, 'CREATE TEMPORARY VIEW v AS SELECT 1', True),
+        (SNOWFLAKE, 'CREATE TEMPORARY TABLE users (i NUMBER)', True),
+    ]
+    for guard, sql, in_setup in refused:
+        with pytest.raises(wg.WriteRefused):
+            if in_setup:
+                with wg.setup():
+                    guard.check(sql)
+            else:
+                guard.check(sql)
+
+
 #: The core's Postgres reads that bind a seed's time in the window column's
 #: own type (sdm-data's seed CTE, T3.7): the table's row read once, the
 #: seed's value put in place of the column (``jsonb_populate_record``).
@@ -1409,11 +1632,6 @@ def _seed(
         # Each shape inside a write's SELECT, refused for itself.
         (
             'INSERT INTO live_tests.t SELECT 1 FROM "live_tests"."orders" AS o '
-            'CROSS JOIN (SELECT 1 AS x) AS b',
-            'JOIN(), a function on no list',
-        ),
-        (
-            'INSERT INTO live_tests.t SELECT 1 FROM "live_tests"."orders" AS o '
             + _LATERAL.format(base='o', value='1'),
             'JSONB_POPULATE_RECORD(), a function on no list',
         ),
@@ -1434,10 +1652,6 @@ def _seed(
             "SELECT jsonb_build_object('ts', 1)",
             'JSONB_BUILD_OBJECT(), a function on no list',
         ),
-        (
-            'SELECT 1 FROM t JOIN (SELECT 1 AS x) AS b ON TRUE',
-            'JOIN(), a function on no list',
-        ),
         # Cut short (Codex r2 P3).
         ('SELECT 1 FROM t CROSS JOIN (', 'JOIN(), a function on no list'),
     ],
@@ -1452,10 +1666,6 @@ def test_each_seed_read_shape_is_refused_where_it_is_not_the_core_s(
 @pytest.mark.parametrize(
     ('sql', 'reason'),
     [
-        (
-            'SELECT 1 FROM t CROSS JOIN (SELECT 1 AS x) AS b',
-            'JOIN(), a function on no list',
-        ),
         (
             'SELECT 1 FROM t AS o ' + _LATERAL.format(base='o', value='1'),
             'JSONB_POPULATE_RECORD(), a function on no list',

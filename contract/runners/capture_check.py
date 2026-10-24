@@ -738,6 +738,31 @@ def _duck_tables(
         connection.close()
 
 
+def _dirty_problems(
+    key: Any, identity: dict[str, Any], recording: dict[str, Any]
+) -> list[str]:
+    r"""A capture recorded from a recording or reference tree that was not
+    clean (the reference line's ``identity``), unless the recording names
+    why (``recording.excuse``, a non-empty text): it might not be the code
+    its commit names (Claude T3.20 r1 P1-2)."""
+    trees = {
+        'recording': identity.get('commit'),
+        'reference': (identity.get('reference') or {}).get('commit'),
+    }
+    dirty = [
+        name
+        for name, commit in trees.items()
+        if commit is not None and commit.get('clean') is not True
+    ]
+    excuse = recording.get('excuse')
+    if not dirty or (isinstance(excuse, str) and excuse.strip()):
+        return []
+    return [
+        f'{key}: recorded from a tree that was not clean ({", ".join(dirty)})'
+        ', and the recording names no excuse'
+    ]
+
+
 def capture_problems(
     line: dict[str, Any],
     case: dict[str, Any],
@@ -793,6 +818,7 @@ def capture_problems(
         )
     if observation['identity']['runner'] != 'python-ref':
         problems.append(f"{key}: its reference line is not python-ref's")
+    problems.extend(_dirty_problems(key, observation['identity'], recording))
     captured = observation['driver']['capture']
     if captured is None:
         return [*problems, f'{key}: recorded with the capture off']
@@ -1023,6 +1049,29 @@ def recording_main(argv: list[str]) -> int:
 # --- the capture manifests (T3.3's writer; design choice 2) -------------------
 
 
+def _captures_module() -> Any:
+    r"""``captures.py``, beside this file, which holds :data:`NOT_LIVE`."""
+    import importlib.util
+
+    name = 'capture_check_captures'
+    if name in sys.modules:
+        return sys.modules[name]
+    spec = importlib.util.spec_from_file_location(
+        name, Path(__file__).resolve().parent / 'captures.py'
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+#: The cases the live run leaves out of a leg by name (``captures.py``'s
+#: list, the one both the live plan and :func:`captures` read).
+NOT_LIVE: dict[str, tuple[tuple[str, ...], str]] = _captures_module().NOT_LIVE
+LEGS: tuple[str, ...] = _captures_module().LEGS
+
+
 def manifest_problem(manifest: Any, name: str) -> str | None:
     r"""Why a capture manifest is not one this checker reads, or None: a
     JSON object of format :data:`CAPTURE_FORMAT` naming its recording and
@@ -1055,12 +1104,14 @@ def captures(
     cases: list[dict[str, Any]],
     manifests: list[tuple[str, Any]],
     legs: Iterable[str] | None = None,
-) -> tuple[list[str], list[str]]:
-    r"""Every manifest refused (:func:`manifest_problem`), and every case
-    and warehouse leg (of ``legs``, default every one) the cases run on
-    with no capture of its current input (``run_python.input_hash``):
-    pending live, a case added or changed after the capture or a leg the
-    capture does not hold (design choice 2)."""
+) -> tuple[list[str], list[str], list[str]]:
+    r"""Every manifest refused (:func:`manifest_problem`); every case and
+    warehouse leg (of ``legs``, default every one) the cases run on with no
+    capture of its current input (``run_python.input_hash``): pending live,
+    a case added or changed after the capture or a leg the capture does not
+    hold (design choice 2); and each such case and leg the live run leaves
+    out by name (:data:`NOT_LIVE`), known not live, with its reason, and
+    not pending."""
     run = runner()
     bases = run.load_bases()
     legs = tuple(run.WAREHOUSES if legs is None else legs)
@@ -1073,15 +1124,19 @@ def captures(
             continue
         for key, entry in manifest['cases'].items():
             held[str(key)] = str(entry['input_hash'])
-    pending = sorted(
-        run.case_key(case['id'], leg)
-        for case in cases
-        for leg in run.case_legs(case)
-        if leg in legs
-        and held.get(run.case_key(case['id'], leg))
-        != run.input_hash(case, bases)
-    )
-    return problems, pending
+    pending: list[str] = []
+    not_live: list[str] = []
+    for case in cases:
+        for leg in run.case_legs(case):
+            key = run.case_key(case['id'], leg)
+            if leg not in legs or held.get(key) == run.input_hash(case, bases):
+                continue
+            skipped, why = NOT_LIVE.get(case['id'], ((), ''))
+            if leg in skipped:
+                not_live.append(f'{key}: {why}')
+            else:
+                pending.append(key)
+    return problems, sorted(pending), sorted(not_live)
 
 
 def captures_main(argv: list[str]) -> int:
@@ -1106,16 +1161,19 @@ def captures_main(argv: list[str]) -> int:
     ):
         print(f'captures: --leg is one of {run.WAREHOUSES}')
         return 1
-    problems, pending = captures(cases, manifests, arguments.leg)
+    problems, pending, not_live = captures(cases, manifests, arguments.leg)
     for problem in problems:
         print(f'FAILS {problem}')
     for key in pending:
         print(f'pending live: {key}')
+    for entry in not_live:
+        print(f'not live: {entry}')
     failed = bool(problems) or (arguments.locked and bool(pending))
     print(
         f'captures: {"FAILED" if failed else "ok"}; {len(manifests)} '
         f'manifests read, {len(pending)} cases and legs waiting for a live run'
         + (' (the locked run fails on any)' if arguments.locked else '')
+        + f', {len(not_live)} left out of the live run by name'
     )
     return 1 if failed else 0
 

@@ -1,0 +1,134 @@
+{
+ "format": "sdm-capture/1",
+ "recording_commit": "b08dee3d2d7101e72b957a0ef613506f99a2638a",
+ "reference_commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+ "legs": {
+  "snowflake": {
+   "duckdb": "1.5.6",
+   "numpy": "2.5.3",
+   "pandas": "3.0.6",
+   "pyarrow": "25.0.1",
+   "python": "3.12.15",
+   "snowflake-connector-python": "4.8.0",
+   "snowflake-snowpark-python": "1.55.3"
+  }
+ },
+ "cases": {
+  "snowflake.binary@snowflake": {
+   "input_hash": "009c51ff02467fe520e00042930e6f2f0112b840fd809e001b53615736be9230",
+   "capture": "snowflake.binary"
+  },
+  "snowflake.connect.snowpark@snowflake": {
+   "input_hash": "3518bc8f7d020ed474e3ea16cd38c7ce81c790433fb7d6b5a30eb2faf832c22f",
+   "capture": "snowflake.connect.snowpark"
+  },
+  "snowflake.forecast.catalog-keys@snowflake": {
+   "input_hash": "b69e82e6ec0b303144547d8fb6830c182711b8aa90c1bd89126ad9510e827a6a",
+   "capture": "snowflake.forecast.catalog-keys"
+  },
+  "snowflake.key.bigint.string@snowflake": {
+   "input_hash": "47e661787537189932ffbd7886ae86da513a4251ddf46ab9b3a1fc069ad506ee",
+   "capture": "snowflake.key.bigint.string"
+  },
+  "snowflake.key.number-38-0@snowflake": {
+   "input_hash": "696b107405a6e1b5ea8b76555487acedc5b8ea7c51f79951e6c6342ea02b9048",
+   "capture": "snowflake.key.number-38-0"
+  },
+  "snowflake.key.number-38-0.decimal-indices@snowflake": {
+   "input_hash": "53f4ce9cb7104bfff1613a865371fe5927c7b9043380a5aa9fc05758b075135c",
+   "capture": "snowflake.key.number-38-0.decimal-indices"
+  },
+  "snowflake.key.number-38-0.number-38-6@snowflake": {
+   "input_hash": "738b9d940b104ee24d1d04e843169eda60cf75b47c6d54240f06198a9b1defa6",
+   "capture": "snowflake.key.number-38-0.number-38-6"
+  },
+  "snowflake.key.number-38-0.past-int64@snowflake": {
+   "input_hash": "226fcc8fbf34befc03dbe993bcd647ca246ac15c03b3aaef6be381f5a3e85a11",
+   "capture": "snowflake.key.number-38-0.past-int64"
+  },
+  "snowflake.key.number-38-6@snowflake": {
+   "input_hash": "6cf32053fa1146ac31a255bf96a9896b829c3f8108bdd5d8f4d55899897470d6",
+   "capture": "snowflake.key.number-38-6"
+  },
+  "snowflake.multiclass.tables@snowflake": {
+   "input_hash": "1097e7821bc0db51246d6ef910c17506e414f825a75bc0436ea741e9c490119b",
+   "capture": "snowflake.multiclass.tables"
+  },
+  "snowflake.name.all-upper-once@snowflake": {
+   "input_hash": "c9be792494ba1a76a4de2300bbb4318eb3be353a3fa3738dab0042d816db7fc1",
+   "capture": "snowflake.name.all-upper-once"
+  },
+  "snowflake.name.database-only@snowflake": {
+   "input_hash": "c49fb203025c7b8b56fed96276f4bb097f52629854bc3c5bc7814a82273b6bf8",
+   "capture": "snowflake.name.database-only"
+  },
+  "snowflake.name.upper-case-folded@snowflake": {
+   "input_hash": "02e79a8f374567b8fca3640ea85ccb1b8b05d1b154dcfa95ae65264f9d88b006",
+   "capture": "snowflake.name.upper-case-folded"
+  },
+  "snowflake.rank.number-38-0-items@snowflake": {
+   "input_hash": "1b53cfed65b796a6b296210483ac1567e55ad9ce59085adeda5b0e132a8e586d",
+   "capture": "snowflake.rank.number-38-0-items"
+  },
+  "snowflake.regression.catalog-keys@snowflake": {
+   "input_hash": "6493e04a767289bb1522c1475770a5dd2002405c36227f3d8e01c6244a9c06ca",
+   "capture": "snowflake.regression.catalog-keys"
+  },
+  "snowflake.rowcount.like-wildcard@snowflake": {
+   "input_hash": "bb454d3c9ebaa6fb5d7eccb5ad1e878bb3c7771353bf3f67a3ad5d67c0071432",
+   "capture": "snowflake.rowcount.like-wildcard"
+  },
+  "snowflake.rowcount.view-as-table@snowflake": {
+   "input_hash": "a90270bd22d391cf2bb05e19b8ce655fb87db18203dbf3ffd78f4309810bd0a5",
+   "capture": "snowflake.rowcount.view-as-table"
+  },
+  "snowflake.sampled.entity-table@snowflake": {
+   "input_hash": "d1493e2e83ecc242bc8d56fa2eb03f7b54852f2e4fec9e81fcb117c63cc8cfa5",
+   "capture": "snowflake.sampled.entity-table"
+  },
+  "snowflake.zone.ltz-time@snowflake": {
+   "input_hash": "203fde712bf46ff3e7f6717689a53e466a2211fc2c16e2669cd80613aad6a062",
+   "capture": "snowflake.zone.ltz-time"
+  },
+  "view.semantic.binary@snowflake": {
+   "input_hash": "71a95d245222beacfcf902ee02bb242b8d794a6485683a5f3e122156f49d327a",
+   "capture": "view.semantic.binary"
+  },
+  "view.semantic.column-refused@snowflake": {
+   "input_hash": "8f9baefb094d93371201af599fe9ce950040d517dc17c88a3f096efe7484bb33",
+   "capture": "view.semantic.column-refused"
+  },
+  "view.semantic.composite-key@snowflake": {
+   "input_hash": "efa74c7ed3f6781b7c5e1232d055a68e294eff1cf1dfd30b0dfdef56a21d04f6",
+   "capture": "view.semantic.composite-key"
+  },
+  "view.semantic.cross-table-expression@snowflake": {
+   "input_hash": "4b5a4e92ada61946a52941f3e169ccfefe96b69b71d48de4d3153808bf5254a1",
+   "capture": "view.semantic.cross-table-expression"
+  },
+  "view.semantic.forecast@snowflake": {
+   "input_hash": "fbab3ab06009cafa95a5256ac02ef82e2d85e12ef5be95feeec1ab91c72716e0",
+   "capture": "view.semantic.forecast"
+  },
+  "view.semantic.from-source@snowflake": {
+   "input_hash": "750c655c607a1ddcaee68a0ecd01c2c33ea50ac8f1d8d62bd271cb4a06ea6ebd",
+   "capture": "view.semantic.from-source"
+  },
+  "view.semantic.multiclass@snowflake": {
+   "input_hash": "c156aab25b13683805bed119d3d41f131a13d5efbb078395246700798af4f44a",
+   "capture": "view.semantic.multiclass"
+  },
+  "view.semantic.ranking@snowflake": {
+   "input_hash": "2ea5c8c84ef84c1e5c6f08a64bda93990390c749948163eae89da5d4388a1fb1",
+   "capture": "view.semantic.ranking"
+  },
+  "view.semantic.regression@snowflake": {
+   "input_hash": "22f80d89c2e68b16286bedbc49b57cdc8701ddce8b1f22e73015019dce003647",
+   "capture": "view.semantic.regression"
+  },
+  "view.semantic.shop-twin.from-source@snowflake": {
+   "input_hash": "c5dc450800c4b3ef6395bb6b097fdfc151bd40389f603d8afb5f8f45425461ab",
+   "capture": "view.semantic.shop-twin.from-source"
+  }
+ }
+}
