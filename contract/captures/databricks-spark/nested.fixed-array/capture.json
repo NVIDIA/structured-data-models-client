@@ -1,0 +1,920 @@
+{
+ "format": "sdm-capture/1",
+ "case": "nested.fixed-array",
+ "leg": "databricks-spark",
+ "recording_commit": "5efdf53a155e25ad7d6b16964eec6d260bede76c",
+ "reference_commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+ "versions": {
+  "databricks-connect": "17.3.14",
+  "duckdb": "1.5.6",
+  "numpy": "2.1.3",
+  "pandas": "2.2.3",
+  "pyarrow": "19.0.1",
+  "pyspark": "4.0.0+databricks.connect.17.3.14",
+  "python": "3.12.3",
+  "runtime": "client.4.10"
+ },
+ "input_hash": "5d41540d0cd832fd18d4747b144f7bb1e9bee9d47dce54f8deacf8a8bbdfb65c",
+ "session": {
+  "time_zone": "Etc/UTC",
+  "null_order": "nulls_first"
+ },
+ "reference": {
+  "case": "nested.fixed-array@databricks-spark",
+  "core": null,
+  "driver": {
+   "capture": {
+    "bindings": [],
+    "cursors": 0,
+    "events": [],
+    "incomplete": [],
+    "passed_through": [
+     "spark.version"
+    ],
+    "statements": [
+     {
+      "error": null,
+      "handle": 0,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{schema}'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "eb321699c22c79bc8154a3357369ae81004bfea24983e444877311a97b90f805",
+        "method": "collect",
+        "rows": 2,
+        "values": {
+         "columns": [
+          "table_name"
+         ],
+         "ordered": "3f59d5de42223ca465ff71eef9d5287bac4dcaac8cb1ef752cba7b80dec67229",
+         "types": null,
+         "unencodable": [],
+         "unordered": "3f59d5de42223ca465ff71eef9d5287bac4dcaac8cb1ef752cba7b80dec67229"
+        }
+       }
+      ],
+      "sql": "\n                    SELECT table_name\n                    FROM `{catalog}`.information_schema.tables\n                    WHERE table_schema = ?\n                      AND table_type != 'METRIC_VIEW'\n                    ",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 0,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{schema}'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'orders'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "35d107a9f3e3b2d4ee5b4fcc24d1acd34248e9fbc15e6df1dcdb74f7386f01e2",
+        "method": "collect",
+        "rows": 4,
+        "values": {
+         "columns": [
+          "column_name",
+          "full_data_type",
+          "is_nullable",
+          "table_catalog",
+          "table_schema",
+          "table_name",
+          "table_type"
+         ],
+         "ordered": "72f1e628d42dace795af6c629b13a786d212224bea6830e2067fa20c41b558f9",
+         "types": null,
+         "unencodable": [],
+         "unordered": "d280d8ffd841a2526e860d6982d31261d77058fa9d00cac8c2b5cbcb0ae01dab"
+        }
+       }
+      ],
+      "sql": "SELECT c.column_name, c.full_data_type, c.is_nullable,\n       c.table_catalog, c.table_schema, c.table_name,\n       t.table_type\nFROM `{catalog}`.information_schema.columns c\nJOIN `{catalog}`.information_schema.tables t\n  ON t.table_catalog = c.table_catalog\n AND t.table_schema = c.table_schema\n AND t.table_name = c.table_name\nWHERE c.table_schema = lower(?)\n  AND c.table_name = lower(?)\nORDER BY c.ordinal_position",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 0,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{schema}'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'orders'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "method": "collect",
+        "rows": 0,
+        "values": {
+         "columns": [
+          "constraint_type",
+          "constraint_name",
+          "column_name"
+         ],
+         "ordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+         "types": null,
+         "unencodable": [],
+         "unordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        }
+       }
+      ],
+      "sql": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name\nFROM `{catalog}`.information_schema.table_constraints tc\nJOIN `{catalog}`.information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = lower(?)\n  AND tc.table_name = lower(?)\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE')",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 0,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "853b87e56cb4dd50e4e5b7a37a2ead797a06f0fc5cac4031de9c734eaf43ccfa",
+        "method": "toArrow",
+        "rows": 80,
+        "schema": [
+         {
+          "name": "order_id",
+          "type": "int64"
+         },
+         {
+          "name": "user_id",
+          "type": "int64"
+         },
+         {
+          "name": "price",
+          "type": "double"
+         },
+         {
+          "name": "ts",
+          "type": "timestamp[us]"
+         }
+        ],
+        "values": {
+         "columns": [
+          "order_id",
+          "user_id",
+          "price",
+          "ts"
+         ],
+         "ordered": "af39e4e03131a5c1ba2a84509405b8e102b4f942869a0f13e459581e2fb42a52",
+         "types": null,
+         "unencodable": [],
+         "unordered": "a3d976aba1ee2ea6f5a893caa40bab840b2e9116e257e03d59f7a5e32290d40d"
+        }
+       }
+      ],
+      "sql": "SELECT `order_id`, `user_id`, `price`, `ts` FROM `{catalog}`.`{schema}`.`orders` LIMIT 1000",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 0,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{schema}'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'users'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "086fdac7fd65d82c34f86f5a905811503a4ab3aac64de63fe4d5e47ee2bc4dfb",
+        "method": "collect",
+        "rows": 4,
+        "values": {
+         "columns": [
+          "column_name",
+          "full_data_type",
+          "is_nullable",
+          "table_catalog",
+          "table_schema",
+          "table_name",
+          "table_type"
+         ],
+         "ordered": "aed9ea900f080860038fe36bd264ab3629908e4804f1f0aca2e8306b991d1b5e",
+         "types": null,
+         "unencodable": [],
+         "unordered": "dab5d6fe1f89293b499b049daa6895f65e9fbce844bc4605db5f14f4f29c2580"
+        }
+       }
+      ],
+      "sql": "SELECT c.column_name, c.full_data_type, c.is_nullable,\n       c.table_catalog, c.table_schema, c.table_name,\n       t.table_type\nFROM `{catalog}`.information_schema.columns c\nJOIN `{catalog}`.information_schema.tables t\n  ON t.table_catalog = c.table_catalog\n AND t.table_schema = c.table_schema\n AND t.table_name = c.table_name\nWHERE c.table_schema = lower(?)\n  AND c.table_name = lower(?)\nORDER BY c.ordinal_position",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 0,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{schema}'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'users'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "method": "collect",
+        "rows": 0,
+        "values": {
+         "columns": [
+          "constraint_type",
+          "constraint_name",
+          "column_name"
+         ],
+         "ordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+         "types": null,
+         "unencodable": [],
+         "unordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        }
+       }
+      ],
+      "sql": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name\nFROM `{catalog}`.information_schema.table_constraints tc\nJOIN `{catalog}`.information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = lower(?)\n  AND tc.table_name = lower(?)\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE')",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 0,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "10f44b9dc9910e9bbfab083d1d52ba1a28546a878e630ca9f113cc8782a7c39f",
+        "method": "toArrow",
+        "rows": 8,
+        "schema": [
+         {
+          "name": "user_id",
+          "type": "int64"
+         },
+         {
+          "name": "age",
+          "type": "int32"
+         },
+         {
+          "name": "country",
+          "type": "string"
+         },
+         {
+          "name": "f",
+          "type": "list<element: int64>"
+         }
+        ],
+        "values": {
+         "columns": [
+          "user_id",
+          "age",
+          "country",
+          "f"
+         ],
+         "ordered": "24ec36ac4274b17f08c325fbb233ed04467157d5b7e96d0310cf6351378a638e",
+         "types": null,
+         "unencodable": [],
+         "unordered": "24ec36ac4274b17f08c325fbb233ed04467157d5b7e96d0310cf6351378a638e"
+        }
+       }
+      ],
+      "sql": "SELECT `user_id`, `age`, `country`, `f` FROM `{catalog}`.`{schema}`.`users` LIMIT 1000",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 0,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{schema}'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'orders'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "method": "collect",
+        "rows": 0,
+        "values": {
+         "columns": [
+          "constraint_name",
+          "column_name",
+          "table_catalog",
+          "table_schema",
+          "table_name",
+          "column_name"
+         ],
+         "ordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+         "types": null,
+         "unencodable": [],
+         "unordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        }
+       }
+      ],
+      "sql": "SELECT tc.constraint_name, kcu.column_name,\n       ccu.table_catalog, ccu.table_schema,\n       ccu.table_name, ccu.column_name\nFROM `{catalog}`.information_schema.table_constraints tc\nJOIN `{catalog}`.information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN `{catalog}`.information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN `{catalog}`.information_schema.constraint_column_usage ccu\n  ON rc.unique_constraint_catalog = ccu.constraint_catalog\n AND rc.unique_constraint_schema = ccu.constraint_schema\n AND rc.unique_constraint_name = ccu.constraint_name\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = lower(?)\n  AND tc.table_name = lower(?)",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 0,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{schema}'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'users'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "method": "collect",
+        "rows": 0,
+        "values": {
+         "columns": [
+          "constraint_name",
+          "column_name",
+          "table_catalog",
+          "table_schema",
+          "table_name",
+          "column_name"
+         ],
+         "ordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+         "types": null,
+         "unencodable": [],
+         "unordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        }
+       }
+      ],
+      "sql": "SELECT tc.constraint_name, kcu.column_name,\n       ccu.table_catalog, ccu.table_schema,\n       ccu.table_name, ccu.column_name\nFROM `{catalog}`.information_schema.table_constraints tc\nJOIN `{catalog}`.information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN `{catalog}`.information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN `{catalog}`.information_schema.constraint_column_usage ccu\n  ON rc.unique_constraint_catalog = ccu.constraint_catalog\n AND rc.unique_constraint_schema = ccu.constraint_schema\n AND rc.unique_constraint_name = ccu.constraint_name\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = lower(?)\n  AND tc.table_name = lower(?)",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 0,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "0f26fd5b9956dba8cb28bd7f4fbd004d1488ad82ee6efe7fed86851b79f83e6d",
+        "method": "collect",
+        "rows": 2,
+        "values": {
+         "columns": [
+          "k",
+          "n",
+          "d",
+          "z"
+         ],
+         "ordered": "290aa461ceb82676d30231b491dccb4a3258a0d4092dbaa318621f6065778de2",
+         "types": null,
+         "unencodable": [],
+         "unordered": "290aa461ceb82676d30231b491dccb4a3258a0d4092dbaa318621f6065778de2"
+        }
+       }
+      ],
+      "sql": "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT `order_id`) AS d, COUNT(CASE WHEN `order_id` IS NULL THEN 1 END) AS z\nFROM `{catalog}`.`{schema}`.`orders`\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT `user_id`) AS d, COUNT(CASE WHEN `user_id` IS NULL THEN 1 END) AS z\nFROM `{catalog}`.`{schema}`.`users`",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 0,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "6e40465c5faceeeada87f3d47dc2e1221f0fe0f99b494acc756572cabd3118de",
+        "method": "first",
+        "rows": 1,
+        "values": {
+         "columns": [
+          "COUNT(*)"
+         ],
+         "ordered": "86acc43898f955f20ffb8c6f2fe3c49d64014bab3224547f9d3b8406880518fa",
+         "types": null,
+         "unencodable": [],
+         "unordered": "86acc43898f955f20ffb8c6f2fe3c49d64014bab3224547f9d3b8406880518fa"
+        }
+       }
+      ],
+      "sql": "SELECT COUNT(*) FROM `{catalog}`.`{schema}`.`orders`",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 0,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "e52db75c53822904dd358548bedb43d8f16db5defe3b6bb2842755da1cde4808",
+        "method": "first",
+        "rows": 1,
+        "values": {
+         "columns": [
+          "COUNT(*)"
+         ],
+         "ordered": "9b38e7811e08fd8de2c83743224e2d6332b5892c9f4d9942d7512344077b08f9",
+         "types": null,
+         "unencodable": [],
+         "unordered": "9b38e7811e08fd8de2c83743224e2d6332b5892c9f4d9942d7512344077b08f9"
+        }
+       }
+      ],
+      "sql": "SELECT COUNT(*) FROM `{catalog}`.`{schema}`.`users`",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 0,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "64f05d5c4d56ed4be4d98aa3c2aa6a342d59ced667e156a2f098931b1adabe09",
+        "method": "collect",
+        "rows": 1,
+        "values": {
+         "columns": [
+          "table_index",
+          "min_date",
+          "max_date"
+         ],
+         "ordered": "6d619e2d389a605a74bd007b91d1b8770ea2c167aa8cc71a480a8f4d3b555ee0",
+         "types": null,
+         "unencodable": [],
+         "unordered": "6d619e2d389a605a74bd007b91d1b8770ea2c167aa8cc71a480a8f4d3b555ee0"
+        }
+       }
+      ],
+      "sql": "SELECT\n  0 as table_index,\n  MIN(`ts`) as min_date,\n  MAX(`ts`) as max_date\nFROM `{catalog}`.`{schema}`.`orders`",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 0,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "8093a07d3569601309376000ae024e6e51601c059895813c7652d125ae872333",
+        "method": "toArrow",
+        "rows": 8,
+        "schema": [
+         {
+          "name": "user_id",
+          "type": "int64"
+         }
+        ],
+        "values": {
+         "columns": [
+          "user_id"
+         ],
+         "ordered": "20dba88dbdfd8da89ff1fda138abc94675aa26ef6e3ddb0e6d6f8d17fe6cad7e",
+         "types": null,
+         "unencodable": [],
+         "unordered": "20dba88dbdfd8da89ff1fda138abc94675aa26ef6e3ddb0e6d6f8d17fe6cad7e"
+        }
+       }
+      ],
+      "sql": "SELECT `user_id`\nFROM `{catalog}`.`{schema}`.`users`\nTABLESAMPLE (100.0 PERCENT) REPEATABLE (42)\nWHERE `user_id` IS NOT NULL\nLIMIT 10000",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 0,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'[{\"id\":3,\"e\":\"2024-03-01 00:00:00\",\"s\":\"2024-01-31 00:00:00\"},{\"id\":4,\"e\":\"2024-03-01 00:00:00\",\"s\":\"2024-01-31 00:00:00\"},{\"id\":2,\"e\":\"2024-03-01 00:00:00\",\"s\":\"2024-01-31 00:00:00\"},{\"id\":7,\"e\":\"2024-03-01 00:00:00\",\"s\":\"2024-01-31 00:00:00\"},{\"id\":6,\"e\":\"2024-03-01 00:00:00\",\"s\":\"2024-01-31 00:00:00\"},{\"id\":1,\"e\":\"2024-03-01 00:00:00\",\"s\":\"2024-01-31 00:00:00\"},{\"id\":5,\"e\":\"2024-03-01 00:00:00\",\"s\":\"2024-01-31 00:00:00\"},{\"id\":0,\"e\":\"2024-03-01 00:00:00\",\"s\":\"2024-01-31 00:00:00\"},{\"id\":0,\"e\":\"2024-01-31 00:00:00\",\"s\":\"2024-01-01 00:00:00\"},{\"id\":2,\"e\":\"2024-01-31 00:00:00\",\"s\":\"2024-01-01 00:00:00\"},{\"id\":7,\"e\":\"2024-01-31 00:00:00\",\"s\":\"2024-01-01 00:00:00\"},{\"id\":1,\"e\":\"2024-01-31 00:00:00\",\"s\":\"2024-01-01 00:00:00\"},{\"id\":4,\"e\":\"2024-01-31 00:00:00\",\"s\":\"2024-01-01 00:00:00\"},{\"id\":5,\"e\":\"2024-01-31 00:00:00\",\"s\":\"2024-01-01 00:00:00\"},{\"id\":3,\"e\":\"2024-01-31 00:00:00\",\"s\":\"2024-01-01 00:00:00\"},{\"id\":6,\"e\":\"2024-01-31 00:00:00\",\"s\":\"2024-01-01 00:00:00\"},{\"id\":5,\"e\":\"2024-01-01 00:00:00\",\"s\":\"2023-12-02 00:00:00\"},{\"id\":7,\"e\":\"2024-01-01 00:00:00\",\"s\":\"2023-12-02 00:00:00\"},{\"id\":2,\"e\":\"2024-01-01 00:00:00\",\"s\":\"2023-12-02 00:00:00\"},{\"id\":4,\"e\":\"2024-01-01 00:00:00\",\"s\":\"2023-12-02 00:00:00\"},{\"id\":1,\"e\":\"2024-01-01 00:00:00\",\"s\":\"2023-12-02 00:00:00\"},{\"id\":6,\"e\":\"2024-01-01 00:00:00\",\"s\":\"2023-12-02 00:00:00\"},{\"id\":3,\"e\":\"2024-01-01 00:00:00\",\"s\":\"2023-12-02 00:00:00\"},{\"id\":0,\"e\":\"2024-01-01 00:00:00\",\"s\":\"2023-12-02 00:00:00\"},{\"id\":7,\"e\":\"2023-12-02 00:00:00\",\"s\":\"2023-11-02 00:00:00\"},{\"id\":0,\"e\":\"2023-12-02 00:00:00\",\"s\":\"2023-11-02 00:00:00\"},{\"id\":4,\"e\":\"2023-12-02 00:00:00\",\"s\":\"2023-11-02 00:00:00\"},{\"id\":2,\"e\":\"2023-12-02 00:00:00\",\"s\":\"2023-11-02 00:00:00\"},{\"id\":3,\"e\":\"2023-12-02 00:00:00\",\"s\":\"2023-11-02 00:00:00\"},{\"id\":5,\"e\":\"2023-12-02 00:00:00\",\"s\":\"2023-11-02 00:00:00\"},{\"id\":6,\"e\":\"2023-12-02 00:00:00\",\"s\":\"2023-11-02 00:00:00\"},{\"id\":1,\"e\":\"2023-12-02 00:00:00\",\"s\":\"2023-11-02 00:00:00\"},{\"id\":7,\"e\":\"2023-11-02 00:00:00\",\"s\":\"2023-10-03 00:00:00\"},{\"id\":1,\"e\":\"2023-11-02 00:00:00\",\"s\":\"2023-10-03 00:00:00\"},{\"id\":5,\"e\":\"2023-11-02 00:00:00\",\"s\":\"2023-10-03 00:00:00\"},{\"id\":4,\"e\":\"2023-11-02 00:00:00\",\"s\":\"2023-10-03 00:00:00\"},{\"id\":0,\"e\":\"2023-11-02 00:00:00\",\"s\":\"2023-10-03 00:00:00\"},{\"id\":6,\"e\":\"2023-11-02 00:00:00\",\"s\":\"2023-10-03 00:00:00\"},{\"id\":3,\"e\":\"2023-11-02 00:00:00\",\"s\":\"2023-10-03 00:00:00\"},{\"id\":2,\"e\":\"2023-11-02 00:00:00\",\"s\":\"2023-10-03 00:00:00\"},{\"id\":2,\"e\":\"2023-10-03 00:00:00\",\"s\":\"2023-09-03 00:00:00\"},{\"id\":5,\"e\":\"2023-10-03 00:00:00\",\"s\":\"2023-09-03 00:00:00\"},{\"id\":0,\"e\":\"2023-10-03 00:00:00\",\"s\":\"2023-09-03 00:00:00\"},{\"id\":7,\"e\":\"2023-10-03 00:00:00\",\"s\":\"2023-09-03 00:00:00\"},{\"id\":4,\"e\":\"2023-10-03 00:00:00\",\"s\":\"2023-09-03 00:00:00\"},{\"id\":1,\"e\":\"2023-10-03 00:00:00\",\"s\":\"2023-09-03 00:00:00\"},{\"id\":6,\"e\":\"2023-10-03 00:00:00\",\"s\":\"2023-09-03 00:00:00\"},{\"id\":3,\"e\":\"2023-10-03 00:00:00\",\"s\":\"2023-09-03 00:00:00\"},{\"id\":5,\"e\":\"2023-09-03 00:00:00\",\"s\":\"2023-08-04 00:00:00\"},{\"id\":3,\"e\":\"2023-09-03 00:00:00\",\"s\":\"2023-08-04 00:00:00\"},{\"id\":6,\"e\":\"2023-09-03 00:00:00\",\"s\":\"2023-08-04 00:00:00\"},{\"id\":2,\"e\":\"2023-09-03 00:00:00\",\"s\":\"2023-08-04 00:00:00\"},{\"id\":7,\"e\":\"2023-09-03 00:00:00\",\"s\":\"2023-08-04 00:00:00\"},{\"id\":1,\"e\":\"2023-09-03 00:00:00\",\"s\":\"2023-08-04 00:00:00\"},{\"id\":4,\"e\":\"2023-09-03 00:00:00\",\"s\":\"2023-08-04 00:00:00\"},{\"id\":0,\"e\":\"2023-09-03 00:00:00\",\"s\":\"2023-08-04 00:00:00\"},{\"id\":0,\"e\":\"2023-08-04 00:00:00\",\"s\":\"2023-07-05 00:00:00\"},{\"id\":6,\"e\":\"2023-08-04 00:00:00\",\"s\":\"2023-07-05 00:00:00\"},{\"id\":4,\"e\":\"2023-08-04 00:00:00\",\"s\":\"2023-07-05 00:00:00\"},{\"id\":5,\"e\":\"2023-08-04 00:00:00\",\"s\":\"2023-07-05 00:00:00\"},{\"id\":1,\"e\":\"2023-08-04 00:00:00\",\"s\":\"2023-07-05 00:00:00\"},{\"id\":2,\"e\":\"2023-08-04 00:00:00\",\"s\":\"2023-07-05 00:00:00\"},{\"id\":7,\"e\":\"2023-08-04 00:00:00\",\"s\":\"2023-07-05 00:00:00\"},{\"id\":3,\"e\":\"2023-08-04 00:00:00\",\"s\":\"2023-07-05 00:00:00\"},{\"id\":7,\"e\":\"2023-07-05 00:00:00\",\"s\":\"2023-06-05 00:00:00\"},{\"id\":3,\"e\":\"2023-07-05 00:00:00\",\"s\":\"2023-06-05 00:00:00\"},{\"id\":4,\"e\":\"2023-07-05 00:00:00\",\"s\":\"2023-06-05 00:00:00\"},{\"id\":1,\"e\":\"2023-07-05 00:00:00\",\"s\":\"2023-06-05 00:00:00\"},{\"id\":6,\"e\":\"2023-07-05 00:00:00\",\"s\":\"2023-06-05 00:00:00\"},{\"id\":2,\"e\":\"2023-07-05 00:00:00\",\"s\":\"2023-06-05 00:00:00\"},{\"id\":0,\"e\":\"2023-07-05 00:00:00\",\"s\":\"2023-06-05 00:00:00\"},{\"id\":5,\"e\":\"2023-07-05 00:00:00\",\"s\":\"2023-06-05 00:00:00\"},{\"id\":4,\"e\":\"2023-06-05 00:00:00\",\"s\":\"2023-05-06 00:00:00\"},{\"id\":3,\"e\":\"2023-06-05 00:00:00\",\"s\":\"2023-05-06 00:00:00\"},{\"id\":0,\"e\":\"2023-06-05 00:00:00\",\"s\":\"2023-05-06 00:00:00\"},{\"id\":6,\"e\":\"2023-06-05 00:00:00\",\"s\":\"2023-05-06 00:00:00\"},{\"id\":5,\"e\":\"2023-06-05 00:00:00\",\"s\":\"2023-05-06 00:00:00\"},{\"id\":2,\"e\":\"2023-06-05 00:00:00\",\"s\":\"2023-05-06 00:00:00\"},{\"id\":7,\"e\":\"2023-06-05 00:00:00\",\"s\":\"2023-05-06 00:00:00\"},{\"id\":1,\"e\":\"2023-06-05 00:00:00\",\"s\":\"2023-05-06 00:00:00\"},{\"id\":1,\"e\":\"2023-05-06 00:00:00\",\"s\":\"2023-04-06 00:00:00\"},{\"id\":3,\"e\":\"2023-05-06 00:00:00\",\"s\":\"2023-04-06 00:00:00\"},{\"id\":0,\"e\":\"2023-05-06 00:00:00\",\"s\":\"2023-04-06 00:00:00\"},{\"id\":2,\"e\":\"2023-05-06 00:00:00\",\"s\":\"2023-04-06 00:00:00\"},{\"id\":4,\"e\":\"2023-05-06 00:00:00\",\"s\":\"2023-04-06 00:00:00\"},{\"id\":6,\"e\":\"2023-05-06 00:00:00\",\"s\":\"2023-04-06 00:00:00\"},{\"id\":5,\"e\":\"2023-05-06 00:00:00\",\"s\":\"2023-04-06 00:00:00\"},{\"id\":7,\"e\":\"2023-05-06 00:00:00\",\"s\":\"2023-04-06 00:00:00\"},{\"id\":2,\"e\":\"2023-04-06 00:00:00\",\"s\":\"2023-03-07 00:00:00\"},{\"id\":7,\"e\":\"2023-04-06 00:00:00\",\"s\":\"2023-03-07 00:00:00\"},{\"id\":3,\"e\":\"2023-04-06 00:00:00\",\"s\":\"2023-03-07 00:00:00\"},{\"id\":4,\"e\":\"2023-04-06 00:00:00\",\"s\":\"2023-03-07 00:00:00\"},{\"id\":1,\"e\":\"2023-04-06 00:00:00\",\"s\":\"2023-03-07 00:00:00\"},{\"id\":0,\"e\":\"2023-04-06 00:00:00\",\"s\":\"2023-03-07 00:00:00\"},{\"id\":6,\"e\":\"2023-04-06 00:00:00\",\"s\":\"2023-03-07 00:00:00\"},{\"id\":5,\"e\":\"2023-04-06 00:00:00\",\"s\":\"2023-03-07 00:00:00\"},{\"id\":0,\"e\":\"2023-03-07 00:00:00\",\"s\":\"2023-02-05 00:00:00\"},{\"id\":2,\"e\":\"2023-03-07 00:00:00\",\"s\":\"2023-02-05 00:00:00\"},{\"id\":4,\"e\":\"2023-03-07 00:00:00\",\"s\":\"2023-02-05 00:00:00\"},{\"id\":6,\"e\":\"2023-03-07 00:00:00\",\"s\":\"2023-02-05 00:00:00\"},{\"id\":7,\"e\":\"2023-03-07 00:00:00\",\"s\":\"2023-02-05 00:00:00\"},{\"id\":1,\"e\":\"2023-03-07 00:00:00\",\"s\":\"2023-02-05 00:00:00\"},{\"id\":3,\"e\":\"2023-03-07 00:00:00\",\"s\":\"2023-02-05 00:00:00\"},{\"id\":5,\"e\":\"2023-03-07 00:00:00\",\"s\":\"2023-02-05 00:00:00\"},{\"id\":4,\"e\":\"2023-02-05 00:00:00\",\"s\":\"2023-01-06 00:00:00\"},{\"id\":3,\"e\":\"2023-02-05 00:00:00\",\"s\":\"2023-01-06 00:00:00\"},{\"id\":2,\"e\":\"2023-02-05 00:00:00\",\"s\":\"2023-01-06 00:00:00\"},{\"id\":0,\"e\":\"2023-02-05 00:00:00\",\"s\":\"2023-01-06 00:00:00\"},{\"id\":1,\"e\":\"2023-02-05 00:00:00\",\"s\":\"2023-01-06 00:00:00\"},{\"id\":6,\"e\":\"2023-02-05 00:00:00\",\"s\":\"2023-01-06 00:00:00\"},{\"id\":5,\"e\":\"2023-02-05 00:00:00\",\"s\":\"2023-01-06 00:00:00\"},{\"id\":7,\"e\":\"2023-02-05 00:00:00\",\"s\":\"2023-01-06 00:00:00\"}]'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'2024-03-01 00:00:00'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'2023-01-06 00:00:00'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "b36d768c0f6e9f5a17071375b48932256a265c3f7994cdd5fe626f97a9601544",
+        "method": "toArrow",
+        "rows": 60,
+        "schema": [
+         {
+          "name": "__KUMO_BATCH__",
+          "type": "int32"
+         },
+         {
+          "name": "price",
+          "type": "double"
+         },
+         {
+          "name": "ts",
+          "type": "timestamp[us]"
+         }
+        ],
+        "values": {
+         "columns": [
+          "__KUMO_BATCH__",
+          "price",
+          "ts"
+         ],
+         "ordered": "4fc814db5662079da4cd8464160a6ae083352ae754d2dadef781bbea01aca6ce",
+         "types": null,
+         "unencodable": [],
+         "unordered": "713b3d83cc72a36e295b4f55e6d7c1b6ade41e51f41a04c4afe0fe39f41be0f1"
+        }
+       }
+      ],
+      "sql": "WITH TMP AS (\n  SELECT pos AS __KUMO_BATCH__, col.id AS __KUMO_ID__, col.e AS __KUMO_END_TIME__, col.s AS __KUMO_START_TIME__\n  FROM posexplode(from_json(?, 'array<struct<id:bigint,e:string,s:string>>'))\n)\nSELECT TMP.__KUMO_BATCH__ as __KUMO_BATCH__, `price`, `ts`\nFROM TMP\nJOIN `{catalog}`.`{schema}`.`orders`\n  ON `user_id` = TMP.__KUMO_ID__\n AND `ts` <= TMP.__KUMO_END_TIME__\nAND `ts` > TMP.__KUMO_START_TIME__\nWHERE `ts` <= ?\nAND `ts` > ?",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 0,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'[3,4,2,7,6,1,5,0,0,2,7,1,4,5,3,6,5,7,2,4,1,6,3,0,7,0,4,2,3,5,6,1,7,1,5,4,0,6,3,2,2,5,0,7,4,1,6,3,5,3,6,2,7,1,4,0,0,6,4,5,1,2,7,3,7,3,4,1,6,2,0,5,4,3,0,6,5,2,7,1,1,3,0,2,4,6,5,7,2,7,3,4,1,0,6,5,0,2,4,6,7,1,3,5,4,3,2,0,1,6,5,7,0,1]'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "2c81979e5c805c6da3f278f10d1e80d3933624d49816c2556b50bed4540d1ee8",
+        "method": "toArrow",
+        "rows": 114,
+        "schema": [
+         {
+          "name": "__KUMO_BATCH__",
+          "type": "int32"
+         },
+         {
+          "name": "user_id",
+          "type": "int64"
+         },
+         {
+          "name": "age",
+          "type": "int32"
+         },
+         {
+          "name": "country",
+          "type": "string"
+         }
+        ],
+        "values": {
+         "columns": [
+          "__KUMO_BATCH__",
+          "user_id",
+          "age",
+          "country"
+         ],
+         "ordered": "bc015df705f0d186476cc90c6d6117384b3a83f4ecc15239a566b93785186991",
+         "types": null,
+         "unencodable": [],
+         "unordered": "967529264c3fb29b3e444009c35ed190f76452bbc745a0d9bbb0896a47dbcb62"
+        }
+       }
+      ],
+      "sql": "WITH TMP AS (\n  SELECT pos AS __KUMO_BATCH__, col AS __KUMO_ID__\n  FROM posexplode(from_json(?, 'array<bigint>'))\n)\nSELECT TMP.__KUMO_BATCH__ as __KUMO_BATCH__, `user_id`, `age`, `country`\nFROM TMP\nJOIN `{catalog}`.`{schema}`.`users`\n  ON `user_id` = TMP.__KUMO_ID__",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 0,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'[{\"id\":3,\"e\":\"2024-01-31 00:00:00\",\"s\":\"2019-02-01 00:00:00\"},{\"id\":4,\"e\":\"2024-01-31 00:00:00\",\"s\":\"2019-02-01 00:00:00\"},{\"id\":2,\"e\":\"2024-01-31 00:00:00\",\"s\":\"2019-02-01 00:00:00\"},{\"id\":7,\"e\":\"2024-01-31 00:00:00\",\"s\":\"2019-02-01 00:00:00\"},{\"id\":6,\"e\":\"2024-01-31 00:00:00\",\"s\":\"2019-02-01 00:00:00\"},{\"id\":1,\"e\":\"2024-01-31 00:00:00\",\"s\":\"2019-02-01 00:00:00\"},{\"id\":5,\"e\":\"2024-01-31 00:00:00\",\"s\":\"2019-02-01 00:00:00\"},{\"id\":0,\"e\":\"2024-01-31 00:00:00\",\"s\":\"2019-02-01 00:00:00\"},{\"id\":0,\"e\":\"2024-01-01 00:00:00\",\"s\":\"2019-01-02 00:00:00\"},{\"id\":2,\"e\":\"2024-01-01 00:00:00\",\"s\":\"2019-01-02 00:00:00\"},{\"id\":7,\"e\":\"2024-01-01 00:00:00\",\"s\":\"2019-01-02 00:00:00\"},{\"id\":1,\"e\":\"2024-01-01 00:00:00\",\"s\":\"2019-01-02 00:00:00\"},{\"id\":4,\"e\":\"2024-01-01 00:00:00\",\"s\":\"2019-01-02 00:00:00\"},{\"id\":5,\"e\":\"2024-01-01 00:00:00\",\"s\":\"2019-01-02 00:00:00\"},{\"id\":3,\"e\":\"2024-01-01 00:00:00\",\"s\":\"2019-01-02 00:00:00\"},{\"id\":6,\"e\":\"2024-01-01 00:00:00\",\"s\":\"2019-01-02 00:00:00\"},{\"id\":5,\"e\":\"2023-12-02 00:00:00\",\"s\":\"2018-12-03 00:00:00\"},{\"id\":7,\"e\":\"2023-12-02 00:00:00\",\"s\":\"2018-12-03 00:00:00\"},{\"id\":2,\"e\":\"2023-12-02 00:00:00\",\"s\":\"2018-12-03 00:00:00\"},{\"id\":4,\"e\":\"2023-12-02 00:00:00\",\"s\":\"2018-12-03 00:00:00\"},{\"id\":1,\"e\":\"2023-12-02 00:00:00\",\"s\":\"2018-12-03 00:00:00\"},{\"id\":6,\"e\":\"2023-12-02 00:00:00\",\"s\":\"2018-12-03 00:00:00\"},{\"id\":3,\"e\":\"2023-12-02 00:00:00\",\"s\":\"2018-12-03 00:00:00\"},{\"id\":0,\"e\":\"2023-12-02 00:00:00\",\"s\":\"2018-12-03 00:00:00\"},{\"id\":7,\"e\":\"2023-11-02 00:00:00\",\"s\":\"2018-11-03 00:00:00\"},{\"id\":0,\"e\":\"2023-11-02 00:00:00\",\"s\":\"2018-11-03 00:00:00\"},{\"id\":4,\"e\":\"2023-11-02 00:00:00\",\"s\":\"2018-11-03 00:00:00\"},{\"id\":2,\"e\":\"2023-11-02 00:00:00\",\"s\":\"2018-11-03 00:00:00\"},{\"id\":3,\"e\":\"2023-11-02 00:00:00\",\"s\":\"2018-11-03 00:00:00\"},{\"id\":5,\"e\":\"2023-11-02 00:00:00\",\"s\":\"2018-11-03 00:00:00\"},{\"id\":6,\"e\":\"2023-11-02 00:00:00\",\"s\":\"2018-11-03 00:00:00\"},{\"id\":1,\"e\":\"2023-11-02 00:00:00\",\"s\":\"2018-11-03 00:00:00\"},{\"id\":7,\"e\":\"2023-10-03 00:00:00\",\"s\":\"2018-10-04 00:00:00\"},{\"id\":1,\"e\":\"2023-10-03 00:00:00\",\"s\":\"2018-10-04 00:00:00\"},{\"id\":5,\"e\":\"2023-10-03 00:00:00\",\"s\":\"2018-10-04 00:00:00\"},{\"id\":4,\"e\":\"2023-10-03 00:00:00\",\"s\":\"2018-10-04 00:00:00\"},{\"id\":0,\"e\":\"2023-10-03 00:00:00\",\"s\":\"2018-10-04 00:00:00\"},{\"id\":6,\"e\":\"2023-10-03 00:00:00\",\"s\":\"2018-10-04 00:00:00\"},{\"id\":3,\"e\":\"2023-10-03 00:00:00\",\"s\":\"2018-10-04 00:00:00\"},{\"id\":2,\"e\":\"2023-10-03 00:00:00\",\"s\":\"2018-10-04 00:00:00\"},{\"id\":2,\"e\":\"2023-09-03 00:00:00\",\"s\":\"2018-09-04 00:00:00\"},{\"id\":5,\"e\":\"2023-09-03 00:00:00\",\"s\":\"2018-09-04 00:00:00\"},{\"id\":0,\"e\":\"2023-09-03 00:00:00\",\"s\":\"2018-09-04 00:00:00\"},{\"id\":7,\"e\":\"2023-09-03 00:00:00\",\"s\":\"2018-09-04 00:00:00\"},{\"id\":4,\"e\":\"2023-09-03 00:00:00\",\"s\":\"2018-09-04 00:00:00\"},{\"id\":1,\"e\":\"2023-09-03 00:00:00\",\"s\":\"2018-09-04 00:00:00\"},{\"id\":6,\"e\":\"2023-09-03 00:00:00\",\"s\":\"2018-09-04 00:00:00\"},{\"id\":3,\"e\":\"2023-09-03 00:00:00\",\"s\":\"2018-09-04 00:00:00\"},{\"id\":5,\"e\":\"2023-08-04 00:00:00\",\"s\":\"2018-08-05 00:00:00\"},{\"id\":3,\"e\":\"2023-08-04 00:00:00\",\"s\":\"2018-08-05 00:00:00\"},{\"id\":6,\"e\":\"2023-08-04 00:00:00\",\"s\":\"2018-08-05 00:00:00\"},{\"id\":2,\"e\":\"2023-08-04 00:00:00\",\"s\":\"2018-08-05 00:00:00\"},{\"id\":7,\"e\":\"2023-08-04 00:00:00\",\"s\":\"2018-08-05 00:00:00\"},{\"id\":1,\"e\":\"2023-08-04 00:00:00\",\"s\":\"2018-08-05 00:00:00\"},{\"id\":4,\"e\":\"2023-08-04 00:00:00\",\"s\":\"2018-08-05 00:00:00\"},{\"id\":0,\"e\":\"2023-08-04 00:00:00\",\"s\":\"2018-08-05 00:00:00\"},{\"id\":0,\"e\":\"2023-07-05 00:00:00\",\"s\":\"2018-07-06 00:00:00\"},{\"id\":6,\"e\":\"2023-07-05 00:00:00\",\"s\":\"2018-07-06 00:00:00\"},{\"id\":4,\"e\":\"2023-07-05 00:00:00\",\"s\":\"2018-07-06 00:00:00\"},{\"id\":5,\"e\":\"2023-07-05 00:00:00\",\"s\":\"2018-07-06 00:00:00\"},{\"id\":1,\"e\":\"2023-07-05 00:00:00\",\"s\":\"2018-07-06 00:00:00\"},{\"id\":2,\"e\":\"2023-07-05 00:00:00\",\"s\":\"2018-07-06 00:00:00\"},{\"id\":7,\"e\":\"2023-07-05 00:00:00\",\"s\":\"2018-07-06 00:00:00\"},{\"id\":3,\"e\":\"2023-07-05 00:00:00\",\"s\":\"2018-07-06 00:00:00\"},{\"id\":7,\"e\":\"2023-06-05 00:00:00\",\"s\":\"2018-06-06 00:00:00\"},{\"id\":3,\"e\":\"2023-06-05 00:00:00\",\"s\":\"2018-06-06 00:00:00\"},{\"id\":4,\"e\":\"2023-06-05 00:00:00\",\"s\":\"2018-06-06 00:00:00\"},{\"id\":1,\"e\":\"2023-06-05 00:00:00\",\"s\":\"2018-06-06 00:00:00\"},{\"id\":6,\"e\":\"2023-06-05 00:00:00\",\"s\":\"2018-06-06 00:00:00\"},{\"id\":2,\"e\":\"2023-06-05 00:00:00\",\"s\":\"2018-06-06 00:00:00\"},{\"id\":0,\"e\":\"2023-06-05 00:00:00\",\"s\":\"2018-06-06 00:00:00\"},{\"id\":5,\"e\":\"2023-06-05 00:00:00\",\"s\":\"2018-06-06 00:00:00\"},{\"id\":4,\"e\":\"2023-05-06 00:00:00\",\"s\":\"2018-05-07 00:00:00\"},{\"id\":3,\"e\":\"2023-05-06 00:00:00\",\"s\":\"2018-05-07 00:00:00\"},{\"id\":0,\"e\":\"2023-05-06 00:00:00\",\"s\":\"2018-05-07 00:00:00\"},{\"id\":6,\"e\":\"2023-05-06 00:00:00\",\"s\":\"2018-05-07 00:00:00\"},{\"id\":5,\"e\":\"2023-05-06 00:00:00\",\"s\":\"2018-05-07 00:00:00\"},{\"id\":2,\"e\":\"2023-05-06 00:00:00\",\"s\":\"2018-05-07 00:00:00\"},{\"id\":7,\"e\":\"2023-05-06 00:00:00\",\"s\":\"2018-05-07 00:00:00\"},{\"id\":1,\"e\":\"2023-05-06 00:00:00\",\"s\":\"2018-05-07 00:00:00\"},{\"id\":1,\"e\":\"2023-04-06 00:00:00\",\"s\":\"2018-04-07 00:00:00\"},{\"id\":3,\"e\":\"2023-04-06 00:00:00\",\"s\":\"2018-04-07 00:00:00\"},{\"id\":0,\"e\":\"2023-04-06 00:00:00\",\"s\":\"2018-04-07 00:00:00\"},{\"id\":2,\"e\":\"2023-04-06 00:00:00\",\"s\":\"2018-04-07 00:00:00\"},{\"id\":4,\"e\":\"2023-04-06 00:00:00\",\"s\":\"2018-04-07 00:00:00\"},{\"id\":6,\"e\":\"2023-04-06 00:00:00\",\"s\":\"2018-04-07 00:00:00\"},{\"id\":5,\"e\":\"2023-04-06 00:00:00\",\"s\":\"2018-04-07 00:00:00\"},{\"id\":7,\"e\":\"2023-04-06 00:00:00\",\"s\":\"2018-04-07 00:00:00\"},{\"id\":2,\"e\":\"2023-03-07 00:00:00\",\"s\":\"2018-03-08 00:00:00\"},{\"id\":7,\"e\":\"2023-03-07 00:00:00\",\"s\":\"2018-03-08 00:00:00\"},{\"id\":3,\"e\":\"2023-03-07 00:00:00\",\"s\":\"2018-03-08 00:00:00\"},{\"id\":4,\"e\":\"2023-03-07 00:00:00\",\"s\":\"2018-03-08 00:00:00\"},{\"id\":1,\"e\":\"2023-03-07 00:00:00\",\"s\":\"2018-03-08 00:00:00\"},{\"id\":0,\"e\":\"2023-03-07 00:00:00\",\"s\":\"2018-03-08 00:00:00\"},{\"id\":6,\"e\":\"2023-03-07 00:00:00\",\"s\":\"2018-03-08 00:00:00\"},{\"id\":5,\"e\":\"2023-03-07 00:00:00\",\"s\":\"2018-03-08 00:00:00\"},{\"id\":0,\"e\":\"2023-02-05 00:00:00\",\"s\":\"2018-02-06 00:00:00\"},{\"id\":2,\"e\":\"2023-02-05 00:00:00\",\"s\":\"2018-02-06 00:00:00\"},{\"id\":4,\"e\":\"2023-02-05 00:00:00\",\"s\":\"2018-02-06 00:00:00\"},{\"id\":6,\"e\":\"2023-02-05 00:00:00\",\"s\":\"2018-02-06 00:00:00\"},{\"id\":7,\"e\":\"2023-02-05 00:00:00\",\"s\":\"2018-02-06 00:00:00\"},{\"id\":1,\"e\":\"2023-02-05 00:00:00\",\"s\":\"2018-02-06 00:00:00\"},{\"id\":3,\"e\":\"2023-02-05 00:00:00\",\"s\":\"2018-02-06 00:00:00\"},{\"id\":5,\"e\":\"2023-02-05 00:00:00\",\"s\":\"2018-02-06 00:00:00\"},{\"id\":4,\"e\":\"2023-01-06 00:00:00\",\"s\":\"2018-01-07 00:00:00\"},{\"id\":3,\"e\":\"2023-01-06 00:00:00\",\"s\":\"2018-01-07 00:00:00\"},{\"id\":2,\"e\":\"2023-01-06 00:00:00\",\"s\":\"2018-01-07 00:00:00\"},{\"id\":0,\"e\":\"2023-01-06 00:00:00\",\"s\":\"2018-01-07 00:00:00\"},{\"id\":1,\"e\":\"2023-01-06 00:00:00\",\"s\":\"2018-01-07 00:00:00\"},{\"id\":6,\"e\":\"2023-01-06 00:00:00\",\"s\":\"2018-01-07 00:00:00\"},{\"id\":5,\"e\":\"2023-01-06 00:00:00\",\"s\":\"2018-01-07 00:00:00\"},{\"id\":7,\"e\":\"2023-01-06 00:00:00\",\"s\":\"2018-01-07 00:00:00\"},{\"id\":0,\"e\":\"2024-03-01 00:00:00\",\"s\":\"2019-03-03 00:00:00\"},{\"id\":1,\"e\":\"2024-03-01 00:00:00\",\"s\":\"2019-03-03 00:00:00\"}]'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'2024-03-01 00:00:00'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'2018-01-07 00:00:00'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "1607f9a215229b2975c6679238cdfa1953a4d88d5f8452b233f079f28b87c0a8",
+        "method": "toArrow",
+        "rows": 424,
+        "schema": [
+         {
+          "name": "__KUMO_BATCH__",
+          "type": "int32"
+         },
+         {
+          "name": "order_id",
+          "type": "int64"
+         },
+         {
+          "name": "user_id",
+          "type": "int64"
+         },
+         {
+          "name": "price",
+          "type": "double"
+         },
+         {
+          "name": "ts",
+          "type": "timestamp[us]"
+         }
+        ],
+        "values": {
+         "columns": [
+          "__KUMO_BATCH__",
+          "order_id",
+          "user_id",
+          "price",
+          "ts"
+         ],
+         "ordered": "d80dc2e6614bf360550e121a312d947b3f55eab951c806328688cf8733607cfc",
+         "types": null,
+         "unencodable": [],
+         "unordered": "7063d47d4d91cac5771d1f0049e2539d3f3d853ff0b8495ebe4df566121604b5"
+        }
+       }
+      ],
+      "sql": "WITH TMP AS (\n  SELECT pos AS __KUMO_BATCH__, col.id AS __KUMO_ID__, col.e AS __KUMO_END_TIME__, col.s AS __KUMO_START_TIME__\n  FROM posexplode(from_json(?, 'array<struct<id:bigint,e:string,s:string>>'))\n)\nSELECT TMP.__KUMO_BATCH__ as __KUMO_BATCH__, `order_id`, `user_id`, `price`, `ts`\nFROM TMP\nJOIN `{catalog}`.`{schema}`.`orders`\n  ON `user_id` = TMP.__KUMO_ID__\n AND `ts` <= TMP.__KUMO_END_TIME__\n AND `ts` > TMP.__KUMO_START_TIME__\nWHERE `ts` <= ?\n  AND `ts` > ?\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY TMP.__KUMO_BATCH__\n  ORDER BY `ts` DESC, `order_id`\n) <= 32\nORDER BY TMP.__KUMO_BATCH__, `ts` DESC, `order_id`",
+      "stage": "materialize"
+     }
+    ]
+   },
+   "query_log": {
+    "bindings": 0,
+    "compared": 17,
+    "differing": [],
+    "statements": 17
+   }
+  },
+  "format": "sdm-observation/1",
+  "host": {
+   "warnings": [
+    "SDMWarning"
+   ]
+  },
+  "identity": {
+   "cell": "dbr17-pandas2",
+   "commit": {
+    "clean": false,
+    "sha": "5efdf53a155e25ad7d6b16964eec6d260bede76c"
+   },
+   "contract": null,
+   "inputs": {
+    "bases": "9d69fe4aea2be4a6a2d96ea03f5258147c537927e2c6e6716b6030836ebc62f8",
+    "case": "e2f93e3d4f3946b3c1d9fe23e5b729710ec406d75f09725ca0b5581989d32931"
+   },
+   "native": null,
+   "native_loaded": false,
+   "operations": [],
+   "platform": "linux-aarch64",
+   "reference": {
+    "commit": {
+     "clean": false,
+     "sha": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1"
+    },
+    "environment": "1eea9905d5e8df5792760770da31b6d04953ff53a710743bc5f6369097863507",
+    "guard": {
+     "after": "passed",
+     "before": "passed"
+    }
+   },
+   "runner": "python-ref",
+   "versions": {
+    "duckdb": "1.5.6",
+    "numpy": "2.1.3",
+    "pandas": "2.2.3",
+    "pyarrow": "19.0.1",
+    "python": "3.12.3"
+   }
+  },
+  "outcome": {
+   "code": "TRANSPORT_ERROR",
+   "error": "StructuredDataError",
+   "result": "refusal",
+   "stage": "predict"
+  },
+  "public": {
+   "payloads": [],
+   "result": null,
+   "schema": {
+    "links": [
+     [
+      "orders",
+      "user_id",
+      "users",
+      "user_id"
+     ]
+    ],
+    "tables": [
+     {
+      "columns": [
+       {
+        "dtype": "int64",
+        "name": "order_id",
+        "stype": "ID"
+       },
+       {
+        "dtype": "int64",
+        "name": "user_id",
+        "stype": "ID"
+       },
+       {
+        "dtype": "float64",
+        "name": "price",
+        "stype": "numerical"
+       },
+       {
+        "dtype": "timestamp[us]",
+        "name": "ts",
+        "stype": "timestamp"
+       }
+      ],
+      "duplicate_keys": 0,
+      "name": "orders",
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     {
+      "columns": [
+       {
+        "dtype": "int64",
+        "name": "user_id",
+        "stype": "ID"
+       },
+       {
+        "dtype": "int64",
+        "name": "age",
+        "stype": "numerical"
+       },
+       {
+        "dtype": "string",
+        "name": "country",
+        "stype": "categorical"
+       }
+      ],
+      "duplicate_keys": 0,
+      "name": "users",
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    ]
+   }
+  }
+ },
+ "tables": [
+  {
+   "name": "orders",
+   "data": "tables/853b87e56cb4dd50e4e5b7a37a2ead797a06f0fc5cac4031de9c734eaf43ccfa.arrows"
+  },
+  {
+   "name": "users",
+   "data": "tables/10f44b9dc9910e9bbfab083d1d52ba1a28546a878e630ca9f113cc8782a7c39f.arrows"
+  }
+ ],
+ "derived": [],
+ "draws": [
+  {
+   "table": "`{catalog}`.`{schema}`.`users`",
+   "seed": 42,
+   "fraction": "100.0",
+   "rows": "tables/8093a07d3569601309376000ae024e6e51601c059895813c7652d125ae872333.arrows",
+   "statement": "SELECT `user_id`\nFROM `{catalog}`.`{schema}`.`users`\nTABLESAMPLE (100.0 PERCENT) REPEATABLE (42)\nWHERE `user_id` IS NOT NULL\nLIMIT 10000"
+  }
+ ],
+ "statements": [
+  {
+   "text": "\n                    SELECT table_name\n                    FROM `{catalog}`.information_schema.tables\n                    WHERE table_schema = ?\n                      AND table_type != 'METRIC_VIEW'\n                    ",
+   "parameters": [
+    "{schema}"
+   ],
+   "result": "tables/9242926c667e8e82ee58b7eef3323d532873d9247253310803aaa8321369ae56.arrows"
+  },
+  {
+   "text": "SELECT c.column_name, c.full_data_type, c.is_nullable,\n       c.table_catalog, c.table_schema, c.table_name,\n       t.table_type\nFROM `{catalog}`.information_schema.columns c\nJOIN `{catalog}`.information_schema.tables t\n  ON t.table_catalog = c.table_catalog\n AND t.table_schema = c.table_schema\n AND t.table_name = c.table_name\nWHERE c.table_schema = lower(?)\n  AND c.table_name = lower(?)\nORDER BY c.ordinal_position",
+   "parameters": [
+    "{schema}",
+    "orders"
+   ],
+   "result": "tables/ffd5a8eaa100a91be94e93aff7a7d3e12b52784c8b20a93c87c968545d5774c3.arrows"
+  },
+  {
+   "text": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name\nFROM `{catalog}`.information_schema.table_constraints tc\nJOIN `{catalog}`.information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = lower(?)\n  AND tc.table_name = lower(?)\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE')",
+   "parameters": [
+    "{schema}",
+    "orders"
+   ],
+   "result": "tables/a9b1ee8ad6e21529d27be456649ed4b0a313d9db8d9b56a4c23a74282bc6c7b1.arrows"
+  },
+  {
+   "text": "SELECT `order_id`, `user_id`, `price`, `ts` FROM `{catalog}`.`{schema}`.`orders` LIMIT 1000",
+   "parameters": [],
+   "result": "tables/853b87e56cb4dd50e4e5b7a37a2ead797a06f0fc5cac4031de9c734eaf43ccfa.arrows"
+  },
+  {
+   "text": "SELECT c.column_name, c.full_data_type, c.is_nullable,\n       c.table_catalog, c.table_schema, c.table_name,\n       t.table_type\nFROM `{catalog}`.information_schema.columns c\nJOIN `{catalog}`.information_schema.tables t\n  ON t.table_catalog = c.table_catalog\n AND t.table_schema = c.table_schema\n AND t.table_name = c.table_name\nWHERE c.table_schema = lower(?)\n  AND c.table_name = lower(?)\nORDER BY c.ordinal_position",
+   "parameters": [
+    "{schema}",
+    "users"
+   ],
+   "result": "tables/bf0425f97654df6d88c0c8bd5ef443a41ebb63748b057f9c1bbe193ea3a3c8f4.arrows"
+  },
+  {
+   "text": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name\nFROM `{catalog}`.information_schema.table_constraints tc\nJOIN `{catalog}`.information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = lower(?)\n  AND tc.table_name = lower(?)\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE')",
+   "parameters": [
+    "{schema}",
+    "users"
+   ],
+   "result": "tables/a9b1ee8ad6e21529d27be456649ed4b0a313d9db8d9b56a4c23a74282bc6c7b1.arrows"
+  },
+  {
+   "text": "SELECT `user_id`, `age`, `country`, `f` FROM `{catalog}`.`{schema}`.`users` LIMIT 1000",
+   "parameters": [],
+   "result": "tables/10f44b9dc9910e9bbfab083d1d52ba1a28546a878e630ca9f113cc8782a7c39f.arrows"
+  },
+  {
+   "text": "SELECT tc.constraint_name, kcu.column_name,\n       ccu.table_catalog, ccu.table_schema,\n       ccu.table_name, ccu.column_name\nFROM `{catalog}`.information_schema.table_constraints tc\nJOIN `{catalog}`.information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN `{catalog}`.information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN `{catalog}`.information_schema.constraint_column_usage ccu\n  ON rc.unique_constraint_catalog = ccu.constraint_catalog\n AND rc.unique_constraint_schema = ccu.constraint_schema\n AND rc.unique_constraint_name = ccu.constraint_name\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = lower(?)\n  AND tc.table_name = lower(?)",
+   "parameters": [
+    "{schema}",
+    "orders"
+   ],
+   "result": "tables/20f15ac1990704c5987a1d4d0665748f628a6190f23b46a604f83785978df5a3.arrows"
+  },
+  {
+   "text": "SELECT tc.constraint_name, kcu.column_name,\n       ccu.table_catalog, ccu.table_schema,\n       ccu.table_name, ccu.column_name\nFROM `{catalog}`.information_schema.table_constraints tc\nJOIN `{catalog}`.information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN `{catalog}`.information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN `{catalog}`.information_schema.constraint_column_usage ccu\n  ON rc.unique_constraint_catalog = ccu.constraint_catalog\n AND rc.unique_constraint_schema = ccu.constraint_schema\n AND rc.unique_constraint_name = ccu.constraint_name\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = lower(?)\n  AND tc.table_name = lower(?)",
+   "parameters": [
+    "{schema}",
+    "users"
+   ],
+   "result": "tables/20f15ac1990704c5987a1d4d0665748f628a6190f23b46a604f83785978df5a3.arrows"
+  },
+  {
+   "text": "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT `order_id`) AS d, COUNT(CASE WHEN `order_id` IS NULL THEN 1 END) AS z\nFROM `{catalog}`.`{schema}`.`orders`\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT `user_id`) AS d, COUNT(CASE WHEN `user_id` IS NULL THEN 1 END) AS z\nFROM `{catalog}`.`{schema}`.`users`",
+   "parameters": [],
+   "result": "tables/993ce4e0e60751f733ce87a65ab131f39d4d2598af88342069e20d695ec4539b.arrows"
+  },
+  {
+   "text": "SELECT COUNT(*) FROM `{catalog}`.`{schema}`.`orders`",
+   "parameters": [],
+   "result": "tables/4ee16e814aff77892b67d2f41f90b34e360f133746f84e539b65819a88a14d6c.arrows"
+  },
+  {
+   "text": "SELECT COUNT(*) FROM `{catalog}`.`{schema}`.`users`",
+   "parameters": [],
+   "result": "tables/40678c01c0d63fcd429bb893889a9f6e48c1f114d721cb866dda55be035254b0.arrows"
+  },
+  {
+   "text": "SELECT\n  0 as table_index,\n  MIN(`ts`) as min_date,\n  MAX(`ts`) as max_date\nFROM `{catalog}`.`{schema}`.`orders`",
+   "parameters": [],
+   "result": "tables/5c2c506cfb973d9d33380087fa2af3cd4aeab9a847648ec6c3f633fb9f69398a.arrows"
+  },
+  {
+   "text": "SELECT `user_id`\nFROM `{catalog}`.`{schema}`.`users`\nTABLESAMPLE (100.0 PERCENT) REPEATABLE (42)\nWHERE `user_id` IS NOT NULL\nLIMIT 10000",
+   "parameters": [],
+   "result": "tables/8093a07d3569601309376000ae024e6e51601c059895813c7652d125ae872333.arrows"
+  },
+  {
+   "text": "WITH TMP AS (\n  SELECT pos AS __KUMO_BATCH__, col.id AS __KUMO_ID__, col.e AS __KUMO_END_TIME__, col.s AS __KUMO_START_TIME__\n  FROM posexplode(from_json(?, 'array<struct<id:bigint,e:string,s:string>>'))\n)\nSELECT TMP.__KUMO_BATCH__ as __KUMO_BATCH__, `price`, `ts`\nFROM TMP\nJOIN `{catalog}`.`{schema}`.`orders`\n  ON `user_id` = TMP.__KUMO_ID__\n AND `ts` <= TMP.__KUMO_END_TIME__\nAND `ts` > TMP.__KUMO_START_TIME__\nWHERE `ts` <= ?\nAND `ts` > ?",
+   "parameters": [
+    "[{\"id\":3,\"e\":\"2024-03-01 00:00:00\",\"s\":\"2024-01-31 00:00:00\"},{\"id\":4,\"e\":\"2024-03-01 00:00:00\",\"s\":\"2024-01-31 00:00:00\"},{\"id\":2,\"e\":\"2024-03-01 00:00:00\",\"s\":\"2024-01-31 00:00:00\"},{\"id\":7,\"e\":\"2024-03-01 00:00:00\",\"s\":\"2024-01-31 00:00:00\"},{\"id\":6,\"e\":\"2024-03-01 00:00:00\",\"s\":\"2024-01-31 00:00:00\"},{\"id\":1,\"e\":\"2024-03-01 00:00:00\",\"s\":\"2024-01-31 00:00:00\"},{\"id\":5,\"e\":\"2024-03-01 00:00:00\",\"s\":\"2024-01-31 00:00:00\"},{\"id\":0,\"e\":\"2024-03-01 00:00:00\",\"s\":\"2024-01-31 00:00:00\"},{\"id\":0,\"e\":\"2024-01-31 00:00:00\",\"s\":\"2024-01-01 00:00:00\"},{\"id\":2,\"e\":\"2024-01-31 00:00:00\",\"s\":\"2024-01-01 00:00:00\"},{\"id\":7,\"e\":\"2024-01-31 00:00:00\",\"s\":\"2024-01-01 00:00:00\"},{\"id\":1,\"e\":\"2024-01-31 00:00:00\",\"s\":\"2024-01-01 00:00:00\"},{\"id\":4,\"e\":\"2024-01-31 00:00:00\",\"s\":\"2024-01-01 00:00:00\"},{\"id\":5,\"e\":\"2024-01-31 00:00:00\",\"s\":\"2024-01-01 00:00:00\"},{\"id\":3,\"e\":\"2024-01-31 00:00:00\",\"s\":\"2024-01-01 00:00:00\"},{\"id\":6,\"e\":\"2024-01-31 00:00:00\",\"s\":\"2024-01-01 00:00:00\"},{\"id\":5,\"e\":\"2024-01-01 00:00:00\",\"s\":\"2023-12-02 00:00:00\"},{\"id\":7,\"e\":\"2024-01-01 00:00:00\",\"s\":\"2023-12-02 00:00:00\"},{\"id\":2,\"e\":\"2024-01-01 00:00:00\",\"s\":\"2023-12-02 00:00:00\"},{\"id\":4,\"e\":\"2024-01-01 00:00:00\",\"s\":\"2023-12-02 00:00:00\"},{\"id\":1,\"e\":\"2024-01-01 00:00:00\",\"s\":\"2023-12-02 00:00:00\"},{\"id\":6,\"e\":\"2024-01-01 00:00:00\",\"s\":\"2023-12-02 00:00:00\"},{\"id\":3,\"e\":\"2024-01-01 00:00:00\",\"s\":\"2023-12-02 00:00:00\"},{\"id\":0,\"e\":\"2024-01-01 00:00:00\",\"s\":\"2023-12-02 00:00:00\"},{\"id\":7,\"e\":\"2023-12-02 00:00:00\",\"s\":\"2023-11-02 00:00:00\"},{\"id\":0,\"e\":\"2023-12-02 00:00:00\",\"s\":\"2023-11-02 00:00:00\"},{\"id\":4,\"e\":\"2023-12-02 00:00:00\",\"s\":\"2023-11-02 00:00:00\"},{\"id\":2,\"e\":\"2023-12-02 00:00:00\",\"s\":\"2023-11-02 00:00:00\"},{\"id\":3,\"e\":\"2023-12-02 00:00:00\",\"s\":\"2023-11-02 00:00:00\"},{\"id\":5,\"e\":\"2023-12-02 00:00:00\",\"s\":\"2023-11-02 00:00:00\"},{\"id\":6,\"e\":\"2023-12-02 00:00:00\",\"s\":\"2023-11-02 00:00:00\"},{\"id\":1,\"e\":\"2023-12-02 00:00:00\",\"s\":\"2023-11-02 00:00:00\"},{\"id\":7,\"e\":\"2023-11-02 00:00:00\",\"s\":\"2023-10-03 00:00:00\"},{\"id\":1,\"e\":\"2023-11-02 00:00:00\",\"s\":\"2023-10-03 00:00:00\"},{\"id\":5,\"e\":\"2023-11-02 00:00:00\",\"s\":\"2023-10-03 00:00:00\"},{\"id\":4,\"e\":\"2023-11-02 00:00:00\",\"s\":\"2023-10-03 00:00:00\"},{\"id\":0,\"e\":\"2023-11-02 00:00:00\",\"s\":\"2023-10-03 00:00:00\"},{\"id\":6,\"e\":\"2023-11-02 00:00:00\",\"s\":\"2023-10-03 00:00:00\"},{\"id\":3,\"e\":\"2023-11-02 00:00:00\",\"s\":\"2023-10-03 00:00:00\"},{\"id\":2,\"e\":\"2023-11-02 00:00:00\",\"s\":\"2023-10-03 00:00:00\"},{\"id\":2,\"e\":\"2023-10-03 00:00:00\",\"s\":\"2023-09-03 00:00:00\"},{\"id\":5,\"e\":\"2023-10-03 00:00:00\",\"s\":\"2023-09-03 00:00:00\"},{\"id\":0,\"e\":\"2023-10-03 00:00:00\",\"s\":\"2023-09-03 00:00:00\"},{\"id\":7,\"e\":\"2023-10-03 00:00:00\",\"s\":\"2023-09-03 00:00:00\"},{\"id\":4,\"e\":\"2023-10-03 00:00:00\",\"s\":\"2023-09-03 00:00:00\"},{\"id\":1,\"e\":\"2023-10-03 00:00:00\",\"s\":\"2023-09-03 00:00:00\"},{\"id\":6,\"e\":\"2023-10-03 00:00:00\",\"s\":\"2023-09-03 00:00:00\"},{\"id\":3,\"e\":\"2023-10-03 00:00:00\",\"s\":\"2023-09-03 00:00:00\"},{\"id\":5,\"e\":\"2023-09-03 00:00:00\",\"s\":\"2023-08-04 00:00:00\"},{\"id\":3,\"e\":\"2023-09-03 00:00:00\",\"s\":\"2023-08-04 00:00:00\"},{\"id\":6,\"e\":\"2023-09-03 00:00:00\",\"s\":\"2023-08-04 00:00:00\"},{\"id\":2,\"e\":\"2023-09-03 00:00:00\",\"s\":\"2023-08-04 00:00:00\"},{\"id\":7,\"e\":\"2023-09-03 00:00:00\",\"s\":\"2023-08-04 00:00:00\"},{\"id\":1,\"e\":\"2023-09-03 00:00:00\",\"s\":\"2023-08-04 00:00:00\"},{\"id\":4,\"e\":\"2023-09-03 00:00:00\",\"s\":\"2023-08-04 00:00:00\"},{\"id\":0,\"e\":\"2023-09-03 00:00:00\",\"s\":\"2023-08-04 00:00:00\"},{\"id\":0,\"e\":\"2023-08-04 00:00:00\",\"s\":\"2023-07-05 00:00:00\"},{\"id\":6,\"e\":\"2023-08-04 00:00:00\",\"s\":\"2023-07-05 00:00:00\"},{\"id\":4,\"e\":\"2023-08-04 00:00:00\",\"s\":\"2023-07-05 00:00:00\"},{\"id\":5,\"e\":\"2023-08-04 00:00:00\",\"s\":\"2023-07-05 00:00:00\"},{\"id\":1,\"e\":\"2023-08-04 00:00:00\",\"s\":\"2023-07-05 00:00:00\"},{\"id\":2,\"e\":\"2023-08-04 00:00:00\",\"s\":\"2023-07-05 00:00:00\"},{\"id\":7,\"e\":\"2023-08-04 00:00:00\",\"s\":\"2023-07-05 00:00:00\"},{\"id\":3,\"e\":\"2023-08-04 00:00:00\",\"s\":\"2023-07-05 00:00:00\"},{\"id\":7,\"e\":\"2023-07-05 00:00:00\",\"s\":\"2023-06-05 00:00:00\"},{\"id\":3,\"e\":\"2023-07-05 00:00:00\",\"s\":\"2023-06-05 00:00:00\"},{\"id\":4,\"e\":\"2023-07-05 00:00:00\",\"s\":\"2023-06-05 00:00:00\"},{\"id\":1,\"e\":\"2023-07-05 00:00:00\",\"s\":\"2023-06-05 00:00:00\"},{\"id\":6,\"e\":\"2023-07-05 00:00:00\",\"s\":\"2023-06-05 00:00:00\"},{\"id\":2,\"e\":\"2023-07-05 00:00:00\",\"s\":\"2023-06-05 00:00:00\"},{\"id\":0,\"e\":\"2023-07-05 00:00:00\",\"s\":\"2023-06-05 00:00:00\"},{\"id\":5,\"e\":\"2023-07-05 00:00:00\",\"s\":\"2023-06-05 00:00:00\"},{\"id\":4,\"e\":\"2023-06-05 00:00:00\",\"s\":\"2023-05-06 00:00:00\"},{\"id\":3,\"e\":\"2023-06-05 00:00:00\",\"s\":\"2023-05-06 00:00:00\"},{\"id\":0,\"e\":\"2023-06-05 00:00:00\",\"s\":\"2023-05-06 00:00:00\"},{\"id\":6,\"e\":\"2023-06-05 00:00:00\",\"s\":\"2023-05-06 00:00:00\"},{\"id\":5,\"e\":\"2023-06-05 00:00:00\",\"s\":\"2023-05-06 00:00:00\"},{\"id\":2,\"e\":\"2023-06-05 00:00:00\",\"s\":\"2023-05-06 00:00:00\"},{\"id\":7,\"e\":\"2023-06-05 00:00:00\",\"s\":\"2023-05-06 00:00:00\"},{\"id\":1,\"e\":\"2023-06-05 00:00:00\",\"s\":\"2023-05-06 00:00:00\"},{\"id\":1,\"e\":\"2023-05-06 00:00:00\",\"s\":\"2023-04-06 00:00:00\"},{\"id\":3,\"e\":\"2023-05-06 00:00:00\",\"s\":\"2023-04-06 00:00:00\"},{\"id\":0,\"e\":\"2023-05-06 00:00:00\",\"s\":\"2023-04-06 00:00:00\"},{\"id\":2,\"e\":\"2023-05-06 00:00:00\",\"s\":\"2023-04-06 00:00:00\"},{\"id\":4,\"e\":\"2023-05-06 00:00:00\",\"s\":\"2023-04-06 00:00:00\"},{\"id\":6,\"e\":\"2023-05-06 00:00:00\",\"s\":\"2023-04-06 00:00:00\"},{\"id\":5,\"e\":\"2023-05-06 00:00:00\",\"s\":\"2023-04-06 00:00:00\"},{\"id\":7,\"e\":\"2023-05-06 00:00:00\",\"s\":\"2023-04-06 00:00:00\"},{\"id\":2,\"e\":\"2023-04-06 00:00:00\",\"s\":\"2023-03-07 00:00:00\"},{\"id\":7,\"e\":\"2023-04-06 00:00:00\",\"s\":\"2023-03-07 00:00:00\"},{\"id\":3,\"e\":\"2023-04-06 00:00:00\",\"s\":\"2023-03-07 00:00:00\"},{\"id\":4,\"e\":\"2023-04-06 00:00:00\",\"s\":\"2023-03-07 00:00:00\"},{\"id\":1,\"e\":\"2023-04-06 00:00:00\",\"s\":\"2023-03-07 00:00:00\"},{\"id\":0,\"e\":\"2023-04-06 00:00:00\",\"s\":\"2023-03-07 00:00:00\"},{\"id\":6,\"e\":\"2023-04-06 00:00:00\",\"s\":\"2023-03-07 00:00:00\"},{\"id\":5,\"e\":\"2023-04-06 00:00:00\",\"s\":\"2023-03-07 00:00:00\"},{\"id\":0,\"e\":\"2023-03-07 00:00:00\",\"s\":\"2023-02-05 00:00:00\"},{\"id\":2,\"e\":\"2023-03-07 00:00:00\",\"s\":\"2023-02-05 00:00:00\"},{\"id\":4,\"e\":\"2023-03-07 00:00:00\",\"s\":\"2023-02-05 00:00:00\"},{\"id\":6,\"e\":\"2023-03-07 00:00:00\",\"s\":\"2023-02-05 00:00:00\"},{\"id\":7,\"e\":\"2023-03-07 00:00:00\",\"s\":\"2023-02-05 00:00:00\"},{\"id\":1,\"e\":\"2023-03-07 00:00:00\",\"s\":\"2023-02-05 00:00:00\"},{\"id\":3,\"e\":\"2023-03-07 00:00:00\",\"s\":\"2023-02-05 00:00:00\"},{\"id\":5,\"e\":\"2023-03-07 00:00:00\",\"s\":\"2023-02-05 00:00:00\"},{\"id\":4,\"e\":\"2023-02-05 00:00:00\",\"s\":\"2023-01-06 00:00:00\"},{\"id\":3,\"e\":\"2023-02-05 00:00:00\",\"s\":\"2023-01-06 00:00:00\"},{\"id\":2,\"e\":\"2023-02-05 00:00:00\",\"s\":\"2023-01-06 00:00:00\"},{\"id\":0,\"e\":\"2023-02-05 00:00:00\",\"s\":\"2023-01-06 00:00:00\"},{\"id\":1,\"e\":\"2023-02-05 00:00:00\",\"s\":\"2023-01-06 00:00:00\"},{\"id\":6,\"e\":\"2023-02-05 00:00:00\",\"s\":\"2023-01-06 00:00:00\"},{\"id\":5,\"e\":\"2023-02-05 00:00:00\",\"s\":\"2023-01-06 00:00:00\"},{\"id\":7,\"e\":\"2023-02-05 00:00:00\",\"s\":\"2023-01-06 00:00:00\"}]",
+    "2024-03-01 00:00:00",
+    "2023-01-06 00:00:00"
+   ],
+   "result": "tables/b36d768c0f6e9f5a17071375b48932256a265c3f7994cdd5fe626f97a9601544.arrows"
+  },
+  {
+   "text": "WITH TMP AS (\n  SELECT pos AS __KUMO_BATCH__, col AS __KUMO_ID__\n  FROM posexplode(from_json(?, 'array<bigint>'))\n)\nSELECT TMP.__KUMO_BATCH__ as __KUMO_BATCH__, `user_id`, `age`, `country`\nFROM TMP\nJOIN `{catalog}`.`{schema}`.`users`\n  ON `user_id` = TMP.__KUMO_ID__",
+   "parameters": [
+    "[3,4,2,7,6,1,5,0,0,2,7,1,4,5,3,6,5,7,2,4,1,6,3,0,7,0,4,2,3,5,6,1,7,1,5,4,0,6,3,2,2,5,0,7,4,1,6,3,5,3,6,2,7,1,4,0,0,6,4,5,1,2,7,3,7,3,4,1,6,2,0,5,4,3,0,6,5,2,7,1,1,3,0,2,4,6,5,7,2,7,3,4,1,0,6,5,0,2,4,6,7,1,3,5,4,3,2,0,1,6,5,7,0,1]"
+   ],
+   "result": "tables/2c81979e5c805c6da3f278f10d1e80d3933624d49816c2556b50bed4540d1ee8.arrows"
+  },
+  {
+   "text": "WITH TMP AS (\n  SELECT pos AS __KUMO_BATCH__, col.id AS __KUMO_ID__, col.e AS __KUMO_END_TIME__, col.s AS __KUMO_START_TIME__\n  FROM posexplode(from_json(?, 'array<struct<id:bigint,e:string,s:string>>'))\n)\nSELECT TMP.__KUMO_BATCH__ as __KUMO_BATCH__, `order_id`, `user_id`, `price`, `ts`\nFROM TMP\nJOIN `{catalog}`.`{schema}`.`orders`\n  ON `user_id` = TMP.__KUMO_ID__\n AND `ts` <= TMP.__KUMO_END_TIME__\n AND `ts` > TMP.__KUMO_START_TIME__\nWHERE `ts` <= ?\n  AND `ts` > ?\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY TMP.__KUMO_BATCH__\n  ORDER BY `ts` DESC, `order_id`\n) <= 32\nORDER BY TMP.__KUMO_BATCH__, `ts` DESC, `order_id`",
+   "parameters": [
+    "[{\"id\":3,\"e\":\"2024-01-31 00:00:00\",\"s\":\"2019-02-01 00:00:00\"},{\"id\":4,\"e\":\"2024-01-31 00:00:00\",\"s\":\"2019-02-01 00:00:00\"},{\"id\":2,\"e\":\"2024-01-31 00:00:00\",\"s\":\"2019-02-01 00:00:00\"},{\"id\":7,\"e\":\"2024-01-31 00:00:00\",\"s\":\"2019-02-01 00:00:00\"},{\"id\":6,\"e\":\"2024-01-31 00:00:00\",\"s\":\"2019-02-01 00:00:00\"},{\"id\":1,\"e\":\"2024-01-31 00:00:00\",\"s\":\"2019-02-01 00:00:00\"},{\"id\":5,\"e\":\"2024-01-31 00:00:00\",\"s\":\"2019-02-01 00:00:00\"},{\"id\":0,\"e\":\"2024-01-31 00:00:00\",\"s\":\"2019-02-01 00:00:00\"},{\"id\":0,\"e\":\"2024-01-01 00:00:00\",\"s\":\"2019-01-02 00:00:00\"},{\"id\":2,\"e\":\"2024-01-01 00:00:00\",\"s\":\"2019-01-02 00:00:00\"},{\"id\":7,\"e\":\"2024-01-01 00:00:00\",\"s\":\"2019-01-02 00:00:00\"},{\"id\":1,\"e\":\"2024-01-01 00:00:00\",\"s\":\"2019-01-02 00:00:00\"},{\"id\":4,\"e\":\"2024-01-01 00:00:00\",\"s\":\"2019-01-02 00:00:00\"},{\"id\":5,\"e\":\"2024-01-01 00:00:00\",\"s\":\"2019-01-02 00:00:00\"},{\"id\":3,\"e\":\"2024-01-01 00:00:00\",\"s\":\"2019-01-02 00:00:00\"},{\"id\":6,\"e\":\"2024-01-01 00:00:00\",\"s\":\"2019-01-02 00:00:00\"},{\"id\":5,\"e\":\"2023-12-02 00:00:00\",\"s\":\"2018-12-03 00:00:00\"},{\"id\":7,\"e\":\"2023-12-02 00:00:00\",\"s\":\"2018-12-03 00:00:00\"},{\"id\":2,\"e\":\"2023-12-02 00:00:00\",\"s\":\"2018-12-03 00:00:00\"},{\"id\":4,\"e\":\"2023-12-02 00:00:00\",\"s\":\"2018-12-03 00:00:00\"},{\"id\":1,\"e\":\"2023-12-02 00:00:00\",\"s\":\"2018-12-03 00:00:00\"},{\"id\":6,\"e\":\"2023-12-02 00:00:00\",\"s\":\"2018-12-03 00:00:00\"},{\"id\":3,\"e\":\"2023-12-02 00:00:00\",\"s\":\"2018-12-03 00:00:00\"},{\"id\":0,\"e\":\"2023-12-02 00:00:00\",\"s\":\"2018-12-03 00:00:00\"},{\"id\":7,\"e\":\"2023-11-02 00:00:00\",\"s\":\"2018-11-03 00:00:00\"},{\"id\":0,\"e\":\"2023-11-02 00:00:00\",\"s\":\"2018-11-03 00:00:00\"},{\"id\":4,\"e\":\"2023-11-02 00:00:00\",\"s\":\"2018-11-03 00:00:00\"},{\"id\":2,\"e\":\"2023-11-02 00:00:00\",\"s\":\"2018-11-03 00:00:00\"},{\"id\":3,\"e\":\"2023-11-02 00:00:00\",\"s\":\"2018-11-03 00:00:00\"},{\"id\":5,\"e\":\"2023-11-02 00:00:00\",\"s\":\"2018-11-03 00:00:00\"},{\"id\":6,\"e\":\"2023-11-02 00:00:00\",\"s\":\"2018-11-03 00:00:00\"},{\"id\":1,\"e\":\"2023-11-02 00:00:00\",\"s\":\"2018-11-03 00:00:00\"},{\"id\":7,\"e\":\"2023-10-03 00:00:00\",\"s\":\"2018-10-04 00:00:00\"},{\"id\":1,\"e\":\"2023-10-03 00:00:00\",\"s\":\"2018-10-04 00:00:00\"},{\"id\":5,\"e\":\"2023-10-03 00:00:00\",\"s\":\"2018-10-04 00:00:00\"},{\"id\":4,\"e\":\"2023-10-03 00:00:00\",\"s\":\"2018-10-04 00:00:00\"},{\"id\":0,\"e\":\"2023-10-03 00:00:00\",\"s\":\"2018-10-04 00:00:00\"},{\"id\":6,\"e\":\"2023-10-03 00:00:00\",\"s\":\"2018-10-04 00:00:00\"},{\"id\":3,\"e\":\"2023-10-03 00:00:00\",\"s\":\"2018-10-04 00:00:00\"},{\"id\":2,\"e\":\"2023-10-03 00:00:00\",\"s\":\"2018-10-04 00:00:00\"},{\"id\":2,\"e\":\"2023-09-03 00:00:00\",\"s\":\"2018-09-04 00:00:00\"},{\"id\":5,\"e\":\"2023-09-03 00:00:00\",\"s\":\"2018-09-04 00:00:00\"},{\"id\":0,\"e\":\"2023-09-03 00:00:00\",\"s\":\"2018-09-04 00:00:00\"},{\"id\":7,\"e\":\"2023-09-03 00:00:00\",\"s\":\"2018-09-04 00:00:00\"},{\"id\":4,\"e\":\"2023-09-03 00:00:00\",\"s\":\"2018-09-04 00:00:00\"},{\"id\":1,\"e\":\"2023-09-03 00:00:00\",\"s\":\"2018-09-04 00:00:00\"},{\"id\":6,\"e\":\"2023-09-03 00:00:00\",\"s\":\"2018-09-04 00:00:00\"},{\"id\":3,\"e\":\"2023-09-03 00:00:00\",\"s\":\"2018-09-04 00:00:00\"},{\"id\":5,\"e\":\"2023-08-04 00:00:00\",\"s\":\"2018-08-05 00:00:00\"},{\"id\":3,\"e\":\"2023-08-04 00:00:00\",\"s\":\"2018-08-05 00:00:00\"},{\"id\":6,\"e\":\"2023-08-04 00:00:00\",\"s\":\"2018-08-05 00:00:00\"},{\"id\":2,\"e\":\"2023-08-04 00:00:00\",\"s\":\"2018-08-05 00:00:00\"},{\"id\":7,\"e\":\"2023-08-04 00:00:00\",\"s\":\"2018-08-05 00:00:00\"},{\"id\":1,\"e\":\"2023-08-04 00:00:00\",\"s\":\"2018-08-05 00:00:00\"},{\"id\":4,\"e\":\"2023-08-04 00:00:00\",\"s\":\"2018-08-05 00:00:00\"},{\"id\":0,\"e\":\"2023-08-04 00:00:00\",\"s\":\"2018-08-05 00:00:00\"},{\"id\":0,\"e\":\"2023-07-05 00:00:00\",\"s\":\"2018-07-06 00:00:00\"},{\"id\":6,\"e\":\"2023-07-05 00:00:00\",\"s\":\"2018-07-06 00:00:00\"},{\"id\":4,\"e\":\"2023-07-05 00:00:00\",\"s\":\"2018-07-06 00:00:00\"},{\"id\":5,\"e\":\"2023-07-05 00:00:00\",\"s\":\"2018-07-06 00:00:00\"},{\"id\":1,\"e\":\"2023-07-05 00:00:00\",\"s\":\"2018-07-06 00:00:00\"},{\"id\":2,\"e\":\"2023-07-05 00:00:00\",\"s\":\"2018-07-06 00:00:00\"},{\"id\":7,\"e\":\"2023-07-05 00:00:00\",\"s\":\"2018-07-06 00:00:00\"},{\"id\":3,\"e\":\"2023-07-05 00:00:00\",\"s\":\"2018-07-06 00:00:00\"},{\"id\":7,\"e\":\"2023-06-05 00:00:00\",\"s\":\"2018-06-06 00:00:00\"},{\"id\":3,\"e\":\"2023-06-05 00:00:00\",\"s\":\"2018-06-06 00:00:00\"},{\"id\":4,\"e\":\"2023-06-05 00:00:00\",\"s\":\"2018-06-06 00:00:00\"},{\"id\":1,\"e\":\"2023-06-05 00:00:00\",\"s\":\"2018-06-06 00:00:00\"},{\"id\":6,\"e\":\"2023-06-05 00:00:00\",\"s\":\"2018-06-06 00:00:00\"},{\"id\":2,\"e\":\"2023-06-05 00:00:00\",\"s\":\"2018-06-06 00:00:00\"},{\"id\":0,\"e\":\"2023-06-05 00:00:00\",\"s\":\"2018-06-06 00:00:00\"},{\"id\":5,\"e\":\"2023-06-05 00:00:00\",\"s\":\"2018-06-06 00:00:00\"},{\"id\":4,\"e\":\"2023-05-06 00:00:00\",\"s\":\"2018-05-07 00:00:00\"},{\"id\":3,\"e\":\"2023-05-06 00:00:00\",\"s\":\"2018-05-07 00:00:00\"},{\"id\":0,\"e\":\"2023-05-06 00:00:00\",\"s\":\"2018-05-07 00:00:00\"},{\"id\":6,\"e\":\"2023-05-06 00:00:00\",\"s\":\"2018-05-07 00:00:00\"},{\"id\":5,\"e\":\"2023-05-06 00:00:00\",\"s\":\"2018-05-07 00:00:00\"},{\"id\":2,\"e\":\"2023-05-06 00:00:00\",\"s\":\"2018-05-07 00:00:00\"},{\"id\":7,\"e\":\"2023-05-06 00:00:00\",\"s\":\"2018-05-07 00:00:00\"},{\"id\":1,\"e\":\"2023-05-06 00:00:00\",\"s\":\"2018-05-07 00:00:00\"},{\"id\":1,\"e\":\"2023-04-06 00:00:00\",\"s\":\"2018-04-07 00:00:00\"},{\"id\":3,\"e\":\"2023-04-06 00:00:00\",\"s\":\"2018-04-07 00:00:00\"},{\"id\":0,\"e\":\"2023-04-06 00:00:00\",\"s\":\"2018-04-07 00:00:00\"},{\"id\":2,\"e\":\"2023-04-06 00:00:00\",\"s\":\"2018-04-07 00:00:00\"},{\"id\":4,\"e\":\"2023-04-06 00:00:00\",\"s\":\"2018-04-07 00:00:00\"},{\"id\":6,\"e\":\"2023-04-06 00:00:00\",\"s\":\"2018-04-07 00:00:00\"},{\"id\":5,\"e\":\"2023-04-06 00:00:00\",\"s\":\"2018-04-07 00:00:00\"},{\"id\":7,\"e\":\"2023-04-06 00:00:00\",\"s\":\"2018-04-07 00:00:00\"},{\"id\":2,\"e\":\"2023-03-07 00:00:00\",\"s\":\"2018-03-08 00:00:00\"},{\"id\":7,\"e\":\"2023-03-07 00:00:00\",\"s\":\"2018-03-08 00:00:00\"},{\"id\":3,\"e\":\"2023-03-07 00:00:00\",\"s\":\"2018-03-08 00:00:00\"},{\"id\":4,\"e\":\"2023-03-07 00:00:00\",\"s\":\"2018-03-08 00:00:00\"},{\"id\":1,\"e\":\"2023-03-07 00:00:00\",\"s\":\"2018-03-08 00:00:00\"},{\"id\":0,\"e\":\"2023-03-07 00:00:00\",\"s\":\"2018-03-08 00:00:00\"},{\"id\":6,\"e\":\"2023-03-07 00:00:00\",\"s\":\"2018-03-08 00:00:00\"},{\"id\":5,\"e\":\"2023-03-07 00:00:00\",\"s\":\"2018-03-08 00:00:00\"},{\"id\":0,\"e\":\"2023-02-05 00:00:00\",\"s\":\"2018-02-06 00:00:00\"},{\"id\":2,\"e\":\"2023-02-05 00:00:00\",\"s\":\"2018-02-06 00:00:00\"},{\"id\":4,\"e\":\"2023-02-05 00:00:00\",\"s\":\"2018-02-06 00:00:00\"},{\"id\":6,\"e\":\"2023-02-05 00:00:00\",\"s\":\"2018-02-06 00:00:00\"},{\"id\":7,\"e\":\"2023-02-05 00:00:00\",\"s\":\"2018-02-06 00:00:00\"},{\"id\":1,\"e\":\"2023-02-05 00:00:00\",\"s\":\"2018-02-06 00:00:00\"},{\"id\":3,\"e\":\"2023-02-05 00:00:00\",\"s\":\"2018-02-06 00:00:00\"},{\"id\":5,\"e\":\"2023-02-05 00:00:00\",\"s\":\"2018-02-06 00:00:00\"},{\"id\":4,\"e\":\"2023-01-06 00:00:00\",\"s\":\"2018-01-07 00:00:00\"},{\"id\":3,\"e\":\"2023-01-06 00:00:00\",\"s\":\"2018-01-07 00:00:00\"},{\"id\":2,\"e\":\"2023-01-06 00:00:00\",\"s\":\"2018-01-07 00:00:00\"},{\"id\":0,\"e\":\"2023-01-06 00:00:00\",\"s\":\"2018-01-07 00:00:00\"},{\"id\":1,\"e\":\"2023-01-06 00:00:00\",\"s\":\"2018-01-07 00:00:00\"},{\"id\":6,\"e\":\"2023-01-06 00:00:00\",\"s\":\"2018-01-07 00:00:00\"},{\"id\":5,\"e\":\"2023-01-06 00:00:00\",\"s\":\"2018-01-07 00:00:00\"},{\"id\":7,\"e\":\"2023-01-06 00:00:00\",\"s\":\"2018-01-07 00:00:00\"},{\"id\":0,\"e\":\"2024-03-01 00:00:00\",\"s\":\"2019-03-03 00:00:00\"},{\"id\":1,\"e\":\"2024-03-01 00:00:00\",\"s\":\"2019-03-03 00:00:00\"}]",
+    "2024-03-01 00:00:00",
+    "2018-01-07 00:00:00"
+   ],
+   "result": "tables/1607f9a215229b2975c6679238cdfa1953a4d88d5f8452b233f079f28b87c0a8.arrows"
+  }
+ ],
+ "loader": []
+}
