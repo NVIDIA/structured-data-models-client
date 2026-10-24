@@ -649,9 +649,9 @@ class SDMClient:
         HTTP transport does, so the bytes the core's size limit counted are
         the bytes sent (register PD-2, T1.28a), and give back the answer as
         the bytes the endpoint sent, which the core reads (T2.14b); a
-        transport that writes its own body (a Databricks serving endpoint's
-        envelope) is handed the call decoded and gives back the answer's
-        text. A transport with no ``predict_body`` answers decoded, which is
+        Databricks serving endpoint's transport posts the envelope the core
+        wrote and gives back the endpoint's reply as it came, which the
+        core reads too (T3.13). A transport with no ``predict_body`` answers decoded, which is
         written back as JSON text. A refusal the adapter explains as
         :meth:`_send` does."""
         send = getattr(self._transport, 'predict_body', None)

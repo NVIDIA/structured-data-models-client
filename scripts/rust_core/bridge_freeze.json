@@ -44,7 +44,7 @@
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py": {
       "<module>": {
-        "fingerprint": "4eca99e41344750376548fcc7021e87657ed7587b401d83bc834db23e604a611"
+        "fingerprint": "1b5ff7a7f1dbf628843b512b81be2cc6bf0bc5aaff39b1e600ce913ac2a1dc30"
       },
       "_adapter": {
         "fingerprint": "f40725046a4dc6e6d4843f595dc9907a872a039e056a9e7794cefc585046fef9"
@@ -98,7 +98,7 @@
         "fingerprint": "34815e94beb5e40441aba62d1800f3cb07ddb670aca7a3578d7b3c82a25cef70"
       },
       "predict": {
-        "fingerprint": "7d7a3763adba57a9bc0ae501d94fd9e3faeaa415ae15ecac2887e14971443c21"
+        "fingerprint": "ec60604b0f50f34c297e6d32483a8a3e760070a84bf762c7633ccbc74021cfe3"
       }
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/codec.py": {

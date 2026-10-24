@@ -16,6 +16,7 @@ serving endpoint hosts one model and answers one request at a time.
 
 from __future__ import annotations
 
+import io
 import json
 import logging
 import math
@@ -26,6 +27,7 @@ from typing import Any
 
 from sdm_client.core.databricks_user_agent import sdm_client_user_agent
 from sdm_client.core.transport import (
+    EndpointFailed,
     _check_encodable,
     _diagnosis_in,
     _validate_limits,
@@ -200,24 +202,43 @@ class DatabricksServingTransport:
     def predict(self, payload: dict[str, Any]) -> dict[str, Any]:
         return self._decoded(self._answered(payload))
 
+    @property
+    def model_endpoint(self) -> dict[str, Any]:
+        r"""This endpoint as the core is told of it (``Predict``'s
+        ``model_endpoint``, T3.13): its name and the caller's limit. The
+        core writes each call's envelope and reads every answer."""
+        return {
+            'endpoint': 'serving_endpoint',
+            'name': self._endpoint,
+            'max_request_bytes': self._max_request_bytes,
+        }
+
     def predict_body(self, body: bytes) -> bytes:
-        r"""Sends a prediction call the core wrote (UTF-8 JSON), wrapped in
-        this endpoint's envelope, and gives back the served model's answer
-        as the text it wrote, encoded as UTF-8, for the core to read: a
-        failure the answer reports by its status is raised as :meth:`predict`
-        raises it, as is an answer that is not a JSON object; one nested
-        past this interpreter's reader is handed over as written, for the
-        core to refuse as too deep (register P1B-22). A lone surrogate the
-        text holds is encoded as it is (``surrogatepass``), for the core to
-        read as U+FFFD as it reads one escaped (register P1B-24, KO2-93),
-        rather than failing here as an encoding error."""
-        text = self._answered(json.loads(body))
+        r"""Posts the bytes the core wrote, this endpoint's envelope as they
+        are, through the workspace's own client (``api_client.do``, which
+        rewinds a byte body to retry it), and gives back the bytes the
+        endpoint answered with, for the core to read (T3.13). A failure is
+        raised as :class:`EndpointFailed`, carrying what the SDK's error
+        says, for the core to name; anything but an ``OSError`` escapes, as
+        from :meth:`predict`."""
+        self._require_open()
         try:
-            self._decoded(text)
-        except StructuredDataError as failed:
-            if not failed._response_too_deep:
-                raise
-        return text.encode('utf-8', 'surrogatepass')
+            answered = self._workspace.api_client.do(
+                'POST',
+                f'/serving-endpoints/{self._endpoint}/invocations',
+                headers={'Content-Type': 'application/json'},
+                data=_Body(body),
+                raw=True,
+            )
+            contents = answered['contents']
+            try:
+                return bytes(contents.read())
+            finally:
+                contents.close()
+        # The SDK's errors and its retry deadline are all OSError, as are
+        # requests' own, as in predict.
+        except OSError as error:
+            raise _failed(error) from None
 
     def _answered(self, payload: dict[str, Any]) -> str:
         r"""The served model's answer to ``payload``, as the text it
@@ -403,6 +424,40 @@ class DatabricksServingTransport:
             message=f'serving endpoint {self._endpoint!r} request failed{suffix}',
             details=details,
         )
+
+
+class _Body(io.BytesIO):
+    r"""The core's bytes as the SDK posts them: a stream it rewinds to try
+    again, as it wraps bytes itself, which is true only until it is sent.
+
+    The SDK's report of a failure whose body it cannot parse dumps the
+    request's body, taking it for text, and fails with ``TypeError`` on any
+    stream; once sent this one is false, so the report leaves it out, and
+    the caller's rows with it.
+    """
+
+    def __init__(self, body: bytes) -> None:
+        super().__init__(body)
+        self._size = len(body)
+
+    def __bool__(self) -> bool:
+        return self.tell() < self._size
+
+
+def _failed(error: BaseException) -> EndpointFailed:
+    r"""The SDK's failure as the core reads it: the status its class gives
+    (as :meth:`DatabricksServingTransport._error_from` takes it), its
+    message and code, and its class's name. Neither logged nor repeated
+    here: the message can hold the request body, which is the caller's
+    rows."""
+    said = getattr(error, 'message', None)
+    code = getattr(error, 'error_code', None)
+    return EndpointFailed(
+        _status_of(error),
+        said if isinstance(said, str) else str(error),
+        code if isinstance(code, str) else None,
+        type(error).__name__,
+    )
 
 
 def _leading_code(text: str) -> str | None:

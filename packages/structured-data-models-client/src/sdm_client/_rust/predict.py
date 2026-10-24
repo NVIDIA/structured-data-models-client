@@ -67,6 +67,7 @@ from typing import TYPE_CHECKING, Any
 
 from sdm_client._rust import codec, errors, results
 from sdm_client._rust.run import Refused, TransportFailed, run
+from sdm_client.core.transport import EndpointFailed
 from sdm_client.decompose import RANKING
 from sdm_client.errors import NimRequestError, StructuredDataError
 
@@ -444,6 +445,9 @@ def predict(
             # answer, the bytes the endpoint sent, is the core's to read
             # (T2.14b).
             return client._send_body(_adapter(client, model_id), body)
+        except EndpointFailed:
+            # A serving endpoint's failure, which the core names (T3.13).
+            raise
         except NimRequestError as refusal:
             refused = refusal
         except StructuredDataError as failed:
@@ -494,6 +498,11 @@ def predict(
     }
     if outputs is None:
         operation['default_outputs'] = True
+    # A serving endpoint the core speaks to: its envelope written and its
+    # answers read there (T3.13).
+    endpoint = getattr(client._transport, 'model_endpoint', None)
+    if endpoint is not None:
+        operation['model_endpoint'] = endpoint
     if state is None:
         operation['held'], attachments = _held(request)
     else:

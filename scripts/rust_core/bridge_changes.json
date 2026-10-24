@@ -24,13 +24,13 @@
       "moved": "T3.17 fix 1: the source with no table is the core's sentence, filled with the source as a host value; the Python sentence is gone"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::<module>": {
-      "moved": "T3.26: the materialize_again refusal is gone: a request the core did not materialize is handed over as plain data (_held, Predict.held) and the core rebuilds what it predicts from (sdm-core held.rs); RANKING read from decompose to tell a ranking by its decomposition"
+      "moved": "T3.26: the materialize_again refusal is gone: a request the core did not materialize is handed over as plain data (_held, Predict.held) and the core rebuilds what it predicts from (sdm-core held.rs); RANKING read from decompose to tell a ranking by its decomposition; T3.13: EndpointFailed imported, a serving endpoint's failure the core names"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_id": {
       "moved": "T1.36 fix 8: the host's half of the moved entity reading: a row's id as the core's id_as_written column gives it (the JSON text of the reference's item value, read as the transport reads JSON), else the id column's value, a missing one None; no rule of its own, as _as_answered for a prediction"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::predict": {
-      "moved": "T3.26: no refusal of a request the core did not materialize; its state, or what it holds (_from_state or _held), is handed over, the core rebuilding the rest; a ranking told by its decomposition"
+      "moved": "T3.26: no refusal of a request the core did not materialize; its state, or what it holds (_from_state or _held), is handed over, the core rebuilding the rest; a ranking told by its decomposition; T3.13: a Databricks serving endpoint's envelope, limit and every answer's reading moved into the core (sdm_request::serving): the bridge names the endpoint (model_endpoint) and lets the transport's EndpointFailed through to the run, which tells the core"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_carry_the_answers": {
       "moved": "T2.13: the carried answers' explanation, which the core puts on the result's schema with the model and metadata, handed to _result as the result's; no rule added"

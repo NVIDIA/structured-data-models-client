@@ -15,6 +15,8 @@
 //! a column type or value the layout does not port yet is refused by name.
 //! It also writes the call the client makes of a payload and lays out the
 //! answer ([`predict`]), thin until T1.28b: a regression's answer alone.
+//! A Databricks Model Serving endpoint's envelope and answers are
+//! [`serving`]'s (T3.13).
 
 #![forbid(unsafe_code)]
 
@@ -22,3 +24,4 @@ pub mod options;
 pub mod payload;
 pub mod predict;
 pub mod ranking;
+pub mod serving;
