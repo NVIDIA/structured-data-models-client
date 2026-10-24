@@ -345,6 +345,30 @@ POSTGRES: list[tuple[str, list[str]]] = [
             _rows('timestamptz[]', '\'{"2024-07-01 00:00+00"}\''),
         ],
     ),
+    # Moving the instant to the session's zone leaves years 1 to 9999:
+    # psycopg keeps the server's own wall time and offset (Claude T3.12 r4
+    # P1-1).
+    (
+        'timestamptz[] at year 9999 in GMT+3',
+        [
+            "SET TimeZone = 'GMT+3'",
+            _rows('timestamptz[]', '\'{"9999-12-31 23:00:00-03"}\''),
+        ],
+    ),
+    (
+        'tstzrange ending at year 9999 in GMT+3',
+        [
+            "SET TimeZone = 'GMT+3'",
+            _rows('tstzrange', "'[9999-12-31 22:00-03,9999-12-31 23:00-03)'"),
+        ],
+    ),
+    (
+        'timestamptz[] at year 1 in <+14>-14',
+        [
+            "SET TimeZone = '<+14>-14'",
+            _rows('timestamptz[]', '\'{"0001-01-01 05:00+14"}\''),
+        ],
+    ),
     (
         'tstzrange back in the JVM zone',
         [
