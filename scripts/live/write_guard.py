@@ -94,7 +94,7 @@ import os
 import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, NoReturn, cast
 
 DIALECTS = ('databricks', 'snowflake', 'postgres')
 
@@ -442,7 +442,7 @@ class _Statement:
         self.refuse('an unclosed (')
         raise AssertionError
 
-    def refuse(self, why: str) -> None:
+    def refuse(self, why: str) -> NoReturn:
         raise WriteRefused(f'{self.what}: {why}')
 
 
@@ -539,6 +539,9 @@ class WriteGuard:
         # The word each open parenthesis follows, innermost last: inside a
         # cast, AS names its type.
         openers: list[str] = []
+        # Where each open parenthesis is, and the one the last ``)`` closed.
+        opened: list[int] = []
+        closed: int | None = None
         types: set[int] = set()
         for i, token in enumerate(items):
             word = _upper(token)
@@ -546,10 +549,12 @@ class WriteGuard:
             before = items[i - 1] if i else None
             if token == _OPEN:
                 openers.append(_upper(before))
+                opened.append(i)
                 continue
             if token == _CLOSE:
                 if openers:
                     openers.pop()
+                closed = opened.pop() if opened else None
                 continue
             if word in words and after != [_OPEN]:
                 raise WriteRefused(f'{what}: {word} where no write may be')
@@ -588,6 +593,22 @@ class WriteGuard:
                     and before is not None
                     and before.kind in ('word', 'name')
                     and _upper(before) not in RESERVED
+                )
+                or (
+                    # The old client's join onto a derived table:
+                    # JOIN (SELECT ...) ON ....
+                    word == 'JOIN'
+                    and [_upper(t) for t in items[i + 2 : i + 3]] == ['SELECT']
+                )
+                or (
+                    # The old client's sampled derived table:
+                    # FROM (SELECT ...) TABLESAMPLE (...).
+                    word == 'TABLESAMPLE'
+                    and before == _CLOSE
+                    and closed is not None
+                    and closed > 0
+                    and _upper(items[closed - 1]) == 'FROM'
+                    and _upper(items[closed + 1]) == 'SELECT'
                 )
                 or (
                     _upper(before) == 'AS'
@@ -1158,7 +1179,7 @@ def _hook(cls: type) -> None:
 
     def __init_subclass__(sub: type, **keywords: Any) -> None:
         if previous is _ABSENT:
-            super(cls, sub).__init_subclass__(**keywords)
+            super(cast(Any, cls), sub).__init_subclass__(**keywords)
         else:
             previous.__get__(None, sub)(**keywords)
         for base, attribute, make in list(_RULES):
@@ -1206,11 +1227,12 @@ def install(guards: Mapping[str, WriteGuard | None]) -> Callable[[], None]:
                 _wrap(
                     cls,
                     attribute,
-                    lambda f, c=check, k=spark: _guarded(f, c, k),
+                    functools.partial(_guarded, check=check, spark=spark),
                 )
         module_name, class_name, attributes = SPARK_CONNECT
         cls = _class(module_name, class_name)
         for attribute in attributes if cls is not None else ():
+            assert cls is not None
             if not hasattr(cls, attribute):
                 raise RuntimeError(
                     f'{class_name} has no {attribute}: the write guard cannot '
@@ -1218,10 +1240,11 @@ def install(guards: Mapping[str, WriteGuard | None]) -> Callable[[], None]:
                 )
             guard = guards.get('databricks')
             check = guard.check if guard is not None else _closed('databricks')
-            _wrap(cls, attribute, lambda f, c=check: _plan_request(f, c))
+            _wrap(cls, attribute, functools.partial(_plan_request, check=check))
         for module_name, class_name, attributes in REFUSED:
             cls = _class(module_name, class_name)
             for attribute in attributes if cls is not None else ():
+                assert cls is not None
                 _wrap(cls, attribute, _refusing(f'{class_name}.{attribute}'))
         for module_name, class_name in REFUSED_CLASSES:
             cls = _class(module_name, class_name, required=False)

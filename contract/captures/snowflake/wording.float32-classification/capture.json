@@ -1,0 +1,1080 @@
+{
+ "format": "sdm-capture/1",
+ "case": "wording.float32-classification",
+ "leg": "snowflake",
+ "recording_commit": "e6c3791bf8e344703f6410aee39e7a26175fdf21",
+ "reference_commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+ "versions": {
+  "duckdb": "1.5.6",
+  "numpy": "2.5.3",
+  "pandas": "3.0.6",
+  "pyarrow": "25.0.1",
+  "python": "3.12.15",
+  "snowflake-connector-python": "4.8.0"
+ },
+ "input_hash": "d5ebd667c0ae0c1d1d5f5ceaf78dee4438406d9eaa8279bda79f534aa77e2bcb",
+ "session": {
+  "time_zone": "America/Los_Angeles",
+  "null_order": "nulls_last"
+ },
+ "reference": {
+  "case": "wording.float32-classification@snowflake",
+  "core": null,
+  "driver": {
+   "capture": {
+    "bindings": [],
+    "cursors": 14,
+    "events": [
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 1
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 2
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 3
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 4
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 5
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 6
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 7
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 8
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 9
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 10
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 11
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 12
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 13
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 14
+     }
+    ],
+    "incomplete": [],
+    "passed_through": [
+     "_paramstyle"
+    ],
+    "statements": [
+     {
+      "error": null,
+      "handle": 1,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{schema}'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "eb321699c22c79bc8154a3357369ae81004bfea24983e444877311a97b90f805",
+        "method": "fetchall",
+        "rows": 2,
+        "values": {
+         "columns": [
+          "TABLE_NAME"
+         ],
+         "ordered": "3f59d5de42223ca465ff71eef9d5287bac4dcaac8cb1ef752cba7b80dec67229",
+         "types": [
+          "2"
+         ],
+         "unencodable": [],
+         "unordered": "3f59d5de42223ca465ff71eef9d5287bac4dcaac8cb1ef752cba7b80dec67229"
+        }
+       }
+      ],
+      "sql": "\n                    SELECT TABLE_NAME\n                    FROM \"{catalog}\".INFORMATION_SCHEMA.TABLES\n                    WHERE TABLE_SCHEMA = ?\n                    ",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 2,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "dddfc5b6698456eab658a494124ed89999cc0c355d8fa375f0de2c0db9b96a77",
+        "method": "fetchall",
+        "rows": 4,
+        "values": {
+         "columns": [
+          "name",
+          "type",
+          "kind",
+          "null?",
+          "default",
+          "primary key",
+          "unique key",
+          "check",
+          "expression",
+          "comment",
+          "policy name",
+          "privacy domain",
+          "write default"
+         ],
+         "ordered": "9429550fa784bf957c28e96cf39f6b2b05e899a26d5d95d9d9d59ddca7c7e78a",
+         "types": [
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "9",
+          "2"
+         ],
+         "unencodable": [],
+         "unordered": "674c9fdde3c49b569493b5572b3beb2e86634abc387cee498f412ae24744aa60"
+        }
+       }
+      ],
+      "sql": "DESCRIBE TABLE \"{catalog}\".\"{schema}\".\"orders\"",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 3,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "2d8127bc0764af3567ddcba4070a719c6db95c81a1c343c86884579dfe9698e1",
+        "method": "fetch_arrow_all",
+        "rows": 80,
+        "schema": [
+         {
+          "name": "order_id",
+          "type": "int8"
+         },
+         {
+          "name": "user_id",
+          "type": "int8"
+         },
+         {
+          "name": "price",
+          "type": "double"
+         },
+         {
+          "name": "ts",
+          "type": "timestamp[us]"
+         }
+        ],
+        "values": {
+         "columns": [
+          "order_id",
+          "user_id",
+          "price",
+          "ts"
+         ],
+         "ordered": "af39e4e03131a5c1ba2a84509405b8e102b4f942869a0f13e459581e2fb42a52",
+         "types": null,
+         "unencodable": [],
+         "unordered": "a3d976aba1ee2ea6f5a893caa40bab840b2e9116e257e03d59f7a5e32290d40d"
+        }
+       }
+      ],
+      "sql": "SELECT \"order_id\", \"user_id\", \"price\", \"ts\" FROM \"{catalog}\".\"{schema}\".\"orders\" LIMIT 1000",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 4,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "bd0960d4d7e249659f1c28d1c3cac1f0b09cd068b9b3d8a73ff77fa1a2b1fb6b",
+        "method": "fetchall",
+        "rows": 4,
+        "values": {
+         "columns": [
+          "name",
+          "type",
+          "kind",
+          "null?",
+          "default",
+          "primary key",
+          "unique key",
+          "check",
+          "expression",
+          "comment",
+          "policy name",
+          "privacy domain",
+          "write default"
+         ],
+         "ordered": "0f368a20112133b6aa3d26eb0f224045ad302bd92d5809ae590b564f62b10ff8",
+         "types": [
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "9",
+          "2"
+         ],
+         "unencodable": [],
+         "unordered": "fb7ed5ecf7503ad04478c613979cc925560c517ca9a0edee3f0be61994fc5ce4"
+        }
+       }
+      ],
+      "sql": "DESCRIBE TABLE \"{catalog}\".\"{schema}\".\"users\"",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 5,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "42ff7c883a0b932327e523c231af789d56d3b86e2ab159f5f14bf09a3dddef49",
+        "method": "fetch_arrow_all",
+        "rows": 8,
+        "schema": [
+         {
+          "name": "user_id",
+          "type": "int8"
+         },
+         {
+          "name": "age",
+          "type": "int8"
+         },
+         {
+          "name": "country",
+          "type": "string"
+         },
+         {
+          "name": "f",
+          "type": "double"
+         }
+        ],
+        "values": {
+         "columns": [
+          "user_id",
+          "age",
+          "country",
+          "f"
+         ],
+         "ordered": "f2a9c3627b20160c22cf8caafaff9bf0bb58f4ee6f6b282a56ef60bff2d93217",
+         "types": null,
+         "unencodable": [],
+         "unordered": "f2a9c3627b20160c22cf8caafaff9bf0bb58f4ee6f6b282a56ef60bff2d93217"
+        }
+       }
+      ],
+      "sql": "SELECT \"user_id\", \"age\", \"country\", \"f\" FROM \"{catalog}\".\"{schema}\".\"users\" LIMIT 1000",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 6,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "method": "fetchall",
+        "rows": 0,
+        "values": {
+         "columns": [
+          "created_on",
+          "pk_database_name",
+          "pk_schema_name",
+          "pk_table_name",
+          "pk_column_name",
+          "fk_database_name",
+          "fk_schema_name",
+          "fk_table_name",
+          "fk_column_name",
+          "key_sequence",
+          "update_rule",
+          "delete_rule",
+          "fk_name",
+          "pk_name",
+          "deferrability",
+          "rely",
+          "comment"
+         ],
+         "ordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+         "types": [
+          "6",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "0",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2"
+         ],
+         "unencodable": [],
+         "unordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        }
+       }
+      ],
+      "sql": "SHOW IMPORTED KEYS IN TABLE \"{catalog}\".\"{schema}\".\"orders\"",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 7,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "method": "fetchall",
+        "rows": 0,
+        "values": {
+         "columns": [
+          "created_on",
+          "pk_database_name",
+          "pk_schema_name",
+          "pk_table_name",
+          "pk_column_name",
+          "fk_database_name",
+          "fk_schema_name",
+          "fk_table_name",
+          "fk_column_name",
+          "key_sequence",
+          "update_rule",
+          "delete_rule",
+          "fk_name",
+          "pk_name",
+          "deferrability",
+          "rely",
+          "comment"
+         ],
+         "ordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+         "types": [
+          "6",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "0",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2"
+         ],
+         "unencodable": [],
+         "unordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        }
+       }
+      ],
+      "sql": "SHOW IMPORTED KEYS IN TABLE \"{catalog}\".\"{schema}\".\"users\"",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 8,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "0f26fd5b9956dba8cb28bd7f4fbd004d1488ad82ee6efe7fed86851b79f83e6d",
+        "method": "fetchall",
+        "rows": 2,
+        "values": {
+         "columns": [
+          "K",
+          "N",
+          "D",
+          "Z"
+         ],
+         "ordered": "290aa461ceb82676d30231b491dccb4a3258a0d4092dbaa318621f6065778de2",
+         "types": [
+          "0",
+          "0",
+          "0",
+          "0"
+         ],
+         "unencodable": [],
+         "unordered": "290aa461ceb82676d30231b491dccb4a3258a0d4092dbaa318621f6065778de2"
+        }
+       }
+      ],
+      "sql": "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT \"order_id\") AS d, COUNT(CASE WHEN \"order_id\" IS NULL THEN 1 END) AS z\nFROM \"{catalog}\".\"{schema}\".\"orders\"\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT \"user_id\") AS d, COUNT(CASE WHEN \"user_id\" IS NULL THEN 1 END) AS z\nFROM \"{catalog}\".\"{schema}\".\"users\"",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 9,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'orders'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "978ddb65ef35fcb361679e055a9af42a0845fc2b643c0079feab2a8ec5230163",
+        "method": "fetchone",
+        "rows": 1,
+        "values": {
+         "columns": [
+          "created_on",
+          "name",
+          "database_name",
+          "schema_name",
+          "kind",
+          "comment",
+          "cluster_by",
+          "rows",
+          "bytes",
+          "owner",
+          "retention_time",
+          "automatic_clustering",
+          "change_tracking",
+          "search_optimization",
+          "search_optimization_progress",
+          "search_optimization_bytes",
+          "is_external",
+          "enable_schema_evolution",
+          "owner_role_type",
+          "is_event",
+          "is_hybrid",
+          "is_iceberg",
+          "is_dynamic",
+          "is_immutable",
+          "is_interactive",
+          "row_timestamp",
+          "error_logging"
+         ],
+         "ordered": "c9cc47f5ca15a7742e523d4759cf04f5450f8aa00ca3d2117292c7537b104fe6",
+         "types": [
+          "6",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "0",
+          "0",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "0",
+          "0",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2"
+         ],
+         "unencodable": [],
+         "unordered": "c9cc47f5ca15a7742e523d4759cf04f5450f8aa00ca3d2117292c7537b104fe6"
+        }
+       }
+      ],
+      "sql": "SHOW TABLES LIKE ? IN SCHEMA \"{catalog}\".\"{schema}\"",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 10,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'users'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "f6ee678ebb54a7d3304c8084a2dd685bb4e829893fabf0c5bcc11049c4c48811",
+        "method": "fetchone",
+        "rows": 1,
+        "values": {
+         "columns": [
+          "created_on",
+          "name",
+          "database_name",
+          "schema_name",
+          "kind",
+          "comment",
+          "cluster_by",
+          "rows",
+          "bytes",
+          "owner",
+          "retention_time",
+          "automatic_clustering",
+          "change_tracking",
+          "search_optimization",
+          "search_optimization_progress",
+          "search_optimization_bytes",
+          "is_external",
+          "enable_schema_evolution",
+          "owner_role_type",
+          "is_event",
+          "is_hybrid",
+          "is_iceberg",
+          "is_dynamic",
+          "is_immutable",
+          "is_interactive",
+          "row_timestamp",
+          "error_logging"
+         ],
+         "ordered": "713056fd072eedfe0b4e66dfebb741a35f46e8ee10bc963496b1a002f50cb763",
+         "types": [
+          "6",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "0",
+          "0",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "0",
+          "0",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2"
+         ],
+         "unencodable": [],
+         "unordered": "713056fd072eedfe0b4e66dfebb741a35f46e8ee10bc963496b1a002f50cb763"
+        }
+       }
+      ],
+      "sql": "SHOW TABLES LIKE ? IN SCHEMA \"{catalog}\".\"{schema}\"",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 11,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "64f05d5c4d56ed4be4d98aa3c2aa6a342d59ced667e156a2f098931b1adabe09",
+        "method": "fetchall",
+        "rows": 1,
+        "values": {
+         "columns": [
+          "TABLE_INDEX",
+          "MIN_DATE",
+          "MAX_DATE"
+         ],
+         "ordered": "6d619e2d389a605a74bd007b91d1b8770ea2c167aa8cc71a480a8f4d3b555ee0",
+         "types": [
+          "0",
+          "8",
+          "8"
+         ],
+         "unencodable": [],
+         "unordered": "6d619e2d389a605a74bd007b91d1b8770ea2c167aa8cc71a480a8f4d3b555ee0"
+        }
+       }
+      ],
+      "sql": "SELECT\n  0 as table_index,\n  MIN(\"ts\") as min_date,\n  MAX(\"ts\") as max_date\nFROM \"{catalog}\".\"{schema}\".\"orders\"",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 12,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "f25b7de13a63e5a5ea62204e41b21c6067e48ebd092558b66359a1811e36dc42",
+        "method": "fetch_arrow_all",
+        "rows": 8,
+        "schema": [
+         {
+          "name": "user_id",
+          "type": "int8"
+         },
+         {
+          "name": "f",
+          "type": "double"
+         }
+        ],
+        "values": {
+         "columns": [
+          "user_id",
+          "f"
+         ],
+         "ordered": "0a838c1bb3a6be83b6532d929e4db915b29b8eddc9bb4646ab023159bdf37deb",
+         "types": null,
+         "unencodable": [],
+         "unordered": "0a838c1bb3a6be83b6532d929e4db915b29b8eddc9bb4646ab023159bdf37deb"
+        }
+       }
+      ],
+      "sql": "SELECT \"user_id\", \"f\"\nFROM \"{catalog}\".\"{schema}\".\"users\"\nSAMPLE ROW (10000 ROWS)\nWHERE \"user_id\" IS NOT NULL",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 13,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'[3, 4, 2, 7, 6, 1, 5, 0, 0, 1]'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "73e89ab1802d0547d805b3886cfbb6447cc22e86f77be881397fbf9bba8bd181",
+        "method": "fetch_arrow_all",
+        "rows": 10,
+        "schema": [
+         {
+          "name": "__KUMO_BATCH__",
+          "type": "decimal128(38, 0)"
+         },
+         {
+          "name": "user_id",
+          "type": "int8"
+         },
+         {
+          "name": "age",
+          "type": "int8"
+         },
+         {
+          "name": "country",
+          "type": "string"
+         }
+        ],
+        "values": {
+         "columns": [
+          "__KUMO_BATCH__",
+          "user_id",
+          "age",
+          "country"
+         ],
+         "ordered": "853b60b94a764e64d97456bdc454c3dda16a6406662f054ef172a6907295a221",
+         "types": null,
+         "unencodable": [],
+         "unordered": "de24cc15ea3943eb7304896b3eee679a48d0c6f895debfa66e55fd9aee3a690b"
+        }
+       }
+      ],
+      "sql": "WITH TMP as (\n  SELECT\n    f.index as __KUMO_BATCH__,\n    f.value::NUMBER as __KUMO_ID__\n  FROM TABLE(FLATTEN(INPUT => PARSE_JSON(?))) f\n)\nSELECT TMP.__KUMO_BATCH__ as __KUMO_BATCH__, \"user_id\", \"age\", \"country\"\nFROM TMP\nJOIN \"{catalog}\".\"{schema}\".\"users\"\n  ON \"user_id\" = TMP.__KUMO_ID__",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 14,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'[[3, \"2023-03-01 00:00:00\", \"2018-03-02 00:00:00\"], [4, \"2023-03-01 00:00:00\", \"2018-03-02 00:00:00\"], [2, \"2023-03-01 00:00:00\", \"2018-03-02 00:00:00\"], [7, \"2023-03-01 00:00:00\", \"2018-03-02 00:00:00\"], [6, \"2023-03-01 00:00:00\", \"2018-03-02 00:00:00\"], [1, \"2023-03-01 00:00:00\", \"2018-03-02 00:00:00\"], [5, \"2023-03-01 00:00:00\", \"2018-03-02 00:00:00\"], [0, \"2023-03-01 00:00:00\", \"2018-03-02 00:00:00\"], [0, \"2023-03-01 00:00:00\", \"2018-03-02 00:00:00\"], [1, \"2023-03-01 00:00:00\", \"2018-03-02 00:00:00\"]]'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'2023-03-01 00:00:00'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'2018-03-02 00:00:00'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "5a6d63a8a294ce8ac174fd3963798b075bba4ce6fb18bfc8b01bbb7225d9a286",
+        "method": "fetch_arrow_all",
+        "rows": 12,
+        "schema": [
+         {
+          "name": "__KUMO_BATCH__",
+          "type": "decimal128(38, 0)"
+         },
+         {
+          "name": "order_id",
+          "type": "int8"
+         },
+         {
+          "name": "user_id",
+          "type": "int8"
+         },
+         {
+          "name": "price",
+          "type": "double"
+         },
+         {
+          "name": "ts",
+          "type": "timestamp[us]"
+         }
+        ],
+        "values": {
+         "columns": [
+          "__KUMO_BATCH__",
+          "order_id",
+          "user_id",
+          "price",
+          "ts"
+         ],
+         "ordered": "f7730c7e6e1e5e8770d98a78690567b23535b6f6a4cc65efb9a9aa053ef62dde",
+         "types": null,
+         "unencodable": [],
+         "unordered": "5b00a5d19a3550634eca681d548581ab0b68423216d1cb5dd461970e138be363"
+        }
+       }
+      ],
+      "sql": "WITH TMP as (\n  SELECT\n    f.index as __KUMO_BATCH__,\n    f.value[0]::NUMBER as __KUMO_ID__,\n    f.value[1]::TIMESTAMP_NTZ as __KUMO_END_TIME__,\n    f.value[2]::TIMESTAMP_NTZ as __KUMO_START_TIME__\n  FROM TABLE(FLATTEN(INPUT => PARSE_JSON(?))) f\n)\nSELECT TMP.__KUMO_BATCH__ as __KUMO_BATCH__, \"order_id\", \"user_id\", \"price\", \"ts\"\nFROM TMP\nJOIN \"{catalog}\".\"{schema}\".\"orders\"\n  ON \"user_id\" = TMP.__KUMO_ID__\n AND \"ts\" <= TMP.__KUMO_END_TIME__\n AND \"ts\" > TMP.__KUMO_START_TIME__\nWHERE \"ts\" <= ?\n  AND \"ts\" > ?\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY TMP.__KUMO_BATCH__\n  ORDER BY \"ts\" DESC, \"order_id\"\n) <= 32\nORDER BY TMP.__KUMO_BATCH__, \"ts\" DESC, \"order_id\"",
+      "stage": "materialize"
+     }
+    ]
+   },
+   "query_log": {
+    "bindings": 0,
+    "compared": 14,
+    "differing": [],
+    "statements": 14
+   }
+  },
+  "format": "sdm-observation/1",
+  "host": {
+   "warnings": [
+    "UserWarning",
+    "RuntimeWarning"
+   ]
+  },
+  "identity": {
+   "cell": "ref-pandas3",
+   "commit": {
+    "clean": true,
+    "sha": "e6c3791bf8e344703f6410aee39e7a26175fdf21"
+   },
+   "contract": null,
+   "inputs": {
+    "bases": "9d69fe4aea2be4a6a2d96ea03f5258147c537927e2c6e6716b6030836ebc62f8",
+    "case": "b949b05c1f40738627fea288a4da2ad9ae05b5d9abff34a25a4d061c385f33f9"
+   },
+   "native": null,
+   "native_loaded": false,
+   "operations": [],
+   "platform": "linux-x86_64",
+   "reference": {
+    "commit": {
+     "clean": true,
+     "sha": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1"
+    },
+    "environment": "4848c08cc7bbb66e99d4a7416854e401ab51e44413b509172cf0c121a55c78e3",
+    "guard": {
+     "after": "passed",
+     "before": "passed"
+    }
+   },
+   "runner": "python-ref",
+   "versions": {
+    "duckdb": "1.5.6",
+    "numpy": "2.5.3",
+    "pandas": "3.0.6",
+    "pyarrow": "25.0.1",
+    "python": "3.12.15"
+   }
+  },
+  "outcome": {
+   "code": "INVALID_REQUEST",
+   "error": "StructuredDataError",
+   "result": "refusal",
+   "stage": "materialize"
+  },
+  "public": {
+   "payloads": [],
+   "result": null,
+   "schema": {
+    "links": [
+     [
+      "orders",
+      "user_id",
+      "users",
+      "user_id"
+     ]
+    ],
+    "tables": [
+     {
+      "columns": [
+       {
+        "dtype": "int64",
+        "name": "order_id",
+        "stype": "ID"
+       },
+       {
+        "dtype": "int64",
+        "name": "user_id",
+        "stype": "ID"
+       },
+       {
+        "dtype": "float64",
+        "name": "price",
+        "stype": "numerical"
+       },
+       {
+        "dtype": "timestamp[us]",
+        "name": "ts",
+        "stype": "timestamp"
+       }
+      ],
+      "duplicate_keys": 0,
+      "name": "orders",
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     {
+      "columns": [
+       {
+        "dtype": "int64",
+        "name": "user_id",
+        "stype": "ID"
+       },
+       {
+        "dtype": "int64",
+        "name": "age",
+        "stype": "numerical"
+       },
+       {
+        "dtype": "string",
+        "name": "country",
+        "stype": "categorical"
+       },
+       {
+        "dtype": "float64",
+        "name": "f",
+        "stype": "categorical"
+       }
+      ],
+      "duplicate_keys": 0,
+      "name": "users",
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    ]
+   }
+  }
+ },
+ "tables": [
+  {
+   "name": "orders",
+   "data": "tables/2d8127bc0764af3567ddcba4070a719c6db95c81a1c343c86884579dfe9698e1.arrows"
+  },
+  {
+   "name": "users",
+   "data": "tables/42ff7c883a0b932327e523c231af789d56d3b86e2ab159f5f14bf09a3dddef49.arrows"
+  }
+ ],
+ "derived": [],
+ "draws": [
+  {
+   "table": "\"{catalog}\".\"{schema}\".\"users\"",
+   "seed": null,
+   "fraction": "10000 ROWS",
+   "rows": "tables/f25b7de13a63e5a5ea62204e41b21c6067e48ebd092558b66359a1811e36dc42.arrows",
+   "statement": "SELECT \"user_id\", \"f\"\nFROM \"{catalog}\".\"{schema}\".\"users\"\nSAMPLE ROW (10000 ROWS)\nWHERE \"user_id\" IS NOT NULL"
+  }
+ ],
+ "statements": [
+  {
+   "text": "\n                    SELECT TABLE_NAME\n                    FROM \"{catalog}\".INFORMATION_SCHEMA.TABLES\n                    WHERE TABLE_SCHEMA = ?\n                    ",
+   "parameters": [
+    "{schema}"
+   ],
+   "result": "tables/3361a6894ea0d8cdf501d9ceb5caf2798c600e0607b8475a3b30c25537ae74ae.arrows"
+  },
+  {
+   "text": "DESCRIBE TABLE \"{catalog}\".\"{schema}\".\"orders\"",
+   "parameters": [],
+   "result": "tables/ec8a74950b8c78dad4b358f31d734b832d60e87d7d18094b5433814455e5e300.arrows"
+  },
+  {
+   "text": "SELECT \"order_id\", \"user_id\", \"price\", \"ts\" FROM \"{catalog}\".\"{schema}\".\"orders\" LIMIT 1000",
+   "parameters": [],
+   "result": "tables/2d8127bc0764af3567ddcba4070a719c6db95c81a1c343c86884579dfe9698e1.arrows"
+  },
+  {
+   "text": "DESCRIBE TABLE \"{catalog}\".\"{schema}\".\"users\"",
+   "parameters": [],
+   "result": "tables/7d6042538e293cb56bd9c16ecdbef394ef907c10889bda5210c8729e0bf06651.arrows"
+  },
+  {
+   "text": "SELECT \"user_id\", \"age\", \"country\", \"f\" FROM \"{catalog}\".\"{schema}\".\"users\" LIMIT 1000",
+   "parameters": [],
+   "result": "tables/42ff7c883a0b932327e523c231af789d56d3b86e2ab159f5f14bf09a3dddef49.arrows"
+  },
+  {
+   "text": "SHOW IMPORTED KEYS IN TABLE \"{catalog}\".\"{schema}\".\"orders\"",
+   "parameters": [],
+   "result": "tables/3645cf01f2ec465c24ec76be98d01f2a53eb424f5a17037114ed58020cd35dca.arrows"
+  },
+  {
+   "text": "SHOW IMPORTED KEYS IN TABLE \"{catalog}\".\"{schema}\".\"users\"",
+   "parameters": [],
+   "result": "tables/3645cf01f2ec465c24ec76be98d01f2a53eb424f5a17037114ed58020cd35dca.arrows"
+  },
+  {
+   "text": "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT \"order_id\") AS d, COUNT(CASE WHEN \"order_id\" IS NULL THEN 1 END) AS z\nFROM \"{catalog}\".\"{schema}\".\"orders\"\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT \"user_id\") AS d, COUNT(CASE WHEN \"user_id\" IS NULL THEN 1 END) AS z\nFROM \"{catalog}\".\"{schema}\".\"users\"",
+   "parameters": [],
+   "result": "tables/d54f5bb0ca25d8b3057aff1c51df43ff7a5fe5f4170834af0b6484c1bb8d967a.arrows"
+  },
+  {
+   "text": "SHOW TABLES LIKE ? IN SCHEMA \"{catalog}\".\"{schema}\"",
+   "parameters": [
+    "orders"
+   ],
+   "result": "tables/7ab12b6ff7919c10e2ff4390574a1de0b5159ab68e6f5db1176b6dc391647d7a.arrows"
+  },
+  {
+   "text": "SHOW TABLES LIKE ? IN SCHEMA \"{catalog}\".\"{schema}\"",
+   "parameters": [
+    "users"
+   ],
+   "result": "tables/3bedd8f7d5348766390f595ecc5b36793e49aa753e83781a8bbdc38ae64e1f82.arrows"
+  },
+  {
+   "text": "SELECT\n  0 as table_index,\n  MIN(\"ts\") as min_date,\n  MAX(\"ts\") as max_date\nFROM \"{catalog}\".\"{schema}\".\"orders\"",
+   "parameters": [],
+   "result": "tables/e6651bd9c438f0e383cadfd6ef1030804359f0e63a2978ae0b963123d0aeb4ab.arrows"
+  },
+  {
+   "text": "SELECT \"user_id\", \"f\"\nFROM \"{catalog}\".\"{schema}\".\"users\"\nSAMPLE ROW (10000 ROWS)\nWHERE \"user_id\" IS NOT NULL",
+   "parameters": [],
+   "result": "tables/f25b7de13a63e5a5ea62204e41b21c6067e48ebd092558b66359a1811e36dc42.arrows"
+  },
+  {
+   "text": "WITH TMP as (\n  SELECT\n    f.index as __KUMO_BATCH__,\n    f.value::NUMBER as __KUMO_ID__\n  FROM TABLE(FLATTEN(INPUT => PARSE_JSON(?))) f\n)\nSELECT TMP.__KUMO_BATCH__ as __KUMO_BATCH__, \"user_id\", \"age\", \"country\"\nFROM TMP\nJOIN \"{catalog}\".\"{schema}\".\"users\"\n  ON \"user_id\" = TMP.__KUMO_ID__",
+   "parameters": [
+    "[3, 4, 2, 7, 6, 1, 5, 0, 0, 1]"
+   ],
+   "result": "tables/73e89ab1802d0547d805b3886cfbb6447cc22e86f77be881397fbf9bba8bd181.arrows"
+  },
+  {
+   "text": "WITH TMP as (\n  SELECT\n    f.index as __KUMO_BATCH__,\n    f.value[0]::NUMBER as __KUMO_ID__,\n    f.value[1]::TIMESTAMP_NTZ as __KUMO_END_TIME__,\n    f.value[2]::TIMESTAMP_NTZ as __KUMO_START_TIME__\n  FROM TABLE(FLATTEN(INPUT => PARSE_JSON(?))) f\n)\nSELECT TMP.__KUMO_BATCH__ as __KUMO_BATCH__, \"order_id\", \"user_id\", \"price\", \"ts\"\nFROM TMP\nJOIN \"{catalog}\".\"{schema}\".\"orders\"\n  ON \"user_id\" = TMP.__KUMO_ID__\n AND \"ts\" <= TMP.__KUMO_END_TIME__\n AND \"ts\" > TMP.__KUMO_START_TIME__\nWHERE \"ts\" <= ?\n  AND \"ts\" > ?\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY TMP.__KUMO_BATCH__\n  ORDER BY \"ts\" DESC, \"order_id\"\n) <= 32\nORDER BY TMP.__KUMO_BATCH__, \"ts\" DESC, \"order_id\"",
+   "parameters": [
+    "[[3, \"2023-03-01 00:00:00\", \"2018-03-02 00:00:00\"], [4, \"2023-03-01 00:00:00\", \"2018-03-02 00:00:00\"], [2, \"2023-03-01 00:00:00\", \"2018-03-02 00:00:00\"], [7, \"2023-03-01 00:00:00\", \"2018-03-02 00:00:00\"], [6, \"2023-03-01 00:00:00\", \"2018-03-02 00:00:00\"], [1, \"2023-03-01 00:00:00\", \"2018-03-02 00:00:00\"], [5, \"2023-03-01 00:00:00\", \"2018-03-02 00:00:00\"], [0, \"2023-03-01 00:00:00\", \"2018-03-02 00:00:00\"], [0, \"2023-03-01 00:00:00\", \"2018-03-02 00:00:00\"], [1, \"2023-03-01 00:00:00\", \"2018-03-02 00:00:00\"]]",
+    "2023-03-01 00:00:00",
+    "2018-03-02 00:00:00"
+   ],
+   "result": "tables/5a6d63a8a294ce8ac174fd3963798b075bba4ce6fb18bfc8b01bbb7225d9a286.arrows"
+  }
+ ],
+ "loader": []
+}

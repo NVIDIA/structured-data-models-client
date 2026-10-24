@@ -1,0 +1,4007 @@
+{
+ "format": "sdm-capture/1",
+ "case": "lag.regression-2",
+ "leg": "snowflake",
+ "recording_commit": "e6c3791bf8e344703f6410aee39e7a26175fdf21",
+ "reference_commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+ "versions": {
+  "duckdb": "1.5.6",
+  "numpy": "2.5.3",
+  "pandas": "3.0.6",
+  "pyarrow": "25.0.1",
+  "python": "3.12.15",
+  "snowflake-connector-python": "4.8.0"
+ },
+ "input_hash": "9df25e259a62be17fa0d89b25bd45ec075c7124d6d0fb449dbd1a972fef1d301",
+ "session": {
+  "time_zone": "America/Los_Angeles",
+  "null_order": "nulls_last"
+ },
+ "reference": {
+  "case": "lag.regression-2@snowflake",
+  "core": null,
+  "driver": {
+   "capture": {
+    "bindings": [],
+    "cursors": 16,
+    "events": [
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 1
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 2
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 3
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 4
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 5
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 6
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 7
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 8
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 9
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 10
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 11
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 12
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 13
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 14
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 15
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 16
+     }
+    ],
+    "incomplete": [],
+    "passed_through": [
+     "_paramstyle"
+    ],
+    "statements": [
+     {
+      "error": null,
+      "handle": 1,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{schema}'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "f531b2a82ae46950a970873d9f03cca04a03b233ab07a0c63afa44bdbdf4e2c4",
+        "method": "fetchall",
+        "rows": 2,
+        "values": {
+         "columns": [
+          "TABLE_NAME"
+         ],
+         "ordered": "437dd79c6ace96dd108155c9a074eb6b331b60538b82de8b14765569187cd458",
+         "types": [
+          "2"
+         ],
+         "unencodable": [],
+         "unordered": "3f59d5de42223ca465ff71eef9d5287bac4dcaac8cb1ef752cba7b80dec67229"
+        }
+       }
+      ],
+      "sql": "\n                    SELECT TABLE_NAME\n                    FROM \"{catalog}\".INFORMATION_SCHEMA.TABLES\n                    WHERE TABLE_SCHEMA = ?\n                    ",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 2,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "8fa10e9f2bb862478a7e2dcd1799ac9a39a2cc8a8c8260c48eaea1f60d3bec17",
+        "method": "fetchall",
+        "rows": 3,
+        "values": {
+         "columns": [
+          "name",
+          "type",
+          "kind",
+          "null?",
+          "default",
+          "primary key",
+          "unique key",
+          "check",
+          "expression",
+          "comment",
+          "policy name",
+          "privacy domain",
+          "write default"
+         ],
+         "ordered": "37d50fd22c56e6bbbba6ee03dc2524685061ca781e26b33dcd139f33b3447cba",
+         "types": [
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "9",
+          "2"
+         ],
+         "unencodable": [],
+         "unordered": "6be8b9b54528336936540f0445f5d908e56100ae10f9ecccf63fe9b02c484b79"
+        }
+       }
+      ],
+      "sql": "DESCRIBE TABLE \"{catalog}\".\"{schema}\".\"users\"",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 3,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "a4d1c73e1c1c48bdaeb829617953b6d38bcf89f3e23ed330e1b8e3abcf42fbc2",
+        "method": "fetch_arrow_all",
+        "rows": 8,
+        "schema": [
+         {
+          "name": "user_id",
+          "type": "int8"
+         },
+         {
+          "name": "age",
+          "type": "int8"
+         },
+         {
+          "name": "country",
+          "type": "string"
+         }
+        ],
+        "values": {
+         "columns": [
+          "user_id",
+          "age",
+          "country"
+         ],
+         "ordered": "125efa7e9ce5f2bec8f42f10fd4c6b1ad3a9b0b68e1aaae1e11e95000f67b193",
+         "types": null,
+         "unencodable": [],
+         "unordered": "125efa7e9ce5f2bec8f42f10fd4c6b1ad3a9b0b68e1aaae1e11e95000f67b193"
+        }
+       }
+      ],
+      "sql": "SELECT \"user_id\", \"age\", \"country\" FROM \"{catalog}\".\"{schema}\".\"users\" LIMIT 1000",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 4,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "dddfc5b6698456eab658a494124ed89999cc0c355d8fa375f0de2c0db9b96a77",
+        "method": "fetchall",
+        "rows": 4,
+        "values": {
+         "columns": [
+          "name",
+          "type",
+          "kind",
+          "null?",
+          "default",
+          "primary key",
+          "unique key",
+          "check",
+          "expression",
+          "comment",
+          "policy name",
+          "privacy domain",
+          "write default"
+         ],
+         "ordered": "9429550fa784bf957c28e96cf39f6b2b05e899a26d5d95d9d9d59ddca7c7e78a",
+         "types": [
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "9",
+          "2"
+         ],
+         "unencodable": [],
+         "unordered": "674c9fdde3c49b569493b5572b3beb2e86634abc387cee498f412ae24744aa60"
+        }
+       }
+      ],
+      "sql": "DESCRIBE TABLE \"{catalog}\".\"{schema}\".\"orders\"",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 5,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "2d8127bc0764af3567ddcba4070a719c6db95c81a1c343c86884579dfe9698e1",
+        "method": "fetch_arrow_all",
+        "rows": 80,
+        "schema": [
+         {
+          "name": "order_id",
+          "type": "int8"
+         },
+         {
+          "name": "user_id",
+          "type": "int8"
+         },
+         {
+          "name": "price",
+          "type": "double"
+         },
+         {
+          "name": "ts",
+          "type": "timestamp[us]"
+         }
+        ],
+        "values": {
+         "columns": [
+          "order_id",
+          "user_id",
+          "price",
+          "ts"
+         ],
+         "ordered": "af39e4e03131a5c1ba2a84509405b8e102b4f942869a0f13e459581e2fb42a52",
+         "types": null,
+         "unencodable": [],
+         "unordered": "a3d976aba1ee2ea6f5a893caa40bab840b2e9116e257e03d59f7a5e32290d40d"
+        }
+       }
+      ],
+      "sql": "SELECT \"order_id\", \"user_id\", \"price\", \"ts\" FROM \"{catalog}\".\"{schema}\".\"orders\" LIMIT 1000",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 6,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "method": "fetchall",
+        "rows": 0,
+        "values": {
+         "columns": [
+          "created_on",
+          "pk_database_name",
+          "pk_schema_name",
+          "pk_table_name",
+          "pk_column_name",
+          "fk_database_name",
+          "fk_schema_name",
+          "fk_table_name",
+          "fk_column_name",
+          "key_sequence",
+          "update_rule",
+          "delete_rule",
+          "fk_name",
+          "pk_name",
+          "deferrability",
+          "rely",
+          "comment"
+         ],
+         "ordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+         "types": [
+          "6",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "0",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2"
+         ],
+         "unencodable": [],
+         "unordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        }
+       }
+      ],
+      "sql": "SHOW IMPORTED KEYS IN TABLE \"{catalog}\".\"{schema}\".\"users\"",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 7,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "method": "fetchall",
+        "rows": 0,
+        "values": {
+         "columns": [
+          "created_on",
+          "pk_database_name",
+          "pk_schema_name",
+          "pk_table_name",
+          "pk_column_name",
+          "fk_database_name",
+          "fk_schema_name",
+          "fk_table_name",
+          "fk_column_name",
+          "key_sequence",
+          "update_rule",
+          "delete_rule",
+          "fk_name",
+          "pk_name",
+          "deferrability",
+          "rely",
+          "comment"
+         ],
+         "ordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+         "types": [
+          "6",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "0",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2"
+         ],
+         "unencodable": [],
+         "unordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        }
+       }
+      ],
+      "sql": "SHOW IMPORTED KEYS IN TABLE \"{catalog}\".\"{schema}\".\"orders\"",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 8,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "1bf991a626c9bbfe6f3571514f0e0d6f2c4904fdd27b043935570887508ea3e8",
+        "method": "fetchall",
+        "rows": 2,
+        "values": {
+         "columns": [
+          "K",
+          "N",
+          "D",
+          "Z"
+         ],
+         "ordered": "9c6abc834f9bc1a6d7975e8c53505568d3cc5bc9ba8851a0a619417da55f15cf",
+         "types": [
+          "0",
+          "0",
+          "0",
+          "0"
+         ],
+         "unencodable": [],
+         "unordered": "9c6abc834f9bc1a6d7975e8c53505568d3cc5bc9ba8851a0a619417da55f15cf"
+        }
+       }
+      ],
+      "sql": "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT \"user_id\") AS d, COUNT(CASE WHEN \"user_id\" IS NULL THEN 1 END) AS z\nFROM \"{catalog}\".\"{schema}\".\"users\"\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT \"order_id\") AS d, COUNT(CASE WHEN \"order_id\" IS NULL THEN 1 END) AS z\nFROM \"{catalog}\".\"{schema}\".\"orders\"",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 9,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'users'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "ff4ac3cbfb59fa64b30d3c9f63382dc557d929191ce5c00a650426d6b3edb6ee",
+        "method": "fetchone",
+        "rows": 1,
+        "values": {
+         "columns": [
+          "created_on",
+          "name",
+          "database_name",
+          "schema_name",
+          "kind",
+          "comment",
+          "cluster_by",
+          "rows",
+          "bytes",
+          "owner",
+          "retention_time",
+          "automatic_clustering",
+          "change_tracking",
+          "search_optimization",
+          "search_optimization_progress",
+          "search_optimization_bytes",
+          "is_external",
+          "enable_schema_evolution",
+          "owner_role_type",
+          "is_event",
+          "is_hybrid",
+          "is_iceberg",
+          "is_dynamic",
+          "is_immutable",
+          "is_interactive",
+          "row_timestamp",
+          "error_logging"
+         ],
+         "ordered": "3c17946b92856235f51d645b0581f8e83491861293a4cd6085409b887b7a8ffe",
+         "types": [
+          "6",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "0",
+          "0",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "0",
+          "0",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2"
+         ],
+         "unencodable": [],
+         "unordered": "3c17946b92856235f51d645b0581f8e83491861293a4cd6085409b887b7a8ffe"
+        }
+       }
+      ],
+      "sql": "SHOW TABLES LIKE ? IN SCHEMA \"{catalog}\".\"{schema}\"",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 10,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'orders'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "c31fea4ebd585b50b14a834d0320c384711b2e036e5ac8db6e98f8aa2dbcce83",
+        "method": "fetchone",
+        "rows": 1,
+        "values": {
+         "columns": [
+          "created_on",
+          "name",
+          "database_name",
+          "schema_name",
+          "kind",
+          "comment",
+          "cluster_by",
+          "rows",
+          "bytes",
+          "owner",
+          "retention_time",
+          "automatic_clustering",
+          "change_tracking",
+          "search_optimization",
+          "search_optimization_progress",
+          "search_optimization_bytes",
+          "is_external",
+          "enable_schema_evolution",
+          "owner_role_type",
+          "is_event",
+          "is_hybrid",
+          "is_iceberg",
+          "is_dynamic",
+          "is_immutable",
+          "is_interactive",
+          "row_timestamp",
+          "error_logging"
+         ],
+         "ordered": "ae146311c5ef15f1d5bec5bafe4491c44a4d78f0ffe4cbc915fd0d87d6054133",
+         "types": [
+          "6",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "0",
+          "0",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "0",
+          "0",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2"
+         ],
+         "unencodable": [],
+         "unordered": "ae146311c5ef15f1d5bec5bafe4491c44a4d78f0ffe4cbc915fd0d87d6054133"
+        }
+       }
+      ],
+      "sql": "SHOW TABLES LIKE ? IN SCHEMA \"{catalog}\".\"{schema}\"",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 11,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "64f05d5c4d56ed4be4d98aa3c2aa6a342d59ced667e156a2f098931b1adabe09",
+        "method": "fetchall",
+        "rows": 1,
+        "values": {
+         "columns": [
+          "TABLE_INDEX",
+          "MIN_DATE",
+          "MAX_DATE"
+         ],
+         "ordered": "6d619e2d389a605a74bd007b91d1b8770ea2c167aa8cc71a480a8f4d3b555ee0",
+         "types": [
+          "0",
+          "8",
+          "8"
+         ],
+         "unencodable": [],
+         "unordered": "6d619e2d389a605a74bd007b91d1b8770ea2c167aa8cc71a480a8f4d3b555ee0"
+        }
+       }
+      ],
+      "sql": "SELECT\n  0 as table_index,\n  MIN(\"ts\") as min_date,\n  MAX(\"ts\") as max_date\nFROM \"{catalog}\".\"{schema}\".\"orders\"",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 12,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "b8dd10dcc307e260d9eeca92611fa638810dbcaff668f4978c576562a8cd2a01",
+        "method": "fetch_arrow_all",
+        "rows": 8,
+        "schema": [
+         {
+          "name": "user_id",
+          "type": "int8"
+         }
+        ],
+        "values": {
+         "columns": [
+          "user_id"
+         ],
+         "ordered": "20dba88dbdfd8da89ff1fda138abc94675aa26ef6e3ddb0e6d6f8d17fe6cad7e",
+         "types": null,
+         "unencodable": [],
+         "unordered": "20dba88dbdfd8da89ff1fda138abc94675aa26ef6e3ddb0e6d6f8d17fe6cad7e"
+        }
+       }
+      ],
+      "sql": "SELECT \"user_id\"\nFROM \"{catalog}\".\"{schema}\".\"users\"\nSAMPLE ROW (10000 ROWS)\nWHERE \"user_id\" IS NOT NULL",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 13,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'[[3, \"2023-03-01 00:00:00\", \"2023-02-22 00:00:00\"], [4, \"2023-03-01 00:00:00\", \"2023-02-22 00:00:00\"], [2, \"2023-03-01 00:00:00\", \"2023-02-22 00:00:00\"], [7, \"2023-03-01 00:00:00\", \"2023-02-22 00:00:00\"], [6, \"2023-03-01 00:00:00\", \"2023-02-22 00:00:00\"], [1, \"2023-03-01 00:00:00\", \"2023-02-22 00:00:00\"], [5, \"2023-03-01 00:00:00\", \"2023-02-22 00:00:00\"], [0, \"2023-03-01 00:00:00\", \"2023-02-22 00:00:00\"], [0, \"2023-02-22 00:00:00\", \"2023-02-15 00:00:00\"], [2, \"2023-02-22 00:00:00\", \"2023-02-15 00:00:00\"], [7, \"2023-02-22 00:00:00\", \"2023-02-15 00:00:00\"], [1, \"2023-02-22 00:00:00\", \"2023-02-15 00:00:00\"], [4, \"2023-02-22 00:00:00\", \"2023-02-15 00:00:00\"], [5, \"2023-02-22 00:00:00\", \"2023-02-15 00:00:00\"], [3, \"2023-02-22 00:00:00\", \"2023-02-15 00:00:00\"], [6, \"2023-02-22 00:00:00\", \"2023-02-15 00:00:00\"], [5, \"2023-02-15 00:00:00\", \"2023-02-08 00:00:00\"], [7, \"2023-02-15 00:00:00\", \"2023-02-08 00:00:00\"], [2, \"2023-02-15 00:00:00\", \"2023-02-08 00:00:00\"], [4, \"2023-02-15 00:00:00\", \"2023-02-08 00:00:00\"], [1, \"2023-02-15 00:00:00\", \"2023-02-08 00:00:00\"], [6, \"2023-02-15 00:00:00\", \"2023-02-08 00:00:00\"], [3, \"2023-02-15 00:00:00\", \"2023-02-08 00:00:00\"], [0, \"2023-02-15 00:00:00\", \"2023-02-08 00:00:00\"], [7, \"2023-02-08 00:00:00\", \"2023-02-01 00:00:00\"], [0, \"2023-02-08 00:00:00\", \"2023-02-01 00:00:00\"], [4, \"2023-02-08 00:00:00\", \"2023-02-01 00:00:00\"], [2, \"2023-02-08 00:00:00\", \"2023-02-01 00:00:00\"], [3, \"2023-02-08 00:00:00\", \"2023-02-01 00:00:00\"], [5, \"2023-02-08 00:00:00\", \"2023-02-01 00:00:00\"], [6, \"2023-02-08 00:00:00\", \"2023-02-01 00:00:00\"], [1, \"2023-02-08 00:00:00\", \"2023-02-01 00:00:00\"], [7, \"2023-02-01 00:00:00\", \"2023-01-25 00:00:00\"], [1, \"2023-02-01 00:00:00\", \"2023-01-25 00:00:00\"], [5, \"2023-02-01 00:00:00\", \"2023-01-25 00:00:00\"], [4, \"2023-02-01 00:00:00\", \"2023-01-25 00:00:00\"], [0, \"2023-02-01 00:00:00\", \"2023-01-25 00:00:00\"], [6, \"2023-02-01 00:00:00\", \"2023-01-25 00:00:00\"], [3, \"2023-02-01 00:00:00\", \"2023-01-25 00:00:00\"], [2, \"2023-02-01 00:00:00\", \"2023-01-25 00:00:00\"], [2, \"2023-01-25 00:00:00\", \"2023-01-18 00:00:00\"], [5, \"2023-01-25 00:00:00\", \"2023-01-18 00:00:00\"], [0, \"2023-01-25 00:00:00\", \"2023-01-18 00:00:00\"], [7, \"2023-01-25 00:00:00\", \"2023-01-18 00:00:00\"], [4, \"2023-01-25 00:00:00\", \"2023-01-18 00:00:00\"], [1, \"2023-01-25 00:00:00\", \"2023-01-18 00:00:00\"], [6, \"2023-01-25 00:00:00\", \"2023-01-18 00:00:00\"], [3, \"2023-01-25 00:00:00\", \"2023-01-18 00:00:00\"], [5, \"2023-01-18 00:00:00\", \"2023-01-11 00:00:00\"], [3, \"2023-01-18 00:00:00\", \"2023-01-11 00:00:00\"], [6, \"2023-01-18 00:00:00\", \"2023-01-11 00:00:00\"], [2, \"2023-01-18 00:00:00\", \"2023-01-11 00:00:00\"], [7, \"2023-01-18 00:00:00\", \"2023-01-11 00:00:00\"], [1, \"2023-01-18 00:00:00\", \"2023-01-11 00:00:00\"], [4, \"2023-01-18 00:00:00\", \"2023-01-11 00:00:00\"], [0, \"2023-01-18 00:00:00\", \"2023-01-11 00:00:00\"], [0, \"2023-01-11 00:00:00\", \"2023-01-04 00:00:00\"], [6, \"2023-01-11 00:00:00\", \"2023-01-04 00:00:00\"], [4, \"2023-01-11 00:00:00\", \"2023-01-04 00:00:00\"], [5, \"2023-01-11 00:00:00\", \"2023-01-04 00:00:00\"], [1, \"2023-01-11 00:00:00\", \"2023-01-04 00:00:00\"], [2, \"2023-01-11 00:00:00\", \"2023-01-04 00:00:00\"], [7, \"2023-01-11 00:00:00\", \"2023-01-04 00:00:00\"], [3, \"2023-01-11 00:00:00\", \"2023-01-04 00:00:00\"]]'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'2023-03-01 00:00:00'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'2023-01-04 00:00:00'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "f788bb0ee8c9c4bd8ee30267529be21b5a1bcee08717cd7b202f26e3443677fb",
+        "method": "fetch_arrow_all",
+        "rows": 8,
+        "schema": [
+         {
+          "name": "__KUMO_BATCH__",
+          "type": "decimal128(38, 0)"
+         },
+         {
+          "name": "price",
+          "type": "double"
+         },
+         {
+          "name": "ts",
+          "type": "timestamp[us]"
+         }
+        ],
+        "values": {
+         "columns": [
+          "__KUMO_BATCH__",
+          "price",
+          "ts"
+         ],
+         "ordered": "f61b89e728a9100025bbe2a59d4a29027baceacaab66d4befde05da86171f958",
+         "types": null,
+         "unencodable": [],
+         "unordered": "010e5b6db9fabf365c96ca16705500edfbc84a23476e46fca26f397c4f750162"
+        }
+       }
+      ],
+      "sql": "WITH TMP as (\n  SELECT\n    f.index as __KUMO_BATCH__,\n    f.value[0]::NUMBER as __KUMO_ID__,\n    f.value[1]::TIMESTAMP_NTZ as __KUMO_END_TIME__,\n    f.value[2]::TIMESTAMP_NTZ as __KUMO_START_TIME__\n  FROM TABLE(FLATTEN(INPUT => PARSE_JSON(?))) f\n)\nSELECT TMP.__KUMO_BATCH__ as __KUMO_BATCH__, \"price\", \"ts\"\nFROM TMP\nJOIN \"{catalog}\".\"{schema}\".\"orders\"\n  ON \"user_id\" = TMP.__KUMO_ID__\n AND \"ts\" <= TMP.__KUMO_END_TIME__\nAND \"ts\" > TMP.__KUMO_START_TIME__\nWHERE \"ts\" <= ?\nAND \"ts\" > ?",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 14,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'[[3, \"2023-02-22 00:00:00\", \"2023-02-08 00:00:00\"], [4, \"2023-02-22 00:00:00\", \"2023-02-08 00:00:00\"], [2, \"2023-02-22 00:00:00\", \"2023-02-08 00:00:00\"], [7, \"2023-02-22 00:00:00\", \"2023-02-08 00:00:00\"], [6, \"2023-02-22 00:00:00\", \"2023-02-08 00:00:00\"], [1, \"2023-02-22 00:00:00\", \"2023-02-08 00:00:00\"], [5, \"2023-02-22 00:00:00\", \"2023-02-08 00:00:00\"], [0, \"2023-02-22 00:00:00\", \"2023-02-08 00:00:00\"], [0, \"2023-02-15 00:00:00\", \"2023-02-01 00:00:00\"], [2, \"2023-02-15 00:00:00\", \"2023-02-01 00:00:00\"], [7, \"2023-02-15 00:00:00\", \"2023-02-01 00:00:00\"], [1, \"2023-02-15 00:00:00\", \"2023-02-01 00:00:00\"], [4, \"2023-02-15 00:00:00\", \"2023-02-01 00:00:00\"], [5, \"2023-02-15 00:00:00\", \"2023-02-01 00:00:00\"], [3, \"2023-02-15 00:00:00\", \"2023-02-01 00:00:00\"], [6, \"2023-02-15 00:00:00\", \"2023-02-01 00:00:00\"], [5, \"2023-02-08 00:00:00\", \"2023-01-25 00:00:00\"], [7, \"2023-02-08 00:00:00\", \"2023-01-25 00:00:00\"], [2, \"2023-02-08 00:00:00\", \"2023-01-25 00:00:00\"], [4, \"2023-02-08 00:00:00\", \"2023-01-25 00:00:00\"], [1, \"2023-02-08 00:00:00\", \"2023-01-25 00:00:00\"], [6, \"2023-02-08 00:00:00\", \"2023-01-25 00:00:00\"], [3, \"2023-02-08 00:00:00\", \"2023-01-25 00:00:00\"], [0, \"2023-02-08 00:00:00\", \"2023-01-25 00:00:00\"], [7, \"2023-02-01 00:00:00\", \"2023-01-18 00:00:00\"], [0, \"2023-02-01 00:00:00\", \"2023-01-18 00:00:00\"], [4, \"2023-02-01 00:00:00\", \"2023-01-18 00:00:00\"], [2, \"2023-02-01 00:00:00\", \"2023-01-18 00:00:00\"], [3, \"2023-02-01 00:00:00\", \"2023-01-18 00:00:00\"], [5, \"2023-02-01 00:00:00\", \"2023-01-18 00:00:00\"], [6, \"2023-02-01 00:00:00\", \"2023-01-18 00:00:00\"], [1, \"2023-02-01 00:00:00\", \"2023-01-18 00:00:00\"], [7, \"2023-01-25 00:00:00\", \"2023-01-11 00:00:00\"], [1, \"2023-01-25 00:00:00\", \"2023-01-11 00:00:00\"], [5, \"2023-01-25 00:00:00\", \"2023-01-11 00:00:00\"], [4, \"2023-01-25 00:00:00\", \"2023-01-11 00:00:00\"], [0, \"2023-01-25 00:00:00\", \"2023-01-11 00:00:00\"], [6, \"2023-01-25 00:00:00\", \"2023-01-11 00:00:00\"], [3, \"2023-01-25 00:00:00\", \"2023-01-11 00:00:00\"], [2, \"2023-01-25 00:00:00\", \"2023-01-11 00:00:00\"], [2, \"2023-01-18 00:00:00\", \"2023-01-04 00:00:00\"], [5, \"2023-01-18 00:00:00\", \"2023-01-04 00:00:00\"], [0, \"2023-01-18 00:00:00\", \"2023-01-04 00:00:00\"], [7, \"2023-01-18 00:00:00\", \"2023-01-04 00:00:00\"], [4, \"2023-01-18 00:00:00\", \"2023-01-04 00:00:00\"], [1, \"2023-01-18 00:00:00\", \"2023-01-04 00:00:00\"], [6, \"2023-01-18 00:00:00\", \"2023-01-04 00:00:00\"], [3, \"2023-01-18 00:00:00\", \"2023-01-04 00:00:00\"], [5, \"2023-01-11 00:00:00\", \"2022-12-28 00:00:00\"], [3, \"2023-01-11 00:00:00\", \"2022-12-28 00:00:00\"], [6, \"2023-01-11 00:00:00\", \"2022-12-28 00:00:00\"], [2, \"2023-01-11 00:00:00\", \"2022-12-28 00:00:00\"], [7, \"2023-01-11 00:00:00\", \"2022-12-28 00:00:00\"], [1, \"2023-01-11 00:00:00\", \"2022-12-28 00:00:00\"], [4, \"2023-01-11 00:00:00\", \"2022-12-28 00:00:00\"], [0, \"2023-01-11 00:00:00\", \"2022-12-28 00:00:00\"], [0, \"2023-01-04 00:00:00\", \"2022-12-21 00:00:00\"], [6, \"2023-01-04 00:00:00\", \"2022-12-21 00:00:00\"], [4, \"2023-01-04 00:00:00\", \"2022-12-21 00:00:00\"], [5, \"2023-01-04 00:00:00\", \"2022-12-21 00:00:00\"], [1, \"2023-01-04 00:00:00\", \"2022-12-21 00:00:00\"], [2, \"2023-01-04 00:00:00\", \"2022-12-21 00:00:00\"], [7, \"2023-01-04 00:00:00\", \"2022-12-21 00:00:00\"], [3, \"2023-01-04 00:00:00\", \"2022-12-21 00:00:00\"], [0, \"2023-03-01 00:00:00\", \"2023-02-15 00:00:00\"], [1, \"2023-03-01 00:00:00\", \"2023-02-15 00:00:00\"]]'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'2023-03-01 00:00:00'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'2022-12-21 00:00:00'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "14a8c8bc5e29aa3f6911ef1149e043aa87555a55271fb1782e0be11a6f37a671",
+        "method": "fetch_arrow_all",
+        "rows": 16,
+        "schema": [
+         {
+          "name": "__KUMO_BATCH__",
+          "type": "decimal128(38, 0)"
+         },
+         {
+          "name": "price",
+          "type": "double"
+         },
+         {
+          "name": "ts",
+          "type": "timestamp[us]"
+         }
+        ],
+        "values": {
+         "columns": [
+          "__KUMO_BATCH__",
+          "price",
+          "ts"
+         ],
+         "ordered": "345a2123160ed6b4a13d0b2aaadf55290b1dbe04230216f83ac8717aa1bc05cf",
+         "types": null,
+         "unencodable": [],
+         "unordered": "8f8d06966e7ce3f4779cd05a060264a1c64e6b93e5fe3326079c48e8d998a033"
+        }
+       }
+      ],
+      "sql": "WITH TMP as (\n  SELECT\n    f.index as __KUMO_BATCH__,\n    f.value[0]::NUMBER as __KUMO_ID__,\n    f.value[1]::TIMESTAMP_NTZ as __KUMO_END_TIME__,\n    f.value[2]::TIMESTAMP_NTZ as __KUMO_START_TIME__\n  FROM TABLE(FLATTEN(INPUT => PARSE_JSON(?))) f\n)\nSELECT TMP.__KUMO_BATCH__ as __KUMO_BATCH__, \"price\", \"ts\"\nFROM TMP\nJOIN \"{catalog}\".\"{schema}\".\"orders\"\n  ON \"user_id\" = TMP.__KUMO_ID__\n AND \"ts\" <= TMP.__KUMO_END_TIME__\nAND \"ts\" > TMP.__KUMO_START_TIME__\nWHERE \"ts\" <= ?\nAND \"ts\" > ?",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 15,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'[3, 4, 2, 7, 6, 1, 5, 0, 0, 2, 7, 1, 4, 5, 3, 6, 5, 7, 2, 4, 1, 6, 3, 0, 7, 0, 4, 2, 3, 5, 6, 1, 7, 1, 5, 4, 0, 6, 3, 2, 2, 5, 0, 7, 4, 1, 6, 3, 5, 3, 6, 2, 7, 1, 4, 0, 0, 6, 4, 5, 1, 2, 7, 3, 0, 1]'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "26698cc500d0853800f0bdaaaac4e18f785040dc30493732d2886a8a104d3bbe",
+        "method": "fetch_arrow_all",
+        "rows": 66,
+        "schema": [
+         {
+          "name": "__KUMO_BATCH__",
+          "type": "decimal128(38, 0)"
+         },
+         {
+          "name": "user_id",
+          "type": "int8"
+         },
+         {
+          "name": "age",
+          "type": "int8"
+         },
+         {
+          "name": "country",
+          "type": "string"
+         }
+        ],
+        "values": {
+         "columns": [
+          "__KUMO_BATCH__",
+          "user_id",
+          "age",
+          "country"
+         ],
+         "ordered": "c121eb4264c44a40ed73b2120bd46f96bde7d7b7d3326e80699c937bf8d15b13",
+         "types": null,
+         "unencodable": [],
+         "unordered": "7b334c16629ab73711ed942ca962d9ff2ef1209277a29f3e36a7b3b853050795"
+        }
+       }
+      ],
+      "sql": "WITH TMP as (\n  SELECT\n    f.index as __KUMO_BATCH__,\n    f.value::NUMBER as __KUMO_ID__\n  FROM TABLE(FLATTEN(INPUT => PARSE_JSON(?))) f\n)\nSELECT TMP.__KUMO_BATCH__ as __KUMO_BATCH__, \"user_id\", \"age\", \"country\"\nFROM TMP\nJOIN \"{catalog}\".\"{schema}\".\"users\"\n  ON \"user_id\" = TMP.__KUMO_ID__",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 16,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'[[3, \"2023-02-22 00:00:00\", \"2018-02-23 00:00:00\"], [4, \"2023-02-22 00:00:00\", \"2018-02-23 00:00:00\"], [2, \"2023-02-22 00:00:00\", \"2018-02-23 00:00:00\"], [7, \"2023-02-22 00:00:00\", \"2018-02-23 00:00:00\"], [6, \"2023-02-22 00:00:00\", \"2018-02-23 00:00:00\"], [1, \"2023-02-22 00:00:00\", \"2018-02-23 00:00:00\"], [5, \"2023-02-22 00:00:00\", \"2018-02-23 00:00:00\"], [0, \"2023-02-22 00:00:00\", \"2018-02-23 00:00:00\"], [0, \"2023-02-15 00:00:00\", \"2018-02-16 00:00:00\"], [2, \"2023-02-15 00:00:00\", \"2018-02-16 00:00:00\"], [7, \"2023-02-15 00:00:00\", \"2018-02-16 00:00:00\"], [1, \"2023-02-15 00:00:00\", \"2018-02-16 00:00:00\"], [4, \"2023-02-15 00:00:00\", \"2018-02-16 00:00:00\"], [5, \"2023-02-15 00:00:00\", \"2018-02-16 00:00:00\"], [3, \"2023-02-15 00:00:00\", \"2018-02-16 00:00:00\"], [6, \"2023-02-15 00:00:00\", \"2018-02-16 00:00:00\"], [5, \"2023-02-08 00:00:00\", \"2018-02-09 00:00:00\"], [7, \"2023-02-08 00:00:00\", \"2018-02-09 00:00:00\"], [2, \"2023-02-08 00:00:00\", \"2018-02-09 00:00:00\"], [4, \"2023-02-08 00:00:00\", \"2018-02-09 00:00:00\"], [1, \"2023-02-08 00:00:00\", \"2018-02-09 00:00:00\"], [6, \"2023-02-08 00:00:00\", \"2018-02-09 00:00:00\"], [3, \"2023-02-08 00:00:00\", \"2018-02-09 00:00:00\"], [0, \"2023-02-08 00:00:00\", \"2018-02-09 00:00:00\"], [7, \"2023-02-01 00:00:00\", \"2018-02-02 00:00:00\"], [0, \"2023-02-01 00:00:00\", \"2018-02-02 00:00:00\"], [4, \"2023-02-01 00:00:00\", \"2018-02-02 00:00:00\"], [2, \"2023-02-01 00:00:00\", \"2018-02-02 00:00:00\"], [3, \"2023-02-01 00:00:00\", \"2018-02-02 00:00:00\"], [5, \"2023-02-01 00:00:00\", \"2018-02-02 00:00:00\"], [6, \"2023-02-01 00:00:00\", \"2018-02-02 00:00:00\"], [1, \"2023-02-01 00:00:00\", \"2018-02-02 00:00:00\"], [7, \"2023-01-25 00:00:00\", \"2018-01-26 00:00:00\"], [1, \"2023-01-25 00:00:00\", \"2018-01-26 00:00:00\"], [5, \"2023-01-25 00:00:00\", \"2018-01-26 00:00:00\"], [4, \"2023-01-25 00:00:00\", \"2018-01-26 00:00:00\"], [0, \"2023-01-25 00:00:00\", \"2018-01-26 00:00:00\"], [6, \"2023-01-25 00:00:00\", \"2018-01-26 00:00:00\"], [3, \"2023-01-25 00:00:00\", \"2018-01-26 00:00:00\"], [2, \"2023-01-25 00:00:00\", \"2018-01-26 00:00:00\"], [2, \"2023-01-18 00:00:00\", \"2018-01-19 00:00:00\"], [5, \"2023-01-18 00:00:00\", \"2018-01-19 00:00:00\"], [0, \"2023-01-18 00:00:00\", \"2018-01-19 00:00:00\"], [7, \"2023-01-18 00:00:00\", \"2018-01-19 00:00:00\"], [4, \"2023-01-18 00:00:00\", \"2018-01-19 00:00:00\"], [1, \"2023-01-18 00:00:00\", \"2018-01-19 00:00:00\"], [6, \"2023-01-18 00:00:00\", \"2018-01-19 00:00:00\"], [3, \"2023-01-18 00:00:00\", \"2018-01-19 00:00:00\"], [5, \"2023-01-11 00:00:00\", \"2018-01-12 00:00:00\"], [3, \"2023-01-11 00:00:00\", \"2018-01-12 00:00:00\"], [6, \"2023-01-11 00:00:00\", \"2018-01-12 00:00:00\"], [2, \"2023-01-11 00:00:00\", \"2018-01-12 00:00:00\"], [7, \"2023-01-11 00:00:00\", \"2018-01-12 00:00:00\"], [1, \"2023-01-11 00:00:00\", \"2018-01-12 00:00:00\"], [4, \"2023-01-11 00:00:00\", \"2018-01-12 00:00:00\"], [0, \"2023-01-11 00:00:00\", \"2018-01-12 00:00:00\"], [0, \"2023-01-04 00:00:00\", \"2018-01-05 00:00:00\"], [6, \"2023-01-04 00:00:00\", \"2018-01-05 00:00:00\"], [4, \"2023-01-04 00:00:00\", \"2018-01-05 00:00:00\"], [5, \"2023-01-04 00:00:00\", \"2018-01-05 00:00:00\"], [1, \"2023-01-04 00:00:00\", \"2018-01-05 00:00:00\"], [2, \"2023-01-04 00:00:00\", \"2018-01-05 00:00:00\"], [7, \"2023-01-04 00:00:00\", \"2018-01-05 00:00:00\"], [3, \"2023-01-04 00:00:00\", \"2018-01-05 00:00:00\"], [0, \"2023-03-01 00:00:00\", \"2018-03-02 00:00:00\"], [1, \"2023-03-01 00:00:00\", \"2018-03-02 00:00:00\"]]'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'2023-03-01 00:00:00'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'2018-01-05 00:00:00'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "8652d1cbcefed7ce412925dc20321ae12d6c7cc675a9abe1503677265464c2d7",
+        "method": "fetch_arrow_all",
+        "rows": 39,
+        "schema": [
+         {
+          "name": "__KUMO_BATCH__",
+          "type": "decimal128(38, 0)"
+         },
+         {
+          "name": "order_id",
+          "type": "int8"
+         },
+         {
+          "name": "user_id",
+          "type": "int8"
+         },
+         {
+          "name": "price",
+          "type": "double"
+         },
+         {
+          "name": "ts",
+          "type": "timestamp[us]"
+         }
+        ],
+        "values": {
+         "columns": [
+          "__KUMO_BATCH__",
+          "order_id",
+          "user_id",
+          "price",
+          "ts"
+         ],
+         "ordered": "1b79be07bf5b9f04498634c68f824359575ced2dfaabe475690a8b1f52a8b38a",
+         "types": null,
+         "unencodable": [],
+         "unordered": "eb8bfd92a83e529612ca3cb4365fdf34c44e48902fff3185223178896ddc4fa3"
+        }
+       }
+      ],
+      "sql": "WITH TMP as (\n  SELECT\n    f.index as __KUMO_BATCH__,\n    f.value[0]::NUMBER as __KUMO_ID__,\n    f.value[1]::TIMESTAMP_NTZ as __KUMO_END_TIME__,\n    f.value[2]::TIMESTAMP_NTZ as __KUMO_START_TIME__\n  FROM TABLE(FLATTEN(INPUT => PARSE_JSON(?))) f\n)\nSELECT TMP.__KUMO_BATCH__ as __KUMO_BATCH__, \"order_id\", \"user_id\", \"price\", \"ts\"\nFROM TMP\nJOIN \"{catalog}\".\"{schema}\".\"orders\"\n  ON \"user_id\" = TMP.__KUMO_ID__\n AND \"ts\" <= TMP.__KUMO_END_TIME__\n AND \"ts\" > TMP.__KUMO_START_TIME__\nWHERE \"ts\" <= ?\n  AND \"ts\" > ?\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY TMP.__KUMO_BATCH__\n  ORDER BY \"ts\" DESC, \"order_id\"\n) <= 32\nORDER BY TMP.__KUMO_BATCH__, \"ts\" DESC, \"order_id\"",
+      "stage": "materialize"
+     }
+    ]
+   },
+   "query_log": {
+    "bindings": 0,
+    "compared": 16,
+    "differing": [],
+    "statements": 16
+   }
+  },
+  "format": "sdm-observation/1",
+  "host": {
+   "warnings": [
+    "UserWarning"
+   ]
+  },
+  "identity": {
+   "cell": "ref-pandas3",
+   "commit": {
+    "clean": true,
+    "sha": "e6c3791bf8e344703f6410aee39e7a26175fdf21"
+   },
+   "contract": null,
+   "inputs": {
+    "bases": "9d69fe4aea2be4a6a2d96ea03f5258147c537927e2c6e6716b6030836ebc62f8",
+    "case": "4ba4d02cd89bd3b22ada4ad2d4594db2fc33c5905c607edbdd495f639baeacd7"
+   },
+   "native": null,
+   "native_loaded": false,
+   "operations": [],
+   "platform": "linux-x86_64",
+   "reference": {
+    "commit": {
+     "clean": true,
+     "sha": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1"
+    },
+    "environment": "4848c08cc7bbb66e99d4a7416854e401ab51e44413b509172cf0c121a55c78e3",
+    "guard": {
+     "after": "passed",
+     "before": "passed"
+    }
+   },
+   "runner": "python-ref",
+   "versions": {
+    "duckdb": "1.5.6",
+    "numpy": "2.5.3",
+    "pandas": "3.0.6",
+    "pyarrow": "25.0.1",
+    "python": "3.12.15"
+   }
+  },
+  "outcome": {
+   "code": null,
+   "error": null,
+   "result": "success",
+   "stage": "predict"
+  },
+  "public": {
+   "payloads": [
+    {
+     "method": "POST",
+     "parsed": {
+      "context": {
+       "instance_table": {
+        "columns": [
+         "instance_id",
+         "__kumo_entity_ref_0",
+         "__kumo_anchor_time",
+         "TARGET",
+         "__kumo_arl0__",
+         "__kumo_arl1__"
+        ],
+        "format": "arrays",
+        "rows": [
+         [
+          {
+           "number": "0"
+          },
+          {
+           "number": "3"
+          },
+          "2023-02-22T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "1"
+          },
+          {
+           "number": "4"
+          },
+          "2023-02-22T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "2"
+          },
+          {
+           "number": "2"
+          },
+          "2023-02-22T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "3"
+          },
+          {
+           "number": "7"
+          },
+          "2023-02-22T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "20.5"
+          },
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "4"
+          },
+          {
+           "number": "6"
+          },
+          "2023-02-22T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "19.0"
+          }
+         ],
+         [
+          {
+           "number": "5"
+          },
+          {
+           "number": "1"
+          },
+          "2023-02-22T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "6"
+          },
+          {
+           "number": "5"
+          },
+          "2023-02-22T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "7"
+          },
+          {
+           "number": "0"
+          },
+          "2023-02-22T00:00:00.000000Z",
+          {
+           "number": "22.0"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "8"
+          },
+          {
+           "number": "0"
+          },
+          "2023-02-15T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "9"
+          },
+          {
+           "number": "2"
+          },
+          "2023-02-15T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "10"
+          },
+          {
+           "number": "7"
+          },
+          "2023-02-15T00:00:00.000000Z",
+          {
+           "number": "20.5"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "11"
+          },
+          {
+           "number": "1"
+          },
+          "2023-02-15T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "12"
+          },
+          {
+           "number": "4"
+          },
+          "2023-02-15T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "13"
+          },
+          {
+           "number": "5"
+          },
+          "2023-02-15T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "17.5"
+          }
+         ],
+         [
+          {
+           "number": "14"
+          },
+          {
+           "number": "3"
+          },
+          "2023-02-15T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "15"
+          },
+          {
+           "number": "6"
+          },
+          "2023-02-15T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "19.0"
+          },
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "16"
+          },
+          {
+           "number": "5"
+          },
+          "2023-02-08T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "17.5"
+          },
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "17"
+          },
+          {
+           "number": "7"
+          },
+          "2023-02-08T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "18"
+          },
+          {
+           "number": "2"
+          },
+          "2023-02-08T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "19"
+          },
+          {
+           "number": "4"
+          },
+          "2023-02-08T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "16.0"
+          }
+         ],
+         [
+          {
+           "number": "20"
+          },
+          {
+           "number": "1"
+          },
+          "2023-02-08T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "21"
+          },
+          {
+           "number": "6"
+          },
+          "2023-02-08T00:00:00.000000Z",
+          {
+           "number": "19.0"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "22"
+          },
+          {
+           "number": "3"
+          },
+          "2023-02-08T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "23"
+          },
+          {
+           "number": "0"
+          },
+          "2023-02-08T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "24"
+          },
+          {
+           "number": "7"
+          },
+          "2023-02-01T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "25"
+          },
+          {
+           "number": "0"
+          },
+          "2023-02-01T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "26"
+          },
+          {
+           "number": "4"
+          },
+          "2023-02-01T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "16.0"
+          },
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "27"
+          },
+          {
+           "number": "2"
+          },
+          "2023-02-01T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "28"
+          },
+          {
+           "number": "3"
+          },
+          "2023-02-01T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "14.5"
+          }
+         ],
+         [
+          {
+           "number": "29"
+          },
+          {
+           "number": "5"
+          },
+          "2023-02-01T00:00:00.000000Z",
+          {
+           "number": "17.5"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "30"
+          },
+          {
+           "number": "6"
+          },
+          "2023-02-01T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "31"
+          },
+          {
+           "number": "1"
+          },
+          "2023-02-01T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "32"
+          },
+          {
+           "number": "7"
+          },
+          "2023-01-25T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "33"
+          },
+          {
+           "number": "1"
+          },
+          "2023-01-25T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "34"
+          },
+          {
+           "number": "5"
+          },
+          "2023-01-25T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "35"
+          },
+          {
+           "number": "4"
+          },
+          "2023-01-25T00:00:00.000000Z",
+          {
+           "number": "16.0"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "36"
+          },
+          {
+           "number": "0"
+          },
+          "2023-01-25T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "37"
+          },
+          {
+           "number": "6"
+          },
+          "2023-01-25T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "38"
+          },
+          {
+           "number": "3"
+          },
+          "2023-01-25T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "14.5"
+          },
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "39"
+          },
+          {
+           "number": "2"
+          },
+          "2023-01-25T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "13.0"
+          }
+         ],
+         [
+          {
+           "number": "40"
+          },
+          {
+           "number": "2"
+          },
+          "2023-01-18T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "13.0"
+          },
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "41"
+          },
+          {
+           "number": "5"
+          },
+          "2023-01-18T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "42"
+          },
+          {
+           "number": "0"
+          },
+          "2023-01-18T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "43"
+          },
+          {
+           "number": "7"
+          },
+          "2023-01-18T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "44"
+          },
+          {
+           "number": "4"
+          },
+          "2023-01-18T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "45"
+          },
+          {
+           "number": "1"
+          },
+          "2023-01-18T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "11.5"
+          }
+         ],
+         [
+          {
+           "number": "46"
+          },
+          {
+           "number": "6"
+          },
+          "2023-01-18T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "47"
+          },
+          {
+           "number": "3"
+          },
+          "2023-01-18T00:00:00.000000Z",
+          {
+           "number": "14.5"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "48"
+          },
+          {
+           "number": "5"
+          },
+          "2023-01-11T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "49"
+          },
+          {
+           "number": "3"
+          },
+          "2023-01-11T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "50"
+          },
+          {
+           "number": "6"
+          },
+          "2023-01-11T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "51"
+          },
+          {
+           "number": "2"
+          },
+          "2023-01-11T00:00:00.000000Z",
+          {
+           "number": "13.0"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "52"
+          },
+          {
+           "number": "7"
+          },
+          "2023-01-11T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "53"
+          },
+          {
+           "number": "1"
+          },
+          "2023-01-11T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "11.5"
+          },
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "54"
+          },
+          {
+           "number": "4"
+          },
+          "2023-01-11T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "55"
+          },
+          {
+           "number": "0"
+          },
+          "2023-01-11T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "10.0"
+          }
+         ],
+         [
+          {
+           "number": "56"
+          },
+          {
+           "number": "0"
+          },
+          "2023-01-04T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "10.0"
+          },
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "57"
+          },
+          {
+           "number": "6"
+          },
+          "2023-01-04T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "58"
+          },
+          {
+           "number": "4"
+          },
+          "2023-01-04T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "59"
+          },
+          {
+           "number": "5"
+          },
+          "2023-01-04T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "60"
+          },
+          {
+           "number": "1"
+          },
+          "2023-01-04T00:00:00.000000Z",
+          {
+           "number": "11.5"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "61"
+          },
+          {
+           "number": "2"
+          },
+          "2023-01-04T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "62"
+          },
+          {
+           "number": "7"
+          },
+          "2023-01-04T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "63"
+          },
+          {
+           "number": "3"
+          },
+          "2023-01-04T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          }
+         ]
+        ]
+       },
+       "related_tables": {
+        "orders": {
+         "columns": [
+          "instance_id",
+          "__node_id",
+          "price",
+          "ts",
+          "user_id"
+         ],
+         "format": "arrays",
+         "rows": [
+          [
+           {
+            "number": "0"
+           },
+           {
+            "number": "0"
+           },
+           {
+            "number": "14.5"
+           },
+           "2023-01-22T00:00:00.000000Z",
+           {
+            "number": "3"
+           }
+          ],
+          [
+           {
+            "number": "1"
+           },
+           {
+            "number": "1"
+           },
+           {
+            "number": "16.0"
+           },
+           "2023-01-29T00:00:00.000000Z",
+           {
+            "number": "4"
+           }
+          ],
+          [
+           {
+            "number": "2"
+           },
+           {
+            "number": "2"
+           },
+           {
+            "number": "13.0"
+           },
+           "2023-01-15T00:00:00.000000Z",
+           {
+            "number": "2"
+           }
+          ],
+          [
+           {
+            "number": "3"
+           },
+           {
+            "number": "3"
+           },
+           {
+            "number": "20.5"
+           },
+           "2023-02-19T00:00:00.000000Z",
+           {
+            "number": "7"
+           }
+          ],
+          [
+           {
+            "number": "4"
+           },
+           {
+            "number": "4"
+           },
+           {
+            "number": "19.0"
+           },
+           "2023-02-12T00:00:00.000000Z",
+           {
+            "number": "6"
+           }
+          ],
+          [
+           {
+            "number": "5"
+           },
+           {
+            "number": "5"
+           },
+           {
+            "number": "11.5"
+           },
+           "2023-01-08T00:00:00.000000Z",
+           {
+            "number": "1"
+           }
+          ],
+          [
+           {
+            "number": "6"
+           },
+           {
+            "number": "6"
+           },
+           {
+            "number": "17.5"
+           },
+           "2023-02-05T00:00:00.000000Z",
+           {
+            "number": "5"
+           }
+          ],
+          [
+           {
+            "number": "7"
+           },
+           {
+            "number": "7"
+           },
+           {
+            "number": "10.0"
+           },
+           "2023-01-01T00:00:00.000000Z",
+           {
+            "number": "0"
+           }
+          ],
+          [
+           {
+            "number": "8"
+           },
+           {
+            "number": "8"
+           },
+           {
+            "number": "10.0"
+           },
+           "2023-01-01T00:00:00.000000Z",
+           {
+            "number": "0"
+           }
+          ],
+          [
+           {
+            "number": "9"
+           },
+           {
+            "number": "9"
+           },
+           {
+            "number": "13.0"
+           },
+           "2023-01-15T00:00:00.000000Z",
+           {
+            "number": "2"
+           }
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "10"
+           },
+           {
+            "number": "11.5"
+           },
+           "2023-01-08T00:00:00.000000Z",
+           {
+            "number": "1"
+           }
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "11"
+           },
+           {
+            "number": "16.0"
+           },
+           "2023-01-29T00:00:00.000000Z",
+           {
+            "number": "4"
+           }
+          ],
+          [
+           {
+            "number": "13"
+           },
+           {
+            "number": "12"
+           },
+           {
+            "number": "17.5"
+           },
+           "2023-02-05T00:00:00.000000Z",
+           {
+            "number": "5"
+           }
+          ],
+          [
+           {
+            "number": "14"
+           },
+           {
+            "number": "13"
+           },
+           {
+            "number": "14.5"
+           },
+           "2023-01-22T00:00:00.000000Z",
+           {
+            "number": "3"
+           }
+          ],
+          [
+           {
+            "number": "15"
+           },
+           {
+            "number": "14"
+           },
+           {
+            "number": "19.0"
+           },
+           "2023-02-12T00:00:00.000000Z",
+           {
+            "number": "6"
+           }
+          ],
+          [
+           {
+            "number": "16"
+           },
+           {
+            "number": "15"
+           },
+           {
+            "number": "17.5"
+           },
+           "2023-02-05T00:00:00.000000Z",
+           {
+            "number": "5"
+           }
+          ],
+          [
+           {
+            "number": "18"
+           },
+           {
+            "number": "16"
+           },
+           {
+            "number": "13.0"
+           },
+           "2023-01-15T00:00:00.000000Z",
+           {
+            "number": "2"
+           }
+          ],
+          [
+           {
+            "number": "19"
+           },
+           {
+            "number": "17"
+           },
+           {
+            "number": "16.0"
+           },
+           "2023-01-29T00:00:00.000000Z",
+           {
+            "number": "4"
+           }
+          ],
+          [
+           {
+            "number": "20"
+           },
+           {
+            "number": "18"
+           },
+           {
+            "number": "11.5"
+           },
+           "2023-01-08T00:00:00.000000Z",
+           {
+            "number": "1"
+           }
+          ],
+          [
+           {
+            "number": "22"
+           },
+           {
+            "number": "19"
+           },
+           {
+            "number": "14.5"
+           },
+           "2023-01-22T00:00:00.000000Z",
+           {
+            "number": "3"
+           }
+          ],
+          [
+           {
+            "number": "23"
+           },
+           {
+            "number": "20"
+           },
+           {
+            "number": "10.0"
+           },
+           "2023-01-01T00:00:00.000000Z",
+           {
+            "number": "0"
+           }
+          ],
+          [
+           {
+            "number": "25"
+           },
+           {
+            "number": "21"
+           },
+           {
+            "number": "10.0"
+           },
+           "2023-01-01T00:00:00.000000Z",
+           {
+            "number": "0"
+           }
+          ],
+          [
+           {
+            "number": "26"
+           },
+           {
+            "number": "22"
+           },
+           {
+            "number": "16.0"
+           },
+           "2023-01-29T00:00:00.000000Z",
+           {
+            "number": "4"
+           }
+          ],
+          [
+           {
+            "number": "27"
+           },
+           {
+            "number": "23"
+           },
+           {
+            "number": "13.0"
+           },
+           "2023-01-15T00:00:00.000000Z",
+           {
+            "number": "2"
+           }
+          ],
+          [
+           {
+            "number": "28"
+           },
+           {
+            "number": "24"
+           },
+           {
+            "number": "14.5"
+           },
+           "2023-01-22T00:00:00.000000Z",
+           {
+            "number": "3"
+           }
+          ],
+          [
+           {
+            "number": "31"
+           },
+           {
+            "number": "25"
+           },
+           {
+            "number": "11.5"
+           },
+           "2023-01-08T00:00:00.000000Z",
+           {
+            "number": "1"
+           }
+          ],
+          [
+           {
+            "number": "33"
+           },
+           {
+            "number": "26"
+           },
+           {
+            "number": "11.5"
+           },
+           "2023-01-08T00:00:00.000000Z",
+           {
+            "number": "1"
+           }
+          ],
+          [
+           {
+            "number": "36"
+           },
+           {
+            "number": "27"
+           },
+           {
+            "number": "10.0"
+           },
+           "2023-01-01T00:00:00.000000Z",
+           {
+            "number": "0"
+           }
+          ],
+          [
+           {
+            "number": "38"
+           },
+           {
+            "number": "28"
+           },
+           {
+            "number": "14.5"
+           },
+           "2023-01-22T00:00:00.000000Z",
+           {
+            "number": "3"
+           }
+          ],
+          [
+           {
+            "number": "39"
+           },
+           {
+            "number": "29"
+           },
+           {
+            "number": "13.0"
+           },
+           "2023-01-15T00:00:00.000000Z",
+           {
+            "number": "2"
+           }
+          ],
+          [
+           {
+            "number": "40"
+           },
+           {
+            "number": "30"
+           },
+           {
+            "number": "13.0"
+           },
+           "2023-01-15T00:00:00.000000Z",
+           {
+            "number": "2"
+           }
+          ],
+          [
+           {
+            "number": "42"
+           },
+           {
+            "number": "31"
+           },
+           {
+            "number": "10.0"
+           },
+           "2023-01-01T00:00:00.000000Z",
+           {
+            "number": "0"
+           }
+          ],
+          [
+           {
+            "number": "45"
+           },
+           {
+            "number": "32"
+           },
+           {
+            "number": "11.5"
+           },
+           "2023-01-08T00:00:00.000000Z",
+           {
+            "number": "1"
+           }
+          ],
+          [
+           {
+            "number": "53"
+           },
+           {
+            "number": "33"
+           },
+           {
+            "number": "11.5"
+           },
+           "2023-01-08T00:00:00.000000Z",
+           {
+            "number": "1"
+           }
+          ],
+          [
+           {
+            "number": "55"
+           },
+           {
+            "number": "34"
+           },
+           {
+            "number": "10.0"
+           },
+           "2023-01-01T00:00:00.000000Z",
+           {
+            "number": "0"
+           }
+          ],
+          [
+           {
+            "number": "56"
+           },
+           {
+            "number": "35"
+           },
+           {
+            "number": "10.0"
+           },
+           "2023-01-01T00:00:00.000000Z",
+           {
+            "number": "0"
+           }
+          ]
+         ]
+        },
+        "users": {
+         "columns": [
+          "instance_id",
+          "user_id",
+          "age",
+          "country"
+         ],
+         "format": "arrays",
+         "rows": [
+          [
+           {
+            "number": "0"
+           },
+           {
+            "number": "3"
+           },
+           {
+            "number": "23"
+           },
+           "US"
+          ],
+          [
+           {
+            "number": "1"
+           },
+           {
+            "number": "4"
+           },
+           {
+            "number": "24"
+           },
+           "DE"
+          ],
+          [
+           {
+            "number": "2"
+           },
+           {
+            "number": "2"
+           },
+           {
+            "number": "22"
+           },
+           "IN"
+          ],
+          [
+           {
+            "number": "3"
+           },
+           {
+            "number": "7"
+           },
+           {
+            "number": "27"
+           },
+           "DE"
+          ],
+          [
+           {
+            "number": "4"
+           },
+           {
+            "number": "6"
+           },
+           {
+            "number": "26"
+           },
+           "US"
+          ],
+          [
+           {
+            "number": "5"
+           },
+           {
+            "number": "1"
+           },
+           {
+            "number": "21"
+           },
+           "DE"
+          ],
+          [
+           {
+            "number": "6"
+           },
+           {
+            "number": "5"
+           },
+           {
+            "number": "25"
+           },
+           "IN"
+          ],
+          [
+           {
+            "number": "7"
+           },
+           {
+            "number": "0"
+           },
+           {
+            "number": "20"
+           },
+           "US"
+          ],
+          [
+           {
+            "number": "8"
+           },
+           {
+            "number": "0"
+           },
+           {
+            "number": "20"
+           },
+           "US"
+          ],
+          [
+           {
+            "number": "9"
+           },
+           {
+            "number": "2"
+           },
+           {
+            "number": "22"
+           },
+           "IN"
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "7"
+           },
+           {
+            "number": "27"
+           },
+           "DE"
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "1"
+           },
+           {
+            "number": "21"
+           },
+           "DE"
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "4"
+           },
+           {
+            "number": "24"
+           },
+           "DE"
+          ],
+          [
+           {
+            "number": "13"
+           },
+           {
+            "number": "5"
+           },
+           {
+            "number": "25"
+           },
+           "IN"
+          ],
+          [
+           {
+            "number": "14"
+           },
+           {
+            "number": "3"
+           },
+           {
+            "number": "23"
+           },
+           "US"
+          ],
+          [
+           {
+            "number": "15"
+           },
+           {
+            "number": "6"
+           },
+           {
+            "number": "26"
+           },
+           "US"
+          ],
+          [
+           {
+            "number": "16"
+           },
+           {
+            "number": "5"
+           },
+           {
+            "number": "25"
+           },
+           "IN"
+          ],
+          [
+           {
+            "number": "17"
+           },
+           {
+            "number": "7"
+           },
+           {
+            "number": "27"
+           },
+           "DE"
+          ],
+          [
+           {
+            "number": "18"
+           },
+           {
+            "number": "2"
+           },
+           {
+            "number": "22"
+           },
+           "IN"
+          ],
+          [
+           {
+            "number": "19"
+           },
+           {
+            "number": "4"
+           },
+           {
+            "number": "24"
+           },
+           "DE"
+          ],
+          [
+           {
+            "number": "20"
+           },
+           {
+            "number": "1"
+           },
+           {
+            "number": "21"
+           },
+           "DE"
+          ],
+          [
+           {
+            "number": "21"
+           },
+           {
+            "number": "6"
+           },
+           {
+            "number": "26"
+           },
+           "US"
+          ],
+          [
+           {
+            "number": "22"
+           },
+           {
+            "number": "3"
+           },
+           {
+            "number": "23"
+           },
+           "US"
+          ],
+          [
+           {
+            "number": "23"
+           },
+           {
+            "number": "0"
+           },
+           {
+            "number": "20"
+           },
+           "US"
+          ],
+          [
+           {
+            "number": "24"
+           },
+           {
+            "number": "7"
+           },
+           {
+            "number": "27"
+           },
+           "DE"
+          ],
+          [
+           {
+            "number": "25"
+           },
+           {
+            "number": "0"
+           },
+           {
+            "number": "20"
+           },
+           "US"
+          ],
+          [
+           {
+            "number": "26"
+           },
+           {
+            "number": "4"
+           },
+           {
+            "number": "24"
+           },
+           "DE"
+          ],
+          [
+           {
+            "number": "27"
+           },
+           {
+            "number": "2"
+           },
+           {
+            "number": "22"
+           },
+           "IN"
+          ],
+          [
+           {
+            "number": "28"
+           },
+           {
+            "number": "3"
+           },
+           {
+            "number": "23"
+           },
+           "US"
+          ],
+          [
+           {
+            "number": "29"
+           },
+           {
+            "number": "5"
+           },
+           {
+            "number": "25"
+           },
+           "IN"
+          ],
+          [
+           {
+            "number": "30"
+           },
+           {
+            "number": "6"
+           },
+           {
+            "number": "26"
+           },
+           "US"
+          ],
+          [
+           {
+            "number": "31"
+           },
+           {
+            "number": "1"
+           },
+           {
+            "number": "21"
+           },
+           "DE"
+          ],
+          [
+           {
+            "number": "32"
+           },
+           {
+            "number": "7"
+           },
+           {
+            "number": "27"
+           },
+           "DE"
+          ],
+          [
+           {
+            "number": "33"
+           },
+           {
+            "number": "1"
+           },
+           {
+            "number": "21"
+           },
+           "DE"
+          ],
+          [
+           {
+            "number": "34"
+           },
+           {
+            "number": "5"
+           },
+           {
+            "number": "25"
+           },
+           "IN"
+          ],
+          [
+           {
+            "number": "35"
+           },
+           {
+            "number": "4"
+           },
+           {
+            "number": "24"
+           },
+           "DE"
+          ],
+          [
+           {
+            "number": "36"
+           },
+           {
+            "number": "0"
+           },
+           {
+            "number": "20"
+           },
+           "US"
+          ],
+          [
+           {
+            "number": "37"
+           },
+           {
+            "number": "6"
+           },
+           {
+            "number": "26"
+           },
+           "US"
+          ],
+          [
+           {
+            "number": "38"
+           },
+           {
+            "number": "3"
+           },
+           {
+            "number": "23"
+           },
+           "US"
+          ],
+          [
+           {
+            "number": "39"
+           },
+           {
+            "number": "2"
+           },
+           {
+            "number": "22"
+           },
+           "IN"
+          ],
+          [
+           {
+            "number": "40"
+           },
+           {
+            "number": "2"
+           },
+           {
+            "number": "22"
+           },
+           "IN"
+          ],
+          [
+           {
+            "number": "41"
+           },
+           {
+            "number": "5"
+           },
+           {
+            "number": "25"
+           },
+           "IN"
+          ],
+          [
+           {
+            "number": "42"
+           },
+           {
+            "number": "0"
+           },
+           {
+            "number": "20"
+           },
+           "US"
+          ],
+          [
+           {
+            "number": "43"
+           },
+           {
+            "number": "7"
+           },
+           {
+            "number": "27"
+           },
+           "DE"
+          ],
+          [
+           {
+            "number": "44"
+           },
+           {
+            "number": "4"
+           },
+           {
+            "number": "24"
+           },
+           "DE"
+          ],
+          [
+           {
+            "number": "45"
+           },
+           {
+            "number": "1"
+           },
+           {
+            "number": "21"
+           },
+           "DE"
+          ],
+          [
+           {
+            "number": "46"
+           },
+           {
+            "number": "6"
+           },
+           {
+            "number": "26"
+           },
+           "US"
+          ],
+          [
+           {
+            "number": "47"
+           },
+           {
+            "number": "3"
+           },
+           {
+            "number": "23"
+           },
+           "US"
+          ],
+          [
+           {
+            "number": "48"
+           },
+           {
+            "number": "5"
+           },
+           {
+            "number": "25"
+           },
+           "IN"
+          ],
+          [
+           {
+            "number": "49"
+           },
+           {
+            "number": "3"
+           },
+           {
+            "number": "23"
+           },
+           "US"
+          ],
+          [
+           {
+            "number": "50"
+           },
+           {
+            "number": "6"
+           },
+           {
+            "number": "26"
+           },
+           "US"
+          ],
+          [
+           {
+            "number": "51"
+           },
+           {
+            "number": "2"
+           },
+           {
+            "number": "22"
+           },
+           "IN"
+          ],
+          [
+           {
+            "number": "52"
+           },
+           {
+            "number": "7"
+           },
+           {
+            "number": "27"
+           },
+           "DE"
+          ],
+          [
+           {
+            "number": "53"
+           },
+           {
+            "number": "1"
+           },
+           {
+            "number": "21"
+           },
+           "DE"
+          ],
+          [
+           {
+            "number": "54"
+           },
+           {
+            "number": "4"
+           },
+           {
+            "number": "24"
+           },
+           "DE"
+          ],
+          [
+           {
+            "number": "55"
+           },
+           {
+            "number": "0"
+           },
+           {
+            "number": "20"
+           },
+           "US"
+          ],
+          [
+           {
+            "number": "56"
+           },
+           {
+            "number": "0"
+           },
+           {
+            "number": "20"
+           },
+           "US"
+          ],
+          [
+           {
+            "number": "57"
+           },
+           {
+            "number": "6"
+           },
+           {
+            "number": "26"
+           },
+           "US"
+          ],
+          [
+           {
+            "number": "58"
+           },
+           {
+            "number": "4"
+           },
+           {
+            "number": "24"
+           },
+           "DE"
+          ],
+          [
+           {
+            "number": "59"
+           },
+           {
+            "number": "5"
+           },
+           {
+            "number": "25"
+           },
+           "IN"
+          ],
+          [
+           {
+            "number": "60"
+           },
+           {
+            "number": "1"
+           },
+           {
+            "number": "21"
+           },
+           "DE"
+          ],
+          [
+           {
+            "number": "61"
+           },
+           {
+            "number": "2"
+           },
+           {
+            "number": "22"
+           },
+           "IN"
+          ],
+          [
+           {
+            "number": "62"
+           },
+           {
+            "number": "7"
+           },
+           {
+            "number": "27"
+           },
+           "DE"
+          ],
+          [
+           {
+            "number": "63"
+           },
+           {
+            "number": "3"
+           },
+           {
+            "number": "23"
+           },
+           "US"
+          ]
+         ]
+        }
+       }
+      },
+      "inference": {
+       "run_mode": "fast",
+       "use_prediction_time": false
+      },
+      "metadata": {
+       "num_context_examples": {
+        "number": "64"
+       },
+       "num_prediction_examples": {
+        "number": "2"
+       },
+       "request_id": "sdm-b7a30485d585",
+       "source_query": "PREDICT SUM(orders.price, 0, 7, days) FOR EACH users.user_id"
+      },
+      "model": "kumo-relational",
+      "output": {
+       "fields": [
+        "prediction"
+       ],
+       "prediction_statistic": "median"
+      },
+      "predict": {
+       "instance_table": {
+        "columns": [
+         "instance_id",
+         "__kumo_entity_ref_0",
+         "__kumo_anchor_time",
+         "__kumo_arl0__",
+         "__kumo_arl1__"
+        ],
+        "format": "arrays",
+        "rows": [
+         [
+          {
+           "number": "64"
+          },
+          {
+           "number": "0"
+          },
+          "2023-03-01T00:00:00.000000Z",
+          {
+           "number": "22.0"
+          },
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "65"
+          },
+          {
+           "number": "1"
+          },
+          "2023-03-01T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "0.0"
+          }
+         ]
+        ]
+       },
+       "related_tables": {
+        "orders": {
+         "columns": [
+          "instance_id",
+          "__node_id",
+          "price",
+          "ts",
+          "user_id"
+         ],
+         "format": "arrays",
+         "rows": [
+          [
+           {
+            "number": "64"
+           },
+           {
+            "number": "36"
+           },
+           {
+            "number": "22.0"
+           },
+           "2023-02-26T00:00:00.000000Z",
+           {
+            "number": "0"
+           }
+          ],
+          [
+           {
+            "number": "64"
+           },
+           {
+            "number": "37"
+           },
+           {
+            "number": "10.0"
+           },
+           "2023-01-01T00:00:00.000000Z",
+           {
+            "number": "0"
+           }
+          ],
+          [
+           {
+            "number": "65"
+           },
+           {
+            "number": "38"
+           },
+           {
+            "number": "11.5"
+           },
+           "2023-01-08T00:00:00.000000Z",
+           {
+            "number": "1"
+           }
+          ]
+         ]
+        },
+        "users": {
+         "columns": [
+          "instance_id",
+          "user_id",
+          "age",
+          "country"
+         ],
+         "format": "arrays",
+         "rows": [
+          [
+           {
+            "number": "64"
+           },
+           {
+            "number": "0"
+           },
+           {
+            "number": "20"
+           },
+           "US"
+          ],
+          [
+           {
+            "number": "65"
+           },
+           {
+            "number": "1"
+           },
+           {
+            "number": "21"
+           },
+           "DE"
+          ]
+         ]
+        }
+       }
+      },
+      "schema": {
+       "instance_table": {
+        "columns": {
+         "TARGET": {
+          "dtype": "float32",
+          "stype": "numerical"
+         },
+         "__kumo_anchor_time": {
+          "dtype": "timestamp[us]",
+          "nullable": false,
+          "stype": "timestamp"
+         },
+         "__kumo_arl0__": {
+          "dtype": "float64"
+         },
+         "__kumo_arl1__": {
+          "dtype": "float64"
+         },
+         "__kumo_entity_ref_0": {
+          "dtype": "int64",
+          "stype": "ID"
+         },
+         "instance_id": {
+          "dtype": "int64",
+          "nullable": false,
+          "stype": "ID"
+         }
+        },
+        "primary_key": "instance_id"
+       },
+       "related_tables": {
+        "orders": {
+         "columns": {
+          "__node_id": {
+           "dtype": "int64",
+           "nullable": false,
+           "stype": "ID"
+          },
+          "instance_id": {
+           "dtype": "int64",
+           "nullable": false,
+           "stype": "ID"
+          },
+          "price": {
+           "dtype": "float64",
+           "stype": "numerical"
+          },
+          "ts": {
+           "dtype": "timestamp[us]",
+           "stype": "timestamp"
+          },
+          "user_id": {
+           "dtype": "int64",
+           "stype": "ID"
+          }
+         },
+         "primary_key": [
+          "instance_id",
+          "__node_id"
+         ]
+        },
+        "users": {
+         "columns": {
+          "age": {
+           "dtype": "int64",
+           "stype": "numerical"
+          },
+          "country": {
+           "dtype": "string",
+           "stype": "categorical"
+          },
+          "instance_id": {
+           "dtype": "int64",
+           "nullable": false,
+           "stype": "ID"
+          },
+          "user_id": {
+           "dtype": "int64",
+           "nullable": false
+          }
+         },
+         "primary_key": [
+          "instance_id",
+          "user_id"
+         ]
+        }
+       },
+       "relationships": [
+        {
+         "source_columns": [
+          "__kumo_entity_ref_0"
+         ],
+         "target_columns": [
+          "user_id"
+         ],
+         "target_table": "users"
+        },
+        {
+         "source_columns": [
+          "user_id"
+         ],
+         "source_table": "orders",
+         "target_columns": [
+          "user_id"
+         ],
+         "target_table": "users"
+        }
+       ]
+      },
+      "task": {
+       "anchor_time_column": "__kumo_anchor_time",
+       "entity_table_names": [
+        "users"
+       ],
+       "kind": "regression",
+       "target": {
+        "column_name": "TARGET",
+        "dtype": "float32"
+       }
+      }
+     },
+     "path": "/v1/predictions",
+     "sha256": "d35191874e3ebf64cedf68f964a6ec94f42837dfe1dbaf79329b38cb83905472"
+    }
+   ],
+   "result": {
+    "columns": [
+     {
+      "dtype": "int64",
+      "name": "row_index"
+     },
+     {
+      "dtype": "int64",
+      "name": "id"
+     },
+     {
+      "dtype": "float64",
+      "name": "prediction"
+     }
+    ],
+    "digest": "bd1c414de19a1ad32f94c4f0ddbf3aa1d86d2968d3fee9e395c97eb7cb293f81",
+    "rows": 2
+   },
+   "result_text": "be067529844a78acc5952c522cf29acf7425e99c5c8f733f6025fe4d5411d126",
+   "schema": {
+    "links": [
+     [
+      "orders",
+      "user_id",
+      "users",
+      "user_id"
+     ]
+    ],
+    "tables": [
+     {
+      "columns": [
+       {
+        "dtype": "int64",
+        "name": "user_id",
+        "stype": "ID"
+       },
+       {
+        "dtype": "int64",
+        "name": "age",
+        "stype": "numerical"
+       },
+       {
+        "dtype": "string",
+        "name": "country",
+        "stype": "categorical"
+       }
+      ],
+      "duplicate_keys": 0,
+      "name": "users",
+      "primary_key": "user_id",
+      "time_column": null
+     },
+     {
+      "columns": [
+       {
+        "dtype": "int64",
+        "name": "order_id",
+        "stype": "ID"
+       },
+       {
+        "dtype": "int64",
+        "name": "user_id",
+        "stype": "ID"
+       },
+       {
+        "dtype": "float64",
+        "name": "price",
+        "stype": "numerical"
+       },
+       {
+        "dtype": "timestamp[us]",
+        "name": "ts",
+        "stype": "timestamp"
+       }
+      ],
+      "duplicate_keys": 0,
+      "name": "orders",
+      "primary_key": "order_id",
+      "time_column": "ts"
+     }
+    ]
+   }
+  }
+ },
+ "tables": [
+  {
+   "name": "orders",
+   "data": "tables/2d8127bc0764af3567ddcba4070a719c6db95c81a1c343c86884579dfe9698e1.arrows"
+  },
+  {
+   "name": "users",
+   "data": "tables/a4d1c73e1c1c48bdaeb829617953b6d38bcf89f3e23ed330e1b8e3abcf42fbc2.arrows"
+  }
+ ],
+ "derived": [],
+ "draws": [
+  {
+   "table": "\"{catalog}\".\"{schema}\".\"users\"",
+   "seed": null,
+   "fraction": "10000 ROWS",
+   "rows": "tables/b8dd10dcc307e260d9eeca92611fa638810dbcaff668f4978c576562a8cd2a01.arrows",
+   "statement": "SELECT \"user_id\"\nFROM \"{catalog}\".\"{schema}\".\"users\"\nSAMPLE ROW (10000 ROWS)\nWHERE \"user_id\" IS NOT NULL"
+  }
+ ],
+ "statements": [
+  {
+   "text": "\n                    SELECT TABLE_NAME\n                    FROM \"{catalog}\".INFORMATION_SCHEMA.TABLES\n                    WHERE TABLE_SCHEMA = ?\n                    ",
+   "parameters": [
+    "{schema}"
+   ],
+   "result": "tables/83a3b2e39d0840e5875bd9975bda83d6bc95b28caf8fedf71d27437751125657.arrows"
+  },
+  {
+   "text": "DESCRIBE TABLE \"{catalog}\".\"{schema}\".\"users\"",
+   "parameters": [],
+   "result": "tables/52af73eb68e328e68a281b9cf3c39d20334399260916f38d53aa612d97cd7e46.arrows"
+  },
+  {
+   "text": "SELECT \"user_id\", \"age\", \"country\" FROM \"{catalog}\".\"{schema}\".\"users\" LIMIT 1000",
+   "parameters": [],
+   "result": "tables/a4d1c73e1c1c48bdaeb829617953b6d38bcf89f3e23ed330e1b8e3abcf42fbc2.arrows"
+  },
+  {
+   "text": "DESCRIBE TABLE \"{catalog}\".\"{schema}\".\"orders\"",
+   "parameters": [],
+   "result": "tables/ec8a74950b8c78dad4b358f31d734b832d60e87d7d18094b5433814455e5e300.arrows"
+  },
+  {
+   "text": "SELECT \"order_id\", \"user_id\", \"price\", \"ts\" FROM \"{catalog}\".\"{schema}\".\"orders\" LIMIT 1000",
+   "parameters": [],
+   "result": "tables/2d8127bc0764af3567ddcba4070a719c6db95c81a1c343c86884579dfe9698e1.arrows"
+  },
+  {
+   "text": "SHOW IMPORTED KEYS IN TABLE \"{catalog}\".\"{schema}\".\"users\"",
+   "parameters": [],
+   "result": "tables/3645cf01f2ec465c24ec76be98d01f2a53eb424f5a17037114ed58020cd35dca.arrows"
+  },
+  {
+   "text": "SHOW IMPORTED KEYS IN TABLE \"{catalog}\".\"{schema}\".\"orders\"",
+   "parameters": [],
+   "result": "tables/3645cf01f2ec465c24ec76be98d01f2a53eb424f5a17037114ed58020cd35dca.arrows"
+  },
+  {
+   "text": "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT \"user_id\") AS d, COUNT(CASE WHEN \"user_id\" IS NULL THEN 1 END) AS z\nFROM \"{catalog}\".\"{schema}\".\"users\"\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT \"order_id\") AS d, COUNT(CASE WHEN \"order_id\" IS NULL THEN 1 END) AS z\nFROM \"{catalog}\".\"{schema}\".\"orders\"",
+   "parameters": [],
+   "result": "tables/8c6ffc49e34df591ebd6052fe9e6800c10c93ff07021e92feba42fea51d55ddc.arrows"
+  },
+  {
+   "text": "SHOW TABLES LIKE ? IN SCHEMA \"{catalog}\".\"{schema}\"",
+   "parameters": [
+    "users"
+   ],
+   "result": "tables/e235591839af383408590a20c4eaa2e99a63aa469a37acd309703ee737b27a81.arrows"
+  },
+  {
+   "text": "SHOW TABLES LIKE ? IN SCHEMA \"{catalog}\".\"{schema}\"",
+   "parameters": [
+    "orders"
+   ],
+   "result": "tables/edfea03b39e5b21421467ebe576e775d2385c6549118af7e22e7db466b3a1a4c.arrows"
+  },
+  {
+   "text": "SELECT\n  0 as table_index,\n  MIN(\"ts\") as min_date,\n  MAX(\"ts\") as max_date\nFROM \"{catalog}\".\"{schema}\".\"orders\"",
+   "parameters": [],
+   "result": "tables/e6651bd9c438f0e383cadfd6ef1030804359f0e63a2978ae0b963123d0aeb4ab.arrows"
+  },
+  {
+   "text": "SELECT \"user_id\"\nFROM \"{catalog}\".\"{schema}\".\"users\"\nSAMPLE ROW (10000 ROWS)\nWHERE \"user_id\" IS NOT NULL",
+   "parameters": [],
+   "result": "tables/b8dd10dcc307e260d9eeca92611fa638810dbcaff668f4978c576562a8cd2a01.arrows"
+  },
+  {
+   "text": "WITH TMP as (\n  SELECT\n    f.index as __KUMO_BATCH__,\n    f.value[0]::NUMBER as __KUMO_ID__,\n    f.value[1]::TIMESTAMP_NTZ as __KUMO_END_TIME__,\n    f.value[2]::TIMESTAMP_NTZ as __KUMO_START_TIME__\n  FROM TABLE(FLATTEN(INPUT => PARSE_JSON(?))) f\n)\nSELECT TMP.__KUMO_BATCH__ as __KUMO_BATCH__, \"price\", \"ts\"\nFROM TMP\nJOIN \"{catalog}\".\"{schema}\".\"orders\"\n  ON \"user_id\" = TMP.__KUMO_ID__\n AND \"ts\" <= TMP.__KUMO_END_TIME__\nAND \"ts\" > TMP.__KUMO_START_TIME__\nWHERE \"ts\" <= ?\nAND \"ts\" > ?",
+   "parameters": [
+    "[[3, \"2023-03-01 00:00:00\", \"2023-02-22 00:00:00\"], [4, \"2023-03-01 00:00:00\", \"2023-02-22 00:00:00\"], [2, \"2023-03-01 00:00:00\", \"2023-02-22 00:00:00\"], [7, \"2023-03-01 00:00:00\", \"2023-02-22 00:00:00\"], [6, \"2023-03-01 00:00:00\", \"2023-02-22 00:00:00\"], [1, \"2023-03-01 00:00:00\", \"2023-02-22 00:00:00\"], [5, \"2023-03-01 00:00:00\", \"2023-02-22 00:00:00\"], [0, \"2023-03-01 00:00:00\", \"2023-02-22 00:00:00\"], [0, \"2023-02-22 00:00:00\", \"2023-02-15 00:00:00\"], [2, \"2023-02-22 00:00:00\", \"2023-02-15 00:00:00\"], [7, \"2023-02-22 00:00:00\", \"2023-02-15 00:00:00\"], [1, \"2023-02-22 00:00:00\", \"2023-02-15 00:00:00\"], [4, \"2023-02-22 00:00:00\", \"2023-02-15 00:00:00\"], [5, \"2023-02-22 00:00:00\", \"2023-02-15 00:00:00\"], [3, \"2023-02-22 00:00:00\", \"2023-02-15 00:00:00\"], [6, \"2023-02-22 00:00:00\", \"2023-02-15 00:00:00\"], [5, \"2023-02-15 00:00:00\", \"2023-02-08 00:00:00\"], [7, \"2023-02-15 00:00:00\", \"2023-02-08 00:00:00\"], [2, \"2023-02-15 00:00:00\", \"2023-02-08 00:00:00\"], [4, \"2023-02-15 00:00:00\", \"2023-02-08 00:00:00\"], [1, \"2023-02-15 00:00:00\", \"2023-02-08 00:00:00\"], [6, \"2023-02-15 00:00:00\", \"2023-02-08 00:00:00\"], [3, \"2023-02-15 00:00:00\", \"2023-02-08 00:00:00\"], [0, \"2023-02-15 00:00:00\", \"2023-02-08 00:00:00\"], [7, \"2023-02-08 00:00:00\", \"2023-02-01 00:00:00\"], [0, \"2023-02-08 00:00:00\", \"2023-02-01 00:00:00\"], [4, \"2023-02-08 00:00:00\", \"2023-02-01 00:00:00\"], [2, \"2023-02-08 00:00:00\", \"2023-02-01 00:00:00\"], [3, \"2023-02-08 00:00:00\", \"2023-02-01 00:00:00\"], [5, \"2023-02-08 00:00:00\", \"2023-02-01 00:00:00\"], [6, \"2023-02-08 00:00:00\", \"2023-02-01 00:00:00\"], [1, \"2023-02-08 00:00:00\", \"2023-02-01 00:00:00\"], [7, \"2023-02-01 00:00:00\", \"2023-01-25 00:00:00\"], [1, \"2023-02-01 00:00:00\", \"2023-01-25 00:00:00\"], [5, \"2023-02-01 00:00:00\", \"2023-01-25 00:00:00\"], [4, \"2023-02-01 00:00:00\", \"2023-01-25 00:00:00\"], [0, \"2023-02-01 00:00:00\", \"2023-01-25 00:00:00\"], [6, \"2023-02-01 00:00:00\", \"2023-01-25 00:00:00\"], [3, \"2023-02-01 00:00:00\", \"2023-01-25 00:00:00\"], [2, \"2023-02-01 00:00:00\", \"2023-01-25 00:00:00\"], [2, \"2023-01-25 00:00:00\", \"2023-01-18 00:00:00\"], [5, \"2023-01-25 00:00:00\", \"2023-01-18 00:00:00\"], [0, \"2023-01-25 00:00:00\", \"2023-01-18 00:00:00\"], [7, \"2023-01-25 00:00:00\", \"2023-01-18 00:00:00\"], [4, \"2023-01-25 00:00:00\", \"2023-01-18 00:00:00\"], [1, \"2023-01-25 00:00:00\", \"2023-01-18 00:00:00\"], [6, \"2023-01-25 00:00:00\", \"2023-01-18 00:00:00\"], [3, \"2023-01-25 00:00:00\", \"2023-01-18 00:00:00\"], [5, \"2023-01-18 00:00:00\", \"2023-01-11 00:00:00\"], [3, \"2023-01-18 00:00:00\", \"2023-01-11 00:00:00\"], [6, \"2023-01-18 00:00:00\", \"2023-01-11 00:00:00\"], [2, \"2023-01-18 00:00:00\", \"2023-01-11 00:00:00\"], [7, \"2023-01-18 00:00:00\", \"2023-01-11 00:00:00\"], [1, \"2023-01-18 00:00:00\", \"2023-01-11 00:00:00\"], [4, \"2023-01-18 00:00:00\", \"2023-01-11 00:00:00\"], [0, \"2023-01-18 00:00:00\", \"2023-01-11 00:00:00\"], [0, \"2023-01-11 00:00:00\", \"2023-01-04 00:00:00\"], [6, \"2023-01-11 00:00:00\", \"2023-01-04 00:00:00\"], [4, \"2023-01-11 00:00:00\", \"2023-01-04 00:00:00\"], [5, \"2023-01-11 00:00:00\", \"2023-01-04 00:00:00\"], [1, \"2023-01-11 00:00:00\", \"2023-01-04 00:00:00\"], [2, \"2023-01-11 00:00:00\", \"2023-01-04 00:00:00\"], [7, \"2023-01-11 00:00:00\", \"2023-01-04 00:00:00\"], [3, \"2023-01-11 00:00:00\", \"2023-01-04 00:00:00\"]]",
+    "2023-03-01 00:00:00",
+    "2023-01-04 00:00:00"
+   ],
+   "result": "tables/f788bb0ee8c9c4bd8ee30267529be21b5a1bcee08717cd7b202f26e3443677fb.arrows"
+  },
+  {
+   "text": "WITH TMP as (\n  SELECT\n    f.index as __KUMO_BATCH__,\n    f.value[0]::NUMBER as __KUMO_ID__,\n    f.value[1]::TIMESTAMP_NTZ as __KUMO_END_TIME__,\n    f.value[2]::TIMESTAMP_NTZ as __KUMO_START_TIME__\n  FROM TABLE(FLATTEN(INPUT => PARSE_JSON(?))) f\n)\nSELECT TMP.__KUMO_BATCH__ as __KUMO_BATCH__, \"price\", \"ts\"\nFROM TMP\nJOIN \"{catalog}\".\"{schema}\".\"orders\"\n  ON \"user_id\" = TMP.__KUMO_ID__\n AND \"ts\" <= TMP.__KUMO_END_TIME__\nAND \"ts\" > TMP.__KUMO_START_TIME__\nWHERE \"ts\" <= ?\nAND \"ts\" > ?",
+   "parameters": [
+    "[[3, \"2023-02-22 00:00:00\", \"2023-02-08 00:00:00\"], [4, \"2023-02-22 00:00:00\", \"2023-02-08 00:00:00\"], [2, \"2023-02-22 00:00:00\", \"2023-02-08 00:00:00\"], [7, \"2023-02-22 00:00:00\", \"2023-02-08 00:00:00\"], [6, \"2023-02-22 00:00:00\", \"2023-02-08 00:00:00\"], [1, \"2023-02-22 00:00:00\", \"2023-02-08 00:00:00\"], [5, \"2023-02-22 00:00:00\", \"2023-02-08 00:00:00\"], [0, \"2023-02-22 00:00:00\", \"2023-02-08 00:00:00\"], [0, \"2023-02-15 00:00:00\", \"2023-02-01 00:00:00\"], [2, \"2023-02-15 00:00:00\", \"2023-02-01 00:00:00\"], [7, \"2023-02-15 00:00:00\", \"2023-02-01 00:00:00\"], [1, \"2023-02-15 00:00:00\", \"2023-02-01 00:00:00\"], [4, \"2023-02-15 00:00:00\", \"2023-02-01 00:00:00\"], [5, \"2023-02-15 00:00:00\", \"2023-02-01 00:00:00\"], [3, \"2023-02-15 00:00:00\", \"2023-02-01 00:00:00\"], [6, \"2023-02-15 00:00:00\", \"2023-02-01 00:00:00\"], [5, \"2023-02-08 00:00:00\", \"2023-01-25 00:00:00\"], [7, \"2023-02-08 00:00:00\", \"2023-01-25 00:00:00\"], [2, \"2023-02-08 00:00:00\", \"2023-01-25 00:00:00\"], [4, \"2023-02-08 00:00:00\", \"2023-01-25 00:00:00\"], [1, \"2023-02-08 00:00:00\", \"2023-01-25 00:00:00\"], [6, \"2023-02-08 00:00:00\", \"2023-01-25 00:00:00\"], [3, \"2023-02-08 00:00:00\", \"2023-01-25 00:00:00\"], [0, \"2023-02-08 00:00:00\", \"2023-01-25 00:00:00\"], [7, \"2023-02-01 00:00:00\", \"2023-01-18 00:00:00\"], [0, \"2023-02-01 00:00:00\", \"2023-01-18 00:00:00\"], [4, \"2023-02-01 00:00:00\", \"2023-01-18 00:00:00\"], [2, \"2023-02-01 00:00:00\", \"2023-01-18 00:00:00\"], [3, \"2023-02-01 00:00:00\", \"2023-01-18 00:00:00\"], [5, \"2023-02-01 00:00:00\", \"2023-01-18 00:00:00\"], [6, \"2023-02-01 00:00:00\", \"2023-01-18 00:00:00\"], [1, \"2023-02-01 00:00:00\", \"2023-01-18 00:00:00\"], [7, \"2023-01-25 00:00:00\", \"2023-01-11 00:00:00\"], [1, \"2023-01-25 00:00:00\", \"2023-01-11 00:00:00\"], [5, \"2023-01-25 00:00:00\", \"2023-01-11 00:00:00\"], [4, \"2023-01-25 00:00:00\", \"2023-01-11 00:00:00\"], [0, \"2023-01-25 00:00:00\", \"2023-01-11 00:00:00\"], [6, \"2023-01-25 00:00:00\", \"2023-01-11 00:00:00\"], [3, \"2023-01-25 00:00:00\", \"2023-01-11 00:00:00\"], [2, \"2023-01-25 00:00:00\", \"2023-01-11 00:00:00\"], [2, \"2023-01-18 00:00:00\", \"2023-01-04 00:00:00\"], [5, \"2023-01-18 00:00:00\", \"2023-01-04 00:00:00\"], [0, \"2023-01-18 00:00:00\", \"2023-01-04 00:00:00\"], [7, \"2023-01-18 00:00:00\", \"2023-01-04 00:00:00\"], [4, \"2023-01-18 00:00:00\", \"2023-01-04 00:00:00\"], [1, \"2023-01-18 00:00:00\", \"2023-01-04 00:00:00\"], [6, \"2023-01-18 00:00:00\", \"2023-01-04 00:00:00\"], [3, \"2023-01-18 00:00:00\", \"2023-01-04 00:00:00\"], [5, \"2023-01-11 00:00:00\", \"2022-12-28 00:00:00\"], [3, \"2023-01-11 00:00:00\", \"2022-12-28 00:00:00\"], [6, \"2023-01-11 00:00:00\", \"2022-12-28 00:00:00\"], [2, \"2023-01-11 00:00:00\", \"2022-12-28 00:00:00\"], [7, \"2023-01-11 00:00:00\", \"2022-12-28 00:00:00\"], [1, \"2023-01-11 00:00:00\", \"2022-12-28 00:00:00\"], [4, \"2023-01-11 00:00:00\", \"2022-12-28 00:00:00\"], [0, \"2023-01-11 00:00:00\", \"2022-12-28 00:00:00\"], [0, \"2023-01-04 00:00:00\", \"2022-12-21 00:00:00\"], [6, \"2023-01-04 00:00:00\", \"2022-12-21 00:00:00\"], [4, \"2023-01-04 00:00:00\", \"2022-12-21 00:00:00\"], [5, \"2023-01-04 00:00:00\", \"2022-12-21 00:00:00\"], [1, \"2023-01-04 00:00:00\", \"2022-12-21 00:00:00\"], [2, \"2023-01-04 00:00:00\", \"2022-12-21 00:00:00\"], [7, \"2023-01-04 00:00:00\", \"2022-12-21 00:00:00\"], [3, \"2023-01-04 00:00:00\", \"2022-12-21 00:00:00\"], [0, \"2023-03-01 00:00:00\", \"2023-02-15 00:00:00\"], [1, \"2023-03-01 00:00:00\", \"2023-02-15 00:00:00\"]]",
+    "2023-03-01 00:00:00",
+    "2022-12-21 00:00:00"
+   ],
+   "result": "tables/14a8c8bc5e29aa3f6911ef1149e043aa87555a55271fb1782e0be11a6f37a671.arrows"
+  },
+  {
+   "text": "WITH TMP as (\n  SELECT\n    f.index as __KUMO_BATCH__,\n    f.value::NUMBER as __KUMO_ID__\n  FROM TABLE(FLATTEN(INPUT => PARSE_JSON(?))) f\n)\nSELECT TMP.__KUMO_BATCH__ as __KUMO_BATCH__, \"user_id\", \"age\", \"country\"\nFROM TMP\nJOIN \"{catalog}\".\"{schema}\".\"users\"\n  ON \"user_id\" = TMP.__KUMO_ID__",
+   "parameters": [
+    "[3, 4, 2, 7, 6, 1, 5, 0, 0, 2, 7, 1, 4, 5, 3, 6, 5, 7, 2, 4, 1, 6, 3, 0, 7, 0, 4, 2, 3, 5, 6, 1, 7, 1, 5, 4, 0, 6, 3, 2, 2, 5, 0, 7, 4, 1, 6, 3, 5, 3, 6, 2, 7, 1, 4, 0, 0, 6, 4, 5, 1, 2, 7, 3, 0, 1]"
+   ],
+   "result": "tables/26698cc500d0853800f0bdaaaac4e18f785040dc30493732d2886a8a104d3bbe.arrows"
+  },
+  {
+   "text": "WITH TMP as (\n  SELECT\n    f.index as __KUMO_BATCH__,\n    f.value[0]::NUMBER as __KUMO_ID__,\n    f.value[1]::TIMESTAMP_NTZ as __KUMO_END_TIME__,\n    f.value[2]::TIMESTAMP_NTZ as __KUMO_START_TIME__\n  FROM TABLE(FLATTEN(INPUT => PARSE_JSON(?))) f\n)\nSELECT TMP.__KUMO_BATCH__ as __KUMO_BATCH__, \"order_id\", \"user_id\", \"price\", \"ts\"\nFROM TMP\nJOIN \"{catalog}\".\"{schema}\".\"orders\"\n  ON \"user_id\" = TMP.__KUMO_ID__\n AND \"ts\" <= TMP.__KUMO_END_TIME__\n AND \"ts\" > TMP.__KUMO_START_TIME__\nWHERE \"ts\" <= ?\n  AND \"ts\" > ?\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY TMP.__KUMO_BATCH__\n  ORDER BY \"ts\" DESC, \"order_id\"\n) <= 32\nORDER BY TMP.__KUMO_BATCH__, \"ts\" DESC, \"order_id\"",
+   "parameters": [
+    "[[3, \"2023-02-22 00:00:00\", \"2018-02-23 00:00:00\"], [4, \"2023-02-22 00:00:00\", \"2018-02-23 00:00:00\"], [2, \"2023-02-22 00:00:00\", \"2018-02-23 00:00:00\"], [7, \"2023-02-22 00:00:00\", \"2018-02-23 00:00:00\"], [6, \"2023-02-22 00:00:00\", \"2018-02-23 00:00:00\"], [1, \"2023-02-22 00:00:00\", \"2018-02-23 00:00:00\"], [5, \"2023-02-22 00:00:00\", \"2018-02-23 00:00:00\"], [0, \"2023-02-22 00:00:00\", \"2018-02-23 00:00:00\"], [0, \"2023-02-15 00:00:00\", \"2018-02-16 00:00:00\"], [2, \"2023-02-15 00:00:00\", \"2018-02-16 00:00:00\"], [7, \"2023-02-15 00:00:00\", \"2018-02-16 00:00:00\"], [1, \"2023-02-15 00:00:00\", \"2018-02-16 00:00:00\"], [4, \"2023-02-15 00:00:00\", \"2018-02-16 00:00:00\"], [5, \"2023-02-15 00:00:00\", \"2018-02-16 00:00:00\"], [3, \"2023-02-15 00:00:00\", \"2018-02-16 00:00:00\"], [6, \"2023-02-15 00:00:00\", \"2018-02-16 00:00:00\"], [5, \"2023-02-08 00:00:00\", \"2018-02-09 00:00:00\"], [7, \"2023-02-08 00:00:00\", \"2018-02-09 00:00:00\"], [2, \"2023-02-08 00:00:00\", \"2018-02-09 00:00:00\"], [4, \"2023-02-08 00:00:00\", \"2018-02-09 00:00:00\"], [1, \"2023-02-08 00:00:00\", \"2018-02-09 00:00:00\"], [6, \"2023-02-08 00:00:00\", \"2018-02-09 00:00:00\"], [3, \"2023-02-08 00:00:00\", \"2018-02-09 00:00:00\"], [0, \"2023-02-08 00:00:00\", \"2018-02-09 00:00:00\"], [7, \"2023-02-01 00:00:00\", \"2018-02-02 00:00:00\"], [0, \"2023-02-01 00:00:00\", \"2018-02-02 00:00:00\"], [4, \"2023-02-01 00:00:00\", \"2018-02-02 00:00:00\"], [2, \"2023-02-01 00:00:00\", \"2018-02-02 00:00:00\"], [3, \"2023-02-01 00:00:00\", \"2018-02-02 00:00:00\"], [5, \"2023-02-01 00:00:00\", \"2018-02-02 00:00:00\"], [6, \"2023-02-01 00:00:00\", \"2018-02-02 00:00:00\"], [1, \"2023-02-01 00:00:00\", \"2018-02-02 00:00:00\"], [7, \"2023-01-25 00:00:00\", \"2018-01-26 00:00:00\"], [1, \"2023-01-25 00:00:00\", \"2018-01-26 00:00:00\"], [5, \"2023-01-25 00:00:00\", \"2018-01-26 00:00:00\"], [4, \"2023-01-25 00:00:00\", \"2018-01-26 00:00:00\"], [0, \"2023-01-25 00:00:00\", \"2018-01-26 00:00:00\"], [6, \"2023-01-25 00:00:00\", \"2018-01-26 00:00:00\"], [3, \"2023-01-25 00:00:00\", \"2018-01-26 00:00:00\"], [2, \"2023-01-25 00:00:00\", \"2018-01-26 00:00:00\"], [2, \"2023-01-18 00:00:00\", \"2018-01-19 00:00:00\"], [5, \"2023-01-18 00:00:00\", \"2018-01-19 00:00:00\"], [0, \"2023-01-18 00:00:00\", \"2018-01-19 00:00:00\"], [7, \"2023-01-18 00:00:00\", \"2018-01-19 00:00:00\"], [4, \"2023-01-18 00:00:00\", \"2018-01-19 00:00:00\"], [1, \"2023-01-18 00:00:00\", \"2018-01-19 00:00:00\"], [6, \"2023-01-18 00:00:00\", \"2018-01-19 00:00:00\"], [3, \"2023-01-18 00:00:00\", \"2018-01-19 00:00:00\"], [5, \"2023-01-11 00:00:00\", \"2018-01-12 00:00:00\"], [3, \"2023-01-11 00:00:00\", \"2018-01-12 00:00:00\"], [6, \"2023-01-11 00:00:00\", \"2018-01-12 00:00:00\"], [2, \"2023-01-11 00:00:00\", \"2018-01-12 00:00:00\"], [7, \"2023-01-11 00:00:00\", \"2018-01-12 00:00:00\"], [1, \"2023-01-11 00:00:00\", \"2018-01-12 00:00:00\"], [4, \"2023-01-11 00:00:00\", \"2018-01-12 00:00:00\"], [0, \"2023-01-11 00:00:00\", \"2018-01-12 00:00:00\"], [0, \"2023-01-04 00:00:00\", \"2018-01-05 00:00:00\"], [6, \"2023-01-04 00:00:00\", \"2018-01-05 00:00:00\"], [4, \"2023-01-04 00:00:00\", \"2018-01-05 00:00:00\"], [5, \"2023-01-04 00:00:00\", \"2018-01-05 00:00:00\"], [1, \"2023-01-04 00:00:00\", \"2018-01-05 00:00:00\"], [2, \"2023-01-04 00:00:00\", \"2018-01-05 00:00:00\"], [7, \"2023-01-04 00:00:00\", \"2018-01-05 00:00:00\"], [3, \"2023-01-04 00:00:00\", \"2018-01-05 00:00:00\"], [0, \"2023-03-01 00:00:00\", \"2018-03-02 00:00:00\"], [1, \"2023-03-01 00:00:00\", \"2018-03-02 00:00:00\"]]",
+    "2023-03-01 00:00:00",
+    "2018-01-05 00:00:00"
+   ],
+   "result": "tables/8652d1cbcefed7ce412925dc20321ae12d6c7cc675a9abe1503677265464c2d7.arrows"
+  }
+ ],
+ "loader": []
+}

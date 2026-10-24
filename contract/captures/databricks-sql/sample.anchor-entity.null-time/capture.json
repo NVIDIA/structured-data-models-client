@@ -1,0 +1,1858 @@
+{
+ "format": "sdm-capture/1",
+ "case": "sample.anchor-entity.null-time",
+ "leg": "databricks-sql",
+ "recording_commit": "be663bf19e98ca3c03266618d646a3f3099ea07b",
+ "reference_commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+ "versions": {
+  "databricks-sdk": "0.148.0",
+  "databricks-sql-connector": "4.6.0",
+  "duckdb": "1.5.6",
+  "numpy": "2.5.3",
+  "pandas": "3.0.6",
+  "pyarrow": "25.0.1",
+  "python": "3.12.15"
+ },
+ "input_hash": "49bb9b2c54e8e578e3c8b728586fb0a48fa8f563c91c4b0b9a3e00b22e8bcdb4",
+ "session": {
+  "time_zone": "Etc/UTC",
+  "null_order": "nulls_first"
+ },
+ "reference": {
+  "case": "sample.anchor-entity.null-time@databricks-sql",
+  "core": null,
+  "driver": {
+   "capture": {
+    "bindings": [],
+    "cursors": 14,
+    "events": [
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 1
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 2
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 3
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 4
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 5
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 6
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 7
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 8
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 9
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 10
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 11
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 12
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 13
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 14
+     }
+    ],
+    "incomplete": [],
+    "passed_through": [],
+    "statements": [
+     {
+      "error": null,
+      "handle": 1,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{schema}'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "f531b2a82ae46950a970873d9f03cca04a03b233ab07a0c63afa44bdbdf4e2c4",
+        "method": "fetchall",
+        "rows": 2,
+        "values": {
+         "columns": [
+          "table_name"
+         ],
+         "ordered": "437dd79c6ace96dd108155c9a074eb6b331b60538b82de8b14765569187cd458",
+         "types": [
+          "string"
+         ],
+         "unencodable": [],
+         "unordered": "3f59d5de42223ca465ff71eef9d5287bac4dcaac8cb1ef752cba7b80dec67229"
+        }
+       }
+      ],
+      "sql": "\n                    SELECT table_name\n                    FROM `{catalog}`.information_schema.tables\n                    WHERE table_schema = ?\n                      AND table_type != 'METRIC_VIEW'\n                    ",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 2,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{schema}'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'users'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "df73419c7a23757c886b055ed0ada18ed9bd605de4c63d171ab0e7aaadbfe24a",
+        "method": "fetchall",
+        "rows": 4,
+        "values": {
+         "columns": [
+          "column_name",
+          "full_data_type",
+          "is_nullable",
+          "table_catalog",
+          "table_schema",
+          "table_name",
+          "table_type"
+         ],
+         "ordered": "675e1eed87976feaed6f1162a824bce0c84614dc671f443caf979f3dac7f44d2",
+         "types": [
+          "string",
+          "string",
+          "string",
+          "string",
+          "string",
+          "string",
+          "string"
+         ],
+         "unencodable": [],
+         "unordered": "959cbf055e8307de536d04a7d853473572b5745cdd993bf61e83d67405a3b92a"
+        }
+       }
+      ],
+      "sql": "SELECT c.column_name, c.full_data_type, c.is_nullable,\n       c.table_catalog, c.table_schema, c.table_name,\n       t.table_type\nFROM `{catalog}`.information_schema.columns c\nJOIN `{catalog}`.information_schema.tables t\n  ON t.table_catalog = c.table_catalog\n AND t.table_schema = c.table_schema\n AND t.table_name = c.table_name\nWHERE c.table_schema = lower(?)\n  AND c.table_name = lower(?)\nORDER BY c.ordinal_position",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 2,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{schema}'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'users'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "method": "fetchall",
+        "rows": 0,
+        "values": {
+         "columns": [
+          "constraint_type",
+          "constraint_name",
+          "column_name"
+         ],
+         "ordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+         "types": [
+          "string",
+          "string",
+          "string"
+         ],
+         "unencodable": [],
+         "unordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        }
+       }
+      ],
+      "sql": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name\nFROM `{catalog}`.information_schema.table_constraints tc\nJOIN `{catalog}`.information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = lower(?)\n  AND tc.table_name = lower(?)\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE')",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 3,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "3ea425ed7e756b880c6d29dcbec814c92e11c3f2f1f7d2f37b35f8889f7b3fff",
+        "method": "fetchall_arrow",
+        "rows": 8,
+        "schema": [
+         {
+          "name": "user_id",
+          "type": "int64"
+         },
+         {
+          "name": "age",
+          "type": "int32"
+         },
+         {
+          "name": "country",
+          "type": "string"
+         },
+         {
+          "name": "signup",
+          "type": "timestamp[us]"
+         }
+        ],
+        "values": {
+         "columns": [
+          "user_id",
+          "age",
+          "country",
+          "signup"
+         ],
+         "ordered": "801198dff5fc0baf883bb63df115a0076baa1c61bfd9a494c97329cda37cebe3",
+         "types": [
+          "bigint",
+          "int",
+          "string",
+          "timestamp"
+         ],
+         "unencodable": [],
+         "unordered": "801198dff5fc0baf883bb63df115a0076baa1c61bfd9a494c97329cda37cebe3"
+        }
+       }
+      ],
+      "sql": "SELECT `user_id`, `age`, `country`, `signup` FROM `{catalog}`.`{schema}`.`users` LIMIT 1000",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 4,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{schema}'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'orders'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "35d107a9f3e3b2d4ee5b4fcc24d1acd34248e9fbc15e6df1dcdb74f7386f01e2",
+        "method": "fetchall",
+        "rows": 4,
+        "values": {
+         "columns": [
+          "column_name",
+          "full_data_type",
+          "is_nullable",
+          "table_catalog",
+          "table_schema",
+          "table_name",
+          "table_type"
+         ],
+         "ordered": "72f1e628d42dace795af6c629b13a786d212224bea6830e2067fa20c41b558f9",
+         "types": [
+          "string",
+          "string",
+          "string",
+          "string",
+          "string",
+          "string",
+          "string"
+         ],
+         "unencodable": [],
+         "unordered": "d280d8ffd841a2526e860d6982d31261d77058fa9d00cac8c2b5cbcb0ae01dab"
+        }
+       }
+      ],
+      "sql": "SELECT c.column_name, c.full_data_type, c.is_nullable,\n       c.table_catalog, c.table_schema, c.table_name,\n       t.table_type\nFROM `{catalog}`.information_schema.columns c\nJOIN `{catalog}`.information_schema.tables t\n  ON t.table_catalog = c.table_catalog\n AND t.table_schema = c.table_schema\n AND t.table_name = c.table_name\nWHERE c.table_schema = lower(?)\n  AND c.table_name = lower(?)\nORDER BY c.ordinal_position",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 4,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{schema}'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'orders'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "method": "fetchall",
+        "rows": 0,
+        "values": {
+         "columns": [
+          "constraint_type",
+          "constraint_name",
+          "column_name"
+         ],
+         "ordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+         "types": [
+          "string",
+          "string",
+          "string"
+         ],
+         "unencodable": [],
+         "unordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        }
+       }
+      ],
+      "sql": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name\nFROM `{catalog}`.information_schema.table_constraints tc\nJOIN `{catalog}`.information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = lower(?)\n  AND tc.table_name = lower(?)\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE')",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 5,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "c05c70ac689f492103a392107639ac87a8672462bbc21aaee5c42dfa074e11f6",
+        "method": "fetchall_arrow",
+        "rows": 80,
+        "schema": [
+         {
+          "name": "order_id",
+          "type": "int64"
+         },
+         {
+          "name": "user_id",
+          "type": "int64"
+         },
+         {
+          "name": "price",
+          "type": "double"
+         },
+         {
+          "name": "ts",
+          "type": "timestamp[us]"
+         }
+        ],
+        "values": {
+         "columns": [
+          "order_id",
+          "user_id",
+          "price",
+          "ts"
+         ],
+         "ordered": "af39e4e03131a5c1ba2a84509405b8e102b4f942869a0f13e459581e2fb42a52",
+         "types": [
+          "bigint",
+          "bigint",
+          "double",
+          "timestamp"
+         ],
+         "unencodable": [],
+         "unordered": "a3d976aba1ee2ea6f5a893caa40bab840b2e9116e257e03d59f7a5e32290d40d"
+        }
+       }
+      ],
+      "sql": "SELECT `order_id`, `user_id`, `price`, `ts` FROM `{catalog}`.`{schema}`.`orders` LIMIT 1000",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 6,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{schema}'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'users'"
+       }
+      ],
+      "results": [],
+      "sql": "SELECT tc.constraint_name, kcu.column_name,\n       ccu.table_catalog, ccu.table_schema,\n       ccu.table_name, ccu.column_name\nFROM `{catalog}`.information_schema.table_constraints tc\nJOIN `{catalog}`.information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN `{catalog}`.information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN `{catalog}`.information_schema.constraint_column_usage ccu\n  ON rc.unique_constraint_catalog = ccu.constraint_catalog\n AND rc.unique_constraint_schema = ccu.constraint_schema\n AND rc.unique_constraint_name = ccu.constraint_name\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = lower(?)\n  AND tc.table_name = lower(?)",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 7,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{schema}'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'orders'"
+       }
+      ],
+      "results": [],
+      "sql": "SELECT tc.constraint_name, kcu.column_name,\n       ccu.table_catalog, ccu.table_schema,\n       ccu.table_name, ccu.column_name\nFROM `{catalog}`.information_schema.table_constraints tc\nJOIN `{catalog}`.information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN `{catalog}`.information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN `{catalog}`.information_schema.constraint_column_usage ccu\n  ON rc.unique_constraint_catalog = ccu.constraint_catalog\n AND rc.unique_constraint_schema = ccu.constraint_schema\n AND rc.unique_constraint_name = ccu.constraint_name\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = lower(?)\n  AND tc.table_name = lower(?)",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 8,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "1bf991a626c9bbfe6f3571514f0e0d6f2c4904fdd27b043935570887508ea3e8",
+        "method": "fetchall",
+        "rows": 2,
+        "values": {
+         "columns": [
+          "k",
+          "n",
+          "d",
+          "z"
+         ],
+         "ordered": "9c6abc834f9bc1a6d7975e8c53505568d3cc5bc9ba8851a0a619417da55f15cf",
+         "types": [
+          "int",
+          "bigint",
+          "bigint",
+          "bigint"
+         ],
+         "unencodable": [],
+         "unordered": "9c6abc834f9bc1a6d7975e8c53505568d3cc5bc9ba8851a0a619417da55f15cf"
+        }
+       }
+      ],
+      "sql": "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT `user_id`) AS d, COUNT(CASE WHEN `user_id` IS NULL THEN 1 END) AS z\nFROM `{catalog}`.`{schema}`.`users`\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT `order_id`) AS d, COUNT(CASE WHEN `order_id` IS NULL THEN 1 END) AS z\nFROM `{catalog}`.`{schema}`.`orders`",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 9,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "e52db75c53822904dd358548bedb43d8f16db5defe3b6bb2842755da1cde4808",
+        "method": "fetchone",
+        "rows": 1,
+        "values": {
+         "columns": [
+          "count(1)"
+         ],
+         "ordered": "9b38e7811e08fd8de2c83743224e2d6332b5892c9f4d9942d7512344077b08f9",
+         "types": [
+          "bigint"
+         ],
+         "unencodable": [],
+         "unordered": "9b38e7811e08fd8de2c83743224e2d6332b5892c9f4d9942d7512344077b08f9"
+        }
+       }
+      ],
+      "sql": "SELECT COUNT(*) FROM `{catalog}`.`{schema}`.`users`",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 10,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "6e40465c5faceeeada87f3d47dc2e1221f0fe0f99b494acc756572cabd3118de",
+        "method": "fetchone",
+        "rows": 1,
+        "values": {
+         "columns": [
+          "count(1)"
+         ],
+         "ordered": "86acc43898f955f20ffb8c6f2fe3c49d64014bab3224547f9d3b8406880518fa",
+         "types": [
+          "bigint"
+         ],
+         "unencodable": [],
+         "unordered": "86acc43898f955f20ffb8c6f2fe3c49d64014bab3224547f9d3b8406880518fa"
+        }
+       }
+      ],
+      "sql": "SELECT COUNT(*) FROM `{catalog}`.`{schema}`.`orders`",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 11,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "b78cec3cd5995078a3db223ed18045e50217c02fbf9a58280139536ea38f410a",
+        "method": "fetchall_arrow",
+        "rows": 7,
+        "schema": [
+         {
+          "name": "user_id",
+          "type": "int64"
+         },
+         {
+          "name": "country",
+          "type": "string"
+         },
+         {
+          "name": "signup",
+          "type": "timestamp[us]"
+         }
+        ],
+        "values": {
+         "columns": [
+          "user_id",
+          "country",
+          "signup"
+         ],
+         "ordered": "9e0d05d6e574daa580076754d42b6be2dd61d8468b5c2f28ab7abbc47d12abb7",
+         "types": [
+          "bigint",
+          "string",
+          "timestamp"
+         ],
+         "unencodable": [],
+         "unordered": "9e0d05d6e574daa580076754d42b6be2dd61d8468b5c2f28ab7abbc47d12abb7"
+        }
+       }
+      ],
+      "sql": "SELECT `user_id`, `country`, `signup`\nFROM `{catalog}`.`{schema}`.`users`\nTABLESAMPLE (100.0 PERCENT) REPEATABLE (42)\nWHERE `user_id` IS NOT NULL AND `signup` IS NOT NULL\nLIMIT 10000",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 12,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'[7,6,5,4,3,2,1,0,1]'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "2efd6df4241308d3335acf2a0bd3280f8166f4ed021a948bb5b2909905403fb1",
+        "method": "fetchall_arrow",
+        "rows": 9,
+        "schema": [
+         {
+          "name": "__KUMO_BATCH__",
+          "type": "int32"
+         },
+         {
+          "name": "user_id",
+          "type": "int64"
+         },
+         {
+          "name": "age",
+          "type": "int32"
+         },
+         {
+          "name": "signup",
+          "type": "timestamp[us]"
+         }
+        ],
+        "values": {
+         "columns": [
+          "__KUMO_BATCH__",
+          "user_id",
+          "age",
+          "signup"
+         ],
+         "ordered": "dd25c608958ddc780168606d22ef5d269aa0043614c271a3f3ea5f6f99f42072",
+         "types": [
+          "int",
+          "bigint",
+          "int",
+          "timestamp"
+         ],
+         "unencodable": [],
+         "unordered": "32094c3b75836b71d1598b3ce3d0d7644d8077c9c7a2ae52c347b9c26076d082"
+        }
+       }
+      ],
+      "sql": "WITH TMP AS (\n  SELECT pos AS __KUMO_BATCH__, col AS __KUMO_ID__\n  FROM posexplode(from_json(?, 'array<bigint>'))\n)\nSELECT TMP.__KUMO_BATCH__ as __KUMO_BATCH__, `user_id`, `age`, `signup`\nFROM TMP\nJOIN `{catalog}`.`{schema}`.`users`\n  ON `user_id` = TMP.__KUMO_ID__",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 13,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "64f05d5c4d56ed4be4d98aa3c2aa6a342d59ced667e156a2f098931b1adabe09",
+        "method": "fetchall",
+        "rows": 1,
+        "values": {
+         "columns": [
+          "table_index",
+          "min_date",
+          "max_date"
+         ],
+         "ordered": "6d619e2d389a605a74bd007b91d1b8770ea2c167aa8cc71a480a8f4d3b555ee0",
+         "types": [
+          "int",
+          "timestamp",
+          "timestamp"
+         ],
+         "unencodable": [],
+         "unordered": "6d619e2d389a605a74bd007b91d1b8770ea2c167aa8cc71a480a8f4d3b555ee0"
+        }
+       }
+      ],
+      "sql": "SELECT\n  0 as table_index,\n  MIN(`ts`) as min_date,\n  MAX(`ts`) as max_date\nFROM `{catalog}`.`{schema}`.`orders`",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 14,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'[{\"id\":7,\"e\":\"2023-10-19 00:00:00\",\"s\":\"2018-10-20 00:00:00\"},{\"id\":6,\"e\":\"2023-09-29 00:00:00\",\"s\":\"2018-09-30 00:00:00\"},{\"id\":5,\"e\":\"2023-09-09 00:00:00\",\"s\":\"2018-09-10 00:00:00\"},{\"id\":4,\"e\":\"2023-08-20 00:00:00\",\"s\":\"2018-08-21 00:00:00\"},{\"id\":3,\"e\":\"2023-07-31 00:00:00\",\"s\":\"2018-08-01 00:00:00\"},{\"id\":2,\"e\":\"2023-07-11 00:00:00\",\"s\":\"2018-07-12 00:00:00\"},{\"id\":1,\"e\":\"2023-06-21 00:00:00\",\"s\":\"2018-06-22 00:00:00\"},{\"id\":0,\"e\":NaN,\"s\":NaN},{\"id\":1,\"e\":\"2023-06-21 00:00:00\",\"s\":\"2018-06-22 00:00:00\"}]'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'2023-10-19 00:00:00'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'2018-06-22 00:00:00'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "2e328350c667c19a5a491d80f5f5632c97f6d7f170f761105e270a828d1d1747",
+        "method": "fetchall_arrow",
+        "rows": 32,
+        "schema": [
+         {
+          "name": "__KUMO_BATCH__",
+          "type": "int32"
+         },
+         {
+          "name": "order_id",
+          "type": "int64"
+         },
+         {
+          "name": "user_id",
+          "type": "int64"
+         },
+         {
+          "name": "price",
+          "type": "double"
+         },
+         {
+          "name": "ts",
+          "type": "timestamp[us]"
+         }
+        ],
+        "values": {
+         "columns": [
+          "__KUMO_BATCH__",
+          "order_id",
+          "user_id",
+          "price",
+          "ts"
+         ],
+         "ordered": "58839990a3da77662a7cb7c68150c3da69583d50ef0c2695efa94f2df83967f8",
+         "types": [
+          "int",
+          "bigint",
+          "bigint",
+          "double",
+          "timestamp"
+         ],
+         "unencodable": [],
+         "unordered": "bf0e305715dfffaff0bed13c62fc2ad7d37230d542c8889bbb58352e8613c7b9"
+        }
+       }
+      ],
+      "sql": "WITH TMP AS (\n  SELECT pos AS __KUMO_BATCH__, col.id AS __KUMO_ID__, col.e AS __KUMO_END_TIME__, col.s AS __KUMO_START_TIME__\n  FROM posexplode(from_json(?, 'array<struct<id:bigint,e:string,s:string>>'))\n)\nSELECT TMP.__KUMO_BATCH__ as __KUMO_BATCH__, `order_id`, `user_id`, `price`, `ts`\nFROM TMP\nJOIN `{catalog}`.`{schema}`.`orders`\n  ON `user_id` = TMP.__KUMO_ID__\n AND `ts` <= TMP.__KUMO_END_TIME__\n AND `ts` > TMP.__KUMO_START_TIME__\nWHERE `ts` <= ?\n  AND `ts` > ?\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY TMP.__KUMO_BATCH__\n  ORDER BY `ts` DESC, `order_id`\n) <= 32\nORDER BY TMP.__KUMO_BATCH__, `ts` DESC, `order_id`",
+      "stage": "materialize"
+     }
+    ]
+   },
+   "query_log": {
+    "bindings": 0,
+    "compared": 16,
+    "differing": [],
+    "statements": 16
+   }
+  },
+  "format": "sdm-observation/1",
+  "host": {
+   "warnings": [
+    "SDMWarning"
+   ]
+  },
+  "identity": {
+   "cell": "ref-pandas3",
+   "commit": {
+    "clean": true,
+    "sha": "be663bf19e98ca3c03266618d646a3f3099ea07b"
+   },
+   "contract": null,
+   "inputs": {
+    "bases": "9d69fe4aea2be4a6a2d96ea03f5258147c537927e2c6e6716b6030836ebc62f8",
+    "case": "77ace2ac9dba071a4fd5f81f4d585d1d9934babd641534ed6404162b338f2cf3"
+   },
+   "native": null,
+   "native_loaded": false,
+   "operations": [],
+   "platform": "linux-x86_64",
+   "reference": {
+    "commit": {
+     "clean": true,
+     "sha": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1"
+    },
+    "environment": "4848c08cc7bbb66e99d4a7416854e401ab51e44413b509172cf0c121a55c78e3",
+    "guard": {
+     "after": "passed",
+     "before": "passed"
+    }
+   },
+   "runner": "python-ref",
+   "versions": {
+    "duckdb": "1.5.6",
+    "numpy": "2.5.3",
+    "pandas": "3.0.6",
+    "pyarrow": "25.0.1",
+    "python": "3.12.15"
+   }
+  },
+  "outcome": {
+   "code": null,
+   "error": null,
+   "result": "success",
+   "stage": "predict"
+  },
+  "public": {
+   "payloads": [
+    {
+     "method": "POST",
+     "parsed": {
+      "context": {
+       "instance_table": {
+        "columns": [
+         "instance_id",
+         "__kumo_entity_ref_0",
+         "__kumo_anchor_time",
+         "TARGET"
+        ],
+        "format": "arrays",
+        "rows": [
+         [
+          {
+           "number": "0"
+          },
+          {
+           "number": "7"
+          },
+          "2023-10-19T00:00:00.000000Z",
+          "DE"
+         ],
+         [
+          {
+           "number": "1"
+          },
+          {
+           "number": "6"
+          },
+          "2023-09-29T00:00:00.000000Z",
+          "US"
+         ],
+         [
+          {
+           "number": "2"
+          },
+          {
+           "number": "5"
+          },
+          "2023-09-09T00:00:00.000000Z",
+          "IN"
+         ],
+         [
+          {
+           "number": "3"
+          },
+          {
+           "number": "4"
+          },
+          "2023-08-20T00:00:00.000000Z",
+          "DE"
+         ],
+         [
+          {
+           "number": "4"
+          },
+          {
+           "number": "3"
+          },
+          "2023-07-31T00:00:00.000000Z",
+          "US"
+         ],
+         [
+          {
+           "number": "5"
+          },
+          {
+           "number": "2"
+          },
+          "2023-07-11T00:00:00.000000Z",
+          "IN"
+         ]
+        ]
+       },
+       "related_tables": {
+        "orders": {
+         "columns": [
+          "instance_id",
+          "__node_id",
+          "price",
+          "ts",
+          "user_id"
+         ],
+         "format": "arrays",
+         "rows": [
+          [
+           {
+            "number": "0"
+           },
+           {
+            "number": "0"
+           },
+           {
+            "number": "68.5"
+           },
+           "2023-10-01T00:00:00.000000Z",
+           {
+            "number": "7"
+           }
+          ],
+          [
+           {
+            "number": "0"
+           },
+           {
+            "number": "1"
+           },
+           {
+            "number": "56.5"
+           },
+           "2023-08-06T00:00:00.000000Z",
+           {
+            "number": "7"
+           }
+          ],
+          [
+           {
+            "number": "0"
+           },
+           {
+            "number": "2"
+           },
+           {
+            "number": "44.5"
+           },
+           "2023-06-11T00:00:00.000000Z",
+           {
+            "number": "7"
+           }
+          ],
+          [
+           {
+            "number": "0"
+           },
+           {
+            "number": "3"
+           },
+           {
+            "number": "32.5"
+           },
+           "2023-04-16T00:00:00.000000Z",
+           {
+            "number": "7"
+           }
+          ],
+          [
+           {
+            "number": "0"
+           },
+           {
+            "number": "4"
+           },
+           {
+            "number": "20.5"
+           },
+           "2023-02-19T00:00:00.000000Z",
+           {
+            "number": "7"
+           }
+          ],
+          [
+           {
+            "number": "1"
+           },
+           {
+            "number": "5"
+           },
+           {
+            "number": "67.0"
+           },
+           "2023-09-24T00:00:00.000000Z",
+           {
+            "number": "6"
+           }
+          ],
+          [
+           {
+            "number": "1"
+           },
+           {
+            "number": "6"
+           },
+           {
+            "number": "55.0"
+           },
+           "2023-07-30T00:00:00.000000Z",
+           {
+            "number": "6"
+           }
+          ],
+          [
+           {
+            "number": "1"
+           },
+           {
+            "number": "7"
+           },
+           {
+            "number": "43.0"
+           },
+           "2023-06-04T00:00:00.000000Z",
+           {
+            "number": "6"
+           }
+          ],
+          [
+           {
+            "number": "1"
+           },
+           {
+            "number": "8"
+           },
+           {
+            "number": "31.0"
+           },
+           "2023-04-09T00:00:00.000000Z",
+           {
+            "number": "6"
+           }
+          ],
+          [
+           {
+            "number": "1"
+           },
+           {
+            "number": "9"
+           },
+           {
+            "number": "19.0"
+           },
+           "2023-02-12T00:00:00.000000Z",
+           {
+            "number": "6"
+           }
+          ],
+          [
+           {
+            "number": "2"
+           },
+           {
+            "number": "10"
+           },
+           {
+            "number": "53.5"
+           },
+           "2023-07-23T00:00:00.000000Z",
+           {
+            "number": "5"
+           }
+          ],
+          [
+           {
+            "number": "2"
+           },
+           {
+            "number": "11"
+           },
+           {
+            "number": "41.5"
+           },
+           "2023-05-28T00:00:00.000000Z",
+           {
+            "number": "5"
+           }
+          ],
+          [
+           {
+            "number": "2"
+           },
+           {
+            "number": "12"
+           },
+           {
+            "number": "29.5"
+           },
+           "2023-04-02T00:00:00.000000Z",
+           {
+            "number": "5"
+           }
+          ],
+          [
+           {
+            "number": "2"
+           },
+           {
+            "number": "13"
+           },
+           {
+            "number": "17.5"
+           },
+           "2023-02-05T00:00:00.000000Z",
+           {
+            "number": "5"
+           }
+          ],
+          [
+           {
+            "number": "3"
+           },
+           {
+            "number": "14"
+           },
+           {
+            "number": "52.0"
+           },
+           "2023-07-16T00:00:00.000000Z",
+           {
+            "number": "4"
+           }
+          ],
+          [
+           {
+            "number": "3"
+           },
+           {
+            "number": "15"
+           },
+           {
+            "number": "40.0"
+           },
+           "2023-05-21T00:00:00.000000Z",
+           {
+            "number": "4"
+           }
+          ],
+          [
+           {
+            "number": "3"
+           },
+           {
+            "number": "16"
+           },
+           {
+            "number": "28.0"
+           },
+           "2023-03-26T00:00:00.000000Z",
+           {
+            "number": "4"
+           }
+          ],
+          [
+           {
+            "number": "3"
+           },
+           {
+            "number": "17"
+           },
+           {
+            "number": "16.0"
+           },
+           "2023-01-29T00:00:00.000000Z",
+           {
+            "number": "4"
+           }
+          ],
+          [
+           {
+            "number": "4"
+           },
+           {
+            "number": "18"
+           },
+           {
+            "number": "50.5"
+           },
+           "2023-07-09T00:00:00.000000Z",
+           {
+            "number": "3"
+           }
+          ],
+          [
+           {
+            "number": "4"
+           },
+           {
+            "number": "19"
+           },
+           {
+            "number": "38.5"
+           },
+           "2023-05-14T00:00:00.000000Z",
+           {
+            "number": "3"
+           }
+          ],
+          [
+           {
+            "number": "4"
+           },
+           {
+            "number": "20"
+           },
+           {
+            "number": "26.5"
+           },
+           "2023-03-19T00:00:00.000000Z",
+           {
+            "number": "3"
+           }
+          ],
+          [
+           {
+            "number": "4"
+           },
+           {
+            "number": "21"
+           },
+           {
+            "number": "14.5"
+           },
+           "2023-01-22T00:00:00.000000Z",
+           {
+            "number": "3"
+           }
+          ],
+          [
+           {
+            "number": "5"
+           },
+           {
+            "number": "22"
+           },
+           {
+            "number": "49.0"
+           },
+           "2023-07-02T00:00:00.000000Z",
+           {
+            "number": "2"
+           }
+          ],
+          [
+           {
+            "number": "5"
+           },
+           {
+            "number": "23"
+           },
+           {
+            "number": "37.0"
+           },
+           "2023-05-07T00:00:00.000000Z",
+           {
+            "number": "2"
+           }
+          ],
+          [
+           {
+            "number": "5"
+           },
+           {
+            "number": "24"
+           },
+           {
+            "number": "25.0"
+           },
+           "2023-03-12T00:00:00.000000Z",
+           {
+            "number": "2"
+           }
+          ],
+          [
+           {
+            "number": "5"
+           },
+           {
+            "number": "25"
+           },
+           {
+            "number": "13.0"
+           },
+           "2023-01-15T00:00:00.000000Z",
+           {
+            "number": "2"
+           }
+          ]
+         ]
+        },
+        "users": {
+         "columns": [
+          "instance_id",
+          "user_id",
+          "age",
+          "signup"
+         ],
+         "format": "arrays",
+         "rows": [
+          [
+           {
+            "number": "0"
+           },
+           {
+            "number": "7"
+           },
+           {
+            "number": "27"
+           },
+           "2023-10-19T00:00:00.000000Z"
+          ],
+          [
+           {
+            "number": "1"
+           },
+           {
+            "number": "6"
+           },
+           {
+            "number": "26"
+           },
+           "2023-09-29T00:00:00.000000Z"
+          ],
+          [
+           {
+            "number": "2"
+           },
+           {
+            "number": "5"
+           },
+           {
+            "number": "25"
+           },
+           "2023-09-09T00:00:00.000000Z"
+          ],
+          [
+           {
+            "number": "3"
+           },
+           {
+            "number": "4"
+           },
+           {
+            "number": "24"
+           },
+           "2023-08-20T00:00:00.000000Z"
+          ],
+          [
+           {
+            "number": "4"
+           },
+           {
+            "number": "3"
+           },
+           {
+            "number": "23"
+           },
+           "2023-07-31T00:00:00.000000Z"
+          ],
+          [
+           {
+            "number": "5"
+           },
+           {
+            "number": "2"
+           },
+           {
+            "number": "22"
+           },
+           "2023-07-11T00:00:00.000000Z"
+          ]
+         ]
+        }
+       }
+      },
+      "inference": {
+       "run_mode": "fast",
+       "use_prediction_time": false
+      },
+      "metadata": {
+       "num_context_examples": {
+        "number": "7"
+       },
+       "num_prediction_examples": {
+        "number": "2"
+       },
+       "request_id": "sdm-f5d8526c33ea",
+       "source_query": "PREDICT users.country FOR EACH users.user_id"
+      },
+      "model": "kumo-relational",
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "predict": {
+       "instance_table": {
+        "columns": [
+         "instance_id",
+         "__kumo_entity_ref_0",
+         "__kumo_anchor_time"
+        ],
+        "format": "arrays",
+        "rows": [
+         [
+          {
+           "number": "7"
+          },
+          {
+           "number": "0"
+          },
+          null
+         ],
+         [
+          {
+           "number": "8"
+          },
+          {
+           "number": "1"
+          },
+          "2023-06-21T00:00:00.000000Z"
+         ]
+        ]
+       },
+       "related_tables": {
+        "orders": {
+         "columns": [
+          "instance_id",
+          "__node_id",
+          "price",
+          "ts",
+          "user_id"
+         ],
+         "format": "arrays",
+         "rows": [
+          [
+           {
+            "number": "8"
+           },
+           {
+            "number": "29"
+           },
+           {
+            "number": "35.5"
+           },
+           "2023-04-30T00:00:00.000000Z",
+           {
+            "number": "1"
+           }
+          ],
+          [
+           {
+            "number": "8"
+           },
+           {
+            "number": "30"
+           },
+           {
+            "number": "23.5"
+           },
+           "2023-03-05T00:00:00.000000Z",
+           {
+            "number": "1"
+           }
+          ],
+          [
+           {
+            "number": "8"
+           },
+           {
+            "number": "31"
+           },
+           {
+            "number": "11.5"
+           },
+           "2023-01-08T00:00:00.000000Z",
+           {
+            "number": "1"
+           }
+          ]
+         ]
+        },
+        "users": {
+         "columns": [
+          "instance_id",
+          "user_id",
+          "age",
+          "signup"
+         ],
+         "format": "arrays",
+         "rows": [
+          [
+           {
+            "number": "7"
+           },
+           {
+            "number": "0"
+           },
+           {
+            "number": "20"
+           },
+           null
+          ],
+          [
+           {
+            "number": "8"
+           },
+           {
+            "number": "1"
+           },
+           {
+            "number": "21"
+           },
+           "2023-06-21T00:00:00.000000Z"
+          ]
+         ]
+        }
+       }
+      },
+      "schema": {
+       "instance_table": {
+        "columns": {
+         "TARGET": {
+          "dtype": "string",
+          "stype": "categorical"
+         },
+         "__kumo_anchor_time": {
+          "dtype": "timestamp[us]",
+          "nullable": false,
+          "stype": "timestamp"
+         },
+         "__kumo_entity_ref_0": {
+          "dtype": "int64",
+          "stype": "ID"
+         },
+         "instance_id": {
+          "dtype": "int64",
+          "nullable": false,
+          "stype": "ID"
+         }
+        },
+        "primary_key": "instance_id"
+       },
+       "related_tables": {
+        "orders": {
+         "columns": {
+          "__node_id": {
+           "dtype": "int64",
+           "nullable": false,
+           "stype": "ID"
+          },
+          "instance_id": {
+           "dtype": "int64",
+           "nullable": false,
+           "stype": "ID"
+          },
+          "price": {
+           "dtype": "float64",
+           "stype": "numerical"
+          },
+          "ts": {
+           "dtype": "timestamp[us]",
+           "stype": "timestamp"
+          },
+          "user_id": {
+           "dtype": "int64",
+           "stype": "ID"
+          }
+         },
+         "primary_key": [
+          "instance_id",
+          "__node_id"
+         ]
+        },
+        "users": {
+         "columns": {
+          "age": {
+           "dtype": "int64",
+           "stype": "numerical"
+          },
+          "instance_id": {
+           "dtype": "int64",
+           "nullable": false,
+           "stype": "ID"
+          },
+          "signup": {
+           "dtype": "timestamp[us]",
+           "stype": "timestamp"
+          },
+          "user_id": {
+           "dtype": "int64",
+           "nullable": false
+          }
+         },
+         "primary_key": [
+          "instance_id",
+          "user_id"
+         ]
+        }
+       },
+       "relationships": [
+        {
+         "source_columns": [
+          "__kumo_entity_ref_0"
+         ],
+         "target_columns": [
+          "user_id"
+         ],
+         "target_table": "users"
+        },
+        {
+         "source_columns": [
+          "user_id"
+         ],
+         "source_table": "orders",
+         "target_columns": [
+          "user_id"
+         ],
+         "target_table": "users"
+        }
+       ]
+      },
+      "task": {
+       "anchor_time_column": "__kumo_anchor_time",
+       "entity_table_names": [
+        "users"
+       ],
+       "kind": "multiclass_classification",
+       "target": {
+        "classes": [
+         "DE",
+         "US",
+         "IN"
+        ],
+        "column_name": "TARGET",
+        "dtype": "string"
+       }
+      }
+     },
+     "path": "/v1/predictions",
+     "sha256": "dba38bfc82edb2b0e00955b512eaea027311deb47bfbcde7806b3c0df2c96e27"
+    }
+   ],
+   "result": {
+    "columns": [
+     {
+      "dtype": "int64",
+      "name": "row_index"
+     },
+     {
+      "dtype": "int64",
+      "name": "id"
+     },
+     {
+      "dtype": "str",
+      "name": "prediction"
+     }
+    ],
+    "digest": "46ad2ba546ccc8a410e5b3742837b52f8be56684b5dd44ecadfb9476af3ec662",
+    "rows": 2
+   },
+   "result_text": "5a2517cbeb7552a85ae9bf0c45e5dc9f7e1dd6c63d7d0d81982e955a556e7893",
+   "schema": {
+    "links": [
+     [
+      "orders",
+      "user_id",
+      "users",
+      "user_id"
+     ]
+    ],
+    "tables": [
+     {
+      "columns": [
+       {
+        "dtype": "int64",
+        "name": "user_id",
+        "stype": "ID"
+       },
+       {
+        "dtype": "int64",
+        "name": "age",
+        "stype": "numerical"
+       },
+       {
+        "dtype": "string",
+        "name": "country",
+        "stype": "categorical"
+       },
+       {
+        "dtype": "timestamp[us]",
+        "name": "signup",
+        "stype": "timestamp"
+       }
+      ],
+      "duplicate_keys": 0,
+      "name": "users",
+      "primary_key": "user_id",
+      "time_column": "signup"
+     },
+     {
+      "columns": [
+       {
+        "dtype": "int64",
+        "name": "order_id",
+        "stype": "ID"
+       },
+       {
+        "dtype": "int64",
+        "name": "user_id",
+        "stype": "ID"
+       },
+       {
+        "dtype": "float64",
+        "name": "price",
+        "stype": "numerical"
+       },
+       {
+        "dtype": "timestamp[us]",
+        "name": "ts",
+        "stype": "timestamp"
+       }
+      ],
+      "duplicate_keys": 0,
+      "name": "orders",
+      "primary_key": "order_id",
+      "time_column": "ts"
+     }
+    ]
+   }
+  }
+ },
+ "tables": [
+  {
+   "name": "orders",
+   "data": "tables/c05c70ac689f492103a392107639ac87a8672462bbc21aaee5c42dfa074e11f6.arrows"
+  },
+  {
+   "name": "users",
+   "data": "tables/3ea425ed7e756b880c6d29dcbec814c92e11c3f2f1f7d2f37b35f8889f7b3fff.arrows"
+  }
+ ],
+ "derived": [],
+ "draws": [
+  {
+   "table": "`{catalog}`.`{schema}`.`users`",
+   "seed": 42,
+   "fraction": "100.0",
+   "rows": "tables/b78cec3cd5995078a3db223ed18045e50217c02fbf9a58280139536ea38f410a.arrows",
+   "statement": "SELECT `user_id`, `country`, `signup`\nFROM `{catalog}`.`{schema}`.`users`\nTABLESAMPLE (100.0 PERCENT) REPEATABLE (42)\nWHERE `user_id` IS NOT NULL AND `signup` IS NOT NULL\nLIMIT 10000"
+  }
+ ],
+ "statements": [
+  {
+   "text": "\n                    SELECT table_name\n                    FROM `{catalog}`.information_schema.tables\n                    WHERE table_schema = ?\n                      AND table_type != 'METRIC_VIEW'\n                    ",
+   "parameters": [
+    "{schema}"
+   ],
+   "result": "tables/c0f85945fcfbe4d56c89be0775fd20eab8136ada530dfc69f1a0a72e0efe235a.arrows"
+  },
+  {
+   "text": "SELECT c.column_name, c.full_data_type, c.is_nullable,\n       c.table_catalog, c.table_schema, c.table_name,\n       t.table_type\nFROM `{catalog}`.information_schema.columns c\nJOIN `{catalog}`.information_schema.tables t\n  ON t.table_catalog = c.table_catalog\n AND t.table_schema = c.table_schema\n AND t.table_name = c.table_name\nWHERE c.table_schema = lower(?)\n  AND c.table_name = lower(?)\nORDER BY c.ordinal_position",
+   "parameters": [
+    "{schema}",
+    "users"
+   ],
+   "result": "tables/094100e2afef4e27d54d73422174827d982f456e7d0afc5936c109c486416368.arrows"
+  },
+  {
+   "text": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name\nFROM `{catalog}`.information_schema.table_constraints tc\nJOIN `{catalog}`.information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = lower(?)\n  AND tc.table_name = lower(?)\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE')",
+   "parameters": [
+    "{schema}",
+    "users"
+   ],
+   "result": "tables/a9b1ee8ad6e21529d27be456649ed4b0a313d9db8d9b56a4c23a74282bc6c7b1.arrows"
+  },
+  {
+   "text": "SELECT `user_id`, `age`, `country`, `signup` FROM `{catalog}`.`{schema}`.`users` LIMIT 1000",
+   "parameters": [],
+   "result": "tables/3ea425ed7e756b880c6d29dcbec814c92e11c3f2f1f7d2f37b35f8889f7b3fff.arrows"
+  },
+  {
+   "text": "SELECT c.column_name, c.full_data_type, c.is_nullable,\n       c.table_catalog, c.table_schema, c.table_name,\n       t.table_type\nFROM `{catalog}`.information_schema.columns c\nJOIN `{catalog}`.information_schema.tables t\n  ON t.table_catalog = c.table_catalog\n AND t.table_schema = c.table_schema\n AND t.table_name = c.table_name\nWHERE c.table_schema = lower(?)\n  AND c.table_name = lower(?)\nORDER BY c.ordinal_position",
+   "parameters": [
+    "{schema}",
+    "orders"
+   ],
+   "result": "tables/ffd5a8eaa100a91be94e93aff7a7d3e12b52784c8b20a93c87c968545d5774c3.arrows"
+  },
+  {
+   "text": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name\nFROM `{catalog}`.information_schema.table_constraints tc\nJOIN `{catalog}`.information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = lower(?)\n  AND tc.table_name = lower(?)\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE')",
+   "parameters": [
+    "{schema}",
+    "orders"
+   ],
+   "result": "tables/a9b1ee8ad6e21529d27be456649ed4b0a313d9db8d9b56a4c23a74282bc6c7b1.arrows"
+  },
+  {
+   "text": "SELECT `order_id`, `user_id`, `price`, `ts` FROM `{catalog}`.`{schema}`.`orders` LIMIT 1000",
+   "parameters": [],
+   "result": "tables/c05c70ac689f492103a392107639ac87a8672462bbc21aaee5c42dfa074e11f6.arrows"
+  },
+  {
+   "text": "SELECT tc.constraint_name, kcu.column_name,\n       ccu.table_catalog, ccu.table_schema,\n       ccu.table_name, ccu.column_name\nFROM `{catalog}`.information_schema.table_constraints tc\nJOIN `{catalog}`.information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN `{catalog}`.information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN `{catalog}`.information_schema.constraint_column_usage ccu\n  ON rc.unique_constraint_catalog = ccu.constraint_catalog\n AND rc.unique_constraint_schema = ccu.constraint_schema\n AND rc.unique_constraint_name = ccu.constraint_name\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = lower(?)\n  AND tc.table_name = lower(?)",
+   "parameters": [
+    "{schema}",
+    "users"
+   ],
+   "result": null
+  },
+  {
+   "text": "SELECT tc.constraint_name, kcu.column_name,\n       ccu.table_catalog, ccu.table_schema,\n       ccu.table_name, ccu.column_name\nFROM `{catalog}`.information_schema.table_constraints tc\nJOIN `{catalog}`.information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN `{catalog}`.information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN `{catalog}`.information_schema.constraint_column_usage ccu\n  ON rc.unique_constraint_catalog = ccu.constraint_catalog\n AND rc.unique_constraint_schema = ccu.constraint_schema\n AND rc.unique_constraint_name = ccu.constraint_name\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = lower(?)\n  AND tc.table_name = lower(?)",
+   "parameters": [
+    "{schema}",
+    "orders"
+   ],
+   "result": null
+  },
+  {
+   "text": "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT `user_id`) AS d, COUNT(CASE WHEN `user_id` IS NULL THEN 1 END) AS z\nFROM `{catalog}`.`{schema}`.`users`\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT `order_id`) AS d, COUNT(CASE WHEN `order_id` IS NULL THEN 1 END) AS z\nFROM `{catalog}`.`{schema}`.`orders`",
+   "parameters": [],
+   "result": "tables/c090cfcd11f76495f9b7ddd618711d730ae305c52e87ca7a19a63b23c05e4441.arrows"
+  },
+  {
+   "text": "SELECT COUNT(*) FROM `{catalog}`.`{schema}`.`users`",
+   "parameters": [],
+   "result": "tables/097d60edaec02c187c0c55d95e6c125477dd2a34345de1a1f6bb40dd82020c91.arrows"
+  },
+  {
+   "text": "SELECT COUNT(*) FROM `{catalog}`.`{schema}`.`orders`",
+   "parameters": [],
+   "result": "tables/3ab1c6b8f7e6ece2e20d9ec89f145eed8194530f56bcbfef1c2f2113f7b4eee3.arrows"
+  },
+  {
+   "text": "SELECT `user_id`, `country`, `signup`\nFROM `{catalog}`.`{schema}`.`users`\nTABLESAMPLE (100.0 PERCENT) REPEATABLE (42)\nWHERE `user_id` IS NOT NULL AND `signup` IS NOT NULL\nLIMIT 10000",
+   "parameters": [],
+   "result": "tables/b78cec3cd5995078a3db223ed18045e50217c02fbf9a58280139536ea38f410a.arrows"
+  },
+  {
+   "text": "WITH TMP AS (\n  SELECT pos AS __KUMO_BATCH__, col AS __KUMO_ID__\n  FROM posexplode(from_json(?, 'array<bigint>'))\n)\nSELECT TMP.__KUMO_BATCH__ as __KUMO_BATCH__, `user_id`, `age`, `signup`\nFROM TMP\nJOIN `{catalog}`.`{schema}`.`users`\n  ON `user_id` = TMP.__KUMO_ID__",
+   "parameters": [
+    "[7,6,5,4,3,2,1,0,1]"
+   ],
+   "result": "tables/2efd6df4241308d3335acf2a0bd3280f8166f4ed021a948bb5b2909905403fb1.arrows"
+  },
+  {
+   "text": "SELECT\n  0 as table_index,\n  MIN(`ts`) as min_date,\n  MAX(`ts`) as max_date\nFROM `{catalog}`.`{schema}`.`orders`",
+   "parameters": [],
+   "result": "tables/5c2c506cfb973d9d33380087fa2af3cd4aeab9a847648ec6c3f633fb9f69398a.arrows"
+  },
+  {
+   "text": "WITH TMP AS (\n  SELECT pos AS __KUMO_BATCH__, col.id AS __KUMO_ID__, col.e AS __KUMO_END_TIME__, col.s AS __KUMO_START_TIME__\n  FROM posexplode(from_json(?, 'array<struct<id:bigint,e:string,s:string>>'))\n)\nSELECT TMP.__KUMO_BATCH__ as __KUMO_BATCH__, `order_id`, `user_id`, `price`, `ts`\nFROM TMP\nJOIN `{catalog}`.`{schema}`.`orders`\n  ON `user_id` = TMP.__KUMO_ID__\n AND `ts` <= TMP.__KUMO_END_TIME__\n AND `ts` > TMP.__KUMO_START_TIME__\nWHERE `ts` <= ?\n  AND `ts` > ?\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY TMP.__KUMO_BATCH__\n  ORDER BY `ts` DESC, `order_id`\n) <= 32\nORDER BY TMP.__KUMO_BATCH__, `ts` DESC, `order_id`",
+   "parameters": [
+    "[{\"id\":7,\"e\":\"2023-10-19 00:00:00\",\"s\":\"2018-10-20 00:00:00\"},{\"id\":6,\"e\":\"2023-09-29 00:00:00\",\"s\":\"2018-09-30 00:00:00\"},{\"id\":5,\"e\":\"2023-09-09 00:00:00\",\"s\":\"2018-09-10 00:00:00\"},{\"id\":4,\"e\":\"2023-08-20 00:00:00\",\"s\":\"2018-08-21 00:00:00\"},{\"id\":3,\"e\":\"2023-07-31 00:00:00\",\"s\":\"2018-08-01 00:00:00\"},{\"id\":2,\"e\":\"2023-07-11 00:00:00\",\"s\":\"2018-07-12 00:00:00\"},{\"id\":1,\"e\":\"2023-06-21 00:00:00\",\"s\":\"2018-06-22 00:00:00\"},{\"id\":0,\"e\":NaN,\"s\":NaN},{\"id\":1,\"e\":\"2023-06-21 00:00:00\",\"s\":\"2018-06-22 00:00:00\"}]",
+    "2023-10-19 00:00:00",
+    "2018-06-22 00:00:00"
+   ],
+   "result": "tables/2e328350c667c19a5a491d80f5f5632c97f6d7f170f761105e270a828d1d1747.arrows"
+  }
+ ],
+ "loader": []
+}

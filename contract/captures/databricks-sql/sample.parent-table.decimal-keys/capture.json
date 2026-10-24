@@ -1,0 +1,6342 @@
+{
+ "format": "sdm-capture/1",
+ "case": "sample.parent-table.decimal-keys",
+ "leg": "databricks-sql",
+ "recording_commit": "be663bf19e98ca3c03266618d646a3f3099ea07b",
+ "reference_commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+ "versions": {
+  "databricks-sdk": "0.148.0",
+  "databricks-sql-connector": "4.6.0",
+  "duckdb": "1.5.6",
+  "numpy": "2.5.3",
+  "pandas": "3.0.6",
+  "pyarrow": "25.0.1",
+  "python": "3.12.15"
+ },
+ "input_hash": "d871703d25ab0c15dbbf5abda22f2129336916f2758d7ad4d988fd3093098de2",
+ "session": {
+  "time_zone": "Etc/UTC",
+  "null_order": "nulls_first"
+ },
+ "reference": {
+  "case": "sample.parent-table.decimal-keys@databricks-sql",
+  "core": null,
+  "driver": {
+   "capture": {
+    "bindings": [],
+    "cursors": 21,
+    "events": [
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 1
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 2
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 3
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 4
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 5
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 6
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 7
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 8
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 9
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 10
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 11
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 12
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 13
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 14
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 15
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 16
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 17
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 18
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 19
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 20
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 21
+     }
+    ],
+    "incomplete": [],
+    "passed_through": [],
+    "statements": [
+     {
+      "error": null,
+      "handle": 1,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{schema}'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "e19fec0437b58f142e051224b53f6543a929912654c9fe93ad25727670ee507e",
+        "method": "fetchall",
+        "rows": 3,
+        "values": {
+         "columns": [
+          "table_name"
+         ],
+         "ordered": "61cdf432030e584b579eac9917b65cff539c57abbecbbb19872cb87aaa6275f3",
+         "types": [
+          "string"
+         ],
+         "unencodable": [],
+         "unordered": "1680d716c7b6c76403abd30dce58ff50d2eb8b9585bf1e7ad031eba8520912d6"
+        }
+       }
+      ],
+      "sql": "\n                    SELECT table_name\n                    FROM `{catalog}`.information_schema.tables\n                    WHERE table_schema = ?\n                      AND table_type != 'METRIC_VIEW'\n                    ",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 2,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{schema}'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'payments'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "47345337114013cdd9e3e3bc304506ed6d6a5617ffa07592fa316b3713999b65",
+        "method": "fetchall",
+        "rows": 4,
+        "values": {
+         "columns": [
+          "column_name",
+          "full_data_type",
+          "is_nullable",
+          "table_catalog",
+          "table_schema",
+          "table_name",
+          "table_type"
+         ],
+         "ordered": "a8c05f2dfd18b178fff1ec126f89165deb20050834be892ba1c4045b59c46351",
+         "types": [
+          "string",
+          "string",
+          "string",
+          "string",
+          "string",
+          "string",
+          "string"
+         ],
+         "unencodable": [],
+         "unordered": "acc68c757cea5d049ed85631a6269b4b6dbb6c18383d85b72d7f4f7d72b5d19f"
+        }
+       }
+      ],
+      "sql": "SELECT c.column_name, c.full_data_type, c.is_nullable,\n       c.table_catalog, c.table_schema, c.table_name,\n       t.table_type\nFROM `{catalog}`.information_schema.columns c\nJOIN `{catalog}`.information_schema.tables t\n  ON t.table_catalog = c.table_catalog\n AND t.table_schema = c.table_schema\n AND t.table_name = c.table_name\nWHERE c.table_schema = lower(?)\n  AND c.table_name = lower(?)\nORDER BY c.ordinal_position",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 2,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{schema}'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'payments'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "method": "fetchall",
+        "rows": 0,
+        "values": {
+         "columns": [
+          "constraint_type",
+          "constraint_name",
+          "column_name"
+         ],
+         "ordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+         "types": [
+          "string",
+          "string",
+          "string"
+         ],
+         "unencodable": [],
+         "unordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        }
+       }
+      ],
+      "sql": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name\nFROM `{catalog}`.information_schema.table_constraints tc\nJOIN `{catalog}`.information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = lower(?)\n  AND tc.table_name = lower(?)\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE')",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 3,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "13d0d7105e910d571376a7d7631ad930b1a42e2d51f71e36af1e2453c58fa28e",
+        "method": "fetchall_arrow",
+        "rows": 36,
+        "schema": [
+         {
+          "name": "payment_id",
+          "type": "int64"
+         },
+         {
+          "name": "account_id",
+          "type": "int64"
+         },
+         {
+          "name": "amount",
+          "type": "double"
+         },
+         {
+          "name": "ts",
+          "type": "timestamp[us]"
+         }
+        ],
+        "values": {
+         "columns": [
+          "payment_id",
+          "account_id",
+          "amount",
+          "ts"
+         ],
+         "ordered": "8e06377b0c8d7b34672cd3f9769cac7f573bd67dc9977cc75b6ee895a6f987be",
+         "types": [
+          "bigint",
+          "bigint",
+          "double",
+          "timestamp"
+         ],
+         "unencodable": [],
+         "unordered": "e6610debe76d7e9a98a6a1ff6ad84ebfb3a0eb7e5aea453def35a15a7c1354ed"
+        }
+       }
+      ],
+      "sql": "SELECT `payment_id`, `account_id`, `amount`, `ts` FROM `{catalog}`.`{schema}`.`payments` LIMIT 1000",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 4,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{schema}'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'owners'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "3e3fe1d2644ded917411408464cd3268ae38325d15f63cec4597ded72c7046d7",
+        "method": "fetchall",
+        "rows": 2,
+        "values": {
+         "columns": [
+          "column_name",
+          "full_data_type",
+          "is_nullable",
+          "table_catalog",
+          "table_schema",
+          "table_name",
+          "table_type"
+         ],
+         "ordered": "7a93302d3a108d36478c18c1b32cd6b197b5532fc214f3fcb80789c467411141",
+         "types": [
+          "string",
+          "string",
+          "string",
+          "string",
+          "string",
+          "string",
+          "string"
+         ],
+         "unencodable": [],
+         "unordered": "7a93302d3a108d36478c18c1b32cd6b197b5532fc214f3fcb80789c467411141"
+        }
+       }
+      ],
+      "sql": "SELECT c.column_name, c.full_data_type, c.is_nullable,\n       c.table_catalog, c.table_schema, c.table_name,\n       t.table_type\nFROM `{catalog}`.information_schema.columns c\nJOIN `{catalog}`.information_schema.tables t\n  ON t.table_catalog = c.table_catalog\n AND t.table_schema = c.table_schema\n AND t.table_name = c.table_name\nWHERE c.table_schema = lower(?)\n  AND c.table_name = lower(?)\nORDER BY c.ordinal_position",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 4,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{schema}'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'owners'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "method": "fetchall",
+        "rows": 0,
+        "values": {
+         "columns": [
+          "constraint_type",
+          "constraint_name",
+          "column_name"
+         ],
+         "ordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+         "types": [
+          "string",
+          "string",
+          "string"
+         ],
+         "unencodable": [],
+         "unordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        }
+       }
+      ],
+      "sql": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name\nFROM `{catalog}`.information_schema.table_constraints tc\nJOIN `{catalog}`.information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = lower(?)\n  AND tc.table_name = lower(?)\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE')",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 5,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "75a3f0d65179132472b37207459c88d63675141f372c45f10c129d0ae3c14963",
+        "method": "fetchall_arrow",
+        "rows": 2,
+        "schema": [
+         {
+          "name": "owner_id",
+          "type": "decimal128(20, 0)"
+         },
+         {
+          "name": "tier",
+          "type": "string"
+         }
+        ],
+        "values": {
+         "columns": [
+          "owner_id",
+          "tier"
+         ],
+         "ordered": "f97857a28433669a13b3669f957d00ee5092daac61675c6f55d7e3fd0e0b03cd",
+         "types": [
+          "decimal",
+          "string"
+         ],
+         "unencodable": [],
+         "unordered": "f97857a28433669a13b3669f957d00ee5092daac61675c6f55d7e3fd0e0b03cd"
+        }
+       }
+      ],
+      "sql": "SELECT `owner_id`, `tier` FROM `{catalog}`.`{schema}`.`owners` LIMIT 1000",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 6,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{schema}'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'accounts'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "cbc155a156547063f04e7c17e9546cbc945348888237196e2e63df3f4b6e5b0c",
+        "method": "fetchall",
+        "rows": 3,
+        "values": {
+         "columns": [
+          "column_name",
+          "full_data_type",
+          "is_nullable",
+          "table_catalog",
+          "table_schema",
+          "table_name",
+          "table_type"
+         ],
+         "ordered": "19ae3dac615c36a77428f313bac7ddd2201b38af00208d19d4d2c373974c0ff6",
+         "types": [
+          "string",
+          "string",
+          "string",
+          "string",
+          "string",
+          "string",
+          "string"
+         ],
+         "unencodable": [],
+         "unordered": "111693b453410428ed9ca7ea358f2a4817dcb056caf881b554fa0dcd86d0bdbf"
+        }
+       }
+      ],
+      "sql": "SELECT c.column_name, c.full_data_type, c.is_nullable,\n       c.table_catalog, c.table_schema, c.table_name,\n       t.table_type\nFROM `{catalog}`.information_schema.columns c\nJOIN `{catalog}`.information_schema.tables t\n  ON t.table_catalog = c.table_catalog\n AND t.table_schema = c.table_schema\n AND t.table_name = c.table_name\nWHERE c.table_schema = lower(?)\n  AND c.table_name = lower(?)\nORDER BY c.ordinal_position",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 6,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{schema}'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'accounts'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "method": "fetchall",
+        "rows": 0,
+        "values": {
+         "columns": [
+          "constraint_type",
+          "constraint_name",
+          "column_name"
+         ],
+         "ordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+         "types": [
+          "string",
+          "string",
+          "string"
+         ],
+         "unencodable": [],
+         "unordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        }
+       }
+      ],
+      "sql": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name\nFROM `{catalog}`.information_schema.table_constraints tc\nJOIN `{catalog}`.information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = lower(?)\n  AND tc.table_name = lower(?)\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE')",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 7,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "da56f025638050e2ef342ab99a2624741b96ec1ec4320de2bf83681a70c70fe5",
+        "method": "fetchall_arrow",
+        "rows": 6,
+        "schema": [
+         {
+          "name": "account_id",
+          "type": "int64"
+         },
+         {
+          "name": "owner_id",
+          "type": "decimal128(20, 0)"
+         },
+         {
+          "name": "age",
+          "type": "int32"
+         }
+        ],
+        "values": {
+         "columns": [
+          "account_id",
+          "owner_id",
+          "age"
+         ],
+         "ordered": "831fa8923c5f48a753cd305633b969e4b3acdc31e36aff68e9cf6ea6e0007b15",
+         "types": [
+          "bigint",
+          "decimal",
+          "int"
+         ],
+         "unencodable": [],
+         "unordered": "831fa8923c5f48a753cd305633b969e4b3acdc31e36aff68e9cf6ea6e0007b15"
+        }
+       }
+      ],
+      "sql": "SELECT `account_id`, `owner_id`, `age` FROM `{catalog}`.`{schema}`.`accounts` LIMIT 1000",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 8,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{schema}'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'payments'"
+       }
+      ],
+      "results": [],
+      "sql": "SELECT tc.constraint_name, kcu.column_name,\n       ccu.table_catalog, ccu.table_schema,\n       ccu.table_name, ccu.column_name\nFROM `{catalog}`.information_schema.table_constraints tc\nJOIN `{catalog}`.information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN `{catalog}`.information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN `{catalog}`.information_schema.constraint_column_usage ccu\n  ON rc.unique_constraint_catalog = ccu.constraint_catalog\n AND rc.unique_constraint_schema = ccu.constraint_schema\n AND rc.unique_constraint_name = ccu.constraint_name\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = lower(?)\n  AND tc.table_name = lower(?)",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 9,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{schema}'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'owners'"
+       }
+      ],
+      "results": [],
+      "sql": "SELECT tc.constraint_name, kcu.column_name,\n       ccu.table_catalog, ccu.table_schema,\n       ccu.table_name, ccu.column_name\nFROM `{catalog}`.information_schema.table_constraints tc\nJOIN `{catalog}`.information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN `{catalog}`.information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN `{catalog}`.information_schema.constraint_column_usage ccu\n  ON rc.unique_constraint_catalog = ccu.constraint_catalog\n AND rc.unique_constraint_schema = ccu.constraint_schema\n AND rc.unique_constraint_name = ccu.constraint_name\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = lower(?)\n  AND tc.table_name = lower(?)",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 10,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{schema}'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'accounts'"
+       }
+      ],
+      "results": [],
+      "sql": "SELECT tc.constraint_name, kcu.column_name,\n       ccu.table_catalog, ccu.table_schema,\n       ccu.table_name, ccu.column_name\nFROM `{catalog}`.information_schema.table_constraints tc\nJOIN `{catalog}`.information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN `{catalog}`.information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN `{catalog}`.information_schema.constraint_column_usage ccu\n  ON rc.unique_constraint_catalog = ccu.constraint_catalog\n AND rc.unique_constraint_schema = ccu.constraint_schema\n AND rc.unique_constraint_name = ccu.constraint_name\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = lower(?)\n  AND tc.table_name = lower(?)",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 11,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "53ff81cc3112bcfa5556b4a4406a95d707920f610cacd094e6c5ed905bf52d71",
+        "method": "fetchall",
+        "rows": 3,
+        "values": {
+         "columns": [
+          "k",
+          "n",
+          "d",
+          "z"
+         ],
+         "ordered": "c3c32fbd1cdf18681399eee1c2fb0fdd4eccf6cbe4b8c1275fef329e4c0ab118",
+         "types": [
+          "int",
+          "bigint",
+          "bigint",
+          "bigint"
+         ],
+         "unencodable": [],
+         "unordered": "c3c32fbd1cdf18681399eee1c2fb0fdd4eccf6cbe4b8c1275fef329e4c0ab118"
+        }
+       }
+      ],
+      "sql": "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT `payment_id`) AS d, COUNT(CASE WHEN `payment_id` IS NULL THEN 1 END) AS z\nFROM `{catalog}`.`{schema}`.`payments`\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT `owner_id`) AS d, COUNT(CASE WHEN `owner_id` IS NULL THEN 1 END) AS z\nFROM `{catalog}`.`{schema}`.`owners`\nUNION ALL\nSELECT 2 AS k, COUNT(*) AS n, COUNT(DISTINCT `account_id`) AS d, COUNT(CASE WHEN `account_id` IS NULL THEN 1 END) AS z\nFROM `{catalog}`.`{schema}`.`accounts`",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 12,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "9699ed616d17430b4821a57b22e09ed79a96bb7be7be9aa154c4149e0b19293e",
+        "method": "fetchone",
+        "rows": 1,
+        "values": {
+         "columns": [
+          "count(1)"
+         ],
+         "ordered": "bcb9493b5f5e5e63a135ca4ffa481785939fc2e63fdc12558aadf9e9622b64c5",
+         "types": [
+          "bigint"
+         ],
+         "unencodable": [],
+         "unordered": "bcb9493b5f5e5e63a135ca4ffa481785939fc2e63fdc12558aadf9e9622b64c5"
+        }
+       }
+      ],
+      "sql": "SELECT COUNT(*) FROM `{catalog}`.`{schema}`.`payments`",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 13,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "7d122d456d71a882da2a0a5fb55edde3489feab1aca7aa7adcc6f84e919d5241",
+        "method": "fetchone",
+        "rows": 1,
+        "values": {
+         "columns": [
+          "count(1)"
+         ],
+         "ordered": "5cf430dcea59395edbf27b614e67a834f1f40d457cb292ac718d9677784b3193",
+         "types": [
+          "bigint"
+         ],
+         "unencodable": [],
+         "unordered": "5cf430dcea59395edbf27b614e67a834f1f40d457cb292ac718d9677784b3193"
+        }
+       }
+      ],
+      "sql": "SELECT COUNT(*) FROM `{catalog}`.`{schema}`.`owners`",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 14,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "a23bc7829deff3112f5a881d8148e8043a5a7eceedbf843902e18266ea24a7a6",
+        "method": "fetchone",
+        "rows": 1,
+        "values": {
+         "columns": [
+          "count(1)"
+         ],
+         "ordered": "44685e00363754e574a61a3814e8dcea35b359c5811c99a391fcb0530da2ca23",
+         "types": [
+          "bigint"
+         ],
+         "unencodable": [],
+         "unordered": "44685e00363754e574a61a3814e8dcea35b359c5811c99a391fcb0530da2ca23"
+        }
+       }
+      ],
+      "sql": "SELECT COUNT(*) FROM `{catalog}`.`{schema}`.`accounts`",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 15,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "bc06ef08717113cb8bd3151e58a125257e30906445358a725da1c48d1029d1e3",
+        "method": "fetchall",
+        "rows": 1,
+        "values": {
+         "columns": [
+          "table_index",
+          "min_date",
+          "max_date"
+         ],
+         "ordered": "00850afa88ace66a065f01cd2c78e4500ebdfaed7a3f54d9e5991035b33ae27d",
+         "types": [
+          "int",
+          "timestamp",
+          "timestamp"
+         ],
+         "unencodable": [],
+         "unordered": "00850afa88ace66a065f01cd2c78e4500ebdfaed7a3f54d9e5991035b33ae27d"
+        }
+       }
+      ],
+      "sql": "SELECT\n  0 as table_index,\n  MIN(`ts`) as min_date,\n  MAX(`ts`) as max_date\nFROM `{catalog}`.`{schema}`.`payments`",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 16,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "a43df6daeb9bc0d4387f763a2c4342b0757d1296e529c0870c8a35f499e4916b",
+        "method": "fetchall_arrow",
+        "rows": 6,
+        "schema": [
+         {
+          "name": "account_id",
+          "type": "int64"
+         }
+        ],
+        "values": {
+         "columns": [
+          "account_id"
+         ],
+         "ordered": "7be8b92001fc8309bad8c2ea0006a17253fb780fd081489bed0e469623b97e74",
+         "types": [
+          "bigint"
+         ],
+         "unencodable": [],
+         "unordered": "7be8b92001fc8309bad8c2ea0006a17253fb780fd081489bed0e469623b97e74"
+        }
+       }
+      ],
+      "sql": "SELECT `account_id`\nFROM `{catalog}`.`{schema}`.`accounts`\nTABLESAMPLE (100.0 PERCENT) REPEATABLE (42)\nWHERE `account_id` IS NOT NULL\nLIMIT 10000",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 17,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'[{\"id\":3,\"e\":\"2023-09-01 00:00:00\",\"s\":\"2023-08-02 00:00:00\"},{\"id\":2,\"e\":\"2023-09-01 00:00:00\",\"s\":\"2023-08-02 00:00:00\"},{\"id\":5,\"e\":\"2023-09-01 00:00:00\",\"s\":\"2023-08-02 00:00:00\"},{\"id\":4,\"e\":\"2023-09-01 00:00:00\",\"s\":\"2023-08-02 00:00:00\"},{\"id\":1,\"e\":\"2023-09-01 00:00:00\",\"s\":\"2023-08-02 00:00:00\"},{\"id\":0,\"e\":\"2023-09-01 00:00:00\",\"s\":\"2023-08-02 00:00:00\"},{\"id\":2,\"e\":\"2023-08-02 00:00:00\",\"s\":\"2023-07-03 00:00:00\"},{\"id\":4,\"e\":\"2023-08-02 00:00:00\",\"s\":\"2023-07-03 00:00:00\"},{\"id\":0,\"e\":\"2023-08-02 00:00:00\",\"s\":\"2023-07-03 00:00:00\"},{\"id\":1,\"e\":\"2023-08-02 00:00:00\",\"s\":\"2023-07-03 00:00:00\"},{\"id\":3,\"e\":\"2023-08-02 00:00:00\",\"s\":\"2023-07-03 00:00:00\"},{\"id\":5,\"e\":\"2023-08-02 00:00:00\",\"s\":\"2023-07-03 00:00:00\"},{\"id\":5,\"e\":\"2023-07-03 00:00:00\",\"s\":\"2023-06-03 00:00:00\"},{\"id\":4,\"e\":\"2023-07-03 00:00:00\",\"s\":\"2023-06-03 00:00:00\"},{\"id\":2,\"e\":\"2023-07-03 00:00:00\",\"s\":\"2023-06-03 00:00:00\"},{\"id\":3,\"e\":\"2023-07-03 00:00:00\",\"s\":\"2023-06-03 00:00:00\"},{\"id\":0,\"e\":\"2023-07-03 00:00:00\",\"s\":\"2023-06-03 00:00:00\"},{\"id\":1,\"e\":\"2023-07-03 00:00:00\",\"s\":\"2023-06-03 00:00:00\"},{\"id\":4,\"e\":\"2023-06-03 00:00:00\",\"s\":\"2023-05-04 00:00:00\"},{\"id\":0,\"e\":\"2023-06-03 00:00:00\",\"s\":\"2023-05-04 00:00:00\"},{\"id\":2,\"e\":\"2023-06-03 00:00:00\",\"s\":\"2023-05-04 00:00:00\"},{\"id\":3,\"e\":\"2023-06-03 00:00:00\",\"s\":\"2023-05-04 00:00:00\"},{\"id\":5,\"e\":\"2023-06-03 00:00:00\",\"s\":\"2023-05-04 00:00:00\"},{\"id\":1,\"e\":\"2023-06-03 00:00:00\",\"s\":\"2023-05-04 00:00:00\"},{\"id\":5,\"e\":\"2023-05-04 00:00:00\",\"s\":\"2023-04-04 00:00:00\"},{\"id\":0,\"e\":\"2023-05-04 00:00:00\",\"s\":\"2023-04-04 00:00:00\"},{\"id\":4,\"e\":\"2023-05-04 00:00:00\",\"s\":\"2023-04-04 00:00:00\"},{\"id\":2,\"e\":\"2023-05-04 00:00:00\",\"s\":\"2023-04-04 00:00:00\"},{\"id\":3,\"e\":\"2023-05-04 00:00:00\",\"s\":\"2023-04-04 00:00:00\"},{\"id\":1,\"e\":\"2023-05-04 00:00:00\",\"s\":\"2023-04-04 00:00:00\"},{\"id\":1,\"e\":\"2023-04-04 00:00:00\",\"s\":\"2023-03-05 00:00:00\"},{\"id\":0,\"e\":\"2023-04-04 00:00:00\",\"s\":\"2023-03-05 00:00:00\"},{\"id\":5,\"e\":\"2023-04-04 00:00:00\",\"s\":\"2023-03-05 00:00:00\"},{\"id\":4,\"e\":\"2023-04-04 00:00:00\",\"s\":\"2023-03-05 00:00:00\"},{\"id\":3,\"e\":\"2023-04-04 00:00:00\",\"s\":\"2023-03-05 00:00:00\"},{\"id\":2,\"e\":\"2023-04-04 00:00:00\",\"s\":\"2023-03-05 00:00:00\"},{\"id\":5,\"e\":\"2023-03-05 00:00:00\",\"s\":\"2023-02-03 00:00:00\"},{\"id\":3,\"e\":\"2023-03-05 00:00:00\",\"s\":\"2023-02-03 00:00:00\"},{\"id\":2,\"e\":\"2023-03-05 00:00:00\",\"s\":\"2023-02-03 00:00:00\"},{\"id\":1,\"e\":\"2023-03-05 00:00:00\",\"s\":\"2023-02-03 00:00:00\"},{\"id\":0,\"e\":\"2023-03-05 00:00:00\",\"s\":\"2023-02-03 00:00:00\"},{\"id\":4,\"e\":\"2023-03-05 00:00:00\",\"s\":\"2023-02-03 00:00:00\"},{\"id\":2,\"e\":\"2023-02-03 00:00:00\",\"s\":\"2023-01-04 00:00:00\"},{\"id\":1,\"e\":\"2023-02-03 00:00:00\",\"s\":\"2023-01-04 00:00:00\"},{\"id\":0,\"e\":\"2023-02-03 00:00:00\",\"s\":\"2023-01-04 00:00:00\"},{\"id\":3,\"e\":\"2023-02-03 00:00:00\",\"s\":\"2023-01-04 00:00:00\"},{\"id\":4,\"e\":\"2023-02-03 00:00:00\",\"s\":\"2023-01-04 00:00:00\"},{\"id\":5,\"e\":\"2023-02-03 00:00:00\",\"s\":\"2023-01-04 00:00:00\"}]'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'2023-09-01 00:00:00'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'2023-01-04 00:00:00'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "a6ab3723b81c25a34cd6cddfa90bdac1aa86902352a024e2e0d5bc8ae8a11195",
+        "method": "fetchall_arrow",
+        "rows": 27,
+        "schema": [
+         {
+          "name": "__KUMO_BATCH__",
+          "type": "int32"
+         },
+         {
+          "name": "amount",
+          "type": "double"
+         },
+         {
+          "name": "ts",
+          "type": "timestamp[us]"
+         }
+        ],
+        "values": {
+         "columns": [
+          "__KUMO_BATCH__",
+          "amount",
+          "ts"
+         ],
+         "ordered": "6ee40859b058a29c036b97e98cbb58165a222223dddcdff00de8ad2b6b870166",
+         "types": [
+          "int",
+          "double",
+          "timestamp"
+         ],
+         "unencodable": [],
+         "unordered": "6cb5b794620cd64dbb66fbc4570e5d93174d651aa452ac43a4af39f6979978b6"
+        }
+       }
+      ],
+      "sql": "WITH TMP AS (\n  SELECT pos AS __KUMO_BATCH__, col.id AS __KUMO_ID__, col.e AS __KUMO_END_TIME__, col.s AS __KUMO_START_TIME__\n  FROM posexplode(from_json(?, 'array<struct<id:bigint,e:string,s:string>>'))\n)\nSELECT TMP.__KUMO_BATCH__ as __KUMO_BATCH__, `amount`, `ts`\nFROM TMP\nJOIN `{catalog}`.`{schema}`.`payments`\n  ON `account_id` = TMP.__KUMO_ID__\n AND `ts` <= TMP.__KUMO_END_TIME__\nAND `ts` > TMP.__KUMO_START_TIME__\nWHERE `ts` <= ?\nAND `ts` > ?",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 18,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'[3,2,5,4,1,0,2,4,0,1,3,5,5,4,2,3,0,1,4,0,2,3,5,1,5,0,4,2,3,1,1,0,5,4,3,2,5,3,2,1,0,4,2,1,0,3,4,5,0,1]'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "d188660dca4764e82f25bb3076531e86b261bdfcecd54b2b8fbba75f24a3b493",
+        "method": "fetchall_arrow",
+        "rows": 50,
+        "schema": [
+         {
+          "name": "__KUMO_BATCH__",
+          "type": "int32"
+         },
+         {
+          "name": "account_id",
+          "type": "int64"
+         },
+         {
+          "name": "owner_id",
+          "type": "decimal128(20, 0)"
+         },
+         {
+          "name": "age",
+          "type": "int32"
+         }
+        ],
+        "values": {
+         "columns": [
+          "__KUMO_BATCH__",
+          "account_id",
+          "owner_id",
+          "age"
+         ],
+         "ordered": "62ba1be5aefbd2bfabc0d24d8644319adb606d8a3e6e19bcd1e54d58668443bd",
+         "types": [
+          "int",
+          "bigint",
+          "decimal",
+          "int"
+         ],
+         "unencodable": [],
+         "unordered": "a8e6920761044a82f5a6765ff2aa1408342d92bd804c55d6bd6b3a69917efb9c"
+        }
+       }
+      ],
+      "sql": "WITH TMP AS (\n  SELECT pos AS __KUMO_BATCH__, col AS __KUMO_ID__\n  FROM posexplode(from_json(?, 'array<bigint>'))\n)\nSELECT TMP.__KUMO_BATCH__ as __KUMO_BATCH__, `account_id`, `owner_id`, `age`\nFROM TMP\nJOIN `{catalog}`.`{schema}`.`accounts`\n  ON `account_id` = TMP.__KUMO_ID__",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 19,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'[9007199254740993,9007199254740992]'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "07a7e067578a24b7f96658728f451a5c0621ffe149ac81ab818e74e943e764fe",
+        "method": "fetchall_arrow",
+        "rows": 2,
+        "schema": [
+         {
+          "name": "__KUMO_BATCH__",
+          "type": "int32"
+         },
+         {
+          "name": "owner_id",
+          "type": "decimal128(20, 0)"
+         },
+         {
+          "name": "tier",
+          "type": "string"
+         }
+        ],
+        "values": {
+         "columns": [
+          "__KUMO_BATCH__",
+          "owner_id",
+          "tier"
+         ],
+         "ordered": "d102b21e2dfe1eb572d40a461b713bc5e1949a42de7bc309ceb092ccce3e3a74",
+         "types": [
+          "int",
+          "decimal",
+          "string"
+         ],
+         "unencodable": [],
+         "unordered": "edef571fad4c008962332abb9d2ebd814a48f2168ad904ceb538f3422026977f"
+        }
+       }
+      ],
+      "sql": "WITH TMP AS (\n  SELECT pos AS __KUMO_BATCH__, col AS __KUMO_ID__\n  FROM posexplode(from_json(?, 'array<bigint>'))\n)\nSELECT TMP.__KUMO_BATCH__ as __KUMO_BATCH__, `owner_id`, `tier`\nFROM TMP\nJOIN `{catalog}`.`{schema}`.`owners`\n  ON `owner_id` = TMP.__KUMO_ID__",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 20,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'[{\"id\":3,\"e\":\"2023-08-02 00:00:00\",\"s\":\"2018-08-03 00:00:00\"},{\"id\":2,\"e\":\"2023-08-02 00:00:00\",\"s\":\"2018-08-03 00:00:00\"},{\"id\":5,\"e\":\"2023-08-02 00:00:00\",\"s\":\"2018-08-03 00:00:00\"},{\"id\":4,\"e\":\"2023-08-02 00:00:00\",\"s\":\"2018-08-03 00:00:00\"},{\"id\":1,\"e\":\"2023-08-02 00:00:00\",\"s\":\"2018-08-03 00:00:00\"},{\"id\":0,\"e\":\"2023-08-02 00:00:00\",\"s\":\"2018-08-03 00:00:00\"},{\"id\":2,\"e\":\"2023-07-03 00:00:00\",\"s\":\"2018-07-04 00:00:00\"},{\"id\":4,\"e\":\"2023-07-03 00:00:00\",\"s\":\"2018-07-04 00:00:00\"},{\"id\":0,\"e\":\"2023-07-03 00:00:00\",\"s\":\"2018-07-04 00:00:00\"},{\"id\":1,\"e\":\"2023-07-03 00:00:00\",\"s\":\"2018-07-04 00:00:00\"},{\"id\":3,\"e\":\"2023-07-03 00:00:00\",\"s\":\"2018-07-04 00:00:00\"},{\"id\":5,\"e\":\"2023-07-03 00:00:00\",\"s\":\"2018-07-04 00:00:00\"},{\"id\":5,\"e\":\"2023-06-03 00:00:00\",\"s\":\"2018-06-04 00:00:00\"},{\"id\":4,\"e\":\"2023-06-03 00:00:00\",\"s\":\"2018-06-04 00:00:00\"},{\"id\":2,\"e\":\"2023-06-03 00:00:00\",\"s\":\"2018-06-04 00:00:00\"},{\"id\":3,\"e\":\"2023-06-03 00:00:00\",\"s\":\"2018-06-04 00:00:00\"},{\"id\":0,\"e\":\"2023-06-03 00:00:00\",\"s\":\"2018-06-04 00:00:00\"},{\"id\":1,\"e\":\"2023-06-03 00:00:00\",\"s\":\"2018-06-04 00:00:00\"},{\"id\":4,\"e\":\"2023-05-04 00:00:00\",\"s\":\"2018-05-05 00:00:00\"},{\"id\":0,\"e\":\"2023-05-04 00:00:00\",\"s\":\"2018-05-05 00:00:00\"},{\"id\":2,\"e\":\"2023-05-04 00:00:00\",\"s\":\"2018-05-05 00:00:00\"},{\"id\":3,\"e\":\"2023-05-04 00:00:00\",\"s\":\"2018-05-05 00:00:00\"},{\"id\":5,\"e\":\"2023-05-04 00:00:00\",\"s\":\"2018-05-05 00:00:00\"},{\"id\":1,\"e\":\"2023-05-04 00:00:00\",\"s\":\"2018-05-05 00:00:00\"},{\"id\":5,\"e\":\"2023-04-04 00:00:00\",\"s\":\"2018-04-05 00:00:00\"},{\"id\":0,\"e\":\"2023-04-04 00:00:00\",\"s\":\"2018-04-05 00:00:00\"},{\"id\":4,\"e\":\"2023-04-04 00:00:00\",\"s\":\"2018-04-05 00:00:00\"},{\"id\":2,\"e\":\"2023-04-04 00:00:00\",\"s\":\"2018-04-05 00:00:00\"},{\"id\":3,\"e\":\"2023-04-04 00:00:00\",\"s\":\"2018-04-05 00:00:00\"},{\"id\":1,\"e\":\"2023-04-04 00:00:00\",\"s\":\"2018-04-05 00:00:00\"},{\"id\":1,\"e\":\"2023-03-05 00:00:00\",\"s\":\"2018-03-06 00:00:00\"},{\"id\":0,\"e\":\"2023-03-05 00:00:00\",\"s\":\"2018-03-06 00:00:00\"},{\"id\":5,\"e\":\"2023-03-05 00:00:00\",\"s\":\"2018-03-06 00:00:00\"},{\"id\":4,\"e\":\"2023-03-05 00:00:00\",\"s\":\"2018-03-06 00:00:00\"},{\"id\":3,\"e\":\"2023-03-05 00:00:00\",\"s\":\"2018-03-06 00:00:00\"},{\"id\":2,\"e\":\"2023-03-05 00:00:00\",\"s\":\"2018-03-06 00:00:00\"},{\"id\":5,\"e\":\"2023-02-03 00:00:00\",\"s\":\"2018-02-04 00:00:00\"},{\"id\":3,\"e\":\"2023-02-03 00:00:00\",\"s\":\"2018-02-04 00:00:00\"},{\"id\":2,\"e\":\"2023-02-03 00:00:00\",\"s\":\"2018-02-04 00:00:00\"},{\"id\":1,\"e\":\"2023-02-03 00:00:00\",\"s\":\"2018-02-04 00:00:00\"},{\"id\":0,\"e\":\"2023-02-03 00:00:00\",\"s\":\"2018-02-04 00:00:00\"},{\"id\":4,\"e\":\"2023-02-03 00:00:00\",\"s\":\"2018-02-04 00:00:00\"},{\"id\":2,\"e\":\"2023-01-04 00:00:00\",\"s\":\"2018-01-05 00:00:00\"},{\"id\":1,\"e\":\"2023-01-04 00:00:00\",\"s\":\"2018-01-05 00:00:00\"},{\"id\":0,\"e\":\"2023-01-04 00:00:00\",\"s\":\"2018-01-05 00:00:00\"},{\"id\":3,\"e\":\"2023-01-04 00:00:00\",\"s\":\"2018-01-05 00:00:00\"},{\"id\":4,\"e\":\"2023-01-04 00:00:00\",\"s\":\"2018-01-05 00:00:00\"},{\"id\":5,\"e\":\"2023-01-04 00:00:00\",\"s\":\"2018-01-05 00:00:00\"},{\"id\":0,\"e\":\"2023-09-01 00:00:00\",\"s\":\"2018-09-02 00:00:00\"},{\"id\":1,\"e\":\"2023-09-01 00:00:00\",\"s\":\"2018-09-02 00:00:00\"}]'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'2023-09-01 00:00:00'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'2018-01-05 00:00:00'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "0eed5158b8b91271934835a73f30170e3da48ff3b070902d1d60046c5a29da13",
+        "method": "fetchall_arrow",
+        "rows": 111,
+        "schema": [
+         {
+          "name": "__KUMO_BATCH__",
+          "type": "int32"
+         },
+         {
+          "name": "payment_id",
+          "type": "int64"
+         },
+         {
+          "name": "account_id",
+          "type": "int64"
+         },
+         {
+          "name": "amount",
+          "type": "double"
+         },
+         {
+          "name": "ts",
+          "type": "timestamp[us]"
+         }
+        ],
+        "values": {
+         "columns": [
+          "__KUMO_BATCH__",
+          "payment_id",
+          "account_id",
+          "amount",
+          "ts"
+         ],
+         "ordered": "62e1581eccd7c03466ad070f98728e2ac1864e6a3074c1088550c83a3a1aa007",
+         "types": [
+          "int",
+          "bigint",
+          "bigint",
+          "double",
+          "timestamp"
+         ],
+         "unencodable": [],
+         "unordered": "def5bbc0552c705bf9bc51843ee0cb96fc7bacb0db44fd8a4dfef50fc67454cb"
+        }
+       }
+      ],
+      "sql": "WITH TMP AS (\n  SELECT pos AS __KUMO_BATCH__, col.id AS __KUMO_ID__, col.e AS __KUMO_END_TIME__, col.s AS __KUMO_START_TIME__\n  FROM posexplode(from_json(?, 'array<struct<id:bigint,e:string,s:string>>'))\n)\nSELECT TMP.__KUMO_BATCH__ as __KUMO_BATCH__, `payment_id`, `account_id`, `amount`, `ts`\nFROM TMP\nJOIN `{catalog}`.`{schema}`.`payments`\n  ON `account_id` = TMP.__KUMO_ID__\n AND `ts` <= TMP.__KUMO_END_TIME__\n AND `ts` > TMP.__KUMO_START_TIME__\nWHERE `ts` <= ?\n  AND `ts` > ?\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY TMP.__KUMO_BATCH__\n  ORDER BY `ts` DESC, `payment_id`\n) <= 32\nORDER BY TMP.__KUMO_BATCH__, `ts` DESC, `payment_id`",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 21,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'[9007199254740993,9007199254740992,9007199254740993,9007199254740992,9007199254740993,9007199254740992,9007199254740992,9007199254740992,9007199254740992,9007199254740993,9007199254740993,9007199254740993,9007199254740993,9007199254740992,9007199254740992,9007199254740993,9007199254740992,9007199254740993,9007199254740992,9007199254740992,9007199254740992,9007199254740993,9007199254740993,9007199254740993,9007199254740993,9007199254740992,9007199254740992,9007199254740992,9007199254740993,9007199254740993,9007199254740993,9007199254740992,9007199254740993,9007199254740992,9007199254740993,9007199254740992,9007199254740993,9007199254740993,9007199254740992,9007199254740993,9007199254740992,9007199254740992,9007199254740992,9007199254740993,9007199254740992,9007199254740993,9007199254740992,9007199254740993,9007199254740992,9007199254740993]'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "311deeca45f001dea90cb2ab188e9d42909f4ae23462166fab91200ba8e69564",
+        "method": "fetchall_arrow",
+        "rows": 150,
+        "schema": [
+         {
+          "name": "__KUMO_BATCH__",
+          "type": "int32"
+         },
+         {
+          "name": "account_id",
+          "type": "int64"
+         },
+         {
+          "name": "owner_id",
+          "type": "decimal128(20, 0)"
+         },
+         {
+          "name": "age",
+          "type": "int32"
+         }
+        ],
+        "values": {
+         "columns": [
+          "__KUMO_BATCH__",
+          "account_id",
+          "owner_id",
+          "age"
+         ],
+         "ordered": "b73a5acc28211f66bdcaa9ecd0b3c12ae25d01e02606b688967366541fe3ca8f",
+         "types": [
+          "int",
+          "bigint",
+          "decimal",
+          "int"
+         ],
+         "unencodable": [],
+         "unordered": "69ce0a0708f8c23b369aa3a061c164fd712107ab4d35ccc9be18b66ff0effef4"
+        }
+       }
+      ],
+      "sql": "WITH TMP AS (\n  SELECT pos AS __KUMO_BATCH__, col AS __KUMO_ID__\n  FROM posexplode(from_json(?, 'array<bigint>'))\n)\nSELECT TMP.__KUMO_BATCH__ as __KUMO_BATCH__, `account_id`, `owner_id`, `age`\nFROM TMP\nJOIN `{catalog}`.`{schema}`.`accounts`\n  ON `owner_id` = TMP.__KUMO_ID__\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY TMP.__KUMO_BATCH__\n  ORDER BY `account_id`\n) <= 32\nORDER BY TMP.__KUMO_BATCH__, `account_id`",
+      "stage": "materialize"
+     }
+    ]
+   },
+   "query_log": {
+    "bindings": 0,
+    "compared": 24,
+    "differing": [],
+    "statements": 24
+   }
+  },
+  "format": "sdm-observation/1",
+  "host": {
+   "warnings": []
+  },
+  "identity": {
+   "cell": "ref-pandas3",
+   "commit": {
+    "clean": true,
+    "sha": "be663bf19e98ca3c03266618d646a3f3099ea07b"
+   },
+   "contract": null,
+   "inputs": {
+    "bases": "9d69fe4aea2be4a6a2d96ea03f5258147c537927e2c6e6716b6030836ebc62f8",
+    "case": "0a0c9d3b13ec51fe31246819dba5a47d981156554317fb823f27c30082af5ecb"
+   },
+   "native": null,
+   "native_loaded": false,
+   "operations": [],
+   "platform": "linux-x86_64",
+   "reference": {
+    "commit": {
+     "clean": true,
+     "sha": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1"
+    },
+    "environment": "4848c08cc7bbb66e99d4a7416854e401ab51e44413b509172cf0c121a55c78e3",
+    "guard": {
+     "after": "passed",
+     "before": "passed"
+    }
+   },
+   "runner": "python-ref",
+   "versions": {
+    "duckdb": "1.5.6",
+    "numpy": "2.5.3",
+    "pandas": "3.0.6",
+    "pyarrow": "25.0.1",
+    "python": "3.12.15"
+   }
+  },
+  "outcome": {
+   "code": null,
+   "error": null,
+   "result": "success",
+   "stage": "predict"
+  },
+  "public": {
+   "payloads": [
+    {
+     "method": "POST",
+     "parsed": {
+      "context": {
+       "instance_table": {
+        "columns": [
+         "instance_id",
+         "__kumo_entity_ref_0",
+         "__kumo_anchor_time",
+         "TARGET"
+        ],
+        "format": "arrays",
+        "rows": [
+         [
+          {
+           "number": "0"
+          },
+          {
+           "number": "3"
+          },
+          "2023-08-02T00:00:00.000000Z",
+          {
+           "number": "32.0"
+          }
+         ],
+         [
+          {
+           "number": "1"
+          },
+          {
+           "number": "2"
+          },
+          "2023-08-02T00:00:00.000000Z",
+          {
+           "number": "31.0"
+          }
+         ],
+         [
+          {
+           "number": "2"
+          },
+          {
+           "number": "5"
+          },
+          "2023-08-02T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "3"
+          },
+          {
+           "number": "4"
+          },
+          "2023-08-02T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "4"
+          },
+          {
+           "number": "1"
+          },
+          "2023-08-02T00:00:00.000000Z",
+          {
+           "number": "30.0"
+          }
+         ],
+         [
+          {
+           "number": "5"
+          },
+          {
+           "number": "0"
+          },
+          "2023-08-02T00:00:00.000000Z",
+          {
+           "number": "29.0"
+          }
+         ],
+         [
+          {
+           "number": "6"
+          },
+          {
+           "number": "2"
+          },
+          "2023-07-03T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "7"
+          },
+          {
+           "number": "4"
+          },
+          "2023-07-03T00:00:00.000000Z",
+          {
+           "number": "27.0"
+          }
+         ],
+         [
+          {
+           "number": "8"
+          },
+          {
+           "number": "0"
+          },
+          "2023-07-03T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "9"
+          },
+          {
+           "number": "1"
+          },
+          "2023-07-03T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "10"
+          },
+          {
+           "number": "3"
+          },
+          "2023-07-03T00:00:00.000000Z",
+          {
+           "number": "26.0"
+          }
+         ],
+         [
+          {
+           "number": "11"
+          },
+          {
+           "number": "5"
+          },
+          "2023-07-03T00:00:00.000000Z",
+          {
+           "number": "28.0"
+          }
+         ],
+         [
+          {
+           "number": "12"
+          },
+          {
+           "number": "5"
+          },
+          "2023-06-03T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "13"
+          },
+          {
+           "number": "4"
+          },
+          "2023-06-03T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "14"
+          },
+          {
+           "number": "2"
+          },
+          "2023-06-03T00:00:00.000000Z",
+          {
+           "number": "25.0"
+          }
+         ],
+         [
+          {
+           "number": "15"
+          },
+          {
+           "number": "3"
+          },
+          "2023-06-03T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "16"
+          },
+          {
+           "number": "0"
+          },
+          "2023-06-03T00:00:00.000000Z",
+          {
+           "number": "23.0"
+          }
+         ],
+         [
+          {
+           "number": "17"
+          },
+          {
+           "number": "1"
+          },
+          "2023-06-03T00:00:00.000000Z",
+          {
+           "number": "24.0"
+          }
+         ],
+         [
+          {
+           "number": "18"
+          },
+          {
+           "number": "4"
+          },
+          "2023-05-04T00:00:00.000000Z",
+          {
+           "number": "21.0"
+          }
+         ],
+         [
+          {
+           "number": "19"
+          },
+          {
+           "number": "0"
+          },
+          "2023-05-04T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "20"
+          },
+          {
+           "number": "2"
+          },
+          "2023-05-04T00:00:00.000000Z",
+          {
+           "number": "19.0"
+          }
+         ],
+         [
+          {
+           "number": "21"
+          },
+          {
+           "number": "3"
+          },
+          "2023-05-04T00:00:00.000000Z",
+          {
+           "number": "20.0"
+          }
+         ],
+         [
+          {
+           "number": "22"
+          },
+          {
+           "number": "5"
+          },
+          "2023-05-04T00:00:00.000000Z",
+          {
+           "number": "22.0"
+          }
+         ],
+         [
+          {
+           "number": "23"
+          },
+          {
+           "number": "1"
+          },
+          "2023-05-04T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "24"
+          },
+          {
+           "number": "5"
+          },
+          "2023-04-04T00:00:00.000000Z",
+          {
+           "number": "16.0"
+          }
+         ],
+         [
+          {
+           "number": "25"
+          },
+          {
+           "number": "0"
+          },
+          "2023-04-04T00:00:00.000000Z",
+          {
+           "number": "17.0"
+          }
+         ],
+         [
+          {
+           "number": "26"
+          },
+          {
+           "number": "4"
+          },
+          "2023-04-04T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "27"
+          },
+          {
+           "number": "2"
+          },
+          "2023-04-04T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "28"
+          },
+          {
+           "number": "3"
+          },
+          "2023-04-04T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "29"
+          },
+          {
+           "number": "1"
+          },
+          "2023-04-04T00:00:00.000000Z",
+          {
+           "number": "18.0"
+          }
+         ],
+         [
+          {
+           "number": "30"
+          },
+          {
+           "number": "1"
+          },
+          "2023-03-05T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "31"
+          },
+          {
+           "number": "0"
+          },
+          "2023-03-05T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "32"
+          },
+          {
+           "number": "5"
+          },
+          "2023-03-05T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "33"
+          },
+          {
+           "number": "4"
+          },
+          "2023-03-05T00:00:00.000000Z",
+          {
+           "number": "15.0"
+          }
+         ],
+         [
+          {
+           "number": "34"
+          },
+          {
+           "number": "3"
+          },
+          "2023-03-05T00:00:00.000000Z",
+          {
+           "number": "14.0"
+          }
+         ],
+         [
+          {
+           "number": "35"
+          },
+          {
+           "number": "2"
+          },
+          "2023-03-05T00:00:00.000000Z",
+          {
+           "number": "13.0"
+          }
+         ],
+         [
+          {
+           "number": "36"
+          },
+          {
+           "number": "5"
+          },
+          "2023-02-03T00:00:00.000000Z",
+          {
+           "number": "10.0"
+          }
+         ],
+         [
+          {
+           "number": "37"
+          },
+          {
+           "number": "3"
+          },
+          "2023-02-03T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "38"
+          },
+          {
+           "number": "2"
+          },
+          "2023-02-03T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "39"
+          },
+          {
+           "number": "1"
+          },
+          "2023-02-03T00:00:00.000000Z",
+          {
+           "number": "12.0"
+          }
+         ],
+         [
+          {
+           "number": "40"
+          },
+          {
+           "number": "0"
+          },
+          "2023-02-03T00:00:00.000000Z",
+          {
+           "number": "11.0"
+          }
+         ],
+         [
+          {
+           "number": "41"
+          },
+          {
+           "number": "4"
+          },
+          "2023-02-03T00:00:00.000000Z",
+          {
+           "number": "9.0"
+          }
+         ],
+         [
+          {
+           "number": "42"
+          },
+          {
+           "number": "2"
+          },
+          "2023-01-04T00:00:00.000000Z",
+          {
+           "number": "7.0"
+          }
+         ],
+         [
+          {
+           "number": "43"
+          },
+          {
+           "number": "1"
+          },
+          "2023-01-04T00:00:00.000000Z",
+          {
+           "number": "6.0"
+          }
+         ],
+         [
+          {
+           "number": "44"
+          },
+          {
+           "number": "0"
+          },
+          "2023-01-04T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "45"
+          },
+          {
+           "number": "3"
+          },
+          "2023-01-04T00:00:00.000000Z",
+          {
+           "number": "8.0"
+          }
+         ],
+         [
+          {
+           "number": "46"
+          },
+          {
+           "number": "4"
+          },
+          "2023-01-04T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          }
+         ],
+         [
+          {
+           "number": "47"
+          },
+          {
+           "number": "5"
+          },
+          "2023-01-04T00:00:00.000000Z",
+          {
+           "number": "0.0"
+          }
+         ]
+        ]
+       },
+       "related_tables": {
+        "accounts": {
+         "columns": [
+          "instance_id",
+          "account_id",
+          "age",
+          "owner_id"
+         ],
+         "format": "arrays",
+         "rows": [
+          [
+           {
+            "number": "0"
+           },
+           {
+            "number": "3"
+           },
+           {
+            "number": "33"
+           },
+           {
+            "number": "0.0"
+           }
+          ],
+          [
+           {
+            "number": "1"
+           },
+           {
+            "number": "2"
+           },
+           {
+            "number": "32"
+           },
+           {
+            "number": "1.0"
+           }
+          ],
+          [
+           {
+            "number": "2"
+           },
+           {
+            "number": "5"
+           },
+           {
+            "number": "35"
+           },
+           {
+            "number": "2.0"
+           }
+          ],
+          [
+           {
+            "number": "3"
+           },
+           {
+            "number": "4"
+           },
+           {
+            "number": "34"
+           },
+           {
+            "number": "3.0"
+           }
+          ],
+          [
+           {
+            "number": "4"
+           },
+           {
+            "number": "1"
+           },
+           {
+            "number": "31"
+           },
+           {
+            "number": "4.0"
+           }
+          ],
+          [
+           {
+            "number": "5"
+           },
+           {
+            "number": "0"
+           },
+           {
+            "number": "30"
+           },
+           {
+            "number": "5.0"
+           }
+          ],
+          [
+           {
+            "number": "6"
+           },
+           {
+            "number": "2"
+           },
+           {
+            "number": "32"
+           },
+           {
+            "number": "6.0"
+           }
+          ],
+          [
+           {
+            "number": "7"
+           },
+           {
+            "number": "4"
+           },
+           {
+            "number": "34"
+           },
+           {
+            "number": "7.0"
+           }
+          ],
+          [
+           {
+            "number": "8"
+           },
+           {
+            "number": "0"
+           },
+           {
+            "number": "30"
+           },
+           {
+            "number": "8.0"
+           }
+          ],
+          [
+           {
+            "number": "9"
+           },
+           {
+            "number": "1"
+           },
+           {
+            "number": "31"
+           },
+           {
+            "number": "9.0"
+           }
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "3"
+           },
+           {
+            "number": "33"
+           },
+           {
+            "number": "10.0"
+           }
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "5"
+           },
+           {
+            "number": "35"
+           },
+           {
+            "number": "11.0"
+           }
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "5"
+           },
+           {
+            "number": "35"
+           },
+           {
+            "number": "12.0"
+           }
+          ],
+          [
+           {
+            "number": "13"
+           },
+           {
+            "number": "4"
+           },
+           {
+            "number": "34"
+           },
+           {
+            "number": "13.0"
+           }
+          ],
+          [
+           {
+            "number": "14"
+           },
+           {
+            "number": "2"
+           },
+           {
+            "number": "32"
+           },
+           {
+            "number": "14.0"
+           }
+          ],
+          [
+           {
+            "number": "15"
+           },
+           {
+            "number": "3"
+           },
+           {
+            "number": "33"
+           },
+           {
+            "number": "15.0"
+           }
+          ],
+          [
+           {
+            "number": "16"
+           },
+           {
+            "number": "0"
+           },
+           {
+            "number": "30"
+           },
+           {
+            "number": "16.0"
+           }
+          ],
+          [
+           {
+            "number": "17"
+           },
+           {
+            "number": "1"
+           },
+           {
+            "number": "31"
+           },
+           {
+            "number": "17.0"
+           }
+          ],
+          [
+           {
+            "number": "18"
+           },
+           {
+            "number": "4"
+           },
+           {
+            "number": "34"
+           },
+           {
+            "number": "18.0"
+           }
+          ],
+          [
+           {
+            "number": "19"
+           },
+           {
+            "number": "0"
+           },
+           {
+            "number": "30"
+           },
+           {
+            "number": "19.0"
+           }
+          ],
+          [
+           {
+            "number": "20"
+           },
+           {
+            "number": "2"
+           },
+           {
+            "number": "32"
+           },
+           {
+            "number": "20.0"
+           }
+          ],
+          [
+           {
+            "number": "21"
+           },
+           {
+            "number": "3"
+           },
+           {
+            "number": "33"
+           },
+           {
+            "number": "21.0"
+           }
+          ],
+          [
+           {
+            "number": "22"
+           },
+           {
+            "number": "5"
+           },
+           {
+            "number": "35"
+           },
+           {
+            "number": "22.0"
+           }
+          ],
+          [
+           {
+            "number": "23"
+           },
+           {
+            "number": "1"
+           },
+           {
+            "number": "31"
+           },
+           {
+            "number": "23.0"
+           }
+          ],
+          [
+           {
+            "number": "24"
+           },
+           {
+            "number": "5"
+           },
+           {
+            "number": "35"
+           },
+           {
+            "number": "24.0"
+           }
+          ],
+          [
+           {
+            "number": "25"
+           },
+           {
+            "number": "0"
+           },
+           {
+            "number": "30"
+           },
+           {
+            "number": "25.0"
+           }
+          ],
+          [
+           {
+            "number": "26"
+           },
+           {
+            "number": "4"
+           },
+           {
+            "number": "34"
+           },
+           {
+            "number": "26.0"
+           }
+          ],
+          [
+           {
+            "number": "27"
+           },
+           {
+            "number": "2"
+           },
+           {
+            "number": "32"
+           },
+           {
+            "number": "27.0"
+           }
+          ],
+          [
+           {
+            "number": "28"
+           },
+           {
+            "number": "3"
+           },
+           {
+            "number": "33"
+           },
+           {
+            "number": "28.0"
+           }
+          ],
+          [
+           {
+            "number": "29"
+           },
+           {
+            "number": "1"
+           },
+           {
+            "number": "31"
+           },
+           {
+            "number": "29.0"
+           }
+          ],
+          [
+           {
+            "number": "30"
+           },
+           {
+            "number": "1"
+           },
+           {
+            "number": "31"
+           },
+           {
+            "number": "30.0"
+           }
+          ],
+          [
+           {
+            "number": "31"
+           },
+           {
+            "number": "0"
+           },
+           {
+            "number": "30"
+           },
+           {
+            "number": "31.0"
+           }
+          ],
+          [
+           {
+            "number": "32"
+           },
+           {
+            "number": "5"
+           },
+           {
+            "number": "35"
+           },
+           {
+            "number": "32.0"
+           }
+          ],
+          [
+           {
+            "number": "33"
+           },
+           {
+            "number": "4"
+           },
+           {
+            "number": "34"
+           },
+           {
+            "number": "33.0"
+           }
+          ],
+          [
+           {
+            "number": "34"
+           },
+           {
+            "number": "3"
+           },
+           {
+            "number": "33"
+           },
+           {
+            "number": "34.0"
+           }
+          ],
+          [
+           {
+            "number": "35"
+           },
+           {
+            "number": "2"
+           },
+           {
+            "number": "32"
+           },
+           {
+            "number": "35.0"
+           }
+          ],
+          [
+           {
+            "number": "36"
+           },
+           {
+            "number": "5"
+           },
+           {
+            "number": "35"
+           },
+           {
+            "number": "36.0"
+           }
+          ],
+          [
+           {
+            "number": "37"
+           },
+           {
+            "number": "3"
+           },
+           {
+            "number": "33"
+           },
+           {
+            "number": "37.0"
+           }
+          ],
+          [
+           {
+            "number": "38"
+           },
+           {
+            "number": "2"
+           },
+           {
+            "number": "32"
+           },
+           {
+            "number": "38.0"
+           }
+          ],
+          [
+           {
+            "number": "39"
+           },
+           {
+            "number": "1"
+           },
+           {
+            "number": "31"
+           },
+           {
+            "number": "39.0"
+           }
+          ],
+          [
+           {
+            "number": "40"
+           },
+           {
+            "number": "0"
+           },
+           {
+            "number": "30"
+           },
+           {
+            "number": "40.0"
+           }
+          ],
+          [
+           {
+            "number": "41"
+           },
+           {
+            "number": "4"
+           },
+           {
+            "number": "34"
+           },
+           {
+            "number": "41.0"
+           }
+          ],
+          [
+           {
+            "number": "42"
+           },
+           {
+            "number": "2"
+           },
+           {
+            "number": "32"
+           },
+           {
+            "number": "42.0"
+           }
+          ],
+          [
+           {
+            "number": "43"
+           },
+           {
+            "number": "1"
+           },
+           {
+            "number": "31"
+           },
+           {
+            "number": "43.0"
+           }
+          ],
+          [
+           {
+            "number": "44"
+           },
+           {
+            "number": "0"
+           },
+           {
+            "number": "30"
+           },
+           {
+            "number": "44.0"
+           }
+          ],
+          [
+           {
+            "number": "45"
+           },
+           {
+            "number": "3"
+           },
+           {
+            "number": "33"
+           },
+           {
+            "number": "45.0"
+           }
+          ],
+          [
+           {
+            "number": "46"
+           },
+           {
+            "number": "4"
+           },
+           {
+            "number": "34"
+           },
+           {
+            "number": "46.0"
+           }
+          ],
+          [
+           {
+            "number": "47"
+           },
+           {
+            "number": "5"
+           },
+           {
+            "number": "35"
+           },
+           {
+            "number": "47.0"
+           }
+          ],
+          [
+           {
+            "number": "0"
+           },
+           {
+            "number": "1"
+           },
+           {
+            "number": "31"
+           },
+           null
+          ],
+          [
+           {
+            "number": "0"
+           },
+           {
+            "number": "5"
+           },
+           {
+            "number": "35"
+           },
+           null
+          ],
+          [
+           {
+            "number": "1"
+           },
+           {
+            "number": "0"
+           },
+           {
+            "number": "30"
+           },
+           null
+          ],
+          [
+           {
+            "number": "1"
+           },
+           {
+            "number": "4"
+           },
+           {
+            "number": "34"
+           },
+           null
+          ],
+          [
+           {
+            "number": "2"
+           },
+           {
+            "number": "1"
+           },
+           {
+            "number": "31"
+           },
+           null
+          ],
+          [
+           {
+            "number": "2"
+           },
+           {
+            "number": "3"
+           },
+           {
+            "number": "33"
+           },
+           null
+          ],
+          [
+           {
+            "number": "3"
+           },
+           {
+            "number": "0"
+           },
+           {
+            "number": "30"
+           },
+           null
+          ],
+          [
+           {
+            "number": "3"
+           },
+           {
+            "number": "2"
+           },
+           {
+            "number": "32"
+           },
+           null
+          ],
+          [
+           {
+            "number": "4"
+           },
+           {
+            "number": "3"
+           },
+           {
+            "number": "33"
+           },
+           null
+          ],
+          [
+           {
+            "number": "4"
+           },
+           {
+            "number": "5"
+           },
+           {
+            "number": "35"
+           },
+           null
+          ],
+          [
+           {
+            "number": "5"
+           },
+           {
+            "number": "2"
+           },
+           {
+            "number": "32"
+           },
+           null
+          ],
+          [
+           {
+            "number": "5"
+           },
+           {
+            "number": "4"
+           },
+           {
+            "number": "34"
+           },
+           null
+          ],
+          [
+           {
+            "number": "6"
+           },
+           {
+            "number": "0"
+           },
+           {
+            "number": "30"
+           },
+           null
+          ],
+          [
+           {
+            "number": "6"
+           },
+           {
+            "number": "4"
+           },
+           {
+            "number": "34"
+           },
+           null
+          ],
+          [
+           {
+            "number": "7"
+           },
+           {
+            "number": "0"
+           },
+           {
+            "number": "30"
+           },
+           null
+          ],
+          [
+           {
+            "number": "7"
+           },
+           {
+            "number": "2"
+           },
+           {
+            "number": "32"
+           },
+           null
+          ],
+          [
+           {
+            "number": "8"
+           },
+           {
+            "number": "2"
+           },
+           {
+            "number": "32"
+           },
+           null
+          ],
+          [
+           {
+            "number": "8"
+           },
+           {
+            "number": "4"
+           },
+           {
+            "number": "34"
+           },
+           null
+          ],
+          [
+           {
+            "number": "9"
+           },
+           {
+            "number": "3"
+           },
+           {
+            "number": "33"
+           },
+           null
+          ],
+          [
+           {
+            "number": "9"
+           },
+           {
+            "number": "5"
+           },
+           {
+            "number": "35"
+           },
+           null
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "1"
+           },
+           {
+            "number": "31"
+           },
+           null
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "5"
+           },
+           {
+            "number": "35"
+           },
+           null
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "1"
+           },
+           {
+            "number": "31"
+           },
+           null
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "3"
+           },
+           {
+            "number": "33"
+           },
+           null
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "1"
+           },
+           {
+            "number": "31"
+           },
+           null
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "3"
+           },
+           {
+            "number": "33"
+           },
+           null
+          ],
+          [
+           {
+            "number": "13"
+           },
+           {
+            "number": "0"
+           },
+           {
+            "number": "30"
+           },
+           null
+          ],
+          [
+           {
+            "number": "13"
+           },
+           {
+            "number": "2"
+           },
+           {
+            "number": "32"
+           },
+           null
+          ],
+          [
+           {
+            "number": "14"
+           },
+           {
+            "number": "0"
+           },
+           {
+            "number": "30"
+           },
+           null
+          ],
+          [
+           {
+            "number": "14"
+           },
+           {
+            "number": "4"
+           },
+           {
+            "number": "34"
+           },
+           null
+          ],
+          [
+           {
+            "number": "15"
+           },
+           {
+            "number": "1"
+           },
+           {
+            "number": "31"
+           },
+           null
+          ],
+          [
+           {
+            "number": "15"
+           },
+           {
+            "number": "5"
+           },
+           {
+            "number": "35"
+           },
+           null
+          ],
+          [
+           {
+            "number": "16"
+           },
+           {
+            "number": "2"
+           },
+           {
+            "number": "32"
+           },
+           null
+          ],
+          [
+           {
+            "number": "16"
+           },
+           {
+            "number": "4"
+           },
+           {
+            "number": "34"
+           },
+           null
+          ],
+          [
+           {
+            "number": "17"
+           },
+           {
+            "number": "3"
+           },
+           {
+            "number": "33"
+           },
+           null
+          ],
+          [
+           {
+            "number": "17"
+           },
+           {
+            "number": "5"
+           },
+           {
+            "number": "35"
+           },
+           null
+          ],
+          [
+           {
+            "number": "18"
+           },
+           {
+            "number": "0"
+           },
+           {
+            "number": "30"
+           },
+           null
+          ],
+          [
+           {
+            "number": "18"
+           },
+           {
+            "number": "2"
+           },
+           {
+            "number": "32"
+           },
+           null
+          ],
+          [
+           {
+            "number": "19"
+           },
+           {
+            "number": "2"
+           },
+           {
+            "number": "32"
+           },
+           null
+          ],
+          [
+           {
+            "number": "19"
+           },
+           {
+            "number": "4"
+           },
+           {
+            "number": "34"
+           },
+           null
+          ],
+          [
+           {
+            "number": "20"
+           },
+           {
+            "number": "0"
+           },
+           {
+            "number": "30"
+           },
+           null
+          ],
+          [
+           {
+            "number": "20"
+           },
+           {
+            "number": "4"
+           },
+           {
+            "number": "34"
+           },
+           null
+          ],
+          [
+           {
+            "number": "21"
+           },
+           {
+            "number": "1"
+           },
+           {
+            "number": "31"
+           },
+           null
+          ],
+          [
+           {
+            "number": "21"
+           },
+           {
+            "number": "5"
+           },
+           {
+            "number": "35"
+           },
+           null
+          ],
+          [
+           {
+            "number": "22"
+           },
+           {
+            "number": "1"
+           },
+           {
+            "number": "31"
+           },
+           null
+          ],
+          [
+           {
+            "number": "22"
+           },
+           {
+            "number": "3"
+           },
+           {
+            "number": "33"
+           },
+           null
+          ],
+          [
+           {
+            "number": "23"
+           },
+           {
+            "number": "3"
+           },
+           {
+            "number": "33"
+           },
+           null
+          ],
+          [
+           {
+            "number": "23"
+           },
+           {
+            "number": "5"
+           },
+           {
+            "number": "35"
+           },
+           null
+          ],
+          [
+           {
+            "number": "24"
+           },
+           {
+            "number": "1"
+           },
+           {
+            "number": "31"
+           },
+           null
+          ],
+          [
+           {
+            "number": "24"
+           },
+           {
+            "number": "3"
+           },
+           {
+            "number": "33"
+           },
+           null
+          ],
+          [
+           {
+            "number": "25"
+           },
+           {
+            "number": "2"
+           },
+           {
+            "number": "32"
+           },
+           null
+          ],
+          [
+           {
+            "number": "25"
+           },
+           {
+            "number": "4"
+           },
+           {
+            "number": "34"
+           },
+           null
+          ],
+          [
+           {
+            "number": "26"
+           },
+           {
+            "number": "0"
+           },
+           {
+            "number": "30"
+           },
+           null
+          ],
+          [
+           {
+            "number": "26"
+           },
+           {
+            "number": "2"
+           },
+           {
+            "number": "32"
+           },
+           null
+          ],
+          [
+           {
+            "number": "27"
+           },
+           {
+            "number": "0"
+           },
+           {
+            "number": "30"
+           },
+           null
+          ],
+          [
+           {
+            "number": "27"
+           },
+           {
+            "number": "4"
+           },
+           {
+            "number": "34"
+           },
+           null
+          ],
+          [
+           {
+            "number": "28"
+           },
+           {
+            "number": "1"
+           },
+           {
+            "number": "31"
+           },
+           null
+          ],
+          [
+           {
+            "number": "28"
+           },
+           {
+            "number": "5"
+           },
+           {
+            "number": "35"
+           },
+           null
+          ],
+          [
+           {
+            "number": "29"
+           },
+           {
+            "number": "3"
+           },
+           {
+            "number": "33"
+           },
+           null
+          ],
+          [
+           {
+            "number": "29"
+           },
+           {
+            "number": "5"
+           },
+           {
+            "number": "35"
+           },
+           null
+          ],
+          [
+           {
+            "number": "30"
+           },
+           {
+            "number": "3"
+           },
+           {
+            "number": "33"
+           },
+           null
+          ],
+          [
+           {
+            "number": "30"
+           },
+           {
+            "number": "5"
+           },
+           {
+            "number": "35"
+           },
+           null
+          ],
+          [
+           {
+            "number": "31"
+           },
+           {
+            "number": "2"
+           },
+           {
+            "number": "32"
+           },
+           null
+          ],
+          [
+           {
+            "number": "31"
+           },
+           {
+            "number": "4"
+           },
+           {
+            "number": "34"
+           },
+           null
+          ],
+          [
+           {
+            "number": "32"
+           },
+           {
+            "number": "1"
+           },
+           {
+            "number": "31"
+           },
+           null
+          ],
+          [
+           {
+            "number": "32"
+           },
+           {
+            "number": "3"
+           },
+           {
+            "number": "33"
+           },
+           null
+          ],
+          [
+           {
+            "number": "33"
+           },
+           {
+            "number": "0"
+           },
+           {
+            "number": "30"
+           },
+           null
+          ],
+          [
+           {
+            "number": "33"
+           },
+           {
+            "number": "2"
+           },
+           {
+            "number": "32"
+           },
+           null
+          ],
+          [
+           {
+            "number": "34"
+           },
+           {
+            "number": "1"
+           },
+           {
+            "number": "31"
+           },
+           null
+          ],
+          [
+           {
+            "number": "34"
+           },
+           {
+            "number": "5"
+           },
+           {
+            "number": "35"
+           },
+           null
+          ],
+          [
+           {
+            "number": "35"
+           },
+           {
+            "number": "0"
+           },
+           {
+            "number": "30"
+           },
+           null
+          ],
+          [
+           {
+            "number": "35"
+           },
+           {
+            "number": "4"
+           },
+           {
+            "number": "34"
+           },
+           null
+          ],
+          [
+           {
+            "number": "36"
+           },
+           {
+            "number": "1"
+           },
+           {
+            "number": "31"
+           },
+           null
+          ],
+          [
+           {
+            "number": "36"
+           },
+           {
+            "number": "3"
+           },
+           {
+            "number": "33"
+           },
+           null
+          ],
+          [
+           {
+            "number": "37"
+           },
+           {
+            "number": "1"
+           },
+           {
+            "number": "31"
+           },
+           null
+          ],
+          [
+           {
+            "number": "37"
+           },
+           {
+            "number": "5"
+           },
+           {
+            "number": "35"
+           },
+           null
+          ],
+          [
+           {
+            "number": "38"
+           },
+           {
+            "number": "0"
+           },
+           {
+            "number": "30"
+           },
+           null
+          ],
+          [
+           {
+            "number": "38"
+           },
+           {
+            "number": "4"
+           },
+           {
+            "number": "34"
+           },
+           null
+          ],
+          [
+           {
+            "number": "39"
+           },
+           {
+            "number": "3"
+           },
+           {
+            "number": "33"
+           },
+           null
+          ],
+          [
+           {
+            "number": "39"
+           },
+           {
+            "number": "5"
+           },
+           {
+            "number": "35"
+           },
+           null
+          ],
+          [
+           {
+            "number": "40"
+           },
+           {
+            "number": "2"
+           },
+           {
+            "number": "32"
+           },
+           null
+          ],
+          [
+           {
+            "number": "40"
+           },
+           {
+            "number": "4"
+           },
+           {
+            "number": "34"
+           },
+           null
+          ],
+          [
+           {
+            "number": "41"
+           },
+           {
+            "number": "0"
+           },
+           {
+            "number": "30"
+           },
+           null
+          ],
+          [
+           {
+            "number": "41"
+           },
+           {
+            "number": "2"
+           },
+           {
+            "number": "32"
+           },
+           null
+          ],
+          [
+           {
+            "number": "42"
+           },
+           {
+            "number": "0"
+           },
+           {
+            "number": "30"
+           },
+           null
+          ],
+          [
+           {
+            "number": "42"
+           },
+           {
+            "number": "4"
+           },
+           {
+            "number": "34"
+           },
+           null
+          ],
+          [
+           {
+            "number": "43"
+           },
+           {
+            "number": "3"
+           },
+           {
+            "number": "33"
+           },
+           null
+          ],
+          [
+           {
+            "number": "43"
+           },
+           {
+            "number": "5"
+           },
+           {
+            "number": "35"
+           },
+           null
+          ],
+          [
+           {
+            "number": "44"
+           },
+           {
+            "number": "2"
+           },
+           {
+            "number": "32"
+           },
+           null
+          ],
+          [
+           {
+            "number": "44"
+           },
+           {
+            "number": "4"
+           },
+           {
+            "number": "34"
+           },
+           null
+          ],
+          [
+           {
+            "number": "45"
+           },
+           {
+            "number": "1"
+           },
+           {
+            "number": "31"
+           },
+           null
+          ],
+          [
+           {
+            "number": "45"
+           },
+           {
+            "number": "5"
+           },
+           {
+            "number": "35"
+           },
+           null
+          ],
+          [
+           {
+            "number": "46"
+           },
+           {
+            "number": "0"
+           },
+           {
+            "number": "30"
+           },
+           null
+          ],
+          [
+           {
+            "number": "46"
+           },
+           {
+            "number": "2"
+           },
+           {
+            "number": "32"
+           },
+           null
+          ],
+          [
+           {
+            "number": "47"
+           },
+           {
+            "number": "1"
+           },
+           {
+            "number": "31"
+           },
+           null
+          ],
+          [
+           {
+            "number": "47"
+           },
+           {
+            "number": "3"
+           },
+           {
+            "number": "33"
+           },
+           null
+          ]
+         ]
+        },
+        "owners": {
+         "columns": [
+          "instance_id",
+          "__node_id",
+          "tier"
+         ],
+         "format": "arrays",
+         "rows": [
+          [
+           {
+            "number": "0"
+           },
+           {
+            "number": "0"
+           },
+           "basic"
+          ],
+          [
+           {
+            "number": "1"
+           },
+           {
+            "number": "1"
+           },
+           "gold"
+          ],
+          [
+           {
+            "number": "2"
+           },
+           {
+            "number": "2"
+           },
+           "basic"
+          ],
+          [
+           {
+            "number": "3"
+           },
+           {
+            "number": "3"
+           },
+           "gold"
+          ],
+          [
+           {
+            "number": "4"
+           },
+           {
+            "number": "4"
+           },
+           "basic"
+          ],
+          [
+           {
+            "number": "5"
+           },
+           {
+            "number": "5"
+           },
+           "gold"
+          ],
+          [
+           {
+            "number": "6"
+           },
+           {
+            "number": "6"
+           },
+           "gold"
+          ],
+          [
+           {
+            "number": "7"
+           },
+           {
+            "number": "7"
+           },
+           "gold"
+          ],
+          [
+           {
+            "number": "8"
+           },
+           {
+            "number": "8"
+           },
+           "gold"
+          ],
+          [
+           {
+            "number": "9"
+           },
+           {
+            "number": "9"
+           },
+           "basic"
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "10"
+           },
+           "basic"
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "11"
+           },
+           "basic"
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "12"
+           },
+           "basic"
+          ],
+          [
+           {
+            "number": "13"
+           },
+           {
+            "number": "13"
+           },
+           "gold"
+          ],
+          [
+           {
+            "number": "14"
+           },
+           {
+            "number": "14"
+           },
+           "gold"
+          ],
+          [
+           {
+            "number": "15"
+           },
+           {
+            "number": "15"
+           },
+           "basic"
+          ],
+          [
+           {
+            "number": "16"
+           },
+           {
+            "number": "16"
+           },
+           "gold"
+          ],
+          [
+           {
+            "number": "17"
+           },
+           {
+            "number": "17"
+           },
+           "basic"
+          ],
+          [
+           {
+            "number": "18"
+           },
+           {
+            "number": "18"
+           },
+           "gold"
+          ],
+          [
+           {
+            "number": "19"
+           },
+           {
+            "number": "19"
+           },
+           "gold"
+          ],
+          [
+           {
+            "number": "20"
+           },
+           {
+            "number": "20"
+           },
+           "gold"
+          ],
+          [
+           {
+            "number": "21"
+           },
+           {
+            "number": "21"
+           },
+           "basic"
+          ],
+          [
+           {
+            "number": "22"
+           },
+           {
+            "number": "22"
+           },
+           "basic"
+          ],
+          [
+           {
+            "number": "23"
+           },
+           {
+            "number": "23"
+           },
+           "basic"
+          ],
+          [
+           {
+            "number": "24"
+           },
+           {
+            "number": "24"
+           },
+           "basic"
+          ],
+          [
+           {
+            "number": "25"
+           },
+           {
+            "number": "25"
+           },
+           "gold"
+          ],
+          [
+           {
+            "number": "26"
+           },
+           {
+            "number": "26"
+           },
+           "gold"
+          ],
+          [
+           {
+            "number": "27"
+           },
+           {
+            "number": "27"
+           },
+           "gold"
+          ],
+          [
+           {
+            "number": "28"
+           },
+           {
+            "number": "28"
+           },
+           "basic"
+          ],
+          [
+           {
+            "number": "29"
+           },
+           {
+            "number": "29"
+           },
+           "basic"
+          ],
+          [
+           {
+            "number": "30"
+           },
+           {
+            "number": "30"
+           },
+           "basic"
+          ],
+          [
+           {
+            "number": "31"
+           },
+           {
+            "number": "31"
+           },
+           "gold"
+          ],
+          [
+           {
+            "number": "32"
+           },
+           {
+            "number": "32"
+           },
+           "basic"
+          ],
+          [
+           {
+            "number": "33"
+           },
+           {
+            "number": "33"
+           },
+           "gold"
+          ],
+          [
+           {
+            "number": "34"
+           },
+           {
+            "number": "34"
+           },
+           "basic"
+          ],
+          [
+           {
+            "number": "35"
+           },
+           {
+            "number": "35"
+           },
+           "gold"
+          ],
+          [
+           {
+            "number": "36"
+           },
+           {
+            "number": "36"
+           },
+           "basic"
+          ],
+          [
+           {
+            "number": "37"
+           },
+           {
+            "number": "37"
+           },
+           "basic"
+          ],
+          [
+           {
+            "number": "38"
+           },
+           {
+            "number": "38"
+           },
+           "gold"
+          ],
+          [
+           {
+            "number": "39"
+           },
+           {
+            "number": "39"
+           },
+           "basic"
+          ],
+          [
+           {
+            "number": "40"
+           },
+           {
+            "number": "40"
+           },
+           "gold"
+          ],
+          [
+           {
+            "number": "41"
+           },
+           {
+            "number": "41"
+           },
+           "gold"
+          ],
+          [
+           {
+            "number": "42"
+           },
+           {
+            "number": "42"
+           },
+           "gold"
+          ],
+          [
+           {
+            "number": "43"
+           },
+           {
+            "number": "43"
+           },
+           "basic"
+          ],
+          [
+           {
+            "number": "44"
+           },
+           {
+            "number": "44"
+           },
+           "gold"
+          ],
+          [
+           {
+            "number": "45"
+           },
+           {
+            "number": "45"
+           },
+           "basic"
+          ],
+          [
+           {
+            "number": "46"
+           },
+           {
+            "number": "46"
+           },
+           "gold"
+          ],
+          [
+           {
+            "number": "47"
+           },
+           {
+            "number": "47"
+           },
+           "basic"
+          ]
+         ]
+        },
+        "payments": {
+         "columns": [
+          "instance_id",
+          "__node_id",
+          "amount",
+          "ts",
+          "account_id"
+         ],
+         "format": "arrays",
+         "rows": [
+          [
+           {
+            "number": "0"
+           },
+           {
+            "number": "0"
+           },
+           {
+            "number": "26.0"
+           },
+           "2023-07-09T00:00:00.000000Z",
+           {
+            "number": "3"
+           }
+          ],
+          [
+           {
+            "number": "0"
+           },
+           {
+            "number": "1"
+           },
+           {
+            "number": "20.0"
+           },
+           "2023-05-16T00:00:00.000000Z",
+           {
+            "number": "3"
+           }
+          ],
+          [
+           {
+            "number": "0"
+           },
+           {
+            "number": "2"
+           },
+           {
+            "number": "14.0"
+           },
+           "2023-03-23T00:00:00.000000Z",
+           {
+            "number": "3"
+           }
+          ],
+          [
+           {
+            "number": "0"
+           },
+           {
+            "number": "3"
+           },
+           {
+            "number": "8.0"
+           },
+           "2023-01-28T00:00:00.000000Z",
+           {
+            "number": "3"
+           }
+          ],
+          [
+           {
+            "number": "1"
+           },
+           {
+            "number": "4"
+           },
+           {
+            "number": "25.0"
+           },
+           "2023-06-30T00:00:00.000000Z",
+           {
+            "number": "2"
+           }
+          ],
+          [
+           {
+            "number": "1"
+           },
+           {
+            "number": "5"
+           },
+           {
+            "number": "19.0"
+           },
+           "2023-05-07T00:00:00.000000Z",
+           {
+            "number": "2"
+           }
+          ],
+          [
+           {
+            "number": "1"
+           },
+           {
+            "number": "6"
+           },
+           {
+            "number": "13.0"
+           },
+           "2023-03-14T00:00:00.000000Z",
+           {
+            "number": "2"
+           }
+          ],
+          [
+           {
+            "number": "1"
+           },
+           {
+            "number": "7"
+           },
+           {
+            "number": "7.0"
+           },
+           "2023-01-19T00:00:00.000000Z",
+           {
+            "number": "2"
+           }
+          ],
+          [
+           {
+            "number": "2"
+           },
+           {
+            "number": "8"
+           },
+           {
+            "number": "28.0"
+           },
+           "2023-07-27T00:00:00.000000Z",
+           {
+            "number": "5"
+           }
+          ],
+          [
+           {
+            "number": "2"
+           },
+           {
+            "number": "9"
+           },
+           {
+            "number": "22.0"
+           },
+           "2023-06-03T00:00:00.000000Z",
+           {
+            "number": "5"
+           }
+          ],
+          [
+           {
+            "number": "2"
+           },
+           {
+            "number": "10"
+           },
+           {
+            "number": "16.0"
+           },
+           "2023-04-10T00:00:00.000000Z",
+           {
+            "number": "5"
+           }
+          ],
+          [
+           {
+            "number": "2"
+           },
+           {
+            "number": "11"
+           },
+           {
+            "number": "10.0"
+           },
+           "2023-02-15T00:00:00.000000Z",
+           {
+            "number": "5"
+           }
+          ],
+          [
+           {
+            "number": "3"
+           },
+           {
+            "number": "12"
+           },
+           {
+            "number": "27.0"
+           },
+           "2023-07-18T00:00:00.000000Z",
+           {
+            "number": "4"
+           }
+          ],
+          [
+           {
+            "number": "3"
+           },
+           {
+            "number": "13"
+           },
+           {
+            "number": "21.0"
+           },
+           "2023-05-25T00:00:00.000000Z",
+           {
+            "number": "4"
+           }
+          ],
+          [
+           {
+            "number": "3"
+           },
+           {
+            "number": "14"
+           },
+           {
+            "number": "15.0"
+           },
+           "2023-04-01T00:00:00.000000Z",
+           {
+            "number": "4"
+           }
+          ],
+          [
+           {
+            "number": "3"
+           },
+           {
+            "number": "15"
+           },
+           {
+            "number": "9.0"
+           },
+           "2023-02-06T00:00:00.000000Z",
+           {
+            "number": "4"
+           }
+          ],
+          [
+           {
+            "number": "4"
+           },
+           {
+            "number": "16"
+           },
+           {
+            "number": "24.0"
+           },
+           "2023-06-21T00:00:00.000000Z",
+           {
+            "number": "1"
+           }
+          ],
+          [
+           {
+            "number": "4"
+           },
+           {
+            "number": "17"
+           },
+           {
+            "number": "18.0"
+           },
+           "2023-04-28T00:00:00.000000Z",
+           {
+            "number": "1"
+           }
+          ],
+          [
+           {
+            "number": "4"
+           },
+           {
+            "number": "18"
+           },
+           {
+            "number": "12.0"
+           },
+           "2023-03-05T00:00:00.000000Z",
+           {
+            "number": "1"
+           }
+          ],
+          [
+           {
+            "number": "4"
+           },
+           {
+            "number": "19"
+           },
+           {
+            "number": "6.0"
+           },
+           "2023-01-10T00:00:00.000000Z",
+           {
+            "number": "1"
+           }
+          ],
+          [
+           {
+            "number": "5"
+           },
+           {
+            "number": "20"
+           },
+           {
+            "number": "23.0"
+           },
+           "2023-06-12T00:00:00.000000Z",
+           {
+            "number": "0"
+           }
+          ],
+          [
+           {
+            "number": "5"
+           },
+           {
+            "number": "21"
+           },
+           {
+            "number": "17.0"
+           },
+           "2023-04-19T00:00:00.000000Z",
+           {
+            "number": "0"
+           }
+          ],
+          [
+           {
+            "number": "5"
+           },
+           {
+            "number": "22"
+           },
+           {
+            "number": "11.0"
+           },
+           "2023-02-24T00:00:00.000000Z",
+           {
+            "number": "0"
+           }
+          ],
+          [
+           {
+            "number": "5"
+           },
+           {
+            "number": "23"
+           },
+           {
+            "number": "5.0"
+           },
+           "2023-01-01T00:00:00.000000Z",
+           {
+            "number": "0"
+           }
+          ],
+          [
+           {
+            "number": "6"
+           },
+           {
+            "number": "24"
+           },
+           {
+            "number": "25.0"
+           },
+           "2023-06-30T00:00:00.000000Z",
+           {
+            "number": "2"
+           }
+          ],
+          [
+           {
+            "number": "6"
+           },
+           {
+            "number": "25"
+           },
+           {
+            "number": "19.0"
+           },
+           "2023-05-07T00:00:00.000000Z",
+           {
+            "number": "2"
+           }
+          ],
+          [
+           {
+            "number": "6"
+           },
+           {
+            "number": "26"
+           },
+           {
+            "number": "13.0"
+           },
+           "2023-03-14T00:00:00.000000Z",
+           {
+            "number": "2"
+           }
+          ],
+          [
+           {
+            "number": "6"
+           },
+           {
+            "number": "27"
+           },
+           {
+            "number": "7.0"
+           },
+           "2023-01-19T00:00:00.000000Z",
+           {
+            "number": "2"
+           }
+          ],
+          [
+           {
+            "number": "7"
+           },
+           {
+            "number": "28"
+           },
+           {
+            "number": "21.0"
+           },
+           "2023-05-25T00:00:00.000000Z",
+           {
+            "number": "4"
+           }
+          ],
+          [
+           {
+            "number": "7"
+           },
+           {
+            "number": "29"
+           },
+           {
+            "number": "15.0"
+           },
+           "2023-04-01T00:00:00.000000Z",
+           {
+            "number": "4"
+           }
+          ],
+          [
+           {
+            "number": "7"
+           },
+           {
+            "number": "30"
+           },
+           {
+            "number": "9.0"
+           },
+           "2023-02-06T00:00:00.000000Z",
+           {
+            "number": "4"
+           }
+          ],
+          [
+           {
+            "number": "8"
+           },
+           {
+            "number": "31"
+           },
+           {
+            "number": "23.0"
+           },
+           "2023-06-12T00:00:00.000000Z",
+           {
+            "number": "0"
+           }
+          ],
+          [
+           {
+            "number": "8"
+           },
+           {
+            "number": "32"
+           },
+           {
+            "number": "17.0"
+           },
+           "2023-04-19T00:00:00.000000Z",
+           {
+            "number": "0"
+           }
+          ],
+          [
+           {
+            "number": "8"
+           },
+           {
+            "number": "33"
+           },
+           {
+            "number": "11.0"
+           },
+           "2023-02-24T00:00:00.000000Z",
+           {
+            "number": "0"
+           }
+          ],
+          [
+           {
+            "number": "8"
+           },
+           {
+            "number": "34"
+           },
+           {
+            "number": "5.0"
+           },
+           "2023-01-01T00:00:00.000000Z",
+           {
+            "number": "0"
+           }
+          ],
+          [
+           {
+            "number": "9"
+           },
+           {
+            "number": "35"
+           },
+           {
+            "number": "24.0"
+           },
+           "2023-06-21T00:00:00.000000Z",
+           {
+            "number": "1"
+           }
+          ],
+          [
+           {
+            "number": "9"
+           },
+           {
+            "number": "36"
+           },
+           {
+            "number": "18.0"
+           },
+           "2023-04-28T00:00:00.000000Z",
+           {
+            "number": "1"
+           }
+          ],
+          [
+           {
+            "number": "9"
+           },
+           {
+            "number": "37"
+           },
+           {
+            "number": "12.0"
+           },
+           "2023-03-05T00:00:00.000000Z",
+           {
+            "number": "1"
+           }
+          ],
+          [
+           {
+            "number": "9"
+           },
+           {
+            "number": "38"
+           },
+           {
+            "number": "6.0"
+           },
+           "2023-01-10T00:00:00.000000Z",
+           {
+            "number": "1"
+           }
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "39"
+           },
+           {
+            "number": "20.0"
+           },
+           "2023-05-16T00:00:00.000000Z",
+           {
+            "number": "3"
+           }
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "40"
+           },
+           {
+            "number": "14.0"
+           },
+           "2023-03-23T00:00:00.000000Z",
+           {
+            "number": "3"
+           }
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "41"
+           },
+           {
+            "number": "8.0"
+           },
+           "2023-01-28T00:00:00.000000Z",
+           {
+            "number": "3"
+           }
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "42"
+           },
+           {
+            "number": "22.0"
+           },
+           "2023-06-03T00:00:00.000000Z",
+           {
+            "number": "5"
+           }
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "43"
+           },
+           {
+            "number": "16.0"
+           },
+           "2023-04-10T00:00:00.000000Z",
+           {
+            "number": "5"
+           }
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "44"
+           },
+           {
+            "number": "10.0"
+           },
+           "2023-02-15T00:00:00.000000Z",
+           {
+            "number": "5"
+           }
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "45"
+           },
+           {
+            "number": "22.0"
+           },
+           "2023-06-03T00:00:00.000000Z",
+           {
+            "number": "5"
+           }
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "46"
+           },
+           {
+            "number": "16.0"
+           },
+           "2023-04-10T00:00:00.000000Z",
+           {
+            "number": "5"
+           }
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "47"
+           },
+           {
+            "number": "10.0"
+           },
+           "2023-02-15T00:00:00.000000Z",
+           {
+            "number": "5"
+           }
+          ],
+          [
+           {
+            "number": "13"
+           },
+           {
+            "number": "48"
+           },
+           {
+            "number": "21.0"
+           },
+           "2023-05-25T00:00:00.000000Z",
+           {
+            "number": "4"
+           }
+          ],
+          [
+           {
+            "number": "13"
+           },
+           {
+            "number": "49"
+           },
+           {
+            "number": "15.0"
+           },
+           "2023-04-01T00:00:00.000000Z",
+           {
+            "number": "4"
+           }
+          ],
+          [
+           {
+            "number": "13"
+           },
+           {
+            "number": "50"
+           },
+           {
+            "number": "9.0"
+           },
+           "2023-02-06T00:00:00.000000Z",
+           {
+            "number": "4"
+           }
+          ],
+          [
+           {
+            "number": "14"
+           },
+           {
+            "number": "51"
+           },
+           {
+            "number": "19.0"
+           },
+           "2023-05-07T00:00:00.000000Z",
+           {
+            "number": "2"
+           }
+          ],
+          [
+           {
+            "number": "14"
+           },
+           {
+            "number": "52"
+           },
+           {
+            "number": "13.0"
+           },
+           "2023-03-14T00:00:00.000000Z",
+           {
+            "number": "2"
+           }
+          ],
+          [
+           {
+            "number": "14"
+           },
+           {
+            "number": "53"
+           },
+           {
+            "number": "7.0"
+           },
+           "2023-01-19T00:00:00.000000Z",
+           {
+            "number": "2"
+           }
+          ],
+          [
+           {
+            "number": "15"
+           },
+           {
+            "number": "54"
+           },
+           {
+            "number": "20.0"
+           },
+           "2023-05-16T00:00:00.000000Z",
+           {
+            "number": "3"
+           }
+          ],
+          [
+           {
+            "number": "15"
+           },
+           {
+            "number": "55"
+           },
+           {
+            "number": "14.0"
+           },
+           "2023-03-23T00:00:00.000000Z",
+           {
+            "number": "3"
+           }
+          ],
+          [
+           {
+            "number": "15"
+           },
+           {
+            "number": "56"
+           },
+           {
+            "number": "8.0"
+           },
+           "2023-01-28T00:00:00.000000Z",
+           {
+            "number": "3"
+           }
+          ],
+          [
+           {
+            "number": "16"
+           },
+           {
+            "number": "57"
+           },
+           {
+            "number": "17.0"
+           },
+           "2023-04-19T00:00:00.000000Z",
+           {
+            "number": "0"
+           }
+          ],
+          [
+           {
+            "number": "16"
+           },
+           {
+            "number": "58"
+           },
+           {
+            "number": "11.0"
+           },
+           "2023-02-24T00:00:00.000000Z",
+           {
+            "number": "0"
+           }
+          ],
+          [
+           {
+            "number": "16"
+           },
+           {
+            "number": "59"
+           },
+           {
+            "number": "5.0"
+           },
+           "2023-01-01T00:00:00.000000Z",
+           {
+            "number": "0"
+           }
+          ],
+          [
+           {
+            "number": "17"
+           },
+           {
+            "number": "60"
+           },
+           {
+            "number": "18.0"
+           },
+           "2023-04-28T00:00:00.000000Z",
+           {
+            "number": "1"
+           }
+          ],
+          [
+           {
+            "number": "17"
+           },
+           {
+            "number": "61"
+           },
+           {
+            "number": "12.0"
+           },
+           "2023-03-05T00:00:00.000000Z",
+           {
+            "number": "1"
+           }
+          ],
+          [
+           {
+            "number": "17"
+           },
+           {
+            "number": "62"
+           },
+           {
+            "number": "6.0"
+           },
+           "2023-01-10T00:00:00.000000Z",
+           {
+            "number": "1"
+           }
+          ],
+          [
+           {
+            "number": "18"
+           },
+           {
+            "number": "63"
+           },
+           {
+            "number": "15.0"
+           },
+           "2023-04-01T00:00:00.000000Z",
+           {
+            "number": "4"
+           }
+          ],
+          [
+           {
+            "number": "18"
+           },
+           {
+            "number": "64"
+           },
+           {
+            "number": "9.0"
+           },
+           "2023-02-06T00:00:00.000000Z",
+           {
+            "number": "4"
+           }
+          ],
+          [
+           {
+            "number": "19"
+           },
+           {
+            "number": "65"
+           },
+           {
+            "number": "17.0"
+           },
+           "2023-04-19T00:00:00.000000Z",
+           {
+            "number": "0"
+           }
+          ],
+          [
+           {
+            "number": "19"
+           },
+           {
+            "number": "66"
+           },
+           {
+            "number": "11.0"
+           },
+           "2023-02-24T00:00:00.000000Z",
+           {
+            "number": "0"
+           }
+          ],
+          [
+           {
+            "number": "19"
+           },
+           {
+            "number": "67"
+           },
+           {
+            "number": "5.0"
+           },
+           "2023-01-01T00:00:00.000000Z",
+           {
+            "number": "0"
+           }
+          ],
+          [
+           {
+            "number": "20"
+           },
+           {
+            "number": "68"
+           },
+           {
+            "number": "13.0"
+           },
+           "2023-03-14T00:00:00.000000Z",
+           {
+            "number": "2"
+           }
+          ],
+          [
+           {
+            "number": "20"
+           },
+           {
+            "number": "69"
+           },
+           {
+            "number": "7.0"
+           },
+           "2023-01-19T00:00:00.000000Z",
+           {
+            "number": "2"
+           }
+          ],
+          [
+           {
+            "number": "21"
+           },
+           {
+            "number": "70"
+           },
+           {
+            "number": "14.0"
+           },
+           "2023-03-23T00:00:00.000000Z",
+           {
+            "number": "3"
+           }
+          ],
+          [
+           {
+            "number": "21"
+           },
+           {
+            "number": "71"
+           },
+           {
+            "number": "8.0"
+           },
+           "2023-01-28T00:00:00.000000Z",
+           {
+            "number": "3"
+           }
+          ],
+          [
+           {
+            "number": "22"
+           },
+           {
+            "number": "72"
+           },
+           {
+            "number": "16.0"
+           },
+           "2023-04-10T00:00:00.000000Z",
+           {
+            "number": "5"
+           }
+          ],
+          [
+           {
+            "number": "22"
+           },
+           {
+            "number": "73"
+           },
+           {
+            "number": "10.0"
+           },
+           "2023-02-15T00:00:00.000000Z",
+           {
+            "number": "5"
+           }
+          ],
+          [
+           {
+            "number": "23"
+           },
+           {
+            "number": "74"
+           },
+           {
+            "number": "18.0"
+           },
+           "2023-04-28T00:00:00.000000Z",
+           {
+            "number": "1"
+           }
+          ],
+          [
+           {
+            "number": "23"
+           },
+           {
+            "number": "75"
+           },
+           {
+            "number": "12.0"
+           },
+           "2023-03-05T00:00:00.000000Z",
+           {
+            "number": "1"
+           }
+          ],
+          [
+           {
+            "number": "23"
+           },
+           {
+            "number": "76"
+           },
+           {
+            "number": "6.0"
+           },
+           "2023-01-10T00:00:00.000000Z",
+           {
+            "number": "1"
+           }
+          ],
+          [
+           {
+            "number": "24"
+           },
+           {
+            "number": "77"
+           },
+           {
+            "number": "10.0"
+           },
+           "2023-02-15T00:00:00.000000Z",
+           {
+            "number": "5"
+           }
+          ],
+          [
+           {
+            "number": "25"
+           },
+           {
+            "number": "78"
+           },
+           {
+            "number": "11.0"
+           },
+           "2023-02-24T00:00:00.000000Z",
+           {
+            "number": "0"
+           }
+          ],
+          [
+           {
+            "number": "25"
+           },
+           {
+            "number": "79"
+           },
+           {
+            "number": "5.0"
+           },
+           "2023-01-01T00:00:00.000000Z",
+           {
+            "number": "0"
+           }
+          ],
+          [
+           {
+            "number": "26"
+           },
+           {
+            "number": "80"
+           },
+           {
+            "number": "15.0"
+           },
+           "2023-04-01T00:00:00.000000Z",
+           {
+            "number": "4"
+           }
+          ],
+          [
+           {
+            "number": "26"
+           },
+           {
+            "number": "81"
+           },
+           {
+            "number": "9.0"
+           },
+           "2023-02-06T00:00:00.000000Z",
+           {
+            "number": "4"
+           }
+          ],
+          [
+           {
+            "number": "27"
+           },
+           {
+            "number": "82"
+           },
+           {
+            "number": "13.0"
+           },
+           "2023-03-14T00:00:00.000000Z",
+           {
+            "number": "2"
+           }
+          ],
+          [
+           {
+            "number": "27"
+           },
+           {
+            "number": "83"
+           },
+           {
+            "number": "7.0"
+           },
+           "2023-01-19T00:00:00.000000Z",
+           {
+            "number": "2"
+           }
+          ],
+          [
+           {
+            "number": "28"
+           },
+           {
+            "number": "84"
+           },
+           {
+            "number": "14.0"
+           },
+           "2023-03-23T00:00:00.000000Z",
+           {
+            "number": "3"
+           }
+          ],
+          [
+           {
+            "number": "28"
+           },
+           {
+            "number": "85"
+           },
+           {
+            "number": "8.0"
+           },
+           "2023-01-28T00:00:00.000000Z",
+           {
+            "number": "3"
+           }
+          ],
+          [
+           {
+            "number": "29"
+           },
+           {
+            "number": "86"
+           },
+           {
+            "number": "12.0"
+           },
+           "2023-03-05T00:00:00.000000Z",
+           {
+            "number": "1"
+           }
+          ],
+          [
+           {
+            "number": "29"
+           },
+           {
+            "number": "87"
+           },
+           {
+            "number": "6.0"
+           },
+           "2023-01-10T00:00:00.000000Z",
+           {
+            "number": "1"
+           }
+          ],
+          [
+           {
+            "number": "30"
+           },
+           {
+            "number": "88"
+           },
+           {
+            "number": "12.0"
+           },
+           "2023-03-05T00:00:00.000000Z",
+           {
+            "number": "1"
+           }
+          ],
+          [
+           {
+            "number": "30"
+           },
+           {
+            "number": "89"
+           },
+           {
+            "number": "6.0"
+           },
+           "2023-01-10T00:00:00.000000Z",
+           {
+            "number": "1"
+           }
+          ],
+          [
+           {
+            "number": "31"
+           },
+           {
+            "number": "90"
+           },
+           {
+            "number": "11.0"
+           },
+           "2023-02-24T00:00:00.000000Z",
+           {
+            "number": "0"
+           }
+          ],
+          [
+           {
+            "number": "31"
+           },
+           {
+            "number": "91"
+           },
+           {
+            "number": "5.0"
+           },
+           "2023-01-01T00:00:00.000000Z",
+           {
+            "number": "0"
+           }
+          ],
+          [
+           {
+            "number": "32"
+           },
+           {
+            "number": "92"
+           },
+           {
+            "number": "10.0"
+           },
+           "2023-02-15T00:00:00.000000Z",
+           {
+            "number": "5"
+           }
+          ],
+          [
+           {
+            "number": "33"
+           },
+           {
+            "number": "93"
+           },
+           {
+            "number": "9.0"
+           },
+           "2023-02-06T00:00:00.000000Z",
+           {
+            "number": "4"
+           }
+          ],
+          [
+           {
+            "number": "34"
+           },
+           {
+            "number": "94"
+           },
+           {
+            "number": "8.0"
+           },
+           "2023-01-28T00:00:00.000000Z",
+           {
+            "number": "3"
+           }
+          ],
+          [
+           {
+            "number": "35"
+           },
+           {
+            "number": "95"
+           },
+           {
+            "number": "7.0"
+           },
+           "2023-01-19T00:00:00.000000Z",
+           {
+            "number": "2"
+           }
+          ],
+          [
+           {
+            "number": "37"
+           },
+           {
+            "number": "96"
+           },
+           {
+            "number": "8.0"
+           },
+           "2023-01-28T00:00:00.000000Z",
+           {
+            "number": "3"
+           }
+          ],
+          [
+           {
+            "number": "38"
+           },
+           {
+            "number": "97"
+           },
+           {
+            "number": "7.0"
+           },
+           "2023-01-19T00:00:00.000000Z",
+           {
+            "number": "2"
+           }
+          ],
+          [
+           {
+            "number": "39"
+           },
+           {
+            "number": "98"
+           },
+           {
+            "number": "6.0"
+           },
+           "2023-01-10T00:00:00.000000Z",
+           {
+            "number": "1"
+           }
+          ],
+          [
+           {
+            "number": "40"
+           },
+           {
+            "number": "99"
+           },
+           {
+            "number": "5.0"
+           },
+           "2023-01-01T00:00:00.000000Z",
+           {
+            "number": "0"
+           }
+          ],
+          [
+           {
+            "number": "44"
+           },
+           {
+            "number": "100"
+           },
+           {
+            "number": "5.0"
+           },
+           "2023-01-01T00:00:00.000000Z",
+           {
+            "number": "0"
+           }
+          ]
+         ]
+        }
+       }
+      },
+      "inference": {
+       "run_mode": "fast",
+       "use_prediction_time": false
+      },
+      "metadata": {
+       "num_context_examples": {
+        "number": "48"
+       },
+       "num_prediction_examples": {
+        "number": "2"
+       },
+       "request_id": "sdm-55829cbcb61e",
+       "source_query": "PREDICT SUM(payments.amount, 0, 30, days) FOR EACH accounts.account_id"
+      },
+      "model": "kumo-relational",
+      "output": {
+       "fields": [
+        "prediction"
+       ],
+       "prediction_statistic": "median"
+      },
+      "predict": {
+       "instance_table": {
+        "columns": [
+         "instance_id",
+         "__kumo_entity_ref_0",
+         "__kumo_anchor_time"
+        ],
+        "format": "arrays",
+        "rows": [
+         [
+          {
+           "number": "48"
+          },
+          {
+           "number": "0"
+          },
+          "2023-09-01T00:00:00.000000Z"
+         ],
+         [
+          {
+           "number": "49"
+          },
+          {
+           "number": "1"
+          },
+          "2023-09-01T00:00:00.000000Z"
+         ]
+        ]
+       },
+       "related_tables": {
+        "accounts": {
+         "columns": [
+          "instance_id",
+          "account_id",
+          "age",
+          "owner_id"
+         ],
+         "format": "arrays",
+         "rows": [
+          [
+           {
+            "number": "48"
+           },
+           {
+            "number": "0"
+           },
+           {
+            "number": "30"
+           },
+           {
+            "number": "48.0"
+           }
+          ],
+          [
+           {
+            "number": "49"
+           },
+           {
+            "number": "1"
+           },
+           {
+            "number": "31"
+           },
+           {
+            "number": "49.0"
+           }
+          ],
+          [
+           {
+            "number": "48"
+           },
+           {
+            "number": "2"
+           },
+           {
+            "number": "32"
+           },
+           null
+          ],
+          [
+           {
+            "number": "48"
+           },
+           {
+            "number": "4"
+           },
+           {
+            "number": "34"
+           },
+           null
+          ],
+          [
+           {
+            "number": "49"
+           },
+           {
+            "number": "3"
+           },
+           {
+            "number": "33"
+           },
+           null
+          ],
+          [
+           {
+            "number": "49"
+           },
+           {
+            "number": "5"
+           },
+           {
+            "number": "35"
+           },
+           null
+          ]
+         ]
+        },
+        "owners": {
+         "columns": [
+          "instance_id",
+          "__node_id",
+          "tier"
+         ],
+         "format": "arrays",
+         "rows": [
+          [
+           {
+            "number": "48"
+           },
+           {
+            "number": "48"
+           },
+           "gold"
+          ],
+          [
+           {
+            "number": "49"
+           },
+           {
+            "number": "49"
+           },
+           "basic"
+          ]
+         ]
+        },
+        "payments": {
+         "columns": [
+          "instance_id",
+          "__node_id",
+          "amount",
+          "ts",
+          "account_id"
+         ],
+         "format": "arrays",
+         "rows": [
+          [
+           {
+            "number": "48"
+           },
+           {
+            "number": "101"
+           },
+           {
+            "number": "29.0"
+           },
+           "2023-08-05T00:00:00.000000Z",
+           {
+            "number": "0"
+           }
+          ],
+          [
+           {
+            "number": "48"
+           },
+           {
+            "number": "102"
+           },
+           {
+            "number": "23.0"
+           },
+           "2023-06-12T00:00:00.000000Z",
+           {
+            "number": "0"
+           }
+          ],
+          [
+           {
+            "number": "48"
+           },
+           {
+            "number": "103"
+           },
+           {
+            "number": "17.0"
+           },
+           "2023-04-19T00:00:00.000000Z",
+           {
+            "number": "0"
+           }
+          ],
+          [
+           {
+            "number": "48"
+           },
+           {
+            "number": "104"
+           },
+           {
+            "number": "11.0"
+           },
+           "2023-02-24T00:00:00.000000Z",
+           {
+            "number": "0"
+           }
+          ],
+          [
+           {
+            "number": "48"
+           },
+           {
+            "number": "105"
+           },
+           {
+            "number": "5.0"
+           },
+           "2023-01-01T00:00:00.000000Z",
+           {
+            "number": "0"
+           }
+          ],
+          [
+           {
+            "number": "49"
+           },
+           {
+            "number": "106"
+           },
+           {
+            "number": "30.0"
+           },
+           "2023-08-14T00:00:00.000000Z",
+           {
+            "number": "1"
+           }
+          ],
+          [
+           {
+            "number": "49"
+           },
+           {
+            "number": "107"
+           },
+           {
+            "number": "24.0"
+           },
+           "2023-06-21T00:00:00.000000Z",
+           {
+            "number": "1"
+           }
+          ],
+          [
+           {
+            "number": "49"
+           },
+           {
+            "number": "108"
+           },
+           {
+            "number": "18.0"
+           },
+           "2023-04-28T00:00:00.000000Z",
+           {
+            "number": "1"
+           }
+          ],
+          [
+           {
+            "number": "49"
+           },
+           {
+            "number": "109"
+           },
+           {
+            "number": "12.0"
+           },
+           "2023-03-05T00:00:00.000000Z",
+           {
+            "number": "1"
+           }
+          ],
+          [
+           {
+            "number": "49"
+           },
+           {
+            "number": "110"
+           },
+           {
+            "number": "6.0"
+           },
+           "2023-01-10T00:00:00.000000Z",
+           {
+            "number": "1"
+           }
+          ]
+         ]
+        }
+       }
+      },
+      "schema": {
+       "instance_table": {
+        "columns": {
+         "TARGET": {
+          "dtype": "float32",
+          "stype": "numerical"
+         },
+         "__kumo_anchor_time": {
+          "dtype": "timestamp[us]",
+          "nullable": false,
+          "stype": "timestamp"
+         },
+         "__kumo_entity_ref_0": {
+          "dtype": "int64",
+          "stype": "ID"
+         },
+         "instance_id": {
+          "dtype": "int64",
+          "nullable": false,
+          "stype": "ID"
+         }
+        },
+        "primary_key": "instance_id"
+       },
+       "related_tables": {
+        "accounts": {
+         "columns": {
+          "account_id": {
+           "dtype": "int64",
+           "nullable": false
+          },
+          "age": {
+           "dtype": "int64",
+           "stype": "numerical"
+          },
+          "instance_id": {
+           "dtype": "int64",
+           "nullable": false,
+           "stype": "ID"
+          },
+          "owner_id": {
+           "dtype": "float64",
+           "stype": "ID"
+          }
+         },
+         "primary_key": [
+          "instance_id",
+          "account_id"
+         ]
+        },
+        "owners": {
+         "columns": {
+          "__node_id": {
+           "dtype": "int64",
+           "nullable": false,
+           "stype": "ID"
+          },
+          "instance_id": {
+           "dtype": "int64",
+           "nullable": false,
+           "stype": "ID"
+          },
+          "tier": {
+           "dtype": "string",
+           "stype": "categorical"
+          }
+         },
+         "primary_key": [
+          "instance_id",
+          "__node_id"
+         ]
+        },
+        "payments": {
+         "columns": {
+          "__node_id": {
+           "dtype": "int64",
+           "nullable": false,
+           "stype": "ID"
+          },
+          "account_id": {
+           "dtype": "int64",
+           "stype": "ID"
+          },
+          "amount": {
+           "dtype": "float64",
+           "stype": "numerical"
+          },
+          "instance_id": {
+           "dtype": "int64",
+           "nullable": false,
+           "stype": "ID"
+          },
+          "ts": {
+           "dtype": "timestamp[us]",
+           "stype": "timestamp"
+          }
+         },
+         "primary_key": [
+          "instance_id",
+          "__node_id"
+         ]
+        }
+       },
+       "relationships": [
+        {
+         "source_columns": [
+          "__kumo_entity_ref_0"
+         ],
+         "target_columns": [
+          "account_id"
+         ],
+         "target_table": "accounts"
+        },
+        {
+         "source_columns": [
+          "owner_id"
+         ],
+         "source_table": "accounts",
+         "target_columns": [
+          "__node_id"
+         ],
+         "target_table": "owners"
+        },
+        {
+         "source_columns": [
+          "account_id"
+         ],
+         "source_table": "payments",
+         "target_columns": [
+          "account_id"
+         ],
+         "target_table": "accounts"
+        }
+       ]
+      },
+      "task": {
+       "anchor_time_column": "__kumo_anchor_time",
+       "entity_table_names": [
+        "accounts"
+       ],
+       "kind": "regression",
+       "target": {
+        "column_name": "TARGET",
+        "dtype": "float32"
+       }
+      }
+     },
+     "path": "/v1/predictions",
+     "sha256": "8eee30d925b0c89df9e9aaa58f7d64f2d6a489f2a5cdafa012d4357277c63aba"
+    }
+   ],
+   "result": {
+    "columns": [
+     {
+      "dtype": "int64",
+      "name": "row_index"
+     },
+     {
+      "dtype": "int64",
+      "name": "id"
+     },
+     {
+      "dtype": "float64",
+      "name": "prediction"
+     }
+    ],
+    "digest": "bd1c414de19a1ad32f94c4f0ddbf3aa1d86d2968d3fee9e395c97eb7cb293f81",
+    "rows": 2
+   },
+   "result_text": "be067529844a78acc5952c522cf29acf7425e99c5c8f733f6025fe4d5411d126",
+   "schema": {
+    "links": [
+     [
+      "payments",
+      "account_id",
+      "accounts",
+      "account_id"
+     ],
+     [
+      "accounts",
+      "owner_id",
+      "owners",
+      "owner_id"
+     ]
+    ],
+    "tables": [
+     {
+      "columns": [
+       {
+        "dtype": "int64",
+        "name": "payment_id",
+        "stype": "ID"
+       },
+       {
+        "dtype": "int64",
+        "name": "account_id",
+        "stype": "ID"
+       },
+       {
+        "dtype": "float64",
+        "name": "amount",
+        "stype": "numerical"
+       },
+       {
+        "dtype": "timestamp[us]",
+        "name": "ts",
+        "stype": "timestamp"
+       }
+      ],
+      "duplicate_keys": 0,
+      "name": "payments",
+      "primary_key": "payment_id",
+      "time_column": "ts"
+     },
+     {
+      "columns": [
+       {
+        "dtype": "int64",
+        "name": "owner_id",
+        "stype": "ID"
+       },
+       {
+        "dtype": "string",
+        "name": "tier",
+        "stype": "categorical"
+       }
+      ],
+      "duplicate_keys": 0,
+      "name": "owners",
+      "primary_key": "owner_id",
+      "time_column": null
+     },
+     {
+      "columns": [
+       {
+        "dtype": "int64",
+        "name": "account_id",
+        "stype": "ID"
+       },
+       {
+        "dtype": "int64",
+        "name": "owner_id",
+        "stype": "ID"
+       },
+       {
+        "dtype": "int64",
+        "name": "age",
+        "stype": "numerical"
+       }
+      ],
+      "duplicate_keys": 0,
+      "name": "accounts",
+      "primary_key": "account_id",
+      "time_column": null
+     }
+    ]
+   }
+  }
+ },
+ "tables": [
+  {
+   "name": "accounts",
+   "data": "tables/da56f025638050e2ef342ab99a2624741b96ec1ec4320de2bf83681a70c70fe5.arrows"
+  },
+  {
+   "name": "owners",
+   "data": "tables/75a3f0d65179132472b37207459c88d63675141f372c45f10c129d0ae3c14963.arrows"
+  },
+  {
+   "name": "payments",
+   "data": "tables/13d0d7105e910d571376a7d7631ad930b1a42e2d51f71e36af1e2453c58fa28e.arrows"
+  }
+ ],
+ "derived": [],
+ "draws": [
+  {
+   "table": "`{catalog}`.`{schema}`.`accounts`",
+   "seed": 42,
+   "fraction": "100.0",
+   "rows": "tables/a43df6daeb9bc0d4387f763a2c4342b0757d1296e529c0870c8a35f499e4916b.arrows",
+   "statement": "SELECT `account_id`\nFROM `{catalog}`.`{schema}`.`accounts`\nTABLESAMPLE (100.0 PERCENT) REPEATABLE (42)\nWHERE `account_id` IS NOT NULL\nLIMIT 10000"
+  }
+ ],
+ "statements": [
+  {
+   "text": "\n                    SELECT table_name\n                    FROM `{catalog}`.information_schema.tables\n                    WHERE table_schema = ?\n                      AND table_type != 'METRIC_VIEW'\n                    ",
+   "parameters": [
+    "{schema}"
+   ],
+   "result": "tables/cd443e2b840a9667b7c290fe9dc1f137bac0c89103cf388a0ec8176e13a897d9.arrows"
+  },
+  {
+   "text": "SELECT c.column_name, c.full_data_type, c.is_nullable,\n       c.table_catalog, c.table_schema, c.table_name,\n       t.table_type\nFROM `{catalog}`.information_schema.columns c\nJOIN `{catalog}`.information_schema.tables t\n  ON t.table_catalog = c.table_catalog\n AND t.table_schema = c.table_schema\n AND t.table_name = c.table_name\nWHERE c.table_schema = lower(?)\n  AND c.table_name = lower(?)\nORDER BY c.ordinal_position",
+   "parameters": [
+    "{schema}",
+    "payments"
+   ],
+   "result": "tables/14b4be2e1b925628e4f428fbd54bc0a31feeefa6d575b7615ee693a94b0da2dc.arrows"
+  },
+  {
+   "text": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name\nFROM `{catalog}`.information_schema.table_constraints tc\nJOIN `{catalog}`.information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = lower(?)\n  AND tc.table_name = lower(?)\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE')",
+   "parameters": [
+    "{schema}",
+    "payments"
+   ],
+   "result": "tables/a9b1ee8ad6e21529d27be456649ed4b0a313d9db8d9b56a4c23a74282bc6c7b1.arrows"
+  },
+  {
+   "text": "SELECT `payment_id`, `account_id`, `amount`, `ts` FROM `{catalog}`.`{schema}`.`payments` LIMIT 1000",
+   "parameters": [],
+   "result": "tables/13d0d7105e910d571376a7d7631ad930b1a42e2d51f71e36af1e2453c58fa28e.arrows"
+  },
+  {
+   "text": "SELECT c.column_name, c.full_data_type, c.is_nullable,\n       c.table_catalog, c.table_schema, c.table_name,\n       t.table_type\nFROM `{catalog}`.information_schema.columns c\nJOIN `{catalog}`.information_schema.tables t\n  ON t.table_catalog = c.table_catalog\n AND t.table_schema = c.table_schema\n AND t.table_name = c.table_name\nWHERE c.table_schema = lower(?)\n  AND c.table_name = lower(?)\nORDER BY c.ordinal_position",
+   "parameters": [
+    "{schema}",
+    "owners"
+   ],
+   "result": "tables/d75cecf2e01ed1fa2868e80e2198140a4840412479321e5c95abfded0148c6d9.arrows"
+  },
+  {
+   "text": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name\nFROM `{catalog}`.information_schema.table_constraints tc\nJOIN `{catalog}`.information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = lower(?)\n  AND tc.table_name = lower(?)\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE')",
+   "parameters": [
+    "{schema}",
+    "owners"
+   ],
+   "result": "tables/a9b1ee8ad6e21529d27be456649ed4b0a313d9db8d9b56a4c23a74282bc6c7b1.arrows"
+  },
+  {
+   "text": "SELECT `owner_id`, `tier` FROM `{catalog}`.`{schema}`.`owners` LIMIT 1000",
+   "parameters": [],
+   "result": "tables/75a3f0d65179132472b37207459c88d63675141f372c45f10c129d0ae3c14963.arrows"
+  },
+  {
+   "text": "SELECT c.column_name, c.full_data_type, c.is_nullable,\n       c.table_catalog, c.table_schema, c.table_name,\n       t.table_type\nFROM `{catalog}`.information_schema.columns c\nJOIN `{catalog}`.information_schema.tables t\n  ON t.table_catalog = c.table_catalog\n AND t.table_schema = c.table_schema\n AND t.table_name = c.table_name\nWHERE c.table_schema = lower(?)\n  AND c.table_name = lower(?)\nORDER BY c.ordinal_position",
+   "parameters": [
+    "{schema}",
+    "accounts"
+   ],
+   "result": "tables/987253e704992167c455266a3c0a3edc59c04c98787efe34f47c8758c968ff0c.arrows"
+  },
+  {
+   "text": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name\nFROM `{catalog}`.information_schema.table_constraints tc\nJOIN `{catalog}`.information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = lower(?)\n  AND tc.table_name = lower(?)\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE')",
+   "parameters": [
+    "{schema}",
+    "accounts"
+   ],
+   "result": "tables/a9b1ee8ad6e21529d27be456649ed4b0a313d9db8d9b56a4c23a74282bc6c7b1.arrows"
+  },
+  {
+   "text": "SELECT `account_id`, `owner_id`, `age` FROM `{catalog}`.`{schema}`.`accounts` LIMIT 1000",
+   "parameters": [],
+   "result": "tables/da56f025638050e2ef342ab99a2624741b96ec1ec4320de2bf83681a70c70fe5.arrows"
+  },
+  {
+   "text": "SELECT tc.constraint_name, kcu.column_name,\n       ccu.table_catalog, ccu.table_schema,\n       ccu.table_name, ccu.column_name\nFROM `{catalog}`.information_schema.table_constraints tc\nJOIN `{catalog}`.information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN `{catalog}`.information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN `{catalog}`.information_schema.constraint_column_usage ccu\n  ON rc.unique_constraint_catalog = ccu.constraint_catalog\n AND rc.unique_constraint_schema = ccu.constraint_schema\n AND rc.unique_constraint_name = ccu.constraint_name\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = lower(?)\n  AND tc.table_name = lower(?)",
+   "parameters": [
+    "{schema}",
+    "payments"
+   ],
+   "result": null
+  },
+  {
+   "text": "SELECT tc.constraint_name, kcu.column_name,\n       ccu.table_catalog, ccu.table_schema,\n       ccu.table_name, ccu.column_name\nFROM `{catalog}`.information_schema.table_constraints tc\nJOIN `{catalog}`.information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN `{catalog}`.information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN `{catalog}`.information_schema.constraint_column_usage ccu\n  ON rc.unique_constraint_catalog = ccu.constraint_catalog\n AND rc.unique_constraint_schema = ccu.constraint_schema\n AND rc.unique_constraint_name = ccu.constraint_name\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = lower(?)\n  AND tc.table_name = lower(?)",
+   "parameters": [
+    "{schema}",
+    "owners"
+   ],
+   "result": null
+  },
+  {
+   "text": "SELECT tc.constraint_name, kcu.column_name,\n       ccu.table_catalog, ccu.table_schema,\n       ccu.table_name, ccu.column_name\nFROM `{catalog}`.information_schema.table_constraints tc\nJOIN `{catalog}`.information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN `{catalog}`.information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN `{catalog}`.information_schema.constraint_column_usage ccu\n  ON rc.unique_constraint_catalog = ccu.constraint_catalog\n AND rc.unique_constraint_schema = ccu.constraint_schema\n AND rc.unique_constraint_name = ccu.constraint_name\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = lower(?)\n  AND tc.table_name = lower(?)",
+   "parameters": [
+    "{schema}",
+    "accounts"
+   ],
+   "result": null
+  },
+  {
+   "text": "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT `payment_id`) AS d, COUNT(CASE WHEN `payment_id` IS NULL THEN 1 END) AS z\nFROM `{catalog}`.`{schema}`.`payments`\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT `owner_id`) AS d, COUNT(CASE WHEN `owner_id` IS NULL THEN 1 END) AS z\nFROM `{catalog}`.`{schema}`.`owners`\nUNION ALL\nSELECT 2 AS k, COUNT(*) AS n, COUNT(DISTINCT `account_id`) AS d, COUNT(CASE WHEN `account_id` IS NULL THEN 1 END) AS z\nFROM `{catalog}`.`{schema}`.`accounts`",
+   "parameters": [],
+   "result": "tables/2b510e8f0688a148bc0b4ec5ccd60e241e8eaedc9cb445a5c1bd6d564375efdb.arrows"
+  },
+  {
+   "text": "SELECT COUNT(*) FROM `{catalog}`.`{schema}`.`payments`",
+   "parameters": [],
+   "result": "tables/cbcd063ae7a233dd95c740e788ac224fa8a628525f55d9816ed4437aa8b17de2.arrows"
+  },
+  {
+   "text": "SELECT COUNT(*) FROM `{catalog}`.`{schema}`.`owners`",
+   "parameters": [],
+   "result": "tables/be8bccfa8df06c83cddc81cfd16e22eb867fde6f9788ee54eed7295985616d69.arrows"
+  },
+  {
+   "text": "SELECT COUNT(*) FROM `{catalog}`.`{schema}`.`accounts`",
+   "parameters": [],
+   "result": "tables/1bc7900b49b2c324b885095985d7307ff862b1266b1a75bb69b90b6254cdcde5.arrows"
+  },
+  {
+   "text": "SELECT\n  0 as table_index,\n  MIN(`ts`) as min_date,\n  MAX(`ts`) as max_date\nFROM `{catalog}`.`{schema}`.`payments`",
+   "parameters": [],
+   "result": "tables/fc274b59d6e86a7b0901423d931353fb8a563431ecf82298918c8dd8c9b714e1.arrows"
+  },
+  {
+   "text": "SELECT `account_id`\nFROM `{catalog}`.`{schema}`.`accounts`\nTABLESAMPLE (100.0 PERCENT) REPEATABLE (42)\nWHERE `account_id` IS NOT NULL\nLIMIT 10000",
+   "parameters": [],
+   "result": "tables/a43df6daeb9bc0d4387f763a2c4342b0757d1296e529c0870c8a35f499e4916b.arrows"
+  },
+  {
+   "text": "WITH TMP AS (\n  SELECT pos AS __KUMO_BATCH__, col.id AS __KUMO_ID__, col.e AS __KUMO_END_TIME__, col.s AS __KUMO_START_TIME__\n  FROM posexplode(from_json(?, 'array<struct<id:bigint,e:string,s:string>>'))\n)\nSELECT TMP.__KUMO_BATCH__ as __KUMO_BATCH__, `amount`, `ts`\nFROM TMP\nJOIN `{catalog}`.`{schema}`.`payments`\n  ON `account_id` = TMP.__KUMO_ID__\n AND `ts` <= TMP.__KUMO_END_TIME__\nAND `ts` > TMP.__KUMO_START_TIME__\nWHERE `ts` <= ?\nAND `ts` > ?",
+   "parameters": [
+    "[{\"id\":3,\"e\":\"2023-09-01 00:00:00\",\"s\":\"2023-08-02 00:00:00\"},{\"id\":2,\"e\":\"2023-09-01 00:00:00\",\"s\":\"2023-08-02 00:00:00\"},{\"id\":5,\"e\":\"2023-09-01 00:00:00\",\"s\":\"2023-08-02 00:00:00\"},{\"id\":4,\"e\":\"2023-09-01 00:00:00\",\"s\":\"2023-08-02 00:00:00\"},{\"id\":1,\"e\":\"2023-09-01 00:00:00\",\"s\":\"2023-08-02 00:00:00\"},{\"id\":0,\"e\":\"2023-09-01 00:00:00\",\"s\":\"2023-08-02 00:00:00\"},{\"id\":2,\"e\":\"2023-08-02 00:00:00\",\"s\":\"2023-07-03 00:00:00\"},{\"id\":4,\"e\":\"2023-08-02 00:00:00\",\"s\":\"2023-07-03 00:00:00\"},{\"id\":0,\"e\":\"2023-08-02 00:00:00\",\"s\":\"2023-07-03 00:00:00\"},{\"id\":1,\"e\":\"2023-08-02 00:00:00\",\"s\":\"2023-07-03 00:00:00\"},{\"id\":3,\"e\":\"2023-08-02 00:00:00\",\"s\":\"2023-07-03 00:00:00\"},{\"id\":5,\"e\":\"2023-08-02 00:00:00\",\"s\":\"2023-07-03 00:00:00\"},{\"id\":5,\"e\":\"2023-07-03 00:00:00\",\"s\":\"2023-06-03 00:00:00\"},{\"id\":4,\"e\":\"2023-07-03 00:00:00\",\"s\":\"2023-06-03 00:00:00\"},{\"id\":2,\"e\":\"2023-07-03 00:00:00\",\"s\":\"2023-06-03 00:00:00\"},{\"id\":3,\"e\":\"2023-07-03 00:00:00\",\"s\":\"2023-06-03 00:00:00\"},{\"id\":0,\"e\":\"2023-07-03 00:00:00\",\"s\":\"2023-06-03 00:00:00\"},{\"id\":1,\"e\":\"2023-07-03 00:00:00\",\"s\":\"2023-06-03 00:00:00\"},{\"id\":4,\"e\":\"2023-06-03 00:00:00\",\"s\":\"2023-05-04 00:00:00\"},{\"id\":0,\"e\":\"2023-06-03 00:00:00\",\"s\":\"2023-05-04 00:00:00\"},{\"id\":2,\"e\":\"2023-06-03 00:00:00\",\"s\":\"2023-05-04 00:00:00\"},{\"id\":3,\"e\":\"2023-06-03 00:00:00\",\"s\":\"2023-05-04 00:00:00\"},{\"id\":5,\"e\":\"2023-06-03 00:00:00\",\"s\":\"2023-05-04 00:00:00\"},{\"id\":1,\"e\":\"2023-06-03 00:00:00\",\"s\":\"2023-05-04 00:00:00\"},{\"id\":5,\"e\":\"2023-05-04 00:00:00\",\"s\":\"2023-04-04 00:00:00\"},{\"id\":0,\"e\":\"2023-05-04 00:00:00\",\"s\":\"2023-04-04 00:00:00\"},{\"id\":4,\"e\":\"2023-05-04 00:00:00\",\"s\":\"2023-04-04 00:00:00\"},{\"id\":2,\"e\":\"2023-05-04 00:00:00\",\"s\":\"2023-04-04 00:00:00\"},{\"id\":3,\"e\":\"2023-05-04 00:00:00\",\"s\":\"2023-04-04 00:00:00\"},{\"id\":1,\"e\":\"2023-05-04 00:00:00\",\"s\":\"2023-04-04 00:00:00\"},{\"id\":1,\"e\":\"2023-04-04 00:00:00\",\"s\":\"2023-03-05 00:00:00\"},{\"id\":0,\"e\":\"2023-04-04 00:00:00\",\"s\":\"2023-03-05 00:00:00\"},{\"id\":5,\"e\":\"2023-04-04 00:00:00\",\"s\":\"2023-03-05 00:00:00\"},{\"id\":4,\"e\":\"2023-04-04 00:00:00\",\"s\":\"2023-03-05 00:00:00\"},{\"id\":3,\"e\":\"2023-04-04 00:00:00\",\"s\":\"2023-03-05 00:00:00\"},{\"id\":2,\"e\":\"2023-04-04 00:00:00\",\"s\":\"2023-03-05 00:00:00\"},{\"id\":5,\"e\":\"2023-03-05 00:00:00\",\"s\":\"2023-02-03 00:00:00\"},{\"id\":3,\"e\":\"2023-03-05 00:00:00\",\"s\":\"2023-02-03 00:00:00\"},{\"id\":2,\"e\":\"2023-03-05 00:00:00\",\"s\":\"2023-02-03 00:00:00\"},{\"id\":1,\"e\":\"2023-03-05 00:00:00\",\"s\":\"2023-02-03 00:00:00\"},{\"id\":0,\"e\":\"2023-03-05 00:00:00\",\"s\":\"2023-02-03 00:00:00\"},{\"id\":4,\"e\":\"2023-03-05 00:00:00\",\"s\":\"2023-02-03 00:00:00\"},{\"id\":2,\"e\":\"2023-02-03 00:00:00\",\"s\":\"2023-01-04 00:00:00\"},{\"id\":1,\"e\":\"2023-02-03 00:00:00\",\"s\":\"2023-01-04 00:00:00\"},{\"id\":0,\"e\":\"2023-02-03 00:00:00\",\"s\":\"2023-01-04 00:00:00\"},{\"id\":3,\"e\":\"2023-02-03 00:00:00\",\"s\":\"2023-01-04 00:00:00\"},{\"id\":4,\"e\":\"2023-02-03 00:00:00\",\"s\":\"2023-01-04 00:00:00\"},{\"id\":5,\"e\":\"2023-02-03 00:00:00\",\"s\":\"2023-01-04 00:00:00\"}]",
+    "2023-09-01 00:00:00",
+    "2023-01-04 00:00:00"
+   ],
+   "result": "tables/a6ab3723b81c25a34cd6cddfa90bdac1aa86902352a024e2e0d5bc8ae8a11195.arrows"
+  },
+  {
+   "text": "WITH TMP AS (\n  SELECT pos AS __KUMO_BATCH__, col AS __KUMO_ID__\n  FROM posexplode(from_json(?, 'array<bigint>'))\n)\nSELECT TMP.__KUMO_BATCH__ as __KUMO_BATCH__, `account_id`, `owner_id`, `age`\nFROM TMP\nJOIN `{catalog}`.`{schema}`.`accounts`\n  ON `account_id` = TMP.__KUMO_ID__",
+   "parameters": [
+    "[3,2,5,4,1,0,2,4,0,1,3,5,5,4,2,3,0,1,4,0,2,3,5,1,5,0,4,2,3,1,1,0,5,4,3,2,5,3,2,1,0,4,2,1,0,3,4,5,0,1]"
+   ],
+   "result": "tables/d188660dca4764e82f25bb3076531e86b261bdfcecd54b2b8fbba75f24a3b493.arrows"
+  },
+  {
+   "text": "WITH TMP AS (\n  SELECT pos AS __KUMO_BATCH__, col AS __KUMO_ID__\n  FROM posexplode(from_json(?, 'array<bigint>'))\n)\nSELECT TMP.__KUMO_BATCH__ as __KUMO_BATCH__, `owner_id`, `tier`\nFROM TMP\nJOIN `{catalog}`.`{schema}`.`owners`\n  ON `owner_id` = TMP.__KUMO_ID__",
+   "parameters": [
+    "[9007199254740993,9007199254740992]"
+   ],
+   "result": "tables/07a7e067578a24b7f96658728f451a5c0621ffe149ac81ab818e74e943e764fe.arrows"
+  },
+  {
+   "text": "WITH TMP AS (\n  SELECT pos AS __KUMO_BATCH__, col.id AS __KUMO_ID__, col.e AS __KUMO_END_TIME__, col.s AS __KUMO_START_TIME__\n  FROM posexplode(from_json(?, 'array<struct<id:bigint,e:string,s:string>>'))\n)\nSELECT TMP.__KUMO_BATCH__ as __KUMO_BATCH__, `payment_id`, `account_id`, `amount`, `ts`\nFROM TMP\nJOIN `{catalog}`.`{schema}`.`payments`\n  ON `account_id` = TMP.__KUMO_ID__\n AND `ts` <= TMP.__KUMO_END_TIME__\n AND `ts` > TMP.__KUMO_START_TIME__\nWHERE `ts` <= ?\n  AND `ts` > ?\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY TMP.__KUMO_BATCH__\n  ORDER BY `ts` DESC, `payment_id`\n) <= 32\nORDER BY TMP.__KUMO_BATCH__, `ts` DESC, `payment_id`",
+   "parameters": [
+    "[{\"id\":3,\"e\":\"2023-08-02 00:00:00\",\"s\":\"2018-08-03 00:00:00\"},{\"id\":2,\"e\":\"2023-08-02 00:00:00\",\"s\":\"2018-08-03 00:00:00\"},{\"id\":5,\"e\":\"2023-08-02 00:00:00\",\"s\":\"2018-08-03 00:00:00\"},{\"id\":4,\"e\":\"2023-08-02 00:00:00\",\"s\":\"2018-08-03 00:00:00\"},{\"id\":1,\"e\":\"2023-08-02 00:00:00\",\"s\":\"2018-08-03 00:00:00\"},{\"id\":0,\"e\":\"2023-08-02 00:00:00\",\"s\":\"2018-08-03 00:00:00\"},{\"id\":2,\"e\":\"2023-07-03 00:00:00\",\"s\":\"2018-07-04 00:00:00\"},{\"id\":4,\"e\":\"2023-07-03 00:00:00\",\"s\":\"2018-07-04 00:00:00\"},{\"id\":0,\"e\":\"2023-07-03 00:00:00\",\"s\":\"2018-07-04 00:00:00\"},{\"id\":1,\"e\":\"2023-07-03 00:00:00\",\"s\":\"2018-07-04 00:00:00\"},{\"id\":3,\"e\":\"2023-07-03 00:00:00\",\"s\":\"2018-07-04 00:00:00\"},{\"id\":5,\"e\":\"2023-07-03 00:00:00\",\"s\":\"2018-07-04 00:00:00\"},{\"id\":5,\"e\":\"2023-06-03 00:00:00\",\"s\":\"2018-06-04 00:00:00\"},{\"id\":4,\"e\":\"2023-06-03 00:00:00\",\"s\":\"2018-06-04 00:00:00\"},{\"id\":2,\"e\":\"2023-06-03 00:00:00\",\"s\":\"2018-06-04 00:00:00\"},{\"id\":3,\"e\":\"2023-06-03 00:00:00\",\"s\":\"2018-06-04 00:00:00\"},{\"id\":0,\"e\":\"2023-06-03 00:00:00\",\"s\":\"2018-06-04 00:00:00\"},{\"id\":1,\"e\":\"2023-06-03 00:00:00\",\"s\":\"2018-06-04 00:00:00\"},{\"id\":4,\"e\":\"2023-05-04 00:00:00\",\"s\":\"2018-05-05 00:00:00\"},{\"id\":0,\"e\":\"2023-05-04 00:00:00\",\"s\":\"2018-05-05 00:00:00\"},{\"id\":2,\"e\":\"2023-05-04 00:00:00\",\"s\":\"2018-05-05 00:00:00\"},{\"id\":3,\"e\":\"2023-05-04 00:00:00\",\"s\":\"2018-05-05 00:00:00\"},{\"id\":5,\"e\":\"2023-05-04 00:00:00\",\"s\":\"2018-05-05 00:00:00\"},{\"id\":1,\"e\":\"2023-05-04 00:00:00\",\"s\":\"2018-05-05 00:00:00\"},{\"id\":5,\"e\":\"2023-04-04 00:00:00\",\"s\":\"2018-04-05 00:00:00\"},{\"id\":0,\"e\":\"2023-04-04 00:00:00\",\"s\":\"2018-04-05 00:00:00\"},{\"id\":4,\"e\":\"2023-04-04 00:00:00\",\"s\":\"2018-04-05 00:00:00\"},{\"id\":2,\"e\":\"2023-04-04 00:00:00\",\"s\":\"2018-04-05 00:00:00\"},{\"id\":3,\"e\":\"2023-04-04 00:00:00\",\"s\":\"2018-04-05 00:00:00\"},{\"id\":1,\"e\":\"2023-04-04 00:00:00\",\"s\":\"2018-04-05 00:00:00\"},{\"id\":1,\"e\":\"2023-03-05 00:00:00\",\"s\":\"2018-03-06 00:00:00\"},{\"id\":0,\"e\":\"2023-03-05 00:00:00\",\"s\":\"2018-03-06 00:00:00\"},{\"id\":5,\"e\":\"2023-03-05 00:00:00\",\"s\":\"2018-03-06 00:00:00\"},{\"id\":4,\"e\":\"2023-03-05 00:00:00\",\"s\":\"2018-03-06 00:00:00\"},{\"id\":3,\"e\":\"2023-03-05 00:00:00\",\"s\":\"2018-03-06 00:00:00\"},{\"id\":2,\"e\":\"2023-03-05 00:00:00\",\"s\":\"2018-03-06 00:00:00\"},{\"id\":5,\"e\":\"2023-02-03 00:00:00\",\"s\":\"2018-02-04 00:00:00\"},{\"id\":3,\"e\":\"2023-02-03 00:00:00\",\"s\":\"2018-02-04 00:00:00\"},{\"id\":2,\"e\":\"2023-02-03 00:00:00\",\"s\":\"2018-02-04 00:00:00\"},{\"id\":1,\"e\":\"2023-02-03 00:00:00\",\"s\":\"2018-02-04 00:00:00\"},{\"id\":0,\"e\":\"2023-02-03 00:00:00\",\"s\":\"2018-02-04 00:00:00\"},{\"id\":4,\"e\":\"2023-02-03 00:00:00\",\"s\":\"2018-02-04 00:00:00\"},{\"id\":2,\"e\":\"2023-01-04 00:00:00\",\"s\":\"2018-01-05 00:00:00\"},{\"id\":1,\"e\":\"2023-01-04 00:00:00\",\"s\":\"2018-01-05 00:00:00\"},{\"id\":0,\"e\":\"2023-01-04 00:00:00\",\"s\":\"2018-01-05 00:00:00\"},{\"id\":3,\"e\":\"2023-01-04 00:00:00\",\"s\":\"2018-01-05 00:00:00\"},{\"id\":4,\"e\":\"2023-01-04 00:00:00\",\"s\":\"2018-01-05 00:00:00\"},{\"id\":5,\"e\":\"2023-01-04 00:00:00\",\"s\":\"2018-01-05 00:00:00\"},{\"id\":0,\"e\":\"2023-09-01 00:00:00\",\"s\":\"2018-09-02 00:00:00\"},{\"id\":1,\"e\":\"2023-09-01 00:00:00\",\"s\":\"2018-09-02 00:00:00\"}]",
+    "2023-09-01 00:00:00",
+    "2018-01-05 00:00:00"
+   ],
+   "result": "tables/0eed5158b8b91271934835a73f30170e3da48ff3b070902d1d60046c5a29da13.arrows"
+  },
+  {
+   "text": "WITH TMP AS (\n  SELECT pos AS __KUMO_BATCH__, col AS __KUMO_ID__\n  FROM posexplode(from_json(?, 'array<bigint>'))\n)\nSELECT TMP.__KUMO_BATCH__ as __KUMO_BATCH__, `account_id`, `owner_id`, `age`\nFROM TMP\nJOIN `{catalog}`.`{schema}`.`accounts`\n  ON `owner_id` = TMP.__KUMO_ID__\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY TMP.__KUMO_BATCH__\n  ORDER BY `account_id`\n) <= 32\nORDER BY TMP.__KUMO_BATCH__, `account_id`",
+   "parameters": [
+    "[9007199254740993,9007199254740992,9007199254740993,9007199254740992,9007199254740993,9007199254740992,9007199254740992,9007199254740992,9007199254740992,9007199254740993,9007199254740993,9007199254740993,9007199254740993,9007199254740992,9007199254740992,9007199254740993,9007199254740992,9007199254740993,9007199254740992,9007199254740992,9007199254740992,9007199254740993,9007199254740993,9007199254740993,9007199254740993,9007199254740992,9007199254740992,9007199254740992,9007199254740993,9007199254740993,9007199254740993,9007199254740992,9007199254740993,9007199254740992,9007199254740993,9007199254740992,9007199254740993,9007199254740993,9007199254740992,9007199254740993,9007199254740992,9007199254740992,9007199254740992,9007199254740993,9007199254740992,9007199254740993,9007199254740992,9007199254740993,9007199254740992,9007199254740993]"
+   ],
+   "result": "tables/311deeca45f001dea90cb2ab188e9d42909f4ae23462166fab91200ba8e69564.arrows"
+  }
+ ],
+ "loader": []
+}
