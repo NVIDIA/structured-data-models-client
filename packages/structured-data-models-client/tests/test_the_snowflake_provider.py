@@ -311,3 +311,51 @@ def test_a_snowpark_session_is_read_through_its_own_connection() -> None:
     answer = _arrow(provider(_step((_SELECT, []))))
     assert answer.equals(rows)
     assert connection.calls == [(_SELECT, None, 'qmark')]
+
+
+class _Text:
+    r"""A one-cell text attachment, as the core hands over a key set it
+    wrote as JSON (T3.28)."""
+
+    def __init__(self, text: str) -> None:
+        self._table = pa.table({'keys': pa.array([text], pa.string())})
+
+    def __arrow_c_stream__(self, requested_schema: Any = None) -> Any:
+        return self._table.__arrow_c_stream__(requested_schema)
+
+
+def test_a_key_set_is_bound_as_the_text_the_core_wrote_then_its_bounds() -> (
+    None
+):
+    read = 'WITH TMP as (SELECT 1) SELECT 1 WHERE "ts" <= ? AND "ts" > ?'
+    rows = pa.table({'__KUMO_BATCH__': pa.array([0], pa.int8())})
+    connection = _Connection({read: rows})
+    step = _step(
+        (
+            read,
+            [
+                {'param': 'text', 'attachment': 7},
+                _scalar('2024-03-01 00:00:00'),
+                _scalar('2023-01-06 00:00:00'),
+            ],
+        )
+    )
+    answer = _arrow(
+        SnowflakeProvider(connection)(
+            step, {7: _Text('[[3, "2024-03-01 00:00:00"]]')}
+        )
+    )
+    assert answer.equals(rows)
+    assert connection.calls == [
+        (
+            read,
+            [
+                '[[3, "2024-03-01 00:00:00"]]',
+                '2024-03-01 00:00:00',
+                '2023-01-06 00:00:00',
+            ],
+            'qmark',
+        )
+    ]
+    with pytest.raises(PlanNotRun):
+        SnowflakeProvider(connection)(step, {})
