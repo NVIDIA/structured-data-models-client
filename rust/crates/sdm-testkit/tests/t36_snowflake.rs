@@ -12,9 +12,7 @@
 //!   statement is the one the old client sent for the same step, text and
 //!   parameters exactly (the catalog reads, the preview, the key counts, the
 //!   time bounds, the entity sample, the column ranges, the row count's
-//!   listing, a semantic view's YAML read). The row count's second
-//!   statement, which reads the listing's `rows` column, is the dialect's
-//!   own and pinned here.
+//!   listing, a semantic view's YAML read).
 //! - The catalog reader: each recorded `DESCRIBE TABLE`, `SHOW IMPORTED
 //!   KEYS`, table listing and session read, rebuilt in the Python row
 //!   adapter's text form (every column nullable text, in the result's
@@ -51,10 +49,6 @@ use serde_json::{Value, json};
 /// The database and schema the recordings name, as their placeholders.
 const DB: &str = "{catalog}";
 const SCHEMA: &str = "{schema}";
-
-/// The row count's second statement: the listing's `rows`, first row.
-const ROWS_OF_THE_LISTING: &str =
-    r#"SELECT "rows" FROM TABLE(RESULT_SCAN(LAST_QUERY_ID())) LIMIT 1"#;
 
 fn captures() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../contract/captures")
@@ -345,7 +339,7 @@ fn an_entity_sample_is_the_old_clients_unseeded_sample_of_rows() {
 }
 
 #[test]
-fn a_row_count_is_the_old_clients_listing_then_its_rows() {
+fn a_row_count_is_the_old_clients_listing_alone() {
     let p = &named();
     for (case, name) in [
         ("base.binary", "users"),
@@ -357,25 +351,18 @@ fn a_row_count_is_the_old_clients_listing_then_its_rows() {
         } else {
             table(name)
         };
-        let statements = planned(
+        let (text, params) = one_recorded(
+            case,
             p,
             json!({"request": "count_rows", "table": source, "filters": []}),
-        )
-        .unwrap();
-        assert_eq!(statements.len(), 2, "{statements:?}");
-        assert!(
-            recorded(case).contains(&statements[0]),
-            "{case} recorded no {:?}",
-            statements[0]
         );
         assert_eq!(
-            statements[0],
+            (text, params),
             (
                 format!(r#"SHOW TABLES LIKE ? IN SCHEMA "{DB}"."{SCHEMA}""#),
                 vec![name.to_owned()]
             )
         );
-        assert_eq!(statements[1], (ROWS_OF_THE_LISTING.to_owned(), vec![]));
     }
 }
 

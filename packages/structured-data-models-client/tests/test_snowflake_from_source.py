@@ -44,7 +44,8 @@ CAPTURES = ROOT / 'contract' / 'captures'
 DB = '{catalog}'
 SCHEMA = '{schema}'
 
-#: The row count's second statement on the core: the listing's ``rows``.
+#: A second statement reading the listing's ``rows``, which the core no
+#: longer sends: it reads the count from the listing, as the old client does.
 ROWS_OF_THE_LISTING = (
     'SELECT "rows" FROM TABLE(RESULT_SCAN(LAST_QUERY_ID())) LIMIT 1'
 )
@@ -135,8 +136,7 @@ class _Cursor:
 
 class _Warehouse(SnowflakeConnection):
     r"""A connector connection answering ``case``'s recorded statements;
-    ``RESULT_SCAN(LAST_QUERY_ID())`` reads the last answer, as Snowflake
-    does. ``upper`` holds the tables stored in upper case (a statement
+    ``upper`` holds the tables stored in upper case (a statement
     naming one in lower case fails with errno 2003, its upper-cased form
     answered as the recording's lower-case one); the database and schema
     are stored in upper case, as the recordings' were; ``fail`` maps a
@@ -161,10 +161,6 @@ class _Warehouse(SnowflakeConnection):
         self.calls.append((text, parameters))
         if text in self.fail:
             raise self.fail[text]
-        if text == ROWS_OF_THE_LISTING:
-            assert self._last is not None and 'rows' in self._last.column_names
-            self._last = self._last.select(['rows']).slice(0, 1)
-            return self._last
         # The recordings' database and schema are stored in upper case, so
         # their upper-cased spellings name the same objects.
         for part in (DB, SCHEMA):
@@ -494,9 +490,11 @@ def test_each_materialize_reads_the_session_again(
         )
 
 
-def test_a_row_count_reads_the_old_clients_listing_and_its_rows_column(
+def test_a_row_count_is_read_from_the_old_clients_listing_alone(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    r"""``SHOW TABLES LIKE ?``, the table's name bound, and nothing more: the
+    count is its first row's ``rows`` (``SNOW/table.py:287-297``)."""
     warehouse = _Warehouse('base.binary')
     schema = _described('core', monkeypatch, warehouse, **_NAMED)
     mark = len(warehouse.calls)
@@ -504,30 +502,33 @@ def test_a_row_count_reads_the_old_clients_listing_and_its_rows_column(
     asked = warehouse.calls[mark:]
     listing = f'SHOW TABLES LIKE ? IN SCHEMA "{DB}"."{SCHEMA}"'
     for name in ('users', 'orders'):
-        at = asked.index((listing, [name]))
-        assert asked[at + 1] == (ROWS_OF_THE_LISTING, [])
+        assert (listing, [name]) in asked
+    assert ROWS_OF_THE_LISTING not in [text for text, _ in asked]
 
 
 def test_a_view_listed_as_no_table_is_refused_where_its_rows_are_counted(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    r"""``SHOW TABLES LIKE`` lists no view, so the old client's count fails
-    (``SNOW/table.py:295-296``, INTERNAL_ERROR); the core refuses the
-    answer by name (registered, proposed: count the exact name)."""
-    warehouse = _Warehouse('snowflake.rowcount.view-as-table')
-    schema = _described(
-        'core',
-        monkeypatch,
-        warehouse,
-        **_NAMED,
-        tables={'users': 'users_v', 'orders': 'orders'},
-    )
-    with pytest.raises(StructuredDataError) as refused:
-        _materialize(
-            schema,
-            'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id',
+    r"""``SHOW TABLES LIKE`` lists no view, so the count reads no row: an
+    internal error on both routes, as the old client's bare assert is
+    (``SNOW/table.py:295-296``); the words differ (P3D-3)."""
+    codes = {}
+    for route in ('core', 'old'):
+        warehouse = _Warehouse('snowflake.rowcount.view-as-table')
+        schema = _described(
+            route,
+            monkeypatch,
+            warehouse,
+            **_NAMED,
+            tables={'users': 'users_v', 'orders': 'orders'},
         )
-    assert refused.value.code == 'PROVIDER_SCHEMA_MISMATCH'
+        with pytest.raises(StructuredDataError) as refused:
+            _materialize(
+                schema,
+                'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id',
+            )
+        codes[route] = refused.value.code
+    assert codes == {'core': 'INTERNAL_ERROR', 'old': 'INTERNAL_ERROR'}
 
 
 def _payloads(request: Any) -> str:
