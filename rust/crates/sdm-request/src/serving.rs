@@ -2,41 +2,22 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! A Databricks Model Serving endpoint's envelope and answers (T3.13), as
-//! the old client's serving transport writes and reads them
-//! (`CL/core/databricks_serving.py`), for every host alike: a host posts
-//! the bytes [`envelope`] writes to the endpoint's invocations and hands
-//! back what it was answered with, which [`answer`] reads, or the
-//! endpoint's failure, which [`failure`] names. No host reads a code out of
-//! what the endpoint said.
+//! Databricks Model Serving's envelope and responses, shared by every host.
 //!
-//! - [`envelope`] is `_envelope` with the size check of `predict`: the call
-//!   as the one `request_json` row of `dataframe_records`, written as
-//!   Python's `json.dumps` writes it (every character past ASCII escaped, a
-//!   float as Python's `repr`), and refused past the caller's limit
-//!   (`max_request_bytes`), counted on the wrapped envelope, which escapes
-//!   every quote of the call again;
-//! - [`answer`] is `_response_body` then `_decoded`: the reply's one
-//!   prediction row and its `response_json` text, read as JSON, an object,
-//!   and a failure the served model answered with by its `status`
-//!   (`_refused_in_band`); a reply the SDK could not read as JSON is the
-//!   SDK's failure, a 503 with no code, as the old client reports it;
-//! - [`failure`] is `_error_from`: the status the old client reports (the
-//!   SDK's error class's), the code the served model opened its message
-//!   with (`_model_diagnosis`), else the SDK's own, and a server failure
-//!   that is the caller's to fix (`_diagnosis_in`) reported as such. It
-//!   reads either form a host has: an SDK's error (its message and its
-//!   code apart, with its class's name, Python's) or the HTTP response's
-//!   body (a host without the SDK, Java's), read as the SDK reads one.
+//! The existing wire JSON codec writes both layers and preserves the call's
+//! member order and number tokens. The request limit counts the final UTF-8
+//! bytes posted. No runtime's JSON formatting or object protocols are copied.
 //!
-//! What the endpoint said is read for codes only, never repeated: it can
-//! quote the rows it was sent.
+//! Response policy is explicit: one response_json row holding an object;
+//! integer failure statuses within the contract's range; JSON type names;
+//! nonblank diagnostic text with a title fallback; bounded ASCII error codes
+//! and ASCII-insensitive known phrases. Endpoint text is read for codes and
+//! never repeated, because it can quote the submitted rows.
 
 use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 use sdm_wire::json::{self, Value, is_integer_token};
 
 use crate::predict::bad_response;
-use crate::serving_compat::{fold, is_present, is_space, value_type, write_json, write_text};
 
 /// The column the served model reads a request from. Renaming it breaks
 /// every endpoint already deployed.
@@ -81,13 +62,8 @@ const STATUS_KEPT: &[u16] = &[400, 401, 403, 404, 409, 429, 504];
 
 /// The call `call` (the core's own JSON) as the endpoint's envelope, the
 /// bytes a host posts, or `ServingPastLimit` when it is more than
-/// `max_request_bytes`. `float_repr` writes a float as Python's `repr`.
-pub fn envelope(
-    endpoint: &str,
-    max_request_bytes: u64,
-    call: &[u8],
-    float_repr: fn(f64) -> String,
-) -> Result<Vec<u8>, CoreError> {
+/// `max_request_bytes`, counted on the actual UTF-8 body.
+pub fn envelope(endpoint: &str, max_request_bytes: u64, call: &[u8]) -> Result<Vec<u8>, CoreError> {
     let read = json::read(call).map_err(|e| {
         CoreError::new(
             Sentence::ServingValueNotJson,
@@ -95,20 +71,29 @@ pub fn envelope(
         )
         .with_field("reason", Detail::text(e.category))
     })?;
-    let mut payload = String::new();
-    write_json(&read, float_repr, &mut payload).map_err(|reason| {
-        CoreError::new(
+    if !read.all_finite() {
+        return Err(CoreError::new(
             Sentence::ServingValueNotJson,
             "the call carries a value with no JSON form",
         )
-        .with_field("reason", Detail::text(reason))
+        .with_field("reason", Detail::text("out_of_range_float")));
+    }
+    // Value's writer always produces UTF-8; this conversion performs no
+    // number decoding, integer narrowing or host-dependent formatting.
+    let payload = String::from_utf8(read.to_bytes()).map_err(|_| {
+        CoreError::new(
+            Sentence::Internal,
+            "the wire JSON writer returned invalid UTF-8",
+        )
     })?;
-    let mut out = String::with_capacity(payload.len() + payload.len() / 8 + 48);
-    out.push_str(r#"{"dataframe_records":[{""#);
-    out.push_str(REQUEST_COLUMN);
-    out.push_str(r#"":"#);
-    write_text(&payload, &mut out);
-    out.push_str("}]}");
+    let out = Value::Object(vec![(
+        "dataframe_records".into(),
+        Value::Array(vec![Value::Object(vec![(
+            REQUEST_COLUMN.into(),
+            Value::Text(payload),
+        )])]),
+    )])
+    .to_bytes();
     let size = out.len() as u64;
     if size > max_request_bytes {
         return Err(CoreError::new(
@@ -119,7 +104,7 @@ pub fn envelope(
         .with_field("bytes", count(size))
         .with_field("limit", count(max_request_bytes)));
     }
-    Ok(out.into_bytes())
+    Ok(out)
 }
 
 /// The served model's answer in the endpoint's reply `body` (a 2xx), a JSON
@@ -180,10 +165,14 @@ pub fn answer(endpoint: &str, body: &[u8]) -> Result<Value, CoreError> {
         .with_field("got", Detail::text(value_type(&read))));
     }
     match read.get("status") {
-        Some(Value::Number(token)) if is_integer_token(token) => match status_at_least_400(token) {
-            Some(status) => Err(in_band(endpoint, status, &read)),
-            None => Ok(read),
-        },
+        Some(Value::Number(token)) if is_integer_token(token) => {
+            match status_at_least_400(token)
+                .map_err(|()| bad_response("response", "invalid_serving_status"))?
+            {
+                Some(status) => Err(in_band(endpoint, status, &read)),
+                None => Ok(read),
+            }
+        }
         _ => Ok(read),
     }
 }
@@ -211,8 +200,9 @@ pub fn failure(endpoint: &str, failed: &Failure<'_>) -> CoreError {
     let (text, raw_code) = if failed.provider_error.is_some() || failed.provider_code.is_some() {
         (detail, failed.provider_code.map(str::to_owned))
     } else {
-        rest_body(&detail)
+        rest_body(&detail, failed.status)
     };
+    let raw_code = raw_code.map(|code| canonical_code(&code));
     let status = reported_status(failed.status, raw_code.as_deref());
     let provider_code = raw_code.as_deref().filter(|c| code_shaped(c));
     let code = model_diagnosis(&text, provider_code);
@@ -223,12 +213,18 @@ pub fn failure(endpoint: &str, failed: &Failure<'_>) -> CoreError {
             endpoint,
             status,
             diagnosis,
-            code.or(provider_code),
+            code.as_deref().or(provider_code),
             provider_code,
             failed.provider_error,
         );
     }
-    refusal(endpoint, status, code, provider_code, failed.provider_error)
+    refusal(
+        endpoint,
+        status,
+        code.as_deref(),
+        provider_code,
+        failed.provider_error,
+    )
 }
 
 // --- Reading the endpoint's failures -------------------------------------------
@@ -236,28 +232,22 @@ pub fn failure(endpoint: &str, failed: &Failure<'_>) -> CoreError {
 /// A failure the served model answered with (`_refused_in_band`), named by
 /// its code alone.
 fn in_band(endpoint: &str, status: u16, answer: &Value) -> CoreError {
-    let mut code = match answer.get("code") {
-        Some(Value::Text(said)) if code_shaped(said) => Some(said.as_str()),
-        _ => None,
-    };
-    let detail = answer.get("detail");
+    let mut code = answer
+        .get("code")
+        .and_then(Value::as_text)
+        .filter(|said| code_shaped(said))
+        .map(canonical_code);
     if status >= 500 {
-        // `detail or title`, as Python's truthiness reads it.
-        let reported = match detail {
-            Some(d) if is_present(d) => Some(d),
-            _ => answer.get("title"),
-        };
-        if let Some(diagnosis) = reported.and_then(Value::as_text).and_then(diagnosis_in) {
-            return callers_fault(endpoint, status, diagnosis, code, None, None);
+        let reported =
+            diagnostic_text(answer.get("detail")).or_else(|| diagnostic_text(answer.get("title")));
+        if let Some(diagnosis) = reported.and_then(diagnosis_in) {
+            return callers_fault(endpoint, status, diagnosis, code.as_deref(), None, None);
         }
-        // A 5xx can be the model naming what was wrong with the request.
-        if let Some(Value::Text(said)) = detail
-            && let Some(leading) = leading_code(said)
-        {
-            code = Some(leading);
+        if let Some(leading) = diagnostic_text(answer.get("detail")).and_then(leading_code) {
+            code = Some(canonical_code(leading));
         }
     }
-    refusal(endpoint, status, code, None, None)
+    refusal(endpoint, status, code.as_deref(), None, None)
 }
 
 /// A failure the endpoint called its own, reported as the caller's
@@ -278,9 +268,10 @@ fn callers_fault(
     )
     .with_field("endpoint", Detail::text(endpoint))
     .with_field("diagnosis", Detail::text(diagnosis));
-    if let Some(code) = endpoint_code {
-        out = out.with_field("endpoint_code", Detail::text(code));
-    }
+    out = out.with_field(
+        "endpoint_code",
+        endpoint_code.map_or(Detail::Scalar(Scalar::Null), Detail::text),
+    );
     with_provider(out, provider_code, provider_error)
 }
 
@@ -339,35 +330,45 @@ fn with_provider(
 /// failure's body (its error parsers, in order): a JSON object's `message`
 /// (its `error`, where it has one) and `error_code`; a body that is
 /// `CODE: message`, its first line; any other, as it is, with no code.
-fn rest_body(body: &str) -> (String, Option<String>) {
+fn rest_body(body: &str, status: u16) -> (String, Option<String>) {
     if let Ok(read @ Value::Object(_)) = json::read(body.as_bytes()) {
-        let text = |value: Option<&Value>| match value {
-            Some(Value::Text(text)) => text.clone(),
-            Some(other) => String::from_utf8_lossy(&other.to_bytes()).into_owned(),
-            None => "request failed".to_owned(),
-        };
-        let message = match read.get("error") {
-            Some(error) => text(Some(error)),
-            None => text(read.get("message")),
-        };
+        let message = diagnostic_text(read.get("error"))
+            .or_else(|| diagnostic_text(read.get("message")))
+            .unwrap_or("request failed")
+            .to_owned();
         let code = match read.get("error_code") {
             Some(Value::Text(code)) => Some(code.clone()),
             _ => None,
         };
         return (message, code);
     }
-    // `([A-Z_]+): (.*)`, matched where the body begins.
+    // A bounded code prefix, followed by the first line of diagnostic text.
     let run = body
         .bytes()
-        .take_while(|b| b.is_ascii_uppercase() || *b == b'_')
+        .take_while(|b| b.is_ascii_alphanumeric() || *b == b'_')
         .count();
     if run > 0
+        && code_shaped(&body[..run])
         && let Some(rest) = body[run..].strip_prefix(": ")
     {
         let line = rest.split('\n').next().unwrap_or_default();
         return (line.to_owned(), Some(body[..run].to_owned()));
     }
-    (body.to_owned(), None)
+    // HTTP gives these gateway failures stable codes even when the body
+    // is an HTML page rather than a model/SDK error object. No host
+    // exception class is invented or needed for this common policy.
+    let html = body.trim_start().to_ascii_lowercase();
+    let gateway = if html.starts_with("<html") || html.starts_with("<!doctype html") {
+        match status {
+            502 => Some("BAD_GATEWAY"),
+            503 => Some("SERVICE_UNAVAILABLE"),
+            504 => Some("GATEWAY_TIMEOUT"),
+            _ => None,
+        }
+    } else {
+        None
+    };
+    (body.to_owned(), gateway.map(str::to_owned))
 }
 
 /// The status the old client reports for an SDK error of `status` and
@@ -376,7 +377,9 @@ fn rest_body(body: &str) -> (String, Option<String>) {
 /// status where the old client names one, else 503.
 fn reported_status(status: u16, code: Option<&str>) -> u16 {
     if let Some(code) = code
-        && let Some((_, by_code)) = STATUS_BY_CODE.iter().find(|(c, _)| *c == code)
+        && let Some((_, by_code)) = STATUS_BY_CODE
+            .iter()
+            .find(|(c, _)| c.eq_ignore_ascii_case(code))
     {
         return *by_code;
     }
@@ -392,11 +395,12 @@ fn reported_status(status: u16, code: Option<&str>) -> u16 {
 /// begins, at the start, after the SDK's own `CODE: ` prefix, or in the
 /// `Error '...'` right after the gateway's fixed wrapper; never the SDK's
 /// own code.
-fn model_diagnosis<'a>(text: &'a str, provider_code: Option<&str>) -> Option<&'a str> {
+fn model_diagnosis(text: &str, provider_code: Option<&str>) -> Option<String> {
     let text = match provider_code {
         Some(code) => text
-            .strip_prefix(code)
-            .and_then(|rest| rest.strip_prefix(": "))
+            .get(..code.len())
+            .filter(|head| head.eq_ignore_ascii_case(code))
+            .and_then(|_| text[code.len()..].strip_prefix(": "))
             .unwrap_or(text),
         None => text,
     };
@@ -405,7 +409,8 @@ fn model_diagnosis<'a>(text: &'a str, provider_code: Option<&str>) -> Option<&'a
         .into_iter()
         .flatten()
         .filter_map(leading_code)
-        .find(|code| Some(*code) != provider_code)
+        .find(|code| !provider_code.is_some_and(|provider| provider.eq_ignore_ascii_case(code)))
+        .map(canonical_code)
 }
 
 /// The text after `Encountered an unexpected error while evaluating the
@@ -426,30 +431,31 @@ fn quoted_model_error(text: &str) -> Option<&str> {
 }
 
 /// The code `text` opens with as `CODE: detail` (`_leading_code`): an
-/// upper-case letter, then two to 63 of upper-case letters, digits and
-/// underscores, then `: ` and a character that is not a space.
+/// bounded enum code (known names without ASCII case), then `: ` and a
+/// character outside standard whitespace.
 fn leading_code(text: &str) -> Option<&str> {
     let bytes = text.as_bytes();
-    if !bytes.first()?.is_ascii_uppercase() {
+    if !bytes.first()?.is_ascii_alphabetic() {
         return None;
     }
     let run = 1 + bytes[1..]
         .iter()
-        .take_while(|b| b.is_ascii_uppercase() || b.is_ascii_digit() || **b == b'_')
+        .take_while(|b| b.is_ascii_alphanumeric() || **b == b'_')
         .count();
-    if !(3..=64).contains(&run) {
+    if !(3..=64).contains(&run) || !code_shaped(&text[..run]) {
         return None;
     }
     let next = text[run..].strip_prefix(": ")?.chars().next()?;
-    (!is_space(next)).then(|| &text[..run])
+    (!next.is_whitespace()).then(|| &text[..run])
 }
 
-/// Whether `code` is shaped as an error code, enum-like enough to be no
-/// secret (`_ERROR_CODE_RE`, `^[A-Z][A-Z0-9_]{0,63}$`, whose `$` also
-/// takes one trailing newline).
+/// Whether `code` is an enum-like name, never arbitrary diagnostic text.
+/// No trailing whitespace or regular-expression end-anchor quirk is admitted.
 fn code_shaped(code: &str) -> bool {
-    let bare = code.strip_suffix('\n').unwrap_or(code);
-    let bytes = bare.as_bytes();
+    if known_code(code).is_some() {
+        return true;
+    }
+    let bytes = code.as_bytes();
     (1..=64).contains(&bytes.len())
         && bytes[0].is_ascii_uppercase()
         && bytes[1..]
@@ -457,30 +463,63 @@ fn code_shaped(code: &str) -> bool {
             .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit() || *b == b'_')
 }
 
-/// The code of a failure the caller can act on, where `reported` says one
-/// (`_diagnosis_in`): its wording found in the text, compared as Python's
-/// `casefold` compares.
+/// These published code names alone are recognized without ASCII case.
+/// Unknown codes must already have the bounded upper-case enum form.
+fn known_code(code: &str) -> Option<&'static str> {
+    STATUS_BY_CODE
+        .iter()
+        .map(|(name, _)| *name)
+        .chain([
+            "BAD_REQUEST",
+            "BAD_GATEWAY",
+            "SERVICE_UNAVAILABLE",
+            "GATEWAY_TIMEOUT",
+            "INVALID_REQUEST",
+            "INVALID_SCHEMA",
+            "INTERNAL_ERROR",
+            "UNSUPPORTED_TASK",
+            "EMPTY_CONTEXT",
+            "PERMISSION_DENIED",
+        ])
+        .find(|name| name.eq_ignore_ascii_case(code))
+}
+
+fn canonical_code(code: &str) -> String {
+    known_code(code).unwrap_or(code).to_owned()
+}
+
+/// A diagnostic is text with something besides standard whitespace.
+fn diagnostic_text(value: Option<&Value>) -> Option<&str> {
+    value
+        .and_then(Value::as_text)
+        .filter(|text| !text.trim().is_empty())
+}
+
 fn diagnosis_in(reported: &str) -> Option<&'static str> {
-    let folded = fold(reported);
+    let folded = reported.to_ascii_lowercase();
     THE_CALLERS_TO_FIX
         .iter()
         .find(|(wording, _)| folded.contains(wording))
         .map(|(_, code)| *code)
 }
 
-/// An integer status token's value where it is 400 or more (an in-band
-/// failure), at most the largest status the field holds.
-fn status_at_least_400(token: &str) -> Option<u16> {
-    let negative = token.starts_with('-');
-    let digits = token.trim_start_matches('-');
-    if negative {
-        return None;
+/// A failure status must fit the shared status field; never clamp it.
+fn status_at_least_400(token: &str) -> Result<Option<u16>, ()> {
+    if token.starts_with('-') {
+        return Ok(None);
     }
-    match digits.parse::<u64>() {
-        Ok(n) if n < 400 => None,
-        Ok(n) => Some(u16::try_from(n).unwrap_or(u16::MAX)),
-        // Past every fixed width: past 400, and past a status.
-        Err(_) => Some(u16::MAX),
+    let status = token.parse::<u16>().map_err(|_| ())?;
+    Ok((status >= 400).then_some(status))
+}
+
+fn value_type(value: &Value) -> &'static str {
+    match value {
+        Value::Null => "null",
+        Value::Bool(_) => "boolean",
+        Value::Number(_) => "number",
+        Value::Text(_) => "string",
+        Value::Array(_) => "array",
+        Value::Object(_) => "object",
     }
 }
 
@@ -507,9 +546,9 @@ mod tests {
     }
 
     #[test]
-    fn a_code_may_end_in_one_newline_as_python_s_pattern_takes_it() {
+    fn a_code_is_bounded_and_contains_no_trailing_whitespace() {
         assert!(code_shaped("A"));
-        assert!(code_shaped("ABC\n"));
+        assert!(!code_shaped("ABC\n"));
         assert!(!code_shaped("ABC\n\n"));
         assert!(!code_shaped(""));
         assert!(!code_shaped("A-B"));
@@ -537,24 +576,5 @@ mod tests {
         assert_eq!(reported_status(400, Some("RESOURCE_DOES_NOT_EXIST")), 404);
         assert_eq!(reported_status(400, Some("BAD_REQUEST")), 400);
         assert_eq!(reported_status(503, Some("UNKNOWN")), 503);
-    }
-
-    #[test]
-    fn python_s_truthiness() {
-        for (value, truth) in [
-            (Value::Null, false),
-            (Value::Number("0".into()), false),
-            (Value::Number("-0.0".into()), false),
-            (Value::Number("0e5".into()), false),
-            (Value::Number("1e-400".into()), false),
-            (Value::Number("NaN".into()), true),
-            (Value::Number("2".into()), true),
-            (Value::text(""), false),
-            (Value::text("x"), true),
-            (Value::Array(vec![]), false),
-            (Value::Object(vec![]), false),
-        ] {
-            assert_eq!(is_present(&value), truth, "{value:?}");
-        }
     }
 }

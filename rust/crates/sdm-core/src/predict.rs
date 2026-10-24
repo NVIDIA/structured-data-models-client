@@ -406,7 +406,7 @@ async fn call(
          }| { (name.as_str(), *max_request_bytes) },
     );
     let sent = match serving {
-        Some((name, limit)) => serving::envelope(name, limit, &bytes, crate::pql::float_text)?,
+        Some((name, limit)) => serving::envelope(name, limit, &bytes)?,
         None => bytes,
     };
     let reply = asker

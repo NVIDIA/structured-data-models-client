@@ -9675,7 +9675,7 @@ entries:
 # --- lane J entries, Phase 3 (P3J-1..19) ---
 
 - id: P3S-1
-  title: A serving endpoint's in-band failure status past 65535 is reported as 65535
+  title: An unrepresentable serving failure status is a named malformed response
   kind: change
   old_behavior: >-
     The old serving transport takes any integer status of 400 or more in
@@ -9683,20 +9683,21 @@ entries:
     NimRequestError(status) with that integer as it is
     (CL/core/databricks_serving.py, _decoded, _refused_in_band).
   new_behavior: >-
-    The core reads the same failure (sdm_request::serving::answer), but
-    ENDPOINT_REFUSED carries the status in a 16-bit field (REFUSED_STATUS),
-    so a status past 65535 is reported as 65535. Every status HTTP defines
-    is reported as it is.
+    The core refuses a failure status outside the shared unsigned 16-bit
+    status field as INVALID_RESPONSE, reason invalid_serving_status.
+    It never clamps a supplied status to a different one.
+    Representable integer statuses retain their existing handling.
   affected_inputs: >-
     A served model answering a status past 65535 in its response_json.
   cases: [T3.13]
   refs: [T3.13, T3.27]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T313-OWNER-2026-10-24-SHARED-SERVING}
   notes: >-
-    Approver: owner. Proposed by T3.13's implementer, never self-approved;
-    held by sdm-request's t313_serving test.
+    The previous proposed clamp is retired, not treated as accepted.
+    The owner's explicit serving rules authorize named malformed-response
+    handling; the existing error and scalar contracts suffice.
 - id: P3S-2
   title: A serving reply the old client crashes on is a named transport error
   kind: change
@@ -9724,7 +9725,7 @@ entries:
     old client crashes. This approves only the malformed-success error,
     not other P3S differences or the package's blocking review findings.
 - id: P3S-3
-  title: A serving refusal's details name its code and leave out an endpoint code it has none of
+  title: Serving refusals retain explicit null details and add structured context
   kind: change
   old_behavior: >-
     The old serving transport's NimRequestError details hold the endpoint
@@ -9733,10 +9734,10 @@ entries:
     none) and diagnosis; a refusal past the limit holds bytes and limit.
   new_behavior: >-
     The same class, status, code and message, and every detail the old
-    client gives with a value; besides, a refusal under the model's own
-    code holds it as endpoint_code (its sentence names it), a past-limit
-    refusal holds the endpoint, every core error holds kind and retryable,
-    and endpoint_code is left out where the old client sets it to None.
+    client gives, including explicit endpoint_code null. A refusal under
+    the model's own code also holds it as endpoint_code (its sentence names
+    it), a past-limit refusal holds the endpoint, and every core error
+    holds kind and retryable.
   affected_inputs: >-
     A caller reading a serving refusal's details by key.
   cases: [T3.13]
@@ -9746,10 +9747,12 @@ entries:
   decision_ref: null
   notes: >-
     Approver: owner. Proposed by T3.13's implementer, never self-approved.
+    The null omission is repaired using the existing nullable scalar.
+    Only the remaining additive diagnostic fields await scoped review.
     The sentences are T3.27's; the client's test_t313_serving_route holds
     each value the old client gives.
 - id: P3S-4
-  title: Java names an HTML gateway failure by its status, without the SDK's reason code or class
+  title: Common serving policy retains stable HTML gateway codes without fabricating host classes
   kind: change
   old_behavior: >-
     Through the Databricks SDK, an error page in HTML is named by the HTTP
@@ -9757,21 +9760,22 @@ entries:
     (BAD_GATEWAY)), and every SDK failure carries the SDK error's class in
     details (provider_error).
   new_behavior: >-
-    Java posts with java.net.http, which gives no reason phrase and has no
-    SDK class: the core names the same failure by its status alone
-    (request failed, the same status) and its details carry no
-    provider_error. Python is unchanged.
+    The core recognizes HTML gateway pages and retains stable
+    BAD_GATEWAY, SERVICE_UNAVAILABLE and GATEWAY_TIMEOUT codes for HTTP
+    502, 503 and 504 respectively, with the existing public status policy.
+    Java carries the stable code but no invented Python SDK exception
+    class. An actual host exception class remains present where supplied.
   affected_inputs: >-
     Java predicting through a Databricks serving endpoint whose gateway
     answers an error page in HTML, or any failure's provider_error.
   cases: [T3.13]
   refs: [T3.13]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T313-OWNER-2026-10-24-SHARED-SERVING}
   notes: >-
-    Approver: owner. Proposed by T3.13's implementer, never self-approved;
-    held by sdm-request's t313_serving test (the 502 HTML case).
+    The previous proposed loss of the gateway code is repaired under the
+    explicit shared serving policy. No host exception class is fabricated.
 - id: P3S-5
   title: Java reads a Databricks TIMESTAMP as its UTC wall time and a STRUCT, MAP or INTERVAL as the driver's text
   kind: change
@@ -9886,6 +9890,66 @@ entries:
     shared by hosts that retains the independent structured failure facts;
     a complete diagnostic would require an attachment contract.
     No truncation or new public diagnostic policy is approved here.
+- id: P3S-9
+  title: Serving envelopes use shared UTF-8 JSON and actual encoded-byte limits
+  kind: change
+  old_behavior: >-
+    The old serving transport serializes both JSON layers through
+    json.dumps, escaping non-ASCII text and normalizing number tokens
+    through Python numbers before applying the serving request limit.
+  new_behavior: >-
+    Both layers use the existing sdm-wire JSON value and writer.
+    Member order, negative zero, exponent tokens and arbitrarily wide
+    integer tokens are preserved, while non-finite float values including
+    1e400 remain refused. The limit counts exactly the final UTF-8 bytes
+    posted, so encoded byte counts and near-limit admission may differ.
+    The logical supported model payload and endpoint envelope shape remain.
+  affected_inputs: >-
+    Serving requests containing Unicode, number spellings normalized by
+    json.dumps, or a limit between the two encoded body sizes.
+  cases: [T3.13]
+  refs: [T3.13, PD-2]
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T313-OWNER-2026-10-24-SHARED-SERVING}
+  notes: >-
+    The owner chose Shared wire codec and explicit rules (recommended).
+    Existing genuine reference vectors remain unchanged; tests compare
+    logical payloads and separately assert new exact bytes and boundaries.
+    This authorizes the stated serving encoding/limit difference only,
+    not a model-input conversion or comparison-rule relaxation.
+
+- id: P3S-10
+  title: Serving diagnostics use explicit JSON and ASCII rules
+  kind: change
+  old_behavior: >-
+    The old transport's diagnostics depend on Python type names,
+    truthiness, casefold and regular-expression whitespace/end anchors.
+    A nonempty nontext detail can suppress a useful title; Unicode long-s
+    or ligatures can match an ASCII diagnosis, and a code may end in one newline.
+  new_behavior: >-
+    Nonobject replies name the JSON type: array, string, number, boolean
+    or null. Only nonblank text is diagnostic input, with title fallback
+    for an absent, blank or nontext detail. Known code names and phrases
+    compare without ASCII case; unknown codes require a bounded uppercase
+    ASCII enum form, with no trailing newline. Leading-code detail uses
+    standard whitespace, without Python-specific control separators.
+    These are explicit serving rules, not language-runtime emulation.
+  affected_inputs: >-
+    Malformed or unusual serving diagnostics, including nontext/blank
+    detail, nonobject JSON responses, Unicode-folded phrases, lowercase
+    known codes, trailing-newline codes and information separators.
+  cases: [T3.13]
+  refs: [T3.13]
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T313-OWNER-2026-10-24-SHARED-SERVING}
+  notes: >-
+    The owner's shared-codec choice explicitly permits the reviewed
+    malformed/Unicode diagnostic differences. Ordinary statuses, codes,
+    refusals, retries and request limits retain their existing policies.
+    Parser-only emulation guards are restored without a serving exception.
+
 - id: P3J-1
   title: A view definition that is no readable YAML is refused by name
   kind: change

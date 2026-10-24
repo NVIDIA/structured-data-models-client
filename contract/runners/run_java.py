@@ -992,7 +992,7 @@ def main(argv: list[str] | None = None) -> int:
             database=arguments.database,
             drivers=arguments.drivers,
         )
-    except RunnerFailure as failed:
+    except (RunnerFailure, run_python.RunnerFailure) as failed:
         print(f'run_java.py: {failed}', file=sys.stderr)
         return 1
     arguments.out.write_text(
