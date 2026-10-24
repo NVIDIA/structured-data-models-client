@@ -69,7 +69,7 @@ fn core(provider: &Value) -> Value {
     }})
 }
 
-/// Ask the actual core for its first fetch, and record a driver failure for it.
+/// Ask the actual core for its first fetch batch, and record driver failures.
 /// Tests do not implement a warehouse or manufacture a successful table answer.
 fn recording(leg: &str, core: &Value) -> Value {
     let spec = &core["describe_source"];
@@ -96,16 +96,20 @@ fn recording(leg: &str, core: &Value) -> Value {
     let ControlMessage::Step(Step::Fetch { requests }) = read(&out).unwrap() else {
         panic!("describe did not ask a fetch");
     };
-    assert_eq!(requests.len(), 1);
-    let step = &requests[0];
-    let FetchPlan::Sql { statements, .. } = &step.plan else {
-        panic!("a warehouse fetch is not SQL");
-    };
+    assert!(!requests.is_empty());
+    let fetches: Vec<Value> = requests
+        .iter()
+        .map(|step| {
+            let FetchPlan::Sql { statements, .. } = &step.plan else {
+                panic!("a warehouse fetch is not SQL");
+            };
+            json!({"request": step.request, "plan": step.plan,
+               "statements": statements.iter().map(|s| s.text.clone()).collect::<Vec<_>>(),
+               "error": {"kind": "data_source", "retryable": false}})
+        })
+        .collect();
     json!({"format": "sdm-replay/1", "case": format!("t310.replay@{leg}"),
-        "core": core,
-        "fetches": [{"request": step.request, "plan": step.plan,
-                     "statements": statements.iter().map(|s| s.text.clone()).collect::<Vec<_>>(),
-                     "error": {"kind": "data_source", "retryable": false}}]})
+        "core": core, "fetches": fetches})
 }
 
 fn case(path: &Path, leg: &str) -> PathBuf {
