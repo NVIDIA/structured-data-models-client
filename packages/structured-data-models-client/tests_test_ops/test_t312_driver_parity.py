@@ -369,6 +369,48 @@ POSTGRES: list[tuple[str, list[str]]] = [
             _rows('timestamptz[]', '\'{"0001-01-01 05:00+14"}\''),
         ],
     ),
+    # The end of time ("no end"), past the last instant the zone data
+    # holds, in zones Python names (Claude T3.12 r5 P0-1).
+    (
+        'the end of time in America/Los_Angeles',
+        [
+            "SET TimeZone = 'America/Los_Angeles'",
+            'SELECT '
+            "'[2020-01-01 00:00+00,9999-12-31 23:59:59+00)'::tstzrange AS r, "
+            "'{[2020-01-01 00:00+00,9999-12-31 23:59:59+00)}'::tstzmultirange AS m, "
+            '\'{"9999-12-30 22:00:00+00","9999-12-30 22:00:01+00","9999-12-31 23:59:59+00"}\'::timestamptz[] AS a',
+        ],
+    ),
+    (
+        'the end of time in America/New_York',
+        [
+            "SET TimeZone = 'America/New_York'",
+            'SELECT '
+            "'[2020-01-01 00:00+00,9999-12-31 23:59:59+00)'::tstzrange AS r, "
+            "'{[2020-01-01 00:00+00,9999-12-31 23:59:59+00)}'::tstzmultirange AS m, "
+            '\'{"9999-12-30 22:00:00+00","9999-12-30 22:00:01+00","9999-12-31 23:59:59+00"}\'::timestamptz[] AS a',
+        ],
+    ),
+    (
+        'the end of time in Pacific/Honolulu',
+        [
+            "SET TimeZone = 'Pacific/Honolulu'",
+            'SELECT '
+            "'[2020-01-01 00:00+00,9999-12-31 23:59:59+00)'::tstzrange AS r, "
+            "'{[2020-01-01 00:00+00,9999-12-31 23:59:59+00)}'::tstzmultirange AS m, "
+            '\'{"9999-12-30 22:00:00+00","9999-12-30 22:00:01+00","9999-12-31 23:59:59+00"}\'::timestamptz[] AS a',
+        ],
+    ),
+    (
+        'the end of time in Asia/Kolkata',
+        [
+            "SET TimeZone = 'Asia/Kolkata'",
+            'SELECT '
+            "'[2020-01-01 00:00+00,9999-12-31 23:59:59+00)'::tstzrange AS r, "
+            "'{[2020-01-01 00:00+00,9999-12-31 23:59:59+00)}'::tstzmultirange AS m, "
+            '\'{"9999-12-30 22:00:00+00","9999-12-30 22:00:01+00","9999-12-31 23:59:59+00"}\'::timestamptz[] AS a',
+        ],
+    ),
     (
         'tstzrange back in the JVM zone',
         [

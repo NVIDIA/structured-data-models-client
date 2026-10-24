@@ -38,3 +38,28 @@ fn a_session_zone_is_read_as_python_s_zoneinfo_reads_it() {
         );
     }
 }
+
+/// 9999-12-31T23:59:59Z, a common "no end" value, past the last instant
+/// jiff holds (9999-12-30T22:00Z), in microseconds.
+const END_OF_TIME: i64 = 253_402_300_799_000_000;
+
+/// Claude T3.12 r5 P0-1: an instant past the zone data's last one is in its
+/// zone still (no zone changes offset in the last day of 9999), never read
+/// as an unknown zone's UTC.
+#[test]
+fn an_instant_at_the_end_of_time_is_in_its_zone() {
+    for (zone, offset) in [
+        ("America/Los_Angeles", -28_800),
+        ("America/New_York", -18_000),
+        ("Pacific/Honolulu", -36_000),
+        ("Asia/Kolkata", 19_800),
+        ("UTC", 0),
+    ] {
+        assert_eq!(
+            session_zone_offset(zone, &[], END_OF_TIME),
+            Some(offset),
+            "{zone}"
+        );
+    }
+    assert_eq!(session_zone_offset("GMT+3", &[], END_OF_TIME), None);
+}

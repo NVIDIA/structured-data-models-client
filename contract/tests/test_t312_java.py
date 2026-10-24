@@ -388,171 +388,85 @@ def _tool(name: str) -> Any:
     return module
 
 
-class _Tree:
-    r"""A candidate tree of the given files (``coverage``'s ``root``)."""
+def _reports(tmp: Path, cases: list[tuple[str, str, bool]]) -> Path:
+    r"""Surefire's reports of a JUnit run: each case its class, its name as
+    Surefire writes it, and whether it was skipped."""
+    by_class: dict[str, list[str]] = {}
+    for classname, name, skipped in cases:
+        body = '<skipped/>' if skipped else ''
+        by_class.setdefault(classname, []).append(
+            f'<testcase name="{name}" classname="{classname}" time="0.1">{body}</testcase>'
+        )
+    for classname, written in by_class.items():
+        (tmp / f'TEST-{classname}.xml').write_text(
+            '<?xml version="1.0" encoding="UTF-8"?>\n'
+            f'<testsuite name="{classname}">{"".join(written)}</testsuite>\n',
+            encoding='utf-8',
+        )
+    return tmp
 
-    def __init__(self, files: dict[str, str]) -> None:
-        self.files = files
 
-    def read(self, path: str) -> str:
-        return self.files[path]
-
-
-def test_t312_a_java_path_s_test_is_a_junit_method_the_tree_defines() -> None:
+def test_t312_a_java_path_s_test_is_one_junit_ran(tmp_path: Path) -> None:
+    # Codex and Claude T3.12 r5: what JUnit ran decides, as Surefire's
+    # reports of the Java test run record it, a parameterized test's
+    # invocations by its method's name; never Java source read by a regex.
     coverage = _tool('coverage')
-    given = 'java/src/test/java/com/nvidia/sdm/T312SchemaTest.java'
+    file = 'java/src/test/java/com/nvidia/sdm/T312PredictTest.java'
+    reports = _reports(
+        tmp_path,
+        [
+            (
+                'com.nvidia.sdm.T312PredictTest',
+                'anExplanationIsReadFromTheResult',
+                False,
+            ),
+            (
+                'com.nvidia.sdm.T312PredictTest',
+                'eachKindOfQueryIsMaterializedAndPredicted(String)[1]',
+                False,
+            ),
+        ],
+    )
+    ran = coverage.junit_ran(reports)
     assert (
-        coverage._test_problem(
-            f'{given}#theShopIsDescribedAsTheReferenceDescribesIt', ROOT, 'java'
+        coverage.junit_problem(f'{file}#anExplanationIsReadFromTheResult', ran)
+        is None
+    )
+    assert (
+        coverage.junit_problem(
+            f'{file}#eachKindOfQueryIsMaterializedAndPredicted', ran
         )
         is None
     )
-    assert coverage._test_problem(f'{given}#noSuchMethod', ROOT, 'java') == (
-        'no test the tree defines'
-    )
-    assert coverage._test_problem('java/Other.java#x', ROOT, 'java') is not None
-    # A parameterized test, its source annotation between, is a test.
-    parameterized = 'java/src/test/java/com/nvidia/sdm/T312PredictTest.java'
-    assert (
-        coverage._test_problem(
-            f'{parameterized}#eachKindOfQueryIsMaterializedAndPredicted',
-            ROOT,
-            'java',
-        )
-        is None
+    assert coverage.junit_problem(f'{file}#noSuchMethod', ran) == (
+        'not a test JUnit ran (target/surefire-reports)'
     )
 
 
-def test_t312_a_java_method_that_is_no_junit_test_claims_nothing() -> None:
-    # Codex T3.12 r1 P1-5 and r2 P1-5: only a method JUnit runs is a test:
-    # annotated @Test or @ParameterizedTest, neither private, static nor
-    # abstract, in the file's own class (not abstract) or a @Nested one.
+def test_t312_a_disabled_java_test_claims_nothing(tmp_path: Path) -> None:
     coverage = _tool('coverage')
-    path = 'java/src/test/java/com/nvidia/sdm/Helpers.java'
-    tree = _Tree(
-        {
-            path: 'class Helpers {\n'
-            '  @Test\n'
-            '  void aTest() {}\n'
-            '\n'
-            '  void helper() {}\n'
-            '\n'
-            '  @Test\n'
-            '  @Timeout(5)\n'
-            '  public void anotherTest() {}\n'
-            '\n'
-            '  @Test\n'
-            '  private void privateOne() {}\n'
-            '\n'
-            '  @Test\n'
-            '  static void staticOne() {}\n'
-            '\n'
-            '  @Test\n'
-            '  abstract void abstractOne();\n'
-            '\n'
-            '  static class Inner {\n'
-            '    @Test\n'
-            '    void innerOne() {}\n'
-            '  }\n'
-            '\n'
-            '  @Nested\n'
-            '  class Grouped {\n'
-            '    @Test\n'
-            '    void nestedOne() {}\n'
-            '  }\n'
-            '\n'
-            '  @Nested\n'
-            '  private class Hidden {\n'
-            '    @Test\n'
-            '    void hiddenOne() {}\n'
-            '  }\n'
-            '\n'
-            '  /*\n'
-            '  @Test\n'
-            '  void commentedOut() {}\n'
-            '  */\n'
-            '  // @Test\n'
-            '  // void lineCommented() {}\n'
-            '\n'
-            '  @Test\n'
-            '  @Disabled("later")\n'
-            '  void disabledOne() {}\n'
-            '\n'
-            '  @Nested\n'
-            '  @Disabled\n'
-            '  class Off {\n'
-            '    @Test\n'
-            '    void inADisabledClass() {}\n'
-            '  }\n'
-            '\n'
-            '  String text = """\n'
-            '  @Test\n'
-            '  void inAString() {}\n'
-            '  """;\n'
-            '\n'
-            '  @Disabled\n'
-            '  @Test\n'
-            '  void disabledFirst() {}\n'
-            '\n'
-            '  @DisplayName("shown")\n'
-            '  @Test\n'
-            '  void displayed() {}\n'
-            '\n'
-            '  String block = """\n'
-            '  a \\""" quote\n'
-            '  @Test\n'
-            '  void inAnEscapedBlock() {}\n'
-            '  """;\n'
-            '\n'
-            '  \\u002f\\u002a\n'
-            '  @Test\n'
-            '  void inAUnicodeComment() {}\n'
-            '  \\u002a\\u002f\n'
-            '}\n'
-        }
+    file = 'java/src/test/java/com/nvidia/sdm/T312PredictTest.java'
+    reports = _reports(
+        tmp_path, [('com.nvidia.sdm.T312PredictTest', 'switchedOff', True)]
     )
-    for runs in ('aTest', 'anotherTest', 'nestedOne', 'displayed'):
-        assert coverage._test_problem(f'{path}#{runs}', tree, 'java') is None, (
-            runs
-        )
-    for never in (
-        'helper',
-        'privateOne',
-        'staticOne',
-        'abstractOne',
-        'innerOne',
-        # Codex T3.12 r3 P1-2 and Claude r3 P3: a private @Nested class, a
-        # commented-out method, a @Disabled method or class, a string.
-        'hiddenOne',
-        'commentedOut',
-        'lineCommented',
-        'disabledOne',
-        'inADisabledClass',
-        'inAString',
-        # Claude T3.12 r4 P1-2 and Codex r4 P1-1: @Disabled above @Test, a
-        # method in a text block past an escaped triple quote, a method in a
-        # comment Unicode escapes spell.
-        'disabledFirst',
-        'inAnEscapedBlock',
-        'inAUnicodeComment',
-    ):
-        assert coverage._test_problem(f'{path}#{never}', tree, 'java') == (
-            'no test the tree defines'
-        ), never
-    disabled = 'java/src/test/java/com/nvidia/sdm/Off.java'
-    tree = _Tree(
-        {disabled: '@Disabled\nclass Off {\n  @Test\n  void aTest() {}\n}\n'}
-    )
-    assert coverage._test_problem(f'{disabled}#aTest', tree, 'java') == (
-        'no test the tree defines'
-    )
-    abstract = 'java/src/test/java/com/nvidia/sdm/Base.java'
-    tree = _Tree(
-        {abstract: 'abstract class Base {\n  @Test\n  void aTest() {}\n}\n'}
-    )
-    assert coverage._test_problem(f'{abstract}#aTest', tree, 'java') == (
-        'no test the tree defines'
-    )
+    assert coverage.junit_problem(
+        f'{file}#switchedOff', coverage.junit_ran(reports)
+    ) == ('not a test JUnit ran (target/surefire-reports)')
+
+
+def test_t312_the_java_test_job_holds_the_java_manifest_to_its_run() -> None:
+    import yaml
+
+    jobs = yaml.safe_load(
+        (ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8')
+    )['jobs']
+    steps = [str(step.get('run', '')) for step in jobs['java-test']['steps']]
+    verify = next(at for at, run in enumerate(steps) if 'pom.xml verify' in run)
+    assert any(
+        'scripts/rust_core/coverage.py --junit-reports java/target/surefire-reports'
+        in run
+        for run in steps[verify + 1 :]
+    ), steps
 
 
 def test_t312_a_python_path_takes_no_java_test_and_a_java_path_no_pytest() -> (
