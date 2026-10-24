@@ -1,0 +1,22 @@
+{
+ "format": "sdm-capture/1",
+ "recording_commit": "74227a64f306c4c94c773cdfcf8ddee5bbda1b6a",
+ "reference_commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+ "legs": {
+  "databricks-sql": {
+   "databricks-sdk": "0.148.0",
+   "databricks-sql-connector": "4.6.0",
+   "duckdb": "1.5.6",
+   "numpy": "2.5.3",
+   "pandas": "3.0.6",
+   "pyarrow": "25.0.1",
+   "python": "3.12.15"
+  }
+ },
+ "cases": {
+  "view.metric.trusted-function@databricks-sql": {
+   "input_hash": "8de553c5ce1c618bec38e0e13ee4f4ae4b9a31a6c3c6eabbeefc98901f0cc484",
+   "capture": "view.metric.trusted-function"
+  }
+ }
+}
