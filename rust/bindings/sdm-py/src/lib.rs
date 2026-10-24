@@ -370,15 +370,15 @@ fn arrow_buffers_aligned(array: &FFI_ArrowArray, data_type: &DataType) -> bool {
                 | DataType::Map(_, _)
         );
         for (index, buffer) in physical.buffers.iter().enumerate() {
-            if let BufferSpec::FixedWidth { alignment, .. } = buffer {
-                // Offset arrays carry length+1 entries, including on an empty
-                // array. Other zero-byte buffers may legally be dangling; the
-                // Arrow importer replaces those without dereferencing them.
-                if extent != 0 || (offsets && index == 0) {
-                    let pointer = array.buffer(first + index);
-                    if pointer.is_null() || pointer.align_offset(*alignment) != 0 {
-                        return false;
-                    }
+            // Offset arrays carry length+1 entries, including on an empty
+            // array. Other zero-byte buffers may legally be dangling; the
+            // Arrow importer replaces those without dereferencing them.
+            if let BufferSpec::FixedWidth { alignment, .. } = buffer
+                && (extent != 0 || (offsets && index == 0))
+            {
+                let pointer = array.buffer(first + index);
+                if pointer.is_null() || pointer.align_offset(*alignment) != 0 {
+                    return false;
                 }
             }
         }
