@@ -50,6 +50,13 @@ COPIED = (
     'packages/structured-data-models-client/src/sdm_client/_routing.py',
     'packages/structured-data-models-client/src/sdm_client/query.py',
 )
+# The ratchet unit histories never execute a warehouse replay or read its
+# per-case snapshots/Arrow tables. Keep the real manifests, cases, reference,
+# protection rules and checker sources; capture validation has its own tests.
+UNCOPIED_PAYLOADS = (
+    'contract/captures/r2/*/*/capture.json',
+    'contract/captures/r2/*/*/tables/*.arrows',
+)
 IDENTITY = ['-c', 'user.name=Gate Test', '-c', 'user.email=gate@example.com']
 CELL = 'ref-pandas3'
 
@@ -129,6 +136,8 @@ def build(repo: Path) -> tuple[Path, str]:
         check=True,
     ).stdout.split(b'\0')
     for name in filter(None, (item.decode() for item in listed)):
+        if any(Path(name).match(pattern) for pattern in UNCOPIED_PAYLOADS):
+            continue
         source = ROOT / name
         if source.is_file():
             (repo / name).parent.mkdir(parents=True, exist_ok=True)
@@ -175,6 +184,10 @@ def repo(origin: tuple[Path, str], tmp_path: Path) -> Path:
     r"""A worktree at the checkpoint, for one test's candidate."""
     source, landed = origin
     tree = tmp_path / 'tree'
+    # Passed test tmp_path retention may remove a directory while its Git
+    # registration remains. This origin belongs only to this module's unit
+    # fixtures; pruning missing registrations keeps extant failed evidence.
+    git(source, 'worktree', 'prune', '--expire', 'now')
     git(source, 'worktree', 'add', '-q', '--detach', str(tree), landed)
     return tree
 
