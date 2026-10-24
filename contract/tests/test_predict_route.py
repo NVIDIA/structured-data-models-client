@@ -70,6 +70,28 @@ def _module(name: str) -> ModuleType:
 capture_check = _module('capture_check')
 
 
+def _without_plan_b_reads(observation: dict[str, Any]) -> dict[str, Any]:
+    r"""``observation``'s projection (``capture_check.py``), its query log's
+    statements counted without the reads plan B adds, by the one rule
+    (``compare.py``'s ``reads_as_it_stands``, register P3A-1)."""
+    path = ROOT / 'scripts/rust_core/compare.py'
+    if 'compare' not in sys.modules:
+        spec = importlib.util.spec_from_file_location('compare', path)
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        sys.modules['compare'] = module
+        spec.loader.exec_module(module)
+    reads = sys.modules['compare'].reads_as_it_stands(
+        observation['driver']['capture']['statements']
+    )
+    projection = capture_check.projection(observation)
+    logged = projection['query_log']
+    return {
+        **projection,
+        'query_log': {**logged, 'statements': logged['statements'] - reads},
+    }
+
+
 def _reference() -> dict[str, Any]:
     for line in REFERENCE.read_text().splitlines():
         observation = json.loads(line)
@@ -128,7 +150,7 @@ def test_base_regression_completes_a_model_request_and_its_result_on_the_core(
         'prediction',
     ]
     assert core['public']['result'] == reference['public']['result']
-    assert capture_check.projection(core) == capture_check.projection(reference)
+    assert _without_plan_b_reads(core) == capture_check.projection(reference)
 
     # The request the endpoint received is the call the core wrote, and the
     # state predict started with is the one materialize answered.

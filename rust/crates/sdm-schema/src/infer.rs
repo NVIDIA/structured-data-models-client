@@ -266,6 +266,11 @@ pub struct InferredTable {
     /// that the source enforces, refusing to repeat them
     /// ([`CatalogKey::enforced`]).
     pub unique: Vec<BTreeSet<String>>,
+    /// The columns the catalog declares a primary or unique key of alone,
+    /// enforced or not (a Databricks key is declared and not enforced): a
+    /// key over one of them is the catalog's, held to its count as a
+    /// declared key is (`crate::keys::hold`).
+    pub declared: BTreeSet<String>,
 }
 
 impl InferredTable {
@@ -487,6 +492,10 @@ struct Keyed {
     /// The one column of each declared primary key of one column.
     primary: BTreeSet<String>,
     /// The one column of each primary, unique or partial unique key of one
+    /// column, enforced or not, and each column the source keeps unique by
+    /// itself: the columns the catalog makes a key of.
+    declared: BTreeSet<String>,
+    /// The one column of each primary, unique or partial unique key of one
     /// column, and each column the source keeps unique by itself.
     unique: BTreeSet<String>,
 }
@@ -511,8 +520,14 @@ impl Keyed {
             true,
         );
         unique.extend(catalog.iter().filter(|c| c.unique).map(|c| c.name.clone()));
+        let mut declared = single(
+            &[KeyKind::Primary, KeyKind::Unique, KeyKind::PartialUnique],
+            false,
+        );
+        declared.extend(catalog.iter().filter(|c| c.unique).map(|c| c.name.clone()));
         Keyed {
             primary: single(&[KeyKind::Primary], false),
+            declared,
             unique,
         }
     }
@@ -728,7 +743,7 @@ pub fn preview_keyed(
     let unique_columns: Vec<&String> = catalog
         .iter()
         .map(|c| &c.name)
-        .filter(|n| keyed.unique.contains(*n))
+        .filter(|n| keyed.declared.contains(*n))
         .filter(held)
         .collect();
     let (key, tied_keys) = match (primary.as_slice(), unique_columns.as_slice()) {
@@ -770,6 +785,7 @@ pub fn preview_keyed(
             time: TimeChoice::default(),
             time_column: None,
             unique,
+            declared: keyed.declared.clone(),
         },
         rows,
         instants,

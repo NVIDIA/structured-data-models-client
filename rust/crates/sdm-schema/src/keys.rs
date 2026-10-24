@@ -138,8 +138,8 @@ pub fn hold(
         let is_stated = stated.contains(&table.name);
         // A key of several columns is only ever named, never declared:
         // the catalog's is read as no key (`crate::infer::preview`).
-        let declared = !is_stated
-            && matches!(key.as_slice(), [one] if table.column(one).is_some_and(|c| c.unique));
+        let declared =
+            !is_stated && matches!(key.as_slice(), [one] if table.declared.contains(one));
         let name = table.name.clone();
         let refused = |sentence: Sentence, message: &'static str| {
             let (field, columns) = named(&key);

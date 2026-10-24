@@ -43,6 +43,12 @@ fn column(name: &str, dtype: Dtype, stype: Stype) -> InferredColumn {
 }
 
 fn table(name: &str, columns: Vec<InferredColumn>, key: Option<&str>) -> InferredTable {
+    // The columns a catalog declares a key of alone: each kept unique.
+    let declared = columns
+        .iter()
+        .filter(|c| c.unique)
+        .map(|c| c.name.clone())
+        .collect();
     InferredTable {
         name: name.into(),
         source: name.into(),
@@ -55,6 +61,7 @@ fn table(name: &str, columns: Vec<InferredColumn>, key: Option<&str>) -> Inferre
         time: TimeChoice::default(),
         time_column: None,
         unique: Vec::new(),
+        declared,
     }
 }
 

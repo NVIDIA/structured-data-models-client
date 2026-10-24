@@ -49,6 +49,11 @@ fn table(name: &str, key: &str, others: &[&str], declared: bool) -> InferredTabl
         } else {
             vec![]
         },
+        declared: if declared {
+            BTreeSet::from([key.to_owned()])
+        } else {
+            BTreeSet::new()
+        },
     }
 }
 
