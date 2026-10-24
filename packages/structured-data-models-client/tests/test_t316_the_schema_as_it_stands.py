@@ -626,3 +626,31 @@ def test_a_key_the_source_holds_as_another_type_is_refused_as_the_old_client_ref
     outcomes = _both(monkeypatch, act)
     assert outcomes['old'][0] == 'INVALID_REQUEST'
     assert outcomes['core'] == outcomes['old']
+
+
+def test_a_column_the_source_dropped_is_left_out_as_the_old_client_leaves_it_out(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Round 12 of T3.4 (Codex's P0-2, Claude's P2-1): a schema built anew
+    # from a description, whose columns all hold their facts, after `age`
+    # was dropped from the source. The old route's engine reads each table
+    # it has not kept and keeps only the columns its source holds
+    # (`sources.py:81-88`), so the run completes without `age`.
+    def act() -> Any:
+        connection = duckdb.connect()
+        for statement in SHOP:
+            connection.execute(statement)
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            described = Schema.from_source(
+                DuckDBSource(connection), {'users': 'users', 'orders': 'orders'}
+            )
+        schema = Schema(
+            described.tables, described.relationships, source=described.source
+        )
+        connection.execute('ALTER TABLE users DROP COLUMN age')
+        return _materialized(schema)
+
+    outcomes = _both(monkeypatch, act)
+    assert not isinstance(outcomes['old'], tuple)
+    assert outcomes['core'] == outcomes['old']

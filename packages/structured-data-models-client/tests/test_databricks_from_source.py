@@ -1600,3 +1600,143 @@ def test_too_many_entities_are_refused_before_the_source_is_read(
         _asked(schema)
     assert refused.value.code == 'UNSUPPORTED_REQUEST'
     assert len(connection.calls) == mark
+
+
+class _EmptyingWarehouse(_CompletingWarehouse):
+    r"""The completing warehouse, whose ``shop.users`` holds no row while
+    ``empty`` says so: every read of its rows answers none, and its count
+    zero."""
+
+    empty = False
+
+    def answer(self, operation: str, parameters: list[Any]) -> pa.Table:
+        found = super().answer(operation, parameters)
+        if self.empty and '`main`.`shop`.`users`' in operation:
+            if operation.startswith('SELECT COUNT(*)'):
+                return pa.table({found.column_names[0]: [0]})
+            return found.slice(0, 0)
+        return found
+
+
+_EmptyingConnection = type(
+    'Connection', (_EmptyingWarehouse,), {'__module__': 'databricks.sql.client'}
+)
+
+
+@pytest.mark.parametrize('route', ['core', 'old'])
+def test_an_empty_table_is_refused_before_the_tables_are_kept(
+    route: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""A schema built anew whose columns all hold their facts reads each
+    table it has not kept in full, its preview included, before keeping
+    any, as the old route's engine reads every table it keeps: a table with
+    no rows is refused there (``databricks/table.py:385-386``), nothing
+    kept, so a retry after the session moved reads there (round 12's P0-1,
+    Codex)."""
+    from sdm_client.errors import StructuredDataError
+
+    _route(route, monkeypatch)
+    connection = _EmptyingConnection()
+    schema = _rebuilt(connection)
+    connection.empty = True
+    with pytest.raises(StructuredDataError) as refused:
+        _materialized(schema)
+    assert str(refused.value) == (
+        "[INVALID_REQUEST] Table 'main.shop.users' is empty"
+    )
+    connection.empty = False
+    connection.schema = 'other'
+    mark = len(connection.calls)
+    request = _materialized(schema)
+    assert {where[:2] for where in _read_since(connection, mark)} == {
+        ('main', 'other')
+    }
+    assert 'OTHER' in repr(request.payloads)
+
+
+class _DroppingWarehouse(_CompletingWarehouse):
+    r"""The completing warehouse, from whose ``users`` the column ``age``
+    is dropped while ``dropped`` says so: its catalog and preview answer
+    without it, and every read of its rows runs over the table without it,
+    so a read that names it fails as the warehouse fails it."""
+
+    dropped = False
+
+    def answer(self, operation: str, parameters: list[Any]) -> pa.Table:
+        import pandas as pd
+        import pyarrow.compute as pc
+
+        text = _normal(operation)
+        if self.dropped and text.startswith('WITH TMP AS ( SELECT pos AS '):
+            self.calls.append((text, list(parameters)))
+            keys = json.loads(parameters[0])
+            seeds = pd.DataFrame(
+                keys
+                if keys and isinstance(keys[0], dict)
+                else [{'key': key} for key in keys]
+            )
+            seeds['batch'] = range(len(seeds))
+            for column in ('start', 'end', 'time', 'e', 's'):
+                if column in seeds:
+                    seeds[column] = pd.to_datetime(seeds[column])
+            for given, named in (
+                ('batch', '__KUMO_BATCH__'),
+                ('key', '__KUMO_ID__'),
+                ('id', '__KUMO_ID__'),
+                ('e', '__KUMO_END_TIME__'),
+                ('s', '__KUMO_START_TIME__'),
+            ):
+                if given in seeds:
+                    seeds[named] = seeds[given]
+            self._db.register(
+                'seeds', pa.Table.from_pandas(seeds, preserve_index=False)
+            )
+            text = re.sub(
+                r'^WITH TMP AS \( .*? \) SELECT ',
+                'WITH TMP AS (SELECT * FROM seeds) SELECT ',
+                text,
+                count=1,
+            )
+            text = re.sub(r'`main`\.`\w+`\.', '', text).replace('`', '"')
+            return self._db.execute(text, parameters[1:]).to_arrow_table()
+        found = super().answer(operation, parameters)
+        if (
+            self.dropped
+            and 'information_schema.columns' in text
+            and parameters[-1:] == ['users']
+        ):
+            found = found.filter(pc.not_equal(found['column_name'], 'age'))
+        if (
+            self.dropped
+            and 'FROM `main`.`shop`.`users` LIMIT 1000' in text
+            and 'age' in found.column_names
+        ):
+            found = found.drop(['age'])
+        return found
+
+
+_DroppingConnection = type(
+    'Connection', (_DroppingWarehouse,), {'__module__': 'databricks.sql.client'}
+)
+
+
+@pytest.mark.parametrize('route', ['core', 'old'])
+def test_a_column_the_source_dropped_is_left_out_of_every_read(
+    route: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""A schema built anew whose columns all hold their facts, one of them
+    since dropped from the source, reads each table it has not kept by what
+    its catalog says now, as the old route's engine keeps only the columns
+    its source holds (``sources.py:81-88``): the dropped column is never
+    read and the run completes (round 12's P0-2, Codex; Claude's P2-1)."""
+    _route(route, monkeypatch)
+    connection = _DroppingConnection()
+    schema = _rebuilt(connection)
+    connection._db.execute('ALTER TABLE users DROP COLUMN age')
+    connection.dropped = True
+    mark = len(connection.calls)
+    request = _materialized(schema)
+    assert request.payloads
+    assert not any(
+        re.search(r'\bage\b', text) for text, _ in connection.calls[mark:]
+    )
