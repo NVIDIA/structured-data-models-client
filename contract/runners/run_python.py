@@ -5384,6 +5384,54 @@ def environment_refusal(
     return None
 
 
+def publish_observations(
+    observations: list[dict[str, Any]], database: str
+) -> list[dict[str, Any]]:
+    """A publication copy, after raw starts/fetches have been recorded.
+
+    Java and reference warehouse runners already publish through Placeheld.
+    Python core and Rust keep their private replay data unchanged and use
+    this same mapping only at the final observation-file boundary.
+    """
+    if database not in WAREHOUSES:
+        return observations
+    _, names, private = live_configuration(database)
+    held = Placeheld(names, private)
+    published = held.value(observations)
+    if held.leaked(json.dumps(published, sort_keys=True, ensure_ascii=False)):
+        raise RunnerFailure(
+            'a published observation retained private configuration'
+        )
+    return published
+
+
+def publish_main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(
+        description='Publish raw warehouse observations without changing replay files'
+    )
+    parser.add_argument('--database', choices=WAREHOUSES, required=True)
+    parser.add_argument('--on', type=Path, required=True)
+    parser.add_argument('--out', type=Path, required=True)
+    args = parser.parse_args(argv)
+    try:
+        raw = [
+            json.loads(line)
+            for line in args.on.read_text().splitlines()
+            if line.strip()
+        ]
+        published = publish_observations(raw, args.database)
+        with args.out.open('x') as stream:
+            for observation in published:
+                stream.write(json.dumps(observation, sort_keys=True) + '\n')
+    except (OSError, ValueError, RunnerFailure) as error:
+        print(
+            f'observation publication failed ({type(error).__name__})',
+            file=sys.stderr,
+        )
+        return 1
+    return 0
+
+
 def _capture_run() -> Any:
     """The live runner's existing driver and loader write guard."""
     path = REPO / 'scripts/live/capture_run.py'
@@ -5399,6 +5447,8 @@ def main(argv: list[str] | None = None) -> int:
     given = sys.argv[1:] if argv is None else argv
     if given[:1] == ['legs']:
         return legs_main(given[1:])
+    if given[:1] == ['publish']:
+        return publish_main(given[1:])
     parser = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     parser.add_argument('--mode', choices=MODES, required=True)
     parser.add_argument('--reference', type=Path)

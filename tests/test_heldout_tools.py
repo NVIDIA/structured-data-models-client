@@ -734,3 +734,124 @@ def test_execute_makes_global_stamp_before_its_first_case_tool(tmp_path):
     assert 'verified marker precedes case reader' in done.stdout
     assert stamp.is_file()
     assert not list((tmp_path / 'out/cases-orig').glob('*.json'))
+
+
+def _heldout_module():
+    spec = importlib.util.spec_from_file_location('heldout_review_edges', TOOL)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_java_comparison_selects_exact_admitted_case_keys_per_database(
+    tmp_path, monkeypatch
+):
+    from types import SimpleNamespace
+
+    held = _heldout_module()
+    run = tmp_path / 'comparison'
+    (run / 'cases').mkdir(parents=True)
+    for relative, name in [
+        ('s0/s0.accept.binary-classification.json', 'dummy.s0'),
+        ('s1/base.multiclass.json', 'dummy.s1'),
+    ]:
+        case = json.loads((ROOT / 'contract/cases' / relative).read_text())
+        write_case(
+            run / 'cases',
+            {
+                **case,
+                'id': name,
+                'status': 'diagnostic',
+                'databases': ['duckdb', 'sqlite', 'postgres'],
+            },
+        )
+    subset = tmp_path / 'java.txt'
+    subset.write_text('dummy.s0\ndummy.s1\n')
+    all_keys = [
+        name + suffix
+        for name in ('dummy.s0', 'dummy.s1')
+        for suffix in ('', '@sqlite', '@postgres')
+    ]
+    admitted = {'dummy.s0', 'dummy.s1', 'dummy.s1@sqlite', 'dummy.s1@postgres'}
+    for who in ('python-ref', 'python-core', 'rust-host', 'python-old', 'java'):
+        keys = admitted if who == 'java' else all_keys
+        jsonl(
+            run / (who + '.jsonl'),
+            [observation(key, 'success', 'predict') for key in keys],
+        )
+    seen = {}
+
+    def compare(paths, reference, files, **kwargs):
+        if any(path.name == 'java.jsonl' for path in files):
+            db = kwargs['database']
+            loader = held._head_loader(ROOT / 'contract')
+            cases = loader.load_cases(paths)
+            keys = {
+                loader.case_key(case['id'], db)
+                for case, _ in cases
+                if db in loader.case_legs(case)
+            }
+            expected = {key for key in admitted if held.database_of(key) == db}
+            assert keys == expected
+            for path in (reference, *files):
+                assert set(held._observations(path)) == expected
+            seen[db] = keys
+        return SimpleNamespace(notes=[], texts=[], failures=[])
+
+    monkeypatch.setattr(
+        held, '_comparison_tool', lambda: SimpleNamespace(compare=compare)
+    )
+    assert (
+        held.cmd_compare(
+            SimpleNamespace(
+                run_dir=run,
+                prefix=PREFIX,
+                databases='duckdb,sqlite,postgres',
+                java_case_ids=subset,
+            )
+        )
+        == 0
+    )
+    assert seen == {
+        'duckdb': {'dummy.s0', 'dummy.s1'},
+        'sqlite': {'dummy.s1@sqlite'},
+        'postgres': {'dummy.s1@postgres'},
+    }
+
+
+@pytest.mark.parametrize(
+    'rule',
+    [
+        'sql.text',
+        'sql.parameters',
+        'sql.bindings',
+        'payload',
+        'result',
+        'schema',
+    ],
+)
+def test_h11_uses_the_comparator_policy_for_five_reported_differences(
+    tmp_path, rule
+):
+    held = _heldout_module()
+    comparator = held._comparison_tool()
+    ids = ['dummy.' + letter for letter in 'abcde']
+    rows = [observation(cid, 'success', 'materialize') for cid in ids]
+    run = run_dir(tmp_path, rows)
+    for cid in ids:
+        write_case(run / 'cases', {**copy.deepcopy(CASE), 'id': cid})
+    for who in ('python-ref', 'python-core', 'python-old', 'rust-host'):
+        jsonl(run / (who + '.jsonl'), rows)
+    report = comparator.Report(comparator._capture_check().policy()['rules'])
+    for cid in ids:
+        report.fail(f'{cid}: python-core: observed values differ', rule)
+    report.demote(
+        0
+    )  # held-out case diagnostics, without changing a rule's class
+    (run / 'compare.txt').write_text('\n'.join(report.notes) + '\n')
+    done = tool('counts', run, '--prefix', PREFIX, '--threshold', 4)
+    assert done.returncode == (0 if rule.startswith('sql.') else 1), (
+        done.stdout + done.stderr
+    )
