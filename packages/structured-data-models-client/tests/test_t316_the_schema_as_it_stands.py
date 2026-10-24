@@ -580,3 +580,49 @@ def test_a_linked_column_retyped_then_sampled_is_refused_in_the_old_client_s_wor
     outcomes = _both(monkeypatch, act)
     assert outcomes['core'] == outcomes['old']
     assert 'cannot match' in outcomes['old'][2]
+
+
+@pytest.mark.parametrize('fresh', [False, True], ids=['facts', 'fresh'])
+def test_a_key_the_source_holds_as_another_type_is_refused_as_the_old_client_refuses_it(
+    fresh: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Round 11 of T3.4 (Claude's P1-1, Codex's P1-2): `orders.user_id` is a
+    # VARCHAR in the source, retyped `int64` by the caller and linked to the
+    # integer key of `users`. The caller's types join, so the link is taken;
+    # the old route's engine refuses the edge over the types its source
+    # holds (`Graph.validate`, `relational.py:418`), whether or not a column
+    # of the schema still needs reading from the source.
+    from sdm_client import PredictiveQuery, Relationship
+
+    def act() -> Any:
+        connection = duckdb.connect()
+        for statement in SHOP:
+            connection.execute(
+                statement.replace('user_id BIGINT,', 'user_id VARCHAR,')
+            )
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            schema = Schema.from_source(
+                DuckDBSource(connection),
+                {'users': 'users', 'orders': 'orders'},
+                relationships=[],
+            )
+        schema['orders']['user_id'].dtype = 'int64'
+        schema.relationships = [
+            Relationship('orders', 'user_id', 'users', 'user_id')
+        ]
+        if fresh:
+            schema['users'].columns['age'] = Column('age', 'int64', 'numerical')
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore')
+                PredictiveQuery(QUERY, schema).materialize(
+                    indices=[0, 1, 2], anchor_time=pd.Timestamp('2024-03-01')
+                )
+        except StructuredDataError as refused:
+            return (refused.code, str(refused))
+        return 'gathered'
+
+    outcomes = _both(monkeypatch, act)
+    assert outcomes['old'][0] == 'INVALID_REQUEST'
+    assert outcomes['core'] == outcomes['old']
