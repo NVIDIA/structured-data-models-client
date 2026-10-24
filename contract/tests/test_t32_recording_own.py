@@ -506,6 +506,26 @@ def test_an_incomplete_capture_fails_by_name(fault: Any, named: str) -> None:
     assert any(named in problem for problem in problems), problems
 
 
+def test_a_capture_from_a_dirty_tree_fails_unless_an_excuse_names_it() -> None:
+    # Claude T3.20 r1 P1-2: a capture recorded from a recording or
+    # reference tree that was not clean is refused, unless the recording
+    # names why (its excuse, as the recording run was given it).
+    case, line, tables = _capture()
+    assert check.capture_problems(line, case, tables) == []
+    for where in (
+        lambda identity: identity['commit'],
+        lambda identity: identity['reference']['commit'],
+    ):
+        dirty = copy.deepcopy(line)
+        where(dirty['observation']['identity'])['clean'] = False
+        problems = check.capture_problems(dirty, case, tables)
+        assert any('a tree that was not clean' in p for p in problems), problems
+        dirty['recording']['excuse'] = ''
+        assert check.capture_problems(dirty, case, tables) != []
+        dirty['recording']['excuse'] = 'build output only; the source untouched'
+        assert check.capture_problems(dirty, case, tables) == []
+
+
 def test_a_case_changed_after_its_capture_is_pending_live() -> None:
     case, line, _ = _capture()
     problems, pending = check.recordings([case], [line], ['databricks-sql'])
