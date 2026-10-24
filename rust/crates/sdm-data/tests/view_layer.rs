@@ -290,7 +290,10 @@ fn semantic_definition_names_are_bound_without_physical_table_qualification() {
         (vec!["SHOP", "V"], "SHOP.V"),
         (vec!["DB", "SHOP", "V"], "DB.SHOP.V"),
         (vec!["DB", "SHOP", "SHOP.V"], "SHOP.V"),
-        (vec!["DB", "SHOP", "\"Sales View\""], "DB.SHOP.\"Sales View\""),
+        (
+            vec!["DB", "SHOP", "\"Sales View\""],
+            "DB.SHOP.\"Sales View\"",
+        ),
         (vec!["DB", "SHOP", "\"Sales.View\""], "\"Sales.View\""),
     ] {
         let FetchPlan::Sql { statements, .. } = Data::reading_views(spaces())
@@ -300,20 +303,38 @@ fn semantic_definition_names_are_bound_without_physical_table_qualification() {
             panic!("a SQL plan")
         };
         assert_eq!(statements.len(), 1);
-        assert_eq!(statements[0].text, "SELECT SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW(?)");
-        assert_eq!(statements[0].params, vec![SqlParam::Value {
-            value: Scalar::Utf8(expected.into()),
-        }]);
+        assert_eq!(
+            statements[0].text,
+            "SELECT SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW(?)"
+        );
+        assert_eq!(
+            statements[0].params,
+            vec![SqlParam::Value {
+                value: Scalar::Utf8(expected.into()),
+            }]
+        );
     }
     for name in ["V", "SHOP.V", "DB.SHOP.\"Sales View\"", "\"Sales.View\""] {
-        assert_eq!(Data::reading_views(spaces()).view_text(
-            &provider, ViewTextAsk::ViewName { name: name.into() }
-        ).unwrap(), ViewTextAnswer::Names(Some(vec![name.into()])));
+        assert_eq!(
+            Data::reading_views(spaces())
+                .view_text(&provider, ViewTextAsk::ViewName { name: name.into() })
+                .unwrap(),
+            ViewTextAnswer::Names(Some(vec![name.into()]))
+        );
     }
     // Only definition lookups bypass physical qualification.
-    assert!(Data::new().plan(&DataRequest::Preview {
-        table: Relation::of(vec!["V".into()]), columns: vec!["id".into()], limit: 1,
-    }, &provider).is_err());
+    assert!(
+        Data::new()
+            .plan(
+                &DataRequest::Preview {
+                    table: Relation::of(vec!["V".into()]),
+                    columns: vec!["id".into()],
+                    limit: 1,
+                },
+                &provider
+            )
+            .is_err()
+    );
 }
 
 /// Rows as the describe gives them, each cell text or null, as many

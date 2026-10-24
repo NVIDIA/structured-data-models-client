@@ -182,7 +182,12 @@ def _source(
         ('DB', 'SHOP', '"Sales View"', 'DB.SHOP."Sales View"'),
         ('DB', 'SHOP', '"Sales.View"', '"Sales.View"'),
         ('DB', 'SHOP', 'OTHER.SHOP."Sales View"', 'OTHER.SHOP."Sales View"'),
-        ('DB', 'SHOP', 'OTHER."Shop.Name"."Sales View"', 'OTHER."Shop.Name"."Sales View"'),
+        (
+            'DB',
+            'SHOP',
+            'OTHER."Shop.Name"."Sales View"',
+            'OTHER."Shop.Name"."Sales View"',
+        ),
         ('DB', 'SHOP', '"Customer\'s View"', 'DB.SHOP."Customer\'s View"'),
     ],
 )
@@ -196,20 +201,32 @@ def test_semantic_lookup_binds_the_supplied_name_and_leaves_resolution_to_snowfl
     connection, model = _source(
         monkeypatch, name=name, database=database, schema=namespace
     )
-    schema = Schema.from_source(model, tables={'people': 'USERS'}, relationships=[])
-    PredictiveQuery('PREDICT people.AGE FOR EACH people.USER_ID', schema).materialize(
-        indices=[0], num_context_samples=4, model='kumo-relational', random_seed=42
+    schema = Schema.from_source(
+        model, tables={'people': 'USERS'}, relationships=[]
+    )
+    PredictiveQuery(
+        'PREDICT people.AGE FOR EACH people.USER_ID', schema
+    ).materialize(
+        indices=[0],
+        num_context_samples=4,
+        model='kumo-relational',
+        random_seed=42,
     )
     definitions = [
         plan['statements'][0]
-        for request, plan in zip(connection.requests, connection.plans, strict=True)
-        if request['request'] == 'describe' and request['part'] == 'view_definition'
+        for request, plan in zip(
+            connection.requests, connection.plans, strict=True
+        )
+        if request['request'] == 'describe'
+        and request['part'] == 'view_definition'
     ]
     assert len(definitions) == 2
     for statement in definitions:
-        assert statement['text'] == 'SELECT SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW(?)'
+        assert (
+            statement['text'] == 'SELECT SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW(?)'
+        )
         assert statement['params'] == [
-            {'param': 'value', 'value': {'type': 'utf8', 'value': bound}}
+            {'param': 'value', 'value': {'t': 'utf8', 'v': bound}}
         ]
     assert not any(
         request['request'] == 'describe' and request['part'] == 'namespace'
