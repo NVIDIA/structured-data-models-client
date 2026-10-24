@@ -2,7 +2,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""A serving compatibility exception never opens another emulation module."""
+"""Serving uses the shared codec; emulation stays inside the parser crate."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ import l0_scan  # noqa: E402
     ('entry', 'permitted'),
     [
         ('rust/crates/sdm-pql/src/float_repr.rs', True),
-        ('rust/crates/sdm-request/src/serving_compat.rs', True),
+        ('rust/crates/sdm-request/src/serving_compat.rs', False),
         ('rust/crates/sdm-request/src/serving.rs', False),
         ('rust/crates/sdm-request/src/another_compat.rs', False),
         ('rust/crates/sdm-request/src/serving_compat/other.rs', False),

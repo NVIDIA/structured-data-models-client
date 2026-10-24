@@ -101,12 +101,16 @@ def _shop() -> list[str]:
     return statements
 
 
-def _materialized(monkeypatch: pytest.MonkeyPatch) -> Request:
+def _materialized(
+    monkeypatch: pytest.MonkeyPatch, *, unicode_feature: bool = False
+) -> Request:
     r"""base.regression's request, materialized on the core."""
     monkeypatch.setenv(_routing.ENVIRONMENT, MATERIALIZE)
     connection = duckdb.connect()
     for statement in _shop():
         connection.execute(statement)
+    if unicode_feature:
+        connection.execute("UPDATE users SET country = 'é😀' WHERE user_id = 0")
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         schema = Schema.from_source(DuckDBSource(connection))
@@ -270,8 +274,7 @@ def _same_refusal(core: Any, old: Any) -> None:
     )
     # Every detail the old route gives, the core route gives alike.
     for name, value in old.details.items():
-        if value is not None:
-            assert core.details[name] == value, name
+        assert core.details[name] == value, name
     shown = str(core) + json.dumps(core.details, default=str)
     assert SECRET not in shown
     assert core.__cause__ is None
@@ -293,10 +296,8 @@ def test_the_core_s_envelope_is_posted_through_the_sdk_and_its_row_read(
     [(path, body, headers)] = on_core
     [(old_path, old_body, old_headers)] = on_old
     assert path == old_path == INVOCATIONS
-    # The same call, in the envelope the old route weighs; posted as the
-    # core wrote it, compact, every character past ASCII escaped.
+    # The same logical call, posted as the core's shared wire codec writes it.
     assert _call(body) == _call(old_body)
-    assert body.isascii()
     assert body.startswith(b'{"dataframe_records":[{"request_json":"{')
     assert headers['Content-Type'] == 'application/json'
     # The workspace's own client, naming this one, as on the old route.
@@ -422,7 +423,12 @@ def test_an_answer_the_old_route_cannot_read_is_its_transport_error(
     core, old, _, _ = _both(monkeypatch, request, (200, body, {}))
     assert isinstance(old, StructuredDataError), old
     assert isinstance(core, StructuredDataError), core
-    assert (core.code, str(core)) == (old.code, str(old))
+    assert core.code == old.code
+    if body == {'predictions': [{'response_json': '[1]'}]}:
+        assert core.details['got'] == 'array'
+        assert old.details['got'] == 'list'
+    else:
+        assert str(core) == str(old)
 
 
 def test_a_call_past_the_caller_s_limit_is_refused_before_it_is_sent(
@@ -431,20 +437,14 @@ def test_a_call_past_the_caller_s_limit_is_refused_before_it_is_sent(
     request = _materialized(monkeypatch)
     _, received = _predict(monkeypatch, request, CORE)
     [(_, body, _)] = received
-    # One byte short of the envelope's size: refused on both routes, the
-    # same words, nothing sent.
-    core, old, on_core, on_old = _both(
-        monkeypatch, request, max_request_bytes=len(body) - 1
+    # Each route weighs the bytes it actually posts; encoded lengths may differ.
+    core, on_core = _predict(
+        monkeypatch, request, CORE, max_request_bytes=len(body) - 1
     )
-    assert on_core == on_old == []
-    assert isinstance(old, StructuredDataError), old
-    assert (type(core), core.code, str(core)) == (
-        type(old),
-        old.code,
-        str(old),
-    )
+    assert on_core == []
+    assert isinstance(core, StructuredDataError), core
     assert core.details['limit'] == len(body) - 1
-    assert core.details['bytes'] == old.details['bytes'] == len(body)
+    assert core.details['bytes'] == len(body)
     # The size itself is admitted.
     core, received = _predict(
         monkeypatch, request, CORE, max_request_bytes=len(body)
@@ -453,6 +453,29 @@ def test_a_call_past_the_caller_s_limit_is_refused_before_it_is_sent(
     [(_, sent, _)] = received
     assert len(sent) == len(body)
     assert _call(sent) == _call(body)
+
+
+def test_utf8_serving_preserves_public_payload_and_measures_the_sent_body(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    request = _materialized(monkeypatch, unicode_feature=True)
+    core, old, on_core, on_old = _both(monkeypatch, request)
+    assert not isinstance(core, Exception), core
+    assert not isinstance(old, Exception), old
+    [(_, body, _)] = on_core
+    [(_, reference, _)] = on_old
+    assert 'é😀'.encode() in body
+    assert b'\\u00e9' in reference
+    assert _call(body) == _call(reference)
+    assert len(body) < len(reference)
+    pd.testing.assert_frame_equal(core.to_pandas(), old.to_pandas())
+    refused, sent = _predict(
+        monkeypatch, request, CORE, max_request_bytes=len(body) - 1
+    )
+    assert isinstance(refused, StructuredDataError)
+    assert sent == []
+    assert refused.details['bytes'] == len(body)
+    assert refused.details['limit'] == len(body) - 1
 
 
 @pytest.mark.parametrize(

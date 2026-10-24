@@ -352,8 +352,30 @@ class T313DatabricksServingTest {
       byte[] sent = workspace.bodies.get(0);
       String text = new String(sent, StandardCharsets.UTF_8);
       assertTrue(text.startsWith("{\"dataframe_records\":[{\"request_json\":\"{"), text);
-      assertTrue(text.chars().allMatch(c -> c < 0x80), "ASCII, as Python's writer");
       assertEquals(withoutId(nim.received.get(0)), withoutId(call(sent)));
+    }
+  }
+
+  @Test
+  void utf8FeatureValuesUseTheSharedEnvelopeAndActualByteLimit() throws Exception {
+    try (Connection connection = T312Shop.open("duckdb");
+        Workspace workspace = new Workspace();
+        SdmClient client = SdmClient.forDatabricksServing(workspace.serving(16_000_000))) {
+      try (var statement = connection.createStatement()) {
+        statement.execute("UPDATE users SET country = 'é😀' WHERE user_id = 0");
+      }
+      Request request = asked(connection);
+      client.predict(request, SdmClient.KUMO_RELATIONAL);
+      byte[] body = workspace.bodies.get(0);
+      assertTrue(new String(body, StandardCharsets.UTF_8).contains("é😀"));
+      try (Workspace limited = new Workspace();
+          SdmClient capped = SdmClient.forDatabricksServing(limited.serving(body.length - 1))) {
+        StructuredDataException error = assertThrows(StructuredDataException.class,
+            () -> capped.predict(request, SdmClient.KUMO_RELATIONAL));
+        assertEquals("INVALID_REQUEST", error.code());
+        assertEquals(body.length, ((Number) error.details().get("bytes")).intValue());
+        assertTrue(limited.bodies.isEmpty());
+      }
     }
   }
 
@@ -438,6 +460,15 @@ class T313DatabricksServingTest {
             row("{\"status\":422,\"code\":\"UNSUPPORTED_TASK\",\"detail\":\"" + SECRET + "\"}"));
     assertEquals(422, inBand.status());
     assertEquals("UNSUPPORTED_TASK", inBand.code());
+
+    ModelEndpointException gateway = refused(Answer.of(502, "<HTML><title>Bad Gateway</title></HTML>"));
+    assertEquals("BAD_GATEWAY", gateway.code());
+    assertFalse(gateway.details().containsKey("provider_error"));
+    ModelEndpointException uncoded = refused(row(
+        "{\"status\":503,\"detail\":{},\"title\":\"FAILED TO COLLECT ANY CONTEXT EXAMPLES\"}"));
+    assertEquals("INVALID_REQUEST", uncoded.code());
+    assertTrue(uncoded.details().containsKey("endpoint_code"));
+    assertNull(uncoded.details().get("endpoint_code"));
   }
 
   @Test

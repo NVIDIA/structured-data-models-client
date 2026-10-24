@@ -15,20 +15,31 @@
 
 use sdm_contract::error::{REFUSED_CODE, REFUSED_STATUS};
 use sdm_contract::{CoreError, Detail, ErrorCode, Scalar, Sentence};
-use sdm_request::serving::{self, Failure};
+use sdm_request::serving::{self, Failure, REQUEST_COLUMN};
 use sdm_wire::json::Value;
 
 const ENDPOINT: &str = "kumo-rfm-serving";
 const SECRET: &str = "Sup3rSecret-CustomerValue-9f2a";
 
 fn envelope(call: &str, limit: u64) -> Result<String, CoreError> {
-    serving::envelope(
-        ENDPOINT,
-        limit,
-        call.as_bytes(),
-        sdm_pql::float_repr::float_repr,
+    serving::envelope(ENDPOINT, limit, call.as_bytes())
+        .map(|bytes| String::from_utf8(bytes).unwrap())
+}
+
+fn call_in(envelope: &str) -> Value {
+    let read = sdm_wire::json::read(envelope.as_bytes()).unwrap();
+    let Value::Array(rows) = read.get("dataframe_records").unwrap() else {
+        panic!("one request row");
+    };
+    sdm_wire::json::read(
+        rows[0]
+            .get(REQUEST_COLUMN)
+            .unwrap()
+            .as_text()
+            .unwrap()
+            .as_bytes(),
     )
-    .map(|bytes| String::from_utf8(bytes).unwrap())
+    .unwrap()
 }
 
 fn text(value: &str) -> Detail {
@@ -76,7 +87,7 @@ fn field<'a>(error: &'a CoreError, name: &str) -> Option<&'a Detail> {
 // --- The envelope -------------------------------------------------------------
 
 #[test]
-fn the_call_travels_as_one_request_json_row_written_as_python_writes_it() {
+fn the_shared_codec_preserves_the_call_and_the_recorded_reference_logical_payload() {
     // Python's json.dumps: every character past ASCII and DEL escaped, a
     // character past the BMP as its surrogate pair, a float as its repr
     // (1E5 as 100000.0, 12345678.900000001 as 12345678.9), -0 as 0, then
@@ -90,13 +101,31 @@ fn the_call_travels_as_one_request_json_row_written_as_python_writes_it() {
     );
     let expected = r#"{"dataframe_records":[{"request_json":"{\"a\":\"\\u00e9\\ud83d\\ude00\\u007f\",\"b\":[1,2.5,1e-05,0,100000.0,1e+20,12345678.9],\"q\":\"\\\"\\\\/\",\"c\":\"\\n\\u0001\\u2028\\t\"}"}]}"#;
     assert_eq!(expected.len(), 182);
-    assert_eq!(envelope(call, 16_000_000).unwrap(), expected);
+    let wrapped = envelope(call, 16_000_000).unwrap();
+    let actual: serde_json::Value = serde_json::from_str(&wrapped).unwrap();
+    let reference: serde_json::Value = serde_json::from_str(expected).unwrap();
+    let actual_call = actual["dataframe_records"][0][REQUEST_COLUMN]
+        .as_str()
+        .unwrap();
+    let reference_call = reference["dataframe_records"][0][REQUEST_COLUMN]
+        .as_str()
+        .unwrap();
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(actual_call).unwrap(),
+        serde_json::from_str::<serde_json::Value>(reference_call).unwrap()
+    );
+    assert_eq!(
+        sdm_wire::json::read(actual_call.as_bytes()).unwrap(),
+        sdm_wire::json::read(call.as_bytes()).unwrap()
+    );
+    assert!(!wrapped.is_ascii());
     // Members in order, a name past ASCII escaped too, an integer past
     // every fixed width as its digits.
     let call = r#"{"kü":null,"t":true,"f":false,"n":-12345678901234567890123}"#;
+    let reference = r#"{"dataframe_records":[{"request_json":"{\"k\\u00fc\":null,\"t\":true,\"f\":false,\"n\":-12345678901234567890123}"}]}"#;
     assert_eq!(
-        envelope(call, 16_000_000).unwrap(),
-        r#"{"dataframe_records":[{"request_json":"{\"k\\u00fc\":null,\"t\":true,\"f\":false,\"n\":-12345678901234567890123}"}]}"#
+        call_in(&envelope(call, 16_000_000).unwrap()),
+        call_in(reference)
     );
 }
 
@@ -111,15 +140,14 @@ fn the_caller_s_limit_counts_the_wrapped_envelope_at_its_boundary() {
     );
     let wrapped = envelope(call, 16_000_000).unwrap();
     let size = wrapped.len() as u64;
-    assert_eq!(
-        wrapped,
-        concat!(
-            r#"{"dataframe_records":[{"request_json":"{\"rows\":[\"\\u00e9\\ud83d\\ude00\\\""#,
-            "Sup3rSecret-CustomerValue-9f2a",
-            r#"\\\"\"]}"}]}"#
-        )
+    let reference = concat!(
+        r#"{"dataframe_records":[{"request_json":"{\"rows\":[\"\\u00e9\\ud83d\\ude00\\\""#,
+        "Sup3rSecret-CustomerValue-9f2a",
+        r#"\\\"\"]}"}]}"#
     );
-    assert_eq!(size, 119);
+    assert_eq!(reference.len(), 119);
+    assert_eq!(call_in(&wrapped), call_in(reference));
+    assert!(size < reference.len() as u64);
     assert_eq!(envelope(call, size).unwrap(), wrapped);
     let refused = envelope(call, size - 1).unwrap_err();
     assert_eq!(refused.sentence, Sentence::ServingPastLimit);
@@ -128,6 +156,68 @@ fn the_caller_s_limit_counts_the_wrapped_envelope_at_its_boundary() {
     assert_eq!(refused.fields["limit"], count(size - 1));
     assert_eq!(refused.fields["endpoint"], text(ENDPOINT));
     assert!(!written(&refused).contains(SECRET));
+}
+
+#[test]
+fn the_utf8_envelope_keeps_number_tokens_and_exactly_counts_the_sent_bytes() {
+    let call = r#"{"x":"é😀","n":-0,"i":1844674407370955161600000,"f":1e+10}"#;
+    let expected = r#"{"dataframe_records":[{"request_json":"{\"x\":\"é😀\",\"n\":-0,\"i\":1844674407370955161600000,\"f\":1e+10}"}]}"#;
+    let limit = expected.len() as u64;
+    assert_eq!(envelope(call, limit).unwrap(), expected);
+    let error = envelope(call, limit - 1).unwrap_err();
+    assert_eq!(error.fields["bytes"], count(limit));
+    assert_eq!(error.fields["limit"], count(limit - 1));
+    assert_eq!(
+        call_in(expected),
+        sdm_wire::json::read(call.as_bytes()).unwrap()
+    );
+    for call in [r#"{"x":1e400}"#, r#"{"x":[NaN]}"#, r#"{"x":Infinity}"#] {
+        let error = envelope(call, u64::MAX).unwrap_err();
+        assert_eq!(error.sentence, Sentence::ServingValueNotJson);
+        assert_eq!(error.code, ErrorCode::InvalidRequest);
+    }
+}
+
+#[test]
+fn diagnostic_fallback_uses_nonblank_text_and_ascii_phrases_only() {
+    for detail in ["null", "false", "0", "1", "[]", "{}", r#""  \t ""#] {
+        let body = format!(
+            r#"{{"status":503,"detail":{detail},"title":"FAILED TO COLLECT ANY CONTEXT EXAMPLES"}}"#
+        );
+        let error = serving::answer(ENDPOINT, &served(&body)).unwrap_err();
+        assert_eq!(error.sentence, Sentence::ServingCallersFault, "{detail}");
+        assert_eq!(error.fields["endpoint_code"], Detail::Scalar(Scalar::Null));
+    }
+    let error = serving::answer(
+        ENDPOINT,
+        &served(r#"{"status":503,"detail":"failed to collect any context exampleſ"}"#),
+    )
+    .unwrap_err();
+    assert_eq!(error.sentence, Sentence::ServingFailed);
+    let error = serving::answer(
+        ENDPOINT,
+        &served(r#"{"status":500,"code":"ABC\n","detail":"private data"}"#),
+    )
+    .unwrap_err();
+    assert_eq!(error.sentence, Sentence::ServingFailed);
+}
+
+#[test]
+fn known_ascii_codes_are_canonical_and_arbitrary_lowercase_text_is_not_a_code() {
+    for (body, expected) in [
+        (
+            r#"{"status":422,"code":"invalid_request"}"#,
+            Some("INVALID_REQUEST"),
+        ),
+        (
+            r#"{"status":500,"detail":"invalid_schema: x"}"#,
+            Some("INVALID_SCHEMA"),
+        ),
+        (r#"{"status":422,"code":"private_text"}"#, None),
+    ] {
+        let error = serving::answer(ENDPOINT, &served(body)).unwrap_err();
+        assert_eq!(refusal(&error).2.as_deref(), expected);
+    }
 }
 
 // --- A success, and the answers that are not one ------------------------------
@@ -208,7 +298,7 @@ fn a_reply_that_is_not_one_row_holding_text_is_a_transport_error() {
 }
 
 #[test]
-fn an_answer_that_is_not_a_json_object_is_named_by_python_s_type() {
+fn a_non_object_uses_json_type_names_and_keeps_the_reference_type_vectors() {
     for (inner, got) in [
         ("[1]", "list"),
         (r#""s""#, "str"),
@@ -223,7 +313,15 @@ fn an_answer_that_is_not_a_json_object_is_named_by_python_s_type() {
         let error = serving::answer(ENDPOINT, &served(inner)).unwrap_err();
         assert_eq!(error.sentence, Sentence::ServingNotAnObject, "{inner}");
         assert_eq!(error.code, ErrorCode::TransportError);
-        assert_eq!(error.fields["got"], text(got), "{inner}");
+        let json_type = match got {
+            "list" => "array",
+            "str" => "string",
+            "int" | "float" => "number",
+            "bool" => "boolean",
+            "NoneType" => "null",
+            _ => unreachable!(),
+        };
+        assert_eq!(error.fields["got"], text(json_type), "{inner}");
     }
     for inner in ["{", "", "\u{feff}{}", &format!("{{\"a\": {SECRET}}}")] {
         let error = serving::answer(ENDPOINT, &served(inner)).unwrap_err();
@@ -345,7 +443,20 @@ fn a_failure_the_model_answered_with_is_named_by_its_code_alone() {
             None,
         ),
     ];
-    for (inner, expected, endpoint_code) in cases {
+    for (inner, reference, reference_endpoint_code) in cases {
+        // Retain the recorded reference vector while naming both deliberate policy changes.
+        let (expected, endpoint_code) = match inner.as_str() {
+            r#"{"status":503,"code":"BUSY","detail":{"x":1},"title":"failed to collect any context examples"}"# => {
+                (
+                    (Sentence::ServingCallersFault, 503, Some("INVALID_REQUEST")),
+                    Some("BUSY"),
+                )
+            }
+            r#"{"status":500,"detail":"ABC: \u001fx"}"# => {
+                ((Sentence::ServingRefused, 500, Some("ABC")), None)
+            }
+            _ => (reference, reference_endpoint_code),
+        };
         let error = serving::answer(ENDPOINT, &served(&inner)).unwrap_err();
         let (sentence, status, code) = refusal(&error);
         assert_eq!(
@@ -360,7 +471,7 @@ fn a_failure_the_model_answered_with_is_named_by_its_code_alone() {
             assert_eq!(error.fields["diagnosis"], text("EMPTY_CONTEXT"));
             assert_eq!(
                 field(&error, "endpoint_code"),
-                endpoint_code.map(text).as_ref()
+                Some(&endpoint_code.map_or(Detail::Scalar(Scalar::Null), text))
             );
         } else {
             assert_eq!(field(&error, "diagnosis"), None);
@@ -616,7 +727,12 @@ fn an_http_failure_reads_as_the_sdk_reads_the_same_response() {
             (Sentence::ServingFailedCoded, 403, Some("PERMISSION_DENIED")),
         ),
     ];
-    for (status, body, expected) in cases {
+    for (status, body, reference) in cases {
+        let expected = if status == 502 && body.starts_with("<html>") {
+            (Sentence::ServingFailedCoded, 503, Some("BAD_GATEWAY"))
+        } else {
+            reference
+        };
         let error = rest(status, &body);
         let (sentence, reported, code) = refusal(&error);
         assert_eq!(
@@ -629,9 +745,10 @@ fn an_http_failure_reads_as_the_sdk_reads_the_same_response() {
 }
 
 #[test]
-fn a_status_past_what_a_status_holds_is_reported_as_the_largest() {
+fn an_invalid_status_is_a_malformed_response_not_a_clamped_status() {
     // Registered, proposed (T3.13): Python's in-band status is any integer
     // from 400; the core's field holds a 16-bit status.
     let error = serving::answer(ENDPOINT, &served(r#"{"status":70000}"#)).unwrap_err();
-    assert_eq!(refusal(&error), (Sentence::ServingFailed, u16::MAX, None));
+    assert_eq!(error.code, ErrorCode::InvalidResponse);
+    assert_eq!(error.fields["reason"], text("invalid_serving_status"));
 }
