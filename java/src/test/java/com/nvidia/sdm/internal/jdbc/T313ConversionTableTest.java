@@ -7,6 +7,7 @@ package com.nvidia.sdm.internal.jdbc;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.nvidia.sdm.internal.ArrowData;
@@ -167,6 +168,31 @@ class T313ConversionTableTest {
     Map<String, Read> got = answered(
         FakeJdbc.Column.of("unzoned", "TIMESTAMP_NTZ", walls.toArray()));
     assertEquals(walls, got.get("unzoned").values());
+  }
+
+  @Test
+  void explicitTransferPreservesNullZeroAndNegativeMicroseconds() throws Exception {
+    Map<String, Read> got = answeredWithConversions(
+        List.of(Map.of("conversion", "timestamp_micros", "column", 0, "name", "at")),
+        FakeJdbc.Column.of("at", "BIGINT", null, 0L, -1L, 1710037800123456L));
+    assertEquals(Arrays.asList(null, LocalDateTime.parse("1970-01-01T00:00:00"),
+        LocalDateTime.parse("1969-12-31T23:59:59.999999"),
+        LocalDateTime.parse("2024-03-10T02:30:00.123456")), got.get("at").values());
+  }
+
+  @Test
+  void aConversionMustMatchTheExactOutputPositionNameAndIntegerType() {
+    List<Map<String, Object>> bad = List.of(
+        Map.of("conversion", "timestamp_micros", "column", 1, "name", "at"),
+        Map.of("conversion", "timestamp_micros", "column", 0, "name", "another"),
+        Map.of("conversion", "not_supported", "column", 0, "name", "at"));
+    for (Map<String, Object> conversion : bad) {
+      assertThrows(java.sql.SQLException.class, () -> answeredWithConversions(
+          List.of(conversion), FakeJdbc.Column.of("at", "BIGINT", 0L)));
+    }
+    assertThrows(java.sql.SQLException.class, () -> answeredWithConversions(
+        List.of(Map.of("conversion", "timestamp_micros", "column", 0, "name", "at")),
+        FakeJdbc.Column.of("at", "DOUBLE", 0.5)));
   }
 
   @Test
