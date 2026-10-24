@@ -59,16 +59,17 @@ pub(crate) fn string(text: &str, ascii: bool) -> String {
     out
 }
 
-/// A double as a JSON number that reads back as it, its shortest digits;
-/// a NaN and an infinity as the old client's JSON writes them (`NaN`,
-/// `Infinity`, `-Infinity`), which the warehouse's JSON reader takes.
-pub(crate) fn number(x: f64) -> String {
+/// A double as the old client's JSON writes it: as its language writes a
+/// double (`float_text`, which the core passes in), a NaN and an infinity
+/// as `NaN`, `Infinity` and `-Infinity`, which the warehouses' JSON
+/// readers take.
+pub(crate) fn number(x: f64, float_text: fn(f64) -> String) -> String {
     if x.is_nan() {
         "NaN".to_owned()
     } else if x.is_infinite() {
         if x > 0.0 { "Infinity" } else { "-Infinity" }.to_owned()
     } else {
-        format!("{x:?}")
+        float_text(x)
     }
 }
 
@@ -84,11 +85,11 @@ mod tests {
     }
 
     #[test]
-    fn a_double_reads_back_as_itself() {
-        for x in [1.5, 0.1, -2.0, 1e16, 1e-7, 5e-324, f64::MAX, -0.0] {
-            assert_eq!(number(x).parse::<f64>().unwrap().to_bits(), x.to_bits());
-        }
-        assert_eq!(number(f64::NAN), "NaN");
-        assert_eq!(number(f64::NEG_INFINITY), "-Infinity");
+    fn a_double_is_its_language_s_text_and_a_nan_or_infinity_json_s_word() {
+        let text = |x: f64| format!("<{x}>");
+        assert_eq!(number(1.5, text), "<1.5>");
+        assert_eq!(number(f64::NAN, text), "NaN");
+        assert_eq!(number(f64::INFINITY, text), "Infinity");
+        assert_eq!(number(f64::NEG_INFINITY, text), "-Infinity");
     }
 }

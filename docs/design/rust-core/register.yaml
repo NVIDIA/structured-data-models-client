@@ -9247,33 +9247,30 @@ entries:
     memo to the source as the run resolves it, so a run after the change
     starts afresh.
 - id: P3K-1
-  title: A key set past the budget may split a few seeds earlier or later than the old client splits it, each seed's value the same
+  title: A Postgres key set of decimals past a double's digits may split a few seeds off where the old client splits it, each seed the same value
   kind: change
   old_behavior: >-
-    The old client writes a Databricks or Postgres key set as Python's
-    json.dumps writes it, ASCII only, a double as Python's repr (1e+16,
-    1e-05), and splits it past 900,000 characters of that text
-    (_chunk_rows, DB/sampler.py:32-44, PG/sampler.py:125-182). The Phase 2
-    core route wrote a Postgres key set's cells as pyarrow's text of them,
-    its characters as they are, and never split it.
+    The old client writes a Postgres key of a numeric column of a scale as
+    the text of its double (_coerce_id, str(value)), and splits the key
+    set past 900,000 characters of its JSON (_chunk_rows,
+    PG/sampler.py:125-182).
   new_behavior: >-
-    The core writes each key set (T3.28): on Databricks as the old client
-    does, but a double as its shortest digits in Rust's layout (1e16,
-    1e-5); on Postgres each cell as its own text (a double the same way),
-    its characters as they are, as the Phase 2 core route bound it. Both
-    split past 900,000 bytes of that text as the old client splits, one
-    fetch per chunk, the answers joined in order. Every seed reads as the
-    same value, so the answers are the same; only where a chunk ends can
-    move, for a key set of doubles or of text past ASCII near the budget.
+    The core writes every Databricks and Postgres key set as the old client
+    does (T3.28) and splits it at the same seeds, but a decimal key with
+    more digits than a double holds, which it writes with its exact digits
+    (exact keys, design choice 5, KO2-35), so that key set's text, and
+    where a chunk ends near the budget, can differ. A key of several
+    columns, which the old client never binds, is written as an array of
+    its values.
   affected_inputs: >-
-    A Databricks key set of float keys, or a Postgres key set of float keys
-    or of text past ASCII, whose text is near or past 900,000 bytes.
+    A Postgres key set of decimal keys of more than about 15 significant
+    digits, near or past 900,000 bytes of JSON.
   cases: [T3.28]
-  refs: [T3.28]
+  refs: [T3.28, KO2-35]
   status: proposed
   approved_by: null
   decision_ref: null
   notes: >-
-    Approver: owner. Writing a double as Python's repr would copy a
-    library's layout into sdm-data, which the emulation allowlist keeps in
-    the parser crate; the value each seed reads as is the same either way.
+    Approver: owner. Writing such a key as its double's text would lose the
+    exact match the core keeps (KO2-35); the core's seed reads as the
+    exact key.

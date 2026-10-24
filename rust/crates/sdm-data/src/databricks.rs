@@ -648,6 +648,8 @@ fn seed_cte(d: &Databricks, read: &SeedRead<'_>) -> Result<String, CoreError> {
             ));
         }
     }
+    // The fields as the old client names them (`id`, `e`, `s`), unquoted
+    // as it writes them, each read under its seed column's own name.
     let batch = batch_select(0);
     let (schema, selects) = if times.is_empty() {
         (
@@ -655,11 +657,20 @@ fn seed_cte(d: &Databricks, read: &SeedRead<'_>) -> Result<String, CoreError> {
             format!("{batch}, col AS {}", d.identifier(SEED_KEY)),
         )
     } else {
-        let mut fields = vec![format!("{}:{element}", d.identifier(SEED_KEY))];
-        let mut selects = vec![batch, format!("col.{0} AS {0}", d.identifier(SEED_KEY))];
-        for time in &times {
-            fields.push(format!("{}:string", d.identifier(time)));
-            selects.push(format!("col.{0} AS {0}", d.identifier(time)));
+        let named = key_text::fields(
+            std::iter::once(SEED_KEY).chain(times.iter().copied()),
+            read.request,
+        );
+        let mut fields = Vec::new();
+        let mut selects = vec![batch];
+        for (column, field) in &named {
+            let kind = if *column == SEED_KEY {
+                element
+            } else {
+                "string"
+            };
+            fields.push(format!("{field}:{kind}"));
+            selects.push(format!("col.{field} AS {}", d.identifier(column)));
         }
         (
             format!("array<struct<{}>>", fields.join(",")),
@@ -1107,36 +1118,37 @@ fn element_type(column_type: &ColumnType) -> &'static str {
 }
 
 /// Each seed of a key set as the JSON this dialect binds it as (the
-/// module's documentation), in order.
+/// module's documentation), in order: the old client's `_dumps` of its
+/// rows, a double as `float_text` writes it.
 pub(crate) fn key_rows(
     request: &DataRequest,
     schema: &SchemaRef,
     batches: &[RecordBatch],
     float_text: fn(f64) -> String,
 ) -> Result<Vec<String>, CoreError> {
-    let _ = (request, float_text);
+    key_text::in_batch_order(schema, batches)?;
     let (schema, batches) = coerced(schema, batches)?;
-    let names: Vec<String> = schema
-        .fields()
+    let named = key_text::fields(
+        schema.fields().iter().map(|field| field.name().as_str()),
+        request,
+    );
+    let order: Vec<(usize, String)> = named
         .iter()
-        .map(|field| json::string(field.name(), true))
+        .filter_map(|(column, field)| {
+            Some((schema.index_of(column).ok()?, json::string(field, true)))
+        })
         .collect();
     let mut rows = Vec::new();
     for batch in &batches {
         for row in 0..batch.num_rows() {
-            let cells: Vec<String> = batch
-                .columns()
-                .iter()
-                .map(|column| json_cell(column, row))
-                .collect();
-            rows.push(match &cells[..] {
-                [one] => one.clone(),
+            let cell = |at: usize| json_cell(batch.column(at), row, float_text);
+            rows.push(match &order[..] {
+                [(at, _)] => cell(*at),
                 several => format!(
                     "{{{}}}",
-                    names
+                    several
                         .iter()
-                        .zip(several)
-                        .map(|(name, cell)| format!("{name}:{cell}"))
+                        .map(|(at, field)| format!("{field}:{}", cell(*at)))
                         .collect::<Vec<_>>()
                         .join(",")
                 ),
@@ -1147,8 +1159,9 @@ pub(crate) fn key_rows(
 }
 
 /// One cell of a key set [`coerced`] for its JSON, as JSON: an integer's
-/// digits, a double's number, a text's string, ASCII only, `null`.
-fn json_cell(column: &ArrayRef, row: usize) -> String {
+/// digits, a double as `float_text` writes it, a text's string, ASCII
+/// only, `null`.
+fn json_cell(column: &ArrayRef, row: usize, float_text: fn(f64) -> String) -> String {
     if column.is_null(row) {
         return "null".to_owned();
     }
@@ -1156,7 +1169,7 @@ fn json_cell(column: &ArrayRef, row: usize) -> String {
         return integers.value(row).to_string();
     }
     if let Some(doubles) = column.as_primitive_opt::<arrow_array::types::Float64Type>() {
-        return json::number(doubles.value(row));
+        return json::number(doubles.value(row), float_text);
     }
     json::string(column.as_string::<i32>().value(row), true)
 }
@@ -1478,8 +1491,8 @@ mod tests {
         assert_eq!(
             key_rows(&windowed(), &schema, &[batch], |x| format!("{x:?}")).unwrap(),
             [
-                r#"{"key":3,"time":"2024-03-01 00:00:00"}"#,
-                r#"{"key":4,"time":null}"#
+                r#"{"id":3,"e":"2024-03-01 00:00:00"}"#,
+                r#"{"id":4,"e":null}"#
             ]
         );
     }

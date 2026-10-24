@@ -21,8 +21,8 @@
 //!   reference's `_to_dtype` reads it: of a scale above zero as doubles,
 //!   of a scale of zero as integers, a column holding a whole number past
 //!   `int64` as its digits (where the reference overflows), a NaN missing.
-//! - A key set is written as the JSON text its statement reads
-//!   ([`key_rows`], T3.28): each cell as its text, a time without a zone as
+//! - A key set is written as the JSON text its statement reads, as the
+//!   reference writes it ([`key_rows`], T3.28): a time without a zone as
 //!   pandas' `Timestamp.isoformat` writes it (the reference compares a
 //!   text time column with it as text), binary as `\x` and its
 //!   hexadecimal digits, so the provider binds the text it is handed.
@@ -37,10 +37,11 @@ use arrow_array::types::{
 };
 use arrow_array::{Array, ArrayRef, Float64Array, Int64Array, ListArray, RecordBatch, StringArray};
 use arrow_schema::{DataType, Field, Schema, SchemaRef, TimeUnit};
-use sdm_contract::data::DECLARED_SCALE_MARKER;
+use sdm_contract::data::{DECLARED_SCALE_MARKER, SEED_BATCH};
 use sdm_contract::{CoreError, Detail, Sentence};
 
 use crate::json;
+use crate::key_text;
 
 /// The field metadata naming Arrow's canonical JSON extension type.
 const EXTENSION_NAME: &str = "ARROW:extension:name";
@@ -635,46 +636,130 @@ impl Reader<'_> {
 
 // --- key sets --------------------------------------------------------------------
 
-/// Each seed of a key set as Postgres's statement reads it (T3.28): a JSON
-/// array of its cells' texts in the key set's column order, the batch
-/// among them, a null `null`, each text a JSON string with its characters
-/// as they are, as the core route has bound one since T2.3.
+/// Each seed of a key set as Postgres's statement reads it (T3.28), as the
+/// old client writes it (`_dumps`, ASCII only): its key alone (several
+/// columns' as an array), or, with seed times, an object of `id` and the
+/// window's bounds (`e`, `s`, [`key_text::fields`]); the batch left out,
+/// the seeds' positions being their batches. A key as the reference
+/// coerces it (`_coerce_id`): an integer as a number, a double as
+/// `float_text` writes it, a decimal of a scale as the text of its double
+/// (exactly, the core's own digits), anything else as its text
+/// ([`key_cell`]); a seed time as pandas' `isoformat` writes it.
 pub(crate) fn key_rows(
     request: &sdm_contract::data::DataRequest,
     schema: &SchemaRef,
     batches: &[RecordBatch],
     float_text: fn(f64) -> String,
 ) -> Result<Vec<String>, CoreError> {
-    let _ = (request, float_text);
+    key_text::in_batch_order(schema, batches)?;
+    let names: Vec<&str> = schema.fields().iter().map(|f| f.name().as_str()).collect();
+    let keys = key_text::key_columns(&names);
+    let others: Vec<&str> = names
+        .iter()
+        .copied()
+        .filter(|name| !keys.contains(name) && *name != SEED_BATCH)
+        .collect();
+    let fields = key_text::fields(others.iter().copied(), request);
+    let at = |name: &str| names.iter().position(|n| *n == name);
+    let key_at: Vec<usize> = keys.iter().filter_map(|k| at(k)).collect();
+    let field_at: Vec<(usize, String)> = fields
+        .iter()
+        .filter_map(|(column, field)| Some((at(column)?, json::string(field, true))))
+        .collect();
     let mut rows = Vec::new();
     for batch in batches {
         for row in 0..batch.num_rows() {
-            let cells = batch
-                .columns()
-                .iter()
-                .zip(schema.fields())
-                .map(|(array, field)| {
-                    Ok(match key_cell(array.as_ref(), row, field.name())? {
-                        Some(text) => json::string(&text, false),
-                        None => "null".to_owned(),
-                    })
-                })
-                .collect::<Result<Vec<_>, CoreError>>()?;
-            rows.push(format!("[{}]", cells.join(",")));
+            let cell = |at: usize| key_json(batch.column(at).as_ref(), row, names[at], float_text);
+            let id = match &key_at[..] {
+                [one] => cell(*one)?,
+                several => format!(
+                    "[{}]",
+                    several
+                        .iter()
+                        .map(|at| cell(*at))
+                        .collect::<Result<Vec<_>, _>>()?
+                        .join(",")
+                ),
+            };
+            if field_at.is_empty() {
+                rows.push(id);
+                continue;
+            }
+            let mut members = vec![format!("\"id\":{id}")];
+            for (at, field) in &field_at {
+                members.push(format!("{field}:{}", cell(*at)?));
+            }
+            rows.push(format!("{{{}}}", members.join(",")));
         }
     }
     Ok(rows)
+}
+
+/// One cell of a key set as the old client's JSON writes it: an integer as
+/// a number, a double as `float_text` writes it, a decimal of a scale as a
+/// string of its digits (with `.0` where it has no fraction, as its double
+/// is written), of no scale as a number; a boolean as JSON's; anything
+/// else as a string of its text ([`key_cell`]), ASCII only; a null `null`.
+fn key_json(
+    array: &dyn Array,
+    row: usize,
+    column: &str,
+    float_text: fn(f64) -> String,
+) -> Result<String, CoreError> {
+    use arrow_array::types as t;
+    if array.is_null(row) {
+        return Ok("null".to_owned());
+    }
+    Ok(match array.data_type() {
+        DataType::Int8
+        | DataType::Int16
+        | DataType::Int32
+        | DataType::Int64
+        | DataType::UInt8
+        | DataType::UInt16
+        | DataType::UInt32
+        | DataType::UInt64
+        | DataType::Boolean => key_cell(array, row, column)?.unwrap_or_default(),
+        DataType::Float32 => json::number(
+            f64::from(array.as_primitive::<t::Float32Type>().value(row)),
+            float_text,
+        ),
+        DataType::Float64 => json::number(
+            array.as_primitive::<t::Float64Type>().value(row),
+            float_text,
+        ),
+        DataType::Decimal128(_, 0) | DataType::Decimal256(_, 0) => {
+            key_cell(array, row, column)?.unwrap_or_default()
+        }
+        DataType::Decimal128(..) | DataType::Decimal256(..) => json::string(
+            &fractional(&key_cell(array, row, column)?.unwrap_or_default()),
+            true,
+        ),
+        _ => json::string(&key_cell(array, row, column)?.unwrap_or_default(), true),
+    })
+}
+
+/// A decimal's text, its scale's digits after the point, as its double's
+/// is written: no trailing zero, and `.0` where it has no fraction.
+fn fractional(text: &str) -> String {
+    let Some((whole, fraction)) = text.split_once('.') else {
+        return format!("{text}.0");
+    };
+    match fraction.trim_end_matches('0') {
+        "" => format!("{whole}.0"),
+        kept => format!("{whole}.{kept}"),
+    }
 }
 
 /// One cell of a key set as the text Postgres's input function reads: a
 /// time without a zone as pandas' `Timestamp.isoformat` writes it (the
 /// reference compares a text time column with it as text) and binary as
 /// `\x` and its hexadecimal digits, as the reference spells them; any
-/// other value as its own text (an integer's digits, a double's shortest
-/// digits, a decimal's with its scale's, a date as `YYYY-MM-DD`, a time of
-/// day and a zoned time to its unit's digits, the zoned one in UTC with a
-/// `Z`), which the type the statement reads it as reads as that value. A
-/// cell of another type is refused by name.
+/// other value as its own text (an integer's digits, a decimal's with its
+/// scale's, a date as `YYYY-MM-DD`, a time of day and a zoned time to its
+/// unit's digits, the zoned one in UTC with a `Z`), which the type the
+/// statement reads it as reads as that value. A double is
+/// [`key_json`]'s; a cell of another type is refused by name.
 fn key_cell(array: &dyn Array, row: usize, column: &str) -> Result<Option<String>, CoreError> {
     use arrow_array::types as t;
     if array.is_null(row) {
@@ -693,15 +778,6 @@ fn key_cell(array: &dyn Array, row: usize, column: &str) -> Result<Option<String
         DataType::UInt16 => array.as_primitive::<t::UInt16Type>().value(row).to_string(),
         DataType::UInt32 => array.as_primitive::<t::UInt32Type>().value(row).to_string(),
         DataType::UInt64 => array.as_primitive::<t::UInt64Type>().value(row).to_string(),
-        DataType::Float32 => {
-            let x = array.as_primitive::<t::Float32Type>().value(row);
-            if x.is_finite() {
-                format!("{x:?}")
-            } else {
-                json::number(f64::from(x))
-            }
-        }
-        DataType::Float64 => json::number(array.as_primitive::<t::Float64Type>().value(row)),
         DataType::Decimal128(_, scale) => scaled(
             &array
                 .as_primitive::<t::Decimal128Type>()

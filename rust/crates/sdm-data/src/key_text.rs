@@ -29,10 +29,12 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
+use arrow_array::cast::AsArray;
 use arrow_array::{RecordBatch, StringArray};
 use arrow_schema::{DataType, Field, Schema};
 use sdm_contract::data::{
-    AttachmentId, BoundFetch, BoundRequest, DataRequest, FetchPlan, KeyData, SqlParam, SqlStatement,
+    AttachmentId, BoundFetch, BoundRequest, DataRequest, FetchPlan, KeyData, SEED_BATCH, SEED_KEY,
+    SqlParam, SqlStatement,
 };
 use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 
@@ -42,6 +44,88 @@ use crate::sql::SqlDialect;
 /// warehouse's native parameter limit of 1 MB (`_chunk_rows` on Databricks
 /// and Postgres alike).
 pub(crate) const BUDGET: usize = 900_000;
+
+/// The field the old client names a seed's column by in its key set's
+/// JSON (`_by_fkey`, `_by_time` on Databricks and Postgres alike): the key
+/// `id`, the window's upper bound `e` and its lower `s`; another column by
+/// its own name. In that order, the key first.
+pub(crate) fn fields<'a>(
+    columns: impl IntoIterator<Item = &'a str>,
+    request: &DataRequest,
+) -> Vec<(&'a str, String)> {
+    let window = match request {
+        DataRequest::Neighbors { window, .. } => window.as_ref(),
+        _ => None,
+    };
+    let bound = |bound: &Option<sdm_contract::data::SeedBound>, column: &str| {
+        bound.as_ref().is_some_and(|b| b.seed_column == column)
+    };
+    let mut named: Vec<(usize, &str, String)> = columns
+        .into_iter()
+        .map(|column| {
+            if column == SEED_KEY {
+                (0, column, "id".to_owned())
+            } else if window.is_some_and(|w| bound(&w.upper, column)) {
+                (1, column, "e".to_owned())
+            } else if window.is_some_and(|w| bound(&w.lower, column)) {
+                (2, column, "s".to_owned())
+            } else {
+                (3, column, column.to_owned())
+            }
+        })
+        .collect();
+    named.sort_by_key(|(rank, _, _)| *rank);
+    named
+        .into_iter()
+        .map(|(_, column, field)| (column, field))
+        .collect()
+}
+
+/// The key columns of a key set's columns `names`: the one key, or each
+/// of a key of several, in order (`seed_key_columns`).
+pub(crate) fn key_columns<'a>(names: &[&'a str]) -> Vec<&'a str> {
+    if let Some(one) = names.iter().find(|n| **n == SEED_KEY) {
+        return vec![*one];
+    }
+    (1..)
+        .map_while(|at| {
+            let name = format!("{SEED_KEY}_{at}");
+            names.iter().find(|n| **n == name).copied()
+        })
+        .collect()
+}
+
+/// Refuses a key set whose batches are not its seeds' positions from 0,
+/// which a statement reading its JSON numbers by position cannot read.
+pub(crate) fn in_batch_order(
+    schema: &arrow_schema::SchemaRef,
+    batches: &[RecordBatch],
+) -> Result<(), CoreError> {
+    let Ok(at) = schema.index_of(SEED_BATCH) else {
+        return Ok(());
+    };
+    let mut next = 0_i64;
+    for batch in batches {
+        let column = batch.column(at);
+        let Some(positions) = column.as_primitive_opt::<arrow_array::types::Int64Type>() else {
+            return Err(out_of_order());
+        };
+        for position in positions.iter() {
+            if position != Some(next) {
+                return Err(out_of_order());
+            }
+            next += 1;
+        }
+    }
+    Ok(())
+}
+
+fn out_of_order() -> CoreError {
+    CoreError::new(
+        Sentence::Internal,
+        "a key set's batches are not its seeds' positions",
+    )
+}
 
 /// The local reference a fetch names its key set's text by; each fetch
 /// holds one batch, so one reference serves them all.
