@@ -47,6 +47,10 @@ Reads (the forms the old client and the runner issue), anywhere:
   of :data:`FUNCTIONS`, by plain name (Postgres' also as ``pg_catalog.``),
   a keyword taking a ``(`` only where it cannot be a call, and casting
   (``::`` or ``CAST``) only to a built-in type of :data:`CAST_TYPES`;
+  on Postgres also the core's seed-time read (T3.7), in a read only:
+  ``CROSS JOIN (SELECT ROW(t.*)::<schema>.<table> ...)``, the cast a row's
+  to a table of the test schema, and ``CROSS JOIN LATERAL
+  jsonb_populate_record(..., jsonb_build_object(...))``;
 - ``DESCRIBE TABLE [EXTENDED] <t>``, ``SHOW TABLES [LIKE <p>] [IN [SCHEMA]
   <s>]``, ``SHOW IMPORTED KEYS IN TABLE <t>``, ``SHOW PARAMETERS LIKE <p>
   IN SESSION``, ``USE CATALOG | SCHEMA | DATABASE <s>`` and ``ALTER
@@ -529,16 +533,27 @@ class WriteGuard:
             )
 
     def _held(
-        self, items: list[Token], words: frozenset[str], what: str
+        self,
+        items: list[Token],
+        words: frozenset[str],
+        what: str,
+        read: bool = False,
     ) -> None:
         r"""Refuses ``items`` holding one of ``words`` or a sequence's word,
         casting to a type not built in, or calling anything but
         :data:`FUNCTIONS` by a plain name; a keyword takes a ``(`` only
         where it cannot be a call (:data:`RESERVED` and the words after it),
-        and an alias after ``AS`` its list of names."""
+        and an alias after ``AS`` its list of names. In a Postgres ``read``
+        (a SELECT or WITH statement, never a write's), also the core's
+        seed-time shapes (:meth:`_seed_row`)."""
         # The word each open parenthesis follows, innermost last: inside a
         # cast, AS names its type.
         openers: list[str] = []
+        # Where each open parenthesis is, and the word before the one the
+        # last ``)`` closed.
+        opened: list[int] = []
+        closed_by = ''
+        seeds = read and self.dialect == 'postgres'
         types: set[int] = set()
         for i, token in enumerate(items):
             word = _upper(token)
@@ -546,17 +561,23 @@ class WriteGuard:
             before = items[i - 1] if i else None
             if token == _OPEN:
                 openers.append(_upper(before))
+                opened.append(i)
                 continue
             if token == _CLOSE:
                 if openers:
                     openers.pop()
+                at = opened.pop() if opened else 0
+                closed_by = _upper(items[at - 1]) if at else ''
                 continue
             if word in words and after != [_OPEN]:
                 raise WriteRefused(f'{what}: {word} where no write may be')
             if word in SEQUENCE_WORDS:
                 raise WriteRefused(f'{what}: {word}, a sequence')
             if token == Token('punct', ':') and after == [Token('punct', ':')]:
-                types |= self._cast_type(items, i + 2, what)
+                if seeds and before == _CLOSE and closed_by == 'ROW':
+                    types |= self._seed_row(items, i + 2, what)
+                else:
+                    types |= self._cast_type(items, i + 2, what)
                 continue
             if word == 'AS' and openers[-1:] in (['CAST'], ['TRY_CAST']):
                 types |= self._cast_type(items, i + 1, what)
@@ -590,6 +611,28 @@ class WriteGuard:
                     and _upper(before) not in RESERVED
                 )
                 or (
+                    # The core's seed-time read on Postgres (sdm-data's
+                    # seed CTE): CROSS JOIN (SELECT ROW(t.*)::<table> ...),
+                    # then CROSS JOIN LATERAL jsonb_populate_record(b.base,
+                    # jsonb_build_object(...)).
+                    seeds
+                    and (
+                        (
+                            word == 'JOIN'
+                            and _upper(before) == 'CROSS'
+                            and _upper(items[i + 2]) == 'SELECT'
+                        )
+                        or (
+                            word == 'JSONB_POPULATE_RECORD'
+                            and _upper(before) == 'LATERAL'
+                        )
+                        or (
+                            word == 'JSONB_BUILD_OBJECT'
+                            and openers[-1:] == ['JSONB_POPULATE_RECORD']
+                        )
+                    )
+                )
+                or (
                     _upper(before) == 'AS'
                     and openers[-1:] not in (['CAST'], ['TRY_CAST'])
                     and _names_only(items, i + 1)
@@ -597,6 +640,32 @@ class WriteGuard:
             ):
                 continue
             raise WriteRefused(f'{what}: {word}(), a function on no list')
+
+    def _seed_row(self, items: list[Token], at: int, what: str) -> set[int]:
+        r"""The row type a ``ROW(...)`` is cast to at ``at`` in the core's
+        seed-time read: a table of the test schema, ``<schema>.<table>``,
+        whose row type only an admitted write made; refuses any other.
+        Returns the index of its tokens."""
+        parts: list[tuple[str, bool]] = []
+        found: set[int] = set()
+        i = at
+        while i < len(items) and items[i].kind in ('word', 'name'):
+            parts.append((items[i].text, items[i].kind == 'name'))
+            found.add(i)
+            i += 1
+            if items[i : i + 1] != [_DOT]:
+                break
+            found.add(i)
+            i += 1
+        if (
+            len(parts) != 2
+            or not self._container(parts[:1])
+            or items[i : i + 1] in ([_DOT], [_OPEN])
+        ):
+            raise WriteRefused(
+                f'{what}: a row cast to a type not of a test schema table'
+            )
+        return found
 
     def _cast_type(self, items: list[Token], at: int, what: str) -> set[int]:
         r"""The built-in type a cast names at ``at`` (one word or several,
@@ -628,7 +697,7 @@ class WriteGuard:
         verb = _upper(s.peek())
         s.at = 1
         if verb in ('SELECT', 'WITH'):
-            self._held(items, WRITE_WORDS, s.what)
+            self._held(items, WRITE_WORDS, s.what, read=True)
         elif verb in ('DESCRIBE', 'DESC'):
             s.expect('TABLE')
             s.accept('EXTENDED')
