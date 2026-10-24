@@ -1203,3 +1203,132 @@ def test_a_metric_view_read_as_a_table_is_refused_in_the_old_client_s_words(
         'measures are aggregations with no value per row. Read it as a '
         "semantic model instead, with source.semantic_model('orders')."
     )
+
+
+def _fresh(schema: Schema, table: str) -> None:
+    r"""``table``'s columns replaced by new ones of the same names and
+    types, which hold nothing of what the source said of them."""
+    from sdm_client import Column
+
+    for name, column in list(schema[table].columns.items()):
+        schema[table].columns[name] = Column(
+            column.name, column.dtype, column.stype
+        )
+
+
+class _RenamedWarehouse(_CompletingWarehouse):
+    r"""The completing warehouse, which also answers for ``users`` named
+    ``Users``, as Unity Catalog does."""
+
+    def answer(self, operation: str, parameters: list[Any]) -> pa.Table:
+        return super().answer(
+            operation.replace('`Users`', '`users`'),
+            ['users' if p == 'Users' else p for p in parameters],
+        )
+
+
+_RenamedConnection = type(
+    'Connection', (_RenamedWarehouse,), {'__module__': 'databricks.sql.client'}
+)
+
+
+@pytest.mark.parametrize('change', ['fresh_columns', 'retargeted'])
+@pytest.mark.parametrize('route', ['core', 'old'])
+def test_a_refused_run_over_columns_with_no_facts_reads_nothing(
+    route: str, change: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""A first ``materialize`` refused for its inputs (no entities) over a
+    table whose columns hold no facts of the source (new columns, or the
+    table pointed at another spelling of its name) reads nothing and leaves
+    no engine reading, so a snapshot reads its own session's tables (round
+    9's P0, both reviewers)."""
+    import pandas as pd
+
+    from sdm_client import PredictiveQuery
+
+    _route(route, monkeypatch)
+    connection = _RenamedConnection()
+    schema = _rebuilt(connection)
+    if change == 'fresh_columns':
+        _fresh(schema, 'users')
+    else:
+        schema['users'].source_name = 'Users'
+    mark = len(connection.calls)
+    with pytest.raises(Exception):  # noqa: B017, PT011 - refused
+        PredictiveQuery(
+            'PREDICT COUNT(orders.*, 0, 30, days) > 0 FOR EACH users.user_id',
+            schema,
+        ).materialize(indices=[], anchor_time=pd.Timestamp('2024-03-01'))
+    assert connection.calls[mark:] == []
+    assert schema._engine_tables is None
+    snapshot = schema.snapshot()
+    assert _where_read(schema, connection) == {('main', 'shop')}
+    connection.schema = 'other'
+    assert _where_read(snapshot, connection) == {('main', 'other')}
+
+
+@pytest.mark.parametrize('route', ['core', 'old'])
+def test_a_preview_failing_before_the_tables_are_located_keeps_none(
+    route: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""A first ``materialize`` over a table whose columns hold no facts,
+    failing at that table's preview (the same statement on both routes),
+    keeps no table's location: a retry after the session moved reads
+    ``other`` (round 9's P0, Codex)."""
+    _route(route, monkeypatch)
+    connection = _ArmedConnection()
+    schema = _rebuilt(connection)
+    _fresh(schema, 'users')
+    connection.fail_on = 'SELECT `user_id`, `age`, `country` FROM `main`.`shop`.`users` LIMIT 1000'
+    with pytest.raises(Exception):  # noqa: B017, PT011 - any failure
+        _materialized(schema)
+    assert connection.fail_on is None, 'the failure was not reached'
+    connection.schema = 'other'
+    assert _where_read(schema, connection) == {('main', 'other')}
+
+
+def test_a_run_cancelled_after_a_notice_gives_no_later_step(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    r"""A run cancelled once it has said its inputs are checked gives the
+    host no step after: every later call is refused as cancelled, the fetch
+    the notice came before included (round 9's P1, Codex)."""
+    from sdm_client import _native
+    from sdm_client._rust import codec, facts, materialize
+
+    class _Stop(Exception):
+        pass
+
+    seen: list[str] = []
+
+    def capture(operation: Any, attachments: Any, **_: Any) -> Any:
+        control = codec.encode(
+            {
+                'message': 'start',
+                'contract': _native.CONTRACT_VERSION,
+                'facts': facts.host_facts(_native.is_posix_zone),
+                'operation': operation,
+            }
+        )
+        handle = _native.Run.start(control, attachments)
+        control, sent = handle.next()
+        seen.append(codec.read(control, sent)['step'])
+        handle.cancel()
+        for _ in range(2):
+            try:
+                control, sent = handle.next()
+                seen.append(codec.read(control, sent)['step'])
+            except _native.CoreError as refused:
+                seen.append(
+                    codec.read(refused.control, refused.attachments)['error'][
+                        'code'
+                    ]
+                )
+        raise _Stop
+
+    _route('core', monkeypatch)
+    schema = _rebuilt(_CompletingConnection())
+    monkeypatch.setattr(materialize, 'run', capture)
+    with pytest.raises(_Stop):
+        _materialized(schema)
+    assert seen == ['inputs_checked', 'RUN_CANCELLED', 'RUN_CANCELLED']
