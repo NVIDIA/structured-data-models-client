@@ -166,4 +166,8 @@ The owner subsequently confirmed the missing-anchor behavior already approved by
 | T36-OWNER-2026-10-24-HYBRID | Detect enforced hybrid-table primary keys and preserve the old client's counting behavior | "Yes, check them." | approved by owner 2026-10-24 |
 | T36-OWNER-2026-10-24-ANCHORS | P3D-8 and P3K-2: retain an entity with a missing anchor, use empty temporal history, continue other rows, and invent no replacement timestamp | "Use empty window history" | approved by owner 2026-10-24 |
 
+## Postgres zoned text, 2026-10-24
+
+| Decision | Scope | Owner answer | Status |
+|---|---|---|---|
 | T39-OWNER-2026-10-24-UTC-TEXT | Canonical UTC text for Postgres zoned timestamp array elements and zoned range bounds on both hosts, preserving scalar timestamps and timezone-free values and leaving caller sessions unchanged | "Use UTC consistently in both hosts (recommended)" after explicit notice that non-UTC old Python text changes | approved by owner 2026-10-24 |
