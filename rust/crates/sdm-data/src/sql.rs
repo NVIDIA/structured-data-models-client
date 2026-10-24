@@ -279,6 +279,13 @@ pub(crate) trait SqlDialect: Sync {
         Ok(read.joined())
     }
 
+    /// A neighbor read with neither a limit per seed nor an order: every
+    /// row each seed's key and window hold, as every dialect but one that
+    /// writes the reference's own statement writes it.
+    fn neighbors_all(&self, read: &SeedRead<'_>) -> String {
+        read.joined()
+    }
+
     /// The key lookup: one row per seed whose key the table holds.
     fn lookup(&self, read: &SeedRead<'_>) -> String;
 
@@ -377,6 +384,25 @@ pub(crate) trait SqlDialect: Sync {
         _float_text: fn(f64) -> String,
     ) -> Result<Option<Vec<String>>, CoreError> {
         Ok(None)
+    }
+
+    /// What separates two seeds in the key set's JSON array, as the old
+    /// client's `json.dumps` writes it: `,` (its compact form), unless the
+    /// dialect's reference writes its default `, ` (Snowflake's).
+    fn key_separator(&self) -> &'static str {
+        ","
+    }
+
+    /// The parameters a key set's statement binds after its text, read
+    /// from the whole key set as the core made it: none, the default;
+    /// Snowflake's window bounds over every seed (`WHERE t <= ? AND t > ?`).
+    fn key_bounds(
+        &self,
+        _request: &DataRequest,
+        _schema: &arrow_schema::SchemaRef,
+        _batches: &[RecordBatch],
+    ) -> Result<Vec<SqlParam>, CoreError> {
+        Ok(vec![])
     }
 
     /// The bytes one statement's key set text may hold before the key set
@@ -729,7 +755,7 @@ pub(crate) fn plan(
             no_columns(request, columns)?;
             let body = match (per_seed, order) {
                 (Some(limit), Some(TieBreak(terms))) => d.neighbors_per_seed(&read, *limit, terms),
-                (None, None) => read.joined(),
+                (None, None) => d.neighbors_all(&read),
                 _ => d.neighbors_unpaired(&read)?,
             };
             format!("{prelude}{body}")

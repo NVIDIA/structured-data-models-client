@@ -35,7 +35,12 @@
 //!   "not found", which the core's spelling retry reads; a name's
 //!   spellings are as given, then all its parts upper-cased, once.
 //!
-//! A key set is not bound yet: a read against one is refused by name.
+//! - a key set bound as the reference binds it, one JSON text the core
+//!   writes ([`crate::key_text`]), unpacked by `FLATTEN(PARSE_JSON(?))`,
+//!   its seeds separated by `, ` as `json.dumps` writes them, a window's
+//!   bounds over every seed bound after it; a lookup's first row of each
+//!   seed and the rows holding its key kept in the statement, where the
+//!   reference keeps them after its fetch.
 
 use std::sync::Arc;
 
@@ -51,14 +56,16 @@ use sdm_contract::catalog::{
     CatalogAnswer, CatalogColumn, CatalogForeignKey, CatalogKey, KeyKind, ViewDefinition,
 };
 use sdm_contract::data::{
-    DataRequest, DescribePart, Determinism, ExpectedSchema, FailureFacts, NullOrder,
-    ProviderCapabilities, ProviderError, Relation, SqlParam, TextTimes, field,
+    DataRequest, DescribePart, Determinism, ExpectedSchema, FailureFacts, MARKED, MATCHES_COLUMN,
+    NullOrder, ProviderCapabilities, ProviderError, Relation, SEED_BATCH, SEED_COUNT_UNREAD,
+    SEED_KEY, SEED_KEY_UNIQUE, SqlParam, TextTimes, field,
 };
 use sdm_contract::ops::Dtype;
 use sdm_contract::types::ColumnType;
 use sdm_contract::view::ViewKind;
 use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 
+use crate::key_text;
 use crate::read::{text, text_at};
 use crate::sql::{self, Batches, Sample, SeedRead, SqlDialect, not_taken};
 
@@ -157,15 +164,58 @@ impl SqlDialect for Snowflake {
         name.to_owned()
     }
 
-    /// A key set is bound as the reference binds it, JSON text unpacked by
-    /// `FLATTEN(PARSE_JSON(?))`, once the core writes that text; until then
-    /// a read against one is refused by name.
+    /// The unpacked key set, `TMP`, as the reference unpacks it
+    /// (`SNOW/sampler.py:204-244`, `:317-345`, `:383-430`): the JSON
+    /// array's index the batch, the key cast by its type, and each of the
+    /// window's bounds a `TIMESTAMP_NTZ`.
     fn seeds_prelude(&self, read: &SeedRead<'_>) -> Result<String, CoreError> {
-        Err(not_taken(
-            read.request,
-            "seeds",
-            "a key set is not bound on Snowflake yet",
-        ))
+        seeds_cte(read)
+    }
+
+    /// A neighbor's order term as the reference writes it
+    /// (`_neighbor_order_by`): the column, `DESC` where descending, its null
+    /// order written only where it is not Snowflake's own for the
+    /// direction (last ascending, first descending); a time term with none,
+    /// its column holding no null in the rows it orders (register ORD-2).
+    fn order_term(
+        &self,
+        term: &sdm_contract::data::TieTerm,
+        alias: &str,
+        _windowed: Option<&str>,
+    ) -> String {
+        let column = format!("{alias}{}", self.identifier(&term.column));
+        let direction = if term.descending { " DESC" } else { "" };
+        let nulls = match (term.as_timestamp, term.descending, term.nulls_last) {
+            (true, _, _) => "",
+            (false, false, false) => " NULLS FIRST",
+            (false, true, true) => " NULLS LAST",
+            _ => "",
+        };
+        format!("{column}{direction}{nulls}")
+    }
+
+    /// The key set as the reference writes it: `, ` between its seeds.
+    fn key_separator(&self) -> &'static str {
+        ", "
+    }
+
+    fn key_rows(
+        &self,
+        request: &DataRequest,
+        schema: &SchemaRef,
+        batches: &[RecordBatch],
+        float_text: fn(f64) -> String,
+    ) -> Result<Option<Vec<String>>, CoreError> {
+        key_rows(request, schema, batches, float_text).map(Some)
+    }
+
+    fn key_bounds(
+        &self,
+        request: &DataRequest,
+        schema: &SchemaRef,
+        batches: &[RecordBatch],
+    ) -> Result<Vec<SqlParam>, CoreError> {
+        key_bounds(request, schema, batches)
     }
 
     /// `COUNT(DISTINCT a, b)`, the reference's: Snowflake leaves out a row
@@ -215,19 +265,89 @@ impl SqlDialect for Snowflake {
         )]
     }
 
-    /// Never reached: [`Snowflake::seeds_prelude`] refuses the read first.
+    /// The reference's `_by_fkey` (`SNOW/sampler.py:317-365`): each seed's
+    /// rows within its window, the window's bounds over every seed bound
+    /// after the key set, the first `limit` in `terms`' order (`QUALIFY`),
+    /// the result in `(batch, order)`.
     fn neighbors_per_seed(
         &self,
         read: &SeedRead<'_>,
-        _limit: u64,
-        _terms: &[sdm_contract::data::TieTerm],
+        limit: u64,
+        terms: &[sdm_contract::data::TieTerm],
     ) -> String {
-        read.joined()
+        let order = terms
+            .iter()
+            .map(|t| self.order_term(t, "", None))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let bounds = bounds(read);
+        let mut text = format!("{}\n", joined(read));
+        for (name, op, _) in &bounds {
+            text.push_str(&format!(" AND {} {op} TMP.{name}\n", window_column(read)));
+        }
+        if !bounds.is_empty() {
+            text.push_str(&format!("WHERE {}\n", global(read, &bounds, "\n  AND ")));
+        }
+        text.push_str(&format!(
+            "QUALIFY ROW_NUMBER() OVER (\n  PARTITION BY TMP.__KUMO_BATCH__\n  ORDER BY {order}\n) <= {limit}\nORDER BY TMP.__KUMO_BATCH__, {order}"
+        ));
+        text
     }
 
-    /// Never reached: [`Snowflake::seeds_prelude`] refuses the read first.
+    /// A limit per seed comes with an order, and an order with a limit.
+    fn neighbors_unpaired(&self, read: &SeedRead<'_>) -> Result<String, CoreError> {
+        Err(sdm_contract::data::refused(
+            read.request,
+            "order",
+            "a limit per seed comes with an order, and an order with a limit",
+        ))
+    }
+
+    /// The reference's `_by_time` (`SNOW/sampler.py:383-450`): every row of
+    /// each seed within its window, the window's bounds over every seed
+    /// bound after the key set, as the reference writes it.
+    fn neighbors_all(&self, read: &SeedRead<'_>) -> String {
+        let bounds = bounds(read);
+        let mut text = joined(read);
+        for (at, (name, op, _)) in bounds.iter().enumerate() {
+            let lead = if at == 0 { "\n AND" } else { "\nAND" };
+            text.push_str(&format!("{lead} {} {op} TMP.{name}", window_column(read)));
+        }
+        if !bounds.is_empty() {
+            text.push_str(&format!("\nWHERE {}", global(read, &bounds, "\nAND ")));
+        }
+        text
+    }
+
+    /// The reference's `_by_pkey` (`SNOW/sampler.py:204-260`): the rows
+    /// holding each seed's key; where the source keeps the key unique, the
+    /// plain join the reference sends; otherwise the first row of each
+    /// seed, as the reference keeps the first it read, with how many rows
+    /// hold the key, which it counts after its fetch, unless the seeds say
+    /// that count is not read.
     fn lookup(&self, read: &SeedRead<'_>) -> String {
-        read.joined()
+        let flagged = |column: &str, flag: &str| {
+            read.seeds.columns.iter().any(|c| {
+                c.name == column && c.metadata.get(flag).map(String::as_str) == Some(MARKED)
+            })
+        };
+        let joined = joined(read);
+        if flagged(SEED_KEY, SEED_KEY_UNIQUE) {
+            return joined;
+        }
+        let counted = if flagged(SEED_BATCH, SEED_COUNT_UNREAD) {
+            String::new()
+        } else {
+            format!(
+                ", COUNT(*) OVER (PARTITION BY TMP.__KUMO_BATCH__) AS {}",
+                self.identifier(MATCHES_COLUMN)
+            )
+        };
+        let (select, rest) = joined.split_once("\nFROM TMP").unwrap_or((&joined, ""));
+        format!(
+            "{select}{counted}\nFROM TMP{rest}\nQUALIFY ROW_NUMBER() OVER (PARTITION BY TMP.__KUMO_BATCH__ ORDER BY {}) = 1",
+            identifier(&read.key[0])
+        )
     }
 
     fn describe(
@@ -310,6 +430,213 @@ impl SqlDialect for Snowflake {
 
 fn identifier(name: &str) -> String {
     Snowflake.identifier(name)
+}
+
+/// The type a key of `column_type` is cast to from its JSON, as the
+/// reference casts it by the key's data type: `NUMBER` for an integer,
+/// `FLOAT` for a float, `VARCHAR` otherwise.
+fn key_cast(column_type: &ColumnType) -> &'static str {
+    match key_text::key_type(column_type) {
+        key_text::KeyType::Integer => "NUMBER",
+        key_text::KeyType::Double => "FLOAT",
+        key_text::KeyType::Text => "VARCHAR",
+    }
+}
+
+/// The window's bounds a read compares with, as the reference names them
+/// in `TMP`, the upper first: each its name, its comparison and its seed
+/// column.
+fn bounds<'a>(read: &SeedRead<'a>) -> Vec<(&'static str, &'static str, &'a str)> {
+    let Some(window) = read.window else {
+        return Vec::new();
+    };
+    let mut found = Vec::new();
+    if let Some(upper) = &window.upper {
+        let op = if upper.inclusive { "<=" } else { "<" };
+        found.push(("__KUMO_END_TIME__", op, upper.seed_column.as_str()));
+    }
+    if let Some(lower) = &window.lower {
+        let op = if lower.inclusive { ">=" } else { ">" };
+        found.push(("__KUMO_START_TIME__", op, lower.seed_column.as_str()));
+    }
+    found
+}
+
+/// The window's column, quoted.
+fn window_column(read: &SeedRead<'_>) -> String {
+    read.window
+        .map_or_else(String::new, |w| identifier(&w.column))
+}
+
+/// The window's bounds over every seed, one bound parameter each, joined by
+/// `between`.
+fn global(read: &SeedRead<'_>, bounds: &[(&str, &str, &str)], between: &str) -> String {
+    let column = window_column(read);
+    bounds
+        .iter()
+        .map(|(_, op, _)| format!("{column} {op} ?"))
+        .collect::<Vec<_>>()
+        .join(between)
+}
+
+/// `TMP` as the reference unpacks the key set (`Snowflake::seeds_prelude`).
+fn seeds_cte(read: &SeedRead<'_>) -> Result<String, CoreError> {
+    let [_] = read.key else {
+        return Err(not_taken(
+            read.request,
+            "key",
+            "a key of several columns is read as the reference reads none",
+        ));
+    };
+    let Some(key) = read.seeds.columns.iter().find(|c| c.name == SEED_KEY) else {
+        return Err(sdm_contract::data::refused(
+            read.request,
+            "seeds",
+            "the seeds lack a key column",
+        ));
+    };
+    let bounds = bounds(read);
+    for column in &read.seeds.columns {
+        if column.name != SEED_KEY
+            && column.name != SEED_BATCH
+            && !bounds.iter().any(|(_, _, seed)| *seed == column.name)
+        {
+            return Err(not_taken(
+                read.request,
+                "seeds",
+                "a seed column past the key, the batch and the window's bounds",
+            ));
+        }
+    }
+    let cast = key_cast(&key.column_type);
+    let batch = if read.offset == 0 {
+        "f.index".to_owned()
+    } else {
+        format!("f.index + {}", read.offset)
+    };
+    let mut lines = vec![format!("{batch} as __KUMO_BATCH__")];
+    if matches!(read.request, DataRequest::Lookup { .. }) {
+        lines.push(format!("f.value::{cast} as __KUMO_ID__"));
+    } else {
+        lines.push(format!("f.value[0]::{cast} as __KUMO_ID__"));
+        for (at, (name, _, _)) in bounds.iter().enumerate() {
+            lines.push(format!("f.value[{}]::TIMESTAMP_NTZ as {name}", at + 1));
+        }
+    }
+    Ok(format!(
+        "WITH TMP as (\n  SELECT\n    {}\n  FROM TABLE(FLATTEN(INPUT => PARSE_JSON(?))) f\n)\n",
+        lines.join(",\n    ")
+    ))
+}
+
+/// The rows of the table each seed's key holds, joined to `TMP`, as the
+/// reference writes them: the batch, then the columns asked for.
+fn joined(read: &SeedRead<'_>) -> String {
+    let columns = read
+        .columns
+        .iter()
+        .map(|c| identifier(c))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!(
+        "SELECT TMP.__KUMO_BATCH__ as __KUMO_BATCH__, {columns}\nFROM TMP\nJOIN {}\n  ON {} = TMP.__KUMO_ID__",
+        read.table,
+        identifier(&read.key[0])
+    )
+}
+
+/// Each seed of a key set as the JSON the reference binds it as, in order
+/// (`SNOW/sampler.py:216`, `:306-309`, `:398-404`): a lookup's seed its key
+/// alone, a neighbor read's an array of its key and its window's bounds;
+/// a key coerced as the reference coerces it, a bound its wall clock to the
+/// second, a missing one `NaN` (pandas' `NaT` formatted).
+fn key_rows(
+    request: &DataRequest,
+    schema: &SchemaRef,
+    batches: &[RecordBatch],
+    float_text: fn(f64) -> String,
+) -> Result<Vec<String>, CoreError> {
+    key_text::in_batch_order(schema, batches)?;
+    let (schema, batches) = key_text::coerced(schema, batches)?;
+    let names: Vec<&str> = schema.fields().iter().map(|f| f.name().as_str()).collect();
+    if key_text::key_columns(&names).len() != 1 {
+        return Err(not_taken(
+            request,
+            "key",
+            "a key of several columns is read as the reference reads none",
+        ));
+    }
+    let order: Vec<(usize, bool)> = key_text::fields(names.iter().copied(), request)
+        .into_iter()
+        .filter_map(|(column, _)| Some((schema.index_of(column).ok()?, column == SEED_KEY)))
+        .collect();
+    let lookup = matches!(request, DataRequest::Lookup { .. });
+    let mut rows = Vec::new();
+    for batch in &batches {
+        for row in 0..batch.num_rows() {
+            let cells: Vec<String> = order
+                .iter()
+                .map(|&(at, key)| {
+                    let column = batch.column(at);
+                    if !key && column.is_null(row) {
+                        "NaN".to_owned()
+                    } else {
+                        key_text::json_cell(column, row, float_text)
+                    }
+                })
+                .collect();
+            rows.push(if lookup {
+                cells.join(", ")
+            } else {
+                format!("[{}]", cells.join(", "))
+            });
+        }
+    }
+    Ok(rows)
+}
+
+/// The window's bounds over every seed of a neighbor read, as the
+/// reference binds them after the key set (`SNOW/sampler.py:350-360`,
+/// `:425-430`): the latest upper bound, then the earliest lower one, each
+/// its wall clock to the second, a missing seed's left out.
+fn key_bounds(
+    request: &DataRequest,
+    schema: &SchemaRef,
+    batches: &[RecordBatch],
+) -> Result<Vec<SqlParam>, CoreError> {
+    let DataRequest::Neighbors {
+        window: Some(window),
+        ..
+    } = request
+    else {
+        return Ok(Vec::new());
+    };
+    let (schema, batches) = key_text::coerced(schema, batches)?;
+    let texts = |column: &str| -> Vec<String> {
+        let Ok(at) = schema.index_of(column) else {
+            return Vec::new();
+        };
+        batches
+            .iter()
+            .flat_map(|batch| {
+                let column = batch.column(at).as_string::<i32>().clone();
+                (0..column.len())
+                    .filter_map(|row| text(&column, row))
+                    .collect::<Vec<_>>()
+            })
+            .collect()
+    };
+    let bound = |found: Option<String>| SqlParam::Value {
+        value: found.map_or(Scalar::Null, Scalar::Utf8),
+    };
+    let mut params = Vec::new();
+    if let Some(upper) = &window.upper {
+        params.push(bound(texts(&upper.seed_column).into_iter().max()));
+    }
+    if let Some(lower) = &window.lower {
+        params.push(bound(texts(&lower.seed_column).into_iter().min()));
+    }
+    Ok(params)
 }
 
 /// A text parameter.

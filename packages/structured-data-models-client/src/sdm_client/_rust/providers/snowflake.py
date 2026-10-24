@@ -22,10 +22,12 @@ core reads those columns by position, as the reference reads the rows.
 
 The statements are the core's (``sdm-data`` renders Snowflake's SQL); this
 module writes none, folds no name's case, retries nothing and says nothing
-of what a failure means: the connector's ``errno`` and ``sqlstate`` reach
+of what a failure means; a key set arrives as the JSON text the core
+wrote for it, bound as it is. The connector's ``errno`` and ``sqlstate`` reach
 the core as the provider error's facts, and the core reads them. A plan
 this provider cannot run, one for a host provider or another dialect, or
-one binding a parameter it does not take, raises before anything runs, and
+one binding a parameter it does not take or a key set not handed over,
+raises before anything runs, and
 the run loop hands the core a provider error.
 
 It imports nothing of pandas.
@@ -55,8 +57,9 @@ class SnowflakeProvider:
     def __call__(
         self, step: dict[str, Any], keys: Mapping[int, Any] | None = None
     ) -> Any:
+        read: dict[int, str] = {}
         statements = [
-            (statement['text'], _values(statement))
+            (statement['text'], _values(statement, keys, read))
             for statement in providers.statements(step, 'snowflake')
         ]
         cursor = self._connection.cursor()
@@ -72,10 +75,22 @@ class SnowflakeProvider:
             cursor.close()
 
 
-def _values(statement: dict[str, Any]) -> list[Any]:
-    r"""A statement's parameters, each the Python value of its scalar."""
-    values = []
+def _values(
+    statement: dict[str, Any],
+    keys: Mapping[int, Any] | None,
+    read: dict[int, str],
+) -> list[Any]:
+    r"""A statement's parameters, in order: each scalar's Python value, and
+    a key set's text as the core wrote it (T3.28, ``providers.text``),
+    bound as it is. ``read`` holds each text read so far, by attachment."""
+    values: list[Any] = []
     for param in statement['params']:
+        if param['param'] == 'text':
+            attachment = param['attachment']
+            if attachment not in read:
+                read[attachment] = providers.text(param, keys)[1]
+            values.append(read[attachment])
+            continue
         if param['param'] != 'value':
             raise PlanNotRun('a parameter this provider does not bind')
         try:

@@ -1288,8 +1288,10 @@ fn times_of_day_unread(asker: &Asker, table: &Table, name: &str, array: &ArrayRe
 }
 
 /// The batch positions a `neighbors` or `lookup` answer names.
+/// Its column is the core's own alias, found as the source folds it
+/// (Snowflake's `__KUMO_BATCH__`, the reference's unquoted alias).
 pub(crate) fn batches(batch: &RecordBatch, seeds: usize) -> Result<Vec<usize>, CoreError> {
-    let column = named(batch, BATCH_COLUMN)?;
+    let column = aliased(batch, BATCH_COLUMN)?;
     let values = column
         .as_primitive_opt::<Int64Type>()
         .ok_or_else(|| crate::run::schema_mismatch("expected", Some(BATCH_COLUMN), "not int64"))?;

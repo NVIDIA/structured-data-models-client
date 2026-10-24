@@ -9602,9 +9602,9 @@ entries:
   approved_by: null
   decision_ref: null
   notes: >-
-    Approver: owner. Not in the code: the key statements carry the bounds
-    and land with the core's key binding (T3.28); they match the old
-    client until the owner says yes.
+    Approver: owner. Not in the code: the core's key reads send the old
+    client's bounds, ::TIMESTAMP_NTZ, so they match it until the owner says
+    yes (t36_snowflake.rs holds the statements).
 
 - id: P3D-8
   title: A null anchor time on Snowflake fails as an internal error (proposed - a named refusal before any read)
@@ -9615,8 +9615,10 @@ entries:
     engine failed while building this request: ProgrammingError: ...", at
     materialize (SNOW/sampler.py:304-309, :400-408).
   new_behavior: >-
-    Proposed for the owner: the named refusal null_anchor (contract T3.27,
-    unused until approved), INVALID_REQUEST, before any read.
+    The core writes a missing anchor as NaN in the key set's JSON, as the
+    old client does, so the read fails the same way. Proposed for the
+    owner: the named refusal null_anchor (contract T3.27, unused until
+    approved), INVALID_REQUEST, before any read.
   affected_inputs: >-
     PredictiveQuery.materialize over a SnowflakeSource with an anchor entity
     whose time is null.
@@ -9626,9 +9628,9 @@ entries:
   approved_by: null
   decision_ref: null
   notes: >-
-    Approver: owner. The key statements land with the core's key binding
-    (T3.28); until the owner says yes they write the key set as the old
-    client writes it.
+    Approver: owner. Held by t36_snowflake.rs (a missing anchor written as
+    NaN). The owner may decide it with P3K's null-anchor entry for
+    Databricks.
 
 - id: P3D-9
   title: A Snowflake semantic view the old client cannot read fails raw (proposed - named refusals)
