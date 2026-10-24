@@ -20,9 +20,12 @@ use sdm_contract::data::{
     ProviderCapabilities, ProviderChoice, ProviderError, Relation, SqlParam, SqlStatement,
     ViewChoice,
 };
+use sdm_contract::ops::Dtype;
 use sdm_contract::ops::{DescribedSource, ModelEndpoint, Predict, ViewNote};
 use sdm_contract::run::{ModelAnswer, ModelOutcome};
-use sdm_contract::view::{ViewTextAnswer, ViewTextAsk};
+use sdm_contract::view::{
+    DeclaredType, ExprRefusal, ExprVerdict, FilterRefusal, ViewKind, ViewTextAnswer, ViewTextAsk,
+};
 use sdm_contract::wording::{self, Group};
 use sdm_contract::{Code, CoreError, Detail, ErrorCode, ErrorKind, Sentence, WarningCode};
 use serde_json::json;
@@ -145,12 +148,26 @@ fn a_view_s_definition_is_a_catalog_part() {
     assert_eq!(*part, DescribePart::ViewDefinition);
     assert_eq!(written(&request)["part"], "view_definition");
     let answer = CatalogAnswer::ViewDefinition(ViewDefinition {
+        kind: ViewKind::Metric,
         text: "version: 0.1".into(),
         parameters: vec![("p".into(), "INT".into())],
         located: vec![Some("c".into()), Some("s".into())],
         columns: vec![("d".into(), "string".into())],
     });
     assert_eq!(answer.part(), DescribePart::ViewDefinition);
+    // The kind is the data layer's answer, never read off the definition:
+    // the same text, even none, is either kind.
+    for kind in [ViewKind::Metric, ViewKind::Semantic] {
+        let definition = ViewDefinition {
+            kind,
+            text: String::new(),
+            parameters: vec![],
+            located: vec![],
+            columns: vec![],
+        };
+        assert_eq!(definition.kind, kind);
+    }
+    assert_eq!(ViewKind::Semantic.noun(), "semantic view");
 }
 
 // --- DescribedSource.notes ---------------------------------------------------------
@@ -185,10 +202,10 @@ fn a_description_carries_its_typed_view_notes_and_none_by_default() {
     assert!(plain.notes.is_empty());
     assert_eq!(written(&plain), json!({"description": 4}));
     // A note says a note's sentence.
-    assert!(described.notes.iter().all(ViewNote::holds_to_table));
+    assert!(described.notes.iter().all(ViewNote::is_note));
     let mut crossed = described.notes[0].clone();
     crossed.sentence = Sentence::ViewJoinSkipped;
-    assert!(!crossed.holds_to_table());
+    assert!(!crossed.is_note());
 }
 
 // --- ModelEndpoint and ModelAnswer (T3.13) -------------------------------------------
@@ -384,6 +401,172 @@ fn a_request_binds_in_one_fetch_as_today_reusing_each_key_set_s_id() {
 }
 
 #[test]
+fn a_key_set_the_plan_binds_and_the_core_did_not_hand_over_is_a_named_defect() {
+    let request: DataRequest = read(json!({
+        "request": "describe", "tables": [{"source": ["t"]}], "part": "tables"
+    }));
+    let refused = Bare { rebound: None }
+        .bind(
+            &ProviderChoice::sql("postgres"),
+            &request,
+            keyed_plan(&[3]),
+            &BTreeMap::new(),
+        )
+        .unwrap_err();
+    assert_eq!(refused.code, ErrorCode::InternalError);
+}
+
+/// A data layer that reads views, saying the clause a reason names its
+/// warehouse in, as a dialect does (`it contains '$$', which Databricks SQL
+/// does not quote with`, old-behaviour row 64).
+struct Worded;
+
+impl DataLayer for Worded {
+    fn capabilities(&self, _: &ProviderChoice) -> Result<ProviderCapabilities, CoreError> {
+        unreachable!()
+    }
+
+    fn plan(&self, _: &DataRequest, _: &ProviderChoice) -> Result<FetchPlan, CoreError> {
+        unreachable!()
+    }
+
+    fn read(
+        &self,
+        _: &DataRequest,
+        _: &ProviderChoice,
+        _: &[RecordBatch],
+    ) -> Result<CatalogAnswer, CoreError> {
+        unreachable!()
+    }
+
+    fn view_text(&self, _: &ProviderChoice, ask: ViewTextAsk) -> Result<ViewTextAnswer, CoreError> {
+        Ok(match ask {
+            ViewTextAsk::ReasonWords {
+                reason: ExprRefusal::DollarQuotes,
+            } => ViewTextAnswer::Words(Some(
+                "it contains '$$', which Databricks SQL does not quote with".into(),
+            )),
+            ViewTextAsk::ReasonWords { .. } => ViewTextAnswer::Words(None),
+            ViewTextAsk::DeclaredType { data_type } => {
+                ViewTextAnswer::DeclaredType(match data_type.as_str() {
+                    "BIGINT" => DeclaredType::Known(Dtype::Int),
+                    "VARIANT" => DeclaredType::Unsupported,
+                    _ => DeclaredType::Unknown,
+                })
+            }
+            _ => unreachable!(),
+        })
+    }
+}
+
+#[test]
+fn a_reason_that_names_the_warehouse_is_worded_by_the_dialect() {
+    let databricks = ProviderChoice::sql("databricks");
+    // The same clause, whether the filter or a dropped column met it.
+    let filter = FilterRefusal::Unsafe(ExprRefusal::DollarQuotes);
+    let column = ExprVerdict {
+        reason: ExprRefusal::DollarQuotes,
+        untrusted: false,
+    };
+    for reason in [
+        match filter {
+            FilterRefusal::Unsafe(reason) => reason,
+            _ => unreachable!(),
+        },
+        column.reason,
+    ] {
+        let said = Worded
+            .view_text(&databricks, ViewTextAsk::ReasonWords { reason })
+            .unwrap();
+        assert_eq!(
+            said,
+            ViewTextAnswer::Words(Some(
+                "it contains '$$', which Databricks SQL does not quote with".into()
+            ))
+        );
+    }
+    // A reason in no warehouse's words is the core's to word.
+    let plain = Worded
+        .view_text(
+            &databricks,
+            ViewTextAsk::ReasonWords {
+                reason: ExprRefusal::SubQuery,
+            },
+        )
+        .unwrap();
+    assert_eq!(plain, ViewTextAnswer::Words(None));
+}
+
+#[test]
+fn a_view_column_s_declared_type_is_read_by_the_dialect_s_type_map() {
+    let databricks = ProviderChoice::sql("databricks");
+    let read = |data_type: &str| {
+        Worded
+            .view_text(
+                &databricks,
+                ViewTextAsk::DeclaredType {
+                    data_type: data_type.into(),
+                },
+            )
+            .unwrap()
+    };
+    // Known, unsupported (refused) and unknown (left to the sample) apart.
+    assert_eq!(
+        read("BIGINT"),
+        ViewTextAnswer::DeclaredType(DeclaredType::Known(Dtype::Int))
+    );
+    assert_eq!(
+        read("VARIANT"),
+        ViewTextAnswer::DeclaredType(DeclaredType::Unsupported)
+    );
+    assert_eq!(
+        read("TEXT"),
+        ViewTextAnswer::DeclaredType(DeclaredType::Unknown)
+    );
+}
+
+// --- A serving endpoint's refusal keeps its identity ------------------------------
+
+#[test]
+fn a_serving_endpoint_s_refusal_carries_its_status_and_its_own_code() {
+    // As the old client's `NimRequestError(status, code=...)`: the status
+    // and the endpoint's code, or none, which the host raises its
+    // endpoint-refusal error with.
+    for (sentence, status, code) in [
+        (Sentence::ServingCallersFault, 400, Some("INVALID_REQUEST")),
+        (
+            Sentence::ServingRefused,
+            503,
+            Some("TEMPORARILY_UNAVAILABLE"),
+        ),
+        (Sentence::ServingFailed, 500, None),
+        (
+            Sentence::ServingFailedCoded,
+            404,
+            Some("RESOURCE_DOES_NOT_EXIST"),
+        ),
+    ] {
+        assert_eq!(sentence.code(), Code::Error(ErrorCode::EndpointRefused));
+        let error = CoreError::refused_by_endpoint(sentence, status, code, "m");
+        assert_eq!(error.code, ErrorCode::EndpointRefused);
+        assert_eq!(error.kind, ErrorKind::ModelEndpoint);
+        assert!(error.holds_to_table());
+        assert_eq!(
+            error.fields[sdm_contract::error::REFUSED_STATUS],
+            Detail::Scalar(sdm_contract::Scalar::UInt16(status))
+        );
+        assert_eq!(
+            error.fields.get(sdm_contract::error::REFUSED_CODE),
+            code.map(Detail::text).as_ref()
+        );
+    }
+    assert_eq!(
+        serde_json::to_value(ErrorCode::EndpointRefused).unwrap(),
+        "ENDPOINT_REFUSED"
+    );
+}
+
+#[test]
 fn a_view_s_text_is_refused_by_name_until_a_dialect_reads_views() {
     let refused = Bare { rebound: None }
         .view_text(
@@ -423,6 +606,7 @@ fn added() -> Vec<(&'static str, Code)> {
         ("view_misses_entry", e(E::InvalidRequest)),
         ("view_not_a_list", e(E::InvalidRequest)),
         ("view_nests_itself", e(E::InvalidRequest)),
+        ("view_tables_absent", e(E::InvalidRequest)),
         ("view_entry_unhashable", e(E::InvalidRequest)),
         ("view_entry_not_text", e(E::InvalidRequest)),
         ("view_value_too_large", e(E::InvalidRequest)),
@@ -473,6 +657,7 @@ fn added() -> Vec<(&'static str, Code)> {
         ("view_time_column_note_renamed", Code::Note),
         ("view_parameter_note", Code::Note),
         ("no_current_schema", e(E::InvalidRequest)),
+        ("unspecified_schema", e(E::InvalidRequest)),
         ("no_current_database", e(E::InvalidRequest)),
         ("null_anchor", e(E::InvalidRequest)),
         ("table_no_columns", e(E::InvalidRequest)),
@@ -481,10 +666,12 @@ fn added() -> Vec<(&'static str, Code)> {
         ("serving_past_limit", e(E::InvalidRequest)),
         ("serving_not_json", e(E::TransportError)),
         ("serving_not_an_object", e(E::TransportError)),
-        ("serving_refused", e(E::InvalidResponse)),
-        ("serving_callers_fault", e(E::InvalidRequest)),
-        ("serving_failed", e(E::InvalidResponse)),
-        ("serving_failed_coded", e(E::InvalidResponse)),
+        ("serving_refused", e(E::EndpointRefused)),
+        ("serving_callers_fault", e(E::EndpointRefused)),
+        ("serving_failed", e(E::EndpointRefused)),
+        ("serving_failed_coded", e(E::EndpointRefused)),
+        ("serving_prediction_row_count", e(E::TransportError)),
+        ("serving_response_column_missing", e(E::TransportError)),
     ]
 }
 
@@ -542,6 +729,57 @@ fn a_proposed_improvement_s_sentence_is_marked_and_used_by_none() {
             "null_anchor",
         ]
     );
+    // Said by no producer: no crate of the core names one.
+    let crates = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    for krate in [
+        "sdm-core",
+        "sdm-data",
+        "sdm-schema",
+        "sdm-engine",
+        "sdm-request",
+        "sdm-host",
+    ] {
+        let mut stack = vec![crates.join(krate).join("src")];
+        while let Some(dir) = stack.pop() {
+            for entry in std::fs::read_dir(&dir).unwrap() {
+                let path = entry.unwrap().path();
+                if path.is_dir() {
+                    stack.push(path);
+                    continue;
+                }
+                let text = std::fs::read_to_string(&path).unwrap();
+                for sentence in wording::PROPOSED {
+                    let named = format!("Sentence::{sentence:?}");
+                    assert!(!text.contains(&named), "{} says {named}", path.display());
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn the_new_message_sites_say_the_old_client_s_words() {
+    let said = |s: Sentence| wording::template(s).text;
+    // `CL/schema.py:1220-1225`, view row 11.
+    assert_eq!(
+        said(Sentence::ViewTablesAbsent),
+        "{absent!r} are not tables of {host.source!r}; it has {offered!r}"
+    );
+    // `SNOW/table.py:88-93`.
+    assert_eq!(
+        said(Sentence::UnspecifiedSchema),
+        "Unspecified 'schema' for table '{table}' in database '{in_database}'"
+    );
+    // `CL/core/databricks_serving.py:489-500`.
+    assert_eq!(
+        said(Sentence::ServingPredictionRowCount),
+        "serving endpoint {endpoint!r} did not return exactly one prediction row"
+    );
+    assert_eq!(
+        said(Sentence::ServingResponseColumnMissing),
+        "serving endpoint {endpoint!r} answered with a row that has no 'response_json' string \
+         column"
+    );
 }
 
 #[test]
@@ -573,8 +811,8 @@ fn the_view_sentences_say_the_old_client_s_words() {
     );
     assert_eq!(
         said(Sentence::ViewColumnsCrossTable),
-        "Failed to add columns {columns!r} of table '{table}' since their expressions reference \
-         other tables"
+        "Failed to add columns '{columns!r}' of table '{table}' since their expressions \
+         reference other tables"
     );
     assert_eq!(
         said(Sentence::ViewMeasureNote),

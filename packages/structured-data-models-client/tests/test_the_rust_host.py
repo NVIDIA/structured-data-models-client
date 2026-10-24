@@ -397,8 +397,47 @@ def _error(code: str, message: str, **more: Any) -> bytes:
     return json.dumps({'message': 'error', 'error': error}).encode()
 
 
+def test_an_endpoint_s_refusal_is_raised_as_the_old_client_raises_it() -> None:
+    # T3.27: as `NimRequestError(status, code=...)`, the status and the
+    # endpoint's own code, or none, the rest of the fields its details.
+    from sdm_client.errors import NimRequestError
+
+    for sentence, status, code in [
+        ('serving_callers_fault', 400, 'INVALID_REQUEST'),
+        ('serving_refused', 503, 'TEMPORARILY_UNAVAILABLE'),
+        ('serving_failed', 500, None),
+    ]:
+        fields: dict[str, Any] = {
+            'status': {'t': 'u16', 'v': str(status)},
+            'endpoint': {'t': 'utf8', 'v': 'kumo'},
+        }
+        if code is not None:
+            fields['refused_code'] = {'t': 'utf8', 'v': code}
+            fields['endpoint_code'] = {'t': 'utf8', 'v': code}
+        error = {
+            'kind': 'model_endpoint',
+            'code': 'ENDPOINT_REFUSED',
+            'sentence': sentence,
+            'message': 'm',
+            'fields': fields,
+        }
+        made = errors.error_from_core(
+            json.dumps({'message': 'error', 'error': error}).encode(), {}
+        )
+        assert type(made) is NimRequestError
+        assert made.status_code == status
+        assert made.code == code
+        assert made.details['endpoint'] == 'kumo'
+        assert 'status' not in made.details
+        assert 'refused_code' not in made.details
+        assert "serving endpoint 'kumo'" in str(made)
+
+
 def test_the_mapping_keys_on_the_code_and_reads_no_message_text() -> None:
     for code in _native.ERROR_CODES:
+        if code == 'ENDPOINT_REFUSED':
+            # Raised under the endpoint's own code (the next test).
+            continue
         made = [
             errors.error_from_core(_error(code, message, kind=kind), {})
             for message, kind in [
