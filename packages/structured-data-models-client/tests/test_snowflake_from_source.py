@@ -80,10 +80,12 @@ class _Recording:
         for statement in capture['statements']:
             key = (statement['text'], json.dumps(statement['parameters']))
             if statement.get('result'):
-                data = (directory / statement['result']).read_bytes()
-                self.answers.setdefault(
-                    key, pa.ipc.open_stream(pa.py_buffer(data)).read_all()
-                )
+                # Read from a file, so each buffer is allocated aligned, as
+                # a driver's are, never a view into the file's bytes.
+                with (directory / statement['result']).open('rb') as stream:
+                    self.answers.setdefault(
+                        key, pa.ipc.open_stream(stream).read_all()
+                    )
             else:
                 self.answers.setdefault(key, _missing(statement['text']))
 
