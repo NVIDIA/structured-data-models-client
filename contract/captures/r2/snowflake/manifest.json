@@ -1,0 +1,54 @@
+{
+ "format": "sdm-capture/1",
+ "recording_commit": "85172c3654202f2b02d0d2dcaf82b6d15ee568a4",
+ "reference_commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+ "legs": {
+  "snowflake": {
+   "duckdb": "1.5.6",
+   "numpy": "2.5.3",
+   "pandas": "3.0.6",
+   "pyarrow": "25.0.1",
+   "python": "3.12.15",
+   "snowflake-connector-python": "4.8.0",
+   "snowflake-snowpark-python": "1.55.3"
+  }
+ },
+ "cases": {
+  "adventureworks.notebook.demand-3-timeframes@snowflake": {
+   "input_hash": "bb67f2d6496a0c945ff87e915d8a5cf1bf94fd672e4f5c1234bcc9428323576b",
+   "capture": "adventureworks.notebook.demand-3-timeframes"
+  },
+  "adventureworks.notebook.demand-30d-historical@snowflake": {
+   "input_hash": "2e697e3c75c6d5e2f8ed04abcbf3d89abd853c5ccdf92538eecffa471a49b119",
+   "capture": "adventureworks.notebook.demand-30d-historical"
+  },
+  "adventureworks.notebook.recommend-top5@snowflake": {
+   "input_hash": "5c884e71665fd6cebf20a4983cdad6d45d4e928835007f18f0b59e15acf947a7",
+   "capture": "adventureworks.notebook.recommend-top5"
+  },
+  "adventureworks.quickstart.large-order-90d@snowflake": {
+   "input_hash": "2ac069fafec718a67a726a04ffbf5e572e143dab5364ebe1fe57c61f3c4c079f",
+   "capture": "adventureworks.quickstart.large-order-90d"
+  },
+  "adventureworks.quickstart.no-order-180d@snowflake": {
+   "input_hash": "1561848084b5d489c806f9bd39666017ecfdefdd1a534a53375fc250560fc5cf",
+   "capture": "adventureworks.quickstart.no-order-180d"
+  },
+  "adventureworks.quickstart.no-order-90d@snowflake": {
+   "input_hash": "a659fd14889f7666d657b37a7f0bb28cf15d3eb6182c3b906fa124700500f6c1",
+   "capture": "adventureworks.quickstart.no-order-90d"
+  },
+  "adventureworks.quickstart.product-line@snowflake": {
+   "input_hash": "d15bf879091cbeb6b8e0b8ae1b2489dadb5b84c9b784fb685ba2d8960589e907",
+   "capture": "adventureworks.quickstart.product-line"
+  },
+  "warehouse.shop.forecast@snowflake": {
+   "input_hash": "78e760a3bb67ac2247e71e3417959463f77fa8ec46252b7732bcd397d7e6b66b",
+   "capture": "warehouse.shop.forecast"
+  },
+  "warehouse.shop.ranking@snowflake": {
+   "input_hash": "d2152df2ab083127afbfe4a8f56f4ddef23f6ed265b08899836808fd32797080",
+   "capture": "warehouse.shop.ranking"
+  }
+ }
+}

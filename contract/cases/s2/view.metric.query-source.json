@@ -1,0 +1,54 @@
+{
+  "format": "sdm-case/1",
+  "id": "view.metric.query-source",
+  "status": "acceptance",
+  "slice": "S2",
+  "warehouses": [
+    "databricks-sql",
+    "databricks-spark"
+  ],
+  "paths": [
+    "schema.from-source/semantic-model/databricks-metric-view"
+  ],
+  "routes": [
+    "schema.from-source/semantic-model/databricks-metric-view",
+    "query.materialize/indices-binary/databricks-metric-view",
+    "query.materialize/indices-multiclass/databricks-metric-view",
+    "query.materialize/indices-regression/databricks-metric-view",
+    "query.materialize/indices-link-prediction/databricks-metric-view",
+    "query.materialize/indices-ranking/databricks-metric-view",
+    "query.materialize/indices-forecast/databricks-metric-view",
+    "client.predict/binary/databricks-metric-view",
+    "client.predict/multiclass/databricks-metric-view",
+    "client.predict/regression/databricks-metric-view",
+    "client.predict/link-prediction/databricks-metric-view",
+    "client.predict/ranking/databricks-metric-view",
+    "client.predict/forecast/databricks-metric-view"
+  ],
+  "cells": [],
+  "input": {
+    "base": "shop",
+    "pql": "PREDICT COUNT(orders.*, 0, 30, days) > 0 FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ],
+      "anchor_time": "2024-03-01"
+    },
+    "view": {
+      "kind": "metric_view",
+      "name": "view_metric_query_source",
+      "yaml": "version: 0.1\nsource: SELECT * FROM `{catalog}`.`{schema}`.orders WHERE price > 0\ndimensions:\n  - name: order_id\n    expr: order_id\n  - name: price\n    expr: price\n"
+    }
+  },
+  "until": "from_source",
+  "expect": {
+    "outcome": "refusal",
+    "stage": "from_source",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+  },
+  "why": "A metric view whose source is a query, which Databricks accepts and the reference refuses by name (ViewConversionError, DB/metric_view.py:779-790), raised by the client as StructuredDataError INVALID_REQUEST (CL/materializers/sources.py:276). The view is created in the test schema from the yaml, its sources named with the {catalog} and {schema} placeholders the capture writes (no private name), each part backtick-quoted since Databricks reads a catalog's hyphen only quoted; its joins' on keys are bare, as people write them, so PyYAML reads each as the key true (KO3-40), which the reference reads too (DB/metric_view.py:825-909, join_cfg.get(True))",
+  "source": "written by T3.5's test author from the reference at 43e55f4f"
+}

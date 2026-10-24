@@ -207,6 +207,11 @@ NOT_LIVE: dict[str, tuple[tuple[str, ...], str]] = {
         )
         for part in ('aggregation', 'entity', 'feature', 'filter', 'target')
     },
+    # T3.4's odd column names hold a backtick among others.
+    'databricks.name.odd-columns': (
+        ('databricks-sql', 'databricks-spark'),
+        _BACKTICK,
+    ),
     **{
         f'name.line-break-{part}': (LEGS, _LINE_BREAK)
         for part in ('aggregation', 'entity', 'feature', 'filter', 'target')
