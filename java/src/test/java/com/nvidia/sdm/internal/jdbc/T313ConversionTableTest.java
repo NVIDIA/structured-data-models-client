@@ -264,6 +264,62 @@ class T313ConversionTableTest {
   }
 
   @Test
+  void anUnexpectedArrayValueIsRefusedByItsJdbcType() {
+    java.sql.SQLException refused = assertThrows(java.sql.SQLDataException.class,
+        () -> answered(FakeJdbc.Column.of("broken", "ARRAY<BIGINT>", 42L)));
+    assertEquals("22000", refused.getSQLState());
+    assertTrue(refused.getMessage().contains("java.lang.Long"));
+  }
+
+  @Test
+  void otherJdbcBackendsLoadWithoutTheDatabricksDriver() throws Exception {
+    String separator = java.io.File.pathSeparator;
+    String classpath = Arrays.stream(System.getProperty("java.class.path")
+            .split(java.util.regex.Pattern.quote(separator)))
+        .filter(entry -> !java.nio.file.Path.of(entry).getFileName().toString()
+            .startsWith("databricks-jdbc-"))
+        .collect(java.util.stream.Collectors.joining(separator));
+    Process child = new ProcessBuilder(
+        java.nio.file.Path.of(System.getProperty("java.home"), "bin", "java").toString(),
+        "-cp", classpath, WithoutDatabricksDriver.class.getName())
+        .redirectErrorStream(true).start();
+    boolean finished = child.waitFor(30, java.util.concurrent.TimeUnit.SECONDS);
+    if (!finished) {
+      child.destroyForcibly();
+    }
+    assertTrue(finished, "the JDBC classpath control timed out");
+    String output = new String(child.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+    assertEquals(0, child.exitValue(), output);
+  }
+
+  /** Runs without the optional Databricks driver, using the other providers' shared converter. */
+  public static final class WithoutDatabricksDriver {
+    private WithoutDatabricksDriver() {}
+
+    public static void main(String[] arguments) throws Exception {
+      try {
+        Class.forName("com.databricks.jdbc.api.impl.ComplexDataTypeParser");
+        throw new AssertionError("the Databricks driver must be absent");
+      } catch (ClassNotFoundException expected) {
+        // The classpath deliberately excludes the provided driver.
+      }
+      assertEquals("Int(64, true)", ConversionTable.REVIEWED.postgres("int8", 0, 0)
+          .field("id").getType().toString());
+      try (java.sql.Connection sqlite = java.sql.DriverManager.getConnection("jdbc:sqlite::memory:");
+          java.sql.Statement statement = sqlite.createStatement();
+          java.sql.ResultSet rows = statement.executeQuery("SELECT 7 AS id")) {
+        new JdbcProvider(sqlite, JdbcProvider.Driver.SQLITE);
+        assertEquals(List.of(List.of(7L)), ConversionTable.sqlite(rows).columns());
+      }
+      try (java.sql.Connection duck = java.sql.DriverManager.getConnection("jdbc:duckdb:")) {
+        new JdbcProvider(duck, JdbcProvider.Driver.DUCKDB);
+      }
+      new JdbcProvider(new FakeJdbc.Database(text -> List.of()).connection(),
+          JdbcProvider.Driver.POSTGRES);
+    }
+  }
+
+  @Test
   void theTableSaysWhatEachDatabricksTypeReachesTheCoreAs() {
     for (String type :
         List.of(
