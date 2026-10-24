@@ -95,10 +95,7 @@ impl DataAccess {
     /// The semantic model the run's provider reads the source through,
     /// if any (`ProviderChoice::Sql.view`, T3.5).
     pub fn view(&self) -> Option<ViewChoice> {
-        // Read from the choice's contract form, its `view` field: the core
-        // names no kind of provider (the contract has no accessor yet).
-        let written = serde_json::to_value(&self.provider).ok()?;
-        serde_json::from_value(written.get("view")?.clone()).ok()
+        self.provider.view().cloned()
     }
 
     /// The name forms the catalog read of `relation` tries, in order
