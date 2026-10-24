@@ -516,9 +516,18 @@ def test_t312_a_test_removed_between_two_builds_fails_coverage(
         '</maven.compiler.release></properties><dependencies><dependency>'
         '<groupId>org.junit.jupiter</groupId><artifactId>junit-jupiter</artifactId>'
         '<version>5.13.4</version><scope>test</scope></dependency></dependencies>'
-        '<build><plugins><plugin><groupId>org.apache.maven.plugins</groupId>'
-        '<artifactId>maven-surefire-plugin</artifactId><version>3.5.3</version>'
-        '</plugin></plugins></build></project>',
+        '<build><plugins>'
+        + ''.join(
+            '<plugin><groupId>org.apache.maven.plugins</groupId>'
+            f'<artifactId>{name}</artifactId><version>{version}</version></plugin>'
+            for name, version in (
+                ('maven-compiler-plugin', '3.14.0'),
+                ('maven-resources-plugin', '3.3.1'),
+                ('maven-jar-plugin', '3.4.2'),
+                ('maven-surefire-plugin', '3.5.3'),
+            )
+        )
+        + '</plugins></build></project>',
         encoding='utf-8',
     )
     covered = sources / 'CoveredTest.java'
