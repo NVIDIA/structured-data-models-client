@@ -5,6 +5,8 @@
 from __future__ import annotations
 
 import importlib
+import sys
+import types
 
 import pytest
 
@@ -116,8 +118,8 @@ def test_snowflake_driver_options_credentials_suppress_borrowing(monkeypatch):
     opened, seen = _Conn(), {}
     monkeypatch.setattr(backend, '_active_snowpark_connection', lambda: _Conn())
     monkeypatch.setattr(
-        backend.snowflake_connector,
-        'connect',
+        backend,
+        '_NamedConnection',
         lambda **kwargs: seen.update(kwargs) or opened,
     )
 
@@ -163,9 +165,7 @@ def test_snowflake_credentials_still_open_their_own_connection(monkeypatch):
 
     opened = _Conn()
     monkeypatch.setattr(backend, '_active_snowpark_connection', lambda: _Conn())
-    monkeypatch.setattr(
-        backend.snowflake_connector, 'connect', lambda **kwargs: opened
-    )
+    monkeypatch.setattr(backend, '_NamedConnection', lambda **kwargs: opened)
 
     assert backend.connect(account='a', user='u', password='p') is opened
 
@@ -182,7 +182,7 @@ def test_snowflake_no_arguments_and_no_session_explains_requirements(
         )
 
     monkeypatch.setattr(backend, '_active_snowpark_connection', lambda: None)
-    monkeypatch.setattr(backend.snowflake_connector, 'connect', _fail)
+    monkeypatch.setattr(backend, '_NamedConnection', _fail)
 
     with pytest.raises(ConnectorError) as excinfo:
         backend.connect()
@@ -687,3 +687,97 @@ def test_a_databricks_default_is_taken_from_the_environment_only_when_absent(
     assert {k: v for k, v in sent.items() if k in ('catalog', 'schema')} == (
         taken
     )
+
+
+_PROFILES = """\
+[default]
+account = "from_default"
+user = "u"
+password = "p"
+
+[plain]
+account = "from_plain"
+user = "u"
+password = "p"
+
+[named]
+account = "from_named"
+user = "u"
+password = "p"
+application = "from_profile"
+"""
+
+_CREDENTIALS = {'account': 'a', 'user': 'u', 'password': 'p'}
+_THE_FILE = 'the connections.toml written below'
+
+
+class _Resolved(Exception):
+    pass
+
+
+@pytest.mark.parametrize(
+    ('arguments', 'detected', 'account', 'application'),
+    [
+        (_CREDENTIALS, None, 'a', 'nvidia/kumo-sdm'),
+        ({**_CREDENTIALS, 'application': 'theirs'}, None, 'a', 'theirs'),
+        (_CREDENTIALS, 'SF_PARTNER', 'a', 'their_partner'),
+        (_CREDENTIALS, 'streamlit', 'a', 'streamlit'),
+        ({'connection_name': 'named'}, None, 'from_named', 'from_profile'),
+        ({'connection_name': 'plain'}, None, 'from_plain', 'nvidia/kumo-sdm'),
+        (
+            {'connections_file_path': _THE_FILE},
+            None,
+            'from_default',
+            'nvidia/kumo-sdm',
+        ),
+        ({}, None, 'from_default', 'nvidia/kumo-sdm'),
+    ],
+)
+def test_snowflake_names_a_session_only_where_nothing_else_does(
+    monkeypatch, tmp_path, arguments, detected, account, application
+):
+    r"""The name is added to what the driver resolves, so an application the
+    caller, a connections.toml profile or the driver's own detection gives
+    is kept, and the default connection is still found."""
+    pytest.importorskip('snowflake.connector')
+    from sdm_connectors.backends import snowflake as backend
+
+    connections = tmp_path / 'connections.toml'
+    connections.write_text(_PROFILES)
+    connections.chmod(0o600)
+    manager = backend.snowflake_connector.config_manager.CONFIG_MANAGER
+    monkeypatch.setattr(manager, 'file_path', tmp_path / 'config.toml')
+    monkeypatch.setattr(
+        manager,
+        '_slices',
+        [
+            s._replace(path=connections) if s.section == 'connections' else s
+            for s in manager._slices
+        ],
+    )
+    monkeypatch.setattr(manager, 'conf_file_cache', None)
+    for name in ('SF_PARTNER', 'SNOWFLAKE_DEFAULT_CONNECTION_NAME'):
+        monkeypatch.delenv(name, raising=False)
+    for module in ('streamlit', 'ipykernel', 'snowbooks'):
+        monkeypatch.delitem(sys.modules, module, raising=False)
+    if detected == 'SF_PARTNER':
+        monkeypatch.setenv('SF_PARTNER', 'their_partner')
+    elif detected == 'streamlit':
+        monkeypatch.setitem(sys.modules, 'streamlit', types.ModuleType('s'))
+    seen = {}
+
+    def _resolved(self, **kwargs):
+        seen.update(kwargs)
+        raise _Resolved
+
+    monkeypatch.setattr(backend, '_active_snowpark_connection', lambda: None)
+    monkeypatch.setattr(backend.Connection, 'connect', _resolved)
+    arguments = {
+        name: connections if value == _THE_FILE else value
+        for name, value in arguments.items()
+    }
+
+    with pytest.raises((_Resolved, ConnectorError)):
+        backend.connect(**arguments)
+
+    assert (seen['account'], seen['application']) == (account, application)

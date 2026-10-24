@@ -9,6 +9,12 @@ these packages. All five distributions share one version and one entry.
 
 ### Added
 
+- A Snowflake session the client opens names itself to Snowflake as
+  `nvidia/kumo-sdm`, so Snowflake can attribute its queries. An application
+  named any other way is kept: an `application` argument, one in the
+  `connections.toml` profile, `SF_PARTNER`, or the connector's own detection
+  of Streamlit and notebooks. A connection or Snowpark session you open
+  yourself is used as it is.
 - The relational engine publishes wheels for macOS (Apple silicon and Intel)
   and 64-bit Windows, and for CPython 3.14, alongside the `manylinux_2_28`
   x86-64 and aarch64 wheels it already built, so `structured-data-models-client[relational]`
