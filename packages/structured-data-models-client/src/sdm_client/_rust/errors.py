@@ -136,6 +136,7 @@ WARNINGS: dict[str, type[Warning]] = {
     'DATES_READ_DAY_FIRST': UserWarning,
     'DATE_LITERAL_DAY_FIRST': UserWarning,
     'KEY_CANDIDATES_TIED': UserWarning,
+    'SEED_IGNORED': UserWarning,
 }
 
 #: Each advice a template names, as Python is written, from the fields the

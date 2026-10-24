@@ -63,6 +63,7 @@ use sdm_contract::ops::Dtype;
 use sdm_contract::types::ColumnType;
 use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 
+use crate::read::{text, text_at};
 use crate::sql::{self, NameCase, Sample, SeedRead, SqlDialect, not_taken};
 
 /// The dialect's name on the wire.
@@ -693,7 +694,7 @@ pub(crate) fn read(
             let mut names = Vec::new();
             for batch in batches {
                 let column = text_at(batch, 0)?;
-                names.extend((0..batch.num_rows()).filter_map(|row| value(&column, row)));
+                names.extend((0..batch.num_rows()).filter_map(|row| text(&column, row)));
             }
             Ok(CatalogAnswer::Tables(names))
         }
@@ -709,9 +710,9 @@ pub(crate) fn read(
                 let columns = text_at(batch, 2)?;
                 for row in 0..batch.num_rows() {
                     let entry = constraints
-                        .entry(value(&names, row).unwrap_or_default())
-                        .or_insert_with(|| (value(&kinds, row).unwrap_or_default(), vec![]));
-                    entry.1.push(value(&columns, row).unwrap_or_default());
+                        .entry(text(&names, row).unwrap_or_default())
+                        .or_insert_with(|| (text(&kinds, row).unwrap_or_default(), vec![]));
+                    entry.1.push(text(&columns, row).unwrap_or_default());
                 }
             }
             Ok(CatalogAnswer::Keys(
@@ -742,17 +743,17 @@ pub(crate) fn read(
                 let tables = text_at(batch, 4)?;
                 let referenced = text_at(batch, 5)?;
                 for row in 0..batch.num_rows() {
-                    let name = value(&names, row).unwrap_or_default();
+                    let name = text(&names, row).unwrap_or_default();
                     let key = CatalogForeignKey {
                         key: 0,
                         referenced_table: format!(
                             "{}.{}.{}",
-                            value(&catalogs, row).unwrap_or_default(),
-                            value(&schemas, row).unwrap_or_default(),
-                            value(&tables, row).unwrap_or_default()
+                            text(&catalogs, row).unwrap_or_default(),
+                            text(&schemas, row).unwrap_or_default(),
+                            text(&tables, row).unwrap_or_default()
                         ),
-                        columns: vec![value(&columns, row).unwrap_or_default()],
-                        referenced_columns: vec![value(&referenced, row).unwrap_or_default()],
+                        columns: vec![text(&columns, row).unwrap_or_default()],
+                        referenced_columns: vec![text(&referenced, row).unwrap_or_default()],
                     };
                     match keys.iter_mut().find(|(n, _)| *n == name) {
                         Some((_, rows)) => rows.push(key),
@@ -814,7 +815,7 @@ fn read_columns(
         let tables = text_at(batch, 5)?;
         let kinds = text_at(batch, 6)?;
         for row in 0..batch.num_rows() {
-            if found.is_empty() && value(&kinds, row).as_deref() == Some("METRIC_VIEW") {
+            if found.is_empty() && text(&kinds, row).as_deref() == Some("METRIC_VIEW") {
                 let mut refusal = CoreError::new(
                     Sentence::MetricViewAsTable,
                     "a metric view is read as a table; its measures have no value per row",
@@ -827,19 +828,19 @@ fn read_columns(
                         .and_then(|relation| relation.source.last().cloned()),
                     _ => None,
                 };
-                if let Some(table) = named.or_else(|| value(&tables, row)) {
+                if let Some(table) = named.or_else(|| text(&tables, row)) {
                     refusal = refusal.with_field("metric_view", Detail::text(table));
                 }
                 return Err(refusal);
             }
             found.push(CatalogColumn {
-                name: value(&names, row).unwrap_or_default(),
-                declared_type: value(&types, row).unwrap_or_default(),
-                not_null: value(&nullable, row).is_some_and(|n| n.trim().to_uppercase() == "NO"),
+                name: text(&names, row).unwrap_or_default(),
+                declared_type: text(&types, row).unwrap_or_default(),
+                not_null: text(&nullable, row).is_some_and(|n| n.trim().to_uppercase() == "NO"),
                 primary_key: false,
                 key_nullable: false,
                 unique: false,
-                dtype: value(&types, row).and_then(|declared| declared_dtype(&declared)),
+                dtype: text(&types, row).and_then(|declared| declared_dtype(&declared)),
             });
         }
     }
@@ -932,37 +933,6 @@ pub(crate) fn declared_dtype(declared: &str) -> Option<Dtype> {
         return Some(Dtype::Unsupported);
     }
     None
-}
-
-fn unread(at: usize) -> CoreError {
-    CoreError::new(
-        Sentence::Internal,
-        "a catalog answer's column is missing or not text",
-    )
-    .with_field("position", Detail::text(at.to_string()))
-}
-
-/// The column at `at` of `batch` as text: a string column, or a column of
-/// nulls (a current schema a session has none of).
-fn text_at(batch: &RecordBatch, at: usize) -> Result<StringArray, CoreError> {
-    let column = batch.columns().get(at).ok_or_else(|| unread(at))?;
-    if let Some(strings) = column.as_string_opt::<i32>() {
-        return Ok(strings.clone());
-    }
-    if let Some(strings) = column.as_string_opt::<i64>() {
-        return Ok(strings.iter().collect());
-    }
-    if let Some(strings) = column.as_string_view_opt() {
-        return Ok(strings.iter().collect());
-    }
-    if *column.data_type() == DataType::Null {
-        return Ok(StringArray::new_null(column.len()));
-    }
-    Err(unread(at))
-}
-
-fn value(strings: &StringArray, row: usize) -> Option<String> {
-    (!strings.is_null(row)).then(|| strings.value(row).to_owned())
 }
 
 /// The percentage of a table's rows the reference samples to draw `n`:

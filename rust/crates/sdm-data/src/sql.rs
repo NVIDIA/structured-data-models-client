@@ -24,15 +24,15 @@ use std::collections::BTreeSet;
 use arrow_array::RecordBatch;
 use sdm_contract::catalog::CatalogAnswer;
 use sdm_contract::data::{
-    BATCH_COLUMN, DataRequest, DescribePart, Dialect, ExpectedSchema, FetchPlan, Filter, KeySet,
-    OptionalRequest, ProviderCapabilities, Relation, SEED_BATCH, SqlParam, SqlStatement,
-    TableColumn, TableKey, TieBreak, TieTerm, Window, refuse_derived, refuse_relation, refused,
-    seed_key_columns,
+    BATCH_COLUMN, DataRequest, DescribePart, Dialect, ExpectedSchema, FailureFacts, FetchPlan,
+    Filter, KeySet, OptionalRequest, ProviderCapabilities, ProviderError, Relation, SEED_BATCH,
+    SqlParam, SqlStatement, TableColumn, TableKey, TieBreak, TieTerm, Window, refuse_derived,
+    refuse_relation, refused, seed_key_columns,
 };
 use sdm_contract::ops::Dtype;
 use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 
-use crate::{databricks, duckdb, postgres, quote, sqlite};
+use crate::{databricks, duckdb, postgres, quote, snowflake, sqlite};
 
 /// The dialects this build renders, in the order `PROVIDERS` names them.
 pub(crate) static DIALECTS: &[&dyn SqlDialect] = &[
@@ -40,18 +40,18 @@ pub(crate) static DIALECTS: &[&dyn SqlDialect] = &[
     &sqlite::Sqlite,
     &postgres::Postgres,
     &databricks::Databricks,
+    &snowflake::Snowflake,
 ];
 
 /// How a dialect's source compares the names of its namespace and
-/// relations (design fix C): as written, without regard to case (Unity
-/// Catalog's, which stores them in lower case), or upper-cased when
-/// unquoted (Snowflake's, T3.6).
-#[allow(dead_code, reason = "Snowflake's rule, T3.6")]
+/// relations (design fix C): as written, or without regard to case (Unity
+/// Catalog's, which stores them in lower case). Snowflake compares a
+/// quoted name as written, and every name is quoted; which spellings of a
+/// name its catalog read tries is [`SqlDialect::spellings`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum NameCase {
     AsWritten,
     Insensitive,
-    UpperWhenUnquoted,
 }
 
 /// The dialect of `name`, if this build renders it.
@@ -203,6 +203,20 @@ pub(crate) trait SqlDialect: Sync {
         )
     }
 
+    /// The statements counting `relation`'s rows (`table` its rendering)
+    /// where `filtered` holds, each with the parameters it binds, the last
+    /// one's answer the count: [`SqlDialect::count_rows`] alone, unless the
+    /// dialect reads its count from a listing of its catalog, as the
+    /// reference's Snowflake engine does.
+    fn count_rows_statements(
+        &self,
+        _relation: &Relation,
+        table: &str,
+        filtered: &str,
+    ) -> Vec<(String, Vec<SqlParam>)> {
+        vec![(self.count_rows(table, filtered), vec![])]
+    }
+
     /// What follows a preview's `FROM` before its `LIMIT`: nothing, unless
     /// the dialect reads the first rows in an order of its own.
     fn preview_order(&self) -> &'static str {
@@ -316,6 +330,18 @@ pub(crate) trait SqlDialect: Sync {
     ) -> Result<CatalogAnswer, CoreError>;
 
     // --- what the core asks of a provider (`DataLayer`) -------------------------
+
+    /// What a provider's failure says (`DataLayer::failure`): no fact, the
+    /// default, so every failure stays the provider's error.
+    fn failure(&self, _error: &ProviderError) -> FailureFacts {
+        FailureFacts::default()
+    }
+
+    /// The name forms the catalog read of `relation` tries, in order
+    /// (`DataLayer::spellings`): as given alone, the default.
+    fn spellings(&self, relation: &Relation) -> Vec<Relation> {
+        vec![relation.clone()]
+    }
 
     /// The answer's values conformed to the reference's reading, if the
     /// dialect changes any (`DataLayer::conform`).
@@ -647,7 +673,7 @@ pub(crate) fn plan(
                 rows: *rows,
             });
             let sample = statements.pop().unwrap_or_default();
-            before = statements;
+            before = statements.into_iter().map(|text| (text, vec![])).collect();
             sample
         }
         DataRequest::Neighbors {
@@ -702,10 +728,17 @@ pub(crate) fn plan(
             }
             text
         }
-        DataRequest::CountRows { table, filters } => d.count_rows(
-            &from(d, request, "table", table)?,
-            &conditions(d, request, filters, " ")?,
-        ),
+        DataRequest::CountRows { table, filters } => {
+            let mut statements = d.count_rows_statements(
+                table,
+                &from(d, request, "table", table)?,
+                &conditions(d, request, filters, " ")?,
+            );
+            let (count, bound) = statements.pop().unwrap_or_default();
+            before = statements;
+            params = bound;
+            count
+        }
     };
     let statement = |text: String, params: Vec<SqlParam>| SqlStatement {
         dialect: Dialect::new(d.name()),
@@ -714,7 +747,7 @@ pub(crate) fn plan(
     };
     let mut statements: Vec<SqlStatement> = before
         .into_iter()
-        .map(|text| statement(text, vec![]))
+        .map(|(text, params)| statement(text, params))
         .collect();
     statements.push(statement(text, params));
     Ok(FetchPlan::Sql {

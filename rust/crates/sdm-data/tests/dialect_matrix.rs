@@ -34,10 +34,10 @@ use serde_json::{Value, json};
 /// their tests included.
 const RECORDED: &str = include_str!("dialect_matrix.jsonl");
 
-/// The dialects held: the four this build renders (Databricks from T3.4),
-/// and two it refuses (one it knows by name, one it does not).
-const RENDERED: [&str; 4] = ["duckdb", "sqlite", "postgres", "databricks"];
-const REFUSED: [&str; 2] = ["snowflake", "nope"];
+/// The dialects held: the five this build renders (Databricks from T3.4,
+/// Snowflake from T3.6), and one it refuses, a name it does not know.
+const RENDERED: [&str; 5] = ["duckdb", "sqlite", "postgres", "databricks", "snowflake"];
+const REFUSED: [&str; 1] = ["nope"];
 
 fn relation(parts: &[&str]) -> Relation {
     Relation {
@@ -956,6 +956,11 @@ fn the_matrix_holds_every_request_kind_and_catalog_part_on_every_dialect() {
             "scan",
             "time_bounds",
         ] {
+            // Snowflake binds no key set until the core writes its JSON
+            // (T3.28): every read against one is refused by name for now.
+            if dialect == "snowflake" && matches!(kind, "lookup" | "neighbors") {
+                continue;
+            }
             let answers: Vec<Value> = requests
                 .iter()
                 .filter(|r| r.name() == kind)

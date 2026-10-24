@@ -760,8 +760,11 @@ async fn read_as_it_stands(
         let CatalogAnswer::Namespace(parts) = describe(asker, asked).await? else {
             return Err(another_part());
         };
-        for relation in relations.iter().filter(|r| r.single().is_some()) {
-            asker.pin(relation, parts.clone());
+        // The parts the source gives kept, the session's for the others.
+        if let Some(settled) = asker.data().map(|data| data.settled(parts)) {
+            for relation in relations.iter().filter(|r| r.single().is_some()) {
+                asker.pin(relation, settled.read_as(relation));
+            }
         }
     }
     let mut found = std::collections::BTreeMap::new();
@@ -865,18 +868,6 @@ pub(crate) async fn describe(
     asker.read(&request, &data)
 }
 
-/// The catalog's answers to `requests`, asked together in one step, in
-/// order.
-pub(crate) async fn describe_all<const N: usize>(
-    asker: &Asker,
-    requests: [DataRequest; N],
-) -> Result<[CatalogAnswer; N], CoreError> {
-    let answers = describe_vec(asker, requests.into()).await?;
-    answers
-        .try_into()
-        .map_err(|_| internal("a step answered another number of requests"))
-}
-
 async fn describe_vec(
     asker: &Asker,
     requests: Vec<DataRequest>,
@@ -914,22 +905,32 @@ pub(crate) async fn ask_all_vec(
     requests: Vec<DataRequest>,
 ) -> Result<Vec<ArrowData>, CoreError> {
     let names: Vec<&'static str> = requests.iter().map(DataRequest::name).collect();
-    let asks = requests
-        .into_iter()
-        .map(|request| asker.fetch(request))
-        .collect::<Result<Vec<_>, _>>()?;
-    Together::new(asks)
-        .await
+    replies(asker, requests)
+        .await?
         .into_iter()
         .zip(names)
         .map(|(reply, name)| data(reply, name))
         .collect()
 }
 
+/// The replies to `requests`, asked together in one step, in order, a
+/// provider's failure among them as it failed: for a step that reads what
+/// the failure says (`Asker::failure`).
+pub(crate) async fn replies(
+    asker: &Asker,
+    requests: Vec<DataRequest>,
+) -> Result<Vec<Reply>, CoreError> {
+    let asks = requests
+        .into_iter()
+        .map(|request| asker.fetch(request))
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(Together::new(asks).await)
+}
+
 /// The data a fetch's reply holds, or the provider's error naming the
 /// request it failed (`request`, its name: never the driver's text, H17),
 /// so no provider error leaves the core saying nothing of where it failed.
-fn data(reply: Reply, request: &'static str) -> Result<ArrowData, CoreError> {
+pub(crate) fn data(reply: Reply, request: &'static str) -> Result<ArrowData, CoreError> {
     match reply {
         Reply::Fetch(FetchResult::Data(data)) => Ok(data),
         Reply::Fetch(FetchResult::Error(error)) => {

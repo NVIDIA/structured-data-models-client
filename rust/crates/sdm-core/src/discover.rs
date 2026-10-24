@@ -30,8 +30,8 @@ use sdm_contract::{CoreError, Detail, ErrorCode, Scalar, Sentence};
 use sdm_schema::held::ColumnAt;
 use sdm_schema::infer::PREVIEW_ROWS;
 
-use crate::describe::{another_part, ask, describe, describe_all, table_names};
-use crate::run::{ArrowData, Asker, schema_mismatch};
+use crate::describe::{another_part, ask, describe, table_names};
+use crate::run::{ArrowData, Asker, FetchResult, Reply, schema_mismatch};
 use crate::{big_integer, exact_number};
 
 /// What [`table`] read of one table.
@@ -126,8 +126,8 @@ pub(crate) async fn table(
     // (`DatabricksTable`, DB/table.py:271-303): the columns first, then the
     // keys, a failure of which is read as no keys.
     let asked = if asker.capabilities()?.keys_optional {
-        match describe(asker, columns).await {
-            Ok(columns) => {
+        match spelled(asker, &table.source, [columns]).await {
+            Ok([columns]) => {
                 let keys = match describe(asker, keys).await {
                     Err(failed) if failed.code == ErrorCode::ProviderError => {
                         CatalogAnswer::Keys(Vec::new())
@@ -139,7 +139,7 @@ pub(crate) async fn table(
             Err(failed) => Err(failed),
         }
     } else {
-        describe_all(asker, [columns, keys]).await
+        spelled(asker, &table.source, [columns, keys]).await
     };
     let [columns, keys] = match asked {
         Ok(answers) => answers,
@@ -256,6 +256,71 @@ pub(crate) async fn table(
         preview,
         big_types,
     })
+}
+
+/// The answers to `requests`, each a catalog read of the one table
+/// `source` names, asked together in one step under each spelling the
+/// source's catalog tries in turn (`DataLayer::spellings`; Snowflake's as
+/// given, then upper-cased), the next asked only where one of the step's
+/// reads failed with what the source says is a name it does not hold
+/// (`FailureFacts::not_found`, Snowflake's errno 2003). The spelling that
+/// resolves is the table's for every later read of the run
+/// ([`Asker::pin`]); none resolving, the table is refused as one the source
+/// does not hold, named as the caller named it (`SNOW/table.py:154-158`).
+/// Any other failure stays the provider's, and no other spelling is tried.
+async fn spelled<const N: usize>(
+    asker: &Asker,
+    source: &Relation,
+    requests: [DataRequest; N],
+) -> Result<[CatalogAnswer; N], CoreError> {
+    let forms = asker.spellings(source);
+    for (at, form) in forms.iter().enumerate() {
+        // The first as the run names the table, read where the run reads
+        // it; another by the spelling in full.
+        let asked: Vec<DataRequest> = requests
+            .iter()
+            .map(|request| {
+                let mut request = request.clone();
+                if at > 0 {
+                    for relation in request.relations_mut() {
+                        relation.clone_from(form);
+                    }
+                }
+                request
+            })
+            .collect();
+        let replies = crate::describe::replies(asker, asked.clone()).await?;
+        let missing = replies.iter().any(|reply| {
+            matches!(reply, Reply::Fetch(FetchResult::Error(error)) if asker.failure(error).not_found)
+        });
+        if missing {
+            if at + 1 < forms.len() {
+                continue;
+            }
+            return Err(not_held(asker, source).await);
+        }
+        if at > 0 {
+            asker.pin(source, form.clone());
+        }
+        // Every answer's data first, then each read, as the step's answers
+        // are read whatever the dialect.
+        let data = asked
+            .iter()
+            .zip(replies)
+            .map(|(request, reply)| crate::describe::data(reply, request.name()))
+            .collect::<Result<Vec<_>, _>>()?;
+        let answers = asked
+            .iter()
+            .zip(&data)
+            .map(|(request, data)| asker.read(request, data))
+            .collect::<Result<Vec<_>, _>>()?;
+        return answers
+            .try_into()
+            .map_err(|_| crate::run::internal("a step answered another number of requests"));
+    }
+    Err(crate::run::internal(
+        "a table's catalog read tried no spelling",
+    ))
 }
 
 /// Whether the time column's choice falls back to the preview on

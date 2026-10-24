@@ -375,20 +375,14 @@ fn the_root_s_data_layer_serves_a_built_in_dialect_or_a_host_provider() {
     assert!(matches!(expect, ExpectedSchema::Schema { .. }));
     assert_ne!(expect, tables.expected());
 
-    // A dialect this build knows but renders nothing for (Snowflake's;
-    // SQLite's and Postgres's are served from T2.2 and T2.3).
+    // Every dialect this build knows by name it renders (Snowflake's from
+    // T3.6).
     let snowflake = ProviderChoice::Sql {
         dialect: Dialect::new("snowflake"),
         namespace: Vec::new(),
         view: None,
     };
-    let err = root.data_access(&snowflake).err().unwrap();
-    assert_eq!(
-        (err.kind, err.code),
-        (ErrorKind::Unsupported, ErrorCode::UnsupportedRequest)
-    );
-    assert_eq!(named(&err, "dialect"), "snowflake");
-    assert!(run_of(&root, describe(snowflake)).is_err());
+    assert!(root.data_access(&snowflake).is_ok());
     // A name the data layer does not know is refused the same way, and
     // not repeated: the contract names no dialect, so it lets any through.
     let unknown = ProviderChoice::Sql {

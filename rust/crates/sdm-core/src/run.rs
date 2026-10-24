@@ -285,13 +285,13 @@ impl Asker {
         lock(&self.shared).located = Some(located);
     }
 
-    /// Reads the table `relation`, of one part, names under `parts` on every
-    /// later read, where it was read before, whatever namespace the run's
-    /// provider reads other tables under.
-    pub(crate) fn pin(&self, relation: &Relation, parts: Vec<String>) {
-        let mut pinned = relation.clone();
-        pinned.source.splice(0..0, parts);
-        lock(&self.shared).pinned.insert(relation.clone(), pinned);
+    /// Reads the table `relation` names as `read` on every later read of
+    /// the run: where the run found it (a table of one part under the
+    /// namespace the session gave, whatever namespace the run's provider
+    /// reads other tables under), and by the spelling its catalog resolved
+    /// (`DataLayer::spellings`). Nothing pinned outlives the run.
+    pub(crate) fn pin(&self, relation: &Relation, read: Relation) {
+        lock(&self.shared).pinned.insert(relation.clone(), read);
     }
 
     /// The asker with `data` its run's data access from here on.
@@ -425,6 +425,26 @@ impl Asker {
     /// `None` for a host provider or an operation that names no provider.
     pub fn source_database(&self) -> Option<&'static str> {
         self.data.as_ref().and_then(DataAccess::source_database)
+    }
+
+    /// What the run's provider's failure says (`DataAccess::failure`); no
+    /// fact where the run names no provider.
+    pub fn failure(&self, error: &ProviderError) -> sdm_contract::data::FailureFacts {
+        self.data
+            .as_ref()
+            .map(|data| data.failure(error))
+            .unwrap_or_default()
+    }
+
+    /// The name forms the catalog read of `relation` tries, in order
+    /// (`DataAccess::spellings`): `relation` as the run reads it alone
+    /// where the run names no provider.
+    pub fn spellings(&self, relation: &Relation) -> Vec<Relation> {
+        let read = self.read_as(relation);
+        match &self.data {
+            Some(data) => data.spellings(&read),
+            None => vec![read],
+        }
     }
 
     /// `relation` as the run's provider reads it (`DataAccess::read_as`);

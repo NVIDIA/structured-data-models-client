@@ -46,6 +46,7 @@ mod pg_values;
 mod postgres;
 mod quote;
 mod read;
+mod snowflake;
 mod sql;
 #[cfg(test)]
 mod sql_tests;
@@ -57,23 +58,21 @@ pub use pg_values::json_text;
 use arrow_array::RecordBatch;
 use sdm_contract::catalog::CatalogAnswer;
 use sdm_contract::data::{
-    DataLayer, DataRequest, DescribePart, Dialect, FetchPlan, ProviderCapabilities, ProviderChoice,
-    Relation, SqlStatement, views_unread,
+    DataLayer, DataRequest, DescribePart, Dialect, FailureFacts, FetchPlan, ProviderCapabilities,
+    ProviderChoice, ProviderError, Relation, SqlStatement, views_unread,
 };
 use sdm_contract::wording::DatabaseNames;
 use sdm_contract::{CoreError, Detail, Sentence};
 use sql::SqlDialect;
 
-/// The SQL dialects this build knows by name. It renders DuckDB's,
-/// SQLite's and Postgres's (T2.2, T2.3); the others are refused by name,
-/// as a dialect it has no rendering for, and a name it does not know is
-/// refused without being repeated.
+/// The SQL dialects this build knows by name, each of which it renders;
+/// a name it does not know is refused without being repeated.
 const KNOWN: &[&str] = &[
     duckdb::NAME,
     sqlite::NAME,
     postgres::NAME,
     databricks::NAME,
-    "snowflake",
+    snowflake::NAME,
 ];
 
 /// The databases this build's data layer provides for, by the names the
@@ -91,6 +90,8 @@ pub const PROVIDERS: &[&str] = &[
     // both run the one `databricks` dialect (T3.4).
     "databricks-sql",
     "databricks-spark",
+    // A connector connection or a Snowpark session's (T3.6).
+    snowflake::NAME,
 ];
 
 /// Each database a sentence may name (`{database:backend}`,
@@ -119,7 +120,7 @@ pub const DATABASE_NAMES: &[DatabaseNames] = &[
         place: "remote data backend",
     },
     DatabaseNames {
-        name: "snowflake",
+        name: snowflake::NAME,
         backend: "Snowflake",
         place: "remote data backend",
     },
@@ -270,15 +271,31 @@ impl DataLayer for Data {
         }
     }
 
+    /// The parts the provider gives kept, each other one the source's
+    /// answer for it, outermost first, as the reference fills only the parts
+    /// a source leaves out (`RE/graph.py:1024-1033`); a part the session has
+    /// none of ends the namespace there, so no relation can be read past it.
     fn settled(&self, provider: &ProviderChoice, parts: Vec<String>) -> ProviderChoice {
         match provider {
-            ProviderChoice::Sql { dialect, view, .. } => ProviderChoice::Sql {
+            ProviderChoice::Sql {
+                dialect,
+                namespace,
+                view,
+            } => ProviderChoice::Sql {
                 dialect: dialect.clone(),
-                namespace: parts.into_iter().map(Some).collect(),
+                namespace: merged(namespace, parts).into_iter().map(Some).collect(),
                 view: view.clone(),
             },
             ProviderChoice::Host { .. } => provider.clone(),
         }
+    }
+
+    fn failure(&self, provider: &ProviderChoice, error: &ProviderError) -> FailureFacts {
+        sql_dialect(provider).map_or_else(FailureFacts::default, |d| d.failure(error))
+    }
+
+    fn spellings(&self, provider: &ProviderChoice, relation: &Relation) -> Vec<Relation> {
+        sql_dialect(provider).map_or_else(|| vec![relation.clone()], |d| d.spellings(relation))
     }
 
     fn read_as(&self, provider: &ProviderChoice, relation: &Relation) -> Relation {
@@ -320,6 +337,27 @@ impl DataLayer for Data {
         debug_assert_eq!(answer.part(), *part);
         Ok(answer)
     }
+}
+
+/// The namespace the source settles: each part `given`, outermost first,
+/// else the part of the source's answer `read` at its place, up to the
+/// first place neither holds one. An answer of as many parts as the
+/// namespace, or of the parts from the outermost, aligns by place; an
+/// empty namespace (none named) takes the answer as it is.
+fn merged(given: &[Option<String>], read: Vec<String>) -> Vec<String> {
+    if given.is_empty() {
+        return read;
+    }
+    let mut read = read.into_iter();
+    let mut parts = Vec::with_capacity(given.len());
+    for part in given {
+        let answered = read.next();
+        match part.clone().or(answered) {
+            Some(part) => parts.push(part),
+            None => break,
+        }
+    }
+    parts
 }
 
 /// The parts a relation of one part is read under, of the provider's

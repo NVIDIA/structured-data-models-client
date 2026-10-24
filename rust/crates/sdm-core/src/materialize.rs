@@ -71,9 +71,9 @@ use arrow_array::{Array, ArrayRef, RecordBatch, TimestampNanosecondArray, UInt32
 use arrow_schema::{DataType, TimeUnit as ArrowUnit};
 use sdm_contract::catalog::{CatalogAnswer, IndexCoverage};
 use sdm_contract::data::{
-    AttachmentId, BATCH_COLUMN, DataRequest, DescribePart, Filter, IndexAdvice, KeySet,
-    MATCHES_COLUMN, NullOrder, OptionalRequest, ProviderChoice, SEED_STORED_TIME, TableColumn,
-    TextTimes,
+    AttachmentId, BATCH_COLUMN, DataRequest, DescribePart, Determinism, Filter, IndexAdvice,
+    KeySet, MATCHES_COLUMN, NullOrder, OptionalRequest, ProviderChoice, SEED_STORED_TIME,
+    TableColumn, TextTimes,
 };
 use sdm_contract::ops::{
     ColumnRef, ForecastStep, Materialized, MemoBounds, MemoRows, MemoStoredTime, OperationResult,
@@ -805,6 +805,18 @@ pub(crate) fn one_batch(data: &ArrowData) -> Result<RecordBatch, CoreError> {
 
 pub(crate) fn named<'a>(batch: &'a RecordBatch, name: &str) -> Result<&'a ArrayRef, CoreError> {
     batch.column_by_name(name).ok_or_else(|| {
+        crate::run::schema_mismatch(
+            "expected",
+            Some(name),
+            "an answer lacks a column it asked for",
+        )
+    })
+}
+
+/// The column of an answer the core names by its own alias, `name`, as
+/// the source folds an unquoted one (`sdm_schema::catalog::result_column`).
+pub(crate) fn aliased<'a>(batch: &'a RecordBatch, name: &str) -> Result<&'a ArrayRef, CoreError> {
+    sdm_schema::catalog::result_column(batch, name).ok_or_else(|| {
         crate::run::schema_mismatch(
             "expected",
             Some(name),
@@ -1632,7 +1644,7 @@ async fn read_bounds(
     // A position of either width: DuckDB writes the literal as an `int32`,
     // SQLite's driver reads every integer as an `int64`.
     let positions: Vec<Option<i64>> = {
-        let column = named(&batch, BOUNDS_POSITION)?;
+        let column = aliased(&batch, BOUNDS_POSITION)?;
         if let Some(values) = column.as_primitive_opt::<Int32Type>() {
             values.iter().map(|v| v.map(i64::from)).collect()
         } else if let Some(values) = column.as_primitive_opt::<Int64Type>() {
@@ -1645,8 +1657,8 @@ async fn read_bounds(
             ));
         }
     };
-    let mins = times.bounds(named(&batch, BOUNDS_MIN)?, BOUNDS_MIN, true)?;
-    let maxs = times.bounds(named(&batch, BOUNDS_MAX)?, BOUNDS_MAX, false)?;
+    let mins = times.bounds(aliased(&batch, BOUNDS_MIN)?, BOUNDS_MIN, true)?;
+    let maxs = times.bounds(aliased(&batch, BOUNDS_MAX)?, BOUNDS_MAX, false)?;
     let mut out = vec![None; tables.len()];
     for row in 0..batch.num_rows() {
         let at = positions[row]
@@ -3223,6 +3235,23 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     {
         filters.push(Filter::NotNull {
             column: time.clone(),
+        });
+    }
+    // A provider whose sample takes no seed draws anew at each call
+    // whatever seed is asked: said before its draw, unless the call asked
+    // for none, as the reference's warehouse sampler says it once
+    // (`SNOW/sampler.py:87-90`, `RE/base/sql_sampler.py:233-249`).
+    if !unseeded && asker.capabilities()?.sampling == Determinism::Unseeded {
+        asker.warn(CoreWarning {
+            fields: [(
+                "database".to_owned(),
+                Detail::text(asker.source_database().unwrap_or_default()),
+            )]
+            .into(),
+            ..CoreWarning::new(
+                Sentence::SeedIgnored,
+                "the provider's sample takes no seed, so the seed asked is not used",
+            )
         });
     }
     let sampled = read_times.read(

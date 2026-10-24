@@ -42,7 +42,10 @@ fn names(names: &[&str]) -> Vec<String> {
 #[test]
 fn each_dialect_is_found_by_its_name_and_only_those() {
     let found: Vec<&str> = DIALECTS.iter().map(|d| d.name()).collect();
-    assert_eq!(found, ["duckdb", "sqlite", "postgres", "databricks"]);
+    assert_eq!(
+        found,
+        ["duckdb", "sqlite", "postgres", "databricks", "snowflake"]
+    );
     for name in &found {
         assert_eq!(dialect(name).name(), *name);
     }
@@ -55,10 +58,11 @@ fn each_dialect_is_found_by_its_name_and_only_those() {
             "sqlite",
             "postgres",
             "databricks-sql",
-            "databricks-spark"
+            "databricks-spark",
+            "snowflake"
         ]
     );
-    for name in ["snowflake", "DuckDB", "", "nope"] {
+    for name in ["Snowflake", "DuckDB", "", "nope"] {
         assert!(sql::dialect(name).is_none(), "{name}");
     }
 }
@@ -70,6 +74,7 @@ fn each_dialect_declares_its_depth_quoting_and_namespace() {
         ("sqlite", 2, 0, u64::MAX),
         ("postgres", 2, 1, u64::MAX),
         ("databricks", 3, 2, u64::MAX),
+        ("snowflake", 3, 2, u64::MAX),
     ] {
         let d = dialect(name);
         assert_eq!(d.most_parts(), most, "{name}");
@@ -168,6 +173,7 @@ fn each_dialect_declares_its_quirks() {
     assert_eq!(quirks("sqlite"), (None, true, true, false));
     assert_eq!(quirks("postgres"), (None, false, false, true));
     assert_eq!(quirks("databricks"), (None, false, false, false));
+    assert_eq!(quirks("snowflake"), (None, false, false, false));
 }
 
 /// A dialect of the trait's required hooks alone, quoting with backticks

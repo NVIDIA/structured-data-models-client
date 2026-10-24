@@ -9313,3 +9313,392 @@ entries:
     fixed, at the orchestrator's direction. The fix it points to keys the
     memo to the source as the run resolves it, so a run after the change
     starts afresh.
+
+# --- lane D entries, Phase 3 (P3D-1..): T3.6, Snowflake on the core ---
+
+- id: P3D-1
+  title: On Snowflake only errno 2003 tries a table's upper-cased spelling
+  kind: change
+  old_behavior: >-
+    The reference retries DESCRIBE TABLE with the database, schema and table
+    upper-cased when the first try fails with errno 2003 or with a message
+    containing "does not exist" (SNOW/table.py:34-45), whatever the error's
+    code.
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build, the
+    data layer reads the failure's errno alone (sdm-data's failure facts,
+    design S3): errno 2003 tries the next spelling; any other failure,
+    whatever its text says, stays the provider's error, and no other
+    spelling is asked.
+  affected_inputs: >-
+    Schema.from_source and PredictiveQuery.materialize over a SnowflakeSource
+    whose DESCRIBE TABLE fails with an errno other than 2003 and a message
+    saying "does not exist" (a schema or database that does not exist,
+    errno 2043 or 2003's relatives).
+  cases: [T3.6]
+  refs: [T3.6, 'old-behaviour/T3.6-snowflake.md row 14', 'design-remaining.md S3']
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: owner. Proposed by the Phase 3 design (S3), reviewed with it;
+    the design's reviewers do not approve it. Held by
+    test_snowflake_from_source.py (only errno 2003 tries another spelling;
+    a login or permission failure never does, on both routes) and
+    t36_snowflake.rs. Recommendation: approve; the core keys no meaning
+    on a driver's text, which may quote anything.
+
+- id: P3D-2
+  title: A Snowflake table's row count is read from the old client's LIKE listing, wildcards and case included (proposed - count the exact name)
+  kind: change
+  old_behavior: >-
+    The reference counts a table's rows with SHOW TABLES LIKE ? IN SCHEMA,
+    binding the table's name, and reads the first row's rows column
+    (SNOW/table.py:287-297). LIKE ignores case and reads _ and % as
+    wildcards, so a sibling table can answer (Users beside USERS, user_s
+    beside users), and that count sizes the neighbour look-back window.
+  new_behavior: >-
+    The core sends the same listing, then reads its first row's rows column
+    back with SELECT "rows" FROM TABLE(RESULT_SCAN(LAST_QUERY_ID())) LIMIT 1
+    (P3D-11), so it counts as the old client counts. Proposed for the owner:
+    count the exact name instead, SELECT COUNT(*) FROM the table, which is
+    never another table's and also answers for a view (P3D-3).
+  affected_inputs: >-
+    PredictiveQuery.materialize over a SnowflakeSource whose table name holds
+    _ or % or has a sibling of another case in its schema.
+  cases: [snowflake.rowcount.like-wildcard]
+  refs: [T3.6, 'old-behaviour/T3.6-snowflake.md rows 36, 48', 'design-remaining.md T3.6 part 6']
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: owner. Not in the code: until the owner says yes the core
+    matches the old client. Recommendation: approve with P3D-3.
+
+- id: P3D-3
+  title: A Snowflake view counted for its rows is refused as an answer that does not read, where the old client failed with a bare assert
+  kind: change
+  old_behavior: >-
+    SHOW TABLES lists no view, so counting a view's rows finds no row and
+    the reference's bare assert fails (SNOW/table.py:295-296):
+    StructuredDataError INTERNAL_ERROR "the relational engine failed while
+    building this request: AssertionError: ", at materialize.
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build, the
+    count's second statement reads no row, and the core refuses the answer
+    by name at materialize: PROVIDER_SCHEMA_MISMATCH (a row count is not one
+    row of one count). Proposed for the owner with P3D-2: count the view's
+    rows with COUNT(*), so a view used as a table materializes.
+  affected_inputs: >-
+    PredictiveQuery.materialize over a SnowflakeSource whose schema holds a
+    view as a table (DESCRIBE TABLE resolves a view, so it describes).
+  cases: [snowflake.rowcount.view-as-table]
+  refs: [T3.6, 'old-behaviour/T3.6-snowflake.md row 37', P3D-2]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: owner. Held by test_snowflake_from_source.py (the view's
+    materialize refused, PROVIDER_SCHEMA_MISMATCH). Both refuse; the code
+    and words differ, as for every refusal the core names where the old
+    client reported INTERNAL_ERROR (old-behaviour row 56).
+
+- id: P3D-4
+  title: A Snowflake session with no current database is an internal error on both routes (proposed - a named refusal)
+  kind: change
+  old_behavior: >-
+    A SnowflakeSource naming no database, on a session with no current one,
+    fails the reference's bare assert on SELECT CURRENT_DATABASE(),
+    CURRENT_SCHEMA() (RE/graph.py:1030-1032): an AssertionError with no
+    text, at describe.
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build, the
+    session read is refused as an internal error (INTERNAL_ERROR, "the
+    session has no current database and the source names none"), never
+    read as a namespace of no parts. Proposed for the owner: the named
+    refusal no_current_database (contract T3.27, unused until approved),
+    "No current 'database' set. Please specify the Snowflake database
+    manually", INVALID_REQUEST.
+  affected_inputs: >-
+    Schema.from_source and PredictiveQuery.materialize over a SnowflakeSource
+    naming no database on a session with no current database.
+  cases: [T3.6]
+  refs: [T3.6, 'old-behaviour/T3.6-snowflake.md row 9', 'design-remaining.md T3.6 part 6']
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: owner. Held by t36_snowflake.rs (no current database refused,
+    never a namespace of no parts). Recommendation: approve the named
+    refusal; the sentence is already in the contract (wording::PROPOSED).
+
+- id: P3D-5
+  title: A Snowflake session or source with no schema is refused in the old client's words, as a StructuredDataError
+  kind: change
+  old_behavior: >-
+    With no schema named and none current, the reference raises its own
+    ValueError before any table is read: "No current 'schema' set. Please
+    specify the Snowflake schema manually" when it lists the tables
+    (RE/graph.py:1035-1040), "Unspecified 'schema' for table '<t>' in
+    database '<db>'" when tables are named (SNOW/table.py:88-93); built-in
+    errors the client does not wrap.
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build, the
+    same words, after the session is read and before any table is, as a
+    StructuredDataError, code INVALID_REQUEST (sentences no_current_schema
+    and unspecified_schema); a materialize of a schema over such a session
+    is refused alike, since every run reads the session (plan B, P3D-12).
+  affected_inputs: >-
+    Schema.from_source and PredictiveQuery.materialize over a SnowflakeSource
+    naming no schema on a session with no current schema.
+  cases: [T3.6]
+  refs: [T3.6, P3E-6, 'old-behaviour/T3.6-snowflake.md row 10']
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: owner. As P3E-6 for Postgres. Held by t36_snowflake.rs (the
+    listing and a named table refused, each sentence and its fields).
+    Recommendation: approve with P3E-6.
+
+- id: P3D-6
+  title: Two single-column foreign keys from one Snowflake table to one primary key are both dropped (proposed - keep both)
+  kind: change
+  old_behavior: >-
+    The reference keeps a SHOW IMPORTED KEYS row only if the referenced
+    key's name (pk_name, column 13) occurs once among the table's rows
+    (SNOW/table.py:174-189). That drops a composite key, and also two
+    single-column keys from one table to the same primary key, which share
+    its name.
+  new_behavior: >-
+    The core reads the rows the same way (one key per referenced key's
+    name), so it drops both, as the old client does. Proposed for the owner:
+    count by the referencing key's name (fk_name), keeping two single-column
+    keys to one target and still dropping a composite one.
+  affected_inputs: >-
+    Schema.from_source over a SnowflakeSource whose table declares two
+    foreign keys of one column each to the same primary key.
+  cases: [rule.composite-foreign-key-declared]
+  refs: [T3.6, 'old-behaviour/T3.6-snowflake.md row 28', 'design-remaining.md T3.6 part 6']
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: owner. Not in the code: until the owner says yes the core
+    matches the old client (t36_snowflake.rs holds the composite key's two
+    rows read as one key). Whether Snowflake names two such keys' rows
+    alike is old-behaviour open question 4.
+
+- id: P3D-7
+  title: A Snowflake window over a zoned time compares in the session's zone (proposed - compare in UTC)
+  kind: change
+  old_behavior: >-
+    Values read back from a TIMESTAMP_LTZ or _TZ column are made UTC-naive,
+    but the window bounds are cast ::TIMESTAMP_NTZ and compared with that
+    column, which Snowflake does in the session's time zone; in a session
+    that is not UTC the window is shifted by the zone's offset
+    (SNOW/sampler.py:304-306, :346-350).
+  new_behavior: >-
+    The core sends the same SQL, so its windows shift as the old client's
+    do. Proposed for the owner: compare in UTC, so a zoned column's window
+    does not move with the session.
+  affected_inputs: >-
+    PredictiveQuery.materialize over a SnowflakeSource with a TIMESTAMP_LTZ
+    or TIMESTAMP_TZ time column in a session not in UTC, rows near a window
+    edge.
+  cases: [time.timestamptz, snowflake.zone.ltz-time]
+  refs: [T3.6, 'old-behaviour/T3.6-snowflake.md row 53', 'design-remaining.md T3.6 part 5, part 6']
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: owner. Not in the code: the key statements carry the bounds
+    and land with the core's key binding (T3.28); they match the old
+    client until the owner says yes.
+
+- id: P3D-8
+  title: A null anchor time on Snowflake fails as an internal error (proposed - a named refusal before any read)
+  kind: change
+  old_behavior: >-
+    A null anchor time is written as JSON NaN in the key set's text, which
+    PARSE_JSON refuses: StructuredDataError INTERNAL_ERROR "the relational
+    engine failed while building this request: ProgrammingError: ...", at
+    materialize (SNOW/sampler.py:304-309, :400-408).
+  new_behavior: >-
+    Proposed for the owner: the named refusal null_anchor (contract T3.27,
+    unused until approved), INVALID_REQUEST, before any read.
+  affected_inputs: >-
+    PredictiveQuery.materialize over a SnowflakeSource with an anchor entity
+    whose time is null.
+  cases: [sample.anchor-entity.null-time, sample.anchor-entity.null-time.prediction-time]
+  refs: [T3.6, 'old-behaviour/T3.6-snowflake.md row 49', 'design-remaining.md T3.6 part 6']
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: owner. The key statements land with the core's key binding
+    (T3.28); until the owner says yes they write the key set as the old
+    client writes it.
+
+- id: P3D-9
+  title: A Snowflake semantic view the old client cannot read fails raw (proposed - named refusals)
+  kind: change
+  old_behavior: >-
+    A semantic view that is missing, not readable, or whose definition does
+    not read reaches the caller as the driver's ProgrammingError or a
+    RuntimeError (RE/graph.py:2054-2060).
+  new_behavior: >-
+    The core reads the view's YAML with the old client's statement,
+    SELECT SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW(?), the name bound as the
+    old client binds it; a failed read is the provider's error and an
+    answer holding no text an internal error. Proposed for the owner: the
+    named refusals view_semantic_not_found and
+    view_semantic_definition_unread (contract T3.27, unused until
+    approved).
+  affected_inputs: >-
+    Schema.from_source and PredictiveQuery.materialize over a Snowflake
+    semantic model that is missing, unreadable, or answers no definition.
+  cases: [view.semantic.forecast]
+  refs: [T3.6, T3.5, 'design-remaining.md T3.6 part 6']
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: owner. The semantic model reaches the core with T3.5; T3.6
+    writes its read statement and reader (t36_snowflake.rs).
+
+- id: P3D-10
+  title: The core reads a Snowflake table's DESCRIBE TABLE twice per spelling, for its columns and for its keys
+  kind: change
+  old_behavior: >-
+    The reference reads one DESCRIBE TABLE per spelling tried and takes the
+    columns, the primary key and the unique flags from it
+    (SNOW/table.py:123-170).
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build, a
+    table's columns and its keys are two catalog reads asked together in
+    one step, each Snowflake's DESCRIBE TABLE of the same spelling, so the
+    statement is sent twice; the answers are the same rows, read as the old
+    client reads them.
+  affected_inputs: >-
+    Every Schema.from_source and PredictiveQuery.materialize over a
+    SnowflakeSource on the core route (one more metadata statement per table
+    and spelling, in the warehouse's query history).
+  cases: [T3.6]
+  refs: [T3.6, 'old-behaviour/T3.6-snowflake.md row 16']
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: reviewer. No answer differs; the statement count does. Reading
+    the keys from the columns' answer would take a contract change (a
+    catalog answer of columns carrying a key the source does not enforce).
+
+- id: P3D-11
+  title: The core reads a Snowflake row count's listing back with RESULT_SCAN, one statement more than the old client sends
+  kind: change
+  old_behavior: >-
+    The reference sends SHOW TABLES LIKE ? IN SCHEMA and reads the first
+    row's rows column on the client (SNOW/table.py:287-297).
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build, the
+    core sends the same listing, then SELECT "rows" FROM
+    TABLE(RESULT_SCAN(LAST_QUERY_ID())) LIMIT 1 on the same session, so the
+    count reaches the core as the one row of one count every provider
+    answers; the count is the old client's.
+  affected_inputs: >-
+    Every PredictiveQuery.materialize over a SnowflakeSource on the core
+    route (one more statement per table counted).
+  cases: [T3.6]
+  refs: [T3.6, P3D-2]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: reviewer. Gone if the owner approves P3D-2 (COUNT(*) is one
+    statement). Held by t36_snowflake.rs and test_snowflake_from_source.py.
+
+- id: P3D-12
+  title: On a Snowflake source each materialize reads the session and resolves each table's spelling again (plan B)
+  kind: change
+  old_behavior: >-
+    The reference reads the session's database and schema once per graph
+    build, and adopts each table's spelling (as given, else upper-cased) at
+    its first DESCRIBE TABLE; the graph kept on the schema keeps both, so
+    no later materialize reads them again (RE/graph.py:1024-1034,
+    SNOW/table.py:124-152).
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build, the
+    owner's plan B (P3A-1) holds for Snowflake: each describe and
+    materialize reads the session once for the parts the source leaves out
+    (the parts it names kept as given), and each table's spelling is the
+    first DESCRIBE TABLE that resolves at that run, as given then
+    upper-cased; nothing outlives the run.
+  affected_inputs: >-
+    PredictiveQuery.materialize over a SnowflakeSource after its session's
+    current database or schema changed, or after a table was renamed
+    between its given and upper-cased spellings.
+  cases: [snowflake.name.upper-case-folded, snowflake.name.database-only]
+  refs: [T3.6, P3A-1, KO3-59]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: owner. P3A-1 for Snowflake, which it names among the SQL
+    providers only by the dialects of its time. Held by
+    test_snowflake_from_source.py (the session read once per run; a table
+    stored upper-cased since its describe found upper-cased at the next
+    run, and as given again once it is back).
+
+- id: P3D-13
+  title: The core says Snowflake's sample takes no seed at each materialize, where the old client says it once per query object
+  kind: change
+  old_behavior: >-
+    The reference's Snowflake sampler warns once that random_seed is
+    ignored (SNOW/sampler.py:87-90, RE/base/sql_sampler.py:233-249), and a
+    query object keeps its sampler across materialize calls (P3A-4), so a
+    second materialize of the same object does not warn again.
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build, the
+    warning (SEED_IGNORED, the old client's words, shown as UserWarning) is
+    given at each materialize that samples with a seed, the same object's
+    later calls included.
+  affected_inputs: >-
+    One PredictiveQuery object materialized more than once over a
+    SnowflakeSource, with random_seed set or left at its default.
+  cases: [sample.seed-7]
+  refs: [T3.6, P3A-4, 'old-behaviour/T3.6-snowflake.md row 41']
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: owner. A warning once per run is the core's rule for every
+    warning a run gives; the sampler memo the host keeps (decision E52)
+    carries no flag for it.
+
+- id: P3D-14
+  title: The core does not list a Snowflake schema's hybrid tables, and counts every declared key
+  kind: change
+  old_behavior: >-
+    Before counting keys, the reference lists each schema's tables once
+    (SHOW TABLES IN SCHEMA) to learn which are hybrid, the one kind whose
+    primary key Snowflake enforces, and counts only the keys not enforced
+    (SNOW/table.py:219-285).
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build, the
+    listing is not sent and every declared key is counted. A hybrid table's
+    enforced key holds no repeat and no null, so its counts say what the
+    old client's skipped count assumed; the refusals and warnings are the
+    same.
+  affected_inputs: >-
+    Schema.from_source over a SnowflakeSource with a declared primary key
+    (one statement fewer per schema, one key count more per hybrid table).
+  cases: [key.declared-int32, key.past-2-53.catalog]
+  refs: [T3.6, 'old-behaviour/T3.6-snowflake.md rows 31, 32']
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: reviewer. No answer differs on the recorded cases (every
+    table plain); what SHOW TABLES says of a hybrid table is old-behaviour
+    open question 3.

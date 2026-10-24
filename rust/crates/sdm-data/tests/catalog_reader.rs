@@ -411,7 +411,7 @@ fn an_answer_not_in_its_checked_shape_is_refused_not_a_panic() {
         .read(
             &columns,
             &ProviderChoice::Sql {
-                dialect: Dialect::new("snowflake"),
+                dialect: Dialect::new("nope"),
                 namespace: Vec::new(),
                 view: None,
             },
@@ -419,7 +419,7 @@ fn an_answer_not_in_its_checked_shape_is_refused_not_a_panic() {
         )
         .unwrap_err();
     assert_eq!(err.code, ErrorCode::UnsupportedRequest);
-    assert_eq!(err.fields["dialect"], Detail::text("snowflake"));
+    assert!(!err.fields.contains_key("dialect"));
 }
 
 /// The plan's expected shape is what the reader reads: an answer in the
