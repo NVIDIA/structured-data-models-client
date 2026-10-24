@@ -129,6 +129,62 @@ def test_no_provider_runs_the_reference_side_only_and_still_runs_cases() -> (
     )
 
 
+def test_lakebase_requires_the_advertised_postgres_provider() -> None:
+    advertised = {'python-core': ('postgres',)}
+    reference = _observed('python-ref', 'lakebase')
+    problems = RUNNER.check_legs('lakebase', advertised, reference)
+    assert _named(problems, 'python-core', 'lakebase', 'missing'), problems
+    assert (
+        RUNNER.check_legs(
+            'lakebase',
+            advertised,
+            [*reference, *_observed('python-core', 'lakebase')],
+        )
+        == []
+    )
+
+
+@pytest.mark.parametrize('database', ['databricks-sql', 'databricks-spark'])
+def test_databricks_admission_keeps_its_separate_provider_ids(
+    database: str,
+) -> None:
+    reference = _observed('python-ref', database)
+    assert (
+        RUNNER.check_legs(database, {'python-core': ('databricks',)}, reference)
+        == []
+    )
+    problems = RUNNER.check_legs(
+        database, {'python-core': (database,)}, reference
+    )
+    assert _named(problems, 'python-core', database, 'missing'), problems
+
+
+def test_the_lakebase_core_run_reaches_its_case_without_opening_a_warehouse(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import sdm_client._native as native
+    from sdm_client._rust import run as host_run
+
+    assert 'postgres' in native.PROVIDERS
+    # The runner wraps this function to record native calls; restore its
+    # original value when the test ends without changing capabilities.
+    monkeypatch.setattr(host_run, 'native', host_run.native)
+    monkeypatch.delenv('SDM_CORE_ROUTES', raising=False)
+    monkeypatch.delenv('SDM_LIVE_CONFIG', raising=False)
+
+    class CaseReached(Exception):
+        pass
+
+    def stop_before_connections(*args: Any) -> Any:
+        assert args[0]['id'] == 'lakebase.binary'
+        raise CaseReached
+
+    monkeypatch.setattr(RUNNER, '_call', stop_before_connections)
+    cases = RUNNER.load_cases([ROOT / 'contract/cases/s2/lakebase.binary.json'])
+    with pytest.raises(CaseReached):
+        RUNNER.run('python-core', cases, None, database='lakebase')
+
+
 def test_a_database_job_that_runs_no_case_fails() -> None:
     r"""Seeded: a job on its database with no case observed fails, naming
     the database, provider or not."""

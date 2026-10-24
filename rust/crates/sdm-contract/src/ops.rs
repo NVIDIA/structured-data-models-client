@@ -527,10 +527,11 @@ pub struct DescribedColumn {
     /// Whether the catalog declares a primary or unique key of this one
     /// column, which the source refuses to repeat.
     pub unique: bool,
-    /// The source's catalog declaration, retained for temporal columns
-    /// so a dialect can distinguish zoned instants from NTZ wall clocks,
-    /// and for opaque big-integer columns so key joins cast to the source
-    /// type (register P1B-43). Other columns keep none. Absent when none.
+    /// The source's opaque catalog declaration, retained for numeric and
+    /// temporal columns and marked big integers.
+    /// A dialect uses it to preserve exact numeric key joins and destination
+    /// float coercion, and to distinguish zoned instants from NTZ wall clocks.
+    /// Other columns keep none. Absent when none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub declared_type: Option<String>,
     /// Set for a column of numbers the host provider handed over as their

@@ -204,18 +204,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "arrow-pyarrow"
-version = "58.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3ffb9be5a873590f825aef50df20e0f8dff5fd42a77058e28bbe7bd44bb53dec"
-dependencies = [
- "arrow-array",
- "arrow-data",
- "arrow-schema",
- "pyo3",
-]
-
-[[package]]
 name = "arrow-row"
 version = "58.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1731,7 +1719,7 @@ name = "sdm-py"
 version = "1.0.0"
 dependencies = [
  "arrow-array",
- "arrow-pyarrow",
+ "arrow-data",
  "arrow-schema",
  "pyo3",
  "pyo3-log",

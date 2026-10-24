@@ -44,7 +44,7 @@ pub(crate) struct Discovered {
     /// The first rows of the columns read, each big integer in its whole
     /// column's tier and each exact number in its role's type.
     pub preview: ArrowData,
-    /// Each big integer's and temporal column's catalog type ([`retained_source_types`]).
+    /// Each numeric and temporal column's catalog type ([`retained_source_types`]).
     pub source_types: Vec<(String, String)>,
 }
 
@@ -442,13 +442,12 @@ pub(crate) fn falls_back(failed: &CoreError) -> bool {
     }
 }
 
-/// The catalog's declared type of each big-integer column the host layer
-/// read from an opaque type and marked ([`crate::big_integer`]), by name:
-/// what the described schema keeps (`DescribedColumn::declared_type`), so a
-/// `decimal128(38, 0)` seed is joined to such a key in the key's own type
-/// with no statement `materialize` adds (register P1B-43). Temporal columns
-/// also retain their declaration so a dialect can distinguish zoned
-/// instants from wall clocks when it renders a window.
+/// The catalog declaration of each numeric, marked big-integer and temporal
+/// column, by name (`DescribedColumn::declared_type`).
+/// The core keeps this fact opaque: a dialect uses it to compare seed keys
+/// without losing exact integer identity or the destination float's rounding,
+/// and to distinguish zoned instants from wall clocks in time windows.
+/// No additional catalog statement is needed.
 fn retained_source_types(preview: &ArrowData, declared: &[CatalogColumn]) -> Vec<(String, String)> {
     preview
         .schema
@@ -469,6 +468,7 @@ pub(crate) fn retained_source_type<'a>(
     declared: &'a str,
 ) -> Option<&'a str> {
     (big_integer::is_marked(field)
+        || field.data_type().is_numeric()
         || matches!(
             field.data_type(),
             arrow_schema::DataType::Timestamp(..)
@@ -662,4 +662,34 @@ async fn key_columns(
         read.push(key);
     }
     Ok(read)
+}
+
+#[cfg(test)]
+mod source_type_tests {
+    use super::retained_source_type;
+    use arrow_schema::{DataType, Field, TimeUnit};
+
+    #[test]
+    fn numeric_and_temporal_fields_retain_the_opaque_catalog_declaration() {
+        for kind in [
+            DataType::Int16,
+            DataType::Int32,
+            DataType::Int64,
+            DataType::UInt64,
+            DataType::Float32,
+            DataType::Float64,
+            DataType::Decimal128(20, 4),
+            DataType::Decimal256(76, 0),
+            DataType::Timestamp(TimeUnit::Microsecond, None),
+        ] {
+            assert_eq!(
+                retained_source_type(&Field::new("k", kind, true), "opaque_domain_name"),
+                Some("opaque_domain_name")
+            );
+        }
+        assert_eq!(
+            retained_source_type(&Field::new("k", DataType::Utf8, true), "text"),
+            None
+        );
+    }
 }

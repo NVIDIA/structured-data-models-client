@@ -433,12 +433,10 @@ public final class JdbcProvider implements Host.Provider {
     return built(new ConversionTable.Result(fields, values), allocator);
   }
 
-  /** The session a Postgres result is read in: its {@code IntervalStyle} and zone, asked once. */
+  /** The session's {@code IntervalStyle}, asked once only when a value needs it. */
   private static final class Session implements ConversionTable.Session {
     private final Connection connection;
     private String intervalStyle;
-    private String zone;
-    private List<String> roots;
 
     Session(Connection connection) {
       this.connection = connection;
@@ -452,15 +450,6 @@ public final class JdbcProvider implements Host.Provider {
       return intervalStyle;
     }
 
-    @Override
-    public int offsetSeconds(long micros) throws SQLException {
-      if (zone == null) {
-        zone = String.valueOf(PgSession.parameter(connection, "TimeZone"));
-        roots = com.nvidia.sdm.internal.HostFacts.zoneRootPaths();
-      }
-      Integer offset = com.nvidia.sdm.internal.NativeCore.sessionZoneOffset(zone, roots, micros);
-      return offset == null ? 0 : offset;
-    }
   }
 
   // --- shared ---------------------------------------------------------------------------

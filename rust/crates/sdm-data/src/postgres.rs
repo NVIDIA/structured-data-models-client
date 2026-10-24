@@ -46,8 +46,10 @@
 //! `bigint` or `numeric`, so the join compares the two keys by value,
 //! exactly (an integer and a `numeric` meet when their values are equal,
 //! whatever their scales, and two `numeric` values float64 would merge
-//! stay apart; design choice 5, lesson 19, KO2-35); any other key (a
-//! float, a text) in the joined column's own declared type, put in place
+//! stay apart; design choice 5, lesson 19, KO2-35).
+//! Floating seeds use `numeric` only when the destination catalog declaration
+//! names an integer or numeric column; any other key (a float destined for
+//! REAL/DOUBLE PRECISION, a text) uses the joined column's declared type, put in place
 //! of that column in one row of the table (`jsonb_populate_record`), so a
 //! `real` key compares as a `real` and a `uuid`, an enum or a `varchar` key
 //! as itself (the reference casts to the type it read from the catalog);
@@ -805,7 +807,7 @@ fn seed_cte(read: &SeedRead<'_>) -> Result<String, CoreError> {
             } else {
                 id.at(at)
             };
-            match key_type(&column.column_type) {
+            match key_type(column) {
                 Some(kind) => format!("({})::{kind}", path.text),
                 None => {
                     built.push(format!("{}, {}", text(&key[at]), path.json));
@@ -917,20 +919,43 @@ impl Path {
     }
 }
 
-/// The Postgres type a seed key of `column_type` is read as, for an
-/// integer or a decimal: `bigint` or `numeric`, which Postgres compares
-/// with the joined key's integers and decimals by value, so equal values
-/// of any scale join; `None` for any other (a float, a text, a time), read
-/// in the joined column's declared type ([`seed_cte`]), so a `real` key
-/// compares as a `real` and a `uuid` as a `uuid`, as the reference casts its
-/// seeds to the column's type.
-fn key_type(column_type: &sdm_contract::ColumnType) -> Option<&'static str> {
+/// The Postgres type a seed key is read as, or `None` to use the destination
+/// column's own input function (`jsonb_populate_record` in [`seed_cte`]).
+/// Integer/decimal seeds compare exactly as `bigint`/`numeric`.
+/// Floating seeds use `numeric` only for integer/numeric destinations, whose
+/// catalog declaration the core carries opaquely via [`sdm_contract::data::SEED_KEY_TYPE`].
+/// This avoids truncating fractions or rounding nearby large integer keys.
+/// REAL/DOUBLE PRECISION destinations and legacy callers with no declaration
+/// retain their original declared-type coercion, so REAL 0.1 finds itself.
+fn key_type(column: &sdm_contract::Field) -> Option<&'static str> {
     use sdm_contract::ColumnType as T;
-    Some(match column_type {
+    Some(match column.column_type {
         T::Int8 | T::Int16 | T::Int32 | T::Int64 | T::Uint8 | T::Uint16 | T::Uint32 => "bigint",
         T::Uint64 | T::Decimal128 { .. } | T::Decimal256 { .. } => "numeric",
+        T::Float32 | T::Float64
+            if column
+                .metadata
+                .get(sdm_contract::data::SEED_KEY_TYPE)
+                .is_some_and(|declared| exact_numeric_type(declared)) =>
+        {
+            "numeric"
+        }
         _ => return None,
     })
+}
+
+/// Whether the catalog declaration names a built-in exact numeric type.
+/// Only this dialect reads the declaration; no catalog text is pasted into SQL.
+/// A domain or any unrecognized declaration retains native record conversion.
+fn exact_numeric_type(declared: &str) -> bool {
+    let declared = declared.trim();
+    let name = declared
+        .split_once('(')
+        .map_or(declared, |(name, _)| name)
+        .trim();
+    ["smallint", "integer", "bigint", "numeric", "decimal"]
+        .iter()
+        .any(|kind| name.eq_ignore_ascii_case(kind))
 }
 
 /// The table's columns asked for, each read from its alias and renamed to a

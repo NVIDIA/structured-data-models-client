@@ -149,11 +149,11 @@ pub fn exact_number_text(text: &str) -> String {
 }
 /// The metadata key, on a seed key set's [`SEED_KEY`] column, naming the
 /// joined table's key column's declared type as the source spells it (its
-/// catalog's `type`, kept in the described schema for a marked big-integer
-/// column, `DescribedColumn::declared_type`), set by the core for a
-/// `decimal128(38, 0)` seed key: a SQL layer joins the seeds in the key's
-/// own type where that is exact (register P1B-43); a host provider may
-/// ignore it.
+/// catalog's `type`, kept as `DescribedColumn::declared_type`), set by the
+/// core for floating and `decimal128(38, 0)` seed keys.
+/// Only the data layer interprets it: a SQL layer preserves the destination's
+/// floating coercion and exact integer/decimal comparisons (register P1B-43).
+/// A host provider may ignore it.
 pub const SEED_KEY_TYPE: &str = "sdm:key_declared_type";
 /// The column of a seed key set that holds each seed's batch position, and
 /// of a `neighbors` or `lookup` result, under [`BATCH_COLUMN`], that names

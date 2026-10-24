@@ -21,6 +21,7 @@ from __future__ import annotations
 import copy
 import importlib.util
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -48,6 +49,13 @@ COPIED = (
     'scripts/rust_core',
     'packages/structured-data-models-client/src/sdm_client/_routing.py',
     'packages/structured-data-models-client/src/sdm_client/query.py',
+)
+# The ratchet unit histories never execute a warehouse replay or read its
+# per-case snapshots/Arrow tables. Keep the real manifests, cases, reference,
+# protection rules and checker sources; capture validation has its own tests.
+UNCOPIED_PAYLOADS = (
+    'contract/captures/r2/*/*/capture.json',
+    'contract/captures/r2/*/*/tables/*.arrows',
 )
 IDENTITY = ['-c', 'user.name=Gate Test', '-c', 'user.email=gate@example.com']
 CELL = 'ref-pandas3'
@@ -128,6 +136,8 @@ def build(repo: Path) -> tuple[Path, str]:
         check=True,
     ).stdout.split(b'\0')
     for name in filter(None, (item.decode() for item in listed)):
+        if any(Path(name).match(pattern) for pattern in UNCOPIED_PAYLOADS):
+            continue
         source = ROOT / name
         if source.is_file():
             (repo / name).parent.mkdir(parents=True, exist_ok=True)
@@ -174,8 +184,86 @@ def repo(origin: tuple[Path, str], tmp_path: Path) -> Path:
     r"""A worktree at the checkpoint, for one test's candidate."""
     source, landed = origin
     tree = tmp_path / 'tree'
+    # Passed test tmp_path retention may remove a directory while its Git
+    # registration remains. This origin belongs only to this module's unit
+    # fixtures; pruning missing registrations keeps extant failed evidence.
+    git(source, 'worktree', 'prune', '--expire', 'now')
     git(source, 'worktree', 'add', '-q', '--detach', str(tree), landed)
     return tree
+
+
+def test_the_fixture_reuses_a_removed_worktree_without_pruning_failed_evidence(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / 'origin'
+    source.mkdir()
+    git(source, 'init', '-q', '-b', 'fixture')
+    landed = commit(source, 'fixture origin')
+    create = repo.__wrapped__
+    original = create((source, landed), tmp_path / 'reused')
+    failed = create((source, landed), tmp_path / 'failed')
+    evidence = failed / 'failure.txt'
+    evidence.write_text('preserve this failed test evidence')
+    # pytest's passed-only tmp_path cleanup removes the directory without
+    # knowing that Git still has a worktree registration for this path.
+    shutil.rmtree(original)
+    replacement = create((source, landed), tmp_path / 'reused')
+    assert replacement == original and replacement.is_dir()
+    assert evidence.read_text() == 'preserve this failed test evidence'
+    registrations = git(source, 'worktree', 'list', '--porcelain')
+    assert f'worktree {replacement}' in registrations
+    assert f'worktree {failed}' in registrations
+
+
+def test_the_synthetic_fixture_omits_only_bulk_r2_capture_inputs(
+    origin: tuple[Path, str],
+) -> None:
+    source, _ = origin
+    copied = source / 'contract/captures/r2'
+    manifests = sorted(copied.glob('*/manifest.json'))
+    expected = sorted((ROOT / 'contract/captures/r2').glob('*/manifest.json'))
+    assert manifests and len(manifests) == len(expected)
+    for path in manifests:
+        assert (
+            path.read_bytes() == (ROOT / path.relative_to(source)).read_bytes()
+        )
+    assert not list(copied.glob('*/*/capture.json'))
+    assert not list(copied.glob('*/*/tables/*.arrows'))
+    assert (source / 'contract/protected-paths.txt').read_bytes() == (
+        ROOT / 'contract/protected-paths.txt'
+    ).read_bytes()
+    assert (
+        source / 'contract/cases/s2/databricks.name.three-part.json'
+    ).read_bytes() == (
+        ROOT / 'contract/cases/s2/databricks.name.three-part.json'
+    ).read_bytes()
+
+
+def test_an_omitted_capture_path_still_requires_protected_edit_review(
+    repo: Path,
+) -> None:
+    # Use an actual payload path with tiny synthetic bytes. These unit
+    # checks exercise Git protection, never the real capture validator.
+    original = next((ROOT / 'contract/captures/r2').glob('*/*/tables/*.arrows'))
+    path = original.relative_to(ROOT).as_posix()
+
+    def write_capture(text: bytes) -> Callable[[Path], None]:
+        def write(tree: Path) -> None:
+            target = tree / path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(text)
+
+        return write
+
+    landed = land(
+        repo, 'T1.15', write_capture(b'synthetic baseline'), protected=path
+    )
+    commit(repo, edit=write_capture(b'synthetic changed capture'))
+    assert check(repo, landed, protected='docs only') == [
+        f'protected: {path}: changed, and the Reviewed-by and Protected-paths '
+        'trailers do not name it'
+    ]
+    assert check(repo, landed, protected=path) == []
 
 
 def checkpoint_of(repo: Path) -> str:
@@ -1866,6 +1954,86 @@ def test_ci_judges_a_phase_push_from_its_previous_tip_and_a_lane_from_the_phase_
         event.write_text(broken)
         with pytest.raises(ratchet.Unreadable):
             ratchet.ci_base({**push, 'GITHUB_REF_NAME': 'rust-core-phase-1'})
+
+
+@pytest.mark.parametrize('phase', ['1', '3', '10'])
+def test_a_dispatched_phase_uses_its_landing_checkpoint_and_rejects_an_unlanded_head(
+    tmp_path: Path, phase: str
+) -> None:
+    repo = tmp_path / 'dispatch'
+    repo.mkdir()
+    branch = f'rust-core-phase-{phase}'
+    git(repo, 'init', '-q', '-b', branch)
+    baseline = commit(
+        repo,
+        f'Land T{phase}.0: the previous reviewed landing',
+        trailers={
+            'Reviewed-by': 'independent reviewers',
+            'Base-SHA': 'f' * 40,
+            'Checkpoint-SHA': 'f' * 40,
+        },
+    )
+    land(repo, f'T{phase}.1')
+    env = {
+        **os.environ,
+        'GITHUB_EVENT_NAME': 'workflow_dispatch',
+        'GITHUB_REF_NAME': branch,
+        'SDM_PHASE_BRANCH': branch,
+    }
+    command = [sys.executable, str(ROOT / 'scripts/rust_core/ratchet.py')]
+    where = subprocess.run(
+        [*command, 'where', '--repo', str(repo)],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert where.stdout.strip() == '--base HEAD'
+
+    def checkpoint() -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [
+                *command,
+                'checkpoint',
+                '--repo',
+                str(repo),
+                *where.stdout.split(),
+            ],
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+
+    found = checkpoint()
+    assert found.returncode == 0, found.stdout + found.stderr
+    assert found.stdout.split()[:2] == [baseline, baseline]
+    # A nightly must not turn an ordinary unlanded phase head into its own
+    # checkpoint, even though dispatch has no push-event previous tip.
+    commit(repo, f'T{phase}.2: unlanded work')
+    refused = checkpoint()
+    assert refused.returncode == 1
+    assert 'self-comparison' in refused.stderr
+
+
+def test_dispatch_retains_lane_bases_and_keeps_unrelated_events_out() -> None:
+    dispatch = {'GITHUB_EVENT_NAME': 'workflow_dispatch'}
+    assert (
+        ratchet.ci_base(
+            {**dispatch, 'GITHUB_REF_NAME': 'rust-core-phase-3-topic-T3.9'}
+        )
+        == '--base origin/rust-core-phase-3'
+    )
+    for event, ref in [
+        ('workflow_dispatch', 'main'),
+        ('pull_request', 'rust-core-phase-3'),
+        ('schedule', 'main'),
+    ]:
+        assert (
+            ratchet.ci_base(
+                {'GITHUB_EVENT_NAME': event, 'GITHUB_REF_NAME': ref}
+            )
+            == ''
+        )
 
 
 compare = _module(ROOT / 'scripts/rust_core/compare.py', 'compare_for_ratchet')
