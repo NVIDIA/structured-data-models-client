@@ -138,3 +138,24 @@ def test_review_push_is_refused_while_handoff_runs(
     assert 'handoff still running' in done.stderr
     assert not (repo / 'ownership.log').exists()
     assert not (repo / 'checks.log').exists()
+
+
+def test_existing_registered_worktree_uses_installed_safety_checker(
+    push_repo: tuple[Path, dict[str, str]],
+) -> None:
+    repo, env = push_repo
+    legacy = repo.parent / 'legacy'
+    done = _run(
+        repo, env, 'git', 'worktree', 'add', '-b', 'other-review-topic', str(legacy)
+    )
+    assert done.returncode == 0, done.stdout + done.stderr
+    (legacy / 'scripts/rust_core/prepush.sh').write_text(
+        '#!/usr/bin/env bash\necho "obsolete package checks" >&2\nexit 86\n'
+    )
+    registered = repo / '.git/hooks/prepush-worktrees'
+    with registered.open('a') as stream:
+        stream.write(f'{legacy}\n')
+    done = _run(legacy, env, 'git', 'push', 'origin', 'HEAD')
+    assert done.returncode == 0, done.stdout + done.stderr
+    assert (legacy / 'ownership.log').exists()
+    assert not (legacy / 'checks.log').exists()
