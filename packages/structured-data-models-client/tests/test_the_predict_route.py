@@ -234,18 +234,21 @@ def test_another_request_state_version_is_refused_by_name(
     assert received.requests == []
 
 
-def test_a_request_the_core_did_not_materialize_is_refused_by_name(
+def test_a_request_the_core_did_not_materialize_predicts_as_on_the_old_route(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # T3.16: refused by name, asking for it to be materialized again,
-    # never a RouteError.
+    # T3.26 (owner decision 2026-10-23): a request holding no state the
+    # core wrote, as an older client's does, is predicted from its own
+    # contents, as the old route predicts it.
     request = _materialized(monkeypatch)
     request._core = None
-    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
-    with pytest.raises(StructuredDataError) as refused:
-        _predict('http://127.0.0.1:9', request)
-    assert refused.value.code == 'INVALID_REQUEST'
-    assert refused.value.details['rule'] == 'materialize_again'
+    with _endpoint().serve() as (url, received):
+        core, old = _both(monkeypatch, request, url)
+    assert not isinstance(core, Exception), core
+    pd.testing.assert_frame_equal(core.to_pandas(), old.to_pandas())
+    assert core.outputs == old.outputs
+    assert len(received.requests) == 2
+    assert request._core is None
 
 
 def test_the_outputs_are_checked_on_the_core_as_on_the_old_route(
