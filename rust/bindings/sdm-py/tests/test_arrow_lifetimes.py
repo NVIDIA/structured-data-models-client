@@ -246,7 +246,7 @@ def test_unaligned_buffers_are_refused_by_name_before_typed_import(
     )
     fields = messages.read(error.control)['error']['fields']
     assert fields['check'] == {'t': 'utf8', 'v': 'declared'}
-    assert fields['attachment'] == {'t': 'uint32', 'v': 1}
+    assert fields['attachment'] == {'t': 'u32', 'v': '1'}
     with pytest.raises(_native.CoreError) as finished:
         run.next()
     assert finished.value.code == 'RUN_FINISHED'
