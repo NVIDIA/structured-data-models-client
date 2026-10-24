@@ -586,17 +586,23 @@ CONNECT = _error(
     'SparkConnectGrpcException',
     getSqlState=lambda self: None,
 )
+CONDITION = _error(
+    'pyspark.errors.exceptions.captured',
+    'AnalysisException',
+    getSqlState=lambda self: '42501',
+    getCondition=lambda self: 'PERMISSION_DENIED',
+)
 
 
 @pytest.mark.parametrize(
-    'error, sqlstate, refuses',
+    'error, sqlstate, error_class',
     [
         (
             SERVER(
                 '[TABLE_OR_VIEW_NOT_FOUND] t cannot be found. SQLSTATE: 42P01'
             ),
             '42P01',
-            True,
+            'TABLE_OR_VIEW_NOT_FOUND',
         ),
         (
             SERVER(
@@ -604,17 +610,31 @@ CONNECT = _error(
                 'SQLSTATE: 22018\n== SQL (line 1) ==\nSELECT 1 -- SQLSTATE: 08001'
             ),
             '22018',
-            True,
+            'CAST_INVALID_INPUT',
         ),
         (
             SERVER('[INSUFFICIENT_PERMISSIONS] no. SQLSTATE: 42501'),
             '42501',
-            True,
+            'INSUFFICIENT_PERMISSIONS',
         ),
-        (SERVER('the connection reset. SQLSTATE: 08006'), '08006', False),
-        (SERVER('no state at all'), None, False),
-        (ANALYSIS('[UNRESOLVED_COLUMN] SQLSTATE: 08001'), '42703', True),
-        (CONNECT('lost. SQLSTATE: 08S01'), '08S01', False),
+        (SERVER('the connection reset. SQLSTATE: 08006'), '08006', None),
+        (SERVER('no state at all'), None, None),
+        (
+            SERVER('[UNRESOLVED_COLUMN.WITH_SUGGESTION] no state'),
+            None,
+            'UNRESOLVED_COLUMN.WITH_SUGGESTION',
+        ),
+        (
+            ANALYSIS('[UNRESOLVED_COLUMN] SQLSTATE: 08001'),
+            '42703',
+            'UNRESOLVED_COLUMN',
+        ),
+        (
+            CONDITION('[NOT_THIS_ONE] SQLSTATE: 42501'),
+            '42501',
+            'PERMISSION_DENIED',
+        ),
+        (CONNECT('lost. SQLSTATE: 08S01'), '08S01', None),
     ],
     ids=[
         'not-found',
@@ -622,20 +642,25 @@ CONNECT = _error(
         'permission',
         'connection',
         'no-state',
+        'class-without-state',
         'spark-answers',
+        'spark-answers-its-condition',
         'spark-connect-message',
     ],
 )
-def test_a_databricks_failure_reaches_the_core_with_its_state(
-    error: Exception, sqlstate: str | None, refuses: bool
+def test_a_databricks_failure_reaches_the_core_with_its_state_and_class(
+    error: Exception, sqlstate: str | None, error_class: str | None
 ) -> None:
     # Read by the provider whose driver failed (its ``error_fields``, the
-    # provider protocol's hook), never by the run loop naming a backend.
+    # provider protocol's hook), never by the run loop naming a backend;
+    # what the failure means is the core's to say (T3.27: the data layer's
+    # ``failure``), so the provider hands over facts, never a judgement.
     provided, driver = _driver(error, DatabricksSqlProvider(None))
     assert provided['sqlstate'] == sqlstate
-    assert provided.get('refuses_expression', False) is refuses
-    if not refuses:
-        assert 'refuses_expression' not in provided
+    assert provided.get('error_class') == error_class
+    if error_class is None:
+        assert 'error_class' not in provided
+    assert 'refuses_expression' not in provided
     assert provided['kind'] == 'data_source'
     assert driver == f'{type(error).__module__}.{type(error).__qualname__}'
     # The driver's message is never in what the core is told.
@@ -661,7 +686,7 @@ def test_another_driver_s_failure_is_read_as_before() -> None:
         ValueError('SQLSTATE: 42000'), DatabricksSqlProvider(None)
     )
     assert plain['sqlstate'] is None
-    assert 'refuses_expression' not in plain
+    assert 'error_class' not in plain
 
 
 def test_a_provider_with_no_reading_of_failures_leaves_them_as_drivers_set_them() -> (
@@ -672,7 +697,7 @@ def test_a_provider_with_no_reading_of_failures_leaves_them_as_drivers_set_them(
     )
     provided, _ = _driver(error, lambda step, keys=None: None)
     assert provided['sqlstate'] is None
-    assert 'refuses_expression' not in provided
+    assert 'error_class' not in provided
 
 
 class _Once:

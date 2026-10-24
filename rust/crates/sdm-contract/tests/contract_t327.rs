@@ -1,0 +1,592 @@
+// SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+// All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+
+//! T3.27, contract first: every contract change the remaining Phase 3
+//! packages need (Snowflake, views, Lakebase, Java on Databricks), in one
+//! version. Each addition round-trips and is optional, so a message written
+//! before it reads the same; each new `DataLayer` method keeps today's
+//! behaviour, or refuses by name, until a dialect answers it; and every
+//! message site of the old client those packages port has its sentence.
+
+use std::collections::BTreeMap;
+use std::sync::Arc;
+
+use arrow_array::{ArrayRef, Int64Array, RecordBatch, StringArray};
+use arrow_schema::{DataType, Field as ArrowField, Schema, SchemaRef};
+use sdm_contract::catalog::{CatalogAnswer, ViewDefinition};
+use sdm_contract::data::{
+    AttachmentId, DataLayer, DataRequest, DescribePart, FailureFacts, FetchPlan, KeyData, KeySet,
+    ProviderCapabilities, ProviderChoice, ProviderError, Relation, SqlParam, SqlStatement,
+    ViewChoice,
+};
+use sdm_contract::ops::{DescribedSource, ModelEndpoint, Predict, ViewNote};
+use sdm_contract::run::{ModelAnswer, ModelOutcome};
+use sdm_contract::view::{ViewTextAnswer, ViewTextAsk};
+use sdm_contract::wording::{self, Group};
+use sdm_contract::{Code, CoreError, Detail, ErrorCode, ErrorKind, Sentence, WarningCode};
+use serde_json::json;
+
+fn read<T: serde::de::DeserializeOwned>(value: serde_json::Value) -> T {
+    serde_json::from_value(value).unwrap()
+}
+
+fn written<T: serde::Serialize>(value: &T) -> serde_json::Value {
+    serde_json::to_value(value).unwrap()
+}
+
+// --- ProviderError: error_class in, refuses_expression out ---------------------------
+
+#[test]
+fn a_provider_error_carries_its_error_class_and_no_judgement() {
+    let error: ProviderError = read(json!({
+        "kind": "data_source", "retryable": false, "sqlstate": "42501",
+        "vendor_code": null, "error_class": "INSUFFICIENT_PERMISSIONS"
+    }));
+    assert_eq!(
+        error.error_class.as_deref(),
+        Some("INSUFFICIENT_PERMISSIONS")
+    );
+    assert_eq!(written(&error)["error_class"], "INSUFFICIENT_PERMISSIONS");
+    // Left out, none, and written as before.
+    let plain: ProviderError = read(json!({
+        "kind": "data_source", "retryable": true, "sqlstate": null, "vendor_code": "2003"
+    }));
+    assert_eq!(plain.error_class, None);
+    assert!(written(&plain).get("error_class").is_none());
+    // What a failure means is the data layer's to say (`DataLayer::failure`),
+    // never the host's: a judgement the host sends is no field of the error.
+    let judged = serde_json::from_value::<ProviderError>(json!({
+        "kind": "data_source", "retryable": false, "sqlstate": "42703",
+        "vendor_code": null, "refuses_expression": true
+    }));
+    assert!(judged.is_err());
+}
+
+// --- ProviderChoice: a semantic model ----------------------------------------------
+
+#[test]
+fn a_semantic_model_is_a_sql_provider_s_view_and_optional() {
+    let choice: ProviderChoice = read(json!({
+        "provider": "sql", "dialect": "databricks", "namespace": ["c", "s"],
+        "view": {"name": "sales_metrics", "trust_expressions": true}
+    }));
+    let ProviderChoice::Sql { view, .. } = &choice else {
+        unreachable!()
+    };
+    assert_eq!(
+        view,
+        &Some(ViewChoice {
+            name: "sales_metrics".into(),
+            trust_expressions: true,
+        })
+    );
+    assert_eq!(written(&choice)["view"]["name"], "sales_metrics");
+    let plain: ProviderChoice = read(json!({"provider": "sql", "dialect": "duckdb"}));
+    assert_eq!(plain, ProviderChoice::sql("duckdb"));
+    assert_eq!(
+        written(&plain),
+        json!({"provider": "sql", "dialect": "duckdb"})
+    );
+    // The flag is the caller's, always written.
+    assert!(
+        serde_json::from_value::<ProviderChoice>(json!({
+            "provider": "sql", "dialect": "snowflake", "view": {"name": "v"}
+        }))
+        .is_err()
+    );
+}
+
+// --- SqlParam::Text: a key set's JSON as a one-cell text attachment ------------------
+
+#[test]
+fn a_text_parameter_names_its_attachment_and_the_step_lists_it() {
+    let param: SqlParam = read(json!({"param": "text", "attachment": 7}));
+    assert_eq!(
+        param,
+        SqlParam::Text {
+            attachment: AttachmentId(7)
+        }
+    );
+    assert_eq!(written(&param), json!({"param": "text", "attachment": 7}));
+    let plan = FetchPlan::Sql {
+        statements: vec![SqlStatement {
+            dialect: sdm_contract::data::Dialect::new("postgres"),
+            text: "SELECT 1".into(),
+            params: vec![
+                SqlParam::KeySet {
+                    keys: KeySet {
+                        attachment: AttachmentId(3),
+                        columns: vec![],
+                    },
+                    relation: "keys".into(),
+                },
+                param,
+            ],
+        }],
+        expect: sdm_contract::data::ExpectedSchema::Discover {},
+    };
+    // Every attachment a plan's statements bind, in order: what the fetch
+    // step lists for the host to take.
+    assert_eq!(plan.key_sets(), vec![AttachmentId(3), AttachmentId(7)]);
+}
+
+// --- DescribePart::ViewDefinition --------------------------------------------------
+
+#[test]
+fn a_view_s_definition_is_a_catalog_part() {
+    let request: DataRequest = read(json!({
+        "request": "describe", "tables": [{"source": ["c", "s", "v"]}],
+        "part": "view_definition"
+    }));
+    let DataRequest::Describe { part, .. } = &request else {
+        unreachable!()
+    };
+    assert_eq!(*part, DescribePart::ViewDefinition);
+    assert_eq!(written(&request)["part"], "view_definition");
+    let answer = CatalogAnswer::ViewDefinition(ViewDefinition {
+        text: "version: 0.1".into(),
+        parameters: vec![("p".into(), "INT".into())],
+        located: vec!["c".into(), "s".into()],
+        columns: vec![("d".into(), "string".into())],
+    });
+    assert_eq!(answer.part(), DescribePart::ViewDefinition);
+}
+
+// --- DescribedSource.notes ---------------------------------------------------------
+
+#[test]
+fn a_description_carries_its_typed_view_notes_and_none_by_default() {
+    let described: DescribedSource = read(json!({
+        "description": 4,
+        "notes": [{
+            "sentence": "view_parameter_note",
+            "fields": {"parameter": {"text": "region"}, "default": {"text": "EMEA"}}
+        }, {
+            "sentence": "view_time_column_note",
+            "fields": {
+                "column": {"text": "ts"}, "table": {"text": "orders"},
+                "reasons": {"text": "a window measure of the view orders by it"}
+            },
+            "table": "orders", "time_column": "ts"
+        }]
+    }));
+    assert_eq!(described.notes.len(), 2);
+    let note: &ViewNote = &described.notes[1];
+    assert_eq!(note.sentence, Sentence::ViewTimeColumnNote);
+    assert_eq!(note.table.as_deref(), Some("orders"));
+    assert_eq!(note.time_column.as_deref(), Some("ts"));
+    assert_eq!(note.fields["column"], Detail::text("ts"));
+    assert_eq!(
+        written(&described)["notes"][0]["sentence"],
+        "view_parameter_note"
+    );
+    let plain: DescribedSource = read(json!({"description": 4}));
+    assert!(plain.notes.is_empty());
+    assert_eq!(written(&plain), json!({"description": 4}));
+    // A note says a note's sentence.
+    assert!(described.notes.iter().all(ViewNote::holds_to_table));
+    let mut crossed = described.notes[0].clone();
+    crossed.sentence = Sentence::ViewJoinSkipped;
+    assert!(!crossed.holds_to_table());
+}
+
+// --- ModelEndpoint and ModelAnswer (T3.13) -------------------------------------------
+
+#[test]
+fn a_predict_names_its_serving_endpoint_and_none_is_today_s() {
+    let mut predict: Predict = read(json!({
+        "state": null, "model": "m", "request_id": "r", "outputs": []
+    }));
+    assert_eq!(predict.model_endpoint, None);
+    assert!(written(&predict).get("model_endpoint").is_none());
+    predict.model_endpoint = Some(ModelEndpoint::DatabricksServing {
+        name: "kumo-rfm".into(),
+        max_request_bytes: 16_000_000,
+    });
+    let text = written(&predict);
+    assert_eq!(
+        text["model_endpoint"],
+        json!({
+            "endpoint": "databricks_serving", "name": "kumo-rfm",
+            "max_request_bytes": 16_000_000
+        })
+    );
+    assert_eq!(read::<Predict>(text), predict);
+}
+
+#[test]
+fn a_failed_model_call_hands_over_its_status_detail_and_codes() {
+    let outcome: ModelOutcome = read(json!({
+        "outcome": "failed",
+        "answer": {
+            "status": 400, "detail": 9, "provider_code": "BAD_REQUEST",
+            "provider_error": "BadRequest"
+        }
+    }));
+    let ModelOutcome::Failed { answer } = &outcome else {
+        unreachable!()
+    };
+    assert_eq!(
+        answer,
+        &ModelAnswer {
+            status: 400,
+            detail: Some(AttachmentId(9)),
+            provider_code: Some("BAD_REQUEST".into()),
+            provider_error: Some("BadRequest".into()),
+        }
+    );
+    // An SDK failure whose message holds no code still carries its code;
+    // a REST body is the detail alone.
+    let bare: ModelOutcome = read(json!({"outcome": "failed", "answer": {"status": 503}}));
+    assert_eq!(
+        written(&bare),
+        json!({"outcome": "failed", "answer": {"status": 503}})
+    );
+}
+
+// --- The DataLayer's new methods: each default today's, or a refusal by name ---------
+
+/// A data layer that answers only what every layer must.
+struct Bare {
+    /// What `bound_keys` gives, for the `bind` default.
+    rebound: Option<(SchemaRef, Vec<RecordBatch>)>,
+}
+
+impl DataLayer for Bare {
+    fn capabilities(&self, _: &ProviderChoice) -> Result<ProviderCapabilities, CoreError> {
+        unreachable!()
+    }
+
+    fn plan(&self, _: &DataRequest, _: &ProviderChoice) -> Result<FetchPlan, CoreError> {
+        unreachable!()
+    }
+
+    fn read(
+        &self,
+        _: &DataRequest,
+        _: &ProviderChoice,
+        _: &[RecordBatch],
+    ) -> Result<CatalogAnswer, CoreError> {
+        unreachable!()
+    }
+
+    fn bound_keys(
+        &self,
+        _: &ProviderChoice,
+        _: &SchemaRef,
+        _: &[RecordBatch],
+    ) -> Result<Option<(SchemaRef, Vec<RecordBatch>)>, CoreError> {
+        Ok(self.rebound.clone())
+    }
+}
+
+fn keys(values: &[i64]) -> KeyData {
+    let schema: SchemaRef = Arc::new(Schema::new(vec![ArrowField::new(
+        "key",
+        DataType::Int64,
+        false,
+    )]));
+    let column: ArrayRef = Arc::new(Int64Array::from(values.to_vec()));
+    KeyData {
+        batches: vec![RecordBatch::try_new(schema.clone(), vec![column]).unwrap()],
+        schema,
+    }
+}
+
+fn keyed_plan(attachments: &[u32]) -> FetchPlan {
+    FetchPlan::Sql {
+        statements: vec![SqlStatement {
+            dialect: sdm_contract::data::Dialect::new("postgres"),
+            text: "SELECT 1".into(),
+            params: attachments
+                .iter()
+                .map(|&id| SqlParam::KeySet {
+                    keys: KeySet {
+                        attachment: AttachmentId(id),
+                        columns: vec![],
+                    },
+                    relation: "keys".into(),
+                })
+                .collect(),
+        }],
+        expect: sdm_contract::data::ExpectedSchema::Discover {},
+    }
+}
+
+#[test]
+fn a_failure_means_nothing_until_a_dialect_reads_it() {
+    let error: ProviderError = read(json!({
+        "kind": "data_source", "retryable": false, "sqlstate": "42P01",
+        "vendor_code": "2003", "error_class": "TABLE_OR_VIEW_NOT_FOUND"
+    }));
+    let facts = Bare { rebound: None }.failure(&ProviderChoice::sql("databricks"), &error);
+    assert_eq!(facts, FailureFacts::default());
+    assert!(!facts.not_found && !facts.refuses_expression && facts.unusable.is_none());
+}
+
+#[test]
+fn a_relation_is_asked_as_given_until_a_dialect_spells_it_otherwise() {
+    let relation = Relation::of(vec!["db".into(), "s".into(), "orders".into()]);
+    let asked = Bare { rebound: None }.spellings(&ProviderChoice::sql("snowflake"), &relation);
+    assert_eq!(asked, vec![relation]);
+}
+
+#[test]
+fn a_request_binds_in_one_fetch_as_today_reusing_each_key_set_s_id() {
+    let request: DataRequest = read(json!({
+        "request": "describe", "tables": [{"source": ["t"]}], "part": "tables"
+    }));
+    let made = BTreeMap::from([
+        (AttachmentId(3), keys(&[1, 2])),
+        (AttachmentId(5), keys(&[3])),
+    ]);
+    // A key set the dialect binds as the core made it: the plan alone.
+    let plan = keyed_plan(&[3, 5, 3]);
+    let bound = Bare { rebound: None }
+        .bind(
+            &ProviderChoice::sql("duckdb"),
+            &request,
+            plan.clone(),
+            &made,
+        )
+        .unwrap();
+    assert_eq!(bound.fetches.len(), 1);
+    assert_eq!(bound.fetches[0].plan, plan);
+    assert!(bound.fetches[0].batches.is_empty());
+    // One the dialect binds as text (`bound_keys`, Postgres's): each once,
+    // under the id the plan names it by, as the core installs it today.
+    let text: SchemaRef = Arc::new(Schema::new(vec![ArrowField::new(
+        "key",
+        DataType::Utf8,
+        false,
+    )]));
+    let column: ArrayRef = Arc::new(StringArray::from(vec!["1"]));
+    let rebound = (
+        text.clone(),
+        vec![RecordBatch::try_new(text.clone(), vec![column]).unwrap()],
+    );
+    let bound = Bare {
+        rebound: Some(rebound.clone()),
+    }
+    .bind(
+        &ProviderChoice::sql("postgres"),
+        &request,
+        plan.clone(),
+        &made,
+    )
+    .unwrap();
+    assert_eq!(bound.fetches.len(), 1);
+    assert_eq!(bound.fetches[0].plan, plan);
+    let ids: Vec<AttachmentId> = bound.fetches[0].batches.keys().copied().collect();
+    assert_eq!(ids, vec![AttachmentId(3), AttachmentId(5)]);
+    assert_eq!(bound.fetches[0].batches[&AttachmentId(3)].schema, text);
+}
+
+#[test]
+fn a_view_s_text_is_refused_by_name_until_a_dialect_reads_views() {
+    let refused = Bare { rebound: None }
+        .view_text(
+            &ProviderChoice::sql("duckdb"),
+            ViewTextAsk::TableReference {
+                name: "c.s.t".into(),
+            },
+        )
+        .map(|_: ViewTextAnswer| ())
+        .unwrap_err();
+    assert_eq!(refused.sentence, Sentence::ViewsUnread);
+    assert_eq!(refused.code, ErrorCode::UnsupportedRequest);
+    assert_eq!(refused.kind, ErrorKind::Unsupported);
+    assert_eq!(refused.fields["rule"], Detail::text("view"));
+    assert!(refused.holds_to_table());
+}
+
+// --- Sentences: one per message site the remaining packages port -------------------
+
+/// Every sentence T3.27 adds, by name, with its code: the old client's
+/// message sites in `old-behaviour/T3.5-views.md` and `T3.6-snowflake.md`,
+/// and `CL/core/databricks_serving.py`'s.
+fn added() -> Vec<(&'static str, Code)> {
+    use ErrorCode as E;
+    use WarningCode as W;
+    let e = Code::Error;
+    let w = Code::Warning;
+    vec![
+        ("views_unread", e(E::UnsupportedRequest)),
+        ("view_name_invalid", e(E::InvalidRequest)),
+        ("view_not_found", e(E::InvalidRequest)),
+        ("view_not_a_metric_view", e(E::InvalidRequest)),
+        ("view_no_definition", e(E::InvalidRequest)),
+        ("view_not_yaml", e(E::InvalidRequest)),
+        ("view_not_a_mapping", e(E::InvalidRequest)),
+        ("view_misses_source", e(E::InvalidRequest)),
+        ("view_misses_entry", e(E::InvalidRequest)),
+        ("view_not_a_list", e(E::InvalidRequest)),
+        ("view_nests_itself", e(E::InvalidRequest)),
+        ("view_source_unsupported", e(E::InvalidRequest)),
+        ("view_source_unqualified", e(E::InvalidRequest)),
+        ("view_on_metric_view", e(E::InvalidRequest)),
+        ("view_filter_refused", e(E::InvalidRequest)),
+        ("view_filter_refused_no_default", e(E::InvalidRequest)),
+        ("view_filter_refused_untrusted", e(E::InvalidRequest)),
+        ("view_join_name_collides", e(E::InvalidRequest)),
+        ("view_table_cannot_hold", e(E::InvalidRequest)),
+        ("view_invalid", e(E::InvalidRequest)),
+        ("view_semantic_not_found", e(E::InvalidRequest)),
+        ("view_semantic_definition_unread", e(E::InvalidRequest)),
+        ("view_table_omitted", e(E::InvalidRequest)),
+        ("view_column_omitted", e(E::InvalidRequest)),
+        ("view_materialization_ignored", w(W::ViewReadInPart)),
+        ("view_fields_ignored", w(W::ViewReadInPart)),
+        ("view_join_not_a_mapping", w(W::ViewReadInPart)),
+        ("view_join_nameless", w(W::ViewReadInPart)),
+        ("view_join_skipped", w(W::ViewReadInPart)),
+        ("view_join_skipped_with_it", w(W::ViewReadInPart)),
+        ("view_dimension_no_table", w(W::ViewReadInPart)),
+        ("view_dimension_not_a_mapping", w(W::ViewReadInPart)),
+        ("view_dimension_misses", w(W::ViewReadInPart)),
+        ("view_dimension_refused", w(W::ViewReadInPart)),
+        ("view_dimension_multiple_tables", w(W::ViewReadInPart)),
+        ("view_measure_refused", w(W::ViewReadInPart)),
+        ("view_measure_column_shadowed", w(W::ViewReadInPart)),
+        ("view_column_refused", w(W::ViewReadInPart)),
+        ("view_join_unchecked", w(W::ViewReadInPart)),
+        ("view_derived_key_replaced", w(W::ViewReadInPart)),
+        ("view_edge_dropped", w(W::ViewReadInPart)),
+        ("view_composite_key", w(W::ViewReadInPart)),
+        ("view_column_cross_table", w(W::ViewReadInPart)),
+        ("view_columns_cross_table", w(W::ViewReadInPart)),
+        ("view_expression_dropped", w(W::ViewReadInPart)),
+        ("view_expression_dropped_untrusted", w(W::ViewReadInPart)),
+        ("view_table_expression_dropped", w(W::ViewReadInPart)),
+        (
+            "view_table_expression_dropped_untrusted",
+            w(W::ViewReadInPart),
+        ),
+        ("view_relationship_refused", w(W::ViewReadInPart)),
+        ("view_measure_note", Code::Note),
+        ("view_time_column_note", Code::Note),
+        ("view_time_column_note_added", Code::Note),
+        ("view_time_column_note_renamed", Code::Note),
+        ("view_parameter_note", Code::Note),
+        ("snowflake_no_current_schema", e(E::InvalidRequest)),
+        ("snowflake_no_current_database", e(E::InvalidRequest)),
+        ("snowflake_null_anchor", e(E::InvalidRequest)),
+        ("table_no_columns", e(E::InvalidRequest)),
+        ("seed_ignored", w(W::SeedIgnored)),
+        ("serving_value_not_json", e(E::InvalidRequest)),
+        ("serving_past_limit", e(E::InvalidRequest)),
+        ("serving_not_json", e(E::TransportError)),
+        ("serving_not_an_object", e(E::TransportError)),
+        ("serving_refused", e(E::InvalidResponse)),
+        ("serving_callers_fault", e(E::InvalidRequest)),
+        ("serving_failed", e(E::InvalidResponse)),
+        ("serving_failed_coded", e(E::InvalidResponse)),
+    ]
+}
+
+#[test]
+fn every_message_site_the_remaining_packages_port_has_its_sentence() {
+    let by_name: BTreeMap<&str, Sentence> =
+        Sentence::ALL.iter().map(|s| (s.as_str(), *s)).collect();
+    for (name, code) in added() {
+        let sentence = by_name
+            .get(name)
+            .unwrap_or_else(|| panic!("no sentence {name}"));
+        assert_eq!(sentence.code(), code, "{name}");
+        assert!(!wording::template(*sentence).text.is_empty(), "{name}");
+    }
+    // Every message a semantic model is read in part for is said in one
+    // warning, opened by the model as the host names it.
+    for (name, code) in added() {
+        if code == Code::Warning(WarningCode::ViewReadInPart) {
+            assert_eq!(
+                wording::template(by_name[name]).group,
+                Some(Group::ViewReadInPart),
+                "{name}"
+            );
+        }
+    }
+    let read_in_part = wording::grouping(Group::ViewReadInPart);
+    assert_eq!(read_in_part.code, WarningCode::ViewReadInPart);
+    assert_eq!(
+        read_in_part.opening,
+        "{host.semantic_model!r} has what a graph cannot hold, so it is read in part:\n- "
+    );
+    assert_eq!(read_in_part.between, "\n- ");
+    assert_eq!(
+        serde_json::to_value(WarningCode::ViewReadInPart).unwrap(),
+        "VIEW_READ_IN_PART"
+    );
+}
+
+#[test]
+fn a_proposed_improvement_s_sentence_is_marked_and_used_by_none() {
+    let proposed: Vec<&str> = wording::PROPOSED.iter().map(|s| s.as_str()).collect();
+    assert_eq!(
+        proposed,
+        vec![
+            "view_not_yaml",
+            "view_misses_entry",
+            "view_not_a_list",
+            "view_nests_itself",
+            "view_semantic_not_found",
+            "view_semantic_definition_unread",
+            "snowflake_no_current_database",
+            "snowflake_null_anchor",
+        ]
+    );
+}
+
+#[test]
+fn the_view_sentences_say_the_old_client_s_words() {
+    // `RE/graph.py` and `DB/metric_view.py` at 43e55f4f, the quoted values
+    // the core's (`sdm-pql`'s Python text), the clauses the core's.
+    let said = |s: Sentence| wording::template(s).text;
+    assert_eq!(
+        said(Sentence::ViewExpressionDroppedUntrusted),
+        "Failed to add column '{column}' since {reason}, and expressions taken from the metric \
+         view are executed as SQL under your warehouse credentials. Pass \
+         {advice:trust_expressions()} to keep it if you trust whoever authored the view"
+    );
+    assert_eq!(
+        said(Sentence::ViewTableExpressionDropped),
+        "Failed to add column '{column}' of table '{table}' since {reason}, and expressions \
+         taken from the semantic view are executed as SQL under your warehouse credentials"
+    );
+    assert_eq!(
+        said(Sentence::ViewFilterRefusedUntrusted),
+        "Cannot apply the metric view filter {filter} since {reason}. The graph would otherwise \
+         read rows the view leaves out. Create a regular view with this WHERE clause and point \
+         the metric view's source at it, or pass {advice:trust_expressions()} to apply it if you \
+         trust whoever authored the view"
+    );
+    assert_eq!(
+        said(Sentence::ViewJoinSkippedWithIt),
+        "Failed to add join '{join}', and with it {lost}, since {reason}"
+    );
+    assert_eq!(
+        said(Sentence::ViewColumnsCrossTable),
+        "Failed to add columns {columns!r} of table '{table}' since their expressions reference \
+         other tables"
+    );
+    assert_eq!(
+        said(Sentence::ViewMeasureNote),
+        "'{measure}' is {function}({table}.{column}, 0, 30, days) over the next 30 days"
+    );
+    assert_eq!(
+        said(Sentence::SnowflakeNoCurrentSchema),
+        "No current 'schema' set. Please specify the Snowflake schema manually"
+    );
+    assert_eq!(
+        said(Sentence::ServingPastLimit),
+        "this request is {bytes:,} bytes once wrapped for serving endpoint {endpoint!r}, above \
+         the {limit:,} byte limit it accepts. Send fewer rows per call: a smaller \
+         num_context_samples, or fewer entities to score"
+    );
+    // The way out of an untrusted expression is the host's to spell.
+    assert_eq!(
+        wording::Advice::TrustExpressions.as_str(),
+        "trust_expressions"
+    );
+}
