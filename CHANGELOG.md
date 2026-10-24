@@ -9,6 +9,12 @@ these packages. All five distributions share one version and one entry.
 
 ### Added
 
+- A Snowflake session the client opens names itself to Snowflake as
+  `nvidia/kumo-sdm`, so Snowflake can attribute its queries. An application
+  named any other way is kept: an `application` argument, one in the
+  `connections.toml` profile, `SF_PARTNER`, or the connector's own detection
+  of Streamlit and notebooks. A connection or Snowpark session you open
+  yourself is used as it is.
 - The relational engine publishes wheels for macOS (Apple silicon and Intel)
   and 64-bit Windows, and for CPython 3.14, alongside the `manylinux_2_28`
   x86-64 and aarch64 wheels it already built, so `structured-data-models-client[relational]`
@@ -22,6 +28,18 @@ these packages. All five distributions share one version and one entry.
   emulated, and each is smoke-tested on the architecture it targets. The
   release no longer builds aarch64 under QEMU, which also takes a privileged
   container image out of the release path.
+
+### Fixed
+
+- DuckDB 2.0 no longer warns on every read. The relational engine and
+  `read_table` read a DuckDB result through a relation rather than the DB-API
+  cursor, which 2.0 warns makes an extra copy of the rows.
+- A relational prediction over a graph without a time column works on pandas
+  3.1. Its anchor is the earliest timestamp pandas holds, and 3.1 refused to
+  take even an empty date offset from it.
+- A request's description leaves out a wire table carrying an integer past
+  the float range on every pandas release. pandas 3.1 had started to build
+  a frame around one, where earlier releases refused it.
 
 ## 1.0.0 - 2026-10-15
 

@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import sqlite3
+import warnings
 from pathlib import PurePosixPath
 
 import pandas as pd
@@ -175,6 +176,23 @@ def test_read_table_over_duckdb_by_table(tmp_path):
     connection = duckdb.connect(database, read_only=True)
     try:
         assert len(read_table(connection, table='items')) == 5
+    finally:
+        connection.close()
+
+
+def test_read_table_over_duckdb_does_not_warn():
+    """DuckDB 2.0 warns on Arrow from a DB-API result, so the read must not
+    take one."""
+    import duckdb
+
+    connection = duckdb.connect()
+    try:
+        connection.execute(
+            'CREATE TABLE items AS SELECT * FROM range(5) AS t(a)'
+        )
+        with warnings.catch_warnings():
+            warnings.simplefilter('error')
+            assert len(read_table(connection, table='items')) == 5
     finally:
         connection.close()
 

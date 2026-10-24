@@ -165,27 +165,16 @@ jobs:
 
       # The engine pins its siblings by exact version, and at this point in a
       # release those versions exist only as the artifact `build` uploaded.
-      # cibuildwheel's test environment resolves from PyPI unless told
-      # otherwise, so without this the smoke test cannot find them.
+      # The engine's `before-test` installs them by file before the engine, so
+      # the smoke test tests these and not a published release.
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: pure-distributions
           path: _sibling_wheels
 
-      # Only Linux runs in a container, where the engine's
-      # `[tool.cibuildwheel.linux]` already names /project/_sibling_wheels.
-      - name: Point the wheel test environments at the sibling wheels
+      - name: Build only this row's architecture
         shell: bash
-        run: |
-          echo "${{ matrix.archs }}" >> "$GITHUB_ENV"
-          case "${{ runner.os }}" in
-            Linux) ;;
-            # cibuildwheel layers its own `environment` over the host's, so a
-            # plain variable reaches the build and test environments without
-            # displacing what the engine's pyproject sets per platform.
-            *) echo "PIP_FIND_LINKS=${{ github.workspace }}/_sibling_wheels" >> "$GITHUB_ENV" ;;
-          esac
-
+        run: echo "${{ matrix.archs }}" >> "$GITHUB_ENV"
 
       - uses: pypa/cibuildwheel@b3395e271a35f73dad77f21802abe9b986dfe299 # v4.3.1
         with:
@@ -359,12 +348,17 @@ jobs:
       - name: Software bill of materials
         run: |
           python -m pip install --upgrade cyclonedx-bom
-          # --find-links dist for the same reason as the engine's test env: the
-          # exact sibling pins resolve to the wheels just built, not to whatever
-          # happens to be on PyPI. Without it this describes a previous release,
-          # or fails outright before the first one.
-          python -m pip install --find-links dist \
-            "./packages/structured-data-models-client[relational,sqlite,duckdb,postgres,databricks,snowflake,s3]"
+          # Every distribution from dist/, never by name and version alone:
+          # after a partial upload, PyPI's release of this version resolves as
+          # readily as the wheels being released, and this would describe it.
+          # The engine has a wheel per platform, so pip picks this runner's
+          # from dist/ and nowhere else.
+          version="${GITHUB_REF_NAME#v}"
+          python -m pip install --no-index --no-deps --find-links dist \
+            "structured-data-models-relational-engine==$version"
+          python -m pip install \
+            "dist/structured_data_models_client-$version-py3-none-any.whl[relational,sqlite,duckdb,postgres,databricks,snowflake,s3]" \
+            dist/structured_data_models_{api,pql,connectors}-$version-py3-none-any.whl
           cyclonedx-py environment --of JSON --validate -o dist/sbom.cyclonedx.json
           python -c "import json,sys; d=json.load(open('dist/sbom.cyclonedx.json')); names={c['name'] for c in d.get('components', [])}; missing={'structured-data-models-client','structured-data-models-api','structured-data-models-pql','structured-data-models-connectors','structured-data-models-relational-engine'} - names; print(f'{len(names)} components'); sys.exit(f'SBOM missing {sorted(missing)}' if missing else 0)"
 
