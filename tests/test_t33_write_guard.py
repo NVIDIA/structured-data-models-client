@@ -1260,3 +1260,21 @@ def test_the_old_clients_join_onto_a_derived_table_passes() -> None:
     ):
         with pytest.raises(wg.WriteRefused):
             DATABRICKS.check(sql)
+
+
+def test_the_old_clients_trusted_bitmap_sample_passes() -> None:
+    # T3.20 second capture (view.metric.trusted-function): with
+    # trust_expressions=True the old client samples the view's
+    # bitmap_bucket_number dimension. That pure read passes; a write
+    # calling it is still refused.
+    DATABRICKS.check(
+        'SELECT bitmap_bucket_number(source.`order_id`) AS `bucket`\n'
+        'FROM `other`.`s`.`orders` AS source\nLIMIT 1000'
+    )
+    for sql in (
+        'CREATE TABLE `other`.s.u AS SELECT bitmap_bucket_number(1) AS b',
+        'INSERT INTO `other`.s.u SELECT bitmap_bucket_number(`id`) '
+        'FROM `other`.s.t',
+    ):
+        with pytest.raises(wg.WriteRefused):
+            DATABRICKS.check(sql)
