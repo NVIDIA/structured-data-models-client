@@ -1,0 +1,54 @@
+{
+  "format": "sdm-case/1",
+  "id": "lakebase.binary",
+  "status": "acceptance",
+  "slice": "S2",
+  "warehouses": [
+    "lakebase"
+  ],
+  "paths": [
+    "source.open/explicit/lakebase",
+    "schema.from-source/all-tables/lakebase",
+    "query.materialize/indices-binary/lakebase",
+    "client.predict/binary/lakebase"
+  ],
+  "routes": [
+    "schema.from-source/all-tables/lakebase",
+    "schema.from-source/catalog-keys/lakebase",
+    "query.materialize/indices-binary/lakebase",
+    "query.materialize/indices-multiclass/lakebase",
+    "query.materialize/indices-regression/lakebase",
+    "query.materialize/indices-link-prediction/lakebase",
+    "query.materialize/indices-ranking/lakebase",
+    "query.materialize/indices-forecast/lakebase",
+    "client.predict/binary/lakebase",
+    "client.predict/multiclass/lakebase",
+    "client.predict/regression/lakebase",
+    "client.predict/link-prediction/lakebase",
+    "client.predict/ranking/lakebase",
+    "client.predict/forecast/lakebase"
+  ],
+  "cells": [
+    "int64/primary-key",
+    "timestamp-us/time-column"
+  ],
+  "input": {
+    "base": "shop",
+    "pql": "PREDICT COUNT(orders.*, 0, 30, days) > 0 FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ],
+      "anchor_time": "2024-03-01"
+    }
+  },
+  "until": "predict",
+  "expect": {
+    "outcome": "success",
+    "stage": "predict",
+    "today": "the tables listed from information_schema.tables in the source's schema (RE/graph.py, from_postgres), each read qualified as \"schema\".\"table\" (PG/table.py:146-153)"
+  },
+  "why": "base.binary's kind on the lakebase leg: Postgres over a psycopg connection to the Lakebase database, opened as PostgresSource(connection), the explicit open and the leg's default (CN/source.py:400).",
+  "source": "written by T3.7's test author from the reference at 43e55f4f"
+}

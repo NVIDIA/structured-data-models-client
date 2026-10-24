@@ -1,0 +1,60 @@
+{
+  "format": "sdm-case/1",
+  "id": "snowflake.zone.ltz-time",
+  "status": "acceptance",
+  "slice": "S2",
+  "warehouses": [
+    "snowflake"
+  ],
+  "paths": [
+    "schema.from-source/all-tables/snowflake",
+    "query.materialize/indices-regression/snowflake",
+    "client.predict/regression/snowflake"
+  ],
+  "routes": [
+    "schema.from-source/all-tables/snowflake",
+    "schema.from-source/catalog-keys/snowflake",
+    "query.materialize/indices-binary/snowflake",
+    "query.materialize/indices-multiclass/snowflake",
+    "query.materialize/indices-regression/snowflake",
+    "query.materialize/indices-link-prediction/snowflake",
+    "query.materialize/indices-ranking/snowflake",
+    "query.materialize/indices-forecast/snowflake",
+    "client.predict/binary/snowflake",
+    "client.predict/multiclass/snowflake",
+    "client.predict/regression/snowflake",
+    "client.predict/link-prediction/snowflake",
+    "client.predict/ranking/snowflake",
+    "client.predict/forecast/snowflake"
+  ],
+  "cells": [
+    "int64/primary-key",
+    "int64/foreign-key",
+    "timestamp-us-tz/time-column",
+    "float64/target"
+  ],
+  "input": {
+    "base": "shop",
+    "setup": [
+      "SET GLOBAL TimeZone = 'UTC'",
+      "ALTER TABLE orders ALTER ts TYPE TIMESTAMPTZ",
+      "INSERT INTO orders VALUES (80, 0, 99.0, TIMESTAMPTZ '2024-03-01 00:30:00+00'), (81, 1, 99.0, TIMESTAMPTZ '2024-02-29 23:30:00+00')"
+    ],
+    "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ],
+      "anchor_time": "2024-03-01"
+    }
+  },
+  "until": "predict",
+  "expect": {
+    "outcome": "success",
+    "stage": "predict",
+    "today": "the column is read as a date (SNOW/table.py:349); its values reach pandas as UTC with the zone dropped (RE/base/utils.py, to_datetime), while the sampler binds each anchor as TIMESTAMP_NTZ text (SNOW/sampler.py:304-306, :327-328, :423-425), which Snowflake compares with a TIMESTAMP_LTZ column on the session's wall clock; orders 80 and 81 lie on opposite sides of the anchor in UTC and on that wall clock, so the answer shows which reading each step took"
+  },
+  "why": "A zoned time column, stored as TIMESTAMP_LTZ by the loader's Snowflake type map, read in the capture's session zone, which is not UTC (B5): order 80 is 30 minutes after the anchor in UTC and order 81 30 minutes before it, so a session zone west of UTC moves order 80 before the anchor on the wall clock and one east of UTC moves order 81 after it. Unsampled: the old client asks SAMPLE ROW for at least 1,000 rows (max_pq_iterations 10 times a context of at least 100, RE/rfm.py:2303), and every table here is smaller, so the draw is the whole table",
+  "source": "written by T3.6's test author from the reference at 43e55f4f"
+}
