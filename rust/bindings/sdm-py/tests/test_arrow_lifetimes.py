@@ -182,6 +182,87 @@ def test_canonical_inputs_cross_sharing_their_buffers() -> None:
     del run
 
 
+def _unaligned_values() -> pa.Array:
+    values = np.ndarray((3,), dtype=np.int64, buffer=bytearray(25), offset=1)
+    values[:] = [1, 2, 3]
+    array = pa.Array.from_buffers(
+        pa.int64(),
+        3,
+        [pa.py_buffer(b'\x05'), pa.py_buffer(values)],
+        null_count=1,
+    )
+    assert array.buffers()[1].address % 8 == 1
+    return array
+
+
+def _unaligned_text() -> pa.Array:
+    offsets = np.ndarray((4,), dtype=np.int32, buffer=bytearray(17), offset=1)
+    offsets[:] = [0, 1, 1, 3]
+    array = pa.Array.from_buffers(
+        pa.utf8(),
+        3,
+        [pa.py_buffer(b'\x05'), pa.py_buffer(offsets), pa.py_buffer(b'acc')],
+        null_count=1,
+    )
+    assert array.buffers()[1].address % 4 == 1
+    return array
+
+
+@pytest.mark.parametrize(
+    'shape',
+    [
+        'primitive',
+        'utf8-offsets',
+        'nested',
+        'dictionary-values',
+        'dictionary-indices',
+    ],
+)
+def test_unaligned_buffers_are_refused_by_name_before_typed_import(
+    shape: str,
+) -> None:
+    if shape == 'primitive':
+        array = _unaligned_values()
+    elif shape == 'utf8-offsets':
+        array = _unaligned_text()
+    elif shape == 'nested':
+        array = pa.ListArray.from_arrays([0, 1, 2, 3], _unaligned_values())
+    elif shape == 'dictionary-values':
+        array = pa.DictionaryArray.from_arrays(
+            pa.array([0, None, 2], pa.int8()), _unaligned_text()
+        )
+    else:
+        array = pa.DictionaryArray.from_arrays(
+            _unaligned_values(), pa.array(['a', 'b', 'c', 'd'])
+        )
+    run = _native.Run.start(*messages.fetch({'expect': 'discover'}))
+    assert messages.read(run.next()[0])['step'] == 'fetch'
+    with pytest.raises(_native.CoreError) as raised:
+        run.reply(messages.fetch_reply(), {1: pa.table({'a': array})})
+    error = raised.value
+    assert (error.kind, error.code) == (
+        'data_source',
+        'PROVIDER_SCHEMA_MISMATCH',
+    )
+    fields = messages.read(error.control)['error']['fields']
+    assert fields['check'] == {'t': 'utf8', 'v': 'declared'}
+    assert fields['attachment'] == {'t': 'uint32', 'v': 1}
+    with pytest.raises(_native.CoreError) as finished:
+        run.next()
+    assert finished.value.code == 'RUN_FINISHED'
+
+
+def test_empty_primitive_dangling_buffer_remains_admissible() -> None:
+    # A zero-byte C buffer may use a dangling address. It is never read and
+    # Arrow's importer replaces it with its own aligned empty allocation.
+    array = pa.Array.from_buffers(
+        pa.int64(), 0, [None, pa.foreign_buffer(1, 0)]
+    )
+    run, stream = _echoed(pa.table({'a': array}))
+    assert _imported(stream).num_rows == 0
+    del run
+
+
 def test_the_run_holds_the_producer_s_memory_and_releases_it_exactly() -> None:
     before = _held()
     sent = pa.table(_canonical())
