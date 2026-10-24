@@ -663,3 +663,33 @@ async fn key_columns(
     }
     Ok(read)
 }
+
+#[cfg(test)]
+mod source_type_tests {
+    use super::retained_source_type;
+    use arrow_schema::{DataType, Field, TimeUnit};
+
+    #[test]
+    fn numeric_and_temporal_fields_retain_the_opaque_catalog_declaration() {
+        for kind in [
+            DataType::Int16,
+            DataType::Int32,
+            DataType::Int64,
+            DataType::UInt64,
+            DataType::Float32,
+            DataType::Float64,
+            DataType::Decimal128(20, 4),
+            DataType::Decimal256(76, 0),
+            DataType::Timestamp(TimeUnit::Microsecond, None),
+        ] {
+            assert_eq!(
+                retained_source_type(&Field::new("k", kind, true), "opaque_domain_name"),
+                Some("opaque_domain_name")
+            );
+        }
+        assert_eq!(
+            retained_source_type(&Field::new("k", DataType::Utf8, true), "text"),
+            None
+        );
+    }
+}

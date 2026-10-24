@@ -115,3 +115,44 @@ fn the_vectors_run_the_core_s_own_requests() {
         );
     }
 }
+
+#[test]
+fn floating_seeds_carry_each_destination_columns_opaque_declaration() {
+    use sdm_contract::data::{SEED_KEY_TYPE, field};
+    use sdm_engine::sample::by_pkey;
+    let mut table = table("ev");
+    table.column("uid").unwrap();
+    table.columns[0].declared_type = Some("my_entity_domain".into());
+    table.columns[1].declared_type = Some("my_neighbor_domain".into());
+    let seeds = || KeySet {
+        attachment: AttachmentId(0),
+        columns: vec![field("key", ColumnType::Float64, true)],
+    };
+    let requests = [
+        (
+            by_fkey(&table, "uid", columns(), seeds(), 32, NullOrder::Last).unwrap(),
+            "my_neighbor_domain",
+        ),
+        (
+            by_time(&table, "uid", columns(), seeds(), true).unwrap(),
+            "my_neighbor_domain",
+        ),
+        (
+            by_pkey(&table, columns(), seeds(), true).unwrap(),
+            "my_entity_domain",
+        ),
+    ];
+    for (request, expected) in requests {
+        let seeds = match request {
+            DataRequest::Neighbors { seeds, .. } | DataRequest::Lookup { seeds, .. } => seeds,
+            _ => unreachable!(),
+        };
+        assert_eq!(
+            seeds.columns[0]
+                .metadata
+                .get(SEED_KEY_TYPE)
+                .map(String::as_str),
+            Some(expected)
+        );
+    }
+}

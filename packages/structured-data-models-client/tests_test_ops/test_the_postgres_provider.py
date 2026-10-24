@@ -184,7 +184,11 @@ def _admitted(connection: Any, request: dict[str, Any]) -> pa.Table:
 
 
 def _keyed(
-    connection: Any, request: dict[str, Any], seeds: pa.Table
+    connection: Any,
+    request: dict[str, Any],
+    seeds: pa.Table,
+    *,
+    key_source_type: str | None = None,
 ) -> tuple[pa.Table, dict[str, Any]]:
     r"""A keyed fetch with ``seeds``, through the core: the core attaches
     them to the step as its own key set, the provider binds them and
@@ -218,6 +222,11 @@ def _keyed(
         'columns': [
             {
                 'name': field.name,
+                **(
+                    {'metadata': {'sdm:key_declared_type': key_source_type}}
+                    if field.name == 'key' and key_source_type is not None
+                    else {}
+                ),
                 'type': kinds.get(str(field.type))
                 or {
                     'type': 'decimal128',
@@ -266,6 +275,7 @@ def test_integral_float_seeds_find_integer_keys_without_truncating_fractions(
                 'key': ['user_id'],
             },
             seeds,
+            key_source_type=sql_type.lower(),
         )
         assert result.column('age').to_pylist() == ['one', 'two']
         assert result.column('__kumo_batch__').to_pylist() == [0, 2]
@@ -303,9 +313,53 @@ def test_float_binding_never_rounds_integer_columns_into_a_match(
                 'key': ['user_id'],
             },
             seeds,
+            key_source_type='bigint',
         )
         assert result.column('age').to_pylist() == ['exact53', 'exact60']
         assert result.column('__kumo_batch__').to_pylist() == [0, 1]
+    finally:
+        connection.close()
+
+
+@pytest.mark.parametrize('sql_type', ['REAL', 'DOUBLE PRECISION'])
+@pytest.mark.parametrize('arrow_type', [pa.float32(), pa.float64()])
+@pytest.mark.parametrize('carry_declaration', [False, True])
+def test_floating_keys_match_their_own_declared_column_type(
+    server: Server | None, sql_type, arrow_type, carry_declaration
+) -> None:
+    if server is None:
+        pytest.skip('needs the local Postgres test service')
+    connection = server.database(
+        [
+            f'CREATE TABLE users(user_id {sql_type} PRIMARY KEY, age VARCHAR)',
+            "INSERT INTO users VALUES (0.1, 'fraction'), (1.5, 'one-half')",
+        ]
+    )
+    try:
+        result, _ = _keyed(
+            connection,
+            {
+                'request': 'lookup',
+                'table': {'source': ['public', 'users']},
+                'columns': ['user_id', 'age'],
+                'key': ['user_id'],
+            },
+            pa.table(
+                {
+                    'key': pa.array([0.1, 1.5], type=arrow_type),
+                    'batch': pa.array([0, 1], type=pa.int64()),
+                }
+            ),
+            key_source_type=sql_type.lower() if carry_declaration else None,
+        )
+        # A float32 0.1 promoted to double is a different DOUBLE PRECISION
+        # key, but REAL must round either seed width to its own value.
+        expected = (
+            ['one-half']
+            if sql_type == 'DOUBLE PRECISION' and arrow_type == pa.float32()
+            else ['fraction', 'one-half']
+        )
+        assert result.column('age').to_pylist() == expected
     finally:
         connection.close()
 
