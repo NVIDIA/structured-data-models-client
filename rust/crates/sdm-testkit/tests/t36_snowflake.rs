@@ -668,9 +668,12 @@ fn each_declared_type_is_read_by_the_old_clients_type_map() {
     }
 }
 
+/// One `DESCRIBE TABLE` row: name, type, `null?`, primary key, unique key.
+type Described<'a> = (&'a str, &'a str, &'a str, &'a str, &'a str);
+
 /// A `DESCRIBE TABLE` answer in the row adapter's text form: name, type,
 /// kind, `null?`, default, primary key, unique key.
-fn describe_rows(rows: &[(&str, &str, &str, &str, &str)]) -> Vec<RecordBatch> {
+fn describe_rows(rows: &[Described<'_>]) -> Vec<RecordBatch> {
     let names = [
         "name",
         "type",
@@ -686,7 +689,7 @@ fn describe_rows(rows: &[(&str, &str, &str, &str, &str)]) -> Vec<RecordBatch> {
             .map(|n| Field::new(*n, DataType::Utf8, true))
             .collect::<Vec<_>>(),
     ));
-    let column = |pick: &dyn Fn(&(&str, &str, &str, &str, &str)) -> Option<String>| -> ArrayRef {
+    let column = |pick: &dyn Fn(&Described<'_>) -> Option<String>| -> ArrayRef {
         Arc::new(rows.iter().map(pick).collect::<StringArray>())
     };
     vec![
