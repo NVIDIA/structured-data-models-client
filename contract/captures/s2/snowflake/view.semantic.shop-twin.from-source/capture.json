@@ -1,0 +1,647 @@
+{
+ "format": "sdm-capture/1",
+ "case": "view.semantic.shop-twin.from-source",
+ "leg": "snowflake",
+ "recording_commit": "b08dee3d2d7101e72b957a0ef613506f99a2638a",
+ "reference_commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+ "versions": {
+  "duckdb": "1.5.6",
+  "numpy": "2.5.3",
+  "pandas": "3.0.6",
+  "pyarrow": "25.0.1",
+  "python": "3.12.15",
+  "snowflake-connector-python": "4.8.0",
+  "snowflake-snowpark-python": "1.55.3"
+ },
+ "input_hash": "c5dc450800c4b3ef6395bb6b097fdfc151bd40389f603d8afb5f8f45425461ab",
+ "session": {
+  "time_zone": "America/Los_Angeles",
+  "null_order": "nulls_last"
+ },
+ "reference": {
+  "case": "view.semantic.shop-twin.from-source@snowflake",
+  "core": null,
+  "driver": {
+   "capture": {
+    "bindings": [],
+    "cursors": 8,
+    "events": [
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 1
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 2
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 3
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 4
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 5
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 6
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 7
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 8
+     }
+    ],
+    "incomplete": [],
+    "passed_through": [
+     "_paramstyle"
+    ],
+    "statements": [
+     {
+      "error": null,
+      "handle": 1,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{shop_semantic_view}'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "0896141f42913eac4b8a90fda119f30b2cf4e3be068a3d98de4f088d05e9a805",
+        "method": "fetchone",
+        "rows": 1,
+        "values": {
+         "columns": [
+          "SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW(?)"
+         ],
+         "ordered": "f1b45aa6a15b7d6a79014dc5343b281492aefa3688634eab8d404edddcde3331",
+         "types": [
+          "2"
+         ],
+         "unencodable": [],
+         "unordered": "f1b45aa6a15b7d6a79014dc5343b281492aefa3688634eab8d404edddcde3331"
+        }
+       }
+      ],
+      "sql": "SELECT SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW(?)",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 2,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "bdb9f6dd835a14351dfb5922933961a155922ca8bbf2a5d7b65b79d5d8e25908",
+        "method": "fetchall",
+        "rows": 5,
+        "values": {
+         "columns": [
+          "name",
+          "type",
+          "kind",
+          "null?",
+          "default",
+          "primary key",
+          "unique key",
+          "check",
+          "expression",
+          "comment",
+          "policy name",
+          "privacy domain",
+          "write default"
+         ],
+         "ordered": "3d9a10dc826af7e9262f15758fa4767707595c68d6c03372339dcc9901016688",
+         "types": [
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "9",
+          "2"
+         ],
+         "unencodable": [],
+         "unordered": "622fbe1e778151824319680e5d65334027125e7a383b88867c40712bcdfef7e3"
+        }
+       }
+      ],
+      "sql": "DESCRIBE TABLE \"{catalog}\".\"{shop_schema}\".\"ORDERS\"",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 3,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "f6c11cfae478b4d6fbe7bf87563ed88b7f6a8b953eb7818ddef9deff8f945c65",
+        "method": "fetch_arrow_all",
+        "rows": 1000,
+        "schema": [
+         {
+          "name": "ORDER_ID",
+          "type": "int16"
+         },
+         {
+          "name": "USER_ID",
+          "type": "int8"
+         },
+         {
+          "name": "PRODUCT_ID",
+          "type": "int8"
+         },
+         {
+          "name": "QUANTITY",
+          "type": "int8"
+         },
+         {
+          "name": "ORDERED_AT",
+          "type": "timestamp[ns]"
+         }
+        ],
+        "values": {
+         "columns": [
+          "ORDER_ID",
+          "USER_ID",
+          "PRODUCT_ID",
+          "QUANTITY",
+          "ORDERED_AT"
+         ],
+         "ordered": "cb38bd86c91d10091442783bc01810a4652d27c4933437ffe7f533a0321d2310",
+         "types": null,
+         "unencodable": [],
+         "unordered": "a78db9c07fb8b6c57b0c7a3e49b8a8f3e7cf14a6db4966ea4ea424709742e222"
+        }
+       }
+      ],
+      "sql": "SELECT \"ORDER_ID\", \"USER_ID\", \"PRODUCT_ID\", \"QUANTITY\", \"ORDERED_AT\" FROM \"{catalog}\".\"{shop_schema}\".\"ORDERS\" LIMIT 1000",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 4,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "6e908e0cd7d87055388178da81f1580a7df6578fbf2bc3e40098aff5d3184f1a",
+        "method": "fetchall",
+        "rows": 1,
+        "values": {
+         "columns": [
+          "COUNT(*)",
+          "MIN(\"ORDERED_AT\")",
+          "MAX(\"ORDERED_AT\")",
+          "COUNT(\"ORDERED_AT\")"
+         ],
+         "ordered": "d66fc9f7dc6315f84bd8545072f34347f25a7d66f723b3f3dae83860052ac2cc",
+         "types": [
+          "0",
+          "8",
+          "8",
+          "0"
+         ],
+         "unencodable": [],
+         "unordered": "d66fc9f7dc6315f84bd8545072f34347f25a7d66f723b3f3dae83860052ac2cc"
+        }
+       }
+      ],
+      "sql": "SELECT COUNT(*), MIN(\"ORDERED_AT\"), MAX(\"ORDERED_AT\"), COUNT(\"ORDERED_AT\")\nFROM \"{catalog}\".\"{shop_schema}\".\"ORDERS\"",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 5,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "e1e45b67596926be8fdd236b59ce4073ffc0c3792545c7eec54a81d6995ab24f",
+        "method": "fetchall",
+        "rows": 3,
+        "values": {
+         "columns": [
+          "name",
+          "type",
+          "kind",
+          "null?",
+          "default",
+          "primary key",
+          "unique key",
+          "check",
+          "expression",
+          "comment",
+          "policy name",
+          "privacy domain",
+          "write default"
+         ],
+         "ordered": "7d9cc0b26b393a05f63eb7cca910c69e2f09f7642a7f4d67b785ccb0351c3a01",
+         "types": [
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "9",
+          "2"
+         ],
+         "unencodable": [],
+         "unordered": "c6e1c5795d5ed59509f3627bc80aca80af070636d11e9e9097456b58cc6d9b9e"
+        }
+       }
+      ],
+      "sql": "DESCRIBE TABLE \"{catalog}\".\"{shop_schema}\".\"PRODUCTS\"",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 6,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "dfcf8770d38bc639d3e7f2eef8de6d27bedec57c3b18cfbcec347f665b9c6b61",
+        "method": "fetch_arrow_all",
+        "rows": 12,
+        "schema": [
+         {
+          "name": "PRODUCT_ID",
+          "type": "int8"
+         },
+         {
+          "name": "CATEGORY",
+          "type": "string"
+         },
+         {
+          "name": "PRICE",
+          "type": "double"
+         }
+        ],
+        "values": {
+         "columns": [
+          "PRODUCT_ID",
+          "CATEGORY",
+          "PRICE"
+         ],
+         "ordered": "72c1ca8efc52216fffa47a8584affc1e1f6c8883cd332cb6b61602886436db72",
+         "types": null,
+         "unencodable": [],
+         "unordered": "ed4a32bfaff9822bb14daf208c0f4e04a211b046725133ddb920b624bfd8bcdc"
+        }
+       }
+      ],
+      "sql": "SELECT \"PRODUCT_ID\", \"CATEGORY\", \"PRICE\" FROM \"{catalog}\".\"{shop_schema}\".\"PRODUCTS\" LIMIT 1000",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 7,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "9bf0618f6afa9b07d2c41c1bfb1bf3e301747fce0e68358f40527f58577183fd",
+        "method": "fetchall",
+        "rows": 3,
+        "values": {
+         "columns": [
+          "name",
+          "type",
+          "kind",
+          "null?",
+          "default",
+          "primary key",
+          "unique key",
+          "check",
+          "expression",
+          "comment",
+          "policy name",
+          "privacy domain",
+          "write default"
+         ],
+         "ordered": "f175eef3ec2e6f8fdee820599b0c61056a549ae8b0d84162b6069962d991e247",
+         "types": [
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "9",
+          "2"
+         ],
+         "unencodable": [],
+         "unordered": "34d2d523006879683fd3cc522ded616c494eb00687995c7728886dcb895cf9ff"
+        }
+       }
+      ],
+      "sql": "DESCRIBE TABLE \"{catalog}\".\"{shop_schema}\".\"USERS\"",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 8,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "b0455b6e69b5c93ad1b6505129a5f6a297c247a861ae39b3a672a2f14eeae535",
+        "method": "fetch_arrow_all",
+        "rows": 40,
+        "schema": [
+         {
+          "name": "USER_ID",
+          "type": "int8"
+         },
+         {
+          "name": "AGE",
+          "type": "int8"
+         },
+         {
+          "name": "COUNTRY",
+          "type": "string"
+         }
+        ],
+        "values": {
+         "columns": [
+          "USER_ID",
+          "AGE",
+          "COUNTRY"
+         ],
+         "ordered": "c21e6dd38b98e40e243a6749d9315fe9206159f24d97ea73b7c4ae862e9962be",
+         "types": null,
+         "unencodable": [],
+         "unordered": "a8807a9d9a8d9555cecdd3f22bc03bb947116d18c7ebf0dca83f39da392218ef"
+        }
+       }
+      ],
+      "sql": "SELECT \"USER_ID\", \"AGE\", \"COUNTRY\" FROM \"{catalog}\".\"{shop_schema}\".\"USERS\" LIMIT 1000",
+      "stage": "from_source"
+     }
+    ]
+   },
+   "query_log": {
+    "bindings": 0,
+    "compared": 8,
+    "differing": [],
+    "statements": 8
+   }
+  },
+  "format": "sdm-observation/1",
+  "host": {
+   "warnings": []
+  },
+  "identity": {
+   "cell": "ref-pandas3",
+   "commit": {
+    "clean": true,
+    "sha": "b08dee3d2d7101e72b957a0ef613506f99a2638a"
+   },
+   "contract": null,
+   "inputs": {
+    "bases": "9d69fe4aea2be4a6a2d96ea03f5258147c537927e2c6e6716b6030836ebc62f8",
+    "case": "16e02f3fcb06ff4386836582e739a7ad6b2c724828202c4e4426727fc4811802"
+   },
+   "native": null,
+   "native_loaded": false,
+   "operations": [],
+   "platform": "linux-x86_64",
+   "reference": {
+    "commit": {
+     "clean": true,
+     "sha": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1"
+    },
+    "environment": "4ad1f59a27870d083c270d58969d94b80e97bd128c81ba20396b4599e8ae0efe",
+    "guard": {
+     "after": "passed",
+     "before": "passed"
+    }
+   },
+   "runner": "python-ref",
+   "versions": {
+    "duckdb": "1.5.6",
+    "numpy": "2.5.3",
+    "pandas": "3.0.6",
+    "pyarrow": "25.0.1",
+    "python": "3.12.15"
+   }
+  },
+  "outcome": {
+   "code": null,
+   "error": null,
+   "result": "success",
+   "stage": "from_source"
+  },
+  "public": {
+   "payloads": [],
+   "result": null,
+   "schema": {
+    "links": [
+     [
+      "ORDERS",
+      "PRODUCT_ID",
+      "PRODUCTS",
+      "PRODUCT_ID"
+     ],
+     [
+      "ORDERS",
+      "USER_ID",
+      "USERS",
+      "USER_ID"
+     ]
+    ],
+    "tables": [
+     {
+      "columns": [
+       {
+        "dtype": "timestamp[us]",
+        "name": "ORDERED_AT",
+        "stype": "timestamp"
+       },
+       {
+        "dtype": "int64",
+        "name": "QUANTITY",
+        "stype": "numerical"
+       },
+       {
+        "dtype": "int64",
+        "name": "ORDER_ID",
+        "stype": "ID"
+       },
+       {
+        "dtype": "int64",
+        "name": "PRODUCT_ID",
+        "stype": "ID"
+       },
+       {
+        "dtype": "int64",
+        "name": "USER_ID",
+        "stype": "ID"
+       }
+      ],
+      "duplicate_keys": null,
+      "name": "ORDERS",
+      "primary_key": "ORDER_ID",
+      "time_column": "ORDERED_AT"
+     },
+     {
+      "columns": [
+       {
+        "dtype": "string",
+        "name": "CATEGORY",
+        "stype": "categorical"
+       },
+       {
+        "dtype": "float64",
+        "name": "PRICE",
+        "stype": "numerical"
+       },
+       {
+        "dtype": "int64",
+        "name": "PRODUCT_ID",
+        "stype": "ID"
+       }
+      ],
+      "duplicate_keys": null,
+      "name": "PRODUCTS",
+      "primary_key": "PRODUCT_ID",
+      "time_column": null
+     },
+     {
+      "columns": [
+       {
+        "dtype": "int64",
+        "name": "AGE",
+        "stype": "numerical"
+       },
+       {
+        "dtype": "string",
+        "name": "COUNTRY",
+        "stype": "categorical"
+       },
+       {
+        "dtype": "int64",
+        "name": "USER_ID",
+        "stype": "ID"
+       }
+      ],
+      "duplicate_keys": null,
+      "name": "USERS",
+      "primary_key": "USER_ID",
+      "time_column": null
+     }
+    ]
+   }
+  }
+ },
+ "tables": [
+  {
+   "name": "orders",
+   "data": "tables/2d8127bc0764af3567ddcba4070a719c6db95c81a1c343c86884579dfe9698e1.arrows"
+  },
+  {
+   "name": "users",
+   "data": "tables/a4d1c73e1c1c48bdaeb829617953b6d38bcf89f3e23ed330e1b8e3abcf42fbc2.arrows"
+  }
+ ],
+ "derived": [],
+ "draws": [],
+ "statements": [
+  {
+   "text": "SELECT SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW(?)",
+   "parameters": [
+    "{shop_semantic_view}"
+   ],
+   "result": "tables/9ae8cee8f23a3008af2416bf42fb2088da6c3c634ea104e79301057db337cc5b.arrows"
+  },
+  {
+   "text": "DESCRIBE TABLE \"{catalog}\".\"{shop_schema}\".\"ORDERS\"",
+   "parameters": [],
+   "result": "tables/f066c717949e0130aac21ec50d3e1c76208c8a24d08fd9b4cd4d6cfc19208780.arrows"
+  },
+  {
+   "text": "SELECT \"ORDER_ID\", \"USER_ID\", \"PRODUCT_ID\", \"QUANTITY\", \"ORDERED_AT\" FROM \"{catalog}\".\"{shop_schema}\".\"ORDERS\" LIMIT 1000",
+   "parameters": [],
+   "result": "tables/f6c11cfae478b4d6fbe7bf87563ed88b7f6a8b953eb7818ddef9deff8f945c65.arrows"
+  },
+  {
+   "text": "SELECT COUNT(*), MIN(\"ORDERED_AT\"), MAX(\"ORDERED_AT\"), COUNT(\"ORDERED_AT\")\nFROM \"{catalog}\".\"{shop_schema}\".\"ORDERS\"",
+   "parameters": [],
+   "result": "tables/6dfdb3958a6d151e4b8a0f8f822144d5a58bea3027a84aed050218856a0ef3de.arrows"
+  },
+  {
+   "text": "DESCRIBE TABLE \"{catalog}\".\"{shop_schema}\".\"PRODUCTS\"",
+   "parameters": [],
+   "result": "tables/5ef5e0632a845de2db9c0b7b3f4271f47432ecf8fed53743d129af735dc90313.arrows"
+  },
+  {
+   "text": "SELECT \"PRODUCT_ID\", \"CATEGORY\", \"PRICE\" FROM \"{catalog}\".\"{shop_schema}\".\"PRODUCTS\" LIMIT 1000",
+   "parameters": [],
+   "result": "tables/dfcf8770d38bc639d3e7f2eef8de6d27bedec57c3b18cfbcec347f665b9c6b61.arrows"
+  },
+  {
+   "text": "DESCRIBE TABLE \"{catalog}\".\"{shop_schema}\".\"USERS\"",
+   "parameters": [],
+   "result": "tables/13692c468098b9ea2cc652ce0815310cabcfedfa6133f50d5d58c3b1663f10e5.arrows"
+  },
+  {
+   "text": "SELECT \"USER_ID\", \"AGE\", \"COUNTRY\" FROM \"{catalog}\".\"{shop_schema}\".\"USERS\" LIMIT 1000",
+   "parameters": [],
+   "result": "tables/b0455b6e69b5c93ad1b6505129a5f6a297c247a861ae39b3a672a2f14eeae535.arrows"
+  }
+ ],
+ "loader": []
+}
