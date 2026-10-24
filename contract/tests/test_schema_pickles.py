@@ -120,7 +120,7 @@ def _shop(routes: str, monkeypatch: pytest.MonkeyPatch) -> Any:
     if routes:
         monkeypatch.setenv(_routing.ENVIRONMENT, routes)
     else:
-        monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+        monkeypatch.setenv(_routing.ENVIRONMENT, '')
     connection = duckdb.connect()
     connection.execute(
         'CREATE TABLE users (user_id BIGINT PRIMARY KEY, age BIGINT)'

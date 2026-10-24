@@ -65,7 +65,7 @@ SUM = 'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id'
 
 @pytest.fixture(autouse=True)
 def _old(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
 
 
 def _shop() -> list[str]:
@@ -91,7 +91,7 @@ def _gathered(
     route where none), for users 0 and 1 unless ``options`` name others,
     or the error it raised."""
     if routes is None:
-        monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+        monkeypatch.setenv(_routing.ENVIRONMENT, '')
     else:
         monkeypatch.setenv(_routing.ENVIRONMENT, routes)
     connection = duckdb.connect()
@@ -111,7 +111,7 @@ def _gathered(
     except StructuredDataError as error:
         return error
     finally:
-        monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+        monkeypatch.setenv(_routing.ENVIRONMENT, '')
 
 
 def _payloads(request: Request | StructuredDataError) -> list[Any]:
@@ -231,7 +231,7 @@ def _predicted(
     outcomes = []
     for routes in (CORE, None):
         if routes is None:
-            monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+            monkeypatch.setenv(_routing.ENVIRONMENT, '')
         else:
             monkeypatch.setenv(_routing.ENVIRONMENT, routes)
         with (
@@ -247,7 +247,7 @@ def _predicted(
             except StructuredDataError as error:
                 outcome = error
         outcomes.append((outcome, [type(w.message).__name__ for w in shown]))
-    monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     return outcomes[0], outcomes[1]
 
 

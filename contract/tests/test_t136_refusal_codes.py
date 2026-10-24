@@ -189,14 +189,14 @@ def _routes(
     r"""The reference's outcome, then the core's, for the same call."""
     from sdm_client import _routing
 
-    monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     reference = _call(setup, query, **kwargs)
     monkeypatch.setenv(
         _routing.ENVIRONMENT,
         ','.join(_routing.FROM_SOURCE_DUCKDB + _routing.MATERIALIZE_DUCKDB),
     )
     core = _call(setup, query, **kwargs)
-    monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     return reference, core
 
 

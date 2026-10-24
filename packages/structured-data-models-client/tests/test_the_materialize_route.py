@@ -61,7 +61,7 @@ ANCHOR = pd.Timestamp('2024-03-01')
 
 @pytest.fixture(autouse=True)
 def _old(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
 
 
 def _shop() -> list[str]:
@@ -116,7 +116,7 @@ def _both_routes(
     where it is not, the old route's refusal is held instead."""
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     core = _materialize(*setup, **arguments)._payloads[0]
-    monkeypatch.delenv(_routing.ENVIRONMENT)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     if importlib.util.find_spec('sdm_relational_engine') is None:
         with pytest.raises(MissingExtraError):
             _materialize(*setup, **arguments)
@@ -275,7 +275,7 @@ def test_an_average_s_lag_is_each_row_s_own_window(
     query = 'PREDICT AVG(orders.price, 0, 30, days) FOR EACH users.user_id'
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     core = _materialize(query=query, lag_timesteps=2)._payloads[0]
-    monkeypatch.delenv(_routing.ENVIRONMENT)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     table = core['predict']['instance_table']
     at = table['columns'].index('__kumo_arl0__')
     connection = _connection()
@@ -409,7 +409,7 @@ def test_a_nan_lag_is_refused_on_the_core_route_only(
     assert str(refused.value).startswith(
         '[INVALID_REQUEST] lag_timesteps carries a value'
     )
-    monkeypatch.delenv(_routing.ENVIRONMENT)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     if value == value and not _old_route_needs_the_engine():
         with pytest.raises(StructuredDataError) as old:
             _materialize(lag_timesteps=value)
@@ -468,7 +468,7 @@ def test_the_sampling_options_are_taken_as_the_old_route_takes_them(
                 .materialize(indices=[0, 1], **arguments)
                 ._payloads[0]
             )
-        monkeypatch.delenv(_routing.ENVIRONMENT)
+        monkeypatch.setenv(_routing.ENVIRONMENT, '')
         if importlib.util.find_spec('sdm_relational_engine') is not None:
             with warnings.catch_warnings():
                 warnings.simplefilter('ignore')
@@ -613,7 +613,7 @@ def test_tables_named_are_sampled_as_the_old_route_samples_them(
     payload = core._payloads[0]
     assert set(payload['context']['related_tables']) == {'buyers', 'purchases'}
     assert core.entity_table == 'buyers'
-    monkeypatch.delenv(_routing.ENVIRONMENT)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     if _old_route_needs_the_engine():
         return
     old, _ = _named()
@@ -979,7 +979,7 @@ def test_a_table_mapped_to_another_source_table_samples_that_table(
 
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     core = sampled()
-    monkeypatch.delenv(_routing.ENVIRONMENT)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     if _old_route_needs_the_engine():
         return
     assert json.loads(json.dumps(core)) == json.loads(
@@ -1097,7 +1097,7 @@ def test_entities_that_do_not_cast_are_the_caller_s_error_on_the_core(
     assert refused.value.code == 'INVALID_REQUEST'
     assert refused.value.details['field'] == 'indices'
     assert refused.value.details['position'] == 0
-    monkeypatch.delenv(_routing.ENVIRONMENT)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     if importlib.util.find_spec('sdm_relational_engine') is not None:
         with pytest.raises(StructuredDataError) as old:
             _materialize(indices=indices)
@@ -1139,7 +1139,7 @@ def test_a_refused_call_does_not_lose_the_index_warning(
         if route == 'core':
             monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
         else:
-            monkeypatch.delenv(_routing.ENVIRONMENT)
+            monkeypatch.setenv(_routing.ENVIRONMENT, '')
             if importlib.util.find_spec('sdm_relational_engine') is None:
                 break
         with warnings.catch_warnings():
@@ -1211,7 +1211,7 @@ def test_a_numpy_context_size_reaches_the_core(
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     core = _materialize(num_context_samples=count)
     assert core._payloads[0]['metadata']['num_context_examples'] == 4
-    monkeypatch.delenv(_routing.ENVIRONMENT)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     if _old_route_needs_the_engine():
         return
     if isinstance(count, np.uint64) and int(np.__version__.split('.')[0]) < 2:
@@ -1270,7 +1270,7 @@ def test_a_key_of_one_column_as_a_sequence_is_pinned_on_both_routes(
     assert schema['users'].primary_key == 'user_id'
     assert len(schema.relationships) == 1
     assert outcome == 'success'
-    monkeypatch.delenv(_routing.ENVIRONMENT)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     if importlib.util.find_spec('sdm_relational_engine') is None:
         return
     schema, outcome = built()
@@ -1332,7 +1332,7 @@ def test_a_zoned_anchor_time_is_read_at_its_utc_instant(
     core = _anchored(zoned)
     assert core == _anchored(pd.Timestamp('2024-03-01 10:00'))
     assert codec.timestamp(1, 'ns', 'UTC')['zone'] == 'UTC'
-    monkeypatch.delenv(_routing.ENVIRONMENT)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     if importlib.util.find_spec('sdm_relational_engine') is not None:
         assert core == _anchored(zoned)
 
@@ -1382,7 +1382,7 @@ def test_a_time_past_nanoseconds_is_refused_on_both_routes_under_its_code(
     with pytest.raises(StructuredDataError) as core:
         _materialize(setup)
     assert core.value.code == 'VALUE_OUT_OF_RANGE'
-    monkeypatch.delenv(_routing.ENVIRONMENT)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     if importlib.util.find_spec('sdm_relational_engine') is not None:
         with pytest.raises(StructuredDataError) as old:
             _materialize(setup)
@@ -1498,7 +1498,7 @@ def _on_both_routes(
     route's refusal is held instead."""
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     found = [made()]
-    monkeypatch.delenv(_routing.ENVIRONMENT)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     if importlib.util.find_spec('sdm_relational_engine') is None:
         with pytest.raises(MissingExtraError):
             made()
@@ -1610,7 +1610,7 @@ def test_a_second_hop_and_a_text_feature_are_sampled_as_the_old_route_samples_th
         'dtype': 'stringlist',
         'stype': 'text',
     }
-    monkeypatch.delenv(_routing.ENVIRONMENT)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     if importlib.util.find_spec('sdm_relational_engine') is not None:
         old = _deeper()._payloads[0]
         assert json.loads(json.dumps(core)) == json.loads(
@@ -1689,7 +1689,7 @@ def test_a_null_key_the_walk_reaches_links_nothing(
     core = _deeper(*setup, edit=False)._payloads[0]
     assert _crossing(core) == 0
     assert _unreferenced(core) == 0
-    monkeypatch.delenv(_routing.ENVIRONMENT)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     if importlib.util.find_spec('sdm_relational_engine') is not None:
         old = _deeper(*setup, edit=False)._payloads[0]
         assert _crossing(old) > 0
@@ -1724,7 +1724,7 @@ def test_every_foreign_key_looked_up_null_is_the_reference_s_request(
     assert all(each == found[0] for each in found)
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     core = _deeper('UPDATE orders SET item_id = NULL', edit=False)._payloads[0]
-    monkeypatch.delenv(_routing.ENVIRONMENT)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     assert 'items' not in core['context']['related_tables']
     if importlib.util.find_spec('sdm_relational_engine') is not None:
         old = _deeper('UPDATE orders SET item_id = NULL', edit=False)._payloads[
@@ -1830,7 +1830,7 @@ def test_a_schema_edited_between_two_calls_is_sampled_as_edited(
         (6, 1) if edit == 'link' else (7, 1),
     ]
     assert core[0][2] != core[1][2]
-    monkeypatch.delenv(_routing.ENVIRONMENT)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     if importlib.util.find_spec('sdm_relational_engine') is None:
         with pytest.raises(MissingExtraError):
             _edited_between_calls(edit)
@@ -2155,7 +2155,7 @@ def test_the_notices_of_what_the_request_leaves_out_are_the_old_route_s(
     assert core, 'a notice was given'
     if text is not None:
         assert any('users.bio is typed text' in n for n in core), core
-    monkeypatch.delenv(_routing.ENVIRONMENT)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     if _old_route_needs_the_engine():
         return
     assert core == _notices(*setup, text=text)
@@ -2198,7 +2198,7 @@ def test_the_default_mode_s_cap_is_noticed_as_on_the_old_route(
         'context examples were gathered' in n
         for n in notices(num_context_samples=1_000)
     )
-    monkeypatch.delenv(_routing.ENVIRONMENT)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     if _old_route_needs_the_engine():
         return
     assert core == notices()
@@ -2242,7 +2242,7 @@ def test_a_limit_is_raised_as_the_subclass_on_the_core_register_p1b_20(
     # (register P2B-3, retired).
     core = _refusal_of(indices=list(range(1_001)))
     assert (type(core), core.code) == (StructuredDataError, 'INVALID_REQUEST')
-    monkeypatch.delenv(_routing.ENVIRONMENT)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     if _old_route_needs_the_engine():
         return
     old = _refusal_of(num_hops=7)
@@ -2268,7 +2268,7 @@ def test_an_average_compared_with_null_is_refused_by_name_register_p1b_21(
         'UNSUPPORTED_REQUEST',
         'average_null',
     )
-    monkeypatch.delenv(_routing.ENVIRONMENT)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     if _old_route_needs_the_engine():
         return
     assert _refusal_of(query=query).code == 'INTERNAL_ERROR'
@@ -2297,7 +2297,7 @@ def test_a_time_of_day_as_the_time_column_is_the_source_s_failure_register_dt_18
 
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     assert refused().code == 'PROVIDER_ERROR'
-    monkeypatch.delenv(_routing.ENVIRONMENT)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     if _old_route_needs_the_engine():
         return
     assert refused().code == 'INTERNAL_ERROR'
@@ -2330,7 +2330,7 @@ def test_numpy_inference_options_are_read_as_on_the_old_route(
     # core reads the options as the engine's validation reads them.
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     core = _materialize(query=query, inference_config=config)
-    monkeypatch.delenv(_routing.ENVIRONMENT)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     if _old_route_needs_the_engine():
         return
     old = _materialize(query=query, inference_config=config)

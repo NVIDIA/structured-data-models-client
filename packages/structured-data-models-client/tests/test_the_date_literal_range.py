@@ -61,7 +61,7 @@ BOUNDARY = [
 
 @pytest.fixture(autouse=True)
 def _old(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
 
 
 @pytest.fixture
@@ -111,7 +111,7 @@ def _answers(
         if route == 'core':
             monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
         else:
-            monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+            monkeypatch.setenv(_routing.ENVIRONMENT, '')
         with warnings.catch_warnings():
             warnings.simplefilter('ignore')
             try:
@@ -121,7 +121,7 @@ def _answers(
                 # Refused as a query, never by a named rule.
                 assert 'rule' not in refused.details, refused.details
                 answers[route] = refused.code
-    monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     return answers
 
 

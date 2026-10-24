@@ -140,7 +140,7 @@ def test_a_metric_view_s_calls_route_as_their_own_paths(
     )
     monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
     for paths in groups:
-        assert not _routing.on_the_core(sources['model'], paths)
+        assert _routing.on_the_core(sources['model'], paths)
     assert _routing.FROM_SOURCE['databricks-metric-view'] == (
         'schema.from-source/semantic-model/databricks-metric-view',
     )

@@ -106,7 +106,7 @@ G = _module('t132h_gate', ROOT / 'contract/tests/t132h_gate.py')
 
 @pytest.fixture(autouse=True)
 def _old(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
 
 
 def _shop() -> list[str]:
@@ -203,7 +203,7 @@ def observe(
     if core:
         monkeypatch.setenv(_routing.ENVIRONMENT, CORE_ANY)
     else:
-        monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+        monkeypatch.setenv(_routing.ENVIRONMENT, '')
     spy.written.clear()
     spy.events.clear()
     got: dict[str, Any]
@@ -900,7 +900,7 @@ def call_raising(
     if core:
         monkeypatch.setenv(_routing.ENVIRONMENT, CORE_ANY)
     else:
-        monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+        monkeypatch.setenv(_routing.ENVIRONMENT, '')
     spy.events.clear()
     value = Raising(error)
     raised: BaseException | None = None

@@ -51,7 +51,7 @@ PROVIDERS = Path(providers.__file__).resolve().parent
 
 @pytest.fixture(autouse=True)
 def _old(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
 
 
 def _shop() -> list[str]:
@@ -717,7 +717,7 @@ def _described(
     if routes:
         monkeypatch.setenv(_routing.ENVIRONMENT, routes)
     else:
-        monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+        monkeypatch.setenv(_routing.ENVIRONMENT, '')
     with warnings.catch_warnings(record=True) as shown:
         warnings.simplefilter('always')
         schema = Schema.from_source(DuckDBSource(_connection(*setup)))
@@ -815,7 +815,7 @@ def _described_with(
     if routes:
         monkeypatch.setenv(_routing.ENVIRONMENT, routes)
     else:
-        monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+        monkeypatch.setenv(_routing.ENVIRONMENT, '')
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         return Schema.from_source(DuckDBSource(_connection(*setup)))
@@ -940,7 +940,7 @@ def _from_source(
     if routes:
         monkeypatch.setenv(_routing.ENVIRONMENT, routes)
     else:
-        monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+        monkeypatch.setenv(_routing.ENVIRONMENT, '')
     with warnings.catch_warnings(record=True) as shown:
         warnings.simplefilter('always')
         schema = Schema.from_source(
@@ -1079,7 +1079,7 @@ def _named_on_the_core(
 def _named_on_the_old_route(
     monkeypatch: pytest.MonkeyPatch, connection: Any, tables: dict[str, str]
 ) -> tuple[dict[str, Any], list[tuple[str, str]]]:
-    monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     with warnings.catch_warnings(record=True) as shown:
         warnings.simplefilter('always')
         schema = Schema.from_source(DuckDBSource(connection), tables)
@@ -1285,7 +1285,7 @@ def test_where_the_core_and_the_old_route_differ_on_names_both_are_pinned(
     assert both.value.code == 'INVALID_REQUEST'
     if importlib.util.find_spec('sdm_relational_engine') is None:
         return
-    monkeypatch.delenv(_routing.ENVIRONMENT)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     with pytest.raises(StructuredDataError) as old_dotted:
         _named_on_the_old_route(
             monkeypatch, _connection(*dotted), {'ok': 'a.b'}
@@ -1358,7 +1358,7 @@ def _named_view(
     if routes:
         monkeypatch.setenv(_routing.ENVIRONMENT, routes)
     else:
-        monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+        monkeypatch.setenv(_routing.ENVIRONMENT, '')
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         return Schema.from_source(
@@ -1468,7 +1468,7 @@ def test_text_with_an_offset_is_read_by_the_list_or_refused_by_name(
     # core reads an offset in the list as a timestamp as the reference
     # does, and refuses text outside the list (text_time) where it could
     # make the column one (T1.25b).
-    monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     if importlib.util.find_spec('sdm_relational_engine') is not None:
         with warnings.catch_warnings():
             warnings.simplefilter('ignore')

@@ -218,7 +218,7 @@ def _both(source: Any, monkeypatch: pytest.MonkeyPatch) -> tuple[Any, Any]:
         _routing.ENVIRONMENT, ','.join(_routing.FROM_SOURCE_DATABRICKS_SQL)
     )
     on_the_core = Schema.from_source(source())
-    monkeypatch.delenv(_routing.ENVIRONMENT)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     on_the_old_route = Schema.from_source(source())
     return on_the_core, on_the_old_route
 

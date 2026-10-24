@@ -268,7 +268,7 @@ ENTITY_ANCHORED = frozenset(
 def test_ord1_no_case_reaches_the_tie_sort(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.delenv('SDM_CORE_ROUTES', raising=False)
+    monkeypatch.setenv('SDM_CORE_ROUTES', '')
     spy = _Spy(monkeypatch)
     bases = run_python.load_bases()
     cases = _every_case()
@@ -332,7 +332,7 @@ def test_ord1_the_spy_sees_the_entity_anchor(
     from sdm_client import PredictiveQuery, Schema
     from sdm_connectors import DuckDBSource
 
-    monkeypatch.delenv('SDM_CORE_ROUTES', raising=False)
+    monkeypatch.setenv('SDM_CORE_ROUTES', '')
     spy = _Spy(monkeypatch)
     spy.case = 'control'
     connection = duckdb.connect()

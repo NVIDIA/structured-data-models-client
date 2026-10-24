@@ -198,7 +198,7 @@ def test_the_old_route_answers_as_recorded(
     name, database = key.rsplit('@', 1)
     if not _runs(name, database, old_route=True):
         return
-    monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     _compare(key, R.observe(R.SCENARIOS[name], database, tmp_path))
 
 

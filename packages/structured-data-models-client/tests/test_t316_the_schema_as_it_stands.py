@@ -60,7 +60,7 @@ SHOP = (
 
 @pytest.fixture(autouse=True)
 def _old(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
 
 
 def _described() -> Schema:
@@ -85,13 +85,13 @@ def _both(
         if route == 'core':
             monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
         else:
-            monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+            monkeypatch.setenv(_routing.ENVIRONMENT, '')
         if route == 'old' and not ENGINE:
             with pytest.raises(MissingExtraError):
                 act()
             continue
         outcomes[route] = act()
-    monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     outcomes.setdefault('old', outcomes['core'])
     return outcomes
 

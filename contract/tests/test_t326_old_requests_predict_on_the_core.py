@@ -64,7 +64,7 @@ def writer() -> ModuleType:
 
 @pytest.fixture(autouse=True)
 def _old(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
 
 
 @pytest.fixture
@@ -169,7 +169,7 @@ def test_a_request_gathered_on_the_old_route_predicts_on_the_core_as_there(
         )
     for held in (request, *(request.parts or ())):
         held._core = None
-    monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     old = writer().answers(request, name)
     assert old == EXPECTED['reference']['requests'][name]
     from sdm_client._rust import predict
@@ -205,6 +205,6 @@ def test_a_request_holding_other_payloads_than_the_core_wrote_answers_as_the_old
     request._payloads = request._payloads[:2]
     core = writer().answers(request, 'batched')
     assert on_the_core
-    monkeypatch.delenv(_routing.ENVIRONMENT)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     assert core == writer().answers(request, 'batched')
     assert len(core[0]['bodies']) == 2

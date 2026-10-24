@@ -3,8 +3,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """The private routing seam, and S0 on the core route (design, "Routing seam").
 
-Every core path of the Python scope manifest is routed, and every default is
-the old code until the Phase 3 switch. ``SDM_CORE_ROUTES`` forces paths onto
+Every core path of the Python scope manifest is routed, and covered S0, S1
+and S2 entrypoints default to the core after the Phase 3 switch. ``SDM_CORE_ROUTES`` forces paths onto
 the core for tests, read at every call; a path it names that is unknown or
 has no core route fails the call, and nothing falls back. Under the core
 route, validation in ``materialize()`` is the core's ``validate_query``, and
@@ -57,7 +57,7 @@ def core(monkeypatch: pytest.MonkeyPatch) -> list[str]:
 
 @pytest.fixture(autouse=True)
 def _old(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
 
 
 def _users() -> pd.DataFrame:
@@ -68,9 +68,10 @@ ACCEPTED = 'PREDICT users.age FOR EACH users.id'
 REFUSED = 'PREDICT users.nope FOR EACH users.id'
 
 
-def test_every_core_path_of_the_manifest_is_routed_and_every_default_is_old() -> (
-    None
-):
+def test_every_core_path_of_the_manifest_is_routed_and_covered_defaults_are_core(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
     # Read without a YAML library, which the installed-wheel job lacks:
     # each operation's `- id:` line is followed by its `layer:`, and a
     # path's ID is operation/mode/backend.
@@ -88,8 +89,9 @@ def test_every_core_path_of_the_manifest_is_routed_and_every_default_is_old() ->
     core = [path for path in ids if layer[path.split('/')[0]] == 'core']
     assert list(_routing.PATHS) == core
     assert set(_routing.ROUTES) == set(core)
-    # Every default is the old code until the Phase 3 switch.
-    assert set(_routing.ROUTES.values()) == {'old'}
+    assert {
+        path for path, route in _routing.ROUTES.items() if route == 'core'
+    } == set(_routing.CORE_ROUTED)
     # S0 and, from T1.11b, a DuckDB source's Schema.from_source with no
     # tables named (with tables named from T1.24), from T1.11c, materialize
     # with indices over a DuckDB source's schema, and from T1.11d, predict
@@ -137,10 +139,10 @@ def test_every_core_path_of_the_manifest_is_routed_and_every_default_is_old() ->
         + _routing.PREDICT_SNOWFLAKE
     )
     assert set(_routing.CORE_ROUTED) <= set(core)
-    assert _routing.route(_routing.S0) == 'old'
-    assert _routing.route(_routing.FROM_SOURCE_DUCKDB) == 'old'
-    assert _routing.route(_routing.MATERIALIZE_DUCKDB) == 'old'
-    assert _routing.route(_routing.PREDICT_DUCKDB) == 'old'
+    assert _routing.route(_routing.S0) == 'core'
+    assert _routing.route(_routing.FROM_SOURCE_DUCKDB) == 'core'
+    assert _routing.route(_routing.MATERIALIZE_DUCKDB) == 'core'
+    assert _routing.route(_routing.PREDICT_DUCKDB) == 'core'
 
 
 def test_a_refused_and_an_accepted_query_give_the_old_outcome_on_the_core(
@@ -184,7 +186,7 @@ def test_the_route_is_read_at_every_call(
 ) -> None:
     query = PredictiveQuery(ACCEPTED, {'users': _users()})
     query._resolve(TABULAR)
-    monkeypatch.delenv(_routing.ENVIRONMENT)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     query._resolve(TABULAR)
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     query._resolve(TABULAR)
@@ -280,12 +282,15 @@ def test_old_paths_never_import_the_native_module() -> None:
     print('sdm_client._native' in sys.modules, 'sdm_client._rust' in sys.modules)
     """
     )
-    result = _subprocess(script)
+    result = _subprocess(script, **{_routing.ENVIRONMENT: ''})
     assert result.returncode == 0, result.stderr
     assert result.stdout.split() == ['False', 'False']
 
 
-def test_a_core_route_without_the_native_module_fails_naming_it() -> None:
+@pytest.mark.parametrize('forced', [False, True], ids=['default', 'forced'])
+def test_a_core_route_without_the_native_module_fails_naming_it(
+    forced: bool,
+) -> None:
     script = (
         _BLOCK_NATIVE
         + """
@@ -303,7 +308,8 @@ def test_a_core_route_without_the_native_module_fails_naming_it() -> None:
         print(missing)
     """
     )
-    result = _subprocess(script, **{_routing.ENVIRONMENT: CORE})
+    settings = {_routing.ENVIRONMENT: CORE} if forced else {}
+    result = _subprocess(script, **settings)
     assert result.returncode == 0, result.stderr
     assert 'sdm_client._native' in result.stdout
 
@@ -538,7 +544,7 @@ def test_a_literal_with_no_run_of_five_digits_answers_as_on_the_old_route(
     answers = []
     for route in ('core', 'old'):
         if route == 'old':
-            monkeypatch.delenv(_routing.ENVIRONMENT)
+            monkeypatch.setenv(_routing.ENVIRONMENT, '')
         with warnings.catch_warnings():
             warnings.simplefilter('ignore')
             try:
@@ -623,7 +629,7 @@ def test_a_day_first_literal_warns_on_the_core_as_on_the_old_route(
     schema = _orders_schema()
     on_core = {text: _shown(text, schema) for text in [accepted, *refused]}
     assert core == [accepted, *refused]
-    monkeypatch.delenv(_routing.ENVIRONMENT)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     on_old = {text: _shown(text, schema) for text in [accepted, *refused]}
     said = (
         'UserWarning: Parsing dates in %d/%m/%Y format when dayfirst=False '

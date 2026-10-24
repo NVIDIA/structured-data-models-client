@@ -68,14 +68,14 @@ SETUP = (
 
 @pytest.fixture(autouse=True)
 def _old(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
 
 
 def _schema(route: str, monkeypatch: pytest.MonkeyPatch) -> Schema:
     if route == 'core':
         monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     else:
-        monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+        monkeypatch.setenv(_routing.ENVIRONMENT, '')
     connection = duckdb.connect()
     for statement in SETUP:
         connection.execute(statement)

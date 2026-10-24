@@ -389,7 +389,7 @@ def test_the_provider_choice_names_the_dialect_and_the_namespace(
     assert provider._connection is source.connection
 
 
-def test_every_databricks_default_is_old_and_each_connection_its_own_route(
+def test_every_databricks_default_is_core_and_each_connection_its_own_route(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     sources = _sources()
@@ -401,7 +401,7 @@ def test_every_databricks_default_is_old_and_each_connection_its_own_route(
     )
     monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
     for paths in groups:
-        assert not any(_routing.on_the_core(s, paths) for s in sources.values())
+        assert all(_routing.on_the_core(s, paths) for s in sources.values())
     assert set(_routing.MATERIALIZE['databricks-sql']) == {
         f'query.materialize/indices-{kind}/databricks-sql'
         for kind in (

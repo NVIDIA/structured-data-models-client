@@ -296,7 +296,7 @@ def _core(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def _old(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
 
 
 def _projection(schema: Schema) -> dict[str, Any]:
