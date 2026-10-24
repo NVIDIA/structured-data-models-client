@@ -1164,6 +1164,24 @@
       }
      ]
     ],
+    "read_under": [
+     {
+      "namespace": [],
+      "relation": {
+       "source": [
+        "orders"
+       ]
+      }
+     },
+     {
+      "namespace": [],
+      "relation": {
+       "source": [
+        "users"
+       ]
+      }
+     }
+    ],
     "tables": [
      {
       "columns": [

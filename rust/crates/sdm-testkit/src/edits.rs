@@ -153,7 +153,9 @@ impl SchemaEdit {
 
 /// The schema as this host holds it, as plain data (T3.16): the
 /// description the core last answered, each column's data type by its wire
-/// name and with what the source said of it.
+/// name and with what the source said of it, and every table kept where
+/// the description read it (T3.4 fix 12), as the Python host's described
+/// schema keeps each table its engine read.
 pub fn held(described: &SourceDescription) -> HeldSchema {
     HeldSchema {
         tables: described
@@ -187,7 +189,14 @@ pub fn held(described: &SourceDescription) -> HeldSchema {
             })
             .collect(),
         links: described.links.clone(),
-        read_under: Vec::new(),
+        read_under: described
+            .tables
+            .iter()
+            .map(|table| sdm_contract::ops::ReadUnder {
+                relation: table.source.clone(),
+                namespace: described.namespace.clone().unwrap_or_default(),
+            })
+            .collect(),
     }
 }
 
