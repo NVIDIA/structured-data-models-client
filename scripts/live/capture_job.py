@@ -27,6 +27,13 @@ every write through the repository's live write guard
 (``scripts/live/write_guard.py`` in ``repo_dir``). It prints the
 manifests written, never a value of the environment.
 
+Both checkouts are copied off the volume to local disk with each file's
+mode as its commit holds it (``capture_run.local_checkout``), so the run
+records from clean trees, which it requires; the scripted endpoint is
+served on a local address predict reaches here
+(``capture_run.endpoint_host``: serverless refuses IPv4 loopback), found
+before anything is recorded.
+
 Run outside Databricks, it prints this text and exits.
 
 Each case's progress is printed and written to the output folder as the
@@ -103,9 +110,23 @@ assert leg in ('databricks-spark', 'lakebase'), (
 )
 assert campaign in ('c1', 'e0'), campaign
 sys.path.insert(0, str(Path(dbutils.widgets.get('repo_dir')) / 'scripts/live'))
+import capture_run as staging
+
+# Both checkouts copied off the volume, each file's mode as its commit
+# holds it, so the run records from clean trees (it refuses others).
+repo = staging.local_checkout(dbutils.widgets.get('repo_dir'), '/tmp/sdm-repo')
+reference = staging.local_checkout(
+    dbutils.widgets.get('reference_dir'), '/tmp/sdm-reference'
+)
+sys.path.remove(str(Path(dbutils.widgets.get('repo_dir')) / 'scripts/live'))
+del sys.modules['capture_run']
+sys.path.insert(0, str(repo / 'scripts/live'))
 import capture_run
 
-capture_run.use_reference_client(Path(dbutils.widgets.get('reference_dir')))
+capture_run.use_reference_client(reference)
+# The scripted endpoint on an address predict reaches here (serverless
+# refuses IPv4 loopback): found before anything is recorded.
+print(f'the scripted endpoint answers on {capture_run.endpoint_host()}')
 names = capture_run.job_environment(
     {
         name: dbutils.widgets.get(name)
@@ -115,7 +136,7 @@ names = capture_run.job_environment(
 print(f'the run reads {len(names)} variable(s) from its job parameters')
 status = capture_run.run(
     leg,
-    Path(dbutils.widgets.get('reference_dir')),
+    reference,
     Path(dbutils.widgets.get('out_dir')),
     campaign == 'e0',
     case_timeout=float(

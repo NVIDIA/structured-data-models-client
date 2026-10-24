@@ -678,6 +678,10 @@ SHA = re.compile(r'[0-9a-f]{40}')
 #: A statement that answers rows: one with no result read and no error
 #: lost its result.
 _QUERY = re.compile(r'\s*(SELECT|WITH|DESCRIBE|SHOW|VALUES|CALL|TABLE)\b', re.I)
+# The reference's Postgres sampler changes the session's RNG state and
+# deliberately does not fetch setseed's void result. Match only that one
+# statement, never an appended query or a read of table rows.
+_SEED_STATE = re.compile(r'\s*SELECT\s+setseed\s*\(\s*%s\s*\)\s*;?\s*', re.I)
 #: The versions every capture names, beside each leg's driver's
 #: (run_python.py's ``_DRIVERS``, one at least).
 _VERSIONS = ('python', 'pandas', 'pyarrow')
@@ -871,6 +875,9 @@ def capture_problems(
             not results
             and statement.get('error') is None
             and _QUERY.match(statement['sql'])
+            and not (
+                leg == 'lakebase' and _SEED_STATE.fullmatch(statement['sql'])
+            )
         ):
             problems.append(f'{where}: a query with no result read')
         for read, result in enumerate(results):
