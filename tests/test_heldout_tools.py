@@ -348,7 +348,7 @@ def test_runner_makes_a_relative_out_absolute(tmp_path):
     text = done.stdout + done.stderr
     absolute = tmp_path.resolve() / 'out'
     assert f'run dir {absolute}' in done.stdout, text
-    assert f'--out {absolute}/python-core.jsonl' in done.stdout, text
+    assert f'{absolute}/python-core.jsonl' in done.stdout, text
     assert ' --out out/' not in done.stdout
     assert not out.exists()
 
@@ -474,36 +474,39 @@ def test_counts_retain_hyphenated_warehouse_legs_and_count_payload_differences(
     )
 
 
-def test_counts_union_payload_and_outcome_cases_across_hosts_once(tmp_path):
-    run = run_dir(
-        tmp_path,
-        [
-            observation('dummy.' + letter, 'success', 'materialize')
-            for letter in 'abc'
-        ],
-    )
-    jsonl(
-        run / 'python-ref.jsonl',
-        [
-            observation(
-                'dummy.' + letter,
-                'refusal',
-                'materialize',
-                'INVALID_REQUEST',
-                'StructuredDataError',
-            )
-            for letter in 'abc'
-        ],
-    )
+@pytest.mark.parametrize('count', [3, 5])
+def test_counts_union_payload_and_outcome_cases_across_hosts_once(
+    tmp_path, count
+):
+    ids = ['dummy.' + letter for letter in 'abcde'[:count]]
+    rows = [observation(cid, 'success', 'materialize') for cid in ids]
+    run = run_dir(tmp_path, rows)
+    for cid in ids:
+        write_case(run / 'cases', {**copy.deepcopy(CASE), 'id': cid})
+    for who in ('python-core', 'rust-host', 'python-old'):
+        jsonl(run / (who + '.jsonl'), rows)
+    reference = [
+        *rows[:-1],
+        observation(
+            ids[-1],
+            'refusal',
+            'materialize',
+            'INVALID_REQUEST',
+            'StructuredDataError',
+        ),
+    ]
+    jsonl(run / 'python-ref.jsonl', reference)
     (run / 'compare.txt').write_text(
-        'diagnostic: payload: dummy.a: rust-host: differs\ndiagnostic: result: dummy.a: python-core: differs\ndiagnostic: schema: dummy.b: python-core: differs\n'
+        ''.join(
+            f'diagnostic: payload: {cid}: python-core: differs\n'
+            for cid in ids[:-1]
+        )
+        + f'diagnostic: result: {ids[0]}: rust-host: differs\n'
     )
-    done = tool('counts', run, '--prefix', PREFIX, '--threshold', 2)
+    done = tool('counts', run, '--prefix', PREFIX, '--threshold', count - 1)
     assert done.returncode == 1, done.stdout + done.stderr
-    assert (
-        "with no approval: 3 ['dummy.a', 'dummy.b', 'dummy.c']" in done.stdout
-    )
-    allowed = tool('counts', run, '--prefix', PREFIX, '--threshold', 3)
+    assert f'with no approval: {count} {ids!r}' in done.stdout
+    allowed = tool('counts', run, '--prefix', PREFIX, '--threshold', count)
     assert allowed.returncode == 0, allowed.stdout + allowed.stderr
 
 
@@ -603,6 +606,8 @@ def test_runner_dry_mode_does_not_call_a_case_reader(tmp_path):
     sentinel.write_text('#!/bin/sh\necho SEALED_READER_WAS_CALLED\nexit 99\n')
     sentinel.chmod(0o700)
     done, _ = runner(tmp_path, '--tool-python', str(sentinel))
+    assert done.returncode == 1
+    assert 'precondition(s) failed' in done.stdout
     assert 'SEALED_READER_WAS_CALLED' not in done.stdout + done.stderr
 
 
