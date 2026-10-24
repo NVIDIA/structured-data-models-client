@@ -183,6 +183,7 @@ fn try_run(
                 outputs: vec![],
                 default_outputs: true,
                 inference_asked: vec![],
+                model_endpoint: None,
             }),
         },
         given,

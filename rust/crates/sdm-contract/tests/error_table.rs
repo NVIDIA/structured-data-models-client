@@ -23,7 +23,7 @@ fn expected(code: ErrorCode) -> &'static [ErrorKind] {
         | C::UnsupportedType
         | C::ValueOutOfRange => &[K::Unsupported],
         C::UnknownModel => &[K::NotFound],
-        C::InvalidResponse | C::TransportError => &[K::ModelEndpoint],
+        C::InvalidResponse | C::TransportError | C::EndpointRefused => &[K::ModelEndpoint],
         C::InternalError => &[K::Internal],
         C::ProviderSchemaMismatch => &[K::DataSource],
         C::ProviderError => &[K::DataSource, K::NotFound],
@@ -93,10 +93,10 @@ fn new_and_protocol_build_only_the_table_s_pairs() {
                     assert!(built.is_err(), "protocol {code} built");
                 }
             }
-            Code::Warning(_) | Code::Part if cfg!(debug_assertions) => {
+            Code::Warning(_) | Code::Part | Code::Note if cfg!(debug_assertions) => {
                 assert!(built.is_err(), "{} built", sentence.as_str());
             }
-            Code::Warning(_) | Code::Part => {
+            Code::Warning(_) | Code::Part | Code::Note => {
                 assert_eq!(built.unwrap().code, ErrorCode::InternalError)
             }
         }
@@ -109,7 +109,7 @@ fn new_and_protocol_build_only_the_table_s_pairs() {
 fn provider_and_transport_errors_outside_the_table_are_internal() {
     for kind in ErrorKind::ALL {
         let provided = CoreError::provider(&ProviderError {
-            refuses_expression: false,
+            error_class: None,
             kind,
             retryable: true,
             sqlstate: Some("42P01".into()),

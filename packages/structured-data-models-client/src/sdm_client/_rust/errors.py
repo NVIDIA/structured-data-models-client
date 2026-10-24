@@ -49,6 +49,7 @@ from sdm_client._rust import codec
 from sdm_client.core.warnings import SDMWarning, caller_stacklevel
 from sdm_client.errors import (
     MissingExtraError,
+    NimRequestError,
     StructuredDataError,
     UnknownModelError,
     UnsupportedRequestError,
@@ -78,6 +79,9 @@ ERRORS: dict[str, type[StructuredDataError]] = {
     'RUN_POISONED': StructuredDataError,
     'RUN_BUSY': StructuredDataError,
     'INVALID_MESSAGE': StructuredDataError,
+    # A serving endpoint's refusal, raised as the old client raises it:
+    # under the endpoint's status and its own code (T3.27).
+    'ENDPOINT_REFUSED': NimRequestError,
 }
 
 #: The refusals the reference raises as its base class under their code,
@@ -178,6 +182,7 @@ ADVICE: dict[str, Callable[..., str]] = {
     'missing_time': lambda: "'NaT'",
     'result_frame': lambda: 'to_pandas()',
     'smaller_calls': lambda: 'materialize(rows_per_call=N)',
+    'trust_expressions': lambda: 'trust_expressions=True',
 }
 
 #: The sentences that relay a library of this host's own, in that
@@ -553,6 +558,16 @@ def _instance(
     that runs.
     """
     error = cls.__new__(cls)
+    if isinstance(error, NimRequestError):
+        # The core's fields name the status and the code the refusal is
+        # raised under (`REFUSED_STATUS`, `REFUSED_CODE`), never details.
+        details = dict(details)
+        error.status_code = details.pop('status')
+        refused: str | None = details.pop('refused_code', None)
+        StructuredDataError.__init__(
+            error, message, code=refused, details=details
+        )
+        return error
     StructuredDataError.__init__(error, message, code=code, details=details)
     if isinstance(error, UnknownModelError):
         error.model = details.get('model')  # type: ignore[assignment]

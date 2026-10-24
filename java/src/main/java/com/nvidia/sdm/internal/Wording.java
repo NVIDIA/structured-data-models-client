@@ -121,6 +121,8 @@ public final class Wording {
     spelled.put("raise_most_parts", given -> "a higher limit on the parts one question is asked as");
     spelled.put("result_frame", given -> "PredictionResult.read()");
     spelled.put(
+        "semantic_model", given -> "source.semanticModel(" + quoted(given.get(0)) + ", false)");
+    spelled.put(
         "set_primary_key",
         given ->
             "FromSourceOptions.builder().primaryKey("
@@ -136,6 +138,7 @@ public final class Wording {
     spelled.put(
         "smaller_calls",
         given -> "MaterializeOptions.builder().option(\"rows_per_call\", N)");
+    spelled.put("trust_expressions", given -> "semanticModel(name, true)");
     return Map.copyOf(spelled);
   }
 

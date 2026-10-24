@@ -20,6 +20,7 @@ fn sql(name: &str, namespace: &[Option<&str>]) -> ProviderChoice {
     ProviderChoice::Sql {
         dialect: Dialect::new(name),
         namespace: namespace.iter().map(|p| p.map(str::to_owned)).collect(),
+        view: None,
     }
 }
 

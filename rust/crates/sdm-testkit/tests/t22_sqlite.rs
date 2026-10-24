@@ -549,6 +549,7 @@ fn sqlite() -> ProviderChoice {
     ProviderChoice::Sql {
         dialect: Dialect::new(DATABASE),
         namespace: Vec::new(),
+        view: None,
     }
 }
 

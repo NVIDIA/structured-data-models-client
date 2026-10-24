@@ -319,6 +319,7 @@ fn predict_run() -> Run {
         outputs: vec!["prediction".to_owned()],
         default_outputs: false,
         inference_asked: vec![],
+        model_endpoint: None,
     });
     let attachments = Attachments::from([
         (

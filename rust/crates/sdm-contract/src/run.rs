@@ -160,6 +160,31 @@ pub enum ModelOutcome {
     /// The transport failed before an answer: its kind and whether trying
     /// again may succeed; the transport's message stays in the host.
     TransportError { kind: ErrorKind, retryable: bool },
+    /// The endpoint failed with no body to hand over, as an SDK's error
+    /// reports it (contract v28, T3.27, for T3.13): what the host was told.
+    Failed { answer: ModelAnswer },
+}
+
+/// A model call's failure as the host's transport reported it
+/// ([`ModelOutcome::Failed`]): the HTTP status, and the facts the core
+/// reads the endpoint's own codes from. The detail can quote the request,
+/// so it travels as an attachment, and the core reads it only for codes,
+/// never repeating it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ModelAnswer {
+    pub status: u16,
+    /// A bytes attachment of the error's message or the REST body, as UTF-8
+    /// text, if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detail: Option<AttachmentId>,
+    /// The error code the SDK's error carries apart from its message
+    /// (`error_code`), if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_code: Option<String>,
+    /// The name of the SDK error's class (`BadRequest`), if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_error: Option<String>,
 }
 
 /// Starts a run.

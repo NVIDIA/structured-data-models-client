@@ -55,6 +55,7 @@ fn misrendered(dialect: &str, goldens: &Owned) -> Vec<String> {
     let choice = ProviderChoice::Sql {
         dialect: Dialect::new(dialect),
         namespace: Vec::new(),
+        view: None,
     };
     let mut problems = Vec::new();
     for (request, statements) in goldens {

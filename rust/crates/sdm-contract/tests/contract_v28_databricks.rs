@@ -6,7 +6,8 @@
 //! relations, opaque SQL text the core carries but never reads, refused by
 //! name for a provider that does not read them; the capabilities and
 //! request fields the old client's warehouse samplers need; a provider
-//! error saying the source refused an expression. Each optional, so a v27
+//! error's class (T3.27, in place of its saying the source refused an
+//! expression). Each optional, so a v27
 //! message reads the same.
 
 use sdm_contract::Detail;
@@ -90,11 +91,13 @@ fn the_warehouse_samplers_fields_are_optional_and_round_trip() {
             ..
         }
     ));
+    // The error's class is a fact the host hands over; what it means is
+    // the data layer's to say (T3.27, `DataLayer::failure`).
     let error: ProviderError = read(json!({
         "kind": "data_source", "retryable": false, "sqlstate": "42703",
-        "vendor_code": null, "refuses_expression": true
+        "vendor_code": null, "error_class": "UNRESOLVED_COLUMN"
     }));
-    assert!(error.refuses_expression);
+    assert_eq!(error.error_class.as_deref(), Some("UNRESOLVED_COLUMN"));
 }
 
 /// A description, a held schema and a materialize carry no shape or

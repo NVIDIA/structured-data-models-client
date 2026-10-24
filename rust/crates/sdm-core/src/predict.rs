@@ -394,6 +394,12 @@ async fn call(asker: &Asker, payload: &Value, bytes: Vec<u8>) -> Result<Part, Co
             }
             body
         }
+        // A failure with no body is refused as one with a body is, by its
+        // status; reading its codes is a serving endpoint's (T3.13).
+        Reply::Model(ModelResult::Failed { status, .. }) => {
+            return Err(bad_response("status", "not_a_success")
+                .with_field("status", Detail::Scalar(Scalar::UInt16(status))));
+        }
         Reply::Model(ModelResult::TransportError { kind, retryable }) => {
             return Err(CoreError::transport(kind, retryable));
         }

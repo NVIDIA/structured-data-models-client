@@ -301,6 +301,8 @@ def _zone(name: str) -> datetime.tzinfo:
 # Databricks appends, which may quote anything.
 _SQL_STATE_RE = re.compile(r'SQLSTATE:\s*([0-9A-Z]{5})')
 _SQL_CONTEXT_RE = re.compile(r'\n\s*== SQL\b')
+# The error class a Databricks message opens with (DB/errors.py).
+_ERROR_CLASS_RE = re.compile(r'\s*\[([A-Z0-9_]+(?:\.[A-Z0-9_]+)*)\]')
 #: The modules whose exceptions are a Databricks failure: the SQL
 #: connector's, and Spark's (classic and Spark Connect).
 _DRIVER_MODULES = ('databricks.sql', 'pyspark')
@@ -330,19 +332,35 @@ def _is_databricks(error: BaseException) -> bool:
     )
 
 
+def error_class(error: BaseException) -> str | None:
+    r"""The error class of a Databricks failure, such as
+    ``UNRESOLVED_COLUMN.WITH_SUGGESTION``, if it says one, as the
+    reference's ``error_class`` reads it: what a Spark error answers
+    (``getCondition()``, else ``getErrorClass()``), else the bracketed name
+    the SQL connector's message opens with."""
+    for method in ('getCondition', 'getErrorClass'):
+        answer = getattr(error, method, None)
+        name = answer() if callable(answer) else None
+        if isinstance(name, str) and name:
+            return name
+    found = _ERROR_CLASS_RE.match(str(error))
+    return None if found is None else found.group(1)
+
+
 def error_fields(error: BaseException) -> dict[str, Any] | None:
     r"""What a Databricks failure says for the contract's provider error:
-    its ``sqlstate``, and ``refuses_expression`` when the state's class is
-    ``22`` (a data error) or ``42`` (a syntax or analysis error), as the
-    reference's ``refuses_expression`` reads it; nothing where it says no
-    state, and ``None`` for a failure that is not Databricks'. Its message
+    its ``sqlstate`` and its ``error_class``, each where it says one, and
+    ``None`` for a failure that is not Databricks'. What the failure means
+    (a refused expression, a table that cannot be used) is the core's to
+    say from these facts (T3.27, the data layer's ``failure``). Its message
     is never kept."""
     if not _is_databricks(error):
         return None
+    fields: dict[str, Any] = {}
     state = sql_state(error)
-    if state is None:
-        return {}
-    fields: dict[str, Any] = {'sqlstate': state}
-    if state[:2] in ('22', '42'):
-        fields['refuses_expression'] = True
+    if state is not None:
+        fields['sqlstate'] = state
+    name = error_class(error)
+    if name is not None:
+        fields['error_class'] = name
     return fields

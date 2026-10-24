@@ -33,6 +33,7 @@ pub mod schema_check;
 #[cfg(feature = "test-ops")]
 pub mod test_ops;
 pub mod types;
+pub mod view;
 pub mod wording;
 
 pub use error::{

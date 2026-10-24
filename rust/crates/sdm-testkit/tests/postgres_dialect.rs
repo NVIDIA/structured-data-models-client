@@ -39,6 +39,7 @@ fn postgres() -> ProviderChoice {
     ProviderChoice::Sql {
         dialect: Dialect::new("postgres"),
         namespace: Vec::new(),
+        view: None,
     }
 }
 

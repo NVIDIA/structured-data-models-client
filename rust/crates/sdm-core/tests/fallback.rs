@@ -689,7 +689,7 @@ fn a_scan_the_provider_fails_is_the_requests_failure() {
         None,
         |_| {
             FetchResult::Error(ProviderError {
-                refuses_expression: false,
+                error_class: None,
                 kind: ErrorKind::DataSource,
                 retryable: true,
                 sqlstate: Some("08006".into()),

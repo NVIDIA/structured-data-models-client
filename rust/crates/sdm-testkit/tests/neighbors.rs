@@ -162,6 +162,7 @@ fn answered(connection: &Connection, request: DataRequest, seeds: RecordBatch) -
         provider: Some(ProviderChoice::Sql {
             dialect: Dialect::new("duckdb"),
             namespace: Vec::new(),
+            view: None,
         }),
         echo: true,
         undeclared: vec![],

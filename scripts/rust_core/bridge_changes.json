@@ -231,7 +231,7 @@
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::<module>": {
-      "refactor": "T3.4 fix 8: the semantic_model advice, Python's spelling of reading a metric view as a semantic model (source.semantic_model(name)), for the core's metric_view_as_table sentence; no rule here"
+      "refactor": "T3.4 fix 8: the semantic_model advice, Python's spelling of reading a metric view as a semantic model (source.semantic_model(name)), for the core's metric_view_as_table sentence; T3.27: the trust_expressions advice, Python's spelling of trusting a semantic model's expressions (trust_expressions=True), for the core's view sentences; T3.27 fix 1: NimRequestError imported, and ENDPOINT_REFUSED in ERRORS; no rule here"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_Words.convert_field": {
       "moved": "T3.17: the one value formatter gains the conversions the shared templates name (d, p); fix 1: host-held values from the call in progress (holding), the a and I conversions and the to() pairing"
@@ -246,7 +246,7 @@
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_instance": {
-      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added; T3.27 fix 1: ENDPOINT_REFUSED raised as NimRequestError under the status and code the core's fields name (REFUSED_STATUS, REFUSED_CODE), as the old serving transport raises it; no rule here"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_shown_timestamp": {
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"

@@ -18,7 +18,7 @@
 //! ([`crate::catalog`], decision E54). The core holds one data layer, in
 //! its composition root, and names no dialect; `sdm-data` implements it.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use arrow_array::RecordBatch;
 use schemars::JsonSchema;
@@ -28,6 +28,7 @@ use crate::catalog::CatalogAnswer;
 use crate::error::{CoreError, Detail, ErrorKind, Sentence};
 use crate::scalar::Scalar;
 use crate::types::{ColumnType, Field, Unit};
+use crate::view::{ViewTextAnswer, ViewTextAsk};
 
 /// The column of a seed key set that holds each seed's key (decision H15).
 pub const SEED_KEY: &str = "key";
@@ -521,6 +522,13 @@ pub enum DescribePart {
     /// source whose tables are named alone (DuckDB's, SQLite's). Asked only
     /// to name a table the source lacks.
     Namespace,
+    /// The definition of the one semantic model named (contract v28, T3.27):
+    /// a Databricks metric view's `DESCRIBE TABLE EXTENDED`, a Snowflake
+    /// semantic view's `SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW`, read into
+    /// [`CatalogAnswer::ViewDefinition`]. Only a SQL provider whose dialect
+    /// reads views is asked it; every other dialect refuses it by name
+    /// ([`Sentence::ViewsUnread`]), and a host provider is never asked it.
+    ViewDefinition,
 }
 
 /// A column of a table.
@@ -1145,6 +1153,13 @@ impl Dialect {
 /// out, empty or all `null`, the connection's current one, as before v28.
 /// A dialect takes as many parts as a relation's parts before its table's,
 /// and refuses by name more, or a part given inside one left `null`.
+///
+/// A SQL provider's `view` (contract v28, T3.27) names the semantic model
+/// the source is read through, a Databricks metric view or a Snowflake
+/// semantic view by its dialect, as the caller named it, with whether the
+/// caller trusts its expressions: its logical tables are then the
+/// relations of one part a request names, each the logical table's name.
+/// Left out, the source's own tables, as before.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "provider", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ProviderChoice {
@@ -1152,6 +1167,8 @@ pub enum ProviderChoice {
         dialect: Dialect,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         namespace: Vec<Option<String>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        view: Option<ViewChoice>,
     },
     Host {
         capabilities: ProviderCapabilities,
@@ -1165,8 +1182,20 @@ impl ProviderChoice {
         ProviderChoice::Sql {
             dialect: Dialect::new(dialect),
             namespace: Vec::new(),
+            view: None,
         }
     }
+}
+
+/// The semantic model a SQL provider's source is read through
+/// ([`ProviderChoice::Sql`]'s `view`): its name as the caller gave it, and
+/// whether the caller trusts whoever authored it to run its expressions
+/// (`semantic_model(name, trust_expressions=...)`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ViewChoice {
+    pub name: String,
+    pub trust_expressions: bool,
 }
 
 /// A statement's parameter: a scalar, or a key set the statement's text
@@ -1182,11 +1211,19 @@ impl ProviderChoice {
 /// without a zone, binary) as that spelling, a `utf8` column of the same
 /// name, which `keys.columns` still types as the statement reads it; the
 /// provider binds each cell as Arrow's text of it.
+///
+/// A `text` parameter (contract v28, T3.27) binds the one text cell of a
+/// one-row, one-column Arrow attachment: a key set the dialect writes as
+/// JSON text itself, past the control message's size ([`DataLayer::bind`]).
+/// In a [`BoundFetch`] the attachment is a local reference the data layer
+/// chose; the core installs its batch in the run and names it here by the
+/// run's own id before the step is sent.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "param", rename_all = "snake_case", deny_unknown_fields)]
 pub enum SqlParam {
     Value { value: Scalar },
     KeySet { keys: KeySet, relation: String },
+    Text { attachment: AttachmentId },
 }
 
 /// One statement a SQL provider runs.
@@ -1223,7 +1260,7 @@ impl FetchPlan {
         }
     }
 
-    /// The attachments of the key sets the plan's statements bind, in
+    /// The attachments the plan's statements bind, key sets and texts, in
     /// order, each as often as it is bound; none for a host plan.
     pub fn key_sets(&self) -> Vec<AttachmentId> {
         match self {
@@ -1232,7 +1269,8 @@ impl FetchPlan {
                 .flat_map(|statement| &statement.params)
                 .filter_map(|param| match param {
                     SqlParam::KeySet { keys, .. } => Some(keys.attachment),
-                    _ => None,
+                    SqlParam::Text { attachment } => Some(*attachment),
+                    SqlParam::Value { .. } => None,
                 })
                 .collect(),
             FetchPlan::Host { .. } => Vec::new(),
@@ -1294,7 +1332,9 @@ pub trait DataLayer: Send + Sync {
     /// its dialect binds keys as text (T2.14d): each column the reference
     /// spells otherwise than Arrow's text of its values as that spelling,
     /// so the provider binds Arrow's text of each cell. `None`, the default
-    /// and a host provider's: the key set as the core made it.
+    /// and a host provider's: the key set as the core made it. Read through
+    /// [`DataLayer::bind`]'s default; it goes once each dialect's `bind`
+    /// writes its key sets itself (T3.28).
     fn bound_keys(
         &self,
         provider: &ProviderChoice,
@@ -1353,6 +1393,152 @@ pub trait DataLayer: Send + Sync {
         let _ = provider;
         relation.clone()
     }
+
+    /// What the run's provider's failure says, as facts each step of the
+    /// core reads the one of that fits what it asked (contract v28, T3.27,
+    /// design S3): a spelling retry reads `not_found`, a join's table read
+    /// `unusable`, an expression sample `refuses_expression`. The dialect
+    /// reads them from the driver's SQLSTATE, vendor code and error class,
+    /// as the old client's separate predicates do. None set, the default
+    /// and a host provider's: every failure stays the provider's error.
+    fn failure(&self, provider: &ProviderChoice, error: &ProviderError) -> FailureFacts {
+        let _ = (provider, error);
+        FailureFacts::default()
+    }
+
+    /// The name forms the catalog read of `relation` tries, in order, kept
+    /// for that run once one resolves (contract v28, T3.27, design S2):
+    /// Snowflake's as given, then upper-cased. As given alone, the default
+    /// and a host provider's. How names compare is another question, the
+    /// dialect's `name_case`.
+    fn spellings(&self, provider: &ProviderChoice, relation: &Relation) -> Vec<Relation> {
+        let _ = provider;
+        vec![relation.clone()]
+    }
+
+    /// `plan`, the run's provider's answer to `request`, with the key sets
+    /// it binds, `keys`, by the attachment the plan names each by, bound as
+    /// the provider binds them (contract v28, T3.27, design S4): one fetch
+    /// or more, each a plan and the batches it binds, named by local
+    /// references the core installs in the run and renames to the run's
+    /// ids; their answers, in order, are the request's. The default is
+    /// today's: one fetch, the plan as it is, and each key set the dialect
+    /// binds as text ([`DataLayer::bound_keys`]) under the id the plan names
+    /// it by, once. The default repeats the core's `Asker::bind_keys` until
+    /// T3.28 replaces both, in the commit that first plans a text parameter.
+    fn bind(
+        &self,
+        provider: &ProviderChoice,
+        request: &DataRequest,
+        plan: FetchPlan,
+        keys: &BTreeMap<AttachmentId, KeyData>,
+    ) -> Result<BoundRequest, CoreError> {
+        let _ = request;
+        let mut batches = BTreeMap::new();
+        for attachment in plan.key_sets() {
+            if batches.contains_key(&attachment) {
+                continue;
+            }
+            let Some(made) = keys.get(&attachment) else {
+                return Err(CoreError::new(
+                    Sentence::Internal,
+                    "a plan binds a key set the core did not hand over",
+                )
+                .with_field("attachment", Detail::Scalar(Scalar::UInt32(attachment.0))));
+            };
+            if let Some((schema, rebound)) =
+                self.bound_keys(provider, &made.schema, &made.batches)?
+            {
+                batches.insert(
+                    attachment,
+                    KeyData {
+                        schema,
+                        batches: rebound,
+                    },
+                );
+            }
+        }
+        Ok(BoundRequest {
+            fetches: vec![BoundFetch { plan, batches }],
+        })
+    }
+
+    /// The answer to one question about a semantic model's text (contract
+    /// v28, T3.27, design S5): a name, a condition, an expression checked
+    /// against its table's columns, a derived relation rendered, each in
+    /// the run's provider's dialect. Refused by name, the default and a
+    /// host provider's: no semantic model is read through it.
+    fn view_text(
+        &self,
+        provider: &ProviderChoice,
+        ask: ViewTextAsk,
+    ) -> Result<ViewTextAnswer, CoreError> {
+        let _ = (provider, ask);
+        Err(views_unread())
+    }
+}
+
+/// The refusal of a semantic model by a provider that reads none
+/// (`UNSUPPORTED_REQUEST`, rule `view`): the default of
+/// [`DataLayer::view_text`], and each dialect's answer to a
+/// [`DescribePart::ViewDefinition`] it does not read.
+pub fn views_unread() -> CoreError {
+    CoreError::new(
+        Sentence::ViewsUnread,
+        "the data source reads no semantic model",
+    )
+}
+
+/// What a provider's failure says ([`DataLayer::failure`]): independent
+/// facts, each read by the step that asked what it fits.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct FailureFacts {
+    /// The relation asked for does not exist under the name asked (Snowflake
+    /// errno 2003): a spelling retry tries the next form.
+    pub not_found: bool,
+    /// The source refused an expression it was asked to read, for what it
+    /// says or reads (Databricks SQLSTATE class `22` or `42`): an expression
+    /// sample leaves that column out.
+    pub refuses_expression: bool,
+    /// Why a table that failed to be read cannot be used, if the failure
+    /// says (Databricks `42P01`, `42501` or a permission error class): a
+    /// join over it is dropped with that reason.
+    pub unusable: Option<Unusable>,
+}
+
+/// Why a table cannot be used ([`FailureFacts::unusable`]), as the old
+/// client's Databricks reader says it (`unusable_table_reason`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Unusable {
+    /// It does not exist, or the caller may not see it: Unity Catalog
+    /// answers both alike.
+    Missing,
+    /// The caller may not read it.
+    Forbidden,
+}
+
+/// A key set's Arrow data, as the core made it or as a dialect binds it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct KeyData {
+    pub schema: arrow_schema::SchemaRef,
+    pub batches: Vec<RecordBatch>,
+}
+
+/// A request bound for the run's provider ([`DataLayer::bind`]; the
+/// design's `Bound`, a name the window bound already has): the fetches the
+/// core sends in one hop, whose answers, in order, are the request's; any
+/// one failing fails the request.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BoundRequest {
+    pub fetches: Vec<BoundFetch>,
+}
+
+/// One fetch of a [`BoundRequest`]: its plan, and the batches its
+/// statements bind, by the local reference each names them by.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BoundFetch {
+    pub plan: FetchPlan,
+    pub batches: BTreeMap<AttachmentId, KeyData>,
 }
 
 /// The columns of the answers whose shape the contract fixes (decision
@@ -1464,6 +1650,9 @@ impl DataRequest {
                 ],
                 DescribePart::IndexColumns => vec![field(c::NAME, Utf8, true)],
                 DescribePart::Namespace => vec![field(c::NAME, Utf8, false)],
+                // The dialect's own statement's shape: a host provider is
+                // never asked for a view's definition.
+                DescribePart::ViewDefinition => return ExpectedSchema::Discover {},
             },
             DataRequest::KeyCounts { .. } => vec![
                 field(results::KEY_POSITION, Int32, false),
@@ -1509,9 +1698,10 @@ pub enum ExpectedSchema {
 }
 
 /// A provider's failure: its kind, whether trying again may succeed, and
-/// the driver's own SQLSTATE and vendor code. The driver's message and
-/// free-text codes stay in the host, since drivers quote values there;
-/// nothing is matched on text.
+/// the driver's own SQLSTATE, vendor code and error class. The driver's
+/// message stays in the host, since drivers quote values there; what the
+/// failure means is the data layer's to say ([`DataLayer::failure`]), from
+/// these facts, never from text.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ProviderError {
@@ -1519,13 +1709,10 @@ pub struct ProviderError {
     pub retryable: bool,
     pub sqlstate: Option<String>,
     pub vendor_code: Option<String>,
-    /// The source refused the statement for an expression it says or
-    /// reads (contract v28): what the reference's Databricks reader calls
-    /// a refused expression, a data error (SQLSTATE class `22`) or a syntax
-    /// or analysis error (class `42`), which it answers by leaving out the
-    /// derived column it could not read. The host sets it from its
-    /// driver's error, as it reads the driver's SQLSTATE; the core reads no
-    /// text. Left out, `false`.
-    #[serde(default, skip_serializing_if = "is_false")]
-    pub refuses_expression: bool,
+    /// The driver's error class, a name of its closed list such as
+    /// Databricks's `INSUFFICIENT_PERMISSIONS` (contract v28, T3.27), read
+    /// as the old client reads it (`error_class`: the driver's own answer,
+    /// else the bracketed name its message opens with). Left out, none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error_class: Option<String>,
 }

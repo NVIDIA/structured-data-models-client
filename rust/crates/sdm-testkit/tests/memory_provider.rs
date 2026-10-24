@@ -136,6 +136,7 @@ fn the_swapped_layer_renders_no_sql_dialect() {
         .capabilities(&ProviderChoice::Sql {
             dialect: Dialect::new("duckdb"),
             namespace: Vec::new(),
+            view: None,
         })
         .unwrap_err();
     assert_eq!(refused.code, ErrorCode::UnsupportedRequest);

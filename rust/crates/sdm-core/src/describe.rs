@@ -316,6 +316,7 @@ pub(crate) async fn run(
     let id = asker.attach(Attachment::Bytes(bytes))?;
     Ok(OperationResult::DescribeSource(DescribedSource {
         description: id,
+        notes: Vec::new(),
     }))
 }
 

@@ -85,13 +85,14 @@ def test_the_binding_exports_the_core_s_table() -> None:
     assert len(sentences) == len(table['sentences']) >= 150
     for name, entry in sentences.items():
         assert entry['template'], name
-        assert entry['kind'] in ('error', 'warning', 'part'), name
+        assert entry['kind'] in ('error', 'warning', 'part', 'note'), name
         if entry['kind'] == 'error':
             assert entry['code'] in _native.ERROR_CODES, name
         elif entry['kind'] == 'warning':
             assert entry['code'] == entry['code'].upper(), name
         else:
-            # A part's sentence follows an error's of any code.
+            # A part's sentence follows an error's of any code; a note of a
+            # semantic model's conversion has none (T3.27).
             assert entry['code'] is None, name
         assert entry['owner'] in (
             'shared',
