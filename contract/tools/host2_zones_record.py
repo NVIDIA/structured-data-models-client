@@ -818,7 +818,7 @@ def from_source_text(setup: list[Any], route: str) -> list[str]:
     if route == 'core':
         os.environ['SDM_CORE_ROUTES'] = ','.join(R.CORE_ROUTES)
     else:
-        os.environ.pop('SDM_CORE_ROUTES', None)
+        os.environ['SDM_CORE_ROUTES'] = ''
     from sdm_client import Schema
     from sdm_connectors import DuckDBSource
 

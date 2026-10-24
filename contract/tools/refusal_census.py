@@ -437,7 +437,7 @@ def route(cases: Path, out: Path, database: str, core: bool) -> None:
         if core:
             os.environ['SDM_CORE_ROUTES'] = ','.join(case['routes'])
         else:
-            os.environ.pop('SDM_CORE_ROUTES', None)
+            os.environ['SDM_CORE_ROUTES'] = ''
         try:
             lines.append(
                 _outcome(case, database, probe['options'], probe['model'])

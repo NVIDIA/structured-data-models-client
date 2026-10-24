@@ -275,11 +275,14 @@ def drive(
         'scripted_endpoint', ROOT / 'contract/runners/scripted_endpoint.py'
     ).serve
     runner = _module('run_python', ROOT / 'contract/runners/run_python.py')
-    previous = os.environ.pop('SDM_CORE_ROUTES', None)
+    previous = os.environ.get('SDM_CORE_ROUTES')
+    os.environ['SDM_CORE_ROUTES'] = ''
     if routes is not None:
         os.environ['SDM_CORE_ROUTES'] = ','.join(routes)
     elif core:
         os.environ['SDM_CORE_ROUTES'] = ','.join(EN.core_routes({}))
+    else:
+        os.environ['SDM_CORE_ROUTES'] = ''
     connection = duckdb.connect()
     stage = 'from_source'
     answer: dict[str, Any] = {'payloads': [], 'result': None}

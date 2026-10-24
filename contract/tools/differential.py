@@ -975,6 +975,7 @@ def probe(spec_path: Path, out: Path, route: str) -> None:
 
         bridge.run = run_also_labels
     else:
+        os.environ['SDM_CORE_ROUTES'] = ''
         if route == 'corrected':
             correct_p1b13()
         from sdm_relational_engine.rfm.backend.duckdb import sampler

@@ -452,7 +452,7 @@ def answer(setup: list[Any], route: str) -> dict[str, Any]:
     if route == 'core':
         os.environ['SDM_CORE_ROUTES'] = ','.join(CORE_ROUTES)
     else:
-        os.environ.pop('SDM_CORE_ROUTES', None)
+        os.environ['SDM_CORE_ROUTES'] = ''
     import pandas as pd
 
     runners = str(ROOT / 'contract/runners')

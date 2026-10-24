@@ -9,8 +9,9 @@
 # other six are diagnostic): the floor the switch must hold. Each S1 case
 # runs on every database and warehouse leg its file and its engines' type
 # maps give (KO2-19, KO2-65; design.md, choice 1). The S2 case IDs join the
-# list once, in T3.10, from the S2 case files then landed, of the kinds in
-# dryrun-plan.yaml; any other change to the checks is the owner's. Its steps
+# list once in T3.10 from the landed S2 acceptance cases, of the kinds in
+# dryrun-plan.yaml; that addition is now recorded below.
+# Any other change to the checks is the owner's. Its steps
 # beyond the runners, observations, ratchet, compare, coverage, l0 and l1
 # every locked run makes, and its numbered checks that the gate judges, with
 # the steps each holds (12 is the every check). Checks 3, 4, 5, 6, 8, 9, 11,
@@ -331,6 +332,83 @@ halves:
       - wording.time-key
       - wording.time-missing-column
       - wording.time-number
+      - adventureworks.notebook.demand-3-timeframes
+      - adventureworks.notebook.demand-30d-historical
+      - adventureworks.notebook.recommend-top5
+      - adventureworks.quickstart.large-order-90d
+      - adventureworks.quickstart.no-order-180d
+      - adventureworks.quickstart.no-order-90d
+      - adventureworks.quickstart.product-line
+      - databricks.connect.spark
+      - databricks.connect.warehouse
+      - databricks.key.bigint-string
+      - databricks.key.bigint-string-linked
+      - databricks.key.decimal-38-0-bigint
+      - databricks.key.decimal-38-6
+      - databricks.key.decimal-scales
+      - databricks.key.string-string
+      - databricks.name.caller-case
+      - databricks.name.odd-columns
+      - databricks.name.three-part
+      - databricks.name.three-part-quoted
+      - databricks.value.struct-feature
+      - lakebase.binary
+      - lakebase.connect
+      - lakebase.multiclass.tables
+      - lakebase.name.shadowed-by-catalog
+      - lakebase.name.shadowed-by-temporary
+      - lakebase.name.two-part
+      - lakebase.regression.catalog-keys
+      - snowflake.binary
+      - snowflake.connect.snowpark
+      - snowflake.forecast.catalog-keys
+      - snowflake.key.bigint.string
+      - snowflake.key.number-38-0
+      - snowflake.key.number-38-0.decimal-indices
+      - snowflake.key.number-38-0.number-38-6
+      - snowflake.key.number-38-0.past-int64
+      - snowflake.key.number-38-6
+      - snowflake.multiclass.tables
+      - snowflake.name.all-upper-once
+      - snowflake.name.database-only
+      - snowflake.name.upper-case-folded
+      - snowflake.rank.number-38-0-items
+      - snowflake.regression.catalog-keys
+      - snowflake.rowcount.like-wildcard
+      - snowflake.rowcount.view-as-table
+      - snowflake.sampled.entity-table
+      - snowflake.zone.ltz-time
+      - view.metric.adventureworks.demand-30d
+      - view.metric.adventureworks.from-source
+      - view.metric.adventureworks.no-order-90d
+      - view.metric.adventureworks.quickstart-revenue-over-1000
+      - view.metric.column-refused
+      - view.metric.composite-join
+      - view.metric.filter-on-join
+      - view.metric.forecast
+      - view.metric.from-source
+      - view.metric.multiclass
+      - view.metric.parameter-and-month
+      - view.metric.query-source
+      - view.metric.ranking
+      - view.metric.regression
+      - view.metric.shop-twin.from-source
+      - view.metric.trusted-function
+      - view.metric.unsafe-expression
+      - view.metric.untrusted-function
+      - view.metric.wildcards-nested-join
+      - view.semantic.binary
+      - view.semantic.column-refused
+      - view.semantic.composite-key
+      - view.semantic.cross-table-expression
+      - view.semantic.forecast
+      - view.semantic.from-source
+      - view.semantic.multiclass
+      - view.semantic.ranking
+      - view.semantic.regression
+      - view.semantic.shop-twin.from-source
+      - warehouse.shop.forecast
+      - warehouse.shop.ranking
     steps: [inventory, seeded, main]
     checks:
       '1': [runners, observations, ratchet, compare, coverage, l1, inventory]

@@ -183,7 +183,8 @@ def observe(vector: dict[str, Any], dsn: str, core: bool) -> dict[str, Any]:
 
     regressions = _regressions()
     name, scoped = regressions._database(dsn)
-    previous = os.environ.pop('SDM_CORE_ROUTES', None)
+    previous = os.environ.get('SDM_CORE_ROUTES')
+    os.environ['SDM_CORE_ROUTES'] = ''
     try:
         with psycopg.connect(scoped, autocommit=True) as connection:
             connection.execute(regressions.UTC)
@@ -217,6 +218,8 @@ def observe(vector: dict[str, Any], dsn: str, core: bool) -> dict[str, Any]:
                 for path in _routing.PATHS
                 if path.endswith('/postgres') and path in _routing.CORE_ROUTED
             )
+        else:
+            os.environ['SDM_CORE_ROUTES'] = ''
         from sdm_client import PredictiveQuery, Schema
         from sdm_connectors import PostgresSource
 

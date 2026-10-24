@@ -379,6 +379,8 @@ def observe(core: bool, dsn: str | None) -> dict[str, Any]:
             + _routing.MATERIALIZE_POSTGRES
             + _routing.PREDICT_POSTGRES
         )
+    else:
+        os.environ['SDM_CORE_ROUTES'] = ''
     try:
         return {
             'candidates': candidates(),

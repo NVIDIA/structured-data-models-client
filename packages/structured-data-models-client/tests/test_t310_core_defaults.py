@@ -109,6 +109,7 @@ def test_public_source_flow_defaults_to_core_without_old_packages(
     cursor.execute('CREATE TABLE users (user_id INTEGER PRIMARY KEY, age DOUBLE)')
     cursor.execute('INSERT INTO users VALUES (1,10.5),(2,20.5),(3,30.5),(4,40.5)')
     connection.commit()
+    cursor.close()
 
     spec = importlib.util.spec_from_file_location(
         'scripted_endpoint', {str(ROOT / 'contract/runners/scripted_endpoint.py')!r}
@@ -129,6 +130,7 @@ def test_public_source_flow_defaults_to_core_without_old_packages(
                 result = client.predict(request, model=KumoRelational())
         assert len(result) == 2
         assert len(received) == 1
+    connection.close()
     assert 'sdm_client._native' in sys.modules
     assert not any(name in sys.modules for name in OLD)
     print('core-default-ok')

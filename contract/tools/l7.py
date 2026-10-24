@@ -281,6 +281,8 @@ def cmd_measure(args: argparse.Namespace) -> int:
                 os.environ['SDM_CORE_ROUTES'] = ','.join(
                     run.routes_on(case, args.database)
                 )
+            else:
+                os.environ['SDM_CORE_ROUTES'] = ''
             try:
                 outcomes.append(run._call(case, bases, False, args.database)[0])
             finally:

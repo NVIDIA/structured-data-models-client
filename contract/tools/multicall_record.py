@@ -228,6 +228,8 @@ def observe(
     from_source = run._from_source_arguments(given.get('from_source', {}))
     if core:
         os.environ['SDM_CORE_ROUTES'] = ','.join(run.routes_on(case, database))
+    else:
+        os.environ['SDM_CORE_ROUTES'] = ''
     observed: dict[str, Any] = {
         'outcome': None,
         'calls': [],
