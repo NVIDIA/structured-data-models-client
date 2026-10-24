@@ -13,6 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.nvidia.sdm.internal.ArrowData;
+import com.nvidia.sdm.internal.Host;
 import com.nvidia.sdm.internal.Json;
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
@@ -29,6 +30,11 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import org.apache.arrow.vector.VectorSchemaRoot;
@@ -353,6 +359,70 @@ class T313DatabricksServingTest {
               () -> client.predict(request, SdmClient.KUMO_RELATIONAL));
       assertEquals(504, error.status());
       assertNull(error.code());
+    }
+  }
+
+  @Test
+  void aResponseBodyThatStallsAfterHeadersIsBoundedByTheCallDeadline() throws Exception {
+    stalledBody(false);
+  }
+
+  @Test
+  void aRetryHasOnlyTheRemainingCallBudgetToReadItsBody() throws Exception {
+    stalledBody(true);
+  }
+
+  /** Keep the body open until cleanup, so headers alone cannot complete the call. */
+  private static void stalledBody(boolean retry) throws Exception {
+    CountDownLatch headers = new CountDownLatch(1);
+    CountDownLatch release = new CountDownLatch(1);
+    AtomicInteger calls = new AtomicInteger();
+    HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+    ExecutorService caller = Executors.newSingleThreadExecutor();
+    server.createContext("/", exchange -> {
+      try (exchange) {
+        exchange.getRequestBody().readAllBytes();
+        if (retry && calls.incrementAndGet() == 1) {
+          try {
+            Thread.sleep(1500);
+          } catch (InterruptedException error) {
+            Thread.currentThread().interrupt();
+            return;
+          }
+          exchange.getResponseHeaders().add("Retry-After", "0");
+          exchange.sendResponseHeaders(503, -1);
+          return;
+        }
+        exchange.sendResponseHeaders(200, 2);
+        exchange.getResponseBody().flush();
+        headers.countDown();
+        try {
+          release.await(8, TimeUnit.SECONDS);
+        } catch (InterruptedException error) {
+          Thread.currentThread().interrupt();
+        }
+      }
+    });
+    server.start();
+    try {
+      DatabricksServing serving = DatabricksServing.of(
+          "http://127.0.0.1:" + server.getAddress().getPort(), ENDPOINT, () -> "dapi-test")
+          .timeout(Duration.ofSeconds(3));
+      long started = System.nanoTime();
+      Future<Host.EndpointFailed> result = caller.submit(() -> assertThrows(
+          Host.EndpointFailed.class, () -> serving.post(new byte[] {'{', '}'})));
+      assertTrue(headers.await(3, TimeUnit.SECONDS), "the endpoint must have sent headers");
+      long remaining = Duration.ofMillis(3800).toNanos() - (System.nanoTime() - started);
+      Host.EndpointFailed error = result.get(Math.max(1, remaining), TimeUnit.NANOSECONDS);
+      assertEquals(504, error.status());
+      if (retry) {
+        assertEquals(2, calls.get(), "the second attempt must have started");
+      }
+    } finally {
+      release.countDown();
+      server.stop(0);
+      caller.shutdownNow();
+      assertTrue(caller.awaitTermination(3, TimeUnit.SECONDS));
     }
   }
 
