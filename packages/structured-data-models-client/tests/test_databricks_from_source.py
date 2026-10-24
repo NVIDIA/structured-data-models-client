@@ -1332,3 +1332,67 @@ def test_a_run_cancelled_after_a_notice_gives_no_later_step(
     with pytest.raises(_Stop):
         _materialized(schema)
     assert seen == ['inputs_checked', 'RUN_CANCELLED', 'RUN_CANCELLED']
+
+
+@pytest.mark.parametrize('route', ['core', 'old'])
+def test_a_meaning_the_source_refuses_is_refused_after_the_tables_are_located(
+    route: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""A first ``materialize`` over columns holding no facts, one given a
+    meaning its source type does not carry, is refused once the tables are
+    read and kept, as the old route checks meanings after it keeps its
+    tables (``relational.py:586``): a retry after the meaning is put right
+    and the session moved reads ``shop`` (round 10's P0, Codex)."""
+    from sdm_client.errors import StructuredDataError
+
+    _route(route, monkeypatch)
+    connection = _CompletingConnection()
+    schema = _rebuilt(connection)
+    _fresh(schema, 'users')
+    schema['users']['age'].dtype = 'string'
+    schema['users']['age'].stype = 'text'
+    with pytest.raises(StructuredDataError) as refused:
+        _materialized(schema)
+    assert refused.value.code == 'INVALID_REQUEST'
+    schema['users']['age'].dtype = 'int64'
+    schema['users']['age'].stype = 'numerical'
+    connection.schema = 'other'
+    assert _where_read(schema, connection) == {('main', 'shop')}
+
+
+@pytest.mark.parametrize('column', ['__kumo_extra', 'user'])
+@pytest.mark.parametrize('route', ['core', 'old'])
+def test_a_column_the_source_does_not_hold_is_left_out_of_every_read(
+    route: str, column: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""A column added by hand that the source does not hold, one named as
+    the sampler reserves (``__kumo_``) or like a session word (``user``), is
+    left out of every read, as the old route reads only the columns its
+    engine found: the run completes (round 10's P1s, both reviewers)."""
+    from sdm_client import Column
+
+    _route(route, monkeypatch)
+    connection = _CompletingConnection()
+    schema = _rebuilt(connection)
+    stype = 'numerical' if column.startswith('__') else 'text'
+    dtype = 'int64' if column.startswith('__') else 'string'
+    schema['users'].columns[column] = Column(column, dtype, stype)
+    assert _where_read(schema, connection) == {('main', 'shop')}
+
+
+@pytest.mark.parametrize('dtype', ['int8', 'int128', 'float16', 'float8'])
+@pytest.mark.parametrize('route', ['core', 'old'])
+def test_a_link_over_a_type_name_the_client_reads_joins_before_the_source_is_read(
+    route: str, dtype: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""A foreign key given by hand a data type name the client reads as a
+    number joins its key before the source is read, as the old client reads
+    the name, and the run completes (round 10's P1, both reviewers)."""
+    from sdm_client import Column
+
+    _route(route, monkeypatch)
+    connection = _CompletingConnection()
+    schema = _rebuilt(connection)
+    _fresh(schema, 'orders')
+    schema['orders'].columns['user_id'] = Column('user_id', dtype, 'ID')
+    assert _where_read(schema, connection) == {('main', 'shop')}
