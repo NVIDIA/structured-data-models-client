@@ -548,6 +548,8 @@ def test_a_failed_case_is_recorded_and_the_rest_continue(
     # error, or a guard refusal of a statement the old client sent, which
     # its call would otherwise record as the reference's answer); the
     # others are recorded and imported, and the run exits 1.
+    # The fakes run from no checkout; the clean-tree rule has its test.
+    monkeypatch.setattr(capture_run, 'dirty_trees', lambda *trees: [])
     names = ('a', 'b', 'c', 'd', 'e')
     paths = [str(tmp_path / f'{name}.json') for name in names]
     monkeypatch.setattr(

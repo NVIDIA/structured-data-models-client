@@ -103,6 +103,8 @@ def _fake_run(
     run by ``behave[case]`` (a callable of the record path) or recorded."""
     names = ('a', 'b', 'c', 'd', 'e')
     paths = [str(tmp_path / f'{name}.json') for name in names]
+    # The fakes' trees are no checkouts; the clean-tree rule has its test.
+    monkeypatch.setattr(capture_run, 'dirty_trees', lambda *trees: [])
     monkeypatch.setattr(
         capture_run,
         'plan',
@@ -385,3 +387,110 @@ def test_a_case_limit_off_the_main_thread_is_refused_by_name(
     assert 'main thread' in outcome[5.0]
     assert not (tmp_path / 'out-5.0').exists()
     assert outcome[None] == 0
+
+
+def test_a_predict_the_environment_failed_is_never_a_capture(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # T3.20: the C-1 Spark leg recorded 148 predicts as TRANSPORT_ERROR,
+    # the scripted endpoint unreachable in the job. Such a case fails, its
+    # lines never imported; the old client's own refusals are kept.
+    out = tmp_path / 'out'
+    imported, _ = _fake_run(tmp_path, monkeypatch, {})
+    runner = capture_run._named('run_python')
+    answered = runner.run
+
+    def run(mode: str, cases: Any, reference: Any, **options: Any) -> Any:
+        lines = answered(mode, cases, reference, **options)
+        case = cases[0][0]['id']
+        code = {'b': 'TRANSPORT_ERROR', 'c': 'INVALID_REQUEST'}.get(case)
+        return [
+            {
+                **line,
+                'outcome': {
+                    'result': 'refusal',
+                    'stage': 'predict',
+                    'error': 'StructuredDataError',
+                    'code': code,
+                },
+            }
+            for line in lines
+        ]
+
+    monkeypatch.setattr(runner, 'run', run)
+    assert capture_run.run('lakebase', tmp_path, out) == 1
+    failed = json.loads((out / 'lakebase.failed.json').read_text())
+    assert list(failed) == ['b'] and 'environment failure' in failed['b']
+    assert imported == ['a', 'c', 'd', 'e']
+
+
+def test_the_job_serves_the_endpoint_where_predict_reaches_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # T3.20: Databricks serverless refuses IPv4 loopback and serves IPv6
+    # loopback. The job finds the first address the endpoint answers on,
+    # before recording, and the runner's endpoint listens there.
+    endpoint = capture_run._named('scripted_endpoint')
+    monkeypatch.delenv(endpoint.HOST_VARIABLE, raising=False)
+    host = capture_run.endpoint_host(('256.0.0.1', '127.0.0.1'))
+    assert host == '127.0.0.1'
+    import os
+
+    assert os.environ[endpoint.HOST_VARIABLE] == '127.0.0.1'
+    with pytest.raises(SystemExit, match='no local address'):
+        capture_run.endpoint_host(('256.0.0.1',))
+    job = (LIVE / 'capture_job.py').read_text()
+    assert 'capture_run.endpoint_host()' in job
+    assert job.index('endpoint_host()') < job.index('capture_run.run(')
+
+
+def test_the_run_records_only_from_clean_trees(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # T3.20 review: every C-1 Spark capture named both checkouts dirty, by
+    # file mode alone (a volume gives every file one mode). The run refuses
+    # a tree that is not clean unless an excuse is named, and the job's
+    # local copy restores each file's mode, so its trees are clean.
+    import os
+    import subprocess
+
+    def git(*arguments: str, cwd: Path) -> str:
+        return subprocess.run(
+            ['git', *arguments],
+            cwd=cwd,
+            check=True,
+            capture_output=True,
+            text=True,
+            env={
+                **os.environ,
+                'GIT_AUTHOR_NAME': 't',
+                'GIT_AUTHOR_EMAIL': 't@t',
+                'GIT_COMMITTER_NAME': 't',
+                'GIT_COMMITTER_EMAIL': 't@t',
+            },
+        ).stdout
+
+    tree = tmp_path / 'tree'
+    tree.mkdir()
+    git('init', '-q', cwd=tree)
+    (tree / 'a.py').write_text('x')
+    (tree / 'run.sh').write_text('y')
+    (tree / 'run.sh').chmod(0o755)
+    git('add', '.', cwd=tree)
+    git('commit', '-q', '-m', 'c', cwd=tree)
+    for name in ('a.py', 'run.sh'):
+        (tree / name).chmod(0o777)  # as on the volume
+    assert capture_run.dirty_trees(tree) == [str(tree)]
+    imported, _ = _fake_run(tmp_path, monkeypatch, {})
+    monkeypatch.setattr(capture_run, 'dirty_trees', lambda *t: [str(tree)])
+    with pytest.raises(SystemExit, match='not a clean checkout'):
+        capture_run.run('lakebase', tree, tmp_path / 'out')
+    assert imported == []
+    excused = capture_run.run(
+        'lakebase', tree, tmp_path / 'out', dirty_excuse='a stated reason'
+    )
+    assert excused == 0 and imported == list('abcde')
+    monkeypatch.undo()
+    copied = capture_run.local_checkout(tree, tmp_path / 'copy')
+    assert capture_run.dirty_trees(copied) == []
+    assert (copied / 'run.sh').stat().st_mode & 0o777 == 0o755

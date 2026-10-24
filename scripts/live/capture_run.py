@@ -349,6 +349,7 @@ def run(
     e0: bool = False,
     guard_path: Path | str | None = GUARD,
     case_timeout: float | None = CASE_TIMEOUT,
+    dirty_excuse: str | None = None,
 ) -> int:
     r"""Records ``leg`` live (see the module's text), every write through
     the live write guard; returns the exit status. As each case ends, a
@@ -380,6 +381,14 @@ def run(
     if not planned['record']:
         print(f'{leg}: nothing to record')
         return 0
+    dirty = dirty_trees(ROOT, Path(reference))
+    if dirty and not (dirty_excuse or '').strip():
+        # A capture names its harness's and the reference's commits; files
+        # that differ from them make that a false record (T3.20 review).
+        raise SystemExit(
+            f'{", ".join(dirty)}: not a clean checkout of its commit; record '
+            'from clean trees, or name the excuse (--dirty-excuse)'
+        )
     # The runner in this process, with the loader it loads (by the names
     # its _sibling reads), so the guard holds every write it makes.
     loader = _named('databases')
@@ -491,11 +500,118 @@ def _one_case(
         return 'the write guard refused: ' + '; '.join(
             guard.REFUSALS[refusals:]
         )
+    environment = environment_failure(lines)
+    if environment is not None:
+        # The run's surroundings failed, not the old client: never a
+        # capture (the C-1 Spark leg's predicts, 2026-10-24).
+        return environment
     observations.write_text(
         ''.join(json.dumps(item, sort_keys=True) + '\n' for item in lines),
         encoding='utf-8',
     )
     return None
+
+
+#: Outcomes that say the run's surroundings failed, not the old client: a
+#: request that never reached the scripted endpoint. No case expects one.
+ENVIRONMENT_CODES = frozenset({'TRANSPORT_ERROR'})
+ENVIRONMENT_ERRORS = frozenset(
+    {'ConnectionError', 'ConnectionRefusedError', 'ConnectTimeout'}
+)
+
+
+def environment_failure(lines: list[Any]) -> str | None:
+    r"""Why the observed ``lines`` hold an environment's failure rather
+    than the old client's answer, or ``None``: an outcome of
+    :data:`ENVIRONMENT_CODES` or :data:`ENVIRONMENT_ERRORS`."""
+    for line in lines:
+        outcome = (line or {}).get('outcome') or {}
+        if (
+            outcome.get('code') in ENVIRONMENT_CODES
+            or outcome.get('error') in ENVIRONMENT_ERRORS
+        ):
+            return (
+                f'{outcome.get("error")} {outcome.get("code")} at '
+                f'{outcome.get("stage")}: the run could not reach what it '
+                'serves or reads, an environment failure, so no capture'
+            )
+    return None
+
+
+def endpoint_host(
+    candidates: tuple[str, ...] = ('127.0.0.1', '::1'),
+) -> str:
+    r"""The first local address the scripted endpoint answers on here,
+    served and called through ``requests`` as the client calls it, set as
+    ``SDM_SCRIPTED_ENDPOINT_HOST`` for the run; none answering stops the
+    run before anything is recorded. Databricks serverless refuses IPv4
+    loopback and serves IPv6 loopback (the second early capture's
+    diagnosis)."""
+    import requests
+
+    endpoint = _named('scripted_endpoint')
+    tried = []
+    for host in candidates:
+        try:
+            with endpoint.serve(host=host) as (url, received):
+                requests.post(f'{url}/v1/predictions', data=b'{}', timeout=10)
+                if received.requests:
+                    os.environ[endpoint.HOST_VARIABLE] = host
+                    return host
+        except Exception as error:  # noqa: BLE001 - try the next address
+            tried.append(f'{host}: {type(error).__name__}')
+            continue
+        tried.append(f'{host}: no request arrived')
+    raise SystemExit(
+        'the scripted endpoint answers on no local address here ('
+        + '; '.join(tried)
+        + '): every predict would fail, so nothing is recorded'
+    )
+
+
+def dirty_trees(*trees: Path) -> list[str]:
+    r"""Each git checkout of ``trees`` whose files differ from its commit
+    (``git status --porcelain`` not empty, or not a checkout)."""
+    import subprocess
+
+    dirty = []
+    for tree in trees:
+        done = subprocess.run(
+            ['git', '-C', str(tree), 'status', '--porcelain'],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if done.returncode != 0 or done.stdout.strip():
+            dirty.append(str(tree))
+    return dirty
+
+
+def local_checkout(source: Path | str, target: Path | str) -> Path:
+    r"""A copy of the checkout ``source`` at ``target`` with each tracked
+    file's mode as its commit holds it: a Databricks volume gives every
+    file one mode, so git reads a checkout there as changed in every file
+    (the C-1 Spark captures: both trees "dirty", by mode alone). Returns
+    ``target``."""
+    import shutil
+    import subprocess
+
+    target = Path(target)
+    shutil.copytree(source, target, symlinks=True, dirs_exist_ok=True)
+    listed = subprocess.run(
+        ['git', '-C', str(target), 'ls-files', '-s', '-z'],
+        capture_output=True,
+        check=True,
+    ).stdout.split(b'\0')
+    for entry in filter(None, listed):
+        meta, _, name = entry.partition(b'\t')
+        mode = meta.split()[0]
+        path = target / os.fsdecode(name)
+        if mode == b'100755':
+            path.chmod(0o755)
+        elif mode == b'100644' and path.exists():
+            path.chmod(0o644)
+    return target
 
 
 def _named(name: str) -> ModuleType:
@@ -634,6 +750,11 @@ def main(argv: list[str] | None = None) -> int:
         default=CASE_TIMEOUT,
         help='seconds one case may run before it fails alone',
     )
+    running.add_argument(
+        '--dirty-excuse',
+        default=None,
+        help='why recording from a checkout that is not clean is right',
+    )
     booting = commands.add_parser(
         'bootstrap', help='import sdm_client from the reference checkout'
     )
@@ -654,6 +775,7 @@ def main(argv: list[str] | None = None) -> int:
         arguments.out,
         arguments.e0,
         case_timeout=arguments.case_timeout,
+        dirty_excuse=arguments.dirty_excuse,
     )
 
 
