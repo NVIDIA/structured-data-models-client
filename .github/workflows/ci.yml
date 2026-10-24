@@ -1003,7 +1003,7 @@ jobs:
     # 90, not 60: the job reached 58 minutes on GitHub's runners as Phase 2's
     # three-database corpus grew (T2.1o); the cause is being cut separately.
     timeout-minutes: 60
-    needs: [landing, native-wheel]
+    needs: [landing, native-wheel, engine-wheels]
     strategy:
       fail-fast: false
       # Every Python, but on a test author's branch (the landing job's
@@ -1032,6 +1032,11 @@ jobs:
         with:
           name: native-wheel
           path: native
+      - &legacy-engine-wheel
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: engine-wheels-linux-x86_64
+          path: engine
       # pip's downloads and built wheels, keyed on the week and on every
       # distribution's manifest and restored from the newest of this job's
       # otherwise; saved on main alone, which every branch restores (E131).
@@ -1055,8 +1060,10 @@ jobs:
       # pytest-timeout==2.4.0 is for the run's --timeout.
       - run: |
           pip install --upgrade pip 'ruff==0.16.*' pytest-timeout==2.4.0 "tomli; python_version < '3.11'"
+          tag=$(python -c 'import sys; print(f"cp{sys.version_info[0]}{sys.version_info[1]}")')
+          pip install --no-deps "$GITHUB_WORKSPACE"/engine/*-"$tag"-*.whl
           pip install -e './packages/structured-data-models-api[test]' -e './packages/structured-data-models-pql[test]' \
-            "$(ls native/*.whl)[test]" \
+            "$(ls native/*.whl)[test,relational]" \
             -e './packages/structured-data-models-connectors[sqlite,duckdb,postgres,databricks,snowflake,s3,test]'
       # In parallel, as contract/tests runs: each test file on one worker,
       # so its module fixtures are built once. The gate's tooling tests
@@ -2119,11 +2126,7 @@ jobs:
         with:
           name: wheels
           path: dist
-      - &legacy-engine-wheel
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: engine-wheels-linux-x86_64
-          path: engine
+      - *legacy-engine-wheel
       # The candidate's own wheels first, without their dependencies, as
       # runtime-install installs them: --find-links alone lets pip take a
       # published distribution of the same version from the index instead
