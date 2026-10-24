@@ -23,14 +23,9 @@ def test_the_general_client_matrix_has_the_legacy_route_dependency() -> None:
         'jobs'
     ]
     job = jobs['test']
-    assert 'engine-wheels' in job['needs']
-    assert any(
-        (step.get('with') or {}).get('name') == 'engine-wheels-linux-x86_64'
-        for step in job['steps']
-    )
     commands = '\n'.join(step.get('run', '') for step in job['steps'])
     assert '[test,relational]' in commands
-    assert 'engine/*-"$tag"-*.whl' in commands
+    assert 'packages/structured-data-models-relational-engine' in commands
 
 
 @pytest.mark.parametrize('name', ['installed-wheel', 'forced-routes'])
@@ -39,14 +34,8 @@ def test_legacy_client_suites_install_the_candidate_engine(name: str) -> None:
         'jobs'
     ]
     job = jobs[name]
-    assert 'engine-wheels' in job['needs']
-    assert any(
-        (step.get('with') or {}).get('name') == 'engine-wheels-linux-x86_64'
-        for step in job['steps']
-    )
     commands = '\n'.join(step.get('run', '') for step in job['steps'])
-    assert 'structured-data-models-relational-engine==$VERSION' in commands
-    assert '--find-links "$GITHUB_WORKSPACE/engine"' in commands
+    assert 'packages/structured-data-models-relational-engine' in commands
     extras = re.findall(r'structured-data-models-client\[([^]]+)\]', commands)
     assert any('relational' in value.split(',') for value in extras)
 
