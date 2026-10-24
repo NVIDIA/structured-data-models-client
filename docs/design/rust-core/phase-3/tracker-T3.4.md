@@ -37,11 +37,33 @@ The work first pushed as `rust-core-phase-3-topic-T3.4-b` (b71baab1) is rebased 
 - **The host** (fix F): `Source.kind` and `Source.namespace_parts()` in `sdm_connectors`; one `providers.for_source` keyed on them; `_routing` keyed on kind, the `databricks-sql` and `databricks-spark` routes core-routed, defaults `old`; `DatabricksSqlProvider` and `DatabricksSparkProvider`, one implementation, the key set as one JSON text written as `_dumps` writes it, chunked as `_chunk_rows` chunks it; a Databricks failure's SQLSTATE read as `sql_state` reads it, through the provider's `error_fields` hook.
   The `Provider` protocol and the plan rules every SQL provider applies (`PlanNotRun`, the plan and key-set checks, the Arrow key-set reader) live once in `sdm_connectors.providers`, with the rule that one relation name binds one key set; the run loop names `Provider` for annotations only, so a core route over frames runs without the connectors package.
 
+## The old route's check order (fix 10)
+
+Every check the old route's `materialize` makes, in order, at the reference commit 43e55f4f (`relational.py` and `sources.py` under `sdm_client/materializers`), and where the core makes it.
+The core makes each on the same side of `inputs_checked` and `tables_located` as the old route, with the same inputs: the caller's schema, its types by the host's names (`HostTypes`), before the reads; the schema as the source holds it after.
+The core's order among the checks before the reads is its own where an input holds several faults (decision E41(k)(iii)); none of them reads the source.
+
+| # | Old route check | Reference site | Reads | Core site (`sdm-core/src`) |
+|---|---|---|---|---|
+| 1 | unknown options, `run_mode` | `relational.py:263`, `:270` | the call | `materialize.rs:2836-2857` (`options::values`, `options_taken`) |
+| 2 | no entities | `relational.py:277` | the call | `materialize.rs:2928-2948` |
+| 3 | the statistic, rows per call | `relational.py:287-288` | the call | `materialize.rs:2836` (`options::values`), `:2962` |
+| 4 | a column named as the wire names its own | `relational.py:289` | the caller's schema | `materialize.rs:2963` (`reserved`) |
+| 5 | the run mode, too many entities, the shapes | `relational.py:338-340` | the call | `materialize.rs:2836-2857`, `:2953` (`refuse_entities`) |
+| 6 | `check_consistent`: meanings, time columns, links | `relational.py:514` | the caller's schema, host type names | `dispatch.rs:442-443`, `materialize.rs:2910` (`consistent` with `HostTypes`) |
+| 7 | `EngineTables` made | `relational.py:520-521` | nothing | `describe.rs` `initialize`: `inputs_checked` |
+| 8 | the engine reads catalog and preview of each table not kept, then keeps them | `sources.py:62-71` (`keep`, `:36`) | the source | `describe.rs` `initialize`: namespace, catalog, preview (`discover::facts`), then `tables_located` |
+| 9 | the columns read: those the catalog lists | `sources.py:79` (`_copy_for_one_gather`) | the catalog | `run.rs` `Asker::guard` (a catalog guard replaces a schema's, `guard_held` never replaces one) |
+| 10 | the links over the types the engine read | `relational.py:559` (`graph.link`) | the source's types | `materialize.rs:2973-2979` (`consistent`, no host names) |
+| 11 | each column's semantic type set on the engine's table | `relational.py:551` | the source's types | `materialize.rs:2980` (`meanings_carried`, none) |
+| 12 | a link to a column that is not the key, the graph against the schema | `relational.py:572-589` | the engine's graph | `materialize.rs:2999-3002` (`refuse_composite_keys`, `Graph::new`) |
+| 13 | the sampler's needs, its indexes | `relational.py:342` onward (`_get_model`) | the provider, the source | `materialize.rs:3040`, `:3049` |
+
 ## Deviations and what is left
 
 - SQL text that differs from the old client's where the result is the same, for review against the recorded statements: the key set's columns named by the core's seed names (`batch`, `key`, `time`, `start`, `end`) where the reference writes `__KUMO_BATCH__`, `__KUMO_ID__`, `e` and `s`; a lookup's duplicates removed in SQL where the reference removes them after the fetch; no outer window bounds (the reference binds them for data skipping, which the live timing run measures).
 - Carried rows left for the packages now reworking their areas: P2-T2.8c-2 (answered parts, the host's results: T3.16), P2-MID2-3 (the unread-columns warning's fields: T3.17's wording), P2-MID2-4 (typed option values: T3.16's plain-data inputs), P2-T2.2-1 (a lookup's seed meanings as request fields, which rewrites every dialect's lookup goldens).
-- A relation marked `found` that renames, computes or filters its columns is refused where every request is routed; a guard from a catalog read is never replaced by the schema's fewer columns.
+- A relation marked `found` that renames, computes or filters its columns is refused where every request is routed; a guard from a catalog read is never replaced by the schema's columns, and replaces one taken from them, so a column the source does not hold is never read (fix 10).
 - Every catalog read guards its table with all the columns the catalog found, as the old client does (`describe_source`, and `materialize` where it reads facts the schema lacks); a `materialize` of a schema whose columns all carry their facts reads no catalog and guards each table with the columns the schema holds, so a session-word column the schema leaves out is read by name there, which differs from the old client only if that column changes during the run (round 2's Claude P2-3: the held schema carries facts of its own columns only).
 - `contract/fixtures/databricks/capture.json` and `reference-statements.json` are synthetic unit fixtures, frozen: written once with an offline stand-in warehouse over DuckDB, which is removed (owner B-lite; round 1's Codex P1-6); `compare.py` beside them keeps only the comparison of the core's statements with the old client's. C-1's live recording replaces both.
 - The live recording of Databricks' core route (structure design step 3) waits for the owner's renewed login and the write guard.
