@@ -5809,6 +5809,7 @@
         "link_composite_key",
         "link_types",
         "primary_key_as_foreign_key",
+        "edge_key_types",
         "schema_table_twice",
         "schema_column_twice",
         "incompatible_semantic_type",

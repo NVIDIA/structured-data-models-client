@@ -2162,22 +2162,32 @@ fn not_carried(sentence: Sentence, table: &str, column: &str) -> CoreError {
     .with_field("column", Detail::text(column))
 }
 
-/// Refuses a time column of another meaning than a time, and a link that
-/// cannot join, each column's type read by the name `types` gives it: the
-/// host's before the source is read, as the reference's `check_consistent`
-/// reads the caller's schema; none once it is, each column then of the type
-/// the source holds, as its engine links the tables it read.
+/// The reference's `Schema.check_consistent` over the caller's schema,
+/// before its engine reads anything (`relational.py:514`): the key columns
+/// marked as the schema joins on them (`_mark_key_columns`), then each link
+/// able to join, each column's type read by the name `types` gives it (the
+/// host's). Each column's meaning against the type the caller gave it is
+/// that check's other half, [`meanings_carried`] with the host's types,
+/// made where the run is asked (dispatch).
 fn consistent(
     description: &mut SourceDescription,
     types: &sdm_schema::assemble::HostTypes,
 ) -> Result<(), CoreError> {
     sdm_schema::assemble::mark_keys(description);
+    sdm_schema::assemble::check_links(description, types)
+}
+
+/// The reference's engine's refusals of the schema over the tables it read
+/// and kept, each over the types the source holds, in its order: each
+/// column's meaning set on the engine's table (`relational.py:551`,
+/// `Column.__setattr__`), one its values can carry, and a time column's
+/// the timestamp meaning (the engine's table takes a time column only of
+/// it: one the schema joins on keeps its identifier's); then the edges, as
+/// `Graph.validate` refuses them (`relational.py:418`). `description`'s
+/// key columns are marked ([`consistent`]).
+fn kept_checks(description: &SourceDescription) -> Result<(), CoreError> {
+    meanings_carried(description, None)?;
     for table in &description.tables {
-        // Each column's meaning was held to what its values can carry before
-        // the run (`meanings_carried`, from dispatch).
-        // The engine's table takes a time column only of the timestamp
-        // meaning (`Column.__setattr__`): one the schema joins on keeps
-        // its identifier's, and the reference refuses the request.
         if let Some(time) = &table.time_column
             && table
                 .columns
@@ -2193,7 +2203,7 @@ fn consistent(
             .with_field("column", Detail::text(time)));
         }
     }
-    sdm_schema::assemble::check_links(description, types)
+    sdm_schema::assemble::check_edges(description)
 }
 
 /// The names of options the host passes without their values
@@ -2905,8 +2915,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // the reference's `check_consistent` reads it before anything is read
     // (`relational.py:514`); where a column holds no facts of the source,
     // the schema is read by what the source says of it once the inputs are
-    // checked (below), and checked again as the reference's engine links
-    // the tables it read.
+    // checked (below). The reference's engine's checks wait for its reads.
     consistent(&mut description, &types)?;
     // The seed reaches this entry as the integer the caller gave, of any
     // size (decision H7); numpy's generator takes it whole, and the sample
@@ -2964,20 +2973,16 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // Every input check of the request made (`inputs_checked`), the
     // tables are located and kept (`tables_located`), as the reference
     // makes its `EngineTables` and its engine reads and keeps its tables
-    // (`relational.py:520-522`, `materializers/sources.py:79`): a schema
+    // (`relational.py:520-522`, `materializers/sources.py:66-71`): a schema
     // whose columns held no facts is read now, by what the source says of
-    // them (its catalog and preview), and linked again over the types the
-    // source holds. Every check over what the source holds comes after:
-    // the meanings (`relational.py:551`), the graph and what the sampler
-    // needs.
+    // them (its catalog and preview). On every path, every check over what
+    // the source holds comes after: the engine's meanings, time columns
+    // and edges ([`kept_checks`]), the graph and what the sampler needs.
     if let Some(located) = crate::describe::initialize(asker, pending.as_ref()).await? {
         description = located;
-        consistent(
-            &mut description,
-            &sdm_schema::assemble::HostTypes::default(),
-        )?;
+        sdm_schema::assemble::mark_keys(&mut description);
     }
-    meanings_carried(&description, None)?;
+    kept_checks(&description)?;
     if description.tables.iter().any(|t| t.primary_key.len() > 1) {
         // The reference resolves its query against a schema with no key of
         // several columns (`to_schema_definition`) before its engine folds
