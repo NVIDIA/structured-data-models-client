@@ -485,7 +485,8 @@ def test_a_complete_capture_passes_and_holds_no_private_name() -> None:
         (lambda line: line.update(zone=''), 'no session zone'),
         (
             lambda line: [
-                line['versions'].pop(name) for name in run._DRIVERS[line['leg']]
+                line['versions'].pop(name, None)
+                for name in run._DRIVERS[line['leg']]
             ],
             "'s driver recorded",
         ),
