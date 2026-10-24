@@ -1185,6 +1185,15 @@ impl ProviderChoice {
             view: None,
         }
     }
+
+    /// The semantic model a SQL provider's source is read through, if any
+    /// (T3.5); none for a host provider.
+    pub fn view(&self) -> Option<&ViewChoice> {
+        match self {
+            ProviderChoice::Sql { view, .. } => view.as_ref(),
+            ProviderChoice::Host { .. } => None,
+        }
+    }
 }
 
 /// The semantic model a SQL provider's source is read through
