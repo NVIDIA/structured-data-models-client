@@ -567,3 +567,50 @@ fn chunks_the_provider_answers_in_two_shapes_are_still_refused() {
         "{error:?}"
     );
 }
+
+#[test]
+fn timestamp_preflight_binds_empty_keys_then_preserves_the_original_lookup() {
+    use arrow_array::{StringArray, TimestampMicrosecondArray};
+    use sdm_contract::data::SqlResultConversion;
+    let provider: ProviderChoice = serde_json::from_str(
+        r#"{"provider":"sql","dialect":"databricks","timestamp_encoding":"naive_microseconds"}"#,
+    ).unwrap();
+    let root = CompositionRoot::new(Arc::new(sdm_data::Data::new()));
+    let seen = Arc::new(Mutex::new(Seen::default()));
+    let saved = Arc::clone(&seen);
+    let mut run = Run::with_data(root.data_access(&provider).unwrap(), move |asker| async move {
+        let id = asker.attach(Attachment::Arrow(seeds(vec![7, 8])))?;
+        let mut request = lookup(USERS, id);
+        if let DataRequest::Lookup { columns, .. } = &mut request { columns.push("at".into()); }
+        saved.lock().unwrap().reply = Some(asker.fetch(request)?.await);
+        Ok(done())
+    });
+    let Step::Fetch { requests } = run.next().unwrap() else { panic!("metadata fetch") };
+    assert_eq!(requests.len(), 1);
+    let metadata = &requests[0];
+    let FetchPlan::Sql { statements, .. } = &metadata.plan else { panic!("SQL") };
+    assert!(statements.last().unwrap().text.starts_with("DESCRIBE QUERY WITH "));
+    assert_eq!(cell(run.take_attachment(text_param(metadata))), "[]");
+    let batch = RecordBatch::try_from_iter(vec![
+        ("col_name", Arc::new(StringArray::from(vec!["__kumo_batch__", "user_id", "at", "__kumo_matches__"])) as arrow_array::ArrayRef),
+        ("data_type", Arc::new(StringArray::from(vec!["int", "bigint", "timestamp_ntz", "bigint"])) as arrow_array::ArrayRef),
+    ]).unwrap();
+    run.submit_fetch(metadata.id, FetchResult::Data(ArrowData::new(batch.schema(), vec![batch]))).unwrap();
+    let Step::Fetch { requests } = run.next().unwrap() else { panic!("data fetch") };
+    assert_eq!(requests.len(), 1);
+    let actual = &requests[0];
+    assert_eq!(cell(run.take_attachment(text_param(actual))), "[7, 8]");
+    let FetchPlan::Sql { statements, result_conversions, .. } = &actual.plan else { panic!("SQL") };
+    assert_eq!(result_conversions, &[SqlResultConversion::TimestampMicros { column: 2, name: "at".into() }]);
+    assert!(!statements.last().unwrap().text.starts_with("DESCRIBE QUERY"));
+    assert!(statements.last().unwrap().text.contains("CAST(t.`at` AS TIMESTAMP_NTZ)"));
+    let batch = RecordBatch::try_from_iter(vec![
+        ("__kumo_batch__", Arc::new(Int64Array::from(vec![0, 1])) as arrow_array::ArrayRef),
+        ("user_id", Arc::new(Int64Array::from(vec![7, 8])) as arrow_array::ArrayRef),
+        ("at", Arc::new(TimestampMicrosecondArray::from(vec![1710037800123456_i64, -1])) as arrow_array::ArrayRef),
+        ("__kumo_matches__", Arc::new(Int64Array::from(vec![1, 1])) as arrow_array::ArrayRef),
+    ]).unwrap();
+    run.submit_fetch(actual.id, FetchResult::Data(ArrowData::new(batch.schema(), vec![batch]))).unwrap();
+    assert!(matches!(run.next().unwrap(), Step::Done { .. }));
+    assert!(matches!(seen.lock().unwrap().reply, Some(Reply::Fetch(FetchResult::Data(_)))));
+}
