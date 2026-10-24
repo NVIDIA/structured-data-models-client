@@ -549,6 +549,21 @@ def test_a_case_the_live_run_leaves_out_by_name_is_not_live_not_pending() -> (
     assert check.NOT_LIVE['name.line-break-target'][0] == check.LEGS
 
 
+def test_a_dirty_tree_s_excuse_survives_the_import(tmp_path: Path) -> None:
+    # Codex T3.20 r2 P2: the excuse a recording names for a tree that was
+    # not clean is kept in the capture written from it, so the capture
+    # alone shows why it stands.
+    captures = _load('captures')
+    case, line, tables = _capture()
+    line['observation']['identity']['commit']['clean'] = False
+    line['recording']['excuse'] = 'build output only; the source untouched'
+    assert check.capture_problems(line, case, tables) == []
+    written = captures.from_recording(line)
+    assert written['excuse'] == line['recording']['excuse']
+    captures.write(tmp_path / 'one', written, environ={})
+    assert captures.read(tmp_path / 'one')['excuse'] == written['excuse']
+
+
 def test_a_case_changed_after_its_capture_is_pending_live() -> None:
     case, line, _ = _capture()
     problems, pending = check.recordings([case], [line], ['databricks-sql'])
