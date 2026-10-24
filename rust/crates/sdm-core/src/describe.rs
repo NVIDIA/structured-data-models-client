@@ -755,17 +755,13 @@ pub(crate) async fn initialize(
     // The facts of each column that holds none, read from the source (its
     // catalog and preview) before the tables are said located, as the
     // reference's engine reads every table it keeps, its preview included,
-    // before keeping any (`materializers/sources.py:79`); the schema then
-    // held to the reference's checks as its engine reads the source.
+    // before keeping any (`materializers/sources.py:79`); the checks over
+    // what the source holds come after, as the reference's do.
     let located = match pending {
         Some(held) => {
             let found = crate::discover::facts(asker, held).await?;
             let read = sdm_schema::held::read(held.clone(), &found, false)?;
-            crate::materialize::meanings_carried(&read.description, Some(&read.types))?;
-            sdm_schema::assemble::check_links(&read.description, &read.types)?;
-            let description = read.by_the_source();
-            crate::materialize::meanings_carried(&description, None)?;
-            Some(description)
+            Some(read.by_the_source())
         }
         None => None,
     };

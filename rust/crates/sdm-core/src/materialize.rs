@@ -199,6 +199,10 @@ pub(crate) struct Inputs {
     /// (`describe::initialize`), as the reference's engine reads a table
     /// after its materializer's checks (T3.4).
     pub pending: Option<sdm_contract::ops::HeldSchema>,
+    /// The data type names the host gave its columns (T3.16), which the
+    /// request's checks before the source is read take, as the reference's
+    /// `check_consistent` reads the caller's schema.
+    pub types: sdm_schema::assemble::HostTypes,
     /// The test-only `labels` operation's run: it finishes with the
     /// context's labels, before anything of the task's layout is read.
     #[cfg(feature = "test-ops")]
@@ -2158,7 +2162,15 @@ fn not_carried(sentence: Sentence, table: &str, column: &str) -> CoreError {
     .with_field("column", Detail::text(column))
 }
 
-fn consistent(description: &mut SourceDescription) -> Result<(), CoreError> {
+/// Refuses a time column of another meaning than a time, and a link that
+/// cannot join, each column's type read by the name `types` gives it: the
+/// host's before the source is read, as the reference's `check_consistent`
+/// reads the caller's schema; none once it is, each column then of the type
+/// the source holds, as its engine links the tables it read.
+fn consistent(
+    description: &mut SourceDescription,
+    types: &sdm_schema::assemble::HostTypes,
+) -> Result<(), CoreError> {
     sdm_schema::assemble::mark_keys(description);
     for table in &description.tables {
         // Each column's meaning was held to what its values can carry before
@@ -2181,7 +2193,7 @@ fn consistent(description: &mut SourceDescription) -> Result<(), CoreError> {
             .with_field("column", Detail::text(time)));
         }
     }
-    sdm_schema::assemble::check_links(description, &sdm_schema::assemble::HostTypes::default())
+    sdm_schema::assemble::check_links(description, types)
 }
 
 /// The names of options the host passes without their values
@@ -2778,7 +2790,7 @@ fn resolved(
     Option<QueryFacts>,
 ) {
     let mut description = inputs.description.clone();
-    if consistent(&mut description).is_err() {
+    if consistent(&mut description, &inputs.types).is_err() {
         return (None, None, None);
     }
     let profile = Profile::resolve(&ProfileSpec {
@@ -2864,6 +2876,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         zones,
         most_entities,
         most_calls,
+        types,
         ..
     } = inputs;
     // The sampling options the engine reads later than the client's
@@ -2888,7 +2901,13 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // A table the schema names otherwise than the source does is read by
     // its source name (`Table::source`), as the reference's engine reads
     // it; the query and the payload name it as the schema does.
-    consistent(&mut description)?;
+    // The schema as the caller holds it, its types by the host's names, as
+    // the reference's `check_consistent` reads it before anything is read
+    // (`relational.py:514`); where a column holds no facts of the source,
+    // the schema is read by what the source says of it once the inputs are
+    // checked (below), and checked again as the reference's engine links
+    // the tables it read.
+    consistent(&mut description, &types)?;
     // The seed reaches this entry as the integer the caller gave, of any
     // size (decision H7); numpy's generator takes it whole, and the sample
     // takes it as the narrowest exact scalar.
@@ -2942,6 +2961,23 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // decision E41(k)(iii)).
     let statistic = options::statistic(prediction_statistic.as_deref())?;
     reserved(&description)?;
+    // Every input check of the request made (`inputs_checked`), the
+    // tables are located and kept (`tables_located`), as the reference
+    // makes its `EngineTables` and its engine reads and keeps its tables
+    // (`relational.py:520-522`, `materializers/sources.py:79`): a schema
+    // whose columns held no facts is read now, by what the source says of
+    // them (its catalog and preview), and linked again over the types the
+    // source holds. Every check over what the source holds comes after:
+    // the meanings (`relational.py:551`), the graph and what the sampler
+    // needs.
+    if let Some(located) = crate::describe::initialize(asker, pending.as_ref()).await? {
+        description = located;
+        consistent(
+            &mut description,
+            &sdm_schema::assemble::HostTypes::default(),
+        )?;
+    }
+    meanings_carried(&description, None)?;
     if description.tables.iter().any(|t| t.primary_key.len() > 1) {
         // The reference resolves its query against a schema with no key of
         // several columns (`to_schema_definition`) before its engine folds
@@ -3010,36 +3046,6 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // this core's own order, not the reference's: an input with several
     // errors may be refused for another of them than the reference's first
     // (decision E41(k)(i)).
-    // Every input check of the request made: the location cache made, and
-    // where each table read anew lives settled, before any row is fetched,
-    // as the reference makes its `EngineTables` and its engine keeps them.
-    // A schema whose columns held no facts read now, by what the source
-    // says of them.
-    let (graph, validated, source_query) =
-        match crate::describe::initialize(asker, pending.as_ref()).await? {
-            // Its graph and its query read again over the schema as the
-            // source holds it, as the reference's engine reads its tables:
-            // a column the source does not hold is no column of it.
-            Some(located) => {
-                description = located;
-                consistent(&mut description)?;
-                reserved(&description)?;
-                let graph = Graph::new(&description)?;
-                let validation = crate::pql::resolve(
-                    &query,
-                    &query_schema(&description),
-                    &profile,
-                    &facts,
-                    &*zones,
-                )?;
-                let (Some(validated), Some(source_query)) = (validation.query, validation.text)
-                else {
-                    return Err(unresolved(&query, &validation.diagnostics));
-                };
-                (graph, validated, source_query)
-            }
-            None => (graph, validated, source_query),
-        };
     missing_indexes(&mut memo, &graph, asker.capabilities()?.index_advice).await?;
     // Each table's rows, where the provider sizes its sampling by them,
     // as the reference's warehouse sampler counts them as it is built.

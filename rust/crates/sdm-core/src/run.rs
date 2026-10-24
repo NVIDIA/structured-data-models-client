@@ -215,8 +215,24 @@ impl Asker {
             && !relation.is_derived()
             && !columns.is_empty()
         {
-            // A guard from the catalog stands: one from a schema's columns,
-            // which may be fewer, never replaces it.
+            // The catalog says which columns the table holds, whatever the
+            // schema said before.
+            lock(&self.shared).guarded.insert(relation.clone(), columns);
+        }
+    }
+
+    /// Names the columns the schema holds of the table `relation` names on
+    /// its later reads, as [`Asker::guard`] does, until a catalog read says
+    /// which it holds: a guard from the catalog is never replaced by one from
+    /// the schema, which may name a column the source does not hold.
+    pub(crate) fn guard_held(&self, relation: &Relation, columns: Vec<String>) {
+        if self
+            .data
+            .as_ref()
+            .is_some_and(|data| data.capabilities().derived_relations)
+            && !relation.is_derived()
+            && !columns.is_empty()
+        {
             lock(&self.shared)
                 .guarded
                 .entry(relation.clone())
