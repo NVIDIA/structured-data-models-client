@@ -383,10 +383,14 @@ public final class ConversionTable {
                 : Math.floorDiv(read.getTime(), 1000L) * 1_000_000L + read.getNanos() / 1_000L;
           }
           case "TIMESTAMP_NTZ" -> {
-            java.time.LocalDateTime read = rows.getObject(at, java.time.LocalDateTime.class);
+            // Databricks JDBC has no LocalDateTime typed getter. Its supported
+            // calendar getter assigns the driver's wall fields to UTC, matching
+            // Arrow's timezone-free microsecond representation without using
+            // the JVM's offset to compute that representation.
+            java.sql.Timestamp read = rows.getTimestamp(at, (java.util.Calendar) UTC.clone());
             yield read == null
                 ? null
-                : read.toEpochSecond(ZoneOffset.UTC) * 1_000_000L + read.getNano() / 1_000L;
+                : Math.floorDiv(read.getTime(), 1000L) * 1_000_000L + read.getNanos() / 1_000L;
           }
           case "BINARY" -> rows.getBytes(at);
           default -> throw new SQLException("no Databricks scalar of " + name + " is read here");
