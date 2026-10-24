@@ -51,6 +51,7 @@ where
             derived_relations: false,
             neighbor_lookback: false,
             keys_optional: false,
+            key_enforcement: false,
             sample_rows: false,
             optional: BTreeSet::new(),
             max_keys_per_request: None,
@@ -79,6 +80,7 @@ fn rows(n: usize) -> FetchResult {
 fn failed() -> FetchResult {
     FetchResult::Error(ProviderError {
         error_class: None,
+        driver_message: None,
         kind: ErrorKind::DataSource,
         retryable: false,
         sqlstate: Some("42P01".into()),

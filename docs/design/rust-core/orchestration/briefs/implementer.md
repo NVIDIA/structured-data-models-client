@@ -1,47 +1,68 @@
 # Implementer: standing rules (appended to every package brief)
 
-The package brief above gives the scope, the exits, the design row and the decision rows. These rules apply to every package.
+The package brief gives scope, exits, dependencies and approved design.
+The current [handbook](../README.md) and latest owner instructions take precedence over older briefs or scripts.
 
 **Workflow**
-- Work and push only from your lane worktree, to `rust-core-phase-N-lane-<x>`. Never switch branches there; `land.py` needs it on the lane. To work ahead, stack the next package in its own worktree off the approved SHA.
-- Every commit subject starts with the package ID: `<ID>: ...`, `<ID> fix <n>: ...`, `<ID> tracker: ...`, `<ID> docs: ...`. Cite other packages only in the body (`Refs: ...`). The first commit records the previous package's landing in the tracker.
-- The acceptance tests come from a separate test author (`<ID> tests: ...` commits). Make them pass without editing them. If one looks wrong, report it; the test author fixes it. Your own unit tests are welcome but aren't acceptance evidence.
-- While iterating, run only your package's tests. Before each push: `scripts/rust_core/prepush.sh` (the cheap tier; the hook blocks `--full`).
-- Before you report "ready": run your package's own tests; reviews start at push, with no stamp. Once both reviewers approve the same SHA, run `scripts/rust_core/handoff.py run --package <ID> --python <your lane environment's python>` (and `--previous <last round's SHA>` in a fix round) on it, once. It runs lint and your package's own tests and stamps the SHA only when both pass; landings refuse a SHA without the stamp (the owner's "2026-10-23 stamp only at landing"). The broad suites run nightly in CI.
-- A fix commit (`<ID> fix <n>: ...`) that changes product code carries `Rule: <the old client's rule it ports, one sentence>`; the commit-msg hook and `land.py` refuse it otherwise.
-- Push review-ready states, report the SHA at once and end your turn. Don't watch CI; the orchestrator sends you any CI failure as a fix item.
-- Final report: final SHA, each exit with its evidence, deviations, decision rows added, and anything needing the owner.
 
-**Judging paths and guards**
-- The judging paths are listed in `scripts/rust_core/judging-paths.txt`. A package may change one together with its product code and land normally; name every judging path you change in your report, so both reviewers check it.
-- Any guard or gate change must also pass in its post-landing state: the phase branch at the landing, judged against itself.
-- Guards are frozen at bug fixes. No new frameworks or harness layers; extend the existing runners, vectors and maps.
-- A new case-format key lands with accept and refuse vectors in `contract/tests/malformed-cases.json`, run by both loaders.
-- A contract version bump also updates `rust/bindings/sdm-py/tests/messages.py` until Phase 2 row FX-6 derives it.
+- Work in the package's assigned lane or topic worktree and preserve any unfinished changes already there.
+  Push only the assigned package branch; do not move protected branches.
+- Every commit subject starts with the package ID: `<ID>: ...`, `<ID> tests: ...`, `<ID> fix <n>: ...` or `<ID> docs: ...`.
+  Use DCO sign-off and no agent co-author.
+- Write and commit the package's tests before implementation.
+  A separate test author is optional; preserve already independent acceptance tests and authentic recorded values.
+  Use public calls and both routes where applicable.
+- Push the candidate and report its exact SHA immediately so both independent reviewers can start.
+  The two reviewers use Sol 6.1 High: one broad design/correctness review and one starting from the package's specific risks.
+  Both may flag any defect; their focus does not limit review coverage.
+  Do not run package tests, lint or cheap pre-push checks before both reviewers approve the code.
+  Do not run full suites, workspace tests, affected suites or full CI within a topic package.
+- After both reviewers approve the same SHA, coordinate the cheap pre-push checks and `handoff.py run --package <ID> --python <lane python>` as one bounded check of that clean SHA.
+  Do not duplicate overlapping commands or accept the old pre-push script's wider tool self-tests and broad clippy scope.
+  The handoff scope is lint and the package's own tests, nothing else.
+  If a check fails, fix it, obtain both approvals on the new SHA, then run the checks again.
+  An outdated automatic hook must be reconciled by the orchestrator, not bypassed with `--no-verify`.
+- A product fix commit carries `Rule: <the old client's rule it ports, one sentence>` where the commit-message tooling requires it.
+- Report the candidate, review/check state, deviations, measured differences and anything requiring the owner.
+  End your turn rather than waiting on CI; the orchestrator handles nightly failures and continuation.
 
-**Behavior**
-- Every outcome you measure to differ from the reference gets a register entry, marked proposed, before review. Never approve your own entry.
-- A refusal of input the reference accepts gets a proposed register entry and a diagnostic test. If the work would diverge from the product in a way the plan doesn't cover, stop and report.
-- The core emits codes and structured fields; each host renders the wording. No host-language knowledge or SQL dialect in the core.
-- When the core concludes something from a provider's answer (absence, existence, resolution), the provider must establish it the way the source resolves names. Probe it with views, other schemas and attached databases.
-- Avoid what reviews kept catching: process-global hooks in production code, checkers that accept empty or vacuous evidence, diagnostic checks presented as gates, proxies that change driver return types, and silently guessing where the reference does something else.
+**Design and behavior**
 
-**Probes before the first push** (record what each found in the tracker or commit text)
-- Where a route changes: an old-route against core-route differential on about 50 generated DuckDB sources (varied types, keys, nulls, sizes), every difference fixed or listed.
-- For every reader of outside JSON: thousands of nested levels and a very wide object, each refused by name or read, never a crash or `RecursionError`.
-- For every new comparator or gate rule: a seeded fault showing the rule fails when its evidence is missing, empty or retyped, not only when it differs.
+- Keep the language-neutral core responsible for query semantics, SQL construction, policy and the chosen error/warning message.
+  Hosts handle native conversions, drivers, authentication, transport and rendering the core's chosen structured message.
+  Do not move SQL or business rules into Python/Java to avoid a contract or core change.
+- Every measured difference from the reference gets a register entry with its exact scope.
+  Never approve your own behavior change or describe a recommendation as the owner's approval.
+  Better errors and more support may be reviewer-approved improvements under the current policy; accepted-answer changes and comparison relaxations still need the owner.
+- Check realistic name resolution, views, namespaces and capabilities against the actual source behavior.
+  Do not replace evidence with guesses or weaken a test to conceal a mismatch.
+- After repeated findings on one theme, report the design issue rather than adding another local patch.
+  The orchestrator reassesses after two rounds on a theme or by round four.
+- Design review includes DRY, crate/module ownership, separation of concerns, interfaces and cross-language plain data.
 
-**Shared docs and IDs**
-- New register IDs and decision rows come only from your lane's ID block. When it runs out, ask the orchestrator.
-- Write only in your lane's sub-table of `decisions.md` and your package's section of `as-built.md` and `tracker.md`; add register entries under your lane's banner. Never append at the end of a shared file.
-- A decision row is at most 1,000 characters; evidence goes in as-built. Fix-round history goes once, briefly, in the tracker.
-- In docs, give each claim the mechanism that enforces it.
+**Tests and judging tools**
 
-**Hard rules**
-- DCO sign-off only (`git commit -s`), no `Co-Authored-By`. No pull requests, no landing commits (`land.py` makes those). Never `git config`.
-- Keep credentials, hostnames, account and workspace names and internal infrastructure names out of everything you write. The repository is public.
-- The command hook (`scripts/rust_core/orchestration/guard_cmd.py`) blocks `rm -r` outside your scratch, `--force` and `-D` removals, `--no-verify`, `sudo`, `git config`, `git stash`, `gh run watch` and `git fetch --prune`, naming the alternative. `git worktree prune` is the only cleanup allowed. Never touch another lane's worktrees. If something seems to need approval, report it instead.
-- Run every probe and subprocess under a timeout with stdin closed: `perl -e 'alarm shift; exec @ARGV' 600 <cmd> </dev/null`, with `GH_PROMPT_DISABLED=1 GIT_TERMINAL_PROMPT=0`.
-- Run in your lane's environment: `scripts/rust_core/cells.sh /mnt/localssd/cells/<lane>` and `SDM_LANE_ENV` (the runners refuse the shared `.venv`). Keep `CARGO_TARGET_DIR` at `/mnt/localssd/target/<you>`; the shared sccache holds the builds.
-- Heavy runs go through `$SDM_ORCH_STATE/bin/heavy`, which queues them until the machine can take them.
-- Never open held-out data.
+- Write regression tests for the actual public failure and check the tests-first history.
+  Execute the package checks after both approvals, including any required baseline failure demonstration within that bounded check.
+- Cover parser nesting and malformed inputs without crashes where the package introduces a reader.
+  A new judging rule needs a seeded fault proving missing, empty or invalid evidence fails.
+  Do not launch generated differential campaigns before review as a routine package step.
+- Judging-path changes land with the product package that needs them; name them so both reviewers inspect them.
+  The separate tooling train is gone.
+  A guard or gate change must also be correct in its post-landing state.
+- Regenerate generated files with their generators and refresh required snapshots for observable changes.
+  Never hand-edit reference recordings or verified outputs.
+
+**Environment and coordination**
+
+- Use the lane's isolated `cells.sh` environment, current phase setting and assigned Cargo target directory.
+  Concurrent worktrees must not share incremental build output.
+- Heavy jobs go through the existing `heavy` wrapper.
+  Do not create new resource guards or raise concurrency limits without authorization.
+- Never wait unattended on an approval prompt.
+  Report the specific command promptly to the orchestrator, which can coordinate an authorized alternative.
+- Never open held-out data, touch another lane's worktree, expose credentials or private infrastructure, or send outbound messages without authorization.
+- Keep probes bounded with stdin closed and noninteractive Git/GitHub settings.
+  Respect the command guard and authorized cleanup scope; do not assume another runtime inherits Claude's hooks.
+- Keep shared-document edits confined to assigned entries and existing ID blocks.
+  Add prose only when needed or requested, keep explanations short, and put each full sentence on its own line in long Markdown.

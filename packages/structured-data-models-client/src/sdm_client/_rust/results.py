@@ -107,8 +107,8 @@ class SourceFacts:
     since), the data type the source's catalog and values give it, the type
     the provider handed over (the contract's ``ColumnType``, as JSON),
     whether it may hold no value, whether a key of it alone keeps it
-    unique, a big integer's declared type, and whether it is a column of
-    exact numbers."""
+    unique, a big integer's or temporal column's declared type, and whether
+    it is a column of exact numbers."""
 
     relation: Any
     dtype: str

@@ -837,7 +837,7 @@
           "type": "boolean"
         },
         "declared_type": {
-          "description": "The column's type as the source's catalog declares it (`describe`\ncolumns' `type`, as the source spells it), kept only for a\nbig-integer column the host layer read from an opaque extension type\n(a HUGEINT, UHUGEINT or VARINT, marked [`crate::data::BIG_INTEGER_MARKER`]):\na key the data layer joins a `decimal128(38, 0)` seed to in the key's\nown type, so `materialize` asks the source nothing more (register\nP1B-43). `None` for every other column, which joins as before part\n3, and absent from the JSON.",
+          "description": "The source's catalog declaration, retained for temporal columns\nso a dialect can distinguish zoned instants from NTZ wall clocks,\nand for opaque big-integer columns so key joins cast to the source\ntype (register P1B-43). Other columns keep none. Absent when none.",
           "type": [
             "string",
             "null"
@@ -3710,6 +3710,10 @@
           "description": "The provider's catalog may fail to read a table's declared keys and\nforeign keys where it reads its columns (Unity Catalog's\n`table_constraints` on an older runtime or without the privilege):\nthe core then reads a table's columns and its keys apart, and reads\na failed key or foreign-key read as no declared keys, as the\nreference's Databricks reader carries on without them\n(`DatabricksTable`'s key reads; contract v28). Left out, `false`: a\nfailed key read fails the description.",
           "type": "boolean"
         },
+        "key_enforcement": {
+          "description": "The catalog can answer `key_enforcement` for a table's namespace.\nThis optional fact can skip counting an enforced declared primary\nkey; it never certifies uniqueness of values exposed by a lookup.",
+          "type": "boolean"
+        },
         "opaque_vendor": {
           "description": "The vendor whose opaque Arrow extension types (`arrow.opaque`, its\nmetadata's `vendor_name`) the provider hands over: the host layer\nreads an opaque column by that vendor's layout only when the column\nnames this vendor (register P1B-43). Left out, none, and no opaque\ncolumn is read as anything but its storage (contract v28, carried\nrow P2-MID2-2: before it, a flag of the data layer's).",
           "type": [
@@ -4257,7 +4261,7 @@
       ]
     },
     "ProviderError": {
-      "description": "A provider's failure: its kind, whether trying again may succeed, and\nthe driver's own SQLSTATE, vendor code and error class. The driver's\nmessage stays in the host, since drivers quote values there; what the\nfailure means is the data layer's to say ([`DataLayer::failure`]), from\nthese facts, never from text.",
+      "description": "A provider's failure: its kind, whether trying again may succeed, and\nthe driver's own SQLSTATE, vendor code and error class, and its message\nas a diagnostic for the data layer alone. What the failure means is the\ndata layer's to say ([`DataLayer::failure`]), from these facts; the\nmessage is never echoed into an error the core gives, since drivers\nquote values there (decision H17).",
       "type": "object",
       "properties": {
         "kind": {
@@ -4280,6 +4284,13 @@
         },
         "error_class": {
           "description": "The driver's error class, a name of its closed list such as\nDatabricks's `INSUFFICIENT_PERMISSIONS` (contract v28, T3.27), read\nas the old client reads it (`error_class`: the driver's own answer,\nelse the bracketed name its message opens with). Left out, none.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "driver_message": {
+          "description": "The driver's message, passed through by the host unread (contract\nv28, T3.6): an internal diagnostic only [`DataLayer::failure`] reads,\nwhere the old client reads a failure by its text (Snowflake's\n\"does not exist\", `SNOW/table.py:34-45`), and never echoed into a\npublic error (decision H17). Left out, none.",
           "type": [
             "string",
             "null"
@@ -4914,6 +4925,11 @@
           "const": "namespace"
         },
         {
+          "description": "The exact names of the tables in the named table's namespace whose\ndeclared primary keys the source enforces (T3.6). Asked lazily once\nper namespace, only before counting a key containing that declared\nprimary key, when `key_enforcement` is declared. A failed or unreadable\nlisting establishes no enforcement. It does not change lookup checks.",
+          "type": "string",
+          "const": "key_enforcement"
+        },
+        {
           "description": "The definition of the one semantic model named (contract v28, T3.27):\na Databricks metric view's `DESCRIBE TABLE EXTENDED`, a Snowflake\nsemantic view's `SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW`, read into\n[`CatalogAnswer::ViewDefinition`]. Only a SQL provider whose dialect\nreads views is asked it; every other dialect refuses it by name\n([`Sentence::ViewsUnread`]), and a host provider is never asked it.",
           "type": "string",
           "const": "view_definition"
@@ -5097,6 +5113,13 @@
       "properties": {
         "column": {
           "type": "string"
+        },
+        "source_type": {
+          "description": "The current catalog declaration of the window column, when known.\nOnly the dialect interprets it: zoned timestamp instants compare\nwith UTC seed bounds; NTZ and DATE retain their wall clock. Absent\nfor older callers, preserving their existing rendering.",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "lower": {
           "anyOf": [

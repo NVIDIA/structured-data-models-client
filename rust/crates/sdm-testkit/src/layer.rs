@@ -193,7 +193,9 @@ impl Rows {
     fn read(&mut self, part: DescribePart, batch: &RecordBatch) -> Result<(), CoreError> {
         for row in 0..batch.num_rows() {
             match part {
-                DescribePart::ViewDefinition => return Err(views_unread()),
+                DescribePart::KeyEnforcement | DescribePart::ViewDefinition => {
+                    return Err(views_unread());
+                }
                 DescribePart::Tables => self.tables.extend(text(batch, c::TABLE, row)?),
                 DescribePart::Columns => {
                     if let Some(name) = text(batch, c::NAME, row)? {
@@ -253,7 +255,9 @@ impl Rows {
     fn answer(self, part: DescribePart) -> Result<CatalogAnswer, CoreError> {
         Ok(match part {
             // A host provider is never asked for a view's definition (T3.27).
-            DescribePart::ViewDefinition => return Err(views_unread()),
+            DescribePart::KeyEnforcement | DescribePart::ViewDefinition => {
+                return Err(views_unread());
+            }
             DescribePart::Tables => CatalogAnswer::Tables(self.tables),
             DescribePart::Columns => CatalogAnswer::Columns(self.columns),
             DescribePart::Keys => CatalogAnswer::Keys(self.keys),

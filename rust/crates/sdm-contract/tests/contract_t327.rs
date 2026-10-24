@@ -675,9 +675,6 @@ fn a_proposed_improvement_s_sentence_is_marked_and_used_by_none() {
             "view_entry_unhashable",
             "view_entry_not_text",
             "view_value_too_large",
-            "view_semantic_not_found",
-            "view_semantic_definition_unread",
-            "no_current_database",
             "null_anchor",
         ]
     );

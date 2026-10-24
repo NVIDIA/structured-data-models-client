@@ -9301,7 +9301,7 @@ entries:
     One PredictiveQuery object materialized more than once over a source
     whose session's schema changed, or whose column was retyped within its
     kind, in between.
-  cases: [T3.4]
+  cases: [T3.4, T3.6]
   refs: [T3.4, P3A-1, P3A-4, E52]
   status: proposed
   approved_by: null
@@ -9362,7 +9362,7 @@ entries:
     ("1.2345678901234568e+16" for 12345678901234567.1234567891) can match
     another row or none; that changed answer is P2C-3's, not proposed here.
 - id: P3K-2
-  title: A Databricks windowed seed with a missing anchor is left out of the answer where the old client's query can fail
+  title: "A missing Databricks anchor retains its entity and empty temporal history"
   kind: change
   old_behavior: >-
     The old client's _by_time writes a missing anchor (an entity with no
@@ -9388,15 +9388,289 @@ entries:
     bounded windows), not on a live warehouse.
   cases: [T3.28]
   refs: [T3.4, T3.28]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T36-OWNER-2026-10-24-ANCHORS}
   notes: >-
-    Approver: owner. Introduced by T3.4's Databricks key-set writer, kept
-    by T3.28 and found in its round-2 review (Codex P1). The design's T3.6
-    proposes a named refusal for a null anchor before any read (P3D-8); the
-    owner may decide both together, which would refuse this case on both
-    warehouses instead of answering it.
+    Both independent Sol 6.1 High round-1 reviews of candidate 870d18da5
+    explicitly approved P3D-8 and P3K-2 under the standing better-support
+    rule. The owner subsequently confirmed this exact policy with
+    "Use empty window history" (T36-OWNER-2026-10-24-ANCHORS).
+    Missing anchors retain the entity and its nonwindow data, read no
+    temporal history, and let valid anchors proceed without a fabricated
+    date. Mixed null/valid anchor coverage is included. The earlier
+    blanket-refusal proposal is withdrawn. No live warehouse verification
+    is claimed.
+
+# --- lane D entries, Phase 3 (P3D-1..): T3.6, Snowflake on the core ---
+
+- id: P3D-1
+  title: "Retired: Snowflake namespace retries now read the internal driver diagnostic"
+  kind: change
+  old_behavior: >-
+    The reference retries DESCRIBE TABLE with the database, schema and table
+    upper-cased when the first try fails with errno 2003 or with a message
+    containing "does not exist" (SNOW/table.py:34-45), whatever the error's
+    code.
+  new_behavior: >-
+    The core retries errno 2003 or a diagnostic containing "does not exist", as the reference does. Hosts pass the diagnostic unread; the data layer alone interprets it and public errors do not echo it.
+  affected_inputs: >-
+    Schema.from_source and PredictiveQuery.materialize over a SnowflakeSource
+    whose DESCRIBE TABLE fails with an errno other than 2003 and a message
+    saying "does not exist" (a schema or database that does not exist,
+    errno 2043 or 2003's relatives).
+  cases: [T3.6]
+  refs: [T3.6, 'old-behaviour/T3.6-snowflake.md row 14', 'design-remaining.md S3']
+  status: rejected
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T36-OWNER-2026-10-24-DIAGNOSTICS}
+  notes: >-
+    Withdrawn after restoring parity through the optional driver_message contract field. This does not approve the former lost-retry proposal.
+
+- id: P3D-2
+  title: "Snowflake row counts name the exact object"
+  kind: change
+  old_behavior: >-
+    The reference counts a table's rows with SHOW TABLES LIKE ? IN SCHEMA,
+    binding the table's name, and reads the first row's rows column
+    (SNOW/table.py:287-297). LIKE ignores case and reads _ and % as
+    wildcards, so a sibling table can answer (Users beside USERS, user_s
+    beside users), and that count sizes the neighbour look-back window.
+  new_behavior: >-
+    The core counts the fully quoted exact relation with SELECT COUNT(*) rather than taking the first wildcard listing match. Sibling names and case variants cannot supply another object's count.
+  affected_inputs: >-
+    PredictiveQuery.materialize over a SnowflakeSource whose table name holds
+    _ or % or has a sibling of another case in its schema.
+  cases: [snowflake.rowcount.like-wildcard]
+  refs: [T3.6, 'old-behaviour/T3.6-snowflake.md rows 36, 48', 'design-remaining.md T3.6 part 6']
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T36-OWNER-2026-10-24-COUNTS}
+  notes: >-
+    Approved by the owner on 2026-10-24. The old client used SHOW TABLES LIKE as a metadata count optimization; source inspection does not establish why it selected LIKE.
+
+- id: P3D-3
+  title: "Snowflake views support exact row counts"
+  kind: change
+  old_behavior: >-
+    SHOW TABLES lists no view, so counting a view's rows finds no row and
+    the reference's bare assert fails (SNOW/table.py:295-296):
+    StructuredDataError INTERNAL_ERROR "the relational engine failed while
+    building this request: AssertionError: ", at materialize.
+  new_behavior: >-
+    The same exact COUNT(*) also counts an ordinary view, allowing it to materialize. Snowflake may scan the view query; a complex view can cost more than reading table metadata.
+  affected_inputs: >-
+    PredictiveQuery.materialize over a SnowflakeSource whose schema holds a
+    view as a table (DESCRIBE TABLE resolves a view, so it describes).
+  cases: [snowflake.rowcount.view-as-table]
+  refs: [T3.6, 'old-behaviour/T3.6-snowflake.md row 37', P3D-2]
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T36-OWNER-2026-10-24-COUNTS}
+  notes: >-
+    Approved after explaining query cost. Fake provider coverage uses recorded view metadata and recorded base-table rows for reads after the old failure; no live performance claim is made.
+
+- id: P3D-4
+  title: "Snowflake names a missing current database"
+  kind: change
+  old_behavior: >-
+    A SnowflakeSource naming no database, on a session with no current one,
+    fails the reference's bare assert on SELECT CURRENT_DATABASE(),
+    CURRENT_SCHEMA() (RE/graph.py:1030-1032): an AssertionError with no
+    text, at describe.
+  new_behavior: >-
+    A source naming no database on a session with none is refused as INVALID_REQUEST, sentence no_current_database, asking the caller to specify the database. A database the source names is retained even if the session names none.
+  affected_inputs: >-
+    Schema.from_source and PredictiveQuery.materialize over a SnowflakeSource
+    naming no database on a session with no current database.
+  cases: [T3.6]
+  refs: [T3.6, 'old-behaviour/T3.6-snowflake.md row 9', 'design-remaining.md T3.6 part 6']
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T36-OWNER-2026-10-24-ERRORS}
+  notes: >-
+    Named refusal approved by the owner; the reference has a bare AssertionError. A named database with no schema retains the existing missing-schema messages.
+
+- id: P3D-5
+  title: "Snowflake names a missing schema as StructuredDataError"
+  kind: change
+  old_behavior: >-
+    With no schema named and none current, the reference raises its own
+    ValueError before any table is read: "No current 'schema' set. Please
+    specify the Snowflake schema manually" when it lists the tables
+    (RE/graph.py:1035-1040), "Unspecified 'schema' for table '<t>' in
+    database '<db>'" when tables are named (SNOW/table.py:88-93); built-in
+    errors the client does not wrap.
+  new_behavior: >-
+    The core retains the reference words for no_current_schema and unspecified_schema, wrapping them in StructuredDataError INVALID_REQUEST. A source's named database is kept when the session has no current database.
+  affected_inputs: >-
+    Schema.from_source and PredictiveQuery.materialize over a SnowflakeSource
+    naming no schema on a session with no current schema.
+  cases: [T3.6]
+  refs: [T3.6, P3E-6, 'old-behaviour/T3.6-snowflake.md row 10']
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T36-OWNER-2026-10-24-ERRORS}
+  notes: >-
+    Approved as the scoped clearer-error proposal. Tests cover named and discovered tables on an empty session.
+
+- id: P3D-6
+  title: "Independent Snowflake foreign keys to one target are retained"
+  kind: change
+  old_behavior: >-
+    The reference keeps a SHOW IMPORTED KEYS row only if the referenced
+    key's name (pk_name, column 13) occurs once among the table's rows
+    (SNOW/table.py:174-189). That drops a composite key, and also two
+    single-column keys from one table to the same primary key, which share
+    its name.
+  new_behavior: >-
+    SHOW IMPORTED KEYS rows are grouped by the referencing constraint name fk_name, preserving independent single-column keys to the same target while keeping composite constraints grouped.
+  affected_inputs: >-
+    Schema.from_source over a SnowflakeSource whose table declares two
+    foreign keys of one column each to the same primary key.
+  cases: [rule.composite-foreign-key-declared]
+  refs: [T3.6, 'old-behaviour/T3.6-snowflake.md row 28', 'design-remaining.md T3.6 part 6']
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T36-OWNER-2026-10-24-FKS}
+  notes: >-
+    Approved by the owner on 2026-10-24. The composite-key recorded case is preserved and a two-independent-constraint regression is added.
+
+- id: P3D-7
+  title: "Zoned Snowflake and Databricks windows compare instants in UTC"
+  kind: change
+  old_behavior: >-
+    Values read back from a TIMESTAMP_LTZ or _TZ column are made UTC-naive,
+    but the window bounds are cast ::TIMESTAMP_NTZ and compared with that
+    column, which Snowflake does in the session's time zone; in a session
+    that is not UTC the window is shifted by the zone's offset
+    (SNOW/sampler.py:304-306, :346-350).
+  new_behavior: >-
+    Current temporal catalog types travel as plain source facts to the window. Snowflake normalizes LTZ/TZ columns to UTC-naive timestamps before comparing them with UTC bounds. Databricks TIMESTAMP/LTZ seed bounds carry an explicit Z when cast to TIMESTAMP. NTZ and DATE retain wall-time semantics on both dialects.
+  affected_inputs: >-
+    Snowflake TIMESTAMP_LTZ/TZ and Databricks TIMESTAMP/LTZ window columns in non-UTC sessions, especially rows near window edges. NTZ and DATE controls preserve wall time.
+  cases: [time.timestamptz, snowflake.zone.ltz-time]
+  refs: [T3.6, 'old-behaviour/T3.6-snowflake.md row 53', 'design-remaining.md T3.6 part 5, part 6']
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T36-OWNER-2026-10-24-UTC}
+  notes: >-
+    The owner authorized both warehouses. Narrow regressions include UTC bounds at Los Angeles DST edges and NTZ/DATE controls. Non-UTC/DST live checks have not run and require the separate authorized matrix.
+
+- id: P3D-8
+  title: "A missing Snowflake anchor retains its entity with empty temporal history"
+  kind: change
+  old_behavior: >-
+    A null anchor time is written as JSON NaN in the key set's text, which
+    PARSE_JSON refuses: StructuredDataError INTERNAL_ERROR "the relational
+    engine failed while building this request: ProgrammingError: ...", at
+    materialize (SNOW/sampler.py:304-309, :400-408).
+  new_behavior: >-
+    Missing temporal bounds are valid JSON null, which compares as SQL NULL and selects no temporal neighbors for that entity. Source identity and nonwindow entity data are retained, and valid anchors continue normally, matching the offline reference semantics.
+  affected_inputs: >-
+    PredictiveQuery.materialize over a SnowflakeSource with an anchor entity
+    whose time is null.
+  cases: [sample.anchor-entity.null-time, sample.anchor-entity.null-time.prediction-time]
+  refs: [T3.6, 'old-behaviour/T3.6-snowflake.md row 49', 'design-remaining.md T3.6 part 6']
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T36-OWNER-2026-10-24-ANCHORS}
+  notes: >-
+    Both independent Sol 6.1 High round-1 reviews of candidate 870d18da5
+    explicitly approved P3D-8 and P3K-2 under the standing better-support
+    rule. The owner subsequently confirmed this exact policy with
+    "Use empty window history" (T36-OWNER-2026-10-24-ANCHORS).
+    Missing anchors retain the entity and its nonwindow data, read no
+    temporal history, and let valid anchors proceed without a fabricated
+    date. Mixed null/valid anchor coverage is included. The earlier
+    blanket-refusal proposal is withdrawn. No live warehouse verification
+    is claimed.
+
+
+- id: P3D-9
+  title: "Snowflake semantic definition failures have named errors"
+  kind: change
+  old_behavior: >-
+    A semantic view that is missing, not readable, or whose definition does
+    not read reaches the caller as the driver's ProgrammingError or a
+    RuntimeError (RE/graph.py:2054-2060).
+  new_behavior: >-
+    A null or unreadable semantic definition is refused as view_semantic_definition_unread. Missing or unreadable definition fetches use view_semantic_not_found through the shared semantic-view routine when T3.5 is integrated.
+  affected_inputs: >-
+    Schema.from_source and PredictiveQuery.materialize over a Snowflake
+    semantic model that is missing, unreadable, or answers no definition.
+  cases: [view.semantic.forecast]
+  refs: [T3.6, T3.5, 'design-remaining.md T3.6 part 6']
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T36-OWNER-2026-10-24-ERRORS}
+  notes: >-
+    Approved scoped errors. T3.6 provides the dialect definition reader; the semantic source route and failed-fetch mapping depend on T3.5 and must be verified on the integrated candidate.
+
+- id: P3D-12
+  title: "Snowflake refreshes run-local metadata at each materialize"
+  kind: change
+  old_behavior: >-
+    The reference reads the session's database and schema once per graph
+    build, and adopts each table's spelling (as given, else upper-cased) at
+    its first DESCRIBE TABLE; the graph kept on the schema keeps both, so
+    no later materialize reads them again (RE/graph.py:1024-1034,
+    SNOW/table.py:124-152).
+  new_behavior: >-
+    Each materialize resolves the session parts the source leaves out, retries table spellings, and reads current columns and types once for that run. It does not reload the whole database. Sampler row-count and bounds memo reuse remains separately tracked by P3A-5.
+  affected_inputs: >-
+    PredictiveQuery.materialize over a SnowflakeSource after its session's
+    current database or schema changed, or after a table was renamed
+    between its given and upper-cased spellings.
+  cases: [snowflake.name.upper-case-folded, snowflake.name.database-only]
+  refs: [T3.6, P3A-1, KO3-59]
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T36-OWNER-2026-10-24-REFRESH}
+  notes: >-
+    Approved by the owner after clarifying the scope. Fresh metadata must not be described as absence of all query-object state; the sampler memo has its existing lifetime.
+
+- id: P3D-13
+  title: "Snowflake sampling emits no routine seed warning"
+  kind: change
+  old_behavior: >-
+    The reference's Snowflake sampler warns once that random_seed is
+    ignored (SNOW/sampler.py:87-90, RE/base/sql_sampler.py:233-249), and a
+    query object keeps its sampler across materialize calls (P3A-4), so a
+    second materialize of the same object does not warn again.
+  new_behavior: >-
+    The core emits no routine warning for Snowflake's unseeded warehouse sample, whether random_seed is omitted, explicit, or None. Documentation explains that the optional seed does not make Snowflake row sampling reproducible.
+  affected_inputs: >-
+    One PredictiveQuery object materialized more than once over a
+    SnowflakeSource, with random_seed set or left at its default.
+  cases: [sample.seed-7]
+  refs: [T3.6, P3A-4, 'old-behaviour/T3.6-snowflake.md row 41']
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T36-OWNER-2026-10-24-SEED}
+  notes: >-
+    Seed is optional and defaults to 42 in the old engine. The owner directed removing the warning when a seed is not required; explicit None already suppressed the old warning.
+
+- id: P3D-14
+  title: "Retired: hybrid-table enforcement is read before counting"
+  kind: change
+  old_behavior: >-
+    Before counting keys, the reference lists each schema's tables once
+    (SHOW TABLES IN SCHEMA) to learn which are hybrid, the one kind whose
+    primary key Snowflake enforces, and counts only the keys not enforced
+    (SNOW/table.py:219-285).
+  new_behavior: >-
+    Before counting a key containing its declared primary key, the core lists the schema once per run and reads exact table-name membership in the enforced-key facts. Failed or malformed listings establish no enforcement and ordinary counting continues. Lookup duplicate checks remain independent, including role-masked keys.
+  affected_inputs: >-
+    Schema.from_source over a SnowflakeSource with a declared primary key
+    (one statement fewer per schema, one key count more per hybrid table).
+  cases: [key.declared-int32, key.past-2-53.catalog]
+  refs: [T3.6, 'old-behaviour/T3.6-snowflake.md rows 31, 32']
+  status: rejected
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T36-OWNER-2026-10-24-HYBRID}
+  notes: >-
+    Withdrawn after restoring the old client's capability. An enforced stored primary key does not guarantee uniqueness of role-visible masked lookup values; this fact is consumed only by key counting.
 - id: P3S-1
   title: A serving endpoint's in-band failure status past 65535 is reported as 65535
   kind: change

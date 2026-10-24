@@ -12,7 +12,7 @@ cache, so a change to the ``logging`` configuration takes effect
 (decision H8).
 
 A provider's failure reaches the core as the contract's ``ProviderError``:
-kind, ``retryable``, SQLSTATE and vendor code, never the driver's text; the
+kind, ``retryable``, SQLSTATE, vendor code and an internal driver diagnostic; the
 exception the run then ends with names the driver's class and is raised
 ``from None`` (decision H17). A failure is retryable when the provider's
 exception says so, by a ``retryable`` attribute that is ``True``, and not
@@ -128,7 +128,8 @@ def _driver(
     failure where it reads one (its ``error_fields``, the
     :class:`~sdm_connectors.providers.Provider` protocol's hook: a
     Databricks failure's SQLSTATE its message writes and its error class);
-    the driver's message is not.
+    the driver's message is passed through unread as an internal diagnostic;
+    only the core interprets it, and never echoes it into public errors.
     """
     sqlstate = next(
         (
@@ -153,6 +154,7 @@ def _driver(
         'retryable': getattr(error, 'retryable', False) is True,
         'sqlstate': sqlstate,
         'vendor_code': vendor,
+        'driver_message': str(error),
     }
     # What the provider reads of its driver's failure beyond the attributes
     # above (a Databricks failure's SQLSTATE in its message, T3.4, and its

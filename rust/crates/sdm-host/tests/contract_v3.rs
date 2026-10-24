@@ -483,6 +483,7 @@ fn a_provider_error_s_retryability_and_codes_reach_the_core_error() {
                 outcome: FetchOutcome::Error {
                     error: ProviderError {
                         error_class: None,
+                        driver_message: None,
                         kind: ErrorKind::DataSource,
                         retryable,
                         sqlstate: Some("40001".into()),

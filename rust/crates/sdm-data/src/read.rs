@@ -75,6 +75,34 @@ pub(crate) fn lists<'a>(batch: &'a RecordBatch, name: &str) -> Result<&'a ListAr
     Ok(lists)
 }
 
+/// The column at `at` of `batch` as text, for a reader that reads its
+/// answer by position (a warehouse's, whose catalog may name two columns
+/// alike): a string column of any width, or a column of nulls (a session
+/// with no current schema, a cell the row adapter had none of).
+pub(crate) fn text_at(batch: &RecordBatch, at: usize) -> Result<StringArray, CoreError> {
+    let unread = || {
+        CoreError::new(
+            Sentence::Internal,
+            "a catalog answer's column is missing or not text",
+        )
+        .with_field("position", Detail::text(at.to_string()))
+    };
+    let column = batch.columns().get(at).ok_or_else(unread)?;
+    if let Some(strings) = column.as_string_opt::<i32>() {
+        return Ok(strings.clone());
+    }
+    if let Some(strings) = column.as_string_opt::<i64>() {
+        return Ok(strings.iter().collect());
+    }
+    if let Some(strings) = column.as_string_view_opt() {
+        return Ok(strings.iter().collect());
+    }
+    if *column.data_type() == arrow_schema::DataType::Null {
+        return Ok(StringArray::new_null(column.len()));
+    }
+    Err(unread())
+}
+
 /// Row `row`'s text, `None` where it is null.
 pub(crate) fn text(strings: &StringArray, row: usize) -> Option<String> {
     (!strings.is_null(row)).then(|| strings.value(row).to_owned())
@@ -117,23 +145,21 @@ pub(crate) fn flag(flags: &BooleanArray, row: usize) -> bool {
 
 /// Each table's name, in order, from the text column `name`.
 pub(crate) fn tables(batches: &[RecordBatch], name: &str) -> Result<CatalogAnswer, CoreError> {
-    let mut found = Vec::new();
-    for batch in batches {
-        let names = strings(batch, name)?;
-        found.extend((0..batch.num_rows()).filter_map(|row| text(names, row)));
-    }
-    Ok(CatalogAnswer::Tables(found))
+    Ok(CatalogAnswer::Tables(text_names(batches, name)?))
 }
 
-/// A `namespace` answer: the parts of `name`'s rows, in order, a row with
-/// none left out.
+/// A `namespace` answer: parts in order, a row with none left out.
 pub(crate) fn namespace(batches: &[RecordBatch], name: &str) -> Result<CatalogAnswer, CoreError> {
+    Ok(CatalogAnswer::Namespace(text_names(batches, name)?))
+}
+
+fn text_names(batches: &[RecordBatch], name: &str) -> Result<Vec<String>, CoreError> {
     let mut found = Vec::new();
     for batch in batches {
         let names = strings(batch, name)?;
         found.extend((0..batch.num_rows()).filter_map(|row| text(names, row)));
     }
-    Ok(CatalogAnswer::Namespace(found))
+    Ok(found)
 }
 
 /// The columns of a `columns` answer, by role.
@@ -237,6 +263,10 @@ pub(crate) fn host(
         // No view is read here (T3.27): only a dialect that reads views answers it.
         DescribePart::ViewDefinition => Err(views_unread()),
         DescribePart::Namespace => namespace(batches, c::NAME),
+        DescribePart::KeyEnforcement => Ok(CatalogAnswer::KeyEnforcement(text_names(
+            batches,
+            c::TABLE,
+        )?)),
         DescribePart::Tables => tables(batches, c::TABLE),
         DescribePart::Columns => columns(
             batches,

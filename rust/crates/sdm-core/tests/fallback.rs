@@ -92,6 +92,7 @@ fn host(optional: &[OptionalRequest], fallback: Option<FallbackLimits>) -> Provi
             derived_relations: false,
             neighbor_lookback: false,
             keys_optional: false,
+            key_enforcement: false,
             sample_rows: false,
             optional: optional.iter().copied().collect::<BTreeSet<_>>(),
             max_keys_per_request: None,
@@ -298,6 +299,7 @@ fn neighbors(window: bool, per_seed: Option<u64>, seeds: &RecordBatch) -> DataRe
         columns: vec!["v".into(), "at".into()],
         seeds: key_set(seeds),
         window: window.then(|| Window {
+            source_type: None,
             column: "at".into(),
             lower: None,
             upper: Some(SeedBound {
@@ -690,6 +692,7 @@ fn a_scan_the_provider_fails_is_the_requests_failure() {
         |_| {
             FetchResult::Error(ProviderError {
                 error_class: None,
+                driver_message: None,
                 kind: ErrorKind::DataSource,
                 retryable: true,
                 sqlstate: Some("08006".into()),

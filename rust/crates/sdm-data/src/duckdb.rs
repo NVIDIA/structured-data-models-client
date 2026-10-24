@@ -139,7 +139,9 @@ fn expected(request: &DataRequest) -> ExpectedSchema {
     };
     let fields = match part {
         // No view is read here (T3.27): only a dialect that reads views answers it.
-        DescribePart::ViewDefinition => return ExpectedSchema::Discover {},
+        DescribePart::KeyEnforcement | DescribePart::ViewDefinition => {
+            return ExpectedSchema::Discover {};
+        }
         DescribePart::Tables => vec![field(c::TABLE_NAME, Utf8, false)],
         DescribePart::Columns => vec![
             field(c::CID, Int32, false),
@@ -177,7 +179,7 @@ fn read(part: DescribePart, batches: &[RecordBatch]) -> Result<CatalogAnswer, Co
     use catalog as c;
     match part {
         // No view is read here (T3.27): only a dialect that reads views answers it.
-        DescribePart::ViewDefinition => Err(views_unread()),
+        DescribePart::KeyEnforcement | DescribePart::ViewDefinition => Err(views_unread()),
         // None: the reference names a DuckDB table it cannot find alone.
         DescribePart::Namespace => {
             read::namespace(batches, sdm_contract::data::catalog_columns::NAME)
@@ -292,6 +294,7 @@ impl SqlDialect for Duckdb {
             derived_relations: false,
             neighbor_lookback: false,
             keys_optional: false,
+            key_enforcement: false,
             sample_rows: false,
             optional: sql::rendered(),
             max_keys_per_request: None,
@@ -453,7 +456,7 @@ fn describe(
     let one = || sql::one_table(request, tables);
     Ok(match part {
         // No view is read here (T3.27): only a dialect that reads views answers it.
-        DescribePart::ViewDefinition => return Err(views_unread()),
+        DescribePart::KeyEnforcement | DescribePart::ViewDefinition => return Err(views_unread()),
         DescribePart::Tables if tables.is_empty() => format!(
             "SELECT table_name FROM duckdb_tables() WHERE NOT temporary AND NOT internal AND {IN_CURRENT_SCHEMA}"
         ),

@@ -30,8 +30,8 @@ use sdm_contract::{CoreError, Detail, ErrorCode, Scalar, Sentence};
 use sdm_schema::held::ColumnAt;
 use sdm_schema::infer::PREVIEW_ROWS;
 
-use crate::describe::{another_part, ask, describe, describe_all, table_names};
-use crate::run::{ArrowData, Asker, schema_mismatch};
+use crate::describe::{another_part, ask, describe, table_names};
+use crate::run::{ArrowData, Asker, FetchResult, Reply, schema_mismatch};
 use crate::{big_integer, exact_number};
 
 /// What [`table`] read of one table.
@@ -44,8 +44,8 @@ pub(crate) struct Discovered {
     /// The first rows of the columns read, each big integer in its whole
     /// column's tier and each exact number in its role's type.
     pub preview: ArrowData,
-    /// Each big integer's declared type ([`big_integer_types`]).
-    pub big_types: Vec<(String, String)>,
+    /// Each big integer's and temporal column's catalog type ([`retained_source_types`]).
+    pub source_types: Vec<(String, String)>,
 }
 
 /// The facts of each column of `held` that carries none, read from the
@@ -80,7 +80,7 @@ pub(crate) fn facts_read(
     relation: &Relation,
     read: Discovered,
 ) -> Result<Vec<(ColumnAt, SourceFacts)>, CoreError> {
-    let types = read.big_types;
+    let types = read.source_types;
     sdm_schema::infer::source_facts(
         relation,
         &read.declared,
@@ -126,8 +126,8 @@ pub(crate) async fn table(
     // (`DatabricksTable`, DB/table.py:271-303): the columns first, then the
     // keys, a failure of which is read as no keys.
     let asked = if asker.capabilities()?.keys_optional {
-        match describe(asker, columns).await {
-            Ok(columns) => {
+        match spelled(asker, &table.source, [columns]).await {
+            Ok([columns]) => {
                 let keys = match describe(asker, keys).await {
                     Err(failed) if failed.code == ErrorCode::ProviderError => {
                         CatalogAnswer::Keys(Vec::new())
@@ -139,7 +139,7 @@ pub(crate) async fn table(
             Err(failed) => Err(failed),
         }
     } else {
-        describe_all(asker, [columns, keys]).await
+        spelled(asker, &table.source, [columns, keys]).await
     };
     let [columns, keys] = match asked {
         Ok(answers) => answers,
@@ -207,7 +207,7 @@ pub(crate) async fn table(
             declared,
             constraints,
             preview: ArrowData::new(Arc::new(arrow_schema::Schema::empty()), Vec::new()),
-            big_types: Vec::new(),
+            source_types: Vec::new(),
         });
     }
     if let Some(previewed) = previewed {
@@ -220,7 +220,7 @@ pub(crate) async fn table(
                 declared,
                 constraints,
                 preview: ArrowData::new(Arc::new(arrow_schema::Schema::empty()), Vec::new()),
-                big_types: Vec::new(),
+                source_types: Vec::new(),
             });
         }
     }
@@ -249,13 +249,106 @@ pub(crate) async fn table(
     // A column of numbers handed over as their text, by its role: a
     // key's text, any other's doubles (crate::exact_number).
     let preview = exact_number::settle(preview, &constraints)?;
-    let big_types = big_integer_types(&preview, &declared);
+    let source_types = retained_source_types(&preview, &declared);
     Ok(Discovered {
         declared,
         constraints,
         preview,
-        big_types,
+        source_types,
     })
+}
+
+/// The answers to `requests`, each a catalog read of the one table
+/// `source` names, asked together in one step under each spelling the
+/// source's catalog tries in turn (`DataLayer::spellings`; Snowflake's as
+/// given, then upper-cased), the next asked only where one of the step's
+/// reads failed with what the source says is a name it does not hold
+/// (`FailureFacts::not_found`, Snowflake's errno 2003). The spelling that
+/// resolves is the table's for every later read of the run
+/// ([`Asker::pin`]); none resolving, the table is refused as one the source
+/// does not hold, named as the caller named it (`SNOW/table.py:154-158`).
+/// Any other failure stays the provider's, and no other spelling is tried.
+async fn spelled<const N: usize>(
+    asker: &Asker,
+    source: &Relation,
+    requests: [DataRequest; N],
+) -> Result<[CatalogAnswer; N], CoreError> {
+    let forms = asker.spellings(source);
+    for (at, form) in forms.iter().enumerate() {
+        // The first as the run names the table, read where the run reads
+        // it; another by the spelling in full.
+        let asked: Vec<DataRequest> = requests
+            .iter()
+            .map(|request| {
+                let mut request = request.clone();
+                if at > 0 {
+                    for relation in request.relations_mut() {
+                        relation.clone_from(form);
+                    }
+                }
+                request
+            })
+            .collect();
+        // Reads whose plans are the same statements are asked once, each
+        // read from the one answer: Snowflake's DESCRIBE TABLE answers a
+        // table's columns and its keys, which the reference reads from one
+        // statement (`SNOW/table.py:123-170`).
+        let plans: Vec<_> = asked.iter().map(|request| asker.planned(request)).collect();
+        let first: Vec<usize> = (0..asked.len())
+            .map(|i| {
+                (0..i)
+                    .find(|&j| plans[j].is_some() && plans[j] == plans[i])
+                    .unwrap_or(i)
+            })
+            .collect();
+        let distinct: Vec<DataRequest> = asked
+            .iter()
+            .zip(&first)
+            .enumerate()
+            .filter(|(i, (_, first))| *i == **first)
+            .map(|(_, (request, _))| request.clone())
+            .collect();
+        let answered = crate::describe::replies(asker, distinct).await?;
+        // The answer of request `i` is that of the distinct request it
+        // shares its plan with, the distinct ones answered in order.
+        let replies: Vec<Reply> = first
+            .iter()
+            .map(|&at| {
+                let distinct_before = (0..at).filter(|&j| first[j] == j).count();
+                answered[distinct_before].clone()
+            })
+            .collect();
+        let missing = replies.iter().any(|reply| {
+            matches!(reply, Reply::Fetch(FetchResult::Error(error)) if asker.failure(error).not_found)
+        });
+        if missing {
+            if at + 1 < forms.len() {
+                continue;
+            }
+            return Err(not_held(asker, source).await);
+        }
+        if at > 0 {
+            asker.pin(source, form.clone());
+        }
+        // Every answer's data first, then each read, as the step's answers
+        // are read whatever the dialect.
+        let data = asked
+            .iter()
+            .zip(replies)
+            .map(|(request, reply)| crate::describe::data(reply, request.name()))
+            .collect::<Result<Vec<_>, _>>()?;
+        let answers = asked
+            .iter()
+            .zip(&data)
+            .map(|(request, data)| asker.read(request, data))
+            .collect::<Result<Vec<_>, _>>()?;
+        return answers
+            .try_into()
+            .map_err(|_| crate::run::internal("a step answered another number of requests"));
+    }
+    Err(crate::run::internal(
+        "a table's catalog read tried no spelling",
+    ))
 }
 
 /// Whether the time column's choice falls back to the preview on
@@ -284,14 +377,23 @@ pub(crate) fn falls_back(failed: &CoreError) -> bool {
 /// read from an opaque type and marked ([`crate::big_integer`]), by name:
 /// what the described schema keeps (`DescribedColumn::declared_type`), so a
 /// `decimal128(38, 0)` seed is joined to such a key in the key's own type
-/// with no statement `materialize` adds (register P1B-43). Every other
-/// column keeps none, and joins as before part 3.
-fn big_integer_types(preview: &ArrowData, declared: &[CatalogColumn]) -> Vec<(String, String)> {
+/// with no statement `materialize` adds (register P1B-43). Temporal columns
+/// also retain their declaration so a dialect can distinguish zoned
+/// instants from wall clocks when it renders a window.
+fn retained_source_types(preview: &ArrowData, declared: &[CatalogColumn]) -> Vec<(String, String)> {
     preview
         .schema
         .fields()
         .iter()
-        .filter(|f| big_integer::is_marked(f))
+        .filter(|f| {
+            big_integer::is_marked(f)
+                || matches!(
+                    f.data_type(),
+                    arrow_schema::DataType::Timestamp(..)
+                        | arrow_schema::DataType::Date32
+                        | arrow_schema::DataType::Date64
+                )
+        })
         .filter_map(|f| {
             let column = declared.iter().find(|c| &c.name == f.name())?;
             Some((column.name.clone(), column.declared_type.clone()))

@@ -156,6 +156,7 @@ pub enum Unreadable {
 fn producer_failed() -> ProviderError {
     ProviderError {
         error_class: None,
+        driver_message: None,
         kind: ErrorKind::DataSource,
         retryable: false,
         sqlstate: None,

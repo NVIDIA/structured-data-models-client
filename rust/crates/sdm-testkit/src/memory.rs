@@ -149,6 +149,7 @@ fn not_read() -> ProviderError {
 fn failed(kind: ErrorKind) -> ProviderError {
     ProviderError {
         error_class: None,
+        driver_message: None,
         kind,
         retryable: false,
         sqlstate: None,
@@ -176,6 +177,7 @@ impl Memory {
             derived_relations: false,
             neighbor_lookback: false,
             keys_optional: false,
+            key_enforcement: false,
             sample_rows: false,
             optional: DECLARED.iter().copied().collect(),
             max_keys_per_request: None,
@@ -458,7 +460,7 @@ impl Memory {
         let columns = match part {
             // A host provider is never asked for a view's definition
             // (T3.27): the layer refuses it before it is asked.
-            DescribePart::ViewDefinition => return Err(not_read()),
+            DescribePart::KeyEnforcement | DescribePart::ViewDefinition => return Err(not_read()),
             DescribePart::Tables => {
                 // Every table, or each one named that the source holds.
                 let held = self

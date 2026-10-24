@@ -522,6 +522,12 @@ pub enum DescribePart {
     /// source whose tables are named alone (DuckDB's, SQLite's). Asked only
     /// to name a table the source lacks.
     Namespace,
+    /// The exact names of the tables in the named table's namespace whose
+    /// declared primary keys the source enforces (T3.6). Asked lazily once
+    /// per namespace, only before counting a key containing that declared
+    /// primary key, when `key_enforcement` is declared. A failed or unreadable
+    /// listing establishes no enforcement. It does not change lookup checks.
+    KeyEnforcement,
     /// The definition of the one semantic model named (contract v28, T3.27):
     /// a Databricks metric view's `DESCRIBE TABLE EXTENDED`, a Snowflake
     /// semantic view's `SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW`, read into
@@ -591,6 +597,12 @@ pub struct SeedBound {
 #[serde(deny_unknown_fields)]
 pub struct Window {
     pub column: String,
+    /// The current catalog declaration of the window column, when known.
+    /// Only the dialect interprets it: zoned timestamp instants compare
+    /// with UTC seed bounds; NTZ and DATE retain their wall clock. Absent
+    /// for older callers, preserving their existing rendering.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_type: Option<String>,
     pub lower: Option<SeedBound>,
     pub upper: Option<SeedBound>,
 }
@@ -1073,6 +1085,11 @@ pub struct ProviderCapabilities {
     /// failed key read fails the description.
     #[serde(default, skip_serializing_if = "is_false")]
     pub keys_optional: bool,
+    /// The catalog can answer `key_enforcement` for a table's namespace.
+    /// This optional fact can skip counting an enforced declared primary
+    /// key; it never certifies uniqueness of values exposed by a lookup.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub key_enforcement: bool,
     /// The vendor whose opaque Arrow extension types (`arrow.opaque`, its
     /// metadata's `vendor_name`) the provider hands over: the host layer
     /// reads an opaque column by that vendor's layout only when the column
@@ -1617,7 +1634,9 @@ impl DataRequest {
         };
         let fields = match self {
             DataRequest::Describe { part, .. } => match part {
-                DescribePart::Tables => vec![field(c::TABLE, Utf8, false)],
+                DescribePart::Tables | DescribePart::KeyEnforcement => {
+                    vec![field(c::TABLE, Utf8, false)]
+                }
                 DescribePart::Columns => vec![
                     field(c::NAME, Utf8, false),
                     field(c::TYPE, Utf8, false),
@@ -1688,10 +1707,11 @@ pub enum ExpectedSchema {
 }
 
 /// A provider's failure: its kind, whether trying again may succeed, and
-/// the driver's own SQLSTATE, vendor code and error class. The driver's
-/// message stays in the host, since drivers quote values there; what the
-/// failure means is the data layer's to say ([`DataLayer::failure`]), from
-/// these facts, never from text.
+/// the driver's own SQLSTATE, vendor code and error class, and its message
+/// as a diagnostic for the data layer alone. What the failure means is the
+/// data layer's to say ([`DataLayer::failure`]), from these facts; the
+/// message is never echoed into an error the core gives, since drivers
+/// quote values there (decision H17).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ProviderError {
@@ -1705,4 +1725,11 @@ pub struct ProviderError {
     /// else the bracketed name its message opens with). Left out, none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error_class: Option<String>,
+    /// The driver's message, passed through by the host unread (contract
+    /// v28, T3.6): an internal diagnostic only [`DataLayer::failure`] reads,
+    /// where the old client reads a failure by its text (Snowflake's
+    /// "does not exist", `SNOW/table.py:34-45`), and never echoed into a
+    /// public error (decision H17). Left out, none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub driver_message: Option<String>,
 }

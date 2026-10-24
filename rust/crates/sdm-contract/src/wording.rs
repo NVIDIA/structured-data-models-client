@@ -233,9 +233,6 @@ pub const PROPOSED: &[Sentence] = &[
     Sentence::ViewEntryUnhashable,
     Sentence::ViewEntryNotText,
     Sentence::ViewValueTooLarge,
-    Sentence::ViewSemanticNotFound,
-    Sentence::ViewSemanticDefinitionUnread,
-    Sentence::NoCurrentDatabase,
     Sentence::NullAnchor,
 ];
 
