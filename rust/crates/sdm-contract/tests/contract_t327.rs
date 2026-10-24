@@ -662,25 +662,34 @@ fn every_message_site_the_remaining_packages_port_has_its_sentence() {
     );
 }
 
+/// The owner approvals recorded in the T35-OWNER-2026-10-24-ERRORS and
+/// LOOKUP-ERRORS decision rows release these names, without changing their
+/// templates, wire identities or the producer scan for pending proposals.
+#[test]
+fn owner_approved_named_refusals_are_no_longer_pending_proposals() {
+    for sentence in [
+        Sentence::ViewNotYaml,
+        Sentence::ViewMissesEntry,
+        Sentence::ViewNotAList,
+        Sentence::ViewNestsItself,
+        Sentence::ViewEntryUnhashable,
+        Sentence::ViewEntryNotText,
+        Sentence::ViewValueTooLarge,
+        Sentence::ViewSemanticNotFound,
+        Sentence::ViewSemanticDefinitionUnread,
+        Sentence::NoCurrentDatabase,
+    ] {
+        assert!(
+            !wording::PROPOSED.contains(&sentence),
+            "{sentence:?} is owner-approved"
+        );
+    }
+}
+
 #[test]
 fn a_proposed_improvement_s_sentence_is_marked_and_used_by_none() {
     let proposed: Vec<&str> = wording::PROPOSED.iter().map(|s| s.as_str()).collect();
-    assert_eq!(
-        proposed,
-        vec![
-            "view_not_yaml",
-            "view_misses_entry",
-            "view_not_a_list",
-            "view_nests_itself",
-            "view_entry_unhashable",
-            "view_entry_not_text",
-            "view_value_too_large",
-            "view_semantic_not_found",
-            "view_semantic_definition_unread",
-            "no_current_database",
-            "null_anchor",
-        ]
-    );
+    assert_eq!(proposed, vec!["null_anchor"]);
     // Said by no producer: no crate of the core names one.
     let crates = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
     for krate in [
