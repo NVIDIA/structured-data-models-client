@@ -44,10 +44,13 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.arrow.vector.ipc.ArrowReader;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 /**
  * Predicting through a Databricks Model Serving endpoint from Java (T3.13): {@link
@@ -190,24 +193,33 @@ class T313DatabricksServingTest {
     }
   }
 
-  @Test
-  void theServingDeadlineIncludesSdkCredentialRefresh() throws Exception {
+  private static DatabricksServing refreshing(
+      Workspace workspace, boolean sdk, Supplier<String> token) {
+    if (!sdk) {
+      return DatabricksServing.of(workspace.host(), ENDPOINT, token);
+    }
+    WorkspaceClient client = new WorkspaceClient(new DatabricksConfig().setHost(workspace.host())
+        .setCredentialsProvider(CredentialsProvider.from("sdm-test", ignored -> () -> Map.of(
+            "Authorization", "Bearer " + token.get()))));
+    return DatabricksServing.of(client, ENDPOINT);
+  }
+
+  @ParameterizedTest
+  @ValueSource(booleans = {false, true})
+  void theServingDeadlineIncludesCredentialRefresh(boolean sdk) throws Exception {
     CountDownLatch refreshing = new CountDownLatch(1);
     CountDownLatch release = new CountDownLatch(1);
     ExecutorService caller = Executors.newSingleThreadExecutor();
     try (Workspace workspace = new Workspace(body -> Answer.of(200, "{}"))) {
-      WorkspaceClient client = new WorkspaceClient(new DatabricksConfig().setHost(workspace.host())
-          .setCredentialsProvider(CredentialsProvider.from("sdm-test", ignored -> () -> {
+      DatabricksServing serving = refreshing(workspace, sdk, () -> {
             refreshing.countDown();
             try {
               release.await(5, TimeUnit.SECONDS);
             } catch (InterruptedException error) {
               Thread.currentThread().interrupt();
             }
-            return Map.of("Authorization", "Bearer late-token");
-          })));
-      DatabricksServing serving = DatabricksServing.of(client, ENDPOINT)
-          .timeout(Duration.ofMillis(150));
+            return "late-token";
+          }).timeout(Duration.ofMillis(150));
       Future<Host.EndpointFailed> result = caller.submit(() -> assertThrows(
           Host.EndpointFailed.class, () -> serving.post(new byte[] {'{', '}'})));
       assertTrue(refreshing.await(1, TimeUnit.SECONDS));
@@ -220,13 +232,13 @@ class T313DatabricksServingTest {
     }
   }
 
-  @Test
-  void timedOutSdkRefreshesDoNotAccumulateBlockedAuthenticationThreads() throws Exception {
+  @ParameterizedTest
+  @ValueSource(booleans = {false, true})
+  void timedOutRefreshesDoNotAccumulateBlockedAuthenticationThreads(boolean sdk) throws Exception {
     CountDownLatch release = new CountDownLatch(1);
     AtomicReference<Thread> worker = new AtomicReference<>();
     try (Workspace workspace = new Workspace(body -> Answer.of(200, "{}"))) {
-      WorkspaceClient client = new WorkspaceClient(new DatabricksConfig().setHost(workspace.host())
-          .setCredentialsProvider(CredentialsProvider.from("sdm-test", ignored -> () -> {
+      DatabricksServing serving = refreshing(workspace, sdk, () -> {
             worker.set(Thread.currentThread());
             // A driver/network library can ignore interruption until its own IO timeout.
             while (release.getCount() != 0) {
@@ -236,10 +248,8 @@ class T313DatabricksServingTest {
                 // Deliberately model that library rather than pretending cancel closes its IO.
               }
             }
-            return Map.of("Authorization", "Bearer late-token");
-          })));
-      DatabricksServing serving = DatabricksServing.of(client, ENDPOINT)
-          .timeout(Duration.ofMillis(150));
+            return "late-token";
+          }).timeout(Duration.ofMillis(150));
       assertEquals(504, assertThrows(Host.EndpointFailed.class,
           () -> serving.post(new byte[] {'{', '}'})).status());
       assertEquals(504, assertThrows(Host.EndpointFailed.class,
