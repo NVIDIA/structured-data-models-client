@@ -257,6 +257,7 @@ impl ProviderPath<'_> {
         {
             return failed(ProviderError {
                 error_class: None,
+                driver_message: None,
                 kind: ErrorKind::DataSource,
                 retryable,
                 sqlstate: None,

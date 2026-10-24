@@ -149,6 +149,7 @@ fn not_read() -> ProviderError {
 fn failed(kind: ErrorKind) -> ProviderError {
     ProviderError {
         error_class: None,
+        driver_message: None,
         kind,
         retryable: false,
         sqlstate: None,

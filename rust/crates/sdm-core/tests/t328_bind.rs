@@ -269,6 +269,8 @@ fn a_later_chunk_failing_fails_the_request() {
         let result = if at == failing {
             FetchResult::Error(ProviderError {
                 error_class: Some("INSUFFICIENT_PERMISSIONS".into()),
+
+                driver_message: None,
                 kind: ErrorKind::DataSource,
                 retryable: false,
                 sqlstate: Some("42501".into()),
@@ -491,6 +493,7 @@ fn chunked_postgres(answers: Vec<FetchResult>) -> Option<Reply> {
             retryable: false,
             sqlstate: None,
             vendor_code: None,
+            driver_message: None,
         }))),
     }
 }

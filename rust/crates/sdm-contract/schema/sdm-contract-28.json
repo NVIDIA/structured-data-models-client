@@ -4257,7 +4257,7 @@
       ]
     },
     "ProviderError": {
-      "description": "A provider's failure: its kind, whether trying again may succeed, and\nthe driver's own SQLSTATE, vendor code and error class. The driver's\nmessage stays in the host, since drivers quote values there; what the\nfailure means is the data layer's to say ([`DataLayer::failure`]), from\nthese facts, never from text.",
+      "description": "A provider's failure: its kind, whether trying again may succeed, and\nthe driver's own SQLSTATE, vendor code and error class, and its message\nas a diagnostic for the data layer alone. What the failure means is the\ndata layer's to say ([`DataLayer::failure`]), from these facts; the\nmessage is never echoed into an error the core gives, since drivers\nquote values there (decision H17).",
       "type": "object",
       "properties": {
         "kind": {
@@ -4280,6 +4280,13 @@
         },
         "error_class": {
           "description": "The driver's error class, a name of its closed list such as\nDatabricks's `INSUFFICIENT_PERMISSIONS` (contract v28, T3.27), read\nas the old client reads it (`error_class`: the driver's own answer,\nelse the bracketed name its message opens with). Left out, none.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "driver_message": {
+          "description": "The driver's message, passed through by the host unread (contract\nv28, T3.6): an internal diagnostic only [`DataLayer::failure`] reads,\nwhere the old client reads a failure by its text (Snowflake's\n\"does not exist\", `SNOW/table.py:34-45`), and never echoed into a\npublic error (decision H17). Left out, none.",
           "type": [
             "string",
             "null"
