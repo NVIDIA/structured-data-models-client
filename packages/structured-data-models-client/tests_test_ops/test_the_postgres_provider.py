@@ -251,7 +251,7 @@ def test_integral_float_seeds_find_integer_keys_without_truncating_fractions(
     server: Server | None, sql_type: str, arrow_type: Any
 ) -> None:
     if server is None:
-        pytest.skip('needs the local Postgres test service')
+        pytest.fail('needs the local Postgres test service')
     connection = server.database(
         [
             f'CREATE TABLE users(user_id {sql_type} PRIMARY KEY, age VARCHAR)',
@@ -286,7 +286,7 @@ def test_float_binding_never_rounds_integer_columns_into_a_match(
     server: Server | None,
 ) -> None:
     if server is None:
-        pytest.skip('needs the local Postgres test service')
+        pytest.fail('needs the local Postgres test service')
     connection = server.database(
         [
             'CREATE TABLE users(user_id BIGINT PRIMARY KEY, age VARCHAR)',
@@ -327,7 +327,7 @@ def test_floating_keys_match_their_own_declared_column_type(
     server: Server | None, sql_type, arrow_type, carry_declaration
 ) -> None:
     if server is None:
-        pytest.skip('needs the local Postgres test service')
+        pytest.fail('needs the local Postgres test service')
     connection = server.database(
         [
             f'CREATE TABLE users(user_id {sql_type} PRIMARY KEY, age VARCHAR)',

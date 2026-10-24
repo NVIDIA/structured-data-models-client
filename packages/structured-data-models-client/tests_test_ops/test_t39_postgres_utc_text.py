@@ -14,16 +14,15 @@ from decimal import Decimal
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
+import psycopg
 import pytest
+from psycopg import sql
+from psycopg.types.multirange import Multirange
+from psycopg.types.range import Range
+from sdm_connectors import PostgresSource
 
-psycopg = pytest.importorskip('psycopg')
-from psycopg import sql  # noqa: E402
-from psycopg.types.multirange import Multirange  # noqa: E402
-from psycopg.types.range import Range  # noqa: E402
-
-from sdm_client import PredictiveQuery, Schema, _routing  # noqa: E402
-from sdm_client._rust.providers.postgres_arrow import rows_arrow  # noqa: E402
-from sdm_connectors import PostgresSource  # noqa: E402
+from sdm_client import PredictiveQuery, Schema, _routing
+from sdm_client._rust.providers.postgres_arrow import rows_arrow
 
 
 def _column(name, oid, values, *, array_oid=0, element_oid=None):
@@ -101,7 +100,7 @@ def test_materialized_range_feature_does_not_follow_connection_timezone(
 ):
     dsn = os.environ.get('SDM_POSTGRES_TEST_DSN')
     if not dsn:
-        pytest.skip('needs the local Postgres test service')
+        pytest.fail('needs the local Postgres test service')
     monkeypatch.setenv(
         _routing.ENVIRONMENT,
         ','.join(_routing.FROM_SOURCE_POSTGRES + _routing.MATERIALIZE_POSTGRES),

@@ -10,13 +10,12 @@ import os
 import uuid
 import warnings
 
+import psycopg
 import pytest
+from psycopg import sql
+from sdm_connectors import PostgresSource
 
-psycopg = pytest.importorskip('psycopg')
-from psycopg import sql  # noqa: E402
-
-from sdm_client import PredictiveQuery, Schema, _routing  # noqa: E402
-from sdm_connectors import PostgresSource  # noqa: E402
+from sdm_client import PredictiveQuery, Schema, _routing
 
 
 @pytest.mark.parametrize('source_type', ['REAL', 'DOUBLE PRECISION'])
@@ -25,7 +24,7 @@ def test_fractional_floating_entity_key_materializes_its_own_row(
 ):
     dsn = os.environ.get('SDM_POSTGRES_TEST_DSN')
     if not dsn:
-        pytest.skip('needs the local Postgres test service')
+        pytest.fail('needs the local Postgres test service')
     monkeypatch.setenv(
         _routing.ENVIRONMENT,
         ','.join(_routing.FROM_SOURCE_POSTGRES + _routing.MATERIALIZE_POSTGRES),
