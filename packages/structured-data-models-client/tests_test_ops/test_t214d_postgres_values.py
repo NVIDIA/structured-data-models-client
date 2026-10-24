@@ -376,7 +376,13 @@ def test_each_seed_is_bound_as_the_reference_writes_it(database: Any) -> None:
             'per_seed': None,
             'order': None,
         },
-        'provider': {'provider': 'sql', 'dialect': 'postgres'},
+        # Under the database's schema, as every Postgres read names one
+        # (T3.7).
+        'provider': {
+            'provider': 'sql',
+            'dialect': 'postgres',
+            'namespace': ['public'],
+        },
         'echo': True,
     }
 
