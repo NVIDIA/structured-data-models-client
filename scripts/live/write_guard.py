@@ -74,6 +74,11 @@ qualified in the test schema (``<database>.<schema>.<object>``; Postgres
   ``name`` one plain name and each table's ``base_table`` in the test
   schema, no key given twice.
 
+One statement is admitted by where it is sent from, not by its form:
+Snowpark's own ``select system$cancel_all_queries(<session id>)``, only
+while that session's ``Session.close`` runs and only for its own id
+(:data:`SESSION_CLOSE`).
+
 Snowflake reads an unquoted name upper-cased and a quoted one exactly;
 Postgres an unquoted one lower-cased and a quoted one exactly; Unity
 Catalog case-insensitively (a double-quoted text is a string there).
@@ -87,6 +92,7 @@ neither the loader nor the old client uses them.
 
 from __future__ import annotations
 
+import contextvars
 import functools
 import importlib
 import inspect
@@ -988,6 +994,38 @@ _INSTALLED: list[tuple[type, str, Any]] = []
 REFUSALS: list[str] = []
 
 
+#: Snowpark's ``Session.close``: while it runs, the one statement it sends
+#: to cancel its own session's queries is admitted (:func:`_closing`).
+SESSION_CLOSE = ('snowflake.snowpark.session', 'Session', 'close')
+#: The statement the closing session may send, exactly, or ``None``.
+_CLOSING: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    'sdm_write_guard_closing', default=None
+)
+
+
+def _closing(original: Any) -> Any:
+    r"""Snowpark's ``Session.close``, admitting while it runs exactly
+    ``select system$cancel_all_queries(<its session id>)``, the statement
+    its ``cancel_all`` sends, and nothing else."""
+
+    @functools.wraps(original)
+    def close(self: Any, *arguments: Any, **keywords: Any) -> Any:
+        session_id = getattr(self, '_session_id', None)
+        admitted = (
+            f'select system$cancel_all_queries({session_id})'
+            if isinstance(session_id, int) and not isinstance(session_id, bool)
+            else None
+        )
+        token = _CLOSING.set(admitted)
+        try:
+            return original(self, *arguments, **keywords)
+        finally:
+            _CLOSING.reset(token)
+
+    setattr(close, _MARK, True)
+    return close
+
+
 def _keeping(function: Any) -> Any:
     r"""``function``, each refusal it raises kept in :data:`REFUSALS`."""
 
@@ -1048,7 +1086,10 @@ def _guarded(
             if len(given) != 1:
                 raise WriteRefused('a statement the guard cannot find')
             statement = keywords[given[0]]
-        check(_text(self, statement))
+        text = _text(self, statement)
+        closing = _CLOSING.get()
+        if closing is None or text != closing:
+            check(text)
         return original(self, *arguments, **keywords)
 
     return _keeping(guarded)
@@ -1249,6 +1290,10 @@ def install(guards: Mapping[str, WriteGuard | None]) -> Callable[[], None]:
             for attribute in attributes if cls is not None else ():
                 assert cls is not None
                 _wrap(cls, attribute, _refusing(f'{class_name}.{attribute}'))
+        module_name, class_name, attribute = SESSION_CLOSE
+        cls = _class(module_name, class_name, required=False)
+        if cls is not None:
+            _wrap(cls, attribute, _closing)
         for module_name, class_name in REFUSED_CLASSES:
             cls = _class(module_name, class_name, required=False)
             if cls is None:
