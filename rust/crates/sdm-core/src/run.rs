@@ -388,7 +388,8 @@ impl Asker {
                 )?;
                 installed.insert(local, id);
             }
-            let plan = renamed(fetch.plan, &installed)?;
+            let mut plan = fetch.plan;
+            plan.rename_attachments(&installed);
             let known =
                 |id: &AttachmentId| named.contains(id) || installed.values().any(|made| made == id);
             if !plan.key_sets().iter().all(known) {
@@ -563,42 +564,6 @@ fn attach(shared: &mut Shared, attachment: Attachment) -> Result<AttachmentId, C
     let id = reserve(shared)?;
     shared.attachments.insert(id, attachment);
     Ok(id)
-}
-
-/// `plan` with each attachment it names by a local reference `installed`
-/// holds named by the run's id it was installed under. The core reads no
-/// plan's shape (a provider's or a dialect's): every `attachment` the plan
-/// names, as the contract writes it, is renamed alike.
-fn renamed(
-    plan: FetchPlan,
-    installed: &BTreeMap<AttachmentId, AttachmentId>,
-) -> Result<FetchPlan, CoreError> {
-    if installed.is_empty() {
-        return Ok(plan);
-    }
-    fn rename(value: &mut serde_json::Value, installed: &BTreeMap<AttachmentId, AttachmentId>) {
-        match value {
-            serde_json::Value::Object(fields) => {
-                for (name, field) in fields.iter_mut() {
-                    let local = field.as_u64().and_then(|n| u32::try_from(n).ok());
-                    match local.and_then(|n| installed.get(&AttachmentId(n))) {
-                        Some(id) if name == "attachment" => *field = serde_json::json!(id.0),
-                        _ => rename(field, installed),
-                    }
-                }
-            }
-            serde_json::Value::Array(items) => {
-                for item in items {
-                    rename(item, installed);
-                }
-            }
-            _ => {}
-        }
-    }
-    let unreadable = || internal("a bound fetch's plan does not read back");
-    let mut value = serde_json::to_value(&plan).map_err(|_| unreadable())?;
-    rename(&mut value, installed);
-    serde_json::from_value(value).map_err(|_| unreadable())
 }
 
 /// The run's next attachment id, or `INTERNAL_ERROR` once they are used up.

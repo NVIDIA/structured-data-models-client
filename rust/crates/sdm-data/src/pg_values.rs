@@ -640,9 +640,12 @@ impl Reader<'_> {
 /// among them, a null `null`, each text a JSON string with its characters
 /// as they are, as the core route has bound one since T2.3.
 pub(crate) fn key_rows(
+    request: &sdm_contract::data::DataRequest,
     schema: &SchemaRef,
     batches: &[RecordBatch],
+    float_text: fn(f64) -> String,
 ) -> Result<Vec<String>, CoreError> {
+    let _ = (request, float_text);
     let mut rows = Vec::new();
     for batch in batches {
         for row in 0..batch.num_rows() {

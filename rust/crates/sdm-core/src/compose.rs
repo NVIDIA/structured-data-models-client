@@ -159,14 +159,16 @@ impl DataAccess {
     /// `plan`, the run's provider's answer to `request`, bound as the
     /// provider binds it with the key sets `keys` it names
     /// (`DataLayer::bind`, T3.28): one fetch or more, each with the
-    /// batches it binds by local reference.
+    /// batches it binds by local reference, a double written as the
+    /// reference's language writes one ([`crate::pql::float_text`]).
     pub fn bind(
         &self,
         request: &DataRequest,
         plan: FetchPlan,
         keys: &BTreeMap<AttachmentId, KeyData>,
     ) -> Result<BoundRequest, CoreError> {
-        self.layer.bind(&self.provider, request, plan, keys)
+        self.layer
+            .bind(&self.provider, request, plan, keys, crate::pql::float_text)
     }
 
     /// How the run's provider answers `request`. A request whose fields

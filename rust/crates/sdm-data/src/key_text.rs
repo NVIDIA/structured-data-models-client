@@ -32,7 +32,7 @@ use std::sync::Arc;
 use arrow_array::{RecordBatch, StringArray};
 use arrow_schema::{DataType, Field, Schema};
 use sdm_contract::data::{
-    AttachmentId, BoundFetch, BoundRequest, FetchPlan, KeyData, SqlParam, SqlStatement,
+    AttachmentId, BoundFetch, BoundRequest, DataRequest, FetchPlan, KeyData, SqlParam, SqlStatement,
 };
 use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 
@@ -54,8 +54,10 @@ const COLUMN: &str = "keys";
 /// core handed over (the module's documentation).
 pub(crate) fn bind(
     dialect: &dyn SqlDialect,
+    request: &DataRequest,
     plan: FetchPlan,
     keys: &BTreeMap<AttachmentId, KeyData>,
+    float_text: fn(f64) -> String,
 ) -> Result<BoundRequest, CoreError> {
     let as_it_is = |plan| BoundRequest {
         fetches: vec![BoundFetch {
@@ -84,7 +86,7 @@ pub(crate) fn bind(
         )
         .with_field("attachment", Detail::Scalar(Scalar::UInt32(attachment.0))));
     };
-    let Some(rows) = dialect.key_rows(&made.schema, &made.batches)? else {
+    let Some(rows) = dialect.key_rows(request, &made.schema, &made.batches, float_text)? else {
         return Ok(as_it_is(plan));
     };
     if named.len() > 1 {

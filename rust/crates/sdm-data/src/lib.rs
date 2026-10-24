@@ -250,10 +250,10 @@ impl DataLayer for Data {
         request: &DataRequest,
         plan: FetchPlan,
         keys: &BTreeMap<AttachmentId, KeyData>,
+        float_text: fn(f64) -> String,
     ) -> Result<BoundRequest, CoreError> {
-        let _ = request;
         match sql_dialect(provider) {
-            Some(dialect) => key_text::bind(dialect, plan, keys),
+            Some(dialect) => key_text::bind(dialect, request, plan, keys, float_text),
             None => Ok(BoundRequest {
                 fetches: vec![BoundFetch {
                     plan,

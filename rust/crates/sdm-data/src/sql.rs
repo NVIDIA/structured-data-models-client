@@ -324,15 +324,18 @@ pub(crate) trait SqlDialect: Sync {
 
     // --- a key set bound as text (T3.28, [`crate::key_text`]) -------------------
 
-    /// Each seed of a key set, `schema` and `batches` as the core made it,
-    /// as the JSON its statement reads, in order, where the dialect binds
+    /// Each seed of the key set `request` reads, `schema` and `batches` as
+    /// the core made it, as the JSON its statement reads, in order, a
+    /// double written as `float_text` writes it, where the dialect binds
     /// its key sets as JSON text the statement unpacks; `None`, the
     /// default, where its provider binds the core's Arrow key set as a
     /// relation (DuckDB, SQLite).
     fn key_rows(
         &self,
+        _request: &DataRequest,
         _schema: &arrow_schema::SchemaRef,
         _batches: &[RecordBatch],
+        _float_text: fn(f64) -> String,
     ) -> Result<Option<Vec<String>>, CoreError> {
         Ok(None)
     }

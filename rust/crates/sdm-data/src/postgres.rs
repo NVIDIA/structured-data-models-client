@@ -333,10 +333,12 @@ impl SqlDialect for Postgres {
 
     fn key_rows(
         &self,
+        request: &DataRequest,
         schema: &arrow_schema::SchemaRef,
         batches: &[RecordBatch],
+        float_text: fn(f64) -> String,
     ) -> Result<Option<Vec<String>>, CoreError> {
-        pg_values::key_rows(schema, batches).map(Some)
+        pg_values::key_rows(request, schema, batches, float_text).map(Some)
     }
 
     /// The reference's budget of a key set's JSON text (`_chunk_rows`,

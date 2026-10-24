@@ -385,10 +385,12 @@ impl SqlDialect for Databricks {
 
     fn key_rows(
         &self,
+        request: &DataRequest,
         schema: &SchemaRef,
         batches: &[RecordBatch],
+        float_text: fn(f64) -> String,
     ) -> Result<Option<Vec<String>>, CoreError> {
-        key_rows(schema, batches).map(Some)
+        key_rows(request, schema, batches, float_text).map(Some)
     }
 
     /// The reference's budget of a key set's JSON text, below the
@@ -1107,9 +1109,12 @@ fn element_type(column_type: &ColumnType) -> &'static str {
 /// Each seed of a key set as the JSON this dialect binds it as (the
 /// module's documentation), in order.
 pub(crate) fn key_rows(
+    request: &DataRequest,
     schema: &SchemaRef,
     batches: &[RecordBatch],
+    float_text: fn(f64) -> String,
 ) -> Result<Vec<String>, CoreError> {
+    let _ = (request, float_text);
     let (schema, batches) = coerced(schema, batches)?;
     let names: Vec<String> = schema
         .fields()
@@ -1438,6 +1443,14 @@ mod tests {
         }
     }
 
+    /// A neighbor read whose window's upper bound is the seeds' `time`.
+    fn windowed() -> DataRequest {
+        serde_json::from_str(
+            r#"{"columns":["ts"],"key":["user_id"],"order":null,"per_seed":null,"request":"neighbors","seeds":{"attachment":2,"columns":[{"name":"key","nullable":true,"type":{"type":"int32"}},{"name":"batch","nullable":false,"type":{"type":"int64"}},{"name":"time","nullable":true,"type":{"type":"timestamp","unit":"ns","zone":null}}]},"table":{"source":["c","s","orders"]},"window":{"column":"ts","lower":null,"upper":{"inclusive":true,"seed_column":"time"}}}"#,
+        )
+        .unwrap()
+    }
+
     #[test]
     fn a_key_set_is_bound_as_the_reference_writes_its_json() {
         use arrow_array::{Int32Array, Int64Array, TimestampNanosecondArray};
@@ -1463,7 +1476,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            key_rows(&schema, &[batch]).unwrap(),
+            key_rows(&windowed(), &schema, &[batch], |x| format!("{x:?}")).unwrap(),
             [
                 r#"{"key":3,"time":"2024-03-01 00:00:00"}"#,
                 r#"{"key":4,"time":null}"#
