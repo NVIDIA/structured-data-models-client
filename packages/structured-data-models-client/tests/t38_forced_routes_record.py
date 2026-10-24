@@ -1401,12 +1401,15 @@ def _not_described_on_the_core(
                 # Described where the old route still runs, then asked
                 # where every route is the core's: a schema a session made
                 # before the switch.
-                forced = os.environ.pop(ROUTES, None)
+                forced = os.environ.get(ROUTES)
+                os.environ[ROUTES] = ''
                 try:
                     schema = Schema.from_source(place.source, TABLES)
                 finally:
                     if forced is not None:
                         os.environ[ROUTES] = forced
+                    else:
+                        os.environ.pop(ROUTES, None)
             elif build == 'from-scratch':
                 schema = _from_scratch(place.source)
             else:

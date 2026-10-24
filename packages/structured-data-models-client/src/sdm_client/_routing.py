@@ -288,8 +288,7 @@ FROM_SOURCE_DUCKDB_TABLES = (
 
 #: ``PredictiveQuery.materialize`` with ``indices`` over a schema of a DuckDB
 #: source: one call ends on the path of the task kind the query resolves to,
-#: so its six paths are routed together (T1.11c). The core materializes a
-#: regression and refuses the other kinds by name (register entry P1B-3).
+#: so its six paths are routed together (T1.11c).
 MATERIALIZE_DUCKDB = (
     'query.materialize/indices-binary/duckdb',
     'query.materialize/indices-multiclass/duckdb',
@@ -301,10 +300,8 @@ MATERIALIZE_DUCKDB = (
 
 #: ``SDMClient.predict`` of a request materialized over a DuckDB source: one
 #: call ends on the path of its task kind, so its six paths are routed
-#: together (T1.11d). On the core route a request materialize built on the
-#: core is sent and its answer read there; the core predicts a regression
-#: and refuses the other kinds by name (register entry P1B-4), and a
-#: request not materialized on the core has no core route.
+#: together (T1.11d). Requests materialized by the core and older requests
+#: are sent and their answers interpreted there (T3.26).
 PREDICT_DUCKDB = (
     'client.predict/binary/duckdb',
     'client.predict/multiclass/duckdb',
