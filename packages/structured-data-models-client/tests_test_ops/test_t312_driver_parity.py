@@ -540,7 +540,12 @@ REFUSED = {
 #: The errors a driver's own refusal of a value is, by host: psycopg's
 #: loaders' and ADBC's, and the Java provider's (its conversion table's).
 CLIENT_REFUSALS = {
-    'python': {'DataError', 'NotImplementedError', 'ProgrammingError'},
+    'python': {
+        'DataError',
+        'NotImplementedError',
+        'ProgrammingError',
+        'OSError',
+    },
     'java': {'java.sql.SQLDataException'},
 }
 
