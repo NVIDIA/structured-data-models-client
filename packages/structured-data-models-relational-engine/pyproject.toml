@@ -129,7 +129,7 @@ skip = "*-musllinux_*"
 # at the root cibuildwheel runs from, and they are installed by file first, so
 # the engine's pins are met by them and never by a published release of the
 # same version.
-before-test = "python -c \"import glob, subprocess, sys; subprocess.check_call([sys.executable, '-m', 'pip', 'install', *glob.glob('{project}/_sibling_wheels/*.whl')])\""
+before-test = "python -c \"import glob, subprocess, sys; subprocess.check_call([sys.executable, '-m', 'pip', 'install', *glob.glob(sys.argv[1] + '/*.whl')])\" \"{project}/_sibling_wheels\""
 # Proof per wheel, on the machine that built it: the compiled sampler loads and
 # the public graph surface imports.
 test-command = "python -c \"from sdm_relational_engine.rfm import Graph, KumoRelational; import sdm_relational_engine.relationallib as relationallib; assert hasattr(relationallib.NeighborSampler, 'seed')\""
