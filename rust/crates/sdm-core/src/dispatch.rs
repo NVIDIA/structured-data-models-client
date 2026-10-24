@@ -379,28 +379,30 @@ pub(crate) fn materialize(
             // The run's inputs, once the schema is read (below) and its
             // fingerprint taken: the memo is read only if it was made under
             // this provider and schema (decision E52).
-            let inputs = move |description, source: String, pending| crate::materialize::Inputs {
-                memo: memo.filter(|memo| memo.source == source),
-                source,
-                description,
-                pending,
-                query,
-                indices,
-                candidates,
-                anchor_time: request.anchor_time,
-                seed: request.seed,
-                unseeded: request.unseeded,
-                anchor_entity: request.anchor_entity,
-                values,
-                options: request.options,
-                most_parts: request.most_parts,
-                most_entities: request.most_entities,
-                most_calls: request.most_calls,
-                facts,
-                zones: Arc::clone(&zones),
-                #[cfg(feature = "test-ops")]
-                labels_only,
-            };
+            let inputs =
+                move |description, source: String, pending, types| crate::materialize::Inputs {
+                    memo: memo.filter(|memo| memo.source == source),
+                    source,
+                    description,
+                    pending,
+                    types,
+                    query,
+                    indices,
+                    candidates,
+                    anchor_time: request.anchor_time,
+                    seed: request.seed,
+                    unseeded: request.unseeded,
+                    anchor_entity: request.anchor_entity,
+                    values,
+                    options: request.options,
+                    most_parts: request.most_parts,
+                    most_entities: request.most_entities,
+                    most_calls: request.most_calls,
+                    facts,
+                    zones: Arc::clone(&zones),
+                    #[cfg(feature = "test-ops")]
+                    labels_only,
+                };
             Ok(Run::with_data(access, move |asker| async move {
                 if progress {
                     asker.says_progress();
@@ -459,13 +461,11 @@ pub(crate) fn materialize(
                 crate::materialize::meanings_carried(&read.description, Some(&read.types))?;
                 sdm_schema::assemble::check_links(&read.description, &read.types)?;
                 let description = read.by_the_source();
-                if !lacking {
-                    crate::materialize::meanings_carried(&description, None)?;
-                }
                 let source = crate::materialize::fingerprint(&provider, &description)?;
-                // Each table read as the columns its description holds.
+                // Each table read as the columns its description holds, until
+                // a catalog read says which it holds.
                 for table in &description.tables {
-                    asker.guard(
+                    asker.guard_held(
                         &table.source,
                         table
                             .columns
@@ -474,8 +474,11 @@ pub(crate) fn materialize(
                             .collect(),
                     );
                 }
-                crate::materialize::run(asker, inputs(description, source, lacking.then_some(held)))
-                    .await
+                crate::materialize::run(
+                    asker,
+                    inputs(description, source, lacking.then_some(held), read.types),
+                )
+                .await
             }))
         }
         _ => Err(internal("a materialize run of another operation")),
