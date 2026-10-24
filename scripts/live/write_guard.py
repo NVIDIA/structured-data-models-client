@@ -251,6 +251,9 @@ FUNCTIONS = frozenset(
         'CURRENT_SETTING',
         # The semantic view's definition, read.
         'SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW',
+        # A metric view's trusted expression the old client samples
+        # (Databricks' pure bitmap function, view.metric.trusted-function).
+        'BITMAP_BUCKET_NUMBER',
     }
 )  # fmt: skip
 #: Keywords no dialect lets name a function, so a ``(`` after one, never
