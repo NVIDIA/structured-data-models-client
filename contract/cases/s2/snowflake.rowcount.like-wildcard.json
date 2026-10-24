@@ -1,0 +1,67 @@
+{
+  "format": "sdm-case/1",
+  "id": "snowflake.rowcount.like-wildcard",
+  "status": "acceptance",
+  "slice": "S2",
+  "warehouses": [
+    "snowflake"
+  ],
+  "paths": [
+    "schema.from-source/tables/snowflake",
+    "query.materialize/indices-regression/snowflake",
+    "client.predict/regression/snowflake"
+  ],
+  "routes": [
+    "schema.from-source/tables/snowflake",
+    "schema.from-source/catalog-keys/snowflake",
+    "query.materialize/indices-binary/snowflake",
+    "query.materialize/indices-multiclass/snowflake",
+    "query.materialize/indices-regression/snowflake",
+    "query.materialize/indices-link-prediction/snowflake",
+    "query.materialize/indices-ranking/snowflake",
+    "query.materialize/indices-forecast/snowflake",
+    "client.predict/binary/snowflake",
+    "client.predict/multiclass/snowflake",
+    "client.predict/regression/snowflake",
+    "client.predict/link-prediction/snowflake",
+    "client.predict/ranking/snowflake",
+    "client.predict/forecast/snowflake"
+  ],
+  "cells": [
+    "int64/primary-key",
+    "int64/foreign-key",
+    "timestamp-us/time-column",
+    "float64/target"
+  ],
+  "input": {
+    "base": "shop",
+    "setup": [
+      "ALTER TABLE users RENAME TO user_s",
+      "ALTER TABLE orders RENAME TO order_s",
+      "CREATE TABLE \"USERXS\" AS SELECT * FROM user_s WHERE user_id < 3",
+      "CREATE TABLE \"ORDERXS\" AS SELECT * FROM order_s WHERE order_id < 20"
+    ],
+    "from_source": {
+      "tables": {
+        "users": "user_s",
+        "orders": "order_s"
+      }
+    },
+    "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ],
+      "anchor_time": "2024-03-01"
+    }
+  },
+  "until": "predict",
+  "expect": {
+    "outcome": "success",
+    "stage": "predict",
+    "today": "the row count is SHOW TABLES LIKE ? IN SCHEMA with the table's name bound (SNOW/table.py:287-297), and LIKE ignores case and reads _ as any one character, so 'user_s' also matches USERXS and 'order_s' also matches ORDERXS; SHOW sorts names, so the upper-case sibling answers first and its rows (3 and 20, not 8 and 80) are the counts; they size only the neighbour window (SNOW/sampler.py:279-309), so the prediction succeeds"
+  },
+  "why": "Each table has a sibling in the schema whose name its own matches under LIKE (an underscore, and a different case): the old client counts the sibling's rows, which the design proposes to replace by COUNT(*) on the exact name (T3.6 part 6). The siblings hold fewer rows than the tables, so the window the counts give differs from the one the tables' own counts would give. Unsampled: the old client asks SAMPLE ROW for at least 1,000 rows (max_pq_iterations 10 times a context of at least 100, RE/rfm.py:2303), and every table here is smaller, so the draw is the whole table",
+  "source": "written for the second early capture (T3.20) from the reference at 43e55f4f"
+}
