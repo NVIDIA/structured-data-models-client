@@ -227,7 +227,8 @@ def _utc_text_value(value: Any) -> Any:
     Range and multirange formatting remains the driver's own formatting.
     """
     if isinstance(value, datetime):
-        if value.utcoffset() is None:
+        offset = value.utcoffset()
+        if offset is None:
             return value
         try:
             return str(value.astimezone(timezone.utc))
@@ -238,14 +239,19 @@ def _utc_text_value(value: Any) -> Any:
             shift = 400 if value.year < 400 else -400
             shifted = value.replace(
                 year=value.year + shift,
-                tzinfo=timezone(value.utcoffset()),
+                tzinfo=timezone(offset),
             ).astimezone(timezone.utc)
             return f'{shifted.year - shift:04d}' + str(shifted)[4:]
 
     # A Postgres native result has psycopg available; keep the dependency
     # lazy so importing this standalone Arrow adapter needs no driver.
-    from psycopg.types.multirange import Multirange
-    from psycopg.types.range import Range
+    try:
+        from psycopg.types.multirange import Multirange
+        from psycopg.types.range import Range
+    except ModuleNotFoundError as error:
+        if error.name == 'psycopg':
+            return value
+        raise
 
     if isinstance(value, Range) and not value.isempty:
         return Range(
