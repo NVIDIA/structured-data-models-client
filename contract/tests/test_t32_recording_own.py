@@ -329,6 +329,71 @@ def test_psycopg_copy_stream_and_executemany_are_recorded() -> None:
     assert run._CAPTURES['postgres'] is run._CapturedPsycopg
 
 
+def test_a_postgres_row_read_is_kept_as_the_provider_types_it() -> None:
+    r"""T3.20 r2: a psycopg read is kept as the Arrow the core's Postgres
+    provider builds from the driver's type codes (an ``int4`` an
+    ``int32``), never the type Arrow infers from the values (``int64``)."""
+    import datetime as dt
+    import types as builtin_types
+    from decimal import Decimal
+
+    class Info:
+        def __init__(self, name: str, oid: int) -> None:
+            self.name, self.oid, self.array_oid = name, oid, oid + 10_000
+
+    known = {
+        23: Info('int4', 23),
+        25: Info('text', 25),
+        1700: Info('numeric', 1700),
+        1184: Info('timestamptz', 1184),
+    }
+
+    class Column:
+        def __init__(
+            self, name: str, code: int, precision: Any = None, scale: Any = None
+        ) -> None:
+            self.name, self.type_code = name, code
+            self.precision, self.scale = precision, scale
+
+        def __getitem__(self, position: int) -> Any:
+            return (self.name, self.type_code)[position]
+
+    class Cursor:
+        description = [
+            Column('id', 23),
+            Column('name', 25),
+            Column('amount', 1700, 10, 2),
+            Column('at', 1184),
+        ]
+        connection = builtin_types.SimpleNamespace(
+            adapters=builtin_types.SimpleNamespace(
+                types=builtin_types.SimpleNamespace(get=known.get)
+            )
+        )
+
+        def execute(self, query: str, params: Any = None) -> Cursor:
+            return self
+
+        def fetchall(self) -> list[tuple[Any, ...]]:
+            at = dt.datetime(2024, 1, 1, tzinfo=dt.timezone.utc)
+            return [(1, 'a', Decimal('1.50'), at)]
+
+    Cursor.__module__ = 'psycopg.cursor'
+    log = run.DriverLog()
+    log.recorder = run.Recorder()
+    captured = run._CapturedPsycopg(Cursor(), log)
+    captured.execute('SELECT id, name, amount, at FROM t')
+    captured.fetchall()
+    kept = log.recorder.kept[(0, 0)]
+    assert [str(field.type) for field in kept.schema] == [
+        'int32',
+        'string',
+        'decimal128(10, 2)',
+        'timestamp[us, tz=UTC]',
+    ]
+    assert kept.column('id').to_pylist() == [1]
+
+
 # --- draws and placeholders ------------------------------------------------------------
 
 
