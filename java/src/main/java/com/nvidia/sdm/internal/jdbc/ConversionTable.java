@@ -361,14 +361,30 @@ public final class ConversionTable {
    * ({@link Session#zone}).
    */
   private static String pyZoned(String text, Session session) throws SQLException {
-    long micros = PostgresText.zoned(text).micros();
+    PostgresText.Zoned zoned = PostgresText.zoned(text);
+    long micros = zoned.micros();
     int offset = session.offsetSeconds(micros);
-    java.time.LocalDateTime wall =
-        java.time.LocalDateTime.ofEpochSecond(
-            Math.floorDiv(micros, 1_000_000L) + offset,
-            (int) Math.floorMod(micros, 1_000_000L) * 1_000,
-            java.time.ZoneOffset.UTC);
+    java.time.LocalDateTime utc = wall(micros, 0);
+    java.time.LocalDateTime wall = wall(micros, offset);
+    if (!inPythonYears(utc) || !inPythonYears(wall)) {
+      // psycopg moves the instant to UTC, then to the session's zone; where either leaves a
+      // datetime's years (1 to 9999), it keeps the server's own wall time and offset.
+      return PostgresText.pyDatetime(zoned.wall()) + PostgresText.pyOffset(zoned.offsetSeconds());
+    }
     return PostgresText.pyDatetime(wall) + PostgresText.pyOffset(offset);
+  }
+
+  /** The wall time of the instant {@code micros} at {@code offset} seconds east of UTC. */
+  private static java.time.LocalDateTime wall(long micros, int offset) {
+    return java.time.LocalDateTime.ofEpochSecond(
+        Math.floorDiv(micros, 1_000_000L) + offset,
+        (int) Math.floorMod(micros, 1_000_000L) * 1_000,
+        java.time.ZoneOffset.UTC);
+  }
+
+  /** Whether a Python {@code datetime} holds {@code wall}'s year. */
+  private static boolean inPythonYears(java.time.LocalDateTime wall) {
+    return wall.getYear() >= 1 && wall.getYear() <= 9999;
   }
 
   private static Map<String, PostgresType> postgres() {
