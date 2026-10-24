@@ -199,6 +199,35 @@ class T313DatabricksServingTest {
     }
   }
 
+  @Test
+  void theFourBaseJ2ShapesUseTheSameCoreWithDirectAndServingEndpoints() throws Exception {
+    // J2's products/order details become shop users/orders with the same query shapes.
+    // These exercise the language-neutral paths; warehouse/JDBC types are covered separately.
+    String regression = "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id";
+    String inactivity = "PREDICT COUNT(orders.*, 0, 90, days) = 0 FOR EACH users.user_id";
+    String multiclass = "PREDICT users.country FOR EACH users.user_id";
+    String[] queries = {regression, regression, inactivity, multiclass};
+    LocalDate latest = LocalDate.of(2024, 3, 1);
+    LocalDate[] anchors = {latest, latest.minusDays(180), latest, latest};
+    try (Connection connection = T312Shop.open("duckdb");
+        Workspace workspace = new Workspace();
+        T312Shop.Endpoint nim = new T312Shop.Endpoint();
+        SdmClient serving = SdmClient.forDatabricksServing(workspace.serving(16_000_000));
+        SdmClient direct = SdmClient.connect(nim.url())) {
+      Schema schema = Schema.fromSource(DuckDbSource.of(connection));
+      for (int at = 0; at < queries.length; at++) {
+        Request request = PredictiveQuery.parse(queries[at]).materialize(schema,
+            MaterializeOptions.builder().indices(List.of(0L, 1L))
+                .anchorTime(anchors[at]).build());
+        PredictionResult expected = direct.predict(request, SdmClient.KUMO_RELATIONAL);
+        PredictionResult result = serving.predict(request, SdmClient.KUMO_RELATIONAL);
+        assertEquals(2, result.rows(), queries[at]);
+        assertEquals(predictions(expected), predictions(result), queries[at]);
+        assertEquals(withoutId(nim.received.get(at)), withoutId(call(workspace.bodies.get(at))));
+      }
+    }
+  }
+
   private static ModelEndpointException refused(Answer answer) throws Exception {
     try (Connection connection = T312Shop.open("duckdb");
         Workspace workspace = new Workspace(body -> answer);
