@@ -329,8 +329,8 @@ def read_captures(
     :data:`CAPTURES`, of :data:`CAPTURE_FORMAT`, its line keyed
     ``<case>@<leg>``); a capture it cannot read, or whose line is not its
     case's on its leg, reported. A sample the old client read as rows (a
-    Postgres leg) shows no Arrow type, so it shows no cell: the Arrow the
-    recorder built of those rows is not the driver's."""
+    Postgres leg) is typed by the Arrow its capture holds for it
+    (:func:`row_schemas`)."""
     found: dict[str, list[dict[str, Any]]] = {}
     try:
         names = [
@@ -359,8 +359,77 @@ def read_captures(
         ):
             report.fail('read', f'{name}: not a capture of {case_id} on {leg}')
             continue
+        base = name.rpartition('/')[0]
+        row_schemas(
+            capture,
+            line,
+            lambda path, base=base: _blob(tree, f'{base}/{path}'),
+        )
         found.setdefault(case_id, []).append(line)
     return found
+
+
+def _blob(tree: Any, path: str) -> bytes | None:
+    r"""A file of ``tree`` as bytes, or None when it has none there."""
+    import subprocess
+
+    done = subprocess.run(
+        ['git', '-C', str(tree.repo), 'cat-file', 'blob', f'{tree.sha}:{path}'],
+        capture_output=True,
+        check=False,
+    )
+    return done.stdout if done.returncode == 0 else None
+
+
+def row_schemas(
+    capture: dict[str, Any],
+    line: dict[str, Any],
+    read: Any,
+) -> None:
+    r"""Each warehouse sample at ``from_source`` that ``line`` holds as rows
+    (a Postgres leg's driver reads rows), given the Arrow schema of the
+    table ``capture`` holds for the same statement at the same position,
+    read by ``read`` (a capture-relative path to its bytes, or None): the
+    recording mode keeps a psycopg read as the core's Postgres provider
+    types it from the driver's type codes (T3.20), the types the core
+    receives. Without pyarrow, or a table to read, the sample stays rows,
+    and shows no cell."""
+    try:
+        import pyarrow as pa
+    except ImportError:
+        return
+    driver = line.get('driver')
+    captured = driver.get('capture') if isinstance(driver, dict) else None
+    statements = (
+        captured.get('statements') if isinstance(captured, dict) else None
+    )
+    held = capture.get('statements')
+    if not isinstance(statements, list) or not isinstance(held, list):
+        return
+    for statement, kept in zip(statements, held, strict=False):
+        if not (
+            isinstance(statement, dict)
+            and isinstance(kept, dict)
+            and statement.get('stage') == 'from_source'
+            and statement.get('sql') == kept.get('text')
+            and isinstance(kept.get('result'), str)
+            and isinstance(statement.get('results'), list)
+            and _WAREHOUSE_SAMPLE.fullmatch(str(statement['sql']).strip())
+        ):
+            continue
+        results = [r for r in statement['results'] if isinstance(r, dict)]
+        if not results or any('schema' in r for r in results):
+            continue
+        data = read(kept['result'])
+        if data is None:
+            continue
+        try:
+            schema = pa.ipc.open_stream(data).schema
+        except (pa.ArrowInvalid, OSError):
+            continue
+        fields = [{'name': f.name, 'type': str(f.type)} for f in schema]
+        for result in results:
+            result['schema'] = fields
 
 
 # --- the rules -----------------------------------------------------------------
@@ -960,8 +1029,8 @@ def received(line: dict[str, Any]) -> dict[tuple[str, str], set[str]]:
                     [cell] if cell is not None else []
                 )
     if not found and warehouse and as_rows:
-        # A Postgres leg's driver reads rows: no Arrow type to hold a
-        # claim to.
+        # A Postgres leg's driver reads rows, and its capture held no Arrow
+        # of them (:func:`row_schemas`): no type to hold a claim to.
         raise Unevidenced('a sample read as rows, with no Arrow type')
     if not found:
         raise Unevidenced('no sample of a table at from_source')
