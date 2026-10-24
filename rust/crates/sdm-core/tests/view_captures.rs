@@ -1256,10 +1256,10 @@ fn view_refresh_checks_held_types_and_accepts_compatible_numeric_widths() {
         }
     }
     // The same logical dimension becomes numeric when the view's expression changes.
-    let definition_rows = rows(
+    let definition_rows = unplaced_rows(rows(
         &document,
         recorded["statements"][0]["result"].as_str().unwrap(),
-    );
+    ));
     let edits = Edits {
         definition: Some(("THEN 'high' ELSE 'low' END", "THEN 1 ELSE 0 END")),
         answer: Some(Box::new(move |request| match request {
@@ -1295,9 +1295,15 @@ fn view_refresh_checks_held_types_and_accepts_compatible_numeric_widths() {
                         RecordBatch::try_new(batch.schema(), columns).unwrap()
                     })
                     .collect();
-                Some(FetchResult::Data(data))
+                Some(FetchResult::Data(edited_rows(
+                    data,
+                    "THEN 'high' ELSE 'low' END",
+                    "THEN 1 ELSE 0 END",
+                )))
             }
-            DataRequest::Preview { columns, .. } if columns == &["price_band".to_owned()] => {
+            DataRequest::Preview { columns, .. }
+                if columns.len() == 1 && columns[0] == "price_band" =>
+            {
                 let batch = RecordBatch::try_from_iter([(
                     "price_band",
                     Arc::new(arrow_array::Int64Array::from(vec![1, 0])) as arrow_array::ArrayRef,

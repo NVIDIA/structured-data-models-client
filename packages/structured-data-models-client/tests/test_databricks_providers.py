@@ -523,11 +523,8 @@ def test_a_databricks_failure_reaches_the_core_with_its_state_and_class(
     assert 'refuses_expression' not in provided
     assert provided['kind'] == 'data_source'
     assert driver == f'{type(error).__module__}.{type(error).__qualname__}'
-    # The driver's message is never in what the core is told.
-    assert not any(
-        isinstance(value, str) and ('[' in value or ' ' in value)
-        for value in provided.values()
-    )
+    # The host passes the diagnostic unread; the core chooses where it is useful.
+    assert provided['driver_message'] == str(error)
 
 
 def test_another_driver_s_failure_is_read_as_before() -> None:
@@ -541,6 +538,7 @@ def test_another_driver_s_failure_is_read_as_before() -> None:
         'retryable': False,
         'sqlstate': '42P01',
         'vendor_code': None,
+        'driver_message': str(other),
     }
     plain, _ = _driver(
         ValueError('SQLSTATE: 42000'), DatabricksSqlProvider(None)
