@@ -92,13 +92,14 @@ neither the loader nor the old client uses them.
 
 from __future__ import annotations
 
+import contextlib
 import contextvars
 import functools
 import importlib
 import inspect
 import os
 import re
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from typing import Any, NoReturn, cast
 
@@ -736,13 +737,46 @@ class WriteGuard:
                 if any(t.kind not in ('string', 'punct') for t in properties):
                     s.refuse('a table property that is not a literal')
             s.end()
-        elif self.dialect == 'databricks' and s.accept('VIEW'):
+        elif (
+            self.dialect == 'databricks'
+            and _upper(s.peek()) == 'VIEW'
+            and any(_upper(t) == 'METRICS' for t in s.items[s.at :])
+        ):
+            s.expect('VIEW')
             self._target(s)
             s.expect('WITH', 'METRICS', 'LANGUAGE', 'YAML', 'AS')
             body = s.peek()
             if body is None or body.kind != 'string':
                 s.refuse('a metric view with no YAML body')
             s.at += 1
+            s.end()
+        elif not replace and s.accept('VIEW'):
+            # The loader's setup only (:func:`setup`): a plain view in the
+            # test schema over a read.
+            if not _SETUP.get():
+                s.refuse("a view outside the loader's setup")
+            self._target(s)
+            s.expect('AS')
+            if _upper(s.peek()) not in ('SELECT', 'WITH'):
+                s.refuse('a view over something that is not a read')
+            self._held(s.items[s.at :], WRITE_WORDS, s.what)
+        elif (
+            self.dialect == 'postgres'
+            and not replace
+            and (s.accept('TEMPORARY') or s.accept('TEMP'))
+        ):
+            # The loader's setup only, on Postgres: a temporary table lives
+            # in the session alone and writes no schema.
+            if not _SETUP.get():
+                s.refuse("a temporary table outside the loader's setup")
+            s.expect('TABLE')
+            name = s.peek()
+            if name is None or name.kind not in ('word', 'name'):
+                s.refuse('a temporary table with no name')
+            s.at += 1
+            if s.peek() == _DOT:
+                s.refuse('a temporary table named in a schema')
+            self._columns(s.group(), s.what, constraints=False)
             s.end()
         elif self.dialect == 'postgres' and not replace and s.accept('TYPE'):
             self._target(s)
@@ -992,6 +1026,26 @@ _INSTALLED: list[tuple[type, str, Any]] = []
 #: message: a caller that catches one (the old client's call makes it the
 #: case's outcome) cannot hide it from the run, which fails the case.
 REFUSALS: list[str] = []
+
+
+#: Whether the contract loader's case setup is running (:func:`setup`):
+#: only then are its two setup forms admitted, a plain view in the test
+#: schema and, on Postgres, a temporary table.
+_SETUP: contextvars.ContextVar[bool] = contextvars.ContextVar(
+    'sdm_write_guard_setup', default=False
+)
+
+
+@contextlib.contextmanager
+def setup() -> Iterator[None]:
+    r"""The contract loader's case setup: within it, and nowhere else,
+    ``CREATE VIEW <the test schema>.<v> AS <a read>`` and, on Postgres,
+    ``CREATE TEMPORARY TABLE <name> (<columns>)`` are admitted."""
+    token = _SETUP.set(True)
+    try:
+        yield
+    finally:
+        _SETUP.reset(token)
 
 
 #: Snowpark's ``Session.close``: while it runs, the one statement it sends

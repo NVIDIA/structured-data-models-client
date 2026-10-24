@@ -1343,3 +1343,76 @@ def test_snowpark_close_admits_its_cancel_only_on_its_own_connection(
     assert statement not in seen
     d['Session']().close()
     assert seen == [statement]
+
+
+def test_a_plain_view_is_admitted_only_in_the_loaders_setup_in_the_test_schema() -> (
+    None
+):
+    # T3.20 second capture (snowflake.rowcount.view-as-table): the
+    # loader's case setup creates a view over a case table in the test
+    # schema. Admitted there; anywhere else, outside the setup, or over a
+    # write, it is refused.
+    view = (
+        'CREATE VIEW REVIEW_DB.LIVE_TESTS.USERS_V AS '
+        'SELECT * FROM REVIEW_DB.LIVE_TESTS.USERS'
+    )
+    with wg.setup():
+        SNOWFLAKE.check(view)
+        DATABRICKS.check(
+            'CREATE VIEW `review-catalog`.live_tests.v AS '
+            'SELECT * FROM `review-catalog`.live_tests.t'
+        )
+    refused = [
+        (SNOWFLAKE, view, False),
+        (
+            SNOWFLAKE,
+            'CREATE VIEW OTHER_DB.PUBLIC.USERS_V AS '
+            'SELECT * FROM REVIEW_DB.LIVE_TESTS.USERS',
+            True,
+        ),
+        (SNOWFLAKE, 'CREATE VIEW USERS_V AS SELECT 1', True),
+        (
+            SNOWFLAKE,
+            'CREATE OR REPLACE VIEW REVIEW_DB.LIVE_TESTS.USERS_V AS SELECT 1',
+            True,
+        ),
+        (
+            SNOWFLAKE,
+            'CREATE VIEW REVIEW_DB.LIVE_TESTS.V AS '
+            'SELECT * FROM REVIEW_DB.LIVE_TESTS.T; DROP TABLE OTHER_DB.P.T',
+            True,
+        ),
+    ]
+    for guard, sql, in_setup in refused:
+        with pytest.raises(wg.WriteRefused):
+            if in_setup:
+                with wg.setup():
+                    guard.check(sql)
+            else:
+                guard.check(sql)
+
+
+def test_a_temporary_table_is_admitted_only_in_the_loaders_lakebase_setup() -> (
+    None
+):
+    # T3.20 second capture (lakebase.name.shadowed-by-temporary): the
+    # loader's case setup creates a session-only table on the Lakebase
+    # connection. Admitted there; outside the setup, in a schema, on
+    # another dialect, or with anything else TEMPORARY, it is refused.
+    table = 'CREATE TEMPORARY TABLE users (user_id BIGINT, note TEXT)'
+    with wg.setup():
+        POSTGRES.check(table)
+    refused = [
+        (POSTGRES, table, False),
+        (POSTGRES, 'CREATE TEMPORARY TABLE public.users (i BIGINT)', True),
+        (POSTGRES, 'CREATE TEMPORARY TABLE u AS SELECT 1', True),
+        (POSTGRES, 'CREATE TEMPORARY VIEW v AS SELECT 1', True),
+        (SNOWFLAKE, 'CREATE TEMPORARY TABLE users (i NUMBER)', True),
+    ]
+    for guard, sql, in_setup in refused:
+        with pytest.raises(wg.WriteRefused):
+            if in_setup:
+                with wg.setup():
+                    guard.check(sql)
+            else:
+                guard.check(sql)
