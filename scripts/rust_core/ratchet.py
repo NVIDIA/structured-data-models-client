@@ -158,6 +158,11 @@ its record must carry Reviewed-by (:func:`epic_merge`). ``--epic`` takes
 the base as given, never the head's own trailers, and refuses any base but
 that landing; a harness that predates it refuses the flag, so ``rust-core``
 holding T2.0 but judged by an older landing fails closed.
+Nightly and phase-end ``workflow_dispatch`` runs use these same checkpoints:
+an exact phase branch names ``--base HEAD``, whose landing record resolves
+to its previous reviewed checkpoint; an unlanded phase head fails the
+self-comparison guard. A dispatched topic uses its phase's remote base,
+and a dispatched epic uses the merged phase's last landing.
 
 A new reference commit (T2.0e): a candidate that adds a reference file
 passes only when a row of the checkpoint's decisions approves its name
@@ -2740,7 +2745,10 @@ def ci_base(environ: dict[str, str], repo: Path = Path('.')) -> str:
     a push to the epic branch, ``--base`` the merged phase's last landing
     ``repo``'s ``HEAD`` holds and ``--epic`` (:func:`epic_merge`; T2.0), so the epic
     branch is judged like a moved landing of that phase's head, and with
-    none it fails; with no CI environment (a local replay), ``--base`` the
+    none it fails. A workflow dispatch uses the same topic and epic bases;
+    an exact phase branch uses ``--base HEAD``, resolved by the landed
+    candidate's recorded base, never a self-comparison of an unlanded head.
+    With no CI environment (a local replay), ``--base`` the
     remote tip of the phase branch ``phases.phase_branch`` names for the
     branch checked out; elsewhere nothing, since there is no ratchet to
     run."""
@@ -2753,7 +2761,8 @@ def ci_base(environ: dict[str, str], repo: Path = Path('.')) -> str:
         except PHASES.PhaseError as error:
             raise Unreadable(str(error)) from None
         return f'--base origin/{phase}'
-    if environ.get('GITHUB_EVENT_NAME') != 'push':
+    event_name = environ.get('GITHUB_EVENT_NAME')
+    if event_name not in ('push', 'workflow_dispatch'):
         return ''
     if ref == PHASES.EPIC:
         head = git(repo, 'rev-parse', 'HEAD^{commit}').strip()
@@ -2767,6 +2776,8 @@ def ci_base(environ: dict[str, str], repo: Path = Path('.')) -> str:
     phase = PHASES.phase_of(ref)
     if phase is None:
         return ''
+    if ref == phase and event_name == 'workflow_dispatch':
+        return '--base HEAD'
     if ref != phase:
         recorded = environ.get(PUSH_BASE, '')
         if re.fullmatch(r'[0-9a-f]{40}', recorded):

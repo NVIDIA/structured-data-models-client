@@ -458,6 +458,73 @@ fn a_postgres_key_is_written_as_the_old_client_writes_it_ascii_only() {
 }
 
 #[test]
+fn postgres_float_seeds_keep_integer_identity_and_fractional_non_matches() {
+    let mut request = lookup(r#"{"type":"float64"}"#, r#""users""#);
+    if let DataRequest::Lookup { seeds, .. } = &mut request {
+        seeds.columns[0]
+            .metadata
+            .insert(sdm_contract::data::SEED_KEY_TYPE.into(), "bigint".into());
+    }
+    let floats = Float64Array::from(vec![
+        1.0,
+        1.5,
+        9_007_199_254_740_992.0,
+        1_000_000_000_000_000_128.0,
+        -0.0,
+    ]);
+    let (_, bound) = bind_on("postgres", &request, seeds(Arc::new(floats)));
+    assert_eq!(
+        texts(&bound),
+        ["[1,1.5,9007199254740992,1000000000000000128,-0]"]
+    );
+    let sql = &statements(&bound.fetches[0].plan).last().unwrap().text;
+    assert!(sql.contains("::numeric AS \"key\""), "{sql}");
+    assert!(!sql.contains("jsonb_populate_record"), "{sql}");
+}
+
+#[test]
+fn postgres_float_seed_binding_uses_the_destination_declaration() {
+    for declared in [
+        None,
+        Some("real"),
+        Some("double precision"),
+        Some("smallint"),
+        Some("integer"),
+        Some("bigint"),
+        Some("numeric(20,4)"),
+        Some("numeric"),
+        Some("my_real_domain"),
+    ] {
+        let mut request = lookup(r#"{"type":"float64"}"#, r#""users""#);
+        if let (Some(kind), DataRequest::Lookup { seeds, .. }) = (declared, &mut request) {
+            seeds.columns[0]
+                .metadata
+                .insert(sdm_contract::data::SEED_KEY_TYPE.into(), kind.into());
+        }
+        let (plan, _) = bind_on(
+            "postgres",
+            &request,
+            seeds(Arc::new(Float64Array::from(vec![0.1]))),
+        );
+        let sql = &statements(&plan).last().unwrap().text;
+        let numeric = matches!(
+            declared,
+            Some("smallint" | "integer" | "bigint" | "numeric(20,4)" | "numeric")
+        );
+        assert_eq!(
+            sql.contains("::numeric AS \"key\""),
+            numeric,
+            "{declared:?}: {sql}"
+        );
+        assert_eq!(
+            sql.contains("jsonb_populate_record"),
+            !numeric,
+            "{declared:?}: {sql}"
+        );
+    }
+}
+
+#[test]
 fn a_postgres_seed_time_is_written_as_the_old_client_writes_it() {
     let request = neighbors(r#""orders""#);
     let time = DataType::Timestamp(TimeUnit::Nanosecond, None);

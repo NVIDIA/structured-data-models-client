@@ -24,7 +24,7 @@ from sdm_client import _native
 from sdm_client._rust import codec, errors
 from sdm_client._rust.run import run
 from sdm_client.core.warnings import SDMWarning
-from sdm_client.errors import StructuredDataError
+from sdm_client.errors import NimRequestError, StructuredDataError
 
 CANARY = 'CANARY-41d9'
 KINDS = (
@@ -65,6 +65,15 @@ def test_every_code_reaches_its_class_through_a_run() -> None:
                 'sentence': _sentence_of(code),
                 'message': CANARY,
             }
+            expected_code = code
+            if code == 'ENDPOINT_REFUSED':
+                # A valid endpoint refusal carries its HTTP status and its
+                # separate endpoint code, which is the caller's public code.
+                expected_code = 'TEST_ENDPOINT_CODE'
+                error['fields'] = {
+                    'status': {'t': 'u16', 'v': '422'},
+                    'refused_code': {'t': 'utf8', 'v': expected_code},
+                }
             with pytest.raises(StructuredDataError) as raised:
                 _test('fail', error, error=1)
             found = raised.value
@@ -73,8 +82,13 @@ def test_every_code_reaches_its_class_through_a_run() -> None:
                 # refused at the boundary, naming the attachment.
                 assert found.code == 'INVALID_MESSAGE'
                 continue
-            assert found.code == code
+            assert found.code == expected_code
             assert type(found) is errors.ERRORS[code]
+            if code == 'ENDPOINT_REFUSED':
+                assert isinstance(found, NimRequestError)
+                assert found.status_code == 422
+                assert 'status' not in found.details
+                assert 'refused_code' not in found.details
             assert found.details['kind'] == kind
             assert CANARY not in str(found)
             reached.setdefault(code, []).append(kind)

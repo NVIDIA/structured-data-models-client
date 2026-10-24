@@ -201,19 +201,19 @@ class T312PostgresReadTest {
   }
 
   /**
-   * Codex T3.12 r2 P0-1: a zoned range is written in the zone psycopg reads the session's in:
-   * UTC for a zone Python does not name ({@code GMT+3}), the named zone otherwise.
+   * The same zoned range is canonical UTC on each session, without changing its timezone.
    */
   @Test
-  void aZonedRangeIsWrittenInTheZonePsycopgReadsIn() throws Exception {
+  void aZonedRangeIsWrittenInUtcOnEverySession() throws Exception {
     try (Connection connection = T312Shop.open("postgres")) {
       String range = "SELECT '[2024-01-01 00:00+00,2024-01-02 00:00+00)'::tstzrange AS v";
       assertEquals(
           List.of("[2024-01-01 00:00:00+00:00, 2024-01-02 00:00:00+00:00)"),
           values(connection, step("SET TimeZone = 'GMT+3'", range)));
       assertEquals(
-          List.of("[2024-01-01 05:30:00+05:30, 2024-01-02 05:30:00+05:30)"),
+          List.of("[2024-01-01 00:00:00+00:00, 2024-01-02 00:00:00+00:00)"),
           values(connection, step("SET TimeZone = 'Asia/Kolkata'", range)));
+      assertEquals(List.of("Asia/Kolkata"), values(connection, step("SHOW TimeZone")));
     }
   }
 }

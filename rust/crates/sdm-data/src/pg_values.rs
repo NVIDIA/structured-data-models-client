@@ -735,11 +735,11 @@ fn key_json(
         | DataType::UInt64
         | DataType::Decimal128(_, 0)
         | DataType::Decimal256(_, 0) => text()?,
-        DataType::Float32 => json::number(
+        DataType::Float32 => float_key_json(
             f64::from(array.as_primitive::<t::Float32Type>().value(row)),
             float_text,
         ),
-        DataType::Float64 => json::number(
+        DataType::Float64 => float_key_json(
             array.as_primitive::<t::Float64Type>().value(row),
             float_text,
         ),
@@ -763,6 +763,19 @@ fn key_json(
         }
         _ => json::string(&text()?, true),
     })
+}
+
+/// A floating seed's exact integer digits when it is whole, otherwise its
+/// unchanged floating spelling. The SQL binder reads these as `numeric`:
+/// integer columns never round into a match and fractions never truncate.
+/// Shortest round-trip float text can differ from a large whole float's
+/// actual integer, so whole values use zero fractional digits instead.
+fn float_key_json(value: f64, float_text: fn(f64) -> String) -> String {
+    if value.is_finite() && value.fract() == 0.0 {
+        format!("{value:.0}")
+    } else {
+        json::number(value, float_text)
+    }
 }
 
 /// A decimal's text, `exact`, as its double's text (`float_text`) where

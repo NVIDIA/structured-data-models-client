@@ -47,10 +47,11 @@ def _reference() -> dict[str, dict[str, Any]]:
 
 def _cases() -> list[dict[str, Any]]:
     r"""Every case, S0 and S1."""
-    return [
+    loaded = (
         json.loads(path.read_text())
         for path in sorted((ROOT / 'contract/cases').rglob('*.json'))
-    ]
+    )
+    return [case for case in loaded if 'warehouses' not in case]
 
 
 def _key(case: str, database: str) -> str:
@@ -77,6 +78,7 @@ def test_every_case_has_its_duckdb_line() -> None:
     reference = _reference()
     cases = _cases()
     assert len(cases) >= 86
+    assert {case['slice'] for case in cases} <= {'S0', 'S1'}
     assert [c['id'] for c in cases if c['id'] not in reference] == []
     assert sum(bool(_statements(reference[c['id']])) for c in cases) > 40
 

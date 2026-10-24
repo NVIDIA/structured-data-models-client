@@ -433,6 +433,15 @@ def case_key(case_id: str, database: str) -> str:
     return case_id if database == 'duckdb' else f'{case_id}@{database}'
 
 
+def provider_for_leg(database: str) -> str:
+    r"""The core capability a leg uses: Lakebase opens a PostgresSource.
+
+    The Databricks SQL and Spark legs retain their separate provider IDs;
+    a loader's shared SQL engine name is not an advertised capability.
+    """
+    return 'postgres' if database == 'lakebase' else database
+
+
 def check_legs(
     database: str,
     providers: Mapping[str, Iterable[str]],
@@ -472,7 +481,7 @@ def check_legs(
     )
     problems = []
     for leg in sorted(providers):
-        if database not in tuple(providers[leg]):
+        if provider_for_leg(database) not in tuple(providers[leg]):
             continue
         made = observed.get(leg, set())
         if not made:
@@ -5055,7 +5064,7 @@ def run(
     if mode == 'python-core' and database != 'duckdb':
         from sdm_client import _native
 
-        if database not in _native.PROVIDERS:
+        if provider_for_leg(database) not in _native.PROVIDERS:
             raise RunnerFailure(
                 f'the core reports no {database} provider: the {database} '
                 'job runs the reference side only'

@@ -837,7 +837,7 @@
           "type": "boolean"
         },
         "declared_type": {
-          "description": "The source's catalog declaration, retained for temporal columns\nso a dialect can distinguish zoned instants from NTZ wall clocks,\nand for opaque big-integer columns so key joins cast to the source\ntype (register P1B-43). Other columns keep none. Absent when none.",
+          "description": "The source's opaque catalog declaration, retained for numeric and\ntemporal columns and marked big integers.\nA dialect uses it to preserve exact numeric key joins and destination\nfloat coercion, and to distinguish zoned instants from NTZ wall clocks.\nOther columns keep none. Absent when none.",
           "type": [
             "string",
             "null"

@@ -14,10 +14,9 @@ that changes how it reads from a later call, as pgjdbc does from its fifth
 prepared run, is caught), plain and binding a key set; each answer must be
 the Python provider's, its schema's metadata included, or both must fail.
 
-Postgres runs in a database of its own, with the session's zone of both
-connections the JVM's (pgjdbc sets the JVM's zone; the Python connection is
-given the same, so a value spelled in the session's zone is compared on the
-same zone).
+Postgres runs in a database of its own.
+Zoned values carried as text are canonical UTC on both hosts, independent
+of the connection's timezone; ordinary timestamps retain their Arrow semantics.
 
 It needs the JAR under test (``SDM_JAVA_JAR``, ``SDM_JAVA_NATIVE``) and, for
 Postgres, ``SDM_POSTGRES_TEST_DSN``; without them it returns without
@@ -967,10 +966,8 @@ INSTANTS = [
 def test_zoned_text_is_python_s_in_every_zone_postgres_names(
     databases: Databases,
 ) -> None:
-    # Codex T3.12 r3 P0-1: a timestamptz written as text is the instant in
-    # the zone psycopg resolves the session's to, by the zone data Python
-    # reads (its ZoneInfo), in every zone Postgres names and the names Python
-    # reads that no listing gives, at historic instants and DST edges alike.
+    # Zoned text keeps the same UTC instant in every session, including
+    # historic instants and DST edges; unreadable native dates remain refused.
     java = _java()
     if java is None or databases.scoped is None:
         return

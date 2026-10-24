@@ -5,7 +5,7 @@
 """The committed reference observations and their environment (T1.13).
 
 ``contract/reference/<commit>.jsonl`` holds one ``python-ref`` observation of
-every case in ``contract/cases`` (and, from T2.1a, at most one more on each
+every offline case in ``contract/cases`` (and, from T2.1a, at most one more on each
 other database the case lists, keyed ``<case>@sqlite`` or
 ``<case>@postgres``), recorded through ``run_python.py`` in
 ``python-ref`` mode from a clean tree, the reference guard passing before the
@@ -17,6 +17,7 @@ digest (the distributions ``reference-env.txt`` lists), the platform, cell
 and versions, a clean checkout, the old route, and the case and bases files
 as they are now, so a case changed without its observation re-recorded
 fails. Each rule fails on missing, empty or retyped evidence, seeded below.
+Warehouse-only cases use their leg's captures instead of this offline file.
 
 ``tests/test_contract_cases.py`` already validates each line against the
 schema and runs ``compare.py`` over the file, which reads it as the
@@ -225,7 +226,11 @@ def reference_problems(
     if [path.name for path in files] != [name]:
         problems.append(f'{reference.name}: not exactly one file, {name}')
         return problems
-    loaded = run_python.load_cases([cases])
+    loaded = [
+        (case, digest)
+        for case, digest in run_python.load_cases([cases])
+        if 'warehouses' not in case
+    ]
     digests = {case['id']: digest for case, digest in loaded}
     digests[''] = run_python.digest(BASES.read_bytes())
     validate = run_python.validator('observation')
@@ -388,6 +393,26 @@ def _copy(tmp_path: Path) -> tuple[Path, Path, list[dict[str, Any]]]:
 def _write(reference: Path, lines: list[Any]) -> None:
     (path,) = reference.iterdir()
     path.write_text(''.join(json.dumps(line) + '\n' for line in lines))
+
+
+@pytest.mark.tooling
+def test_warehouse_inputs_do_not_hide_a_missing_offline_reference(
+    tmp_path: Path,
+) -> None:
+    reference, environment, lines = _copy(tmp_path)
+    cases = tmp_path / 'cases'
+    cases.mkdir()
+    offline = 's0.accept.binary-classification'
+    for name in (offline, 'lakebase.binary'):
+        source = next(CASES.rglob(f'{name}.json'))
+        shutil.copyfile(source, cases / source.name)
+    selected = [line for line in lines if _bare(line['case']) == offline]
+    _write(reference, selected)
+    assert reference_problems(reference, environment, cases) == []
+    _write(reference, [line for line in selected if line['case'] != offline])
+    assert f'{offline}: 0 reference observations' in reference_problems(
+        reference, environment, cases
+    )
 
 
 def _set(path: str, value: Any) -> Callable[[list[dict[str, Any]]], None]:

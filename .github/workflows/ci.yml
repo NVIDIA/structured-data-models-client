@@ -1053,10 +1053,13 @@ jobs:
       # client is the native wheel's, the one abi3 build every interpreter
       # here installs; its test extra carries pytest-xdist, and
       # pytest-timeout==2.4.0 is for the run's --timeout.
-      - run: |
+      - env:
+          CMAKE_BUILD_PARALLEL_LEVEL: '2'
+        run: |
           pip install --upgrade pip 'ruff==0.16.*' pytest-timeout==2.4.0 "tomli; python_version < '3.11'"
           pip install -e './packages/structured-data-models-api[test]' -e './packages/structured-data-models-pql[test]' \
-            "$(ls native/*.whl)[test]" \
+            "$(ls native/*.whl)[test,relational]" \
+            './packages/structured-data-models-relational-engine' \
             -e './packages/structured-data-models-connectors[sqlite,duckdb,postgres,databricks,snowflake,s3,test]'
       # In parallel, as contract/tests runs: each test file on one worker,
       # so its module fixtures are built once. The gate's tooling tests
@@ -2124,12 +2127,16 @@ jobs:
       # published distribution of the same version from the index instead
       # (it took the published connectors, whose duckdb extra admits 2.0;
       # T2.16), so the job would test that rather than the candidate.
-      - run: |
+      - &legacy-client-install
+        env:
+          CMAKE_BUILD_PARALLEL_LEVEL: '2'
+        run: |
           pip install --upgrade pip pytest requests-mock
           VERSION=$(cat dist/VERSION)
           pip install --no-deps "$GITHUB_WORKSPACE"/dist/*.whl
           pip install --find-links "$GITHUB_WORKSPACE/dist" \
-            "structured-data-models-client[sqlite,duckdb]==$VERSION"
+            "$GITHUB_WORKSPACE/packages/structured-data-models-relational-engine" \
+            "structured-data-models-client[relational,sqlite,duckdb]==$VERSION"
       - name: The installed distribution is what gets imported, and it is typed
         working-directory: /tmp
         run: |
@@ -2181,12 +2188,7 @@ jobs:
         with:
           name: wheels
           path: dist
-      - run: |
-          pip install --upgrade pip pytest requests-mock
-          VERSION=$(cat dist/VERSION)
-          pip install --no-deps "$GITHUB_WORKSPACE"/dist/*.whl
-          pip install --find-links "$GITHUB_WORKSPACE/dist" \
-            "structured-data-models-client[sqlite,duckdb]==$VERSION"
+      - *legacy-client-install
       - working-directory: /tmp
         run: |
           SDM_CORE_ROUTES=$(python -c 'from sdm_client._routing import CORE_ROUTED; print(",".join(sorted(CORE_ROUTED)))')
@@ -2309,7 +2311,7 @@ jobs:
           # What the client's tests read their tables through, as
           # installed-wheel has it, NumPy kept.
           keep_numpy="numpy==$(python -c 'import numpy; print(numpy.__version__)')"
-          pip install --quiet --only-binary=:all: pytest requests-mock \
+          pip install --quiet --only-binary=:all: pytest requests-mock jsonschema \
             "structured-data-models-client[sqlite,duckdb]" $keep_numpy
           python -m pytest rust/bindings/sdm-py/tests/test_binding.py -q \
             -p no:cacheprovider --native-build production

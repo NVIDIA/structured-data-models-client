@@ -664,7 +664,7 @@ fn every_message_site_the_remaining_packages_port_has_its_sentence() {
     );
 }
 
-/// The owner approvals recorded in the T35-OWNER-2026-10-24-ERRORS and
+/// The owner approvals recorded in the T35-OWNER-2026-10-24-ERRORS-1 and
 /// LOOKUP-ERRORS decision rows release these names, without changing their
 /// templates, wire identities or the producer scan for pending proposals.
 #[test]

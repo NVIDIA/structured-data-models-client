@@ -507,23 +507,26 @@ pub fn by_pkey(
     })
 }
 
-/// `seeds`, their key column naming the declared type of `table`'s `key`
-/// ([`SEED_KEY_TYPE`]) where the described schema keeps one (a big-integer
-/// key the host layer read and marked, `DescribedColumn::declared_type`) and
-/// the seed key is of that type: the data layer joins such a seed in the
-/// key's own type (register P1B-43), from what `describe_source` read, so
-/// `materialize` asks the source nothing more.
+/// `seeds`, their key column naming the destination key's catalog declaration
+/// ([`SEED_KEY_TYPE`]) when the destination retains one and the seed is floating
+/// or a wide decimal.
+/// Only the data layer interprets that opaque declaration: a floating seed
+/// must retain the destination's float coercion without rounding integer keys,
+/// and a wide decimal must compare exactly with an opaque big integer.
 fn typed(mut seeds: KeySet, table: &Table, key: &str) -> KeySet {
-    let wide = ColumnType::Decimal128 {
-        precision: 38,
-        scale: 0,
-    };
     if let Some(declared) = table.column(key).and_then(|c| c.declared_type.as_ref()) {
-        for column in seeds
-            .columns
-            .iter_mut()
-            .filter(|c| c.name == SEED_KEY && c.column_type == wide)
-        {
+        for column in seeds.columns.iter_mut().filter(|c| {
+            c.name == SEED_KEY
+                && matches!(
+                    c.column_type,
+                    ColumnType::Float32
+                        | ColumnType::Float64
+                        | ColumnType::Decimal128 {
+                            precision: 38,
+                            scale: 0
+                        }
+                )
+        }) {
             column
                 .metadata
                 .insert(SEED_KEY_TYPE.to_owned(), declared.clone());
