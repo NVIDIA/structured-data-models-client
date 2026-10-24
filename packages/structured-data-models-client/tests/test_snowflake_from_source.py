@@ -782,3 +782,32 @@ def test_every_statement_names_the_database_and_schema_in_double_quotes(
     for text, _ in warehouse.calls:
         for found in re.findall(r'"([^"]*)"\."([^"]*)"\."([^"]*)"', text):
             assert found[:2] == (DB, SCHEMA), text
+
+
+def test_no_current_database_is_a_named_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    with pytest.raises(StructuredDataError) as refused:
+        _described('core', monkeypatch, _NoSession())
+    assert refused.value.code == 'INVALID_REQUEST'
+    assert "No current 'database' set" in str(refused.value)
+
+
+@pytest.mark.parametrize('listing', ['failed', 'malformed', 'other-case'])
+def test_hybrid_enforcement_requires_exact_optional_evidence(
+    listing: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class Warehouse(_MaskedHybrid):
+        def answer(self, text: str, parameters: list[Any]) -> pa.Table:
+            if text.startswith('SHOW TABLES IN SCHEMA'):
+                self.calls.append((text, parameters))
+                if listing == 'failed':
+                    raise ProgrammingError(msg='not authorized', errno=3001)
+                if listing == 'malformed':
+                    return pa.table({'name': ['users']})
+                return pa.table({'NAME': ['USERS'], 'IS_HYBRID': ['Y']})
+            return super().answer(text, parameters)
+
+    for route in ('core', 'old'):
+        warehouse = Warehouse()
+        with pytest.raises(Exception):  # noqa: B017, PT011 - each route's error
+            _described(route, monkeypatch, warehouse, **_NAMED, tables={'users': 'users'})
+        assert any('COUNT(DISTINCT "uid")' in text for text, _ in warehouse.calls)

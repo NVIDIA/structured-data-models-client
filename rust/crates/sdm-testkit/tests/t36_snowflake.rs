@@ -1459,3 +1459,17 @@ fn counts(name: &str, values: ArrayRef) -> Vec<RecordBatch> {
     ]
 }
 
+
+#[test]
+fn independent_foreign_keys_to_one_primary_key_stay_independent() {
+    let statement = format!("SHOW IMPORTED KEYS IN TABLE \"{DB}\".\"{SCHEMA}\".\"orders\"");
+    let mut rows = as_rows(&recorded_result("rule.composite-foreign-key-declared", &statement, &[]));
+    let batch = &rows[0];
+    let mut columns = batch.columns().to_vec();
+    columns[12] = Arc::new(StringArray::from(vec!["buyer_fk", "seller_fk"]));
+    columns[13] = Arc::new(StringArray::from(vec!["users_pk", "users_pk"]));
+    rows[0] = RecordBatch::try_new(batch.schema(), columns).unwrap();
+    let CatalogAnswer::ForeignKeys(keys) = read(json!({"request": "describe", "part": "foreign_keys", "tables": [table("orders")]}), &rows).unwrap() else { panic!("keys") };
+    assert_eq!(keys.len(), 2);
+    assert_ne!(keys[0].key, keys[1].key);
+}

@@ -505,21 +505,25 @@ fn neighbors() -> Vec<DataRequest> {
     };
     let windows = [
         Window {
+            source_type: None,
             column: "at".to_owned(),
             lower: bound("start", false),
             upper: bound("end", true),
         },
         Window {
+            source_type: None,
             column: "at".to_owned(),
             lower: bound("start", true),
             upper: bound("end", false),
         },
         Window {
+            source_type: None,
             column: "at".to_owned(),
             lower: None,
             upper: bound("end", true),
         },
         Window {
+            source_type: None,
             column: "at".to_owned(),
             lower: bound("start", false),
             upper: None,

@@ -231,6 +231,7 @@ pub fn messages() -> Vec<ControlMessage> {
                         columns: vec!["order_id".into(), "ts".into()],
                         seeds: seeds(&["anchor"]),
                         window: Some(Window {
+                            source_type: None,
                             column: "ts".into(),
                             lower: None,
                             upper: Some(SeedBound {
@@ -374,6 +375,8 @@ pub fn messages() -> Vec<ControlMessage> {
             outcome: FetchOutcome::Error {
                 error: ProviderError {
                     error_class: None,
+
+                    driver_message: None,
                     kind: ErrorKind::DataSource,
                     retryable: true,
                     sqlstate: Some("42P01".into()),
@@ -456,6 +459,8 @@ pub fn messages() -> Vec<ControlMessage> {
                 .with_field("panic", Detail::Scalar(Scalar::Bool(true)))
                 .caused_by(CoreError::provider(&ProviderError {
                     error_class: None,
+
+                    driver_message: None,
                     kind: ErrorKind::DataSource,
                     retryable: true,
                     sqlstate: Some("08006".into()),
