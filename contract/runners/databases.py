@@ -27,6 +27,7 @@ which ``sdm-testkit``'s key binders implement too; both run the vector.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import re
@@ -722,6 +723,34 @@ def _tables(duck: Any) -> list[str]:
         for wanted in needs.values():
             wanted.difference_update(ready)
     return ordered
+
+
+def holding(duck: Any) -> str:
+    r"""What ``duck``'s main schema holds, as one digest: each table, in
+    load order, by its name, its columns' names and types, its constraints
+    and its rows. Two cases with one digest load the same tables."""
+    import pyarrow as pa
+
+    digest = hashlib.sha256()
+    for table in _tables(duck):
+        columns = duck.execute(f'DESCRIBE {quote(table)}').fetchall()
+        not_null, clauses = _constraints(duck, table)
+        digest.update(
+            json.dumps(
+                [
+                    table,
+                    [[str(cell) for cell in column] for column in columns],
+                    sorted(not_null),
+                    clauses,
+                ]
+            ).encode()
+        )
+        data = _read(duck, table)
+        sink = pa.BufferOutputStream()
+        with pa.ipc.new_stream(sink, data.schema) as writer:
+            writer.write_table(data)
+        digest.update(sink.getvalue().to_pybytes())
+    return digest.hexdigest()
 
 
 def _constraints(
@@ -1639,6 +1668,10 @@ class CaseSchema:
         self.tables: list[str] = []
         self.types: list[str] = []
         self.views: list[tuple[str, str]] = []
+        # What the schema holds now, as :func:`holding` digests it, and the
+        # notes its load gave; ``None`` once anything else may be there.
+        self.loaded: tuple[str, bool] | None = None
+        self.notes: list[str] = []
 
     def _run(self, statement: str) -> None:
         guarded(statement)
@@ -1678,6 +1711,7 @@ class CaseSchema:
         if self.database == 'lakebase':
             self.target.commit()
         self.tables, self.types = [], []
+        self.loaded = None
 
     def create_view(self, kind: str, name: str, yaml: str) -> None:
         r"""The case's view, created in the schema from its YAML under the
@@ -1735,21 +1769,34 @@ class CaseSchema:
 
     def load(self, duck: Any, fold: bool = False) -> list[str]:
         r"""The case's tables in the schema, alone; :func:`load`'s notes;
-        with ``fold``, its columns named as Snowflake stores unquoted names."""
+        with ``fold``, its columns named as Snowflake stores unquoted names.
+
+        Tables the schema already holds, loaded by the case before from the
+        same tables (:func:`holding`: names, types, constraints and rows),
+        with no view created since, are not loaded again: the drops and
+        writes would put back what is there (the Spark recording's
+        root-cause analysis, 2026-10-24: about a third of each case's
+        time)."""
+        asked = (holding(duck), fold)
+        if asked == self.loaded and not self.views:
+            return list(self.notes)
         self.clear()
         self.tables = _tables(duck)
         if self.database == 'lakebase':
             self.types = _load_postgres(
                 duck, self.target, self.namespace[0], replace=True
             )
-            return []
-        return load(
-            duck,
-            self.database,
-            self.target,
-            namespace=self.namespace,
-            fold=fold,
-        )
+            notes: list[str] = []
+        else:
+            notes = load(
+                duck,
+                self.database,
+                self.target,
+                namespace=self.namespace,
+                fold=fold,
+            )
+        self.loaded, self.notes = asked, list(notes)
+        return notes
 
 
 #: Each leg's test schema across the run's cases, by leg and schema: the

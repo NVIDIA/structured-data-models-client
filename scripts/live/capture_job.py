@@ -26,9 +26,15 @@ manifests written, never a value of the environment.
 
 Run outside Databricks, it prints this text and exits.
 
+Each case's progress is printed and written to the output folder as the
+run goes (``<leg>.progress.jsonl``), each failure at once
+(``<leg>.failed.json``), and a case past ``case_timeout`` seconds fails
+alone (``capture_run.run``).
+
 Widgets (job base parameters): leg, campaign (c1 or e0), repo_dir,
 reference_dir, wheel_dir, out_dir, live_config,
-capture_catalog, capture_schema, test_database, test_schema, commit.
+capture_catalog, capture_schema, test_database, test_schema,
+case_timeout, commit.
 """
 
 import sys
@@ -49,6 +55,7 @@ WIDGETS = (
     'capture_schema',
     'test_database',
     'test_schema',
+    'case_timeout',
     'commit',
 )
 for name in WIDGETS:
@@ -118,5 +125,8 @@ status = capture_run.run(
     Path(dbutils.widgets.get('reference_dir')),
     Path(dbutils.widgets.get('out_dir')),
     campaign == 'e0',
+    case_timeout=float(
+        dbutils.widgets.get('case_timeout') or capture_run.CASE_TIMEOUT
+    ),
 )
 dbutils.notebook.exit('passed' if status == 0 else f'failed {status}')

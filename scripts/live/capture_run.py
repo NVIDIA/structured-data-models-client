@@ -45,10 +45,15 @@ and submitted by ``dbx_runs.py``, its notebook ``capture_job.py``).
 from __future__ import annotations
 
 import argparse
+import contextlib
 import importlib.util
 import json
 import os
+import signal
 import sys
+import threading
+import time
+from collections.abc import Iterator
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -300,15 +305,55 @@ def install_guard(leg: str, guard: ModuleType, loader: Any) -> Any:
     return uninstall
 
 
+#: How long one case may run, in seconds, before it fails alone: three
+#: times the heaviest case the Spark leg recorded (549 s, a 30 MiB body;
+#: the Spark recording's root-cause analysis, 2026-10-24).
+CASE_TIMEOUT = 1800
+
+
+class CaseTimedOut(BaseException):
+    r"""A case past its time limit. Not an :class:`Exception`, so no
+    handler of the runner's or a driver's takes it for the case's own
+    error or answer; :func:`run` catches it and goes on."""
+
+
+@contextlib.contextmanager
+def _limited(seconds: float | None) -> Iterator[None]:
+    r"""Raises :class:`CaseTimedOut` in the block once ``seconds`` have
+    passed, by the interval timer, which interrupts a statement waiting on
+    its driver's socket; no limit for ``None`` or off the main thread,
+    where no signal can be taken."""
+    if not seconds or threading.current_thread() is not threading.main_thread():
+        yield
+        return
+
+    def expired(signum: int, frame: Any) -> None:
+        raise CaseTimedOut
+
+    before = signal.signal(signal.SIGALRM, expired)
+    signal.setitimer(signal.ITIMER_REAL, seconds)
+    try:
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, before)
+
+
 def run(
     leg: str,
     reference: Path,
     out: Path,
     e0: bool = False,
     guard_path: Path | str | None = GUARD,
+    case_timeout: float | None = CASE_TIMEOUT,
 ) -> int:
     r"""Records ``leg`` live (see the module's text), every write through
-    the live write guard; returns the exit status."""
+    the live write guard; returns the exit status. As each case ends, a
+    line for it is added to ``DIR/<leg>.progress.jsonl`` (its number,
+    name, ``recorded`` or ``failed`` and its seconds) and printed, and a
+    failure is written to ``DIR/<leg>.failed.json`` at once, so a run cut
+    short leaves what it did; a case running past ``case_timeout``
+    seconds fails alone, and the run goes on."""
     guard = load_guard(guard_path)
     planned = plan(leg, e0)
     missing = [
@@ -329,44 +374,54 @@ def run(
     parts.mkdir(exist_ok=True)
     failed: dict[str, str] = {}
     recorded: list[Path] = []
+    progress = out / f'{leg}.progress.jsonl'
+    progress.write_text('', encoding='utf-8')
+    failures = out / f'{leg}.failed.json'
+
+    def write_failures() -> None:
+        failures.write_text(
+            json.dumps(failed, indent=1, sort_keys=True) + '\n',
+            encoding='utf-8',
+        )
+
+    write_failures()
     uninstall = install_guard(leg, guard, loader)
     try:
-        # One case at a time: a case that fails (refused, or not opened)
-        # is written with its reason, and the others go on.
+        # One case at a time: a case that fails (refused, not opened, or
+        # past its time limit) is written with its reason, and the others
+        # go on.
         for number, path in enumerate(planned['record']):
             case = Path(path).stem
-            recording = parts / f'{number:04d}.record.jsonl'
-            observations = parts / f'{number:04d}.python-ref.jsonl'
-            refusals = len(guard.REFUSALS)
-            try:
-                lines = runner.run(
-                    'python-ref',
-                    runner.load_cases([Path(path)]),
-                    reference,
-                    database=leg,
-                    record=recording,
-                )
-            except runner.RunnerFailure as failure:
-                failed[case] = str(failure)
-                continue
-            except Exception as error:  # noqa: BLE001 - this case alone fails
-                failed[case] = f'{type(error).__name__}: {error}'
-                continue
-            if len(guard.REFUSALS) > refusals:
-                # A statement of the case refused, whoever sent it: the old
-                # client's call would record the refusal as its own answer.
-                failed[case] = 'the write guard refused: ' + '; '.join(
-                    guard.REFUSALS[refusals:]
-                )
-                continue
-            observations.write_text(
-                ''.join(
-                    json.dumps(item, sort_keys=True) + '\n' for item in lines
-                ),
-                encoding='utf-8',
+            started = time.monotonic()
+            reason = _one_case(
+                runner,
+                guard,
+                path,
+                reference,
+                leg,
+                parts / f'{number:04d}',
+                case_timeout,
             )
-            if recording.is_file():
-                recorded.append(recording)
+            if reason is None:
+                recording = parts / f'{number:04d}.record.jsonl'
+                if recording.is_file():
+                    recorded.append(recording)
+            else:
+                failed[case] = reason
+                write_failures()
+            line = {
+                'number': number,
+                'case': case,
+                'status': 'recorded' if reason is None else 'failed',
+                'seconds': round(time.monotonic() - started, 1),
+            }
+            with progress.open('a', encoding='utf-8') as written:
+                written.write(json.dumps(line, sort_keys=True) + '\n')
+            print(
+                f'{leg}: {number + 1}/{len(planned["record"])} {case} '
+                f'{line["status"]} in {line["seconds"]} s',
+                flush=True,
+            )
     finally:
         uninstall()
     whole = out / f'{leg}.record.jsonl'
@@ -374,14 +429,54 @@ def run(
         ''.join(part.read_text(encoding='utf-8') for part in recorded),
         encoding='utf-8',
     )
-    (out / f'{leg}.failed.json').write_text(
-        json.dumps(failed, indent=1, sort_keys=True) + '\n', encoding='utf-8'
-    )
     for case, reason in sorted(failed.items()):
         print(f'{leg}: {case} failed: {reason}')
     for manifest in _module('captures').import_recording(whole, out):
         print(f'{leg}: wrote {manifest}')
     return 1 if failed else 0
+
+
+def _one_case(
+    runner: Any,
+    guard: ModuleType,
+    path: str,
+    reference: Path,
+    leg: str,
+    stem: Path,
+    case_timeout: float | None,
+) -> str | None:
+    r"""Records the case at ``path``, its lines beside ``stem``
+    (``.record.jsonl``, ``.python-ref.jsonl``), within ``case_timeout``
+    seconds; returns why it failed, or ``None``."""
+    recording = stem.with_name(stem.name + '.record.jsonl')
+    observations = stem.with_name(stem.name + '.python-ref.jsonl')
+    refusals = len(guard.REFUSALS)
+    try:
+        with _limited(case_timeout):
+            lines = runner.run(
+                'python-ref',
+                runner.load_cases([Path(path)]),
+                reference,
+                database=leg,
+                record=recording,
+            )
+    except CaseTimedOut:
+        return f'past its time limit of {case_timeout} s'
+    except runner.RunnerFailure as failure:
+        return str(failure)
+    except Exception as error:  # noqa: BLE001 - this case alone fails
+        return f'{type(error).__name__}: {error}'
+    if len(guard.REFUSALS) > refusals:
+        # A statement of the case refused, whoever sent it: the old
+        # client's call would record the refusal as its own answer.
+        return 'the write guard refused: ' + '; '.join(
+            guard.REFUSALS[refusals:]
+        )
+    observations.write_text(
+        ''.join(json.dumps(item, sort_keys=True) + '\n' for item in lines),
+        encoding='utf-8',
+    )
+    return None
 
 
 def _named(name: str) -> ModuleType:
@@ -457,6 +552,12 @@ def main(argv: list[str] | None = None) -> int:
     running.add_argument('--reference', type=Path, required=True)
     running.add_argument('--out', type=Path, required=True)
     running.add_argument('--e0', action='store_true')
+    running.add_argument(
+        '--case-timeout',
+        type=float,
+        default=CASE_TIMEOUT,
+        help='seconds one case may run before it fails alone',
+    )
     booting = commands.add_parser(
         'bootstrap', help='import sdm_client from the reference checkout'
     )
@@ -476,6 +577,7 @@ def main(argv: list[str] | None = None) -> int:
         arguments.reference,
         arguments.out,
         arguments.e0,
+        case_timeout=arguments.case_timeout,
     )
 
 
