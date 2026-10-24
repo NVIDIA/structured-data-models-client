@@ -1740,3 +1740,122 @@ def test_a_column_the_source_dropped_is_left_out_of_every_read(
     assert not any(
         re.search(r'\bage\b', text) for text, _ in connection.calls[mark:]
     )
+
+
+@pytest.mark.parametrize('route', ['core', 'old'])
+def test_a_column_the_source_dropped_stays_unread_on_every_later_materialize(
+    route: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""A schema built anew over a table that has lost a column since it was
+    described reads it without that column on its first ``materialize``
+    and keeps it so: its next ``materialize`` reads it without the column
+    too, as the old route keeps its engine's table (round 13's P1-1,
+    Claude)."""
+    _route(route, monkeypatch)
+    connection = _DroppingConnection()
+    schema = _rebuilt(connection)
+    connection._db.execute('ALTER TABLE users DROP COLUMN age')
+    connection.dropped = True
+    mark = len(connection.calls)
+    for _ in range(2):
+        assert _materialized(schema).payloads
+    assert not any(
+        re.search(r'\bage\b', text) for text, _ in connection.calls[mark:]
+    )
+
+
+class _AddingWarehouse(_CompletingWarehouse):
+    r"""The completing warehouse, whose ``users`` gains a column ``plan``
+    while ``added`` says so: its catalog lists it, and its rows hold
+    ``NEW_FEATURE`` in it."""
+
+    added = False
+
+    def answer(self, operation: str, parameters: list[Any]) -> pa.Table:
+        found = super().answer(operation, parameters)
+        if (
+            self.added
+            and 'information_schema.columns' in operation
+            and parameters[-1:] == ['users']
+        ):
+            row = dict(found.to_pylist()[-1])
+            row['column_name'] = 'plan'
+            for name in ('data_type', 'full_data_type'):
+                if name in row:
+                    row[name] = 'STRING'
+            if 'ordinal_position' in row:
+                row['ordinal_position'] = 4
+            found = pa.concat_tables(
+                [found, pa.Table.from_pylist([row], schema=found.schema)]
+            )
+        return found
+
+
+_AddingConnection = type(
+    'Connection', (_AddingWarehouse,), {'__module__': 'databricks.sql.client'}
+)
+
+
+@pytest.mark.parametrize('route', ['core', 'old'])
+def test_a_column_added_to_the_source_after_the_tables_were_kept_is_not_read(
+    route: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""A described schema keeps each table as its description read it: a
+    column the source gained since, given to the schema by hand, is no
+    column of the kept table, so no request carries it and its catalog is
+    not read again, as the old route's engine keeps the table it read
+    (round 13's P0-1, Codex)."""
+    from sdm_client import Column
+
+    _route(route, monkeypatch)
+    connection = _AddingConnection()
+    schema = Schema.from_source(DatabricksSource(connection, catalog='main'))
+    connection._db.execute(
+        "ALTER TABLE users ADD COLUMN plan VARCHAR DEFAULT 'NEW_FEATURE'"
+    )
+    connection.added = True
+    schema['users'].columns['plan'] = Column('plan', 'string', 'text')
+    mark = len(connection.calls)
+    request = _materialized(schema)
+    users = request.payloads[0]['schema']['related_tables']['users']['columns']
+    assert 'plan' not in list(users)
+    assert 'NEW_FEATURE' not in repr(request.payloads)
+    assert not any(
+        'information_schema.columns' in text or re.search(r'\bplan\b', text)
+        for text, _ in connection.calls[mark:]
+    )
+
+
+def test_a_run_taking_no_notices_reads_what_one_taking_them_reads(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    r"""Whether a run says its notices (``Materialize.progress``) decides
+    nothing of what it reads: a schema built anew over a table that has
+    lost a column reads it without the column either way (round 13's P1-3,
+    Codex)."""
+    from sdm_client._rust import materialize
+
+    _route('core', monkeypatch)
+    real = materialize.run
+    for progress in (True, False):
+
+        def run(
+            operation: Any, *args: Any, _p: bool = progress, **how: Any
+        ) -> Any:
+            return real(dict(operation, progress=_p), *args, **how)
+
+        monkeypatch.setattr(materialize, 'run', run)
+        connection = _DroppingConnection()
+        described = Schema.from_source(
+            DatabricksSource(connection, catalog='main', schema='shop')
+        )
+        schema = Schema(
+            described.tables, described.relationships, source=described.source
+        )
+        connection._db.execute('ALTER TABLE users DROP COLUMN age')
+        connection.dropped = True
+        mark = len(connection.calls)
+        assert _materialized(schema).payloads, progress
+        assert not any(
+            re.search(r'\bage\b', text) for text, _ in connection.calls[mark:]
+        ), progress
