@@ -86,9 +86,32 @@ fn bind_on(dialect: &str, request: &DataRequest, keys: KeyData) -> (FetchPlan, B
     let mut handed = BTreeMap::new();
     handed.insert(AttachmentId(2), keys);
     let bound = data
-        .bind(&provider, request, plan.clone(), &handed)
+        .bind(&provider, request, plan.clone(), &handed, reference_float)
         .unwrap();
     (plan, bound)
+}
+
+/// The text the old client's language gives each double these tests bind
+/// (its `repr`), the oracle, a table of the values used; the core passes in
+/// the parser crate's own (`sdm_pql::float_repr`).
+fn reference_float(x: f64) -> String {
+    const WRITTEN: &[(f64, &str)] = &[
+        (1.5, "1.5"),
+        (0.1, "0.1"),
+        (-2.0, "-2.0"),
+        (2.5, "2.5"),
+        (-0.05, "-0.05"),
+        (1e16, "1e+16"),
+        (1e-5, "1e-05"),
+        (123456789.0, "123456789.0"),
+    ];
+    WRITTEN
+        .iter()
+        .find(|(value, _)| value.to_bits() == x.to_bits())
+        .map_or_else(
+            || panic!("no reference text for {x:?}"),
+            |(_, text)| (*text).to_owned(),
+        )
 }
 
 /// The statements of a SQL plan.
@@ -503,7 +526,13 @@ fn a_request_binding_no_key_set_is_its_plan() {
     let provider = choice("databricks");
     let plan = data.plan(&request, &provider).unwrap();
     let bound = data
-        .bind(&provider, &request, plan.clone(), &BTreeMap::new())
+        .bind(
+            &provider,
+            &request,
+            plan.clone(),
+            &BTreeMap::new(),
+            reference_float,
+        )
         .unwrap();
     assert_eq!(
         bound,

@@ -308,12 +308,11 @@ fn a_key_set_within_the_budget_is_one_fetch_of_one_text() {
 
 // --- bind's default, round-tripped through the core ------------------------------
 
-/// `sdm-data`'s layer, its key sets rebound by the contract's default
-/// `bind` through `bound_keys`: each key doubled, so the batch the provider
-/// is handed is told apart from the core's.
-struct Doubling(sdm_data::Data);
+/// `sdm-data`'s plans and catalog reads, bound by the contract's default
+/// `bind`: one fetch, the plan as it is, the key sets as the core made them.
+struct Unbound(sdm_data::Data);
 
-impl DataLayer for Doubling {
+impl DataLayer for Unbound {
     fn capabilities(&self, provider: &ProviderChoice) -> Result<ProviderCapabilities, CoreError> {
         self.0.capabilities(provider)
     }
@@ -334,39 +333,18 @@ impl DataLayer for Doubling {
     ) -> Result<CatalogAnswer, CoreError> {
         self.0.read(request, provider, batches)
     }
-
-    fn bound_keys(
-        &self,
-        _provider: &ProviderChoice,
-        schema: &SchemaRef,
-        batches: &[RecordBatch],
-    ) -> Result<Option<(SchemaRef, Vec<RecordBatch>)>, CoreError> {
-        let doubled = batches
-            .iter()
-            .map(|batch| {
-                let keys = batch
-                    .column(0)
-                    .as_primitive::<arrow_array::types::Int64Type>();
-                let keys: Int64Array = keys.iter().map(|k| k.map(|k| k * 2)).collect();
-                RecordBatch::try_new(
-                    Arc::clone(schema),
-                    vec![Arc::new(keys), Arc::clone(batch.column(1))],
-                )
-                .unwrap()
-            })
-            .collect();
-        Ok(Some((Arc::clone(schema), doubled)))
-    }
 }
 
 #[test]
-fn bind_s_default_round_trips_one_fetch_its_key_set_rebound_once() {
+fn bind_s_default_round_trips_one_fetch_of_the_plan_and_the_core_s_key_set() {
+    // Postgres, whose own binding writes text: the default writes none.
     let seen = Arc::new(Mutex::new(Seen::default()));
+    let made = seeds(vec![1, 2, 3]);
     let mut run = keyed_run(
-        Arc::new(Doubling(sdm_data::Data::new())),
-        &ProviderChoice::sql("duckdb"),
+        Arc::new(Unbound(sdm_data::Data::new())),
+        &ProviderChoice::sql("postgres"),
         &["users"],
-        seeds(vec![1, 2, 3]),
+        made.clone(),
         Arc::clone(&seen),
     );
     let Step::Fetch { requests } = run.next().unwrap() else {
@@ -375,8 +353,14 @@ fn bind_s_default_round_trips_one_fetch_its_key_set_rebound_once() {
     let [step] = &requests[..] else {
         panic!("one fetch")
     };
-    // The plan is the layer's, its key set named by the id it is handed
-    // under; that attachment holds the key set as the layer rebound it.
+    let original = seen.lock().unwrap().keys.unwrap();
+    let planned = sdm_data::Data::new()
+        .plan(
+            &lookup(&["users"], original),
+            &ProviderChoice::sql("postgres"),
+        )
+        .unwrap();
+    assert_eq!(step.plan, planned, "the plan as it is");
     let FetchPlan::Sql { statements, .. } = &step.plan else {
         panic!("not SQL")
     };
@@ -388,37 +372,11 @@ fn bind_s_default_round_trips_one_fetch_its_key_set_rebound_once() {
             _ => None,
         })
         .collect();
-    let [set] = &sets[..] else {
-        panic!("one key set: {sets:?}")
-    };
-    let mut planned = sdm_data::Data::new()
-        .plan(
-            &lookup(&["users"], seen.lock().unwrap().keys.unwrap()),
-            &ProviderChoice::sql("duckdb"),
-        )
-        .unwrap();
-    if let FetchPlan::Sql { statements, .. } = &mut planned {
-        for param in statements.iter_mut().flat_map(|s| &mut s.params) {
-            if let SqlParam::KeySet { keys, .. } = param {
-                keys.attachment = set.attachment;
-            }
-        }
-    }
-    assert_eq!(step.plan, planned);
-    let Some(Attachment::Arrow(handed)) = run.take_attachment(set.attachment) else {
+    assert!(sets.iter().all(|set| set.attachment == original));
+    let Some(Attachment::Arrow(handed)) = run.take_attachment(original) else {
         panic!("the key set is not attached")
     };
-    let keys: Vec<i64> = handed
-        .batches
-        .iter()
-        .flat_map(|b| {
-            b.column(0)
-                .as_primitive::<arrow_array::types::Int64Type>()
-                .values()
-                .to_vec()
-        })
-        .collect();
-    assert_eq!(keys, [2, 4, 6], "rebound once");
+    assert_eq!(handed.batches, made.batches);
     // Nothing else is left attached for the host.
     for id in 1..=8 {
         assert!(run.take_attachment(AttachmentId(id)).is_none(), "{id}");
