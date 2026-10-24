@@ -27,7 +27,10 @@ Design: the structure design's "Java: T3.11, T3.12, T3.13" (one `internal/jdbc/J
 - **Materialize asks the core once.** Java's `materialize` sends the query as written to the core's `materialize`, which resolves it, as python-core does where its runner does not force the S0 route; a case naming `validate_query` among its core operations is validated first by the runner, through the internal validation, as python-core's forced route does, so both hosts start the same operations.
 - **DuckDB through its own Arrow.** The DuckDB column of the table is the driver's own export (`arrowExportStream`), the same C++ conversion as Python's `to_arrow_table`; a key set is registered as Arrow and kept as a temporary table, since DuckDB reads a registered stream once.
 - **SQLite as ADBC reads it.** The reference's driver is ADBC SQLite: a column's type is settled by its first 1,024 values, with ADBC's own text of a real in a text column, and a later value of another kind fails the read; the table holds it, probed from ADBC 1.12.
-- **Postgres as psycopg reads it.** A `float4` as the server's shortest text, an interval as psycopg's `timedelta`, JSON written back as Python's `json.dumps` writes it, a `numeric` past Arrow's decimals as its exact text, marked.
+- **Postgres as psycopg reads it.** A column's type by its OID, read as psycopg's registry reads it (a type it does not name, a user's enum or its array, as the server's text); every value read in text, as psycopg reads it (a statement is never prepared on the server, so pgjdbc never turns to binary); a `float4` as the server's shortest text; dates, times and intervals psycopg refuses refused by name; a value psycopg reads as an object written as Python's `str` of it (a range, an element of a `timestamptz`, `timetz` or `interval` array); JSON written by the core (`sdm_host::json_value_text`), as Python's provider writes it; a `numeric` past Arrow's decimals as its exact text, marked.
+- **A Postgres read takes a transaction as psycopg's does.** None under autocommit; outside a transaction one of its own, committed; inside the caller's a savepoint.
+- **Parity with Python's providers, value by value.** `tests_test_ops/test_t312_driver_parity.py` runs each type the table names, nulls, edge values and the values the reference's drivers refuse through both hosts' providers, seven runs plain and bound on one connection.
+- **What an answer left out is the core's.** The result's schema names it (`absent`, `sdm_request::predict::left_out`); `PredictionResult.absent` reads it.
 - **IPC buffers realigned.** Arrow read back from an IPC stream is copied to buffers of their own, since an IPC body's 8-byte offsets are no alignment a 128-bit decimal may be read at across the C Data interface (arrow-rs panics on one).
 - **The schema is immutable.** An edit gives a new schema, so `snapshot()` is the schema itself.
 - **Options as names and plain values.** `MaterializeOptions.option(name, value)` passes each as Python's keyword arguments do; the core refuses one it does not read.
@@ -40,6 +43,8 @@ Every S1 case on Java's paths, on DuckDB (245 cases), SQLite (227) and Postgres 
 Against the reference, Java differs exactly where rust-host does, under owner-approved entries: 117 `case_outcomes` rows in 24 entries copy rust-host's to runner `java` (DT-12, P1B-7 to P1B-11, P1B-26, P1B-33, P1B-53, P1B-55, P1B-72, P2B-1, P2B-10 to P2B-13, P2C-3, P2C-4, P2C-10, P2E-1, P2E-3 to P2E-5, P2I-4), each entry's notes saying so, listed for the owner.
 The endpoint's refusal (P2G-1's cases) is the reference's on Java, `NimRequestError`'s twin with no code, so it needs no row.
 New: JV-1 (proposed): the two cases naming a key or time column by a number cannot be written in Java's types and have no Java leg.
+JV-2, JV-3 and JV-4 (proposed, fix round 1): an anonymous Postgres record is refused by name; a JSON value nested past Python's recursion limit is read; a zoned time written as text is in the session's zone, which pgjdbc sets to the JVM's.
+A row on a DuckDB line for `java` moves from `none`, as no Java baseline is committed.
 
 ## Rounds
 

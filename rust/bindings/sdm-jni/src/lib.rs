@@ -568,6 +568,29 @@ pub extern "system" fn Java_com_nvidia_sdm_internal_NativeCore_capabilities0<'ca
     })
 }
 
+/// A Postgres `json` or `jsonb` value, given as the server's UTF-8 text, as
+/// the reference's provider hands it to the core
+/// (`sdm_host::json_value_text`, T3.12 fix 1): its UTF-8 text, or null
+/// for a JSON null; an exception for text that is not JSON.
+#[allow(unsafe_code)]
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_nvidia_sdm_internal_NativeCore_jsonText0<'caller>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    text: JByteArray<'caller>,
+) -> JByteArray<'caller> {
+    entry(&mut unowned, |env| {
+        let given = env.convert_byte_array(&text)?;
+        let given = String::from_utf8(given)
+            .map_err(|_| Failure::Usage("a JSON value is not UTF-8 text"))?;
+        match sdm_host::json_value_text(&given) {
+            Some(Some(written)) => Ok(env.byte_array_from_slice(written.as_bytes())?),
+            Some(None) => Ok(JByteArray::default()),
+            None => Err(Failure::Usage("a JSON value the server wrote is not JSON")),
+        }
+    })
+}
+
 /// Sets the most verbose level the logging bridge passes on: 0 none, 1
 /// error, 2 warn, 3 info, 4 debug, 5 trace. Java sets it at each run start
 /// from SLF4J's configuration, so a change there takes effect.

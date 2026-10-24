@@ -100,11 +100,16 @@
       <version>${sqlite.version}</version>
       <scope>test</scope>
     </dependency>
+    <!-- Postgres's driver (pgjdbc), compiled against for what JDBC does not
+         say (a column type's OID, the session's IntervalStyle, whether a
+         transaction is open, a statement read in text), which the Postgres
+         provider reaches only for a Postgres connection; the caller brings
+         the driver (provided, never shipped). -->
     <dependency>
       <groupId>org.postgresql</groupId>
       <artifactId>postgresql</artifactId>
       <version>${postgresql.version}</version>
-      <scope>test</scope>
+      <scope>provided</scope>
     </dependency>
 
     <!-- The tests' logger, so a test can see the core's events reach SLF4J. -->

@@ -51,6 +51,7 @@ mod sql_tests;
 mod sqlite;
 
 pub use keys::canonical_decimal_text;
+pub use pg_values::json_text;
 
 use arrow_array::RecordBatch;
 use sdm_contract::catalog::CatalogAnswer;

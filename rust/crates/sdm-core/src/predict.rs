@@ -32,8 +32,8 @@ use sdm_contract::run::Endpoint;
 use sdm_contract::{CoreError, CoreWarning, Detail, Scalar, Sentence};
 use sdm_request::predict::{
     Notice, Part, absent, absent_notice, bad_response, body, by_step, call_bytes, call_starts,
-    empty, layout, merge, nothing_to_score, numbered_from, predict_rows, preflight, prepare,
-    refused, steps_unexplained, table,
+    empty, layout, left_out, merge, nothing_to_score, numbered_from, predict_rows, preflight,
+    prepare, refused, steps_unexplained, table,
 };
 use sdm_wire::json::{self, Value};
 use sdm_wire::response::PredictionResponse;
@@ -249,6 +249,7 @@ fn carried(
             String::from_utf8(Value::texts(outputs.iter().map(String::as_str)).to_bytes())
                 .map_err(|_| internal("the outputs are not text"))?,
         ),
+        ("absent", absent_text(merged)?),
     ] {
         named.insert(key.to_owned(), value);
     }
@@ -262,6 +263,15 @@ fn carried(
     })
 }
 
+/// The JSON list of the outputs the answer left out ([`left_out`]), which
+/// the result's schema carries under `absent` for a host to read a caller's
+/// `absent(...)` off (T3.12 fix 1): the rule stays here.
+fn absent_text(merged: &Part) -> Result<String, CoreError> {
+    let named = left_out(merged);
+    String::from_utf8(Value::texts(named.iter().map(String::as_str)).to_bytes())
+        .map_err(|_| internal("the outputs left out are not text"))
+}
+
 fn count(n: usize) -> Detail {
     Detail::Scalar(Scalar::UInt64(u64::try_from(n).unwrap_or(u64::MAX)))
 }
@@ -269,7 +279,13 @@ fn count(n: usize) -> Detail {
 /// The result of a request's answer, attached.
 fn finish(asker: &Asker, merged: Part, outputs: Vec<String>) -> Result<OperationResult, CoreError> {
     let laid = table(&merged)?;
-    let result = asker.attach(Attachment::Arrow(ArrowData::new(laid.schema(), vec![laid])))?;
+    let mut named = laid.schema().metadata().clone();
+    named.insert("absent".to_owned(), absent_text(&merged)?);
+    let schema = std::sync::Arc::new(laid.schema().as_ref().clone().with_metadata(named));
+    let laid = laid
+        .with_schema(std::sync::Arc::clone(&schema))
+        .map_err(|_| internal("a result does not take its own schema"))?;
+    let result = asker.attach(Attachment::Arrow(ArrowData::new(schema, vec![laid])))?;
     let metadata = asker.attach(Attachment::Bytes(merged.metadata.to_bytes()))?;
     Ok(OperationResult::Predict(Predicted {
         result,

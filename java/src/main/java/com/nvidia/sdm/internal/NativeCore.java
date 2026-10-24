@@ -214,6 +214,20 @@ public final class NativeCore {
 
   private static native byte[] capabilities0();
 
+  /**
+   * A Postgres {@code json} or {@code jsonb} value, given as the server's text, as the
+   * reference's provider hands it to the core ({@code sdm_host::json_value_text}): the JSON text
+   * of the value read, or null for a JSON null. The rule is the core's; Java holds no copy.
+   *
+   * @throws IllegalArgumentException the text is not JSON
+   */
+  public static String jsonText(String text) {
+    load();
+    byte[] written = jsonText0(text.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    return written == null ? null : new String(written, java.nio.charset.StandardCharsets.UTF_8);
+  }
+
+  private static native byte[] jsonText0(byte[] text);
 
   /** Sets the most verbose level the core's events pass at, 0 none to 5 trace. */
   public static native void setLogLevel(int level);

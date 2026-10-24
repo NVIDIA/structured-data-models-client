@@ -119,10 +119,15 @@ class T312PredictTest {
   @SuppressWarnings("unchecked")
   private static byte[] withEmptyQuantiles(byte[] answer) {
     try {
-      Map<String, Object> read = (Map<String, Object>) com.nvidia.sdm.internal.Json.read(answer);
+      Map<String, Object> read =
+          new java.util.LinkedHashMap<>((Map<String, Object>) com.nvidia.sdm.internal.Json.read(answer));
+      List<Object> predictions = new ArrayList<>();
       for (Object item : (List<Object>) read.get("predictions")) {
-        ((Map<String, Object>) item).put("quantiles", new java.util.LinkedHashMap<>());
+        Map<String, Object> each = new java.util.LinkedHashMap<>((Map<String, Object>) item);
+        each.put("quantiles", new java.util.LinkedHashMap<>());
+        predictions.add(each);
       }
+      read.put("predictions", predictions);
       return com.nvidia.sdm.internal.Json.write(read);
     } catch (com.nvidia.sdm.internal.Json.JsonException e) {
       throw new IllegalStateException(e);

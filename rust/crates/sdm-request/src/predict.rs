@@ -1567,6 +1567,25 @@ pub fn absent(part: &Part, named: &[String]) -> Vec<String> {
         .collect()
 }
 
+/// The outputs [`absent`] looks for, in the order [`left_out`] names them.
+pub const LOOKED_FOR: [&str; 7] = [
+    "prediction",
+    "probabilities",
+    "scores",
+    "rankings",
+    "quantiles",
+    "explanation",
+    "embeddings",
+];
+
+/// Every output of [`LOOKED_FOR`] the answer does not carry, as [`absent`]
+/// reads each: what the result says it left out, for a host to read a
+/// caller's `absent(...)` off rather than keep a copy of the rule (T3.12
+/// fix 1).
+pub fn left_out(part: &Part) -> Vec<String> {
+    absent(part, &LOOKED_FOR.map(String::from))
+}
+
 /// The notice of the outputs [`absent`] found, naming the model asked.
 pub fn absent_notice(model: &str, absent: &[String]) -> Notice {
     Notice {
@@ -2379,13 +2398,21 @@ mod tests {
         let part = layout(&payload, &PredictionResponse::read(&answer).unwrap(), spell).unwrap();
         assert_eq!(
             left_out(&part),
-            ["probabilities", "scores", "rankings", "quantiles", "explanation", "embeddings"]
+            [
+                "probabilities",
+                "scores",
+                "rankings",
+                "quantiles",
+                "explanation",
+                "embeddings"
+            ]
         );
         let named: Vec<String> = ["quantiles", "prediction", "quantiles", "no_such_output"]
             .map(String::from)
             .to_vec();
         assert_eq!(absent(&part, &named), ["quantiles"]);
-        let none = read(r#"{"id": "r1", "model": "kumo-relational", "metadata": {}, "predictions": []}"#);
+        let none =
+            read(r#"{"id": "r1", "model": "kumo-relational", "metadata": {}, "predictions": []}"#);
         let empty = read(
             r#"{"task": {"kind": "regression", "target": {"dtype": "float64"}},
                 "predict": {"instance_table": {"columns": ["instance_id"], "rows": []}}}"#,

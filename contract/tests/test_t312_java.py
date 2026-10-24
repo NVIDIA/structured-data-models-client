@@ -109,6 +109,45 @@ def test_t312_a_java_row_on_a_duckdb_line_moves_from_no_outcome() -> None:
     assert not wrong, wrong
 
 
+def test_t312_a_first_admission_row_moves_from_the_reference_s_outcome() -> (
+    None
+):
+    # A row on a line no baseline holds (``old: none``) names the call its
+    # statements differ at against the committed reference's outcome, as
+    # the ratchet moves it from that outcome.
+    register = _tool('register')
+    entry = {'id': 'X-1', 'status': 'proposed', 'approved_by': None}
+    kept = {
+        'case': 'rule.composite-key-given',
+        'cell': 'ref-pandas3',
+        'runner': 'java',
+        'old': 'none',
+        'new': 'refusal INVALID_REQUEST',
+        'summary': 'kept',
+        'statements_differ': ['materialize'],
+    }
+    corpus = {'rule.composite-key-given': {}}
+    refused = {'rule.composite-key-given': 'materialize'}
+    codes = {'rule.composite-key-given': 'INVALID_REQUEST'}
+    assert not register._outcome_problems(
+        entry,
+        kept,
+        corpus,
+        {'rule.composite-key-given': 'refusal'},
+        refused,
+        codes,
+    )
+    other = {**kept, 'new': 'refusal UNSUPPORTED_REQUEST'}
+    assert register._outcome_problems(
+        entry,
+        other,
+        corpus,
+        {'rule.composite-key-given': 'refusal'},
+        refused,
+        codes,
+    )
+
+
 def test_t312_duckdb_s_log_counts_a_key_set_kept_as_a_table_once() -> None:
     import pyarrow as pa
 

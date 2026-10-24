@@ -6,6 +6,9 @@
   "type": "object",
   "additionalProperties": false,
   "required": ["format", "language", "slices", "backends", "operations", "paths", "cells"],
+  "if": {"properties": {"language": {"const": "java"}}},
+  "then": {"properties": {"paths": {"items": {"properties": {"tests": {"items": {"pattern": "^java/src/test/java/[A-Za-z0-9_./-]+\\.java#[A-Za-z0-9_]+$"}}}}}}},
+  "else": {"properties": {"paths": {"items": {"properties": {"tests": {"items": {"pattern": "^[A-Za-z0-9_./-]+\\.py::test_[A-Za-z0-9_]+$"}}}}}}},
   "properties": {
     "format": {"const": "sdm-scope/1"},
     "language": {"enum": ["python", "java"]},
@@ -69,7 +72,7 @@
           "slice": {"$ref": "#/$defs/slice"},
           "cases": {"$ref": "#/$defs/cases"},
           "tests": {
-            "description": "The client tests claiming the path where the case format cannot express it (T3.2, P2-T2.16-3): pytest node IDs, <file>::<test>, or, for a Java path (T3.12), JUnit test methods, <file>.java#<method>, each a test the tree defines (scripts/rust_core/coverage.py's rule 4).",
+            "description": "The client tests claiming the path where the case format cannot express it (T3.2, P2-T2.16-3), each a test the tree defines (scripts/rust_core/coverage.py's rule 4), in the manifest's own language's form (below): pytest node IDs, <file>::<test>, for Python; JUnit test methods, java/src/test/java/<file>.java#<method>, for Java (T3.12).",
             "type": "array",
             "minItems": 1,
             "uniqueItems": true,

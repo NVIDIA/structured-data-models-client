@@ -14,9 +14,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.apache.arrow.memory.BufferAllocator;
-import org.apache.arrow.vector.FieldVector;
 import org.apache.arrow.vector.VectorSchemaRoot;
-import org.apache.arrow.vector.complex.BaseListVector;
 import org.apache.arrow.vector.ipc.ArrowReader;
 
 /**
@@ -27,10 +25,6 @@ import org.apache.arrow.vector.ipc.ArrowReader;
  * the other outputs it carries. Join on {@code id}, or on {@code row_index}, never on row order.
  */
 public final class PredictionResult {
-  /** The outputs a row carries under a column of its own name. */
-  private static final Set<String> ITEM_FIELDS =
-      Set.of("prediction", "probabilities", "quantiles", "scores", "rankings", "embeddings");
-
   private final String model;
   private final String requestId;
   private final Object metadata;
@@ -111,50 +105,40 @@ public final class PredictionResult {
   }
 
   /**
-   * Which of {@code requested} the answer does not carry, as Python's {@code absent()}: a field
-   * no row holds a value of, the explanation where none was given; nothing for an answer of no
-   * rows, and a name this does not look for is taken as carried.
+   * Which of {@code requested} the answer does not carry, as Python's {@code absent()}, each once,
+   * in the order named: the core's reading of the answer, which the result names beside its rows
+   * (every output it looks for that no row holds, the explanation where none was given, nothing
+   * for an answer of no rows); a name it does not look for is taken as carried.
    */
   public List<String> absent(List<String> requested) {
+    Set<String> leftOut = new LinkedHashSet<>(leftOut());
     List<String> missing = new ArrayList<>();
-    if (rows() == 0) {
-      return missing;
-    }
     for (String name : new LinkedHashSet<>(requested)) {
-      if ("explanation".equals(name)) {
-        if (explanation() == null) {
-          missing.add(name);
-        }
-      } else if (ITEM_FIELDS.contains(name) && !carries(name)) {
+      if (leftOut.contains(name)) {
         missing.add(name);
       }
     }
     return missing;
   }
 
-  private boolean carries(String name) {
+  /** The outputs the core read the answer as leaving out, from the result's schema. */
+  private List<String> leftOut() {
     try (ArrowReader reader = read(ArrowData.allocator())) {
-      while (reader.loadNextBatch()) {
-        VectorSchemaRoot root = reader.getVectorSchemaRoot();
-        FieldVector column = root.getVector(name);
-        if (column == null) {
-          return false;
-        }
-        for (int row = 0; row < root.getRowCount(); row++) {
-          if (column.isNull(row)) {
-            continue;
-          }
-          if (column instanceof BaseListVector list
-              && list.getElementEndIndex(row) == list.getElementStartIndex(row)) {
-            continue;
-          }
-          return true;
-        }
+      Map<String, String> named = reader.getVectorSchemaRoot().getSchema().getCustomMetadata();
+      String text = named == null ? null : named.get("absent");
+      if (text == null) {
+        throw new StructuredDataException(
+            "the result does not say which outputs the answer left out", "INTERNAL_ERROR",
+            Map.of(), null);
       }
-      return false;
-    } catch (IOException e) {
+      List<String> read = new ArrayList<>();
+      for (Object each : (List<?>) Json.read(text.getBytes(StandardCharsets.UTF_8))) {
+        read.add((String) each);
+      }
+      return read;
+    } catch (IOException | Json.JsonException | ClassCastException e) {
       throw new StructuredDataException(
-          "the result's rows cannot be read", "INTERNAL_ERROR", Map.of(), null);
+          "the result's outputs left out cannot be read", "INTERNAL_ERROR", Map.of(), null);
     }
   }
 

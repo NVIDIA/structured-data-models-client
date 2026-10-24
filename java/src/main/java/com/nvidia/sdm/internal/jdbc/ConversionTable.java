@@ -4,23 +4,17 @@
 
 package com.nvidia.sdm.internal.jdbc;
 
-import com.nvidia.sdm.internal.PythonText;
+import com.nvidia.sdm.internal.NativeCore;
 import java.math.BigDecimal;
 import java.sql.Array;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.LocalTime;
-import java.time.OffsetDateTime;
-import java.time.OffsetTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import org.apache.arrow.vector.types.pojo.ArrowType;
 import org.apache.arrow.vector.types.pojo.Field;
 
@@ -68,7 +62,7 @@ public final class ConversionTable {
   public interface Column {
     Field field(String name);
 
-    Object read(ResultSet rows, int at) throws SQLException;
+    Object read(ResultSet rows, int at, Session session) throws SQLException;
   }
 
   /** How a Postgres type is read, given the column's declared precision and scale. */
@@ -200,21 +194,46 @@ public final class ConversionTable {
     throw new SQLException("[SQLite] Type mismatch: a value of another type than its column's");
   }
 
-  /** A double in C's {@code %e} form, as ADBC SQLite writes a real into a text column. */
+  /**
+   * A double in C's {@code %e} form, as ADBC SQLite writes a real into a text column: the double's
+   * exact value to seven significant digits, an exact tie to even (glibc's printf), the exponent
+   * signed and of two digits at least.
+   */
   static String cExponent(double value) {
     if (Double.isInfinite(value)) {
       return value > 0 ? "inf" : "-inf";
     }
-    return String.format(java.util.Locale.ROOT, "%e", value);
+    if (Double.isNaN(value)) {
+      return Double.doubleToRawLongBits(value) < 0 ? "-nan" : "nan";
+    }
+    String sign = (Double.doubleToRawLongBits(value) < 0) ? "-" : "";
+    if (value == 0) {
+      return sign + "0.000000e+00";
+    }
+    BigDecimal rounded =
+        new BigDecimal(Math.abs(value)).round(new java.math.MathContext(7, java.math.RoundingMode.HALF_EVEN));
+    String digits = rounded.unscaledValue().toString();
+    int exponent = digits.length() - 1 - rounded.scale();
+    digits = (digits + "000000").substring(0, 7);
+    return sign
+        + digits.charAt(0)
+        + "."
+        + digits.substring(1)
+        + "e"
+        + (exponent < 0 ? "-" : "+")
+        + (Math.abs(exponent) < 10 ? "0" : "")
+        + Math.abs(exponent);
   }
 
   // --- Postgres ------------------------------------------------------------------------
 
   /**
-   * The Postgres column, by type name, as the Python provider reads each through psycopg
-   * ({@code _rust/providers/postgres.py}): its {@code _SCALARS}, {@code numeric}, the times, the
-   * interval, JSON, and every type psycopg reads as text; an array ({@code _<element>}) as a list
-   * of its element's type ({@link #element}).
+   * The Postgres column, by the name psycopg's registry gives its type, as the Python provider
+   * reads each through psycopg ({@code _rust/providers/postgres.py}), every value as the server's
+   * text, as psycopg reads it: its {@code _SCALARS}, {@code numeric}, the times, the interval,
+   * JSON; any other type its registry names as Python's {@code str} of what psycopg read (a range
+   * as {@code [1, 5)}); an array of a type it names as a list of its element ({@link #array}); a
+   * type it does not name (a user's enum or composite, or an array of one) as the server's text.
    */
   public static final Map<String, String> POSTGRES = Map.ofEntries(
       Map.entry("bool", "bool"),
@@ -222,71 +241,245 @@ public final class ConversionTable {
       Map.entry("int4", "int32"),
       Map.entry("int8", "int64"),
       Map.entry("oid", "int64"),
-      Map.entry("float4", "double (the server's shortest text of the value)"),
+      Map.entry("float4", "double of the server's shortest text of the value"),
       Map.entry("float8", "double"),
       Map.entry("bytea", "binary"),
-      Map.entry("date", "date32"),
+      Map.entry("date", "date32; years 1 to 9999, else refused"),
       Map.entry("numeric", "decimal128(p, s) to 38 digits, decimal256(p, s) to 76, else exact"
           + " text marked sdm:exact_number (no precision, a negative scale) or"
           + " sdm:declared_scale (past 76 digits)"),
-      Map.entry("timestamp", "timestamp[us]"),
-      Map.entry("timestamptz", "timestamp[us, tz=UTC], the instant"),
-      Map.entry("time", "time64[us]"),
-      Map.entry("timetz", "time64[us], its offset left out"),
-      Map.entry("interval", "month_day_nano_interval, a month as 30 days, tagged sdm:interval"),
-      Map.entry("json", "utf8 tagged arrow.json: the JSON text of the value read"),
-      Map.entry("jsonb", "utf8 tagged arrow.json: the JSON text of the value read"));
+      Map.entry("timestamp", "timestamp[us]; years 1 to 9999, else refused"),
+      Map.entry("timestamptz", "timestamp[us, tz=UTC], the instant; years 1 to 9999 in the"
+          + " session's zone, else refused"),
+      Map.entry("time", "time64[us]; 24:00:00 refused"),
+      Map.entry("timetz", "time64[us], its offset left out; 24:00:00 refused"),
+      Map.entry("interval", "month_day_nano_interval of psycopg's timedelta (a month as 30 days),"
+          + " tagged sdm:interval; another IntervalStyle than postgres, or past a timedelta,"
+          + " refused"),
+      Map.entry("json", "utf8 tagged arrow.json: the core's JSON text of the value, a JSON null"
+          + " null"),
+      Map.entry("jsonb", "utf8 tagged arrow.json: the core's JSON text of the value, a JSON null"
+          + " null"),
+      Map.entry("int4range, int8range, numrange, daterange, tsrange, tstzrange", "utf8: Python's"
+          + " str of psycopg's Range"),
+      Map.entry("int4multirange and the other multiranges", "utf8: Python's str of psycopg's"
+          + " Multirange"),
+      Map.entry("record", "refused (register JV-2)"),
+      Map.entry("any other type psycopg's registry names, or none", "utf8: the server's text"));
 
-  /** The Postgres types read as text, as psycopg gives them (its {@code _TEXT}). */
-  static final Set<String> TEXT = Set.of(
-      "text", "varchar", "bpchar", "char", "name", "uuid", "xml", "inet", "cidr", "macaddr",
-      "macaddr8", "money", "bit", "varbit");
+  /** A type psycopg's registry names: its name, and its array type's OID. */
+  record Registered(String name, int array) {}
+
+  /**
+   * psycopg's registry of the server's own types (psycopg 3, its default adapters, by OID), as the
+   * Python provider reads a column's type: a type by its OID, an array by its array OID.
+   */
+  static final Map<Integer, Registered> REGISTRY = registry(
+      16, "bool", 1000, 17, "bytea", 1001, 18, "\"char\"", 1002, 19, "name", 1003,
+      20, "int8", 1016, 21, "int2", 1005, 22, "int2vector", 1006, 23, "int4", 1007,
+      24, "regproc", 1008, 25, "text", 1009, 26, "oid", 1028, 27, "tid", 1010, 28, "xid", 1011,
+      29, "cid", 1012, 30, "oidvector", 1013, 114, "json", 199, 142, "xml", 143,
+      600, "point", 1017, 601, "lseg", 1018, 602, "path", 1019, 603, "box", 1020,
+      604, "polygon", 1027, 628, "line", 629, 650, "cidr", 651, 700, "float4", 1021,
+      701, "float8", 1022, 718, "circle", 719, 774, "macaddr8", 775, 790, "money", 791,
+      829, "macaddr", 1040, 869, "inet", 1041, 1033, "aclitem", 1034, 1042, "bpchar", 1014,
+      1043, "varchar", 1015, 1082, "date", 1182, 1083, "time", 1183, 1114, "timestamp", 1115,
+      1184, "timestamptz", 1185, 1186, "interval", 1187, 1266, "timetz", 1270,
+      1560, "bit", 1561, 1562, "varbit", 1563, 1700, "numeric", 1231, 1790, "refcursor", 2201,
+      2202, "regprocedure", 2207, 2203, "regoper", 2208, 2204, "regoperator", 2209,
+      2205, "regclass", 2210, 2206, "regtype", 2211, 2249, "record", 2287, 2950, "uuid", 2951,
+      2970, "txid_snapshot", 2949, 3220, "pg_lsn", 3221, 3614, "tsvector", 3643,
+      3615, "tsquery", 3645, 3642, "gtsvector", 3644, 3734, "regconfig", 3735,
+      3769, "regdictionary", 3770, 3802, "jsonb", 3807, 3904, "int4range", 3905,
+      3906, "numrange", 3907, 3908, "tsrange", 3909, 3910, "tstzrange", 3911,
+      3912, "daterange", 3913, 3926, "int8range", 3927, 4072, "jsonpath", 4073,
+      4089, "regnamespace", 4090, 4096, "regrole", 4097, 4191, "regcollation", 4192,
+      4451, "int4multirange", 6150, 4532, "nummultirange", 6151, 4533, "tsmultirange", 6152,
+      4534, "tstzmultirange", 6153, 4535, "datemultirange", 6155, 4536, "int8multirange", 6157,
+      5069, "xid8", 271);
+
+  /** Each array type psycopg's registry names, by its OID: its element's name. */
+  static final Map<Integer, String> ARRAYS = arrays();
+
+  private static Map<Integer, Registered> registry(Object... given) {
+    Map<Integer, Registered> registry = new LinkedHashMap<>();
+    for (int at = 0; at < given.length; at += 3) {
+      registry.put((Integer) given[at], new Registered((String) given[at + 1], (Integer) given[at + 2]));
+    }
+    return Map.copyOf(registry);
+  }
+
+  private static Map<Integer, String> arrays() {
+    Map<Integer, String> arrays = new LinkedHashMap<>();
+    for (Registered each : REGISTRY.values()) {
+      arrays.put(each.array(), each.name());
+    }
+    return Map.copyOf(arrays);
+  }
+
+  /** The range types psycopg reads as a {@code Range}, by name: how each bound is written. */
+  private static final Map<String, PostgresText.Bound> RANGES = Map.of(
+      "int4range", ConversionTable::pyInteger,
+      "int8range", ConversionTable::pyInteger,
+      "numrange", ConversionTable::pyDecimal,
+      "daterange", text -> PostgresText.pyDate(PostgresText.date(text)),
+      "tsrange", text -> PostgresText.pyDatetime(PostgresText.timestamp(text)),
+      "tstzrange", ConversionTable::pyZoned);
+
+  /** The multirange types, by name: their range's name. */
+  private static final Map<String, String> MULTIRANGES = Map.of(
+      "int4multirange", "int4range",
+      "int8multirange", "int8range",
+      "nummultirange", "numrange",
+      "datemultirange", "daterange",
+      "tsmultirange", "tsrange",
+      "tstzmultirange", "tstzrange");
+
+  private static String pyInteger(String text) {
+    return new java.math.BigInteger(text).toString();
+  }
+
+  /** Python's {@code str} of a {@code Decimal} of the server's text. */
+  private static String pyDecimal(String text) {
+    return new BigDecimal(text).toString();
+  }
+
+  /** Python's {@code str} of psycopg's {@code datetime} in the session's zone. */
+  private static String pyZoned(String text) throws java.sql.SQLDataException {
+    PostgresText.Zoned zoned = PostgresText.zoned(text);
+    return PostgresText.pyDatetime(zoned.wall()) + PostgresText.pyOffset(zoned.offsetSeconds());
+  }
 
   private static Map<String, PostgresType> postgres() {
     Map<String, PostgresType> types = new LinkedHashMap<>();
-    types.put("bool", (p, s) -> plain(ArrowColumns.BOOL, (r, i) -> nullable(r, r.getBoolean(i))));
-    types.put("int2", (p, s) -> plain(ArrowColumns.INT16, (r, i) -> nullable(r, r.getShort(i))));
-    types.put("int4", (p, s) -> plain(ArrowColumns.INT32, (r, i) -> nullable(r, r.getInt(i))));
-    types.put("int8", (p, s) -> plain(ArrowColumns.INT64, (r, i) -> nullable(r, r.getLong(i))));
-    types.put("oid", (p, s) -> plain(ArrowColumns.INT64, (r, i) -> nullable(r, r.getLong(i))));
+    types.put("bool", (p, s) -> plain(ArrowColumns.BOOL, ConversionTable::bool));
+    types.put("int2", (p, s) -> plain(ArrowColumns.INT16, texts(Short::valueOf)));
+    types.put("int4", (p, s) -> plain(ArrowColumns.INT32, texts(Integer::valueOf)));
+    types.put("int8", (p, s) -> plain(ArrowColumns.INT64, texts(Long::valueOf)));
+    types.put("oid", (p, s) -> plain(ArrowColumns.INT64, texts(Long::valueOf)));
     // Read as the reference reads it, a double of the value the server writes (its shortest
     // text), never the float32 the server holds.
-    types.put("float4", (p, s) -> plain(ArrowColumns.FLOAT64, ConversionTable::doubleOfText));
-    types.put("float8", (p, s) -> plain(ArrowColumns.FLOAT64, ConversionTable::doubleOfText));
-    types.put("bytea", (p, s) -> plain(ArrowColumns.BINARY, (r, i) -> r.getBytes(i)));
-    types.put("date", (p, s) -> plain(ArrowColumns.DATE32, ConversionTable::days));
-    types.put("numeric", ConversionTable::numeric);
-    types.put("timestamp", (p, s) -> plain(ArrowColumns.TIMESTAMP_US, ConversionTable::wallMicros));
     types.put(
-        "timestamptz", (p, s) -> plain(ArrowColumns.TIMESTAMP_US_UTC, ConversionTable::instantMicros));
-    types.put("time", (p, s) -> plain(ArrowColumns.TIME64_US, ConversionTable::timeMicros));
-    types.put("timetz", (p, s) -> plain(ArrowColumns.TIME64_US, ConversionTable::zonedTimeMicros));
+        "float4",
+        (p, s) ->
+            plain(
+                ArrowColumns.FLOAT64,
+                (r, i, c) -> {
+                  float value = r.getFloat(i);
+                  return r.wasNull() ? null : shortest(value);
+                }));
+    types.put("float8", (p, s) -> plain(ArrowColumns.FLOAT64, texts(ConversionTable::parseDouble)));
+    types.put("bytea", (p, s) -> plain(ArrowColumns.BINARY, (r, i, c) -> r.getBytes(i)));
+    types.put("date", (p, s) -> plain(ArrowColumns.DATE32, texts(ConversionTable::days)));
+    types.put("numeric", ConversionTable::numeric);
+    types.put(
+        "timestamp",
+        (p, s) ->
+            plain(
+                ArrowColumns.TIMESTAMP_US,
+                texts(t -> PostgresText.micros(PostgresText.timestamp(t).toInstant(ZoneOffset.UTC)))));
+    types.put(
+        "timestamptz",
+        (p, s) -> plain(ArrowColumns.TIMESTAMP_US_UTC, texts(t -> PostgresText.zoned(t).micros())));
+    types.put(
+        "time",
+        (p, s) -> plain(ArrowColumns.TIME64_US, texts(t -> PostgresText.time(t).toNanoOfDay() / 1_000L)));
+    // A timetz's time of day, its offset left out, as the reference reads a time.
+    types.put(
+        "timetz",
+        (p, s) ->
+            plain(
+                ArrowColumns.TIME64_US,
+                texts(t -> PostgresText.zonedTime(t).time().toNanoOfDay() / 1_000L)));
     types.put(
         "interval",
-        (p, s) -> tagged(ArrowColumns.MONTH_DAY_NANO, INTERVAL_TAG, ConversionTable::interval));
-    types.put("json", (p, s) -> tagged(ArrowColumns.UTF8, JSON_TAG, ConversionTable::jsonText));
-    types.put("jsonb", (p, s) -> tagged(ArrowColumns.UTF8, JSON_TAG, ConversionTable::jsonText));
+        (p, s) ->
+            tagged(
+                ArrowColumns.MONTH_DAY_NANO,
+                INTERVAL_TAG,
+                (r, i, c) -> {
+                  String text = r.getString(i);
+                  return text == null ? null : monthDayNano(PostgresText.interval(text, c.intervalStyle()));
+                }));
+    types.put("json", (p, s) -> tagged(ArrowColumns.UTF8, JSON_TAG, texts(ConversionTable::jsonText)));
+    types.put("jsonb", (p, s) -> tagged(ArrowColumns.UTF8, JSON_TAG, texts(ConversionTable::jsonText)));
     return types;
   }
 
-  /** The Postgres column of type {@code name} with {@code precision} and {@code scale}. */
+  /**
+   * What a reading asks of the session: its {@code IntervalStyle}, read once, when a value needs
+   * it.
+   */
+  public interface Session {
+    String intervalStyle() throws SQLException;
+  }
+
+  /** The Postgres column of the type with OID {@code oid}, by psycopg's registry. */
+  public Column postgres(int oid, int precision, int scale) {
+    Registered registered = REGISTRY.get(oid);
+    if (registered != null) {
+      return postgres(registered.name(), precision, scale);
+    }
+    String element = ARRAYS.get(oid);
+    if (element != null) {
+      return array(element);
+    }
+    // A type psycopg's registry does not name (a user's enum or composite, or an array of one),
+    // which it reads as the server's text.
+    return plain(ArrowColumns.UTF8, (r, i, c) -> r.getString(i));
+  }
+
+  /** The Postgres column of the type psycopg's registry names {@code name}. */
   public Column postgres(String name, int precision, int scale) {
     PostgresType type = postgres.get(name);
     if (type != null) {
       return type.column(precision, scale);
     }
-    if (name.startsWith("_")) {
-      return array(name.substring(1));
-    }
-    // A type psycopg reads as text (TEXT), or one its registry does not name (a user's enum or
-    // composite), which it reads as text too.
-    return plain(ArrowColumns.UTF8, (r, i) -> r.getString(i));
+    return plain(ArrowColumns.UTF8, texts(textOf(name)));
   }
 
-  /** A reading of one value. */
+  /**
+   * How a value of a type psycopg's registry names, and this table does not read into a type of
+   * its own, is written: Python's {@code str} of what psycopg read.
+   */
+  private static Text textOf(String name) {
+    PostgresText.Bound range = RANGES.get(name);
+    if (range != null) {
+      return text -> PostgresText.pyRange(text, range);
+    }
+    String multirange = MULTIRANGES.get(name);
+    if (multirange != null) {
+      PostgresText.Bound bound = RANGES.get(multirange);
+      return text -> PostgresText.pyMultirange(text, bound);
+    }
+    if ("record".equals(name)) {
+      // psycopg reads an anonymous record, which no table's column holds, as a tuple of texts,
+      // and the provider writes Python's repr of it; refused here (register JV-2).
+      return text -> {
+        throw PostgresText.refused("an anonymous record");
+      };
+    }
+    return text -> text;
+  }
+
+  /** A reading of one value, given the session it is read in. */
   @FunctionalInterface
   interface Reading {
-    Object read(ResultSet rows, int at) throws SQLException;
+    Object read(ResultSet rows, int at, Session session) throws SQLException;
+  }
+
+  /** A reading of one value's text, the server's, never null. */
+  @FunctionalInterface
+  interface Text {
+    Object read(String text) throws SQLException;
+  }
+
+  /** The reading of each value's text by {@code text}, a null null. */
+  private static Reading texts(Text text) {
+    return (rows, at, session) -> {
+      String given = rows.getString(at);
+      return given == null ? null : text.read(given);
+    };
   }
 
   private static Column plain(ArrowType type, Reading reading) {
@@ -301,19 +494,15 @@ public final class ConversionTable {
       }
 
       @Override
-      public Object read(ResultSet rows, int at) throws SQLException {
-        return reading.read(rows, at);
+      public Object read(ResultSet rows, int at, Session session) throws SQLException {
+        return reading.read(rows, at, session);
       }
     };
   }
 
-  private static Object nullable(ResultSet rows, Object value) throws SQLException {
-    return rows.wasNull() ? null : value;
-  }
-
-  private static Object doubleOfText(ResultSet rows, int at) throws SQLException {
+  private static Object bool(ResultSet rows, int at, Session session) throws SQLException {
     String text = rows.getString(at);
-    return text == null ? null : parseDouble(text);
+    return text == null ? null : "t".equals(text) || "true".equals(text);
   }
 
   private static Double parseDouble(String text) {
@@ -325,58 +514,39 @@ public final class ConversionTable {
     };
   }
 
-  private static Object days(ResultSet rows, int at) throws SQLException {
-    LocalDate date = rows.getObject(at, LocalDate.class);
-    return date == null ? null : (int) date.toEpochDay();
+  /**
+   * A float4 as the reference reads it: the double of the server's shortest text of the float32
+   * (Postgres 12 on), whichever form the driver read it in.
+   */
+  private static Double shortest(float value) {
+    if (Float.isNaN(value)) {
+      return Double.NaN;
+    }
+    if (Float.isInfinite(value)) {
+      return value > 0 ? Double.POSITIVE_INFINITY : Double.NEGATIVE_INFINITY;
+    }
+    return Double.valueOf(ArrowText.floating32(value));
   }
 
-  private static Object wallMicros(ResultSet rows, int at) throws SQLException {
-    LocalDateTime time = rows.getObject(at, LocalDateTime.class);
-    return time == null ? null : micros(time.toInstant(ZoneOffset.UTC));
+  private static Object days(String text) throws SQLException {
+    return (int) PostgresText.date(text).toEpochDay();
   }
 
-  private static Object instantMicros(ResultSet rows, int at) throws SQLException {
-    OffsetDateTime time = rows.getObject(at, OffsetDateTime.class);
-    return time == null ? null : micros(time.toInstant());
-  }
-
-  private static long micros(java.time.Instant instant) {
-    return Math.addExact(
-        Math.multiplyExact(instant.getEpochSecond(), 1_000_000L), instant.getNano() / 1_000L);
-  }
-
-  private static Object timeMicros(ResultSet rows, int at) throws SQLException {
-    LocalTime time = rows.getObject(at, LocalTime.class);
-    return time == null ? null : time.toNanoOfDay() / 1_000L;
-  }
-
-  /** A {@code timetz}'s time of day, its offset left out, as the reference reads a time. */
-  private static Object zonedTimeMicros(ResultSet rows, int at) throws SQLException {
-    OffsetTime time = rows.getObject(at, OffsetTime.class);
-    return time == null ? null : time.toLocalTime().toNanoOfDay() / 1_000L;
+  /** psycopg's timedelta of an interval, as Arrow's {@code MonthDayNano} of it: no months. */
+  private static ArrowColumns.MonthDayNano monthDayNano(PostgresText.Delta delta) {
+    return new ArrowColumns.MonthDayNano(0, delta.days(), delta.micros() * 1_000L);
   }
 
   /**
-   * An interval as the reference's driver reads it, a {@code timedelta} with a month counted as
-   * 30 days and a year as 365 (psycopg's), then as Arrow's {@code MonthDayNano} of that
-   * timedelta: no months, its days, and its seconds and microseconds as nanoseconds, the days
-   * taking the sign as a timedelta normalizes.
+   * A JSON value as the reference's provider hands it over, the core's text of it ({@link
+   * NativeCore#jsonText}), a JSON null null.
    */
-  private static Object interval(ResultSet rows, int at) throws SQLException {
-    String text = rows.getString(at);
-    if (text == null) {
-      return null;
+  private static Object jsonText(String text) throws SQLException {
+    try {
+      return NativeCore.jsonText(text);
+    } catch (IllegalArgumentException e) {
+      throw PostgresText.refused("a JSON value that is not JSON");
     }
-    long micros = PostgresText.intervalMicros(text);
-    long days = Math.floorDiv(micros, 86_400_000_000L);
-    long rest = Math.floorMod(micros, 86_400_000_000L);
-    return new ArrowColumns.MonthDayNano(0, Math.toIntExact(days), rest * 1_000L);
-  }
-
-  /** A JSON value as the JSON text of the value the reference's driver read. */
-  private static Object jsonText(ResultSet rows, int at) throws SQLException {
-    String text = rows.getString(at);
-    return text == null ? null : PythonText.json(text);
   }
 
   /**
@@ -391,32 +561,30 @@ public final class ConversionTable {
           precision <= 0 || scale < 0
               ? Map.of(EXACT_NUMBER_MARKER, "true")
               : Map.of(DECLARED_SCALE_MARKER, Integer.toString(scale));
-      return tagged(ArrowColumns.UTF8, marked, ConversionTable::numericText);
+      return tagged(ArrowColumns.UTF8, marked, texts(ConversionTable::numericText));
     }
     return plain(
         ArrowColumns.decimal(precision, scale),
-        (r, i) -> {
-          String text = r.getString(i);
-          return text == null || "NaN".equals(text) ? null : new BigDecimal(text);
-        });
+        texts(text -> "NaN".equals(text) ? null : new BigDecimal(text)));
   }
 
   /** A numeric's exact text, as Python's {@code str} of the driver's {@code Decimal} writes it. */
-  private static Object numericText(ResultSet rows, int at) throws SQLException {
-    String text = rows.getString(at);
-    if (text == null) {
-      return null;
-    }
+  private static Object numericText(String text) {
     return switch (text) {
       case "NaN", "Infinity", "-Infinity" -> text;
-      default -> new BigDecimal(text).toString();
+      default -> pyDecimal(text);
     };
   }
 
   /**
-   * An array column ({@code _<element>}): a list of its element's type, each element read as the
-   * Python provider reads one ({@code _element_type}, {@code _cell}), a multi-dimensional array's
-   * in row-major order; a JSON array's elements each the JSON text of its value, marked as JSON.
+   * An array column of a type psycopg's registry names ({@code element}): a list of its element's
+   * type, each element read as the Python provider reads one ({@code _element_type}, {@code
+   * _cell}), a multi-dimensional array's in row-major order: an element of its {@code
+   * _SCALARS} in that type; a {@code numeric} as a double; a {@code timestamp} and a {@code time}
+   * in theirs; a JSON element as the core's text of it, marked as JSON; any other as Python's
+   * {@code str} of what psycopg read (a {@code timestamptz} in the session's zone as {@code
+   * 2024-01-01 12:00:00+05:30}, an {@code interval} as {@code 1 day, 2:00:00}, a {@code timetz}
+   * as {@code 12:00:00+02:00}, a range as {@code [1, 5)}).
    */
   private static Column array(String element) {
     Field item;
@@ -424,51 +592,81 @@ public final class ConversionTable {
     switch (element) {
       case "json", "jsonb" -> {
         item = ArrowColumns.field("item", ArrowColumns.UTF8, JSON_TAG);
-        reading = (value, text) -> PythonText.json(text);
+        reading = (value, text, session) -> jsonText(text);
       }
       case "bool" -> {
         item = ArrowColumns.field("item", ArrowColumns.BOOL, null);
-        reading = (value, text) -> value instanceof Boolean flag ? flag : "t".equals(text);
+        reading = (value, text, session) -> "t".equals(text) || "true".equals(text);
       }
       case "int2" -> {
         item = ArrowColumns.field("item", ArrowColumns.INT16, null);
-        reading = (value, text) -> Short.valueOf(text);
+        reading = (value, text, session) -> Short.valueOf(text);
       }
       case "int4" -> {
         item = ArrowColumns.field("item", ArrowColumns.INT32, null);
-        reading = (value, text) -> Integer.valueOf(text);
+        reading = (value, text, session) -> Integer.valueOf(text);
       }
       case "int8", "oid" -> {
         item = ArrowColumns.field("item", ArrowColumns.INT64, null);
-        reading = (value, text) -> Long.valueOf(text);
+        reading = (value, text, session) -> Long.valueOf(text);
       }
-      case "float4", "float8", "numeric" -> {
+      case "float4" -> {
+        item = ArrowColumns.field("item", ArrowColumns.FLOAT64, null);
+        reading =
+            (value, text, session) ->
+                value instanceof Float single ? shortest(single) : parseDouble(text);
+      }
+      case "float8", "numeric" -> {
         // A numeric element, whose array carries no scale of its own, as a double, as the
         // reference reads one.
         item = ArrowColumns.field("item", ArrowColumns.FLOAT64, null);
-        reading = (value, text) -> parseDouble(text);
+        reading = (value, text, session) -> parseDouble(text);
       }
       case "bytea" -> {
         item = ArrowColumns.field("item", ArrowColumns.BINARY, null);
-        reading = (value, text) -> value instanceof byte[] bytes ? bytes : text.getBytes(
-            java.nio.charset.StandardCharsets.UTF_8);
+        reading =
+            (value, text, session) ->
+                value instanceof byte[] bytes
+                    ? bytes
+                    : text.getBytes(java.nio.charset.StandardCharsets.UTF_8);
       }
       case "date" -> {
         item = ArrowColumns.field("item", ArrowColumns.DATE32, null);
-        reading = (value, text) -> (int) LocalDate.parse(text).toEpochDay();
+        reading = (value, text, session) -> days(text);
       }
       case "timestamp" -> {
         item = ArrowColumns.field("item", ArrowColumns.TIMESTAMP_US, null);
-        reading = (value, text) -> micros(PostgresText.timestamp(text).toInstant(ZoneOffset.UTC));
+        reading =
+            (value, text, session) ->
+                PostgresText.micros(PostgresText.timestamp(text).toInstant(ZoneOffset.UTC));
       }
       case "time" -> {
         item = ArrowColumns.field("item", ArrowColumns.TIME64_US, null);
-        reading = (value, text) -> LocalTime.parse(text).toNanoOfDay() / 1_000L;
+        reading = (value, text, session) -> PostgresText.time(text).toNanoOfDay() / 1_000L;
+      }
+      case "timestamptz" -> {
+        item = ArrowColumns.field("item", ArrowColumns.UTF8, null);
+        reading = (value, text, session) -> pyZoned(text);
+      }
+      case "timetz" -> {
+        item = ArrowColumns.field("item", ArrowColumns.UTF8, null);
+        reading =
+            (value, text, session) -> {
+              PostgresText.ZonedTime read = PostgresText.zonedTime(text);
+              return PostgresText.pyTime(read.time()) + PostgresText.pyOffset(read.offsetSeconds());
+            };
+      }
+      case "interval" -> {
+        item = ArrowColumns.field("item", ArrowColumns.UTF8, null);
+        reading =
+            (value, text, session) ->
+                PostgresText.pyTimedelta(PostgresText.interval(text, session.intervalStyle()));
       }
       default -> {
-        // Any other element as the driver's text of it.
+        // Any other element as Python's str of what psycopg read.
         item = ArrowColumns.field("item", ArrowColumns.UTF8, null);
-        reading = (value, text) -> text;
+        Text written = textOf(element);
+        reading = (value, text, session) -> written.read(text);
       }
     }
     Field elementField = item;
@@ -480,54 +678,62 @@ public final class ConversionTable {
       }
 
       @Override
-      public Object read(ResultSet rows, int at) throws SQLException {
+      public Object read(ResultSet rows, int at, Session session) throws SQLException {
         Array array = rows.getArray(at);
         if (array == null) {
           return null;
         }
         List<Object> out = new ArrayList<>();
-        collect(array, out, read);
+        collect(array, out, read, session);
         return out;
       }
     };
   }
 
-  /** One element's reading, from the driver's object and its text of it. */
+  /** One element's reading, from the driver's object and the server's text of it. */
   @FunctionalInterface
   private interface ElementReading {
-    Object read(Object value, String text);
+    Object read(Object value, String text, Session session) throws SQLException;
   }
 
   /** {@code array}'s elements, a nested array's in row-major order, each read. */
-  private static void collect(Array array, List<Object> out, ElementReading read)
+  private static void collect(Array array, List<Object> out, ElementReading read, Session session)
       throws SQLException {
     try (ResultSet elements = array.getResultSet()) {
       while (elements.next()) {
         Object value = elements.getObject(2);
         if (value instanceof Array nested) {
-          collect(nested, out, read);
+          collect(nested, out, read, session);
           continue;
         }
         String text = elements.getString(2);
-        out.add(value == null ? null : read.read(value, text));
+        out.add(value == null ? null : read.read(value, text, session));
       }
     } finally {
       array.free();
     }
   }
 
-  /** The Postgres type names of a result's columns, and their precision and scale. */
-  public static List<Object[]> described(ResultSetMetaData meta) throws SQLException {
-    List<Object[]> columns = new ArrayList<>();
+  /** A result's column as the driver describes it: its type's OID, precision and scale. */
+  public record Described(int oid, int precision, int scale) {}
+
+  /**
+   * The columns of a Postgres result: each type's OID, as the driver names the type (its name
+   * read back to the OID the server sent), and its precision and scale.
+   */
+  public static List<Described> described(java.sql.Connection connection, ResultSetMetaData meta)
+      throws SQLException {
+    List<Described> columns = new ArrayList<>();
     for (int at = 1; at <= meta.getColumnCount(); at++) {
       int scale = meta.getScale(at);
       // pgjdbc reads a negative scale's 11-bit field as unsigned (numeric(5, -2): 2046).
       if (scale > 1000) {
         scale = ((scale + 1024) & 2047) - 1024;
       }
-      columns.add(new Object[] {meta.getColumnTypeName(at), meta.getPrecision(at), scale});
+      columns.add(
+          new Described(
+              PgSession.oid(connection, meta.getColumnTypeName(at)), meta.getPrecision(at), scale));
     }
     return columns;
   }
-
 }

@@ -2751,15 +2751,17 @@ jobs:
           name: native-wheel-test-ops
           path: native-test-ops
       - if: matrix.database == 'postgres' && matrix.platform == 'linux-x86_64'
-        name: L5 for Java, on the service
+        name: L5 for Java and the drivers' parity with Python's, on the service
         env:
           SDM_REQUIRE_POSTGRES: '1'
-          SDM_JAVA_JAR: jar/structured-data-models-client-1.0.0.jar
+          SDM_REQUIRE_JAVA: '1'
+          # Absolute: the step runs pytest from the package's directory.
+          SDM_JAVA_JAR: ${{ github.workspace }}/jar/structured-data-models-client-1.0.0.jar
         run: |
           python -m venv --system-site-packages "$RUNNER_TEMP/kit"
           "$RUNNER_TEMP/kit/bin/pip" install --quiet --no-deps --ignore-installed "$(ls native-test-ops/*.whl)"
           cd packages/structured-data-models-client
-          "$RUNNER_TEMP/kit/bin/python" -m pytest -q -p no:cacheprovider tests_test_ops/test_l5_java.py
+          "$RUNNER_TEMP/kit/bin/python" -m pytest -q -p no:cacheprovider tests_test_ops/test_l5_java.py tests_test_ops/test_t312_driver_parity.py
       - if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
