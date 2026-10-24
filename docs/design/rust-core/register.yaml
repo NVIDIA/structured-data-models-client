@@ -7776,10 +7776,13 @@ entries:
     materialize's and predict's sampler and request notices.
   cases: [T3.8]
   refs: [E41, E59, KO3-41, KO3-47]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T310-OWNER-2026-10-24-PYTHON-DIFFERENCES-1}
   notes: >-
+    Owner approved item 12 on 2026-10-24: "Approved", for bracketed warning
+    codes, reading a column added by hand, and Postgres current_schema once
+    per run.
     Proposed by T3.8's implementer on the orchestrator's decision
     (2026-10-22) to keep the prefix: Phase 2's flip dry run counted it as a
     failure in the client tests that compare the two routes' warnings, which
@@ -7841,10 +7844,13 @@ entries:
     the source gained after it was described.
   cases: [T3.16]
   refs: [T3.16, P1B-3]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T310-OWNER-2026-10-24-PYTHON-DIFFERENCES-1}
   notes: >-
+    Owner approved item 12 on 2026-10-24: "Approved", for bracketed warning
+    codes, reading a column added by hand, and Postgres current_schema once
+    per run.
     Measured by T3.16's implementer (DuckDB: the users table altered to add
     a column after describing, the column added to the schema and its
     meaning set: the old route's request holds four users columns, the
@@ -7898,10 +7904,13 @@ entries:
     request state, sampler state or option value, and num_hops=None.
   cases: [T3.17]
   refs: [T3.17, E66, P1B-2, P1B-3, P1B-4, P1B-11, P1B-47, P1B-51, HOST-2, RS-7, DT-11, DT-12]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T310-OWNER-2026-10-24-CLEARER-ERRORS-1}
   notes: >-
+    Owner approved item 11 on 2026-10-24: "Approved", for these named
+    diagnostic improvements, not new refusals of previously supported
+    inputs.
     Code, class and the details callers branch on are unchanged, but for
     fields added to name what the new sentences say: table and characters
     (a table's name), source (an empty table), table (a table named twice,
@@ -7935,10 +7944,13 @@ entries:
     path names no schema that exists.
   cases: [T3.7]
   refs: [T3.7, P3A-1, 'old-behaviour/T3.7-lakebase.md row 17']
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T310-OWNER-2026-10-24-CLEARER-ERRORS-1}
   notes: >-
+    Owner approved item 11 on 2026-10-24: "Approved", for these named
+    diagnostic improvements, not new refusals of previously supported
+    inputs.
     Approver: owner. Measured on Postgres 17 (search_path set to a schema
     that does not exist) by test_t37_lakebase_is_postgres.py, both routes:
     the words are equal, the class and code differ. Recommendation: approve;
@@ -7970,10 +7982,13 @@ entries:
     core route.
   cases: [T3.7]
   refs: [T3.7, P2C-1, P2C-2, P3A-1, KO2-58, KO2-63]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T310-OWNER-2026-10-24-PYTHON-DIFFERENCES-1}
   notes: >-
+    Owner approved item 12 on 2026-10-24: "Approved", for bracketed warning
+    codes, reading a column added by hand, and Postgres current_schema once
+    per run.
     Approver: owner. Proposes closing P2C-1 as no longer a difference and
     narrowing P2C-2 to the row counts the reference reads at materialize;
     both are owner-approved, so neither is edited here. Held by
@@ -8950,10 +8965,13 @@ entries:
     a type _to_dtype reads as unsupported, under a forced core route.
   cases: [T3.4]
   refs: [T3.4, P1B-10, E66]
-  status: proposed
-  approved_by: null
-  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E66}
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T310-OWNER-2026-10-24-CLEARER-ERRORS-1}
   notes: >-
+    Owner approved item 11 on 2026-10-24: "Approved", for these named
+    diagnostic improvements, not new refusals of previously supported
+    inputs.
     Its case, databricks.value.struct-feature, lands with C-1's Databricks
     recording (rust-core-phase-3-topic-T3.4-cases); T3.4's tests hold the
     refusal meanwhile (t34_declared_types.rs).
@@ -9027,10 +9045,13 @@ entries:
     a value that is not text.
   cases: [wording.key-number, wording.time-number]
   refs: [T3.12, KO3-41]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T310-OWNER-2026-10-24-JAVA-NAMES-1}
   notes: >-
+    Owner approved item 13, JV-1 through JV-3, on 2026-10-24: "Approved".
+    JV-1 covers compile-time rejection of non-text key/time-column names,
+    not Databricks value conversions.
     Approver: owner. Proposed by T3.12's implementer: a better error (at
     compile time) in the owner's sense of KO3-41, and no input the Java API
     takes is refused that the reference accepts.
@@ -9055,10 +9076,13 @@ entries:
     table column cannot be of this type.
   cases: []
   refs: [T3.12, packages/structured-data-models-client/tests_test_ops/test_t312_driver_parity.py]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T310-OWNER-2026-10-24-JAVA-RECORDS-1}
   notes: >-
+    Owner approved item 13, JV-1 through JV-3, on 2026-10-24: "Approved".
+    JV-2 covers anonymous Postgres records or their arrays, not user-defined
+    composite types or Databricks value conversions.
     Approver: owner. Proposed by T3.12's implementer (fix round 1): Python's
     repr of a string depends on Unicode's printable classes, which differ
     between Python's and the JVM's Unicode versions, so a Java copy could
@@ -9086,10 +9110,13 @@ entries:
     A Postgres json or jsonb value nested more than 2,000 levels deep.
   cases: []
   refs: [T3.12, packages/structured-data-models-client/tests_test_ops/test_t312_driver_parity.py]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T310-OWNER-2026-10-24-JAVA-DEEP-JSON-1}
   notes: >-
+    Owner approved item 13, JV-1 through JV-3, on 2026-10-24: "Approved".
+    JV-3 covers provider text beyond 2,000 Postgres JSON levels with the
+    same public refusal, not Databricks value conversions.
     Approver: owner. Proposed by T3.12's implementer (fix rounds 1 and 2,
     Codex P1-4: the JSON rule is the core's alone). The driver parity test
     holds the difference at 2,100 levels, and holds 920 and 1,500 levels
@@ -9171,10 +9198,14 @@ entries:
     each table's catalog, keys and preview as well as its rows.
   cases: [T3.4]
   refs: [T3.4, P3E-4, P3A-2, P3A-3, P3A-4, P3A-5, sdm-testkit/src/plan_b.rs, scripts/rust_core/compare.py]
-  status: proposed
-  approved_by: null
-  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: KO3-59}
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T310-OWNER-2026-10-24-PLAN-B-1}
   notes: >-
+    Owner approved item 10 on 2026-10-24: "Approved", for P3A-1 through
+    P3A-5 as presented: re-reading table location and shape at each
+    materialize. This does not authorize incorrect stale sampler bounds or
+    counts.
     Approver: owner. Decision: the owner's answers of 2026-10-24, "warehouse
     table shape: B" ("Ok, I'm convinced. Let's plan B.") (decisions.md KO3-59). Held by
     test_databricks_from_source.py (the _KEPT expectations: the old route
@@ -9214,10 +9245,14 @@ entries:
     run reads it.
   cases: [T3.4]
   refs: [T3.4, P3A-1]
-  status: proposed
-  approved_by: null
-  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: KO3-60}
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T310-OWNER-2026-10-24-PLAN-B-1}
   notes: >-
+    Owner approved item 10 on 2026-10-24: "Approved", for P3A-1 through
+    P3A-5 as presented: re-reading table location and shape at each
+    materialize. This does not authorize incorrect stale sampler bounds or
+    counts.
     Approver: owner. Decision: the owner's answers of 2026-10-24, item 1
     ("1. Sure": a named error, not silently dropped) (decisions.md). Held by test_databricks_from_source.py and
     test_t316_the_schema_as_plain_data.py.
@@ -9244,10 +9279,14 @@ entries:
     source since, to a type of another kind.
   cases: [T3.4]
   refs: [T3.4, P3A-1]
-  status: proposed
-  approved_by: null
-  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: KO3-61}
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T310-OWNER-2026-10-24-PLAN-B-1}
   notes: >-
+    Owner approved item 10 on 2026-10-24: "Approved", for P3A-1 through
+    P3A-5 as presented: re-reading table location and shape at each
+    materialize. This does not authorize incorrect stale sampler bounds or
+    counts.
     Approver: owner. Decision: the owner's answers of 2026-10-24, item 3
     ("3. Sure": a named error) (decisions.md). Held by
     test_t316_the_schema_as_it_stands.py and
@@ -9271,10 +9310,14 @@ entries:
     whose tables or session changed in between.
   cases: [T3.4]
   refs: [T3.4, P3A-1]
-  status: proposed
-  approved_by: null
-  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: KO3-62}
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T310-OWNER-2026-10-24-PLAN-B-1}
   notes: >-
+    Owner approved item 10 on 2026-10-24: "Approved", for P3A-1 through
+    P3A-5 as presented: re-reading table location and shape at each
+    materialize. This does not authorize incorrect stale sampler bounds or
+    counts.
     Approver: owner. Decision: the owner's answers of 2026-10-24, item 6
     ("6. Hmm ok": register and confirm) (decisions.md).
 - id: P3A-5
@@ -9303,10 +9346,14 @@ entries:
     kind, in between.
   cases: [T3.4, T3.6]
   refs: [T3.4, P3A-1, P3A-4, E52]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T310-OWNER-2026-10-24-PLAN-B-1}
   notes: >-
+    Owner approved item 10 on 2026-10-24: "Approved", for P3A-1 through
+    P3A-5 as presented: re-reading table location and shape at each
+    materialize. This does not authorize incorrect stale sampler bounds or
+    counts.
     Approver: owner. Found by T3.4's round 15 reviews (Codex P2-1, Claude
     P2-2), rare (a successful run, then a change of the source or its
     session, then the same query object again); registered as found, not
@@ -9350,10 +9397,17 @@ entries:
     JSON for the split to differ.
   cases: [T3.28]
   refs: [T3.28, P2C-3, P3K-2]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T310-OWNER-2026-10-24-KEY-SPELLING-1}
   notes: >-
+    Owner approved item 14 on 2026-10-24: "Approved.", limited to
+    answer-neutral key spelling and chunk boundaries. Source inspection still finds
+    numeric spelling and UTC zoned-key formatting in pg_values::key_json,
+    but does not verify every public path. Verify the stated scope and
+    retire any part restored to parity; this is an implementation-evidence
+    task, not a new owner question. Exact-decimal answer changes remain
+    under P2C-3.
     Approver: owner. Reviewed in T3.28 rounds 1 and 2 (Codex, Claude): the
     reference's own _coerce_id and Postgres casts show each spelling reads
     as the same value. A decimal key past a double's digits stays exact, as
@@ -10115,10 +10169,15 @@ entries:
     Every materialize of a schema described from a semantic model.
   cases: []
   refs: [T3.5]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T310-OWNER-2026-10-24-VIEW-REFRESH-1}
   notes: >-
+    Owner approved current semantic expressions and filters at the next
+    materialize on 2026-10-24: "As long as they're correct, sure." Normal
+    complete conversion validation and named refusals for incompatible held
+    tables or columns remain required. No validation bypass or incompatible
+    model input is approved.
     Approver: owner. The owner's plan B as design S5 applies it to views;
     held by sdm-core/tests/view_captures.rs.
 

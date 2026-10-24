@@ -136,7 +136,7 @@ Private names in the owner's words are replaced by a bracketed description; the 
 
 Source: the owner's answers on 2026-10-24 to the orchestrator's question on how a schema reused across materialize calls reads a warehouse table that changed (A, keep what the first read found, as the old client does; or B, read each table as it stands at every run), and the items listed with it.
 These rows record the owner's decisions, which the owner made on 2026-10-24.
-The register's entries P3A-1 to P3A-5, the differences from the old client those decisions lead to, name these rows and stay proposed until the owner approves each entry.
+The register's entries P3A-1 to P3A-5 name these original decisions; the later item-10 approval below closes their proposed metadata within the scope presented to the owner.
 
 | # | Decision | Owner's words | Status |
 |---|---|---|---|
@@ -186,3 +186,21 @@ The owner subsequently confirmed the missing-anchor behavior already approved by
 | T310-DEFAULTS | Covered S0/S1/S2 entrypoints default to the core together; an explicit private routing selection preserves legacy comparison controls and invalid selections still fail | KO3-36; owner-approved switch, implemented without a new user setting | implementation of approved owner policy |
 | T310-LEGACY-TESTS | Existing old-route comparisons explicitly select legacy code; the engine package alone keeps its internal suite on the old route until Phase 5 | KO3-37 | implementation of approved owner policy |
 | T310-S2-INVENTORY | Append the 77 landed S2 acceptance IDs to half 3a, preserving the 309 existing IDs and every check | Locked-set design: the S2 list joins once in T3.10 | implementation of approved inventory extension |
+
+## Remaining continuation approvals (2026-10-24)
+
+Source: the owner's direct answers preserved in `$SDM_ORCH_STATE/phase-3/owner-answers-2026-10-24-codex.md`.
+Items 10 through 14 answer Claude's main-session list of 2026-10-24 at 16:32:32 UTC.
+These rows close approval bookkeeping for the proposals actually presented, without changing behavior, captured expectations or comparison rules.
+The view-refresh row records the later direct answer and its correctness condition.
+
+| # | Decision and presented context | Owner's words | Status |
+|---|---|---|---|
+| T310-OWNER-2026-10-24-PLAN-B-1 | Item 10, "Your plan-B choice (P3A-1 to 5)": re-read each table's location and shape at every materialize rather than remember it. Approve those presented consequences, including named missing-column/type errors and repeated-query refresh; this is no permission to preserve incorrect stale sampler bounds or counts. | "Approved" | approved by owner 2026-10-24 |
+| T310-OWNER-2026-10-24-CLEARER-ERRORS-1 | Item 11, "Clearer errors": P3E-5, P3E-6 and P3B-1 give named errors where the old client crashed or gave a vague error. This row covers only these three entries; view and Snowflake entries retain their own decisions. It grants no new refusal of a previously supported input. | "Approved" | approved by owner 2026-10-24 |
+| T310-OWNER-2026-10-24-PYTHON-DIFFERENCES-1 | Item 12, "Small Python-side differences (P3E-2, P3E-4, P3E-7)": warning codes in brackets, reading a column added by hand, and Postgres reading its current schema once per run. | "Approved" | approved by owner 2026-10-24 |
+| T310-OWNER-2026-10-24-JAVA-NAMES-1 | Item 13, JV-1: Java's typed API rejects non-text key/time-column names at compile time rather than Python's runtime error. | "JV-1 to 3: Approved" | approved by owner 2026-10-24 |
+| T310-OWNER-2026-10-24-JAVA-RECORDS-1 | Item 13, JV-2: Java refuses anonymous Postgres record OID 2249 or its array by name rather than passing Python tuple text; the core writes no such statement and user-defined composite types are unchanged. | "JV-1 to 3: Approved" | approved by owner 2026-10-24 |
+| T310-OWNER-2026-10-24-JAVA-DEEP-JSON-1 | Item 13, JV-3: Java passes server text beyond 2,000 Postgres JSON levels and the core refuses it on both hosts, preserving the public outcome. JV-1 through JV-3 grant no approval to Databricks dtype conversions. | "JV-1 to 3: Approved" | approved by owner 2026-10-24 |
+| T310-OWNER-2026-10-24-KEY-SPELLING-1 | Item 14, "Key-list spelling (P3K-1)": a few key kinds have different text but the database reads the same values. Approval is limited to the stated answer-neutral spelling and chunk-boundary difference, excluding exact-decimal answer changes already covered by P2C-3. Retire any obsolete part after implementation verification; this row supplies no new execution evidence. | "Approved." | approved by owner 2026-10-24 |
+| T310-OWNER-2026-10-24-VIEW-REFRESH-1 | Later question 1, P3J-14: adopt current semantic expressions and filters at the next materialize with normal complete conversion validation and named refusals when held tables or columns are incompatible. Validation bypass and incompatible model inputs are not approved. | "As long as they're correct, sure." | approved by owner 2026-10-24 |
