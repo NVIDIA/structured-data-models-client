@@ -258,9 +258,15 @@ def test_empty_primitive_dangling_buffer_remains_admissible() -> None:
     array = pa.Array.from_buffers(
         pa.int64(), 0, [None, pa.foreign_buffer(1, 0)]
     )
-    run, stream = _echoed(pa.table({'a': array}))
-    assert _imported(stream).num_rows == 0
-    del run
+    batch = pa.record_batch([array], names=['a'])
+    # Tables may omit empty batches entirely. An explicit reader makes the
+    # native preflight see this batch and its zero-byte data buffer.
+    reader = pa.RecordBatchReader.from_batches(batch.schema, [batch])
+    run = _native.Run.start(*messages.fetch({'expect': 'discover'}, echo=True))
+    run.next()
+    run.reply(messages.fetch_reply(), {1: reader})
+    assert messages.read(run.next()[0])['result']['rows'] == 0
+    assert _imported(run.take_attachment(1)).num_rows == 0
 
 
 def test_the_run_holds_the_producer_s_memory_and_releases_it_exactly() -> None:

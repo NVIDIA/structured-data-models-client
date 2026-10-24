@@ -119,6 +119,12 @@ EXPECTED: dict[str, tuple[str, ...]] = {
     'test_arrow_lifetimes.py': (
         'test_the_canonical_set_is_every_type_of_the_closed_set',
         'test_canonical_inputs_cross_sharing_their_buffers',
+        'test_unaligned_buffers_are_refused_by_name_before_typed_import[primitive]',
+        'test_unaligned_buffers_are_refused_by_name_before_typed_import[utf8-offsets]',
+        'test_unaligned_buffers_are_refused_by_name_before_typed_import[nested]',
+        'test_unaligned_buffers_are_refused_by_name_before_typed_import[dictionary-values]',
+        'test_unaligned_buffers_are_refused_by_name_before_typed_import[dictionary-indices]',
+        'test_empty_primitive_dangling_buffer_remains_admissible',
         'test_the_run_holds_the_producer_s_memory_and_releases_it_exactly',
         'test_an_output_stays_valid_after_its_input_its_run_s_error_and_its_run',
         'test_admitted_types_match_the_expected_canonical_schema',
