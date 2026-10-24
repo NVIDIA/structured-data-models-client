@@ -2368,8 +2368,21 @@ class _Captured:
             return derived
         return self._same(answer)
 
+    def _fetch(self, method: str, *arguments: Any, **keywords: Any) -> Any:
+        # Execution can succeed while fetching fails (Databricks' FK
+        # catalog reads). Preserve that failure before the client catches
+        # it, just as execute preserves an execution failure.
+        try:
+            return getattr(self._driver, method)(*arguments, **keywords)
+        except BaseException as error:
+            if self._statement is None:
+                self._log.incomplete.append(f'{method}:no_statement')
+            else:
+                self._statement['error'] = type(error).__name__
+            raise
+
     def _read(self, method: str, *arguments: Any, **keywords: Any) -> Any:
-        answer = getattr(self._driver, method)(*arguments, **keywords)
+        answer = self._fetch(method, *arguments, **keywords)
         statement = self._statement
         if statement is None:
             self._log.incomplete.append(f'{method}:no_statement')
@@ -3314,7 +3327,7 @@ class _CapturedSnowflake(_CapturedWarehouse):
     def _recorded_read(
         self, name: str, *arguments: Any, **keywords: Any
     ) -> Any:
-        answer = getattr(self._driver, name)(*arguments, **keywords)
+        answer = self._fetch(name, *arguments, **keywords)
         if name == 'fetch_pandas_all':
             import pyarrow as pa
 
