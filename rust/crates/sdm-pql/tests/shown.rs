@@ -11,13 +11,20 @@ use serde_json::Value as Json;
 
 const VECTORS: &str = include_str!("../../../../contract/view-yaml-vectors.json");
 
-/// A recorded value, its typed form, as the text helpers take it.
-fn shown(value: &Json) -> Shown {
+/// A recorded value, its typed form, as the text helpers take it; `open`
+/// the kinds of the collections it is inside (a list `true`).
+fn shown(value: &Json, open: &mut Vec<bool>) -> Shown {
     let inner = &value["v"];
+    let nested = |kind: bool, open: &mut Vec<bool>, items: &dyn Fn(&mut Vec<bool>) -> Shown| {
+        open.push(kind);
+        let shown = items(open);
+        open.pop();
+        shown
+    };
     match value["t"].as_str().unwrap() {
         "null" => Shown::None,
         "bool" => Shown::Bool(inner.as_bool().unwrap()),
-        "int" => Shown::Int(inner.as_str().unwrap().parse().unwrap()),
+        "int" => Shown::Int(inner.as_str().unwrap().to_owned()),
         "float" => Shown::Float(inner.as_str().unwrap().parse().unwrap()),
         "str" => Shown::Text(inner.as_str().unwrap().to_owned()),
         "bytes" => Shown::Bytes(debase64(inner.as_str().unwrap())),
@@ -26,15 +33,46 @@ fn shown(value: &Json) -> Shown {
             Shown::Date { year, month, day }
         }
         "datetime" => datetime(inner.as_str().unwrap()),
-        "list" => Shown::List(inner.as_array().unwrap().iter().map(shown).collect()),
-        "map" => Shown::Dict(
+        "cycle" => {
+            let up = usize::try_from(inner.as_u64().unwrap()).unwrap();
+            Shown::Recursive(open[open.len() - up])
+        }
+        "list" => nested(true, open, &|open| {
+            Shown::List(
+                inner
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|v| shown(v, open))
+                    .collect(),
+            )
+        }),
+        "tuple" => Shown::Tuple(
             inner
                 .as_array()
                 .unwrap()
                 .iter()
-                .map(|pair| (shown(&pair[0]), shown(&pair[1])))
+                .map(|v| shown(v, open))
                 .collect(),
         ),
+        "set" => Shown::Set(
+            inner
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|v| shown(v, open))
+                .collect(),
+        ),
+        "map" => nested(false, open, &|open| {
+            Shown::Dict(
+                inner
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|pair| (shown(&pair[0], open), shown(&pair[1], open)))
+                    .collect(),
+            )
+        }),
         other => panic!("{other}"),
     }
 }
@@ -108,9 +146,11 @@ fn each_value_is_written_as_python_wrote_it() {
     let vectors = document["vectors"].as_array().unwrap();
     let mut wrong = Vec::new();
     let mut held = 0;
-    for vector in vectors.iter().filter(|v| v.get("value").is_some()) {
+    // A value holding a set has no recorded text: a set's order varies by
+    // run in Python.
+    for vector in vectors.iter().filter(|v| v.get("repr").is_some()) {
         held += 1;
-        let value = shown(&vector["value"]);
+        let value = shown(&vector["value"], &mut Vec::new());
         if value.repr() != vector["repr"].as_str().unwrap() {
             wrong.push(format!("repr {} where {}", value.repr(), vector["repr"]));
         }
@@ -120,7 +160,7 @@ fn each_value_is_written_as_python_wrote_it() {
             wrong.push(format!("str {} where {text}", value.text()));
         }
     }
-    assert!(held > 250, "{held} values");
+    assert!(held > 300, "{held} values");
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }
 
@@ -138,4 +178,24 @@ fn a_text_is_quoted_as_python_quotes_it() {
     assert_eq!(text_repr("\u{E000}"), "'\\ue000'");
     assert_eq!(text_repr("$$"), "'$$'");
     assert_eq!(text_repr("'"), "\"'\"");
+}
+
+/// A set, a tuple and a collection inside itself, as Python writes them.
+#[test]
+fn sets_tuples_and_cycles_are_written_as_python_writes_them() {
+    let text = |t: &str| Shown::Text(t.into());
+    assert_eq!(Shown::Set(vec![]).repr(), "set()");
+    assert_eq!(Shown::Set(vec![text("a"), text("b")]).repr(), "{'a', 'b'}");
+    assert_eq!(Shown::Tuple(vec![text("a")]).repr(), "('a',)");
+    assert_eq!(
+        Shown::Tuple(vec![text("a"), Shown::Int("1".into())]).repr(),
+        "('a', 1)"
+    );
+    assert_eq!(Shown::List(vec![Shown::Recursive(true)]).repr(), "[[...]]");
+    assert_eq!(
+        Shown::Dict(vec![(text("k"), Shown::Recursive(false))]).repr(),
+        "{'k': {...}}"
+    );
+    let big = "1".repeat(50);
+    assert_eq!(Shown::Int(big.clone()).text(), big);
 }

@@ -12,9 +12,9 @@
 use sdm_core::view_words;
 use sdm_data::view_expr::metric::{self as data, FilterRefusal, ParameterInput};
 use sdm_data::view_expr::{self, ExprDialect, ViewKind};
-use sdm_schema::view::metric::Parameter as ViewParameter;
+use sdm_schema::view::metric;
 use sdm_schema::view::model::{self, Edge, EdgeFacts, MeasureNote, TimeColumnNote};
-use sdm_schema::view::yaml::{self, Date, Value};
+use sdm_schema::view::yaml::{self, Document, NodeId, Value};
 use serde_json::Value as Json;
 
 const EXPR: &str = include_str!("../../../../contract/view-expr-vectors.json");
@@ -54,46 +54,85 @@ fn each(document: &str, kind: &str, least: usize, check: impl Fn(&Json) -> Optio
     );
 }
 
-/// A recorded value, the typed form the recorder writes, as YAML gives it.
-fn value_of(json: &Json) -> Value {
+/// A recorded value, the typed form the recorder writes, as YAML text
+/// that reads back to it; `None` for one holding itself.
+fn yaml_of(json: &Json) -> Option<String> {
     let inner = &json["v"];
-    match json["t"].as_str().unwrap() {
-        "null" => Value::Null,
-        "bool" => Value::Bool(inner.as_bool().unwrap()),
-        "int" => Value::Int(inner.as_str().unwrap().parse().unwrap()),
-        "float" => Value::Float(inner.as_str().unwrap().parse().unwrap()),
-        "str" => Value::Str(inner.as_str().unwrap().to_owned()),
-        "date" => {
-            let parts: Vec<&str> = inner.as_str().unwrap().split('-').collect();
-            Value::Date(Date {
-                year: parts[0].parse().unwrap(),
-                month: parts[1].parse().unwrap(),
-                day: parts[2].parse().unwrap(),
-            })
-        }
-        "datetime" => {
-            // Only the recorder's probes give one: written with `isoformat`.
-            let text = inner.as_str().unwrap();
-            let loaded = yaml::load(&format!("v: {}", text.replacen('T', " ", 1))).unwrap();
-            match loaded {
-                Value::Map(mut pairs) => match pairs.remove(0).1 {
-                    moment @ Value::Timestamp(_) => moment,
-                    other => panic!("{other:?}"),
-                },
-                other => panic!("{other:?}"),
+    Some(match json["t"].as_str().unwrap() {
+        "null" => "~".into(),
+        "bool" => inner.as_bool().unwrap().to_string(),
+        "int" => inner.as_str().unwrap().to_owned(),
+        "float" => {
+            let x: f64 = inner.as_str().unwrap().parse().unwrap();
+            if x.is_nan() {
+                ".nan".into()
+            } else if x.is_infinite() {
+                if x > 0.0 {
+                    ".inf".into()
+                } else {
+                    "-.inf".into()
+                }
+            } else {
+                let shortest = format!("{x:e}");
+                let (mantissa, exponent) = shortest.split_once('e').unwrap();
+                let mantissa = if mantissa.contains('.') {
+                    mantissa.to_owned()
+                } else {
+                    format!("{mantissa}.0")
+                };
+                let exponent: i32 = exponent.parse().unwrap();
+                format!("{mantissa}e{exponent:+}")
             }
         }
-        "list" => Value::Seq(inner.as_array().unwrap().iter().map(value_of).collect()),
-        "map" => Value::Map(
-            inner
+        "str" => serde_json::to_string(inner.as_str().unwrap()).unwrap(),
+        "bytes" => format!("!!binary \"{}\"", inner.as_str().unwrap()),
+        "date" | "datetime" => inner.as_str().unwrap().to_owned(),
+        "list" => {
+            let items = inner.as_array().unwrap();
+            if !items.is_empty() && items.iter().all(|i| i["t"] == "tuple") {
+                let pairs: Option<Vec<String>> = items
+                    .iter()
+                    .map(|i| {
+                        Some(format!(
+                            "{{{}: {}}}",
+                            yaml_of(&i["v"][0])?,
+                            yaml_of(&i["v"][1])?
+                        ))
+                    })
+                    .collect();
+                format!("!!pairs [{}]", pairs?.join(", "))
+            } else {
+                let items: Option<Vec<String>> = items.iter().map(yaml_of).collect();
+                format!("[{}]", items?.join(", "))
+            }
+        }
+        "set" => {
+            let members: Option<Vec<String>> = inner
                 .as_array()
                 .unwrap()
                 .iter()
-                .map(|pair| (value_of(&pair[0]), value_of(&pair[1])))
-                .collect(),
-        ),
-        other => panic!("{other}"),
-    }
+                .map(|m| Some(format!("{}: ~", yaml_of(m)?)))
+                .collect();
+            format!("!!set {{{}}}", members?.join(", "))
+        }
+        "map" => {
+            let pairs: Option<Vec<String>> = inner
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|pair| Some(format!("{}: {}", yaml_of(&pair[0])?, yaml_of(&pair[1])?)))
+                .collect();
+            format!("{{{}}}", pairs?.join(", "))
+        }
+        _ => return None,
+    })
+}
+
+/// A recorded value, loaded: its document and node.
+fn loaded(json: &Json) -> Option<(Document, NodeId)> {
+    let document = yaml::load(&format!("v: {}", yaml_of(json)?)).unwrap();
+    let node = document.get(document.root(), "v").unwrap();
+    Some((document, node))
 }
 
 #[test]
@@ -104,14 +143,23 @@ fn a_yaml_value_is_quoted_as_the_old_client_quoted_it() {
         let Some(repr) = vector["repr"].as_str() else {
             continue;
         };
-        let value = yaml::load(vector["yaml"].as_str().unwrap()).unwrap();
-        if view_words::value_repr(&value) != repr {
-            wrong.push(format!("{} where {repr}", view_words::value_repr(&value)));
+        let Ok(document) = yaml::load(vector["yaml"].as_str().unwrap()) else {
+            continue; // A registered scanner difference (P3J-6).
+        };
+        let root = document.root();
+        if view_words::value_repr(&document, root) != repr {
+            wrong.push(format!(
+                "{} where {repr}",
+                view_words::value_repr(&document, root)
+            ));
         }
         if let Some(text) = vector["str"].as_str()
-            && view_words::value_text(&value) != text
+            && view_words::value_text(&document, root) != text
         {
-            wrong.push(format!("{} where {text}", view_words::value_text(&value)));
+            wrong.push(format!(
+                "{} where {text}",
+                view_words::value_text(&document, root)
+            ));
         }
     }
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
@@ -204,12 +252,17 @@ fn unsafe_text_and_untrusted_calls_are_worded_by_name() {
 #[test]
 fn a_parameter_is_read_and_worded_as_the_old_client_read_it() {
     each(STEPS, "default_text", 500, |vector| {
-        let default = value_of(&vector["default"]);
+        let (document, default) = loaded(&vector["default"])?;
         let data_type = vector["data_type"].as_str().unwrap();
-        let read = data::default_text(data_type, &view_words::parameter_default(&default));
+        let read = data::default_text(
+            data_type,
+            &view_words::parameter_default(&document, default),
+        );
         let got = match &read {
             Ok(text) => text.clone(),
-            Err(refusal) => view_words::default_refusal_text(refusal, data_type, &default),
+            Err(refusal) => {
+                view_words::default_refusal_text(refusal, data_type, &document, default)
+            }
         };
         let expected = vector["text"]
             .as_str()
@@ -223,51 +276,32 @@ fn a_parameter_is_read_and_worded_as_the_old_client_read_it() {
         })
     });
     each(STEPS, "read_parameters", 10, |vector| {
-        let section = &vector["parameters"];
-        let parameters: Vec<ViewParameter> = if section["t"] == "list" {
-            section["v"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .filter_map(|cfg| match value_of(cfg) {
-                    entry @ Value::Map(_) => {
-                        let name = entry.get("name")?.as_str()?.to_owned();
-                        Some(ViewParameter {
-                            name,
-                            data_type: entry.get("data_type").cloned().unwrap_or(Value::Null),
-                            default: entry.get("default").cloned().unwrap_or(Value::Null),
-                        })
-                    }
-                    _ => None,
-                })
-                .collect()
-        } else {
-            vec![]
-        };
+        let section = yaml_of(&vector["parameters"])?;
+        let spec = metric::parse(&format!("source: c.s.t\nparameters: {section}\n")).unwrap();
         let described: Vec<(String, String)> = vector["types"]
             .as_object()
             .unwrap()
             .iter()
             .map(|(k, v)| (k.clone(), v.as_str().unwrap().to_owned()))
             .collect();
-        let inputs: Vec<ParameterInput> = view_words::parameter_inputs(&parameters);
+        let inputs: Vec<ParameterInput> = view_words::parameter_inputs(&spec);
         let read = data::read_parameters(&inputs, &described);
         let got: serde_json::Map<String, Json> = read
             .iter()
             .map(|(folded, parameter)| {
-                let default = parameters
+                let default = spec
+                    .parameters
                     .iter()
                     .rev()
                     .find(|p| p.name.to_lowercase() == *folded)
-                    .map(|p| &p.default)
-                    .unwrap();
+                    .and_then(|p| p.default);
                 let literal = parameter.read.as_ref().ok().map(|r| r.literal.clone());
                 (
                     folded.clone(),
                     serde_json::json!([
                         parameter.name,
                         literal,
-                        view_words::parameter_text(parameter, default)
+                        view_words::parameter_text(parameter, &spec.document, default)
                     ]),
                 )
             })
@@ -288,15 +322,16 @@ fn a_parameter_is_read_and_worded_as_the_old_client_read_it() {
 fn a_filter_and_a_measure_are_refused_in_the_old_client_s_words() {
     each(STEPS, "check_filter", 50, |vector| {
         let error = vector.get("error")?;
-        let filter = value_of(&vector["filter"]);
+        let (document, filter) = loaded(&vector["filter"])?;
         let candidates: Vec<(Vec<String>, String)> = vector["candidates"]
             .as_array()
             .unwrap()
             .iter()
             .map(|pair| (texts(&pair[0]), pair[1].as_str().unwrap().to_owned()))
             .collect();
-        let refusal: FilterRefusal = data::check_filter(filter.as_str(), &candidates).unwrap_err();
-        let text = view_words::filter_refusal_text(&filter, &refusal);
+        let refusal: FilterRefusal =
+            data::check_filter(document.text(filter), &candidates).unwrap_err();
+        let text = view_words::filter_refusal_text(&document, filter, &refusal);
         (text != error["message"].as_str().unwrap())
             .then(|| format!("{text} where {}", error["message"]))
     });
@@ -305,15 +340,18 @@ fn a_filter_and_a_measure_are_refused_in_the_old_client_s_words() {
         if messages.is_empty() {
             return None;
         }
-        let section = value_of(&vector["measures"]);
-        let measures: Vec<data::MeasureInput> = match &section {
+        let (document, section) = loaded(&vector["measures"])?;
+        let measures: Vec<data::MeasureInput> = match document.value(section) {
             Value::Seq(items) => items
                 .iter()
-                .filter_map(|cfg| {
+                .filter_map(|&cfg| {
                     Some(data::MeasureInput {
-                        name: cfg.get("name")?.as_str()?.to_owned(),
-                        expr: cfg.get("expr").and_then(Value::as_str).map(str::to_owned),
-                        window: cfg.get("window").is_some(),
+                        name: document.text(document.get(cfg, "name")?)?.to_owned(),
+                        expr: document
+                            .get(cfg, "expr")
+                            .and_then(|e| document.text(e))
+                            .map(str::to_owned),
+                        window: document.has(cfg, "window"),
                     })
                 })
                 .collect(),
@@ -365,12 +403,11 @@ fn the_graph_s_steps_are_worded_as_the_old_client_worded_them() {
             count["distinct"].as_u64(),
             count["repeats"].as_u64().unwrap(),
         )?;
-        let example = (!count["example"].is_null()).then(|| value_of(&count["example"]));
         let text = view_words::key_reason_text(
             &reason,
             vector["table"].as_str().unwrap(),
             vector["key"].as_str().unwrap(),
-            example.as_ref(),
+            count["example_repr"].as_str(),
         );
         (Some(text.as_str()) != vector["reason"].as_str()).then_some(text)
     });
@@ -472,10 +509,31 @@ fn each_edge_reason_and_key_reason_is_worded_by_name() {
             },
             "users",
             "id",
-            Some(&Value::Str("a".into())),
+            Some("'a'"),
         ),
         "its key 'id' is not unique in table 'users': 1,200 of 34,567 rows repeat a value, e.g. \
          'a'. A graph table needs one row per key, so point the join at a table or view with one \
          row per 'id'"
     );
+}
+
+/// The long tokens' refusals (T3.5 fix 1), worded as the old client
+/// worded them.
+#[test]
+fn a_long_token_s_refusal_is_worded_as_the_old_client_worded_it() {
+    each(EXPR, "long_tokens", 15, |vector| {
+        let r = &vector["recipe"];
+        let part = |i: usize| r[i].as_str().unwrap();
+        let called = format!(
+            "{}{}{}",
+            part(0),
+            part(1).repeat(r[4].as_u64().unwrap() as usize),
+            part(3)
+        );
+        let reason =
+            view_expr::untrusted_call_reason(&called, ExprDialect::Databricks, &["x", "y", "z"])
+                .map(|r| view_words::expr_reason(&r));
+        (reason.as_deref() != vector["calls"]["databricks"].as_str())
+            .then(|| format!("{r}: {reason:?}"))
+    });
 }

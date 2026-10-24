@@ -206,14 +206,21 @@ def case_texts(directory: str | None) -> list[tuple[str, str]]:
     return found
 
 
-def value(item: Any) -> Any:
-    r"""``item``, a loaded YAML value, as typed JSON."""
+def value(item: Any, _seen: tuple[int, ...] = ()) -> Any:
+    r"""``item``, a loaded YAML value, as typed JSON. A collection that
+    holds itself, as an alias of its own anchor makes one, is written
+    ``{'t': 'cycle', 'v': n}``, ``n`` the levels up to it; a set's members
+    in the order of their typed forms, since a set's own order varies by
+    run; a tuple (of ``!!omap`` and ``!!pairs``) as ``tuple``.
+    """
+    if id(item) in _seen:
+        return {'t': 'cycle', 'v': len(_seen) - _seen.index(id(item))}
     if item is None:
         return {'t': 'null'}
     if isinstance(item, bool):
         return {'t': 'bool', 'v': item}
     if isinstance(item, int):
-        return {'t': 'int', 'v': str(item)}
+        return {'t': 'int', 'v': _digits(item)}
     if isinstance(item, float):
         return {'t': 'float', 'v': repr(item)}
     if isinstance(item, str):
@@ -224,28 +231,83 @@ def value(item: Any) -> Any:
         return {'t': 'datetime', 'v': item.isoformat()}
     if isinstance(item, datetime.date):
         return {'t': 'date', 'v': item.isoformat()}
+    seen = (*_seen, id(item))
     if isinstance(item, list):
-        return {'t': 'list', 'v': [value(entry) for entry in item]}
+        return {'t': 'list', 'v': [value(entry, seen) for entry in item]}
+    if isinstance(item, tuple):
+        return {'t': 'tuple', 'v': [value(entry, seen) for entry in item]}
     if isinstance(item, dict):
         return {
             't': 'map',
-            'v': [[value(key), value(entry)] for key, entry in item.items()],
+            'v': [
+                [value(key, seen), value(entry, seen)]
+                for key, entry in item.items()
+            ],
         }
     if isinstance(item, set):
-        return {'t': 'set', 'v': sorted(repr(entry) for entry in item)}
+        members = [value(entry, seen) for entry in item]
+        return {
+            't': 'set',
+            'v': sorted(members, key=lambda m: json.dumps(m, sort_keys=True)),
+        }
     raise TypeError(f'no vector form for {type(item).__name__}')
+
+
+def _digits(number: int) -> str:
+    r"""``str(number)`` past Python's 4,300-digit limit on writing one,
+    which only the recorder lifts: PyYAML reads such a number.
+    """
+    limit = sys.get_int_max_str_digits()
+    sys.set_int_max_str_digits(0)
+    try:
+        return str(number)
+    finally:
+        sys.set_int_max_str_digits(limit)
+
+
+def _holds_set(item: Any, seen: tuple[int, ...] = ()) -> bool:
+    if id(item) in seen:
+        return False
+    if isinstance(item, set):
+        return True
+    seen = (*seen, id(item))
+    if isinstance(item, list | tuple):
+        return any(_holds_set(entry, seen) for entry in item)
+    if isinstance(item, dict):
+        return any(
+            _holds_set(k, seen) or _holds_set(v, seen) for k, v in item.items()
+        )
+    return False
+
+
+# A repr longer than this is not written out: its length is.
+_LONGEST_REPR = 20_000
 
 
 def yaml_vector(text: str) -> dict[str, Any]:
     r"""What ``yaml.safe_load`` makes of ``text``: the value, its ``repr``
-    and ``str``, or the error's class.
+    and ``str``, or the error's class. A value holding a set has no
+    ``repr`` or ``str`` here, since a set's order varies by run.
     """
     try:
         loaded = yaml.safe_load(text)
     except Exception as error:  # noqa: BLE001 - every failure is an answer
         return {'yaml': text, 'error': type(error).__name__}
+    vector: dict[str, Any] = {'yaml': text, 'value': value(loaded)}
+    if _holds_set(loaded):
+        vector['unordered'] = True
+        return vector
+    try:
+        shown = repr(loaded)
+    except ValueError:
+        # Python will not write an integer past 4,300 digits.
+        vector['repr_error'] = True
+        return vector
+    if len(shown) > _LONGEST_REPR:
+        vector['repr_length'] = len(shown)
+        return vector
+    vector['repr'] = shown
     finite = not (isinstance(loaded, float) and not math.isfinite(loaded))
-    vector = {'yaml': text, 'value': value(loaded), 'repr': repr(loaded)}
     if finite:
         vector['str'] = str(loaded)
     return vector
@@ -1013,6 +1075,7 @@ def _install() -> None:
     ]
     for module, name, record in wanted:
         original, wrapped = _wrap(module, name, record)
+        _ORIGINALS.setdefault(name, original)
         _PATCHES.append((original, wrapped))
         setattr(module, name, wrapped)
     _sweep()
@@ -1134,10 +1197,187 @@ def _probe_helpers() -> None:
                 pass
 
 
+# The cases T3.5's first review found (fix 1): mapping keys Python takes
+# as one, integers past 128 bits, the safe collection tags, base64 as
+# Python's decoder reads it, aliases of their own anchor, block scalars at
+# the end of the text, tabs, a bare `?`, an anchor named twice, a BOM.
+FIX1_YAML_INPUTS = (
+    '{9007199254740993: a, 9007199254740992.0: b}',
+    '{9007199254740992: a, 9007199254740992.0: b}',
+    '{.nan: a, .nan: b}', '{&n .nan: a, *n: b}',
+    '{!!float nan: a, !!float nan: b}', '{.inf: a, .Inf: b}',
+    '{2024-01-01T01:00:00+01:00: a, 2024-01-01T00:00:00Z: b}',
+    '{2024-01-01 00:00:00: a, 2024-01-01T00:00:00Z: b}',
+    '{2024-01-01: a, 2024-01-01 00:00:00: b}',
+    '{1: a, 1.0: b, true: c}', '{0: a, false: b, -0.0: c, 0.0: d}',
+    '{1.5: a, 1.50: b}', '{"1": a, 1: b}', '{~: a, null: b}',
+    'v: 1000000000000000000000000000000000000000',
+    'v: -1000000000000000000000000000000000000000',
+    'v: 170141183460469231731687303715884105727',
+    'v: 170141183460469231731687303715884105728',
+    'v: -170141183460469231731687303715884105728',
+    'v: -170141183460469231731687303715884105729',
+    'v: 0x' + 'f' * 40, 'v: -0b' + '1' * 200, 'v: 0' + '7' * 60,
+    'v: 99999999999999999999999999999999999999:59:59',
+    'v: ' + '9' * 4300, 'v: ' + '9' * 4301, 'v: 0x' + 'f' * 4400,
+    '{100000000000000000000000000000000000000000: a, 1e+41: b}',
+    'v: !!set {a: null, b: null}', 'v: !!set {}', 'v: !!set {1: null, 1.0: null}',
+    'v: !!omap [{a: 1}, {b: 2}]', 'v: !!pairs [{a: 1}, {a: 2}]',
+    'v: !!omap []', 'v: !!omap {a: 1}', 'v: !!pairs [1]',
+    'v: !!omap [{a: 1, b: 2}]', 'v: !!set [a]',
+    'v: !!binary YQ==Yg==', 'v: !!binary YW=Jj', 'v: !!binary YQ',
+    'v: !!binary Y', 'v: !!binary YQ=', 'v: !!binary "YQ=\\n=Yg"',
+    'v: !!binary ""', 'v: !!binary "Y Q = ="', 'v: !!binary "@@YQ=="',
+    'v: !!binary =YQ', 'v: !!binary aGVsbG8gd29ybGQ',
+    'v: &a [*a]', 'v: &a {k: *a}', 'a: &x [1, *x]', '- &a [*a, *a]',
+    'v: &a {<<: *a}', '&r {k: *r}',
+    'v: |\n  a', 'v: |-\n  a', 'v: |+\n  a', 'v: >\n  a',
+    'v: |\n  a\n  b', 'v: |\n  a\n# c', 'v: |\n  a\n\n',
+    'v: |+\n  a\n\n', '- |\n  a', 'k: >-\n  a\n  b',
+    'v: |\n  a\n  ', 'v: >\n  a\n\n  b',
+    'v: a\tb', 'v: "a\n\tb"', 'v: a \tb', '- ?', '? a',
+    'a: &x 1\nb: &x 2\nc: *x', '\ufeffsource: x', '\ufeff- a',
+)  # fmt: skip
+
+# Metric-view definitions the review gave, each read by the old client's
+# own parse_metric_view: a parameter's default as each value above, a
+# nameless join's children, a dimension list holding itself, and an alias
+# of aliases whose expansion would double eighteen times.
+_DEFAULT_TEMPLATE = (
+    'source: c.s.t\nparameters:\n- name: p\n  data_type: STRING\n'
+    '  default: {value}\ndimensions:\n- name: x\n  expr: p\n'
+)
+FIX1_DEFAULTS = (
+    '1000000000000000000000000000000000000000',
+    '-170141183460469231731687303715884105729',
+    '{9007199254740993: a, 9007199254740992.0: b}',
+    '{.nan: a, .nan: b}',
+    '{2024-01-01T01:00:00+01:00: a, 2024-01-01T00:00:00Z: b}',
+    '!!set {a: null}', '!!omap [{a: 1}]', '!!pairs [{a: 1}]',
+    '!!binary YQ==Yg==', '!!binary YW=Jj', '|\n    a',
+)  # fmt: skip
+
+
+def _bomb() -> str:
+    text = 'source: c.s.t\nmaterialization:\n  a0: &a0 [x]\n'
+    for i in range(1, 19):
+        text += f'  a{i}: &a{i} [*a{i - 1}, *a{i - 1}]\n'
+    return text
+
+
+FIX1_METRIC_VIEWS = (
+    *(_DEFAULT_TEMPLATE.format(value=v) for v in FIX1_DEFAULTS),
+    'source: c.s.t\nmaterialization: !!set {a: null}\n',
+    'source: c.s.t\ndimensions: &a [*a]\n',
+    'source: c.s.t\njoins:\n- name: 1\n  joins: 1\n'
+    'dimensions:\n- name: x\n  expr: source.x\n',
+    'source: c.s.t\njoins:\n- name: 1\n  joins:\n  - name: u\n'
+    '    source: c.s.u\n    on: source.a = u.a\n'
+    'dimensions:\n- name: x\n  expr: source.x\n',
+    _bomb(),
+)  # fmt: skip
+
+# Expressions with each separator Python's `re` reads as white space and
+# Rust's regex engines do not (U+001C to U+001F).
+_SEPARATED = (
+    'WITH{s}x AS (x)', 'x{s}NOT{s}IN{s}(1)', '{s}select{s}1', 'secret{s}(x)',
+    'trim(FROM{s}x)', 'x{s}AND{s}current_user', 'insert{s}(x)',
+    'values{s}+{s}1', '(map{s}x{s}using{s}y)', 'CASE{s}WHEN{s}x{s}THEN{s}1{s}END',
+    'x{s}::{s}int', 'EXTRACT(YEAR{s}FROM{s}d)', 'transform(a,{s}x{s}->{s}x)',
+    'x{s}=={s}1', 'CAST(x{s}AS{s}DECIMAL(10,2))', '`a`{s}(x)', 'with{s}(x)',
+    'NOT{s}escape(x)', 'x{s}IS{s}NOT{s}NULL', 'upper{s}(x)', 'x{s}',
+)  # fmt: skip
+SEPARATORS = ('\x1c', '\x1d', '\x1e', '\x1f')
+
+# Long tokens, each a recipe (prefix, repeated text, count, suffix, and the
+# count the call check is put to), so the vectors hold a megabyte's
+# expression in a few bytes. The old client's call check is quadratic on a
+# long word (its lambda-parameter pattern), so it is put to 20,000 there.
+LONG_TOKENS = (
+    ("'", 'a', 1_000_000, "'", 1_000_000), ('', 'a', 1_000_000, '', 20_000),
+    ('', '1', 100_000, 'a', 20_000), ('insert', ' ', 1_000_000, '(x)', 1_000_000),
+    ('x', ' ', 1_000_000, '', 1_000_000), ('', 'x', 1_200_000, '(', 20_000),
+    ('`', 'a', 1_000_000, '`', 1_000_000), ('"', 'a', 1_000_000, '"', 1_000_000),
+    ('$$', 'a', 1_000_000, '$$', 20_000), ('-- ', 'a', 1_000_000, '', 20_000),
+    ('current_user', ' ', 1_000_000, '', 1_000_000),
+    ('/* ', 'a', 1_000_000, ' */', 20_000), ("r'", 'a', 1_000_000, "'", 1_000_000),
+    ('', '1', 1_000_000, '', 20_000), ('', '1.', 500_000, '', 500_000),
+    ('x + ', 'y + ', 250_000, 'z', 250_000), ('', '(', 1_000, 'x' + ')' * 1_000, 1_000),
+)  # fmt: skip
+
+_ORIGINALS: dict[str, Any] = {}
+
+
+def _probe_fix1() -> None:
+    r"""Puts the cases above to the old client: the separated expressions
+    through the recording wrappers, the long tokens through the originals,
+    their answers written by recipe, and the metric-view definitions
+    through ``parse_metric_view``."""
+    import sdm_relational_engine.rfm.backend.databricks.metric_view as metric
+    import sdm_relational_engine.rfm.graph as graph
+    import sdm_relational_engine.rfm.view_expr as view_expr
+
+    for template in _SEPARATED:
+        for separator in SEPARATORS:
+            expr = template.format(s=separator)
+            for dialect in (None, 'databricks', 'snowflake'):
+                view_expr._unsafe_expr_reason(expr, dialect)
+            for dialect in ('databricks', 'snowflake'):
+                view_expr._untrusted_call_reason(
+                    expr, dialect, columns=('x', 'd', 'a', 'y')
+                )
+                for trust in (False, True):
+                    graph._view_expr_message(
+                        "column 'c'",
+                        expr,
+                        'metric view'
+                        if dialect == 'databricks'
+                        else 'semantic view',
+                        dialect,
+                        trust,
+                        ('x', 'd', 'a', 'y'),
+                    )
+            try:
+                view_expr.name_references(expr)
+            except view_expr.UnreadableExpressionError:
+                pass
+            view_expr.strip_comments(expr)
+    unsafe = _ORIGINALS['_unsafe_expr_reason']
+    calls = _ORIGINALS['_untrusted_call_reason']
+    names = _ORIGINALS['name_references']
+    for prefix, repeated, count, suffix, calls_count in LONG_TOKENS:
+        expr = prefix + repeated * count + suffix
+        called = prefix + repeated * calls_count + suffix
+        try:
+            read = names(expr)
+            names_answer = {'count': len(read), 'error': None}
+        except view_expr.UnreadableExpressionError as error:
+            names_answer = {'count': None, 'error': str(error)}
+        vector = {
+            'recipe': [prefix, repeated, count, suffix, calls_count],
+            'unsafe': {
+                str(dialect): unsafe(expr, dialect)
+                for dialect in (None, 'databricks', 'snowflake')
+            },
+            'calls': {
+                dialect: calls(called, dialect, columns=('x', 'y', 'z'))
+                for dialect in ('databricks', 'snowflake')
+            },
+            'names': names_answer,
+        }
+        RECORDER.add('long_tokens', vector['recipe'], vector)
+    for text in FIX1_METRIC_VIEWS:
+        try:
+            metric.parse_metric_view(text)
+        except Exception:  # noqa: BLE001, S110 - recorded by the wrapper
+            pass
+
+
 def pytest_sessionfinish(session: Any) -> None:
     out = Path(session.config.getoption('--record-out'))
     _probe_words()
     _probe_helpers()
+    _probe_fix1()
     from sdm_relational_engine.rfm.backend.databricks import metric_view
 
     cases = case_texts(session.config.getoption('--record-cases'))
@@ -1169,6 +1409,7 @@ def pytest_sessionfinish(session: Any) -> None:
                     'qualifier_found',
                     'qualifier_stripped',
                     'expr_message',
+                    'long_tokens',
                 )
             },
         },
@@ -1217,9 +1458,13 @@ def pytest_sessionfinish(session: Any) -> None:
         },
     )
     texts = dict.fromkeys(YAML_INPUTS)
+    texts.update(dict.fromkeys(FIX1_YAML_INPUTS))
     texts.update(dict.fromkeys(semantic_texts()))
     texts.update(dict.fromkeys(text for _, text in cases))
     texts.update(RECORDER.yaml_texts)
+    # The alias bomb's value doubles eighteen times: its YAML vector would
+    # be megabytes, and its metric-view vector holds it already.
+    texts.pop(_bomb(), None)
     _write(
         out / 'view-yaml-vectors.json',
         {

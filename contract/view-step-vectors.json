@@ -327,6 +327,17 @@
   {
    "name": {
     "t": "str",
+    "v": "c.s.t"
+   },
+   "parts": [
+    "c",
+    "s",
+    "t"
+   ]
+  },
+  {
+   "name": {
+    "t": "str",
     "v": "`c`.`s`.orders"
    },
    "parts": [
@@ -3415,6 +3426,76 @@
     "source"
    ],
    "found": true
+  },
+  {
+   "expr": "CAST('1000000000000000000000000000000000000000' AS STRING)",
+   "path": [
+    "source"
+   ],
+   "found": false
+  },
+  {
+   "expr": "CAST('-170141183460469231731687303715884105729' AS STRING)",
+   "path": [
+    "source"
+   ],
+   "found": false
+  },
+  {
+   "expr": "CAST('{9007199254740993: \\'a\\', 9007199254740992.0: \\'b\\'}' AS STRING)",
+   "path": [
+    "source"
+   ],
+   "found": false
+  },
+  {
+   "expr": "CAST('{nan: \\'b\\'}' AS STRING)",
+   "path": [
+    "source"
+   ],
+   "found": false
+  },
+  {
+   "expr": "CAST('{datetime.datetime(2024, 1, 1, 1, 0, tzinfo=datetime.timezone(datetime.timedelta(seconds=3600))): \\'b\\'}' AS STRING)",
+   "path": [
+    "source"
+   ],
+   "found": false
+  },
+  {
+   "expr": "CAST('{\\'a\\'}' AS STRING)",
+   "path": [
+    "source"
+   ],
+   "found": false
+  },
+  {
+   "expr": "CAST('[(\\'a\\', 1)]' AS STRING)",
+   "path": [
+    "source"
+   ],
+   "found": false
+  },
+  {
+   "expr": "CAST('b\\'a\\'' AS STRING)",
+   "path": [
+    "source"
+   ],
+   "found": false
+  },
+  {
+   "expr": "CAST('b\\'abc\\'' AS STRING)",
+   "path": [
+    "source"
+   ],
+   "found": false
+  },
+  {
+   "expr": "CAST('a\n' AS STRING)",
+   "path": [
+    "source"
+   ],
+   "found": false
   },
   {
    "expr": "source.order_id",
@@ -11064,6 +11145,168 @@
    }
   },
   {
+   "data_type": "STRING",
+   "default": {
+    "t": "int",
+    "v": "1000000000000000000000000000000000000000"
+   },
+   "default_str": "1000000000000000000000000000000000000000",
+   "default_repr": "1000000000000000000000000000000000000000",
+   "text": "1000000000000000000000000000000000000000"
+  },
+  {
+   "data_type": "STRING",
+   "default": {
+    "t": "int",
+    "v": "-170141183460469231731687303715884105729"
+   },
+   "default_str": "-170141183460469231731687303715884105729",
+   "default_repr": "-170141183460469231731687303715884105729",
+   "text": "-170141183460469231731687303715884105729"
+  },
+  {
+   "data_type": "STRING",
+   "default": {
+    "t": "map",
+    "v": [
+     [
+      {
+       "t": "int",
+       "v": "9007199254740993"
+      },
+      {
+       "t": "str",
+       "v": "a"
+      }
+     ],
+     [
+      {
+       "t": "float",
+       "v": "9007199254740992.0"
+      },
+      {
+       "t": "str",
+       "v": "b"
+      }
+     ]
+    ]
+   },
+   "default_str": "{9007199254740993: 'a', 9007199254740992.0: 'b'}",
+   "default_repr": "{9007199254740993: 'a', 9007199254740992.0: 'b'}",
+   "text": "{9007199254740993: 'a', 9007199254740992.0: 'b'}"
+  },
+  {
+   "data_type": "STRING",
+   "default": {
+    "t": "map",
+    "v": [
+     [
+      {
+       "t": "float",
+       "v": "nan"
+      },
+      {
+       "t": "str",
+       "v": "b"
+      }
+     ]
+    ]
+   },
+   "default_str": "{nan: 'b'}",
+   "default_repr": "{nan: 'b'}",
+   "text": "{nan: 'b'}"
+  },
+  {
+   "data_type": "STRING",
+   "default": {
+    "t": "map",
+    "v": [
+     [
+      {
+       "t": "datetime",
+       "v": "2024-01-01T01:00:00+01:00"
+      },
+      {
+       "t": "str",
+       "v": "b"
+      }
+     ]
+    ]
+   },
+   "default_str": "{datetime.datetime(2024, 1, 1, 1, 0, tzinfo=datetime.timezone(datetime.timedelta(seconds=3600))): 'b'}",
+   "default_repr": "{datetime.datetime(2024, 1, 1, 1, 0, tzinfo=datetime.timezone(datetime.timedelta(seconds=3600))): 'b'}",
+   "text": "{datetime.datetime(2024, 1, 1, 1, 0, tzinfo=datetime.timezone(datetime.timedelta(seconds=3600))): 'b'}"
+  },
+  {
+   "data_type": "STRING",
+   "default": {
+    "t": "set",
+    "v": [
+     {
+      "t": "str",
+      "v": "a"
+     }
+    ]
+   },
+   "default_str": "{'a'}",
+   "default_repr": "{'a'}",
+   "text": "{'a'}"
+  },
+  {
+   "data_type": "STRING",
+   "default": {
+    "t": "list",
+    "v": [
+     {
+      "t": "tuple",
+      "v": [
+       {
+        "t": "str",
+        "v": "a"
+       },
+       {
+        "t": "int",
+        "v": "1"
+       }
+      ]
+     }
+    ]
+   },
+   "default_str": "[('a', 1)]",
+   "default_repr": "[('a', 1)]",
+   "text": "[('a', 1)]"
+  },
+  {
+   "data_type": "STRING",
+   "default": {
+    "t": "bytes",
+    "v": "YQ=="
+   },
+   "default_str": "b'a'",
+   "default_repr": "b'a'",
+   "text": "b'a'"
+  },
+  {
+   "data_type": "STRING",
+   "default": {
+    "t": "bytes",
+    "v": "YWJj"
+   },
+   "default_str": "b'abc'",
+   "default_repr": "b'abc'",
+   "text": "b'abc'"
+  },
+  {
+   "data_type": "STRING",
+   "default": {
+    "t": "str",
+    "v": "a\n"
+   },
+   "default_str": "a\n",
+   "default_repr": "'a\\n'",
+   "text": "a\n"
+  },
+  {
    "data_type": "DOUBLE",
    "default": {
     "t": "int",
@@ -12495,6 +12738,568 @@
         },
         {
          "t": "str",
+         "v": "p"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "data_type"
+        },
+        {
+         "t": "str",
+         "v": "STRING"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "default"
+        },
+        {
+         "t": "int",
+         "v": "1000000000000000000000000000000000000000"
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "types": {},
+   "read": {
+    "p": [
+     "p",
+     "CAST('1000000000000000000000000000000000000000' AS STRING)",
+     "1000000000000000000000000000000000000000"
+    ]
+   }
+  },
+  {
+   "parameters": {
+    "t": "list",
+    "v": [
+     {
+      "t": "map",
+      "v": [
+       [
+        {
+         "t": "str",
+         "v": "name"
+        },
+        {
+         "t": "str",
+         "v": "p"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "data_type"
+        },
+        {
+         "t": "str",
+         "v": "STRING"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "default"
+        },
+        {
+         "t": "int",
+         "v": "-170141183460469231731687303715884105729"
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "types": {},
+   "read": {
+    "p": [
+     "p",
+     "CAST('-170141183460469231731687303715884105729' AS STRING)",
+     "-170141183460469231731687303715884105729"
+    ]
+   }
+  },
+  {
+   "parameters": {
+    "t": "list",
+    "v": [
+     {
+      "t": "map",
+      "v": [
+       [
+        {
+         "t": "str",
+         "v": "name"
+        },
+        {
+         "t": "str",
+         "v": "p"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "data_type"
+        },
+        {
+         "t": "str",
+         "v": "STRING"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "default"
+        },
+        {
+         "t": "map",
+         "v": [
+          [
+           {
+            "t": "int",
+            "v": "9007199254740993"
+           },
+           {
+            "t": "str",
+            "v": "a"
+           }
+          ],
+          [
+           {
+            "t": "float",
+            "v": "9007199254740992.0"
+           },
+           {
+            "t": "str",
+            "v": "b"
+           }
+          ]
+         ]
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "types": {},
+   "read": {
+    "p": [
+     "p",
+     "CAST('{9007199254740993: \\'a\\', 9007199254740992.0: \\'b\\'}' AS STRING)",
+     "{9007199254740993: 'a', 9007199254740992.0: 'b'}"
+    ]
+   }
+  },
+  {
+   "parameters": {
+    "t": "list",
+    "v": [
+     {
+      "t": "map",
+      "v": [
+       [
+        {
+         "t": "str",
+         "v": "name"
+        },
+        {
+         "t": "str",
+         "v": "p"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "data_type"
+        },
+        {
+         "t": "str",
+         "v": "STRING"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "default"
+        },
+        {
+         "t": "map",
+         "v": [
+          [
+           {
+            "t": "float",
+            "v": "nan"
+           },
+           {
+            "t": "str",
+            "v": "b"
+           }
+          ]
+         ]
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "types": {},
+   "read": {
+    "p": [
+     "p",
+     "CAST('{nan: \\'b\\'}' AS STRING)",
+     "{nan: 'b'}"
+    ]
+   }
+  },
+  {
+   "parameters": {
+    "t": "list",
+    "v": [
+     {
+      "t": "map",
+      "v": [
+       [
+        {
+         "t": "str",
+         "v": "name"
+        },
+        {
+         "t": "str",
+         "v": "p"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "data_type"
+        },
+        {
+         "t": "str",
+         "v": "STRING"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "default"
+        },
+        {
+         "t": "map",
+         "v": [
+          [
+           {
+            "t": "datetime",
+            "v": "2024-01-01T01:00:00+01:00"
+           },
+           {
+            "t": "str",
+            "v": "b"
+           }
+          ]
+         ]
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "types": {},
+   "read": {
+    "p": [
+     "p",
+     "CAST('{datetime.datetime(2024, 1, 1, 1, 0, tzinfo=datetime.timezone(datetime.timedelta(seconds=3600))): \\'b\\'}' AS STRING)",
+     "{datetime.datetime(2024, 1, 1, 1, 0, tzinfo=datetime.timezone(datetime.timedelta(seconds=3600))): 'b'}"
+    ]
+   }
+  },
+  {
+   "parameters": {
+    "t": "list",
+    "v": [
+     {
+      "t": "map",
+      "v": [
+       [
+        {
+         "t": "str",
+         "v": "name"
+        },
+        {
+         "t": "str",
+         "v": "p"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "data_type"
+        },
+        {
+         "t": "str",
+         "v": "STRING"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "default"
+        },
+        {
+         "t": "set",
+         "v": [
+          {
+           "t": "str",
+           "v": "a"
+          }
+         ]
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "types": {},
+   "read": {
+    "p": [
+     "p",
+     "CAST('{\\'a\\'}' AS STRING)",
+     "{'a'}"
+    ]
+   }
+  },
+  {
+   "parameters": {
+    "t": "list",
+    "v": [
+     {
+      "t": "map",
+      "v": [
+       [
+        {
+         "t": "str",
+         "v": "name"
+        },
+        {
+         "t": "str",
+         "v": "p"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "data_type"
+        },
+        {
+         "t": "str",
+         "v": "STRING"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "default"
+        },
+        {
+         "t": "list",
+         "v": [
+          {
+           "t": "tuple",
+           "v": [
+            {
+             "t": "str",
+             "v": "a"
+            },
+            {
+             "t": "int",
+             "v": "1"
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "types": {},
+   "read": {
+    "p": [
+     "p",
+     "CAST('[(\\'a\\', 1)]' AS STRING)",
+     "[('a', 1)]"
+    ]
+   }
+  },
+  {
+   "parameters": {
+    "t": "list",
+    "v": [
+     {
+      "t": "map",
+      "v": [
+       [
+        {
+         "t": "str",
+         "v": "name"
+        },
+        {
+         "t": "str",
+         "v": "p"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "data_type"
+        },
+        {
+         "t": "str",
+         "v": "STRING"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "default"
+        },
+        {
+         "t": "bytes",
+         "v": "YQ=="
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "types": {},
+   "read": {
+    "p": [
+     "p",
+     "CAST('b\\'a\\'' AS STRING)",
+     "b'a'"
+    ]
+   }
+  },
+  {
+   "parameters": {
+    "t": "list",
+    "v": [
+     {
+      "t": "map",
+      "v": [
+       [
+        {
+         "t": "str",
+         "v": "name"
+        },
+        {
+         "t": "str",
+         "v": "p"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "data_type"
+        },
+        {
+         "t": "str",
+         "v": "STRING"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "default"
+        },
+        {
+         "t": "bytes",
+         "v": "YWJj"
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "types": {},
+   "read": {
+    "p": [
+     "p",
+     "CAST('b\\'abc\\'' AS STRING)",
+     "b'abc'"
+    ]
+   }
+  },
+  {
+   "parameters": {
+    "t": "list",
+    "v": [
+     {
+      "t": "map",
+      "v": [
+       [
+        {
+         "t": "str",
+         "v": "name"
+        },
+        {
+         "t": "str",
+         "v": "p"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "data_type"
+        },
+        {
+         "t": "str",
+         "v": "STRING"
+        }
+       ],
+       [
+        {
+         "t": "str",
+         "v": "default"
+        },
+        {
+         "t": "str",
+         "v": "a\n"
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "types": {},
+   "read": {
+    "p": [
+     "p",
+     "CAST('a\n' AS STRING)",
+     "a\n"
+    ]
+   }
+  },
+  {
+   "parameters": {
+    "t": "list",
+    "v": [
+     {
+      "t": "map",
+      "v": [
+       [
+        {
+         "t": "str",
+         "v": "name"
+        },
+        {
+         "t": "str",
          "v": "min_price"
         }
        ],
@@ -13739,6 +14544,146 @@
    "parameters": {},
    "out": "source.quantity",
    "used": []
+  },
+  {
+   "expr": "p",
+   "parameters": {
+    "p": [
+     "p",
+     "CAST('1000000000000000000000000000000000000000' AS STRING)",
+     "1000000000000000000000000000000000000000"
+    ]
+   },
+   "out": "CAST('1000000000000000000000000000000000000000' AS STRING)",
+   "used": [
+    "p"
+   ]
+  },
+  {
+   "expr": "p",
+   "parameters": {
+    "p": [
+     "p",
+     "CAST('-170141183460469231731687303715884105729' AS STRING)",
+     "-170141183460469231731687303715884105729"
+    ]
+   },
+   "out": "CAST('-170141183460469231731687303715884105729' AS STRING)",
+   "used": [
+    "p"
+   ]
+  },
+  {
+   "expr": "p",
+   "parameters": {
+    "p": [
+     "p",
+     "CAST('{9007199254740993: \\'a\\', 9007199254740992.0: \\'b\\'}' AS STRING)",
+     "{9007199254740993: 'a', 9007199254740992.0: 'b'}"
+    ]
+   },
+   "out": "CAST('{9007199254740993: \\'a\\', 9007199254740992.0: \\'b\\'}' AS STRING)",
+   "used": [
+    "p"
+   ]
+  },
+  {
+   "expr": "p",
+   "parameters": {
+    "p": [
+     "p",
+     "CAST('{nan: \\'b\\'}' AS STRING)",
+     "{nan: 'b'}"
+    ]
+   },
+   "out": "CAST('{nan: \\'b\\'}' AS STRING)",
+   "used": [
+    "p"
+   ]
+  },
+  {
+   "expr": "p",
+   "parameters": {
+    "p": [
+     "p",
+     "CAST('{datetime.datetime(2024, 1, 1, 1, 0, tzinfo=datetime.timezone(datetime.timedelta(seconds=3600))): \\'b\\'}' AS STRING)",
+     "{datetime.datetime(2024, 1, 1, 1, 0, tzinfo=datetime.timezone(datetime.timedelta(seconds=3600))): 'b'}"
+    ]
+   },
+   "out": "CAST('{datetime.datetime(2024, 1, 1, 1, 0, tzinfo=datetime.timezone(datetime.timedelta(seconds=3600))): \\'b\\'}' AS STRING)",
+   "used": [
+    "p"
+   ]
+  },
+  {
+   "expr": "p",
+   "parameters": {
+    "p": [
+     "p",
+     "CAST('{\\'a\\'}' AS STRING)",
+     "{'a'}"
+    ]
+   },
+   "out": "CAST('{\\'a\\'}' AS STRING)",
+   "used": [
+    "p"
+   ]
+  },
+  {
+   "expr": "p",
+   "parameters": {
+    "p": [
+     "p",
+     "CAST('[(\\'a\\', 1)]' AS STRING)",
+     "[('a', 1)]"
+    ]
+   },
+   "out": "CAST('[(\\'a\\', 1)]' AS STRING)",
+   "used": [
+    "p"
+   ]
+  },
+  {
+   "expr": "p",
+   "parameters": {
+    "p": [
+     "p",
+     "CAST('b\\'a\\'' AS STRING)",
+     "b'a'"
+    ]
+   },
+   "out": "CAST('b\\'a\\'' AS STRING)",
+   "used": [
+    "p"
+   ]
+  },
+  {
+   "expr": "p",
+   "parameters": {
+    "p": [
+     "p",
+     "CAST('b\\'abc\\'' AS STRING)",
+     "b'abc'"
+    ]
+   },
+   "out": "CAST('b\\'abc\\'' AS STRING)",
+   "used": [
+    "p"
+   ]
+  },
+  {
+   "expr": "p",
+   "parameters": {
+    "p": [
+     "p",
+     "CAST('a\n' AS STRING)",
+     "a\n"
+    ]
+   },
+   "out": "CAST('a\n' AS STRING)",
+   "used": [
+    "p"
+   ]
   },
   {
    "expr": "source.order_id",
@@ -15818,6 +16763,116 @@
    "refused": null
   },
   {
+   "expr": "CAST('1000000000000000000000000000000000000000' AS STRING)",
+   "fields": {},
+   "qualifiers": [
+    [
+     "source"
+    ]
+   ],
+   "out": "CAST('1000000000000000000000000000000000000000' AS STRING)",
+   "refused": null
+  },
+  {
+   "expr": "CAST('-170141183460469231731687303715884105729' AS STRING)",
+   "fields": {},
+   "qualifiers": [
+    [
+     "source"
+    ]
+   ],
+   "out": "CAST('-170141183460469231731687303715884105729' AS STRING)",
+   "refused": null
+  },
+  {
+   "expr": "CAST('{9007199254740993: \\'a\\', 9007199254740992.0: \\'b\\'}' AS STRING)",
+   "fields": {},
+   "qualifiers": [
+    [
+     "source"
+    ]
+   ],
+   "out": "CAST('{9007199254740993: \\'a\\', 9007199254740992.0: \\'b\\'}' AS STRING)",
+   "refused": null
+  },
+  {
+   "expr": "CAST('{nan: \\'b\\'}' AS STRING)",
+   "fields": {},
+   "qualifiers": [
+    [
+     "source"
+    ]
+   ],
+   "out": "CAST('{nan: \\'b\\'}' AS STRING)",
+   "refused": null
+  },
+  {
+   "expr": "CAST('{datetime.datetime(2024, 1, 1, 1, 0, tzinfo=datetime.timezone(datetime.timedelta(seconds=3600))): \\'b\\'}' AS STRING)",
+   "fields": {},
+   "qualifiers": [
+    [
+     "source"
+    ]
+   ],
+   "out": "CAST('{datetime.datetime(2024, 1, 1, 1, 0, tzinfo=datetime.timezone(datetime.timedelta(seconds=3600))): \\'b\\'}' AS STRING)",
+   "refused": null
+  },
+  {
+   "expr": "CAST('{\\'a\\'}' AS STRING)",
+   "fields": {},
+   "qualifiers": [
+    [
+     "source"
+    ]
+   ],
+   "out": "CAST('{\\'a\\'}' AS STRING)",
+   "refused": null
+  },
+  {
+   "expr": "CAST('[(\\'a\\', 1)]' AS STRING)",
+   "fields": {},
+   "qualifiers": [
+    [
+     "source"
+    ]
+   ],
+   "out": "CAST('[(\\'a\\', 1)]' AS STRING)",
+   "refused": null
+  },
+  {
+   "expr": "CAST('b\\'a\\'' AS STRING)",
+   "fields": {},
+   "qualifiers": [
+    [
+     "source"
+    ]
+   ],
+   "out": "CAST('b\\'a\\'' AS STRING)",
+   "refused": null
+  },
+  {
+   "expr": "CAST('b\\'abc\\'' AS STRING)",
+   "fields": {},
+   "qualifiers": [
+    [
+     "source"
+    ]
+   ],
+   "out": "CAST('b\\'abc\\'' AS STRING)",
+   "refused": null
+  },
+  {
+   "expr": "CAST('a\n' AS STRING)",
+   "fields": {},
+   "qualifiers": [
+    [
+     "source"
+    ]
+   ],
+   "out": "CAST('a\n' AS STRING)",
+   "refused": null
+  },
+  {
    "expr": "source.order_id",
    "fields": {},
    "qualifiers": [
@@ -16629,6 +17684,46 @@
   },
   {
    "expr": "source.quantity",
+   "star": false
+  },
+  {
+   "expr": "CAST('1000000000000000000000000000000000000000' AS STRING)",
+   "star": false
+  },
+  {
+   "expr": "CAST('-170141183460469231731687303715884105729' AS STRING)",
+   "star": false
+  },
+  {
+   "expr": "CAST('{9007199254740993: \\'a\\', 9007199254740992.0: \\'b\\'}' AS STRING)",
+   "star": false
+  },
+  {
+   "expr": "CAST('{nan: \\'b\\'}' AS STRING)",
+   "star": false
+  },
+  {
+   "expr": "CAST('{datetime.datetime(2024, 1, 1, 1, 0, tzinfo=datetime.timezone(datetime.timedelta(seconds=3600))): \\'b\\'}' AS STRING)",
+   "star": false
+  },
+  {
+   "expr": "CAST('{\\'a\\'}' AS STRING)",
+   "star": false
+  },
+  {
+   "expr": "CAST('[(\\'a\\', 1)]' AS STRING)",
+   "star": false
+  },
+  {
+   "expr": "CAST('b\\'a\\'' AS STRING)",
+   "star": false
+  },
+  {
+   "expr": "CAST('b\\'abc\\'' AS STRING)",
+   "star": false
+  },
+  {
+   "expr": "CAST('a\n' AS STRING)",
    "star": false
   },
   {
@@ -24333,6 +25428,301 @@
    "candidates": [
     [
      [
+      "source"
+     ],
+     "source"
+    ]
+   ],
+   "kept": [],
+   "dimensions": {
+    "x": [
+     "x",
+     "source",
+     "CAST('1000000000000000000000000000000000000000' AS STRING)"
+    ]
+   },
+   "refused": [],
+   "parameters": [
+    "p"
+   ],
+   "read": [],
+   "messages": []
+  },
+  {
+   "measures": {
+    "t": "null"
+   },
+   "candidates": [
+    [
+     [
+      "source"
+     ],
+     "source"
+    ]
+   ],
+   "kept": [],
+   "dimensions": {
+    "x": [
+     "x",
+     "source",
+     "CAST('-170141183460469231731687303715884105729' AS STRING)"
+    ]
+   },
+   "refused": [],
+   "parameters": [
+    "p"
+   ],
+   "read": [],
+   "messages": []
+  },
+  {
+   "measures": {
+    "t": "null"
+   },
+   "candidates": [
+    [
+     [
+      "source"
+     ],
+     "source"
+    ]
+   ],
+   "kept": [],
+   "dimensions": {
+    "x": [
+     "x",
+     "source",
+     "CAST('{9007199254740993: \\'a\\', 9007199254740992.0: \\'b\\'}' AS STRING)"
+    ]
+   },
+   "refused": [],
+   "parameters": [
+    "p"
+   ],
+   "read": [],
+   "messages": []
+  },
+  {
+   "measures": {
+    "t": "null"
+   },
+   "candidates": [
+    [
+     [
+      "source"
+     ],
+     "source"
+    ]
+   ],
+   "kept": [],
+   "dimensions": {
+    "x": [
+     "x",
+     "source",
+     "CAST('{nan: \\'b\\'}' AS STRING)"
+    ]
+   },
+   "refused": [],
+   "parameters": [
+    "p"
+   ],
+   "read": [],
+   "messages": []
+  },
+  {
+   "measures": {
+    "t": "null"
+   },
+   "candidates": [
+    [
+     [
+      "source"
+     ],
+     "source"
+    ]
+   ],
+   "kept": [],
+   "dimensions": {
+    "x": [
+     "x",
+     "source",
+     "CAST('{datetime.datetime(2024, 1, 1, 1, 0, tzinfo=datetime.timezone(datetime.timedelta(seconds=3600))): \\'b\\'}' AS STRING)"
+    ]
+   },
+   "refused": [],
+   "parameters": [
+    "p"
+   ],
+   "read": [],
+   "messages": []
+  },
+  {
+   "measures": {
+    "t": "null"
+   },
+   "candidates": [
+    [
+     [
+      "source"
+     ],
+     "source"
+    ]
+   ],
+   "kept": [],
+   "dimensions": {
+    "x": [
+     "x",
+     "source",
+     "CAST('{\\'a\\'}' AS STRING)"
+    ]
+   },
+   "refused": [],
+   "parameters": [
+    "p"
+   ],
+   "read": [],
+   "messages": []
+  },
+  {
+   "measures": {
+    "t": "null"
+   },
+   "candidates": [
+    [
+     [
+      "source"
+     ],
+     "source"
+    ]
+   ],
+   "kept": [],
+   "dimensions": {
+    "x": [
+     "x",
+     "source",
+     "CAST('[(\\'a\\', 1)]' AS STRING)"
+    ]
+   },
+   "refused": [],
+   "parameters": [
+    "p"
+   ],
+   "read": [],
+   "messages": []
+  },
+  {
+   "measures": {
+    "t": "null"
+   },
+   "candidates": [
+    [
+     [
+      "source"
+     ],
+     "source"
+    ]
+   ],
+   "kept": [],
+   "dimensions": {
+    "x": [
+     "x",
+     "source",
+     "CAST('b\\'a\\'' AS STRING)"
+    ]
+   },
+   "refused": [],
+   "parameters": [
+    "p"
+   ],
+   "read": [],
+   "messages": []
+  },
+  {
+   "measures": {
+    "t": "null"
+   },
+   "candidates": [
+    [
+     [
+      "source"
+     ],
+     "source"
+    ]
+   ],
+   "kept": [],
+   "dimensions": {
+    "x": [
+     "x",
+     "source",
+     "CAST('b\\'abc\\'' AS STRING)"
+    ]
+   },
+   "refused": [],
+   "parameters": [
+    "p"
+   ],
+   "read": [],
+   "messages": []
+  },
+  {
+   "measures": {
+    "t": "null"
+   },
+   "candidates": [
+    [
+     [
+      "source"
+     ],
+     "source"
+    ]
+   ],
+   "kept": [],
+   "dimensions": {
+    "x": [
+     "x",
+     "source",
+     "CAST('a\n' AS STRING)"
+    ]
+   },
+   "refused": [],
+   "parameters": [
+    "p"
+   ],
+   "read": [],
+   "messages": []
+  },
+  {
+   "measures": {
+    "t": "null"
+   },
+   "candidates": [
+    [
+     [
+      "source"
+     ],
+     "source"
+    ]
+   ],
+   "kept": [],
+   "dimensions": {
+    "x": [
+     "x",
+     "source",
+     "x"
+    ]
+   },
+   "refused": [],
+   "parameters": [],
+   "read": [],
+   "messages": []
+  },
+  {
+   "measures": {
+    "t": "null"
+   },
+   "candidates": [
+    [
+     [
       "users"
      ],
      "users"
@@ -25241,8 +26631,8 @@
     "id"
    ],
    "parent_columns": [
-    "dim_id",
-    "amount"
+    "amount",
+    "dim_id"
    ],
    "keys": [
     "source",

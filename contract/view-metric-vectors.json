@@ -6751,6 +6751,469 @@
    }
   },
   {
+   "definition": "source: c.s.t\nparameters:\n- name: p\n  data_type: STRING\n  default: 1000000000000000000000000000000000000000\ndimensions:\n- name: x\n  expr: p\n",
+   "parameter_types": {},
+   "source_columns": null,
+   "spec": {
+    "source": [
+     "c",
+     "s",
+     "t"
+    ],
+    "joins": [],
+    "columns": [
+     {
+      "name": "x",
+      "alias": "source",
+      "expr": "CAST('1000000000000000000000000000000000000000' AS STRING)"
+     }
+    ],
+    "messages": [],
+    "skipped_joins": [],
+    "notes": [
+     [
+      "p",
+      "1000000000000000000000000000000000000000"
+     ]
+    ],
+    "filter": null,
+    "window_orders": [],
+    "measures": []
+   }
+  },
+  {
+   "definition": "source: c.s.t\nparameters:\n- name: p\n  data_type: STRING\n  default: -170141183460469231731687303715884105729\ndimensions:\n- name: x\n  expr: p\n",
+   "parameter_types": {},
+   "source_columns": null,
+   "spec": {
+    "source": [
+     "c",
+     "s",
+     "t"
+    ],
+    "joins": [],
+    "columns": [
+     {
+      "name": "x",
+      "alias": "source",
+      "expr": "CAST('-170141183460469231731687303715884105729' AS STRING)"
+     }
+    ],
+    "messages": [],
+    "skipped_joins": [],
+    "notes": [
+     [
+      "p",
+      "-170141183460469231731687303715884105729"
+     ]
+    ],
+    "filter": null,
+    "window_orders": [],
+    "measures": []
+   }
+  },
+  {
+   "definition": "source: c.s.t\nparameters:\n- name: p\n  data_type: STRING\n  default: {9007199254740993: a, 9007199254740992.0: b}\ndimensions:\n- name: x\n  expr: p\n",
+   "parameter_types": {},
+   "source_columns": null,
+   "spec": {
+    "source": [
+     "c",
+     "s",
+     "t"
+    ],
+    "joins": [],
+    "columns": [
+     {
+      "name": "x",
+      "alias": "source",
+      "expr": "CAST('{9007199254740993: \\'a\\', 9007199254740992.0: \\'b\\'}' AS STRING)"
+     }
+    ],
+    "messages": [],
+    "skipped_joins": [],
+    "notes": [
+     [
+      "p",
+      "{9007199254740993: 'a', 9007199254740992.0: 'b'}"
+     ]
+    ],
+    "filter": null,
+    "window_orders": [],
+    "measures": []
+   }
+  },
+  {
+   "definition": "source: c.s.t\nparameters:\n- name: p\n  data_type: STRING\n  default: {.nan: a, .nan: b}\ndimensions:\n- name: x\n  expr: p\n",
+   "parameter_types": {},
+   "source_columns": null,
+   "spec": {
+    "source": [
+     "c",
+     "s",
+     "t"
+    ],
+    "joins": [],
+    "columns": [
+     {
+      "name": "x",
+      "alias": "source",
+      "expr": "CAST('{nan: \\'b\\'}' AS STRING)"
+     }
+    ],
+    "messages": [],
+    "skipped_joins": [],
+    "notes": [
+     [
+      "p",
+      "{nan: 'b'}"
+     ]
+    ],
+    "filter": null,
+    "window_orders": [],
+    "measures": []
+   }
+  },
+  {
+   "definition": "source: c.s.t\nparameters:\n- name: p\n  data_type: STRING\n  default: {2024-01-01T01:00:00+01:00: a, 2024-01-01T00:00:00Z: b}\ndimensions:\n- name: x\n  expr: p\n",
+   "parameter_types": {},
+   "source_columns": null,
+   "spec": {
+    "source": [
+     "c",
+     "s",
+     "t"
+    ],
+    "joins": [],
+    "columns": [
+     {
+      "name": "x",
+      "alias": "source",
+      "expr": "CAST('{datetime.datetime(2024, 1, 1, 1, 0, tzinfo=datetime.timezone(datetime.timedelta(seconds=3600))): \\'b\\'}' AS STRING)"
+     }
+    ],
+    "messages": [],
+    "skipped_joins": [],
+    "notes": [
+     [
+      "p",
+      "{datetime.datetime(2024, 1, 1, 1, 0, tzinfo=datetime.timezone(datetime.timedelta(seconds=3600))): 'b'}"
+     ]
+    ],
+    "filter": null,
+    "window_orders": [],
+    "measures": []
+   }
+  },
+  {
+   "definition": "source: c.s.t\nparameters:\n- name: p\n  data_type: STRING\n  default: !!set {a: null}\ndimensions:\n- name: x\n  expr: p\n",
+   "parameter_types": {},
+   "source_columns": null,
+   "spec": {
+    "source": [
+     "c",
+     "s",
+     "t"
+    ],
+    "joins": [],
+    "columns": [
+     {
+      "name": "x",
+      "alias": "source",
+      "expr": "CAST('{\\'a\\'}' AS STRING)"
+     }
+    ],
+    "messages": [],
+    "skipped_joins": [],
+    "notes": [
+     [
+      "p",
+      "{'a'}"
+     ]
+    ],
+    "filter": null,
+    "window_orders": [],
+    "measures": []
+   }
+  },
+  {
+   "definition": "source: c.s.t\nparameters:\n- name: p\n  data_type: STRING\n  default: !!omap [{a: 1}]\ndimensions:\n- name: x\n  expr: p\n",
+   "parameter_types": {},
+   "source_columns": null,
+   "spec": {
+    "source": [
+     "c",
+     "s",
+     "t"
+    ],
+    "joins": [],
+    "columns": [
+     {
+      "name": "x",
+      "alias": "source",
+      "expr": "CAST('[(\\'a\\', 1)]' AS STRING)"
+     }
+    ],
+    "messages": [],
+    "skipped_joins": [],
+    "notes": [
+     [
+      "p",
+      "[('a', 1)]"
+     ]
+    ],
+    "filter": null,
+    "window_orders": [],
+    "measures": []
+   }
+  },
+  {
+   "definition": "source: c.s.t\nparameters:\n- name: p\n  data_type: STRING\n  default: !!pairs [{a: 1}]\ndimensions:\n- name: x\n  expr: p\n",
+   "parameter_types": {},
+   "source_columns": null,
+   "spec": {
+    "source": [
+     "c",
+     "s",
+     "t"
+    ],
+    "joins": [],
+    "columns": [
+     {
+      "name": "x",
+      "alias": "source",
+      "expr": "CAST('[(\\'a\\', 1)]' AS STRING)"
+     }
+    ],
+    "messages": [],
+    "skipped_joins": [],
+    "notes": [
+     [
+      "p",
+      "[('a', 1)]"
+     ]
+    ],
+    "filter": null,
+    "window_orders": [],
+    "measures": []
+   }
+  },
+  {
+   "definition": "source: c.s.t\nparameters:\n- name: p\n  data_type: STRING\n  default: !!binary YQ==Yg==\ndimensions:\n- name: x\n  expr: p\n",
+   "parameter_types": {},
+   "source_columns": null,
+   "spec": {
+    "source": [
+     "c",
+     "s",
+     "t"
+    ],
+    "joins": [],
+    "columns": [
+     {
+      "name": "x",
+      "alias": "source",
+      "expr": "CAST('b\\'a\\'' AS STRING)"
+     }
+    ],
+    "messages": [],
+    "skipped_joins": [],
+    "notes": [
+     [
+      "p",
+      "b'a'"
+     ]
+    ],
+    "filter": null,
+    "window_orders": [],
+    "measures": []
+   }
+  },
+  {
+   "definition": "source: c.s.t\nparameters:\n- name: p\n  data_type: STRING\n  default: !!binary YW=Jj\ndimensions:\n- name: x\n  expr: p\n",
+   "parameter_types": {},
+   "source_columns": null,
+   "spec": {
+    "source": [
+     "c",
+     "s",
+     "t"
+    ],
+    "joins": [],
+    "columns": [
+     {
+      "name": "x",
+      "alias": "source",
+      "expr": "CAST('b\\'abc\\'' AS STRING)"
+     }
+    ],
+    "messages": [],
+    "skipped_joins": [],
+    "notes": [
+     [
+      "p",
+      "b'abc'"
+     ]
+    ],
+    "filter": null,
+    "window_orders": [],
+    "measures": []
+   }
+  },
+  {
+   "definition": "source: c.s.t\nparameters:\n- name: p\n  data_type: STRING\n  default: |\n    a\ndimensions:\n- name: x\n  expr: p\n",
+   "parameter_types": {},
+   "source_columns": null,
+   "spec": {
+    "source": [
+     "c",
+     "s",
+     "t"
+    ],
+    "joins": [],
+    "columns": [
+     {
+      "name": "x",
+      "alias": "source",
+      "expr": "CAST('a\n' AS STRING)"
+     }
+    ],
+    "messages": [],
+    "skipped_joins": [],
+    "notes": [
+     [
+      "p",
+      "a\n"
+     ]
+    ],
+    "filter": null,
+    "window_orders": [],
+    "measures": []
+   }
+  },
+  {
+   "definition": "source: c.s.t\nmaterialization: !!set {a: null}\n",
+   "parameter_types": {},
+   "source_columns": null,
+   "spec": {
+    "source": [
+     "c",
+     "s",
+     "t"
+    ],
+    "joins": [],
+    "columns": [],
+    "messages": [
+     "Ignored the 'materialization' section since it cannot be represented in a graph"
+    ],
+    "skipped_joins": [],
+    "notes": [],
+    "filter": null,
+    "window_orders": [],
+    "measures": []
+   }
+  },
+  {
+   "definition": "source: c.s.t\ndimensions: &a [*a]\n",
+   "parameter_types": {},
+   "source_columns": null,
+   "spec": {
+    "source": [
+     "c",
+     "s",
+     "t"
+    ],
+    "joins": [],
+    "columns": [],
+    "messages": [
+     "Failed to add dimension [[...]] since it is not a mapping"
+    ],
+    "skipped_joins": [],
+    "notes": [],
+    "filter": null,
+    "window_orders": [],
+    "measures": []
+   }
+  },
+  {
+   "definition": "source: c.s.t\njoins:\n- name: 1\n  joins: 1\ndimensions:\n- name: x\n  expr: source.x\n",
+   "parameter_types": {},
+   "source_columns": null,
+   "spec": {
+    "source": [
+     "c",
+     "s",
+     "t"
+    ],
+    "joins": [],
+    "columns": [
+     {
+      "name": "x",
+      "alias": "source",
+      "expr": "x"
+     }
+    ],
+    "messages": [
+     "Failed to add join {'name': 1, 'joins': 1} since it misses a name"
+    ],
+    "skipped_joins": [],
+    "notes": [],
+    "filter": null,
+    "window_orders": [],
+    "measures": []
+   }
+  },
+  {
+   "definition": "source: c.s.t\njoins:\n- name: 1\n  joins:\n  - name: u\n    source: c.s.u\n    on: source.a = u.a\ndimensions:\n- name: x\n  expr: source.x\n",
+   "parameter_types": {},
+   "source_columns": null,
+   "spec": {
+    "source": [
+     "c",
+     "s",
+     "t"
+    ],
+    "joins": [],
+    "columns": [
+     {
+      "name": "x",
+      "alias": "source",
+      "expr": "x"
+     }
+    ],
+    "messages": [
+     "Failed to add join {'name': 1, 'joins': [{'name': 'u', 'source': 'c.s.u', True: 'source.a = u.a'}]} since it misses a name"
+    ],
+    "skipped_joins": [],
+    "notes": [],
+    "filter": null,
+    "window_orders": [],
+    "measures": []
+   }
+  },
+  {
+   "definition": "source: c.s.t\nmaterialization:\n  a0: &a0 [x]\n  a1: &a1 [*a0, *a0]\n  a2: &a2 [*a1, *a1]\n  a3: &a3 [*a2, *a2]\n  a4: &a4 [*a3, *a3]\n  a5: &a5 [*a4, *a4]\n  a6: &a6 [*a5, *a5]\n  a7: &a7 [*a6, *a6]\n  a8: &a8 [*a7, *a7]\n  a9: &a9 [*a8, *a8]\n  a10: &a10 [*a9, *a9]\n  a11: &a11 [*a10, *a10]\n  a12: &a12 [*a11, *a11]\n  a13: &a13 [*a12, *a12]\n  a14: &a14 [*a13, *a13]\n  a15: &a15 [*a14, *a14]\n  a16: &a16 [*a15, *a15]\n  a17: &a17 [*a16, *a16]\n  a18: &a18 [*a17, *a17]\n",
+   "parameter_types": {},
+   "source_columns": null,
+   "spec": {
+    "source": [
+     "c",
+     "s",
+     "t"
+    ],
+    "joins": [],
+    "columns": [],
+    "messages": [
+     "Ignored the 'materialization' section since it cannot be represented in a graph"
+    ],
+    "skipped_joins": [],
+    "notes": [],
+    "filter": null,
+    "window_orders": [],
+    "measures": []
+   }
+  },
+  {
    "definition": "version: 0.1\nsource: \"`c`.`s`.orders\"\njoins:\n  - name: users\n    source: \"`c`.`s`.users\"\n    on: source.user_id = users.user_id\ndimensions:\n  - name: order_id\n    expr: source.order_id\n  - name: user_id\n    expr: source.user_id\n  - name: ts\n    expr: source.ts\n  - name: price\n    expr: source.price\n  - name: broken\n    expr: source.order_id / 0\n",
    "parameter_types": {},
    "source_columns": null,

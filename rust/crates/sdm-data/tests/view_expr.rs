@@ -7,7 +7,10 @@
 //! made of `RE/view_expr.py` and of the Snowflake qualifier helpers of
 //! `RE/graph.py`, with its answer, and each word of the old word tables
 //! (the dialects' allow-lists, keywords, type names, session words) put to
-//! the same checks. Here each answer is held to whether the old client
+//! the same checks, and from T3.5 fix 1 each separator Python reads as
+//! white space (U+001C to U+001F) in both dialects and both trust settings,
+//! and tokens of up to a megabyte, recorded by recipe. Here each answer is
+//! held to whether the old client
 //! refused, and the names, literals and qualifiers it read; each reason's
 //! text is the core's to write and is held there
 //! (`sdm-core/tests/view_words.rs`).
@@ -111,7 +114,7 @@ fn names_are_read_as_the_old_client_read_them() {
 fn comments_are_stripped_as_databricks_drops_them() {
     each("strip_comments", 150, |vector| {
         let expr = vector["expr"].as_str().unwrap();
-        let out = view_expr::strip_comments(expr);
+        let out = view_expr::strip_comments(expr).unwrap();
         (out != vector["out"].as_str().unwrap())
             .then(|| format!("{expr:?}: {out:?} where {}", vector["out"]))
     });
@@ -122,6 +125,7 @@ fn string_literals_end_where_databricks_ends_them() {
     each("string_literals", 150, |vector| {
         let expr = vector["expr"].as_str().unwrap();
         let literals: Vec<String> = view_expr::string_literals(expr)
+            .unwrap()
             .into_iter()
             .map(|span| expr[span].to_owned())
             .collect();
@@ -134,7 +138,7 @@ fn string_literals_end_where_databricks_ends_them() {
 fn snowflake_qualifiers_are_read_outside_literals() {
     each("mask_literals", 5, |vector| {
         let expr = vector["expr"].as_str().unwrap();
-        let out = view_expr::mask_literals(expr);
+        let out = view_expr::mask_literals(expr).unwrap();
         (out != vector["out"].as_str().unwrap())
             .then(|| format!("{expr:?}: {out:?} where {}", vector["out"]))
     });
@@ -143,7 +147,7 @@ fn snowflake_qualifiers_are_read_outside_literals() {
             vector["table"].as_str().unwrap(),
             vector["text"].as_str().unwrap(),
         );
-        let found = view_expr::qualifier_found(table, text);
+        let found = view_expr::qualifier_found(table, text).unwrap();
         (found != vector["found"].as_bool().unwrap())
             .then(|| format!("{table:?} in {text:?}: {found}"))
     });
@@ -152,8 +156,80 @@ fn snowflake_qualifiers_are_read_outside_literals() {
             vector["table"].as_str().unwrap(),
             vector["expr"].as_str().unwrap(),
         );
-        let out = view_expr::strip_qualifier(table, expr);
+        let out = view_expr::strip_qualifier(table, expr).unwrap();
         (out != vector["out"].as_str().unwrap())
             .then(|| format!("{table:?} from {expr:?}: {out:?} where {}", vector["out"]))
     });
+}
+
+/// A long token's expression, from its recipe: a prefix, a text repeated
+/// `count` times, and a suffix.
+fn recipe(recipe: &Json, count: usize) -> String {
+    let part = |i: usize| recipe[i].as_str().unwrap();
+    format!("{}{}{}", part(0), part(1).repeat(count), part(3))
+}
+
+/// Codex review 1, P1-3, and Claude review 1, P1-1: a long token is read,
+/// never a panic, and answered as the old client answered it, accepted
+/// where it accepted it.
+#[test]
+fn a_long_token_is_answered_as_the_old_client_answered_it() {
+    each("long_tokens", 15, |vector| {
+        let r = &vector["recipe"];
+        let expr = recipe(r, r[2].as_u64().unwrap() as usize);
+        let called = recipe(r, r[4].as_u64().unwrap() as usize);
+        let mut wrong = Vec::new();
+        for (key, dialect) in [
+            ("None", None),
+            ("databricks", Some(ExprDialect::Databricks)),
+            ("snowflake", Some(ExprDialect::Snowflake)),
+        ] {
+            let refused = view_expr::unsafe_reason(&expr, dialect).is_some();
+            if refused != vector["unsafe"][key].is_string() {
+                wrong.push(format!("unsafe {key}: refused {refused}"));
+            }
+        }
+        for (key, dialect) in [
+            ("databricks", ExprDialect::Databricks),
+            ("snowflake", ExprDialect::Snowflake),
+        ] {
+            let refused =
+                view_expr::untrusted_call_reason(&called, dialect, &["x", "y", "z"]).is_some();
+            if refused != vector["calls"][key].is_string() {
+                wrong.push(format!("calls {key}: refused {refused}"));
+            }
+        }
+        let names = match view_expr::name_references(&expr) {
+            Ok(references) => serde_json::json!({"count": references.len(), "error": null}),
+            Err(error) => serde_json::json!({"count": null, "error": error.to_string()}),
+        };
+        if names != vector["names"] {
+            wrong.push(format!("names {names} where {}", vector["names"]));
+        }
+        (!wrong.is_empty()).then(|| format!("{r}: {}", wrong.join("; ")))
+    });
+}
+
+/// Every recipe at a megabyte or more, the call check included where the
+/// old client takes too long to answer: each check answers, and a failure
+/// to read refuses, never accepts.
+#[test]
+fn a_megabyte_of_any_token_is_answered() {
+    let document = document();
+    for vector in document["long_tokens"].as_array().unwrap() {
+        let r = &vector["recipe"];
+        let expr = recipe(r, r[2].as_u64().unwrap() as usize);
+        for dialect in [
+            None,
+            Some(ExprDialect::Databricks),
+            Some(ExprDialect::Snowflake),
+        ] {
+            let _ = view_expr::unsafe_reason(&expr, dialect);
+        }
+        for dialect in [ExprDialect::Databricks, ExprDialect::Snowflake] {
+            let _ = view_expr::untrusted_call_reason(&expr, dialect, &["x"]);
+        }
+        let _ = view_expr::name_references(&expr);
+        let _ = view_expr::strip_comments(&expr);
+    }
 }

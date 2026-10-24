@@ -101,11 +101,13 @@ fn names_and_qualifiers_are_read_as_the_old_client_read_them() {
     });
     each("references_alias", 100, |vector| {
         let found =
-            metric::references_alias(vector["expr"].as_str().unwrap(), &texts(&vector["path"]));
+            metric::references_alias(vector["expr"].as_str().unwrap(), &texts(&vector["path"]))
+                .unwrap();
         (found != vector["found"].as_bool().unwrap()).then(|| format!("{vector}: {found}"))
     });
     each("strip_alias", 50, |vector| {
-        let out = metric::strip_alias(vector["expr"].as_str().unwrap(), &texts(&vector["path"]));
+        let out =
+            metric::strip_alias(vector["expr"].as_str().unwrap(), &texts(&vector["path"])).unwrap();
         (out != vector["out"].as_str().unwrap()).then(|| format!("{vector}: {out}"))
     });
     each("derived_column", 20, |vector| {
@@ -123,7 +125,7 @@ fn names_and_qualifiers_are_read_as_the_old_client_read_them() {
 fn default_of(value: &Json, text: &str) -> ParameterDefault {
     let kind = match value["t"].as_str().unwrap() {
         "bool" => DefaultKind::Bool(value["v"].as_bool().unwrap()),
-        "int" => DefaultKind::Int(value["v"].as_str().unwrap().parse().unwrap()),
+        "int" => DefaultKind::Int,
         "date" => DefaultKind::Date,
         "datetime" => DefaultKind::DateTime {
             iso: value["v"].as_str().unwrap().to_owned(),
