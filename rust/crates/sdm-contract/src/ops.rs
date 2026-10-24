@@ -458,8 +458,8 @@ pub struct ViewNote {
 }
 
 impl ViewNote {
-    /// Whether the note says a note's sentence.
-    pub fn holds_to_table(&self) -> bool {
+    /// Whether the note's sentence is a note's ([`crate::Code::Note`]).
+    pub fn is_note(&self) -> bool {
         self.sentence.code() == crate::Code::Note
     }
 }

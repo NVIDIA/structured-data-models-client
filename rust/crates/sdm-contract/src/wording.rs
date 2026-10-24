@@ -1097,6 +1097,9 @@ pub fn template(sentence: Sentence) -> Template {
         S::ViewMissesEntry => said(r#"The {view_kind} definition misses '{entry}'"#),
         S::ViewNotAList => said(r#"The {view_kind} definition's '{section}' is not a list"#),
         S::ViewNestsItself => said(r#"The {view_kind} definition has a join nested in itself"#),
+        S::ViewTablesAbsent => {
+            said(r#"{absent!r} are not tables of {host.source!r}; it has {offered!r}"#)
+        }
         S::ViewEntryUnhashable => {
             said(r#"The {view_kind} definition's '{entry}' is a list or a mapping"#)
         }
@@ -1220,7 +1223,7 @@ pub fn template(sentence: Sentence) -> Template {
             Group::ViewReadInPart,
         ),
         S::ViewColumnsCrossTable => grouped(
-            r#"Failed to add columns {columns!r} of table '{table}' since their expressions reference other tables"#,
+            r#"Failed to add columns '{columns!r}' of table '{table}' since their expressions reference other tables"#,
             Group::ViewReadInPart,
         ),
         S::ViewExpressionDropped => grouped(
@@ -1268,6 +1271,9 @@ pub fn template(sentence: Sentence) -> Template {
         S::NullAnchor => said(
             r#"an entity's anchor time is missing, and a window of the {database:backend} source cannot end at no time; give every entity an anchor time"#,
         ),
+        S::UnspecifiedSchema => {
+            said(r#"Unspecified 'schema' for table '{table}' in database '{in_database}'"#)
+        }
         S::TableNoColumns => said(r#"Table '{table}' has no columns"#),
         S::SeedIgnored => said(
             r#"The '{database}' backend does not support seeded random sampling, so 'random_seed' is ignored when drawing in-context examples. Repeated calls with the same seed may return different predictions."#,
@@ -1292,6 +1298,12 @@ pub fn template(sentence: Sentence) -> Template {
         S::ServingCallersFault => {
             said(r#"serving endpoint {endpoint!r} refused the request (INVALID_REQUEST)"#)
         }
+        S::ServingPredictionRowCount => {
+            said(r#"serving endpoint {endpoint!r} did not return exactly one prediction row"#)
+        }
+        S::ServingResponseColumnMissing => said(
+            r#"serving endpoint {endpoint!r} answered with a row that has no 'response_json' string column"#,
+        ),
         S::ServingFailed => said(r#"serving endpoint {endpoint!r} request failed"#),
         S::ServingFailedCoded => {
             said(r#"serving endpoint {endpoint!r} request failed ({provider_code})"#)

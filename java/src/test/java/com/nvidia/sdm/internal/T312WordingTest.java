@@ -42,6 +42,12 @@ class T312WordingTest {
         "FromSourceOptions.builder().primaryKey(\"orders\", \"ts\")",
         Wording.fill("{advice:set_primary_key(table, column)}", fields));
     assertTrue(Wording.fill("{advice:skip_key_check()}", fields).contains("checkKeys(false)"));
+    // A semantic model's advice (T3.4 fix 8, T3.27), as Java reads one.
+    fields.put("metric_view", "c.s.sales");
+    assertEquals(
+        "source.semanticModel(\"c.s.sales\", false)",
+        Wording.fill("{advice:semantic_model(metric_view)}", fields));
+    assertEquals("semanticModel(name, true)", Wording.fill("{advice:trust_expressions()}", fields));
   }
 
   @Test

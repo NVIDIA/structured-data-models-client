@@ -17,6 +17,7 @@
 
 use crate::data::DescribePart;
 use crate::ops::Dtype;
+use crate::view::ViewKind;
 
 /// One part of the catalog, read.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -66,6 +67,10 @@ impl CatalogAnswer {
 /// reader by name, never read as an empty one.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ViewDefinition {
+    /// The kind of semantic model it is, as the dialect reads one
+    /// (Databricks metric views, Snowflake semantic views): the core reads
+    /// the definition by it, never by its contents.
+    pub kind: ViewKind,
     /// The YAML definition, as written.
     pub text: String,
     /// Each parameter's type, by name, in order, as the warehouse describes

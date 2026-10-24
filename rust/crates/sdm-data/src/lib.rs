@@ -58,7 +58,7 @@ use arrow_array::RecordBatch;
 use sdm_contract::catalog::CatalogAnswer;
 use sdm_contract::data::{
     DataLayer, DataRequest, DescribePart, Dialect, FetchPlan, ProviderCapabilities, ProviderChoice,
-    Relation, SqlStatement,
+    Relation, SqlStatement, views_unread,
 };
 use sdm_contract::wording::DatabaseNames;
 use sdm_contract::{CoreError, Detail, Sentence};
@@ -153,7 +153,15 @@ impl DataLayer for Data {
     fn capabilities(&self, provider: &ProviderChoice) -> Result<ProviderCapabilities, CoreError> {
         match provider {
             ProviderChoice::Host { capabilities } => Ok(capabilities.clone()),
-            ProviderChoice::Sql { dialect, .. } => Ok(rendered(dialect)?.capabilities()),
+            ProviderChoice::Sql { dialect, view, .. } => {
+                let dialect = rendered(dialect)?;
+                // No dialect reads a semantic model yet (T3.5 and T3.6 do):
+                // refused by name, never read as the source's own tables.
+                if view.is_some() {
+                    return Err(views_unread());
+                }
+                Ok(dialect.capabilities())
+            }
         }
     }
 

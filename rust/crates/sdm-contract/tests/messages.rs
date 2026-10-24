@@ -291,7 +291,8 @@ fn every_error_code_is_listed_once_and_spelled_as_the_contract_spells_it() {
         | ErrorCode::RunCancelled
         | ErrorCode::RunPoisoned
         | ErrorCode::RunBusy
-        | ErrorCode::InvalidMessage => ErrorCode::ALL.contains(&code),
+        | ErrorCode::InvalidMessage
+        | ErrorCode::EndpointRefused => ErrorCode::ALL.contains(&code),
     };
     let mut names = BTreeSet::new();
     for code in ErrorCode::ALL {

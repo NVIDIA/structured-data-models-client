@@ -1424,7 +1424,8 @@ pub trait DataLayer: Send + Sync {
     /// ids; their answers, in order, are the request's. The default is
     /// today's: one fetch, the plan as it is, and each key set the dialect
     /// binds as text ([`DataLayer::bound_keys`]) under the id the plan names
-    /// it by, once.
+    /// it by, once. The default repeats the core's `Asker::bind_keys` until
+    /// T3.28 replaces both, in the commit that first plans a text parameter.
     fn bind(
         &self,
         provider: &ProviderChoice,
@@ -1439,7 +1440,11 @@ pub trait DataLayer: Send + Sync {
                 continue;
             }
             let Some(made) = keys.get(&attachment) else {
-                continue;
+                return Err(CoreError::new(
+                    Sentence::Internal,
+                    "a plan binds a key set the core did not hand over",
+                )
+                .with_field("attachment", Detail::Scalar(Scalar::UInt32(attachment.0))));
             };
             if let Some((schema, rebound)) =
                 self.bound_keys(provider, &made.schema, &made.batches)?

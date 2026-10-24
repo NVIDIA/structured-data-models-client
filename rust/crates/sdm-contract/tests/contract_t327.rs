@@ -9,6 +9,11 @@
 //! behaviour, or refuses by name, until a dialect answers it; and every
 //! message site of the old client those packages port has its sentence.
 
+#![allow(
+    clippy::disallowed_methods,
+    reason = "test code: reads the core's sources, to hold the proposed sentences unsaid"
+)]
+
 use std::collections::BTreeMap;
 use std::sync::Arc;
 

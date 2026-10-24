@@ -6012,6 +6012,7 @@
         "view_misses_entry",
         "view_not_a_list",
         "view_nests_itself",
+        "view_tables_absent",
         "view_entry_unhashable",
         "view_entry_not_text",
         "view_value_too_large",
@@ -6059,6 +6060,7 @@
         "view_time_column_note_renamed",
         "view_parameter_note",
         "no_current_schema",
+        "unspecified_schema",
         "no_current_database",
         "null_anchor",
         "table_no_columns",
@@ -6070,7 +6072,9 @@
         "serving_refused",
         "serving_callers_fault",
         "serving_failed",
-        "serving_failed_coded"
+        "serving_failed_coded",
+        "serving_prediction_row_count",
+        "serving_response_column_missing"
       ]
     },
     "Detail": {
@@ -6279,6 +6283,11 @@
           "description": "A control message the contract cannot read, larger than the control cap, of the wrong direction, or whose attachments do not match the ids it names.",
           "type": "string",
           "const": "INVALID_MESSAGE"
+        },
+        {
+          "description": "A model serving endpoint refused the request, with an HTTP status and\nperhaps a code of its own (contract v28, T3.27): the host raises its\nendpoint-refusal error with the status ([`REFUSED_STATUS`]) and the\ncode ([`REFUSED_CODE`], none where there is none), as the old client\nraises `NimRequestError(status, code=...)`, the error's other fields\nits details.",
+          "type": "string",
+          "const": "ENDPOINT_REFUSED"
         }
       ]
     },

@@ -23,6 +23,7 @@
 use std::fmt;
 
 use crate::data::{Relation, RelationColumn};
+use crate::ops::Dtype;
 
 /// The kind of semantic model a definition is: a dialect reads one kind
 /// (Databricks metric views, Snowflake semantic views), and a sentence
@@ -272,6 +273,19 @@ pub struct JoinRef {
     pub condition: [KeyRef; 2],
 }
 
+/// A view column's declared type read by the dialect's type map (the old
+/// client's `DatabricksTable._to_dtype`, `SnowTable._to_dtype`, rows 41 and
+/// 55 to 57).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DeclaredType {
+    /// A type of the map's.
+    Known(Dtype),
+    /// A type the map refuses, as the old client refuses such a column.
+    Unsupported,
+    /// A type the map does not read, left to the sampled values.
+    Unknown,
+}
+
 /// One question about a semantic model's text, in the run's provider's
 /// dialect ([`crate::data::DataLayer::view_text`]): each the old client's
 /// helper it is named after (`RE/view_expr.py`, `RE/graph.py:107-191`,
@@ -363,6 +377,15 @@ pub enum ViewTextAsk {
         child_columns: Vec<String>,
         parent_columns: Vec<String>,
     },
+    /// A view column's declared type (a metric view's described column, a
+    /// semantic view's `data_type`), read by the dialect's type map:
+    /// [`ViewTextAnswer::DeclaredType`].
+    DeclaredType { data_type: String },
+    /// The dialect's own words for a refusal's reason that names its
+    /// warehouse (Databricks's `$$`, old-behaviour row 64), a clause:
+    /// [`ViewTextAnswer::Words`], none for a reason in no warehouse's words,
+    /// which the core words.
+    ReasonWords { reason: ExprRefusal },
     /// One column's expression checked against `columns`, its table's:
     /// unsafe text whatever the trust, and unless `trust_expressions`, a
     /// call that is not trusted (`_view_expr_message`'s reason):
@@ -422,6 +445,10 @@ pub enum ViewTextAnswer {
     JoinKeys(Option<(String, String, String)>),
     /// Why an expression is refused, or none to keep it.
     Expression(Option<ExprVerdict>),
+    /// A declared type, read.
+    DeclaredType(DeclaredType),
+    /// A clause in the dialect's words, or none.
+    Words(Option<String>),
     /// A derived relation, as the dialect reads it.
     Relation(Relation),
 }

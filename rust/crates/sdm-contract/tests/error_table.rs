@@ -23,7 +23,7 @@ fn expected(code: ErrorCode) -> &'static [ErrorKind] {
         | C::UnsupportedType
         | C::ValueOutOfRange => &[K::Unsupported],
         C::UnknownModel => &[K::NotFound],
-        C::InvalidResponse | C::TransportError => &[K::ModelEndpoint],
+        C::InvalidResponse | C::TransportError | C::EndpointRefused => &[K::ModelEndpoint],
         C::InternalError => &[K::Internal],
         C::ProviderSchemaMismatch => &[K::DataSource],
         C::ProviderError => &[K::DataSource, K::NotFound],

@@ -144,11 +144,26 @@ pub enum ErrorCode {
     RunBusy,
     /// A control message the contract cannot read, larger than the control cap, of the wrong direction, or whose attachments do not match the ids it names.
     InvalidMessage,
+    /// A model serving endpoint refused the request, with an HTTP status and
+    /// perhaps a code of its own (contract v28, T3.27): the host raises its
+    /// endpoint-refusal error with the status ([`REFUSED_STATUS`]) and the
+    /// code ([`REFUSED_CODE`], none where there is none), as the old client
+    /// raises `NimRequestError(status, code=...)`, the error's other fields
+    /// its details.
+    EndpointRefused,
 }
+
+/// The field of an `ENDPOINT_REFUSED` error holding the endpoint's HTTP
+/// status (a `u16`).
+pub const REFUSED_STATUS: &str = "status";
+/// The field of an `ENDPOINT_REFUSED` error holding the code the refusal is
+/// raised under, the endpoint's own or `INVALID_REQUEST` for a refusal the
+/// endpoint blamed on the request; absent where there is none.
+pub const REFUSED_CODE: &str = "refused_code";
 
 impl ErrorCode {
     /// Every code, in the order the contract lists them.
-    pub const ALL: [ErrorCode; 22] = [
+    pub const ALL: [ErrorCode; 23] = [
         ErrorCode::InvalidRequest,
         ErrorCode::UnsupportedRequest,
         ErrorCode::InvalidResponse,
@@ -171,6 +186,7 @@ impl ErrorCode {
         ErrorCode::RunPoisoned,
         ErrorCode::RunBusy,
         ErrorCode::InvalidMessage,
+        ErrorCode::EndpointRefused,
     ];
 
     /// The kinds an error of this code may carry (decision E22): one for
@@ -193,7 +209,9 @@ impl ErrorCode {
             | ErrorCode::UnsupportedType
             | ErrorCode::ValueOutOfRange => &[K::Unsupported],
             ErrorCode::UnknownModel => &[K::NotFound],
-            ErrorCode::InvalidResponse | ErrorCode::TransportError => &[K::ModelEndpoint],
+            ErrorCode::InvalidResponse | ErrorCode::TransportError | ErrorCode::EndpointRefused => {
+                &[K::ModelEndpoint]
+            }
             ErrorCode::InternalError => &[K::Internal],
             ErrorCode::ProviderSchemaMismatch => &[K::DataSource],
             ErrorCode::ProviderError => &[K::DataSource, K::NotFound],
@@ -238,6 +256,7 @@ impl ErrorCode {
             ErrorCode::RunPoisoned => "RUN_POISONED",
             ErrorCode::RunBusy => "RUN_BUSY",
             ErrorCode::InvalidMessage => "INVALID_MESSAGE",
+            ErrorCode::EndpointRefused => "ENDPOINT_REFUSED",
         }
     }
 }
@@ -429,6 +448,23 @@ impl CoreError {
     pub fn with_field(mut self, name: &str, value: Detail) -> Self {
         self.fields.insert(name.to_owned(), value);
         self
+    }
+
+    /// A model serving endpoint's refusal saying `sentence`, a sentence of
+    /// `ENDPOINT_REFUSED`, under the endpoint's `status` and the code it is
+    /// raised under, if any ([`ErrorCode::EndpointRefused`]).
+    pub fn refused_by_endpoint(
+        sentence: Sentence,
+        status: u16,
+        code: Option<&str>,
+        message: impl Into<String>,
+    ) -> Self {
+        let out = Self::new(sentence, message)
+            .with_field(REFUSED_STATUS, Detail::Scalar(Scalar::UInt16(status)));
+        match code {
+            Some(code) => out.with_field(REFUSED_CODE, Detail::text(code)),
+            None => out,
+        }
     }
 
     /// This error saying `sentence` in place of its own, a sentence of the
@@ -1025,6 +1061,7 @@ sentences! {
     ViewMissesEntry = "view_misses_entry", E::InvalidRequest;
     ViewNotAList = "view_not_a_list", E::InvalidRequest;
     ViewNestsItself = "view_nests_itself", E::InvalidRequest;
+    ViewTablesAbsent = "view_tables_absent", E::InvalidRequest;
     ViewEntryUnhashable = "view_entry_unhashable", E::InvalidRequest;
     ViewEntryNotText = "view_entry_not_text", E::InvalidRequest;
     ViewValueTooLarge = "view_value_too_large", E::InvalidRequest;
@@ -1072,6 +1109,7 @@ sentences! {
     ViewTimeColumnNoteRenamed = "view_time_column_note_renamed", Code::Note;
     ViewParameterNote = "view_parameter_note", Code::Note;
     NoCurrentSchema = "no_current_schema", E::InvalidRequest;
+    UnspecifiedSchema = "unspecified_schema", E::InvalidRequest;
     NoCurrentDatabase = "no_current_database", E::InvalidRequest;
     NullAnchor = "null_anchor", E::InvalidRequest;
     TableNoColumns = "table_no_columns", E::InvalidRequest;
@@ -1080,8 +1118,10 @@ sentences! {
     ServingPastLimit = "serving_past_limit", E::InvalidRequest;
     ServingNotJson = "serving_not_json", E::TransportError;
     ServingNotAnObject = "serving_not_an_object", E::TransportError;
-    ServingRefused = "serving_refused", E::InvalidResponse;
-    ServingCallersFault = "serving_callers_fault", E::InvalidRequest;
-    ServingFailed = "serving_failed", E::InvalidResponse;
-    ServingFailedCoded = "serving_failed_coded", E::InvalidResponse;
+    ServingRefused = "serving_refused", E::EndpointRefused;
+    ServingCallersFault = "serving_callers_fault", E::EndpointRefused;
+    ServingFailed = "serving_failed", E::EndpointRefused;
+    ServingFailedCoded = "serving_failed_coded", E::EndpointRefused;
+    ServingPredictionRowCount = "serving_prediction_row_count", E::TransportError;
+    ServingResponseColumnMissing = "serving_response_column_missing", E::TransportError;
 }
