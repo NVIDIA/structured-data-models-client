@@ -229,6 +229,28 @@ public final class NativeCore {
 
   private static native byte[] jsonText0(byte[] text);
 
+  /**
+   * The UTC offset, in seconds, at {@code micros} (microseconds since the epoch) in the zone a
+   * psycopg session whose {@code TimeZone} is {@code name} reads a {@code timestamptz} in, through
+   * Python's zone lookup roots ({@link HostFacts#zoneRoots}) as Python's {@code ZoneInfo} reads
+   * them ({@code sdm_host::session_zone_offset}); null where it finds no such zone, where psycopg
+   * reads the instant in UTC. The rule and the zone data are the core's and Python's; Java's own
+   * zone database is never read.
+   */
+  public static Integer sessionZoneOffset(String name, List<String> roots, long micros) {
+    load();
+    try {
+      int offset =
+          sessionZoneOffset0(name.getBytes(StandardCharsets.UTF_8), Json.write(roots), micros);
+      return offset == Integer.MIN_VALUE ? null : offset;
+    } catch (Json.JsonException e) {
+      throw new StructuredDataException(
+          "the zone lookup roots cannot be written", "INTERNAL_ERROR", Map.of(), e);
+    }
+  }
+
+  private static native int sessionZoneOffset0(byte[] name, byte[] roots, long micros);
+
   /** Sets the most verbose level the core's events pass at, 0 none to 5 trace. */
   public static native void setLogLevel(int level);
 

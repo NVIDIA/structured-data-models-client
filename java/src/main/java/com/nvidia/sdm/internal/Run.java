@@ -6,6 +6,11 @@ package com.nvidia.sdm.internal;
 
 import java.lang.ref.Cleaner;
 import java.util.Map;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import org.apache.arrow.c.ArrowArrayStream;
 
@@ -25,6 +30,69 @@ import org.apache.arrow.c.ArrowArrayStream;
  */
 public final class Run implements AutoCloseable {
   private static final Cleaner CLEANER = Cleaner.create();
+
+  /**
+   * The stack a call into the core runs on: the core's work, in a debug build above all, needs
+   * more than a JVM thread may have (256 KiB to 1 MiB), so each call runs on a thread of the
+   * core's own with this much, reserved, not committed (T3.12 fix 3). A JVM thread, so the core's
+   * calls back into the JVM (its log events, Arrow's releases) are made as any thread's are.
+   */
+  static final long CORE_STACK_BYTES = 64L << 20;
+
+  private static final ThreadGroup CORE_THREADS = new ThreadGroup("sdm-core");
+
+  private static final ExecutorService CORE =
+      Executors.newCachedThreadPool(
+          task -> {
+            Thread thread = new Thread(CORE_THREADS, task, "sdm-core", CORE_STACK_BYTES);
+            thread.setDaemon(true);
+            return thread;
+          });
+
+  /** A call into the core that may fail with its error. */
+  @FunctionalInterface
+  interface CoreCall<T> {
+    T call() throws NativeError;
+  }
+
+  /**
+   * Makes {@code call} on a thread with the core's stack ({@link #CORE_STACK_BYTES}), this one
+   * where it is one, and gives back what it gave or threw.
+   */
+  static <T> T onCoreStack(CoreCall<T> call) throws NativeError {
+    if (Thread.currentThread().getThreadGroup() == CORE_THREADS) {
+      return call.call();
+    }
+    Callable<T> task = call::call;
+    Future<T> pending = CORE.submit(task);
+    boolean interrupted = false;
+    try {
+      while (true) {
+        try {
+          return pending.get();
+        } catch (InterruptedException e) {
+          // A call into the core runs to its end; the interrupt is kept for the caller.
+          interrupted = true;
+        } catch (ExecutionException e) {
+          Throwable cause = e.getCause();
+          if (cause instanceof NativeError error) {
+            throw error;
+          }
+          if (cause instanceof RuntimeException runtime) {
+            throw runtime;
+          }
+          if (cause instanceof Error error) {
+            throw error;
+          }
+          throw new IllegalStateException(cause);
+        }
+      }
+    } finally {
+      if (interrupted) {
+        Thread.currentThread().interrupt();
+      }
+    }
+  }
 
   /** The handle and its guard, shared with the cleaning action. */
   private static final class Handle implements Runnable {
@@ -73,7 +141,8 @@ public final class Run implements AutoCloseable {
   public static Run start(byte[] message, Map<Integer, ?> attachments) throws NativeError {
     NativeCore.load();
     Attachments sent = Attachments.of(attachments);
-    return new Run(NativeCore.start(message, sent.ids(), sent.bytes(), sent.streams()));
+    return new Run(
+        onCoreStack(() -> NativeCore.start(message, sent.ids(), sent.bytes(), sent.streams())));
   }
 
   /** Makes {@code call} on the run's handle, while the run is open. */
@@ -83,7 +152,8 @@ public final class Run implements AutoCloseable {
       if (handle.run == 0) {
         throw new IllegalStateException("this run was closed");
       }
-      return call.call(handle.run);
+      long run = handle.run;
+      return onCoreStack(() -> call.call(run));
     } finally {
       handle.lock.readLock().unlock();
     }

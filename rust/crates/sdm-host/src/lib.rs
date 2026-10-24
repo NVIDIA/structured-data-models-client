@@ -29,7 +29,7 @@ pub use runs::{Failure, HostRun, Unreadable, Unreadables, contain, is_posix_zone
 pub use sdm_core::{
     ArrowData, Attachment, Attachments, CompositionRoot, dtype_names, meanings, wire_names,
 };
-pub use zones::{ZoneError, ZoneResolver, ZoneRoot, ZoneSource};
+pub use zones::{ZoneError, ZoneResolver, ZoneRoot, ZoneSource, session_zone_offset};
 
 /// A Postgres `json` or `jsonb` value, given as the server's text, as the
 /// reference's provider hands it to the core (`sdm_data::json_text`, the

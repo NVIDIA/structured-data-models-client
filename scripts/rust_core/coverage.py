@@ -452,30 +452,44 @@ _DEFINED = {
 }
 
 
+def _blanked(source: str) -> str:
+    r"""Java ``source`` with its comments and its string and character
+    literals as spaces, line breaks kept, so only live code is read."""
+    out = list(source)
+    i = 0
+    while i < len(source):
+        if source.startswith('//', i):
+            end = source.find('\n', i)
+            end = len(source) if end < 0 else end
+        elif source.startswith('/*', i):
+            end = source.find('*/', i + 2)
+            end = len(source) if end < 0 else end + 2
+        elif source.startswith('"""', i):
+            end = source.find('"""', i + 3)
+            end = len(source) if end < 0 else end + 3
+        elif source[i] in '"\'':
+            end = i + 1
+            while end < len(source) and source[end] not in (source[i], '\n'):
+                end += 2 if source[end] == '\\' else 1
+            end += 1
+        else:
+            i += 1
+            continue
+        for at in range(i, min(end, len(source))):
+            if out[at] != '\n':
+                out[at] = ' '
+        i = end
+    return ''.join(out)
+
+
 def _runs_in(source: str, at: int) -> bool:
-    r"""Whether JUnit runs a method declared at ``at`` of a Java ``source``:
-    in the file's class, not abstract, or in a ``@Nested`` class (not
-    static) within it, and in no other block. Strings and comments are
-    skipped."""
+    r"""Whether JUnit runs a method declared at ``at`` of a Java ``source``
+    already :func:`_blanked`: in the file's class, not abstract, or in a
+    ``@Nested`` class within it, neither private, static nor abstract, and
+    in no other block; no class around it ``@Disabled``."""
     stack: list[str] = []
     header = 0
-    i = 0
-    while i < at:
-        c = source[i]
-        if source.startswith('//', i):
-            i = source.find('\n', i)
-            i = at if i < 0 else i
-            continue
-        if source.startswith('/*', i):
-            end = source.find('*/', i + 2)
-            i = at if end < 0 else end + 2
-            continue
-        if c in '"\'':
-            j = i + 1
-            while j < len(source) and source[j] != c:
-                j += 2 if source[j] == '\\' else 1
-            i = j + 1
-            continue
+    for i, c in enumerate(source[:at]):
         if c == '{':
             stack.append(source[header:i])
             header = i + 1
@@ -485,14 +499,18 @@ def _runs_in(source: str, at: int) -> bool:
             header = i + 1
         elif c == ';':
             header = i + 1
-        i += 1
     if not stack or not all(re.search(r'\bclass\b', h) for h in stack):
         return False
     if re.search(r'\babstract\b', stack[0]):
         return False
+    if any(
+        re.search(r'@(?:org\.junit\.jupiter\.api\.)?Disabled\b', h)
+        for h in stack
+    ):
+        return False
     return all(
         re.search(r'@(?:org\.junit\.jupiter\.api\.)?Nested\b', h)
-        and not re.search(r'\b(?:static|abstract)\b', h)
+        and not re.search(r'\b(?:static|abstract|private)\b', h)
         for h in stack[1:]
     )
 
@@ -521,11 +539,20 @@ def _test_problem(test: str, root: Any, language: str = 'python') -> str | None:
     except Exception:  # noqa: BLE001 - an unreadable file defines no test
         source = None
     defined = _DEFINED[language].format(name=re.escape(found['name']))
-    matches = list(re.finditer(defined, source, re.M)) if source else []
-    if not matches or (
-        language == 'java'
-        and not any(_runs_in(source or '', m.start()) for m in matches)
-    ):
+    if language == 'java' and source:
+        # Live code only, and a method JUnit runs: not @Disabled, in a class
+        # it runs.
+        live = _blanked(source)
+        runs = [
+            m
+            for m in re.finditer(defined, live, re.M)
+            if not re.search(
+                r'@(?:org\.junit\.jupiter\.api\.)?Disabled\b', m.group()
+            )
+            and _runs_in(live, m.start())
+        ]
+        return None if runs else 'no test the tree defines'
+    if not source or not re.search(defined, source, re.M):
         return 'no test the tree defines'
     return None
 

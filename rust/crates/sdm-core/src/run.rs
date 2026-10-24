@@ -823,13 +823,21 @@ impl Run {
                 // own: a JSON value is read by a reader that recurses once
                 // per level, and the host's thread may have a small stack
                 // (a JVM's), so no value it hands over overflows it (T3.12).
+                // The host's own data is kept here until the read returns,
+                // so its buffers are released on the host's stack, never the
+                // grown one (a JVM's releases call back into the JVM).
                 let result = match (result, &self.data) {
                     (FetchResult::Data(data), Some(access)) => {
-                        crate::pql::on_adapter_stack(|| access.conform(data)).map(FetchResult::Data)
+                        let given = data.clone();
+                        let read = crate::pql::on_adapter_stack(|| access.conform(data));
+                        drop(given);
+                        read.map(FetchResult::Data)
                     }
                     (FetchResult::Page { data, continuation }, Some(access)) => {
-                        crate::pql::on_adapter_stack(|| access.conform(data))
-                            .map(|data| FetchResult::Page { data, continuation })
+                        let given = data.clone();
+                        let read = crate::pql::on_adapter_stack(|| access.conform(data));
+                        drop(given);
+                        read.map(|data| FetchResult::Page { data, continuation })
                     }
                     (other, _) => Ok(other),
                 };

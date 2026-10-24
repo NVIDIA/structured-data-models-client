@@ -485,7 +485,10 @@ def test_t312_a_java_method_that_is_no_junit_test_claims_nothing() -> None:
             '    void inADisabledClass() {}\n'
             '  }\n'
             '\n'
-            '  String text = "\n@Test\nvoid inAString() {}";\n'
+            '  String text = """\n'
+            '  @Test\n'
+            '  void inAString() {}\n'
+            '  """;\n'
             '}\n'
         }
     )

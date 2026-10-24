@@ -191,7 +191,8 @@ public final class ConversionTable {
         return text.getBytes(java.nio.charset.StandardCharsets.UTF_8);
       }
     }
-    throw new SQLException("[SQLite] Type mismatch: a value of another type than its column's");
+    throw new java.sql.SQLDataException(
+        "[SQLite] Type mismatch: a value of another type than its column's");
   }
 
   /**
@@ -360,12 +361,14 @@ public final class ConversionTable {
    * ({@link Session#zone}).
    */
   private static String pyZoned(String text, Session session) throws SQLException {
-    java.time.ZonedDateTime at =
-        java.time.Instant.ofEpochSecond(0)
-            .plus(PostgresText.zoned(text).micros(), java.time.temporal.ChronoUnit.MICROS)
-            .atZone(session.zone());
-    return PostgresText.pyDatetime(at.toLocalDateTime())
-        + PostgresText.pyOffset(at.getOffset().getTotalSeconds());
+    long micros = PostgresText.zoned(text).micros();
+    int offset = session.offsetSeconds(micros);
+    java.time.LocalDateTime wall =
+        java.time.LocalDateTime.ofEpochSecond(
+            Math.floorDiv(micros, 1_000_000L) + offset,
+            (int) Math.floorMod(micros, 1_000_000L) * 1_000,
+            java.time.ZoneOffset.UTC);
+    return PostgresText.pyDatetime(wall) + PostgresText.pyOffset(offset);
   }
 
   private static Map<String, PostgresType> postgres() {
@@ -424,11 +427,12 @@ public final class ConversionTable {
     String intervalStyle() throws SQLException;
 
     /**
-     * The zone psycopg reads a {@code timestamptz} in: the session's {@code TimeZone} where
-     * Python's {@code ZoneInfo} names it (an IANA zone), else UTC, as psycopg's {@code
-     * get_tzinfo} falls back.
+     * The UTC offset, in seconds, at {@code micros} in the zone psycopg reads a {@code
+     * timestamptz} in: the session's {@code TimeZone} as Python's {@code ZoneInfo} finds it, in
+     * Python's zone data, else UTC, as psycopg's {@code get_tzinfo} falls back ({@link
+     * com.nvidia.sdm.internal.NativeCore#sessionZoneOffset}).
      */
-    java.time.ZoneId zone() throws SQLException;
+    int offsetSeconds(long micros) throws SQLException;
   }
 
   /** The Postgres column of the type with OID {@code oid}, by psycopg's registry. */
