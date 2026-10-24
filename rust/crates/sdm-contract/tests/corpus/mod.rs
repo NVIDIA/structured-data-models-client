@@ -374,7 +374,6 @@ pub fn messages() -> Vec<ControlMessage> {
             id: ReplyId(2),
             outcome: FetchOutcome::Error {
                 error: ProviderError {
-                    driver_message: None,
                     error_class: None,
                     driver_message: None,
                     kind: ErrorKind::DataSource,
@@ -458,7 +457,6 @@ pub fn messages() -> Vec<ControlMessage> {
             error: CoreError::new(Sentence::Internal, "panicked")
                 .with_field("panic", Detail::Scalar(Scalar::Bool(true)))
                 .caused_by(CoreError::provider(&ProviderError {
-                    driver_message: None,
                     error_class: None,
                     driver_message: None,
                     kind: ErrorKind::DataSource,

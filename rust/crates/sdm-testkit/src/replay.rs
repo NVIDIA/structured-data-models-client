@@ -230,7 +230,6 @@ impl Replay<'_> {
                 return Ok(Replayed {
                     statements: &[],
                     answer: Err(ProviderError {
-                        driver_message: None,
                         error_class: None,
                         driver_message: None,
                         kind: ErrorKind::DataSource,

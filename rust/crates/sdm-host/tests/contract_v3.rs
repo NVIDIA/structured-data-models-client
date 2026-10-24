@@ -482,7 +482,6 @@ fn a_provider_error_s_retryability_and_codes_reach_the_core_error() {
                 id: ReplyId(1),
                 outcome: FetchOutcome::Error {
                     error: ProviderError {
-                        driver_message: None,
                         error_class: None,
                         driver_message: None,
                         kind: ErrorKind::DataSource,

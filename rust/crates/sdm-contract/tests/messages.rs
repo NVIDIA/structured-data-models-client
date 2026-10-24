@@ -361,7 +361,6 @@ fn a_provider_error_keeps_its_retryability_and_codes_in_the_core_error() {
     use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind};
     for retryable in [true, false] {
         let error = CoreError::provider(&ProviderError {
-            driver_message: None,
             error_class: None,
             driver_message: Some("secret driver value does not exist".into()),
             kind: ErrorKind::DataSource,
