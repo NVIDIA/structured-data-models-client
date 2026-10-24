@@ -792,6 +792,8 @@ def loaded(
                 raise RunnerFailure(
                     'the fixture loader guard refused a statement'
                 )
+        except run_python.RunnerFailure as failed:
+            raise RunnerFailure(str(failed)) from None
         finally:
             if live is not None:
                 live.close()
