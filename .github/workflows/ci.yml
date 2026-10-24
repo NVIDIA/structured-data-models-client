@@ -1003,7 +1003,7 @@ jobs:
     # 90, not 60: the job reached 58 minutes on GitHub's runners as Phase 2's
     # three-database corpus grew (T2.1o); the cause is being cut separately.
     timeout-minutes: 60
-    needs: [landing, native-wheel, engine-wheels]
+    needs: [landing, native-wheel]
     strategy:
       fail-fast: false
       # Every Python, but on a test author's branch (the landing job's
@@ -1032,11 +1032,6 @@ jobs:
         with:
           name: native-wheel
           path: native
-      - &legacy-engine-wheel
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: engine-wheels-linux-x86_64
-          path: engine
       # pip's downloads and built wheels, keyed on the week and on every
       # distribution's manifest and restored from the newest of this job's
       # otherwise; saved on main alone, which every branch restores (E131).
@@ -1058,12 +1053,13 @@ jobs:
       # client is the native wheel's, the one abi3 build every interpreter
       # here installs; its test extra carries pytest-xdist, and
       # pytest-timeout==2.4.0 is for the run's --timeout.
-      - run: |
+      - env:
+          CMAKE_BUILD_PARALLEL_LEVEL: '2'
+        run: |
           pip install --upgrade pip 'ruff==0.16.*' pytest-timeout==2.4.0 "tomli; python_version < '3.11'"
-          tag=$(python -c 'import sys; print(f"cp{sys.version_info[0]}{sys.version_info[1]}")')
-          pip install --no-deps "$GITHUB_WORKSPACE"/engine/*-"$tag"-*.whl
           pip install -e './packages/structured-data-models-api[test]' -e './packages/structured-data-models-pql[test]' \
             "$(ls native/*.whl)[test,relational]" \
+            './packages/structured-data-models-relational-engine' \
             -e './packages/structured-data-models-connectors[sqlite,duckdb,postgres,databricks,snowflake,s3,test]'
       # In parallel, as contract/tests runs: each test file on one worker,
       # so its module fixtures are built once. The gate's tooling tests
@@ -2116,7 +2112,7 @@ jobs:
   installed-wheel:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    needs: [build, engine-wheels]
+    needs: build
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -2126,21 +2122,20 @@ jobs:
         with:
           name: wheels
           path: dist
-      - *legacy-engine-wheel
       # The candidate's own wheels first, without their dependencies, as
       # runtime-install installs them: --find-links alone lets pip take a
       # published distribution of the same version from the index instead
       # (it took the published connectors, whose duckdb extra admits 2.0;
       # T2.16), so the job would test that rather than the candidate.
       - &legacy-client-install
+        env:
+          CMAKE_BUILD_PARALLEL_LEVEL: '2'
         run: |
           pip install --upgrade pip pytest requests-mock
           VERSION=$(cat dist/VERSION)
           pip install --no-deps "$GITHUB_WORKSPACE"/dist/*.whl
-          pip install --no-deps --no-index --find-links "$GITHUB_WORKSPACE/engine" \
-            "structured-data-models-relational-engine==$VERSION"
           pip install --find-links "$GITHUB_WORKSPACE/dist" \
-            --find-links "$GITHUB_WORKSPACE/engine" \
+            "$GITHUB_WORKSPACE/packages/structured-data-models-relational-engine" \
             "structured-data-models-client[relational,sqlite,duckdb]==$VERSION"
       - name: The installed distribution is what gets imported, and it is typed
         working-directory: /tmp
@@ -2182,7 +2177,7 @@ jobs:
   forced-routes:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: [build, engine-wheels]
+    needs: build
     if: github.event_name == 'workflow_dispatch' && inputs.fresh
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -2193,7 +2188,6 @@ jobs:
         with:
           name: wheels
           path: dist
-      - *legacy-engine-wheel
       - *legacy-client-install
       - working-directory: /tmp
         run: |
@@ -2261,7 +2255,10 @@ jobs:
         with:
           name: wheels
           path: dist
-      - *legacy-engine-wheel
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: engine-wheels-linux-x86_64
+          path: engine
       - name: The runtime's own packages
         env:
           PREINSTALLED: ${{ matrix.preinstalled }}
