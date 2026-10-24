@@ -341,8 +341,18 @@ fn an_entity_sample_is_the_old_clients_unseeded_sample_of_rows() {
 #[test]
 fn row_counts_name_the_exact_object_and_support_views() {
     for name in ["users", "user_s", "users%", "USERS", "users_v"] {
-        let got = planned(&named(), json!({"request": "count_rows", "table": table(name), "filters": []})).unwrap();
-        assert_eq!(got, vec![(format!("SELECT COUNT(*) AS \"rows\" FROM \"{DB}\".\"{SCHEMA}\".\"{name}\""), vec![])]);
+        let got = planned(
+            &named(),
+            json!({"request": "count_rows", "table": table(name), "filters": []}),
+        )
+        .unwrap();
+        assert_eq!(
+            got,
+            vec![(
+                format!("SELECT COUNT(*) AS \"rows\" FROM \"{DB}\".\"{SCHEMA}\".\"{name}\""),
+                vec![]
+            )]
+        );
     }
 }
 
@@ -1339,7 +1349,7 @@ fn a_float_or_text_key_is_cast_and_written_as_the_old_client_writes_it() {
 }
 
 #[test]
-fn a_missing_anchor_is_written_as_the_old_clients_nan() {
+fn a_missing_anchor_is_json_null_and_other_seeds_keep_their_window() {
     use arrow_array::{Int64Array, TimestampNanosecondArray};
     let schema = Arc::new(Schema::new(vec![
         Field::new("key", DataType::Int64, true),
@@ -1373,7 +1383,7 @@ fn a_missing_anchor_is_written_as_the_old_clients_nan() {
                    "upper": {"seed_column": "end", "inclusive": true}},
         "per_seed": null, "order": null});
     let found = bound(request, keys);
-    assert_eq!(found[0].1, r#"[[0, NaN], [1, "2024-03-01 00:00:00"]]"#);
+    assert_eq!(found[0].1, r#"[[0, null], [1, "2024-03-01 00:00:00"]]"#);
     assert!(found[0].0.ends_with("WHERE \"ts\" <= ?"));
     assert_eq!(found[0].2, vec!["2024-03-01 00:00:00".to_owned()]);
 }
@@ -1447,20 +1457,35 @@ fn the_schemas_hybrid_tables_are_listed_and_read_as_the_old_client_reads_them() 
 #[test]
 fn independent_foreign_keys_to_one_primary_key_stay_independent() {
     let statement = format!("SHOW IMPORTED KEYS IN TABLE \"{DB}\".\"{SCHEMA}\".\"orders\"");
-    let mut rows = as_rows(&recorded_result("rule.composite-foreign-key-declared", &statement, &[]));
+    let mut rows = as_rows(&recorded_result(
+        "rule.composite-foreign-key-declared",
+        &statement,
+        &[],
+    ));
     let batch = &rows[0];
     let mut columns = batch.columns().to_vec();
     columns[12] = Arc::new(StringArray::from(vec!["buyer_fk", "seller_fk"]));
     columns[13] = Arc::new(StringArray::from(vec!["users_pk", "users_pk"]));
     rows[0] = RecordBatch::try_new(batch.schema(), columns).unwrap();
-    let CatalogAnswer::ForeignKeys(keys) = read(json!({"request": "describe", "part": "foreign_keys", "tables": [table("orders")]}), &rows).unwrap() else { panic!("keys") };
+    let CatalogAnswer::ForeignKeys(keys) = read(
+        json!({"request": "describe", "part": "foreign_keys", "tables": [table("orders")]}),
+        &rows,
+    )
+    .unwrap() else {
+        panic!("keys")
+    };
     assert_eq!(keys.len(), 2);
     assert_ne!(keys[0].key, keys[1].key);
 }
 
 #[test]
 fn zoned_windows_keep_utc_bounds_at_non_utc_dst_edges() {
-    for end in ["2026-03-08 09:59:59", "2026-03-08 10:00:00", "2026-11-01 08:59:59", "2026-11-01 09:00:00"] {
+    for end in [
+        "2026-03-08 09:59:59",
+        "2026-03-08 10:00:00",
+        "2026-11-01 08:59:59",
+        "2026-11-01 09:00:00",
+    ] {
         let payload = format!("[[1, \"{end}\"]]");
         let request = json!({
             "request": "neighbors", "table": table("orders"), "key": ["user_id"], "columns": ["ts"],
@@ -1471,7 +1496,11 @@ fn zoned_windows_keep_utc_bounds_at_non_utc_dst_edges() {
         let sent = bound(request, recorded_seeds(&payload));
         assert_eq!(sent[0].1, payload);
         assert_eq!(sent[0].2, vec![end.to_owned()]);
-        assert!(sent[0].0.contains("CONVERT_TIMEZONE('UTC', \"ts\")::TIMESTAMP_NTZ"));
+        assert!(
+            sent[0]
+                .0
+                .contains("CONVERT_TIMEZONE('UTC', \"ts\")::TIMESTAMP_NTZ")
+        );
     }
 }
 
@@ -1480,8 +1509,13 @@ fn an_unreadable_semantic_definition_is_refused_by_name() {
     let batch = RecordBatch::try_new(
         Arc::new(Schema::new(vec![Field::new("yaml", DataType::Utf8, true)])),
         vec![Arc::new(StringArray::from(vec![None::<&str>])) as ArrayRef],
-    ).unwrap();
-    let error = read(json!({"request": "describe", "part": "view_definition", "tables": [table("v")]}), &[batch]).unwrap_err();
+    )
+    .unwrap();
+    let error = read(
+        json!({"request": "describe", "part": "view_definition", "tables": [table("v")]}),
+        &[batch],
+    )
+    .unwrap_err();
     assert_eq!(error.sentence, Sentence::ViewSemanticDefinitionUnread);
     assert_eq!(error.fields["view"], Detail::text("v"));
 }

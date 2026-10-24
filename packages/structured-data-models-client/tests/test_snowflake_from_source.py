@@ -146,6 +146,7 @@ class _Warehouse(SnowflakeConnection):
 
     def __init__(self, case: str = 'base.binary') -> None:
         self._recording = _Recording(case)
+        self._view_base = _Recording('base.binary') if case == 'snowflake.rowcount.view-as-table' else None
         self._paramstyle = 'pyformat'
         self._last: pa.Table | None = None
         self.upper: set[str] = set()
@@ -198,6 +199,13 @@ class _Warehouse(SnowflakeConnection):
         found = self._recording.answers.get((text, json.dumps(parameters)))
         if first is not None and isinstance(found, pa.Table):
             found = _first_of_each_seed(found, counted)
+        if found is None and self._view_base is not None:
+            # Recorded base rows supply the reads after the old client's
+            # view-count failure; only the source relation name differs.
+            base_text = text.replace('"users_v"', '"users"')
+            found = self._view_base.answers.get((base_text, json.dumps(parameters)))
+            if first is not None and isinstance(found, pa.Table):
+                found = _first_of_each_seed(found, counted)
         if found is None:
             raise AssertionError(
                 f'no recorded answer for {text!r} {parameters!r}'
@@ -822,3 +830,51 @@ def test_described_timestamp_facts_keep_the_current_catalog_type(
     assert facts is not None
     assert facts.declared_type is not None
     assert facts.declared_type.startswith(kind)
+
+
+def test_a_missing_anchor_keeps_its_entity_and_other_entities_history(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class Warehouse(_Warehouse):
+        def __init__(self) -> None:
+            super().__init__('sample.anchor-entity.null-time')
+            preview = f'SELECT "order_id", "user_id", "price", "ts" FROM "{DB}"."{SCHEMA}"."orders" LIMIT 1000'
+            self.orders = self._recording.answers[(preview, '[]')]
+            self.missing_batches: set[int] = set()
+            self.present_batches: set[int] = set()
+
+        def answer(self, text: str, parameters: list[Any]) -> pa.Table:
+            if '\nJOIN ' in text and f'"{SCHEMA}"."orders"' in text:
+                self.calls.append((text, parameters))
+                seeds = json.loads(parameters[0])
+                assert not any(isinstance(v, float) for row in seeds for v in row[1:])
+                missing = [at for at, row in enumerate(seeds) if row[1] is None]
+                valid = [at for at, row in enumerate(seeds) if row[0] == 1 and row[1] is not None]
+                self.missing_batches.update(missing)
+                self.present_batches.update(valid)
+                # Fixed fixture response for the valid user, drawn from
+                # the recorded orders preview. NULL windows have no row.
+                recorded = self.orders.filter(pa.compute.equal(self.orders['user_id'], 1)).slice(0, 1)
+                rows = pa.concat_tables([recorded] * len(valid)) if valid else recorded.slice(0, 0)
+                return rows.add_column(0, '__KUMO_BATCH__', pa.array(valid, pa.int64()))
+            found = super().answer(text, parameters)
+            if 'signup' in found.column_names and 'user_id' in found.column_names:
+                values = found['signup'].to_pylist()
+                for at, user in enumerate(found['user_id'].to_pylist()):
+                    if user == 1:
+                        values[at] = pd.Timestamp('2024-03-01').to_pydatetime()
+                field = found.schema.field('signup')
+                found = found.set_column(found.column_names.index('signup'), field, pa.array(values, field.type))
+            return found
+
+    warehouse = Warehouse()
+    schema = _described('core', monkeypatch, warehouse, **_NAMED)
+    request = PredictiveQuery('PREDICT users.country FOR EACH users.user_id', schema).materialize(indices=[0, 1], anchor_time='entity')
+    prediction = request.payloads[0]['predict']
+    assert len(prediction['instance_table']['rows']) == 2
+    users = prediction['related_tables']['users']
+    assert {row[users['columns'].index('instance_id')] for row in users['rows']} == {0, 1}
+    orders = prediction['related_tables']['orders']
+    assert {row[orders['columns'].index('instance_id')] for row in orders['rows']} == {1}
+    assert warehouse.missing_batches
+    assert warehouse.present_batches
