@@ -438,3 +438,32 @@ fn deep_block_nesting_is_refused_by_name() {
     shallow.push_str("1\n");
     assert!(load(&shallow).is_ok());
 }
+
+/// Many block scalars read in time linear in the text (Claude review 4,
+/// P2-1): eight times as many take not much over eight times as long,
+/// where each block once re-walked the text to its end (20,000 took 224
+/// s).
+#[test]
+#[allow(
+    clippy::disallowed_methods,
+    clippy::disallowed_types,
+    reason = "a test of growth measures its own time; the core reads no clock"
+)]
+fn many_block_scalars_read_in_linear_time() {
+    let text = |n: usize| "- |\n  a\n".repeat(n);
+    let best = |text: &str| {
+        (0..3)
+            .map(|_| {
+                let started = std::time::Instant::now();
+                let loaded = load(text).unwrap();
+                let took = started.elapsed().as_secs_f64();
+                assert!(
+                    matches!(loaded.value(loaded.root()), Value::Seq(items) if !items.is_empty())
+                );
+                took
+            })
+            .fold(f64::INFINITY, f64::min)
+    };
+    let (small, large) = (best(&text(2_500)), best(&text(20_000)));
+    assert!(large / small.max(1e-6) < 24.0, "{small} s, then {large} s");
+}
