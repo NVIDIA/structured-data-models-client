@@ -439,16 +439,64 @@ _TESTS = {
 }
 #: How a file defines the test, by language: a pytest function; a JUnit
 #: method, ``@Test`` or ``@ParameterizedTest`` on it (other annotations, each
-#: on its own line, and modifiers between), so a helper method is no test.
+#: on its own line, between), neither private, static nor abstract, which
+#: JUnit runs only in a class it runs (:func:`_runs_in`).
 _DEFINED = {
     'python': r'^\s*def {name}\(',
     'java': (
         r'^\s*@(?:org\.junit\.jupiter\.api\.|org\.junit\.jupiter\.params\.)?'
         r'(?:Test|ParameterizedTest)\b[^\n]*\n'
         r'(?:\s*@[^\n]*\n)*'
-        r'\s*(?:(?:public|protected|private|static|final)\s+)*void {name}\('
+        r'\s*(?:(?:public|protected|final)\s+)*void {name}\('
     ),
 }
+
+
+def _runs_in(source: str, at: int) -> bool:
+    r"""Whether JUnit runs a method declared at ``at`` of a Java ``source``:
+    in the file's class, not abstract, or in a ``@Nested`` class (not
+    static) within it, and in no other block. Strings and comments are
+    skipped."""
+    stack: list[str] = []
+    header = 0
+    i = 0
+    while i < at:
+        c = source[i]
+        if source.startswith('//', i):
+            i = source.find('\n', i)
+            i = at if i < 0 else i
+            continue
+        if source.startswith('/*', i):
+            end = source.find('*/', i + 2)
+            i = at if end < 0 else end + 2
+            continue
+        if c in '"\'':
+            j = i + 1
+            while j < len(source) and source[j] != c:
+                j += 2 if source[j] == '\\' else 1
+            i = j + 1
+            continue
+        if c == '{':
+            stack.append(source[header:i])
+            header = i + 1
+        elif c == '}':
+            if stack:
+                stack.pop()
+            header = i + 1
+        elif c == ';':
+            header = i + 1
+        i += 1
+    if not stack or not all(re.search(r'\bclass\b', h) for h in stack):
+        return False
+    if re.search(r'\babstract\b', stack[0]):
+        return False
+    return all(
+        re.search(r'@(?:org\.junit\.jupiter\.api\.)?Nested\b', h)
+        and not re.search(r'\b(?:static|abstract)\b', h)
+        for h in stack[1:]
+    )
+
+
 #: Each language's form, as a problem names it.
 _FORM = {
     'python': '<file>::<test>',
@@ -473,7 +521,11 @@ def _test_problem(test: str, root: Any, language: str = 'python') -> str | None:
     except Exception:  # noqa: BLE001 - an unreadable file defines no test
         source = None
     defined = _DEFINED[language].format(name=re.escape(found['name']))
-    if not source or not re.search(defined, source, re.M):
+    matches = list(re.finditer(defined, source, re.M)) if source else []
+    if not matches or (
+        language == 'java'
+        and not any(_runs_in(source or '', m.start()) for m in matches)
+    ):
         return 'no test the tree defines'
     return None
 

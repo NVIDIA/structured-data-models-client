@@ -819,14 +819,18 @@ impl Run {
         match &mut self.state {
             State::AwaitingFetch(pending) if pending.contains_key(&id) => {
                 // Its values read as the reference reads them, before it is
-                // held to the schema expected (T2.14d).
+                // held to the schema expected (T2.14d), on a stack of their
+                // own: a JSON value is read by a reader that recurses once
+                // per level, and the host's thread may have a small stack
+                // (a JVM's), so no value it hands over overflows it (T3.12).
                 let result = match (result, &self.data) {
                     (FetchResult::Data(data), Some(access)) => {
-                        access.conform(data).map(FetchResult::Data)
+                        crate::pql::on_adapter_stack(|| access.conform(data)).map(FetchResult::Data)
                     }
-                    (FetchResult::Page { data, continuation }, Some(access)) => access
-                        .conform(data)
-                        .map(|data| FetchResult::Page { data, continuation }),
+                    (FetchResult::Page { data, continuation }, Some(access)) => {
+                        crate::pql::on_adapter_stack(|| access.conform(data))
+                            .map(|data| FetchResult::Page { data, continuation })
+                    }
                     (other, _) => Ok(other),
                 };
                 let result = match result {

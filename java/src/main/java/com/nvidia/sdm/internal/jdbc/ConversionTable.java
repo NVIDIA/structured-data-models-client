@@ -241,7 +241,7 @@ public final class ConversionTable {
       Map.entry("int4", "int32"),
       Map.entry("int8", "int64"),
       Map.entry("oid", "int64"),
-      Map.entry("float4", "double of the server's shortest text of the value"),
+      Map.entry("float4", "double of the server's text of the value, as psycopg reads it"),
       Map.entry("float8", "double"),
       Map.entry("bytea", "binary"),
       Map.entry("date", "date32; years 1 to 9999, else refused"),
@@ -322,8 +322,8 @@ public final class ConversionTable {
       "int4range", ConversionTable::pyInteger,
       "int8range", ConversionTable::pyInteger,
       "numrange", ConversionTable::pyDecimal,
-      "daterange", text -> PostgresText.pyDate(PostgresText.date(text)),
-      "tsrange", text -> PostgresText.pyDatetime(PostgresText.timestamp(text)),
+      "daterange", (text, session) -> PostgresText.pyDate(PostgresText.date(text)),
+      "tsrange", (text, session) -> PostgresText.pyDatetime(PostgresText.timestamp(text)),
       "tstzrange", ConversionTable::pyZoned);
 
   /** The multirange types, by name: their range's name. */
@@ -335,19 +335,37 @@ public final class ConversionTable {
       "tsmultirange", "tsrange",
       "tstzmultirange", "tstzrange");
 
-  private static String pyInteger(String text) {
+  private static String pyInteger(String text, Session session) {
     return new java.math.BigInteger(text).toString();
   }
 
-  /** Python's {@code str} of a {@code Decimal} of the server's text. */
+  /**
+   * Python's {@code str} of a {@code Decimal} of the server's text: a NaN or an infinity as the
+   * server spells it, as {@code Decimal} writes it back.
+   */
   private static String pyDecimal(String text) {
-    return new BigDecimal(text).toString();
+    return switch (text) {
+      case "NaN", "Infinity", "-Infinity" -> text;
+      default -> new BigDecimal(text).toString();
+    };
   }
 
-  /** Python's {@code str} of psycopg's {@code datetime} in the session's zone. */
-  private static String pyZoned(String text) throws java.sql.SQLDataException {
-    PostgresText.Zoned zoned = PostgresText.zoned(text);
-    return PostgresText.pyDatetime(zoned.wall()) + PostgresText.pyOffset(zoned.offsetSeconds());
+  private static String pyDecimal(String text, Session session) {
+    return pyDecimal(text);
+  }
+
+  /**
+   * Python's {@code str} of the {@code datetime} psycopg reads a {@code timestamptz} as: the
+   * instant the server wrote, in the zone psycopg resolves the session's {@code TimeZone} to
+   * ({@link Session#zone}).
+   */
+  private static String pyZoned(String text, Session session) throws SQLException {
+    java.time.ZonedDateTime at =
+        java.time.Instant.ofEpochSecond(0)
+            .plus(PostgresText.zoned(text).micros(), java.time.temporal.ChronoUnit.MICROS)
+            .atZone(session.zone());
+    return PostgresText.pyDatetime(at.toLocalDateTime())
+        + PostgresText.pyOffset(at.getOffset().getTotalSeconds());
   }
 
   private static Map<String, PostgresType> postgres() {
@@ -359,15 +377,7 @@ public final class ConversionTable {
     types.put("oid", (p, s) -> plain(ArrowColumns.INT64, texts(Long::valueOf)));
     // Read as the reference reads it, a double of the value the server writes (its shortest
     // text), never the float32 the server holds.
-    types.put(
-        "float4",
-        (p, s) ->
-            plain(
-                ArrowColumns.FLOAT64,
-                (r, i, c) -> {
-                  float value = r.getFloat(i);
-                  return r.wasNull() ? null : shortest(value);
-                }));
+    types.put("float4", (p, s) -> plain(ArrowColumns.FLOAT64, texts(ConversionTable::parseDouble)));
     types.put("float8", (p, s) -> plain(ArrowColumns.FLOAT64, texts(ConversionTable::parseDouble)));
     types.put("bytea", (p, s) -> plain(ArrowColumns.BINARY, (r, i, c) -> r.getBytes(i)));
     types.put("date", (p, s) -> plain(ArrowColumns.DATE32, texts(ConversionTable::days)));
@@ -412,6 +422,13 @@ public final class ConversionTable {
    */
   public interface Session {
     String intervalStyle() throws SQLException;
+
+    /**
+     * The zone psycopg reads a {@code timestamptz} in: the session's {@code TimeZone} where
+     * Python's {@code ZoneInfo} names it (an IANA zone), else UTC, as psycopg's {@code
+     * get_tzinfo} falls back.
+     */
+    java.time.ZoneId zone() throws SQLException;
   }
 
   /** The Postgres column of the type with OID {@code oid}, by psycopg's registry. */
@@ -435,31 +452,43 @@ public final class ConversionTable {
     if (type != null) {
       return type.column(precision, scale);
     }
-    return plain(ArrowColumns.UTF8, texts(textOf(name)));
+    SessionText written = textOf(name);
+    return plain(
+        ArrowColumns.UTF8,
+        (rows, at, session) -> {
+          String given = rows.getString(at);
+          return given == null ? null : written.read(given, session);
+        });
   }
 
   /**
    * How a value of a type psycopg's registry names, and this table does not read into a type of
    * its own, is written: Python's {@code str} of what psycopg read.
    */
-  private static Text textOf(String name) {
+  private static SessionText textOf(String name) {
     PostgresText.Bound range = RANGES.get(name);
     if (range != null) {
-      return text -> PostgresText.pyRange(text, range);
+      return (text, session) -> PostgresText.pyRange(text, range, session);
     }
     String multirange = MULTIRANGES.get(name);
     if (multirange != null) {
       PostgresText.Bound bound = RANGES.get(multirange);
-      return text -> PostgresText.pyMultirange(text, bound);
+      return (text, session) -> PostgresText.pyMultirange(text, bound, session);
     }
     if ("record".equals(name)) {
       // psycopg reads an anonymous record, which no table's column holds, as a tuple of texts,
       // and the provider writes Python's repr of it; refused here (register JV-2).
-      return text -> {
+      return (text, session) -> {
         throw PostgresText.refused("an anonymous record");
       };
     }
-    return text -> text;
+    return (text, session) -> text;
+  }
+
+  /** A reading of one value's text in the session it is read in. */
+  @FunctionalInterface
+  interface SessionText {
+    Object read(String text, Session session) throws SQLException;
   }
 
   /** A reading of one value, given the session it is read in. */
@@ -514,20 +543,6 @@ public final class ConversionTable {
     };
   }
 
-  /**
-   * A float4 as the reference reads it: the double of the server's shortest text of the float32
-   * (Postgres 12 on), whichever form the driver read it in.
-   */
-  private static Double shortest(float value) {
-    if (Float.isNaN(value)) {
-      return Double.NaN;
-    }
-    if (Float.isInfinite(value)) {
-      return value > 0 ? Double.POSITIVE_INFINITY : Double.NEGATIVE_INFINITY;
-    }
-    return Double.valueOf(ArrowText.floating32(value));
-  }
-
   private static Object days(String text) throws SQLException {
     return (int) PostgresText.date(text).toEpochDay();
   }
@@ -539,13 +554,15 @@ public final class ConversionTable {
 
   /**
    * A JSON value as the reference's provider hands it over, the core's text of it ({@link
-   * NativeCore#jsonText}), a JSON null null.
+   * NativeCore#jsonText}), a JSON null null; one the core does not read (nested past its 2,000
+   * levels; the server writes no other) as the server's text, which the core then refuses by name
+   * as it refuses Python's (register JV-3).
    */
-  private static Object jsonText(String text) throws SQLException {
+  private static Object jsonText(String text) {
     try {
       return NativeCore.jsonText(text);
     } catch (IllegalArgumentException e) {
-      throw PostgresText.refused("a JSON value that is not JSON");
+      return text;
     }
   }
 
@@ -610,13 +627,7 @@ public final class ConversionTable {
         item = ArrowColumns.field("item", ArrowColumns.INT64, null);
         reading = (value, text, session) -> Long.valueOf(text);
       }
-      case "float4" -> {
-        item = ArrowColumns.field("item", ArrowColumns.FLOAT64, null);
-        reading =
-            (value, text, session) ->
-                value instanceof Float single ? shortest(single) : parseDouble(text);
-      }
-      case "float8", "numeric" -> {
+      case "float4", "float8", "numeric" -> {
         // A numeric element, whose array carries no scale of its own, as a double, as the
         // reference reads one.
         item = ArrowColumns.field("item", ArrowColumns.FLOAT64, null);
@@ -646,7 +657,7 @@ public final class ConversionTable {
       }
       case "timestamptz" -> {
         item = ArrowColumns.field("item", ArrowColumns.UTF8, null);
-        reading = (value, text, session) -> pyZoned(text);
+        reading = (value, text, session) -> pyZoned(text, session);
       }
       case "timetz" -> {
         item = ArrowColumns.field("item", ArrowColumns.UTF8, null);
@@ -665,8 +676,8 @@ public final class ConversionTable {
       default -> {
         // Any other element as Python's str of what psycopg read.
         item = ArrowColumns.field("item", ArrowColumns.UTF8, null);
-        Text written = textOf(element);
-        reading = (value, text, session) -> written.read(text);
+        SessionText written = textOf(element);
+        reading = (value, text, session) -> written.read(text, session);
       }
     }
     Field elementField = item;

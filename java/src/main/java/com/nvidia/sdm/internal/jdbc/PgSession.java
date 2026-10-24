@@ -9,13 +9,15 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import org.postgresql.PGConnection;
 import org.postgresql.PGStatement;
+import org.postgresql.jdbc.PgConnection;
 import org.postgresql.core.BaseConnection;
 import org.postgresql.core.TransactionState;
 
 /**
  * What the Postgres provider asks of pgjdbc beyond JDBC, in one place, so no other class names
  * the driver's own types (and a host without pgjdbc never loads them): a column type's OID, a
- * session parameter, whether a transaction is open, and a statement read in text. Not part of the
+ * session parameter, whether a transaction is open, and statements read in text, a forced binary
+ * transfer turned off for them and restored after. Not part of the
  * API.
  */
 final class PgSession {
@@ -42,6 +44,30 @@ final class PgSession {
   /** Whether the session is inside a transaction (open, or failed). */
   static boolean inTransaction(Connection connection) throws SQLException {
     return base(connection).getTransactionState() != TransactionState.IDLE;
+  }
+
+  /** What a connection forces on the statements it makes: binary transfer, a prepare threshold. */
+  record Forced(boolean binary, int threshold) {}
+
+  /**
+   * Turns off the binary transfer {@code connection} forces on every statement it makes after
+   * (pgjdbc's {@code forceBinary}, and a {@code prepareThreshold} below zero, which forces it on
+   * each statement too), so this read's statements read their values in text; what it forced,
+   * for {@link #restoreBinary}.
+   */
+  static Forced binaryOff(Connection connection) throws SQLException {
+    PgConnection pg = connection.unwrap(PgConnection.class);
+    Forced was = new Forced(pg.getForceBinary(), pg.getPrepareThreshold());
+    pg.setForceBinary(false);
+    pg.setPrepareThreshold(0);
+    return was;
+  }
+
+  /** Gives {@code connection} back what it forced ({@link #binaryOff}). */
+  static void restoreBinary(Connection connection, Forced was) throws SQLException {
+    PgConnection pg = connection.unwrap(PgConnection.class);
+    pg.setPrepareThreshold(was.threshold());
+    pg.setForceBinary(was.binary());
   }
 
   /**
