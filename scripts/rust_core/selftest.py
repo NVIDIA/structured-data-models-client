@@ -3279,6 +3279,46 @@ def scan_cases(results: list[Result]) -> None:
 
     steps('a fourth step variant in the schema', schema_variant, "'truthiness'")
 
+    def step_branch(schema: dict) -> dict:
+        return next(
+            branch
+            for branch in schema['oneOf']
+            if branch.get('properties', {}).get('message', {}).get('const')
+            == 'step'
+        )
+
+    def without_notices(root: Path) -> None:
+        path = root / contract / 'schema/sdm-contract-28.json'
+        schema = json.loads(path.read_text())
+        branch = step_branch(schema)
+        branch['oneOf'] = [
+            b
+            for b in branch['oneOf']
+            if b['properties']['step']['const'] not in l0_scan.NOTICE_STEPS
+        ]
+        path.write_text(json.dumps(schema, indent=2) + '\n')
+
+    def with_notices(root: Path) -> None:
+        current = json.loads(
+            (root / contract / 'schema/sdm-contract-28.json').read_text()
+        )
+        notices = [
+            b
+            for b in step_branch(current)['oneOf']
+            if b['properties']['step']['const'] in l0_scan.NOTICE_STEPS
+        ]
+        path = root / contract / 'schema/sdm-contract-27.json'
+        schema = json.loads(path.read_text())
+        step_branch(schema)['oneOf'].extend(notices)
+        path.write_text(json.dumps(schema, indent=2) + '\n')
+
+    # Each schema holds the steps of its version (T3.4, round 9): v28 the two
+    # notices, an earlier version none of them.
+    steps(
+        'v28 without its two notices', without_notices, 'sdm-contract-28.json'
+    )
+    steps('v27 with the two notices', with_notices, 'sdm-contract-27.json')
+
 
 # --- the clippy bans, for real ------------------------------------------------
 
