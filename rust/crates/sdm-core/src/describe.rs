@@ -34,7 +34,10 @@ use std::task::{Context, Poll};
 use arrow_schema::TimeUnit;
 use sdm_contract::catalog::{CatalogAnswer, CatalogForeignKey};
 use sdm_contract::data::{DataRequest, DescribePart, Relation, TableKey};
-use sdm_contract::ops::{ColumnRef, DescribedSource, NamedTable, OperationResult, SourceSpec};
+use sdm_contract::ops::{
+    ColumnRef, DescribedSource, HeldSchema, NamedTable, OperationResult, SourceDescription,
+    SourceSpec,
+};
 use sdm_contract::{CoreError, Detail, ErrorCode, HostFacts, Scalar, Sentence, Unit};
 use sdm_engine::time::text::Reader;
 use sdm_engine::time::{Instant, Zones};
@@ -696,56 +699,78 @@ pub(crate) async fn settled(asker: Asker) -> Result<Asker, CoreError> {
 /// once, each table pinned under it, and its catalog read, a table the
 /// source does not hold refused by name, as the reference's engine reads
 /// each table it keeps), and said with where ([`Asker::tables_located`]),
-/// before any row is fetched, as the reference's engine keeps its tables
-/// (`EngineTables.keep`). Once a run.
-pub(crate) async fn initialize(asker: &Asker) -> Result<(), CoreError> {
+/// once every table it reads anew is read (its catalog, and, for a column
+/// holding no facts, its preview), before any row is sampled, as the
+/// reference's engine keeps its tables (`EngineTables.keep`); the schema
+/// read by what the source says of a column that held no facts answered.
+/// Once a run, the answer kept for its later parts.
+pub(crate) async fn initialize(
+    asker: &Asker,
+    pending: Option<&HeldSchema>,
+) -> Result<Option<SourceDescription>, CoreError> {
     asker.inputs_checked();
     let Some(anew) = asker.uninitialized() else {
-        return Ok(());
+        return Ok(asker.located());
     };
-    if anew.is_empty() {
-        asker.tables_located(Vec::new());
-        return Ok(());
-    }
-    let asked = DataRequest::Describe {
-        tables: vec![],
-        part: DescribePart::Namespace,
-    };
-    let parts = match describe(asker, asked).await? {
-        CatalogAnswer::Namespace(parts) => parts,
-        _ => return Err(another_part()),
-    };
-    for relation in &anew {
-        asker.pin(relation, parts.clone());
-    }
-    let read = describe_vec(
-        asker,
-        anew.iter()
-            .map(|relation| DataRequest::Describe {
-                tables: vec![relation.clone()],
-                part: DescribePart::Columns,
-            })
-            .collect(),
-    )
-    .await?;
-    for (relation, answer) in anew.iter().zip(read) {
-        match answer {
-            CatalogAnswer::Columns(columns) if !columns.is_empty() => {}
-            CatalogAnswer::Columns(_) => {
-                return Err(crate::discover::not_held(asker, relation).await);
-            }
+    let mut read_under = Vec::new();
+    if !anew.is_empty() {
+        let asked = DataRequest::Describe {
+            tables: vec![],
+            part: DescribePart::Namespace,
+        };
+        let parts = match describe(asker, asked).await? {
+            CatalogAnswer::Namespace(parts) => parts,
             _ => return Err(another_part()),
+        };
+        for relation in &anew {
+            asker.pin(relation, parts.clone());
         }
-    }
-    asker.tables_located(
-        anew.into_iter()
+        let read = describe_vec(
+            asker,
+            anew.iter()
+                .map(|relation| DataRequest::Describe {
+                    tables: vec![relation.clone()],
+                    part: DescribePart::Columns,
+                })
+                .collect(),
+        )
+        .await?;
+        for (relation, answer) in anew.iter().zip(read) {
+            match answer {
+                CatalogAnswer::Columns(columns) if !columns.is_empty() => {}
+                CatalogAnswer::Columns(_) => {
+                    return Err(crate::discover::not_held(asker, relation).await);
+                }
+                _ => return Err(another_part()),
+            }
+        }
+        read_under = anew
+            .into_iter()
             .map(|relation| sdm_contract::ops::ReadUnder {
                 relation,
                 namespace: parts.clone(),
             })
-            .collect(),
-    );
-    Ok(())
+            .collect();
+    }
+    // The facts of each column that holds none, read from the source (its
+    // catalog and preview) before the tables are said located, as the
+    // reference's engine reads every table it keeps, its preview included,
+    // before keeping any (`materializers/sources.py:79`); the schema then
+    // held to the reference's checks as its engine reads the source.
+    let located = match pending {
+        Some(held) => {
+            let found = crate::discover::facts(asker, held).await?;
+            let read = sdm_schema::held::read(held.clone(), &found, false)?;
+            crate::materialize::meanings_carried(&read.description, Some(&read.types))?;
+            sdm_schema::assemble::check_links(&read.description, &read.types)?;
+            let description = read.by_the_source();
+            crate::materialize::meanings_carried(&description, None)?;
+            Some(description)
+        }
+        None => None,
+    };
+    asker.tables_located(read_under, located.clone());
+    Ok(located)
 }
 
 /// The catalog's answer to `request`, a `describe`: fetched, admitted,

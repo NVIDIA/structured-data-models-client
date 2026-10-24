@@ -168,6 +168,9 @@ struct Shared {
     /// [`Asker::tables_located`]).
     inputs_checked: bool,
     initialized: bool,
+    /// The schema read by what the source said of columns that held none
+    /// ([`Asker::located`]).
+    located: Option<sdm_contract::ops::SourceDescription>,
     /// The steps the run said and the host has not been given, in order,
     /// said only where the host takes them ([`Asker::says_progress`]).
     progress: Vec<Step>,
@@ -264,6 +267,12 @@ impl Asker {
         (!shared.initialized).then(|| shared.anew.clone())
     }
 
+    /// The schema read by what the source said of its columns that held
+    /// none, once the run has read them ([`Asker::tables_located`]).
+    pub(crate) fn located(&self) -> Option<sdm_contract::ops::SourceDescription> {
+        lock(&self.shared).located.clone()
+    }
+
     /// Has the run give its notices of where its tables live to the host,
     /// which takes them (`Materialize::progress`).
     pub(crate) fn says_progress(&self) {
@@ -285,10 +294,15 @@ impl Asker {
     /// Says, once, where every table the run reads anew lives, its catalog
     /// read and its catalog and schema settled, no row fetched
     /// ([`Step::TablesLocated`]).
-    pub(crate) fn tables_located(&self, read_under: Vec<sdm_contract::ops::ReadUnder>) {
+    pub(crate) fn tables_located(
+        &self,
+        read_under: Vec<sdm_contract::ops::ReadUnder>,
+        located: Option<sdm_contract::ops::SourceDescription>,
+    ) {
         let mut shared = lock(&self.shared);
         if !shared.initialized {
             shared.initialized = true;
+            shared.located = located;
             if shared.says_progress {
                 shared.progress.push(Step::TablesLocated { read_under });
             }
@@ -1070,7 +1084,11 @@ impl Run {
         }
         self.body = None;
         self.state = State::Cancelled;
+        // What the body said and the step after it go with it.
+        self.said.clear();
+        self.after = None;
         let mut shared = lock(&self.shared);
+        shared.progress.clear();
         shared.replies.clear();
         shared.attachments.clear();
         Ok(())
@@ -1085,6 +1103,9 @@ impl Run {
             return Err(err);
         }
         self.body = None;
+        // What the body said and the step after it go with it.
+        self.said.clear();
+        self.after = None;
         self.state = State::Finished;
         lock(&self.shared).replies.clear();
         Ok(())
