@@ -10,8 +10,8 @@
 //! the core (`sdm-core/tests/view_words.rs`).
 
 use sdm_data::view_expr::metric::{
-    self, DefaultKind, DimensionRef, JoinRef, KeyRef, MeasureInput, MeasureReason, Parameter,
-    ParameterDefault, ParameterRead, Unread,
+    self, DimensionRef, JoinRef, KeyRef, MeasureInput, MeasureReason, Parameter, ParameterRead,
+    Unread,
 };
 use serde_json::Value as Json;
 
@@ -120,35 +120,28 @@ fn names_and_qualifiers_are_read_as_the_old_client_read_them() {
     });
 }
 
-/// A recorded default as the data layer takes it: its kind and the text
-/// Python's `str` gives it (the core writes that text, `view_words`).
-fn default_of(value: &Json, text: &str) -> ParameterDefault {
-    let kind = match value["t"].as_str().unwrap() {
-        "bool" => DefaultKind::Bool(value["v"].as_bool().unwrap()),
-        "int" => DefaultKind::Int,
-        "date" => DefaultKind::Date,
-        "datetime" => DefaultKind::DateTime {
-            iso: value["v"].as_str().unwrap().to_owned(),
-        },
-        _ => DefaultKind::Other,
-    };
-    ParameterDefault {
-        kind,
-        text: text.to_owned(),
-    }
-}
-
+/// A type's class, as `_default_text` tells types apart: its words in
+/// any case and spacing.
 #[test]
-fn a_parameter_s_default_reads_as_the_old_client_read_it() {
-    each("default_text", 500, |vector| {
-        let default = default_of(&vector["default"], vector["default_str"].as_str().unwrap());
-        let read = metric::default_text(vector["data_type"].as_str().unwrap(), &default);
-        match (&read, vector["text"].as_str()) {
-            (Ok(text), Some(expected)) if text == expected => None,
-            (Err(_), None) => None,
-            _ => Some(format!("{vector}: {read:?}")),
-        }
-    });
+fn a_parameter_s_type_is_classed_as_the_old_client_classed_it() {
+    use metric::TypeClass;
+    for (data_type, class) in [
+        ("BOOLEAN", TypeClass::Boolean),
+        ("bigint", TypeClass::Integer),
+        ("INT", TypeClass::Integer),
+        ("DOUBLE", TypeClass::Decimal),
+        ("decimal( 10 , 2 )", TypeClass::Decimal),
+        ("DEC", TypeClass::Decimal),
+        ("STRING", TypeClass::String),
+        ("varchar(3)", TypeClass::String),
+        ("DATE", TypeClass::Date),
+        ("timestamp_ntz", TypeClass::Timestamp),
+        ("TIMESTAMP\u{1c}", TypeClass::Timestamp),
+        ("ARRAY<INT>", TypeClass::NoLiteral),
+        ("INTERVAL DAY", TypeClass::NoLiteral),
+    ] {
+        assert_eq!(metric::type_class(data_type), class, "{data_type}");
+    }
 }
 
 /// The recorded parameters, as the data layer holds them once read.

@@ -12,22 +12,25 @@ use serde_json::Value as Json;
 const VECTORS: &str = include_str!("../../../../contract/view-yaml-vectors.json");
 
 /// A recorded value, its typed form, as the text helpers take it; `open`
-/// the kinds of the collections it is inside (a list `true`).
-fn shown(value: &Json, open: &mut Vec<bool>) -> Shown {
+/// the kinds of the collections it is inside (a list `true`). `None` for a
+/// value outside the YAML view definitions use (a byte string, a set, a
+/// list of pairs), which the core refuses (register P3J-9).
+fn shown(value: &Json, open: &mut Vec<bool>) -> Option<Shown> {
     let inner = &value["v"];
-    let nested = |kind: bool, open: &mut Vec<bool>, items: &dyn Fn(&mut Vec<bool>) -> Shown| {
-        open.push(kind);
-        let shown = items(open);
-        open.pop();
-        shown
-    };
-    match value["t"].as_str().unwrap() {
+    let nested =
+        |kind: bool, open: &mut Vec<bool>, items: &dyn Fn(&mut Vec<bool>) -> Option<Shown>| {
+            open.push(kind);
+            let shown = items(open);
+            open.pop();
+            shown
+        };
+    Some(match value["t"].as_str().unwrap() {
+        "bytes" | "tuple" | "set" => return None,
         "null" => Shown::None,
         "bool" => Shown::Bool(inner.as_bool().unwrap()),
         "int" => Shown::Int(inner.as_str().unwrap().to_owned()),
         "float" => Shown::Float(inner.as_str().unwrap().parse().unwrap()),
         "str" => Shown::Text(inner.as_str().unwrap().to_owned()),
-        "bytes" => Shown::Bytes(debase64(inner.as_str().unwrap())),
         "date" => {
             let (year, month, day) = date(inner.as_str().unwrap());
             Shown::Date { year, month, day }
@@ -38,43 +41,27 @@ fn shown(value: &Json, open: &mut Vec<bool>) -> Shown {
             Shown::Recursive(open[open.len() - up])
         }
         "list" => nested(true, open, &|open| {
-            Shown::List(
+            Some(Shown::List(
                 inner
                     .as_array()
                     .unwrap()
                     .iter()
                     .map(|v| shown(v, open))
-                    .collect(),
-            )
-        }),
-        "tuple" => Shown::Tuple(
-            inner
-                .as_array()
-                .unwrap()
-                .iter()
-                .map(|v| shown(v, open))
-                .collect(),
-        ),
-        "set" => Shown::Set(
-            inner
-                .as_array()
-                .unwrap()
-                .iter()
-                .map(|v| shown(v, open))
-                .collect(),
-        ),
+                    .collect::<Option<_>>()?,
+            ))
+        })?,
         "map" => nested(false, open, &|open| {
-            Shown::Dict(
+            Some(Shown::Dict(
                 inner
                     .as_array()
                     .unwrap()
                     .iter()
-                    .map(|pair| (shown(&pair[0], open), shown(&pair[1], open)))
-                    .collect(),
-            )
-        }),
+                    .map(|pair| Some((shown(&pair[0], open)?, shown(&pair[1], open)?)))
+                    .collect::<Option<_>>()?,
+            ))
+        })?,
         other => panic!("{other}"),
-    }
+    })
 }
 
 fn date(text: &str) -> (i32, u8, u8) {
@@ -119,27 +106,6 @@ fn datetime(text: &str) -> Shown {
     }
 }
 
-fn debase64(text: &str) -> Vec<u8> {
-    let mut bits = 0u32;
-    let (mut count, mut out) = (0, Vec::new());
-    for c in text.bytes().filter(|&c| c != b'=') {
-        let sextet = match c {
-            b'A'..=b'Z' => c - b'A',
-            b'a'..=b'z' => c - b'a' + 26,
-            b'0'..=b'9' => c - b'0' + 52,
-            b'+' => 62,
-            _ => 63,
-        };
-        bits = (bits << 6) | u32::from(sextet);
-        count += 6;
-        if count >= 8 {
-            count -= 8;
-            out.push(((bits >> count) & 0xFF) as u8);
-        }
-    }
-    out
-}
-
 #[test]
 fn each_value_is_written_as_python_wrote_it() {
     let document: Json = serde_json::from_str(VECTORS).unwrap();
@@ -149,8 +115,10 @@ fn each_value_is_written_as_python_wrote_it() {
     // A value holding a set has no recorded text: a set's order varies by
     // run in Python.
     for vector in vectors.iter().filter(|v| v.get("repr").is_some()) {
+        let Some(value) = shown(&vector["value"], &mut Vec::new()) else {
+            continue;
+        };
         held += 1;
-        let value = shown(&vector["value"], &mut Vec::new());
         if value.repr() != vector["repr"].as_str().unwrap() {
             wrong.push(format!("repr {} where {}", value.repr(), vector["repr"]));
         }
@@ -180,17 +148,10 @@ fn a_text_is_quoted_as_python_quotes_it() {
     assert_eq!(text_repr("'"), "\"'\"");
 }
 
-/// A set, a tuple and a collection inside itself, as Python writes them.
+/// A collection inside itself, as Python writes it.
 #[test]
-fn sets_tuples_and_cycles_are_written_as_python_writes_them() {
+fn cycles_are_written_as_python_writes_them() {
     let text = |t: &str| Shown::Text(t.into());
-    assert_eq!(Shown::Set(vec![]).repr(), "set()");
-    assert_eq!(Shown::Set(vec![text("a"), text("b")]).repr(), "{'a', 'b'}");
-    assert_eq!(Shown::Tuple(vec![text("a")]).repr(), "('a',)");
-    assert_eq!(
-        Shown::Tuple(vec![text("a"), Shown::Int("1".into())]).repr(),
-        "('a', 1)"
-    );
     assert_eq!(Shown::List(vec![Shown::Recursive(true)]).repr(), "[[...]]");
     assert_eq!(
         Shown::Dict(vec![(text("k"), Shown::Recursive(false))]).repr(),

@@ -16,9 +16,21 @@
 
 use sdm_schema::view::semantic;
 use sdm_schema::view::spec::{
-    ColumnItem, PrimaryKey, RelationshipItem, Section, Source, TableItem, ViewSpec,
+    ColumnItem, PrimaryKey, RefusalReason, RelationshipItem, Section, Source, TableItem,
+    ViewRefusal, ViewSpec,
 };
+use sdm_schema::view::yaml::{Rules, Value};
 use serde_json::Value as Json;
+
+/// Python's limit on an integer's digits, as the core hands it in.
+const RULES: Rules = Rules { most_digits: 4300 };
+
+/// A definition read whole, in the old client's order.
+fn read(source: &str) -> Result<ViewSpec, ViewRefusal> {
+    let mut spec = semantic::parse(source, &RULES)?;
+    semantic::read_all(&mut spec)?;
+    Ok(spec)
+}
 
 const VECTORS: &str = include_str!("../../../../contract/view-yaml-vectors.json");
 
@@ -66,7 +78,7 @@ fn each_definition_reads_as_the_old_client_reads_it() {
     for vector in definitions {
         let source = vector["yaml"].as_str().unwrap();
         let cfg = &vector["value"];
-        let spec = semantic::parse(source).unwrap_or_else(|error| panic!("{source}: {error}"));
+        let mut spec = read(source).unwrap_or_else(|error| panic!("{source}: {error}"));
 
         let tables = items(get(cfg, "tables"));
         assert_eq!(spec.tables.len(), tables.len(), "{source}");
@@ -142,7 +154,7 @@ fn each_definition_reads_as_the_old_client_reads_it() {
         // `RE/graph.py:2209-2222`.
         let relationships = items(get(cfg, "relationships"));
         assert_eq!(spec.relationships.len(), relationships.len(), "{source}");
-        for (relationship, cfg) in spec.relationships.iter().zip(&relationships) {
+        for (relationship, cfg) in spec.relationships.clone().iter().zip(&relationships) {
             assert_eq!(
                 node_text(&spec, Some(relationship.name)),
                 Some(text(get(cfg, "name").unwrap()))
@@ -185,7 +197,7 @@ fn a_definition_missing_its_tables_is_refused_by_name() {
         ),
         ("- a\n", "tables"),
     ] {
-        let refusal = semantic::parse(source).unwrap_err();
+        let refusal = read(source).unwrap_err();
         assert!(
             refusal.to_string().contains(&format!("'{missing}'")),
             "{source}: {refusal}"
@@ -200,7 +212,7 @@ fn an_entry_the_old_client_never_reads_cannot_refuse_the_view() {
     let base = "tables:\n  - name: A\n    base_table: {database: D, schema: S, table: T}\n";
     // A relationship of no pair: the old client notes it as composite and
     // reads neither of its tables (`RE/graph.py:2211-2215`).
-    let spec = semantic::parse(&format!(
+    let spec = read(&format!(
         "{base}relationships:\n  - name: R\n    relationship_columns: []\n"
     ))
     .unwrap();
@@ -213,7 +225,7 @@ fn an_entry_the_old_client_never_reads_cannot_refuse_the_view() {
         }]
     );
     // A physical column's type, which it never uses (`:2117-2119`).
-    let spec = semantic::parse(&format!(
+    let spec = read(&format!(
         "{base}    dimensions:\n      - name: X\n        data_type: 123\n"
     ))
     .unwrap();
@@ -222,9 +234,77 @@ fn an_entry_the_old_client_never_reads_cannot_refuse_the_view() {
     };
     assert!(column.expr.is_none() && column.data_type.is_some());
     // A composite key's members, which it never inspects (`:2086-2090`).
-    let spec = semantic::parse(&format!("{base}    primary_key: {{columns: [1, 2]}}\n")).unwrap();
+    let spec = read(&format!("{base}    primary_key: {{columns: [1, 2]}}\n")).unwrap();
     let TableItem::Table(table) = &spec.tables[0] else {
         panic!()
     };
     assert_eq!(table.primary_key, PrimaryKey::Composite);
+}
+
+/// Codex review 2, P1-8: the old client reads every table's name first,
+/// then finishes each table, reading its catalog, before it reads the
+/// next; a later table's missing entry refuses the view only when the
+/// conversion comes to it.
+#[test]
+fn each_table_is_read_when_the_conversion_comes_to_it() {
+    let source = "tables:\n- name: A\n  base_table: {database: D, schema: S, table: T}\n  \
+                  dimensions: [{name: X, expr: X + 1}]\n- name: B\n";
+    let mut spec = semantic::parse(source, &RULES).unwrap();
+    assert_eq!(spec.tables.len(), 2);
+    let a = semantic::table(&mut spec, 0).unwrap();
+    assert_eq!(a.alias, "A");
+    let columns = semantic::columns(&mut spec, 0);
+    assert!(matches!(columns.as_slice(), [Ok(ColumnItem::Column(_))]));
+    let refusal = semantic::table(&mut spec, 1).unwrap_err();
+    assert_eq!(refusal.reason, RefusalReason::Misses("base_table".into()));
+    // A name missing anywhere refuses before any table is read.
+    let refusal = semantic::parse("tables:\n- name: A\n- base_table: {}\n", &RULES).unwrap_err();
+    assert_eq!(refusal.reason, RefusalReason::Misses("name".into()));
+    // A name no set holds refuses then; one no pattern is made of, when
+    // the first table makes its patterns.
+    let refusal = semantic::parse("tables:\n- name: [A]\n", &RULES).unwrap_err();
+    assert_eq!(refusal.reason, RefusalReason::Unhashable("name".into()));
+    let source =
+        "tables:\n- name: A\n  base_table: {database: D, schema: S, table: T}\n- name: 1\n";
+    let mut spec = semantic::parse(source, &RULES).unwrap();
+    let refusal = semantic::table(&mut spec, 0).unwrap_err();
+    assert_eq!(refusal.reason, RefusalReason::NotText("name".into()));
+}
+
+/// Codex review 2, P1-6: `len(...)` and `[0]` as Python takes them, on a
+/// mapping (its entry keyed 0) and on a text (its first character).
+#[test]
+fn a_key_and_a_pair_are_indexed_as_python_indexes_them() {
+    let base = "tables:\n  - name: A\n    base_table: {database: D, schema: S, table: T}\n";
+    let mut spec = read(&format!(
+        "{base}relationships:\n  - name: R\n    left_table: A\n    right_table: B\n    \
+         relationship_columns: {{0: {{left_column: X, right_column: Y}}}}\n"
+    ))
+    .unwrap();
+    let item = spec.relationships[0].clone();
+    assert_eq!(item.pairs, 1);
+    let pair = spec.relationship(&item).unwrap();
+    assert_eq!(spec.text(pair.left_column), Some("X"));
+    assert_eq!(spec.text(pair.right_column), Some("Y"));
+    for (columns, key) in [
+        ("{0: K}", "K"),
+        ("[K]", "K"),
+        ("K", "K"),
+        ("{false: K}", "K"),
+    ] {
+        let spec = read(&format!("{base}    primary_key: {{columns: {columns}}}\n")).unwrap();
+        let TableItem::Table(table) = &spec.tables[0] else {
+            panic!()
+        };
+        let PrimaryKey::One(node) = table.primary_key else {
+            panic!("{columns}: {:?}", table.primary_key)
+        };
+        assert_eq!(spec.value(node), &Value::Str(key.into()), "{columns}");
+    }
+    // `{1: K}` has a length of one and no entry keyed 0: Python's
+    // `KeyError`, refused by name.
+    let refusal = read(&format!("{base}    primary_key: {{columns: {{1: K}}}}\n")).unwrap_err();
+    assert_eq!(refusal.reason, RefusalReason::Misses("columns".into()));
+    let refusal = read(&format!("{base}    primary_key: {{columns: 7}}\n")).unwrap_err();
+    assert_eq!(refusal.reason, RefusalReason::NotAList("columns".into()));
 }

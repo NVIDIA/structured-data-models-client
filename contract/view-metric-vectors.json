@@ -7214,6 +7214,712 @@
    }
   },
   {
+   "definition": "source: c.s.t\ndimensions:\n- name: x\n  expr: p\nparameters:\n- name: p\n  data_type: STRING\n  default: |\n    #hello",
+   "parameter_types": {},
+   "source_columns": null,
+   "spec": {
+    "source": [
+     "c",
+     "s",
+     "t"
+    ],
+    "joins": [],
+    "columns": [
+     {
+      "name": "x",
+      "alias": "source",
+      "expr": "CAST('#hello' AS STRING)"
+     }
+    ],
+    "messages": [],
+    "skipped_joins": [],
+    "notes": [
+     [
+      "p",
+      "#hello"
+     ]
+    ],
+    "filter": null,
+    "window_orders": [],
+    "measures": []
+   }
+  },
+  {
+   "definition": "source: c.s.t\ndimensions:\n- name: x\n  expr: p\nparameters:\n- name: p\n  data_type: TIMESTAMP\n  default: |\n    #hello",
+   "parameter_types": {},
+   "source_columns": null,
+   "spec": {
+    "source": [
+     "c",
+     "s",
+     "t"
+    ],
+    "joins": [],
+    "columns": [],
+    "messages": [
+     "Failed to add dimension 'x' since it references the parameter 'p', which its default '#hello' is not of type TIMESTAMP"
+    ],
+    "skipped_joins": [],
+    "notes": [],
+    "filter": null,
+    "window_orders": [],
+    "measures": []
+   }
+  },
+  {
+   "definition": "source: c.s.t\ndimensions:\n- name: x\n  expr: p\nparameters:\n- name: p\n  data_type: DOUBLE\n  default: |\n    #hello",
+   "parameter_types": {},
+   "source_columns": null,
+   "spec": {
+    "source": [
+     "c",
+     "s",
+     "t"
+    ],
+    "joins": [],
+    "columns": [],
+    "messages": [
+     "Failed to add dimension 'x' since it references the parameter 'p', which its default '#hello' is not of type DOUBLE"
+    ],
+    "skipped_joins": [],
+    "notes": [],
+    "filter": null,
+    "window_orders": [],
+    "measures": []
+   }
+  },
+  {
+   "definition": "source: c.s.t\ndimensions:\n- name: x\n  expr: p\nparameters:\n- name: p\n  data_type: INT\n  default: |\n    #hello",
+   "parameter_types": {},
+   "source_columns": null,
+   "spec": {
+    "source": [
+     "c",
+     "s",
+     "t"
+    ],
+    "joins": [],
+    "columns": [],
+    "messages": [
+     "Failed to add dimension 'x' since it references the parameter 'p', which its default '#hello' is not of type INT"
+    ],
+    "skipped_joins": [],
+    "notes": [],
+    "filter": null,
+    "window_orders": [],
+    "measures": []
+   }
+  },
+  {
+   "definition": "source: c.s.t\ndimensions:\n- name: x\n  expr: p\nparameters:\n- name: p\n  data_type: STRING\n  default: |\n    hi\n...",
+   "parameter_types": {},
+   "source_columns": null,
+   "spec": {
+    "source": [
+     "c",
+     "s",
+     "t"
+    ],
+    "joins": [],
+    "columns": [
+     {
+      "name": "x",
+      "alias": "source",
+      "expr": "CAST('hi\n' AS STRING)"
+     }
+    ],
+    "messages": [],
+    "skipped_joins": [],
+    "notes": [
+     [
+      "p",
+      "hi\n"
+     ]
+    ],
+    "filter": null,
+    "window_orders": [],
+    "measures": []
+   }
+  },
+  {
+   "definition": "source: c.s.t\ndimensions:\n- name: x\n  expr: p\nparameters:\n- name: p\n  data_type: TIMESTAMP\n  default: |\n    hi\n...",
+   "parameter_types": {},
+   "source_columns": null,
+   "spec": {
+    "source": [
+     "c",
+     "s",
+     "t"
+    ],
+    "joins": [],
+    "columns": [],
+    "messages": [
+     "Failed to add dimension 'x' since it references the parameter 'p', which its default 'hi\\n' is not of type TIMESTAMP"
+    ],
+    "skipped_joins": [],
+    "notes": [],
+    "filter": null,
+    "window_orders": [],
+    "measures": []
+   }
+  },
+  {
+   "definition": "source: c.s.t\ndimensions:\n- name: x\n  expr: p\nparameters:\n- name: p\n  data_type: DOUBLE\n  default: |\n    hi\n...",
+   "parameter_types": {},
+   "source_columns": null,
+   "spec": {
+    "source": [
+     "c",
+     "s",
+     "t"
+    ],
+    "joins": [],
+    "columns": [],
+    "messages": [
+     "Failed to add dimension 'x' since it references the parameter 'p', which its default 'hi\\n' is not of type DOUBLE"
+    ],
+    "skipped_joins": [],
+    "notes": [],
+    "filter": null,
+    "window_orders": [],
+    "measures": []
+   }
+  },
+  {
+   "definition": "source: c.s.t\ndimensions:\n- name: x\n  expr: p\nparameters:\n- name: p\n  data_type: INT\n  default: |\n    hi\n...",
+   "parameter_types": {},
+   "source_columns": null,
+   "spec": {
+    "source": [
+     "c",
+     "s",
+     "t"
+    ],
+    "joins": [],
+    "columns": [],
+    "messages": [
+     "Failed to add dimension 'x' since it references the parameter 'p', which its default 'hi\\n' is not of type INT"
+    ],
+    "skipped_joins": [],
+    "notes": [],
+    "filter": null,
+    "window_orders": [],
+    "measures": []
+   }
+  },
+  {
+   "definition": "source: c.s.t\ndimensions:\n- name: x\n  expr: p\nparameters:\n- name: p\n  data_type: STRING\n  default: >\n    #hello",
+   "parameter_types": {},
+   "source_columns": null,
+   "spec": {
+    "source": [
+     "c",
+     "s",
+     "t"
+    ],
+    "joins": [],
+    "columns": [
+     {
+      "name": "x",
+      "alias": "source",
+      "expr": "CAST('#hello' AS STRING)"
+     }
+    ],
+    "messages": [],
+    "skipped_joins": [],
+    "notes": [
+     [
+      "p",
+      "#hello"
+     ]
+    ],
+    "filter": null,
+    "window_orders": [],
+    "measures": []
+   }
+  },
+  {
+   "definition": "source: c.s.t\ndimensions:\n- name: x\n  expr: p\nparameters:\n- name: p\n  data_type: TIMESTAMP\n  default: >\n    #hello",
+   "parameter_types": {},
+   "source_columns": null,
+   "spec": {
+    "source": [
+     "c",
+     "s",
+     "t"
+    ],
+    "joins": [],
+    "columns": [],
+    "messages": [
+     "Failed to add dimension 'x' since it references the parameter 'p', which its default '#hello' is not of type TIMESTAMP"
+    ],
+    "skipped_joins": [],
+    "notes": [],
+    "filter": null,
+    "window_orders": [],
+    "measures": []
+   }
+  },
+  {
+   "definition": "source: c.s.t\ndimensions:\n- name: x\n  expr: p\nparameters:\n- name: p\n  data_type: DOUBLE\n  default: >\n    #hello",
+   "parameter_types": {},
+   "source_columns": null,
+   "spec": {
+    "source": [
+     "c",
+     "s",
+     "t"
+    ],
+    "joins": [],
+    "columns": [],
+    "messages": [
+     "Failed to add dimension 'x' since it references the parameter 'p', which its default '#hello' is not of type DOUBLE"
+    ],
+    "skipped_joins": [],
+    "notes": [],
+    "filter": null,
+    "window_orders": [],
+    "measures": []
+   }
+  },
+  {
+   "definition": "source: c.s.t\ndimensions:\n- name: x\n  expr: p\nparameters:\n- name: p\n  data_type: INT\n  default: >\n    #hello",
+   "parameter_types": {},
+   "source_columns": null,
+   "spec": {
+    "source": [
+     "c",
+     "s",
+     "t"
+    ],
+    "joins": [],
+    "columns": [],
+    "messages": [
+     "Failed to add dimension 'x' since it references the parameter 'p', which its default '#hello' is not of type INT"
+    ],
+    "skipped_joins": [],
+    "notes": [],
+    "filter": null,
+    "window_orders": [],
+    "measures": []
+   }
+  },
+  {
+   "definition": "source: c.s.t\ndimensions:\n- name: x\n  expr: p\nparameters:\n- name: p\n  data_type: STRING\n  default: |+\n    a\n    ",
+   "parameter_types": {},
+   "source_columns": null,
+   "spec": {
+    "source": [
+     "c",
+     "s",
+     "t"
+    ],
+    "joins": [],
+    "columns": [
+     {
+      "name": "x",
+      "alias": "source",
+      "expr": "CAST('a\n' AS STRING)"
+     }
+    ],
+    "messages": [],
+    "skipped_joins": [],
+    "notes": [
+     [
+      "p",
+      "a\n"
+     ]
+    ],
+    "filter": null,
+    "window_orders": [],
+    "measures": []
+   }
+  },
+  {
+   "definition": "source: c.s.t\ndimensions:\n- name: x\n  expr: p\nparameters:\n- name: p\n  data_type: TIMESTAMP\n  default: |+\n    a\n    ",
+   "parameter_types": {},
+   "source_columns": null,
+   "spec": {
+    "source": [
+     "c",
+     "s",
+     "t"
+    ],
+    "joins": [],
+    "columns": [],
+    "messages": [
+     "Failed to add dimension 'x' since it references the parameter 'p', which its default 'a\\n' is not of type TIMESTAMP"
+    ],
+    "skipped_joins": [],
+    "notes": [],
+    "filter": null,
+    "window_orders": [],
+    "measures": []
+   }
+  },
+  {
+   "definition": "source: c.s.t\ndimensions:\n- name: x\n  expr: p\nparameters:\n- name: p\n  data_type: DOUBLE\n  default: |+\n    a\n    ",
+   "parameter_types": {},
+   "source_columns": null,
+   "spec": {
+    "source": [
+     "c",
+     "s",
+     "t"
+    ],
+    "joins": [],
+    "columns": [],
+    "messages": [
+     "Failed to add dimension 'x' since it references the parameter 'p', which its default 'a\\n' is not of type DOUBLE"
+    ],
+    "skipped_joins": [],
+    "notes": [],
+    "filter": null,
+    "window_orders": [],
+    "measures": []
+   }
+  },
+  {
+   "definition": "source: c.s.t\ndimensions:\n- name: x\n  expr: p\nparameters:\n- name: p\n  data_type: INT\n  default: |+\n    a\n    ",
+   "parameter_types": {},
+   "source_columns": null,
+   "spec": {
+    "source": [
+     "c",
+     "s",
+     "t"
+    ],
+    "joins": [],
+    "columns": [],
+    "messages": [
+     "Failed to add dimension 'x' since it references the parameter 'p', which its default 'a\\n' is not of type INT"
+    ],
+    "skipped_joins": [],
+    "notes": [],
+    "filter": null,
+    "window_orders": [],
+    "measures": []
+   }
+  },
+  {
+   "definition": "source: c.s.t\ndimensions:\n- name: x\n  expr: p\nparameters:\n- name: p\n  data_type: STRING\n  default: \"2024-01-01T12.5\"",
+   "parameter_types": {},
+   "source_columns": null,
+   "spec": {
+    "source": [
+     "c",
+     "s",
+     "t"
+    ],
+    "joins": [],
+    "columns": [
+     {
+      "name": "x",
+      "alias": "source",
+      "expr": "CAST('2024-01-01T12.5' AS STRING)"
+     }
+    ],
+    "messages": [],
+    "skipped_joins": [],
+    "notes": [
+     [
+      "p",
+      "2024-01-01T12.5"
+     ]
+    ],
+    "filter": null,
+    "window_orders": [],
+    "measures": []
+   }
+  },
+  {
+   "definition": "source: c.s.t\ndimensions:\n- name: x\n  expr: p\nparameters:\n- name: p\n  data_type: TIMESTAMP\n  default: \"2024-01-01T12.5\"",
+   "parameter_types": {},
+   "source_columns": null,
+   "spec": {
+    "source": [
+     "c",
+     "s",
+     "t"
+    ],
+    "joins": [],
+    "columns": [
+     {
+      "name": "x",
+      "alias": "source",
+      "expr": "CAST('2024-01-01 12:00:00.500000' AS TIMESTAMP)"
+     }
+    ],
+    "messages": [],
+    "skipped_joins": [],
+    "notes": [
+     [
+      "p",
+      "2024-01-01 12:00:00.500000"
+     ]
+    ],
+    "filter": null,
+    "window_orders": [],
+    "measures": []
+   }
+  },
+  {
+   "definition": "source: c.s.t\ndimensions:\n- name: x\n  expr: p\nparameters:\n- name: p\n  data_type: DOUBLE\n  default: \"2024-01-01T12.5\"",
+   "parameter_types": {},
+   "source_columns": null,
+   "spec": {
+    "source": [
+     "c",
+     "s",
+     "t"
+    ],
+    "joins": [],
+    "columns": [],
+    "messages": [
+     "Failed to add dimension 'x' since it references the parameter 'p', which its default '2024-01-01T12.5' is not of type DOUBLE"
+    ],
+    "skipped_joins": [],
+    "notes": [],
+    "filter": null,
+    "window_orders": [],
+    "measures": []
+   }
+  },
+  {
+   "definition": "source: c.s.t\ndimensions:\n- name: x\n  expr: p\nparameters:\n- name: p\n  data_type: INT\n  default: \"2024-01-01T12.5\"",
+   "parameter_types": {},
+   "source_columns": null,
+   "spec": {
+    "source": [
+     "c",
+     "s",
+     "t"
+    ],
+    "joins": [],
+    "columns": [],
+    "messages": [
+     "Failed to add dimension 'x' since it references the parameter 'p', which its default '2024-01-01T12.5' is not of type INT"
+    ],
+    "skipped_joins": [],
+    "notes": [],
+    "filter": null,
+    "window_orders": [],
+    "measures": []
+   }
+  },
+  {
+   "definition": "source: c.s.t\ndimensions:\n- name: x\n  expr: p\nparameters:\n- name: p\n  data_type: STRING\n  default: \"١٢\"",
+   "parameter_types": {},
+   "source_columns": null,
+   "spec": {
+    "source": [
+     "c",
+     "s",
+     "t"
+    ],
+    "joins": [],
+    "columns": [
+     {
+      "name": "x",
+      "alias": "source",
+      "expr": "CAST('١٢' AS STRING)"
+     }
+    ],
+    "messages": [],
+    "skipped_joins": [],
+    "notes": [
+     [
+      "p",
+      "١٢"
+     ]
+    ],
+    "filter": null,
+    "window_orders": [],
+    "measures": []
+   }
+  },
+  {
+   "definition": "source: c.s.t\ndimensions:\n- name: x\n  expr: p\nparameters:\n- name: p\n  data_type: TIMESTAMP\n  default: \"١٢\"",
+   "parameter_types": {},
+   "source_columns": null,
+   "spec": {
+    "source": [
+     "c",
+     "s",
+     "t"
+    ],
+    "joins": [],
+    "columns": [],
+    "messages": [
+     "Failed to add dimension 'x' since it references the parameter 'p', which its default '١٢' is not of type TIMESTAMP"
+    ],
+    "skipped_joins": [],
+    "notes": [],
+    "filter": null,
+    "window_orders": [],
+    "measures": []
+   }
+  },
+  {
+   "definition": "source: c.s.t\ndimensions:\n- name: x\n  expr: p\nparameters:\n- name: p\n  data_type: DOUBLE\n  default: \"١٢\"",
+   "parameter_types": {},
+   "source_columns": null,
+   "spec": {
+    "source": [
+     "c",
+     "s",
+     "t"
+    ],
+    "joins": [],
+    "columns": [
+     {
+      "name": "x",
+      "alias": "source",
+      "expr": "CAST('12' AS DOUBLE)"
+     }
+    ],
+    "messages": [],
+    "skipped_joins": [],
+    "notes": [
+     [
+      "p",
+      "12"
+     ]
+    ],
+    "filter": null,
+    "window_orders": [],
+    "measures": []
+   }
+  },
+  {
+   "definition": "source: c.s.t\ndimensions:\n- name: x\n  expr: p\nparameters:\n- name: p\n  data_type: INT\n  default: \"١٢\"",
+   "parameter_types": {},
+   "source_columns": null,
+   "spec": {
+    "source": [
+     "c",
+     "s",
+     "t"
+    ],
+    "joins": [],
+    "columns": [
+     {
+      "name": "x",
+      "alias": "source",
+      "expr": "CAST('12' AS INT)"
+     }
+    ],
+    "messages": [],
+    "skipped_joins": [],
+    "notes": [
+     [
+      "p",
+      "12"
+     ]
+    ],
+    "filter": null,
+    "window_orders": [],
+    "measures": []
+   }
+  },
+  {
+   "definition": "source: c.s.t\ndimensions:\n- name: x\n  expr: p\nparameters:\n- name: p\n  data_type: STRING\n  default: 1e9223372036854775807",
+   "parameter_types": {},
+   "source_columns": null,
+   "spec": {
+    "source": [
+     "c",
+     "s",
+     "t"
+    ],
+    "joins": [],
+    "columns": [
+     {
+      "name": "x",
+      "alias": "source",
+      "expr": "CAST('1e9223372036854775807' AS STRING)"
+     }
+    ],
+    "messages": [],
+    "skipped_joins": [],
+    "notes": [
+     [
+      "p",
+      "1e9223372036854775807"
+     ]
+    ],
+    "filter": null,
+    "window_orders": [],
+    "measures": []
+   }
+  },
+  {
+   "definition": "source: c.s.t\ndimensions:\n- name: x\n  expr: p\nparameters:\n- name: p\n  data_type: TIMESTAMP\n  default: 1e9223372036854775807",
+   "parameter_types": {},
+   "source_columns": null,
+   "spec": {
+    "source": [
+     "c",
+     "s",
+     "t"
+    ],
+    "joins": [],
+    "columns": [],
+    "messages": [
+     "Failed to add dimension 'x' since it references the parameter 'p', which its default '1e9223372036854775807' is not of type TIMESTAMP"
+    ],
+    "skipped_joins": [],
+    "notes": [],
+    "filter": null,
+    "window_orders": [],
+    "measures": []
+   }
+  },
+  {
+   "definition": "source: c.s.t\ndimensions:\n- name: x\n  expr: p\nparameters:\n- name: p\n  data_type: DOUBLE\n  default: 1e9223372036854775807",
+   "parameter_types": {},
+   "source_columns": null,
+   "spec": {
+    "source": [
+     "c",
+     "s",
+     "t"
+    ],
+    "joins": [],
+    "columns": [],
+    "messages": [
+     "Failed to add dimension 'x' since it references the parameter 'p', which its default '1e9223372036854775807' is not of type DOUBLE"
+    ],
+    "skipped_joins": [],
+    "notes": [],
+    "filter": null,
+    "window_orders": [],
+    "measures": []
+   }
+  },
+  {
+   "definition": "source: c.s.t\ndimensions:\n- name: x\n  expr: p\nparameters:\n- name: p\n  data_type: INT\n  default: 1e9223372036854775807",
+   "parameter_types": {},
+   "source_columns": null,
+   "spec": {
+    "source": [
+     "c",
+     "s",
+     "t"
+    ],
+    "joins": [],
+    "columns": [],
+    "messages": [
+     "Failed to add dimension 'x' since it references the parameter 'p', which its default '1e9223372036854775807' is not of type INT"
+    ],
+    "skipped_joins": [],
+    "notes": [],
+    "filter": null,
+    "window_orders": [],
+    "measures": []
+   }
+  },
+  {
    "definition": "version: 0.1\nsource: \"`c`.`s`.orders\"\njoins:\n  - name: users\n    source: \"`c`.`s`.users\"\n    on: source.user_id = users.user_id\ndimensions:\n  - name: order_id\n    expr: source.order_id\n  - name: user_id\n    expr: source.user_id\n  - name: ts\n    expr: source.ts\n  - name: price\n    expr: source.price\n  - name: broken\n    expr: source.order_id / 0\n",
    "parameter_types": {},
    "source_columns": null,

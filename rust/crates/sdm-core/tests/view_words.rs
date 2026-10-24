@@ -9,8 +9,9 @@
 //! `contract/view-expr-vectors.json`, `view-yaml-vectors.json` and
 //! `view-step-vectors.json`. T3.27 turns each into a `Sentence`.
 
-use sdm_core::view_words;
-use sdm_data::view_expr::metric::{self as data, FilterRefusal, ParameterInput};
+use sdm_core::pql::yaml_rules;
+use sdm_core::{view_steps, view_words};
+use sdm_data::view_expr::metric::{self as data, DefaultRefusal, FilterRefusal};
 use sdm_data::view_expr::{self, ExprDialect, ViewKind};
 use sdm_schema::view::metric;
 use sdm_schema::view::model::{self, Edge, EdgeFacts, MeasureNote, TimeColumnNote};
@@ -55,7 +56,8 @@ fn each(document: &str, kind: &str, least: usize, check: impl Fn(&Json) -> Optio
 }
 
 /// A recorded value, the typed form the recorder writes, as YAML text
-/// that reads back to it; `None` for one holding itself.
+/// that reads back to it; `None` for one holding itself, or outside the
+/// YAML view definitions use.
 fn yaml_of(json: &Json) -> Option<String> {
     let inner = &json["v"];
     Some(match json["t"].as_str().unwrap() {
@@ -85,35 +87,13 @@ fn yaml_of(json: &Json) -> Option<String> {
             }
         }
         "str" => serde_json::to_string(inner.as_str().unwrap()).unwrap(),
-        "bytes" => format!("!!binary \"{}\"", inner.as_str().unwrap()),
+        // Outside the YAML view definitions use (register P3J-9).
+        "bytes" | "set" | "tuple" => return None,
         "date" | "datetime" => inner.as_str().unwrap().to_owned(),
         "list" => {
-            let items = inner.as_array().unwrap();
-            if !items.is_empty() && items.iter().all(|i| i["t"] == "tuple") {
-                let pairs: Option<Vec<String>> = items
-                    .iter()
-                    .map(|i| {
-                        Some(format!(
-                            "{{{}: {}}}",
-                            yaml_of(&i["v"][0])?,
-                            yaml_of(&i["v"][1])?
-                        ))
-                    })
-                    .collect();
-                format!("!!pairs [{}]", pairs?.join(", "))
-            } else {
-                let items: Option<Vec<String>> = items.iter().map(yaml_of).collect();
-                format!("[{}]", items?.join(", "))
-            }
-        }
-        "set" => {
-            let members: Option<Vec<String>> = inner
-                .as_array()
-                .unwrap()
-                .iter()
-                .map(|m| Some(format!("{}: ~", yaml_of(m)?)))
-                .collect();
-            format!("!!set {{{}}}", members?.join(", "))
+            let items: Option<Vec<String>> =
+                inner.as_array().unwrap().iter().map(yaml_of).collect();
+            format!("[{}]", items?.join(", "))
         }
         "map" => {
             let pairs: Option<Vec<String>> = inner
@@ -128,9 +108,15 @@ fn yaml_of(json: &Json) -> Option<String> {
     })
 }
 
-/// A recorded value, loaded: its document and node.
+/// A recorded value, loaded: its document and node; `None` for one
+/// outside the YAML view definitions use, a YAML 1.1 line break in a text
+/// among them (register P3J-9).
 fn loaded(json: &Json) -> Option<(Document, NodeId)> {
-    let document = yaml::load(&format!("v: {}", yaml_of(json)?)).unwrap();
+    let document = match yaml::load(&format!("v: {}", yaml_of(json)?), &yaml_rules()) {
+        Ok(document) => document,
+        Err(error) if error.outside.is_some() => return None,
+        Err(error) => panic!("{json}: {error}"),
+    };
     let node = document.get(document.root(), "v").unwrap();
     Some((document, node))
 }
@@ -143,23 +129,21 @@ fn a_yaml_value_is_quoted_as_the_old_client_quoted_it() {
         let Some(repr) = vector["repr"].as_str() else {
             continue;
         };
-        let Ok(document) = yaml::load(vector["yaml"].as_str().unwrap()) else {
-            continue; // A registered scanner difference (P3J-6).
+        let Ok(document) = yaml::load(vector["yaml"].as_str().unwrap(), &yaml_rules()) else {
+            // A registered scanner difference (P3J-6), or YAML outside what
+            // view definitions use (P3J-9), held by sdm-schema's tests.
+            continue;
         };
         let root = document.root();
-        if view_words::value_repr(&document, root) != repr {
-            wrong.push(format!(
-                "{} where {repr}",
-                view_words::value_repr(&document, root)
-            ));
+        let got = view_words::value_repr(&document, root).unwrap();
+        if got != repr {
+            wrong.push(format!("{got} where {repr}"));
         }
-        if let Some(text) = vector["str"].as_str()
-            && view_words::value_text(&document, root) != text
-        {
-            wrong.push(format!(
-                "{} where {text}",
-                view_words::value_text(&document, root)
-            ));
+        if let Some(text) = vector["str"].as_str() {
+            let got = view_words::value_text(&document, root).unwrap();
+            if got != text {
+                wrong.push(format!("{got} where {text}"));
+            }
         }
     }
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
@@ -254,14 +238,17 @@ fn a_parameter_is_read_and_worded_as_the_old_client_read_it() {
     each(STEPS, "default_text", 500, |vector| {
         let (document, default) = loaded(&vector["default"])?;
         let data_type = vector["data_type"].as_str().unwrap();
-        let read = data::default_text(
-            data_type,
-            &view_words::parameter_default(&document, default),
-        );
+        let read = view_steps::default_text(data_type, &document, default);
+        // Python ran out of memory writing the text; the core refuses it
+        // by name before writing it (register P3J-10).
+        if vector["error"]["type"] == "MemoryError" {
+            return (read != Err(DefaultRefusal::TooLong))
+                .then(|| format!("{data_type} {}: {read:?}", vector["default_repr"]));
+        }
         let got = match &read {
             Ok(text) => text.clone(),
             Err(refusal) => {
-                view_words::default_refusal_text(refusal, data_type, &document, default)
+                view_words::default_refusal_text(refusal, data_type, &document, default).unwrap()
             }
         };
         let expected = vector["text"]
@@ -277,15 +264,18 @@ fn a_parameter_is_read_and_worded_as_the_old_client_read_it() {
     });
     each(STEPS, "read_parameters", 10, |vector| {
         let section = yaml_of(&vector["parameters"])?;
-        let spec = metric::parse(&format!("source: c.s.t\nparameters: {section}\n")).unwrap();
+        let spec = metric::parse(
+            &format!("source: c.s.t\nparameters: {section}\n"),
+            &yaml_rules(),
+        )
+        .unwrap();
         let described: Vec<(String, String)> = vector["types"]
             .as_object()
             .unwrap()
             .iter()
             .map(|(k, v)| (k.clone(), v.as_str().unwrap().to_owned()))
             .collect();
-        let inputs: Vec<ParameterInput> = view_words::parameter_inputs(&spec);
-        let read = data::read_parameters(&inputs, &described);
+        let read = view_steps::parameters(&spec, &described);
         let got: serde_json::Map<String, Json> = read
             .iter()
             .map(|(folded, parameter)| {
@@ -301,7 +291,7 @@ fn a_parameter_is_read_and_worded_as_the_old_client_read_it() {
                     serde_json::json!([
                         parameter.name,
                         literal,
-                        view_words::parameter_text(parameter, &spec.document, default)
+                        view_words::parameter_text(parameter, &spec.document, default).unwrap()
                     ]),
                 )
             })
@@ -331,7 +321,7 @@ fn a_filter_and_a_measure_are_refused_in_the_old_client_s_words() {
             .collect();
         let refusal: FilterRefusal =
             data::check_filter(document.text(filter), &candidates).unwrap_err();
-        let text = view_words::filter_refusal_text(&document, filter, &refusal);
+        let text = view_words::filter_refusal_text(&document, filter, &refusal).unwrap();
         (text != error["message"].as_str().unwrap())
             .then(|| format!("{text} where {}", error["message"]))
     });
