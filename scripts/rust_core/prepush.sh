@@ -104,6 +104,9 @@ if [ "$install_hook" = 1 ]; then
   fi
   {
     printf '#!/usr/bin/env bash\n%s\n' "$marker"
+    # Use the installing checkout's checker even in older registered
+    # worktrees, whose prepush.sh still runs package checks before review.
+    printf 'checker=%q\n' "$root/scripts/rust_core/prepush.sh"
     cat <<'EOF'
 # In every worktree of the clone, registered or not (Claude r3 P2-2): no
 # push updates or deletes rust-core, main or rust-core-reference (the
@@ -163,12 +166,12 @@ if ! grep -qxF "$top" "$(dirname "$0")/prepush-worktrees" 2>/dev/null; then
   fi
   exit 0
 fi
-if [ ! -x "$top/scripts/rust_core/prepush.sh" ]; then
-  echo "pre-push: $top has no scripts/rust_core/prepush.sh; not checking" >&2
-  exit 0
+if [ ! -x "$checker" ]; then
+  echo "pre-push: installed checker $checker is unavailable; reinstall the hook" >&2
+  exit 1
 fi
 # Git gives the refs being pushed on standard input; pass them on.
-printf '%s\n' "$refs" | exec "$top/scripts/rust_core/prepush.sh" --pushed-refs
+printf '%s\n' "$refs" | exec "$checker" --pushed-refs
 EOF
   } >"$hook"
   chmod +x "$hook"
