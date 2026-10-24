@@ -9362,7 +9362,7 @@ entries:
     ("1.2345678901234568e+16" for 12345678901234567.1234567891) can match
     another row or none; that changed answer is P2C-3's, not proposed here.
 - id: P3K-2
-  title: "Reviewer-approved improvement: a missing Databricks anchor retains its entity and empty temporal history"
+  title: "A missing Databricks anchor retains its entity and empty temporal history"
   kind: change
   old_behavior: >-
     The old client's _by_time writes a missing anchor (an entity with no
@@ -9389,12 +9389,13 @@ entries:
   cases: [T3.28]
   refs: [T3.4, T3.28]
   status: approved
-  approved_by: reviewer
-  decision_ref: null
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T36-OWNER-2026-10-24-ANCHORS}
   notes: >-
     Both independent Sol 6.1 High round-1 reviews of candidate 870d18da5
     explicitly approved P3D-8 and P3K-2 under the standing better-support
-    rule. This is reviewer approval, not final owner-policy approval.
+    rule. The owner subsequently confirmed this exact policy with
+    "Use empty window history" (T36-OWNER-2026-10-24-ANCHORS).
     Missing anchors retain the entity and its nonwindow data, read no
     temporal history, and let valid anchors proceed without a fabricated
     date. Mixed null/valid anchor coverage is included. The earlier
@@ -9557,7 +9558,7 @@ entries:
     The owner authorized both warehouses. Narrow regressions include UTC bounds at Los Angeles DST edges and NTZ/DATE controls. Non-UTC/DST live checks have not run and require the separate authorized matrix.
 
 - id: P3D-8
-  title: "Reviewer-approved improvement: a missing Snowflake anchor retains its entity with empty temporal history"
+  title: "A missing Snowflake anchor retains its entity with empty temporal history"
   kind: change
   old_behavior: >-
     A null anchor time is written as JSON NaN in the key set's text, which
@@ -9572,12 +9573,13 @@ entries:
   cases: [sample.anchor-entity.null-time, sample.anchor-entity.null-time.prediction-time]
   refs: [T3.6, 'old-behaviour/T3.6-snowflake.md row 49', 'design-remaining.md T3.6 part 6']
   status: approved
-  approved_by: reviewer
-  decision_ref: null
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T36-OWNER-2026-10-24-ANCHORS}
   notes: >-
     Both independent Sol 6.1 High round-1 reviews of candidate 870d18da5
     explicitly approved P3D-8 and P3K-2 under the standing better-support
-    rule. This is reviewer approval, not final owner-policy approval.
+    rule. The owner subsequently confirmed this exact policy with
+    "Use empty window history" (T36-OWNER-2026-10-24-ANCHORS).
     Missing anchors retain the entity and its nonwindow data, read no
     temporal history, and let valid anchors proceed without a fabricated
     date. Mixed null/valid anchor coverage is included. The earlier

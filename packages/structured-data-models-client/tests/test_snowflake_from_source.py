@@ -148,7 +148,7 @@ class _Warehouse(SnowflakeConnection):
     def __init__(self, case: str = 'base.binary') -> None:
         self._recording = _Recording(case)
         self._view_base = (
-            _Recording('base.binary')
+            _Recording('base.regression')
             if case == 'snowflake.rowcount.view-as-table'
             else None
         )
@@ -899,6 +899,41 @@ def test_a_missing_anchor_keeps_its_entity_and_other_entities_history(
             super().__init__('sample.anchor-entity.null-time')
             preview = f'SELECT "order_id", "user_id", "price", "ts" FROM "{DB}"."{SCHEMA}"."orders" LIMIT 1000'
             self.orders = self._recording.answers[(preview, '[]')]
+            # Moving user 1's signup to March below moves its context seed
+            # first. The recorded lookup result is ordered by source ID,
+            # not by batch, so retain its rows and remap only the batch IDs.
+            for (lookup, parameters), answer in list(
+                self._recording.answers.items()
+            ):
+                if (
+                    'f.value::NUMBER as __KUMO_ID__' not in lookup
+                    or '\nJOIN ' not in lookup
+                ):
+                    continue
+                assert json.loads(json.loads(parameters)[0]) == [
+                    7,
+                    6,
+                    5,
+                    4,
+                    3,
+                    2,
+                    1,
+                    0,
+                    1,
+                ]
+                positions = [1, 2, 3, 4, 5, 6, 0, 7, 8]
+                batches = [
+                    positions[int(at)] for at in answer.column(0).to_pylist()
+                ]
+                remapped = answer.set_column(
+                    0,
+                    answer.schema.field(0),
+                    pa.array(batches, answer.column(0).type),
+                )
+                reordered = json.dumps(
+                    [json.dumps([1, 7, 6, 5, 4, 3, 2, 0, 1])]
+                )
+                self._recording.answers[(lookup, reordered)] = remapped
             self.missing_batches: set[int] = set()
             self.present_batches: set[int] = set()
 
@@ -955,12 +990,32 @@ def test_a_missing_anchor_keeps_its_entity_and_other_entities_history(
     prediction = request.payloads[0]['predict']
     assert len(prediction['instance_table']['rows']) == 2
     users = prediction['related_tables']['users']
-    assert {
-        row[users['columns'].index('instance_id')] for row in users['rows']
-    } == {0, 1}
+    by_entity = {
+        row[users['columns'].index('user_id')]: dict(
+            zip(users['columns'], row, strict=True)
+        )
+        for row in users['rows']
+    }
+    assert set(by_entity) == {0, 1}
+    assert by_entity[0]['age'] == 20
+    assert by_entity[0]['signup'] is None
+    assert by_entity[1]['age'] == 21
+    assert by_entity[1]['signup'] == '2024-03-01T00:00:00.000000Z'
+    instances = prediction['instance_table']
+    anchors = {
+        row[instances['columns'].index('instance_id')]: row[
+            instances['columns'].index('__kumo_anchor_time')
+        ]
+        for row in instances['rows']
+    }
+    assert anchors[by_entity[0]['instance_id']] is None
+    assert anchors[by_entity[1]['instance_id']] == '2024-03-01T00:00:00.000000Z'
     orders = prediction['related_tables']['orders']
     assert {
         row[orders['columns'].index('instance_id')] for row in orders['rows']
+    } == {by_entity[1]['instance_id']}
+    assert {
+        row[orders['columns'].index('user_id')] for row in orders['rows']
     } == {1}
     assert warehouse.missing_batches
     assert warehouse.present_batches

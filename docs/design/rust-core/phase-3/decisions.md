@@ -152,7 +152,7 @@ None yet beyond the rows above: the open questions are in [design.md](design.md)
 ## Snowflake continuation answers (2026-10-24)
 
 These rows preserve the owner's scoped continuation answers.
-Missing-anchor handling is approved by both independent round-1 reviewers under the standing better-support rule, not by a final owner-policy decision.
+The owner subsequently confirmed the missing-anchor behavior already approved by both independent round-1 reviewers: retain the entity with empty temporal history and continue other rows.
 
 | # | Decision | Owner's words | Status |
 |---|---|---|---|
@@ -164,3 +164,4 @@ Missing-anchor handling is approved by both independent round-1 reviewers under 
 | T36-OWNER-2026-10-24-DIAGNOSTICS | Repair internal driver-message transport and preserve old namespace retry behavior | "Ok sounds good." | approved by owner 2026-10-24 |
 | T36-OWNER-2026-10-24-SEED | Remove the routine Snowflake seed warning, since the seed is optional, and document the limitation | "The question is, are users expected to provide a seed? If not, I'd suggest not having a warning at all." | approved by owner 2026-10-24 |
 | T36-OWNER-2026-10-24-HYBRID | Detect enforced hybrid-table primary keys and preserve the old client's counting behavior | "Yes, check them." | approved by owner 2026-10-24 |
+| T36-OWNER-2026-10-24-ANCHORS | P3D-8 and P3K-2: retain an entity with a missing anchor, use empty temporal history, continue other rows, and invent no replacement timestamp | "Use empty window history" | approved by owner 2026-10-24 |
