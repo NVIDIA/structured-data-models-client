@@ -93,6 +93,12 @@ impl DataAccess {
         self.layer.reads_tables_as_they_stand(&self.provider)
     }
 
+    /// Whether the run's provider's source holds a type per column that a
+    /// caller's type must match (`DataLayer::holds_column_types`).
+    pub fn holds_column_types(&self) -> bool {
+        self.layer.holds_column_types(&self.provider)
+    }
+
     /// What the run's provider answers.
     pub fn capabilities(&self) -> &ProviderCapabilities {
         &self.capabilities

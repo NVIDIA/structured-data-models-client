@@ -322,6 +322,13 @@ pub(crate) trait SqlDialect: Sync {
         Ok(None)
     }
 
+    /// Whether the source holds a type per column that a caller's type
+    /// must match: `true`, the default; SQLite's columns hold affinities
+    /// only (`DataLayer::holds_column_types`).
+    fn holds_column_types(&self) -> bool {
+        true
+    }
+
     // --- a key set bound as text (T3.28, [`crate::key_text`]) -------------------
 
     /// Each seed of the key set `request` reads, `schema` and `batches` as

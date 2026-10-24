@@ -1344,6 +1344,16 @@ pub trait DataLayer: Send + Sync {
         Ok(None)
     }
 
+    /// Whether `provider`'s source holds a type per column that a caller's
+    /// type for the column must match (plan B's check, T3.4). `true`, the
+    /// default and a host provider's; `false` for a source whose columns
+    /// hold affinities only (SQLite's), where the old client reads any
+    /// column as the type its caller gives (T3.28).
+    fn holds_column_types(&self, provider: &ProviderChoice) -> bool {
+        let _ = provider;
+        true
+    }
+
     /// Whether `provider` reads a source of tables, a database or warehouse
     /// whose tables each `materialize` reads as they stand at that run:
     /// their location where the provider leaves a part to the session,

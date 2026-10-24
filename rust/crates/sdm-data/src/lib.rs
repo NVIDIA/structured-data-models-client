@@ -263,6 +263,10 @@ impl DataLayer for Data {
         }
     }
 
+    fn holds_column_types(&self, provider: &ProviderChoice) -> bool {
+        sql_dialect(provider).is_none_or(|dialect| dialect.holds_column_types())
+    }
+
     fn source_database(&self, provider: &ProviderChoice) -> Option<&'static str> {
         Some(sql_dialect(provider)?.name())
     }
