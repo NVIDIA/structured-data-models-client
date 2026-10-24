@@ -9693,7 +9693,7 @@ entries:
   refs: [T3.13, T3.27]
   status: approved
   approved_by: owner
-  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T313-OWNER-2026-10-24-SHARED-SERVING}
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T313-OWNER-2026-10-24-SHARED-SERVING-1}
   notes: >-
     The previous proposed clamp is retired, not treated as accepted.
     The owner's explicit serving rules authorize named malformed-response
@@ -9772,7 +9772,7 @@ entries:
   refs: [T3.13]
   status: approved
   approved_by: owner
-  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T313-OWNER-2026-10-24-SHARED-SERVING}
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T313-OWNER-2026-10-24-SHARED-SERVING-1}
   notes: >-
     The previous proposed loss of the gateway code is repaired under the
     explicit shared serving policy. No host exception class is fabricated.
@@ -9854,7 +9854,7 @@ entries:
   refs: [T3.13]
   status: rejected
   approved_by: owner
-  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T313-OWNER-2026-10-24-SDK-AUTH}
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T313-OWNER-2026-10-24-SDK-AUTH-1}
   notes: >-
     Owner requires the official Java library and every authentication
     method it supports rather than accepting the proposed token-only
@@ -9911,7 +9911,7 @@ entries:
   refs: [T3.13, PD-2]
   status: approved
   approved_by: owner
-  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T313-OWNER-2026-10-24-SHARED-SERVING}
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T313-OWNER-2026-10-24-SHARED-SERVING-1}
   notes: >-
     The owner chose Shared wire codec and explicit rules (recommended).
     Existing genuine reference vectors remain unchanged; tests compare
@@ -9943,7 +9943,7 @@ entries:
   refs: [T3.13]
   status: approved
   approved_by: owner
-  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T313-OWNER-2026-10-24-SHARED-SERVING}
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T313-OWNER-2026-10-24-SHARED-SERVING-1}
   notes: >-
     The owner's shared-codec choice explicitly permits the reviewed
     malformed/Unicode diagnostic differences. Ordinary statuses, codes,
