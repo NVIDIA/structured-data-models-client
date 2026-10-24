@@ -179,6 +179,80 @@ def repo(origin: tuple[Path, str], tmp_path: Path) -> Path:
     return tree
 
 
+def test_the_fixture_reuses_a_removed_worktree_without_pruning_failed_evidence(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / 'origin'
+    source.mkdir()
+    git(source, 'init', '-q', '-b', 'fixture')
+    landed = commit(source, 'fixture origin')
+    create = repo.__wrapped__
+    original = create((source, landed), tmp_path / 'reused')
+    failed = create((source, landed), tmp_path / 'failed')
+    evidence = failed / 'failure.txt'
+    evidence.write_text('preserve this failed test evidence')
+    # pytest's passed-only tmp_path cleanup removes the directory without
+    # knowing that Git still has a worktree registration for this path.
+    shutil.rmtree(original)
+    replacement = create((source, landed), tmp_path / 'reused')
+    assert replacement == original and replacement.is_dir()
+    assert evidence.read_text() == 'preserve this failed test evidence'
+    registrations = git(source, 'worktree', 'list', '--porcelain')
+    assert f'worktree {replacement}' in registrations
+    assert f'worktree {failed}' in registrations
+
+
+def test_the_synthetic_fixture_omits_only_bulk_r2_capture_inputs(
+    origin: tuple[Path, str],
+) -> None:
+    source, _ = origin
+    copied = source / 'contract/captures/r2'
+    manifests = sorted(copied.glob('*/manifest.json'))
+    expected = sorted((ROOT / 'contract/captures/r2').glob('*/manifest.json'))
+    assert manifests and len(manifests) == len(expected)
+    for path in manifests:
+        assert (
+            path.read_bytes() == (ROOT / path.relative_to(source)).read_bytes()
+        )
+    assert not list(copied.glob('*/*/capture.json'))
+    assert not list(copied.glob('*/*/tables/*.arrows'))
+    assert (source / 'contract/protected-paths.txt').read_bytes() == (
+        ROOT / 'contract/protected-paths.txt'
+    ).read_bytes()
+    assert (
+        source / 'contract/cases/s2/databricks.name.three-part.json'
+    ).read_bytes() == (
+        ROOT / 'contract/cases/s2/databricks.name.three-part.json'
+    ).read_bytes()
+
+
+def test_an_omitted_capture_path_still_requires_protected_edit_review(
+    repo: Path,
+) -> None:
+    # Use an actual payload path with tiny synthetic bytes. These unit
+    # checks exercise Git protection, never the real capture validator.
+    original = next((ROOT / 'contract/captures/r2').glob('*/*/tables/*.arrows'))
+    path = original.relative_to(ROOT).as_posix()
+
+    def write_capture(text: bytes) -> Callable[[Path], None]:
+        def write(tree: Path) -> None:
+            target = tree / path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(text)
+
+        return write
+
+    landed = land(
+        repo, 'T1.15', write_capture(b'synthetic baseline'), protected=path
+    )
+    commit(repo, edit=write_capture(b'synthetic changed capture'))
+    assert check(repo, landed, protected='docs only') == [
+        f'protected: {path}: changed, and the Reviewed-by and Protected-paths '
+        'trailers do not name it'
+    ]
+    assert check(repo, landed, protected=path) == []
+
+
 def checkpoint_of(repo: Path) -> str:
     return git(repo, 'rev-parse', 'HEAD')
 
