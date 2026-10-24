@@ -39,6 +39,11 @@ Read at each check-in (learnings.md, lessons 8 and 12): round 4 of any package g
 | Packages at review round 4 or later | none |
 | Finding families blocking twice | none |
 
+## Warehouse cases carried to a later package
+
+- T3.4's 22 Databricks and warehouse cases (`databricks.*`, `adventureworks.notebook.*`, `adventureworks.quickstart.*`, `warehouse.shop.*`) are not in the repository yet: they land, and are recorded live on the SQL warehouse and Spark legs, with the Databricks package T3.20d.
+- The 19 metric-view cases (`view.metric.*`) and the Databricks SQL and Spark recordings of every case land with T3.20d too; T3.20 holds the Snowflake and Lakebase legs only.
+
 ## Design review rounds
 
 | Round | SHA | Claude | Codex | Findings |
