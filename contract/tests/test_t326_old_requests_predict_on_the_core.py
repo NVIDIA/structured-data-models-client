@@ -185,3 +185,26 @@ def test_a_request_gathered_on_the_old_route_predicts_on_the_core_as_there(
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     assert writer().answers(request, name) == old
     assert handed and all(asked is request for asked in handed)
+
+
+def test_a_request_holding_other_payloads_than_the_core_wrote_answers_as_the_old_client(
+    monkeypatch: pytest.MonkeyPatch, on_the_core: list[Any]
+) -> None:
+    r"""Claude r1 P2: a request the core materialized whose payloads were
+    changed since (a call dropped) is predicted from what it holds, as the
+    old client predicts whatever payloads a request holds, never a bare
+    ValueError."""
+    query, arguments = writer().REQUESTS['batched']
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        schema = Schema.from_source(writer().source(), writer().TABLES)
+        request = PredictiveQuery(query, schema).materialize(
+            anchor_time=pd.Timestamp(writer().ANCHOR), **arguments
+        )
+    assert request._core is not None and request._core.batches
+    request._payloads = request._payloads[:2]
+    core = writer().answers(request, 'batched')
+    assert on_the_core
+    monkeypatch.delenv(_routing.ENVIRONMENT)
+    assert core == writer().answers(request, 'batched')
+    assert len(core[0]['bodies']) == 2
