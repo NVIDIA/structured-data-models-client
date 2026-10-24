@@ -1635,6 +1635,41 @@ def test_an_empty_table_is_refused_before_the_tables_are_kept(
     assert 'OTHER' in repr(request.payloads)
 
 
+def _seeded_over(db: Any, text: str, parameters: list[Any]) -> pa.Table:
+    r"""A read of a key set (``WITH TMP AS ...``), either route's, run over
+    ``db``'s tables: the key set's columns under both routes' names."""
+    import pandas as pd
+
+    keys = json.loads(parameters[0])
+    seeds = pd.DataFrame(
+        keys
+        if keys and isinstance(keys[0], dict)
+        else [{'key': key} for key in keys]
+    )
+    seeds['batch'] = range(len(seeds))
+    for column in ('start', 'end', 'time', 'e', 's'):
+        if column in seeds:
+            seeds[column] = pd.to_datetime(seeds[column])
+    for given, named in (
+        ('batch', '__KUMO_BATCH__'),
+        ('key', '__KUMO_ID__'),
+        ('id', '__KUMO_ID__'),
+        ('e', '__KUMO_END_TIME__'),
+        ('s', '__KUMO_START_TIME__'),
+    ):
+        if given in seeds:
+            seeds[named] = seeds[given]
+    db.register('seeds', pa.Table.from_pandas(seeds, preserve_index=False))
+    text = re.sub(
+        r'^WITH TMP AS \( .*? \) SELECT ',
+        'WITH TMP AS (SELECT * FROM seeds) SELECT ',
+        text,
+        count=1,
+    )
+    text = re.sub(r'`main`\.`\w+`\.', '', text).replace('`', '"')
+    return db.execute(text, parameters[1:]).to_arrow_table()
+
+
 class _DroppingWarehouse(_CompletingWarehouse):
     r"""The completing warehouse, from whose ``users`` the column ``age``
     is dropped while ``dropped`` says so: its catalog and preview answer
@@ -1644,42 +1679,12 @@ class _DroppingWarehouse(_CompletingWarehouse):
     dropped = False
 
     def answer(self, operation: str, parameters: list[Any]) -> pa.Table:
-        import pandas as pd
         import pyarrow.compute as pc
 
         text = _normal(operation)
         if self.dropped and text.startswith('WITH TMP AS ( SELECT pos AS '):
             self.calls.append((text, list(parameters)))
-            keys = json.loads(parameters[0])
-            seeds = pd.DataFrame(
-                keys
-                if keys and isinstance(keys[0], dict)
-                else [{'key': key} for key in keys]
-            )
-            seeds['batch'] = range(len(seeds))
-            for column in ('start', 'end', 'time', 'e', 's'):
-                if column in seeds:
-                    seeds[column] = pd.to_datetime(seeds[column])
-            for given, named in (
-                ('batch', '__KUMO_BATCH__'),
-                ('key', '__KUMO_ID__'),
-                ('id', '__KUMO_ID__'),
-                ('e', '__KUMO_END_TIME__'),
-                ('s', '__KUMO_START_TIME__'),
-            ):
-                if given in seeds:
-                    seeds[named] = seeds[given]
-            self._db.register(
-                'seeds', pa.Table.from_pandas(seeds, preserve_index=False)
-            )
-            text = re.sub(
-                r'^WITH TMP AS \( .*? \) SELECT ',
-                'WITH TMP AS (SELECT * FROM seeds) SELECT ',
-                text,
-                count=1,
-            )
-            text = re.sub(r'`main`\.`\w+`\.', '', text).replace('`', '"')
-            return self._db.execute(text, parameters[1:]).to_arrow_table()
+            return _seeded_over(self._db, text, parameters)
         found = super().answer(operation, parameters)
         if (
             self.dropped
@@ -1850,3 +1855,125 @@ def test_a_column_taken_out_of_the_schema_and_put_back_is_sent(
     request = _materialized(schema)
     users = request.payloads[0]['schema']['related_tables']['users']['columns']
     assert 'country' in list(users)
+
+
+class _RepeatedKeyWarehouse(_CompletingWarehouse):
+    r"""The completing warehouse, whose ``users`` holds its key ``2`` twice:
+    every read of ``users``' rows (its preview, its key's count, a sample,
+    a lookup) runs over that table, the catalog declaring the key as before.
+    Databricks declares keys and does not enforce them."""
+
+    def __init__(self, **how: Any) -> None:
+        super().__init__(**how)
+        self._db.execute(
+            'INSERT INTO users SELECT * FROM users WHERE user_id = 2'
+        )
+
+    def answer(self, operation: str, parameters: list[Any]) -> pa.Table:
+        text = _normal(operation)
+        if text.startswith('WITH TMP AS ( SELECT pos AS '):
+            self.calls.append((text, list(parameters)))
+            return _seeded_over(self._db, text, parameters)
+        if (
+            '`main`.`shop`.`users`' in operation
+            and 'information_schema' not in text
+            and not parameters
+        ):
+            self.calls.append((text, list(parameters)))
+            sql = re.sub(r'`main`\.`\w+`\.', '', text).replace('`', '"')
+            return self._db.execute(sql).to_arrow_table()
+        found = super().answer(operation, parameters)
+        if text.startswith(
+            'SELECT tc.constraint_type, tc.constraint_name,'
+        ) and parameters[-1:] == ['users']:
+            # `users.user_id` declared its primary key, as Databricks
+            # declares one it does not enforce.
+            found = pa.Table.from_pylist(
+                [
+                    {
+                        'constraint_type': 'PRIMARY KEY',
+                        'constraint_name': 'users_pk',
+                        'column_name': 'user_id',
+                    }
+                ],
+                schema=found.schema,
+            )
+        return found
+
+
+_RepeatedKeyConnection = type(
+    'Connection',
+    (_RepeatedKeyWarehouse,),
+    {'__module__': 'databricks.sql.client'},
+)
+
+
+@pytest.mark.parametrize('route', ['core', 'old'])
+def test_a_repeated_declared_key_is_refused_as_databricks_enforces_none(
+    route: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""A key Databricks declares, which it does not enforce, is counted
+    when the schema is described: a repeated value is refused, naming the
+    source as one that does not enforce declared keys (round 15's P0-1,
+    Codex)."""
+    from sdm_client.errors import StructuredDataError
+
+    _route(route, monkeypatch)
+    connection = _RepeatedKeyConnection()
+    with pytest.raises(StructuredDataError) as refused:
+        Schema.from_source(DatabricksSource(connection, catalog='main'))
+    assert refused.value.code == 'INVALID_REQUEST'
+    assert 'users.user_id is not unique enough' in str(refused.value)
+    assert 'Databricks does not enforce declared keys' in str(refused.value)
+
+
+@pytest.mark.parametrize('route', ['core', 'old'])
+def test_a_repeated_declared_key_left_unchecked_is_read_once_in_the_context(
+    route: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""With the key check off, a key Databricks declares and does not
+    enforce, repeated in the table, is read once per key in the context,
+    as the old route keeps the first row of a key several rows hold (round
+    15's P0-1, Codex)."""
+    import pandas as pd
+
+    from sdm_client import PredictiveQuery
+
+    _route(route, monkeypatch)
+    connection = _RepeatedKeyConnection()
+    schema = Schema.from_source(
+        DatabricksSource(connection, catalog='main'), check_keys=False
+    )
+    request = PredictiveQuery(
+        'PREDICT COUNT(orders.*, 0, 30, days) > 0 FOR EACH users.user_id',
+        schema,
+    ).materialize(indices=[0, 1], anchor_time=pd.Timestamp('2024-03-01'))
+    assert request.payloads
+
+
+@pytest.mark.parametrize('route', ['core', 'old'])
+def test_a_repeated_declared_key_scored_is_refused_by_name(
+    route: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""With the key check off, an entity scored by a key Databricks
+    declares and does not enforce, which two rows hold, is refused by name,
+    as the old route refuses guessing which row is meant (round 15's P0-1,
+    Codex)."""
+    import pandas as pd
+
+    from sdm_client import PredictiveQuery
+    from sdm_client.errors import StructuredDataError
+
+    _route(route, monkeypatch)
+    connection = _RepeatedKeyConnection()
+    schema = Schema.from_source(
+        DatabricksSource(connection, catalog='main'), check_keys=False
+    )
+    with pytest.raises(StructuredDataError) as refused:
+        PredictiveQuery(
+            'PREDICT COUNT(orders.*, 0, 30, days) > 0 FOR EACH users.user_id',
+            schema,
+        ).materialize(indices=[2, 3], anchor_time=pd.Timestamp('2024-03-01'))
+    assert str(refused.value).startswith(
+        "[INVALID_REQUEST] Cannot score 2: more than one row of table 'users'"
+    ), str(refused.value)
