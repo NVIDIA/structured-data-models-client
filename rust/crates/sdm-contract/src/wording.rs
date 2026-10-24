@@ -343,6 +343,9 @@ pub fn template(sentence: Sentence) -> Template {
         S::PrimaryKeyAsForeignKey => said(
             r#"Cannot treat the primary key of table '{source_table}' as a foreign key. Remove either the primary key or the link before proceeding."#,
         ),
+        S::EdgeKeyTypes => said(
+            r#"Edge(src_table={source_table!r}, fkey={source_column!r}, dst_table={target_table!r}) is invalid as foreign key {source_column!r} and primary key {target_column!r} have incompatible data types (got foreign key data type {source_dtype!r} and primary key data type {target_dtype!r})"#,
+        ),
         S::SchemaTableTwice => said(r#"the schema holds table {table!r} twice"#),
         S::SchemaColumnTwice => said(r#"table {table!r} holds column {column!r} twice"#),
         S::IncompatibleSemanticType => said(
