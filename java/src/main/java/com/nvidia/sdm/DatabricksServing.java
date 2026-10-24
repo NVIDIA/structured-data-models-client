@@ -60,21 +60,17 @@ public final class DatabricksServing {
 
   private static final Set<String> LOCAL_HOSTS = Set.of("localhost", "127.0.0.1", "::1", "[::1]");
 
-  private final String host;
   private final String endpoint;
-  private final Supplier<String> token;
-  private final SdkAuthentication sdk;
+  private final AuthenticationSource authentication;
   private final long maxRequestBytes;
   private final Duration timeout;
   private final HttpClient client;
 
   private DatabricksServing(
-      String host, String endpoint, Supplier<String> token, SdkAuthentication sdk,
+      String endpoint, AuthenticationSource authentication,
       long maxRequestBytes, Duration timeout) {
-    this.host = host;
     this.endpoint = endpoint;
-    this.token = token;
-    this.sdk = sdk;
+    this.authentication = authentication;
     this.maxRequestBytes = maxRequestBytes;
     this.timeout = timeout;
     this.client = HttpClient.newBuilder().connectTimeout(timeout).build();
@@ -110,8 +106,11 @@ public final class DatabricksServing {
     String name = name(endpoint);
     positiveLimit(maxRequestBytes);
     DatabricksConfig config = Objects.requireNonNull(workspace.config(), "workspace.config");
-    return new DatabricksServing(
-        null, name, null, new SdkAuthentication(config), maxRequestBytes, DEFAULT_TIMEOUT);
+    AuthenticationSource source = new AuthenticationSource(() -> {
+      Map<String, String> headers = Map.copyOf(config.authenticate());
+      return new Authentication(config.getHost(), headers);
+    });
+    return new DatabricksServing(name, source, maxRequestBytes, DEFAULT_TIMEOUT);
   }
 
   /** The endpoint {@code endpoint} in the workspace at {@code host}, with the gateway's limit. */
@@ -123,6 +122,8 @@ public final class DatabricksServing {
    * The endpoint {@code endpoint} (its name, not its URL) in the workspace at {@code host} (its
    * base URL, {@code https://...}), called with the token {@code token} gives, each request at
    * most {@code maxRequestBytes} once wrapped in the endpoint's envelope.
+   * The supplier runs on a bounded credential worker, so it must not depend on the calling
+   * thread's local state.
    *
    * @throws StructuredDataException {@code INVALID_CONFIGURATION} for a host that is not a base
    *     URL or would send the token over plaintext HTTP to another host, an endpoint that is not
@@ -135,7 +136,9 @@ public final class DatabricksServing {
     String base = base(host);
     String name = name(endpoint);
     positiveLimit(maxRequestBytes);
-    return new DatabricksServing(base, name, token, null, maxRequestBytes, DEFAULT_TIMEOUT);
+    AuthenticationSource source = new AuthenticationSource(() -> new Authentication(
+        base, Map.of("Authorization", "Bearer " + token.get())));
+    return new DatabricksServing(name, source, maxRequestBytes, DEFAULT_TIMEOUT);
   }
 
   /** This endpoint, each attempt and its retries bounded by {@code timeout}. */
@@ -143,7 +146,7 @@ public final class DatabricksServing {
     if (timeout == null || timeout.isNegative() || timeout.isZero()) {
       throw configuration("timeout must be a positive duration");
     }
-    return new DatabricksServing(host, endpoint, token, sdk, maxRequestBytes, timeout);
+    return new DatabricksServing(endpoint, authentication, maxRequestBytes, timeout);
   }
 
   /** The serving endpoint's name. */
@@ -187,22 +190,20 @@ public final class DatabricksServing {
   byte[] post(byte[] body) throws Host.EndpointFailed, Host.TransportFailed {
     long deadline = System.nanoTime() + timeout.toNanos();
     for (int attempt = 1; ; attempt++) {
-      Authentication authentication = sdk == null
-          ? new Authentication(host, Map.of("Authorization", "Bearer " + token.get()))
-          : authenticate(deadline);
+      Authentication granted = authenticate(deadline);
       long remaining = deadline - System.nanoTime();
       if (remaining <= 0) {
         throw new Host.EndpointFailed(504, new byte[0]);
       }
       // Native SDK authentication can discover the workspace host. Validate it afterwards,
       // before any credential is sent, and on every attempt if the caller edits its config.
-      URI target = URI.create(base(authentication.host())
+      URI target = URI.create(base(granted.host())
           + "/serving-endpoints/" + endpoint + "/invocations");
       HttpRequest request;
       try {
         HttpRequest.Builder builder = HttpRequest.newBuilder(target)
             .timeout(Duration.ofNanos(remaining));
-        authentication.headers().forEach(builder::header);
+        granted.headers().forEach(builder::header);
         request = builder
             .setHeader("Content-Type", "application/json")
             .setHeader("User-Agent", userAgent())
@@ -252,17 +253,17 @@ public final class DatabricksServing {
 
   private record Authentication(String host, Map<String, String> headers) {}
 
-  /** Shared by timeout copies: a noninterruptible SDK refresh never accumulates more workers. */
-  private static final class SdkAuthentication {
-    final DatabricksConfig config;
+  /** Shared by timeout copies: a noninterruptible refresh never accumulates more workers. */
+  private static final class AuthenticationSource {
+    final Supplier<Authentication> refresh;
     final Semaphore permit = new Semaphore(1, true);
 
-    SdkAuthentication(DatabricksConfig config) {
-      this.config = config;
+    AuthenticationSource(Supplier<Authentication> refresh) {
+      this.refresh = refresh;
     }
   }
 
-  /** SDK refresh may perform IO: cancellation must bound it as well as the serving body. */
+  /** Credential refresh may perform IO: cancellation bounds it as well as the serving body. */
   private Authentication authenticate(long deadline)
       throws Host.EndpointFailed, Host.TransportFailed {
     long remaining = deadline - System.nanoTime();
@@ -270,29 +271,26 @@ public final class DatabricksServing {
       throw new Host.EndpointFailed(504, new byte[0]);
     }
     try {
-      if (!sdk.permit.tryAcquire(remaining, TimeUnit.NANOSECONDS)) {
+      if (!authentication.permit.tryAcquire(remaining, TimeUnit.NANOSECONDS)) {
         throw new Host.EndpointFailed(504, new byte[0]);
       }
     } catch (InterruptedException error) {
       Thread.currentThread().interrupt();
       throw new Host.TransportFailed();
     }
-    FutureTask<Authentication> pending = new FutureTask<>(() -> {
-      Map<String, String> headers = Map.copyOf(sdk.config.authenticate());
-      return new Authentication(sdk.config.getHost(), headers);
-    });
+    FutureTask<Authentication> pending = new FutureTask<>(authentication.refresh::get);
     Thread refresh = new Thread(() -> {
       try {
         pending.run();
       } finally {
-        sdk.permit.release();
+        authentication.permit.release();
       }
-    }, "sdm-databricks-auth-" + Integer.toHexString(System.identityHashCode(sdk)));
+    }, "sdm-databricks-auth-" + Integer.toHexString(System.identityHashCode(authentication)));
     refresh.setDaemon(true);
     try {
       refresh.start();
     } catch (RuntimeException | Error error) {
-      sdk.permit.release();
+      authentication.permit.release();
       throw error;
     }
     try {
@@ -303,7 +301,7 @@ public final class DatabricksServing {
       Thread.currentThread().interrupt();
       throw new Host.TransportFailed();
     } catch (ExecutionException error) {
-      // SDK diagnostics can carry credentials and configuration. They stay internal.
+      // Credential-provider diagnostics can carry secrets and configuration. They stay internal.
       throw new Host.TransportFailed();
     } finally {
       pending.cancel(true);
