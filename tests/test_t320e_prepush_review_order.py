@@ -146,7 +146,14 @@ def test_existing_registered_worktree_uses_installed_safety_checker(
     repo, env = push_repo
     legacy = repo.parent / 'legacy'
     done = _run(
-        repo, env, 'git', 'worktree', 'add', '-b', 'other-review-topic', str(legacy)
+        repo,
+        env,
+        'git',
+        'worktree',
+        'add',
+        '-b',
+        'other-review-topic',
+        str(legacy),
     )
     assert done.returncode == 0, done.stdout + done.stderr
     (legacy / 'scripts/rust_core/prepush.sh').write_text(

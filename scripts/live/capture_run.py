@@ -504,9 +504,12 @@ def _one_case(
         with contextlib.redirect_stdout(checked):
             status = _module('capture_check').recording_main(
                 [
-                    '--cases', path,
-                    '--capture', str(recording),
-                    '--leg', leg,
+                    '--cases',
+                    path,
+                    '--capture',
+                    str(recording),
+                    '--leg',
+                    leg,
                     '--locked',
                 ]  # fmt: skip
             )

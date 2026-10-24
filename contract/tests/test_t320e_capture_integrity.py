@@ -111,7 +111,9 @@ def _unread(sql: str, leg: str) -> tuple[Any, Any, Any]:
     return case, line, tables
 
 
-@pytest.mark.parametrize('sql', ['SELECT setseed(%s)', ' select SETSEED ( %s ) ; '])
+@pytest.mark.parametrize(
+    'sql', ['SELECT setseed(%s)', ' select SETSEED ( %s ) ; ']
+)
 def test_only_the_lakebase_seed_state_change_may_be_unread(sql: str) -> None:
     case, line, tables = _unread(sql, 'lakebase')
     assert check.capture_problems(line, case, tables) == []
@@ -120,7 +122,10 @@ def test_only_the_lakebase_seed_state_change_may_be_unread(sql: str) -> None:
 @pytest.mark.parametrize(
     ('sql', 'leg'),
     [
-        ('SELECT * FROM information_schema.referential_constraints', 'databricks-sql'),
+        (
+            'SELECT * FROM information_schema.referential_constraints',
+            'databricks-sql',
+        ),
         ('SELECT setseed(%s)', 'databricks-sql'),
         ('SELECT setseed(%s), user_id FROM users', 'lakebase'),
         ('SELECT setseed(%s); SELECT user_id FROM users', 'lakebase'),

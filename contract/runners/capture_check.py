@@ -875,7 +875,9 @@ def capture_problems(
             not results
             and statement.get('error') is None
             and _QUERY.match(statement['sql'])
-            and not (leg == 'lakebase' and _SEED_STATE.fullmatch(statement['sql']))
+            and not (
+                leg == 'lakebase' and _SEED_STATE.fullmatch(statement['sql'])
+            )
         ):
             problems.append(f'{where}: a query with no result read')
         for read, result in enumerate(results):

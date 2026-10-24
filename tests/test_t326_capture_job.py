@@ -571,6 +571,8 @@ def test_one_dirty_excuse_reaches_the_recording_and_its_checker(
     monkeypatch.setattr(runner, 'run', run)
     monkeypatch.setattr(checker, 'recording_main', validate)
     options = {'dirty_excuse': reason} if source == 'option' else {}
-    assert capture_run.run('lakebase', tmp_path, tmp_path / 'out', **options) == 0
+    assert (
+        capture_run.run('lakebase', tmp_path, tmp_path / 'out', **options) == 0
+    )
     assert imported == list('abcde')
     assert os.environ['SDM_RECORD_EXCUSE'] == expected
