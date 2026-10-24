@@ -196470,15 +196470,35 @@
    "literals": []
   },
   {
+   "expr": "ts",
+   "literals": []
+  },
+  {
+   "expr": "`order ts`",
+   "literals": []
+  },
+  {
+   "expr": "(ts)",
+   "literals": []
+  },
+  {
+   "expr": "a) - date(b",
+   "literals": []
+  },
+  {
+   "expr": "DATE(ts)",
+   "literals": []
+  },
+  {
+   "expr": "source.ts",
+   "literals": []
+  },
+  {
    "expr": "source.order_id",
    "literals": []
   },
   {
    "expr": "source.user_id",
-   "literals": []
-  },
-  {
-   "expr": "source.ts",
    "literals": []
   },
   {

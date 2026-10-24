@@ -19,7 +19,12 @@ Run from the reference checkout::
         --record-out=<this repository>/contract \
         --record-cases=<the view cases of rust-core-phase-3-topic-T3.5-tests2>
 
-which also reads the semantic-view definitions the old tests hold as text
+which also records the old client's metric-view helpers, its reading of
+``DESCRIBE TABLE EXTENDED``, and the graph's steps of a conversion (a
+join's key reason, the measure notes, the time column with the reads and
+choices it made on the way, an edge's error, and the texts of a skipped
+join and a parameter note) into ``view-step-vectors.json``; and reads the
+semantic-view definitions the old tests hold as text
 (``SEMANTIC_TEST_FILES``, whose tests need the Snowflake connector the
 reference's environment lacks) and each view case's definition through
 ``yaml.safe_load``, and each metric-view case's through ``parse_metric_view``,
@@ -497,12 +502,476 @@ def _safe_load(original: Any, stream: Any) -> Any:
     return original(stream)
 
 
+def _plain(item: Any) -> Any:
+    r"""``item`` as JSON as it stands: tuples as lists, a mapping's keys as
+    text."""
+    if isinstance(item, tuple | list):
+        return [_plain(entry) for entry in item]
+    if isinstance(item, dict):
+        return {str(key): _plain(entry) for key, entry in item.items()}
+    if item is None or isinstance(item, bool | int | float | str):
+        return item
+    return str(item)
+
+
+def _record_call(kind: str, inputs: dict[str, Any], call: Any) -> Any:
+    r"""Runs ``call`` and records ``inputs`` with its answer, or with the
+    class and text of what it raised."""
+    vector = dict(inputs)
+    try:
+        answer = call()
+    except Exception as error:
+        vector['error'] = {'type': type(error).__name__, 'message': str(error)}
+        RECORDER.add(kind, vector, vector)
+        raise
+    return answer, vector
+
+
+def _parse_name(kind: str) -> Any:
+    def record(original: Any, name: Any) -> Any:
+        answer, vector = _record_call(
+            kind, {'name': value(name)}, lambda: original(name)
+        )
+        vector['parts'] = None if answer is None else list(answer)
+        RECORDER.add(kind, vector, vector)
+        return answer
+
+    return record
+
+
+def _join_condition(original: Any, condition: Any) -> Any:
+    answer = original(condition)
+    vector = {
+        'condition': value(condition),
+        'keys': None
+        if answer is None
+        else [[side.qualifier, side.column] for side in answer],
+    }
+    RECORDER.add('join_conditions', vector, vector)
+    return answer
+
+
+def _unquote(original: Any, name: Any) -> Any:
+    answer = original(name)
+    RECORDER.add('unquote', name, {'name': name, 'out': answer})
+    return answer
+
+
+def _alias(alias: Any) -> Any:
+    return [alias] if isinstance(alias, str) else list(alias)
+
+
+def _references(original: Any, expr: Any, alias: Any) -> Any:
+    answer = original(expr, alias)
+    vector = {'expr': expr, 'path': _alias(alias), 'found': answer}
+    RECORDER.add('references_alias', vector, vector)
+    return answer
+
+
+def _strip_alias(original: Any, expr: Any, alias: Any) -> Any:
+    answer = original(expr, alias)
+    vector = {'expr': expr, 'path': _alias(alias), 'out': answer}
+    RECORDER.add('strip_alias', vector, vector)
+    return answer
+
+
+def _derived(original: Any, expr: Any) -> Any:
+    answer = original(expr)
+    RECORDER.add('derived_column', expr, {'expr': expr, 'column': answer})
+    return answer
+
+
+def _default(original: Any, data_type: Any, default: Any) -> Any:
+    inputs = {
+        'data_type': data_type,
+        'default': value(default),
+        'default_str': str(default),
+        'default_repr': repr(default),
+    }
+    answer, vector = _record_call(
+        'default_text', inputs, lambda: original(data_type, default)
+    )
+    vector['text'] = answer
+    RECORDER.add('default_text', vector, vector)
+    return answer
+
+
+def _parameters_of(parameters: Any) -> Any:
+    return {
+        folded: [parameter.name, parameter.literal, parameter.text]
+        for folded, parameter in parameters.items()
+    }
+
+
+def _read_parameters(original: Any, cfgs: Any, types: Any) -> Any:
+    answer = original(cfgs, types)
+    vector = {
+        'parameters': value(cfgs),
+        'types': dict(types),
+        'read': _parameters_of(answer),
+    }
+    RECORDER.add('read_parameters', vector, vector)
+    return answer
+
+
+def _substitute_parameters(original: Any, expr: Any, parameters: Any) -> Any:
+    inputs = {'expr': expr, 'parameters': _parameters_of(parameters)}
+    answer, vector = _record_call(
+        'substitute_parameters', inputs, lambda: original(expr, parameters)
+    )
+    vector['out'] = answer[0]
+    vector['used'] = [parameter.name for parameter in answer[1]]
+    RECORDER.add('substitute_parameters', vector, vector)
+    return answer
+
+
+def _substitute_fields(
+    original: Any, expr: Any, fields: Any, qualifiers: Any
+) -> Any:
+    inputs = {
+        'expr': expr,
+        'fields': dict(fields),
+        'qualifiers': sorted(list(path) for path in qualifiers),
+    }
+    answer, vector = _record_call(
+        'substitute_fields', inputs, lambda: original(expr, fields, qualifiers)
+    )
+    vector['out'], vector['refused'] = answer
+    RECORDER.add('substitute_fields', vector, vector)
+    return answer
+
+
+def _star_of(original: Any, expr: Any) -> Any:
+    answer, vector = _record_call(
+        'star', {'expr': expr}, lambda: original(expr)
+    )
+    vector['star'] = answer
+    RECORDER.add('star', vector, vector)
+    return answer
+
+
+def _candidates(candidates: Any) -> Any:
+    return [[list(path), alias] for path, alias in candidates]
+
+
+def _check_filter(original: Any, row_filter: Any, candidates: Any) -> Any:
+    inputs = {
+        'filter': value(row_filter),
+        'candidates': _candidates(candidates),
+    }
+    answer, vector = _record_call(
+        'check_filter', inputs, lambda: original(row_filter, candidates)
+    )
+    vector['sql'] = None if answer is None else answer.trusted()
+    RECORDER.add('check_filter', vector, vector)
+    return answer
+
+
+def _read_measures(
+    original: Any,
+    cfgs: Any,
+    candidates: Any,
+    kept: Any,
+    dimensions: Any,
+    refused: Any,
+    parameters: Any,
+    messages: Any,
+) -> Any:
+    before = len(messages)
+    answer = original(
+        cfgs, candidates, kept, dimensions, refused, parameters, messages
+    )
+    vector = {
+        'measures': value(cfgs),
+        'candidates': _candidates(candidates),
+        'kept': sorted(kept),
+        'dimensions': {
+            folded: [column.name, column.alias, column.expr]
+            for folded, column in dimensions.items()
+        },
+        'refused': sorted(refused),
+        'parameters': sorted(parameters),
+        'read': [
+            {
+                'name': measure.name,
+                'inputs': [list(entry) for entry in measure.inputs],
+                'aggregation': None
+                if measure.aggregation is None
+                else list(measure.aggregation),
+            }
+            for measure in answer
+        ],
+        'messages': list(messages[before:]),
+    }
+    RECORDER.add('read_measures', vector, vector)
+    return answer
+
+
+def _resolve_keys(
+    original: Any, join: Any, child_columns: Any, parent_columns: Any
+) -> Any:
+    from sdm_relational_engine.rfm.backend.databricks.metric_view import (
+        UnsupportedJoinError,
+    )
+
+    vector = {
+        'join': {
+            'alias': join.alias,
+            'parent_alias': join.parent_alias,
+            'path': list(join.path),
+            'condition': [
+                [side.qualifier, side.column] for side in join.condition
+            ],
+        },
+        'child_columns': [str(c) for c in child_columns],
+        'parent_columns': [str(c) for c in parent_columns],
+    }
+    try:
+        answer = original(join, child_columns, parent_columns)
+    except UnsupportedJoinError as error:
+        vector['reason'] = error.reason
+        RECORDER.add('resolve_join_keys', vector, vector)
+        raise
+    vector['keys'] = list(answer)
+    RECORDER.add('resolve_join_keys', vector, vector)
+    return answer
+
+
+_DESCRIBED: list[Any] = []
+
+
+def _sections(original: Any, rows: Any) -> Any:
+    _DESCRIBED.append(
+        [[None if cell is None else str(cell) for cell in row] for row in rows]
+    )
+    return original(rows)
+
+
+def _describe(original: Any, connection: Any, quoted_name: Any) -> Any:
+    _DESCRIBED.clear()
+    try:
+        answer = original(connection, quoted_name)
+    except Exception as error:
+        if _DESCRIBED:
+            vector = {
+                'name': quoted_name,
+                'rows': _DESCRIBED[0],
+                'error': {
+                    'type': type(error).__name__,
+                    'message': str(error),
+                },
+            }
+            RECORDER.add('describe', vector, vector)
+        raise
+    vector = {
+        'name': quoted_name,
+        'rows': _DESCRIBED[0],
+        'definition': answer.definition,
+        'dtypes': answer.dtypes,
+        'parameters': answer.parameters,
+        'catalog': answer.catalog,
+        'schema': answer.schema,
+    }
+    RECORDER.add('describe', vector, vector)
+    return answer
+
+
+def _key_reason(original: Any, count: Any, table: Any, key: Any) -> Any:
+    answer = original(count, table, key)
+    vector = {
+        'count': {
+            'rows': count.rows,
+            'distinct': count.distinct,
+            'nulls': count.nulls,
+            'repeats': count.repeats,
+            'example': None if count.example is None else value(count.example),
+            'example_repr': None
+            if count.example is None
+            else repr(count.example),
+        },
+        'table': table,
+        'key': key,
+        'reason': answer,
+    }
+    RECORDER.add('join_key_reason', vector, vector)
+    return answer
+
+
+def _renamed(original: Any, expr: Any) -> Any:
+    answer = original(expr)
+    RECORDER.add('renamed_column', expr, {'expr': expr, 'column': answer})
+    return answer
+
+
+def _columns_of_table(table: Any) -> list[Any]:
+    return [
+        {
+            'name': column.name,
+            'expr': None if column.expr is None else str(column.expr),
+            'dtype': None if column.dtype is None else str(column.dtype),
+            'stype': None if column.stype is None else str(column.stype),
+        }
+        for column in table.columns
+    ]
+
+
+def _measure_notes(original: Any, fact_table: Any, measures: Any) -> Any:
+    answer = original(fact_table, measures)
+    vector = {
+        'table': fact_table.name,
+        'columns': _columns_of_table(fact_table),
+        'source_columns': list(fact_table._source_column_dict),
+        'measures': [
+            [
+                measure.name,
+                None
+                if measure.aggregation is None
+                else list(measure.aggregation),
+            ]
+            for measure in measures
+        ],
+        'notes': [
+            {
+                'measure': note.measure,
+                'table': note.table,
+                'function': note.function,
+                'column': note.column,
+                'text': str(note),
+            }
+            for note in answer
+        ],
+    }
+    RECORDER.add('measure_notes', vector, vector)
+    return answer
+
+
+def _time_column(
+    original: Any, table: Any, window_orders: Any, *, warn: bool = True
+) -> Any:
+    import sdm_relational_engine.rfm.graph as graph
+
+    adds: list[Any] = []
+    choices: list[Any] = []
+    vector = {
+        'table': table.name,
+        'columns': _columns_of_table(table),
+        'source_columns': [
+            [name, str(column.dtype)]
+            for name, column in table._source_column_dict.items()
+        ],
+        'window_orders': list(window_orders),
+    }
+    trying = graph._try_add_columns
+    choosing = table._infer_time_column_among
+
+    def try_add(table_: Any, columns: Any) -> Any:
+        error = trying(table_, columns)
+        for spec in columns:
+            adds.append(
+                {
+                    'name': spec.name,
+                    'expr': None if spec.expr is None else str(spec.expr),
+                    'added': error is None,
+                    'stype': str(table_[spec.name].stype)
+                    if error is None
+                    else None,
+                }
+            )
+        return error
+
+    def choose(candidates: Any, *, warn: bool = True) -> Any:
+        chosen = choosing(candidates, warn=warn)
+        choice = table._time_column_choice
+        choices.append(
+            {
+                'candidates': list(candidates),
+                'chosen': chosen,
+                'fallback': None if choice is None else choice.fallback,
+            }
+        )
+        return chosen
+
+    graph._try_add_columns = try_add
+    table._infer_time_column_among = choose
+    try:
+        note = original(table, window_orders, warn=warn)
+    finally:
+        graph._try_add_columns = trying
+        del table._infer_time_column_among
+    choice = table._time_column_choice
+    vector.update(
+        adds=adds,
+        choices=choices,
+        columns_after=[column.name for column in table.columns],
+        instead_of=None if choice is None else list(choice.instead_of),
+        note=None
+        if note is None
+        else {
+            'table': note.table,
+            'column': note.column,
+            'instead_of': list(note.instead_of),
+            'source_column': note.source_column,
+            'added': note.added,
+            'window_order': note.window_order,
+            'text': str(note),
+        },
+    )
+    RECORDER.add('time_column', vector, vector)
+    return note
+
+
+def _edge_error(original: Any, graph_: Any, edge: Any) -> Any:
+    answer = original(graph_, edge)
+    src, fkey, dst = edge
+    source, target = graph_[src], graph_[dst]
+    key = source[fkey] if source.has_column(fkey) else None
+    target_key = target.primary_key
+    source_key = source.primary_key
+    vector = {
+        'edge': [src, fkey, dst],
+        'edge_text': str(edge),
+        'fkey_dtype': None if key is None else str(key.dtype),
+        'target_key': None
+        if target_key is None
+        else [target_key.name, str(target_key.dtype)],
+        'source_key': None if source_key is None else source_key.name,
+        'reason': answer,
+    }
+    RECORDER.add('edge_error', vector, vector)
+    return answer
+
+
+def _skipped_str(original: Any, skipped: Any) -> Any:
+    answer = original(skipped)
+    vector = {
+        'alias': skipped.alias,
+        'reason': skipped.reason,
+        'nested': list(skipped.nested),
+        'dimensions': list(skipped.dimensions),
+        'text': answer,
+    }
+    RECORDER.add('skipped_join', vector, vector)
+    return answer
+
+
+def _parameter_note_str(original: Any, note: Any) -> Any:
+    answer = original(note)
+    vector = {
+        'parameter': note.parameter,
+        'default': note.default,
+        'text': answer,
+    }
+    RECORDER.add('parameter_note', vector, vector)
+    return answer
+
+
 _PATCHES: list[tuple[Any, Any]] = []
 
 
 def _install() -> None:
     import sdm_relational_engine.rfm.backend.databricks.metric_view as metric
     import sdm_relational_engine.rfm.graph as graph
+    import sdm_relational_engine.rfm.view_conversion as view_conversion
     import sdm_relational_engine.rfm.view_expr as view_expr
 
     wanted = [
@@ -516,6 +985,30 @@ def _install() -> None:
         (graph, '_mask_literals', _mask),
         (graph, '_view_expr_message', _message),
         (metric, 'parse_metric_view', _parse_metric),
+        (metric, 'parse_table_reference', _parse_name('table_references')),
+        (metric, 'parse_view_name', _parse_name('view_names')),
+        (metric, 'parse_join_condition', _join_condition),
+        (metric, 'unquote_ident', _unquote),
+        (metric, 'references_alias', _references),
+        (metric, 'strip_alias_qualifier', _strip_alias),
+        (metric, 'derived_column', _derived),
+        (metric, '_default_text', _default),
+        (metric, '_read_parameters', _read_parameters),
+        (metric, '_substitute_parameters', _substitute_parameters),
+        (metric, '_substitute_fields', _substitute_fields),
+        (metric, '_star', _star_of),
+        (metric, '_check_filter', _check_filter),
+        (metric, '_read_measures', _read_measures),
+        (metric, 'resolve_join_keys', _resolve_keys),
+        (metric, '_describe_sections', _sections),
+        (metric, 'read_metric_view_definition', _describe),
+        (graph, '_join_key_reason', _key_reason),
+        (graph, '_renamed_column', _renamed),
+        (graph, '_measure_notes', _measure_notes),
+        (graph, '_infer_view_time_column', _time_column),
+        (graph.Graph, '_edge_error', _edge_error),
+        (metric.SkippedJoin, '__str__', _skipped_str),
+        (view_conversion.ParameterNote, '__str__', _parameter_note_str),
         (yaml, 'safe_load', _safe_load),
     ]
     for module, name, record in wanted:
@@ -594,9 +1087,57 @@ def _probe_words() -> None:
                 pass
 
 
+# Expressions a time dimension may wrap a column in, or not.
+DERIVED_PROBES = (
+    "DATE_TRUNC('MONTH', ts)", "date_trunc('day', `order ts`)",
+    'date_trunc("week", ts)', 'date(ts)', 'DATE(ts)', 'to_date(ts)',
+    'to_timestamp(ts)', 'CAST(ts AS DATE)', 'cast(ts as timestamp_ntz)',
+    'CAST(ts AS STRING)', 'ts::date', 'ts :: timestamp_ltz', 'ts::int',
+    "trunc(ts, 'MM')", '(ts)', '((ts))', 'ts', '`ts`', 'date(a) - date(b)',
+    'upper(ts)', "DATE_TRUNC('MONTH', DATE(ts))", 'date(source.ts)',
+    "date_trunc('MONTH', ts) + INTERVAL 1 DAY", "date_trunc(')', ts)",
+)  # fmt: skip
+# Parameter types, and defaults as YAML would give them.
+DEFAULT_TYPES = (
+    'INT', 'bigint', 'TINYINT', 'long', 'BOOLEAN', 'DOUBLE', 'float',
+    'DECIMAL(10, 2)', 'decimal', 'numeric(5)', 'STRING', 'VARCHAR(10)',
+    'char(3)', 'DATE', 'TIMESTAMP', 'timestamp_ntz', 'TIMESTAMP_LTZ',
+    'ARRAY<INT>', 'Double  Precision',
+)  # fmt: skip
+
+
+def _default_probes() -> tuple[Any, ...]:
+    return (
+        True, False, 5, -17, 0, 1.5, 1e3, float('inf'), '5', ' 7 ', '+3',
+        '1e3', '1.50', '1_000', 'abc', 'true', 'FALSE', '2024-01-01',
+        '2024-01-01T10:00:00', '2024-01-01 10:00:00.5+02:00', '20240101',
+        datetime.date(2024, 1, 1), datetime.datetime(2024, 1, 1, 10, 0),
+        datetime.datetime(2024, 1, 1, 10, 0, 0, 500, datetime.timezone.utc),
+        [1, 2], {'a': 1}, "it's",
+    )  # fmt: skip
+
+
+def _probe_helpers() -> None:
+    r"""Puts the probes above to the old client's own helpers, through the
+    wrapped (recording) functions."""
+    import sdm_relational_engine.rfm.backend.databricks.metric_view as metric
+    import sdm_relational_engine.rfm.graph as graph
+
+    for expr in DERIVED_PROBES:
+        metric.derived_column(expr)
+        graph._renamed_column(expr)
+    for data_type in DEFAULT_TYPES:
+        for default in _default_probes():
+            try:
+                metric._default_text(data_type, default)
+            except ValueError:
+                pass
+
+
 def pytest_sessionfinish(session: Any) -> None:
     out = Path(session.config.getoption('--record-out'))
     _probe_words()
+    _probe_helpers()
     from sdm_relational_engine.rfm.backend.databricks import metric_view
 
     cases = case_texts(session.config.getoption('--record-cases'))
@@ -638,6 +1179,41 @@ def pytest_sessionfinish(session: Any) -> None:
             'format': 'sdm-view-metric-vectors/1',
             'source': source,
             'metric_views': list(calls.get('metric_views', {}).values()),
+        },
+    )
+    _write(
+        out / 'view-step-vectors.json',
+        {
+            'format': 'sdm-view-step-vectors/1',
+            'source': source,
+            **{
+                kind: list(calls.get(kind, {}).values())
+                for kind in (
+                    'table_references',
+                    'view_names',
+                    'join_conditions',
+                    'unquote',
+                    'references_alias',
+                    'strip_alias',
+                    'derived_column',
+                    'default_text',
+                    'read_parameters',
+                    'substitute_parameters',
+                    'substitute_fields',
+                    'star',
+                    'check_filter',
+                    'read_measures',
+                    'resolve_join_keys',
+                    'describe',
+                    'join_key_reason',
+                    'renamed_column',
+                    'measure_notes',
+                    'time_column',
+                    'edge_error',
+                    'skipped_join',
+                    'parameter_note',
+                )
+            },
         },
     )
     texts = dict.fromkeys(YAML_INPUTS)

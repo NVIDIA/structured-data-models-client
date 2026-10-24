@@ -15,10 +15,12 @@
 //! the joins' tree and order as the old client walked it, the messages of
 //! a join or dimension that is no mapping or misses a name, the
 //! `materialization` and `fields` messages, the measures, the parameters
-//! and the window measures' order dimensions.
+//! and the window measures' order dimensions. The messages quote a value
+//! as the core writes it (`view_words`), so this test is the core's.
 
 use std::collections::BTreeSet;
 
+use sdm_core::view_words::value_repr;
 use sdm_schema::view::metric::{self, Cardinality, DimensionItem, JoinItem, MetricView};
 use sdm_schema::view::yaml::Value;
 use serde_json::Value as Json;
@@ -68,13 +70,17 @@ fn walk(
 ) {
     for item in items {
         match item {
-            JoinItem::NotAMapping { repr } => {
+            JoinItem::NotAMapping { cfg } => {
                 messages.push(format!(
-                    "Failed to add join {repr} since it is not a mapping"
+                    "Failed to add join {} since it is not a mapping",
+                    value_repr(cfg)
                 ));
             }
-            JoinItem::Nameless { repr, .. } => {
-                messages.push(format!("Failed to add join {repr} since it misses a name"));
+            JoinItem::Nameless { cfg, .. } => {
+                messages.push(format!(
+                    "Failed to add join {} since it misses a name",
+                    value_repr(cfg)
+                ));
             }
             JoinItem::Join(join) => {
                 // A name already taken skips the join (`:849-851`).
@@ -104,12 +110,16 @@ fn dimension_messages(view: &MetricView) -> Vec<String> {
     view.dimensions
         .iter()
         .filter_map(|item| match item {
-            DimensionItem::NotAMapping { repr } => Some(format!(
-                "Failed to add dimension {repr} since it is not a mapping"
+            DimensionItem::NotAMapping { cfg } => Some(format!(
+                "Failed to add dimension {} since it is not a mapping",
+                value_repr(cfg)
             )),
-            DimensionItem::Dimension { expr, repr, .. } if !matches!(expr, Value::Str(_)) => Some(
-                format!("Failed to add dimension {repr} since it misses a name or expression"),
-            ),
+            DimensionItem::Dimension { expr, cfg, .. } if !matches!(expr, Value::Str(_)) => {
+                Some(format!(
+                    "Failed to add dimension {} since it misses a name or expression",
+                    value_repr(cfg)
+                ))
+            }
             DimensionItem::Dimension { .. } => None,
         })
         .collect()
@@ -361,11 +371,14 @@ fn a_join_keeps_what_it_says_as_written() {
     let [JoinItem::Join(countries)] = users.joins.as_slice() else {
         panic!("{:?}", users.joins)
     };
-    assert_eq!(countries.keys, metric::JoinKeys::Using("country".into()));
+    assert_eq!(
+        countries.keys,
+        metric::JoinKeys::Using(Value::Str("country".into()))
+    );
     assert_eq!(countries.cardinality, Cardinality::OneToMany);
     assert_eq!(shops.keys, metric::JoinKeys::UsingSeveral);
     assert_eq!(
         shops.cardinality,
-        Cardinality::Unsupported("many_to_many".into())
+        Cardinality::Unsupported(Value::Str("many_to_many".into()))
     );
 }
