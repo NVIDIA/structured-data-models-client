@@ -1791,6 +1791,8 @@ def check_bans(root: Path) -> list[str]:
 ASKING_STEPS = ('fetch', 'call_model', 'done')
 NOTICE_STEPS = ('inputs_checked', 'tables_located')
 STEP_VARIANTS = ASKING_STEPS + NOTICE_STEPS
+#: The contract version whose schema first holds the notices.
+NOTICES_FROM = 28
 _STEP_ENUM = re.compile(r'\bpub\s+enum\s+Step\s*\{')
 CONTRACT = Path('rust/crates/sdm-contract')
 
@@ -1871,14 +1873,17 @@ def check_steps(root: Path) -> list[str]:
         problems.append(f'{CONTRACT}/schema: no contract schema')
     for path in schemas:
         variants = step_variants_in_schema(json.loads(path.read_text()))
-        # A contract before v28 has no notices.
-        if variants is None or sorted(variants) not in (
-            expected,
-            sorted(ASKING_STEPS),
-        ):
+        # Each schema holds its version's steps: the notices from v28.
+        version = re.search(r'sdm-contract-(\d+)\.json$', path.name)
+        wanted = (
+            expected
+            if version is None or int(version.group(1)) >= NOTICES_FROM
+            else sorted(ASKING_STEPS)
+        )
+        if variants is None or sorted(variants) != wanted:
             problems.append(
                 f'{path.relative_to(root)}: the step message has {variants}; it '
-                f'has exactly {list(STEP_VARIANTS)}'
+                f'has exactly {wanted}'
             )
     return problems
 
