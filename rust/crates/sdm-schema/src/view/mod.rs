@@ -11,5 +11,6 @@
 //! order. Nothing here reads a warehouse.
 
 pub mod metric;
+pub mod model;
 pub mod semantic;
 pub mod yaml;

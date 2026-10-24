@@ -24,6 +24,7 @@ arrow-schema.workspace = true
 arrow-select.workspace = true
 jiff.workspace = true
 sdm-contract = { path = "../sdm-contract" }
+sdm-data = { path = "../sdm-data" }
 sdm-engine = { path = "../sdm-engine" }
 sdm-pql = { path = "../sdm-pql" }
 sdm-request = { path = "../sdm-request" }
@@ -37,7 +38,6 @@ tracing.workspace = true
 [dev-dependencies]
 arrow-array.workspace = true
 arrow-schema.workspace = true
-sdm-data = { path = "../sdm-data" }
 serde_stacker.workspace = true
 
 [lints]

@@ -90,15 +90,15 @@ pub enum RelationshipKeys {
 }
 
 /// Why a semantic view's definition cannot be read.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum SemanticRefusal {
     /// The text is no YAML.
     Yaml(YamlError),
     /// An entry the old client reads is missing.
     Misses { entry: String },
     /// An entry is of a kind the old client cannot read: a name that is
-    /// no text, or a list that is no list. With its `repr`.
-    Unreadable { entry: String, repr: String },
+    /// no text, or a list that is no list. With its value.
+    Unreadable { entry: String, value: Value },
 }
 
 impl fmt::Display for SemanticRefusal {
@@ -113,9 +113,9 @@ impl fmt::Display for SemanticRefusal {
             SemanticRefusal::Misses { entry } => {
                 write!(f, "The semantic view definition misses '{entry}'")
             }
-            SemanticRefusal::Unreadable { entry, repr } => write!(
+            SemanticRefusal::Unreadable { entry, .. } => write!(
                 f,
-                "The semantic view definition gives '{entry}' as {repr}, which cannot be read"
+                "The semantic view definition gives '{entry}' a value that cannot be read"
             ),
         }
     }
@@ -249,6 +249,6 @@ fn optional_text(cfg: &Value, entry: &str) -> Result<Option<String>, SemanticRef
 fn unreadable(entry: &str, value: &Value) -> SemanticRefusal {
     SemanticRefusal::Unreadable {
         entry: entry.to_owned(),
-        repr: value.repr(),
+        value: value.clone(),
     }
 }

@@ -11,7 +11,93 @@ use fancy_regex::Regex;
 
 use super::lex::{Kind, lex, masked};
 use super::words::{self, has};
-use super::{ExprDialect, quoted, rstrip};
+use super::{ExprDialect, rstrip};
+
+/// Why an expression is refused (old-behaviour rows 64 to 66), typed so
+/// the core words it as the old client did (`sdm-core::view_words`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ExprRefusal {
+    /// It holds `;`, `--`, `/*`, `*/`, `|>` or `->>`, anywhere.
+    Contains(&'static str),
+    /// `$$` on Databricks, which quotes nothing with it.
+    DollarQuotes,
+    /// A Snowflake comment, `//` or another.
+    SlashComment,
+    /// A backslash inside a Snowflake double-quoted name.
+    BackslashInQuotedName,
+    /// A character outside quotes that is not ASCII.
+    NotAscii(char),
+    /// A quote left unpaired: `$$`, `'`, `"` or a backtick.
+    Unpaired(&'static str),
+    ClosesUnopened,
+    LeavesUnclosed,
+    /// A statement keyword outside quotes, as written.
+    Keyword(String),
+    SubQuery,
+    /// A call of what a bracket or an index gives.
+    CallsResult,
+    /// A call of something that is no name, with the ten characters before
+    /// its `(`, quoted text masked.
+    CallsAfter(String),
+    /// A call of a quoted name.
+    QuotedFunction,
+    /// A call of a qualified name: its last part.
+    QualifiedFunction(String),
+    /// A function named through `IDENTIFIER()`.
+    Identifier,
+    /// A call of a function off the dialect's allow-list, as written.
+    NotPure(String),
+    /// A session word read bare, as written.
+    SessionValue(String),
+    /// A session word read quoted, its quotes included.
+    QuotedSessionValue(String),
+}
+
+impl ExprRefusal {
+    /// The old client's words for the refusal, `quote` writing a piece of
+    /// the expression as it quoted it (Python's `repr`, which the core
+    /// hands in: no code here writes Python's text).
+    pub fn words(&self, quote: &dyn Fn(&str) -> String) -> String {
+        match self {
+            ExprRefusal::Contains(token) => format!("it contains {}", quote(token)),
+            ExprRefusal::DollarQuotes => {
+                "it contains '$$', which Databricks SQL does not quote with".into()
+            }
+            ExprRefusal::SlashComment => "it contains '//'".into(),
+            ExprRefusal::BackslashInQuotedName => {
+                "it has a backslash inside a double-quoted name".into()
+            }
+            ExprRefusal::NotAscii(c) => format!(
+                "it has {} outside quotes, which is not ASCII",
+                quote(&c.to_string())
+            ),
+            ExprRefusal::Unpaired(delimiter) => format!(
+                "it leaves {} unpaired, so which part of it is quoted text cannot be established",
+                quote(delimiter)
+            ),
+            ExprRefusal::ClosesUnopened => "it closes a '(' it never opened".into(),
+            ExprRefusal::LeavesUnclosed => "it leaves a '(' unclosed".into(),
+            ExprRefusal::Keyword(keyword) => format!("it contains the SQL keyword '{keyword}'"),
+            ExprRefusal::SubQuery => "it contains a sub-query".into(),
+            ExprRefusal::CallsResult => "it calls the result of an expression".into(),
+            ExprRefusal::CallsAfter(before) => {
+                format!("it calls what precedes '(' after {}", quote(before))
+            }
+            ExprRefusal::QuotedFunction => "it calls a function by a quoted name".into(),
+            ExprRefusal::QualifiedFunction(name) => {
+                format!("it calls the qualified function '{name}'")
+            }
+            ExprRefusal::Identifier => "it names a function through IDENTIFIER()".into(),
+            ExprRefusal::NotPure(name) => {
+                format!("it calls '{name}', which is not a pure built-in SQL function")
+            }
+            ExprRefusal::SessionValue(word) => format!("it reads the session value '{word}'"),
+            ExprRefusal::QuotedSessionValue(quoted) => {
+                format!("it reads the session value {quoted}")
+            }
+        }
+    }
+}
 
 const UNSAFE_TOKENS: [&str; 6] = [";", "--", "/*", "*/", "|>", "->>"];
 const QUOTE_DELIMITERS: [&str; 4] = ["$$", "'", "\"", "`"];
@@ -100,42 +186,38 @@ const OPENS_A_GROUP: &str = "+-*/%=<>!|&^~,([?:";
 /// with its quoted text masked: anything not ASCII outside quotes, a quote
 /// left unpaired, brackets that do not balance, a statement keyword, or a
 /// sub-query's start. `None` for the dialect checks only what both share.
-pub fn unsafe_reason(expr: &str, dialect: Option<ExprDialect>) -> Option<String> {
+pub fn unsafe_reason(expr: &str, dialect: Option<ExprDialect>) -> Option<ExprRefusal> {
     for token in UNSAFE_TOKENS {
         if expr.contains(token) {
-            return Some(format!("it contains '{token}'"));
+            return Some(ExprRefusal::Contains(token));
         }
     }
     // Databricks has no `$$` literal.
     if dialect == Some(ExprDialect::Databricks) && expr.contains("$$") {
-        return Some("it contains '$$', which Databricks SQL does not quote with".into());
+        return Some(ExprRefusal::DollarQuotes);
     }
     if dialect == Some(ExprDialect::Snowflake) {
         let tokens = lex(expr, dialect);
         // Snowflake also comments out the rest of a line with `//`.
         if tokens.iter().any(|token| token.kind == Kind::Comment) {
-            return Some("it contains '//'".into());
+            return Some(ExprRefusal::SlashComment);
         }
         if tokens
             .iter()
             .any(|token| token.text.starts_with('"') && token.text.contains('\\'))
         {
-            return Some("it has a backslash inside a double-quoted name".into());
+            return Some(ExprRefusal::BackslashInQuotedName);
         }
     }
     let unquoted = masked(expr, dialect, " ");
     if let Ok(Some(other)) = NOT_ASCII.find(&unquoted) {
-        return Some(format!(
-            "it has {} outside quotes, which is not ASCII",
-            quoted(other.as_str())
+        return Some(ExprRefusal::NotAscii(
+            other.as_str().chars().next().unwrap(),
         ));
     }
     for delimiter in QUOTE_DELIMITERS {
         if unquoted.contains(delimiter) {
-            return Some(format!(
-                "it leaves {} unpaired, so which part of it is quoted text cannot be established",
-                quoted(delimiter)
-            ));
+            return Some(ExprRefusal::Unpaired(delimiter));
         }
     }
     let mut depth: i64 = 0;
@@ -146,20 +228,17 @@ pub fn unsafe_reason(expr: &str, dialect: Option<ExprDialect>) -> Option<String>
             _ => 0,
         };
         if depth < 0 {
-            return Some("it closes a '(' it never opened".into());
+            return Some(ExprRefusal::ClosesUnopened);
         }
     }
     if depth != 0 {
-        return Some("it leaves a '(' unclosed".into());
+        return Some(ExprRefusal::LeavesUnclosed);
     }
     if let Ok(Some(keyword)) = UNSAFE_KEYWORDS.find(&unquoted) {
-        return Some(format!(
-            "it contains the SQL keyword '{}'",
-            keyword.as_str()
-        ));
+        return Some(ExprRefusal::Keyword(keyword.as_str().to_owned()));
     }
     if starts_a_query(&unquoted) {
-        return Some("it contains a sub-query".into());
+        return Some(ExprRefusal::SubQuery);
     }
     None
 }
@@ -375,7 +454,7 @@ pub fn untrusted_call_reason<S: AsRef<str>>(
     expr: &str,
     dialect: ExprDialect,
     columns: &[S],
-) -> Option<String> {
+) -> Option<ExprRefusal> {
     let trusted = match dialect {
         ExprDialect::Databricks => words::DATABRICKS_FUNCTIONS,
         ExprDialect::Snowflake => words::SNOWFLAKE_FUNCTIONS,
@@ -396,27 +475,24 @@ pub fn untrusted_call_reason<S: AsRef<str>>(
             continue;
         }
         if last == ')' || last == ']' {
-            return Some("it calls the result of an expression".into());
+            return Some(ExprRefusal::CallsResult);
         }
         let Some((start, name)) = first(&LAST_TOKEN, before) else {
             let tail: String = {
                 let chars: Vec<char> = before.chars().collect();
                 chars[chars.len().saturating_sub(10)..].iter().collect()
             };
-            return Some(format!(
-                "it calls what precedes '(' after {}",
-                quoted(&tail)
-            ));
+            return Some(ExprRefusal::CallsAfter(tail));
         };
         if name.contains(QUOTED) {
-            return Some("it calls a function by a quoted name".into());
+            return Some(ExprRefusal::QuotedFunction);
         }
         if found(&QUALIFIED, &before[..start]) {
-            return Some(format!("it calls the qualified function '{name}'"));
+            return Some(ExprRefusal::QualifiedFunction(name));
         }
         let folded = name.to_lowercase();
         if folded == "identifier" {
-            return Some("it names a function through IDENTIFIER()".into());
+            return Some(ExprRefusal::Identifier);
         }
         if has(words::KEYWORDS, &folded)
             && acts_as_keyword(&folded, &before[..start], &text[index..], &visible)
@@ -427,9 +503,7 @@ pub fn untrusted_call_reason<S: AsRef<str>>(
             continue;
         }
         if !has(trusted, &folded) {
-            return Some(format!(
-                "it calls '{name}', which is not a pure built-in SQL function"
-            ));
+            return Some(ExprRefusal::NotPure(name));
         }
     }
     // A lambda parameter is in scope only inside its lambda, so only the
@@ -443,7 +517,7 @@ pub fn untrusted_call_reason<S: AsRef<str>>(
         let Ok(captures) = captures else { break };
         let session = captures.get(1).unwrap().as_str();
         if !overridden(&session.to_lowercase()) {
-            return Some(format!("it reads the session value '{session}'"));
+            return Some(ExprRefusal::SessionValue(session.to_owned()));
         }
     }
     // Quoting the word does not keep it from the session; a column of the
@@ -459,7 +533,7 @@ pub fn untrusted_call_reason<S: AsRef<str>>(
         }
         let word = token.unquoted().to_lowercase();
         if has(words::SESSION_WORDS, &word) && !quoted_overridden(&word) {
-            return Some(format!("it reads the session value {}", token.text));
+            return Some(ExprRefusal::QuotedSessionValue(token.text));
         }
     }
     None

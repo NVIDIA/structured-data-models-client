@@ -13,9 +13,9 @@
 //! keeps its first key's place and its last value, keys equal as Python
 //! compares them (`1`, `1.0` and `true` are one key), and `<<` merges.
 //!
-//! A value's [`Value::repr`] and [`Value::text_form`] are the texts the old
-//! client's messages quote it by (`{cfg!r}`, `{value}`), Python's `repr`
-//! and `str` of what PyYAML made of it.
+//! A value is data only: the texts the old client's messages quote it by,
+//! Python's `repr` and `str` of it, are the core's to write
+//! (`sdm-core::view_words`, through `sdm-pql`).
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -599,24 +599,18 @@ fn binary(text: &str) -> Result<Vec<u8>, YamlError> {
 }
 
 impl Date {
-    /// `date.isoformat()`: `2024-01-01`.
+    /// The ISO 8601 text: `2024-01-01`.
     pub fn isoformat(&self) -> String {
         format!("{:04}-{:02}-{:02}", self.year, self.month, self.day)
     }
 }
 
 impl Timestamp {
-    /// `datetime.isoformat()`: `2024-01-01T10:00:00`, with `.ffffff` for a
+    /// The ISO 8601 text: `2024-01-01T10:00:00`, with `.ffffff` for a
     /// fraction and `+HH:MM` for an offset.
     pub fn isoformat(&self) -> String {
-        self.written('T')
-    }
-
-    /// The date and time with `separator` between them, as
-    /// `datetime.isoformat(separator)` writes them.
-    pub fn written(&self, separator: char) -> String {
         let mut text = format!(
-            "{}{separator}{:02}:{:02}:{:02}",
+            "{}T{:02}:{:02}:{:02}",
             self.date.isoformat(),
             self.hour,
             self.minute,
@@ -681,210 +675,5 @@ impl Value {
             Value::Map(pairs) => !pairs.is_empty(),
             Value::Date(_) | Value::Timestamp(_) => true,
         }
-    }
-
-    /// Python's `repr` of the value PyYAML made: `'text'`, `True`, `None`,
-    /// `[1, 'a']`, `{'name': 'x'}`, `datetime.date(2024, 1, 1)`.
-    pub fn repr(&self) -> String {
-        match self {
-            Value::Null => "None".into(),
-            Value::Bool(true) => "True".into(),
-            Value::Bool(false) => "False".into(),
-            Value::Int(n) => n.to_string(),
-            Value::Float(x) => float_text(*x),
-            Value::Str(text) => quoted(text),
-            Value::Bytes(bytes) => bytes_repr(bytes),
-            Value::Date(date) => {
-                format!("datetime.date({}, {}, {})", date.year, date.month, date.day)
-            }
-            Value::Timestamp(moment) => timestamp_repr(moment),
-            Value::Seq(items) => format!(
-                "[{}]",
-                items.iter().map(Value::repr).collect::<Vec<_>>().join(", ")
-            ),
-            Value::Map(pairs) => format!(
-                "{{{}}}",
-                pairs
-                    .iter()
-                    .map(|(key, value)| format!("{}: {}", key.repr(), value.repr()))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ),
-        }
-    }
-
-    /// Python's `str` of the value PyYAML made: text as itself, a date or
-    /// time in ISO form (`2024-01-01 10:00:00`), anything else its
-    /// [`Value::repr`].
-    pub fn text_form(&self) -> String {
-        match self {
-            Value::Str(text) => text.clone(),
-            Value::Date(date) => date.isoformat(),
-            Value::Timestamp(moment) => moment.written(' '),
-            _ => self.repr(),
-        }
-    }
-}
-
-fn timestamp_repr(moment: &Timestamp) -> String {
-    let mut fields = vec![
-        moment.date.year.to_string(),
-        moment.date.month.to_string(),
-        moment.date.day.to_string(),
-        moment.hour.to_string(),
-        moment.minute.to_string(),
-    ];
-    if moment.second > 0 || moment.microsecond > 0 {
-        fields.push(moment.second.to_string());
-    }
-    if moment.microsecond > 0 {
-        fields.push(moment.microsecond.to_string());
-    }
-    let mut text = format!("datetime.datetime({}", fields.join(", "));
-    match moment.offset {
-        None => {}
-        Some(0) => text.push_str(", tzinfo=datetime.timezone.utc"),
-        Some(offset) => {
-            let days = offset.div_euclid(86_400);
-            let seconds = offset.rem_euclid(86_400);
-            let delta = match (days, seconds) {
-                (0, s) => format!("seconds={s}"),
-                (d, 0) => format!("days={d}"),
-                (d, s) => format!("days={d}, seconds={s}"),
-            };
-            text.push_str(&format!(
-                ", tzinfo=datetime.timezone(datetime.timedelta({delta}))"
-            ));
-        }
-    }
-    text.push(')');
-    text
-}
-
-fn bytes_repr(bytes: &[u8]) -> String {
-    let quote = if bytes.contains(&b'\'') && !bytes.contains(&b'"') {
-        '"'
-    } else {
-        '\''
-    };
-    let mut text = format!("b{quote}");
-    for &b in bytes {
-        match b {
-            b'\\' => text.push_str("\\\\"),
-            b'\t' => text.push_str("\\t"),
-            b'\n' => text.push_str("\\n"),
-            b'\r' => text.push_str("\\r"),
-            _ if char::from(b) == quote => {
-                text.push('\\');
-                text.push(quote);
-            }
-            0x20..=0x7E => text.push(char::from(b)),
-            _ => text.push_str(&format!("\\x{b:02x}")),
-        }
-    }
-    text.push(quote);
-    text
-}
-
-/// Python's `repr` of a text: in single quotes unless it holds one and no
-/// double quote, backslashes and that quote escaped, `\t`, `\n`, `\r`, and
-/// each character Python does not print as `\xhh`, `\uhhhh` or
-/// `\Uhhhhhhhh`.
-pub(crate) fn quoted(text: &str) -> String {
-    let quote = if text.contains('\'') && !text.contains('"') {
-        '"'
-    } else {
-        '\''
-    };
-    let mut out = String::with_capacity(text.len() + 2);
-    out.push(quote);
-    for c in text.chars() {
-        match c {
-            '\\' => out.push_str("\\\\"),
-            '\t' => out.push_str("\\t"),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            _ if c == quote => {
-                out.push('\\');
-                out.push(c);
-            }
-            _ if printable(c) => out.push(c),
-            _ => {
-                let code = u32::from(c);
-                if code < 0x100 {
-                    out.push_str(&format!("\\x{code:02x}"));
-                } else if code < 0x10000 {
-                    out.push_str(&format!("\\u{code:04x}"));
-                } else {
-                    out.push_str(&format!("\\U{code:08x}"));
-                }
-            }
-        }
-    }
-    out.push(quote);
-    out
-}
-
-/// Whether Python prints `c` as itself in a `repr`: not a control or
-/// format character, a separator other than the space, a private-use
-/// character or a noncharacter. Unassigned code points, which Python also
-/// escapes, are not told apart here.
-fn printable(c: char) -> bool {
-    let code = u32::from(c);
-    if code < 0x80 {
-        return (0x20..0x7F).contains(&code);
-    }
-    !(c.is_control()
-        || matches!(code,
-            0xA0 | 0xAD | 0x1680 | 0x2000..=0x200F | 0x2028..=0x202F | 0x205F..=0x2064
-            | 0x2066..=0x206F | 0x3000 | 0xFEFF | 0xFFF9..=0xFFFB | 0x600..=0x605 | 0x61C
-            | 0x6DD | 0x70F | 0x890..=0x891 | 0x8E2 | 0x180E | 0x110BD | 0x110CD
-            | 0x13430..=0x1343F | 0x1BCA0..=0x1BCA3 | 0x1D173..=0x1D17A | 0xE0001
-            | 0xE0020..=0xE007F | 0xD800..=0xDFFF | 0xE000..=0xF8FF | 0xF0000..=0xFFFFD
-            | 0x100000..=0x10FFFD | 0xFDD0..=0xFDEF)
-        || code & 0xFFFE == 0xFFFE)
-}
-
-/// Python's `repr` of a float: the shortest digits that read back, in
-/// fixed notation from `1e-4` up to `1e16` and in exponent notation
-/// (`1e+16`, `1.5e-05`) beyond, `.0` added to a whole number.
-fn float_text(x: f64) -> String {
-    if x.is_nan() {
-        return "nan".into();
-    }
-    if x.is_infinite() {
-        return if x > 0.0 { "inf" } else { "-inf" }.into();
-    }
-    let sign = if x.is_sign_negative() { "-" } else { "" };
-    let shortest = format!("{:e}", x.abs());
-    let (mantissa, exponent) = shortest.split_once('e').unwrap();
-    let exponent: i32 = exponent.parse().unwrap();
-    let digits: String = mantissa.chars().filter(char::is_ascii_digit).collect();
-    // The decimal point's place, Python's `decpt`: the value is
-    // 0.<digits> times ten to it.
-    let point = exponent + 1;
-    if digits == "0" {
-        return format!("{sign}0.0");
-    }
-    if !(-4 < point && point <= 16) {
-        let (first, rest) = digits.split_at(1);
-        let rest = if rest.is_empty() {
-            String::new()
-        } else {
-            format!(".{rest}")
-        };
-        let exp_sign = if exponent < 0 { '-' } else { '+' };
-        return format!("{sign}{first}{rest}e{exp_sign}{:02}", exponent.abs());
-    }
-    let count = i32::try_from(digits.len()).unwrap();
-    if point <= 0 {
-        let zeros = "0".repeat(usize::try_from(-point).unwrap());
-        format!("{sign}0.{zeros}{digits}")
-    } else if point >= count {
-        let zeros = "0".repeat(usize::try_from(point - count).unwrap());
-        format!("{sign}{digits}{zeros}.0")
-    } else {
-        let (whole, fraction) = digits.split_at(usize::try_from(point).unwrap());
-        format!("{sign}{whole}.{fraction}")
     }
 }

@@ -18,7 +18,8 @@
 
 # Python's 4,300-digit limit on reading an integer, which decides validity.
 rust/crates/sdm-pql/src/pyint.rs
-# The text Python's repr gives a float.
+# The text Python's repr gives a float, and from T3.5 the repr and str of the
+# values a view's conversion messages quote (Shown, text_repr).
 rust/crates/sdm-pql/src/float_repr.rs
 # How the reference reads a string literal's escapes, which decides validity
 # (Phase 1 decisions, E9).
