@@ -84,7 +84,8 @@ pub fn float_repr(x: f64) -> String {
 pub enum Shown {
     None,
     Bool(bool),
-    Int(i128),
+    /// An integer, as its decimal digits, a `-` before them if negative.
+    Int(String),
     Float(f64),
     Text(String),
     Bytes(Vec<u8>),
@@ -107,6 +108,12 @@ pub enum Shown {
     List(Vec<Shown>),
     /// A `dict`'s entries in order.
     Dict(Vec<(Shown, Shown)>),
+    /// A `set`'s members, in the order they are to be written.
+    Set(Vec<Shown>),
+    Tuple(Vec<Shown>),
+    /// A list (`true`) or a `dict` (`false`) inside itself, which Python
+    /// writes as `[...]` or `{...}`.
+    Recursive(bool),
 }
 
 impl Shown {
@@ -117,7 +124,7 @@ impl Shown {
             Shown::None => "None".into(),
             Shown::Bool(true) => "True".into(),
             Shown::Bool(false) => "False".into(),
-            Shown::Int(n) => n.to_string(),
+            Shown::Int(n) => n.clone(),
             Shown::Float(x) => float_repr(*x),
             Shown::Text(text) => text_repr(text),
             Shown::Bytes(bytes) => bytes_repr(bytes),
@@ -172,6 +179,22 @@ impl Shown {
                     .collect::<Vec<_>>()
                     .join(", ")
             ),
+            Shown::Set(members) if members.is_empty() => "set()".into(),
+            Shown::Set(members) => format!(
+                "{{{}}}",
+                members
+                    .iter()
+                    .map(Shown::repr)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            Shown::Tuple(items) if items.len() == 1 => format!("({},)", items[0].repr()),
+            Shown::Tuple(items) => format!(
+                "({})",
+                items.iter().map(Shown::repr).collect::<Vec<_>>().join(", ")
+            ),
+            Shown::Recursive(true) => "[...]".into(),
+            Shown::Recursive(false) => "{...}".into(),
         }
     }
 

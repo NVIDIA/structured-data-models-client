@@ -19,24 +19,26 @@ use sdm_data::view_expr::metric::{
     DefaultKind, DefaultRefusal, FilterRefusal, MeasureReason, MeasureRefusal, Parameter,
     ParameterDefault, ParameterInput, Unread,
 };
-use sdm_schema::view::metric::Parameter as ViewParameter;
+use sdm_schema::view::joins::{JoinMessage, SkipReason};
 use sdm_schema::view::model::{
     Edge, EdgeReason, JoinNote, JoinRefusal, KeyReason, LinkFailure, MeasureNote,
     RelationshipRefusal, TimeColumnNote,
 };
-use sdm_schema::view::yaml::Value;
+use sdm_schema::view::spec::{Ignored, ViewSpec};
+use sdm_schema::view::yaml::{Document, NodeId, Value};
 
 use crate::pql::{text_repr, value_repr as repr, value_text as text};
+use crate::view_steps::JoinJudgement;
 
 /// The text the old client's messages quote a view definition's value by:
 /// Python's `repr` of it.
-pub fn value_repr(value: &Value) -> String {
-    repr(value)
+pub fn value_repr(document: &Document, node: NodeId) -> String {
+    repr(document, node)
 }
 
 /// Python's `str` of a view definition's value.
-pub fn value_text(value: &Value) -> String {
-    text(value)
+pub fn value_text(document: &Document, node: NodeId) -> String {
+    text(document, node)
 }
 
 /// A text as the old client quotes a piece of an expression or a name:
@@ -53,10 +55,10 @@ pub fn expr_reason(reason: &ExprRefusal) -> String {
 
 /// A parameter's default as the data layer reads it: its kind, and
 /// Python's `str` of it.
-pub fn parameter_default(value: &Value) -> ParameterDefault {
-    let kind = match value {
+pub fn parameter_default(document: &Document, node: NodeId) -> ParameterDefault {
+    let kind = match document.value(node) {
         Value::Bool(flag) => DefaultKind::Bool(*flag),
-        Value::Int(n) => DefaultKind::Int(*n),
+        Value::Int(_) => DefaultKind::Int,
         Value::Date(_) => DefaultKind::Date,
         Value::Timestamp(moment) => DefaultKind::DateTime {
             iso: moment.isoformat(),
@@ -65,46 +67,62 @@ pub fn parameter_default(value: &Value) -> ParameterDefault {
     };
     ParameterDefault {
         kind,
-        text: text(value),
+        text: text(document, node),
     }
 }
 
 /// Each parameter of the view as the data layer reads it: its type if the
 /// definition writes it as text, its default unless null.
-pub fn parameter_inputs(parameters: &[ViewParameter]) -> Vec<ParameterInput> {
-    parameters
+pub fn parameter_inputs(spec: &ViewSpec) -> Vec<ParameterInput> {
+    spec.parameters
         .iter()
         .map(|parameter| ParameterInput {
             name: parameter.name.clone(),
-            data_type: parameter.data_type.as_str().map(str::to_owned),
-            default: (parameter.default != Value::Null)
-                .then(|| parameter_default(&parameter.default)),
+            data_type: parameter
+                .data_type
+                .and_then(|n| spec.text(n))
+                .map(str::to_owned),
+            default: parameter
+                .default
+                .map(|n| parameter_default(&spec.document, n)),
         })
         .collect()
 }
 
 /// Why a default gives no literal of `data_type` (`_default_text`'s
 /// refusals).
-pub fn default_refusal_text(refusal: &DefaultRefusal, data_type: &str, default: &Value) -> String {
+pub fn default_refusal_text(
+    refusal: &DefaultRefusal,
+    data_type: &str,
+    document: &Document,
+    default: NodeId,
+) -> String {
     match refusal {
         DefaultRefusal::NoLiteral => format!("its type '{data_type}' has no literal here"),
         DefaultRefusal::NotOfType => {
-            format!("its default {} is not of type {data_type}", repr(default))
+            format!(
+                "its default {} is not of type {data_type}",
+                repr(document, default)
+            )
         }
     }
 }
 
 /// A parameter's text: its default's, or why it has no literal
 /// (`_Parameter.text`). `default` is its default as the definition gives
-/// it.
-pub fn parameter_text(parameter: &Parameter, default: &Value) -> String {
-    match &parameter.read {
-        Ok(read) => read.text.clone(),
-        Err(Unread::NoDefault) => "has no default".into(),
-        Err(Unread::NoType) => "has no type".into(),
-        Err(Unread::Refused { refusal, data_type }) => {
-            default_refusal_text(refusal, data_type, default)
+/// it, if it has one.
+pub fn parameter_text(
+    parameter: &Parameter,
+    document: &Document,
+    default: Option<NodeId>,
+) -> String {
+    match (&parameter.read, default) {
+        (Ok(read), _) => read.text.clone(),
+        (Err(Unread::Refused { refusal, data_type }), Some(default)) => {
+            default_refusal_text(refusal, data_type, document, default)
         }
+        (Err(Unread::NoType), _) => "has no type".into(),
+        (Err(_), _) => "has no default".into(),
     }
 }
 
@@ -128,7 +146,12 @@ pub enum FilterHatch {
 
 /// The refusal of a view for its filter (`_refuse_filter`), `reason` a
 /// clause.
-pub fn filter_message(filter: &Value, reason: &str, hatch: FilterHatch) -> String {
+pub fn filter_message(
+    document: &Document,
+    filter: NodeId,
+    reason: &str,
+    hatch: FilterHatch,
+) -> String {
     let hatch = match hatch {
         FilterHatch::None => "",
         FilterHatch::Default => ", or give the parameter a default of its type",
@@ -140,19 +163,20 @@ pub fn filter_message(filter: &Value, reason: &str, hatch: FilterHatch) -> Strin
         "Cannot apply the metric view filter {} since {reason}. The graph would otherwise read \
          rows the view leaves out. Create a regular view with this WHERE clause and point the \
          metric view's source at it{hatch}",
-        repr(filter)
+        repr(document, filter)
     )
 }
 
 /// The refusal of a filter the source table alone cannot apply
 /// (`_check_filter`).
-pub fn filter_refusal_text(filter: &Value, refusal: &FilterRefusal) -> String {
+pub fn filter_refusal_text(document: &Document, filter: NodeId, refusal: &FilterRefusal) -> String {
     let reason = match refusal {
         FilterRefusal::NotACondition => "it is not a SQL condition".to_owned(),
         FilterRefusal::Unsafe(reason) => expr_reason(reason),
         FilterRefusal::JoinedTable(alias) => format!("it references the joined table '{alias}'"),
+        FilterRefusal::Unreadable(unreadable) => unreadable.to_string(),
     };
-    filter_message(filter, &reason, FilterHatch::None)
+    filter_message(document, filter, &reason, FilterHatch::None)
 }
 
 /// A measure left out (`_read_measures`).
@@ -180,17 +204,17 @@ fn grouped(n: u64) -> String {
 }
 
 /// Why a join's key cannot key its table (`_join_key_reason`), with a
-/// repeating value if one was read.
+/// repeating value if one was read, as Python's `repr` writes it.
 pub fn key_reason_text(
     reason: &KeyReason,
     table: &str,
     key: &str,
-    example: Option<&Value>,
+    example: Option<&str>,
 ) -> String {
     match reason {
         KeyReason::NoValue => format!("its key '{key}' holds no value in table '{table}'"),
         KeyReason::NotUnique { repeats, rows } => {
-            let example = example.map_or(String::new(), |v| format!(", e.g. {}", repr(v)));
+            let example = example.map_or(String::new(), |shown| format!(", e.g. {shown}"));
             format!(
                 "its key '{key}' is not unique in table '{table}': {} of {} rows repeat a \
                  value{example}. A graph table needs one row per key, so point the join at a \
@@ -395,7 +419,7 @@ fn link_failure_text(failure: &LinkFailure) -> String {
 
 /// Why a join is left out, as a clause of [`skipped_join_text`]; a key's
 /// repeating value, if one was read, for its count's reason.
-pub fn join_refusal_text(refusal: &JoinRefusal, example: Option<&Value>) -> String {
+pub fn join_refusal_text(refusal: &JoinRefusal, example: Option<&str>) -> String {
     match refusal {
         JoinRefusal::AlreadyKeyed { table, key } => {
             format!("table '{table}' already uses '{key}' as its primary key")
@@ -445,4 +469,83 @@ pub fn relationship_refusal_text(name: &str, refusal: &RelationshipRefusal) -> S
         }
     };
     format!("Failed to add relationship '{name}' since {reason}")
+}
+
+/// A section the conversion leaves out, as it says so.
+pub fn ignored_text(ignored: Ignored) -> String {
+    match ignored {
+        Ignored::Materialization => {
+            "Ignored the 'materialization' section since it cannot be represented in a graph".into()
+        }
+        Ignored::Fields => sdm_data::view_expr::metric::FIELDS_IGNORED.into(),
+    }
+}
+
+/// A source that is no plain table name, which refuses the view
+/// (`DB/metric_view.py:784-791`).
+pub fn unsupported_source_text(spec: &ViewSpec, source: NodeId) -> String {
+    format!(
+        "Unsupported metric view source {}. Only plain table names are supported as the source \
+         of a metric view when converting it into a graph. Create a regular view with this query \
+         and point the metric view's source at it",
+        repr(&spec.document, source)
+    )
+}
+
+/// A join entry the conversion cannot read (`:828-839`).
+pub fn join_message_text(spec: &ViewSpec, message: &JoinMessage) -> String {
+    match message {
+        JoinMessage::NotAMapping(cfg) => format!(
+            "Failed to add join {} since it is not a mapping",
+            repr(&spec.document, *cfg)
+        ),
+        JoinMessage::Nameless(cfg) => format!(
+            "Failed to add join {} since it misses a name",
+            repr(&spec.document, *cfg)
+        ),
+    }
+}
+
+/// Why a join is skipped, as a clause (`:849-889`).
+pub fn skip_reason_text(
+    spec: &ViewSpec,
+    alias: &str,
+    reason: &SkipReason<JoinJudgement>,
+) -> String {
+    match reason {
+        SkipReason::NameInUse => format!("the name '{alias}' is already in use"),
+        SkipReason::Judged(JoinJudgement::NotPlainSource) => {
+            "only plain table names are supported as join sources. Create a regular view with its \
+             query and join that instead"
+                .into()
+        }
+        SkipReason::Cardinality(node) => {
+            format!(
+                "of its unsupported cardinality '{}'",
+                text(&spec.document, *node)
+            )
+        }
+        SkipReason::UsingSeveral => {
+            "it joins on more than one column, which a graph link cannot express".into()
+        }
+        SkipReason::Judged(JoinJudgement::NotSingleEquality) => {
+            "only single-column equality join conditions are supported".into()
+        }
+    }
+}
+
+/// A dimension that is no mapping (`:959-963`).
+pub fn dimension_not_a_mapping(spec: &ViewSpec, cfg: NodeId) -> String {
+    format!(
+        "Failed to add dimension {} since it is not a mapping",
+        repr(&spec.document, cfg)
+    )
+}
+
+/// A dimension that misses its name or its expression (`:991-996`).
+pub fn dimension_misses_text(spec: &ViewSpec, cfg: NodeId) -> String {
+    format!(
+        "Failed to add dimension {} since it misses a name or expression",
+        repr(&spec.document, cfg)
+    )
 }

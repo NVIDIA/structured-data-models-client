@@ -3,252 +3,136 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! A semantic view's definition, as the warehouse writes it out in YAML,
-//! read into its structure (design S5, T3.5's V2, V3 and V6): its logical
-//! tables, each with its base table, primary key and columns, and its
-//! relationships, expressions kept as written. The old client reads these
-//! by the paths of `RE/graph.py:2072-2252`, and fails with a raw `KeyError`
-//! or `TypeError` where one is missing or of another kind; here each such
-//! is refused by name, saying what is missing. Which table an expression
-//! reads, and whether it may run, the data layer says.
+//! read into a [`ViewSpec`] (design S5, T3.5's V2, V3 and V6): its logical
+//! tables, each with its base table and primary key, their columns by
+//! section, and the relationships, read by the paths the old client reads
+//! them by (`RE/graph.py:2069-2222`).
+//!
+//! Only what the old client read before its first warehouse read is read
+//! here: each table's name, base table and the size of its primary key, and
+//! each column's and relationship's name. Where it failed with a raw
+//! `KeyError` or `TypeError`, the view is refused by name. A column's
+//! expression and type, a key's member, and a relationship's tables and keys
+//! are read when the conversion comes to them, so one it never uses cannot
+//! refuse the view.
 
-use std::fmt;
-
-use super::yaml::{self, Value, YamlError};
-
-/// A semantic view's definition.
-#[derive(Clone, Debug, PartialEq)]
-pub struct SemanticView {
-    pub tables: Vec<LogicalTable>,
-    pub relationships: Vec<Relationship>,
-}
-
-/// A logical table.
-#[derive(Clone, Debug, PartialEq)]
-pub struct LogicalTable {
-    pub name: String,
-    pub base: BaseTable,
-    pub primary_key: PrimaryKey,
-    /// The columns of its `dimensions`, `time_dimensions` and `facts`, in
-    /// that order (`:2105-2113`).
-    pub columns: Vec<ViewColumn>,
-}
-
-/// The table a logical table reads, named in full as the definition says.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct BaseTable {
-    pub database: String,
-    pub schema: String,
-    pub table: String,
-}
-
-/// A logical table's `primary_key` (`:2081-2090`).
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum PrimaryKey {
-    /// None declared, or one of no columns.
-    None,
-    One(String),
-    /// More than one column, which the old client drops with a message.
-    Composite(Vec<String>),
-}
-
-/// A column of a logical table.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ViewColumn {
-    pub name: String,
-    /// Its `expr` as written; none for a column of the base table of the
-    /// same name.
-    pub expr: Option<String>,
-    pub data_type: Option<String>,
-    pub section: Section,
-}
-
-/// The section a column is declared in; a time dimension is a time column's
-/// first candidate (`:2192-2205`).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Section {
-    Dimension,
-    TimeDimension,
-    Fact,
-}
-
-/// A relationship between two logical tables (`:2209-2222`).
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Relationship {
-    pub name: String,
-    pub left_table: String,
-    pub right_table: String,
-    pub keys: RelationshipKeys,
-}
-
-/// A relationship's `relationship_columns`.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RelationshipKeys {
-    /// One pair of columns.
-    One { left: String, right: String },
-    /// Any other number, which the old client drops with a message.
-    Composite,
-}
-
-/// Why a semantic view's definition cannot be read.
-#[derive(Clone, Debug, PartialEq)]
-pub enum SemanticRefusal {
-    /// The text is no YAML.
-    Yaml(YamlError),
-    /// An entry the old client reads is missing.
-    Misses { entry: String },
-    /// An entry is of a kind the old client cannot read: a name that is
-    /// no text, or a list that is no list. With its value.
-    Unreadable { entry: String, value: Value },
-}
-
-impl fmt::Display for SemanticRefusal {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            SemanticRefusal::Yaml(error) => {
-                write!(
-                    f,
-                    "The semantic view definition is not readable YAML: {error}"
-                )
-            }
-            SemanticRefusal::Misses { entry } => {
-                write!(f, "The semantic view definition misses '{entry}'")
-            }
-            SemanticRefusal::Unreadable { entry, .. } => write!(
-                f,
-                "The semantic view definition gives '{entry}' a value that cannot be read"
-            ),
-        }
-    }
-}
-
-impl std::error::Error for SemanticRefusal {}
+use super::spec::{
+    ColumnItem, ColumnSpec, PrimaryKey, RefusalReason, RelationshipItem, Section, Source,
+    TableItem, TableSpec, ViewKind, ViewRefusal, ViewSpec,
+};
+use super::yaml::{self, NodeId, Value};
 
 /// Reads a semantic view's definition.
-pub fn parse(definition: &str) -> Result<SemanticView, SemanticRefusal> {
-    let cfg = yaml::load(definition).map_err(SemanticRefusal::Yaml)?;
-    let tables = list(required(&cfg, "tables")?, "tables")?;
+pub fn parse(definition: &str) -> Result<ViewSpec, ViewRefusal> {
+    let refusal = |reason| ViewRefusal {
+        kind: ViewKind::Semantic,
+        reason,
+    };
+    let document = yaml::load(definition).map_err(|e| refusal(RefusalReason::Yaml(e)))?;
+    let root = document.root();
+    let mut spec = ViewSpec {
+        kind: ViewKind::Semantic,
+        document,
+        tables: Vec::new(),
+        columns: Vec::new(),
+        relationships: Vec::new(),
+        filter: None,
+        parameters: Vec::new(),
+        measures: Vec::new(),
+        ignored: Vec::new(),
+        window_orders: Vec::new(),
+    };
+    let tables = required(&spec, root, "tables")?;
+    let tables = sequence(&mut spec, tables, "tables")?;
     // The old client reads every table's name first (`:2069`).
-    for table in tables {
-        text(required(table, "name")?, "name")?;
+    let mut aliases = Vec::new();
+    for &table in &tables {
+        let name = required(&spec, table, "name")?;
+        let alias = spec
+            .text(name)
+            .ok_or_else(|| spec.refusal(RefusalReason::Misses("name".into())))?;
+        aliases.push(alias.to_owned());
     }
-    let tables = tables
-        .iter()
-        .map(logical_table)
-        .collect::<Result<Vec<_>, _>>()?;
-    let relationships = match cfg.get("relationships") {
-        None => Vec::new(),
-        Some(section) => list(section, "relationships")?
-            .iter()
-            .map(relationship)
-            .collect::<Result<_, _>>()?,
-    };
-    Ok(SemanticView {
-        tables,
-        relationships,
-    })
-}
-
-fn logical_table(cfg: &Value) -> Result<LogicalTable, SemanticRefusal> {
-    let name = text(required(cfg, "name")?, "name")?;
-    let base = required(cfg, "base_table")?;
-    let base = BaseTable {
-        table: text(required(base, "table")?, "table")?,
-        database: text(required(base, "database")?, "database")?,
-        schema: text(required(base, "schema")?, "schema")?,
-    };
-    let primary_key = match cfg.get("primary_key") {
-        None => PrimaryKey::None,
-        Some(key) => {
-            let mut columns = list(required(key, "columns")?, "columns")?
-                .iter()
-                .map(|column| text(column, "columns"))
-                .collect::<Result<Vec<_>, _>>()?;
-            match columns.len() {
-                0 => PrimaryKey::None,
-                1 => PrimaryKey::One(columns.remove(0)),
-                _ => PrimaryKey::Composite(columns),
+    for (index, (&cfg, alias)) in tables.iter().zip(aliases).enumerate() {
+        let base = required(&spec, cfg, "base_table")?;
+        let source = Source::Parts {
+            table: required(&spec, base, "table")?,
+            database: required(&spec, base, "database")?,
+            schema: required(&spec, base, "schema")?,
+        };
+        let primary_key = match spec.document.get(cfg, "primary_key") {
+            None => PrimaryKey::None,
+            Some(key) => {
+                let columns = required(&spec, key, "columns")?;
+                match sequence(&mut spec, columns, "columns")?.as_slice() {
+                    [] => PrimaryKey::None,
+                    [one] => PrimaryKey::One(*one),
+                    _ => PrimaryKey::Composite,
+                }
+            }
+        };
+        spec.tables.push(TableItem::Table(TableSpec {
+            alias,
+            source,
+            parent: None,
+            join: None,
+            primary_key,
+            cfg,
+        }));
+        for (section, key) in [
+            (Section::Dimension, "dimensions"),
+            (Section::TimeDimension, "time_dimensions"),
+            (Section::Fact, "facts"),
+        ] {
+            let Some(entries) = spec.document.get(cfg, key) else {
+                continue;
+            };
+            for column in sequence(&mut spec, entries, key)? {
+                let name = required(&spec, column, "name")?;
+                let item = ColumnItem::Column(ColumnSpec {
+                    table: Some(index),
+                    section,
+                    name: Some(name),
+                    expr: spec
+                        .document
+                        .get(column, "expr")
+                        .filter(|&n| !spec.document.is_null(n)),
+                    data_type: spec
+                        .document
+                        .get(column, "data_type")
+                        .filter(|&n| !spec.document.is_null(n)),
+                    cfg: column,
+                });
+                spec.columns.push(item);
             }
         }
-    };
-    let mut columns = Vec::new();
-    for (section, key) in [
-        (Section::Dimension, "dimensions"),
-        (Section::TimeDimension, "time_dimensions"),
-        (Section::Fact, "facts"),
-    ] {
-        let Some(entries) = cfg.get(key) else {
-            continue;
-        };
-        for column in list(entries, key)? {
-            columns.push(ViewColumn {
-                name: text(required(column, "name")?, "name")?,
-                expr: optional_text(column, "expr")?,
-                data_type: optional_text(column, "data_type")?,
-                section,
-            });
+    }
+    if let Some(relationships) = spec.document.get(root, "relationships") {
+        for cfg in sequence(&mut spec, relationships, "relationships")? {
+            let name = required(&spec, cfg, "name")?;
+            let pairs = required(&spec, cfg, "relationship_columns")?;
+            let pairs = sequence(&mut spec, pairs, "relationship_columns")?.len();
+            spec.relationships
+                .push(RelationshipItem { name, pairs, cfg });
         }
     }
-    Ok(LogicalTable {
-        name,
-        base,
-        primary_key,
-        columns,
-    })
-}
-
-fn relationship(cfg: &Value) -> Result<Relationship, SemanticRefusal> {
-    let name = text(required(cfg, "name")?, "name")?;
-    let pairs = list(
-        required(cfg, "relationship_columns")?,
-        "relationship_columns",
-    )?;
-    let keys = match pairs {
-        [pair] => RelationshipKeys::One {
-            left: text(required(pair, "left_column")?, "left_column")?,
-            right: text(required(pair, "right_column")?, "right_column")?,
-        },
-        _ => RelationshipKeys::Composite,
-    };
-    Ok(Relationship {
-        name,
-        left_table: text(required(cfg, "left_table")?, "left_table")?,
-        right_table: text(required(cfg, "right_table")?, "right_table")?,
-        keys,
-    })
+    Ok(spec)
 }
 
 /// `cfg[entry]`, a mapping's entry that must be there.
-fn required<'a>(cfg: &'a Value, entry: &str) -> Result<&'a Value, SemanticRefusal> {
-    cfg.get(entry).ok_or_else(|| SemanticRefusal::Misses {
-        entry: entry.to_owned(),
-    })
+fn required(spec: &ViewSpec, cfg: NodeId, entry: &str) -> Result<NodeId, ViewRefusal> {
+    spec.document
+        .get(cfg, entry)
+        .ok_or_else(|| spec.refusal(RefusalReason::Misses(entry.to_owned())))
 }
 
-fn list<'a>(value: &'a Value, entry: &str) -> Result<&'a [Value], SemanticRefusal> {
-    match value {
-        Value::Seq(items) => Ok(items),
-        other => Err(unreadable(entry, other)),
+/// The members of a section the old client iterates, as Python iterates
+/// it; a null or anything else that cannot be iterated is refused.
+fn sequence(spec: &mut ViewSpec, node: NodeId, entry: &str) -> Result<Vec<NodeId>, ViewRefusal> {
+    if matches!(spec.value(node), Value::Null) {
+        return Err(spec.refusal(RefusalReason::NotAList(entry.to_owned())));
     }
-}
-
-fn text(value: &Value, entry: &str) -> Result<String, SemanticRefusal> {
-    value
-        .as_str()
-        .map(str::to_owned)
-        .ok_or_else(|| unreadable(entry, value))
-}
-
-/// `cfg.get(entry, None)`: text, or none when absent or null.
-fn optional_text(cfg: &Value, entry: &str) -> Result<Option<String>, SemanticRefusal> {
-    match cfg.get(entry) {
-        None | Some(Value::Null) => Ok(None),
-        Some(value) => text(value, entry).map(Some),
-    }
-}
-
-fn unreadable(entry: &str, value: &Value) -> SemanticRefusal {
-    SemanticRefusal::Unreadable {
-        entry: entry.to_owned(),
-        value: value.clone(),
-    }
+    spec.document
+        .iterate(node)
+        .ok_or_else(|| spec.refusal(RefusalReason::NotAList(entry.to_owned())))
 }
