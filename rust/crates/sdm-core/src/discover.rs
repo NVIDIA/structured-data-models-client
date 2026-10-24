@@ -10,21 +10,20 @@
 //! columns asked, with no inference, links or key counting.
 //!
 //! `describe_source` infers each table from what [`table`] reads;
-//! `materialize` reads, by [`facts`], the facts of each column the host's
-//! schema holds none of (a schema built by hand, or a column added to one
-//! described), as `describe_source` would have read them, and nothing for a
-//! schema whose columns all carry theirs. The cost, per table holding such
-//! a column: the `columns` and `keys` catalog requests (with any
-//! `index_columns` read), one preview, and one `column_ranges` read only
-//! where the preview may have left rows unread and a big integer needs
-//! widening; requests of one table are asked together in one step.
+//! `materialize` reads by it each table its schema has not kept, in full
+//! (`describe::initialize`), and takes each column's facts from that read
+//! ([`facts_read`]), as `describe_source` would have read them, and nothing
+//! of a table the schema kept. The cost, per table read: the `columns` and
+//! `keys` catalog requests (with any `index_columns` read), one preview,
+//! and one `column_ranges` read only where the preview may have left rows
+//! unread and a big integer needs widening; requests of one table are
+//! asked together in one step.
 
-use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use sdm_contract::catalog::{CatalogAnswer, CatalogColumn, CatalogKey, KeyKind};
 use sdm_contract::data::{DataRequest, DescribePart, Relation};
-use sdm_contract::ops::{HeldSchema, NamedTable, SourceFacts};
+use sdm_contract::ops::{NamedTable, SourceFacts};
 use sdm_contract::{CoreError, Detail, ErrorCode, Scalar, Sentence};
 use sdm_schema::held::ColumnAt;
 use sdm_schema::infer::PREVIEW_ROWS;
@@ -45,37 +44,6 @@ pub(crate) struct Discovered {
     pub preview: ArrowData,
     /// Each big integer's declared type ([`big_integer_types`]).
     pub big_types: Vec<(String, String)>,
-}
-
-/// The facts of each column of `held` that carries none, read from the
-/// source as `describe_source` reads them ([`table`]), by table and column
-/// (T3.16): none asked for a schema whose columns all carry theirs. A column
-/// the source does not hold has none, and the schema read without it
-/// ([`sdm_schema::held::read`]), as the reference's engine reads only the
-/// columns its source holds; a table the source does not hold is refused as
-/// describing it refuses one (`no_such_table`).
-/// A table read in full by [`table`] for a run first (`describe::initialize`)
-/// answers its columns' facts too, and is not read again here (`read`).
-pub(crate) async fn facts(
-    asker: &Asker,
-    held: &HeldSchema,
-    read: &[Relation],
-) -> Result<BTreeMap<ColumnAt, SourceFacts>, CoreError> {
-    let mut found = BTreeMap::new();
-    for (table, lacking) in sdm_schema::held::lacking_facts(held) {
-        if read.contains(&table.source) {
-            continue;
-        }
-        let named = NamedTable {
-            name: table.name.clone(),
-            source: table.source.clone(),
-            columns: Some(table.columns.iter().map(|c| c.name.clone()).collect()),
-        };
-        let asked: Vec<String> = lacking.iter().map(|c| (*c).to_owned()).collect();
-        let read = self::table(asker, &named, true, Some(&asked)).await?;
-        found.extend(facts_read(&table.name, &table.source, read)?);
-    }
-    Ok(found)
 }
 
 /// The facts of each column [`table`] read of `relation`, the table

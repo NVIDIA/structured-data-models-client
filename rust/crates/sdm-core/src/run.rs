@@ -160,9 +160,11 @@ struct Shared {
     /// Each table of one part read under a namespace of its own, by the
     /// relation the run names it by ([`Asker::pin`]).
     pinned: BTreeMap<Relation, Relation>,
-    /// The tables of one part the schema holds no reading of, read anew by
-    /// this run ([`Asker::reads_anew`]).
+    /// The tables the schema keeps no reading of, read anew by this run
+    /// ([`Asker::reads_anew`]).
     anew: Vec<Relation>,
+    /// The tables the schema kept, each as it was kept ([`Asker::keeps`]).
+    kept: Vec<sdm_contract::ops::ReadUnder>,
     /// Whether the run said its inputs are checked, and where each table
     /// it reads anew lives ([`Asker::inputs_checked`],
     /// [`Asker::tables_located`]).
@@ -275,6 +277,17 @@ impl Asker {
     /// ([`Asker::tables_located`]).
     pub(crate) fn reads_anew(&self, anew: Vec<Relation>) {
         lock(&self.shared).anew = anew;
+    }
+
+    /// Names `kept`, the tables the schema kept, which the run reads as they
+    /// were kept, asking the source nothing more of them.
+    pub(crate) fn keeps(&self, kept: Vec<sdm_contract::ops::ReadUnder>) {
+        lock(&self.shared).kept = kept;
+    }
+
+    /// The tables the schema kept ([`Asker::keeps`]).
+    pub(crate) fn kept(&self) -> Vec<sdm_contract::ops::ReadUnder> {
+        lock(&self.shared).kept.clone()
     }
 
     /// The tables this run reads anew, where it has not said it read them.

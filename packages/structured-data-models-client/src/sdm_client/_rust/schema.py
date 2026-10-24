@@ -257,9 +257,22 @@ def build(cls: type[Schema], source: Any, described: dict[str, Any]) -> Schema:
     # read it, as the old route's `from_source` keeps its engine's reading
     # of every table: under the parts the source left to the connection
     # where it read any (`SourceDescription.namespace`), under none where
-    # the source names every part (T3.4).
-    namespace = described.get('namespace') or ()
+    # the source names every part, with each column and what the source
+    # said of it (T3.4).
+    from sdm_client._rust.results import Reading
+
+    namespace = tuple(described.get('namespace') or ())
     schema._keep_readings(
-        {table.source_name: tuple(namespace) for table in built.values()}
+        {
+            table.source_name: Reading(
+                namespace=namespace,
+                columns=tuple(
+                    (column_name, column._source)
+                    for column_name, column in table.columns.items()
+                    if column._source is not None
+                ),
+            )
+            for table in built.values()
+        }
     )
     return schema

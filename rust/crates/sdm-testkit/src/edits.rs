@@ -153,10 +153,21 @@ impl SchemaEdit {
 
 /// The schema as this host holds it, as plain data (T3.16): the
 /// description the core last answered, each column's data type by its wire
-/// name and with what the source said of it, and every table kept where
-/// the description read it (T3.4 fix 12), as the Python host's described
-/// schema keeps each table its engine read.
+/// name and with what the source said of it, and every table kept as the
+/// description read it, its columns and what the source said of each
+/// (T3.4 fixes 12 and 13), as the Python host's described schema keeps each
+/// table its engine read.
 pub fn held(described: &SourceDescription) -> HeldSchema {
+    let facts = |table: &sdm_contract::ops::DescribedTable,
+                 column: &sdm_contract::ops::DescribedColumn| SourceFacts {
+        relation: table.source.clone(),
+        dtype: column.dtype,
+        received: column.received.clone(),
+        nullable: column.nullable,
+        unique: column.unique,
+        declared_type: column.declared_type.clone(),
+        exact_number: column.exact_number,
+    };
     HeldSchema {
         tables: described
             .tables
@@ -172,15 +183,7 @@ pub fn held(described: &SourceDescription) -> HeldSchema {
                         dtype: column.dtype.wire_name().to_owned(),
                         stype: column.stype,
                         stype_before_key: column.stype_before_key,
-                        source: Some(SourceFacts {
-                            relation: table.source.clone(),
-                            dtype: column.dtype,
-                            received: column.received.clone(),
-                            nullable: column.nullable,
-                            unique: column.unique,
-                            declared_type: column.declared_type.clone(),
-                            exact_number: column.exact_number,
-                        }),
+                        source: Some(facts(table, column)),
                     })
                     .collect(),
                 primary_key: table.primary_key.clone(),
@@ -195,6 +198,14 @@ pub fn held(described: &SourceDescription) -> HeldSchema {
             .map(|table| sdm_contract::ops::ReadUnder {
                 relation: table.source.clone(),
                 namespace: described.namespace.clone().unwrap_or_default(),
+                columns: table
+                    .columns
+                    .iter()
+                    .map(|column| sdm_contract::ops::KeptColumn {
+                        name: column.name.clone(),
+                        source: facts(table, column),
+                    })
+                    .collect(),
             })
             .collect(),
     }

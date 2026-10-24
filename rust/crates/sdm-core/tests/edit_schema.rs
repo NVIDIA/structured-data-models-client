@@ -308,6 +308,7 @@ fn an_edit_answers_where_the_schema_read_each_relation_as_it_was() {
     given.read_under = vec![sdm_contract::ops::ReadUnder {
         relation: given.tables[0].source.clone(),
         namespace: vec!["main".into(), "shop".into()],
+        columns: Vec::new(),
     }];
     let mut run = start(
         edit_op(),

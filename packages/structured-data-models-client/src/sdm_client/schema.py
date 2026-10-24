@@ -56,7 +56,7 @@ if TYPE_CHECKING:
     from predictive_query.time_columns import TimeColumnChoice
     from sdm_connectors import Source
 
-    from sdm_client._rust.results import SourceFacts
+    from sdm_client._rust.results import Reading, SourceFacts
 
 # Semantic types this client can declare. These are the contract's, and match
 # ``predictive_query.Stype`` one for one.
@@ -1041,6 +1041,14 @@ class Schema:
         name (T3.4), held with the engine's reading of them
         (``EngineTables.readings``) so it lives exactly as long: none for a
         schema whose engine reading is none yet."""
+        return {
+            name: reading.namespace for name, reading in self._readings.items()
+        }
+
+    @property
+    def _readings(self) -> Mapping[str, Reading]:
+        r"""Each table the core read and kept, by source name, as kept
+        (:attr:`_read_under` with each table's columns, T3.4)."""
         tables = self._engine_tables
         return {} if tables is None else tables.readings()
 
@@ -1055,7 +1063,7 @@ class Schema:
         return self._engine_tables
 
     def _keep_readings(
-        self, read: Mapping[str, tuple[str, ...]], *, replace: bool = False
+        self, read: Mapping[str, Reading], *, replace: bool = False
     ) -> None:
         r"""Where the core says it read tables, kept with the engine's reading
         as the old route keeps a table it read (``EngineTables.keep``): an
@@ -1068,8 +1076,8 @@ class Schema:
         held = self._engine_reading().readings()
         if replace:
             held.clear()
-        for source_name, namespace in read.items():
-            held.setdefault(source_name, tuple(namespace))
+        for source_name, reading in read.items():
+            held.setdefault(source_name, reading)
 
     def snapshot(self) -> Schema:
         r"""This schema as it stands, so a later edit cannot reach back.
