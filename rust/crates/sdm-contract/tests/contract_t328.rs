@@ -31,6 +31,7 @@ fn text(id: u32) -> SqlParam {
 
 fn plan(params: Vec<Vec<SqlParam>>) -> FetchPlan {
     FetchPlan::Sql {
+        result_conversions: Vec::new(),
         statements: params
             .into_iter()
             .map(|params| SqlStatement {

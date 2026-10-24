@@ -54,6 +54,11 @@ public final class Providers {
     Map<String, Object> choice = new LinkedHashMap<>();
     choice.put("provider", "sql");
     choice.put("dialect", driver.dialect());
+    if (driver == JdbcProvider.Driver.DATABRICKS) {
+      // The driver normalizes native NTZ timestamps through the JVM zone.
+      // The core selects a lossless SQL projection and names its conversion.
+      choice.put("timestamp_encoding", "naive_microseconds");
+    }
     if (source instanceof PostgresSource postgres && postgres.schema().isPresent()) {
       choice.put("namespace", List.of(postgres.schema().get()));
     }

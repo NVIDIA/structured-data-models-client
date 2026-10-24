@@ -126,7 +126,12 @@ public final class JdbcProvider implements Host.Provider {
       throw new PlanNotRun("a plan with no statement or another dialect");
     }
     if (driver == Driver.DATABRICKS) {
-      return databricks(databricksPlanned(statements, keys), texts(keys), allocator);
+      List<Map<String, Object>> conversions =
+          (List<Map<String, Object>>) plan.getOrDefault("result_conversions", List.of());
+      return databricks(databricksPlanned(statements, keys), texts(keys), conversions, allocator);
+    }
+    if (!((List<?>) plan.getOrDefault("result_conversions", List.of())).isEmpty()) {
+      throw new PlanNotRun("this driver does not implement result conversions");
     }
     List<Planned> planned = new ArrayList<>();
     Map<String, Integer> relations = new LinkedHashMap<>();
@@ -551,7 +556,8 @@ public final class JdbcProvider implements Host.Provider {
    * conversion table.
    */
   private ArrowReader databricks(
-      List<DatabricksStatement> planned, Map<Integer, String> keys, BufferAllocator allocator)
+      List<DatabricksStatement> planned, Map<Integer, String> keys,
+      List<Map<String, Object>> conversions, BufferAllocator allocator)
       throws Exception {
     Trace trace = Trace.installed();
     if (trace != null) {
@@ -571,7 +577,7 @@ public final class JdbcProvider implements Host.Provider {
         }
         try (ResultSet rows = executeQuery(prepared, statement.text())) {
           List<Map<String, Object>> types = types(rows, trace);
-          answer = answered(built(ConversionTable.databricks(rows), allocator), types, allocator, trace);
+          answer = answered(built(ConversionTable.databricks(rows, conversions), allocator), types, allocator, trace);
         }
       } catch (SQLException e) {
         if (trace != null) {

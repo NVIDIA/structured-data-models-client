@@ -99,6 +99,12 @@ impl SqlDialect for Databricks {
         NAME
     }
 
+    fn timestamp_micros(&self, value: &str) -> Option<String> {
+        Some(format!(
+            "timestampdiff(MICROSECOND, TIMESTAMP_NTZ '1970-01-01 00:00:00', CAST({value} AS TIMESTAMP_NTZ))"
+        ))
+    }
+
     /// What a Databricks source answers through this layer.
     fn capabilities(&self) -> ProviderCapabilities {
         ProviderCapabilities {

@@ -204,6 +204,24 @@ impl DataAccess {
         }
     }
 
+    pub(crate) fn result_metadata(
+        &self,
+        request: &DataRequest,
+        plan: &FetchPlan,
+    ) -> Result<Option<FetchPlan>, CoreError> {
+        self.layer.result_metadata(&self.provider, request, plan)
+    }
+
+    pub(crate) fn project_result(
+        &self,
+        request: &DataRequest,
+        plan: &FetchPlan,
+        metadata: &ArrowData,
+    ) -> Result<FetchPlan, CoreError> {
+        self.layer
+            .project_result(&self.provider, request, plan, &metadata.batches)
+    }
+
     /// How `request` is answered: the data layer's plan for the run's
     /// provider, as [`DataAccess::plan`] gives it, or, for an optional
     /// request the provider did not declare while it declares the

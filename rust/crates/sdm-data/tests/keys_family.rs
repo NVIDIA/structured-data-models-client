@@ -216,6 +216,7 @@ ORDER BY s."batch", CAST(t."ts" AS TIMESTAMP) DESC NULLS LAST, t."order_id" ASC 
 #[test]
 fn each_request_of_the_keys_family_renders_its_pinned_statement() {
     let duckdb = ProviderChoice::Sql {
+        timestamp_encoding: None,
         dialect: Dialect::new("duckdb"),
         namespace: Vec::new(),
         view: None,

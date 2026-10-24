@@ -62,6 +62,7 @@ fn start(request: &Value) -> HostRun {
         request: serde_json::from_value::<DataRequest>(request.clone()).unwrap(),
         plan: None,
         provider: Some(ProviderChoice::Sql {
+            timestamp_encoding: None,
             dialect: Dialect::new("duckdb"),
             namespace: Vec::new(),
             view: None,
@@ -503,6 +504,7 @@ fn keyed(connection: &Connection, request: &Value, keys: RecordBatch) -> (Record
         request: serde_json::from_value::<DataRequest>(request).unwrap(),
         plan: None,
         provider: Some(ProviderChoice::Sql {
+            timestamp_encoding: None,
             dialect: Dialect::new("duckdb"),
             namespace: Vec::new(),
             view: None,
@@ -740,6 +742,7 @@ fn two_key_sets_bound_to_one_name_are_refused() {
             part: sdm_contract::data::DescribePart::Tables,
         },
         plan: FetchPlan::Sql {
+            result_conversions: Vec::new(),
             statements: vec![SqlStatement {
                 dialect: Dialect::new("duckdb"),
                 text: "SELECT 1".into(),
@@ -901,6 +904,7 @@ fn columns_of(connection: &Connection, table: &str) -> (String, Vec<RecordBatch>
         part: DescribePart::Columns,
     };
     let duckdb = ProviderChoice::Sql {
+        timestamp_encoding: None,
         dialect: Dialect::new("duckdb"),
         namespace: Vec::new(),
         view: None,

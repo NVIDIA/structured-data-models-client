@@ -1186,6 +1186,12 @@ pub enum ProviderChoice {
         namespace: Vec<Option<String>>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         view: Option<ViewChoice>,
+        /// A host's required lossless transport for timestamps that its
+        /// driver cannot preserve through native getters. The data layer
+        /// owns the SQL projection; the host performs only the conversion
+        /// explicitly named by the resulting plan.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        timestamp_encoding: Option<SqlTimestampEncoding>,
     },
     Host {
         capabilities: ProviderCapabilities,
@@ -1200,8 +1206,27 @@ impl ProviderChoice {
             dialect: Dialect::new(dialect),
             namespace: Vec::new(),
             view: None,
+            timestamp_encoding: None,
         }
     }
+}
+
+/// A driver's requested lossless SQL timestamp transport.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum SqlTimestampEncoding {
+    /// Timezone-free timestamps as signed microseconds from the Unix
+    /// epoch's wall fields, preserving even a local DST-gap wall time.
+    NaiveMicroseconds,
+}
+
+/// One output column projected by the SQL data layer for lossless native
+/// transfer. Positions are zero-based and names remain exactly the
+/// warehouse's original output names, including duplicates.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "conversion", rename_all = "snake_case", deny_unknown_fields)]
+pub enum SqlResultConversion {
+    TimestampMicros { column: u32, name: String },
 }
 
 /// The semantic model a SQL provider's source is read through
@@ -1259,6 +1284,8 @@ pub enum FetchPlan {
     Sql {
         statements: Vec<SqlStatement>,
         expect: ExpectedSchema,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        result_conversions: Vec<SqlResultConversion>,
     },
     Host {
         expect: ExpectedSchema,
@@ -1329,6 +1356,33 @@ pub trait DataLayer: Send + Sync {
         request: &DataRequest,
         provider: &ProviderChoice,
     ) -> Result<FetchPlan, CoreError>;
+
+    /// An optional schema-only preflight for a driver's lossless result
+    /// transport. It binds empty key sets; it never executes the sampled
+    /// data query. No preflight by default.
+    fn result_metadata(
+        &self,
+        provider: &ProviderChoice,
+        request: &DataRequest,
+        plan: &FetchPlan,
+    ) -> Result<Option<FetchPlan>, CoreError> {
+        let _ = (provider, request, plan);
+        Ok(None)
+    }
+
+    /// The original data plan projected using the warehouse's preflight
+    /// result types. SQL semantics and projection choices belong to the
+    /// data layer; the host only executes the explicit output conversions.
+    fn project_result(
+        &self,
+        provider: &ProviderChoice,
+        request: &DataRequest,
+        plan: &FetchPlan,
+        metadata: &[RecordBatch],
+    ) -> Result<FetchPlan, CoreError> {
+        let _ = (provider, request, metadata);
+        Ok(plan.clone())
+    }
 
     /// The catalog answer the run's provider returned to `request`, a
     /// `describe`, read into the contract's dialect-neutral shape (decision

@@ -60,8 +60,11 @@ The four base J2 shapes have equivalent shop-data tests through Java's core call
 These tests use the existing DuckDB fixture to exercise the shared semantics; they do not claim live Databricks or AdventureWorks evidence.
 JDBC conversion tests separately express the required non-UTC JVM and spring DST parity.
 The fake now follows released JDBC 3.4.2's unsupported typed getter and initial JVM-zone timestamp conversion, rather than inventing `LocalDateTime` support.
-A narrow probe with that released driver's actual result-set getters confirms ordinary NTZ reads are repaired, but DST-gap wall fields still normalize before reaching the host.
-The gap regression retains the desired original wall fields and needs a further fix; it is not passing acceptance evidence.
+A narrow probe with that released driver's actual result-set getters confirms the original ordinary NTZ cast failure and DST-gap normalization.
+The core now plans a schema-only `DESCRIBE QUERY` preflight and exact NTZ wall-microsecond projection, with an explicit output-position conversion to Arrow timestamps.
+The Java host writes only the indicated integer values into timestamp columns and contains no timestamp SQL or date parsing rule.
+The desired gap fields, nulls, zero and negative microseconds survive the released driver's actual integer getter under LA and Berlin JVM zones in a bounded private probe.
+This is focused reproduction evidence; package checks and final live warehouse coverage remain pending.
 A live non-UTC warehouse check and the actual E-7 comparison remain phase-end work.
 
 The two known nightly Java probe defects were reproduced with the package artifact: the relative classpath failed after changing to scratch, and the load source failed to compile against the current API.
@@ -88,4 +91,8 @@ New tests were committed before the fix and hold response bodies open after head
 A bounded local-server probe returned success after 1,477 ms with the original 150 ms timeout, then raised the intended endpoint failure after 167 ms with the fix.
 That probe compiled only the two affected Java sources in private scratch; it was not a package build or suite.
 The NTZ fix uses the driver's supported calendar getter instead of the unsupported typed getter and preserves nulls, microseconds and pre-epoch values.
-The remaining DST-gap issue requires a lossless transport decision before this package's final checks.
+The lossless transport preserves the original data query's filters, order, grouping and limits; only the result projection changes.
+Aggregate time bounds convert outside their UNION, preserving the warehouse's common result type and using the existing table-position labels.
+Metadata preflight binds empty key sets without consuming the original seeds, and the actual fetch retains page-by-page budget checks.
+The optional transfer facts leave existing Python and native SQL plans byte-identical when absent.
+It adds a schema-only warehouse roundtrip for Java data queries; metadata is never discovered by executing a sampled query.

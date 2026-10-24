@@ -160,6 +160,7 @@ fn answered(connection: &Connection, request: DataRequest, seeds: RecordBatch) -
         request,
         plan: None,
         provider: Some(ProviderChoice::Sql {
+            timestamp_encoding: None,
             dialect: Dialect::new("duckdb"),
             namespace: Vec::new(),
             view: None,

@@ -23,11 +23,16 @@ fn metadata(types: &[(&str, &str)]) -> RecordBatch {
             Field::new("comment", DataType::Utf8, true),
         ])),
         vec![
-            Arc::new(StringArray::from(types.iter().map(|(n, _)| *n).collect::<Vec<_>>())) as ArrayRef,
-            Arc::new(StringArray::from(types.iter().map(|(_, t)| *t).collect::<Vec<_>>())),
+            Arc::new(StringArray::from(
+                types.iter().map(|(n, _)| *n).collect::<Vec<_>>(),
+            )) as ArrayRef,
+            Arc::new(StringArray::from(
+                types.iter().map(|(_, t)| *t).collect::<Vec<_>>(),
+            )),
             Arc::new(StringArray::new_null(types.len())),
         ],
-    ).unwrap()
+    )
+    .unwrap()
 }
 
 #[test]
@@ -39,31 +44,61 @@ fn ntz_projection_keeps_names_positions_and_all_other_types() {
     };
     let choice = provider();
     let plan = Data.plan(&request, &choice).unwrap();
-    let before = Data.result_metadata(&choice, &request, &plan).unwrap().unwrap();
-    let FetchPlan::Sql { statements, .. } = before else { panic!("SQL") };
-    assert!(statements.last().unwrap().text.starts_with("DESCRIBE QUERY SELECT "));
-    let types = metadata(&[("id", "bigint"), ("at`time", "timestamp_ntz"), ("zoned", "timestamp")]);
-    let projected = Data.project_result(&choice, &request, &plan, &[types]).unwrap();
+    let before = Data
+        .result_metadata(&choice, &request, &plan)
+        .unwrap()
+        .unwrap();
+    let FetchPlan::Sql { statements, .. } = before else {
+        panic!("SQL")
+    };
+    assert!(
+        statements
+            .last()
+            .unwrap()
+            .text
+            .starts_with("DESCRIBE QUERY SELECT ")
+    );
+    let types = metadata(&[
+        ("id", "bigint"),
+        ("at`time", "timestamp_ntz"),
+        ("zoned", "timestamp"),
+    ]);
+    let projected = Data
+        .project_result(&choice, &request, &plan, &[types])
+        .unwrap();
     let value = serde_json::to_value(&projected).unwrap();
     assert_eq!(value["result_conversions"][0]["column"], 1);
     assert_eq!(value["result_conversions"][0]["name"], "at`time");
-    assert_eq!(value["result_conversions"][0]["conversion"], "timestamp_micros");
+    assert_eq!(
+        value["result_conversions"][0]["conversion"],
+        "timestamp_micros"
+    );
     let sql = value["statements"][0]["text"].as_str().unwrap();
     assert!(sql.contains("timestampdiff(MICROSECOND, TIMESTAMP_NTZ '1970-01-01 00:00:00', CAST(`at``time` AS TIMESTAMP_NTZ)) AS `at``time`"), "{sql}");
     assert!(sql.ends_with(" LIMIT 5"));
     assert!(sql.contains("`id`, "));
     assert!(sql.contains(", `zoned` FROM"));
     let native = ProviderChoice::sql("databricks");
-    assert!(Data.result_metadata(&native, &request, &plan).unwrap().is_none());
+    assert!(
+        Data.result_metadata(&native, &request, &plan)
+            .unwrap()
+            .is_none()
+    );
 }
 
 #[test]
 fn metadata_without_ntz_keeps_the_original_plan_exactly() {
     let request = DataRequest::Scan {
         table: Relation::of(vec!["main".into(), "test".into(), "events".into()]),
-        columns: vec!["id".into()], filters: vec![], limit: None,
+        columns: vec!["id".into()],
+        filters: vec![],
+        limit: None,
     };
     let choice = provider();
     let plan = Data.plan(&request, &choice).unwrap();
-    assert_eq!(Data.project_result(&choice, &request, &plan, &[metadata(&[("id", "bigint")])]).unwrap(), plan);
+    assert_eq!(
+        Data.project_result(&choice, &request, &plan, &[metadata(&[("id", "bigint")])])
+            .unwrap(),
+        plan
+    );
 }

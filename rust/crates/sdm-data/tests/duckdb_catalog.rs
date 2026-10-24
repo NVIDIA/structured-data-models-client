@@ -36,6 +36,7 @@ const REFERENCE: [&str; 12] = [
 
 fn duckdb() -> ProviderChoice {
     ProviderChoice::Sql {
+        timestamp_encoding: None,
         dialect: Dialect::new("duckdb"),
         namespace: Vec::new(),
         view: None,
@@ -68,7 +69,9 @@ fn catalog_columns(part: DescribePart) -> &'static [&'static str] {
 /// The one statement `request` renders to, its expected schema checked.
 fn rendered(request: &DataRequest) -> String {
     match Data::new().plan(request, &duckdb()).unwrap() {
-        FetchPlan::Sql { statements, expect } => {
+        FetchPlan::Sql {
+            statements, expect, ..
+        } => {
             match request {
                 DataRequest::Describe { part, .. } => {
                     let ExpectedSchema::Schema { fields } = &expect else {

@@ -3570,6 +3570,17 @@
                 }
               ]
             },
+            "timestamp_encoding": {
+              "description": "A host's required lossless transport for timestamps that its\ndriver cannot preserve through native getters. The data layer\nowns the SQL projection; the host performs only the conversion\nexplicitly named by the resulting plan.",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SqlTimestampEncoding"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "provider": {
               "type": "string",
               "const": "sql"
@@ -3619,6 +3630,16 @@
       "required": [
         "name",
         "trust_expressions"
+      ]
+    },
+    "SqlTimestampEncoding": {
+      "description": "A driver's requested lossless SQL timestamp transport.",
+      "oneOf": [
+        {
+          "description": "Timezone-free timestamps as signed microseconds from the Unix\nepoch's wall fields, preserving even a local DST-gap wall time.",
+          "type": "string",
+          "const": "naive_microseconds"
+        }
       ]
     },
     "ProviderCapabilities": {
@@ -5214,6 +5235,12 @@
             "expect": {
               "$ref": "#/$defs/ExpectedSchema"
             },
+            "result_conversions": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/SqlResultConversion"
+              }
+            },
             "plan": {
               "type": "string",
               "const": "sql"
@@ -5363,6 +5390,34 @@
           "required": [
             "expect",
             "fields"
+          ]
+        }
+      ]
+    },
+    "SqlResultConversion": {
+      "description": "One output column projected by the SQL data layer for lossless native\ntransfer. Positions are zero-based and names remain exactly the\nwarehouse's original output names, including duplicates.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "column": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "name": {
+              "type": "string"
+            },
+            "conversion": {
+              "type": "string",
+              "const": "timestamp_micros"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "conversion",
+            "column",
+            "name"
           ]
         }
       ]

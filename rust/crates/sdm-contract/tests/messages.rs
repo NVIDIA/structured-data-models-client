@@ -28,6 +28,7 @@ fn every_message_round_trips() {
 fn provider_choices_round_trip() {
     for choice in [
         ProviderChoice::Sql {
+            timestamp_encoding: None,
             dialect: Dialect::new("duckdb"),
             namespace: Vec::new(),
             view: None,

@@ -134,6 +134,7 @@ fn two_schema_tables_over_one_source_predict_as_two_sources() {
 fn the_swapped_layer_renders_no_sql_dialect() {
     let refused = HostLayer
         .capabilities(&ProviderChoice::Sql {
+            timestamp_encoding: None,
             dialect: Dialect::new("duckdb"),
             namespace: Vec::new(),
             view: None,

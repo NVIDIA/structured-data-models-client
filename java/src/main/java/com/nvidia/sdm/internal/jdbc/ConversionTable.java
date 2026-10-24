@@ -275,6 +275,12 @@ public final class ConversionTable {
 
   /** A Databricks result read whole by the Databricks column ({@link #DATABRICKS}). */
   static Result databricks(ResultSet rows) throws SQLException {
+    return databricks(rows, List.of());
+  }
+
+  /** Apply only the output conversions explicitly selected by the core. */
+  static Result databricks(ResultSet rows, List<Map<String, Object>> conversions)
+      throws SQLException {
     ResultSetMetaData meta = rows.getMetaData();
     int width = meta.getColumnCount();
     List<DatabricksColumn> columns = new ArrayList<>();
@@ -286,6 +292,26 @@ public final class ConversionTable {
       columns.add(column);
       fields.add(column.field(meta.getColumnLabel(at)));
       values.add(new ArrayList<>());
+    }
+    java.util.Set<Integer> converted = new java.util.HashSet<>();
+    for (Map<String, Object> conversion : conversions) {
+      if (!"timestamp_micros".equals(conversion.get("conversion"))
+          || !(conversion.get("column") instanceof Number position)) {
+        throw new SQLException("an unsupported SQL result conversion");
+      }
+      int at = position.intValue();
+      if (at < 0 || at >= width || !converted.add(at)
+          || !meta.getColumnLabel(at + 1).equals(conversion.get("name"))
+          || !java.util.Set.of("BIGINT", "LONG").contains(bare(meta.getColumnTypeName(at + 1)))) {
+        throw new SQLException("a SQL result conversion does not match its output column");
+      }
+      DatabricksColumn column = new DatabricksColumn(ArrowColumns.TIMESTAMP_US, null,
+          (result, index) -> {
+            long micros = result.getLong(index);
+            return result.wasNull() ? null : micros;
+          });
+      columns.set(at, column);
+      fields.set(at, column.field(meta.getColumnLabel(at + 1)));
     }
     while (rows.next()) {
       for (int at = 0; at < width; at++) {

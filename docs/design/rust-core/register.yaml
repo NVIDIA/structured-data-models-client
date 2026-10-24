@@ -9781,16 +9781,14 @@ entries:
     Java's Databricks column reads a TIMESTAMP's instant as its wall time
     in UTC, and a STRUCT, MAP, INTERVAL or an ARRAY of decimals or time
     stamps as utf8 of the driver's text; every other type as the connector
-    gives it. The supported TIMESTAMP_NTZ calendar getter preserves
-    ordinary wall fields and microseconds, but released JDBC 3.4.2 first
-    normalizes a wall time in the JVM zone. A nonexistent DST-gap wall
-    time can therefore change before the host reads it, even with a UTC
-    warehouse session. This is an unresolved implementation issue, not an
-    accepted loss of parity. Other live timestamp behavior is unverified.
+    gives it. TIMESTAMP_NTZ outputs use a core-planned schema-only
+    preflight and exact SQL wall-microsecond projection, followed by the
+    explicit indexed BIGINT-to-Arrow timestamp conversion. This bypasses
+    the driver's JVM-zone normalization even for nonexistent DST-gap
+    wall fields. Other live timestamp behavior remains unverified.
   affected_inputs: >-
     Java over a Databricks session whose zone is not UTC with a TIMESTAMP
-    column, a TIMESTAMP_NTZ wall time in the JVM zone's DST gap, or a
-    nested or interval column the core reads as data.
+    column, or a nested or interval column the core reads as data.
   cases: [T3.13]
   refs: [T3.13]
   status: proposed
@@ -9800,8 +9798,10 @@ entries:
     Approver: owner. Proposed by T3.13's implementer, never self-approved.
     A narrow probe with released Databricks JDBC 3.4.2 reproduced both
     the unsupported LocalDateTime typed getter and the gap normalization.
-    The typed-getter failure is repaired; the driver-faithful gap
-    regression retains the desired wall fields and still needs a fix.
+    The typed-getter failure is repaired. The lossless NTZ projection
+    preserves gap wall fields rather than accepting that corruption;
+    the explicit transfer was verified narrowly with the actual released
+    driver's integer getter under LA and Berlin JVM zones.
     The proposed live JDBC probe (B7) settles it: the driver's type names,
     getters, time zone handling and whether getSQLState() is generic.
 - id: P3S-6

@@ -133,6 +133,7 @@ fn layer() -> Arc<dyn DataLayer> {
 /// left to the session.
 fn snowflake(namespace: &[Option<&str>]) -> ProviderChoice {
     ProviderChoice::Sql {
+        timestamp_encoding: None,
         dialect: Dialect::new("snowflake"),
         namespace: namespace.iter().map(|p| p.map(str::to_owned)).collect(),
         view: None,

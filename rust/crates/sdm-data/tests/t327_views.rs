@@ -14,6 +14,7 @@ use sdm_data::Data;
 fn a_sql_source_naming_a_view_is_refused_by_name() {
     for dialect in ["duckdb", "sqlite", "postgres", "databricks"] {
         let choice = ProviderChoice::Sql {
+            timestamp_encoding: None,
             dialect: Dialect::new(dialect),
             namespace: Vec::new(),
             view: Some(ViewChoice {

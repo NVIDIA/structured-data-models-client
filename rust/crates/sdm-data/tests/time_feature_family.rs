@@ -82,6 +82,7 @@ JOIN "orders" t
 #[test]
 fn each_request_of_the_time_and_feature_family_renders_its_pinned_statement() {
     let duckdb = ProviderChoice::Sql {
+        timestamp_encoding: None,
         dialect: Dialect::new("duckdb"),
         namespace: Vec::new(),
         view: None,

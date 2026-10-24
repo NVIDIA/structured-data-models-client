@@ -804,6 +804,7 @@ fn namespaces(request: &DataRequest) -> Vec<Vec<Option<&'static str>>> {
 
 fn provider(dialect: &str, namespace: &[Option<&str>]) -> ProviderChoice {
     ProviderChoice::Sql {
+        timestamp_encoding: None,
         dialect: Dialect::new(dialect),
         namespace: namespace.iter().map(|p| p.map(str::to_owned)).collect(),
         view: None,

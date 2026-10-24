@@ -154,7 +154,12 @@ pub(crate) fn bind(
             batches: BTreeMap::new(),
         }],
     };
-    let FetchPlan::Sql { statements, expect } = &plan else {
+    let FetchPlan::Sql {
+        statements,
+        expect,
+        result_conversions,
+    } = &plan
+    else {
         return Ok(as_it_is(plan));
     };
     let named: BTreeSet<AttachmentId> = statements
@@ -214,6 +219,7 @@ pub(crate) fn bind(
             .collect();
         fetches.push(BoundFetch {
             plan: FetchPlan::Sql {
+                result_conversions: result_conversions.clone(),
                 statements,
                 expect: expect.clone(),
             },
