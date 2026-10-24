@@ -121,7 +121,6 @@ fn floating_seeds_carry_each_destination_columns_opaque_declaration() {
     use sdm_contract::data::{SEED_KEY_TYPE, field};
     use sdm_engine::sample::by_pkey;
     let mut table = table("ev");
-    table.column("uid").unwrap();
     table.columns[0].declared_type = Some("my_entity_domain".into());
     table.columns[1].declared_type = Some("my_neighbor_domain".into());
     let seeds = || KeySet {

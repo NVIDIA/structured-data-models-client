@@ -7,11 +7,14 @@ The public materialize path previously emitted different range feature strings f
 The conversion preserves microseconds, nulls, empty and open ranges, and readable wall dates whose UTC year is outside Python's datetime range.
 Scalar timestamp columns and timezone-free values retain their existing conversion, and caller sessions are unchanged.
 
-Postgres floating seeds are bound as exact numeric values, repairing six float/integer key-pair materialize refusals.
+Postgres floating seeds bound to integer or numeric columns use exact numeric comparison, repairing six float/integer key-pair materialize refusals.
 Whole floats use their actual integer digits rather than a shortest decimal that can name a nearby integer.
 Fractional seeds are not truncated, and integer columns are not rounded to double precision for matching.
+Numeric source declarations travel opaquely through the existing SEED_KEY_TYPE metadata port, and only the PostgreSQL dialect interprets them.
+Floating destinations retain their native declared-type conversion, so a REAL key such as 0.1 finds itself despite the different precision of its seed.
+Legacy requests without destination metadata retain their original declared-type conversion.
 This changes the binding representation of already admitted values; it does not relax entity-key admission.
-The dialect matrix is regenerated canonically, changing only four PostgreSQL answers and preserving all 2,972 inputs and every other dialect.
+The dialect matrix is regenerated canonically without editing its inputs or expected SQL by hand.
 
 Metadata refresh retains the accepted tier of a held big-integer column.
 Fresh nullability, uniqueness and catalog facts remain current, while a later fetch wider than the held tier produces the established VALUE_OUT_OF_RANGE error.
@@ -74,6 +77,10 @@ E-1 must check the core on all three, including the approved missing-anchor poli
 ## Validation state
 
 Regression tests precede each production change.
-Only narrowly scoped suspected-bug reproductions and the canonical matrix writer ran during implementation.
+The focused round-1 review found a REAL self-match regression in universal floating-seed numeric conversion.
+A bounded public SDK probe using the baseline native module reproduced it by substituting only the candidate's numeric seed projection: REAL entity 0.1 changed from success to INVALID_REQUEST.
+That probe establishes the faulty SQL's public consequence and is not evidence of a built candidate native module.
+The destination-fact repair adds public SDK REAL/FLOAT8 regressions, both floating seed widths with and without declarations, and retains the integral, fractional and large-integer binding checks.
+Only narrowly scoped suspected-bug reproductions and the canonical matrix/schema writers ran during implementation.
 Both independent approvals of the final integrated SHA are required before lint and package checks.
 Full CI remains the phase-end check.
