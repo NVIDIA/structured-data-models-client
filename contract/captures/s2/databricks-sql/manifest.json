@@ -1,0 +1,90 @@
+{
+ "format": "sdm-capture/1",
+ "recording_commit": "337030f9271d35d9a6f4d207115ee78cea8c25be",
+ "reference_commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+ "legs": {
+  "databricks-sql": {
+   "databricks-sdk": "0.148.0",
+   "databricks-sql-connector": "4.6.0",
+   "duckdb": "1.5.6",
+   "numpy": "2.5.3",
+   "pandas": "3.0.6",
+   "pyarrow": "25.0.1",
+   "python": "3.12.15"
+  }
+ },
+ "cases": {
+  "view.metric.adventureworks.demand-30d@databricks-sql": {
+   "input_hash": "c63d5c3184ee4aca73d84aeac72004f14a41d73bae291dcb227bad5edfbd4a29",
+   "capture": "view.metric.adventureworks.demand-30d"
+  },
+  "view.metric.adventureworks.from-source@databricks-sql": {
+   "input_hash": "50f25bb236aa5e55dc01fc45bd33bc328e3315bb6e51d59484b24a30cb01fc4b",
+   "capture": "view.metric.adventureworks.from-source"
+  },
+  "view.metric.adventureworks.no-order-90d@databricks-sql": {
+   "input_hash": "3994e8d674c62dc35a4534846250b88e4b40c780d8a7f049359e83580c2774a4",
+   "capture": "view.metric.adventureworks.no-order-90d"
+  },
+  "view.metric.adventureworks.quickstart-revenue-over-1000@databricks-sql": {
+   "input_hash": "5db30ba7d0bd1ca319d0f8e23fa93d8deb33a5052ac4085f5de580906c43f44a",
+   "capture": "view.metric.adventureworks.quickstart-revenue-over-1000"
+  },
+  "view.metric.column-refused@databricks-sql": {
+   "input_hash": "aa03bf20746b002ac019a495d7ea4e93c2b1ec3144a8fd315a779beee3778802",
+   "capture": "view.metric.column-refused"
+  },
+  "view.metric.composite-join@databricks-sql": {
+   "input_hash": "63cf1475162532e249d36694f304e8de5183ff2a2c57d8ea7b8b8e8bc2572e2b",
+   "capture": "view.metric.composite-join"
+  },
+  "view.metric.filter-on-join@databricks-sql": {
+   "input_hash": "f932055003cdce7bcc6d59f3ed2bfd07a82c0eadfe3aa4a0acdf512aea74d0b7",
+   "capture": "view.metric.filter-on-join"
+  },
+  "view.metric.forecast@databricks-sql": {
+   "input_hash": "8c916f8c5c4d88c47f4dd8e13caeb652754023a9c2dbf539a04cee562c4d2b0b",
+   "capture": "view.metric.forecast"
+  },
+  "view.metric.from-source@databricks-sql": {
+   "input_hash": "b97f022b16ae95a06df1a87dd061e167550425e73ba4ace2ac8c080e718fef3f",
+   "capture": "view.metric.from-source"
+  },
+  "view.metric.multiclass@databricks-sql": {
+   "input_hash": "39f7e99a49a3d76afb52b1c340cadcb249549c866d0576100de749c82afa1d89",
+   "capture": "view.metric.multiclass"
+  },
+  "view.metric.parameter-and-month@databricks-sql": {
+   "input_hash": "be0319702a1aefe09aff2a581b25652c60102932036d4f0e94162c4a0373d8ff",
+   "capture": "view.metric.parameter-and-month"
+  },
+  "view.metric.query-source@databricks-sql": {
+   "input_hash": "ebf443970b9f74fe4e7dc63613b361223a542d8f1fdadfd3cf1587ec8d3e8de6",
+   "capture": "view.metric.query-source"
+  },
+  "view.metric.ranking@databricks-sql": {
+   "input_hash": "ea4fcc5b0c56e2506e99ddc06d79b0292b13f55ae62296faa956020131967af4",
+   "capture": "view.metric.ranking"
+  },
+  "view.metric.regression@databricks-sql": {
+   "input_hash": "afc6cf380b799239d3161e7496dbfa4d10b5f79ed3e1a8c5cd14829592a15d52",
+   "capture": "view.metric.regression"
+  },
+  "view.metric.shop-twin.from-source@databricks-sql": {
+   "input_hash": "69d1172fd1d023135b5f10dea59d8822db20f223108f26bd8bb5aab18f533f05",
+   "capture": "view.metric.shop-twin.from-source"
+  },
+  "view.metric.unsafe-expression@databricks-sql": {
+   "input_hash": "1ddbac162de10668df35c1783b691d9536245d5d580510ce999db7f97347d8a3",
+   "capture": "view.metric.unsafe-expression"
+  },
+  "view.metric.untrusted-function@databricks-sql": {
+   "input_hash": "f32a7d25b3d02e2606ed5d30346ca938765093f42aac40b509b79428c0915186",
+   "capture": "view.metric.untrusted-function"
+  },
+  "view.metric.wildcards-nested-join@databricks-sql": {
+   "input_hash": "cd543fddb3ff40577f2bdd7931c8937bdd9889ea4c2e735c8c9254e3d35abc21",
+   "capture": "view.metric.wildcards-nested-join"
+  }
+ }
+}
