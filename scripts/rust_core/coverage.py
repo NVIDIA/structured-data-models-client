@@ -443,13 +443,42 @@ _TESTS = {
 #: JUnit runs only in a class it runs (:func:`_runs_in`).
 _DEFINED = {
     'python': r'^\s*def {name}\(',
+    # The method's whole run of annotations, each on lines of its own, then
+    # its modifiers: the run is held to JUnit's rule in _test_problem.
     'java': (
-        r'^\s*@(?:org\.junit\.jupiter\.api\.|org\.junit\.jupiter\.params\.)?'
-        r'(?:Test|ParameterizedTest)\b[^\n]*\n'
-        r'(?:\s*@[^\n]*\n)*'
-        r'\s*(?:(?:public|protected|final)\s+)*void {name}\('
+        r'^[ \t]*(?P<annotations>(?:@[^\n]*\n[ \t]*)+)'
+        r'(?:(?:public|protected|final)\s+)*void {name}\('
     ),
 }
+
+#: An annotation that makes a method a test JUnit runs, and one that keeps
+#: it from running.
+_TEST_ANNOTATION = re.compile(
+    r'@(?:org\.junit\.jupiter\.(?:api|params)\.)?(?:Test|ParameterizedTest)\b(?!\.)'
+)
+_DISABLED = re.compile(r'@(?:org\.junit\.jupiter\.api\.)?Disabled\b')
+
+
+def _unicode_unescaped(source: str) -> str:
+    r"""Java ``source`` with its Unicode escapes translated, as the compiler
+    reads them before anything else (JLS 3.3): a backslash an even number of
+    backslashes precede, one ``u`` or more, four hexadecimal digits."""
+    out: list[str] = []
+    i = 0
+    run = 0
+    while i < len(source):
+        c = source[i]
+        if c == '\\' and run % 2 == 0:
+            found = re.match(r'\\u+([0-9a-fA-F]{4})', source[i:])
+            if found:
+                out.append(chr(int(found.group(1), 16)))
+                i += found.end()
+                run = 0
+                continue
+        run = run + 1 if c == '\\' else 0
+        out.append(c)
+        i += 1
+    return ''.join(out)
 
 
 def _blanked(source: str) -> str:
@@ -465,8 +494,12 @@ def _blanked(source: str) -> str:
             end = source.find('*/', i + 2)
             end = len(source) if end < 0 else end + 2
         elif source.startswith('"""', i):
-            end = source.find('"""', i + 3)
-            end = len(source) if end < 0 else end + 3
+            # A text block ends at the first triple quote no backslash
+            # escapes.
+            end = i + 3
+            while end < len(source) and not source.startswith('"""', end):
+                end += 2 if source[end] == '\\' else 1
+            end = min(end + 3, len(source))
         elif source[i] in '"\'':
             end = i + 1
             while end < len(source) and source[end] not in (source[i], '\n'):
@@ -542,13 +575,12 @@ def _test_problem(test: str, root: Any, language: str = 'python') -> str | None:
     if language == 'java' and source:
         # Live code only, and a method JUnit runs: not @Disabled, in a class
         # it runs.
-        live = _blanked(source)
+        live = _blanked(_unicode_unescaped(source))
         runs = [
             m
             for m in re.finditer(defined, live, re.M)
-            if not re.search(
-                r'@(?:org\.junit\.jupiter\.api\.)?Disabled\b', m.group()
-            )
+            if _TEST_ANNOTATION.search(m['annotations'])
+            and not _DISABLED.search(m['annotations'])
             and _runs_in(live, m.start())
         ]
         return None if runs else 'no test the tree defines'
