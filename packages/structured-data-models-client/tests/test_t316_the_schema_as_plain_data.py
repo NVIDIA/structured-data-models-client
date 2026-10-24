@@ -666,3 +666,48 @@ def test_the_core_route_runs_no_code_of_the_old_engine_or_the_old_pql(
     assert done.returncode == 0, done.stderr
     assert done.stdout.split('\n')[0] == '2'
     assert done.stdout.split('\n')[1:] == [''], done.stdout
+
+
+@pytest.mark.parametrize(
+    'kind',
+    ['BOOLEAN[]', 'STRUCT(a INTEGER, b VARCHAR)'],
+    ids=['bool_list', 'struct'],
+)
+def test_a_column_of_a_type_the_core_has_no_reading_for_the_schema_leaves_out_is_never_read(
+    kind: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # T3.4 round 16 (Codex P1-2): a schema written by hand without a
+    # column the source holds, of a type the core has no reading for,
+    # materializes on the core: each run checks only the columns the schema
+    # uses (the owner's plan B). The old client, which reads the whole table
+    # in place, refuses the type.
+    def act() -> Any:
+        connection = duckdb.connect()
+        for statement in SHOP:
+            connection.execute(statement)
+        connection.execute(f'ALTER TABLE users ADD COLUMN unselected {kind}')
+        return _said(_hand_built(DuckDBSource(connection)))
+
+    outcomes = _both(monkeypatch, act)
+    assert isinstance(outcomes['core'], list), outcomes['core']
+
+
+def test_a_column_of_a_type_the_core_has_no_reading_for_added_after_describe_is_never_read(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # T3.4 round 16 (Claude P2-2): a STRUCT column the source gained after
+    # the schema was described, which the schema does not use, changes
+    # nothing: both routes materialize as before.
+    def act() -> Any:
+        connection = duckdb.connect()
+        for statement in SHOP:
+            connection.execute(statement)
+        schema = _described(DuckDBSource(connection))
+        connection.execute(
+            'ALTER TABLE users ADD COLUMN extra STRUCT(a INTEGER, b VARCHAR)'
+        )
+        return _said(schema)
+
+    outcomes = _both(monkeypatch, act)
+    assert isinstance(outcomes['old'], list), outcomes['old']
+    assert outcomes['core'] == outcomes['old']
