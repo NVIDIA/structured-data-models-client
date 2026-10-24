@@ -1,0 +1,2402 @@
+{
+ "format": "sdm-capture/1",
+ "case": "view.semantic.multiclass",
+ "leg": "snowflake",
+ "recording_commit": "74227a64f306c4c94c773cdfcf8ddee5bbda1b6a",
+ "reference_commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+ "versions": {
+  "duckdb": "1.5.6",
+  "numpy": "2.5.3",
+  "pandas": "3.0.6",
+  "pyarrow": "25.0.1",
+  "python": "3.12.15",
+  "snowflake-connector-python": "4.8.0",
+  "snowflake-snowpark-python": "1.55.3"
+ },
+ "input_hash": "c156aab25b13683805bed119d3d41f131a13d5efbb078395246700798af4f44a",
+ "session": {
+  "time_zone": "America/Los_Angeles",
+  "null_order": "nulls_last"
+ },
+ "reference": {
+  "case": "view.semantic.multiclass@snowflake",
+  "core": null,
+  "driver": {
+   "capture": {
+    "bindings": [],
+    "cursors": 11,
+    "events": [
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 1
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 2
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 3
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 4
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 5
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 6
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 7
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 8
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 9
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 10
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 11
+     }
+    ],
+    "incomplete": [],
+    "passed_through": [
+     "_paramstyle"
+    ],
+    "statements": [
+     {
+      "error": null,
+      "handle": 1,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{catalog}.{schema}.view_semantic_multiclass'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "96c3759e0770f1756598042eee1061a635ee0613b14630a87ec6738c03710dd3",
+        "method": "fetchone",
+        "rows": 1,
+        "values": {
+         "columns": [
+          "SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW(?)"
+         ],
+         "ordered": "7c3d0829a24a9d7da9d916c6a16077042f12c4998732447e6896a3db62af3859",
+         "types": [
+          "2"
+         ],
+         "unencodable": [],
+         "unordered": "7c3d0829a24a9d7da9d916c6a16077042f12c4998732447e6896a3db62af3859"
+        }
+       }
+      ],
+      "sql": "SELECT SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW(?)",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 2,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "ac74a4e87e0dac8fb9d21172718306af3289dfb84d1817ca49bebe621d463690",
+        "method": "fetchall",
+        "rows": 4,
+        "values": {
+         "columns": [
+          "name",
+          "type",
+          "kind",
+          "null?",
+          "default",
+          "primary key",
+          "unique key",
+          "check",
+          "expression",
+          "comment",
+          "policy name",
+          "privacy domain",
+          "write default"
+         ],
+         "ordered": "7aceafd5725f590b8c252de12e1cda6bc627e1cdefea46da419d2cbd55dde796",
+         "types": [
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "9",
+          "2"
+         ],
+         "unencodable": [],
+         "unordered": "f5404def56780445b8c4e4ca0b67abd2b502867bfcd688fd45d362744af621ba"
+        }
+       }
+      ],
+      "sql": "DESCRIBE TABLE \"{catalog}\".\"{schema}\".\"ORDERS\"",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 3,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "998d3173491ec2ed2aabc6ac5bf469f5bb9c733eb8cab6630a409cb9ae321ac1",
+        "method": "fetch_arrow_all",
+        "rows": 80,
+        "schema": [
+         {
+          "name": "ORDER_ID",
+          "type": "int8"
+         },
+         {
+          "name": "USER_ID",
+          "type": "int8"
+         },
+         {
+          "name": "TS",
+          "type": "timestamp[us]"
+         },
+         {
+          "name": "PRICE",
+          "type": "double"
+         },
+         {
+          "name": "PRICE_WITH_TAX",
+          "type": "double"
+         }
+        ],
+        "values": {
+         "columns": [
+          "ORDER_ID",
+          "USER_ID",
+          "TS",
+          "PRICE",
+          "PRICE_WITH_TAX"
+         ],
+         "ordered": "b38864d09a1b0fee37b9dc84009680ff0461b1551309a2952834fab2bb3eae8e",
+         "types": null,
+         "unencodable": [],
+         "unordered": "3a8e5dcb22b5fb911865ea046471f7cf08ccafebfe6ed61e0a91ee1271a206f4"
+        }
+       }
+      ],
+      "sql": "SELECT order_id AS \"ORDER_ID\", user_id AS \"USER_ID\", ts AS \"TS\", price AS \"PRICE\", price * 1.2 AS \"PRICE_WITH_TAX\" FROM \"{catalog}\".\"{schema}\".\"ORDERS\" LIMIT 1000",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 4,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "9bf0618f6afa9b07d2c41c1bfb1bf3e301747fce0e68358f40527f58577183fd",
+        "method": "fetchall",
+        "rows": 3,
+        "values": {
+         "columns": [
+          "name",
+          "type",
+          "kind",
+          "null?",
+          "default",
+          "primary key",
+          "unique key",
+          "check",
+          "expression",
+          "comment",
+          "policy name",
+          "privacy domain",
+          "write default"
+         ],
+         "ordered": "f175eef3ec2e6f8fdee820599b0c61056a549ae8b0d84162b6069962d991e247",
+         "types": [
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "9",
+          "2"
+         ],
+         "unencodable": [],
+         "unordered": "34d2d523006879683fd3cc522ded616c494eb00687995c7728886dcb895cf9ff"
+        }
+       }
+      ],
+      "sql": "DESCRIBE TABLE \"{catalog}\".\"{schema}\".\"USERS\"",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 5,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "f13c0ee1cbf40ef2129cac4d6abf36fed8b4cea8a148fca66c59ca6e0ab4c869",
+        "method": "fetch_arrow_all",
+        "rows": 8,
+        "schema": [
+         {
+          "name": "COUNTRY",
+          "type": "string"
+         },
+         {
+          "name": "USER_ID",
+          "type": "int8"
+         },
+         {
+          "name": "AGE",
+          "type": "int8"
+         }
+        ],
+        "values": {
+         "columns": [
+          "COUNTRY",
+          "USER_ID",
+          "AGE"
+         ],
+         "ordered": "7bdbfa29626490d026228bfe56607813a9a908699e7e4e3ae980de1935e77f49",
+         "types": null,
+         "unencodable": [],
+         "unordered": "2e5930850a43feb8400110bde65d01ee18db4c263f1a18fc55cfd57e785818fc"
+        }
+       }
+      ],
+      "sql": "SELECT country AS \"COUNTRY\", user_id AS \"USER_ID\", age AS \"AGE\" FROM \"{catalog}\".\"{schema}\".\"USERS\" LIMIT 1000",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 6,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'ORDERS'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "167dd64dc261bb0d40ece576c8299accc8e3200cc28e277b5189a50fe135d8ef",
+        "method": "fetchone",
+        "rows": 1,
+        "values": {
+         "columns": [
+          "created_on",
+          "name",
+          "database_name",
+          "schema_name",
+          "kind",
+          "comment",
+          "cluster_by",
+          "rows",
+          "bytes",
+          "owner",
+          "retention_time",
+          "automatic_clustering",
+          "change_tracking",
+          "search_optimization",
+          "search_optimization_progress",
+          "search_optimization_bytes",
+          "is_external",
+          "enable_schema_evolution",
+          "owner_role_type",
+          "is_event",
+          "is_hybrid",
+          "is_iceberg",
+          "is_dynamic",
+          "is_immutable",
+          "is_interactive",
+          "row_timestamp",
+          "error_logging"
+         ],
+         "ordered": "736d79be9e294b566574138e97517535a42719e9cd79f1807add443a9219eca2",
+         "types": [
+          "6",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "0",
+          "0",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "0",
+          "0",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2"
+         ],
+         "unencodable": [],
+         "unordered": "736d79be9e294b566574138e97517535a42719e9cd79f1807add443a9219eca2"
+        }
+       }
+      ],
+      "sql": "SHOW TABLES LIKE ? IN SCHEMA \"{catalog}\".\"{schema}\"",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 7,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'USERS'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "17d9998bf2e8c299b6b7ca4b70506bbe93ffd1ff895bb09c7222d5f9c9130a5f",
+        "method": "fetchone",
+        "rows": 1,
+        "values": {
+         "columns": [
+          "created_on",
+          "name",
+          "database_name",
+          "schema_name",
+          "kind",
+          "comment",
+          "cluster_by",
+          "rows",
+          "bytes",
+          "owner",
+          "retention_time",
+          "automatic_clustering",
+          "change_tracking",
+          "search_optimization",
+          "search_optimization_progress",
+          "search_optimization_bytes",
+          "is_external",
+          "enable_schema_evolution",
+          "owner_role_type",
+          "is_event",
+          "is_hybrid",
+          "is_iceberg",
+          "is_dynamic",
+          "is_immutable",
+          "is_interactive",
+          "row_timestamp",
+          "error_logging"
+         ],
+         "ordered": "80501fa6f2bb06b9df5b2fd11c303169270975fc2b40a5a936573b5862b6916f",
+         "types": [
+          "6",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "0",
+          "0",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "0",
+          "0",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2"
+         ],
+         "unencodable": [],
+         "unordered": "80501fa6f2bb06b9df5b2fd11c303169270975fc2b40a5a936573b5862b6916f"
+        }
+       }
+      ],
+      "sql": "SHOW TABLES LIKE ? IN SCHEMA \"{catalog}\".\"{schema}\"",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 8,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "64f05d5c4d56ed4be4d98aa3c2aa6a342d59ced667e156a2f098931b1adabe09",
+        "method": "fetchall",
+        "rows": 1,
+        "values": {
+         "columns": [
+          "TABLE_INDEX",
+          "MIN_DATE",
+          "MAX_DATE"
+         ],
+         "ordered": "6d619e2d389a605a74bd007b91d1b8770ea2c167aa8cc71a480a8f4d3b555ee0",
+         "types": [
+          "0",
+          "8",
+          "8"
+         ],
+         "unencodable": [],
+         "unordered": "6d619e2d389a605a74bd007b91d1b8770ea2c167aa8cc71a480a8f4d3b555ee0"
+        }
+       }
+      ],
+      "sql": "SELECT\n  0 as table_index,\n  MIN(ts) as min_date,\n  MAX(ts) as max_date\nFROM \"{catalog}\".\"{schema}\".\"ORDERS\"",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 9,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "a161d7191835de6e3f36a8bae7cf15def002dfd51f19edf1e51cf223329df1f4",
+        "method": "fetch_arrow_all",
+        "rows": 8,
+        "schema": [
+         {
+          "name": "COUNTRY",
+          "type": "string"
+         },
+         {
+          "name": "USER_ID",
+          "type": "int8"
+         }
+        ],
+        "values": {
+         "columns": [
+          "COUNTRY",
+          "USER_ID"
+         ],
+         "ordered": "869e8a453e6e1c8783bb8fd94227cbd73c1db74f3241c44c0e4ef6b32f7030e8",
+         "types": null,
+         "unencodable": [],
+         "unordered": "769e45cbbb9d5d172a77299759274a41f4e560bf9effab0fcc56480291e3905c"
+        }
+       }
+      ],
+      "sql": "SELECT country AS \"COUNTRY\", user_id AS \"USER_ID\"\nFROM \"{catalog}\".\"{schema}\".\"USERS\"\nSAMPLE ROW (10000 ROWS)\nWHERE user_id IS NOT NULL",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 10,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'[3, 4, 2, 7, 6, 1, 5, 0, 0, 1]'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "587a474c2ac814bcc72360a0692e8c7b6bdf6af2a3618e0b3952e253fe99d990",
+        "method": "fetch_arrow_all",
+        "rows": 10,
+        "schema": [
+         {
+          "name": "__KUMO_BATCH__",
+          "type": "decimal128(38, 0)"
+         },
+         {
+          "name": "USER_ID",
+          "type": "int8"
+         },
+         {
+          "name": "AGE",
+          "type": "int8"
+         }
+        ],
+        "values": {
+         "columns": [
+          "__KUMO_BATCH__",
+          "USER_ID",
+          "AGE"
+         ],
+         "ordered": "1aaab2f867bc9c191840f1cd4c979f5cba63a9bdd9e58012b40b481d0e0c8241",
+         "types": null,
+         "unencodable": [],
+         "unordered": "39ebea72a7b09fcfc75f130adf441cabdc892782d13e4c48a4ab0aa613ef63d7"
+        }
+       }
+      ],
+      "sql": "WITH TMP as (\n  SELECT\n    f.index as __KUMO_BATCH__,\n    f.value::NUMBER as __KUMO_ID__\n  FROM TABLE(FLATTEN(INPUT => PARSE_JSON(?))) f\n)\nSELECT TMP.__KUMO_BATCH__ as __KUMO_BATCH__, user_id AS \"USER_ID\", age AS \"AGE\"\nFROM TMP\nJOIN \"{catalog}\".\"{schema}\".\"USERS\"\n  ON user_id = TMP.__KUMO_ID__",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 11,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'[[3, \"2024-03-01 00:00:00\", \"2019-03-03 00:00:00\"], [4, \"2024-03-01 00:00:00\", \"2019-03-03 00:00:00\"], [2, \"2024-03-01 00:00:00\", \"2019-03-03 00:00:00\"], [7, \"2024-03-01 00:00:00\", \"2019-03-03 00:00:00\"], [6, \"2024-03-01 00:00:00\", \"2019-03-03 00:00:00\"], [1, \"2024-03-01 00:00:00\", \"2019-03-03 00:00:00\"], [5, \"2024-03-01 00:00:00\", \"2019-03-03 00:00:00\"], [0, \"2024-03-01 00:00:00\", \"2019-03-03 00:00:00\"], [0, \"2024-03-01 00:00:00\", \"2019-03-03 00:00:00\"], [1, \"2024-03-01 00:00:00\", \"2019-03-03 00:00:00\"]]'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'2024-03-01 00:00:00'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'2019-03-03 00:00:00'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "230bf208dc80035a15890f4847780fd3987715523181cef576727c9a6697b4c7",
+        "method": "fetch_arrow_all",
+        "rows": 77,
+        "schema": [
+         {
+          "name": "__KUMO_BATCH__",
+          "type": "decimal128(38, 0)"
+         },
+         {
+          "name": "ORDER_ID",
+          "type": "int8"
+         },
+         {
+          "name": "USER_ID",
+          "type": "int8"
+         },
+         {
+          "name": "TS",
+          "type": "timestamp[us]"
+         },
+         {
+          "name": "PRICE",
+          "type": "double"
+         },
+         {
+          "name": "PRICE_WITH_TAX",
+          "type": "double"
+         }
+        ],
+        "values": {
+         "columns": [
+          "__KUMO_BATCH__",
+          "ORDER_ID",
+          "USER_ID",
+          "TS",
+          "PRICE",
+          "PRICE_WITH_TAX"
+         ],
+         "ordered": "69461f4510f52f091f257da426da8b8615e67ae9a61ded03883c195957eea9a8",
+         "types": null,
+         "unencodable": [],
+         "unordered": "d2dc7e0288df4628b6482bb103b405a2675df1ce178dfe601dac6f00d284bee1"
+        }
+       }
+      ],
+      "sql": "WITH TMP as (\n  SELECT\n    f.index as __KUMO_BATCH__,\n    f.value[0]::NUMBER as __KUMO_ID__,\n    f.value[1]::TIMESTAMP_NTZ as __KUMO_END_TIME__,\n    f.value[2]::TIMESTAMP_NTZ as __KUMO_START_TIME__\n  FROM TABLE(FLATTEN(INPUT => PARSE_JSON(?))) f\n)\nSELECT TMP.__KUMO_BATCH__ as __KUMO_BATCH__, order_id AS \"ORDER_ID\", user_id AS \"USER_ID\", ts AS \"TS\", price AS \"PRICE\", price * 1.2 AS \"PRICE_WITH_TAX\"\nFROM TMP\nJOIN \"{catalog}\".\"{schema}\".\"ORDERS\"\n  ON user_id = TMP.__KUMO_ID__\n AND ts <= TMP.__KUMO_END_TIME__\n AND ts > TMP.__KUMO_START_TIME__\nWHERE ts <= ?\n  AND ts > ?\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY TMP.__KUMO_BATCH__\n  ORDER BY ts DESC, order_id\n) <= 32\nORDER BY TMP.__KUMO_BATCH__, ts DESC, order_id",
+      "stage": "materialize"
+     }
+    ]
+   },
+   "query_log": {
+    "bindings": 0,
+    "compared": 11,
+    "differing": [],
+    "statements": 11
+   }
+  },
+  "format": "sdm-observation/1",
+  "host": {
+   "warnings": [
+    "UserWarning",
+    "SDMWarning"
+   ]
+  },
+  "identity": {
+   "cell": "ref-pandas3",
+   "commit": {
+    "clean": true,
+    "sha": "74227a64f306c4c94c773cdfcf8ddee5bbda1b6a"
+   },
+   "contract": null,
+   "inputs": {
+    "bases": "9d69fe4aea2be4a6a2d96ea03f5258147c537927e2c6e6716b6030836ebc62f8",
+    "case": "884c78636371e6243ce677c2bc7a8122d0e5ef36cae325e3e09c97eb567de091"
+   },
+   "native": null,
+   "native_loaded": false,
+   "operations": [],
+   "platform": "linux-x86_64",
+   "reference": {
+    "commit": {
+     "clean": true,
+     "sha": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1"
+    },
+    "environment": "4ad1f59a27870d083c270d58969d94b80e97bd128c81ba20396b4599e8ae0efe",
+    "guard": {
+     "after": "passed",
+     "before": "passed"
+    }
+   },
+   "runner": "python-ref",
+   "versions": {
+    "duckdb": "1.5.6",
+    "numpy": "2.5.3",
+    "pandas": "3.0.6",
+    "pyarrow": "25.0.1",
+    "python": "3.12.15"
+   }
+  },
+  "outcome": {
+   "code": null,
+   "error": null,
+   "result": "success",
+   "stage": "predict"
+  },
+  "public": {
+   "payloads": [
+    {
+     "method": "POST",
+     "parsed": {
+      "context": {
+       "instance_table": {
+        "columns": [
+         "instance_id",
+         "__kumo_entity_ref_0",
+         "__kumo_anchor_time",
+         "TARGET"
+        ],
+        "format": "arrays",
+        "rows": [
+         [
+          {
+           "number": "0"
+          },
+          {
+           "number": "3"
+          },
+          "2024-03-01T00:00:00.000000Z",
+          "US"
+         ],
+         [
+          {
+           "number": "1"
+          },
+          {
+           "number": "4"
+          },
+          "2024-03-01T00:00:00.000000Z",
+          "DE"
+         ],
+         [
+          {
+           "number": "2"
+          },
+          {
+           "number": "2"
+          },
+          "2024-03-01T00:00:00.000000Z",
+          "IN"
+         ],
+         [
+          {
+           "number": "3"
+          },
+          {
+           "number": "7"
+          },
+          "2024-03-01T00:00:00.000000Z",
+          "DE"
+         ],
+         [
+          {
+           "number": "4"
+          },
+          {
+           "number": "6"
+          },
+          "2024-03-01T00:00:00.000000Z",
+          "US"
+         ],
+         [
+          {
+           "number": "6"
+          },
+          {
+           "number": "5"
+          },
+          "2024-03-01T00:00:00.000000Z",
+          "IN"
+         ]
+        ]
+       },
+       "related_tables": {
+        "ORDERS": {
+         "columns": [
+          "instance_id",
+          "__node_id",
+          "TS",
+          "PRICE",
+          "PRICE_WITH_TAX",
+          "USER_ID"
+         ],
+         "format": "arrays",
+         "rows": [
+          [
+           {
+            "number": "0"
+           },
+           {
+            "number": "0"
+           },
+           "2024-02-18T00:00:00.000000Z",
+           {
+            "number": "98.5"
+           },
+           {
+            "number": "118.19999999999999"
+           },
+           {
+            "number": "3"
+           }
+          ],
+          [
+           {
+            "number": "0"
+           },
+           {
+            "number": "1"
+           },
+           "2023-12-24T00:00:00.000000Z",
+           {
+            "number": "86.5"
+           },
+           {
+            "number": "103.8"
+           },
+           {
+            "number": "3"
+           }
+          ],
+          [
+           {
+            "number": "0"
+           },
+           {
+            "number": "2"
+           },
+           "2023-10-29T00:00:00.000000Z",
+           {
+            "number": "74.5"
+           },
+           {
+            "number": "89.39999999999999"
+           },
+           {
+            "number": "3"
+           }
+          ],
+          [
+           {
+            "number": "0"
+           },
+           {
+            "number": "3"
+           },
+           "2023-09-03T00:00:00.000000Z",
+           {
+            "number": "62.5"
+           },
+           {
+            "number": "75.0"
+           },
+           {
+            "number": "3"
+           }
+          ],
+          [
+           {
+            "number": "0"
+           },
+           {
+            "number": "4"
+           },
+           "2023-07-09T00:00:00.000000Z",
+           {
+            "number": "50.5"
+           },
+           {
+            "number": "60.599999999999994"
+           },
+           {
+            "number": "3"
+           }
+          ],
+          [
+           {
+            "number": "0"
+           },
+           {
+            "number": "5"
+           },
+           "2023-05-14T00:00:00.000000Z",
+           {
+            "number": "38.5"
+           },
+           {
+            "number": "46.199999999999996"
+           },
+           {
+            "number": "3"
+           }
+          ],
+          [
+           {
+            "number": "0"
+           },
+           {
+            "number": "6"
+           },
+           "2023-03-19T00:00:00.000000Z",
+           {
+            "number": "26.5"
+           },
+           {
+            "number": "31.799999999999997"
+           },
+           {
+            "number": "3"
+           }
+          ],
+          [
+           {
+            "number": "0"
+           },
+           {
+            "number": "7"
+           },
+           "2023-01-22T00:00:00.000000Z",
+           {
+            "number": "14.5"
+           },
+           {
+            "number": "17.4"
+           },
+           {
+            "number": "3"
+           }
+          ],
+          [
+           {
+            "number": "1"
+           },
+           {
+            "number": "8"
+           },
+           "2024-02-25T00:00:00.000000Z",
+           {
+            "number": "100.0"
+           },
+           {
+            "number": "120.0"
+           },
+           {
+            "number": "4"
+           }
+          ],
+          [
+           {
+            "number": "1"
+           },
+           {
+            "number": "9"
+           },
+           "2023-12-31T00:00:00.000000Z",
+           {
+            "number": "88.0"
+           },
+           {
+            "number": "105.6"
+           },
+           {
+            "number": "4"
+           }
+          ],
+          [
+           {
+            "number": "1"
+           },
+           {
+            "number": "10"
+           },
+           "2023-11-05T00:00:00.000000Z",
+           {
+            "number": "76.0"
+           },
+           {
+            "number": "91.2"
+           },
+           {
+            "number": "4"
+           }
+          ],
+          [
+           {
+            "number": "1"
+           },
+           {
+            "number": "11"
+           },
+           "2023-09-10T00:00:00.000000Z",
+           {
+            "number": "64.0"
+           },
+           {
+            "number": "76.8"
+           },
+           {
+            "number": "4"
+           }
+          ],
+          [
+           {
+            "number": "1"
+           },
+           {
+            "number": "12"
+           },
+           "2023-07-16T00:00:00.000000Z",
+           {
+            "number": "52.0"
+           },
+           {
+            "number": "62.4"
+           },
+           {
+            "number": "4"
+           }
+          ],
+          [
+           {
+            "number": "1"
+           },
+           {
+            "number": "13"
+           },
+           "2023-05-21T00:00:00.000000Z",
+           {
+            "number": "40.0"
+           },
+           {
+            "number": "48.0"
+           },
+           {
+            "number": "4"
+           }
+          ],
+          [
+           {
+            "number": "1"
+           },
+           {
+            "number": "14"
+           },
+           "2023-03-26T00:00:00.000000Z",
+           {
+            "number": "28.0"
+           },
+           {
+            "number": "33.6"
+           },
+           {
+            "number": "4"
+           }
+          ],
+          [
+           {
+            "number": "1"
+           },
+           {
+            "number": "15"
+           },
+           "2023-01-29T00:00:00.000000Z",
+           {
+            "number": "16.0"
+           },
+           {
+            "number": "19.2"
+           },
+           {
+            "number": "4"
+           }
+          ],
+          [
+           {
+            "number": "2"
+           },
+           {
+            "number": "16"
+           },
+           "2024-02-11T00:00:00.000000Z",
+           {
+            "number": "97.0"
+           },
+           {
+            "number": "116.39999999999999"
+           },
+           {
+            "number": "2"
+           }
+          ],
+          [
+           {
+            "number": "2"
+           },
+           {
+            "number": "17"
+           },
+           "2023-12-17T00:00:00.000000Z",
+           {
+            "number": "85.0"
+           },
+           {
+            "number": "102.0"
+           },
+           {
+            "number": "2"
+           }
+          ],
+          [
+           {
+            "number": "2"
+           },
+           {
+            "number": "18"
+           },
+           "2023-10-22T00:00:00.000000Z",
+           {
+            "number": "73.0"
+           },
+           {
+            "number": "87.6"
+           },
+           {
+            "number": "2"
+           }
+          ],
+          [
+           {
+            "number": "2"
+           },
+           {
+            "number": "19"
+           },
+           "2023-08-27T00:00:00.000000Z",
+           {
+            "number": "61.0"
+           },
+           {
+            "number": "73.2"
+           },
+           {
+            "number": "2"
+           }
+          ],
+          [
+           {
+            "number": "2"
+           },
+           {
+            "number": "20"
+           },
+           "2023-07-02T00:00:00.000000Z",
+           {
+            "number": "49.0"
+           },
+           {
+            "number": "58.8"
+           },
+           {
+            "number": "2"
+           }
+          ],
+          [
+           {
+            "number": "2"
+           },
+           {
+            "number": "21"
+           },
+           "2023-05-07T00:00:00.000000Z",
+           {
+            "number": "37.0"
+           },
+           {
+            "number": "44.4"
+           },
+           {
+            "number": "2"
+           }
+          ],
+          [
+           {
+            "number": "2"
+           },
+           {
+            "number": "22"
+           },
+           "2023-03-12T00:00:00.000000Z",
+           {
+            "number": "25.0"
+           },
+           {
+            "number": "30.0"
+           },
+           {
+            "number": "2"
+           }
+          ],
+          [
+           {
+            "number": "2"
+           },
+           {
+            "number": "23"
+           },
+           "2023-01-15T00:00:00.000000Z",
+           {
+            "number": "13.0"
+           },
+           {
+            "number": "15.6"
+           },
+           {
+            "number": "2"
+           }
+          ],
+          [
+           {
+            "number": "3"
+           },
+           {
+            "number": "24"
+           },
+           "2024-01-21T00:00:00.000000Z",
+           {
+            "number": "92.5"
+           },
+           {
+            "number": "111.0"
+           },
+           {
+            "number": "7"
+           }
+          ],
+          [
+           {
+            "number": "3"
+           },
+           {
+            "number": "25"
+           },
+           "2023-11-26T00:00:00.000000Z",
+           {
+            "number": "80.5"
+           },
+           {
+            "number": "96.6"
+           },
+           {
+            "number": "7"
+           }
+          ],
+          [
+           {
+            "number": "3"
+           },
+           {
+            "number": "26"
+           },
+           "2023-10-01T00:00:00.000000Z",
+           {
+            "number": "68.5"
+           },
+           {
+            "number": "82.2"
+           },
+           {
+            "number": "7"
+           }
+          ],
+          [
+           {
+            "number": "3"
+           },
+           {
+            "number": "27"
+           },
+           "2023-08-06T00:00:00.000000Z",
+           {
+            "number": "56.5"
+           },
+           {
+            "number": "67.8"
+           },
+           {
+            "number": "7"
+           }
+          ],
+          [
+           {
+            "number": "3"
+           },
+           {
+            "number": "28"
+           },
+           "2023-06-11T00:00:00.000000Z",
+           {
+            "number": "44.5"
+           },
+           {
+            "number": "53.4"
+           },
+           {
+            "number": "7"
+           }
+          ],
+          [
+           {
+            "number": "3"
+           },
+           {
+            "number": "29"
+           },
+           "2023-04-16T00:00:00.000000Z",
+           {
+            "number": "32.5"
+           },
+           {
+            "number": "39.0"
+           },
+           {
+            "number": "7"
+           }
+          ],
+          [
+           {
+            "number": "3"
+           },
+           {
+            "number": "30"
+           },
+           "2023-02-19T00:00:00.000000Z",
+           {
+            "number": "20.5"
+           },
+           {
+            "number": "24.599999999999998"
+           },
+           {
+            "number": "7"
+           }
+          ],
+          [
+           {
+            "number": "4"
+           },
+           {
+            "number": "31"
+           },
+           "2024-01-14T00:00:00.000000Z",
+           {
+            "number": "91.0"
+           },
+           {
+            "number": "109.2"
+           },
+           {
+            "number": "6"
+           }
+          ],
+          [
+           {
+            "number": "4"
+           },
+           {
+            "number": "32"
+           },
+           "2023-11-19T00:00:00.000000Z",
+           {
+            "number": "79.0"
+           },
+           {
+            "number": "94.8"
+           },
+           {
+            "number": "6"
+           }
+          ],
+          [
+           {
+            "number": "4"
+           },
+           {
+            "number": "33"
+           },
+           "2023-09-24T00:00:00.000000Z",
+           {
+            "number": "67.0"
+           },
+           {
+            "number": "80.39999999999999"
+           },
+           {
+            "number": "6"
+           }
+          ],
+          [
+           {
+            "number": "4"
+           },
+           {
+            "number": "34"
+           },
+           "2023-07-30T00:00:00.000000Z",
+           {
+            "number": "55.0"
+           },
+           {
+            "number": "66.0"
+           },
+           {
+            "number": "6"
+           }
+          ],
+          [
+           {
+            "number": "4"
+           },
+           {
+            "number": "35"
+           },
+           "2023-06-04T00:00:00.000000Z",
+           {
+            "number": "43.0"
+           },
+           {
+            "number": "51.6"
+           },
+           {
+            "number": "6"
+           }
+          ],
+          [
+           {
+            "number": "4"
+           },
+           {
+            "number": "36"
+           },
+           "2023-04-09T00:00:00.000000Z",
+           {
+            "number": "31.0"
+           },
+           {
+            "number": "37.199999999999996"
+           },
+           {
+            "number": "6"
+           }
+          ],
+          [
+           {
+            "number": "4"
+           },
+           {
+            "number": "37"
+           },
+           "2023-02-12T00:00:00.000000Z",
+           {
+            "number": "19.0"
+           },
+           {
+            "number": "22.8"
+           },
+           {
+            "number": "6"
+           }
+          ],
+          [
+           {
+            "number": "6"
+           },
+           {
+            "number": "46"
+           },
+           "2024-01-07T00:00:00.000000Z",
+           {
+            "number": "89.5"
+           },
+           {
+            "number": "107.39999999999999"
+           },
+           {
+            "number": "5"
+           }
+          ],
+          [
+           {
+            "number": "6"
+           },
+           {
+            "number": "47"
+           },
+           "2023-11-12T00:00:00.000000Z",
+           {
+            "number": "77.5"
+           },
+           {
+            "number": "93.0"
+           },
+           {
+            "number": "5"
+           }
+          ],
+          [
+           {
+            "number": "6"
+           },
+           {
+            "number": "48"
+           },
+           "2023-09-17T00:00:00.000000Z",
+           {
+            "number": "65.5"
+           },
+           {
+            "number": "78.6"
+           },
+           {
+            "number": "5"
+           }
+          ],
+          [
+           {
+            "number": "6"
+           },
+           {
+            "number": "49"
+           },
+           "2023-07-23T00:00:00.000000Z",
+           {
+            "number": "53.5"
+           },
+           {
+            "number": "64.2"
+           },
+           {
+            "number": "5"
+           }
+          ],
+          [
+           {
+            "number": "6"
+           },
+           {
+            "number": "50"
+           },
+           "2023-05-28T00:00:00.000000Z",
+           {
+            "number": "41.5"
+           },
+           {
+            "number": "49.8"
+           },
+           {
+            "number": "5"
+           }
+          ],
+          [
+           {
+            "number": "6"
+           },
+           {
+            "number": "51"
+           },
+           "2023-04-02T00:00:00.000000Z",
+           {
+            "number": "29.5"
+           },
+           {
+            "number": "35.4"
+           },
+           {
+            "number": "5"
+           }
+          ],
+          [
+           {
+            "number": "6"
+           },
+           {
+            "number": "52"
+           },
+           "2023-02-05T00:00:00.000000Z",
+           {
+            "number": "17.5"
+           },
+           {
+            "number": "21.0"
+           },
+           {
+            "number": "5"
+           }
+          ]
+         ]
+        },
+        "USERS": {
+         "columns": [
+          "instance_id",
+          "USER_ID",
+          "AGE"
+         ],
+         "format": "arrays",
+         "rows": [
+          [
+           {
+            "number": "0"
+           },
+           {
+            "number": "3"
+           },
+           {
+            "number": "23"
+           }
+          ],
+          [
+           {
+            "number": "1"
+           },
+           {
+            "number": "4"
+           },
+           {
+            "number": "24"
+           }
+          ],
+          [
+           {
+            "number": "2"
+           },
+           {
+            "number": "2"
+           },
+           {
+            "number": "22"
+           }
+          ],
+          [
+           {
+            "number": "3"
+           },
+           {
+            "number": "7"
+           },
+           {
+            "number": "27"
+           }
+          ],
+          [
+           {
+            "number": "4"
+           },
+           {
+            "number": "6"
+           },
+           {
+            "number": "26"
+           }
+          ],
+          [
+           {
+            "number": "6"
+           },
+           {
+            "number": "5"
+           },
+           {
+            "number": "25"
+           }
+          ]
+         ]
+        }
+       }
+      },
+      "inference": {
+       "run_mode": "fast",
+       "use_prediction_time": false
+      },
+      "metadata": {
+       "num_context_examples": {
+        "number": "8"
+       },
+       "num_prediction_examples": {
+        "number": "2"
+       },
+       "request_id": "sdm-b0f6ed35eba5",
+       "source_query": "PREDICT USERS.COUNTRY FOR EACH USERS.USER_ID"
+      },
+      "model": "kumo-relational",
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "predict": {
+       "instance_table": {
+        "columns": [
+         "instance_id",
+         "__kumo_entity_ref_0",
+         "__kumo_anchor_time"
+        ],
+        "format": "arrays",
+        "rows": [
+         [
+          {
+           "number": "8"
+          },
+          {
+           "number": "0"
+          },
+          "2024-03-01T00:00:00.000000Z"
+         ],
+         [
+          {
+           "number": "9"
+          },
+          {
+           "number": "1"
+          },
+          "2024-03-01T00:00:00.000000Z"
+         ]
+        ]
+       },
+       "related_tables": {
+        "ORDERS": {
+         "columns": [
+          "instance_id",
+          "__node_id",
+          "TS",
+          "PRICE",
+          "PRICE_WITH_TAX",
+          "USER_ID"
+         ],
+         "format": "arrays",
+         "rows": [
+          [
+           {
+            "number": "8"
+           },
+           {
+            "number": "61"
+           },
+           "2024-01-28T00:00:00.000000Z",
+           {
+            "number": "94.0"
+           },
+           {
+            "number": "112.8"
+           },
+           {
+            "number": "0"
+           }
+          ],
+          [
+           {
+            "number": "8"
+           },
+           {
+            "number": "62"
+           },
+           "2023-12-03T00:00:00.000000Z",
+           {
+            "number": "82.0"
+           },
+           {
+            "number": "98.39999999999999"
+           },
+           {
+            "number": "0"
+           }
+          ],
+          [
+           {
+            "number": "8"
+           },
+           {
+            "number": "63"
+           },
+           "2023-10-08T00:00:00.000000Z",
+           {
+            "number": "70.0"
+           },
+           {
+            "number": "84.0"
+           },
+           {
+            "number": "0"
+           }
+          ],
+          [
+           {
+            "number": "8"
+           },
+           {
+            "number": "64"
+           },
+           "2023-08-13T00:00:00.000000Z",
+           {
+            "number": "58.0"
+           },
+           {
+            "number": "69.6"
+           },
+           {
+            "number": "0"
+           }
+          ],
+          [
+           {
+            "number": "8"
+           },
+           {
+            "number": "65"
+           },
+           "2023-06-18T00:00:00.000000Z",
+           {
+            "number": "46.0"
+           },
+           {
+            "number": "55.199999999999996"
+           },
+           {
+            "number": "0"
+           }
+          ],
+          [
+           {
+            "number": "8"
+           },
+           {
+            "number": "66"
+           },
+           "2023-04-23T00:00:00.000000Z",
+           {
+            "number": "34.0"
+           },
+           {
+            "number": "40.8"
+           },
+           {
+            "number": "0"
+           }
+          ],
+          [
+           {
+            "number": "8"
+           },
+           {
+            "number": "67"
+           },
+           "2023-02-26T00:00:00.000000Z",
+           {
+            "number": "22.0"
+           },
+           {
+            "number": "26.4"
+           },
+           {
+            "number": "0"
+           }
+          ],
+          [
+           {
+            "number": "8"
+           },
+           {
+            "number": "68"
+           },
+           "2023-01-01T00:00:00.000000Z",
+           {
+            "number": "10.0"
+           },
+           {
+            "number": "12.0"
+           },
+           {
+            "number": "0"
+           }
+          ],
+          [
+           {
+            "number": "9"
+           },
+           {
+            "number": "69"
+           },
+           "2024-02-04T00:00:00.000000Z",
+           {
+            "number": "95.5"
+           },
+           {
+            "number": "114.6"
+           },
+           {
+            "number": "1"
+           }
+          ],
+          [
+           {
+            "number": "9"
+           },
+           {
+            "number": "70"
+           },
+           "2023-12-10T00:00:00.000000Z",
+           {
+            "number": "83.5"
+           },
+           {
+            "number": "100.2"
+           },
+           {
+            "number": "1"
+           }
+          ],
+          [
+           {
+            "number": "9"
+           },
+           {
+            "number": "71"
+           },
+           "2023-10-15T00:00:00.000000Z",
+           {
+            "number": "71.5"
+           },
+           {
+            "number": "85.8"
+           },
+           {
+            "number": "1"
+           }
+          ],
+          [
+           {
+            "number": "9"
+           },
+           {
+            "number": "72"
+           },
+           "2023-08-20T00:00:00.000000Z",
+           {
+            "number": "59.5"
+           },
+           {
+            "number": "71.39999999999999"
+           },
+           {
+            "number": "1"
+           }
+          ],
+          [
+           {
+            "number": "9"
+           },
+           {
+            "number": "73"
+           },
+           "2023-06-25T00:00:00.000000Z",
+           {
+            "number": "47.5"
+           },
+           {
+            "number": "57.0"
+           },
+           {
+            "number": "1"
+           }
+          ],
+          [
+           {
+            "number": "9"
+           },
+           {
+            "number": "74"
+           },
+           "2023-04-30T00:00:00.000000Z",
+           {
+            "number": "35.5"
+           },
+           {
+            "number": "42.6"
+           },
+           {
+            "number": "1"
+           }
+          ],
+          [
+           {
+            "number": "9"
+           },
+           {
+            "number": "75"
+           },
+           "2023-03-05T00:00:00.000000Z",
+           {
+            "number": "23.5"
+           },
+           {
+            "number": "28.2"
+           },
+           {
+            "number": "1"
+           }
+          ],
+          [
+           {
+            "number": "9"
+           },
+           {
+            "number": "76"
+           },
+           "2023-01-08T00:00:00.000000Z",
+           {
+            "number": "11.5"
+           },
+           {
+            "number": "13.799999999999999"
+           },
+           {
+            "number": "1"
+           }
+          ]
+         ]
+        },
+        "USERS": {
+         "columns": [
+          "instance_id",
+          "USER_ID",
+          "AGE"
+         ],
+         "format": "arrays",
+         "rows": [
+          [
+           {
+            "number": "8"
+           },
+           {
+            "number": "0"
+           },
+           {
+            "number": "20"
+           }
+          ],
+          [
+           {
+            "number": "9"
+           },
+           {
+            "number": "1"
+           },
+           {
+            "number": "21"
+           }
+          ]
+         ]
+        }
+       }
+      },
+      "schema": {
+       "instance_table": {
+        "columns": {
+         "TARGET": {
+          "dtype": "string",
+          "stype": "categorical"
+         },
+         "__kumo_anchor_time": {
+          "dtype": "timestamp[us]",
+          "nullable": false,
+          "stype": "timestamp"
+         },
+         "__kumo_entity_ref_0": {
+          "dtype": "int64",
+          "stype": "ID"
+         },
+         "instance_id": {
+          "dtype": "int64",
+          "nullable": false,
+          "stype": "ID"
+         }
+        },
+        "primary_key": "instance_id"
+       },
+       "related_tables": {
+        "ORDERS": {
+         "columns": {
+          "PRICE": {
+           "dtype": "float64",
+           "stype": "numerical"
+          },
+          "PRICE_WITH_TAX": {
+           "dtype": "float64",
+           "stype": "numerical"
+          },
+          "TS": {
+           "dtype": "timestamp[us]",
+           "stype": "timestamp"
+          },
+          "USER_ID": {
+           "dtype": "int64",
+           "stype": "ID"
+          },
+          "__node_id": {
+           "dtype": "int64",
+           "nullable": false,
+           "stype": "ID"
+          },
+          "instance_id": {
+           "dtype": "int64",
+           "nullable": false,
+           "stype": "ID"
+          }
+         },
+         "primary_key": [
+          "instance_id",
+          "__node_id"
+         ]
+        },
+        "USERS": {
+         "columns": {
+          "AGE": {
+           "dtype": "int64",
+           "stype": "numerical"
+          },
+          "USER_ID": {
+           "dtype": "int64",
+           "nullable": false
+          },
+          "instance_id": {
+           "dtype": "int64",
+           "nullable": false,
+           "stype": "ID"
+          }
+         },
+         "primary_key": [
+          "instance_id",
+          "USER_ID"
+         ]
+        }
+       },
+       "relationships": [
+        {
+         "source_columns": [
+          "__kumo_entity_ref_0"
+         ],
+         "target_columns": [
+          "USER_ID"
+         ],
+         "target_table": "USERS"
+        },
+        {
+         "source_columns": [
+          "USER_ID"
+         ],
+         "source_table": "ORDERS",
+         "target_columns": [
+          "USER_ID"
+         ],
+         "target_table": "USERS"
+        }
+       ]
+      },
+      "task": {
+       "anchor_time_column": "__kumo_anchor_time",
+       "entity_table_names": [
+        "USERS"
+       ],
+       "kind": "multiclass_classification",
+       "target": {
+        "classes": [
+         "US",
+         "DE",
+         "IN"
+        ],
+        "column_name": "TARGET",
+        "dtype": "string"
+       }
+      }
+     },
+     "path": "/v1/predictions",
+     "sha256": "da9dceefbfa39a1d2d58c4edfd4bd9a8c93f8218aa5df5727f0769d16ec4a1e8"
+    }
+   ],
+   "result": {
+    "columns": [
+     {
+      "dtype": "int64",
+      "name": "row_index"
+     },
+     {
+      "dtype": "int64",
+      "name": "id"
+     },
+     {
+      "dtype": "str",
+      "name": "prediction"
+     }
+    ],
+    "digest": "fa11198651a33fd4bb40dc39c32a07a1bf5b597d563107e81643dc7e06dff240",
+    "rows": 2
+   },
+   "result_text": "b050a34871ba3ba449c7b3f9ffc4b769cf9f2a612fb87f5c3bcd9774abd0a68f",
+   "schema": {
+    "links": [
+     [
+      "ORDERS",
+      "USER_ID",
+      "USERS",
+      "USER_ID"
+     ]
+    ],
+    "tables": [
+     {
+      "columns": [
+       {
+        "dtype": "int64",
+        "name": "ORDER_ID",
+        "stype": "ID"
+       },
+       {
+        "dtype": "int64",
+        "name": "USER_ID",
+        "stype": "ID"
+       },
+       {
+        "dtype": "timestamp[us]",
+        "name": "TS",
+        "stype": "timestamp"
+       },
+       {
+        "dtype": "float64",
+        "name": "PRICE",
+        "stype": "numerical"
+       },
+       {
+        "dtype": "float64",
+        "name": "PRICE_WITH_TAX",
+        "stype": "numerical"
+       }
+      ],
+      "duplicate_keys": null,
+      "name": "ORDERS",
+      "primary_key": "ORDER_ID",
+      "time_column": "TS"
+     },
+     {
+      "columns": [
+       {
+        "dtype": "string",
+        "name": "COUNTRY",
+        "stype": "categorical"
+       },
+       {
+        "dtype": "int64",
+        "name": "USER_ID",
+        "stype": "ID"
+       },
+       {
+        "dtype": "int64",
+        "name": "AGE",
+        "stype": "numerical"
+       }
+      ],
+      "duplicate_keys": null,
+      "name": "USERS",
+      "primary_key": "USER_ID",
+      "time_column": null
+     }
+    ]
+   }
+  }
+ },
+ "tables": [
+  {
+   "name": "orders",
+   "data": "tables/8049516335da931e918938188572814a7931269038d2cbbe0c185d4e0ab0b94d.arrows"
+  },
+  {
+   "name": "users",
+   "data": "tables/29f7ee10385af2639f3f77371460f1f451776c91f72220d1169412e309a6b8e5.arrows"
+  }
+ ],
+ "derived": [],
+ "draws": [
+  {
+   "table": "\"{catalog}\".\"{schema}\".\"USERS\"",
+   "seed": null,
+   "fraction": "10000 ROWS",
+   "rows": "tables/a161d7191835de6e3f36a8bae7cf15def002dfd51f19edf1e51cf223329df1f4.arrows",
+   "statement": "SELECT country AS \"COUNTRY\", user_id AS \"USER_ID\"\nFROM \"{catalog}\".\"{schema}\".\"USERS\"\nSAMPLE ROW (10000 ROWS)\nWHERE user_id IS NOT NULL"
+  }
+ ],
+ "statements": [
+  {
+   "text": "SELECT SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW(?)",
+   "parameters": [
+    "{catalog}.{schema}.view_semantic_multiclass"
+   ],
+   "result": "tables/9ff34d73ed107fe0261fae0706c1ed7821f1bd74831b732dcb9a891fdf7b2a15.arrows"
+  },
+  {
+   "text": "DESCRIBE TABLE \"{catalog}\".\"{schema}\".\"ORDERS\"",
+   "parameters": [],
+   "result": "tables/74c34866c72d51676862e9b710be0502bb7b2695e13af17ecb09778a9ddca795.arrows"
+  },
+  {
+   "text": "SELECT order_id AS \"ORDER_ID\", user_id AS \"USER_ID\", ts AS \"TS\", price AS \"PRICE\", price * 1.2 AS \"PRICE_WITH_TAX\" FROM \"{catalog}\".\"{schema}\".\"ORDERS\" LIMIT 1000",
+   "parameters": [],
+   "result": "tables/998d3173491ec2ed2aabc6ac5bf469f5bb9c733eb8cab6630a409cb9ae321ac1.arrows"
+  },
+  {
+   "text": "DESCRIBE TABLE \"{catalog}\".\"{schema}\".\"USERS\"",
+   "parameters": [],
+   "result": "tables/13692c468098b9ea2cc652ce0815310cabcfedfa6133f50d5d58c3b1663f10e5.arrows"
+  },
+  {
+   "text": "SELECT country AS \"COUNTRY\", user_id AS \"USER_ID\", age AS \"AGE\" FROM \"{catalog}\".\"{schema}\".\"USERS\" LIMIT 1000",
+   "parameters": [],
+   "result": "tables/f13c0ee1cbf40ef2129cac4d6abf36fed8b4cea8a148fca66c59ca6e0ab4c869.arrows"
+  },
+  {
+   "text": "SHOW TABLES LIKE ? IN SCHEMA \"{catalog}\".\"{schema}\"",
+   "parameters": [
+    "ORDERS"
+   ],
+   "result": "tables/ff2a55b52ca694c4bb9a26db8ec6bb44fc5ccd40edc6eddb1eb4853caf0b6524.arrows"
+  },
+  {
+   "text": "SHOW TABLES LIKE ? IN SCHEMA \"{catalog}\".\"{schema}\"",
+   "parameters": [
+    "USERS"
+   ],
+   "result": "tables/aa2a9662477b985004b02d2e4a881a901b1289644074f14b6adcdf23158e2b00.arrows"
+  },
+  {
+   "text": "SELECT\n  0 as table_index,\n  MIN(ts) as min_date,\n  MAX(ts) as max_date\nFROM \"{catalog}\".\"{schema}\".\"ORDERS\"",
+   "parameters": [],
+   "result": "tables/e6651bd9c438f0e383cadfd6ef1030804359f0e63a2978ae0b963123d0aeb4ab.arrows"
+  },
+  {
+   "text": "SELECT country AS \"COUNTRY\", user_id AS \"USER_ID\"\nFROM \"{catalog}\".\"{schema}\".\"USERS\"\nSAMPLE ROW (10000 ROWS)\nWHERE user_id IS NOT NULL",
+   "parameters": [],
+   "result": "tables/a161d7191835de6e3f36a8bae7cf15def002dfd51f19edf1e51cf223329df1f4.arrows"
+  },
+  {
+   "text": "WITH TMP as (\n  SELECT\n    f.index as __KUMO_BATCH__,\n    f.value::NUMBER as __KUMO_ID__\n  FROM TABLE(FLATTEN(INPUT => PARSE_JSON(?))) f\n)\nSELECT TMP.__KUMO_BATCH__ as __KUMO_BATCH__, user_id AS \"USER_ID\", age AS \"AGE\"\nFROM TMP\nJOIN \"{catalog}\".\"{schema}\".\"USERS\"\n  ON user_id = TMP.__KUMO_ID__",
+   "parameters": [
+    "[3, 4, 2, 7, 6, 1, 5, 0, 0, 1]"
+   ],
+   "result": "tables/587a474c2ac814bcc72360a0692e8c7b6bdf6af2a3618e0b3952e253fe99d990.arrows"
+  },
+  {
+   "text": "WITH TMP as (\n  SELECT\n    f.index as __KUMO_BATCH__,\n    f.value[0]::NUMBER as __KUMO_ID__,\n    f.value[1]::TIMESTAMP_NTZ as __KUMO_END_TIME__,\n    f.value[2]::TIMESTAMP_NTZ as __KUMO_START_TIME__\n  FROM TABLE(FLATTEN(INPUT => PARSE_JSON(?))) f\n)\nSELECT TMP.__KUMO_BATCH__ as __KUMO_BATCH__, order_id AS \"ORDER_ID\", user_id AS \"USER_ID\", ts AS \"TS\", price AS \"PRICE\", price * 1.2 AS \"PRICE_WITH_TAX\"\nFROM TMP\nJOIN \"{catalog}\".\"{schema}\".\"ORDERS\"\n  ON user_id = TMP.__KUMO_ID__\n AND ts <= TMP.__KUMO_END_TIME__\n AND ts > TMP.__KUMO_START_TIME__\nWHERE ts <= ?\n  AND ts > ?\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY TMP.__KUMO_BATCH__\n  ORDER BY ts DESC, order_id\n) <= 32\nORDER BY TMP.__KUMO_BATCH__, ts DESC, order_id",
+   "parameters": [
+    "[[3, \"2024-03-01 00:00:00\", \"2019-03-03 00:00:00\"], [4, \"2024-03-01 00:00:00\", \"2019-03-03 00:00:00\"], [2, \"2024-03-01 00:00:00\", \"2019-03-03 00:00:00\"], [7, \"2024-03-01 00:00:00\", \"2019-03-03 00:00:00\"], [6, \"2024-03-01 00:00:00\", \"2019-03-03 00:00:00\"], [1, \"2024-03-01 00:00:00\", \"2019-03-03 00:00:00\"], [5, \"2024-03-01 00:00:00\", \"2019-03-03 00:00:00\"], [0, \"2024-03-01 00:00:00\", \"2019-03-03 00:00:00\"], [0, \"2024-03-01 00:00:00\", \"2019-03-03 00:00:00\"], [1, \"2024-03-01 00:00:00\", \"2019-03-03 00:00:00\"]]",
+    "2024-03-01 00:00:00",
+    "2019-03-03 00:00:00"
+   ],
+   "result": "tables/230bf208dc80035a15890f4847780fd3987715523181cef576727c9a6697b4c7.arrows"
+  }
+ ],
+ "loader": []
+}
