@@ -280,3 +280,69 @@ def test_the_cell_types_are_pyarrow_s_text_through_the_admission_table() -> (
         table += [(pa.list_view(pa.int32()), 'list')]
     found = {str(arrow): cell_type(str(arrow)) for arrow, _ in table}
     assert found == {str(arrow): cell for arrow, cell in table}
+
+
+def test_a_warehouse_only_case_is_held_to_its_captures_reference_line() -> None:
+    # Codex and Claude T3.20 r1 P1-1: a case with no DuckDB line is held to
+    # the old client's reference line in each of its warehouse captures,
+    # the sample named as the warehouse names the relation; a claim no leg
+    # shows, a case with no capture, and a sample read as rows all fail.
+    coverage = _coverage_module()
+    case = {
+        'id': 'w.case',
+        'cells': ['int64/primary-key', 'timestamp-us/time-column'],
+        'input': {},
+    }
+    sample = 'SELECT "id", "ts" FROM "{catalog}"."{schema}"."ORDERS" LIMIT 1000'
+
+    def line(types: Any) -> dict[str, Any]:
+        result: dict[str, Any] = {'rows': 2}
+        if types is not None:
+            result['schema'] = [
+                {'name': 'id', 'type': types[0]},
+                {'name': 'ts', 'type': types[1]},
+            ]
+        return {
+            'case': 'w.case@snowflake',
+            'outcome': {'result': 'success', 'stage': 'from_source'},
+            'driver': {
+                'capture': {
+                    'statements': [
+                        {
+                            'stage': 'from_source',
+                            'sql': sample,
+                            'results': [result],
+                        }
+                    ]
+                }
+            },
+            'public': {
+                'schema': {
+                    'tables': [
+                        {
+                            'name': 'orders',
+                            'columns': [{'name': 'id'}, {'name': 'ts'}],
+                            'primary_key': 'id',
+                            'time_column': 'ts',
+                        }
+                    ],
+                    'links': [],
+                }
+            },
+        }
+
+    def problems(captured: dict[str, Any]) -> list[str]:
+        report = coverage.Report()
+        coverage.rule_6({'w.case': case}, {}, report, captured)
+        return list(report.problems)
+
+    held = line(('int64', 'timestamp[us]'))
+    assert problems({'w.case': [held]}) == []
+    narrower = line(('int8', 'timestamp[us]'))
+    assert problems({'w.case': [narrower, held]}) == []
+    [one] = problems({'w.case': [narrower]})
+    assert one.startswith('rule 6: case w.case: claims int64/primary-key')
+    [none] = problems({})
+    assert 'no reference observation' in none
+    [rows] = problems({'w.case': [line(None)]})
+    assert 'a sample read as rows' in rows
