@@ -82,6 +82,7 @@ def test_passing_temp_trees_are_removed_and_failed_ones_preserved(
             '--basetemp',
             str(tmp_path / 'run'),
             '-q',
+            '--color=no',
             str(test),
         ],
         env={
