@@ -1,0 +1,42 @@
+{
+ "format": "sdm-capture/1",
+ "recording_commit": "337030f9271d35d9a6f4d207115ee78cea8c25be",
+ "reference_commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+ "legs": {
+  "lakebase": {
+   "databricks-sdk": "0.148.0",
+   "duckdb": "1.5.6",
+   "numpy": "2.5.3",
+   "pandas": "3.0.6",
+   "psycopg": "3.3.6",
+   "pyarrow": "25.0.1",
+   "python": "3.12.15"
+  }
+ },
+ "cases": {
+  "lakebase.binary@lakebase": {
+   "input_hash": "009c51ff02467fe520e00042930e6f2f0112b840fd809e001b53615736be9230",
+   "capture": "lakebase.binary"
+  },
+  "lakebase.connect@lakebase": {
+   "input_hash": "82851c1a889116c2a76432b317626286a780a590303c1d38d75f37a129144215",
+   "capture": "lakebase.connect"
+  },
+  "lakebase.multiclass.tables@lakebase": {
+   "input_hash": "1097e7821bc0db51246d6ef910c17506e414f825a75bc0436ea741e9c490119b",
+   "capture": "lakebase.multiclass.tables"
+  },
+  "lakebase.name.shadowed-by-catalog@lakebase": {
+   "input_hash": "cf46459f1baf3389a5ca04f0a334ed7248a49c5bff1e40862de2168d7bb8f5c3",
+   "capture": "lakebase.name.shadowed-by-catalog"
+  },
+  "lakebase.name.two-part@lakebase": {
+   "input_hash": "4b8654f0e774a88911a7f85756069e55b1a28710cf31ca3c552f07c5a3a838aa",
+   "capture": "lakebase.name.two-part"
+  },
+  "lakebase.regression.catalog-keys@lakebase": {
+   "input_hash": "6493e04a767289bb1522c1475770a5dd2002405c36227f3d8e01c6244a9c06ca",
+   "capture": "lakebase.regression.catalog-keys"
+  }
+ }
+}
