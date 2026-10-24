@@ -283,6 +283,7 @@ It is the type the engine already accepts, so there is no second connection type
 On Databricks, `sdm_connectors.databricks.warehouse()` and `lakebase()` open one as the caller's `WorkspaceClient` and hand back that same native connection, for the caller to close.
 Every connection and API request structured-data-models-client opens there names it as `nvidia_structured-data-models-client/<version>`, as Databricks requires of a partner product, and a warehouse session it opens tags its statements `structured_data_models_client_purpose: sampling`.
 Each package keeps a private copy of the identifier, so the connectors never import the client and the serving extra brings no connectors; a test holds the two copies to the same value.
+A Snowflake session it opens names itself to Snowflake as `nvidia/kumo-sdm`, the connector's `application`, unless the arguments, the `connections.toml` profile or the connector's own detection (`SF_PARTNER`, Streamlit, a notebook) already name one.
 A connection the caller opens and passes in is used as it is.
 A notebook's `spark` is wrapped in the few calls the samplers make: a cursor that runs `spark.sql` with positional parameters and returns Arrow.
 A schema over a source does not pickle.
