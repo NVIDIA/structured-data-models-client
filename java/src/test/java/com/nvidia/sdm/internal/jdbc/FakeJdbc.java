@@ -236,7 +236,9 @@ final class FakeJdbc {
     if (value instanceof Instant instant) {
       return Timestamp.from(instant);
     }
-    LocalDateTime wall = (LocalDateTime) value;
+    // The released driver first constructs a Timestamp in the JVM's zone,
+    // even when its calendar getter is used afterwards.
+    LocalDateTime wall = Timestamp.valueOf((LocalDateTime) value).toLocalDateTime();
     return Timestamp.from(wall.atZone(zone.toZoneId()).toInstant());
   }
 
@@ -244,11 +246,13 @@ final class FakeJdbc {
     if (value == null) {
       return null;
     }
+    // Databricks JDBC 3.4.2 has no LocalDateTime typed-getter branch.
+    // Its fallback is TimestampConverter.toString, including its JVM-zone conversion.
+    if (type == LocalDateTime.class) {
+      return timestamp(value, null).toString();
+    }
     if (type.isInstance(value)) {
       return value;
-    }
-    if (type == LocalDateTime.class && value instanceof Instant instant) {
-      return LocalDateTime.ofInstant(instant, ZoneOffset.UTC);
     }
     if (type == LocalDate.class && value instanceof LocalDate date) {
       return date;

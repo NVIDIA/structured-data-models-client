@@ -136,16 +136,27 @@ class T313ConversionTableTest {
         Instant before = Instant.parse("2024-03-10T09:59:59.123456Z");
         Instant after = Instant.parse("2024-03-10T10:00:00.654321Z");
         LocalDateTime wall = LocalDateTime.parse("2024-03-10T02:30:00.123456");
+        LocalDateTime europeanGap = LocalDateTime.parse("2024-03-31T02:30:00.654321");
         Map<String, Read> got = answered(
             FakeJdbc.Column.of("zoned", "TIMESTAMP", before, after),
-            FakeJdbc.Column.of("unzoned", "TIMESTAMP_NTZ", wall, wall));
+            FakeJdbc.Column.of("unzoned", "TIMESTAMP_NTZ", wall, europeanGap));
         assertEquals(List.of(LocalDateTime.ofInstant(before, java.time.ZoneOffset.UTC),
             LocalDateTime.ofInstant(after, java.time.ZoneOffset.UTC)), got.get("zoned").values(), zone);
-        assertEquals(List.of(wall, wall), got.get("unzoned").values(), zone);
+        assertEquals(List.of(wall, europeanGap), got.get("unzoned").values(), zone);
       }
     } finally {
       java.util.TimeZone.setDefault(original);
     }
+  }
+
+  @Test
+  void zoneFreeTimestampsRetainNullsMicrosecondsAndPreEpochWallFields() throws Exception {
+    List<LocalDateTime> walls = Arrays.asList(
+        LocalDateTime.parse("1969-12-31T23:59:59.999999"),
+        LocalDateTime.parse("2024-06-02T00:00:01.123456"), null);
+    Map<String, Read> got = answered(
+        FakeJdbc.Column.of("unzoned", "TIMESTAMP_NTZ", walls.toArray()));
+    assertEquals(walls, got.get("unzoned").values());
   }
 
   @Test
