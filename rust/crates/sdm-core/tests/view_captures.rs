@@ -676,7 +676,7 @@ fn a_42501_on_an_expression_sample_leaves_that_column_out() {
         .expect("no warning of the column left out");
     assert_eq!(
         refused.message,
-        "Failed to add column 'price_band' to table 'orders': SQLSTATE: 42501"
+        "Failed to add column 'price_band' to table 'orders': permission was denied while evaluating the expression (SQLSTATE: 42501)"
     );
 }
 
@@ -1342,36 +1342,90 @@ fn view_refresh_checks_held_types_and_accepts_compatible_numeric_widths() {
     );
 }
 
+/// A driver may include row values and its full statement in ordinary cast
+/// failures. Only safe classification and the caller's logical names may escape.
 #[test]
-fn a_refused_expression_keeps_the_warehouses_diagnosis() {
+fn refused_expression_diagnostics_keep_context_and_never_echo_driver_text() {
     let document = captures();
-    let edits = Edits {
-        definition: None,
-        answer: Some(Box::new(|request| {
-            samples(request).then(|| {
-                FetchResult::Error(
-                    serde_json::from_value(json!({"kind": "data_source", "retryable": false,
-                "sqlstate": "22018", "driver_message": "Cannot cast price 'unknown' to DOUBLE"}))
-                    .unwrap(),
-                )
-            })
-        })),
-    };
-    let replayed = replay_with(
-        &document,
-        case(&document, "view.metric.from-source"),
-        &edits,
-        false,
-    );
-    assert!(replayed.ended.is_ok(), "{:?}", replayed.ended);
-    assert!(
-        replayed.warnings.iter().any(|w| w
-            .fields
-            .values()
-            .any(|v| v == &sdm_contract::Detail::text("Cannot cast price 'unknown' to DOUBLE"))),
-        "{:?}",
-        replayed.warnings
-    );
+    let recorded = case(&document, "view.metric.from-source");
+    let schema = held(&described(&document, "view.metric.from-source"));
+    const ROW_SECRET: &str = "customer-cell-canary-93841";
+    const RAW_SQL: &str = "SELECT raw-driver-sql-canary FROM private_table";
+    for (sqlstate, error_class, explanation) in [
+        (
+            "42000",
+            Some("CAST_INVALID_INPUT"),
+            "a value could not be converted",
+        ),
+        ("22018", None, "a value could not be converted"),
+        ("22012", Some("DIVIDE_BY_ZERO"), "division by zero"),
+        (
+            "42000",
+            Some("unknown-driver-class-canary"),
+            "the warehouse could not evaluate the expression",
+        ),
+    ] {
+        let driver_text = format!("Cannot cast '{ROW_SECRET}'; statement: {RAW_SQL}");
+        let edits =
+            Edits {
+                definition: None,
+                answer: Some(Box::new(move |request| {
+                    samples(request).then(|| {
+                        FetchResult::Error(serde_json::from_value(json!({
+                    "kind": "data_source", "retryable": false,
+                    "sqlstate": sqlstate, "error_class": error_class,
+                    "vendor_code": "vendor-secret-canary", "driver_message": driver_text,
+                })).unwrap())
+                    })
+                })),
+            };
+        let replayed = replay_with(&document, recorded, &edits, false);
+        assert!(replayed.ended.is_ok(), "{:?}", replayed.ended);
+        let warning = replayed
+            .warnings
+            .iter()
+            .find(|w| w.sentence == sdm_contract::Sentence::ViewColumnRefused)
+            .unwrap();
+        let warning_json = serde_json::to_string(warning).unwrap();
+        assert!(warning_json.contains(explanation), "{warning_json}");
+        assert!(
+            warning_json.contains("price_band") && warning_json.contains("orders"),
+            "{warning_json}"
+        );
+        assert!(warning_json.contains(sqlstate), "{warning_json}");
+        for forbidden in [
+            ROW_SECRET,
+            RAW_SQL,
+            "Cannot cast",
+            "unknown-driver-class-canary",
+            "vendor-secret-canary",
+        ] {
+            assert!(!warning_json.contains(forbidden), "{warning_json}");
+        }
+
+        // Re-conversion at materialize omits this held logical column, and its
+        // public refusal must keep the same useful safe reason, without data.
+        let Located::Ended(error) = materialize_over(&document, recorded, &schema, &edits) else {
+            panic!("a refused held expression reached sampling");
+        };
+        assert_eq!(error.sentence, sdm_contract::Sentence::ViewColumnOmitted);
+        let error_json = serde_json::to_string(&error).unwrap();
+        assert!(error_json.contains(explanation), "{error_json}");
+        assert!(
+            error_json.contains("price_band") && error_json.contains("orders"),
+            "{error_json}"
+        );
+        assert!(error_json.contains(sqlstate), "{error_json}");
+        for forbidden in [
+            ROW_SECRET,
+            RAW_SQL,
+            "Cannot cast",
+            "unknown-driver-class-canary",
+            "vendor-secret-canary",
+        ] {
+            assert!(!error_json.contains(forbidden), "{error_json}");
+        }
+    }
 }
 
 #[test]
