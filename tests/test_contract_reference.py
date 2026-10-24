@@ -5,7 +5,7 @@
 """The committed reference observations and their environment (T1.13).
 
 ``contract/reference/<commit>.jsonl`` holds one ``python-ref`` observation of
-every case in ``contract/cases`` (and, from T2.1a, at most one more on each
+every offline case in ``contract/cases`` (and, from T2.1a, at most one more on each
 other database the case lists, keyed ``<case>@sqlite`` or
 ``<case>@postgres``), recorded through ``run_python.py`` in
 ``python-ref`` mode from a clean tree, the reference guard passing before the
@@ -17,6 +17,7 @@ digest (the distributions ``reference-env.txt`` lists), the platform, cell
 and versions, a clean checkout, the old route, and the case and bases files
 as they are now, so a case changed without its observation re-recorded
 fails. Each rule fails on missing, empty or retyped evidence, seeded below.
+Warehouse-only cases use their leg's captures instead of this offline file.
 
 ``tests/test_contract_cases.py`` already validates each line against the
 schema and runs ``compare.py`` over the file, which reads it as the
