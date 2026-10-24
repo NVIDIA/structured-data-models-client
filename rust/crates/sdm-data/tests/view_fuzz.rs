@@ -12,7 +12,7 @@
 
 use sdm_data::view_expr::metric;
 use sdm_data::view_expr::{
-    self, ExprDialect, ViewKind, mask_literals, name_references, qualifier_found, string_literals,
+    self, ExprDialect, mask_literals, name_references, qualifier_found, string_literals,
     strip_comments, strip_qualifier, unsafe_reason, untrusted_call_reason,
 };
 use serde_json::Value as Json;
@@ -42,7 +42,7 @@ fn spaces() -> &'static Spaces {
     &SPACES
 }
 
-use sdm_data::view_expr::{Spaces, TextRules};
+use sdm_data::view_expr::Spaces;
 
 const EXPR: &str = include_str!("../../../../contract/view-expr-vectors.json");
 
@@ -152,18 +152,7 @@ fn read_every_way(expr: &str, table: &str) {
     }
     for dialect in [ExprDialect::Databricks, ExprDialect::Snowflake] {
         let _ = untrusted_call_reason(expr, dialect, &["x", table], spaces());
-        let _ = view_expr::expression_message(
-            "column 'x'",
-            expr,
-            ViewKind::MetricView,
-            dialect,
-            false,
-            &["x"],
-            TextRules {
-                quote: &|text: &str| format!("'{text}'"),
-                spaces: spaces(),
-            },
-        );
+        let _ = view_expr::expression_verdict(expr, dialect, false, &["x"], spaces());
     }
     let _ = name_references(expr, spaces());
     let _ = strip_comments(expr, spaces());

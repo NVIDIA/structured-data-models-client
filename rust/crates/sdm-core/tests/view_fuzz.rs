@@ -9,8 +9,12 @@
 //! its values quoted. Each may refuse, by name; none may panic, and no
 //! text is built past its bound (Codex review 2, P1-5).
 
-use sdm_core::pql::yaml_rules;
+use sdm_contract::CoreError;
+use sdm_contract::data::{DataLayer, ProviderChoice};
+use sdm_contract::view::{TypeClass, ViewTextAnswer, ViewTextAsk};
+use sdm_core::pql::{spaces, yaml_rules};
 use sdm_core::{view_steps, view_words};
+use sdm_data::Data;
 use sdm_data::view_expr::metric::DefaultRefusal;
 use sdm_schema::view::metric;
 use sdm_schema::view::spec::ColumnItem;
@@ -83,24 +87,37 @@ impl Rng {
     }
 }
 
+/// The data layer's answers in Databricks's dialect, as the routine asks
+/// them (`DataLayer::view_text`).
+fn ask(question: ViewTextAsk) -> Result<ViewTextAnswer, CoreError> {
+    Data::reading_views(spaces()).view_text(&ProviderChoice::sql("databricks"), question)
+}
+
+/// A type's class, as the data layer answers it.
+fn class(data_type: &str) -> TypeClass {
+    view_steps::type_class(&ask, data_type).unwrap()
+}
+
 /// Reads `definition` through every step and sentence of the core.
 fn convert_every_way(definition: &str) {
     let Ok(mut spec) = metric::parse(definition, &yaml_rules()) else {
         return;
     };
-    let _ = view_steps::fact_source(&spec);
+    let _ = view_steps::fact_source(&spec, &ask);
     for parameter in spec.parameters.clone() {
         let Some(default) = parameter.default else {
             continue;
         };
         for data_type in TYPES {
-            if let Err(refusal) = view_steps::default_text(data_type, &spec.document, default) {
+            if let Err(refusal) =
+                view_steps::default_text(class(data_type), &spec.document, default)
+            {
                 let _ =
                     view_words::default_refusal_text(&refusal, data_type, &spec.document, default);
             }
         }
     }
-    for (_, parameter) in view_steps::parameters(&spec, &[]) {
+    for (_, parameter) in view_steps::parameters(&spec, &[], &ask).unwrap() {
         let _ = view_words::parameter_text(&parameter, &spec.document, None);
     }
     let _ = view_words::value_repr(&spec.document, spec.document.root());
@@ -115,7 +132,7 @@ fn convert_every_way(definition: &str) {
             }
         }
     }
-    if let Ok(walk) = view_steps::walk_joins(&mut spec) {
+    if let Ok(Ok(walk)) = view_steps::walk_joins(&mut spec, &ask) {
         for message in &walk.messages {
             let _ = view_words::join_message_text(&spec, message);
         }
@@ -161,13 +178,13 @@ fn a_value_too_large_to_write_is_refused_by_name() {
     let root = document.root();
     assert!(view_words::value_repr(&document, root).is_err());
     assert_eq!(
-        view_steps::default_text("STRING", &document, root),
+        view_steps::default_text(class("STRING"), &document, root),
         Err(DefaultRefusal::TooLong)
     );
     let document = yaml::load("v: '1e999999999999999999'", &yaml_rules()).unwrap();
     let node = document.get(document.root(), "v").unwrap();
     assert_eq!(
-        view_steps::default_text("DOUBLE", &document, node),
+        view_steps::default_text(class("DOUBLE"), &document, node),
         Err(DefaultRefusal::TooLong)
     );
     assert_eq!(
@@ -185,12 +202,12 @@ fn a_semantic_view_passes_through_the_metric_steps() {
     let source = "tables:\n- name: A\n  base_table: {database: D, schema: S, table: T}\n\
                   - name: B\n  base_table: {database: D, schema: S, table: U}\n";
     let mut spec = semantic::parse(source, &yaml_rules()).unwrap();
-    assert_eq!(view_steps::fact_source(&spec), Err(None));
-    let walk = view_steps::walk_joins(&mut spec).unwrap();
+    assert_eq!(view_steps::fact_source(&spec, &ask).unwrap(), Err(None));
+    let walk = view_steps::walk_joins(&mut spec, &ask).unwrap().unwrap();
     assert!(walk.kept.is_empty() && walk.skipped.is_empty());
     semantic::read_all(&mut spec).unwrap();
-    assert_eq!(view_steps::fact_source(&spec), Err(None));
-    let walk = view_steps::walk_joins(&mut spec).unwrap();
+    assert_eq!(view_steps::fact_source(&spec, &ask).unwrap(), Err(None));
+    let walk = view_steps::walk_joins(&mut spec, &ask).unwrap().unwrap();
     assert!(walk.kept.is_empty() && walk.skipped.is_empty());
 }
 
@@ -203,7 +220,7 @@ fn the_bound_counts_the_characters_written() {
     let wide = format!("v: \"{}\"", "é".repeat(2_100_000));
     let document = yaml::load(&wide, &yaml_rules()).unwrap();
     let node = document.get(document.root(), "v").unwrap();
-    let text = view_steps::default_text("STRING", &document, node).unwrap();
+    let text = view_steps::default_text(class("STRING"), &document, node).unwrap();
     assert_eq!(text.chars().count(), 2_100_000);
     let nuls = format!("v: \"{}\"", "\\0".repeat(1_100_000));
     let document = yaml::load(&nuls, &yaml_rules()).unwrap();

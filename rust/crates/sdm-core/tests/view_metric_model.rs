@@ -19,9 +19,13 @@
 
 use std::collections::BTreeSet;
 
+use sdm_contract::CoreError;
+use sdm_contract::data::{DataLayer, ProviderChoice};
+use sdm_contract::view::{ViewTextAnswer, ViewTextAsk};
 use sdm_core::pql::{spaces, yaml_rules};
 use sdm_core::view_steps::{self, JoinJudgement};
 use sdm_core::view_words;
+use sdm_data::Data;
 use sdm_data::view_expr::metric as data;
 use sdm_data::view_expr::strip_comments;
 use sdm_schema::view::joins::JoinWalk;
@@ -31,6 +35,12 @@ use sdm_schema::view::spec::{
 };
 use sdm_schema::view::yaml::{Outside, Value, YamlError};
 use serde_json::Value as Json;
+
+/// The data layer's answers in Databricks's dialect, as the routine asks
+/// them (`DataLayer::view_text`).
+fn ask(question: ViewTextAsk) -> Result<ViewTextAnswer, CoreError> {
+    Data::reading_views(spaces()).view_text(&ProviderChoice::sql("databricks"), question)
+}
 
 const VECTORS: &str = include_str!("../../../../contract/view-metric-vectors.json");
 
@@ -186,14 +196,14 @@ fn each_definition_reads_as_the_old_client_read_it() {
             }
         };
         // The source, which the old client parses before anything else.
-        if let Err(node) = view_steps::fact_source(&spec) {
+        if let Err(node) = view_steps::fact_source(&spec, &ask).unwrap() {
             let text = view_words::unsupported_source_text(&spec, node.unwrap()).unwrap();
             if Some(text.as_str()) != refused {
                 wrong.push(format!("{definition:?}: {text} where {refused:?}"));
             }
             continue;
         }
-        let walk = match view_steps::walk_joins(&mut spec) {
+        let walk = match view_steps::walk_joins(&mut spec, &ask).unwrap() {
             Ok(walk) => walk,
             Err(refusal) => {
                 wrong.push(format!("{definition:?}: joins refused ({refusal})"));
@@ -309,7 +319,7 @@ fn each_definition_reads_as_the_old_client_read_it() {
         let parameters: BTreeSet<String> = spec.parameters.iter().map(|p| p.name.clone()).collect();
         // Each parameter read as its default, with its default's text, the
         // literal's (Codex review 2, P0-1).
-        let read = view_steps::parameters(&spec, &[]);
+        let read = view_steps::parameters(&spec, &[], &ask).unwrap();
         for note in old["notes"].as_array().unwrap() {
             let name = note[0].as_str().unwrap();
             if !parameters.contains(name) {
