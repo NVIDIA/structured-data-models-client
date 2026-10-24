@@ -9666,3 +9666,488 @@ entries:
   decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T36-OWNER-2026-10-24-HYBRID}
   notes: >-
     Withdrawn after restoring the old client's capability. An enforced stored primary key does not guarantee uniqueness of role-visible masked lookup values; this fact is consumed only by key counting.
+
+# --- lane J entries, Phase 3 (P3J-1..19) ---
+
+- id: P3J-1
+  title: A view definition that is no readable YAML is refused by name
+  kind: change
+  old_behavior: >-
+    The old client reads a metric view's or a semantic view's definition with
+    PyYAML's safe_load and lets its error through: a ScannerError,
+    ParserError, ComposerError or ConstructorError reaches the caller as it
+    is (DB/metric_view.py:773, RE/graph.py:2060).
+  new_behavior: >-
+    The core refuses the view by name, "The metric view definition is not
+    readable YAML: ..." (or "semantic view"), with the reader's reason.
+  affected_inputs: >-
+    A metric or semantic view whose definition PyYAML cannot read, or reads
+    as more than one document.
+  cases: []
+  refs: [T3.5, contract/view-yaml-vectors.json]
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T35-OWNER-2026-10-24-ERRORS}
+  notes: >-
+    Approved by the owner on 2026-10-24, item 11 ("Approved").
+    Proposed by T3.5's implementer (stage 1; both reviews of
+    round 1). A named refusal in place of a raw library error; the texts
+    refused are those PyYAML refuses, held by the YAML vectors.
+
+- id: P3J-2
+  title: A section of a view definition that cannot be iterated is refused by name
+  kind: change
+  old_behavior: >-
+    The old client iterates a metric view's joins, a join's nested joins and
+    its dimensions with `for x in section or []`, and a semantic view's
+    tables, columns and relationships directly; a value that cannot be
+    iterated (a number, say) fails with a raw TypeError (DB/metric_view.py:817-952,
+    RE/graph.py:2069-2209).
+  new_behavior: >-
+    The core refuses the view by name: "The metric view definition's 'joins'
+    is not a list" (or the section named). A nameless join's nested joins
+    are read only where the old client reads them, so a nameless join with
+    `joins: 1` is still only noted, as the old client notes it (Codex review
+    1, P1-8).
+  affected_inputs: >-
+    A view definition whose joins, nested joins of a named join, dimensions
+    or fields, or a semantic view's tables, columns or relationships, are a
+    number, a boolean, a date or null where the old client iterates them.
+  cases: []
+  refs: [T3.5, contract/view-metric-vectors.json]
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T35-OWNER-2026-10-24-ERRORS}
+  notes: >-
+    Approved by the owner on 2026-10-24, item 11 ("Approved").
+    Proposed by T3.5's implementer. A named refusal where the
+    old client failed with a TypeError; nothing the old client converted is
+    refused.
+
+- id: P3J-3
+  title: A semantic view definition missing an entry the old client reads is refused by name
+  kind: change
+  old_behavior: >-
+    The old client reads a semantic view's `tables`, each table's `name`,
+    `base_table` and its `database`, `schema` and `table`, a primary key's
+    `columns`, each column's `name`, and each relationship's `name` and
+    `relationship_columns` by key, and fails with a raw KeyError where one is
+    missing (RE/graph.py:2069-2215).
+  new_behavior: >-
+    The core refuses the view by name, "The semantic view definition misses
+    'base_table'" (the entry named). An entry the old client reads only on
+    the branch that uses it is read there, so a composite relationship's
+    tables, a physical column's type and a composite key's members never
+    refuse the view (Codex review 1, P1-9).
+  affected_inputs: >-
+    A semantic view whose YAML lacks one of those entries, or names a table
+    with a value that is no text.
+  cases: []
+  refs: [T3.5]
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T35-OWNER-2026-10-24-ERRORS}
+  notes: >-
+    Approved by the owner on 2026-10-24, item 11 ("Approved").
+    Proposed by T3.5's implementer. Two differences proposed
+    in stage 1 no longer stand after fix 1: integers past 128 bits are read
+    as PyYAML reads them, and a composite relationship's tables are not
+    required.
+
+- id: P3J-4
+  title: A metric view join nested in itself is refused by name
+  kind: change
+  old_behavior: >-
+    A join whose `joins` is an alias of a list holding the join itself is
+    followed by the old client until Python stops it with a RecursionError
+    (DB/metric_view.py:817-907).
+  new_behavior: >-
+    The core refuses the view by name: "The metric view definition has a
+    join nested in itself".
+  affected_inputs: >-
+    A metric view definition whose YAML aliases a join's own anchor under its
+    `joins`.
+  cases: []
+  refs: [T3.5]
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T35-OWNER-2026-10-24-ERRORS}
+  notes: >-
+    Approved by the owner on 2026-10-24, item 11 ("Approved").
+    Proposed by T3.5's implementer (fix 1, from the reviews'
+    alias findings).
+
+- id: P3J-5
+  title: A view expression a check's pattern cannot finish on is refused as unreadable
+  kind: change
+  old_behavior: >-
+    The old client's checks of a view expression use Python's `re`, which has
+    no limit on a match's work, and answer for every expression, if slowly:
+    its call check is quadratic on a word of 1,000,000 characters
+    (RE/view_expr.py).
+  new_behavior: >-
+    Every check matches through one pattern wrapper with a backtracking
+    budget of 2^31 steps; a match that runs out of it, or overflows the
+    engine's stack, makes the expression unreadable, and every check refuses
+    it ("it is too deeply nested or too long to read safely"), never accepts
+    it. Databricks' numbers and names are matched by hand, so a run of a
+    megabyte reads as the old client reads it. No recorded expression, up to
+    1,200,000 characters, reaches the limit. From fix 2 (Codex review 2,
+    P1-7), a pattern built from a definition's text, a semantic view's
+    table name or a metric view's join path, that is past the pattern
+    compiler's size bound makes the expression unreadable too, where the old
+    client's `re` compiled it: a table name of 100,000 characters, which
+    the old client finds in no expression.
+  affected_inputs: >-
+    A view expression on which a pattern exceeds the budget, none known;
+    and a table name or join path past the compiler's bound, about 100,000
+    characters.
+  cases: []
+  refs: [T3.5, contract/view-expr-vectors.json]
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T35-OWNER-2026-10-24-ERRORS}
+  notes: >-
+    Approved by the owner on 2026-10-24, item 11 ("Approved").
+    Proposed by T3.5's implementer (fix 1; Claude review 1,
+    P1-1 and P2-3, Codex review 1, P1-3): the policy that a failed match
+    refuses, which no input known reaches.
+
+- id: P3J-6
+  title: A few YAML texts the core's scanner reads otherwise than PyYAML
+  kind: change
+  old_behavior: >-
+    PyYAML refuses a tab after a plain scalar on its line (`v: a<TAB>b`,
+    ScannerError) and a tab alone on the line after a block scalar, and
+    reads a quoted scalar whose next line starts with a tab, and an alias of
+    an anchor written on a flow mapping's key (`{&n .nan: a, *n: b}`).
+  new_behavior: >-
+    The core's YAML scanner (yaml-rust2 0.13) reads the first, the tab kept in
+    the text, and the second, the block scalar ending before the tab; it
+    refuses the other two as no readable YAML (P3J-1).
+  affected_inputs: >-
+    A view definition with one of those four forms, or, from Claude review
+    3's probes, one of these: `[?]` (PyYAML a mapping of null to null, the
+    core the text `?`), a block scalar inside a flow list and `- :` (PyYAML
+    refuses both, the core reads them), and about one in a hundred odd
+    block-scalar layouts (an indentation indicator with comment lines below
+    the indentation, an empty kept scalar before a less indented comment),
+    which the core refuses as no readable YAML. A warehouse writes none of
+    them.
+  cases: []
+  refs: [T3.5, contract/view-yaml-vectors.json]
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T35-OWNER-2026-10-24-YAML}
+  notes: >-
+    Approved by the owner on 2026-10-24, item 16 ("Approved").
+    Proposed by T3.5's implementer (fix 1; Claude review 1,
+    P2-2). The other scanner findings of that review (a block scalar ending
+    the text, a bare `?`, an anchor named twice, a byte order mark) now read
+    as PyYAML reads them, held by the YAML vectors.
+
+- id: P3J-7
+  title: A view value of type !!set is quoted in the order it is written
+  kind: change
+  old_behavior: >-
+    PyYAML makes a Python set of a `!!set`, whose order, and so the text of a
+    message or a STRING parameter's default holding it, varies from run to
+    run with the interpreter's hash seed.
+  new_behavior: >-
+    The core keeps a set's members in the order they are written, and quotes
+    them so: `{'a', 'b'}`.
+  affected_inputs: >-
+    A metric view whose parameter default or quoted section is a `!!set`.
+  cases: []
+  refs: [T3.5]
+  status: rejected
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T35-OWNER-2026-10-24-RETIRED}
+  notes: >-
+    Approver: owner. Proposed by T3.5's implementer (fix 1; Codex review 1,
+    P1-5). Superseded at fix 2 by P3J-9: the core no longer reads `!!set`,
+    which is outside the YAML view definitions use, and refuses it by name;
+    no behavior of this entry is left. The owner said "Ok retire 7/8 as
+    superseded." on 2026-10-24; rejected records that retirement, not a
+    rejection of the approved named refusal or a claim of Python parity.
+
+- id: P3J-8
+  title: An integer of more than 4,300 digits in a view definition is quoted whole
+  kind: change
+  old_behavior: >-
+    PyYAML reads an integer of any size written in hexadecimal, octal or
+    binary, but Python refuses to write one past 4,300 digits as text, so a
+    message or a STRING parameter's default quoting it fails with a
+    ValueError.
+  new_behavior: >-
+    The core writes its digits.
+  affected_inputs: >-
+    A view definition holding such an integer where a message or a default
+    quotes it.
+  cases: []
+  refs: [T3.5, contract/view-yaml-vectors.json]
+  status: rejected
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T35-OWNER-2026-10-24-RETIRED}
+  notes: >-
+    Approver: owner. Proposed by T3.5's implementer (fix 1). A decimal
+    integer past 4,300 digits is refused as PyYAML refuses it. Superseded
+    at fix 2 by P3J-9: an integer of more than 4,300 digits written in
+    another base is outside the YAML view definitions use and refused by
+    name, so the core writes no such integer. The owner said "Ok retire
+    7/8 as superseded." on 2026-10-24; rejected records that retirement,
+    not a claim that the old Python behavior was restored.
+
+- id: P3J-9
+  title: YAML outside the subset view definitions use is refused by name
+  kind: change
+  old_behavior: >-
+    The old client reads a view definition with PyYAML 6.0.3's safe_load,
+    which takes all of YAML 1.1: explicit tags (`!!binary`, `!!set`,
+    `!!omap`, `!!pairs`, `!!str` and the rest), merge keys (`<<`), any
+    nesting up to Python's recursion limit (about 490 levels), aliases read
+    as references however far they expand, integers of any size in
+    hexadecimal, octal, binary or base 60, and U+0085, U+2028 and U+2029 as
+    line breaks. A key that is a list or a mapping, a mapping keyed by
+    itself among them, fails in PyYAML's constructor.
+  new_behavior: >-
+    The core reads exactly the YAML view definitions use: scalars with
+    PyYAML 1.1's values, block and flow mappings and lists, block scalars,
+    comments, anchors and aliases as plain references, and from fix 3 the
+    `!!str` tag on a scalar, read as text as PyYAML reads it. It refuses by
+    name, "The metric view definition is not readable YAML: the text holds
+    the explicit tag '!!binary', which is outside the YAML view definitions
+    use" (the thing named), each of: any other explicit tag; a merge key; a
+    key that is a list or a mapping, before it is made; collections nested
+    deeper than 200 levels, each alias's counted (yaml-rust2 scans 255 flow
+    levels); aliases that, each read as a copy, give more than 4,194,304
+    values; an integer of more than 4,300 decimal digits written in another
+    base, which Python would not write; a U+0085, U+2028 or U+2029; and,
+    from fix 3, a plain `-` alone as a flow collection's member (`[-]`,
+    `{a: -}`), which PyYAML reads as the text `-` and yaml-rust2 refuses.
+    Nesting is counted in the scanner's pass and the parser is driven event
+    by event, so a definition nested a million levels deep is refused by
+    name, not by an overflowed stack (Claude review 3, P1-1).
+  affected_inputs: >-
+    A view definition holding any of those; the old client's tests and the
+    warehouses' definitions hold none, and of the tags only `!!str`, now
+    read, is in real use. A collection key PyYAML refused too, with another
+    message.
+  cases: []
+  refs: [T3.5, contract/view-yaml-vectors.json, contract/view-metric-vectors.json]
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T35-OWNER-2026-10-24-ERRORS}
+  notes: >-
+    Approved by the owner on 2026-10-24, item 11 ("Approved").
+    Proposed by T3.5's implementer at fix 2, by the
+    coordinator's direction under the owner's stop rule: bound the YAML the
+    core emulates, refuse the rest by name, and delete the code for the
+    refused features (the base64 reader, sets, ordered maps and pairs,
+    merges). Answers Codex review 2's P1-2 (a mapping keyed by itself
+    overflowed the stack), P1-3 (base64 padding overflowed a counter) and
+    P2 (a replaced value was not checked), and replaces P3J-7 and P3J-8.
+    The YAML vectors hold each refusal to the recorded text that holds the
+    thing refused.
+
+- id: P3J-10
+  title: A parameter default or a quoted value too large to write is refused by name
+  kind: change
+  old_behavior: >-
+    The old client writes a DOUBLE or DECIMAL parameter's default with
+    `format(Decimal(text), 'f')` and quotes a value with Python's `repr` or
+    `str`, however long the text: `1e999999999999999999` or
+    `1e-999999999999999999` asks for a string of 10^18 characters and fails
+    with a MemoryError, which ends the conversion (DB/metric_view.py:533-539),
+    and a value aliased many times over is written out whole.
+  new_behavior: >-
+    The core builds no text longer than 4,194,304 characters, counted as
+    the characters Python writes (escapes, punctuation and dates' text
+    included), and refuses exactly past it: a value is written through a
+    bounded writer that refuses the write that would pass the bound. A
+    default whose text would be longer is not read, "its default is too
+    long to write as a literal of type DOUBLE", the parameter then left
+    without a literal as one whose default is not of its type; a message
+    that would quote a longer value, or one whose collections met again
+    inside themselves nest past 400 levels, is refused by name
+    (`TooLarge`). A zero with any positive exponent is `0`, as Python
+    writes it, never refused (Codex review 3, P1-3).
+  affected_inputs: >-
+    A metric view whose numeric default has an exponent past about four
+    million, or a definition whose quoted value expands past four million
+    characters through its aliases.
+  cases: []
+  refs: [T3.5, contract/view-step-vectors.json]
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T35-OWNER-2026-10-24-ERRORS}
+  notes: >-
+    Approved by the owner on 2026-10-24, item 11 ("Approved").
+    Proposed by T3.5's implementer at fix 2 (Codex review
+    2, P1-5; Claude review 2's addendum: no huge allocation, refuse
+    `1e999999999999999999` by name). Every other default the second
+    reviews named, `1e9223372036854775807` and `1.0e-9223372036854775808`
+    among them, is read as Python reads it, held by the step vectors.
+
+- id: P3J-11
+  title: A definition entry the old client failed on as a set member or a pattern is refused by name
+  kind: change
+  old_behavior: >-
+    The old client looks a join's `cardinality` up in a set, so a list or a
+    mapping there fails with a raw TypeError, as does a semantic view
+    table's name that is a list or a mapping when it collects the names in
+    a set; a table name that is no text fails when it is made a pattern
+    (DB/metric_view.py:860, RE/graph.py:2069-2092).
+  new_behavior: >-
+    The core refuses the view by name at the same point: "The metric view
+    definition's 'cardinality' is a list or a mapping", "The semantic view
+    definition's 'name' is a list or a mapping", "The semantic view
+    definition's 'name' is not text".
+  affected_inputs: >-
+    A metric view join whose cardinality is a list or a mapping; a semantic
+    view whose table name is no text.
+  cases: []
+  refs: [T3.5]
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T35-OWNER-2026-10-24-ERRORS}
+  notes: >-
+    Approved by the owner on 2026-10-24, item 11 ("Approved").
+    Proposed by T3.5's implementer at fix 2: a named
+    refusal where the old client failed with a TypeError, found while
+    making the join walk total; nothing the old client converted is
+    refused.
+
+- id: P3J-12
+  title: A metric view's expression is read inside the relation the data layer renders
+  kind: change
+  old_behavior: >-
+    The old client samples a metric view's expression columns over the rows
+    it read of their table, `SELECT {expr} AS name FROM {the table, or its
+    renamed and filtered rows} LIMIT 1000` (DB/table.py:415-440), reads a
+    time column's range over every row as `MIN(({expr}))` over those rows
+    (RE/base/table.py:960-1000), and samples a source column it adds under
+    another name as the expression `` `{column}` `` (RE/graph.py:310-325).
+  new_behavior: >-
+    The core asks each as a preview, or a column range, of the relation the
+    data layer renders for the table: `SELECT name FROM (SELECT ({expr}) AS
+    name FROM t AS source WHERE ({filter})) LIMIT 1000`, the source column
+    added under another name read as `source.column AS name` there. The
+    rows are the same, each expression evaluated over the table's rows
+    under the view's filter; only the statement's text differs, as the
+    contract's requests name columns, not expressions. Every other
+    statement of the conversion is the old client's text, in its order,
+    held against the recordings (sdm-core/tests/view_captures.rs).
+  affected_inputs: >-
+    Every metric view with an expression column, or whose time column is
+    taken from a source column a dimension truncates or casts.
+  cases: []
+  refs: [T3.5, contract/view-captures.json]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: owner. Proposed by T3.5's implementer at stage 2: the
+    contract is frozen (T3.27) and its preview names its columns, so the
+    expression rides in the relation, as it does at every later read
+    (old-behaviour row 17). An expression reading a dimension's name rather
+    than its source column's would read the source's column inside the
+    relation where the old client read the renamed one; Databricks matches
+    names without case, and the view renames only by case, so no recorded
+    view reads otherwise.
+
+- id: P3J-13
+  title: A column the warehouse refuses, and a failed key count, are said by their SQLSTATE
+  kind: change
+  old_behavior: >-
+    The old client says a column whose expression the warehouse refused
+    with the driver's message, "Failed to add column 'x' to table 't':
+    {error}" (RE/graph.py:243-246), and a join kept unchecked with the
+    exception's type, "Kept join 'j' with its key 'k' unchecked, since
+    counting the keys failed: {ErrorType}" (:1804).
+  new_behavior: >-
+    The core says each by what the provider hands over, never the driver's
+    text, which can quote values: "[{error class}] SQLSTATE: {sqlstate}",
+    either alone where only one is given, or "the warehouse refused it"
+    where neither is (design S3, "two old view notes quote driver text").
+  affected_inputs: >-
+    A metric view whose expression the warehouse refuses, or whose join key
+    count fails.
+  cases: []
+  refs: [T3.5]
+  status: rejected
+  approved_by: reviewer
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-86}
+  notes: >-
+    Withdrawn at the orchestrator's direction after T3.5's broad round-2
+    review: neither this loss of useful context nor its attempted raw-message
+    replacement is implemented. H17 and KO2-86 keep driver messages and row
+    values out of warnings as well as errors. The earlier focused approval
+    does not override that owner policy. Rejected records reviewer-directed
+    retirement as superseded by the safe classification in P3J-15, never
+    owner approval of raw-message disclosure.
+
+- id: P3J-14
+  title: A semantic model is read again at each materialize, and what it no longer gives is refused by name
+  kind: change
+  old_behavior: >-
+    The old client reads the view once, at `from_source`, keeps the graph on
+    the schema and copies its tables at every materialize, so a view changed
+    since is not seen; a schema with no kept tables reads the whole view
+    again and warns again (CL/materializers/sources.py:26-78; old-behaviour
+    row 15).
+  new_behavior: >-
+    Plan B: each materialize reads the whole view again, every probe
+    included, and reads each table the schema holds as the relation the
+    view gives it at this run, a changed expression or filter as it now
+    reads. A table or column the schema holds that the view no longer
+    gives is refused by name, with this run's reason, "the semantic model
+    no longer gives the table 'users' this schema holds: its key 'user_id'
+    holds no value in table 'users'" (ViewTableOmitted, ViewColumnOmitted),
+    never dropped silently. Notes and the read-in-part warning are given at
+    describe only.
+  affected_inputs: >-
+    Every materialize of a schema described from a semantic model.
+  cases: []
+  refs: [T3.5]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: owner. The owner's plan B as design S5 applies it to views;
+    held by sdm-core/tests/view_captures.rs.
+
+
+- id: P3J-15
+  title: Refused view reads use safe classifications and caller context
+  kind: change
+  old_behavior: >-
+    A refused expression column is diagnosed with the driver's text, which
+    may include a cell value and the warehouse statement. A failed join-key
+    count is diagnosed with the driver's exception type.
+  new_behavior: >-
+    The core maps known error classes and SQLSTATE values to finite safe
+    explanations of conversion, division by zero, range, name resolution,
+    permission, syntax or incompatible-type failures. It names the operation
+    it requested and the logical table, column or join at the existing
+    message site. Unknown failures keep that caller context and valid
+    SQLSTATE or numeric vendor codes. Raw driver text, row values and
+    unrecognized free-text diagnostic fields are never copied into the
+    conversion warning or a held-column omission error.
+  affected_inputs: >-
+    A metric-view expression sample refused by the warehouse, or a failed
+    join-key count or repeated-key example read, including a materialize
+    that consequently refuses a logical column held by the schema.
+  cases: [T3.5]
+  refs: [T3.5, H17, KO2-86, P3J-13]
+  status: proposed
+  approved_by: null
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-86}
+  notes: >-
+    Supersedes P3J-13 after the diagnostic design was reassessed against the
+    owner's H17 and KO2-86 scope. Driver-message transport remains internal
+    for data-layer interpretation. This row records the exact explanation
+    difference for review; its policy reference grants no new owner approval
+    of public data disclosure. Public core describe/materialize canary tests
+    require useful classification and caller context while excluding cell
+    values, raw SQL and driver text.

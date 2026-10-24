@@ -41,6 +41,8 @@
 //!   setters do (decision E67, T1.24b).
 //! - [`held`] reads the schema as a host holds it, as plain data, and
 //!   writes it back (T3.16).
+//! - [`view`] reads a semantic model's definition, a metric or semantic
+//!   view's YAML, into its structure, expressions as written (T3.5).
 
 #![forbid(unsafe_code)]
 
@@ -52,6 +54,7 @@ pub mod infer;
 pub mod keys;
 mod names;
 mod values;
+pub mod view;
 
 use sdm_contract::{CoreError, Detail, Sentence};
 

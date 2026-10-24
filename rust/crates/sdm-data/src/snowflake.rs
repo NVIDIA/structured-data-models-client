@@ -125,7 +125,7 @@ impl SqlDialect for Snowflake {
             // warns of missing ones.
             index_advice: None,
             fallback: None,
-            derived_relations: false,
+            derived_relations: true,
             // The sample's size is its own `n ROWS`.
             sample_rows: false,
             // A neighbor read looks back by the tables' rows and time span
@@ -134,6 +134,65 @@ impl SqlDialect for Snowflake {
             keys_optional: false,
             key_enforcement: true,
         }
+    }
+
+    fn expr_dialect(&self) -> Option<crate::view_expr::ExprDialect> {
+        Some(crate::view_expr::ExprDialect::Snowflake)
+    }
+
+    fn view_kind(&self) -> Option<ViewKind> {
+        Some(ViewKind::Semantic)
+    }
+
+    fn declared_type(&self, data_type: &str) -> sdm_contract::view::DeclaredType {
+        use sdm_contract::view::DeclaredType;
+        match declared_dtype(data_type) {
+            Some(Dtype::Unsupported) => DeclaredType::Unsupported,
+            Some(dtype) => DeclaredType::Known(dtype),
+            None => DeclaredType::Unknown,
+        }
+    }
+
+    fn read_view(
+        &self,
+        request: &DataRequest,
+        batches: &[RecordBatch],
+        _spaces: &crate::view_expr::Spaces,
+    ) -> Result<CatalogAnswer, CoreError> {
+        read(request, DescribePart::ViewDefinition, batches)
+    }
+
+    fn derived(&self, relation: &Relation, source: &str) -> Option<String> {
+        if relation.found {
+            return Some(source.to_owned());
+        }
+        let columns = if relation.columns.is_empty() {
+            "*".to_owned()
+        } else {
+            relation
+                .columns
+                .iter()
+                .map(|column| match (&column.column, &column.expression) {
+                    (Some(read), _) if *read == column.name => self.identifier(read),
+                    (Some(read), _) => format!(
+                        "{} AS {}",
+                        self.identifier(read),
+                        self.identifier(&column.name)
+                    ),
+                    (None, Some(expression)) => {
+                        format!("({expression}) AS {}", self.identifier(&column.name))
+                    }
+                    (None, None) => String::new(), // Refused by refuse_derived before rendering.
+                })
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+        let filter = relation
+            .filter
+            .as_ref()
+            .map(|f| format!(" WHERE ({f})"))
+            .unwrap_or_default();
+        Some(format!("(SELECT {columns} FROM {source}{filter})"))
     }
 
     fn most_parts(&self) -> usize {

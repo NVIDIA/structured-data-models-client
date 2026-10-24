@@ -219,22 +219,11 @@ advice! {
     TrustExpressions = "trust_expressions", [];
 }
 
-/// The sentences of improvements proposed to the owner and not yet
-/// approved (T3.27; the registered differences P3J-1 to P3J-4 and P3J-9
-/// to P3J-11 (P3J-9 says `view_not_yaml`), and the
-/// Snowflake and semantic-view proposals of the Phase 3 design): in the
-/// table, so approving one needs no contract change, and said by no
-/// producer until the owner says yes.
-pub const PROPOSED: &[Sentence] = &[
-    Sentence::ViewNotYaml,
-    Sentence::ViewMissesEntry,
-    Sentence::ViewNotAList,
-    Sentence::ViewNestsItself,
-    Sentence::ViewEntryUnhashable,
-    Sentence::ViewEntryNotText,
-    Sentence::ViewValueTooLarge,
-    Sentence::NullAnchor,
-];
+/// Sentences whose improvements remain proposed under the recorded owner
+/// decisions (T3.27). A producer must not use one until the owner approves
+/// it; releasing an approved name here changes neither its wire identity
+/// nor its template. The blanket null-anchor refusal remains unapproved.
+pub const PROPOSED: &[Sentence] = &[Sentence::NullAnchor];
 
 /// A database a sentence names: by the name the core gives it, as a
 /// product (`backend`), and as the place a table is held (`place`). The

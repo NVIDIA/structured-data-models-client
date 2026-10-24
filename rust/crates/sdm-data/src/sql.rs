@@ -145,6 +145,36 @@ pub(crate) trait SqlDialect: Sync {
         NameCase::AsWritten
     }
 
+    /// The dialect a semantic model's expressions are checked in, where
+    /// this dialect reads semantic models (T3.5); `None`, the default: it
+    /// reads none, and each question of one is refused by name.
+    fn expr_dialect(&self) -> Option<crate::view_expr::ExprDialect> {
+        None
+    }
+
+    /// The semantic model kind this dialect reads, before its definition.
+    fn view_kind(&self) -> Option<sdm_contract::view::ViewKind> {
+        None
+    }
+
+    /// A semantic model's declared column type read by the dialect's type
+    /// map (T3.5); unknown, the default, left to the sampled values.
+    fn declared_type(&self, _data_type: &str) -> sdm_contract::view::DeclaredType {
+        sdm_contract::view::DeclaredType::Unknown
+    }
+
+    /// A semantic model's definition read (`DescribePart::ViewDefinition`),
+    /// its text read by `spaces`; refused by name, the default, by a
+    /// dialect that reads none.
+    fn read_view(
+        &self,
+        _request: &DataRequest,
+        _batches: &[RecordBatch],
+        _spaces: &crate::view_expr::Spaces,
+    ) -> Result<CatalogAnswer, CoreError> {
+        Err(sdm_contract::data::views_unread())
+    }
+
     /// A derived relation's `FROM` (contract v28), `source` the rendering
     /// of the relation it reads; `None` for a dialect that reads none, where
     /// a derived relation is refused by name (`derived_relations` is false
@@ -639,7 +669,20 @@ pub(crate) fn plan(
     let text = match request {
         DataRequest::Describe { tables, part } => {
             for table in tables {
-                from(d, request, "tables", table)?;
+                if *part == DescribePart::ViewDefinition
+                    && d.view_kind() == Some(sdm_contract::view::ViewKind::Semantic)
+                {
+                    // A semantic definition lookup binds its name as text;
+                    // it does not render a physical FROM relation. Retain
+                    // the structural rule, leaving namespace resolution to
+                    // the warehouse function the dialect calls.
+                    if let Some(refusal) = refuse_relation(request, "tables", table, d.most_parts())
+                    {
+                        return Err(refusal);
+                    }
+                } else {
+                    from(d, request, "tables", table)?;
+                }
             }
             let (text, bound) = d.describe(request, tables, *part, namespace)?;
             params = bound;

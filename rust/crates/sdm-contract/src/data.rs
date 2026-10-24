@@ -1202,6 +1202,15 @@ impl ProviderChoice {
             view: None,
         }
     }
+
+    /// The semantic model a SQL provider's source is read through, if any
+    /// (T3.5); none for a host provider.
+    pub fn view(&self) -> Option<&ViewChoice> {
+        match self {
+            ProviderChoice::Sql { view, .. } => view.as_ref(),
+            ProviderChoice::Host { .. } => None,
+        }
+    }
 }
 
 /// The semantic model a SQL provider's source is read through
@@ -1266,6 +1275,15 @@ pub enum FetchPlan {
 }
 
 impl FetchPlan {
+    /// Whether catalog requests with these complete concrete plans may
+    /// share the same fetched rows within one discovery step.
+    /// All statements, parameters and the expected schema must match.
+    /// Host plans omit the request itself and carry only its answer schema,
+    /// so equality of two host plans never establishes the same read.
+    pub fn same_catalog_read(&self, other: &Self) -> bool {
+        matches!(self, Self::Sql { .. }) && self == other
+    }
+
     /// The schema the plan returns.
     pub fn expect(&self) -> &ExpectedSchema {
         match self {
@@ -1418,6 +1436,13 @@ pub trait DataLayer: Send + Sync {
     fn read_as(&self, provider: &ProviderChoice, relation: &Relation) -> Relation {
         let _ = provider;
         relation.clone()
+    }
+
+    /// The kind of semantic model this provider reads, known before fetching
+    /// its definition. Unspecified by default for custom data layers.
+    fn view_kind(&self, provider: &ProviderChoice) -> Option<crate::view::ViewKind> {
+        let _ = provider;
+        None
     }
 
     /// What the run's provider's failure says, as facts each step of the

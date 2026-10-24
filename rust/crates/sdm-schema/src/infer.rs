@@ -385,6 +385,65 @@ impl Previewed {
     }
 }
 
+impl Previewed {
+    /// The columns of `among` the time column's choice reads over every
+    /// row of the table ([`Previewed::whole_table_columns`]), for a choice
+    /// among them alone ([`choose_among`]).
+    pub fn whole_table_columns_among(&self, among: &[String]) -> Vec<String> {
+        if (self.rows as u64) < PREVIEW_ROWS {
+            return vec![];
+        }
+        among
+            .iter()
+            .filter(|name| {
+                self.table
+                    .columns
+                    .iter()
+                    .any(|c| c.name == **name && c.stype == Stype::Timestamp)
+                    && !self.table.primary_key.contains(*name)
+                    && !names::is_load_stamp(name)
+                    && !names::is_birth_date(name)
+            })
+            .cloned()
+            .collect()
+    }
+}
+
+/// The time column of a semantic model's table chosen among `among` alone,
+/// as the old client's `_infer_time_column_among` chooses it
+/// (`RE/base/table.py:859-893`): the choice of [`finish`] over those
+/// columns, `whole` the whole table's reading of
+/// [`Previewed::whole_table_columns_among`] where one was asked, `failed`
+/// where asking it failed. A column of `among` that holds no timestamp is
+/// no candidate.
+pub fn choose_among(
+    previewed: &Previewed,
+    among: &[String],
+    whole: Option<&WholeTable>,
+    failed: bool,
+) -> Result<TimeChoice, CoreError> {
+    let table = &previewed.table;
+    let mut columns = table.columns.clone();
+    for column in &mut columns {
+        if !among.contains(&column.name) && column.stype == Stype::Timestamp {
+            // Not offered: read as no timestamp, so never a candidate.
+            column.stype = Stype::Numerical;
+        }
+    }
+    choose_time_column(
+        &columns,
+        &Read {
+            instants: &previewed.instants,
+            presence: &previewed.presence,
+            firsts: &previewed.firsts,
+        },
+        previewed.rows,
+        &table.primary_key,
+        whole,
+        failed,
+    )
+}
+
 /// Chooses the time column of a table inferred from its preview
 /// ([`choose_time_column`]), reading `whole`, the answer to the source
 /// about [`Previewed::whole_table_columns`], where those are not empty. A
@@ -618,6 +677,78 @@ pub fn preview_keyed(
     floats: Floats,
     key_stated: bool,
 ) -> Result<Previewed, CoreError> {
+    preview_with(
+        name,
+        source,
+        catalog,
+        constraints,
+        schema,
+        batches,
+        times,
+        floats,
+        Keying::Inferred { stated: key_stated },
+    )
+}
+
+/// How a preview's table is keyed.
+#[derive(Clone, Copy)]
+enum Keying {
+    /// By the catalog's key, else its one unique column, else a guess;
+    /// `stated` where the caller names the key.
+    Inferred { stated: bool },
+    /// By nothing the preview reads: a semantic model's table, which its
+    /// view keys (`RE/graph.py:1820-1925`, `:2083-2096`).
+    Never,
+}
+
+/// The columns of a semantic model's table inferred from its rows, as the
+/// old client's `Table.add_columns` infers each (`RE/base/table.py:225-318`):
+/// `columns` the columns the conversion adds, each with the data type the
+/// source's catalog or the view declares where either does
+/// ([`CatalogColumn::dtype`]), else its values', and its meaning by its name
+/// and values; `schema` and `batches` the rows sampled of them, in that
+/// order. No key is read or guessed: the view's joins and keys set it.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the table, its columns, its rows and the source's two readings"
+)]
+pub fn view_table(
+    name: &str,
+    source: &Relation,
+    columns: &[CatalogColumn],
+    schema: &Schema,
+    batches: &[RecordBatch],
+    times: &dyn TextTimes,
+    floats: Floats,
+) -> Result<Previewed, CoreError> {
+    preview_with(
+        name,
+        source,
+        columns,
+        &[],
+        schema,
+        batches,
+        times,
+        floats,
+        Keying::Never,
+    )
+}
+
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the table, its catalog, its preview, the source's two readings and its keying"
+)]
+fn preview_with(
+    name: &str,
+    source: &Relation,
+    catalog: &[CatalogColumn],
+    constraints: &[CatalogKey],
+    schema: &Schema,
+    batches: &[RecordBatch],
+    times: &dyn TextTimes,
+    floats: Floats,
+    keying: Keying,
+) -> Result<Previewed, CoreError> {
     let rows: usize = batches.iter().map(RecordBatch::num_rows).sum();
     if rows == 0 {
         // The reference refuses an empty table as a RuntimeError.
@@ -746,9 +877,14 @@ pub fn preview_keyed(
         .filter(|n| keyed.declared.contains(*n))
         .filter(held)
         .collect();
-    let (key, tied_keys) = match (primary.as_slice(), unique_columns.as_slice()) {
-        ([one], _) => (Some(one.clone()), Vec::new()),
-        (_, [one]) => (Some((*one).clone()), Vec::new()),
+    let key_stated = match keying {
+        Keying::Inferred { stated } => stated,
+        Keying::Never => true,
+    };
+    let (key, tied_keys) = match (keying, primary.as_slice(), unique_columns.as_slice()) {
+        (Keying::Never, _, _) => (None, Vec::new()),
+        (_, [one], _) => (Some(one.clone()), Vec::new()),
+        (_, _, [one]) => (Some((*one).clone()), Vec::new()),
         _ => match guess_key(name, &columns, &samples) {
             Guess::Key(key) => (Some(key), Vec::new()),
             Guess::None => (None, Vec::new()),

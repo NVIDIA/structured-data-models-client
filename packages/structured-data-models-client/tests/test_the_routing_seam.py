@@ -95,6 +95,8 @@ def test_every_core_path_of_the_manifest_is_routed_and_every_default_is_old() ->
     # with indices over a DuckDB source's schema, and from T1.11d, predict
     # of a request materialized over one, have core routes; from T2.2 the
     # same calls over a SQLite source, from T2.3 over a Postgres one, and
+    # from T3.4 over a Databricks SQL warehouse and a Spark session, and
+    # from T3.5 over a Databricks metric view.
     # from T3.4 over a Databricks SQL warehouse and a Spark session, and from
     # T3.6 over a Snowflake source.
     assert _routing.CORE_ROUTED == set(
@@ -121,6 +123,13 @@ def test_every_core_path_of_the_manifest_is_routed_and_every_default_is_old() ->
         + _routing.FROM_SOURCE_DATABRICKS_SPARK_TABLES
         + _routing.MATERIALIZE_DATABRICKS_SPARK
         + _routing.PREDICT_DATABRICKS_SPARK
+        # From T3.5, a Databricks metric view's, on either connection.
+        + _routing.FROM_SOURCE_DATABRICKS_METRIC_VIEW
+        + _routing.MATERIALIZE_DATABRICKS_METRIC_VIEW
+        + _routing.PREDICT_DATABRICKS_METRIC_VIEW
+        + _routing.FROM_SOURCE_SNOWFLAKE_SEMANTIC_VIEW
+        + _routing.MATERIALIZE_SNOWFLAKE_SEMANTIC_VIEW
+        + _routing.PREDICT_SNOWFLAKE_SEMANTIC_VIEW
         # From T3.6, over a Snowflake connection or a Snowpark session.
         + _routing.FROM_SOURCE_SNOWFLAKE
         + _routing.FROM_SOURCE_SNOWFLAKE_TABLES
@@ -189,19 +198,20 @@ def test_the_route_is_read_at_every_call(
         (f'{CORE},nope', 'nope'),
         # A host path is never routed.
         ('source.open/explicit/duckdb', 'source.open/explicit/duckdb'),
-        # A core path with no core route in this build (SQLite's has one
-        # from T2.2, Postgres's from T2.3, Snowflake's from T3.6).
+        # Trained models remain a known core path without an implementation
+        # in Phase 3; warehouse and semantic-view prediction now have routes.
         (
-            'client.predict/regression/snowflake-semantic-view',
-            'client.predict/regression/snowflake-semantic-view',
+            'client.fit/regression/duckdb',
+            'client.fit/regression/duckdb',
         ),
     ],
 )
 def test_an_unknown_or_unrouted_forced_path_fails_the_call(
     monkeypatch: pytest.MonkeyPatch, setting: str, named: str
 ) -> None:
-    if named.startswith('client.predict'):
+    if named.startswith('client.'):
         assert named in _routing.ROUTES
+        assert named not in _routing.CORE_ROUTED
     monkeypatch.setenv(_routing.ENVIRONMENT, setting)
     query = PredictiveQuery(ACCEPTED, {'users': _users()})
     with pytest.raises(_routing.RouteError, match=named):

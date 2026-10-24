@@ -30,6 +30,9 @@
 //! expressions), so no other crate does. `l0_scan.py`'s `dialects` check
 //! keeps them here.
 //!
+//! [`view_expr`] checks the expressions a metric or semantic view holds,
+//! as each dialect reads them, before any reaches a statement (T3.5).
+//!
 //! The statements are written once, in [`sql`]'s shared builder, over its
 //! `SqlDialect` trait (T3.18, design fix E): each dialect's module holds
 //! only what differs, and [`Data`] finds a dialect by its name in one
@@ -53,6 +56,7 @@ mod sql;
 #[cfg(test)]
 mod sql_tests;
 mod sqlite;
+pub mod view_expr;
 
 pub use keys::canonical_decimal_text;
 pub use pg_values::json_text;
@@ -66,6 +70,7 @@ use sdm_contract::data::{
     FailureFacts, FetchPlan, KeyData, ProviderCapabilities, ProviderChoice, ProviderError,
     Relation, SqlStatement, views_unread,
 };
+use sdm_contract::view::{ViewTextAnswer, ViewTextAsk};
 use sdm_contract::wording::DatabaseNames;
 use sdm_contract::{CoreError, Detail, Sentence};
 use sql::SqlDialect;
@@ -146,12 +151,33 @@ fn sql_dialect(provider: &ProviderChoice) -> Option<&'static dyn SqlDialect> {
 }
 
 /// The data layer of a shipped build: DuckDB's SQL, and host providers.
+/// It reads semantic models only where it was given the white space their
+/// checks read text by ([`Data::reading_views`]), the rule the core holds.
 #[derive(Debug, Clone, Copy, Default)]
-pub struct Data;
+pub struct Data {
+    spaces: Option<&'static view_expr::Spaces>,
+}
 
 impl Data {
     pub fn new() -> Self {
-        Data
+        Data { spaces: None }
+    }
+
+    /// A data layer that reads semantic models, each text question of one
+    /// read by `spaces`, Python's white space as the core hands it in.
+    pub fn reading_views(spaces: &'static view_expr::Spaces) -> Self {
+        Data {
+            spaces: Some(spaces),
+        }
+    }
+
+    /// The dialect of `provider` and the white space, where this layer
+    /// reads its semantic models.
+    fn views(
+        &self,
+        provider: &ProviderChoice,
+    ) -> Option<(view_expr::ExprDialect, &'static view_expr::Spaces)> {
+        Some((sql_dialect(provider)?.expr_dialect()?, self.spaces?))
     }
 }
 
@@ -160,13 +186,14 @@ impl DataLayer for Data {
         match provider {
             ProviderChoice::Host { capabilities } => Ok(capabilities.clone()),
             ProviderChoice::Sql { dialect, view, .. } => {
-                let dialect = rendered(dialect)?;
-                // No dialect reads a semantic model yet (T3.5 and T3.6 do):
-                // refused by name, never read as the source's own tables.
-                if view.is_some() {
+                let rendered_dialect = rendered(dialect)?;
+                // A semantic model is read only by a dialect that reads one,
+                // with the white space it is read by; refused by name, never
+                // read as the source's own tables.
+                if view.is_some() && self.views(provider).is_none() {
                     return Err(views_unread());
                 }
-                Ok(dialect.capabilities())
+                Ok(rendered_dialect.capabilities())
             }
         }
     }
@@ -269,8 +296,26 @@ impl DataLayer for Data {
         }
     }
 
+    fn view_kind(&self, provider: &ProviderChoice) -> Option<sdm_contract::view::ViewKind> {
+        sql_dialect(provider)?.view_kind()
+    }
+
     fn failure(&self, provider: &ProviderChoice, error: &ProviderError) -> FailureFacts {
-        sql_dialect(provider).map_or_else(FailureFacts::default, |d| d.failure(error))
+        sql_dialect(provider).map_or_else(FailureFacts::default, |dialect| dialect.failure(error))
+    }
+
+    fn view_text(
+        &self,
+        provider: &ProviderChoice,
+        ask: ViewTextAsk,
+    ) -> Result<ViewTextAnswer, CoreError> {
+        let (Some((dialect, spaces)), Some(sql)) = (self.views(provider), sql_dialect(provider))
+        else {
+            return Err(views_unread());
+        };
+        Ok(view_expr::answer(ask, dialect, spaces, &|data_type| {
+            sql.declared_type(data_type)
+        }))
     }
 
     fn spellings(&self, provider: &ProviderChoice, relation: &Relation) -> Vec<Relation> {
@@ -309,6 +354,10 @@ impl DataLayer for Data {
         };
         let answer = match provider {
             ProviderChoice::Host { .. } => read::host(*part, batches)?,
+            ProviderChoice::Sql { dialect, .. } if *part == DescribePart::ViewDefinition => {
+                let spaces = self.spaces.ok_or_else(views_unread)?;
+                rendered(dialect)?.read_view(request, batches, spaces)?
+            }
             ProviderChoice::Sql { dialect, .. } => {
                 rendered(dialect)?.read(request, *part, batches)?
             }
@@ -460,7 +509,23 @@ impl Data {
                 {
                     return sql::plan(dialect, request, &[], offset);
                 }
-                let namespace = qualifying(request, namespace)?;
+                let namespace = if matches!(
+                    request,
+                    DataRequest::Describe {
+                        part: DescribePart::ViewDefinition,
+                        ..
+                    }
+                ) && dialect.view_kind()
+                    == Some(sdm_contract::view::ViewKind::Semantic)
+                {
+                    // The semantic lookup binds a name, prefixed only by
+                    // the source parts explicitly supplied by its caller.
+                    // Missing parts are the warehouse's to resolve, even
+                    // where a physical relation would need a namespace read.
+                    namespace.iter().flatten().cloned().collect()
+                } else {
+                    qualifying(request, namespace)?
+                };
                 deeper(request, &namespace, dialect.namespace_depth())?;
                 sql::plan(
                     dialect,

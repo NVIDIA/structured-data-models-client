@@ -23,9 +23,10 @@ use arrow_array::RecordBatch;
 use sdm_contract::catalog::CatalogAnswer;
 use sdm_contract::data::{
     AttachmentId, BoundRequest, DataLayer, DataRequest, FailureFacts, FallbackLimits, FetchPlan,
-    KeyData, ProviderCapabilities, ProviderChoice, ProviderError, Relation, refuse_derived,
-    seed_integer,
+    KeyData, ProviderCapabilities, ProviderChoice, ProviderError, Relation, ViewChoice,
+    refuse_derived, seed_integer,
 };
+use sdm_contract::view::{ViewTextAnswer, ViewTextAsk};
 use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 
 use crate::ArrowData;
@@ -92,6 +93,23 @@ impl DataAccess {
     /// tables are the host's own.
     pub fn reads_a_source(&self) -> bool {
         self.layer.reads_tables_as_they_stand(&self.provider)
+    }
+
+    /// The semantic model the run's provider reads the source through,
+    /// if any (`ProviderChoice::Sql.view`, T3.5).
+    pub fn view(&self) -> Option<ViewChoice> {
+        self.provider.view().cloned()
+    }
+
+    /// The kind of model the provider reads, before its definition is fetched.
+    pub fn view_kind(&self) -> Option<sdm_contract::view::ViewKind> {
+        self.layer.view_kind(&self.provider)
+    }
+
+    /// The data layer's answer to a question of a semantic model's text, in
+    /// the run's provider's dialect (`DataLayer::view_text`).
+    pub fn view_text(&self, ask: ViewTextAsk) -> Result<ViewTextAnswer, CoreError> {
+        self.layer.view_text(&self.provider, ask)
     }
 
     /// Whether the run's provider's source holds a type per column that a

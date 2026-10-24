@@ -53,7 +53,7 @@ import math
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
-from sdm_client._rust import codec, providers, results
+from sdm_client._rust import codec, errors, providers, results
 from sdm_client._rust.results import CoreQuery, CoreRequest, QueryFacts
 from sdm_client._rust.run import run
 from sdm_client._rust.spec import held_schema
@@ -394,12 +394,15 @@ def gather(
     # The sampler state the core's last run on this materializer left,
     # handed back, so a run skips what the reference's sampler reads once
     # (decision E52); the run leaves its own in its place, done or failed.
-    finished = run(
-        operation,
-        attachments,
-        provider=provider,
-        state=materializer._core_sampler_state,
-    )
+    # A semantic model's, as the core's refusal of a table or column the
+    # model no longer gives names it (T3.5, plan B).
+    with errors.holding(**errors.source_values(schema.source)):
+        finished = run(
+            operation,
+            attachments,
+            provider=provider,
+            state=materializer._core_sampler_state,
+        )
     gathered = results.expect(finished.result, results.Gathered)
     state = gathered.state
     if gathered.query is None:

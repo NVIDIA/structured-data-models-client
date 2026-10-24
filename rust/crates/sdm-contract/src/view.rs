@@ -292,8 +292,10 @@ pub enum DeclaredType {
 /// `DB/metric_view.py`), answered by the [`ViewTextAnswer`] its doc names.
 #[derive(Clone, Debug, PartialEq)]
 pub enum ViewTextAsk {
-    /// A metric view's name, in one to three parts (`_split_view_name`):
-    /// [`ViewTextAnswer::Names`], none for a name that is not one.
+    /// The definition lookup's name as the dialect reads it:
+    /// [`ViewTextAnswer::Names`], none for an invalid name.
+    /// A metric view uses one to three identifier parts (`_split_view_name`);
+    /// a semantic view uses its supplied name as one opaque bound-text part.
     ViewName { name: String },
     /// A source's or a join's `source` as a plain one-to-three-part table
     /// name (`_table_reference`): [`ViewTextAnswer::Names`], none for one
