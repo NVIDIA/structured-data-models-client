@@ -355,23 +355,10 @@ public final class ConversionTable {
     return pyDecimal(text);
   }
 
-  /**
-   * Python's {@code str} of the {@code datetime} psycopg reads a {@code timestamptz} as: the
-   * instant the server wrote, in the zone psycopg resolves the session's {@code TimeZone} to
-   * ({@link Session#zone}).
-   */
+  /** A zoned text value's instant in canonical UTC, independent of the session's zone. */
   private static String pyZoned(String text, Session session) throws SQLException {
     PostgresText.Zoned zoned = PostgresText.zoned(text);
-    long micros = zoned.micros();
-    int offset = session.offsetSeconds(micros);
-    java.time.LocalDateTime utc = wall(micros, 0);
-    java.time.LocalDateTime wall = wall(micros, offset);
-    if (!inPythonYears(utc) || !inPythonYears(wall)) {
-      // psycopg moves the instant to UTC, then to the session's zone; where either leaves a
-      // datetime's years (1 to 9999), it keeps the server's own wall time and offset.
-      return PostgresText.pyDatetime(zoned.wall()) + PostgresText.pyOffset(zoned.offsetSeconds());
-    }
-    return PostgresText.pyDatetime(wall) + PostgresText.pyOffset(offset);
+    return PostgresText.pyDatetime(wall(zoned.micros(), 0)) + "+00:00";
   }
 
   /** The wall time of the instant {@code micros} at {@code offset} seconds east of UTC. */
@@ -380,11 +367,6 @@ public final class ConversionTable {
         Math.floorDiv(micros, 1_000_000L) + offset,
         (int) Math.floorMod(micros, 1_000_000L) * 1_000,
         java.time.ZoneOffset.UTC);
-  }
-
-  /** Whether a Python {@code datetime} holds {@code wall}'s year. */
-  private static boolean inPythonYears(java.time.LocalDateTime wall) {
-    return wall.getYear() >= 1 && wall.getYear() <= 9999;
   }
 
   private static Map<String, PostgresType> postgres() {
@@ -442,13 +424,6 @@ public final class ConversionTable {
   public interface Session {
     String intervalStyle() throws SQLException;
 
-    /**
-     * The UTC offset, in seconds, at {@code micros} in the zone psycopg reads a {@code
-     * timestamptz} in: the session's {@code TimeZone} as Python's {@code ZoneInfo} finds it, in
-     * Python's zone data, else UTC, as psycopg's {@code get_tzinfo} falls back ({@link
-     * com.nvidia.sdm.internal.NativeCore#sessionZoneOffset}).
-     */
-    int offsetSeconds(long micros) throws SQLException;
   }
 
   /** The Postgres column of the type with OID {@code oid}, by psycopg's registry. */

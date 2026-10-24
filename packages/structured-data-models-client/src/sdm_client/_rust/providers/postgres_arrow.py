@@ -12,6 +12,7 @@ provider). It imports nothing of this package."""
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
@@ -200,7 +201,7 @@ def _cell(value: Any, kind: Any) -> Any:
     if pa.types.is_list(kind):
         return [_cell(item, kind.value_type) for item in _elements(value)]
     if pa.types.is_string(kind) and not isinstance(value, str):
-        return str(value)
+        return str(_utc_text_value(value))
     if pa.types.is_floating(kind) and isinstance(value, Decimal):
         return float(value)
     if (
@@ -215,6 +216,45 @@ def _cell(value: Any, kind: Any) -> Any:
         # A timetz's time of day, its offset left out, as the reference
         # reads a time.
         return value.replace(tzinfo=None)
+    return value
+
+
+def _utc_text_value(value: Any) -> Any:
+    """Normalize zoned native values before their native text conversion.
+
+    This is used only for a text Arrow cell, including an array element.
+    Scalar timestamp columns keep their existing Arrow conversion.
+    Range and multirange formatting remains the driver's own formatting.
+    """
+    if isinstance(value, datetime):
+        if value.utcoffset() is None:
+            return value
+        try:
+            return str(value.astimezone(timezone.utc))
+        except OverflowError:
+            # A readable wall date can represent UTC year 0 or 10000.
+            # Shift by a Gregorian cycle, retaining its actual fixed offset,
+            # so conversion preserves the instant without losing support.
+            shift = 400 if value.year < 400 else -400
+            shifted = value.replace(
+                year=value.year + shift,
+                tzinfo=timezone(value.utcoffset()),
+            ).astimezone(timezone.utc)
+            return f'{shifted.year - shift:04d}' + str(shifted)[4:]
+
+    # A Postgres native result has psycopg available; keep the dependency
+    # lazy so importing this standalone Arrow adapter needs no driver.
+    from psycopg.types.multirange import Multirange
+    from psycopg.types.range import Range
+
+    if isinstance(value, Range) and not value.isempty:
+        return Range(
+            _utc_text_value(value.lower),
+            _utc_text_value(value.upper),
+            value.bounds,
+        )
+    if isinstance(value, Multirange):
+        return Multirange([_utc_text_value(span) for span in value])
     return value
 
 
