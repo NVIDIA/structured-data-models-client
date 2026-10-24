@@ -1305,6 +1305,17 @@ pub trait DataLayer: Send + Sync {
         Ok(None)
     }
 
+    /// Whether `provider` reads a source of tables, a database or warehouse
+    /// whose tables each `materialize` reads as they stand at that run:
+    /// their location where the provider leaves a part to the session,
+    /// their columns and their types (the owner's plan B, T3.4). `false`,
+    /// the default and a host provider's: the host's tables are its own,
+    /// and only a column holding no facts is read from it.
+    fn reads_tables_as_they_stand(&self, provider: &ProviderChoice) -> bool {
+        let _ = provider;
+        false
+    }
+
     /// The database the run's provider reads, by the name its built-in
     /// dialect has (`duckdb`, `sqlite`, `postgres`), which a host words a
     /// refusal naming the source with (T3.8). `None`, the default and a

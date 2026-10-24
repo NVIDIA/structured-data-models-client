@@ -216,6 +216,7 @@ impl Rows {
                     },
                     columns: kept_names(batch, c::COLUMNS, row)?,
                     index: None,
+                    enforced: true,
                 }),
                 DescribePart::ForeignKeys => {
                     let key = column(batch, c::KEY)?

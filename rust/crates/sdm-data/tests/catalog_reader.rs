@@ -184,16 +184,19 @@ fn duckdb_s_catalog_and_a_host_s_read_to_the_same_answer() {
             kind: KeyKind::Primary,
             columns: vec!["order_id".into()],
             index: None,
+            enforced: true,
         },
         CatalogKey {
             kind: KeyKind::Unique,
             columns: vec!["a".into(), "b".into()],
             index: None,
+            enforced: true,
         },
         CatalogKey {
             kind: KeyKind::Other,
             columns: vec!["user_id".into()],
             index: None,
+            enforced: true,
         },
     ]);
     let members: &[&[&str]] = &[&["order_id"], &["a", "b"], &["user_id"]];

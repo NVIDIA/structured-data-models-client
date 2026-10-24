@@ -241,6 +241,10 @@ impl DataLayer for Data {
         Some(sql_dialect(provider)?.name())
     }
 
+    fn reads_tables_as_they_stand(&self, provider: &ProviderChoice) -> bool {
+        sql_dialect(provider).is_some()
+    }
+
     fn unsettled(&self, provider: &ProviderChoice) -> bool {
         match provider {
             ProviderChoice::Sql { dialect, namespace } => {

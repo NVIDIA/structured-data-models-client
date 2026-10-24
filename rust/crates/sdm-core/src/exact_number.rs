@@ -168,6 +168,7 @@ mod tests {
             kind,
             columns: vec![column.to_owned()],
             index: None,
+            enforced: true,
         }
     }
 
@@ -202,6 +203,7 @@ mod tests {
                 kind: KeyKind::Unique,
                 columns: vec!["amount".to_owned(), "note".to_owned()],
                 index: None,
+                enforced: true,
             },
         ];
         let settled = settle(preview, &keys).unwrap();

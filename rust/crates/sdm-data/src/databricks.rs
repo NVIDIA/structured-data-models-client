@@ -721,6 +721,7 @@ pub(crate) fn read(
                         },
                         columns,
                         index: None,
+                        enforced: false,
                     })
                     .collect(),
             ))

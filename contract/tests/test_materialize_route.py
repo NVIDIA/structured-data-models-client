@@ -61,32 +61,21 @@ REFERENCE = next((ROOT / 'contract/reference').glob('*.jsonl'))
 PINNED = ROOT / 'contract/pinned/base.regression.core.json'
 
 
-#: The statements the core runs reading each of base.regression's two
-#: tables as the source holds it at each materialize, its catalog, keys and
-#: preview, which the reference does not run again after from_source (the
-#: owner's plan B, T3.4, register P3A-1).
-_READ_AS_IT_STANDS = 6
-
-
-def _as_the_reference_counts(projection: dict[str, Any]) -> dict[str, Any]:
-    r"""A core observation's projection, its query log's count of
-    statements without the plan B reads."""
-    log = projection.get('query_log')
-    if isinstance(log, dict) and 'statements' in log:
-        projection = {
-            **projection,
-            'query_log': {
-                **log,
-                'statements': log['statements'] - _READ_AS_IT_STANDS,
-            },
-        }
-    return projection
-
-
 def _module(name: str) -> ModuleType:
     if name in sys.modules:
         return sys.modules[name]
     spec = importlib.util.spec_from_file_location(name, RUNNERS / f'{name}.py')
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _module_at(name: str, path: Path) -> ModuleType:
+    if name in sys.modules:
+        return sys.modules[name]
+    spec = importlib.util.spec_from_file_location(name, path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     sys.modules[name] = module
@@ -151,9 +140,7 @@ def test_base_regression_reaches_the_reference_s_payload_on_the_core(
     assert (
         'request_id' in reference['public']['payloads'][0]['parsed']['metadata']
     )
-    assert _as_the_reference_counts(
-        capture_check.projection(core)
-    ) == capture_check.projection(reference)
+    assert capture_check.projection(core) == capture_check.projection(reference)
     # The request the endpoint received is the core's payload, with what
     # predict adds: the model, the outputs, a request id, and only the
     # inference options the model reads.
@@ -238,13 +225,22 @@ def test_the_core_s_sql_for_materialize_returns_the_reference_s_results(
 ) -> None:
     reference = _reference()['driver']['capture']
     recorded = _materialize_recording(monkeypatch)
-    # Ten fetches for the schema (test_schema_route.py), then
-    # materialize's six, as the reference's sixteen statements; and before
-    # them, the six that read each table as the source holds it at this
-    # materialize (the owner's plan B, T3.4).
-    assert len(recorded) == 16 + _READ_AS_IT_STANDS
+    # Ten fetches for the schema (test_schema_route.py), then the reads
+    # plan B adds (the one rule, compare.py's reads_as_it_stands, register
+    # P3A-1), then materialize's six, as the reference's sixteen statements.
+    compare = _module_at('compare', ROOT / 'scripts/rust_core/compare.py')
+    fresh = compare.reads_as_it_stands(
+        [
+            {
+                'stage': 'from_source' if at < 10 else 'materialize',
+                'sql': step['plan']['statements'][0]['text'],
+            }
+            for at, (step, _, _) in enumerate(recorded)
+        ]
+    )
+    assert len(recorded) == 16 + fresh
     assert len(reference['statements']) == 16
-    ours = recorded[10 + _READ_AS_IT_STANDS :]
+    ours = recorded[10 + fresh :]
     theirs = reference['statements'][10:]
     bindings = iter(reference['bindings'])
     requests = [step['request']['request'] for step, _, _ in ours]

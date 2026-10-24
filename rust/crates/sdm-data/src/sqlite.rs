@@ -790,6 +790,7 @@ fn read(
                             },
                             columns: vec![],
                             index: Some(name.clone()),
+                            enforced: true,
                         });
                     }
                 }

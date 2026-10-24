@@ -506,6 +506,7 @@ fn read(part: DescribePart, batches: &[RecordBatch]) -> Result<CatalogAnswer, Co
                         },
                         columns: columns.into_iter().map(|(_, c)| c).collect(),
                         index: None,
+                        enforced: true,
                     }
                 })
                 .collect();

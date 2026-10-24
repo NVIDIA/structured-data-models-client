@@ -189,6 +189,7 @@ pub(crate) fn keys(
                 kind: text(kinds, row).map_or(KeyKind::Other, |k| kind_of(&k)),
                 columns: names(lists, row),
                 index: None,
+                enforced: true,
             });
         }
     }

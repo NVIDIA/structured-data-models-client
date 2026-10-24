@@ -1636,6 +1636,10 @@ impl DataLayer for Changed {
     fn source_database(&self, provider: &ProviderChoice) -> Option<&'static str> {
         sdm_data::Data::new().source_database(provider)
     }
+
+    fn reads_tables_as_they_stand(&self, provider: &ProviderChoice) -> bool {
+        sdm_data::Data::new().reads_tables_as_they_stand(provider)
+    }
 }
 
 /// DuckDB's index answer, in its own catalog's shape: one row per index

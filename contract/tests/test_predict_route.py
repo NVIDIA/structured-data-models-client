@@ -56,28 +56,6 @@ REFERENCE = next((ROOT / 'contract/reference').glob('*.jsonl'))
 PINNED = ROOT / 'contract/pinned/base.regression.core.json'
 
 
-#: The statements the core runs reading each of base.regression's two
-#: tables as the source holds it at each materialize, its catalog, keys and
-#: preview, which the reference does not run again after from_source (the
-#: owner's plan B, T3.4, register P3A-1).
-_READ_AS_IT_STANDS = 6
-
-
-def _as_the_reference_counts(projection: dict[str, Any]) -> dict[str, Any]:
-    r"""A core observation's projection, its query log's count of
-    statements without the plan B reads."""
-    log = projection.get('query_log')
-    if isinstance(log, dict) and 'statements' in log:
-        projection = {
-            **projection,
-            'query_log': {
-                **log,
-                'statements': log['statements'] - _READ_AS_IT_STANDS,
-            },
-        }
-    return projection
-
-
 def _module(name: str) -> ModuleType:
     if name in sys.modules:
         return sys.modules[name]
@@ -150,9 +128,7 @@ def test_base_regression_completes_a_model_request_and_its_result_on_the_core(
         'prediction',
     ]
     assert core['public']['result'] == reference['public']['result']
-    assert _as_the_reference_counts(
-        capture_check.projection(core)
-    ) == capture_check.projection(reference)
+    assert capture_check.projection(core) == capture_check.projection(reference)
 
     # The request the endpoint received is the call the core wrote, and the
     # state predict started with is the one materialize answered.

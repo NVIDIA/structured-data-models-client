@@ -816,7 +816,7 @@ fn base_regression_s_statements_return_the_reference_s_results() {
         .as_array()
         .unwrap()
         .clone();
-    let mut ours = driver["capture"]["statements"].as_array().unwrap().clone();
+    let ours = driver["capture"]["statements"].as_array().unwrap().clone();
     let per_stage = |statements: &[Value]| -> Vec<(String, usize)> {
         ["from_source", "materialize", "predict"]
             .iter()
@@ -831,26 +831,17 @@ fn base_regression_s_statements_return_the_reference_s_results() {
         ("materialize".to_owned(), 6),
         ("predict".to_owned(), 0),
     ];
-    // Each materialize reads each table as the source holds it at that run
-    // (the owner's plan B, T3.4, register P3A-1): its catalog, its keys and
-    // its preview, six statements before the reference's six, which read
-    // what the description read.
-    const FRESH: usize = 6;
-    let first = ours
-        .iter()
-        .position(|s| s["stage"] == "materialize")
-        .expect("a materialize statement");
-    let fresh: Vec<Value> = ours.drain(first..first + FRESH).collect();
-    assert!(
-        fresh.iter().all(|s| s["stage"] == "materialize"),
-        "{fresh:?}"
-    );
+    // The reads plan B adds taken out (register P3A-1): two tables' catalog,
+    // keys and preview; every statement after them is the reference's.
+    let fresh = sdm_testkit::plan_b::reads_as_it_stands(&ours);
+    assert_eq!(fresh, 6);
+    let ours = sdm_testkit::plan_b::as_the_old_client_ran(&ours);
     assert_eq!(per_stage(&ours), counts);
     assert_eq!(per_stage(&theirs), counts);
     // The record is complete: DuckDB logged the same statements, and the
     // three bindings, and every text it logs as written is the one run.
     let logged = &driver["query_log"];
-    assert_eq!(logged["statements"], 16 + FRESH);
+    assert_eq!(logged["statements"], 16 + fresh as u64);
     assert_eq!(logged["bindings"], 3);
     // Of the six read again, the four whose text DuckDB logs as written.
     assert_eq!(logged["compared"], 14 + 4);
@@ -1400,10 +1391,11 @@ fn a_materializer_s_later_calls_skip_what_its_first_read() {
     let loaded = case::load(&[contract().join("cases/s1/base.regression.json")]).unwrap();
     let bases = bases::load(&contract().join("bases.yaml")).unwrap();
     let calls = host::materialize_repeatedly(&loaded[0].case, &bases, 3).unwrap();
+    // The reads plan B adds taken out (register P3A-1).
     let kinds: Vec<Vec<String>> = calls
         .iter()
         .map(|call| {
-            call.fetches
+            sdm_testkit::plan_b::requests_as_the_old_client_made(&call.fetches)
                 .iter()
                 .map(|f| f["request"]["request"].as_str().unwrap().to_owned())
                 .collect()
@@ -1462,8 +1454,9 @@ fn a_sampler_state_the_core_refuses_is_dropped_on_its_word() {
         };
         assert_eq!(fields["field"], field);
         assert!(calls[0].materialized.is_none(), "{field}");
-        let reads: Vec<&str> = calls[1]
-            .fetches
+        // The reads plan B adds taken out (register P3A-1).
+        let fetches = sdm_testkit::plan_b::requests_as_the_old_client_made(&calls[1].fetches);
+        let reads: Vec<&str> = fetches
             .iter()
             .map(|f| f["request"]["request"].as_str().unwrap())
             .collect();

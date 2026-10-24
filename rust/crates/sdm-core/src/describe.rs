@@ -757,22 +757,18 @@ async fn as_it_stands(asker: &Asker, held: &HeldSchema) -> Result<SourceDescript
             .iter()
             .filter(|t| t.source == *relation)
             .collect();
-        let mut columns: Vec<String> = Vec::new();
-        for column in tables.iter().flat_map(|t| &t.columns) {
-            if !columns.contains(&column.name) {
-                columns.push(column.name.clone());
-            }
-        }
+        // The whole table, every column its catalog lists and its keys, as
+        // `describe_source` reads it and the reference's engine reads a
+        // table (`sources.py:126-175`); the schema's columns are taken from
+        // it below.
         let named = NamedTable {
             name: tables[0].name.clone(),
             source: relation.clone(),
-            columns: Some(columns),
+            columns: None,
         };
         let read = crate::discover::table(asker, &named, true, None).await?;
-        let rows: usize = read.preview.batches.iter().map(|b| b.num_rows()).sum();
-        if rows == 0 {
-            return Err(infer::empty_table(&asker.read_as(relation)));
-        }
+        // Which columns the source holds is its catalog's to say, before
+        // its rows are read.
         for table in &tables {
             if let Some(column) = table
                 .columns
@@ -785,6 +781,10 @@ async fn as_it_stands(asker: &Asker, held: &HeldSchema) -> Result<SourceDescript
                     &asker.read_as(relation),
                 ));
             }
+        }
+        let rows: usize = read.preview.batches.iter().map(|b| b.num_rows()).sum();
+        if rows == 0 {
+            return Err(infer::empty_table(&asker.read_as(relation)));
         }
         let facts = crate::discover::facts_read(&tables[0].name, relation, read)?;
         for table in &tables {

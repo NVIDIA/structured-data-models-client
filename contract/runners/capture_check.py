@@ -458,9 +458,33 @@ def _payloads(public: dict[str, Any]) -> list[Any]:
     ]
 
 
+def _reads_as_it_stands(observation: dict[str, Any]) -> int:
+    r"""The reads plan B adds to ``observation``'s statements
+    (``scripts/rust_core/compare.py``'s ``reads_as_it_stands``, the one
+    rule, register P3A-1)."""
+    import importlib.util
+
+    capture = observation['driver'].get('capture')
+    if not capture:
+        return 0
+    path = Path(__file__).resolve().parents[2] / 'scripts/rust_core/compare.py'
+    spec = importlib.util.spec_from_file_location('compare', path)
+    assert spec is not None and spec.loader is not None
+    compare = sys.modules.get('compare') or importlib.util.module_from_spec(
+        spec
+    )
+    if 'compare' not in sys.modules:
+        sys.modules['compare'] = compare
+        spec.loader.exec_module(compare)
+    return int(compare.reads_as_it_stands(capture['statements']))
+
+
 def projection(observation: dict[str, Any]) -> dict[str, Any]:
-    r"""What the capture must not change of one observation."""
+    r"""What the capture must not change of one observation: its query
+    log's statements counted without the reads plan B adds
+    (:func:`_reads_as_it_stands`)."""
     public = observation['public']
+    logged = observation['driver']['query_log']
     return {
         'outcome': observation['outcome'],
         'warnings': observation['host']['warnings'],
@@ -468,10 +492,11 @@ def projection(observation: dict[str, Any]) -> dict[str, Any]:
         'payloads': _payloads(public),
         'result': public['result'],
         'query_log': None
-        if observation['driver']['query_log'] is None
+        if logged is None
         else {
-            key: observation['driver']['query_log'][key]
-            for key in ('statements', 'bindings')
+            'statements': logged['statements']
+            - _reads_as_it_stands(observation),
+            'bindings': logged['bindings'],
         },
     }
 

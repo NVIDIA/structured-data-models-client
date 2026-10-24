@@ -156,15 +156,37 @@ pub fn named_dtype(name: &str) -> Option<Dtype> {
 
 /// Whether a column the caller gave the data type named `name` can be the
 /// source's column of type `source` (the owner's plan B, item 3, T3.4): the
-/// two of one kind ([`crate::assemble::join_family`] of each wire name), a
-/// name no data type has, or the language's `unsupported`, taking any.
+/// two of one kind ([`kind`]); a name no data type has, or the language's
+/// `unsupported`, taking any.
 pub fn type_matches(name: &str, source: Dtype) -> bool {
     match named_dtype(name) {
         None | Some(Dtype::Unsupported) => true,
-        Some(given) => {
-            crate::assemble::join_family(given.wire_name())
-                == crate::assemble::join_family(source.wire_name())
-        }
+        Some(given) => kind(given) == kind(source),
+    }
+}
+
+/// The kind of value a column of `dtype` holds, which a caller's type and
+/// the source's must share ([`type_matches`]): a number of any width, a
+/// list of numbers, a list of strings, a time or a date, or each other type
+/// its own.
+fn kind(dtype: Dtype) -> &'static str {
+    match dtype {
+        Dtype::Int
+        | Dtype::Byte
+        | Dtype::Int16
+        | Dtype::Int32
+        | Dtype::Int64
+        | Dtype::Float
+        | Dtype::Float32
+        | Dtype::Float64 => "number",
+        Dtype::Intlist | Dtype::Floatlist => "numbers",
+        Dtype::Stringlist => "strings",
+        Dtype::Date | Dtype::Time => "time",
+        Dtype::String => "string",
+        Dtype::Bool => "bool",
+        Dtype::Binary => "binary",
+        Dtype::Timedelta => "timedelta",
+        Dtype::Unsupported => "unsupported",
     }
 }
 

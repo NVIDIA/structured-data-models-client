@@ -331,7 +331,6 @@ pub(crate) fn materialize(
             // provider and description (decision E52). Each refusal of the
             // state tells the host to drop it (decision E74), so its next
             // run starts afresh rather than being refused the same way.
-            // Whether the host takes the run's progress steps.
             let memo = match &request.sampler_state {
                 None => None,
                 Some(state) => {

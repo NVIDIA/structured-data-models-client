@@ -1392,13 +1392,57 @@ def test_a_time_past_nanoseconds_is_refused_on_both_routes_under_its_code(
 # --- T1.26b: the sampler's walk and its state ----------------------------------
 
 
-def _logged(connection: Any) -> int:
-    r"""How many statements DuckDB logged since its query log was turned
-    on, the log's own reads left out."""
+def _logged_texts(connection: Any) -> list[str]:
+    r"""The statements DuckDB logged since its query log was turned on, in
+    order, the log's own reads left out."""
     rows = connection.execute(
         "SELECT message FROM duckdb_logs WHERE type = 'QueryLog'"
     ).fetchall()
-    return sum(1 for (text,) in rows if text and 'duckdb_logs' not in text)
+    return [text for (text,) in rows if text and 'duckdb_logs' not in text]
+
+
+def _logged(connection: Any) -> int:
+    r"""How many statements DuckDB logged since its query log was turned
+    on, the log's own reads left out."""
+    return len(_logged_texts(connection))
+
+
+#: The statements each connection's ``Schema.from_source`` ran, by the
+#: connection's id: what a core run's reads of each table as it stands
+#: repeat (the owner's plan B).
+_DESCRIBED: dict[int, list[str]] = {}
+
+
+def _described_on(connection: Any) -> None:
+    r"""What ``connection`` logged so far, held as its description's
+    statements."""
+    _DESCRIBED[id(connection)] = _logged_texts(connection)
+
+
+def _ran(connection: Any, before: int) -> int:
+    r"""The statements ``connection`` logged since ``before``, the reads
+    plan B adds taken out by its one rule (``compare.py``'s
+    ``reads_as_it_stands``, register P3A-1), so a core run is held to the
+    old client's statements exactly."""
+    texts = _logged_texts(connection)
+    call = texts[before:]
+    statements = [
+        {'stage': 'from_source', 'sql': text}
+        for text in _DESCRIBED.get(id(connection), [])
+    ] + [{'stage': 'materialize', 'sql': text} for text in call]
+    return len(call) - _compare().reads_as_it_stands(statements)
+
+
+def _compare() -> Any:
+    if 'compare' not in sys.modules:
+        spec = importlib.util.spec_from_file_location(
+            'compare', ROOT / 'scripts/rust_core/compare.py'
+        )
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        sys.modules['compare'] = module
+        spec.loader.exec_module(module)
+    return sys.modules['compare']
 
 
 def _calls(
@@ -1416,7 +1460,7 @@ def _calls(
             except StructuredDataError:
                 pass
         warned = sum('Missing' in str(w.message) for w in caught)
-        made.append((_logged(connection) - before, warned))
+        made.append((_ran(connection, before), warned))
     return made
 
 
@@ -1437,26 +1481,13 @@ def _on_both_routes(
     return found
 
 
-#: The statements a core run reads each table of a DuckDB source with, as
-#: the source holds it at that run (the owner's plan B, T3.4, register
-#: P3A-1): its catalog, its keys and its preview.
-_READ_AS_IT_STANDS = 3
-
-
-def _as_it_stands(
-    calls: list[tuple[int, int]], tables: int
-) -> list[tuple[int, int]]:
-    r"""``calls``, the old route's statements per call, as the core runs
-    them: each call reading each of ``tables`` tables as it stands first."""
-    return [(n + _READ_AS_IT_STANDS * tables, w) for n, w in calls]
-
-
 def _shop_logged() -> tuple[Any, Schema]:
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         connection = _connection()
+        connection.execute("CALL enable_logging('QueryLog')")
         schema = Schema.from_source(DuckDBSource(connection))
-    connection.execute("CALL enable_logging('QueryLog')")
+    _described_on(connection)
     return connection, schema
 
 
@@ -1472,9 +1503,8 @@ def test_a_second_call_runs_the_reference_s_statements(
         query = PredictiveQuery(QUERY, schema)
         return _calls([query] * 3, connection, indices=[0, 1])
 
-    core, *old = _on_both_routes(monkeypatch, made)
-    assert core == _as_it_stands([(6, 1), (4, 0), (4, 0)], 2)
-    assert all(each == [(6, 1), (4, 0), (4, 0)] for each in old)
+    for found in _on_both_routes(monkeypatch, made):
+        assert found == [(6, 1), (4, 0), (4, 0)]
 
 
 def test_two_materializers_each_check_their_source_once(
@@ -1488,9 +1518,8 @@ def test_two_materializers_each_check_their_source_once(
         two = PredictiveQuery(QUERY, schema)
         return _calls([one, two, one, two], connection, indices=[0, 1])
 
-    core, *old = _on_both_routes(monkeypatch, made)
-    assert core == _as_it_stands([(6, 1), (6, 1), (4, 0), (4, 0)], 2)
-    assert all(each == [(6, 1), (6, 1), (4, 0), (4, 0)] for each in old)
+    for found in _on_both_routes(monkeypatch, made):
+        assert found == [(6, 1), (6, 1), (4, 0), (4, 0)]
 
 
 def test_a_call_the_core_refuses_before_its_check_leaves_it_to_the_next(
@@ -1505,16 +1534,10 @@ def test_a_call_the_core_refuses_before_its_check_leaves_it_to_the_next(
     connection, schema = _shop_logged()
     query = PredictiveQuery(QUERY, schema)
     assert _calls([query], connection, indices=[0, 1], num_hops=7) == [(0, 0)]
-    assert _calls([query], connection, indices=[0, 1]) == _as_it_stands(
-        [(6, 1)], 2
-    )
+    assert _calls([query], connection, indices=[0, 1]) == [(6, 1)]
     other = PredictiveQuery(QUERY, schema)
-    assert _calls([other], connection, indices=[None, 1]) == _as_it_stands(
-        [(1, 1)], 2
-    )
-    assert _calls([other], connection, indices=[0, 1]) == _as_it_stands(
-        [(5, 0)], 2
-    )
+    assert _calls([other], connection, indices=[None, 1]) == [(1, 1)]
+    assert _calls([other], connection, indices=[0, 1]) == [(5, 0)]
 
 
 #: A source whose order lines refer to items as well as users, the items
@@ -1659,6 +1682,7 @@ def test_every_foreign_key_looked_up_null_is_the_reference_s_request(
             connection = _connection(
                 *_DEEPER, 'UPDATE orders SET item_id = NULL'
             )
+            connection.execute("CALL enable_logging('QueryLog')")
             schema = Schema.from_source(
                 DuckDBSource(connection),
                 primary_keys={
@@ -1667,13 +1691,13 @@ def test_every_foreign_key_looked_up_null_is_the_reference_s_request(
                     'items': 'item_id',
                 },
             )
-        connection.execute("CALL enable_logging('QueryLog')")
+        _described_on(connection)
         query = PredictiveQuery(QUERY, schema)
         return _calls([query, query], connection, indices=[0, 1])
 
-    core, *old = _on_both_routes(monkeypatch, made)
-    assert core == _as_it_stands([(7, 1), (5, 0)], 3)
-    assert all(each == [(7, 1), (5, 0)] for each in old)
+    found = _on_both_routes(monkeypatch, made)
+    assert found[0] == [(7, 1), (5, 0)]
+    assert all(each == found[0] for each in found)
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     core = _deeper('UPDATE orders SET item_id = NULL', edit=False)._payloads[0]
     monkeypatch.delenv(_routing.ENVIRONMENT)
@@ -1718,6 +1742,7 @@ def _editable() -> tuple[Any, Schema]:
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         connection = _connection(*_EDITABLE)
+        connection.execute("CALL enable_logging('QueryLog')")
         schema = Schema.from_source(
             DuckDBSource(connection),
             primary_keys={
@@ -1731,7 +1756,7 @@ def _editable() -> tuple[Any, Schema]:
                 Relationship('extra', 'user_id', 'users', 'user_id'),
             ],
         )
-    connection.execute("CALL enable_logging('QueryLog')")
+    _described_on(connection)
     return connection, schema
 
 
@@ -1752,7 +1777,7 @@ def _edited_between_calls(edit: str) -> list[tuple[int, int, str]]:
             )._payloads[0]
         made.append(
             (
-                _logged(connection) - before,
+                _ran(connection, before),
                 sum('Missing' in str(w.message) for w in caught),
                 json.dumps(payload, sort_keys=True, default=str),
             )
@@ -1774,9 +1799,10 @@ def test_a_schema_edited_between_two_calls_is_sampled_as_edited(
     # sends.
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     core = _edited_between_calls(edit)
-    assert [made[:2] for made in core] == _as_it_stands(
-        [(7, 1), (6, 1) if edit == 'link' else (7, 1)], 3
-    )
+    assert [made[:2] for made in core] == [
+        (7, 1),
+        (6, 1) if edit == 'link' else (7, 1),
+    ]
     assert core[0][2] != core[1][2]
     monkeypatch.delenv(_routing.ENVIRONMENT)
     if importlib.util.find_spec('sdm_relational_engine') is None:
@@ -1784,10 +1810,7 @@ def test_a_schema_edited_between_two_calls_is_sampled_as_edited(
             _edited_between_calls(edit)
         return
     old = _edited_between_calls(edit)
-    # The same request; the core read each of the three tables as it
-    # stands first (plan B).
-    assert old[0][2] == core[0][2]
-    assert _as_it_stands([old[0][:2]], 3) == [core[0][:2]]
+    assert old[0] == core[0]
     assert old[1][:2] == (5, 0)
     assert old[1][2] == old[0][2]
     with warnings.catch_warnings():
@@ -1823,9 +1846,10 @@ def test_a_state_the_core_refuses_is_not_handed_back_again(
         query.materialize(indices=[0, 1], anchor_time=ANCHOR)
     assert refused.value.code in ('INVALID_REQUEST', 'INVALID_MESSAGE')
     assert 'held' not in query._relational_materializer._core_sampler_state
-    assert _calls([query, query], connection, indices=[0, 1]) == _as_it_stands(
-        [(6, 1), (4, 0)], 2
-    )
+    assert _calls([query, query], connection, indices=[0, 1]) == [
+        (6, 1),
+        (4, 0),
+    ]
 
 
 @pytest.mark.parametrize('said', [True, False])

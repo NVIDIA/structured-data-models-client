@@ -262,8 +262,9 @@ pub struct InferredTable {
     /// The table's time column: inference's choice until the caller names
     /// one (`crate::assemble::apply_keys_and_times`).
     pub time_column: Option<String>,
-    /// The column sets the catalog declares a primary or unique key over,
-    /// which the source refuses to repeat.
+    /// The column sets the catalog declares a primary or unique key over
+    /// that the source enforces, refusing to repeat them
+    /// ([`CatalogKey::enforced`]).
     pub unique: Vec<BTreeSet<String>>,
 }
 
@@ -492,21 +493,26 @@ struct Keyed {
 
 impl Keyed {
     fn of(catalog: &[CatalogColumn], constraints: &[CatalogKey]) -> Keyed {
-        let single = |kinds: &[KeyKind]| -> BTreeSet<String> {
+        let single = |kinds: &[KeyKind], enforced: bool| -> BTreeSet<String> {
             constraints
                 .iter()
                 .filter(|c| kinds.contains(&c.kind) && c.columns.len() == 1)
+                .filter(|c| c.enforced || !enforced)
                 .map(|c| c.columns[0].clone())
                 .collect()
         };
         // A column the source keeps unique by itself (a SQLite rowid alias)
         // is unique as a key of its own is; a partial unique index keeps its
         // one column unique as the reference reads it (SQLite's
-        // `unique_keys`), but makes no key of several.
-        let mut unique = single(&[KeyKind::Primary, KeyKind::Unique, KeyKind::PartialUnique]);
+        // `unique_keys`), but makes no key of several. A key the source
+        // declares and does not enforce (Databricks') keeps nothing unique.
+        let mut unique = single(
+            &[KeyKind::Primary, KeyKind::Unique, KeyKind::PartialUnique],
+            true,
+        );
         unique.extend(catalog.iter().filter(|c| c.unique).map(|c| c.name.clone()));
         Keyed {
-            primary: single(&[KeyKind::Primary]),
+            primary: single(&[KeyKind::Primary], false),
             unique,
         }
     }
@@ -607,7 +613,7 @@ pub fn preview_keyed(
     let kept_unique = catalog.iter().filter(|c| c.unique).map(|c| c.name.clone());
     let unique = constraints
         .iter()
-        .filter(|c| matches!(c.kind, KeyKind::Primary | KeyKind::Unique))
+        .filter(|c| matches!(c.kind, KeyKind::Primary | KeyKind::Unique) && c.enforced)
         .map(|c| c.columns.iter().cloned().collect::<BTreeSet<_>>())
         .chain(kept_unique.map(|name| BTreeSet::from([name])))
         .collect::<Vec<_>>();

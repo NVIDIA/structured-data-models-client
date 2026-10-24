@@ -665,9 +665,11 @@ fn statements(observed: &Observed) -> (Value, bool) {
         .as_array()
         .cloned()
         .unwrap_or_default();
+    // The reads plan B adds taken out (register P3A-1).
+    let compared = sdm_testkit::plan_b::as_the_old_client_ran(&recorded);
     let mut counted = Map::new();
     for stage in COUNTED {
-        let n = recorded.iter().filter(|s| s["stage"] == stage).count();
+        let n = compared.iter().filter(|s| s["stage"] == stage).count();
         counted.insert(stage.to_owned(), json!(n));
     }
     let logged = &driver["query_log"];

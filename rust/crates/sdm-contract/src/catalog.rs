@@ -113,6 +113,13 @@ pub struct CatalogKey {
     /// (`index_columns`), as SQLite's catalog lists a unique index; the
     /// key is read whatever its kind, as the reference reads it.
     pub index: Option<String>,
+    /// Whether the source holds its rows to the key: a primary or unique
+    /// key DuckDB, SQLite or Postgres declares is enforced; one Databricks
+    /// declares is informational, never enforced, so its rows may repeat a
+    /// value (contract v28, T3.4). Only an enforced key lets a check of
+    /// the key's rows, or a lookup's removal of repeated rows, be skipped,
+    /// as the reference's engine reads its `_unique_constraints`.
+    pub enforced: bool,
 }
 
 /// One row of a declared foreign key, as the dialect's reader gives it:

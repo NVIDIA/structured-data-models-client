@@ -10,10 +10,11 @@
 //! columns asked, with no inference, links or key counting.
 //!
 //! `describe_source` infers each table from what [`table`] reads;
-//! `materialize` reads by it each table its schema has not kept, in full
-//! (`describe::initialize`), and takes each column's facts from that read
-//! ([`facts_read`]), as `describe_source` would have read them, and nothing
-//! of a table the schema kept. The cost, per table read: the `columns` and
+//! `materialize` reads by it every table of a source as it stands at each
+//! run (`describe::initialize`, the owner's plan B), and a host provider's
+//! columns that hold no facts ([`facts`]), taking each column's facts from
+//! that read ([`facts_read`]), as `describe_source` would have read them.
+//! The cost, per table read: the `columns` and
 //! `keys` catalog requests (with any `index_columns` read), one preview,
 //! and one `column_ranges` read only where the preview may have left rows
 //! unread and a big integer needs widening; requests of one table are
@@ -198,6 +199,16 @@ pub(crate) async fn table(
         }
     }
     let constraints = key_columns(asker, &table.source, keys).await?;
+    if previewed.is_none() && declared.is_empty() {
+        // None of the columns kept is the source's: nothing to preview, and
+        // the caller says which it lacks.
+        return Ok(Discovered {
+            declared,
+            constraints,
+            preview: ArrowData::new(Arc::new(arrow_schema::Schema::empty()), Vec::new()),
+            big_types: Vec::new(),
+        });
+    }
     if let Some(previewed) = previewed {
         // Only the columns asked are previewed, once their keys are read
         // over every column the schema keeps.

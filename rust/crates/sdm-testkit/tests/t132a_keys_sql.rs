@@ -103,7 +103,10 @@ fn observed() -> Vec<(Case, Observed)> {
 fn statements(seen: &Observed) -> BTreeMap<String, Vec<String>> {
     let mut out: BTreeMap<String, Vec<String>> = BTreeMap::new();
     let driver = seen.driver.as_ref().expect("a driver record");
-    for statement in driver["capture"]["statements"].as_array().unwrap() {
+    // The reads plan B adds taken out (register P3A-1).
+    for statement in &sdm_testkit::plan_b::as_the_old_client_ran(
+        driver["capture"]["statements"].as_array().unwrap(),
+    ) {
         out.entry(statement["stage"].as_str().unwrap().to_owned())
             .or_default()
             .push(statement["sql"].as_str().unwrap().to_owned());
