@@ -4094,6 +4094,13 @@ def capture_line(
         'recording': {
             'commit': observation['identity']['commit']['sha'],
             'reference': (reference.get('commit') or {}).get('sha'),
+            # Why a tree that was not clean may stand (capture_check.py's
+            # dirty-tree rule), as the recording run is given it.
+            **(
+                {'excuse': os.environ['SDM_RECORD_EXCUSE']}
+                if os.environ.get('SDM_RECORD_EXCUSE')
+                else {}
+            ),
         },
         'versions': versions,
         'zone': live.zone,

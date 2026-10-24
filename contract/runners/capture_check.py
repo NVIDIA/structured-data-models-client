@@ -738,6 +738,31 @@ def _duck_tables(
         connection.close()
 
 
+def _dirty_problems(
+    key: Any, identity: dict[str, Any], recording: dict[str, Any]
+) -> list[str]:
+    r"""A capture recorded from a recording or reference tree that was not
+    clean (the reference line's ``identity``), unless the recording names
+    why (``recording.excuse``, a non-empty text): it might not be the code
+    its commit names (Claude T3.20 r1 P1-2)."""
+    trees = {
+        'recording': identity.get('commit'),
+        'reference': (identity.get('reference') or {}).get('commit'),
+    }
+    dirty = [
+        name
+        for name, commit in trees.items()
+        if commit is not None and commit.get('clean') is not True
+    ]
+    excuse = recording.get('excuse')
+    if not dirty or (isinstance(excuse, str) and excuse.strip()):
+        return []
+    return [
+        f'{key}: recorded from a tree that was not clean ({", ".join(dirty)})'
+        ', and the recording names no excuse'
+    ]
+
+
 def capture_problems(
     line: dict[str, Any],
     case: dict[str, Any],
@@ -793,6 +818,7 @@ def capture_problems(
         )
     if observation['identity']['runner'] != 'python-ref':
         problems.append(f"{key}: its reference line is not python-ref's")
+    problems.extend(_dirty_problems(key, observation['identity'], recording))
     captured = observation['driver']['capture']
     if captured is None:
         return [*problems, f'{key}: recorded with the capture off']
