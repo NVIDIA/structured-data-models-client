@@ -460,6 +460,32 @@ def test_t312_a_java_method_that_is_no_junit_test_claims_nothing() -> None:
             '    @Test\n'
             '    void nestedOne() {}\n'
             '  }\n'
+            '\n'
+            '  @Nested\n'
+            '  private class Hidden {\n'
+            '    @Test\n'
+            '    void hiddenOne() {}\n'
+            '  }\n'
+            '\n'
+            '  /*\n'
+            '  @Test\n'
+            '  void commentedOut() {}\n'
+            '  */\n'
+            '  // @Test\n'
+            '  // void lineCommented() {}\n'
+            '\n'
+            '  @Test\n'
+            '  @Disabled("later")\n'
+            '  void disabledOne() {}\n'
+            '\n'
+            '  @Nested\n'
+            '  @Disabled\n'
+            '  class Off {\n'
+            '    @Test\n'
+            '    void inADisabledClass() {}\n'
+            '  }\n'
+            '\n'
+            '  String text = "\n@Test\nvoid inAString() {}";\n'
             '}\n'
         }
     )
@@ -473,10 +499,25 @@ def test_t312_a_java_method_that_is_no_junit_test_claims_nothing() -> None:
         'staticOne',
         'abstractOne',
         'innerOne',
+        # Codex T3.12 r3 P1-2 and Claude r3 P3: a private @Nested class, a
+        # commented-out method, a @Disabled method or class, a string.
+        'hiddenOne',
+        'commentedOut',
+        'lineCommented',
+        'disabledOne',
+        'inADisabledClass',
+        'inAString',
     ):
         assert coverage._test_problem(f'{path}#{never}', tree, 'java') == (
             'no test the tree defines'
         ), never
+    disabled = 'java/src/test/java/com/nvidia/sdm/Off.java'
+    tree = _Tree(
+        {disabled: '@Disabled\nclass Off {\n  @Test\n  void aTest() {}\n}\n'}
+    )
+    assert coverage._test_problem(f'{disabled}#aTest', tree, 'java') == (
+        'no test the tree defines'
+    )
     abstract = 'java/src/test/java/com/nvidia/sdm/Base.java'
     tree = _Tree(
         {abstract: 'abstract class Base {\n  @Test\n  void aTest() {}\n}\n'}
