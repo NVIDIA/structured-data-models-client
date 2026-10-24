@@ -289,7 +289,35 @@ async fn spelled<const N: usize>(
                 request
             })
             .collect();
-        let replies = crate::describe::replies(asker, asked.clone()).await?;
+        // Reads whose plans are the same statements are asked once, each
+        // read from the one answer: Snowflake's DESCRIBE TABLE answers a
+        // table's columns and its keys, which the reference reads from one
+        // statement (`SNOW/table.py:123-170`).
+        let plans: Vec<_> = asked.iter().map(|request| asker.planned(request)).collect();
+        let first: Vec<usize> = (0..asked.len())
+            .map(|i| {
+                (0..i)
+                    .find(|&j| plans[j].is_some() && plans[j] == plans[i])
+                    .unwrap_or(i)
+            })
+            .collect();
+        let distinct: Vec<DataRequest> = asked
+            .iter()
+            .zip(&first)
+            .enumerate()
+            .filter(|(i, (_, first))| *i == **first)
+            .map(|(_, (request, _))| request.clone())
+            .collect();
+        let answered = crate::describe::replies(asker, distinct).await?;
+        // The answer of request `i` is that of the distinct request it
+        // shares its plan with, the distinct ones answered in order.
+        let replies: Vec<Reply> = first
+            .iter()
+            .map(|&at| {
+                let distinct_before = (0..at).filter(|&j| first[j] == j).count();
+                answered[distinct_before].clone()
+            })
+            .collect();
         let missing = replies.iter().any(|reply| {
             matches!(reply, Reply::Fetch(FetchResult::Error(error)) if asker.failure(error).not_found)
         });

@@ -9567,33 +9567,6 @@ entries:
     Approver: owner. The semantic model reaches the core with T3.5; T3.6
     writes its read statement and reader (t36_snowflake.rs).
 
-- id: P3D-10
-  title: The core reads a Snowflake table's DESCRIBE TABLE twice per spelling, for its columns and for its keys
-  kind: change
-  old_behavior: >-
-    The reference reads one DESCRIBE TABLE per spelling tried and takes the
-    columns, the primary key and the unique flags from it
-    (SNOW/table.py:123-170).
-  new_behavior: >-
-    On the core route, which only SDM_CORE_ROUTES forces in this build, a
-    table's columns and its keys are two catalog reads asked together in
-    one step, each Snowflake's DESCRIBE TABLE of the same spelling, so the
-    statement is sent twice; the answers are the same rows, read as the old
-    client reads them.
-  affected_inputs: >-
-    Every Schema.from_source and PredictiveQuery.materialize over a
-    SnowflakeSource on the core route (one more metadata statement per table
-    and spelling, in the warehouse's query history).
-  cases: [T3.6]
-  refs: [T3.6, 'old-behaviour/T3.6-snowflake.md row 16']
-  status: proposed
-  approved_by: null
-  decision_ref: null
-  notes: >-
-    Approver: reviewer. No answer differs; the statement count does. Reading
-    the keys from the columns' answer would take a contract change (a
-    catalog answer of columns carrying a key the source does not enforce).
-
 - id: P3D-11
   title: The core reads a Snowflake row count's listing back with RESULT_SCAN, one statement more than the old client sends
   kind: change

@@ -337,6 +337,21 @@ impl Asker {
         })
     }
 
+    /// The plan the run's provider answers `request` with, as
+    /// [`Asker::fetch`] would ask it; `None` where it would not ask a plan
+    /// (no provider, the in-memory fallback, a refusal).
+    pub(crate) fn planned(&self, request: &DataRequest) -> Option<FetchPlan> {
+        match self
+            .data
+            .as_ref()?
+            .route(&self.guarded(request.clone()))
+            .ok()?
+        {
+            Route::Plan(plan) => Some(plan),
+            Route::Fallback(_) => None,
+        }
+    }
+
     /// [`Asker::fetch`], the answer held to `budget` as each page arrives.
     pub(crate) fn fetch_within(
         &self,
