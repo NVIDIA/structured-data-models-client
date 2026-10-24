@@ -265,6 +265,7 @@ struct Replayed {
     ended: Result<SourceDescription, sdm_contract::CoreError>,
     requests: Vec<DataRequest>,
     warnings: Vec<sdm_contract::CoreWarning>,
+    notes: Vec<sdm_contract::ops::ViewNote>,
 }
 
 /// An answer of a test's own to the requests it names.
@@ -350,6 +351,7 @@ fn replay_spec(document: &Json, case: &Json, edits: &Edits, strict: bool, spec: 
         ended,
         requests,
         warnings: run.take_warnings(),
+        notes: Vec::new(),
     };
     loop {
         let step = match run.next() {
@@ -366,7 +368,9 @@ fn replay_spec(document: &Json, case: &Json, edits: &Edits, strict: bool, spec: 
                     panic!("no description attached");
                 };
                 let description = serde_json::from_slice(&bytes).unwrap();
-                return ended(&mut run, at, requests, None, Ok(description));
+                let mut replayed = ended(&mut run, at, requests, None, Ok(description));
+                replayed.notes = described.notes;
+                return replayed;
             }
             Step::Fetch {
                 requests: asked_now,
@@ -1126,6 +1130,17 @@ fn logical_table_aliases_and_swapped_names_survive_describe_and_materialize() {
             "primary_keys": {}, "time_columns": {}
         });
         let replayed = replay_spec(&document, recorded, &Edits::default(), true, spec);
+        assert!(
+            replayed
+                .notes
+                .iter()
+                .any(|note| note.table.as_deref() == Some(transactions))
+        );
+        assert!(replayed.notes.iter().all(|note| {
+            note.table
+                .as_deref()
+                .is_none_or(|table| table == buyers || table == transactions)
+        }));
         let description = replayed.ended.unwrap();
         assert_eq!(
             description
