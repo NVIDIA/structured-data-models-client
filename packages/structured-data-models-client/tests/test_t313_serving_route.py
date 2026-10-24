@@ -426,7 +426,8 @@ def test_an_answer_the_old_route_cannot_read_is_its_transport_error(
     assert core.code == old.code
     if body == {'predictions': [{'response_json': '[1]'}]}:
         assert core.details['got'] == 'array'
-        assert old.details['got'] == 'list'
+        assert 'got list' in str(old)
+        assert old.details == {}
     else:
         assert str(core) == str(old)
 
