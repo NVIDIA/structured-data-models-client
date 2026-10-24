@@ -114,7 +114,9 @@ public final class PredictiveQuery {
     attachments.put(2, Host.attachment(text));
     attachments.put(3, Indices.column(options.indices(), ArrowData.allocator()));
     attachments.put(5, Host.attachment(values(options)));
-    Map<String, Function<Map<String, Object>, Object>> held = Map.of("query", fields -> text);
+    Map<String, Function<Map<String, Object>, Object>> held =
+        new LinkedHashMap<>(Providers.held(schema.source()));
+    held.put("query", fields -> text);
     try (Host.Finished finished =
         Host.run(operation, attachments, new Host.Call(chosen.provider(), null, held))) {
       Results.Gathered gathered =

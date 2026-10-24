@@ -83,6 +83,9 @@ public final class DatabricksSource implements Source {
 
   @Override
   public String toString() {
-    return "DatabricksSource(" + connection + ", " + catalog + ", " + schema + ")";
+    String source = "DatabricksSource(" + connection + ", " + catalog + ", " + schema + ")";
+    return semanticModel == null ? source
+        : "SemanticModel(" + semanticModel + " in " + source
+            + ", trustExpressions=" + trustExpressions + ")";
   }
 }

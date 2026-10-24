@@ -14,6 +14,7 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 
 /**
  * The provider choice a run over a source names, and the provider answering its fetches, as the
@@ -26,6 +27,16 @@ public final class Providers {
 
   /** The choice and provider of one source. */
   public record Chosen(Map<String, Object> choice, Host.Provider provider) {}
+
+  /** Host values named by the core's source and semantic-model sentences. */
+  public static Map<String, Function<Map<String, Object>, Object>> held(Source source) {
+    Map<String, Function<Map<String, Object>, Object>> held = new LinkedHashMap<>();
+    held.put("source", fields -> source);
+    if (source instanceof DatabricksSource databricks && databricks.semanticModel().isPresent()) {
+      held.put("semantic_model", fields -> source);
+    }
+    return Map.copyOf(held);
+  }
 
   public static Chosen of(Source source) {
     JdbcProvider.Driver driver;

@@ -9,6 +9,7 @@ import com.nvidia.sdm.internal.Json;
 import com.nvidia.sdm.internal.NativeCore;
 import com.nvidia.sdm.internal.Providers;
 import com.nvidia.sdm.internal.Results;
+import com.nvidia.sdm.internal.Wording;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -41,11 +42,18 @@ public final class Schema {
   private final List<Table> tables;
   private final List<Relationship> relationships;
   private final Source source;
+  private final List<String> conversionNotes;
 
   private Schema(List<Table> tables, List<Relationship> relationships, Source source) {
+    this(tables, relationships, source, List.of());
+  }
+
+  private Schema(List<Table> tables, List<Relationship> relationships, Source source,
+      List<String> conversionNotes) {
     this.tables = List.copyOf(tables);
     this.relationships = List.copyOf(relationships);
     this.source = source;
+    this.conversionNotes = List.copyOf(conversionNotes);
   }
 
   /** Every table {@code source} holds, described on the core, keys checked. */
@@ -76,12 +84,13 @@ public final class Schema {
     attachments.put(1, Host.attachment(options.spec()));
     // The source, which only this host holds, as the core's sentence of a source with no table
     // names it.
-    Map<String, Function<Map<String, Object>, Object>> held = Map.of("source", fields -> source);
+    Map<String, Function<Map<String, Object>, Object>> held = Providers.held(source);
     try (Host.Finished finished =
         Host.run(operation, attachments, new Host.Call(chosen.provider(), null, held))) {
       Results.Described described =
           (Results.Described) Results.expect(finished.result(), "describe_source");
-      return described(read(finished.bytes(described.description())), source);
+      return described(read(finished.bytes(described.description())), source)
+          .withConversionNotes(described.notes());
     }
   }
 
@@ -118,6 +127,28 @@ public final class Schema {
   /** The source its tables are in. */
   public Source source() {
     return source;
+  }
+
+  /** How a semantic model was converted, in the core's words, in source order. */
+  public List<String> conversionNotes() {
+    return conversionNotes;
+  }
+
+  /** Renders describe's notes after caller overrides, as Python's host does. */
+  Schema withConversionNotes(List<Results.ViewNote> notes) {
+    List<String> said = new ArrayList<>();
+    for (Results.ViewNote note : notes) {
+      if (note.table() != null) {
+        Table named = tables.stream().filter(table -> table.name().equals(note.table()))
+            .findFirst().orElse(null);
+        if (named == null || (note.timeColumn() != null
+            && !note.timeColumn().equals(named.timeColumn().orElse(null)))) {
+          continue;
+        }
+      }
+      said.add(Wording.said(Map.of("sentence", note.sentence(), "fields", note.fields())));
+    }
+    return new Schema(tables, relationships, source, said);
   }
 
   // --- edits ----------------------------------------------------------------------------
@@ -226,7 +257,8 @@ public final class Schema {
     attachments.put(2, Host.attachment(edit));
     try (Host.Finished finished = Host.run(operation, attachments)) {
       Results.Edited edited = (Results.Edited) Results.expect(finished.result(), "edit_schema");
-      return held(read(finished.bytes(edited.schema())), source);
+      Schema changed = held(read(finished.bytes(edited.schema())), source);
+      return new Schema(changed.tables, changed.relationships, source, conversionNotes);
     }
   }
 
