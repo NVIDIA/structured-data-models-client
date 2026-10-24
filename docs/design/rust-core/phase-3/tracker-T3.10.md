@@ -25,6 +25,10 @@ The following existing comparison modules retain explicit legacy controls:
 
 The relational engine's own test suite selects the legacy route through its package-local fixture until Phase 5, as KO3-37 requires.
 Legacy recorder and benchmark branches also select legacy code explicitly, while preserving the caller's saved environment on exit where they previously did so.
+The smoke, null-link benchmark, real-data benchmark and key-rule probe use an explicitly empty selection for their old controls.
+The sampled-null recorder selects the requested route for every vector and restores the caller's setting after success or failure.
+The nested-schema and whole-table-time probes explicitly select legacy in their reference subprocesses too.
+Focused regressions audit the actual smoke's describe/materialize/predict calls, the other helpers' public source boundary and the recorder's consecutive vectors and environment restoration.
 The Python runner selects the requested route for every case, including consecutive `python-old` cases.
 No recorded expectation, observation, capture, comparison threshold or generated golden is rewritten.
 

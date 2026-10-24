@@ -478,7 +478,7 @@ def describe(dataset: Any, route: str) -> dict[str, Any]:
     if route == 'core':
         os.environ[_routing.ENVIRONMENT] = ','.join(base.core_routes())
     else:
-        os.environ.pop(_routing.ENVIRONMENT, None)
+        os.environ[_routing.ENVIRONMENT] = ''
     started = time.monotonic()
     try:
         schema = Schema.from_source(

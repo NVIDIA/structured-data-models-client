@@ -519,7 +519,7 @@ def build(
     if route == 'core':
         os.environ[_routing.ENVIRONMENT] = ','.join(core_routes())
     else:
-        os.environ.pop(_routing.ENVIRONMENT, None)
+        os.environ[_routing.ENVIRONMENT] = ''
     connection = dataset.connect()
     schema = Schema.from_source(
         DuckDBSource(connection),

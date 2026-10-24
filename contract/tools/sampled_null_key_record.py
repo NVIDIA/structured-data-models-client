@@ -252,8 +252,9 @@ def observe(vector: dict[str, Any]) -> dict[str, Any]:
 
 def observe_all(mode: str) -> dict[str, Any]:
     r"""Every vector on ``mode``'s route: ``python-ref`` and ``python-old``
-    as the environment has them, ``python-core`` forced onto the core's
-    DuckDB routes with each run's core operations recorded."""
+    explicitly legacy, ``python-core`` forced onto the core's DuckDB routes
+    with each run's core operations recorded. Restore the caller's routing
+    setting after the complete run, including a failed observation."""
     boundary = None
     routes: list[str] = []
     if mode == 'python-core':
@@ -267,18 +268,21 @@ def observe_all(mode: str) -> dict[str, Any]:
                 *_routing.PREDICT_DUCKDB,
             }
         )
+    previous = os.environ.get('SDM_CORE_ROUTES')
     observed = {}
-    for vector in VECTORS:
-        capture = boundary.reset() if boundary is not None else None
-        if routes:
+    try:
+        for vector in VECTORS:
+            capture = boundary.reset() if boundary is not None else None
             os.environ['SDM_CORE_ROUTES'] = ','.join(routes)
-        try:
             answer = observe(vector)
-        finally:
+            if capture is not None:
+                answer['operations'] = list(capture.operations)
+            observed[vector['id']] = answer
+    finally:
+        if previous is None:
             os.environ.pop('SDM_CORE_ROUTES', None)
-        if capture is not None:
-            answer['operations'] = list(capture.operations)
-        observed[vector['id']] = answer
+        else:
+            os.environ['SDM_CORE_ROUTES'] = previous
     return observed
 
 

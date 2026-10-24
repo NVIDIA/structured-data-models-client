@@ -326,7 +326,7 @@ def build_request(route: str) -> Any:
     if route == 'core':
         os.environ[_routing.ENVIRONMENT] = ','.join(case['routes'])
     else:
-        os.environ.pop(_routing.ENVIRONMENT, None)
+        os.environ[_routing.ENVIRONMENT] = ''
     connection = duckdb.connect()
     for statement in _shop():
         connection.execute(statement)

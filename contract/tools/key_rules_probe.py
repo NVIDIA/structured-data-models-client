@@ -132,7 +132,7 @@ def probe(source: dict[str, Any], route: str) -> dict[str, Any]:
     if route == 'core':
         os.environ[_routing.ENVIRONMENT] = ','.join(base.core_routes())
     else:
-        os.environ.pop(_routing.ENVIRONMENT, None)
+        os.environ[_routing.ENVIRONMENT] = ''
     connection = duckdb.connect()
     for statement in source['statements']:
         connection.execute(statement)
