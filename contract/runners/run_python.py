@@ -531,7 +531,9 @@ def warehouse_problem(case: dict[str, Any]) -> str | None:
     None (design choice 1): ``input.view`` and ``input.connect`` only on a
     case naming ``warehouses``; a view's kind kept by every leg named
     (:data:`VIEW_LEGS`); a connect path's case naming exactly its leg
-    (:data:`CONNECT_LEGS`). sdm-testkit's loader holds the same rules."""
+    (:data:`CONNECT_LEGS`); ``input.named_part`` only on a case naming
+    warehouses, none of them Lakebase, and no connect path. sdm-testkit's
+    loader holds the same rules."""
     given = case['input']
     legs = case.get('warehouses')
     if ('view' in given or 'connect' in given) and legs is None:
@@ -546,6 +548,13 @@ def warehouse_problem(case: dict[str, Any]) -> str | None:
     connect = given.get('connect')
     if connect is not None and legs != [CONNECT_LEGS[connect]]:
         return f'input/connect {connect} runs on {CONNECT_LEGS[connect]} alone'
+    if 'warehouse_setup' in given and legs is None:
+        return 'input/warehouse_setup needs warehouses'
+    if 'named_part' in given:
+        if legs is None or connect is not None:
+            return 'input/named_part needs warehouses and no connect'
+        if 'lakebase' in legs:
+            return 'input/named_part on lakebase, whose source names one part'
     return None
 
 
@@ -2399,7 +2408,7 @@ class _Captured:
             }
             kept = answer
         statement['results'].append(result)
-        _keep(self._log, statement, kept, names)
+        _keep(self._log, statement, kept, names, cursor=self._driver)
         return answer
 
     def fetchall(self, *arguments: Any, **keywords: Any) -> Any:
@@ -2755,7 +2764,7 @@ PLACEHOLDER = re.compile(r'\{([a-z][a-z0-9_]*)\}')
 #: The parts of a case's ``input`` the placeholders are resolved in: what
 #: names the warehouse's objects. ``base`` and ``setup`` build the data in a
 #: local DuckDB, and ``pql`` and ``materialize`` name no warehouse object.
-_RESOLVED_IN = ('from_source', 'edits', 'view')
+_RESOLVED_IN = ('from_source', 'edits', 'view', 'warehouse_setup')
 #: The environment variable naming the live configuration file, a JSON file
 #: outside the repository that only the orchestrator writes (C-1, E-0, E-1;
 #: :func:`live_configuration`).
@@ -3129,14 +3138,51 @@ class Recorder:
         self.kept: dict[tuple[int, int], Any] = {}
 
 
+#: The core's Postgres provider's Arrow mapping, which the recording mode
+#: keeps a psycopg read as (loaded by its path: the recording runs beside a
+#: reference client, which has no such provider).
+POSTGRES_ARROW = (
+    REPO
+    / 'packages/structured-data-models-client/src/sdm_client/_rust/providers'
+    / 'postgres_arrow.py'
+)
+
+
+def _postgres_arrow() -> Any:
+    name = 'run_python_postgres_arrow'
+    if name in sys.modules:
+        return sys.modules[name]
+    spec = importlib.util.spec_from_file_location(name, POSTGRES_ARROW)
+    if spec is None or spec.loader is None:
+        raise RunnerFailure("the Postgres provider's Arrow mapping is missing")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _psycopg_cursor(driver: Any) -> bool:
+    r"""Whether ``driver`` is a psycopg cursor holding a result: its rows
+    are kept as the Postgres provider types them (:func:`_keep`)."""
+    return (
+        type(driver).__module__.split('.', 1)[0] == 'psycopg'
+        and getattr(driver, 'description', None) is not None
+        and hasattr(driver, 'connection')
+    )
+
+
 def _keep(
     log: DriverLog,
     statement: dict[str, Any],
     answer: Any,
     names: Iterable[str] | None = None,
+    cursor: Any = None,
 ) -> None:
     r"""Keeps the result just recorded on ``statement`` for the recording
-    mode (``log.recorder``); nothing without one."""
+    mode (``log.recorder``); nothing without one. A psycopg ``cursor``'s
+    rows are kept as the Arrow the core's Postgres provider builds from the
+    driver's type codes (``postgres_arrow.rows_arrow``), not as the types
+    Arrow would infer from the values."""
     recorder = log.recorder
     if recorder is None:
         return
@@ -3150,6 +3196,12 @@ def _keep(
     key = (position, len(statement['results']) - 1)
     if hasattr(answer, 'schema') and hasattr(answer, 'num_rows'):
         recorder.kept[key] = answer
+    elif cursor is not None and _psycopg_cursor(cursor):
+        recorder.kept[key] = _postgres_arrow().rows_arrow(
+            cursor.description,
+            [tuple(row) for row in answer],
+            cursor.connection,
+        )
     else:
         recorder.kept[key] = (list(names or []), [tuple(row) for row in answer])
 
@@ -3684,15 +3736,22 @@ class WarehouseTarget:
         connection: Any,
         names: Mapping[str, str],
         view: Mapping[str, Any] | None,
+        setup: list[str] | None = None,
     ) -> None:
         self.connection = connection
         self.names = dict(names)
         self.view = dict(view) if view is not None else None
+        self.setup = list(setup or [])
 
 
-def _quoted(leg: str, names: Mapping[str, str], table: str) -> str:
+def _quoted(
+    leg: str, names: Mapping[str, str], table: str, fold: bool = False
+) -> str:
     r"""``table`` in the test schema, qualified and quoted as ``leg``'s
-    engine reads it, its name exactly as the case's DuckDB data has it."""
+    engine reads it, its name exactly as the case's DuckDB data has it, or
+    with ``fold`` in upper case, as the loader stored it."""
+    if fold:
+        table = table.upper()
     if leg in ('databricks-sql', 'databricks-spark'):
         parts = [names.get('catalog', ''), names.get('schema', ''), table]
         return '.'.join('`' + part.replace('`', '``') + '`' for part in parts)
@@ -3781,11 +3840,14 @@ def connect_leg(
     spec: Mapping[str, Any],
     names: Mapping[str, str],
     path: str | None,
+    in_schema: bool = False,
 ) -> tuple[Any, Any]:
     r"""The leg's connection, opened as the live configuration says
     (:func:`live_configuration`), and what closes it: through the case's
     connect ``path`` when it has one, its namespace the test schema so a
-    connection handed over as it is resolves the case's tables there."""
+    connection handed over as it is resolves the case's tables there, as
+    with ``in_schema`` (a source naming one part reads the other from the
+    session)."""
     catalog, schema = names.get('catalog'), names.get('schema')
     if leg == 'databricks-sql':
         if path == 'warehouse' or 'driver' not in spec:
@@ -3797,7 +3859,7 @@ def connect_leg(
                 raise RunnerFailure('the live configuration names no warehouse')
             workspace = _workspace(options)
             driver = dict(options.pop('driver', {}) or {})
-            if path == 'warehouse':
+            if path == 'warehouse' or in_schema:
                 driver.update(catalog=catalog, schema=schema)
             connection = warehouse(warehouse_id, workspace=workspace, **driver)
         else:
@@ -3812,7 +3874,7 @@ def connect_leg(
             SparkSession.getActiveSession()
             or SparkSession.builder.getOrCreate()
         )
-        if path == 'spark':
+        if path == 'spark' or in_schema:
             session.sql(f'USE CATALOG `{catalog}`')
             session.sql(f'USE SCHEMA `{schema}`')
         # The notebook owns its session: closing the case's stops nothing.
@@ -3827,7 +3889,10 @@ def connect_leg(
             return session, session.close
         import snowflake.connector
 
-        connection = snowflake.connector.connect(**spec['driver'])
+        driver = dict(spec['driver'])
+        if in_schema:
+            driver.update(database=catalog, schema=schema)
+        connection = snowflake.connector.connect(**driver)
         return connection, connection.close
     if leg == 'lakebase':
         from sdm_connectors.databricks import lakebase
@@ -3854,21 +3919,34 @@ def warehouse_source(
     leg: str, captured: Any, names: Mapping[str, str], given: Mapping[str, Any]
 ) -> Any:
     r"""The public source a user builds on ``leg`` over the captured
-    connection: the raw connection itself for a connect case (found by
-    detection, CN/source.py:97-107); the leg's source class in the test
-    schema otherwise, and a view case's semantic model of it."""
+    connection: for a connect case, ``Source(connection)``, which finds the
+    leg's source class by the connection's type (CN/source.py:97-107), as
+    the case's ``Source(session)`` does; the leg's source class in the test
+    schema otherwise, naming only the case's ``named_part`` when it has
+    one, and a view case's semantic model of it."""
     import sdm_connectors
 
     if 'connect' in given:
-        return captured
+        return sdm_connectors.Source(captured)
     catalog, schema = names.get('catalog'), names.get('schema')
+    named = given.get('named_part')
+    parts = {
+        'catalog': catalog if named in (None, 'catalog') else None,
+        'schema': schema if named in (None, 'schema') else None,
+    }
     if leg in ('databricks-sql', 'databricks-spark'):
         source = sdm_connectors.DatabricksSource(
-            captured, catalog=catalog, schema=schema
+            captured,
+            **{key: value for key, value in parts.items() if value},
         )
     elif leg == 'snowflake':
         source = sdm_connectors.SnowflakeSource(
-            captured, database=catalog, schema=schema
+            captured,
+            **{
+                ('database' if key == 'catalog' else key): value
+                for key, value in parts.items()
+                if value
+            },
         )
     else:
         return sdm_connectors.PostgresSource(captured, schema=schema)
@@ -3908,7 +3986,11 @@ class Live:
         self._undo: list[Any] = []
         try:
             self.connection, close = connect_leg(
-                leg, spec, self.names, given.get('connect')
+                leg,
+                spec,
+                self.names,
+                given.get('connect'),
+                in_schema='named_part' in given,
             )
             self._undo.append(close)
             # The connect path's session is not the driver connection the
@@ -3924,7 +4006,12 @@ class Live:
             loader.load(
                 duck,
                 leg,
-                WarehouseTarget(writer, self.names, given.get('view')),
+                WarehouseTarget(
+                    writer,
+                    self.names,
+                    given.get('view'),
+                    given.get('warehouse_setup'),
+                ),
             )
             self.tables = [
                 (
@@ -3932,7 +4019,13 @@ class Live:
                     raw_arrow(
                         leg,
                         writer,
-                        f'SELECT * FROM {_quoted(leg, self.names, name)}',
+                        'SELECT * FROM '
+                        + _quoted(
+                            leg,
+                            self.names,
+                            name,
+                            loader.folds(leg, given.get('view')),
+                        ),
                     ),
                 )
                 for name in self.table_names
@@ -4053,6 +4146,13 @@ def capture_line(
         'recording': {
             'commit': observation['identity']['commit']['sha'],
             'reference': (reference.get('commit') or {}).get('sha'),
+            # Why a tree that was not clean may stand (capture_check.py's
+            # dirty-tree rule), as the recording run is given it.
+            **(
+                {'excuse': os.environ['SDM_RECORD_EXCUSE']}
+                if os.environ.get('SDM_RECORD_EXCUSE')
+                else {}
+            ),
         },
         'versions': versions,
         'zone': live.zone,

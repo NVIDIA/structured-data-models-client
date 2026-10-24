@@ -8,7 +8,8 @@ the design's row ("dialect, psycopg provider (Arrow without pandas)", "key
 sets bound as the dialect binds them", "L4 goldens executed", choice 12's
 relation forms) and ``test_the_duckdb_provider.py``, whose vectors this
 reads: each fetch is planned by the core's data layer for Postgres
-(``{'provider': 'sql', 'dialect': 'postgres'}``), answered by the provider
+(``{'provider': 'sql', 'dialect': 'postgres'}``, under the database's
+``public`` schema since T3.7), answered by the provider
 over a ``psycopg`` connection to a real Postgres, admitted by the core and
 echoed back by the test-only fetch. The data is the DuckDB-built tables the
 vectors name, loaded into a database of their own by the contract loader
@@ -78,7 +79,10 @@ KINDS = json.loads(
 )
 #: The provider under test, module and class.
 PROVIDER = ('sdm_client._rust.providers.postgres', 'PostgresProvider')
-POSTGRES = {'provider': 'sql', 'dialect': 'postgres'}
+#: Under the schema each test's database holds its tables in, ``public``,
+#: as every Postgres read names one (T3.7): the source's, or its session's
+#: current one, read once per run.
+POSTGRES = {'provider': 'sql', 'dialect': 'postgres', 'namespace': ['public']}
 
 
 def _loader() -> Any:
@@ -293,8 +297,14 @@ def test_keys_that_collide_as_float64_bind_join_and_answer_exactly(
     for case in cases:
         exact = _seeds(case['type'], case['values'])
         data, seen = _keyed(vectors_db, case['request'], exact)
+        # The key set travels as the dialect's JSON text (T3.28): one
+        # cell, each key as the old client writes it, its value exact.
         [handed] = seen['keys'].values()
-        assert handed.equals(exact), case['column']
+        assert (handed.num_rows, handed.num_columns) == (1, 1), case['column']
+        rows = json.loads(handed.column(0)[0].as_py(), parse_float=Decimal)
+        assert [Decimal(str(key)) for key in rows] == [
+            Decimal(value) for value in case['values']
+        ], case['column']
         assert _each_seed_finds_its_own_row(data, case['labels']), case[
             'column'
         ]

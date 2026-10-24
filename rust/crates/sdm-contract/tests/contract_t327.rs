@@ -17,7 +17,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use arrow_array::{ArrayRef, Int64Array, RecordBatch, StringArray};
+use arrow_array::{ArrayRef, Int64Array, RecordBatch};
 use arrow_schema::{DataType, Field as ArrowField, Schema, SchemaRef};
 use sdm_contract::catalog::{CatalogAnswer, ViewDefinition};
 use sdm_contract::data::{
@@ -270,10 +270,7 @@ fn a_failed_model_call_hands_over_its_status_detail_and_codes() {
 // --- The DataLayer's new methods: each default today's, or a refusal by name ---------
 
 /// A data layer that answers only what every layer must.
-struct Bare {
-    /// What `bound_keys` gives, for the `bind` default.
-    rebound: Option<(SchemaRef, Vec<RecordBatch>)>,
-}
+struct Bare;
 
 impl DataLayer for Bare {
     fn capabilities(&self, _: &ProviderChoice) -> Result<ProviderCapabilities, CoreError> {
@@ -291,15 +288,6 @@ impl DataLayer for Bare {
         _: &[RecordBatch],
     ) -> Result<CatalogAnswer, CoreError> {
         unreachable!()
-    }
-
-    fn bound_keys(
-        &self,
-        _: &ProviderChoice,
-        _: &SchemaRef,
-        _: &[RecordBatch],
-    ) -> Result<Option<(SchemaRef, Vec<RecordBatch>)>, CoreError> {
-        Ok(self.rebound.clone())
     }
 }
 
@@ -342,7 +330,7 @@ fn a_failure_means_nothing_until_a_dialect_reads_it() {
         "kind": "data_source", "retryable": false, "sqlstate": "42P01",
         "vendor_code": "2003", "error_class": "TABLE_OR_VIEW_NOT_FOUND"
     }));
-    let facts = Bare { rebound: None }.failure(&ProviderChoice::sql("databricks"), &error);
+    let facts = Bare.failure(&ProviderChoice::sql("databricks"), &error);
     assert_eq!(facts, FailureFacts::default());
     assert!(!facts.not_found && !facts.refuses_expression && facts.unusable.is_none());
 }
@@ -350,12 +338,14 @@ fn a_failure_means_nothing_until_a_dialect_reads_it() {
 #[test]
 fn a_relation_is_asked_as_given_until_a_dialect_spells_it_otherwise() {
     let relation = Relation::of(vec!["db".into(), "s".into(), "orders".into()]);
-    let asked = Bare { rebound: None }.spellings(&ProviderChoice::sql("snowflake"), &relation);
+    let asked = Bare.spellings(&ProviderChoice::sql("snowflake"), &relation);
     assert_eq!(asked, vec![relation]);
 }
 
 #[test]
-fn a_request_binds_in_one_fetch_as_today_reusing_each_key_set_s_id() {
+fn a_request_binds_in_one_fetch_as_the_core_made_its_key_sets() {
+    // bind's default (T3.28 simplified it): the plan as it is, binding the
+    // key sets the core made, under the ids it made them under.
     let request: DataRequest = read(json!({
         "request": "describe", "tables": [{"source": ["t"]}], "part": "tables"
     }));
@@ -363,62 +353,19 @@ fn a_request_binds_in_one_fetch_as_today_reusing_each_key_set_s_id() {
         (AttachmentId(3), keys(&[1, 2])),
         (AttachmentId(5), keys(&[3])),
     ]);
-    // A key set the dialect binds as the core made it: the plan alone.
     let plan = keyed_plan(&[3, 5, 3]);
-    let bound = Bare { rebound: None }
+    let bound = Bare
         .bind(
             &ProviderChoice::sql("duckdb"),
             &request,
             plan.clone(),
             &made,
+            |x| x.to_string(),
         )
         .unwrap();
     assert_eq!(bound.fetches.len(), 1);
     assert_eq!(bound.fetches[0].plan, plan);
     assert!(bound.fetches[0].batches.is_empty());
-    // One the dialect binds as text (`bound_keys`, Postgres's): each once,
-    // under the id the plan names it by, as the core installs it today.
-    let text: SchemaRef = Arc::new(Schema::new(vec![ArrowField::new(
-        "key",
-        DataType::Utf8,
-        false,
-    )]));
-    let column: ArrayRef = Arc::new(StringArray::from(vec!["1"]));
-    let rebound = (
-        text.clone(),
-        vec![RecordBatch::try_new(text.clone(), vec![column]).unwrap()],
-    );
-    let bound = Bare {
-        rebound: Some(rebound.clone()),
-    }
-    .bind(
-        &ProviderChoice::sql("postgres"),
-        &request,
-        plan.clone(),
-        &made,
-    )
-    .unwrap();
-    assert_eq!(bound.fetches.len(), 1);
-    assert_eq!(bound.fetches[0].plan, plan);
-    let ids: Vec<AttachmentId> = bound.fetches[0].batches.keys().copied().collect();
-    assert_eq!(ids, vec![AttachmentId(3), AttachmentId(5)]);
-    assert_eq!(bound.fetches[0].batches[&AttachmentId(3)].schema, text);
-}
-
-#[test]
-fn a_key_set_the_plan_binds_and_the_core_did_not_hand_over_is_a_named_defect() {
-    let request: DataRequest = read(json!({
-        "request": "describe", "tables": [{"source": ["t"]}], "part": "tables"
-    }));
-    let refused = Bare { rebound: None }
-        .bind(
-            &ProviderChoice::sql("postgres"),
-            &request,
-            keyed_plan(&[3]),
-            &BTreeMap::new(),
-        )
-        .unwrap_err();
-    assert_eq!(refused.code, ErrorCode::InternalError);
 }
 
 /// A data layer that reads views, saying the clause a reason names its
@@ -573,7 +520,7 @@ fn a_serving_endpoint_s_refusal_carries_its_status_and_its_own_code() {
 
 #[test]
 fn a_view_s_text_is_refused_by_name_until_a_dialect_reads_views() {
-    let refused = Bare { rebound: None }
+    let refused = Bare
         .view_text(
             &ProviderChoice::sql("duckdb"),
             ViewTextAsk::TableReference {

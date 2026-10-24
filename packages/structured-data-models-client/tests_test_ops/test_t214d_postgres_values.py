@@ -376,7 +376,13 @@ def test_each_seed_is_bound_as_the_reference_writes_it(database: Any) -> None:
             'per_seed': None,
             'order': None,
         },
-        'provider': {'provider': 'sql', 'dialect': 'postgres'},
+        # Under the database's schema, as every Postgres read names one
+        # (T3.7).
+        'provider': {
+            'provider': 'sql',
+            'dialect': 'postgres',
+            'namespace': ['public'],
+        },
         'echo': True,
     }
 
@@ -396,7 +402,9 @@ def test_each_seed_is_bound_as_the_reference_writes_it(database: Any) -> None:
             if isinstance(value, str)
         ]
         assert len(texts) == 1, answers.bound
-        assert [[row[0], row[2]] for row in texts[0]] == (
+        # Each seed as the old client writes it (T3.28): its key as a
+        # number and its end time as ``e``.
+        assert [[str(row['id']), row['e']] for row in texts[0]] == (
             VECTORS['seed_times']['reference']
         )
 

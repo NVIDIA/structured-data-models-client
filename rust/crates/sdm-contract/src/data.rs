@@ -1214,12 +1214,8 @@ pub struct ViewChoice {
 /// PostgreSQL dialect may bind the keys as JSON text that a common table
 /// expression of that name unpacks, as the reference's PostgreSQL sampler
 /// does. `relation` names what the text reads, not an instruction to
-/// register an Arrow relation. Where the dialect binds keys as text
-/// (`DataLayer::bound_keys`, Postgres's), the attachment holds each column
-/// the dialect spells otherwise than Arrow's text of its values (a time
-/// without a zone, binary) as that spelling, a `utf8` column of the same
-/// name, which `keys.columns` still types as the statement reads it; the
-/// provider binds each cell as Arrow's text of it.
+/// register an Arrow relation. A dialect that binds its key sets as JSON
+/// text names none: [`DataLayer::bind`] turns each into a `text` parameter.
 ///
 /// A `text` parameter (contract v28, T3.27) binds the one text cell of a
 /// one-row, one-column Arrow attachment: a key set the dialect writes as
@@ -1266,6 +1262,26 @@ impl FetchPlan {
     pub fn expect(&self) -> &ExpectedSchema {
         match self {
             FetchPlan::Sql { expect, .. } | FetchPlan::Host { expect } => expect,
+        }
+    }
+
+    /// Each attachment the plan's statements bind, a key set's or a text's,
+    /// that `to` names, named by what `to` maps it to (contract v28,
+    /// T3.28): how the core names a bound fetch's batches by the run's ids
+    /// ([`DataLayer::bind`]). A host plan binds none.
+    pub fn rename_attachments(&mut self, to: &BTreeMap<AttachmentId, AttachmentId>) {
+        let FetchPlan::Sql { statements, .. } = self else {
+            return;
+        };
+        for param in statements.iter_mut().flat_map(|s| &mut s.params) {
+            let named = match param {
+                SqlParam::KeySet { keys, .. } => &mut keys.attachment,
+                SqlParam::Text { attachment } => attachment,
+                SqlParam::Value { .. } => continue,
+            };
+            if let Some(renamed) = to.get(named) {
+                *named = *renamed;
+            }
         }
     }
 
@@ -1337,21 +1353,14 @@ pub trait DataLayer: Send + Sync {
         Ok(None)
     }
 
-    /// A key set the run's provider binds, as the provider binds it, where
-    /// its dialect binds keys as text (T2.14d): each column the reference
-    /// spells otherwise than Arrow's text of its values as that spelling,
-    /// so the provider binds Arrow's text of each cell. `None`, the default
-    /// and a host provider's: the key set as the core made it. Read through
-    /// [`DataLayer::bind`]'s default; it goes once each dialect's `bind`
-    /// writes its key sets itself (T3.28).
-    fn bound_keys(
-        &self,
-        provider: &ProviderChoice,
-        schema: &arrow_schema::SchemaRef,
-        batches: &[RecordBatch],
-    ) -> Result<Option<(arrow_schema::SchemaRef, Vec<RecordBatch>)>, CoreError> {
-        let _ = (provider, schema, batches);
-        Ok(None)
+    /// Whether `provider`'s source holds a type per column that a caller's
+    /// type for the column must match (plan B's check, T3.4). `true`, the
+    /// default and a host provider's; `false` for a source whose columns
+    /// hold affinities only (SQLite's), where the old client reads any
+    /// column as the type its caller gives (T3.28).
+    fn holds_column_types(&self, provider: &ProviderChoice) -> bool {
+        let _ = provider;
+        true
     }
 
     /// Whether `provider` reads a source of tables, a database or warehouse
@@ -1430,45 +1439,26 @@ pub trait DataLayer: Send + Sync {
     /// the provider binds them (contract v28, T3.27, design S4): one fetch
     /// or more, each a plan and the batches it binds, named by local
     /// references the core installs in the run and renames to the run's
-    /// ids; their answers, in order, are the request's. The default is
-    /// today's: one fetch, the plan as it is, and each key set the dialect
-    /// binds as text ([`DataLayer::bound_keys`]) under the id the plan names
-    /// it by, once. The default repeats the core's `Asker::bind_keys` until
-    /// T3.28 replaces both, in the commit that first plans a text parameter.
+    /// ids ([`FetchPlan::rename_attachments`]); their answers, in order,
+    /// are the request's. A double the binding writes is written as
+    /// `float_text` writes it, the text the reference's language gives a
+    /// double, which the core passes in (T3.28). The default, and a host
+    /// provider's: one fetch, the plan as it is, binding the key sets as
+    /// the core made them.
     fn bind(
         &self,
         provider: &ProviderChoice,
         request: &DataRequest,
         plan: FetchPlan,
         keys: &BTreeMap<AttachmentId, KeyData>,
+        float_text: fn(f64) -> String,
     ) -> Result<BoundRequest, CoreError> {
-        let _ = request;
-        let mut batches = BTreeMap::new();
-        for attachment in plan.key_sets() {
-            if batches.contains_key(&attachment) {
-                continue;
-            }
-            let Some(made) = keys.get(&attachment) else {
-                return Err(CoreError::new(
-                    Sentence::Internal,
-                    "a plan binds a key set the core did not hand over",
-                )
-                .with_field("attachment", Detail::Scalar(Scalar::UInt32(attachment.0))));
-            };
-            if let Some((schema, rebound)) =
-                self.bound_keys(provider, &made.schema, &made.batches)?
-            {
-                batches.insert(
-                    attachment,
-                    KeyData {
-                        schema,
-                        batches: rebound,
-                    },
-                );
-            }
-        }
+        let _ = (provider, request, keys, float_text);
         Ok(BoundRequest {
-            fetches: vec![BoundFetch { plan, batches }],
+            fetches: vec![BoundFetch {
+                plan,
+                batches: BTreeMap::new(),
+            }],
         })
     }
 

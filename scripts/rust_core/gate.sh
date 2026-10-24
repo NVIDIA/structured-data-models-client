@@ -766,7 +766,7 @@ sys.exit(1 if refused else 0)
   if [ -n "$locked" ] && [ -d "$candidate/contract/captures" ]; then
     local manifests=()
     while IFS= read -r -d '' manifest; do manifests+=("$manifest"); done < <(
-      find "$candidate/contract/captures" -name '*.json' -print0)
+      find "$candidate/contract/captures" -name manifest.json -print0)
     "$PYTHON" "$here/contract/runners/capture_check.py" captures --locked \
       --cases "$candidate/contract/cases" "${manifests[@]+"${manifests[@]}"}" || status=1
   elif [ -n "$locked" ]; then

@@ -416,7 +416,10 @@ public final class Host {
     return driverClass;
   }
 
-  /** The key sets a request's plan names, taken from the run by attachment id (decision Q1). */
+  /**
+   * The key sets a request's plan names, taken from the run by attachment id (decision Q1): each
+   * a key set's Arrow, or the one text its dialect wrote of it (T3.28).
+   */
   @SuppressWarnings("unchecked")
   private static Map<Integer, ArrowReader> keySets(
       Run run, Map<String, Object> plan, BufferAllocator allocator) throws NativeError {
@@ -428,10 +431,15 @@ public final class Host {
     for (Object statement : list) {
       for (Object param : (List<Object>) ((Map<String, Object>) statement).get("params")) {
         Map<String, Object> read = (Map<String, Object>) param;
-        if (!"key_set".equals(read.get("param"))) {
+        Object named;
+        if ("key_set".equals(read.get("param"))) {
+          named = ((Map<String, Object>) read.get("keys")).get("attachment");
+        } else if ("text".equals(read.get("param"))) {
+          named = read.get("attachment");
+        } else {
           continue;
         }
-        int id = ((Number) ((Map<String, Object>) read.get("keys")).get("attachment")).intValue();
+        int id = ((Number) named).intValue();
         if (taken.containsKey(id)) {
           continue;
         }

@@ -49,11 +49,12 @@ import contextlib
 import importlib.util
 import json
 import os
+import re
 import signal
 import sys
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -207,26 +208,9 @@ def plan(leg: str, e0: bool = False) -> dict[str, Any]:
 
 
 #: The cases a leg's live plan leaves out, by name, with the legs and the
-#: reason: their names hold a character the write guard's one strict name
-#: rule refuses (a backtick on Databricks, a line break anywhere), so every
-#: load of theirs is refused by design (the owner's allowlist decision).
-_BACKTICK = (
-    'a name holds a backtick, which the write guard refuses on Databricks'
-)
-_LINE_BREAK = 'a name holds a line break, which the write guard refuses'
-NOT_LIVE: dict[str, tuple[tuple[str, ...], str]] = {
-    **{
-        f'name.backtick-{part}': (
-            ('databricks-sql', 'databricks-spark'),
-            _BACKTICK,
-        )
-        for part in ('aggregation', 'entity', 'feature', 'filter', 'target')
-    },
-    **{
-        f'name.line-break-{part}': (LEGS, _LINE_BREAK)
-        for part in ('aggregation', 'entity', 'feature', 'filter', 'target')
-    },
-}
+#: reason (the owner's allowlist decision): ``captures.py``'s list, which
+#: the capture check reads too.
+NOT_LIVE = _module('captures').NOT_LIVE
 
 
 #: The live write guard, beside this file (KO3-51): a run without it does
@@ -297,9 +281,11 @@ def install_guard(leg: str, guard: ModuleType, loader: Any) -> Any:
             )
     undo = guard.install(guards)
     loader.WRITE_GUARD = guard._keeping(own.check)
+    loader.WRITE_GUARD_SETUP = getattr(guard, 'setup', None)
 
     def uninstall() -> None:
         loader.WRITE_GUARD = None
+        loader.WRITE_GUARD_SETUP = None
         undo()
 
     return uninstall
@@ -387,6 +373,10 @@ def run(
     failed: dict[str, str] = {}
     recorded: list[Path] = []
     progress = out / f'{leg}.progress.jsonl'
+    # Rewritten whole after each case, never appended to: a Databricks
+    # volume refuses an append to a file once written (Errno 29, the
+    # second recording's Spark run).
+    progressed: list[str] = []
     progress.write_text('', encoding='utf-8')
     failures = out / f'{leg}.failed.json'
 
@@ -427,8 +417,8 @@ def run(
                 'status': 'recorded' if reason is None else 'failed',
                 'seconds': round(time.monotonic() - started, 1),
             }
-            with progress.open('a', encoding='utf-8') as written:
-                written.write(json.dumps(line, sort_keys=True) + '\n')
+            progressed.append(json.dumps(line, sort_keys=True) + '\n')
+            progress.write_text(''.join(progressed), encoding='utf-8')
             print(
                 f'{leg}: {number + 1}/{len(planned["record"])} {case} '
                 f'{line["status"]} in {line["seconds"]} s',
@@ -526,6 +516,41 @@ def bootstrap_reference(reference: Path, site: Path) -> Path:
     return path
 
 
+def installable_wheels(
+    folder: Path | str, tags: Iterable[Any] | None = None
+) -> list[str]:
+    r"""The wheels in ``folder`` this host installs, by its tags
+    (``tags``, else ``packaging.tags.sys_tags()``), sorted: the folder
+    holds every platform's build the jobs' hosts need (serverless runs on
+    x86_64 and aarch64), and pip refuses a whole install naming a wheel
+    the host does not support."""
+    from packaging.tags import sys_tags
+    from packaging.utils import parse_wheel_filename
+
+    supported = set(sys_tags() if tags is None else tags)
+    return sorted(
+        str(path)
+        for path in Path(folder).glob('*.whl')
+        if supported & set(parse_wheel_filename(path.name)[3])
+    )
+
+
+def use_reference_client(reference: Path) -> Path:
+    r"""Makes this process import ``sdm_client`` from the reference
+    checkout ``reference``: its client source first on ``sys.path``, any
+    ``sdm_client`` already imported forgotten, so the client the recording
+    runs is the checkout's, as the runner requires, beside the reference's
+    other packages installed from its wheels (``capture_job.py``; a
+    notebook's environment reads no ``.pth`` file). Returns the source."""
+    source = (Path(reference) / CLIENT_SOURCE).resolve()
+    if not (source / 'sdm_client' / '__init__.py').is_file():
+        raise SystemExit(f'{reference}: no reference client at {CLIENT_SOURCE}')
+    sys.path.insert(0, str(source))
+    for name in [n for n in sys.modules if n.split('.')[0] == 'sdm_client']:
+        del sys.modules[name]
+    return source
+
+
 #: Each job parameter that names part of a run's environment, and the
 #: variable it sets: the live configuration's path, the placeholders'
 #: private names and the write guard's test schema, filled into the job's
@@ -540,16 +565,38 @@ JOB_ENVIRONMENT = {
 }
 
 
+#: The job parameter holding the other placeholders' private names, a JSON
+#: object by placeholder name (``{"user": ..., "shop_metric_view": ...}``),
+#: each set as ``SDM_CAPTURE_<NAME>``: an existing view's name, its
+#: schema, the view owner the warehouse's describe shows.
+JOB_NAMES = 'capture_names'
+
+
 def job_environment(parameters: dict[str, str]) -> list[str]:
     r"""Sets the run's environment from a job's parameters
-    (:data:`JOB_ENVIRONMENT`), each given one; no value is printed.
-    Returns the variables set."""
+    (:data:`JOB_ENVIRONMENT`, and each placeholder's name of
+    :data:`JOB_NAMES`), each given one; no value is printed. A name that
+    is not a placeholder's (``[a-z][a-z0-9_]*``), or a value that is not
+    text, is refused by its key. Returns the variables set."""
     found = []
     for parameter, variable in JOB_ENVIRONMENT.items():
         value = (parameters.get(parameter) or '').strip()
         if value:
             os.environ[variable] = value
             found.append(variable)
+    names = json.loads((parameters.get(JOB_NAMES) or '').strip() or '{}')
+    if not isinstance(names, dict):
+        raise SystemExit(f'{JOB_NAMES} is not a JSON object')
+    for key, value in sorted(names.items()):
+        if not (
+            re.fullmatch(r'[a-z][a-z0-9_]*', key)
+            and isinstance(value, str)
+            and value.strip()
+        ):
+            raise SystemExit(f'{JOB_NAMES}: {key!r} is no placeholder name')
+        variable = 'SDM_CAPTURE_' + key.upper()
+        os.environ[variable] = value.strip()
+        found.append(variable)
     return found
 
 

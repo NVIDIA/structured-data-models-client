@@ -52,10 +52,11 @@ import org.apache.arrow.vector.types.pojo.Field;
 
 /**
  * How each driver binds a key set a plan names (the seeds of a {@code neighbors} or {@code
- * lookup} request), the Arrow attachment the core sent with the step, as the Python provider for
- * that driver binds it: DuckDB's registered as Arrow (kept as a temporary table, since a
- * registered stream is read once), SQLite's ingested as a temporary table of the types ADBC
- * gives it, Postgres's the statement's one parameter, JSON text. Not part of the API.
+ * lookup} request), the attachment the core sent with the step, as the Python provider for that
+ * driver binds it: DuckDB's Arrow registered (kept as a temporary table, since a registered
+ * stream is read once), SQLite's ingested as a temporary table of the types ADBC gives it,
+ * Postgres's the statement's one parameter, the JSON text the core wrote of it (T3.28), handed
+ * over as one text cell ({@link #text}). Not part of the API.
  */
 abstract class KeySets {
   /** A key set read whole: its Arrow IPC bytes, its fields and each column's values. */
@@ -298,7 +299,7 @@ abstract class KeySets {
 
   // --- Postgres -------------------------------------------------------------------------
 
-  /** Postgres's: bound as the statement's one parameter ({@link #postgresText}). */
+  /** Postgres's: the text the core wrote, the statement's one parameter ({@link #text}). */
   static final class PostgresKeys extends KeySets {
     @Override
     void bind(Connection on, String name, Keys keys, BufferAllocator allocator) {
@@ -307,54 +308,34 @@ abstract class KeySets {
   }
 
   /**
-   * A key set as the Postgres dialect binds it: a JSON array of its rows, each an array of its
-   * cells' texts in the key set's column order, {@code null} for a null, each cell Arrow's text of
-   * the value (pyarrow's cast to text, {@link ArrowText}), written as Python's {@code
-   * json.dumps(rows, separators=(',', ':'), ensure_ascii=False)} writes it. The core hands over
-   * the cells the reference spells otherwise (a time without a zone, binary) already as text.
+   * The one text cell of {@code reader}, a key set the core wrote as its dialect's JSON (T3.28),
+   * which the provider binds as it is; {@code reader} is closed.
+   *
+   * @throws JdbcProvider.PlanNotRun the attachment is not one text cell
    */
-  static String postgresText(Keys keys) {
-    StringBuilder out = new StringBuilder("[");
-    for (int row = 0; row < keys.rows(); row++) {
-      if (row > 0) {
-        out.append(',');
+  static String text(ArrowReader reader) throws Exception {
+    String found = null;
+    int rows = 0;
+    try (reader) {
+      VectorSchemaRoot root = reader.getVectorSchemaRoot();
+      if (root.getFieldVectors().size() != 1 || !(root.getVector(0) instanceof VarCharVector)) {
+        throw new JdbcProvider.PlanNotRun("a key set that is not one text");
       }
-      out.append('[');
-      for (int at = 0; at < keys.fields().size(); at++) {
-        if (at > 0) {
-          out.append(',');
-        }
-        Object value = keys.columns().get(at).get(row);
-        out.append(value == null ? "null" : jsonString(ArrowText.of(value, keys.fields().get(at))));
-      }
-      out.append(']');
-    }
-    return out.append(']').toString();
-  }
-
-  /** Text as {@code json.dumps(..., ensure_ascii=False)} writes it. */
-  static String jsonString(String text) {
-    StringBuilder out = new StringBuilder("\"");
-    for (int at = 0; at < text.length(); at++) {
-      char c = text.charAt(at);
-      switch (c) {
-        case '"' -> out.append("\\\"");
-        case '\\' -> out.append("\\\\");
-        case '\n' -> out.append("\\n");
-        case '\r' -> out.append("\\r");
-        case '\t' -> out.append("\\t");
-        case '\b' -> out.append("\\b");
-        case '\f' -> out.append("\\f");
-        default -> {
-          if (c < 0x20) {
-            out.append(String.format("\\u%04x", (int) c));
-          } else {
-            out.append(c);
-          }
+      while (reader.loadNextBatch()) {
+        VarCharVector cells = (VarCharVector) root.getVector(0);
+        for (int row = 0; row < root.getRowCount(); row++) {
+          rows++;
+          found =
+              cells.isNull(row)
+                  ? null
+                  : new String(cells.get(row), java.nio.charset.StandardCharsets.UTF_8);
         }
       }
     }
-    return out.append('"').toString();
+    if (rows != 1 || found == null) {
+      throw new JdbcProvider.PlanNotRun("a key set that is not one text");
+    }
+    return found;
   }
 
   /**

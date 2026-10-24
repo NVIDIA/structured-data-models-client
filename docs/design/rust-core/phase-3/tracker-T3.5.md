@@ -33,7 +33,11 @@ Each is crate-local until T3.27; none is in `sdm-contract` yet.
 - `sdm_core::view_steps::JoinJudgement` and `sdm_core::pql::TooLarge` (a value too large to quote).
 - One `Sentence` per function of `sdm_core::view_words` and per refusal above: about 45 templates, each a sentence of the old client, its quoted values written by `sdm-pql`.
 
-## Registered differences (proposed, Approver: owner)
+## Registered differences
+
+The owner approved P3J-1 through P3J-6 and P3J-9 through P3J-11 on 2026-10-24, and explicitly retired P3J-7 and P3J-8 as superseded by P3J-9.
+The exact answers are recorded in the T35-OWNER-2026-10-24 rows of [decisions.md](decisions.md).
+P3J-12 through P3J-14 remain proposed.
 
 - P3J-1: a definition that is no readable YAML is refused by name.
 - P3J-2: a section that cannot be iterated is refused by name.
@@ -42,7 +46,7 @@ Each is crate-local until T3.27; none is in `sdm-contract` yet.
 - P3J-5: an expression a check's pattern cannot finish on is refused as unreadable (no input known).
 - P3J-5 also covers, from fix 2, a pattern made of a definition's text past the compiler's bound.
 - P3J-6: four YAML texts the scanner reads otherwise than PyYAML.
-- P3J-7 and P3J-8: superseded at fix 2 by P3J-9; rejection recommended.
+- P3J-7 and P3J-8: retired by the owner as superseded at fix 2 by P3J-9; the register uses rejected for retirement, without claiming Python parity.
 - P3J-9: YAML outside the subset view definitions use is refused by name (`!!str` read as text from fix 3; a lone `-` in a flow collection named).
 - P3J-10: a default or a quoted value too large to write is refused by name.
 - P3J-11: a cardinality or a table name the old client failed on as a set member or a pattern is refused by name.
@@ -52,7 +56,9 @@ Each is crate-local until T3.27; none is in `sdm-contract` yet.
 
 Withdrawn in fix 1, now read as the old client reads them: integers past 128 bits; a composite relationship's tables.
 
-Fix 3 allow-lists `sdm-pql/src/printable.rs`, generated from Python 3.12, likewise. Fix 2 also allow-lists `sdm-pql/src/conversions.rs` in `scripts/rust_core/emulation-allowlist.txt`, by the coordinator's direction; its decisions row (H21) is the owner's.
+Fix 2 proposes `sdm-pql/src/conversions.rs` and fix 3 proposes generated `sdm-pql/src/printable.rs` in `scripts/rust_core/emulation-allowlist.txt`.
+The preserved implementation contains these additions, but the owner requested a short explanation (original item 7) and has not approved them.
+Do not treat the coordinator's direction as the owner approval H21 requires.
 
 ## Stage 2 (after T3.27)
 
@@ -65,4 +71,5 @@ The ordered routine `sdm-core/src/view.rs` over these pieces, the wiring, provid
 - `sdm-data`: the contract's view types, `view_text`, Databricks's `failure` facts and `DESCRIBE TABLE EXTENDED`.
 - Parity: every Databricks SQL warehouse capture of T3.20's recordings (`contract/view-captures.json`, written by `contract/fixtures/views/captures.py`), each statement in the old client's order and the schema it gave.
 - Python: the semantic model's routes, its provider choice, `conversion_notes` and the model's sentences.
-- Open: Snowflake's statements and type map are T3.6's (a semantic view runs end to end once they land); the contract has no `ProviderChoice` accessor for its view, read in the core from its contract form.
+- Open: Snowflake's statements and type map are T3.6's; whichever package lands second enables the semantic-view routes.
+- `ProviderChoice::view` now reads the held view through the contract's accessor (T3.27 follow-up); the core no longer decodes its serialized contract form.

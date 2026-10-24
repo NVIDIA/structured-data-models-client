@@ -383,10 +383,11 @@ def test_a_warehouse_schema_drops_only_what_it_loaded() -> None:
 class _Target:
     r"""The recording mode's WarehouseTarget, as run_python.py builds it."""
 
-    def __init__(self, connection, names, view=None) -> None:
+    def __init__(self, connection, names, view=None, setup=None) -> None:
         self.connection = connection
         self.names = names
         self.view = view
+        self.setup = list(setup or [])
 
 
 class _Warehouse:
@@ -408,7 +409,7 @@ class _Warehouse:
                 warehouse.ran.append(statement)
                 name = re.findall(r'[`"]([^`"]+)[`"]', statement.split(' (')[0])
                 if statement.startswith(
-                    ('CREATE TABLE', 'CREATE OR REPLACE VIEW')
+                    ('CREATE TABLE', 'CREATE OR REPLACE VIEW', 'CREATE VIEW')
                 ):
                     warehouse.held.add(name[-1])
                 elif statement.startswith('DROP'):
@@ -496,14 +497,15 @@ def test_a_semantic_view_is_created_and_dropped_under_the_case_s_name() -> None:
     )
     (call,) = [s for s in warehouse.ran if s.startswith('CALL')]
     assert 'name: view_semantic_binary' in call and 'shop_semantics' not in call
-    # The YAML names its columns unquoted, which Snowflake reads in upper
-    # case: the case's columns are created so, and the YAML names its base
-    # tables quoted, as created (reviews r2 and r3).
+    # The YAML names its tables and columns unquoted, as a user writes it,
+    # which Snowflake reads in upper case: the case's tables and columns are
+    # created so, and the base tables are left unquoted, since the old
+    # client quotes a quoted name a second time ("""users""").
     assert (
-        'CREATE TABLE "DB_V"."SCH_V"."users" ("I" NUMBER(38,0))'
+        'CREATE TABLE "DB_V"."SCH_V"."USERS" ("I" NUMBER(38,0))'
         in warehouse.ran
     )
-    assert """table: '"users"'""" in call
+    assert 'table: users' in call and '"users"' not in call
     nxt = _Warehouse(warehouse.held)
     databases.load(
         _duck('CREATE TABLE users (i INTEGER)'),
@@ -512,7 +514,7 @@ def test_a_semantic_view_is_created_and_dropped_under_the_case_s_name() -> None:
     )
     assert nxt.ran[:2] == [
         'DROP SEMANTIC VIEW IF EXISTS "DB_V"."SCH_V".view_semantic_binary',
-        'DROP TABLE IF EXISTS "DB_V"."SCH_V"."users"',
+        'DROP TABLE IF EXISTS "DB_V"."SCH_V"."USERS"',
     ]
     # A case with no semantic view keeps its names as written.
     assert 'CREATE TABLE "DB_V"."SCH_V"."users" ("i" NUMBER(38,0))' in nxt.ran
@@ -571,3 +573,47 @@ def test_empty_nested_columns_load_on_each_warehouse(
         assert len(inserts) == (1 if rows else 0), (engine, ran)
         stored = databases.stored(duck, 't', engine)
         assert stored.num_rows == len(rows)
+
+
+def test_a_case_s_warehouse_setup_runs_in_the_guard_s_setup_and_is_dropped(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # T3.20: the case's warehouse setup runs after its tables, each
+    # statement inside the write guard's setup scope, and a view it creates
+    # is the case's own: not "a relation this case did not load", and
+    # dropped before the next case loads.
+    import contextlib
+
+    scoped: list[bool] = []
+    inside = [False]
+
+    @contextlib.contextmanager
+    def setup():
+        inside[0] = True
+        try:
+            yield
+        finally:
+            inside[0] = False
+
+    monkeypatch.setattr(databases, 'WRITE_GUARD_SETUP', setup)
+    monkeypatch.setattr(
+        databases, 'WRITE_GUARD', lambda statement: scoped.append(inside[0])
+    )
+    monkeypatch.setattr(databases, '_SCHEMAS', {})
+    names = {'catalog': 'cat_s', 'schema': 'sch_s'}
+    view = 'CREATE VIEW `cat_s`.`sch_s`.`users_v` AS SELECT * FROM `cat_s`.`sch_s`.`users`'
+    first = _Warehouse()
+    databases.load(
+        _duck('CREATE TABLE users (i INTEGER)'),
+        'databricks-sql',
+        _Target(first, names, setup=[view]),
+    )
+    assert first.ran[-2] == view and scoped[-1] is True
+    assert scoped.count(True) == 1
+    nxt = _Warehouse(first.held)
+    databases.load(
+        _duck('CREATE TABLE users (i INTEGER)'),
+        'databricks-sql',
+        _Target(nxt, names),
+    )
+    assert 'DROP VIEW IF EXISTS `cat_s`.`sch_s`.`users_v`' in nxt.ran

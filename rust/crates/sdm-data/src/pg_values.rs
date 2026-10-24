@@ -5,7 +5,7 @@
 //! Postgres's value rules (T2.14d, MID2 P2-3): how the reference reads the
 //! values its Postgres driver hands over, and how it binds a key set, here
 //! in the dialect, so the host's provider only moves the driver's rows into
-//! Arrow and binds the cells it is given.
+//! Arrow and binds the text it is given.
 //!
 //! - A `json` or `jsonb` value, which the provider hands over as JSON text
 //!   (Arrow's `arrow.json`), is read as the reference's
@@ -21,12 +21,11 @@
 //!   reference's `_to_dtype` reads it: of a scale above zero as doubles,
 //!   of a scale of zero as integers, a column holding a whole number past
 //!   `int64` as its digits (where the reference overflows), a NaN missing.
-//! - A key set's cells the reference spells otherwise than Arrow's text of
-//!   them are handed to the provider as that spelling ([`bound_keys`]): a
-//!   time without a zone as pandas' `Timestamp.isoformat` writes it (the
-//!   reference compares a text time column with it as text), binary as
-//!   `\x` and its hexadecimal digits; the provider binds every other
-//!   value as Arrow's text of it.
+//! - A key set is written as the JSON text its statement reads, as the
+//!   reference writes it ([`key_rows`], T3.28): a time without a zone as
+//!   pandas' `Timestamp.isoformat` writes it (the reference compares a
+//!   text time column with it as text), binary as `\x` and its
+//!   hexadecimal digits, so the provider binds the text it is handed.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -38,8 +37,11 @@ use arrow_array::types::{
 };
 use arrow_array::{Array, ArrayRef, Float64Array, Int64Array, ListArray, RecordBatch, StringArray};
 use arrow_schema::{DataType, Field, Schema, SchemaRef, TimeUnit};
-use sdm_contract::data::DECLARED_SCALE_MARKER;
+use sdm_contract::data::{DECLARED_SCALE_MARKER, SEED_BATCH};
 use sdm_contract::{CoreError, Detail, Sentence};
+
+use crate::json;
+use crate::key_text;
 
 /// The field metadata naming Arrow's canonical JSON extension type.
 const EXTENSION_NAME: &str = "ARROW:extension:name";
@@ -418,7 +420,7 @@ fn write(value: &Json, float_text: fn(f64) -> String, out: &mut String) {
             out.push_str(if *f > 0.0 { "Infinity" } else { "-Infinity" });
         }
         Json::Float(f) => out.push_str(&float_text(*f)),
-        Json::Text(s) => quoted(s, out),
+        Json::Text(s) => json::quoted(s, out),
         Json::List(items) => {
             out.push('[');
             for (i, item) in items.iter().enumerate() {
@@ -435,35 +437,13 @@ fn write(value: &Json, float_text: fn(f64) -> String, out: &mut String) {
                 if i > 0 {
                     out.push(',');
                 }
-                quoted(name, out);
+                json::quoted(name, out);
                 out.push(':');
                 write(item, float_text, out);
             }
             out.push('}');
         }
     }
-}
-
-/// A string as the reference's writer quotes one, ASCII only: `"` and `\`
-/// escaped, the named control characters by name, every other code unit
-/// outside space to `~` as `\u` and four lowercase hexadecimal digits (one
-/// past the first plane as its two surrogates, a lone surrogate as itself).
-fn quoted(units: &[u16], out: &mut String) {
-    out.push('"');
-    for &unit in units {
-        match unit {
-            0x22 => out.push_str("\\\""),
-            0x5C => out.push_str("\\\\"),
-            0x0A => out.push_str("\\n"),
-            0x0D => out.push_str("\\r"),
-            0x09 => out.push_str("\\t"),
-            0x08 => out.push_str("\\b"),
-            0x0C => out.push_str("\\f"),
-            0x20..=0x7E => out.push(char::from(u8::try_from(unit).unwrap_or(b'?'))),
-            _ => out.push_str(&format!("\\u{unit:04x}")),
-        }
-    }
-    out.push('"');
 }
 
 struct Reader<'a> {
@@ -656,89 +636,358 @@ impl Reader<'_> {
 
 // --- key sets --------------------------------------------------------------------
 
-/// A key set as Postgres's provider binds it: each column the reference
-/// spells otherwise than Arrow's text of its values, by name, as that text
-/// (a null a null): a time without a zone as pandas' `Timestamp.isoformat`
-/// writes it, binary as `\x` and its hexadecimal digits. Every other
-/// column stays as the core made it, which the provider binds as Arrow's
-/// text of each value. `None` where no column is spelled otherwise.
-pub fn bound_keys(schema: &SchemaRef, batches: &[RecordBatch]) -> Result<Conformed, CoreError> {
-    let spelled = |kind: &DataType| {
-        matches!(
-            kind,
-            DataType::Timestamp(_, None) | DataType::Binary | DataType::LargeBinary
-        )
-    };
-    if !schema.fields().iter().any(|f| spelled(f.data_type())) {
-        return Ok(None);
-    }
-    let fields: Vec<Field> = schema
-        .fields()
+/// Each seed of a key set as Postgres's statement reads it (T3.28), as the
+/// old client writes it (`_dumps`, ASCII only): its key alone (several
+/// columns' as an array), or, with seed times, an object of `id` and the
+/// window's bounds (`e`, `s`, [`key_text::fields`]); the batch left out,
+/// the seeds' positions being their batches. A key as the reference
+/// coerces it (`_coerce_id`): an integer as a number, a double as
+/// `float_text` writes it, a decimal of a scale as the text of its double
+/// (exactly, the core's own digits), anything else as its text
+/// ([`key_cell`]); a seed time as pandas' `isoformat` writes it.
+pub(crate) fn key_rows(
+    request: &sdm_contract::data::DataRequest,
+    schema: &SchemaRef,
+    batches: &[RecordBatch],
+    float_text: fn(f64) -> String,
+) -> Result<Vec<String>, CoreError> {
+    key_text::in_batch_order(schema, batches)?;
+    let names: Vec<&str> = schema.fields().iter().map(|f| f.name().as_str()).collect();
+    let keys = key_text::key_columns(&names);
+    let others: Vec<&str> = names
         .iter()
-        .map(|f| {
-            if spelled(f.data_type()) {
-                Field::new(f.name(), DataType::Utf8, f.is_nullable())
-            } else {
-                f.as_ref().clone()
-            }
-        })
+        .copied()
+        .filter(|name| !keys.contains(name) && *name != SEED_BATCH)
         .collect();
-    let bound: SchemaRef = Arc::new(Schema::new_with_metadata(fields, schema.metadata().clone()));
-    let mut out = Vec::with_capacity(batches.len());
+    let fields = key_text::fields(others.iter().copied(), request);
+    let at = |name: &str| names.iter().position(|n| *n == name);
+    let key_at: Vec<usize> = keys.iter().filter_map(|k| at(k)).collect();
+    let field_at: Vec<(usize, String)> = fields
+        .iter()
+        .filter_map(|(column, field)| Some((at(column)?, json::string(field, true))))
+        .collect();
+    let mut rows = Vec::new();
     for batch in batches {
-        let columns = batch
-            .columns()
-            .iter()
-            .map(|array| {
-                if !spelled(array.data_type()) {
-                    return Ok(Arc::clone(array));
+        for row in 0..batch.num_rows() {
+            let cell = |at: usize| {
+                let column = batch.column(at).as_ref();
+                if key_at.contains(&at) {
+                    key_json(column, row, names[at], float_text)
+                } else {
+                    key_cell(column, row, names[at]).map(|text| {
+                        text.map_or_else(|| "null".to_owned(), |t| json::string(&t, true))
+                    })
                 }
-                let texts: StringArray = (0..array.len())
-                    .map(|row| cell_text(array.as_ref(), row))
-                    .collect();
-                Ok(Arc::new(texts) as ArrayRef)
-            })
-            .collect::<Result<Vec<_>, CoreError>>()?;
-        out.push(
-            RecordBatch::try_new(Arc::clone(&bound), columns)
-                .map_err(|_| internal("a bound key set does not build"))?,
-        );
-    }
-    Ok(Some((bound, out)))
-}
-
-/// One cell of a column [`bound_keys`] spells, as the text the reference
-/// binds it as.
-fn cell_text(array: &dyn Array, row: usize) -> Option<String> {
-    if array.is_null(row) {
-        return None;
-    }
-    Some(match array.data_type() {
-        DataType::Binary => hex(array.as_binary::<i32>().value(row)),
-        DataType::LargeBinary => hex(array.as_binary::<i64>().value(row)),
-        DataType::Timestamp(unit, _) => {
-            let (ticks, per) = match unit {
-                TimeUnit::Second => (
-                    array.as_primitive::<TimestampSecondType>().value(row),
-                    1_000_000_000,
-                ),
-                TimeUnit::Millisecond => (
-                    array.as_primitive::<TimestampMillisecondType>().value(row),
-                    1_000_000,
-                ),
-                TimeUnit::Microsecond => (
-                    array.as_primitive::<TimestampMicrosecondType>().value(row),
-                    1_000,
-                ),
-                TimeUnit::Nanosecond => (
-                    array.as_primitive::<TimestampNanosecondType>().value(row),
-                    1,
+            };
+            let id = match &key_at[..] {
+                [one] => cell(*one)?,
+                several => format!(
+                    "[{}]",
+                    several
+                        .iter()
+                        .map(|at| cell(*at))
+                        .collect::<Result<Vec<_>, _>>()?
+                        .join(",")
                 ),
             };
-            isoformat(i128::from(ticks) * per)
+            if field_at.is_empty() {
+                rows.push(id);
+                continue;
+            }
+            let mut members = vec![format!("\"id\":{id}")];
+            for (at, field) in &field_at {
+                members.push(format!("{field}:{}", cell(*at)?));
+            }
+            rows.push(format!("{{{}}}", members.join(",")));
         }
-        _ => return None,
+    }
+    Ok(rows)
+}
+
+/// One key of a key set as the old client's JSON writes it
+/// (`_coerce_id` of the value pandas holds): an integer as a number; a
+/// double as `float_text` writes it; a decimal of a scale as the text of its
+/// double (`str(float)`) where that text reads back as its exact value, else
+/// its own digits (exact keys, P3K-1), of no scale as a number; a boolean
+/// as `True` or `False`; a date as its midnight's time stamp and a time
+/// stamp with a space before its time (`str(Timestamp)`), a zoned one in
+/// UTC; anything else as its text ([`key_cell`]); each text ASCII only; a
+/// null `null`.
+fn key_json(
+    array: &dyn Array,
+    row: usize,
+    column: &str,
+    float_text: fn(f64) -> String,
+) -> Result<String, CoreError> {
+    use arrow_array::types as t;
+    if array.is_null(row) {
+        return Ok("null".to_owned());
+    }
+    let text = || Ok::<_, CoreError>(key_cell(array, row, column)?.unwrap_or_default());
+    Ok(match array.data_type() {
+        DataType::Int8
+        | DataType::Int16
+        | DataType::Int32
+        | DataType::Int64
+        | DataType::UInt8
+        | DataType::UInt16
+        | DataType::UInt32
+        | DataType::UInt64
+        | DataType::Decimal128(_, 0)
+        | DataType::Decimal256(_, 0) => text()?,
+        DataType::Float32 => json::number(
+            f64::from(array.as_primitive::<t::Float32Type>().value(row)),
+            float_text,
+        ),
+        DataType::Float64 => json::number(
+            array.as_primitive::<t::Float64Type>().value(row),
+            float_text,
+        ),
+        DataType::Decimal128(..) | DataType::Decimal256(..) => {
+            json::string(&double_text(&text()?, float_text), true)
+        }
+        DataType::Boolean => json::string(
+            if array.as_boolean().value(row) {
+                "True"
+            } else {
+                "False"
+            },
+            true,
+        ),
+        DataType::Date32 | DataType::Date64 => json::string(&format!("{} 00:00:00", text()?), true),
+        DataType::Timestamp(_, None) => json::string(&text()?.replacen('T', " ", 1), true),
+        DataType::Timestamp(_, Some(_)) => {
+            let utc = text()?;
+            let utc = utc.strip_suffix('Z').unwrap_or(&utc);
+            json::string(&format!("{utc}+00:00"), true)
+        }
+        _ => json::string(&text()?, true),
     })
+}
+
+/// A decimal's text, `exact`, as its double's text (`float_text`) where
+/// that reads back as the same value, else its own digits with no trailing
+/// zero after the point.
+fn double_text(exact: &str, float_text: fn(f64) -> String) -> String {
+    if let Ok(double) = exact.parse::<f64>()
+        && double.is_finite()
+    {
+        let written = float_text(double);
+        if decimal_value(&written) == decimal_value(exact) {
+            return written;
+        }
+    }
+    match exact.split_once('.') {
+        Some((whole, fraction)) => match fraction.trim_end_matches('0') {
+            "" => format!("{whole}.0"),
+            kept => format!("{whole}.{kept}"),
+        },
+        None => format!("{exact}.0"),
+    }
+}
+
+/// A decimal number's text as its value: its sign, its significant digits
+/// and the power of ten of its last; `None` for text that is no number.
+fn decimal_value(text: &str) -> Option<(bool, String, i64)> {
+    let (negative, text) = match text.strip_prefix('-') {
+        Some(rest) => (true, rest),
+        None => (false, text.strip_prefix('+').unwrap_or(text)),
+    };
+    let (mantissa, exponent) = match text.split_once(['e', 'E']) {
+        Some((mantissa, exponent)) => (mantissa, exponent.parse::<i64>().ok()?),
+        None => (text, 0),
+    };
+    let (whole, fraction) = mantissa.split_once('.').unwrap_or((mantissa, ""));
+    if !(whole.chars().chain(fraction.chars())).all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    let digits = format!("{whole}{fraction}");
+    let mut power = exponent - i64::try_from(fraction.len()).ok()?;
+    let trimmed = digits.trim_start_matches('0');
+    if trimmed.is_empty() {
+        return Some((false, String::new(), 0));
+    }
+    let kept = trimmed.trim_end_matches('0');
+    power += i64::try_from(trimmed.len() - kept.len()).ok()?;
+    Some((negative, kept.to_owned(), power))
+}
+
+/// One cell of a key set as the text Postgres's input function reads: a
+/// time without a zone as pandas' `Timestamp.isoformat` writes it (the
+/// reference compares a text time column with it as text) and binary as
+/// `\x` and its hexadecimal digits, as the reference spells them; any
+/// other value as its own text (an integer's digits, a decimal's with its
+/// scale's, a date as `YYYY-MM-DD`, a time of day and a zoned time to its
+/// unit's digits, the zoned one in UTC with a `Z`), which the type the
+/// statement reads it as reads as that value. A double is
+/// [`key_json`]'s; a cell of another type is refused by name.
+fn key_cell(array: &dyn Array, row: usize, column: &str) -> Result<Option<String>, CoreError> {
+    use arrow_array::types as t;
+    if array.is_null(row) {
+        return Ok(None);
+    }
+    let text = match array.data_type() {
+        DataType::Utf8 => array.as_string::<i32>().value(row).to_owned(),
+        DataType::LargeUtf8 => array.as_string::<i64>().value(row).to_owned(),
+        DataType::Utf8View => array.as_string_view().value(row).to_owned(),
+        DataType::Boolean => array.as_boolean().value(row).to_string(),
+        DataType::Int8 => array.as_primitive::<t::Int8Type>().value(row).to_string(),
+        DataType::Int16 => array.as_primitive::<t::Int16Type>().value(row).to_string(),
+        DataType::Int32 => array.as_primitive::<t::Int32Type>().value(row).to_string(),
+        DataType::Int64 => array.as_primitive::<t::Int64Type>().value(row).to_string(),
+        DataType::UInt8 => array.as_primitive::<t::UInt8Type>().value(row).to_string(),
+        DataType::UInt16 => array.as_primitive::<t::UInt16Type>().value(row).to_string(),
+        DataType::UInt32 => array.as_primitive::<t::UInt32Type>().value(row).to_string(),
+        DataType::UInt64 => array.as_primitive::<t::UInt64Type>().value(row).to_string(),
+        DataType::Decimal128(_, scale) => scaled(
+            &array
+                .as_primitive::<t::Decimal128Type>()
+                .value(row)
+                .to_string(),
+            *scale,
+        ),
+        DataType::Decimal256(_, scale) => scaled(
+            &array
+                .as_primitive::<t::Decimal256Type>()
+                .value(row)
+                .to_string(),
+            *scale,
+        ),
+        DataType::Date32 => date(i64::from(array.as_primitive::<t::Date32Type>().value(row))),
+        DataType::Date64 => date(
+            array
+                .as_primitive::<t::Date64Type>()
+                .value(row)
+                .div_euclid(86_400_000),
+        ),
+        DataType::Binary => hex(array.as_binary::<i32>().value(row)),
+        DataType::LargeBinary => hex(array.as_binary::<i64>().value(row)),
+        DataType::Timestamp(unit, zone) => {
+            let (ticks, digits) = match unit {
+                TimeUnit::Second => (
+                    i128::from(array.as_primitive::<TimestampSecondType>().value(row)),
+                    0,
+                ),
+                TimeUnit::Millisecond => (
+                    i128::from(array.as_primitive::<TimestampMillisecondType>().value(row)),
+                    3,
+                ),
+                TimeUnit::Microsecond => (
+                    i128::from(array.as_primitive::<TimestampMicrosecondType>().value(row)),
+                    6,
+                ),
+                TimeUnit::Nanosecond => (
+                    i128::from(array.as_primitive::<TimestampNanosecondType>().value(row)),
+                    9,
+                ),
+            };
+            let nanos = ticks * 10_i128.pow(9 - digits);
+            if zone.is_none() {
+                isoformat(nanos)
+            } else {
+                zoned(nanos, digits)
+            }
+        }
+        DataType::Time32(_) | DataType::Time64(_) => {
+            let (ticks, digits) = match array.data_type() {
+                DataType::Time32(TimeUnit::Second) => (
+                    i64::from(array.as_primitive::<t::Time32SecondType>().value(row)),
+                    0,
+                ),
+                DataType::Time32(_) => (
+                    i64::from(array.as_primitive::<t::Time32MillisecondType>().value(row)),
+                    3,
+                ),
+                DataType::Time64(TimeUnit::Microsecond) => (
+                    array.as_primitive::<t::Time64MicrosecondType>().value(row),
+                    6,
+                ),
+                _ => (
+                    array.as_primitive::<t::Time64NanosecondType>().value(row),
+                    9,
+                ),
+            };
+            let per = 10_i64.pow(digits);
+            let seconds = ticks.div_euclid(per);
+            let mut text = format!(
+                "{:02}:{:02}:{:02}",
+                seconds / 3_600,
+                seconds / 60 % 60,
+                seconds % 60
+            );
+            if digits > 0 {
+                text.push_str(&format!(
+                    ".{:0width$}",
+                    ticks.rem_euclid(per),
+                    width = digits as usize
+                ));
+            }
+            text
+        }
+        _ => {
+            return Err(CoreError::new(
+                Sentence::KeySetTypeUnbound,
+                format!(
+                    "key set column {column:?} is of a type this dialect does not bind as text"
+                ),
+            )
+            .with_field("column", Detail::text(column)));
+        }
+    };
+    Ok(Some(text))
+}
+
+/// A decimal's text, `digits` (signed) ten-to-the-`scale`ths, with its
+/// scale's digits after the point.
+fn scaled(digits: &str, scale: i8) -> String {
+    let (sign, digits) = match digits.strip_prefix('-') {
+        Some(rest) => ("-", rest),
+        None => ("", digits),
+    };
+    if scale <= 0 {
+        let zeros = if digits == "0" {
+            String::new()
+        } else {
+            "0".repeat(usize::from(scale.unsigned_abs()))
+        };
+        return format!("{sign}{digits}{zeros}");
+    }
+    let scale = usize::from(scale.unsigned_abs());
+    let padded = format!("{digits:0>width$}", width = scale + 1);
+    let (whole, fraction) = padded.split_at(padded.len() - scale);
+    format!("{sign}{whole}.{fraction}")
+}
+
+/// Days since 1970-01-01 as `YYYY-MM-DD`.
+fn date(days: i64) -> String {
+    let (y, m, d) = civil(days);
+    format!("{}-{m:02}-{d:02}", year(y))
+}
+
+/// An instant, `nanos` since the epoch, in UTC to `digits` fractional
+/// digits, a `Z` after it.
+fn zoned(nanos: i128, digits: u32) -> String {
+    let seconds = nanos.div_euclid(1_000_000_000);
+    #[allow(clippy::cast_possible_truncation, reason = "below a second")]
+    let fraction = nanos.rem_euclid(1_000_000_000) as i64;
+    #[allow(clippy::cast_possible_truncation, reason = "days of an int64 count")]
+    let (days, of_day) = (
+        seconds.div_euclid(86_400) as i64,
+        seconds.rem_euclid(86_400) as i64,
+    );
+    let mut text = format!(
+        "{} {:02}:{:02}:{:02}",
+        date(days),
+        of_day / 3_600,
+        of_day / 60 % 60,
+        of_day % 60
+    );
+    if digits > 0 {
+        let kept = fraction / 10_i64.pow(9 - digits);
+        text.push_str(&format!(".{kept:0width$}", width = digits as usize));
+    }
+    text.push('Z');
+    text
 }
 
 fn hex(bytes: &[u8]) -> String {

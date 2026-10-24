@@ -253,7 +253,13 @@ def _fetch(case: dict[str, Any], source: dict[str, Any], database: str) -> Any:
     capabilities = case.get('capabilities', {})
     fetch: dict[str, Any] = {
         'request': request,
-        'provider': {'provider': 'sql', 'dialect': database},
+        # A Postgres read names its schema, the case database's ``public``,
+        # as every run names the session's (T3.7).
+        'provider': {
+            'provider': 'sql',
+            'dialect': database,
+            **({'namespace': ['public']} if database == 'postgres' else {}),
+        },
         'echo': True,
         'undeclared': list(capabilities.get('withhold', [])),
     }

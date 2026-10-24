@@ -271,7 +271,13 @@ def admitted(provider: Any, name: str) -> Any:
             'filters': [],
             'limit': None,
         },
-        'provider': {'provider': 'sql', 'dialect': 'postgres'},
+        # Under the database's schema, as every Postgres read names one
+        # (T3.7).
+        'provider': {
+            'provider': 'sql',
+            'dialect': 'postgres',
+            'namespace': ['public'],
+        },
         'echo': True,
     }
     try:

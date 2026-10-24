@@ -43,6 +43,8 @@
 mod blake2b;
 mod databricks;
 mod duckdb;
+mod json;
+mod key_text;
 mod keys;
 mod mt19937;
 mod pg_values;
@@ -60,9 +62,12 @@ pub use pg_values::json_text;
 
 use arrow_array::RecordBatch;
 use sdm_contract::catalog::CatalogAnswer;
+use std::collections::BTreeMap;
+
 use sdm_contract::data::{
-    DataLayer, DataRequest, DescribePart, Dialect, FailureFacts, FetchPlan, ProviderCapabilities,
-    ProviderChoice, ProviderError, Relation, SqlStatement, views_unread,
+    AttachmentId, BoundFetch, BoundRequest, DataLayer, DataRequest, DescribePart, Dialect,
+    FailureFacts, FetchPlan, KeyData, ProviderCapabilities, ProviderChoice, ProviderError,
+    Relation, SqlStatement, views_unread,
 };
 use sdm_contract::view::{ViewTextAnswer, ViewTextAsk};
 use sdm_contract::wording::DatabaseNames;
@@ -197,56 +202,7 @@ impl DataLayer for Data {
         request: &DataRequest,
         provider: &ProviderChoice,
     ) -> Result<FetchPlan, CoreError> {
-        match provider {
-            ProviderChoice::Host { .. } => Ok(FetchPlan::Host {
-                expect: request.expected(),
-            }),
-            ProviderChoice::Sql {
-                dialect, namespace, ..
-            } => {
-                let dialect = rendered(dialect)?;
-                // The namespace itself, read where a part is left to the
-                // connection inside one given, which the core then reads
-                // every relation under (T3.4).
-                if let DataRequest::Describe {
-                    part: DescribePart::Namespace,
-                    ..
-                } = request
-                    && given_parts(namespace).is_none()
-                {
-                    let parts: Vec<String> = namespace
-                        .iter()
-                        .map(|part| part.clone().unwrap_or_default())
-                        .collect();
-                    deeper(request, &parts, dialect.namespace_depth())?;
-                    let (text, params) = dialect.current_namespace(request, namespace)?;
-                    return Ok(FetchPlan::Sql {
-                        statements: vec![SqlStatement {
-                            dialect: Dialect::new(dialect.name()),
-                            text,
-                            params,
-                        }],
-                        expect: dialect.expected(request),
-                    });
-                }
-                // A request of a dialect that reads every table under its
-                // full namespace, whose every relation names it in full (a
-                // table the core reads where it was described), reads none
-                // of the parts the provider leaves to the connection (T3.4).
-                let under = request.relations();
-                if dialect.settles_namespace()
-                    && !under.is_empty()
-                    && under
-                        .iter()
-                        .all(|(_, r)| r.source.len() == dialect.namespace_depth() + 1)
-                {
-                    return sql::plan(dialect, request, &[]);
-                }
-                let namespace = qualifying(request, namespace)?;
-                deeper(request, &namespace, dialect.namespace_depth())?;
-                sql::plan(dialect, &in_namespace(request, &namespace), &namespace)
-            }
-        }
+        self.render(request, provider, 0)
     }
 
     fn conform(
@@ -262,16 +218,34 @@ impl DataLayer for Data {
         }
     }
 
-    fn bound_keys(
+    /// `plan` bound as the run's provider binds it: a built-in dialect's key
+    /// set written as the text its statement reads where it binds one so,
+    /// split past its budget, one fetch per chunk ([`key_text`], T3.28); a
+    /// host provider's plan, or one binding the core's Arrow key set as a
+    /// relation, one fetch as it is.
+    fn bind(
         &self,
         provider: &ProviderChoice,
-        schema: &arrow_schema::SchemaRef,
-        batches: &[RecordBatch],
-    ) -> Result<Option<(arrow_schema::SchemaRef, Vec<RecordBatch>)>, CoreError> {
+        request: &DataRequest,
+        plan: FetchPlan,
+        keys: &BTreeMap<AttachmentId, KeyData>,
+        float_text: fn(f64) -> String,
+    ) -> Result<BoundRequest, CoreError> {
         match sql_dialect(provider) {
-            Some(dialect) => dialect.bound_keys(schema, batches),
-            None => Ok(None),
+            Some(dialect) => key_text::bind(dialect, request, plan, keys, float_text, &|offset| {
+                self.render(request, provider, offset)
+            }),
+            None => Ok(BoundRequest {
+                fetches: vec![BoundFetch {
+                    plan,
+                    batches: BTreeMap::new(),
+                }],
+            }),
         }
+    }
+
+    fn holds_column_types(&self, provider: &ProviderChoice) -> bool {
+        sql_dialect(provider).is_none_or(|dialect| dialect.holds_column_types())
     }
 
     fn source_database(&self, provider: &ProviderChoice) -> Option<&'static str> {
@@ -456,5 +430,72 @@ fn no_dialect(dialect: &Dialect) -> CoreError {
         Some(known) => CoreError::new(Sentence::NoDialectNamed, message)
             .with_field("dialect", Detail::text(*known)),
         None => CoreError::new(Sentence::NoDialect, message),
+    }
+}
+
+impl Data {
+    /// [`DataLayer::plan`], a key set's seeds numbered from `offset`: a
+    /// later chunk's statements, rendered as the first's are ([`key_text`]).
+    fn render(
+        &self,
+        request: &DataRequest,
+        provider: &ProviderChoice,
+        offset: usize,
+    ) -> Result<FetchPlan, CoreError> {
+        match provider {
+            ProviderChoice::Host { .. } => Ok(FetchPlan::Host {
+                expect: request.expected(),
+            }),
+            ProviderChoice::Sql {
+                dialect, namespace, ..
+            } => {
+                let dialect = rendered(dialect)?;
+                // The namespace itself, read where a part is left to the
+                // connection inside one given, which the core then reads
+                // every relation under (T3.4).
+                if let DataRequest::Describe {
+                    part: DescribePart::Namespace,
+                    ..
+                } = request
+                    && given_parts(namespace).is_none()
+                {
+                    let parts: Vec<String> = namespace
+                        .iter()
+                        .map(|part| part.clone().unwrap_or_default())
+                        .collect();
+                    deeper(request, &parts, dialect.namespace_depth())?;
+                    let (text, params) = dialect.current_namespace(request, namespace)?;
+                    return Ok(FetchPlan::Sql {
+                        statements: vec![SqlStatement {
+                            dialect: Dialect::new(dialect.name()),
+                            text,
+                            params,
+                        }],
+                        expect: dialect.expected(request),
+                    });
+                }
+                // A request of a dialect that reads every table under its
+                // full namespace, whose every relation names it in full (a
+                // table the core reads where it was described), reads none
+                // of the parts the provider leaves to the connection (T3.4).
+                let under = request.relations();
+                if dialect.settles_namespace()
+                    && !under.is_empty()
+                    && under
+                        .iter()
+                        .all(|(_, r)| r.source.len() == dialect.namespace_depth() + 1)
+                {
+                    return sql::plan(dialect, request, &[], offset);
+                }
+                let namespace = qualifying(request, namespace)?;
+                deeper(request, &namespace, dialect.namespace_depth())?;
+                sql::plan(
+                    dialect,
+                    &in_namespace(request, &namespace),
+                    &namespace,
+                    offset,
+                )
+            }
+        }
     }
 }
