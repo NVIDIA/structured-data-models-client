@@ -298,7 +298,7 @@
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py": {
       "<module>": {
-        "fingerprint": "1151cd3eea7cdfc04003fec3586e5fa0749cea167cefb7e8484f244065bec401"
+        "fingerprint": "73cedc3f25379a0ef67978fd56bdbe471ab01cd8985fd7d262ff883e7f4872e4"
       },
       "PostgresProvider.__call__": {
         "fingerprint": "0863e31498d184173e461f2c5f8cb8006dc356570e2d81b854205a4bc1449512"
@@ -306,14 +306,28 @@
       "PostgresProvider.__init__": {
         "fingerprint": "3e278560d028fd3cf21e43d5d3da95154b0daf3e1dc8cca7683d4ca59c9f97f4"
       },
+      "_bound_text": {
+        "fingerprint": "89c9d59cf663fd14adb697c36944a1b5a534d4bceb4e7762b3e719c1e2fa819b"
+      },
+      "_own_transaction": {
+        "fingerprint": "223bfb1d59011dcd424a1deafdb3a04f4dccdb0546daccf2ab5b981647467684"
+      },
+      "_psycopg_text": {
+        "fingerprint": "0bca2858b29ddcf9c6f04be6ed0ce8a5fc119d122f171022b31bb8358319f828"
+      },
+      "_result": {
+        "fingerprint": "e661aeed8eb9d870a929ed2eebe1390316ced0294ee58af8177ea74cb37418bd"
+      }
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres_arrow.py": {
+      "<module>": {
+        "fingerprint": "ece57f2d861e2a986feb1c6340d20130eb9724ee30af67c37026c34429d57e97"
+      },
       "_array": {
         "fingerprint": "8373cfcd4c2046e8068c0336c4d292064110aa7cf69989a24bd449f2323ed33d"
       },
       "_arrow_type": {
         "fingerprint": "38f23ced009259c6d1a377c771107be728c232c53db4503284a882022652619b"
-      },
-      "_bound_text": {
-        "fingerprint": "89c9d59cf663fd14adb697c36944a1b5a534d4bceb4e7762b3e719c1e2fa819b"
       },
       "_cell": {
         "fingerprint": "90a26e98a8649cd77620844f7052f97a88945f3a05cf3a1fa16e318911d32e69"
@@ -324,9 +338,6 @@
       "_elements": {
         "fingerprint": "6643cb4066d209eb4836096778d5f2e61a60d1177a1a66c93efddc1269dd3751"
       },
-      "_field": {
-        "fingerprint": "2e5f9d99bb541092f3341dc6059aecf791ee9e3b742b4ca0fccf5733d333ce08"
-      },
       "_is_json": {
         "fingerprint": "b26e62b0ba57aa2ee3715bc3c4da81f837b9e847243c69adb48508ccda0f30c2"
       },
@@ -336,20 +347,17 @@
       "_numeric_field": {
         "fingerprint": "f22634654aaf35750ff0e55acad1caab2de3afbb2129214ada466f5e0be0a5eb"
       },
-      "_own_transaction": {
-        "fingerprint": "223bfb1d59011dcd424a1deafdb3a04f4dccdb0546daccf2ab5b981647467684"
-      },
-      "_psycopg_text": {
-        "fingerprint": "0bca2858b29ddcf9c6f04be6ed0ce8a5fc119d122f171022b31bb8358319f828"
-      },
-      "_result": {
-        "fingerprint": "aed20b5fb5d23d488a776f14efc5a334672b7bc0595586f3735351e40d012dad"
-      },
       "_scalar_type": {
         "fingerprint": "bb68e5984f0707034ef0a7cbb6ae10ace7ac2bbd0c0aa7b27a9b367029612e2f"
       },
       "_tags": {
         "fingerprint": "4199278e8874a8eee10279f2ccec1d94f0d908b7e51f153102e6b532a662d5b1"
+      },
+      "field": {
+        "fingerprint": "cea6477af1ca7a4d35ac934e1ab6c9b6dce11e130a2f1f4d01dfc3c6ab5b5241"
+      },
+      "rows_arrow": {
+        "fingerprint": "768c36d7f1b2d08e8a0db0eae8ecd22ac5079005fd333baf992634895173c141"
       }
     },
     "packages/structured-data-models-client/src/sdm_client/client.py": {
