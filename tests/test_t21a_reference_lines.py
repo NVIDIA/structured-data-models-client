@@ -77,6 +77,7 @@ def test_every_case_has_its_duckdb_line() -> None:
     reference = _reference()
     cases = _cases()
     assert len(cases) >= 86
+    assert {case['slice'] for case in cases} <= {'S0', 'S1'}
     assert [c['id'] for c in cases if c['id'] not in reference] == []
     assert sum(bool(_statements(reference[c['id']])) for c in cases) > 40
 

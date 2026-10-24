@@ -390,6 +390,26 @@ def _write(reference: Path, lines: list[Any]) -> None:
     path.write_text(''.join(json.dumps(line) + '\n' for line in lines))
 
 
+@pytest.mark.tooling
+def test_warehouse_inputs_do_not_hide_a_missing_offline_reference(
+    tmp_path: Path,
+) -> None:
+    reference, environment, lines = _copy(tmp_path)
+    cases = tmp_path / 'cases'
+    cases.mkdir()
+    offline = 's0.accept.binary-classification'
+    for name in (offline, 'lakebase.binary'):
+        source = next(CASES.rglob(f'{name}.json'))
+        shutil.copyfile(source, cases / source.name)
+    selected = [line for line in lines if _bare(line['case']) == offline]
+    _write(reference, selected)
+    assert reference_problems(reference, environment, cases) == []
+    _write(reference, [line for line in selected if line['case'] != offline])
+    assert f'{offline}: 0 reference observations' in reference_problems(
+        reference, environment, cases
+    )
+
+
 def _set(path: str, value: Any) -> Callable[[list[dict[str, Any]]], None]:
     r"""Sets the field at the dotted ``path`` of the first line; a value of
     ``_MISSING`` removes it."""

@@ -685,6 +685,23 @@ def test_the_checkout_s_own_tests_judge_another_tree_s_inputs(
         assert (root / path).read_text() == (inputs / path).read_text(), path
 
 
+def test_a_crate_reading_builder_is_staged_without_executing_it(
+    tmp_path: pathlib.Path,
+) -> None:
+    own = _tree(tmp_path / 'own', 19)
+    inputs = _tree(tmp_path / 'inputs', 20)
+    builder = (
+        'def _crate_version():\n'
+        '    raise AssertionError("the smoke must not execute its builder")\n'
+        'CONTRACT = _crate_version()\n'
+    )
+    (own / BINDING_TESTS / 'messages.py').write_text(builder)
+    tests = smoke.suite(own, inputs, _scratch(tmp_path))
+    assert (tests / 'messages.py').read_text() == builder.replace(
+        'CONTRACT = _crate_version()', 'CONTRACT = 20'
+    )
+
+
 def test_a_normalizing_messages_py_in_the_inputs_changes_nothing(
     tmp_path: pathlib.Path,
 ) -> None:
