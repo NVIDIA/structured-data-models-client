@@ -7,7 +7,8 @@ SPDX-License-Identifier: Apache-2.0
 # Structured Data Models client for Java
 
 The Java library on the client's Rust core: the same core the Python client runs, loaded from the JAR through JNI (design choice 10 of `docs/design/rust-core/phase-3/design.md`).
-It describes the tables of a DuckDB, SQLite or Postgres database through the caller's own JDBC connection, gathers a predictive query's request from them, and predicts with a model endpoint, each on the core, as the Python client does (Java S1, T3.12); Databricks follows (T3.13).
+It describes the tables of a DuckDB, SQLite, Postgres or Databricks database through the caller's own JDBC connection, gathers a predictive query's request from them, and predicts with a model endpoint, each on the core, as the Python client does.
+Databricks metric views are read through `source.semanticModel(name, trustExpressions)`, and `schema.conversionNotes()` explains their conversion in the core's words.
 Nothing is published to a repository before Phase 5.
 
 ## Coordinates

@@ -49,8 +49,25 @@ The case IDs are filled in when their files land.
 | `view_demand_30d` | `demand_30d` through the owner's AdventureWorks metric view | T3.5's |
 | `view_inactivity_90d` | `inactivity_90d` through the same view | T3.5's |
 
-## Left to later commits
+## Current implementation and verification boundary
 
-- The case IDs of T3.4's and T3.5's files in the two tables above, and a check that T3.5's cover the multiclass metric-view paths; a Java case is added for any path they leave empty.
-- The `core` section of both cases.
-- The package's own test round: the Databricks JDBC provider's type conversions, the serving transport against a scripted endpoint, and E-7's dry mode.
+The Java source, JDBC conversion table and serving transport are implemented.
+Metric views use `DatabricksSource.semanticModel(name, trustExpressions)` and the shared core's `view` choice.
+`Schema.conversionNotes()` renders the core's typed notes after caller overrides; grouped loss warnings remain run warnings.
+No view parsing, SQL planning or diagnostic policy lives in Java.
+
+The four base J2 shapes have equivalent shop-data tests through Java's core calls and both direct and serving transports: regression, the same historical regression 180 days earlier, 90-day inactivity and multiclass classification.
+These tests use the existing DuckDB fixture to exercise the shared semantics; they do not claim live Databricks or AdventureWorks evidence.
+JDBC conversion tests separately cover non-UTC JVM settings and the spring DST edge, retaining timezone-free timestamps as wall times.
+A live non-UTC warehouse check and the actual E-7 comparison remain phase-end work.
+
+The two known nightly Java probe defects were reproduced with the package artifact: the relative classpath failed after changing to scratch, and the load source failed to compile against the current API.
+The corrected classpath loaded the packaged native, and the corrected source compiled on JDK 17.
+This targeted diagnosis ran no package suite or full CI.
+Canonical binding vectors were regenerated with `contract/tools/t311_java_record.py binding` using lane a's existing test-ops kit; its output exactly reproduced the preserved vector changes.
+
+Package tests and lint wait for two approvals on the final candidate.
+The final metric-view integration waits for T3.5's actual phase landing.
+The real E-7 JDBC/live runner and model comparison remain T3.10's phase-end evidence.
+P3S-1 through P3S-7 remain proposed; no approval is inferred from this implementation.
+JV-4's startup-session timezone difference remains proposed and is handed to T3.9 for policy resolution; the existing same-zone offset helper does not fix it.
