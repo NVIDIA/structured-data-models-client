@@ -1,0 +1,44 @@
+{
+  "format": "sdm-case/1",
+  "id": "lakebase.name.two-part",
+  "status": "acceptance",
+  "slice": "S2",
+  "warehouses": [
+    "lakebase"
+  ],
+  "paths": [
+    "schema.from-source/tables/lakebase"
+  ],
+  "routes": [
+    "schema.from-source/tables/lakebase",
+    "schema.from-source/catalog-keys/lakebase"
+  ],
+  "cells": [],
+  "input": {
+    "base": "shop",
+    "from_source": {
+      "tables": {
+        "users": "{schema}.users",
+        "orders": "{schema}.orders"
+      }
+    },
+    "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ],
+      "anchor_time": "2024-03-01"
+    }
+  },
+  "until": "from_source",
+  "expect": {
+    "outcome": "refusal",
+    "stage": "from_source",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "today": "read from the code: the old client never splits a table name, so '<schema>.users' is looked up as one table name in the source's schema (PG/table.py:159-177), matches no column and raises TableNotFoundError (:178-182), which the client re-raises as INVALID_REQUEST (CL/materializers/sources.py, engine_graph); the core reading the two parts as schema and table (contract 26's Relation) would be more support, a better difference to register"
+  },
+  "why": "Tables named with schema and table, the {schema} placeholder the capture writes (P2-MID2-6): the reference's answer to a name qualified by its schema.",
+  "source": "written by T3.7's test author from the reference at 43e55f4f"
+}

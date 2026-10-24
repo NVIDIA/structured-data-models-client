@@ -31,7 +31,7 @@ use sdm_contract::catalog::{
 };
 use sdm_contract::data::{
     DataLayer, DataRequest, DescribePart, Dialect, FetchPlan, ProviderCapabilities, ProviderChoice,
-    catalog_columns as c,
+    catalog_columns as c, views_unread,
 };
 use sdm_contract::{CoreError, Detail, Sentence};
 use sdm_host::CompositionRoot;
@@ -96,7 +96,7 @@ impl DataLayer for HostLayer {
         for batch in batches {
             rows.read(*part, batch)?;
         }
-        Ok(rows.answer(*part))
+        rows.answer(*part)
     }
 }
 
@@ -193,6 +193,7 @@ impl Rows {
     fn read(&mut self, part: DescribePart, batch: &RecordBatch) -> Result<(), CoreError> {
         for row in 0..batch.num_rows() {
             match part {
+                DescribePart::ViewDefinition => return Err(views_unread()),
                 DescribePart::Tables => self.tables.extend(text(batch, c::TABLE, row)?),
                 DescribePart::Columns => {
                     if let Some(name) = text(batch, c::NAME, row)? {
@@ -249,8 +250,10 @@ impl Rows {
         Ok(())
     }
 
-    fn answer(self, part: DescribePart) -> CatalogAnswer {
-        match part {
+    fn answer(self, part: DescribePart) -> Result<CatalogAnswer, CoreError> {
+        Ok(match part {
+            // A host provider is never asked for a view's definition (T3.27).
+            DescribePart::ViewDefinition => return Err(views_unread()),
             DescribePart::Tables => CatalogAnswer::Tables(self.tables),
             DescribePart::Columns => CatalogAnswer::Columns(self.columns),
             DescribePart::Keys => CatalogAnswer::Keys(self.keys),
@@ -258,6 +261,6 @@ impl Rows {
             DescribePart::Indexes => CatalogAnswer::Indexes(self.indexes),
             DescribePart::IndexColumns => CatalogAnswer::IndexColumns(self.index_columns),
             DescribePart::Namespace => CatalogAnswer::Namespace(self.namespace),
-        }
+        })
     }
 }

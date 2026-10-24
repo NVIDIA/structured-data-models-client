@@ -95,6 +95,16 @@ pub enum ModelResult {
     /// The transport failed before an answer; its message stays in the
     /// host.
     TransportError { kind: ErrorKind, retryable: bool },
+    /// The endpoint failed with no body, as the host's transport reported
+    /// it (`ModelOutcome::Failed`, T3.27): its status, the error's text or
+    /// body, read only for codes, and the codes the transport carried
+    /// apart from it.
+    Failed {
+        status: u16,
+        detail: Option<Vec<u8>>,
+        provider_code: Option<String>,
+        provider_error: Option<String>,
+    },
 }
 
 /// What an awaited request resolves to.

@@ -329,6 +329,71 @@ def test_psycopg_copy_stream_and_executemany_are_recorded() -> None:
     assert run._CAPTURES['postgres'] is run._CapturedPsycopg
 
 
+def test_a_postgres_row_read_is_kept_as_the_provider_types_it() -> None:
+    r"""T3.20 r2: a psycopg read is kept as the Arrow the core's Postgres
+    provider builds from the driver's type codes (an ``int4`` an
+    ``int32``), never the type Arrow infers from the values (``int64``)."""
+    import datetime as dt
+    import types as builtin_types
+    from decimal import Decimal
+
+    class Info:
+        def __init__(self, name: str, oid: int) -> None:
+            self.name, self.oid, self.array_oid = name, oid, oid + 10_000
+
+    known = {
+        23: Info('int4', 23),
+        25: Info('text', 25),
+        1700: Info('numeric', 1700),
+        1184: Info('timestamptz', 1184),
+    }
+
+    class Column:
+        def __init__(
+            self, name: str, code: int, precision: Any = None, scale: Any = None
+        ) -> None:
+            self.name, self.type_code = name, code
+            self.precision, self.scale = precision, scale
+
+        def __getitem__(self, position: int) -> Any:
+            return (self.name, self.type_code)[position]
+
+    class Cursor:
+        description = [
+            Column('id', 23),
+            Column('name', 25),
+            Column('amount', 1700, 10, 2),
+            Column('at', 1184),
+        ]
+        connection = builtin_types.SimpleNamespace(
+            adapters=builtin_types.SimpleNamespace(
+                types=builtin_types.SimpleNamespace(get=known.get)
+            )
+        )
+
+        def execute(self, query: str, params: Any = None) -> Cursor:
+            return self
+
+        def fetchall(self) -> list[tuple[Any, ...]]:
+            at = dt.datetime(2024, 1, 1, tzinfo=dt.timezone.utc)
+            return [(1, 'a', Decimal('1.50'), at)]
+
+    Cursor.__module__ = 'psycopg.cursor'
+    log = run.DriverLog()
+    log.recorder = run.Recorder()
+    captured = run._CapturedPsycopg(Cursor(), log)
+    captured.execute('SELECT id, name, amount, at FROM t')
+    captured.fetchall()
+    kept = log.recorder.kept[(0, 0)]
+    assert [str(field.type) for field in kept.schema] == [
+        'int32',
+        'string',
+        'decimal128(10, 2)',
+        'timestamp[us, tz=UTC]',
+    ]
+    assert kept.column('id').to_pylist() == [1]
+
+
 # --- draws and placeholders ------------------------------------------------------------
 
 
@@ -485,7 +550,8 @@ def test_a_complete_capture_passes_and_holds_no_private_name() -> None:
         (lambda line: line.update(zone=''), 'no session zone'),
         (
             lambda line: [
-                line['versions'].pop(name) for name in run._DRIVERS[line['leg']]
+                line['versions'].pop(name, None)
+                for name in run._DRIVERS[line['leg']]
             ],
             "'s driver recorded",
         ),
@@ -503,6 +569,64 @@ def test_an_incomplete_capture_fails_by_name(fault: Any, named: str) -> None:
     fault(line)
     problems = check.capture_problems(line, case, tables)
     assert any(named in problem for problem in problems), problems
+
+
+def test_a_capture_from_a_dirty_tree_fails_unless_an_excuse_names_it() -> None:
+    # Claude T3.20 r1 P1-2: a capture recorded from a recording or
+    # reference tree that was not clean is refused, unless the recording
+    # names why (its excuse, as the recording run was given it).
+    case, line, tables = _capture()
+    assert check.capture_problems(line, case, tables) == []
+    for where in (
+        lambda identity: identity['commit'],
+        lambda identity: identity['reference']['commit'],
+    ):
+        dirty = copy.deepcopy(line)
+        where(dirty['observation']['identity'])['clean'] = False
+        problems = check.capture_problems(dirty, case, tables)
+        assert any('a tree that was not clean' in p for p in problems), problems
+        dirty['recording']['excuse'] = ''
+        assert check.capture_problems(dirty, case, tables) != []
+        dirty['recording']['excuse'] = 'build output only; the source untouched'
+        assert check.capture_problems(dirty, case, tables) == []
+
+
+def test_a_case_the_live_run_leaves_out_by_name_is_not_live_not_pending() -> (
+    None
+):
+    # T3.20 r2: the cases the live run leaves out by name on a leg (their
+    # names hold what the write guard refuses there) are known not live on
+    # that leg, listed with the reason, and never pending: the locked run
+    # does not fail on them. On a leg the list does not name, the case is
+    # pending as any other.
+    case, _, _ = _capture()
+    left = copy.deepcopy(case)
+    left['id'] = 'name.backtick-target'
+    problems, pending, not_live = check.captures(
+        [case, left], [], ['databricks-sql']
+    )
+    assert problems == []
+    assert pending == ['base.binary@databricks-sql']
+    assert [entry.split(':', 1)[0] for entry in not_live] == [
+        'name.backtick-target@databricks-sql'
+    ]
+    assert 'backtick' in not_live[0]
+    assert check.NOT_LIVE['name.line-break-target'][0] == check.LEGS
+
+
+def test_a_dirty_tree_s_excuse_survives_the_import(tmp_path: Path) -> None:
+    # Codex T3.20 r2 P2: the excuse a recording names for a tree that was
+    # not clean is kept in the capture written from it, so the capture
+    # alone shows why it stands.
+    captures = _load('captures')
+    case, line, tables = _capture()
+    line['observation']['identity']['commit']['clean'] = False
+    line['recording']['excuse'] = 'build output only; the source untouched'
+    assert check.capture_problems(line, case, tables) == []
+    written = captures.from_recording(line)
+    assert written['excuse'] == line['recording']['excuse']
+    captures.write(tmp_path / 'one', written, environ={})
+    assert captures.read(tmp_path / 'one')['excuse'] == written['excuse']
 
 
 def test_a_case_changed_after_its_capture_is_pending_live() -> None:

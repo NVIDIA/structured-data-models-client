@@ -155,7 +155,7 @@ pub enum Unreadable {
 /// which may quote values (decision H17).
 fn producer_failed() -> ProviderError {
     ProviderError {
-        refuses_expression: false,
+        error_class: None,
         kind: ErrorKind::DataSource,
         retryable: false,
         sqlstate: None,
@@ -421,6 +421,34 @@ impl HostRun {
                         ModelOutcome::TransportError { kind, retryable } => {
                             check_attachments(&[], &attachments)?;
                             ModelResult::TransportError { kind, retryable }
+                        }
+                        ModelOutcome::Failed { answer } => {
+                            let detail = match answer.detail {
+                                Some(detail) => {
+                                    check_attachments(
+                                        &[(detail, AttachmentKind::Bytes)],
+                                        &attachments,
+                                    )?;
+                                    let Some(Attachment::Bytes(bytes)) =
+                                        attachments.remove(&detail)
+                                    else {
+                                        return Err(invalid(
+                                            "a failed model call's detail is bytes",
+                                        ));
+                                    };
+                                    Some(bytes)
+                                }
+                                None => {
+                                    check_attachments(&[], &attachments)?;
+                                    None
+                                }
+                            };
+                            ModelResult::Failed {
+                                status: answer.status,
+                                detail,
+                                provider_code: answer.provider_code,
+                                provider_error: answer.provider_error,
+                            }
                         }
                     };
                     run.submit_model(reply.id, result)

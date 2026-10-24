@@ -30,6 +30,7 @@ fn provider_choices_round_trip() {
         ProviderChoice::Sql {
             dialect: Dialect::new("duckdb"),
             namespace: Vec::new(),
+            view: None,
         },
         ProviderChoice::Host {
             capabilities: ProviderCapabilities {
@@ -290,7 +291,8 @@ fn every_error_code_is_listed_once_and_spelled_as_the_contract_spells_it() {
         | ErrorCode::RunCancelled
         | ErrorCode::RunPoisoned
         | ErrorCode::RunBusy
-        | ErrorCode::InvalidMessage => ErrorCode::ALL.contains(&code),
+        | ErrorCode::InvalidMessage
+        | ErrorCode::EndpointRefused => ErrorCode::ALL.contains(&code),
     };
     let mut names = BTreeSet::new();
     for code in ErrorCode::ALL {
@@ -358,7 +360,7 @@ fn a_provider_error_keeps_its_retryability_and_codes_in_the_core_error() {
     use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind};
     for retryable in [true, false] {
         let error = CoreError::provider(&ProviderError {
-            refuses_expression: false,
+            error_class: None,
             kind: ErrorKind::DataSource,
             retryable,
             sqlstate: Some("40001".into()),

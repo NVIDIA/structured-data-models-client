@@ -19,9 +19,16 @@ fn statement(dialect: &str, unique: bool) -> String {
             unique,
         }],
     };
+    // Postgres reads every table under a schema (T3.7).
+    let namespace = if dialect == "postgres" {
+        vec![Some("public".to_owned())]
+    } else {
+        Vec::new()
+    };
     let choice = ProviderChoice::Sql {
-        namespace: Vec::new(),
+        namespace,
         dialect: Dialect::new(dialect),
+        view: None,
     };
     let Ok(FetchPlan::Sql { statements, .. }) = Data::new().plan(&request, &choice) else {
         panic!("{dialect}: key_counts is not planned as SQL");

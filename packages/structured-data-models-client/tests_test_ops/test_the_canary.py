@@ -514,8 +514,10 @@ def _leaky_driver(monkeypatch: pytest.MonkeyPatch) -> None:
     r"""A provider mapping that writes the driver's text into a field."""
     mapped = run_module._driver
 
-    def leaky(error: Exception) -> tuple[dict[str, Any], str]:
-        provided, kind = mapped(error)
+    def leaky(
+        error: Exception, provider: Any = None
+    ) -> tuple[dict[str, Any], str]:
+        provided, kind = mapped(error, provider)
         return {**provided, 'sqlstate': str(error)[:200]}, kind
 
     monkeypatch.setattr(run_module, '_driver', leaky)

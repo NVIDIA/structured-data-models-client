@@ -143,7 +143,7 @@ impl Sqlite {
         log: &mut DriverLog,
     ) -> Result<Fetched, ProviderError> {
         let failed = || ProviderError {
-            refuses_expression: false,
+            error_class: None,
             kind: ErrorKind::DataSource,
             retryable: false,
             sqlstate: None,
@@ -556,6 +556,7 @@ mod tests {
         let sqlite = ProviderChoice::Sql {
             dialect: Dialect::new("sqlite"),
             namespace: Vec::new(),
+            view: None,
         };
         let plan = sdm_host::default_root()
             .data_access(&sqlite)

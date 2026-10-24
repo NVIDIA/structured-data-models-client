@@ -244,7 +244,12 @@ def _admitted(provider: Any, dialect: str, column: str) -> pa.Table | str:
     }
     fetch = {
         'request': request,
-        'provider': {'provider': 'sql', 'dialect': dialect},
+        # A Postgres read names its schema, the database's ``public`` (T3.7).
+        'provider': {
+            'provider': 'sql',
+            'dialect': dialect,
+            **({'namespace': ['public']} if dialect == 'postgres' else {}),
+        },
         'echo': True,
     }
     try:

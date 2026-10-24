@@ -47,6 +47,10 @@ Reads (the forms the old client and the runner issue), anywhere:
   of :data:`FUNCTIONS`, by plain name (Postgres' also as ``pg_catalog.``),
   a keyword taking a ``(`` only where it cannot be a call, and casting
   (``::`` or ``CAST``) only to a built-in type of :data:`CAST_TYPES`;
+  on Postgres also the core's seed-time read (T3.7), in a read only:
+  ``CROSS JOIN (SELECT ROW(t.*)::<schema>.<table> ...)``, the cast a row's
+  to a table of the test schema, and ``CROSS JOIN LATERAL
+  jsonb_populate_record(..., jsonb_build_object(...))``;
 - ``DESCRIBE TABLE [EXTENDED] <t>``, ``SHOW TABLES [LIKE <p>] [IN [SCHEMA]
   <s>]``, ``SHOW IMPORTED KEYS IN TABLE <t>``, ``SHOW PARAMETERS LIKE <p>
   IN SESSION``, ``USE CATALOG | SCHEMA | DATABASE <s>`` and ``ALTER
@@ -489,6 +493,12 @@ class WriteGuard:
         self.dialect = dialect
         self.database = database if dialect != 'postgres' else None
         self.schema = schema
+        #: The tables of the test schema this guard admitted the CREATE of
+        #: and not yet the DROP, by name as stored: the only ones whose rows
+        #: the core's seed-time read may convert or cast to (their columns
+        #: are of the built-in types and test schema composites a CREATE
+        #: admits, so no domain's check runs).
+        self.made: set[str] = set()
 
     # Names.
 
@@ -529,29 +539,64 @@ class WriteGuard:
             s.refuse('no name here')
         return parts
 
-    def _target(self, s: _Statement) -> None:
-        r"""Moves past a name in the test schema, refusing any other."""
+    def _target(self, s: _Statement) -> str:
+        r"""Moves past a name in the test schema, refusing any other;
+        returns the object's name as stored."""
         parts = self._name(s)
         if not self._container(parts[:-1]):
             s.refuse(
                 'a write target outside the test schema, or not fully '
                 'qualified in it'
             )
+        return self._stored(parts[-1])
+
+    def _stored(self, part: tuple[str, bool]) -> str:
+        r"""A name part as the warehouse stores it."""
+        text, quoted = part
+        if quoted:
+            return text
+        return text.upper() if self.dialect == 'snowflake' else text.lower()
+
+    def _made(self, items: list[Token], at: int) -> int | None:
+        r"""Where the name at ``at`` ends, when it is ``<schema>.<table>``,
+        a table of the test schema this guard saw made; None otherwise."""
+        name = items[at : at + 3]
+        if (
+            len(name) == 3
+            and name[0].kind in ('word', 'name')
+            and name[1] == _DOT
+            and name[2].kind in ('word', 'name')
+            and items[at + 3 : at + 4] not in ([_DOT], [_OPEN])
+            and self._container([(name[0].text, name[0].kind == 'name')])
+            and self._stored((name[2].text, name[2].kind == 'name'))
+            in self.made
+        ):
+            return at + 3
+        return None
 
     def _held(
-        self, items: list[Token], words: frozenset[str], what: str
+        self,
+        items: list[Token],
+        words: frozenset[str],
+        what: str,
+        read: bool = False,
     ) -> None:
         r"""Refuses ``items`` holding one of ``words`` or a sequence's word,
         casting to a type not built in, or calling anything but
         :data:`FUNCTIONS` by a plain name; a keyword takes a ``(`` only
         where it cannot be a call (:data:`RESERVED` and the words after it),
-        and an alias after ``AS`` its list of names."""
+        and an alias after ``AS`` its list of names. In a Postgres ``read``
+        (a SELECT or WITH statement, never a write's), also the core's
+        seed-time shapes (:meth:`_seed_row`)."""
         # The word each open parenthesis follows, innermost last: inside a
         # cast, AS names its type.
         openers: list[str] = []
-        # Where each open parenthesis is, and the one the last ``)`` closed.
+        # Where each open parenthesis is, the one the last ``)`` closed, and
+        # the word before that one.
         opened: list[int] = []
         closed: int | None = None
+        closed_by = ''
+        seeds = read and self.dialect == 'postgres'
         types: set[int] = set()
         for i, token in enumerate(items):
             word = _upper(token)
@@ -565,13 +610,17 @@ class WriteGuard:
                 if openers:
                     openers.pop()
                 closed = opened.pop() if opened else None
+                closed_by = _upper(items[closed - 1]) if closed else ''
                 continue
             if word in words and after != [_OPEN]:
                 raise WriteRefused(f'{what}: {word} where no write may be')
             if word in SEQUENCE_WORDS:
                 raise WriteRefused(f'{what}: {word}, a sequence')
             if token == Token('punct', ':') and after == [Token('punct', ':')]:
-                types |= self._cast_type(items, i + 2, what)
+                if seeds and before == _CLOSE and closed_by == 'ROW':
+                    types |= self._seed_row(items, i + 2, what)
+                else:
+                    types |= self._cast_type(items, i + 2, what)
                 continue
             if word == 'AS' and openers[-1:] in (['CAST'], ['TRY_CAST']):
                 types |= self._cast_type(items, i + 1, what)
@@ -605,6 +654,30 @@ class WriteGuard:
                     and _upper(before) not in RESERVED
                 )
                 or (
+                    # The core's seed-time read on Postgres (sdm-data's
+                    # seed CTE): CROSS JOIN (SELECT ROW(t.*)::<table> ...),
+                    # then CROSS JOIN LATERAL jsonb_populate_record(b.base,
+                    # jsonb_build_object(...)).
+                    seeds
+                    and (
+                        (
+                            word == 'JOIN'
+                            and _upper(before) == 'CROSS'
+                            and [_upper(t) for t in items[i + 2 : i + 3]]
+                            == ['SELECT']
+                        )
+                        or (
+                            word == 'JSONB_POPULATE_RECORD'
+                            and _upper(before) == 'LATERAL'
+                            and self._seed_base(items, i + 2, what)
+                        )
+                        or (
+                            word == 'JSONB_BUILD_OBJECT'
+                            and openers[-1:] == ['JSONB_POPULATE_RECORD']
+                        )
+                    )
+                )
+                or (
                     # The old client's join onto a derived table:
                     # JOIN (SELECT ...) ON ....
                     word == 'JOIN'
@@ -628,6 +701,139 @@ class WriteGuard:
             ):
                 continue
             raise WriteRefused(f'{what}: {word}(), a function on no list')
+
+    def _seed_row(self, items: list[Token], at: int, what: str) -> set[int]:
+        r"""The row type a ``ROW(...)`` is cast to at ``at`` in the core's
+        seed-time read: ``<schema>.<table>``, a table of the test schema
+        this guard saw made (:attr:`made`); refuses any other. Returns the
+        index of its tokens."""
+        end = self._made(items, at)
+        if end is None:
+            raise WriteRefused(
+                f'{what}: a row cast to a type not of a test schema table'
+            )
+        return set(range(at, end))
+
+    def _seed_base(self, items: list[Token], at: int, what: str) -> bool:
+        r"""Whether the first argument of ``jsonb_populate_record`` at
+        ``at`` is a row of a table this guard saw made: the alias (or name)
+        of a FROM or JOIN item ``<schema>.<table> [AS] <alias>``, or
+        ``<b>.base`` of the core's seed row of one, ``(SELECT
+        ROW(<t>.*)::<table> AS base FROM <table> [AS] <t> LIMIT 1) [AS]
+        <b>``, the same table twice; refuses anything else (another
+        schema's or the catalog's row, a subquery's, a function's or a
+        cast's), whose conversion could run a domain's check."""
+        argument = items[at : at + 4]
+        if (
+            len(argument) >= 2
+            and argument[0].kind in ('word', 'name')
+            and argument[1] == _COMMA
+        ):
+            if self._aliases_table(items, argument[0]):
+                return True
+        elif (
+            len(argument) == 4
+            and argument[0].kind in ('word', 'name')
+            and argument[1] == _DOT
+            and _upper(argument[2]) == 'BASE'
+            and argument[3] == _COMMA
+        ):
+            if self._aliases_seed_row(items, argument[0]):
+                return True
+        raise WriteRefused(
+            f"{what}: a row converted that is not a test schema table's"
+        )
+
+    def _same_name(self, a: Token, b: Token) -> bool:
+        return (
+            a.kind in ('word', 'name')
+            and b.kind
+            in (
+                'word',
+                'name',
+            )
+            and self._stored((a.text, a.kind == 'name'))
+            == self._stored((b.text, b.kind == 'name'))
+        )
+
+    def _alias_at(self, items: list[Token], at: int) -> Token | None:
+        r"""The alias a FROM item names at ``at`` (after an optional AS)."""
+        if _upper(items[at] if at < len(items) else None) == 'AS':
+            at += 1
+        token = items[at] if at < len(items) else None
+        if token is None or token.kind not in ('word', 'name'):
+            return None
+        return token
+
+    def _aliases_table(self, items: list[Token], alias: Token) -> bool:
+        r"""Whether ``alias`` names a FROM or JOIN item that is a table
+        this guard saw made."""
+        for j in range(1, len(items)):
+            if _upper(items[j - 1]) not in ('FROM', 'JOIN'):
+                continue
+            end = self._made(items, j)
+            if end is None:
+                continue
+            named = self._alias_at(items, end)
+            if named is not None and self._same_name(named, alias):
+                return True
+        return False
+
+    def _aliases_seed_row(self, items: list[Token], alias: Token) -> bool:
+        r"""Whether ``alias`` names the core's seed row of a table this
+        guard saw made (see :meth:`_seed_base`)."""
+        for j in range(len(items)):
+            if items[j] != _OPEN or [
+                _upper(t) for t in items[j + 1 : j + 3]
+            ] != [
+                'SELECT',
+                'ROW',
+            ]:
+                continue
+            row = items[j + 3 : j + 9]
+            if not (
+                len(row) == 6
+                and row[0] == _OPEN
+                and row[1].kind in ('word', 'name')
+                and row[2] == _DOT
+                and row[3] == Token('punct', '*')
+                and row[4] == _CLOSE
+                and row[5] == Token('punct', ':')
+                and items[j + 9 : j + 10] == [Token('punct', ':')]
+            ):
+                continue
+            cast_end = self._made(items, j + 10)
+            if cast_end is None or [
+                _upper(t) for t in items[cast_end : cast_end + 3]
+            ] != ['AS', 'BASE', 'FROM']:
+                continue
+            table_end = self._made(items, cast_end + 3)
+            if table_end is None or not all(
+                self._same_name(a, b)
+                for a, b in zip(
+                    items[j + 10 : cast_end],
+                    items[cast_end + 3 : table_end],
+                    strict=True,
+                )
+                if a != _DOT
+            ):
+                continue
+            source = self._alias_at(items, table_end)
+            if source is None or not self._same_name(source, row[1]):
+                continue
+            after = table_end + (2 if _upper(items[table_end]) == 'AS' else 1)
+            tail = items[after : after + 3]
+            if not (
+                len(tail) == 3
+                and _upper(tail[0]) == 'LIMIT'
+                and tail[1] == Token('number', '1')
+                and tail[2] == _CLOSE
+            ):
+                continue
+            named = self._alias_at(items, after + 3)
+            if named is not None and self._same_name(named, alias):
+                return True
+        return False
 
     def _cast_type(self, items: list[Token], at: int, what: str) -> set[int]:
         r"""The built-in type a cast names at ``at`` (one word or several,
@@ -659,7 +865,7 @@ class WriteGuard:
         verb = _upper(s.peek())
         s.at = 1
         if verb in ('SELECT', 'WITH'):
-            self._held(items, WRITE_WORDS, s.what)
+            self._held(items, WRITE_WORDS, s.what, read=True)
         elif verb in ('DESCRIBE', 'DESC'):
             s.expect('TABLE')
             s.accept('EXTENDED')
@@ -730,13 +936,14 @@ class WriteGuard:
     def _create(self, s: _Statement) -> None:
         replace = s.accept('OR', 'REPLACE')
         if s.accept('TABLE'):
-            self._target(s)
+            made = self._target(s)
             self._columns(s.group(), s.what, constraints=True)
             if self.dialect == 'databricks' and s.accept('TBLPROPERTIES'):
                 properties = s.group()
                 if any(t.kind not in ('string', 'punct') for t in properties):
                     s.refuse('a table property that is not a literal')
             s.end()
+            self.made.add(made)
         elif (
             self.dialect == 'databricks'
             and _upper(s.peek()) == 'VIEW'
@@ -858,8 +1065,9 @@ class WriteGuard:
         ):
             s.refuse('an object the guard does not drop')
         s.accept('IF', 'EXISTS')
-        self._target(s)
+        dropped = self._target(s)
         s.end()
+        self.made.discard(dropped)
 
     def _call(self, s: _Statement) -> None:
         s.expect('SYSTEM$CREATE_SEMANTIC_VIEW_FROM_YAML')
@@ -1051,23 +1259,29 @@ def setup() -> Iterator[None]:
 #: Snowpark's ``Session.close``: while it runs, the one statement it sends
 #: to cancel its own session's queries is admitted (:func:`_closing`).
 SESSION_CLOSE = ('snowflake.snowpark.session', 'Session', 'close')
-#: The statement the closing session may send, exactly, or ``None``.
-_CLOSING: contextvars.ContextVar[str | None] = contextvars.ContextVar(
-    'sdm_write_guard_closing', default=None
+#: While a Snowpark session closes, the one statement it may send and the
+#: Snowflake connection it may send it on, or ``None``.
+_CLOSING: contextvars.ContextVar[tuple[str, Any] | None] = (
+    contextvars.ContextVar('sdm_write_guard_closing', default=None)
 )
 
 
 def _closing(original: Any) -> Any:
     r"""Snowpark's ``Session.close``, admitting while it runs exactly
     ``select system$cancel_all_queries(<its session id>)``, the statement
-    its ``cancel_all`` sends, and nothing else."""
+    its ``cancel_all`` sends, on the session's own Snowflake connection
+    (``Session._conn._conn``), and nothing else."""
 
     @functools.wraps(original)
     def close(self: Any, *arguments: Any, **keywords: Any) -> Any:
         session_id = getattr(self, '_session_id', None)
+        server = getattr(self, '_conn', None)
+        connection = getattr(server, '_conn', None)
         admitted = (
-            f'select system$cancel_all_queries({session_id})'
-            if isinstance(session_id, int) and not isinstance(session_id, bool)
+            (f'select system$cancel_all_queries({session_id})', connection)
+            if isinstance(session_id, int)
+            and not isinstance(session_id, bool)
+            and connection is not None
             else None
         )
         token = _CLOSING.set(admitted)
@@ -1078,6 +1292,30 @@ def _closing(original: Any) -> Any:
 
     setattr(close, _MARK, True)
     return close
+
+
+def _closing_admits(dialect: str, cursor: Any, text: str) -> bool:
+    r"""Whether ``text`` on ``cursor`` is the closing Snowpark session's
+    own cancel: on that session's connection or a cursor of it, or on the
+    driver connection a capture of it wraps."""
+    closing = _CLOSING.get()
+    if closing is None or dialect != 'snowflake':
+        return False
+    statement, connection = closing
+    if text != statement:
+        return False
+    # A cursor of the connection, or the connection itself (the connector
+    # sends a cursor's statement on through its cmd_query).
+    own = (cursor, getattr(cursor, 'connection', None))
+    # The recording mode hands Snowpark its capture of the connection,
+    # keeping the driver's as ``_driver``; the cursor is the driver's.
+    for _ in range(4):
+        if connection is None:
+            return False
+        if any(each is connection for each in own):
+            return True
+        connection = getattr(connection, '_driver', None)
+    return False
 
 
 def _keeping(function: Any) -> Any:
@@ -1125,7 +1363,10 @@ def _text(owner: Any, statement: Any) -> str:
 
 
 def _guarded(
-    original: Any, check: Callable[[str], None], spark: bool = False
+    original: Any,
+    check: Callable[[str], None],
+    spark: bool = False,
+    dialect: str = '',
 ) -> Any:
     @functools.wraps(original)
     def guarded(self: Any, *arguments: Any, **keywords: Any) -> Any:
@@ -1141,8 +1382,7 @@ def _guarded(
                 raise WriteRefused('a statement the guard cannot find')
             statement = keywords[given[0]]
         text = _text(self, statement)
-        closing = _CLOSING.get()
-        if closing is None or text != closing:
+        if not _closing_admits(dialect, self, text):
             check(text)
         return original(self, *arguments, **keywords)
 
@@ -1325,7 +1565,9 @@ def install(guards: Mapping[str, WriteGuard | None]) -> Callable[[], None]:
                 _wrap(
                     cls,
                     attribute,
-                    functools.partial(_guarded, check=check, spark=spark),
+                    functools.partial(
+                        _guarded, check=check, spark=spark, dialect=dialect
+                    ),
                 )
         module_name, class_name, attributes = SPARK_CONNECT
         cls = _class(module_name, class_name)

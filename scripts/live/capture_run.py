@@ -208,31 +208,9 @@ def plan(leg: str, e0: bool = False) -> dict[str, Any]:
 
 
 #: The cases a leg's live plan leaves out, by name, with the legs and the
-#: reason: their names hold a character the write guard's one strict name
-#: rule refuses (a backtick on Databricks, a line break anywhere), so every
-#: load of theirs is refused by design (the owner's allowlist decision).
-_BACKTICK = (
-    'a name holds a backtick, which the write guard refuses on Databricks'
-)
-_LINE_BREAK = 'a name holds a line break, which the write guard refuses'
-NOT_LIVE: dict[str, tuple[tuple[str, ...], str]] = {
-    **{
-        f'name.backtick-{part}': (
-            ('databricks-sql', 'databricks-spark'),
-            _BACKTICK,
-        )
-        for part in ('aggregation', 'entity', 'feature', 'filter', 'target')
-    },
-    # T3.4's odd column names hold a backtick among others.
-    'databricks.name.odd-columns': (
-        ('databricks-sql', 'databricks-spark'),
-        _BACKTICK,
-    ),
-    **{
-        f'name.line-break-{part}': (LEGS, _LINE_BREAK)
-        for part in ('aggregation', 'entity', 'feature', 'filter', 'target')
-    },
-}
+#: reason (the owner's allowlist decision): ``captures.py``'s list, which
+#: the capture check reads too.
+NOT_LIVE = _module('captures').NOT_LIVE
 
 
 #: The live write guard, beside this file (KO3-51): a run without it does

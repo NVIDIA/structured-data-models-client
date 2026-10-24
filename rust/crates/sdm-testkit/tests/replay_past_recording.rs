@@ -13,10 +13,11 @@
 //! never judged on rows it was not recorded with.
 //!
 //! `sdm-contract-run --replay` runs three cases over
-//! `tests/replay-past-recording.jsonl`, a recording of one fetch:
-//! `t28.replay.answered`, whose one fetch (the describe's list of tables,
-//! answered with none) is recorded, so it runs to its end and writes its
-//! line; and two cases recorded with no fetch at all, which the core asks
+//! `tests/replay-past-recording.jsonl`, a recording of two fetches:
+//! `t28.replay.answered`, whose fetches (the session's current schema,
+//! read once since the source names none, T3.7, then the describe's list
+//! of tables in it, answered with none) are recorded, so it runs to its end
+//! and writes its line; and two cases recorded with no fetch at all, which the core asks
 //! one past at once: `t28.replay.diagnostic-past-its-recording` and
 //! `t28.replay.acceptance-past-its-recording`. Each case is `s0.accept.
 //! sum-window`'s, its id and status its own.

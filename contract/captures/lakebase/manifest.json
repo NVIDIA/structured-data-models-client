@@ -1,0 +1,1110 @@
+{
+ "format": "sdm-capture/1",
+ "recording_commit": "b08dee3d2d7101e72b957a0ef613506f99a2638a",
+ "reference_commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+ "legs": {
+  "lakebase": {
+   "databricks-sdk": "0.148.0",
+   "duckdb": "1.5.6",
+   "numpy": "2.5.3",
+   "pandas": "3.0.6",
+   "psycopg": "3.3.6",
+   "pyarrow": "25.0.1",
+   "python": "3.12.15"
+  }
+ },
+ "cases": {
+  "assuming.binary@lakebase": {
+   "input_hash": "170c881b7d416baf9c90844ef65588bf1b1589271993a294ccf5052d05e1d151",
+   "capture": "assuming.binary"
+  },
+  "assuming.no-examples@lakebase": {
+   "input_hash": "d78441b5456280bc425e973dd7677369f410d11d9d176b5874084fad2eb568a3",
+   "capture": "assuming.no-examples"
+  },
+  "assuming.regression@lakebase": {
+   "input_hash": "e867b1601e3ab80eeab5f6d23b01a53207ef809ff12bedaa69a91e98447761ac",
+   "capture": "assuming.regression"
+  },
+  "assuming.static@lakebase": {
+   "input_hash": "c30e292a91410889d5042b0f754120960bf2b9fc681e0478b97a255735c15d80",
+   "capture": "assuming.static"
+  },
+  "base.adventureworks@lakebase": {
+   "input_hash": "47776071971e7e1afddaf12f893c38ebd92d640cd1bb30c887cd03436314e46e",
+   "capture": "base.adventureworks"
+  },
+  "base.adventureworks.churn@lakebase": {
+   "input_hash": "da4cc7de5b0129a01c20122cabfa2f591baacc21279c08bc194326396e8e1fec",
+   "capture": "base.adventureworks.churn"
+  },
+  "base.adventureworks.color@lakebase": {
+   "input_hash": "6a8fd412e8ca185fdcc2b1fd821386989d707b3fa7208d8dad2ba7a04327f7eb",
+   "capture": "base.adventureworks.color"
+  },
+  "base.binary@lakebase": {
+   "input_hash": "009c51ff02467fe520e00042930e6f2f0112b840fd809e001b53615736be9230",
+   "capture": "base.binary"
+  },
+  "base.multiclass@lakebase": {
+   "input_hash": "673f33a018fd021e15d03e0416c0c7ebb41ec44fc3754c85bee3640085411efa",
+   "capture": "base.multiclass"
+  },
+  "base.regression@lakebase": {
+   "input_hash": "7b5e1b9a91a6c33663d4c8a0dcc383a8140f9764e193554c5670483fd28373c0",
+   "capture": "base.regression"
+  },
+  "config-text.accepted@lakebase": {
+   "input_hash": "c487663de4469310c52fec6f6c86e3db6345d33b1f38127f52d1fce621ad7b25",
+   "capture": "config-text.accepted"
+  },
+  "config-text.class-shuffle@lakebase": {
+   "input_hash": "b75e4cca5b7a5f591d9b8dcacea8dc000239d14f99ed038cd80e007aa75a7871",
+   "capture": "config-text.class-shuffle"
+  },
+  "config-text.estimators-out-of-range@lakebase": {
+   "input_hash": "b710f51bb9c78e52b91b9f98d766c56383555ac53a11b9f54292c580f40d607a",
+   "capture": "config-text.estimators-out-of-range"
+  },
+  "config-text.estimators-whole-float@lakebase": {
+   "input_hash": "89ad32b326afe25ad632a1b8082085562e997f0e266e7ce90f1557e0024ec24d",
+   "capture": "config-text.estimators-whole-float"
+  },
+  "config-text.estimators-word@lakebase": {
+   "input_hash": "4f4eb806f298bf0e6402829e64a273e8cc2431a21451a4babd481180118c025a",
+   "capture": "config-text.estimators-word"
+  },
+  "config-text.shuffle-word@lakebase": {
+   "input_hash": "93bc399ee1bddc2a58c5b823a9adae9d09cbb369501c095b83e3f6fd14c4d572",
+   "capture": "config-text.shuffle-word"
+  },
+  "date.day-first-then-packed@lakebase": {
+   "input_hash": "81525a286017815622345fd7f7bd2717309a800932c8b42c20080f554e17e1e6",
+   "capture": "date.day-first-then-packed"
+  },
+  "decimal.class-target-38-18@lakebase": {
+   "input_hash": "e5f24d485ce2377fda9f7867dccb88e678ba2963ae63f3b60b4bf93dd9c9a497",
+   "capture": "decimal.class-target-38-18"
+  },
+  "decimal.compare-finer-eq@lakebase": {
+   "input_hash": "070c598426df757160ddb36444b0b3f23557ec53ca013e4531e0a6c952c3db28",
+   "capture": "decimal.compare-finer-eq"
+  },
+  "decimal.compare-finer-gt@lakebase": {
+   "input_hash": "4a46cbf9a69fa2c04c075df89da89064a4cea9e386a6e27a4e030c26ad475b16",
+   "capture": "decimal.compare-finer-gt"
+  },
+  "decimal.compare-finer-negative@lakebase": {
+   "input_hash": "8b565ad3742481336702eeb433c47ad052bbc9b90da37f574b5f19849d9f7259",
+   "capture": "decimal.compare-finer-negative"
+  },
+  "decimal.compare-past-precision@lakebase": {
+   "input_hash": "3bdf015a4d22f52888b3b9dd7190a9cc85c94cf8665a83e0b0d87e5c44228ea0",
+   "capture": "decimal.compare-past-precision"
+  },
+  "decimal.compare-past-precision-gt@lakebase": {
+   "input_hash": "e25017627c6e431ec20bbd88bb91b2396de8f5bdb418de1ce5676da600eafab8",
+   "capture": "decimal.compare-past-precision-gt"
+  },
+  "decimal.compare-same-scale@lakebase": {
+   "input_hash": "ad7618b0db9ceacc16e7c4d8feafbb3184ca92236617fc23368233850926107d",
+   "capture": "decimal.compare-same-scale"
+  },
+  "decimal.feature-38-0-wide@lakebase": {
+   "input_hash": "caa5fc160ba044a7d31c0aeff881884976d67838ebcae124c5fcf27a03ace0f1",
+   "capture": "decimal.feature-38-0-wide"
+  },
+  "decimal.feature-inexact-38-18@lakebase": {
+   "input_hash": "62cbdd55c41d178b4f55ab3133c05be81037188e5872acae236918f259b2cdf9",
+   "capture": "decimal.feature-inexact-38-18"
+  },
+  "decimal.key-wide@lakebase": {
+   "input_hash": "9deda39767d0de3c081c7ac2165691024e3382ae0b1486aed00e9af7f4cff4ad",
+   "capture": "decimal.key-wide"
+  },
+  "decimal.stype-past-float-precision@lakebase": {
+   "input_hash": "5e52d9e9f430867d84feeefa499da53471c7f2b67fdc2f0900d9ca42e1e7b5a6",
+   "capture": "decimal.stype-past-float-precision"
+  },
+  "decimal.sum-10-2@lakebase": {
+   "input_hash": "9dcdf0af4dd9f3fd35c056acafa580454651e5500a7f8a6d3e86e909acef97bf",
+   "capture": "decimal.sum-10-2"
+  },
+  "decimal.target-38-18@lakebase": {
+   "input_hash": "0c4cc307e06f0571455407cc64c1a1dc646f3841407bd4dd58b550f212ab57e7",
+   "capture": "decimal.target-38-18"
+  },
+  "decimal.target-regression-collide@lakebase": {
+   "input_hash": "76c349ff4f58690c2756cf502f934be9487dd77d29d9dc40ef9b5b7eb76616c2",
+   "capture": "decimal.target-regression-collide"
+  },
+  "edit.accepted-meaning-key-links@lakebase": {
+   "input_hash": "f6ad728ea0e66b8ed36d17eb9eb8734b8bf7704375338123614667a4210cd422",
+   "capture": "edit.accepted-meaning-key-links"
+  },
+  "edit.key-missing-column@lakebase": {
+   "input_hash": "7cd5a7a03776276988d0024913ab554fd8d93b74ff65f4c1c4c9e462f1ea964a",
+   "capture": "edit.key-missing-column"
+  },
+  "edit.key-time-column@lakebase": {
+   "input_hash": "36acdf8f00187b5d212bd22d265125b1db52a7b99737e7026f5f0ea5eed52cdb",
+   "capture": "edit.key-time-column"
+  },
+  "edit.leave-out-the-key@lakebase": {
+   "input_hash": "0e92c7c9d2d08fa9fc7d8f72cc3fcfdcbad66ca1897806dde6f3163e920578db",
+   "capture": "edit.leave-out-the-key"
+  },
+  "edit.link-not-the-key@lakebase": {
+   "input_hash": "914ca8e5d39fb13d2231aa73ee3dc295c1e162fa1ec93f58ce70f82527db3597",
+   "capture": "edit.link-not-the-key"
+  },
+  "edit.meaning-not-carried@lakebase": {
+   "input_hash": "0b6d873a39057e839c2a53e5edd51b7a17802adae147843b34dd3952c1b788b6",
+   "capture": "edit.meaning-not-carried"
+  },
+  "edit.meaning-unknown@lakebase": {
+   "input_hash": "81abfa148afb8bb1366a639a513f07cd7445c089f6871cd520681a135b947a8a",
+   "capture": "edit.meaning-unknown"
+  },
+  "edit.time-column-not-a-time@lakebase": {
+   "input_hash": "f218c03d0824a3a8ed600bd6f546070cdfa1a494b6676117cf056fea709322f4",
+   "capture": "edit.time-column-not-a-time"
+  },
+  "edit.time-column-text@lakebase": {
+   "input_hash": "1ea4615cbcff65624d2aa1ec39dd2a3168ec66b0b1ff63b682c0ac4aa851fb29",
+   "capture": "edit.time-column-text"
+  },
+  "empty.entity-without-facts@lakebase": {
+   "input_hash": "6e99aa95cd64965a1e9011f1e7c7fa1f4d26f61cea4395cb41de4d8af50d8323",
+   "capture": "empty.entity-without-facts"
+  },
+  "empty.fact-table@lakebase": {
+   "input_hash": "d7e8b0f33063e1773daea0777804af677867d99be0e671c61a2508f47edac9a2",
+   "capture": "empty.fact-table"
+  },
+  "empty.indices@lakebase": {
+   "input_hash": "6d284b8dfe0609c82d62cf0eb37b28f97a847ce608440f399fdc1422174a4d04",
+   "capture": "empty.indices"
+  },
+  "evaluate.binary@lakebase": {
+   "input_hash": "d164f1c6924c89b65fc1cc2e895dd14b80cd6450a5938e75f2266da7db261b40",
+   "capture": "evaluate.binary"
+  },
+  "evaluate.regression@lakebase": {
+   "input_hash": "a326bd76701519dfab8bb054e1b571981b2f05b24ea319ec7c065e9b7211be85",
+   "capture": "evaluate.regression"
+  },
+  "explain.answered@lakebase": {
+   "input_hash": "a2ae5b96e03269c915caf115eadf12f2425ef7e34f2dc30d71c19f9207d64643",
+   "capture": "explain.answered"
+  },
+  "explain.explanation-only@lakebase": {
+   "input_hash": "53206a81b52da45622ff0af45e3220d6f48fc64d5aa91a1d9eadb26c8774703e",
+   "capture": "explain.explanation-only"
+  },
+  "explain.forecast@lakebase": {
+   "input_hash": "1cb649db06cc293267a4ac63b0d86da595bf8d17e8ec09863a032e4dc5055a2f",
+   "capture": "explain.forecast"
+  },
+  "explain.not-answered@lakebase": {
+   "input_hash": "1ffc81cf5b8a9d8f1f70a2be191739f63d68f82ce6ac6226a7cebcd54a8f283c",
+   "capture": "explain.not-answered"
+  },
+  "explain.query@lakebase": {
+   "input_hash": "94bf0f988e77529c94cc9d0c0d47c26ff5eb5c26ff37122f1d6b3a94d86daa34",
+   "capture": "explain.query"
+  },
+  "explain.two-entities@lakebase": {
+   "input_hash": "c5ddc22d501d0bdfe7a249e411996875295182b655553ce0b354981e5f5f324a",
+   "capture": "explain.two-entities"
+  },
+  "feature.bool@lakebase": {
+   "input_hash": "797989530072cf08502ffc4ccb25c91f3ad323dfefad958f61639ddd6dc41f1b",
+   "capture": "feature.bool"
+  },
+  "filter.entity-aggregation@lakebase": {
+   "input_hash": "9e85a269cd0e6f875cf4844097847a14601b9c0f73a38127459d2a11d421060a",
+   "capture": "filter.entity-aggregation"
+  },
+  "filter.entity-column@lakebase": {
+   "input_hash": "b1d5e80cd485b3083bfc48855e7743259abb990b67c463908ad5f7e038918ed3",
+   "capture": "filter.entity-column"
+  },
+  "filter.entity-text@lakebase": {
+   "input_hash": "b7243b242554266bd053534070da643a585975a1b8e459372adf6a5238879a12",
+   "capture": "filter.entity-text"
+  },
+  "filter.event-column@lakebase": {
+   "input_hash": "6286985f74ddf6e76b880ed253f318ffd23e3db39aadc222fa8e80e621c5dd55",
+   "capture": "filter.event-column"
+  },
+  "filter.matches-none@lakebase": {
+   "input_hash": "9aaa94a6ec4fc65cdd173fae5c1191afb73e924773b2b09cab1d312d8fc106a3",
+   "capture": "filter.matches-none"
+  },
+  "filter.ranking@lakebase": {
+   "input_hash": "ca9169bce4bafbf85d55b073c5bc70061afa1d7f7ad80714fa1ee09b81ab8bee",
+   "capture": "filter.ranking"
+  },
+  "forecast.binary-target@lakebase": {
+   "input_hash": "e8733c071926a6706b22c7f0c895165c1062c32d581c4ec76f3bcb974f0b5dc7",
+   "capture": "forecast.binary-target"
+  },
+  "forecast.count-months@lakebase": {
+   "input_hash": "ab4b181a659f13594af2055a1fa2289476cfb92c413b3bfd87a79e4f549d0449",
+   "capture": "forecast.count-months"
+  },
+  "forecast.lag-0@lakebase": {
+   "input_hash": "5fe887bb9aa37ffb712f70bf9bd7cf6b4e0e8c4673b08c65589947bfb9788c74",
+   "capture": "forecast.lag-0"
+  },
+  "forecast.lag-1@lakebase": {
+   "input_hash": "e30108a03c4180766555c7df30163c5a01055dc0e890c39b795ee5cdef6ed92a",
+   "capture": "forecast.lag-1"
+  },
+  "forecast.lag-2@lakebase": {
+   "input_hash": "9338f0e87bd5ecac19049e1bc0ec9546f4f437aac1ef18df57fd281c8a433b4b",
+   "capture": "forecast.lag-2"
+  },
+  "forecast.lag-bool@lakebase": {
+   "input_hash": "0222448c6440a72c4c09edf0f058009ec255be4c111e663d885fd3949907444e",
+   "capture": "forecast.lag-bool"
+  },
+  "forecast.lag-fraction@lakebase": {
+   "input_hash": "94f9b043ba08af1f9865b6a7247038a2d67840e317784290953617bdddbf2b51",
+   "capture": "forecast.lag-fraction"
+  },
+  "forecast.lag-negative@lakebase": {
+   "input_hash": "164a943a47aa7e226d1ece4eeb70da70ecb395c2460ca1bfa71bb50406b31402",
+   "capture": "forecast.lag-negative"
+  },
+  "forecast.lag-text@lakebase": {
+   "input_hash": "3bd9f2856f3882cb1795be5b2a32378a4c0412dc65ab846fa4ef2615021d4ee8",
+   "capture": "forecast.lag-text"
+  },
+  "forecast.lag-whole-float@lakebase": {
+   "input_hash": "b51fcd69af17da6028537cbc1a63393b6bccb9f146cf07d4b5e1301d9d790bed",
+   "capture": "forecast.lag-whole-float"
+  },
+  "forecast.most-parts@lakebase": {
+   "input_hash": "76c12c65ee38becc7f6111b79941763ba0eb65ca103cb35baf5fa141b24793b7",
+   "capture": "forecast.most-parts"
+  },
+  "forecast.quantiles@lakebase": {
+   "input_hash": "1765551545a636afe0e7a75cc23de47d03f655491581a7703ca4c5a809509242",
+   "capture": "forecast.quantiles"
+  },
+  "forecast.quantiles-and-prediction@lakebase": {
+   "input_hash": "ef0a75f58b54cfdfa8aac850c4699faaaee929d7d999dcb6f02d687e6c233e30",
+   "capture": "forecast.quantiles-and-prediction"
+  },
+  "forecast.quantiles-unanswered@lakebase": {
+   "input_hash": "2ad96697004248ebbf28414cfee39ec2ee21805801914f6e73829fdb564fe776",
+   "capture": "forecast.quantiles-unanswered"
+  },
+  "forecast.static-target@lakebase": {
+   "input_hash": "3609fee6b3a231c152bef88febbc6127358e683e7d190752b9f96e38ac9028d3",
+   "capture": "forecast.static-target"
+  },
+  "forecast.steps-1@lakebase": {
+   "input_hash": "634e0a96100a946aecbd21209b339a0b39cb60cde16002f23cbabb3331b0c1ac",
+   "capture": "forecast.steps-1"
+  },
+  "forecast.steps-2@lakebase": {
+   "input_hash": "d676c92b5a08aff612c399fa5e57ea4f4d5796be345b04180081b03d190f33d8",
+   "capture": "forecast.steps-2"
+  },
+  "forecast.steps-3@lakebase": {
+   "input_hash": "a39254124d7b695d5a64737efb4509a62381f4f1d04332ca939982a7f9a85502",
+   "capture": "forecast.steps-3"
+  },
+  "forecast.steps-fraction@lakebase": {
+   "input_hash": "fdd31a9023f07e579b816fe2c295f7c5476a7c5a532b8bb9bc66ae3a7afe8036",
+   "capture": "forecast.steps-fraction"
+  },
+  "forecast.steps-negative@lakebase": {
+   "input_hash": "f9ce2d7d383a8a8d2a6f3e80c417261b0031f164a5411a3a0546dc4473fc1b84",
+   "capture": "forecast.steps-negative"
+  },
+  "forecast.steps-past-grammar@lakebase": {
+   "input_hash": "2931d5932b6b342d14f669051ee29bb3ccb7eda8991509e0bfc13f8b448c873c",
+   "capture": "forecast.steps-past-grammar"
+  },
+  "forecast.steps-zero@lakebase": {
+   "input_hash": "668b2e0251293dac0633e214a457212ca4f10b104c8978658c5194bcdb95da6b",
+   "capture": "forecast.steps-zero"
+  },
+  "forecast.top-k@lakebase": {
+   "input_hash": "de26b337f161c1fac66b85e3c7bbcfbd10b975fa2585b2b9e2490f67deeca3b6",
+   "capture": "forecast.top-k"
+  },
+  "ids.absent@lakebase": {
+   "input_hash": "872a1b3bb405894603e567c92e13944654c712bbfad0ed9e77cb1878e8fd12af",
+   "capture": "ids.absent"
+  },
+  "ids.in-list-other-indices@lakebase": {
+   "input_hash": "21622defe3e24ed0d35bb118c9429c2a4dee5b619c024c0b0984f36e406b13be",
+   "capture": "ids.in-list-other-indices"
+  },
+  "ids.one@lakebase": {
+   "input_hash": "920a8063aacee6e4f9b5994524b8d260dad7907fec12b31c83fee547d8fb93b0",
+   "capture": "ids.one"
+  },
+  "ids.wrong-type@lakebase": {
+   "input_hash": "fa274dcc9ee7eb2a9a8fac6d4d2b31cf2b6a9d307b5d6db31682b377a179a434",
+   "capture": "ids.wrong-type"
+  },
+  "key.decimal-18-0@lakebase": {
+   "input_hash": "1852caec48535d1a0bb7abcb5367f47de9fe5e771c436e94a136e243708d5185",
+   "capture": "key.decimal-18-0"
+  },
+  "key.decimal-38-10@lakebase": {
+   "input_hash": "55f8a30dad4ad34f1176b3f60bd8b8bc3e67e5023cb5649c320d9898eb01563b",
+   "capture": "key.decimal-38-10"
+  },
+  "key.declared-int32@lakebase": {
+   "input_hash": "6493e04a767289bb1522c1475770a5dd2002405c36227f3d8e01c6244a9c06ca",
+   "capture": "key.declared-int32"
+  },
+  "key.hugeint@lakebase": {
+   "input_hash": "7fbafbd017c5dc6ec6bb93bc8a88e788fa8f5ede05dccbf3fd9f345ca31a1d88",
+   "capture": "key.hugeint"
+  },
+  "key.past-2-53.catalog@lakebase": {
+   "input_hash": "ca5509b0319009a8a18092c43c2cd8e59757aa3c5a9e0c15cfa245c2bf1c48bb",
+   "capture": "key.past-2-53.catalog"
+  },
+  "key.past-2-53.edited-link@lakebase": {
+   "input_hash": "178c195d90cdc9a46f8714d2e427de8424c4b710fdebe2683e56a7e1540fb511",
+   "capture": "key.past-2-53.edited-link"
+  },
+  "key.past-2-53.given-key@lakebase": {
+   "input_hash": "af01166939be39da619e17c9ae487c8ce2c40a998ae8df7c68d0f61223eeba5c",
+   "capture": "key.past-2-53.given-key"
+  },
+  "key.past-2-53.given-link@lakebase": {
+   "input_hash": "4f7e34cfb9eee65fdad5882605fd359f712083fec6272c67738a95aa531a2427",
+   "capture": "key.past-2-53.given-link"
+  },
+  "key.uint64-above-int64-max@lakebase": {
+   "input_hash": "2f3fa3609350b9713544ab69f1f157d322f5c8631380b9992d4527fc38932d98",
+   "capture": "key.uint64-above-int64-max"
+  },
+  "key.uint64-small@lakebase": {
+   "input_hash": "e4909434ba227378a203a9dc09335372dd898a52c4a7a30131b392f013817494",
+   "capture": "key.uint64-small"
+  },
+  "key.uint8@lakebase": {
+   "input_hash": "112698648d4ce655359cb347bf3b90c991ef26c9d51bc50274a98e8ca457fefd",
+   "capture": "key.uint8"
+  },
+  "key.varchar@lakebase": {
+   "input_hash": "88b299162b03afea079a81ec8f832ea771ffc765fb0d9e180d8f9a372abe213d",
+   "capture": "key.varchar"
+  },
+  "key.varchar-large-buffers@lakebase": {
+   "input_hash": "4e62ef6b9c430bc6cf03c1a76ca8fed159da9988705937c8873b5ef9e6a8f598",
+   "capture": "key.varchar-large-buffers"
+  },
+  "lag.average-empty-windows@lakebase": {
+   "input_hash": "1fae83f6bb28516f7cfaa95d0d4155e90fb032368622c3ca926d398ce207ab86",
+   "capture": "lag.average-empty-windows"
+  },
+  "lag.binary-2@lakebase": {
+   "input_hash": "a9337504caa04d69c51351baf0a25c12bef1a2364a3d3f4e986a5bdad8f1529c",
+   "capture": "lag.binary-2"
+  },
+  "lag.condition-per-call@lakebase": {
+   "input_hash": "030b5225eed8ac50c356dc2a3a6b09a95a51a42a43f9283f3f245d9f9b71b1c5",
+   "capture": "lag.condition-per-call"
+  },
+  "lag.not-filtered-2@lakebase": {
+   "input_hash": "b96a42b3c5ec3182a8dc313576ce2b2df6196251c5d943f34e884e1819bfdf02",
+   "capture": "lag.not-filtered-2"
+  },
+  "lag.regression-2@lakebase": {
+   "input_hash": "9df25e259a62be17fa0d89b25bd45ec075c7124d6d0fb449dbd1a972fef1d301",
+   "capture": "lag.regression-2"
+  },
+  "lag.static-2@lakebase": {
+   "input_hash": "f6f6c6baa3a3d3910ca8bd5138ee42cc50f01547dbc92d98199e218acc88af65",
+   "capture": "lag.static-2"
+  },
+  "lag.static-negative@lakebase": {
+   "input_hash": "88cb48efcbb180f240d5d00cafc6d5330b503efb9a7f9adef54b4bb6e0b52307",
+   "capture": "lag.static-negative"
+  },
+  "lakebase.binary@lakebase": {
+   "input_hash": "009c51ff02467fe520e00042930e6f2f0112b840fd809e001b53615736be9230",
+   "capture": "lakebase.binary"
+  },
+  "lakebase.connect@lakebase": {
+   "input_hash": "82851c1a889116c2a76432b317626286a780a590303c1d38d75f37a129144215",
+   "capture": "lakebase.connect"
+  },
+  "lakebase.multiclass.tables@lakebase": {
+   "input_hash": "1097e7821bc0db51246d6ef910c17506e414f825a75bc0436ea741e9c490119b",
+   "capture": "lakebase.multiclass.tables"
+  },
+  "lakebase.name.shadowed-by-catalog@lakebase": {
+   "input_hash": "cf46459f1baf3389a5ca04f0a334ed7248a49c5bff1e40862de2168d7bb8f5c3",
+   "capture": "lakebase.name.shadowed-by-catalog"
+  },
+  "lakebase.name.shadowed-by-temporary@lakebase": {
+   "input_hash": "7dc4ad5692449fc13cce5ab0f6faec57a53df8aa4c0f284343eb2f7d5da8edcc",
+   "capture": "lakebase.name.shadowed-by-temporary"
+  },
+  "lakebase.name.two-part@lakebase": {
+   "input_hash": "4b8654f0e774a88911a7f85756069e55b1a28710cf31ca3c552f07c5a3a838aa",
+   "capture": "lakebase.name.two-part"
+  },
+  "lakebase.regression.catalog-keys@lakebase": {
+   "input_hash": "6493e04a767289bb1522c1475770a5dd2002405c36227f3d8e01c6244a9c06ca",
+   "capture": "lakebase.regression.catalog-keys"
+  },
+  "metadata.items@lakebase": {
+   "input_hash": "9f7df054aeab78c2df59b7b51268fa9523025be511c325257921bcafa6169c73",
+   "capture": "metadata.items"
+  },
+  "metadata.items-across-calls@lakebase": {
+   "input_hash": "8ef03f74e4201f535d7853f86d464d3c8b2f34b209a0b1b7af9c77eb5c039186",
+   "capture": "metadata.items-across-calls"
+  },
+  "metadata.items-explained@lakebase": {
+   "input_hash": "ed2629df54c916f423745def8b88d5f1ab552fa03135fab48683fbf6385401c9",
+   "capture": "metadata.items-explained"
+  },
+  "multicall.body-30mib.one-row@lakebase": {
+   "input_hash": "664b90e3c6d458e45e7a81065a18628e1fd9f9a9d77b85b4162da7d07d5439d6",
+   "capture": "multicall.body-30mib.one-row"
+  },
+  "multicall.body-30mib.several-rows@lakebase": {
+   "input_hash": "2cba6db426627ce2a47dabbb7a6c2f6a8d91c50975e4c2d00c6aff110ba2e531",
+   "capture": "multicall.body-30mib.several-rows"
+  },
+  "multicall.calls.100@lakebase": {
+   "input_hash": "6f97682ac0a2698a168c24a740812e8c553670de7f2fb56d4906752712f5be15",
+   "capture": "multicall.calls.100"
+  },
+  "multicall.calls.101@lakebase": {
+   "input_hash": "ad2b670bf6ed147cb10914dfb76f53fc18549dc309cd9334a80c3756ce5293f9",
+   "capture": "multicall.calls.101"
+  },
+  "multicall.entities-per-call.10001@lakebase": {
+   "input_hash": "67e10863efe25d85dfdce7043d0f9d7f791b3203d0fa6d7768261af2873129fd",
+   "capture": "multicall.entities-per-call.10001"
+  },
+  "multicall.fail-call-0@lakebase": {
+   "input_hash": "8441679f4856e67b7606d0052cdc31b85c9fe85d9226235099ca3468a00f6810",
+   "capture": "multicall.fail-call-0"
+  },
+  "multicall.fail-call-2@lakebase": {
+   "input_hash": "144169abea3d1b3c7be628aecbc9caff2f14c0db910b9aa9030539b806a96510",
+   "capture": "multicall.fail-call-2"
+  },
+  "multicall.forecast.batched@lakebase": {
+   "input_hash": "fab2c9d4cc44efd434779c145d071f2870c1869bba2c3507d45306e4d21923a7",
+   "capture": "multicall.forecast.batched"
+  },
+  "multicall.forecast.fail-call-1@lakebase": {
+   "input_hash": "484c95c828cfc1302b2e8c9b70c741902a1e13213b6f477ad64700419e91a1d0",
+   "capture": "multicall.forecast.fail-call-1"
+  },
+  "multicall.forecast.one-call@lakebase": {
+   "input_hash": "f1926c301e94a0c151ff73da92ba1a5d752b70fe11b2fcfcceaa4ebb57087026",
+   "capture": "multicall.forecast.one-call"
+  },
+  "multicall.rows-per-call-3@lakebase": {
+   "input_hash": "2ce8d23de1ee6e09a39c68cd484d900d2131382432bff1d3e8876323b69ec020",
+   "capture": "multicall.rows-per-call-3"
+  },
+  "multicall.rows-per-call.above-the-cap@lakebase": {
+   "input_hash": "04b2bc98ff3fcdb768eb07bab0cbfe972d2195b565b006bb7d6ccbf276357006",
+   "capture": "multicall.rows-per-call.above-the-cap"
+  },
+  "multicall.rows-per-call.bool@lakebase": {
+   "input_hash": "61cf7bb080a5af0cd4aff245b2949c12eb42b3f4d87b7842d860f9611fbfa593",
+   "capture": "multicall.rows-per-call.bool"
+  },
+  "multicall.rows-per-call.fraction@lakebase": {
+   "input_hash": "6f8e1fd5584bd65dded3f6458c7a273313162f1a7d7639114ead04a239ffaace",
+   "capture": "multicall.rows-per-call.fraction"
+  },
+  "multicall.rows-per-call.negative@lakebase": {
+   "input_hash": "3d556749c9a49ede78d1bc168ad5893603efa550a91351bfbd75183d5e690bf5",
+   "capture": "multicall.rows-per-call.negative"
+  },
+  "multicall.rows-per-call.past-int64@lakebase": {
+   "input_hash": "52d8b64e77c26a31d9d2bd41fdeee3e69ab532c639620c7a3ebd0dcfe72d1a66",
+   "capture": "multicall.rows-per-call.past-int64"
+  },
+  "multicall.rows-per-call.text@lakebase": {
+   "input_hash": "07e070f76065dbcedad64a383e20cfd8c618564357d21be7f6c157e73a3b1f8f",
+   "capture": "multicall.rows-per-call.text"
+  },
+  "multicall.rows-per-call.whole-float@lakebase": {
+   "input_hash": "9243fc08fb261145f7b0c12ff9404e79219e864f50653d6c2db02900be9955ab",
+   "capture": "multicall.rows-per-call.whole-float"
+  },
+  "multicall.rows-per-call.zero@lakebase": {
+   "input_hash": "19f6d9dde86f583cd93789cd7755df97e61f2bc5a993278ecd657a871e956b5e",
+   "capture": "multicall.rows-per-call.zero"
+  },
+  "name.backtick-aggregation@lakebase": {
+   "input_hash": "e953f43ccbae4207e2e5b3df169e268e83d9dd131ac9b8581b9648021393319e",
+   "capture": "name.backtick-aggregation"
+  },
+  "name.backtick-entity@lakebase": {
+   "input_hash": "4e285d340e9353b72bc1ff51da949a3185768eb5d711a3dbfee2bd509b10e02b",
+   "capture": "name.backtick-entity"
+  },
+  "name.backtick-feature@lakebase": {
+   "input_hash": "bf02341958ba5a9ab1db4113e18562fd151aa010b7ad7d8a31bf8927ee829c41",
+   "capture": "name.backtick-feature"
+  },
+  "name.backtick-filter@lakebase": {
+   "input_hash": "5f9c1a30a404e64ac042e8a71ea357d830f3778930272e916f61fcda5be8c5c4",
+   "capture": "name.backtick-filter"
+  },
+  "name.backtick-target@lakebase": {
+   "input_hash": "efd028477a9f9ed88f0802f7eeaa67870fb4bfe4a74b2ba409adc1efd3d40d7e",
+   "capture": "name.backtick-target"
+  },
+  "name.dot-aggregation@lakebase": {
+   "input_hash": "3ecacb0a7c638f9e04ad8fa0d4a3ae17221c8a744c35eddd4be3383a5d94c90b",
+   "capture": "name.dot-aggregation"
+  },
+  "name.dot-entity@lakebase": {
+   "input_hash": "902163d61e6c61747d8d8a3ae7c06ba68c04a1f6eee89163c301c217c4eba34a",
+   "capture": "name.dot-entity"
+  },
+  "name.dot-feature@lakebase": {
+   "input_hash": "2c42ab46271238a7a4f1d9c9b9f02388e06f00ab0095e2ba882e0ab1448d5748",
+   "capture": "name.dot-feature"
+  },
+  "name.dot-filter@lakebase": {
+   "input_hash": "7a0e73cd7240a9a90ec271eb7c967febe3501263828fb771d54783b7a34b4da3",
+   "capture": "name.dot-filter"
+  },
+  "name.dot-target@lakebase": {
+   "input_hash": "61f10c6359d30eb4c3075aa823cf8498c5b548593adb376f00a15f22b7c91ea2",
+   "capture": "name.dot-target"
+  },
+  "nested.fixed-array@lakebase": {
+   "input_hash": "5d41540d0cd832fd18d4747b144f7bb1e9bee9d47dce54f8deacf8a8bbdfb65c",
+   "capture": "nested.fixed-array"
+  },
+  "nested.list-int@lakebase": {
+   "input_hash": "809e38c19b9f3bb90539fa9b6c6883f3f5f3ff5843807cd38987829d5632397d",
+   "capture": "nested.list-int"
+  },
+  "nested.map@lakebase": {
+   "input_hash": "8e05c1de4fbafa307473545ae02a9e2dc54e37b7aee1802632aa79770e197245",
+   "capture": "nested.map"
+  },
+  "nested.struct@lakebase": {
+   "input_hash": "30d5e332ffa57449d76dda19f231f1259eb32de3e2f112bb096c6bec01062fb3",
+   "capture": "nested.struct"
+  },
+  "nested.union@lakebase": {
+   "input_hash": "64471b9c3f70af7b25d30ce8a6da259767aa2b7e02bf22b9e4f07ad53af0c59f",
+   "capture": "nested.union"
+  },
+  "null.feature-all-null@lakebase": {
+   "input_hash": "f6a40a02a891c0d3880fe42b80c261a08e77f72507e8cfb6e3b6b82e6815361d",
+   "capture": "null.feature-all-null"
+  },
+  "null.some-foreign-keys@lakebase": {
+   "input_hash": "a089e961a4097effe1a0e20a8d005c32f02850da17acee4b4ac8c4f819d47989",
+   "capture": "null.some-foreign-keys"
+  },
+  "null.some-times@lakebase": {
+   "input_hash": "d5e7d5705a73bb6d538a44d78f57704f721f55a3f17121cbdd5ec9177b01d33d",
+   "capture": "null.some-times"
+  },
+  "null.target-all-null@lakebase": {
+   "input_hash": "03e35831b6d5782cef440943d24a88bdf1dd41c64a9b8e7cb9308588af75d3a8",
+   "capture": "null.target-all-null"
+  },
+  "quantiles.regression@lakebase": {
+   "input_hash": "8c3dc51037a4f11dd7702313d81b6fb3dd144d7c458f4700c7c37fe70fd59a1b",
+   "capture": "quantiles.regression"
+  },
+  "rank.all-unscored@lakebase": {
+   "input_hash": "ef1c28ef97b159c1ef2b454bb192c42da8fac9ca3dbeab430a5c140f9c5feaf2",
+   "capture": "rank.all-unscored"
+  },
+  "rank.batched@lakebase": {
+   "input_hash": "317db4f79f4f91f548714e739509ab61fc87d204dedbdc431689beeb63e2c2d9",
+   "capture": "rank.batched"
+  },
+  "rank.candidates-empty@lakebase": {
+   "input_hash": "8589f39f27f5af511311263805fdbc81cf660fbaac81f1ca2de1bdabac13ddd1",
+   "capture": "rank.candidates-empty"
+  },
+  "rank.candidates-not-a-ranking@lakebase": {
+   "input_hash": "6800d52db1eeed3787120d2871e51bee33f2b9e614c9782f36940638b3eb3992",
+   "capture": "rank.candidates-not-a-ranking"
+  },
+  "rank.decimal-key@lakebase": {
+   "input_hash": "c2db50d22bd816403890eab26d9b3546449fae863436e0950a7b8c82171ff859",
+   "capture": "rank.decimal-key"
+  },
+  "rank.entities-by-candidates.at@lakebase": {
+   "input_hash": "ac9d58b099d016bffd5ec6c36273ef408c7ca4691ae4fce203ebf5d68ceb9f1a",
+   "capture": "rank.entities-by-candidates.at"
+  },
+  "rank.entities-by-candidates.over@lakebase": {
+   "input_hash": "c9cdebcf96c54bf5ecb9745942c6fd740c2a7cd7b693cc463ff970dd72f2ece1",
+   "capture": "rank.entities-by-candidates.over"
+  },
+  "rank.most-parts@lakebase": {
+   "input_hash": "8922a5e834a2b14969656cc42938598c2639bec2c69da50d80e0a87f5483a6e0",
+   "capture": "rank.most-parts"
+  },
+  "rank.no-candidates@lakebase": {
+   "input_hash": "a92681dd668f8f8053a5810520f79c942efb7f09562f334987b76a37d60beb43",
+   "capture": "rank.no-candidates"
+  },
+  "rank.odd-column@lakebase": {
+   "input_hash": "0b61eb3fd8fea25707e2704a3572ea714d3875968335095c9a80f2dbc78f9b6f",
+   "capture": "rank.odd-column"
+  },
+  "rank.repeated-candidates@lakebase": {
+   "input_hash": "b7dd6b9e610c3c008e5243714c164459af517546c2923c273a9208742d4793f1",
+   "capture": "rank.repeated-candidates"
+  },
+  "rank.top-k@lakebase": {
+   "input_hash": "b6d278e14bd253facd9336459cf9449d884c10ef8de594c50716062a5af1d782",
+   "capture": "rank.top-k"
+  },
+  "rank.top-k-option@lakebase": {
+   "input_hash": "44b813d64829b0429001a8c5c0c33d6cc79e26ec39d79a5deffa334ac09d95b1",
+   "capture": "rank.top-k-option"
+  },
+  "rank.top-k-zero@lakebase": {
+   "input_hash": "cf1455f1a251aa368853ee708c17e757131186cee89ce07efdc9d56a516c80ed",
+   "capture": "rank.top-k-zero"
+  },
+  "rank.unscored-candidate@lakebase": {
+   "input_hash": "0981a3534efeec56516c60df276000d8f078159cbe7fe8614159d857038bc8c1",
+   "capture": "rank.unscored-candidate"
+  },
+  "refuse.unknown-column@lakebase": {
+   "input_hash": "4a562a8682228c5183a7015a876bf4f809c3ff3c8cc207d1ca2680d37598f2d2",
+   "capture": "refuse.unknown-column"
+  },
+  "rule.composite-foreign-key-declared@lakebase": {
+   "input_hash": "c795df5e58272e94477948a9864c83ed7ad0a7346c32400302efeb0997a86637",
+   "capture": "rule.composite-foreign-key-declared"
+  },
+  "rule.composite-key-declared@lakebase": {
+   "input_hash": "dd53284209fc8d586b14b78f3d56c2f2703aa7593fededfd0140d64ae424bfde",
+   "capture": "rule.composite-key-declared"
+  },
+  "rule.composite-key-given@lakebase": {
+   "input_hash": "f4f9559ea714624bbb9985737fe9417cd11c9ffaaf00f41019265b2ea1593667",
+   "capture": "rule.composite-key-given"
+  },
+  "rule.key-name-form@lakebase": {
+   "input_hash": "01f650e0b7e072c6d566f4883341965f6abbf1d24c8da3f6743b6e649feca579",
+   "capture": "rule.key-name-form"
+  },
+  "rule.key-tie-entity@lakebase": {
+   "input_hash": "4092201c32afdb348cfcc3292971b793575e88eb317f2141286ba730285e112e",
+   "capture": "rule.key-tie-entity"
+  },
+  "rule.key-tie-fact@lakebase": {
+   "input_hash": "4e70e9b46366fe7b67201aced0123b0fd723d319ece41a4ca8b218c1012721bd",
+   "capture": "rule.key-tie-fact"
+  },
+  "sample.anchor-entity@lakebase": {
+   "input_hash": "9920ce0f283b62a13fd91d3b6c5b2da9dec19b01a8ba20d2aeafcfef14b66575",
+   "capture": "sample.anchor-entity"
+  },
+  "sample.anchor-entity.context-entity@lakebase": {
+   "input_hash": "3ddbddd50fad8926c0fb4708a4f2fab4f3ea6850991608505a4c864f87aa52a7",
+   "capture": "sample.anchor-entity.context-entity"
+  },
+  "sample.anchor-entity.context-time@lakebase": {
+   "input_hash": "a2a1cb1a6ca66d12c121fdff3f583d353d6fc079ddd0b8671b14b1200cdd1ec8",
+   "capture": "sample.anchor-entity.context-time"
+  },
+  "sample.anchor-entity.no-time-column@lakebase": {
+   "input_hash": "5a7ae10fc429092c2de0861dd2976fe8ff6d3d28bc670b0c661fcc2ab937e01f",
+   "capture": "sample.anchor-entity.no-time-column"
+  },
+  "sample.anchor-entity.null-time@lakebase": {
+   "input_hash": "49bb9b2c54e8e578e3c8b728586fb0a48fa8f563c91c4b0b9a3e00b22e8bcdb4",
+   "capture": "sample.anchor-entity.null-time"
+  },
+  "sample.anchor-entity.null-time.prediction-time@lakebase": {
+   "input_hash": "31dad6d319941b135b942ca919ab55492a57fc5a2a2d07ae21dd56c9b01cec6b",
+   "capture": "sample.anchor-entity.null-time.prediction-time"
+  },
+  "sample.anchor-entity.regression@lakebase": {
+   "input_hash": "428b0146a61a3975aefb19bdf8fcd11c03f5ee0d9453a84a699e31c57e5fd20c",
+   "capture": "sample.anchor-entity.regression"
+  },
+  "sample.anchor-entity.temporal@lakebase": {
+   "input_hash": "87b30305842ac035b2bdd30860ce26c724b83f7a495c530036d9737b020927ea",
+   "capture": "sample.anchor-entity.temporal"
+  },
+  "sample.context-anchor-time@lakebase": {
+   "input_hash": "8d49011a1ce98c85bc5c68341adcea03a43415c46a8fe1f006e5c63a29234606",
+   "capture": "sample.context-anchor-time"
+  },
+  "sample.context-anchor-time.entity@lakebase": {
+   "input_hash": "6cee8606e8727d87c2a88ab45c98f458a1c57dd8a6f52938009724cd1892129b",
+   "capture": "sample.context-anchor-time.entity"
+  },
+  "sample.context-anchor-time.later@lakebase": {
+   "input_hash": "0a6ab0ada25c43a0915d5e8d2e1491b495e0839fcd502dc22deb33de55ab8f08",
+   "capture": "sample.context-anchor-time.later"
+  },
+  "sample.context-anchor-time.too-early@lakebase": {
+   "input_hash": "4a2c0564721ea41f0fa52ae2ee1e175e390a2b21ad00107a75ca819a6c1b1199",
+   "capture": "sample.context-anchor-time.too-early"
+  },
+  "sample.embeddings-answered@lakebase": {
+   "input_hash": "85501c990650befee358f53c6fa4b468387ad57b74e3938630c8c6a57d43d75e",
+   "capture": "sample.embeddings-answered"
+  },
+  "sample.embeddings-only@lakebase": {
+   "input_hash": "213acd9c4f323ef04441203f95409c88cb8c6e5e30477aef24a465eec41ff9fd",
+   "capture": "sample.embeddings-only"
+  },
+  "sample.exclude-cols.key@lakebase": {
+   "input_hash": "f18cc43b50ede6580f5f433bff2184aae654f389f50171a8e4320fc820b3aae0",
+   "capture": "sample.exclude-cols.key"
+  },
+  "sample.exclude-cols.list@lakebase": {
+   "input_hash": "a697f8a1118a53acc1fcd46f786f022af32cecda57c9fa841bbd0a9ff2b099ad",
+   "capture": "sample.exclude-cols.list"
+  },
+  "sample.exclude-cols.null@lakebase": {
+   "input_hash": "51ffc1aa6b19c51c0042fefa2cfaa9c4cd41757ad060fa875e5c289ac2e1ee40",
+   "capture": "sample.exclude-cols.null"
+  },
+  "sample.exclude-cols.orders-price@lakebase": {
+   "input_hash": "580bb27c5f60f44695b6e60a4270ee7937f118f087f41058dda09a2e3a5bf7e7",
+   "capture": "sample.exclude-cols.orders-price"
+  },
+  "sample.exclude-cols.text-columns@lakebase": {
+   "input_hash": "bd87aeca2ace56eeca487b4a96e53764368229ede8d8c89a453d4f6891808679",
+   "capture": "sample.exclude-cols.text-columns"
+  },
+  "sample.exclude-cols.unknown-column@lakebase": {
+   "input_hash": "8e542673e841a3e1ab223c26081053852bbe3971d40019f4a48a906fd56305ca",
+   "capture": "sample.exclude-cols.unknown-column"
+  },
+  "sample.exclude-cols.unknown-table@lakebase": {
+   "input_hash": "2fe3da9042117e564b162d7443fe0f95a0e83d4d61fcd29f20f74560d0a1deae",
+   "capture": "sample.exclude-cols.unknown-table"
+  },
+  "sample.exclude-cols.users-age@lakebase": {
+   "input_hash": "80e05f3de6eb1f4337ec4e44595b1d91f018f3b53ed0f491e19da1ec067467c4",
+   "capture": "sample.exclude-cols.users-age"
+  },
+  "sample.max-pq-iterations-1@lakebase": {
+   "input_hash": "4dd2b446790d3c8d87c7c42b7f0c88b7428bf950a333ebab31eb6618fca91330",
+   "capture": "sample.max-pq-iterations-1"
+  },
+  "sample.max-pq-iterations.text@lakebase": {
+   "input_hash": "a0d77068ff5774a8f383e075cfec756a43c489d7d43b0686c11e65fa7a74bd2a",
+   "capture": "sample.max-pq-iterations.text"
+  },
+  "sample.max-pq-iterations.zero@lakebase": {
+   "input_hash": "61a43df925a491feffaa5fd580d6754325051d3f3c934fd4030eb346f13c1135",
+   "capture": "sample.max-pq-iterations.zero"
+  },
+  "sample.num-hops-1@lakebase": {
+   "input_hash": "fd4de51ac1473ad6ee142a31bafa2c06feac2c97b7a4e836de08e6ea4178d4bc",
+   "capture": "sample.num-hops-1"
+  },
+  "sample.num-hops-3@lakebase": {
+   "input_hash": "8d32b078ca2026d57b8c2ca3cb84b89d6b63a1472e5f6bb8be41ff21797a6fbb",
+   "capture": "sample.num-hops-3"
+  },
+  "sample.num-hops.bool@lakebase": {
+   "input_hash": "2f14ab18c43988f663ec27d1e97115f727e85ceec7428757b2ddf151d2e3c38b",
+   "capture": "sample.num-hops.bool"
+  },
+  "sample.num-hops.fraction@lakebase": {
+   "input_hash": "82bf223aa2b24e45ddfe5a4b7b7c52c46bcaa37bf7019211e09e916d97a53909",
+   "capture": "sample.num-hops.fraction"
+  },
+  "sample.num-hops.seven@lakebase": {
+   "input_hash": "0983ac04043c6a7fe05529e45b2812f48bfe14a82e8223bcfd004c82679c07ba",
+   "capture": "sample.num-hops.seven"
+  },
+  "sample.num-hops.text@lakebase": {
+   "input_hash": "359b4ba2c28671ffadb1d2975a9a7bd0c7e67a76a1cbd150d1f2a2ad0cf2ddc6",
+   "capture": "sample.num-hops.text"
+  },
+  "sample.num-hops.zero@lakebase": {
+   "input_hash": "c7147735363a352c374d690d0d408c524c65a8b2c5b6223b447f60ac20d5227a",
+   "capture": "sample.num-hops.zero"
+  },
+  "sample.num-neighbors-2-2@lakebase": {
+   "input_hash": "2b5bfa8b49d277217bd725a36144390d80beb3aae32846a1019875d75060d13f",
+   "capture": "sample.num-neighbors-2-2"
+  },
+  "sample.num-neighbors-4@lakebase": {
+   "input_hash": "643e67f87d788fa36de9691da14f30a02bff2013db8fc1790f04ce9d4b6b5e52",
+   "capture": "sample.num-neighbors-4"
+  },
+  "sample.num-neighbors.empty@lakebase": {
+   "input_hash": "e65a74016d7444a7e7c2a72e6210f78e2b615004b119a8107bd241bab61a59fa",
+   "capture": "sample.num-neighbors.empty"
+  },
+  "sample.num-neighbors.minus-one@lakebase": {
+   "input_hash": "362f0c08cea89559d6098b00e896cfa13b794573c51ea42865382f2739b436d5",
+   "capture": "sample.num-neighbors.minus-one"
+  },
+  "sample.num-neighbors.number@lakebase": {
+   "input_hash": "3b74764b083350044638d5c38774caf14a2de27e5ef001c6759622c9ca9d6c35",
+   "capture": "sample.num-neighbors.number"
+  },
+  "sample.num-neighbors.over-num-hops@lakebase": {
+   "input_hash": "6749d10d6c3c67a3402d38f13a9613663b4791b73361f9fa33c1f9ffb3e110a3",
+   "capture": "sample.num-neighbors.over-num-hops"
+  },
+  "sample.num-neighbors.seven-hops@lakebase": {
+   "input_hash": "68a218e81edad81ff5af436d63137a8fd97b1ad9a2c9cc5587aafa79e7ee5337",
+   "capture": "sample.num-neighbors.seven-hops"
+  },
+  "sample.num-neighbors.zero@lakebase": {
+   "input_hash": "f372bf28f3b16f344a52a3af4c7c1b6870faabee0d37c12b875638e0d26c7d94",
+   "capture": "sample.num-neighbors.zero"
+  },
+  "sample.parent-table@lakebase": {
+   "input_hash": "ca70c7e144ba398471f6ca1db215cd3e7dab4a0965b21af88d317dcd21b01ded",
+   "capture": "sample.parent-table"
+  },
+  "sample.parent-table.decimal-keys@lakebase": {
+   "input_hash": "d871703d25ab0c15dbbf5abda22f2129336916f2758d7ad4d988fd3093098de2",
+   "capture": "sample.parent-table.decimal-keys"
+  },
+  "sample.parent-table.relbench-avito@lakebase": {
+   "input_hash": "56ee31000d39c1733f72ba434ffc29ee9de2e6df8d86267904af58cc131055a5",
+   "capture": "sample.parent-table.relbench-avito"
+  },
+  "sample.parent-table.relbench-stack@lakebase": {
+   "input_hash": "e15d74421f1469a3d1ed8892369e53fbab3be9e78350fc0e1f3a8e2d0fb20ca0",
+   "capture": "sample.parent-table.relbench-stack"
+  },
+  "sample.parent-table.static@lakebase": {
+   "input_hash": "ac0f26dbb631ba652bddd7697214366cdb76f980ea262d7bffc11cf2e74a38f0",
+   "capture": "sample.parent-table.static"
+  },
+  "sample.return-embeddings@lakebase": {
+   "input_hash": "897463a611e662154e7f2ac01dfe87e5d665b4ba6c47a4f4f537a75b2254439c",
+   "capture": "sample.return-embeddings"
+  },
+  "sample.seed-7@lakebase": {
+   "input_hash": "103c37d8033e03cc7e101b8606c8524b455fd0d18a2d62cab7a72d97fdf1a154",
+   "capture": "sample.seed-7"
+  },
+  "sample.seed.negative@lakebase": {
+   "input_hash": "7eef3c9d3c5df0937dfcc44fb320e4f80ad02a9e37bcb1ee48fbd2691de96c18",
+   "capture": "sample.seed.negative"
+  },
+  "sample.use-prediction-time@lakebase": {
+   "input_hash": "bc057440dd2f552a0e9ace8806ad2cf15476939da8d1d6526c812cdf69df7b89",
+   "capture": "sample.use-prediction-time"
+  },
+  "sample.use-prediction-time.false@lakebase": {
+   "input_hash": "b791cd99da8367c4a297acaa932088d461ced76f098c8bc62d0ce24d2f68ff3e",
+   "capture": "sample.use-prediction-time.false"
+  },
+  "shape.chain.addresses@lakebase": {
+   "input_hash": "26f7c1e579f3abcf13dc2dd40ffc8c3d1adfb430a89a77a7c1408f68c31830d8",
+   "capture": "shape.chain.addresses"
+  },
+  "shape.diamond-from-source@lakebase": {
+   "input_hash": "1c4126e941ce3a80b23d11650bc301a9ea0e3e1acf83504433f0c48092aba03e",
+   "capture": "shape.diamond-from-source"
+  },
+  "shape.diamond.addresses@lakebase": {
+   "input_hash": "42aff45f1b6062cd6c72e180bf5beec72d4195e539f3f0ba462e73f53960a4ec",
+   "capture": "shape.diamond.addresses"
+  },
+  "shape.one-column-two-tables@lakebase": {
+   "input_hash": "63d6d805b211e9bb3cc1b15d7d8241ba1335f00961b734c1ad08d6ec0b53d9ac",
+   "capture": "shape.one-column-two-tables"
+  },
+  "shape.same-table-twice.buyers@lakebase": {
+   "input_hash": "5f0fc3d6cff0c578734b92607e9504be8776942268f6f09b2165beaecdafd4d6",
+   "capture": "shape.same-table-twice.buyers"
+  },
+  "shape.same-table-twice.customers@lakebase": {
+   "input_hash": "8b7bfdf2a77772404330d4e69d368c41b685caf14cce9e4c457a7b81517f5e21",
+   "capture": "shape.same-table-twice.customers"
+  },
+  "shape.star.customers@lakebase": {
+   "input_hash": "2f802c1de469cf08bc05b7572013467ab86d204a54f7bf6ca74aeb41fb715152",
+   "capture": "shape.star.customers"
+  },
+  "shape.star.products@lakebase": {
+   "input_hash": "469eb768ac88bbcca2ba5de587c70270a3550b3b500e11ec654e2cf6aa23943c",
+   "capture": "shape.star.products"
+  },
+  "shape.star.stores@lakebase": {
+   "input_hash": "f33ef2d886e4263882e1ae37a7dec26d5164fd8aebb24d7d1bae3e8e2b460e16",
+   "capture": "shape.star.stores"
+  },
+  "shape.two-paths.keyed@lakebase": {
+   "input_hash": "bcc5f3c6ddc23cb8f31b6eee29075cdadcce817bd62ebc75bd63d680141e8c89",
+   "capture": "shape.two-paths.keyed"
+  },
+  "shape.two-paths.keyless@lakebase": {
+   "input_hash": "786a3d7c88ecf0a0fa3e521aaea85ad150c04094469fcd851ad7f60c0ece8680",
+   "capture": "shape.two-paths.keyless"
+  },
+  "target.aggregation.list-distinct@lakebase": {
+   "input_hash": "a50b8c87c945f0ac16edf340d5064f637039168df15cefd07552e50912d63aee",
+   "capture": "target.aggregation.list-distinct"
+  },
+  "target.condition.in@lakebase": {
+   "input_hash": "c7dc3bf65c5eb4ffafd0f5c891f06cc96cea3c25915d638ff14a46ccb5656203",
+   "capture": "target.condition.in"
+  },
+  "target.condition.text@lakebase": {
+   "input_hash": "11c3ea2d426e136e6a524e1dbf3e9be4df1fa1898a26c0002d612fbb53ead1ba",
+   "capture": "target.condition.text"
+  },
+  "target.filter.and@lakebase": {
+   "input_hash": "a7a15fa4303276fccb93adceed50b22b2b0f1c5cddd2be9a8d039828ad556c1c",
+   "capture": "target.filter.and"
+  },
+  "target.filter.sum@lakebase": {
+   "input_hash": "2bf734f34b6ee7e2610584bf97719ce0519b3cb9b8f2cc1827fe69a99faf1bd4",
+   "capture": "target.filter.sum"
+  },
+  "target.filter.text-in@lakebase": {
+   "input_hash": "de9d45d15d7e4ffea9c7c58fbd342188719425f90e337068e67733d55c3066d0",
+   "capture": "target.filter.text-in"
+  },
+  "target.logical.and@lakebase": {
+   "input_hash": "1f8a5090c74a1d27a30ddf031a7bd807686c417c4d10c49657cda9ade0f6846d",
+   "capture": "target.logical.and"
+  },
+  "target.logical.not@lakebase": {
+   "input_hash": "1f918d479846ca5e7ab350633cb126ad7777658ada5b4ed90442e26396c98d36",
+   "capture": "target.logical.not"
+  },
+  "target.open-window@lakebase": {
+   "input_hash": "d079148687edd759225eb19c1450056626fd184653b30c50696f70ed4256d283",
+   "capture": "target.open-window"
+  },
+  "target.static.other-table@lakebase": {
+   "input_hash": "3134e6da0ca1cb9562700d1645509ba7b86b49abf6d2b8624cb4633017217e19",
+   "capture": "target.static.other-table"
+  },
+  "time.date@lakebase": {
+   "input_hash": "075c48b5c8ac97c61f1f85b924a4d2345feb26f3aabe88e0744914784ee45d17",
+   "capture": "time.date"
+  },
+  "time.feature-date-and-timestamp-with-null@lakebase": {
+   "input_hash": "2f920dd5a6f0ea256116b7a8de5dccf6df280cb774109fb1aacbe3dd82cc01b6",
+   "capture": "time.feature-date-and-timestamp-with-null"
+  },
+  "time.feature-interval@lakebase": {
+   "input_hash": "3b47968ee709e688f2f2da890cde9c297a544cebd21f0d0a685507bc64e6b747",
+   "capture": "time.feature-interval"
+  },
+  "time.feature-time-of-day@lakebase": {
+   "input_hash": "3940f8c1c1c2c4d358b87c8dc26593c06354ed7a7a3f772768c552289b375816",
+   "capture": "time.feature-time-of-day"
+  },
+  "time.text-declared@lakebase": {
+   "input_hash": "04f524dca5953d4c408472215c11bda9a567dfcaec8f30851ba47006bd952a79",
+   "capture": "time.text-declared"
+  },
+  "time.text-iso-date@lakebase": {
+   "input_hash": "9565ffe077da7442c33602f0e0ecbdbfe8b4e361d647fe12070380be3f8ba479",
+   "capture": "time.text-iso-date"
+  },
+  "time.text-one-bad-value@lakebase": {
+   "input_hash": "d90ec3831f60bc8a0dbe2b781723a098b73ff07f4ee3d5700c04e5ea74c81c68",
+   "capture": "time.text-one-bad-value"
+  },
+  "time.text-us-date@lakebase": {
+   "input_hash": "a600d1c20d1262a4f3f42cfdb5cf7cda54301ded48a21d389f00b6b7e70cc887",
+   "capture": "time.text-us-date"
+  },
+  "time.timestamp-ns@lakebase": {
+   "input_hash": "9914cdae234d454dfb365fd20cedf6ae08a3b76893588d752c9b9b5eb3e5bcf1",
+   "capture": "time.timestamp-ns"
+  },
+  "time.timestamp-s@lakebase": {
+   "input_hash": "b238666fb27f120e6c75792d81cf30d23e07c630fb7ac458d352e770605efba9",
+   "capture": "time.timestamp-s"
+  },
+  "time.timestamptz@lakebase": {
+   "input_hash": "99a42ead2900f1f2708a3a32749f688ca29467ea69b3a6e0fd7aac4f9a0155ce",
+   "capture": "time.timestamptz"
+  },
+  "transforms.null@lakebase": {
+   "input_hash": "df9bbdb6f38845da16a224ee9161e17b281d13554fa94b391b1e9e011e70caea",
+   "capture": "transforms.null"
+  },
+  "transforms.null-beside-a-name@lakebase": {
+   "input_hash": "07a4405b2ff45456c0cbfd3bfa18c3f45356146690362b00dcecd78a5885e2f3",
+   "capture": "transforms.null-beside-a-name"
+  },
+  "transforms.null-on-a-classification@lakebase": {
+   "input_hash": "bd04ddf63efa0cadab4757c3de351106b19a71ff7bf9ed4854d011ccf7a9a710",
+   "capture": "transforms.null-on-a-classification"
+  },
+  "transforms.whole-null@lakebase": {
+   "input_hash": "727d2f76b77d56e0af18cce14b5a734455999ec511639101a078503ad9bf6310",
+   "capture": "transforms.whole-null"
+  },
+  "wording.anchor-after-data@lakebase": {
+   "input_hash": "a9fe6777687c10c6b7b566ab7d8ca6485fc384ed15d810ac0c1c456b695f4b58",
+   "capture": "wording.anchor-after-data"
+  },
+  "wording.binary-one-class@lakebase": {
+   "input_hash": "d445045733bb8428358c7ce31bbdc393e664fd5d7aded01bb1d1a8c6e61540e9",
+   "capture": "wording.binary-one-class"
+  },
+  "wording.float32-classification@lakebase": {
+   "input_hash": "d5ebd667c0ae0c1d1d5f5ceaf78dee4438406d9eaa8279bda79f534aa77e2bcb",
+   "capture": "wording.float32-classification"
+  },
+  "wording.float32-regression@lakebase": {
+   "input_hash": "f215d73ca0a21091f610e5801f0931ddaeb3cc6f3e4a176f0cdb300a9af5de46",
+   "capture": "wording.float32-regression"
+  },
+  "wording.key-missing-table@lakebase": {
+   "input_hash": "2ff7ff99754276d17fb8e98915f83ddb068fb5ab127378b9a7cf96706372b0b6",
+   "capture": "wording.key-missing-table"
+  },
+  "wording.key-none@lakebase": {
+   "input_hash": "bfe715bf6a048636d293414d627c4d2f82c27c805cd30f1c7cbb146cba4cb88b",
+   "capture": "wording.key-none"
+  },
+  "wording.key-number@lakebase": {
+   "input_hash": "1ee0df520eb72c90ef81c7f6104f34e25b3cc184436b70d7c67ce95ccbe1f3d7",
+   "capture": "wording.key-number"
+  },
+  "wording.rank-text-candidate@lakebase": {
+   "input_hash": "154615ad38cac4bd8c015073a2f9ba6613b28d47f26c44f0d78b0f04efdae82a",
+   "capture": "wording.rank-text-candidate"
+  },
+  "wording.time-key@lakebase": {
+   "input_hash": "f07edc1e52c03a1bc3da4465b65a342442bd923a50b762fb3dc6c72824aad984",
+   "capture": "wording.time-key"
+  },
+  "wording.time-missing-column@lakebase": {
+   "input_hash": "3546a1a115a069e8ab0a7a0741b57d27c91b02e1578058e2d6fa7c3ba37e3aef",
+   "capture": "wording.time-missing-column"
+  },
+  "wording.time-number@lakebase": {
+   "input_hash": "b9ab790251bbf31676da76b8a77c2dc61515891563b8c3c423852c7304fb5c10",
+   "capture": "wording.time-number"
+  }
+ }
+}

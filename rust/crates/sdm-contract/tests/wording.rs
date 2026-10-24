@@ -323,8 +323,12 @@ fn groups_are_data_over_one_code_each() {
         let grouping = wording::grouping(*group);
         for text in [grouping.opening, grouping.between, grouping.closing] {
             for placeholder in placeholders(text).unwrap() {
+                // Or a value only the host holds, the same for every
+                // warning of the call (T3.27: the semantic model read in
+                // part, as the host names it).
                 assert!(
-                    grouping.agree.contains(&placeholder.name.as_str()),
+                    grouping.agree.contains(&placeholder.name.as_str())
+                        || placeholder.name.starts_with("host."),
                     "a group's words name only the fields its warnings agree on"
                 );
             }

@@ -29,6 +29,7 @@ fn duckdb() -> ProviderChoice {
     ProviderChoice::Sql {
         dialect: Dialect::new("duckdb"),
         namespace: Vec::new(),
+        view: None,
     }
 }
 
@@ -412,6 +413,7 @@ fn an_answer_not_in_its_checked_shape_is_refused_not_a_panic() {
             &ProviderChoice::Sql {
                 dialect: Dialect::new("snowflake"),
                 namespace: Vec::new(),
+                view: None,
             },
             &[],
         )

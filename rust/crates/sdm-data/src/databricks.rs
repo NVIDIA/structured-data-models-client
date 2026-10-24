@@ -57,7 +57,7 @@ use sdm_contract::catalog::{CatalogAnswer, CatalogColumn, CatalogForeignKey, Cat
 use sdm_contract::data::{
     DataRequest, DescribePart, Determinism, ExpectedSchema, MARKED, MATCHES_COLUMN, NullOrder,
     ProviderCapabilities, Relation, SEED_BATCH, SEED_COUNT_UNREAD, SEED_KEY, SEED_KEY_UNIQUE,
-    SqlParam, TextTimes, TieTerm, refused, seed_integer,
+    SqlParam, TextTimes, TieTerm, refused, seed_integer, views_unread,
 };
 use sdm_contract::ops::Dtype;
 use sdm_contract::types::ColumnType;
@@ -485,6 +485,8 @@ fn describe(
 ) -> Result<(String, Vec<SqlParam>), CoreError> {
     let one = || CatalogTarget::of(request, sql::one_table(request, tables)?);
     Ok(match part {
+        // No view is read here (T3.27): only a dialect that reads views answers it.
+        DescribePart::ViewDefinition => return Err(views_unread()),
         // The source's namespace, one row per part, outermost first, each
         // given or the session's current one.
         DescribePart::Namespace => {
@@ -682,6 +684,8 @@ pub(crate) fn read(
     batches: &[RecordBatch],
 ) -> Result<CatalogAnswer, CoreError> {
     match part {
+        // No view is read here (T3.27): only a dialect that reads views answers it.
+        DescribePart::ViewDefinition => Err(views_unread()),
         DescribePart::Namespace => {
             crate::read::namespace(batches, sdm_contract::data::catalog_columns::NAME)
         }

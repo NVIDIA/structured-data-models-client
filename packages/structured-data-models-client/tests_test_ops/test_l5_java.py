@@ -91,7 +91,12 @@ def _fetched(provider: Any, dialect: str, column: str) -> None:
             'filters': [],
             'limit': None,
         },
-        'provider': {'provider': 'sql', 'dialect': dialect},
+        # A Postgres read names its schema, the database's ``public`` (T3.7).
+        'provider': {
+            'provider': 'sql',
+            'dialect': dialect,
+            **({'namespace': ['public']} if dialect == 'postgres' else {}),
+        },
         'echo': True,
     }
     try:

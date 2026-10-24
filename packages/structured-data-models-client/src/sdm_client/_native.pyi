@@ -39,6 +39,7 @@ _Code = Literal[
     'RUN_POISONED',
     'RUN_BUSY',
     'INVALID_MESSAGE',
+    'ENDPOINT_REFUSED',
 ]
 #: The kinds of an error of the core, the contract's ``ErrorKind``.
 _Kind = Literal[

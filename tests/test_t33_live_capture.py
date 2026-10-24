@@ -122,7 +122,7 @@ def test_snowflake_s_plan_creates_a_semantic_view_first(
     assert first['case'] == 'view.semantic.binary'
     statements = '\n'.join(first['statements'])
     assert (
-        'CREATE TABLE "{catalog}"."{schema}"."users" ("USER_ID"' in statements
+        'CREATE TABLE "{catalog}"."{schema}"."USERS" ("USER_ID"' in statements
     )
     assert 'SYSTEM$CREATE_SEMANTIC_VIEW_FROM_YAML' in statements
 
@@ -361,7 +361,7 @@ def test_a_semantic_view_case_loads_creates_and_reads_back_through_live(
 ) -> None:
     # Review r3 (P2): the recording mode's Live loads the case, creates its
     # semantic view and reads every table back on a case-sensitive
-    # Snowflake: the YAML's quoted base tables and unquoted columns resolve.
+    # Snowflake: the YAML's unquoted base tables and columns resolve.
     config = tmp_path / 'live.json'
     config.write_text(
         json.dumps(

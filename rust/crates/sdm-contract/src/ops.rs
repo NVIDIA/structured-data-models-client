@@ -26,6 +26,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::data::{AttachmentId, ProviderChoice, Relation};
+use crate::error::{Detail, Sentence};
 use crate::scalar::Scalar;
 #[cfg(feature = "test-ops")]
 use crate::test_ops::{TestOperation, TestResult};
@@ -426,6 +427,41 @@ pub struct NamedTable {
 pub struct DescribedSource {
     /// A bytes attachment of a [`SourceDescription`] as JSON.
     pub description: AttachmentId,
+    /// What a semantic model's conversion notes of the schema it gave
+    /// (contract v28, T3.27): each measure as the predictive query it is,
+    /// each time column taken in place of the view's own, each parameter
+    /// read as its default, in order (`Schema.conversion_notes`). Given at
+    /// describe only. Left out, none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub notes: Vec<ViewNote>,
+}
+
+/// A note of a semantic model's conversion ([`DescribedSource::notes`]):
+/// its sentence, a note's ([`crate::Code::Note`]), the fields its template
+/// names, and what it is about, so a host shows it only while the schema
+/// still holds that: the table it names, and the time column it says was
+/// taken, as the old client drops a note of a table not taken or of a
+/// time column the table no longer has (`CL/schema.py:1401-1433`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ViewNote {
+    pub sentence: Sentence,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub fields: BTreeMap<String, Detail>,
+    /// The schema's table the note is about; none for a note of the whole
+    /// view (a parameter's).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub table: Option<String>,
+    /// The time column the note says was taken, of `table`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub time_column: Option<String>,
+}
+
+impl ViewNote {
+    /// Whether the note's sentence is a note's ([`crate::Code::Note`]).
+    pub fn is_note(&self) -> bool {
+        self.sentence.code() == crate::Code::Note
+    }
 }
 
 /// The described schema.
@@ -1339,6 +1375,27 @@ pub struct Predict {
     /// others' defaults left out of it silently (T1.28a).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub inference_asked: Vec<String>,
+    /// The model endpoint the host's transport calls, where the core writes
+    /// its envelope and reads its answers (contract v28, T3.27, for T3.13):
+    /// a Databricks Model Serving endpoint, by name, with the request size
+    /// the caller allows it. Left out, the client's own endpoint, as
+    /// before.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_endpoint: Option<ModelEndpoint>,
+}
+
+/// The model endpoint a `predict`'s calls go to, as the caller configured
+/// its transport ([`Predict::model_endpoint`]).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "endpoint", rename_all = "snake_case", deny_unknown_fields)]
+pub enum ModelEndpoint {
+    /// A Databricks Model Serving endpoint: its name, and the most bytes
+    /// one request may take once wrapped in the endpoint's envelope
+    /// (`max_request_bytes`, `CL/core/databricks_serving.py:127-148`).
+    ServingEndpoint {
+        name: String,
+        max_request_bytes: u64,
+    },
 }
 
 /// The prediction. Nothing inline grows with the result's width or the

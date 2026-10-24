@@ -634,7 +634,9 @@ def test_t32_result_rows_are_compared_as_text_where_the_digest_is_excused(
     assert any('text_digest' in text for text in differs), differs
 
 
-def test_the_locked_run_reads_only_the_capture_manifests(tmp_path: Path) -> None:
+def test_the_locked_run_reads_only_the_capture_manifests(
+    tmp_path: Path,
+) -> None:
     r"""T3.20: the locked run hands ``capture_check.py captures`` each leg's
     ``manifest.json``, never a capture's own ``capture.json``, which the
     check refuses as a manifest ("no legs or cases")."""

@@ -8,18 +8,20 @@
 //! `Graph.from_postgres` read the schema they were given; a part left
 //! `null` is the connection's current one, as before v28; DuckDB's and
 //! SQLite's sources name none, so a namespace given them is refused by
-//! name.
+//! name. A Postgres source given no schema has the session's current one
+//! read once per run and every relation named under it (T3.7).
 
 use sdm_contract::data::{
     DataLayer, DataRequest, DescribePart, Dialect, FetchPlan, ProviderChoice, Relation,
 };
-use sdm_contract::{Detail, ErrorCode};
+use sdm_contract::{Detail, ErrorCode, Sentence};
 use sdm_data::Data;
 
 fn sql(name: &str, namespace: &[Option<&str>]) -> ProviderChoice {
     ProviderChoice::Sql {
         dialect: Dialect::new(name),
         namespace: namespace.iter().map(|p| p.map(str::to_owned)).collect(),
+        view: None,
     }
 }
 
@@ -67,14 +69,23 @@ fn a_postgres_namespace_lists_and_reads_under_its_schema() {
     assert!(text(&preview(named), &under).contains(r#"FROM "other"."orders""#));
 }
 
+/// A Postgres source given no schema is read under the session's current
+/// one, which the core reads once per run before any table (T3.7): until
+/// then a relation of one part is under no schema, refused as the
+/// reference refuses a session with none, never read where the search path
+/// finds it.
 #[test]
-fn no_namespace_or_a_null_part_reads_the_current_schema() {
+fn no_namespace_or_a_null_part_reads_no_relation_before_the_schema_is_settled() {
     for current in [sql("postgres", &[]), sql("postgres", &[None])] {
-        assert!(text(&listing(), &current).contains("WHERE table_schema = current_schema()"));
-        assert_eq!(
-            text(&preview(Relation::named("orders")), &current),
-            r#"SELECT "id" FROM "orders" LIMIT 10"#
-        );
+        for request in [listing(), preview(Relation::named("orders"))] {
+            let refused = Data::new().plan(&request, &current).unwrap_err();
+            assert_eq!(refused.sentence, Sentence::NoCurrentSchema, "{request:?}");
+            assert_eq!(refused.code, ErrorCode::InvalidRequest);
+            assert_eq!(
+                refused.fields.get("database"),
+                Some(&Detail::text("postgres"))
+            );
+        }
     }
 }
 
@@ -118,9 +129,19 @@ fn the_namespace_asked_for_is_the_one_a_table_is_named_under() {
         tables: vec![],
         part: DescribePart::Namespace,
     };
-    assert!(text(&asked, &sql("postgres", &[])).contains("SELECT current_schema() AS n"));
-    assert!(text(&asked, &sql("postgres", &[None])).contains("SELECT current_schema() AS n"));
-    assert!(text(&asked, &sql("postgres", &[Some("sales")])).contains("SELECT 'sales' AS n"));
+    // The old client's own read of the session's schema (T3.7).
+    assert_eq!(
+        text(&asked, &sql("postgres", &[])),
+        "SELECT current_schema()"
+    );
+    assert_eq!(
+        text(&asked, &sql("postgres", &[None])),
+        "SELECT current_schema()"
+    );
+    assert_eq!(
+        text(&asked, &sql("postgres", &[Some("sales")])),
+        "SELECT 'sales' AS current_schema"
+    );
     for alone in ["duckdb", "sqlite"] {
         let statement = text(&asked, &sql(alone, &[]));
         assert!(

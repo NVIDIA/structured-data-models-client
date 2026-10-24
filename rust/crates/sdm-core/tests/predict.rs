@@ -123,6 +123,7 @@ fn predict_run_setting(
         outputs: outputs.iter().map(|o| (*o).to_owned()).collect(),
         default_outputs,
         inference_asked: inference_asked.iter().map(|o| (*o).to_owned()).collect(),
+        model_endpoint: None,
     });
     let attachments = Attachments::from([
         (AttachmentId(1), Attachment::Bytes(payload.into_bytes())),
@@ -243,6 +244,7 @@ fn a_ranking_s_state_naming_its_candidates_out_of_order_is_refused_by_name() {
             outputs: vec![],
             default_outputs: true,
             inference_asked: vec![],
+            model_endpoint: None,
         });
         let query =
             serde_json::to_vec("PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id")

@@ -20,7 +20,7 @@ use sdm_contract::catalog::{
     CatalogAnswer, CatalogColumn, CatalogForeignKey, CatalogIndex, CatalogKey, IndexCoverage,
     KeyKind,
 };
-use sdm_contract::data::{DescribePart, catalog_columns as c};
+use sdm_contract::data::{DescribePart, catalog_columns as c, views_unread};
 use sdm_contract::{CoreError, Detail, Sentence};
 
 fn unread(name: &str, message: &str) -> CoreError {
@@ -234,6 +234,8 @@ pub(crate) fn host(
     batches: &[RecordBatch],
 ) -> Result<CatalogAnswer, CoreError> {
     match part {
+        // No view is read here (T3.27): only a dialect that reads views answers it.
+        DescribePart::ViewDefinition => Err(views_unread()),
         DescribePart::Namespace => namespace(batches, c::NAME),
         DescribePart::Tables => tables(batches, c::TABLE),
         DescribePart::Columns => columns(

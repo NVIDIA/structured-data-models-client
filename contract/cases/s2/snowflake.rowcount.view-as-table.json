@@ -1,0 +1,66 @@
+{
+  "format": "sdm-case/1",
+  "id": "snowflake.rowcount.view-as-table",
+  "status": "acceptance",
+  "slice": "S2",
+  "warehouses": [
+    "snowflake"
+  ],
+  "paths": [
+    "schema.from-source/tables/snowflake",
+    "query.materialize/indices-regression/snowflake",
+    "client.predict/regression/snowflake"
+  ],
+  "routes": [
+    "schema.from-source/tables/snowflake",
+    "schema.from-source/catalog-keys/snowflake",
+    "query.materialize/indices-binary/snowflake",
+    "query.materialize/indices-multiclass/snowflake",
+    "query.materialize/indices-regression/snowflake",
+    "query.materialize/indices-link-prediction/snowflake",
+    "query.materialize/indices-ranking/snowflake",
+    "query.materialize/indices-forecast/snowflake",
+    "client.predict/binary/snowflake",
+    "client.predict/multiclass/snowflake",
+    "client.predict/regression/snowflake",
+    "client.predict/link-prediction/snowflake",
+    "client.predict/ranking/snowflake",
+    "client.predict/forecast/snowflake"
+  ],
+  "cells": [
+    "int8/primary-key",
+    "int8/foreign-key",
+    "timestamp-us/time-column",
+    "float64/target"
+  ],
+  "input": {
+    "base": "shop",
+    "from_source": {
+      "tables": {
+        "users": "users_v",
+        "orders": "orders"
+      }
+    },
+    "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ],
+      "anchor_time": "2024-03-01"
+    },
+    "warehouse_setup": [
+      "CREATE VIEW \"{catalog}\".\"{schema}\".\"users_v\" AS SELECT * FROM \"{catalog}\".\"{schema}\".\"users\""
+    ]
+  },
+  "until": "predict",
+  "expect": {
+    "outcome": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INTERNAL_ERROR",
+    "today": "DESCRIBE TABLE resolves the view, so describe passes (SNOW/table.py:123-158); at materialize the row count is SHOW TABLES LIKE ? IN SCHEMA (:287-297), which lists no view, so the bare assert at :296 fails and the client reports INTERNAL_ERROR 'the relational engine failed while building this request: AssertionError: ' (CL/materializers/relational.py:637-642)"
+  },
+  "why": "A plain Snowflake view used as a table (T3.6 table rows 11, 14, 37 and open question 1): the view is created in the test schema over the case's users table by the run's warehouse setup, its names given with the {catalog} and {schema} placeholders, and named in from_source as the users table. The design proposes counting rows with COUNT(*), which also answers for a view (T3.6 part 6)",
+  "source": "written for the second early capture (T3.20) from the reference at 43e55f4f"
+}

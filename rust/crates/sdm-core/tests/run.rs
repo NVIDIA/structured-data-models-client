@@ -78,7 +78,7 @@ fn rows(n: usize) -> FetchResult {
 
 fn failed() -> FetchResult {
     FetchResult::Error(ProviderError {
-        refuses_expression: false,
+        error_class: None,
         kind: ErrorKind::DataSource,
         retryable: false,
         sqlstate: Some("42P01".into()),
