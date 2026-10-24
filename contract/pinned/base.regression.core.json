@@ -728,6 +728,7 @@
      }
     ]
    },
+   "purpose": "locate",
    "request": {
     "part": "columns",
     "request": "describe",
@@ -777,6 +778,7 @@
      }
     ]
    },
+   "purpose": "locate",
    "request": {
     "part": "keys",
     "request": "describe",
@@ -803,6 +805,7 @@
      }
     ]
    },
+   "purpose": "locate",
    "request": {
     "columns": [
      "order_id",
@@ -877,6 +880,7 @@
      }
     ]
    },
+   "purpose": "locate",
    "request": {
     "part": "columns",
     "request": "describe",
@@ -926,6 +930,7 @@
      }
     ]
    },
+   "purpose": "locate",
    "request": {
     "part": "keys",
     "request": "describe",
@@ -952,6 +957,7 @@
      }
     ]
    },
+   "purpose": "locate",
    "request": {
     "columns": [
      "user_id",
