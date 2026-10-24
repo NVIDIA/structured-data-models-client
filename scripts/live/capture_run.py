@@ -373,6 +373,10 @@ def run(
     failed: dict[str, str] = {}
     recorded: list[Path] = []
     progress = out / f'{leg}.progress.jsonl'
+    # Rewritten whole after each case, never appended to: a Databricks
+    # volume refuses an append to a file once written (Errno 29, the
+    # second recording's Spark run).
+    progressed: list[str] = []
     progress.write_text('', encoding='utf-8')
     failures = out / f'{leg}.failed.json'
 
@@ -413,8 +417,8 @@ def run(
                 'status': 'recorded' if reason is None else 'failed',
                 'seconds': round(time.monotonic() - started, 1),
             }
-            with progress.open('a', encoding='utf-8') as written:
-                written.write(json.dumps(line, sort_keys=True) + '\n')
+            progressed.append(json.dumps(line, sort_keys=True) + '\n')
+            progress.write_text(''.join(progressed), encoding='utf-8')
             print(
                 f'{leg}: {number + 1}/{len(planned["record"])} {case} '
                 f'{line["status"]} in {line["seconds"]} s',
