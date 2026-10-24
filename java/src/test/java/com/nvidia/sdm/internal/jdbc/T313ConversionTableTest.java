@@ -264,6 +264,56 @@ class T313ConversionTableTest {
   }
 
   @Test
+  void tinyAndDateArraysReadNativeDriverClassesUnderBothComplexModesAndJvmZones()
+      throws Exception {
+    java.util.TimeZone original = java.util.TimeZone.getDefault();
+    try {
+      for (String zone : List.of("UTC", "America/Los_Angeles", "Europe/Berlin")) {
+        java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone(zone));
+        List<Object> dates = Arrays.asList(LocalDate.parse("1969-12-31"),
+            LocalDate.parse("2024-03-10"), LocalDate.parse("2024-03-31"), null);
+        for (boolean complexEnabled : List.of(false, true)) {
+          Object tiny = complexEnabled ? Arrays.asList("-128", "127", null) : "[-128,127,null]";
+          Object days = complexEnabled ? Arrays.asList(java.sql.Date.valueOf("1969-12-31"),
+              java.sql.Date.valueOf("2024-03-10"), java.sql.Date.valueOf("2024-03-31"), null)
+              : "[-1,19792,19813,null]";
+          Object empty = complexEnabled ? List.of() : "[]";
+          Map<String, Read> got = answered(
+              FakeJdbc.Column.of("tiny", "ARRAY<TINYINT>", tiny, empty, null),
+              FakeJdbc.Column.of("dates", "ARRAY<DATE>", days, empty, null));
+          assertEquals(Arrays.asList((byte) -128, (byte) 127, null),
+              got.get("tiny").values().get(0), zone);
+          assertEquals(dates, got.get("dates").values().get(0), zone);
+          assertEquals("Int(8, true)",
+              got.get("tiny").field().getChildren().get(0).getType().toString());
+          assertEquals("Date(DAY)",
+              got.get("dates").field().getChildren().get(0).getType().toString());
+          for (String name : List.of("tiny", "dates")) {
+            assertEquals(List.of(), got.get(name).values().get(1), zone);
+            assertNull(got.get(name).values().get(2), zone);
+          }
+        }
+      }
+    } finally {
+      java.util.TimeZone.setDefault(original);
+    }
+  }
+
+  @Test
+  void tinyArrayOutOfRangeAndUnknownDateShapesAreNamedDataFailures() {
+    for (String number : List.of("-129", "128")) {
+      java.sql.SQLException refused = assertThrows(java.sql.SQLDataException.class,
+          () -> answered(FakeJdbc.Column.of("tiny", "ARRAY<TINYINT>", List.of(number))));
+      assertEquals("22003", refused.getSQLState());
+      assertTrue(refused.getMessage().contains("TINYINT"));
+    }
+    java.sql.SQLException refused = assertThrows(java.sql.SQLDataException.class,
+        () -> answered(FakeJdbc.Column.of("dates", "ARRAY<DATE>", List.of(7L))));
+    assertEquals("22000", refused.getSQLState());
+    assertTrue(refused.getMessage().contains("java.lang.Long"));
+  }
+
+  @Test
   void anUnexpectedArrayValueIsRefusedByItsJdbcType() {
     java.sql.SQLException refused = assertThrows(java.sql.SQLDataException.class,
         () -> answered(FakeJdbc.Column.of("broken", "ARRAY<BIGINT>", 42L)));
