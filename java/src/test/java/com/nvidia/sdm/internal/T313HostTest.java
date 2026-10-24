@@ -67,6 +67,38 @@ class T313HostTest {
     assertTrue(source.schema().isEmpty());
   }
 
+  @Test
+  void aMetricViewAddsPlainConfigurationAndKeepsTheOriginalSource() {
+    DatabricksSource source = DatabricksSource.of(connection(), "main", "sales");
+    DatabricksSource view = source.semanticModel("revenue", true);
+    assertEquals(source.connection(), view.connection());
+    assertFalse(Providers.of(source).choice().containsKey("view"));
+    assertEquals(Map.of("name", "revenue", "trust_expressions", true),
+        Providers.of(view).choice().get("view"));
+    assertEquals(Map.of("name", "revenue", "trust_expressions", false),
+        Providers.of(source.semanticModel("revenue", false)).choice().get("view"));
+    assertEquals(Arrays.asList("main", "sales"), Providers.of(view).choice().get("namespace"));
+    assertThrows(NullPointerException.class, () -> source.semanticModel(null, false));
+  }
+
+  @Test
+  void aDriverDiagnosticDoesNotEscapeTheCoreProviderError() {
+    TestOps.required();
+    Host.Provider provider = (request, keys, allocator) -> {
+      throw new java.sql.SQLException("secret_driver_text", "42501", 17);
+    };
+    assertEquals("secret_driver_text",
+        provider.failure(new java.sql.SQLException("secret_driver_text")).get("driver_message"));
+    StructuredDataException error = assertThrows(StructuredDataException.class,
+        () -> Host.run(Map.of("op", "test", "test", "fetch", "fetch", 1),
+            Map.of(1, TestOps.json(TestOps.fetch(false))), new Host.Call(provider, null, null)));
+    assertEquals("PROVIDER_ERROR", error.code());
+    assertFalse(error.getMessage().contains("secret_driver_text"));
+    assertFalse(error.details().toString().contains("secret_driver_text"));
+    assertEquals("42501", error.details().get("sqlstate"));
+    assertEquals("17", error.details().get("vendor_code"));
+  }
+
   /** The core's error of {@code sentence} under {@code status} and {@code code}. */
   private static StructuredDataException raised(String sentence, int status, String code) {
     TestOps.required();

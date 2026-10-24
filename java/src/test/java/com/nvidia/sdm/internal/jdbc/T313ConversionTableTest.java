@@ -128,6 +128,27 @@ class T313ConversionTableTest {
   }
 
   @Test
+  void zonedInstantsAndZoneFreeWallTimesSurviveDstAndANonUtcJvm() throws Exception {
+    java.util.TimeZone original = java.util.TimeZone.getDefault();
+    try {
+      for (String zone : List.of("America/Los_Angeles", "Europe/Berlin", "Asia/Kolkata")) {
+        java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone(zone));
+        Instant before = Instant.parse("2024-03-10T09:59:59.123456Z");
+        Instant after = Instant.parse("2024-03-10T10:00:00.654321Z");
+        LocalDateTime wall = LocalDateTime.parse("2024-03-10T02:30:00.123456");
+        Map<String, Read> got = answered(
+            FakeJdbc.Column.of("zoned", "TIMESTAMP", before, after),
+            FakeJdbc.Column.of("unzoned", "TIMESTAMP_NTZ", wall, wall));
+        assertEquals(List.of(LocalDateTime.ofInstant(before, java.time.ZoneOffset.UTC),
+            LocalDateTime.ofInstant(after, java.time.ZoneOffset.UTC)), got.get("zoned").values(), zone);
+        assertEquals(List.of(wall, wall), got.get("unzoned").values(), zone);
+      }
+    } finally {
+      java.util.TimeZone.setDefault(original);
+    }
+  }
+
+  @Test
   void aBinaryAnArrayAndAVoidAreTheConnectorsAndAnyOtherTypeIsTheDriversText()
       throws Exception {
     byte[] token = "u1".getBytes(StandardCharsets.UTF_8);

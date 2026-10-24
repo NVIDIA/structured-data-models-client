@@ -188,7 +188,7 @@ class T313DatabricksProviderTest {
   }
 
   @Test
-  void aDatabricksFailureIsToldByItsStateAndErrorClassNeverItsText() {
+  void aDatabricksFailureCarriesItsDiagnosticOnlyAsAnInternalFact() {
     JdbcProvider databricks = new JdbcProvider(null, JdbcProvider.Driver.DATABRICKS);
     // The class a Databricks message opens with, and the state the driver gives.
     SQLException opened =
@@ -198,7 +198,8 @@ class T313DatabricksProviderTest {
             "42703",
             0);
     assertEquals(
-        Map.of("sqlstate", "42703", "error_class", "UNRESOLVED_COLUMN.WITH_SUGGESTION"),
+        Map.of("sqlstate", "42703", "error_class", "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+            "driver_message", opened.getMessage()),
         databricks.failure(opened));
     // The driver's own wrapping, its state left out: the state and class the message carries,
     // the driver's mixed-case brackets not a class.
@@ -211,24 +212,28 @@ class T313DatabricksProviderTest {
             500051);
     assertEquals(
         Map.of(
-            "sqlstate", "42P01", "vendor_code", "500051", "error_class", "TABLE_OR_VIEW_NOT_FOUND"),
+            "sqlstate", "42P01", "vendor_code", "500051", "error_class", "TABLE_OR_VIEW_NOT_FOUND",
+            "driver_message", wrapped.getMessage()),
         databricks.failure(wrapped));
     // A message that says neither.
-    assertEquals(Map.of(), databricks.failure(new SQLException("connection reset")));
+    assertEquals(Map.of("driver_message", "connection reset"),
+        databricks.failure(new SQLException("connection reset")));
+    assertEquals(Map.of(), databricks.failure(new SQLException((String) null)));
     // A transient failure keeps its state.
     assertEquals(
-        Map.of("sqlstate", "08001"),
+        Map.of("sqlstate", "08001", "driver_message", "no route"),
         databricks.failure(new SQLTransientException("no route", "08001")));
     // Anything else the provider raised carries no fact.
     assertEquals(Map.of(), databricks.failure(new IllegalStateException("[NOT_A_CLASS] x")));
     // Another driver's failure is read as before: its state and code, no class.
     JdbcProvider postgres = new JdbcProvider(null, JdbcProvider.Driver.POSTGRES);
     assertEquals(
-        Map.of("sqlstate", "42P01"),
+        Map.of("sqlstate", "42P01", "driver_message", "[TABLE_OR_VIEW_NOT_FOUND] x"),
         postgres.failure(new SQLException("[TABLE_OR_VIEW_NOT_FOUND] x", "42P01", 0)));
     for (Map<String, Object> facts :
         List.of(databricks.failure(opened), databricks.failure(wrapped))) {
-      assertTrue(facts.values().stream().noneMatch(v -> String.valueOf(v).contains("secret")));
+      assertTrue(facts.entrySet().stream().filter(e -> !e.getKey().equals("driver_message"))
+          .noneMatch(e -> String.valueOf(e.getValue()).contains("secret")));
     }
   }
 }
