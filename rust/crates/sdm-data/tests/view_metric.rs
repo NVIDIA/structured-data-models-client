@@ -16,23 +16,29 @@ use sdm_data::view_expr::metric::{
 use serde_json::Value as Json;
 
 /// Python's white space (`str.isspace`), which the core hands in from
-/// `sdm-pql`: the 29 characters Python 3.12 counts.
-const SPACES: Spaces = Spaces(|c| {
-    matches!(
-        c,
-        '\t'..='\r'
-            | '\u{1c}'..='\u{20}'
-            | '\u{85}'
-            | '\u{a0}'
-            | '\u{1680}'
-            | '\u{2000}'..='\u{200a}'
-            | '\u{2028}'
-            | '\u{2029}'
-            | '\u{202f}'
-            | '\u{205f}'
-            | '\u{3000}'
-    )
-});
+/// `sdm-pql`: the 29 characters Python 3.12 counts, with the class the
+/// patterns are compiled with derived from them.
+fn spaces() -> &'static Spaces {
+    static SPACES: std::sync::LazyLock<Spaces> = std::sync::LazyLock::new(|| {
+        Spaces::new(|c| {
+            matches!(
+                c,
+                '\t'..='\r'
+                    | '\u{1c}'..='\u{20}'
+                    | '\u{85}'
+                    | '\u{a0}'
+                    | '\u{1680}'
+                    | '\u{2000}'..='\u{200a}'
+                    | '\u{2028}'
+                    | '\u{2029}'
+                    | '\u{202f}'
+                    | '\u{205f}'
+                    | '\u{3000}'
+            )
+        })
+    });
+    &SPACES
+}
 
 use sdm_data::view_expr::Spaces;
 
@@ -84,12 +90,12 @@ fn table_and_view_names_are_split_as_the_old_client_split_them() {
     for (kind, read) in [
         (
             "table_references",
-            metric::table_reference as fn(&str, Spaces) -> Option<Vec<String>>,
+            metric::table_reference as fn(&str, &Spaces) -> Option<Vec<String>>,
         ),
         ("view_names", metric::view_name),
     ] {
         each(kind, 10, |vector| {
-            let parts = name_text(&vector["name"]).and_then(|name| read(name, SPACES));
+            let parts = name_text(&vector["name"]).and_then(|name| read(name, spaces()));
             let expected = (!vector["parts"].is_null()).then(|| texts(&vector["parts"]));
             (parts != expected).then(|| format!("{}: {parts:?} where {expected:?}", vector["name"]))
         });
@@ -107,7 +113,7 @@ fn key_ref(value: &Json) -> KeyRef {
 fn join_conditions_are_read_as_the_old_client_read_them() {
     each("join_conditions", 20, |vector| {
         let keys =
-            name_text(&vector["condition"]).and_then(|text| metric::join_condition(text, SPACES));
+            name_text(&vector["condition"]).and_then(|text| metric::join_condition(text, spaces()));
         let expected = vector["keys"]
             .as_array()
             .map(|sides| [key_ref(&sides[0]), key_ref(&sides[1])]);
@@ -118,30 +124,33 @@ fn join_conditions_are_read_as_the_old_client_read_them() {
 #[test]
 fn names_and_qualifiers_are_read_as_the_old_client_read_them() {
     each("unquote", 50, |vector| {
-        let out = metric::unquote(vector["name"].as_str().unwrap(), SPACES);
+        let out = metric::unquote(vector["name"].as_str().unwrap(), spaces());
         (out != vector["out"].as_str().unwrap()).then(|| format!("{vector}: {out}"))
     });
     each("references_alias", 100, |vector| {
-        let found =
-            metric::references_alias(vector["expr"].as_str().unwrap(), &texts(&vector["path"]))
-                .unwrap();
+        let found = metric::references_alias(
+            vector["expr"].as_str().unwrap(),
+            &texts(&vector["path"]),
+            spaces(),
+        )
+        .unwrap();
         (found != vector["found"].as_bool().unwrap()).then(|| format!("{vector}: {found}"))
     });
     each("strip_alias", 50, |vector| {
         let out = metric::strip_alias(
             vector["expr"].as_str().unwrap(),
             &texts(&vector["path"]),
-            SPACES,
+            spaces(),
         )
         .unwrap();
         (out != vector["out"].as_str().unwrap()).then(|| format!("{vector}: {out}"))
     });
     each("derived_column", 20, |vector| {
-        let column = metric::derived_column(vector["expr"].as_str().unwrap(), SPACES);
+        let column = metric::derived_column(vector["expr"].as_str().unwrap(), spaces());
         (column != optional_text(&vector["column"])).then(|| format!("{vector}: {column:?}"))
     });
     each("renamed_column", 20, |vector| {
-        let column = metric::renamed_column(vector["expr"].as_str().unwrap(), SPACES);
+        let column = metric::renamed_column(vector["expr"].as_str().unwrap(), spaces());
         (column != optional_text(&vector["column"])).then(|| format!("{vector}: {column:?}"))
     });
 }
@@ -166,7 +175,11 @@ fn a_parameter_s_type_is_classed_as_the_old_client_classed_it() {
         ("ARRAY<INT>", TypeClass::NoLiteral),
         ("INTERVAL DAY", TypeClass::NoLiteral),
     ] {
-        assert_eq!(metric::type_class(data_type, SPACES), class, "{data_type}");
+        assert_eq!(
+            metric::type_class(data_type, spaces()),
+            class,
+            "{data_type}"
+        );
     }
 }
 
@@ -201,6 +214,7 @@ fn parameters_and_fields_are_substituted_as_the_old_client_substituted_them() {
         let read = metric::substitute_parameters(
             vector["expr"].as_str().unwrap(),
             &parameters(&vector["parameters"]),
+            spaces(),
         );
         let got = match &read {
             Ok((out, used)) => serde_json::json!({"out": out, "used": used}),
@@ -225,8 +239,12 @@ fn parameters_and_fields_are_substituted_as_the_old_client_substituted_them() {
             .iter()
             .map(texts)
             .collect();
-        let read =
-            metric::substitute_fields(vector["expr"].as_str().unwrap(), &fields, &qualifiers);
+        let read = metric::substitute_fields(
+            vector["expr"].as_str().unwrap(),
+            &fields,
+            &qualifiers,
+            spaces(),
+        );
         let got = match &read {
             Ok((out, refused)) => serde_json::json!({"out": out, "refused": refused}),
             Err(error) => serde_json::json!({"error": error.to_string()}),
@@ -238,7 +256,7 @@ fn parameters_and_fields_are_substituted_as_the_old_client_substituted_them() {
         (got != expected).then(|| format!("{}: {got} where {expected}", vector["expr"]))
     });
     each("star", 100, |vector| {
-        let read = metric::reads_star(vector["expr"].as_str().unwrap());
+        let read = metric::reads_star(vector["expr"].as_str().unwrap(), spaces());
         let got = match &read {
             Ok(star) => serde_json::json!({"star": star}),
             Err(error) => serde_json::json!({"error": error.to_string()}),
@@ -270,7 +288,7 @@ fn a_filter_is_kept_or_refused_as_the_old_client_kept_or_refused_it() {
         let read = metric::check_filter(
             name_text(filter),
             &candidates(&vector["candidates"]),
-            SPACES,
+            spaces(),
         );
         match (&read, vector["sql"].as_str()) {
             (Ok(sql), Some(expected)) if sql == expected => None,
@@ -333,7 +351,7 @@ fn measures_are_read_as_the_old_client_read_them() {
             &dimensions,
             &texts(&vector["refused"]),
             &texts(&vector["parameters"]),
-            SPACES,
+            spaces(),
         );
         let got: Vec<Json> = read
             .iter()
