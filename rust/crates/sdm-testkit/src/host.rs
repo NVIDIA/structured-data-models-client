@@ -619,7 +619,10 @@ fn validate(
 enum Source<'a> {
     Duck(&'a duckdb::Connection),
     Sqlite(&'a Sqlite),
-    Replay(&'a Replay<'a>),
+    Replay {
+        answers: &'a Replay<'a>,
+        preserve_provider: bool,
+    },
     /// The non-SQL provider, through the composition root given.
     Memory(&'a Memory, &'a CompositionRoot),
 }
@@ -636,7 +639,11 @@ impl Source<'_> {
                 namespace: Vec::new(),
                 view: None,
             },
-            Source::Replay(_) => ProviderChoice::Sql {
+            Source::Replay {
+                preserve_provider: true,
+                ..
+            } => given,
+            Source::Replay { .. } => ProviderChoice::Sql {
                 dialect: Dialect::new(Database::Postgres.name()),
                 namespace: Vec::new(),
                 view: None,
@@ -722,12 +729,53 @@ pub fn run_sqlite(case: &Case, bases: &Bases, repository: &std::path::Path) -> R
 /// the statements the recording names, each with this host's read of the
 /// answer replayed.
 pub fn run_replayed(case: &Case, recording: &Recording) -> Result<Observed> {
+    run_replayed_on(case, recording, Database::Postgres.name())
+}
+
+/// The same strict replay journey on a named warehouse leg. Warehouse
+/// starts carry their exact provider, source arguments and entity scalars;
+/// descriptions, edits and request states are rebuilt by this host.
+pub fn run_replayed_on(case: &Case, recording: &Recording, leg: &str) -> Result<Observed> {
+    let dialect = match leg {
+        "postgres" | "lakebase" => "postgres",
+        "databricks-sql" | "databricks-spark" => "databricks",
+        "snowflake" => "snowflake",
+        _ => bail!("an unsupported replay leg"),
+    };
+    let key = format!("{}@{leg}", case.id);
+    let recorded_core = recording.core(&key)?;
     // Every call the case makes through its until, as python-core makes
-    // them off DuckDB, whose fetches the recording holds (T2.1d).
-    let case = &through_until(case, Database::Postgres.name())?;
+    // them off DuckDB. Existing Postgres recordings keep their derivation.
+    let case = &if let Some(core) = recorded_core {
+        let mut case = case.clone();
+        case.core = Some(core.clone());
+        case
+    } else if leg == Database::Postgres.name() {
+        through_until(case, Database::Postgres.name())?
+    } else {
+        bail!("{key}: the warehouse recording has no describe_source start");
+    };
     let Some(spec) = case.core.as_ref().and_then(|c| c.describe_source.as_ref()) else {
+        if leg != Database::Postgres.name() {
+            bail!("{key}: the warehouse recording has no describe_source start");
+        }
         return run_edited(case, &Bases::default(), &[]);
     };
+    if recorded_core.is_some() {
+        for provider in std::iter::once(&spec.provider).chain(
+            case.core
+                .as_ref()
+                .and_then(|c| c.materialize.as_ref())
+                .map(|s| &s.provider),
+        ) {
+            let provider: ProviderChoice = serde_json::from_value(provider.clone())
+                .map_err(|_| anyhow!("{key}: a recorded provider is not a ProviderChoice"))?;
+            if !matches!(provider, ProviderChoice::Sql { dialect: ref d, .. } if d.name() == dialect)
+            {
+                bail!("{key}: the recorded provider does not match the replay leg");
+            }
+        }
+    }
     let mut edits: Vec<SchemaEdit> = Vec::new();
     for edit in case.input.edits.iter().flatten() {
         let Some(made) = SchemaEdit::from_case(edit) else {
@@ -735,7 +783,6 @@ pub fn run_replayed(case: &Case, recording: &Recording) -> Result<Observed> {
         };
         edits.push(made);
     }
-    let key = format!("{}@{}", case.id, Database::Postgres.name());
     // A diagnostic case's fetch past the recording is answered as the
     // provider's error, so the case is observed (T2.8 fix 4).
     let replay = recording.replay(&key)?;
@@ -745,7 +792,27 @@ pub fn run_replayed(case: &Case, recording: &Recording) -> Result<Observed> {
         replay
     };
     let mut log = DriverLog::default();
-    let mut observed = describe_on(case, spec, Source::Replay(&replay), &mut log, &edits)?;
+    let mut observed = describe_on(
+        case,
+        spec,
+        Source::Replay {
+            answers: &replay,
+            preserve_provider: recorded_core.is_some(),
+        },
+        &mut log,
+        &edits,
+    )?;
+    let until = match case.until {
+        Until::FromSource => "describe_source",
+        Until::Materialize => "materialize",
+        Until::Predict => "predict",
+    };
+    if recorded_core.is_some()
+        && !observed.operations.iter().any(|op| op == until)
+        && observed.answer.outcome().0 != "refusal"
+    {
+        bail!("{key}: the recording has no {until} start for a successful earlier call");
+    }
     if !replay.finished() {
         bail!("{key}: the core asked fewer fetches than were recorded: record the case again");
     }
@@ -908,7 +975,9 @@ fn drive(
                             duck::answer_logged(connection, step, &keys, log)
                         }
                         Source::Sqlite(source) => source.answer_logged(step, &keys, log),
-                        Source::Replay(replay) => {
+                        Source::Replay {
+                            answers: replay, ..
+                        } => {
                             let replayed = replay.answer(step)?;
                             log_replayed(log, &replayed);
                             replayed.answer

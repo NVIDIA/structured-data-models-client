@@ -5169,16 +5169,13 @@ def run(
         record_fetches.write_text(
             ''.join(
                 json.dumps(
-                    {
-                        'format': 'sdm-replay/1',
-                        'case': case_key(case['id'], database),
-                        'fetches': _with_statements(case, capture, driver),
-                    },
+                    _replay_line(case, database, capture, driver),
                     sort_keys=True,
                 )
                 + '\n'
                 for case, _, _, _, capture, _, driver, *_ in recorded
-                if capture is not None and capture.answered
+                if capture is not None
+                and (capture.answered or database in WAREHOUSES)
             ),
             encoding='utf-8',
         )
@@ -5236,6 +5233,49 @@ def _held_observations(
         partial.write_text(''.join(lines), encoding='utf-8')
         partial.replace(record)
     return out
+
+
+def _replay_line(
+    case: dict[str, Any],
+    database: str,
+    capture: _Capture,
+    driver: dict[str, Any],
+) -> dict[str, Any]:
+    line: dict[str, Any] = {
+        'format': 'sdm-replay/1',
+        'case': case_key(case['id'], database),
+        'fetches': _with_statements(case, capture, driver),
+    }
+    if database in WAREHOUSES:
+        line['core'] = _replay_core(capture)
+    return line
+
+
+def _replay_core(capture: _Capture) -> dict[str, Any]:
+    r"""The starts a warehouse replay needs, projected to the existing
+    pure-Rust host's inputs. Its own description and materialized state
+    must be rebuilt, never copied from this host's answers (E50).
+
+    This is private replay data: namespace and view names remain exactly
+    those of the fetch recording, with no publication-time substitution.
+    """
+    fields = {
+        'validate_query': ('profile', 'schema'),
+        'describe_source': ('provider', 'source', 'check_keys'),
+        'materialize': ('provider', 'indices', 'anchor_time', 'seed'),
+        'predict': ('model',),
+    }
+    core: dict[str, Any] = {}
+    for started in capture.inputs:
+        operation = started['op']
+        if operation not in fields:
+            raise RunnerFailure('an operation this replay does not carry')
+        if operation in core:
+            raise RunnerFailure(f'more than one {operation} start in a replay')
+        core[operation] = {name: started[name] for name in fields[operation]}
+    if 'describe_source' not in core:
+        raise RunnerFailure('a warehouse replay has no describe_source start')
+    return core
 
 
 def _with_statements(
