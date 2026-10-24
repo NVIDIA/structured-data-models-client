@@ -87,7 +87,7 @@
       "refactor": "T2.2: a SQLite source routes as a DuckDB one (_routing.on_the_core with the backend's from-source paths); no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::build": {
-      "refactor": "T3.4: the schema Schema.from_source builds keeps where the core read each table (SourceDescription.namespace) with its engine reading (Schema._keep_readings, EngineTables.readings), so the two share one lifetime; no rule here"
+      "refactor": "T3.4 and fix 12: the schema Schema.from_source builds keeps every table the core read with its engine reading (Schema._keep_readings, EngineTables.readings), under the parts the source left to the connection (SourceDescription.namespace) or none, as the old route's from_source keeps its engine's reading of every table, so the two share one lifetime; no rule here"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::description": {
       "gone": "T3.16 (fix A): the schema is handed over as plain data by _rust/spec.py's held_schema; no saved description, no merge (sdm_schema::edit::read_held is gone)"
