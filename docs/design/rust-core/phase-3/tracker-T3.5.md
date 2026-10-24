@@ -104,3 +104,13 @@ The private reproduction log is `$SDM_ORCH_STATE/phase-3/t35-contract-t327-aff13
 Tests-first commit `cd32de6b1` pins the owner-approved named view/lookup refusals as released, while preserving the full producer scan and the unapproved blanket null-anchor refusal.
 The metadata now follows the existing T35-OWNER-2026-10-24-ERRORS approval and the narrowly recorded LOOKUP-ERRORS approval; wire identities, templates and runtime diagnostics are unchanged.
 No package checks run again until both reviewers approve the updated candidate.
+
+
+## View replay fixture follow-up
+
+The two failed `view_captures` cases were reproduced individually from the approved cached binary; the private logs are `t35-overrides-73d-repro.log` and `t35-aliases-73d-repro.log` under `$SDM_ORCH_STATE/phase-3/`.
+The override fixture sent bare values where the actual contract requires tagged `Given` values, so the core correctly rejected its malformed attachment before applying schema policy.
+All new source-spec builders in the metric and semantic replay fixtures now use typed `SourceSpec` and serde, including the negative override cases.
+The alias fixture assumed physical orders would be counted first despite placing users first in schema order; it now observes both physical mappings at the existing first-read boundary, once in each schema order.
+The original alias, link, note, override and refusal assertions are retained, and the first post-refresh request is explicitly checked as `CountRows`.
+No product code or recorded data changed, and no package checks run again before renewed approvals.

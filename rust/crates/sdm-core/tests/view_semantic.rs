@@ -20,7 +20,9 @@ use sdm_contract::data::{
     ProviderCapabilities, ProviderChoice, Relation,
 };
 use sdm_contract::facts::PlatformFacts;
-use sdm_contract::ops::{DescribeSource, Operation, OperationResult, SourceDescription};
+use sdm_contract::ops::{
+    DescribeSource, NamedTable, Operation, OperationResult, SourceDescription, SourceSpec,
+};
 use sdm_contract::run::StartRun;
 use sdm_contract::view::{DeclaredType, ViewKind, ViewTextAnswer, ViewTextAsk};
 use sdm_contract::{CONTRACT_VERSION, CoreError, HostFacts, Scalar, Step, Unit};
@@ -198,7 +200,16 @@ fn table_of(request: &DataRequest) -> Option<String> {
         .and_then(|(_, relation)| relation.source.last().cloned())
 }
 
-fn semantic_run(definition: &str, spec: serde_json::Value) -> sdm_core::Run {
+fn source_spec() -> SourceSpec {
+    SourceSpec {
+        tables: Vec::new(),
+        primary_keys: BTreeMap::new(),
+        time_columns: BTreeMap::new(),
+        relationships: None,
+    }
+}
+
+fn semantic_run(definition: &str, spec: SourceSpec) -> sdm_core::Run {
     let fake = Fake {
         definition: definition.to_owned(),
         catalogs: BTreeMap::from([
@@ -231,10 +242,7 @@ fn semantic_run(definition: &str, spec: serde_json::Value) -> sdm_core::Run {
     .unwrap()
 }
 
-fn describe_view(
-    definition: &str,
-    spec: serde_json::Value,
-) -> (SourceDescription, Vec<(String, String)>) {
+fn describe_view(definition: &str, spec: SourceSpec) -> (SourceDescription, Vec<(String, String)>) {
     let mut run = semantic_run(definition, spec);
     let mut read: Vec<(String, String)> = Vec::new();
     let description: SourceDescription = loop {
@@ -270,10 +278,7 @@ fn describe_view(
 
 #[test]
 fn each_table_is_finished_before_the_next_is_read() {
-    let (description, read) = describe_view(
-        VIEW,
-        json!({"tables": [], "primary_keys": {}, "time_columns": {}}),
-    );
+    let (description, read) = describe_view(VIEW, source_spec());
     // Every read of USERS before the first of ORDERS.
     let first_orders = read.iter().position(|(t, _)| t == "ORDERS").unwrap();
     assert!(
@@ -300,8 +305,14 @@ fn a_semantic_table_with_no_columns_or_key_does_not_read_or_break_other_tables()
     let definition = VIEW.replace("tables:\n", "tables:\n  - name: UNUSED\n    base_table: {database: DB, schema: SHOP, table: NEVER_READ}\n");
     let (description, read) = describe_view(
         &definition,
-        json!({"tables": [{"name": "people", "source": {"source": ["USERS"]}}],
-            "primary_keys": {}, "time_columns": {}}),
+        SourceSpec {
+            tables: vec![NamedTable {
+                name: "people".into(),
+                source: Relation::named("USERS"),
+                columns: None,
+            }],
+            ..source_spec()
+        },
     );
     assert_eq!(description.tables.len(), 1);
     assert_eq!(description.tables[0].name, "people");
@@ -311,10 +322,7 @@ fn a_semantic_table_with_no_columns_or_key_does_not_read_or_break_other_tables()
 
 #[test]
 fn a_failed_semantic_definition_fetch_uses_its_prefetch_kind() {
-    let mut run = semantic_run(
-        VIEW,
-        json!({"tables": [], "primary_keys": {}, "time_columns": {}}),
-    );
+    let mut run = semantic_run(VIEW, source_spec());
     let Step::Fetch { requests } = run.next().unwrap() else {
         panic!("definition was not fetched");
     };
@@ -348,10 +356,7 @@ fn a_failed_semantic_definition_fetch_uses_its_prefetch_kind() {
 #[test]
 fn semantic_models_never_infer_additional_links_from_column_names() {
     let definition = VIEW.split("relationships:").next().unwrap();
-    let (description, _) = describe_view(
-        definition,
-        json!({"tables": [], "primary_keys": {}, "time_columns": {}}),
-    );
+    let (description, _) = describe_view(definition, source_spec());
     assert_eq!(description.tables.len(), 2);
     assert!(description.links.is_empty(), "{:?}", description.links);
 }

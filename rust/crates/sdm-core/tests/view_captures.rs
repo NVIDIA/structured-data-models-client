@@ -16,6 +16,7 @@
 //! rows (register P3J-12); the test reads the core's as the old client's text
 //! to find its recorded rows.
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use arrow_array::RecordBatch;
@@ -24,7 +25,9 @@ use sdm_contract::data::{
     DataRequest, ExpectedSchema, FetchPlan, ProviderChoice, ProviderError, SqlParam,
 };
 use sdm_contract::facts::PlatformFacts;
-use sdm_contract::ops::{DescribeSource, Operation, OperationResult, SourceDescription};
+use sdm_contract::ops::{
+    DescribeSource, Given, NamedTable, Operation, OperationResult, SourceDescription, SourceSpec,
+};
 use sdm_contract::run::StartRun;
 use sdm_contract::{CONTRACT_VERSION, ColumnType, ErrorCode, HostFacts, Scalar, Step, Unit};
 use sdm_core::{
@@ -292,6 +295,17 @@ fn refusal(sqlstate: &str) -> FetchResult {
     })
 }
 
+/// Build protocol attachments from the contract types, as the hosts do.
+/// In particular, each explicit override is a tagged `Given` value.
+fn source_spec() -> SourceSpec {
+    SourceSpec {
+        tables: Vec::new(),
+        primary_keys: BTreeMap::new(),
+        time_columns: BTreeMap::new(),
+        relationships: None,
+    }
+}
+
 fn replay(document: &Json, case: &Json) -> Replayed {
     replay_with(document, case, &Edits::default(), true)
 }
@@ -299,18 +313,16 @@ fn replay(document: &Json, case: &Json) -> Replayed {
 /// The run of `case`, its statements answered by the recording: in order
 /// where `strict`, else wherever the recording holds each.
 fn replay_with(document: &Json, case: &Json, edits: &Edits, strict: bool) -> Replayed {
-    replay_spec(
-        document,
-        case,
-        edits,
-        strict,
-        json!({
-            "tables": [], "primary_keys": {}, "time_columns": {}
-        }),
-    )
+    replay_spec(document, case, edits, strict, source_spec())
 }
 
-fn replay_spec(document: &Json, case: &Json, edits: &Edits, strict: bool, spec: Json) -> Replayed {
+fn replay_spec(
+    document: &Json,
+    case: &Json,
+    edits: &Edits,
+    strict: bool,
+    spec: SourceSpec,
+) -> Replayed {
     let trust = case["input"]["view"]["trust_expressions"]
         .as_bool()
         .unwrap_or(false);
@@ -1122,13 +1134,21 @@ fn logical_table_aliases_and_swapped_names_survive_describe_and_materialize() {
     let document = captures();
     let recorded = case(&document, "view.metric.from-source");
     for (buyers, transactions) in [("buyers", "transactions"), ("orders", "users")] {
-        let spec = json!({
-            "tables": [
-                {"name": buyers, "source": {"source": ["users"]}},
-                {"name": transactions, "source": {"source": ["orders"]}}
+        let spec = SourceSpec {
+            tables: vec![
+                NamedTable {
+                    name: buyers.into(),
+                    source: sdm_contract::data::Relation::named("users"),
+                    columns: None,
+                },
+                NamedTable {
+                    name: transactions.into(),
+                    source: sdm_contract::data::Relation::named("orders"),
+                    columns: None,
+                },
             ],
-            "primary_keys": {}, "time_columns": {}
-        });
+            ..source_spec()
+        };
         let replayed = replay_spec(&document, recorded, &Edits::default(), true, spec);
         assert!(
             replayed
@@ -1163,22 +1183,28 @@ fn logical_table_aliases_and_swapped_names_survive_describe_and_materialize() {
         assert_eq!(description.links[0][1].table, buyers);
         let query =
             format!("PREDICT COUNT({transactions}.*, 0, 30, days) > 0 FOR EACH {buyers}.user_id");
-        let Located::Past(request) = materialize_query(
-            &document,
-            recorded,
-            &held(&description),
-            &Edits::default(),
-            &query,
-        ) else {
-            panic!("aliased view schema did not reach sampling");
-        };
-        assert!(
-            request
-                .relations()
-                .iter()
-                .any(|(_, r)| r.source.last().is_some_and(|s| s == "orders")),
-            "{request:?}"
-        );
+        let mut schema = held(&description);
+        // Sampler setup counts tables in schema order. Observe each physical
+        // source at the first post-refresh read, including after reordering.
+        for expected in ["users", "orders"] {
+            let Located::Past(request) =
+                materialize_query(&document, recorded, &schema, &Edits::default(), &query)
+            else {
+                panic!("aliased view schema did not reach sampling setup");
+            };
+            assert!(
+                matches!(request, DataRequest::CountRows { .. }),
+                "{request:?}"
+            );
+            assert!(
+                request
+                    .relations()
+                    .iter()
+                    .any(|(_, r)| r.source.last().is_some_and(|s| s == expected)),
+                "{request:?}"
+            );
+            schema.tables.reverse();
+        }
     }
 }
 
@@ -1186,10 +1212,15 @@ fn logical_table_aliases_and_swapped_names_survive_describe_and_materialize() {
 fn a_views_caller_overrides_use_common_key_time_and_relationship_rules() {
     let document = captures();
     let recorded = case(&document, "view.metric.from-source");
-    let spec = json!({
-        "tables": [], "primary_keys": {"orders": ["order_id"]},
-        "time_columns": {"orders": null}, "relationships": []
-    });
+    let spec = SourceSpec {
+        primary_keys: BTreeMap::from([(
+            "orders".into(),
+            Given::Value(Some(vec!["order_id".into()])),
+        )]),
+        time_columns: BTreeMap::from([("orders".into(), Given::Value(None))]),
+        relationships: Some(Vec::new()),
+        ..source_spec()
+    };
     let description = replay_spec(&document, recorded, &Edits::default(), true, spec)
         .ended
         .unwrap();
@@ -1222,13 +1253,30 @@ fn a_views_caller_overrides_use_common_key_time_and_relationship_rules() {
         source.stype_before_key.unwrap_or(source.stype)
     );
 
-    for (primary, time) in [
-        (json!({"absent": ["id"]}), json!({})),
-        (json!({"orders": ["absent"]}), json!({})),
-        (json!({"orders": null}), json!({})),
-        (json!({}), json!({"orders": "absent"})),
+    for spec in [
+        SourceSpec {
+            primary_keys: BTreeMap::from([(
+                "absent".into(),
+                Given::Value(Some(vec!["id".into()])),
+            )]),
+            ..source_spec()
+        },
+        SourceSpec {
+            primary_keys: BTreeMap::from([(
+                "orders".into(),
+                Given::Value(Some(vec!["absent".into()])),
+            )]),
+            ..source_spec()
+        },
+        SourceSpec {
+            primary_keys: BTreeMap::from([("orders".into(), Given::Value(None))]),
+            ..source_spec()
+        },
+        SourceSpec {
+            time_columns: BTreeMap::from([("orders".into(), Given::Value(Some("absent".into())))]),
+            ..source_spec()
+        },
     ] {
-        let spec = json!({"tables": [], "primary_keys": primary, "time_columns": time});
         let error = replay_spec(&document, recorded, &Edits::default(), true, spec)
             .ended
             .unwrap_err();
