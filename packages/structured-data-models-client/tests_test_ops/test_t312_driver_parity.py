@@ -34,7 +34,7 @@ import sys
 import uuid
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 import pyarrow as pa
 import pytest
@@ -70,10 +70,16 @@ POSTGRES_SETUP = [
 ]
 
 
+def _deep(depth: int) -> str:
+    r"""SQL text of a JSON array nested ``depth`` deep around ``0``, spaced
+    as written, so the server's text is not the compact text."""
+    return f"repeat('[ ', {depth}) || '0' || repeat(' ]', {depth})"
+
+
 def _rows(kind: str, *values: str) -> str:
     r"""A statement of one column ``v`` of type ``kind``, a row per value
     (SQL literal text, or NULL), in order."""
-    rows = ', '.join(f'({n}, {v}::{kind})' for n, v in enumerate(values))
+    rows = ', '.join(f'({n}, ({v})::{kind})' for n, v in enumerate(values))
     return f'SELECT v FROM (VALUES {rows}) AS t(n, v) ORDER BY n'
 
 
@@ -99,6 +105,9 @@ POSTGRES: list[tuple[str, list[str]]] = [
                 "'1.17549435e-38'",
                 "'-0'",
                 "'16777217'",
+                # An exact tie of the shortest digits, which Postgres
+                # writes with nine (Claude T3.12 r2 P1-1).
+                "'103528336'",
                 "'NaN'",
                 "'Infinity'",
                 "'-Infinity'",
@@ -201,12 +210,16 @@ POSTGRES: list[tuple[str, list[str]]] = [
                 "'1 year 2 mons -3 days 04:05:06.789'",
                 "'-1 days -00:00:01'",
                 "'00:00:00.000001'",
-                "'-5000000 years'",
                 'NULL',
             )
         ],
     ),
-    ('interval past a timedelta', [_rows('interval', "'-178000000 years'")]),
+    # psycopg's C loader sums the days in 32 bits, so this one wraps.
+    (
+        'interval past a timedelta, wrapped',
+        [_rows('interval', "'-178000000 years'")],
+    ),
+    ('interval past a timedelta', [_rows('interval', "'-5000000 years'")]),
     (
         'interval, iso_8601',
         ["SET IntervalStyle = 'iso_8601'", _rows('interval', "'1 day'")],
@@ -230,11 +243,7 @@ POSTGRES: list[tuple[str, list[str]]] = [
                 "'12345678901234567890'",
                 "'1.5e300'",
                 "'true'",
-                "'[' || repeat('[', "
-                + str(DEEP - 1)
-                + ") || repeat(']', "
-                + str(DEEP)
-                + ')',
+                _deep(DEEP),
                 'NULL',
             )
         ],
@@ -246,15 +255,16 @@ POSTGRES: list[tuple[str, list[str]]] = [
                 'jsonb',
                 """'{"b": [1.0, 1E2], "a": {"x": null}}'""",
                 "'null'",
-                "'[' || repeat('[', "
-                + str(DEEP - 1)
-                + ") || repeat(']', "
-                + str(DEEP)
-                + ')',
+                _deep(DEEP),
                 'NULL',
             )
         ],
     ),
+    # Deeper than Python's recursion limit, which Python's provider reads
+    # (its C scanner) and the core reads to 2,000 levels.
+    ('json 1500 deep', [_rows('json', _deep(1500))]),
+    # Past the core's 2,000 levels (register JV-3).
+    ("json past the core's reader", [_rows('json', _deep(2100))]),
     ('text', [_rows('text', "'x'", "''", "'é\\n'", 'NULL')]),
     ('varchar', [_rows('varchar(3)', "'abc'", 'NULL')]),
     ('bpchar', [_rows('char(3)', "'a'", 'NULL')]),
@@ -281,7 +291,27 @@ POSTGRES: list[tuple[str, list[str]]] = [
     ('record', ["SELECT ROW(1, 'x') AS v"]),
     ('int4range', [_rows('int4range', "'[1,5)'", "'empty'", "'(,3]'", 'NULL')]),
     ('int8range', [_rows('int8range', "'[1,)'", 'NULL')]),
-    ('numrange', [_rows('numrange', "'[1.50,2.5]'", 'NULL')]),
+    (
+        'numrange',
+        [
+            _rows(
+                'numrange',
+                "'[1.50,2.5]'",
+                "'[1,Infinity]'",
+                "'(-Infinity,1)'",
+                "'[1,NaN]'",
+                'NULL',
+            )
+        ],
+    ),
+    (
+        'nummultirange',
+        [_rows('nummultirange', "'{[1,Infinity], [2,3)}'", 'NULL')],
+    ),
+    (
+        'numrange[]',
+        [_rows('numrange[]', "ARRAY['[1,Infinity]'::numrange]", 'NULL')],
+    ),
     ('daterange', [_rows('daterange', "'[2024-01-01,2024-02-01)'", 'NULL')]),
     (
         'tsrange',
@@ -292,6 +322,36 @@ POSTGRES: list[tuple[str, list[str]]] = [
         ],
     ),
     ('tstzrange', [_rows('tstzrange', "'[2024-01-01 00:00+00,)'", 'NULL')]),
+    # A session zone Python's ZoneInfo does not name: psycopg reads the
+    # instant in UTC (Codex T3.12 r2 P0-1).
+    (
+        'tstzrange in GMT+3',
+        [
+            "SET TimeZone = 'GMT+3'",
+            _rows('tstzrange', "'[2024-01-01 00:00+00,2024-01-02 00:00+00)'"),
+        ],
+    ),
+    (
+        'tstzrange in +03:00',
+        [
+            "SET TimeZone = '+03:00'",
+            _rows('tstzrange', "'[2024-01-01 00:00+00,)'"),
+        ],
+    ),
+    (
+        'timestamptz[] in Europe/Berlin',
+        [
+            "SET TimeZone = 'Europe/Berlin'",
+            _rows('timestamptz[]', '\'{"2024-07-01 00:00+00"}\''),
+        ],
+    ),
+    (
+        'tstzrange back in the JVM zone',
+        [
+            f"SET TimeZone = '{ZONE}'",
+            _rows('tstzrange', "'[2024-01-01 00:00+00,)'"),
+        ],
+    ),
     (
         'int4multirange',
         [_rows('int4multirange', "'{[1,3),[5,7)}'", "'{}'", 'NULL')],
@@ -303,7 +363,11 @@ POSTGRES: list[tuple[str, list[str]]] = [
     ('oid[]', [_rows('oid[]', "'{1}'", 'NULL')]),
     (
         'float4[]',
-        [_rows('float4[]', "'{0.1,1.1,NaN,-Infinity,1e-45}'", 'NULL')],
+        [
+            _rows(
+                'float4[]', "'{0.1,1.1,NaN,-Infinity,1e-45,103528336}'", 'NULL'
+            )
+        ],
     ),
     ('float8[]', [_rows('float8[]', "'{0.1,1e300,NaN}'", 'NULL')]),
     ('numeric[]', [_rows('numeric[]', "'{1.50,NaN,1e30}'", 'NULL')]),
@@ -446,12 +510,35 @@ CASES = {'duckdb': DUCKDB, 'sqlite': SQLITE, 'postgres': POSTGRES}
 #: the entry. Every other case is held to the rule.
 KNOWN = {
     # An anonymous record, which no table's column holds: psycopg reads it
-    # as a tuple of texts and the provider writes Python's repr of it.
-    'record': ('python', 'JV-2'),
-    # A JSON value nested past Python's recursion limit, which the core
-    # reads (to 2,000) and Python's reader does not.
-    "json past Python's reader": ('java', 'JV-3'),
+    # as a tuple of texts and the provider writes Python's repr of it; Java
+    # refuses it.
+    'record': ('python answers', 'JV-2'),
+    # Past the core's 2,000 levels: Python's provider writes the value
+    # back compact, Java's hands the server's text; the core refuses either.
+    "json past the core's reader": ('both answer, differently', 'JV-3'),
 }
+
+#: The cases both providers refuse, by the driver's error: the SQLSTATE it
+#: names, the same on both (none for a refusal of the client's own).
+REFUSED = {
+    'date infinity',
+    'date -infinity',
+    'date BC',
+    'date past 9999',
+    'timestamp infinity',
+    'timestamp BC',
+    'timestamptz infinity',
+    'time 24:00',
+    'timetz 24:00',
+    'interval past a timedelta',
+    'interval, iso_8601',
+    'interval, sql_standard',
+    'date[] infinity',
+    'a later text in an integer column',
+}
+
+#: The cases whose answer has no row.
+EMPTY = {'no row'}
 
 
 def _java() -> tuple[Path, Path | None] | None:
@@ -588,11 +675,21 @@ def _steps(database: str, statements: list[str], bound: bool) -> dict[str, Any]:
     return {'plan': {'plan': 'sql', 'statements': planned}}
 
 
-def _python_answer(provider: Any, step: dict[str, Any]) -> pa.Table | str:
+class Refused(NamedTuple):
+    r"""A provider's refusal: the SQLSTATE its driver named (none for a
+    refusal of the client's own), and what it said, for the report."""
+
+    sqlstate: str | None
+    said: str
+
+
+def _python_answer(provider: Any, step: dict[str, Any]) -> pa.Table | Refused:
     try:
         answer = provider(step, {1: KEYS})
-    except Exception as error:  # noqa: BLE001 - any refusal is a refusal
-        return f'refused ({type(error).__name__}: {error})'
+    except Exception as error:  # noqa: BLE001 - judged by its SQLSTATE
+        return Refused(
+            getattr(error, 'sqlstate', None), f'{type(error).__name__}: {error}'
+        )
     return pa.RecordBatchReader._import_from_c_capsule(
         answer.__arrow_c_stream__()
     ).read_all()
@@ -603,7 +700,7 @@ def _java_answers(
     databases: Databases,
     database: str,
     steps: list[dict[str, Any]],
-) -> list[pa.Table | str]:
+) -> list[pa.Table | Refused]:
     jar, native = java
     program = RUNNER.Program(
         java=RUNNER.java_binary(None),
@@ -636,7 +733,7 @@ def _java_answers(
     return [
         pa.ipc.open_stream(base64.b64decode(each['arrow'])).read_all()
         if 'arrow' in each
-        else f'refused ({each["error"]})'
+        else Refused(each.get('sqlstate'), each['error'])
         for each in answer['answers']
     ]
 
@@ -662,11 +759,41 @@ def _values(table: pa.Table) -> Any:
         return [column.to_string() for column in table.columns]
 
 
-def _difference(mine: pa.Table | str, theirs: pa.Table | str) -> str | None:
-    if isinstance(mine, str) or isinstance(theirs, str):
-        if isinstance(mine, str) and isinstance(theirs, str):
+def _judged(case: str, mine: Any, theirs: Any) -> str | None:
+    r"""What is wrong with the two answers to ``case``, or None: a
+    registered difference as its entry states it; a refusal both refuse, by
+    the same SQLSTATE; any other case both answer, with a row unless it
+    has none, the same Arrow."""
+    known = KNOWN.get(case)
+    if known is not None:
+        if known[0] == 'python answers':
+            stated = isinstance(mine, pa.Table) and isinstance(theirs, Refused)
+        else:
+            stated = (
+                isinstance(mine, pa.Table)
+                and isinstance(theirs, pa.Table)
+                and _values(mine) != _values(theirs)
+            )
+        if stated:
             return None
-        return f'Python {_shown(mine)}; Java {_shown(theirs)}'
+        return (
+            f'not the difference {known[1]} states: Python {_shown(mine)}; '
+            f'Java {_shown(theirs)}'
+        )
+    if case in REFUSED:
+        if not (isinstance(mine, Refused) and isinstance(theirs, Refused)):
+            return f'both refuse: Python {_shown(mine)}; Java {_shown(theirs)}'
+        if mine.sqlstate != theirs.sqlstate:
+            return f'refused by SQLSTATE {theirs.sqlstate}, not {mine.sqlstate}'
+        return None
+    if isinstance(mine, Refused) or isinstance(theirs, Refused):
+        return f'both answer: Python {_shown(mine)}; Java {_shown(theirs)}'
+    if case not in EMPTY and mine.num_rows == 0:
+        return 'answered no row'
+    return _difference(mine, theirs)
+
+
+def _difference(mine: pa.Table, theirs: pa.Table) -> str | None:
     if not mine.schema.equals(theirs.schema, check_metadata=True):
         return f'schema: Java {theirs.schema!r}; Python {mine.schema!r}'
     if _values(mine) != _values(theirs):
@@ -674,8 +801,10 @@ def _difference(mine: pa.Table | str, theirs: pa.Table | str) -> str | None:
     return None
 
 
-def _shown(answer: pa.Table | str) -> str:
-    return answer if isinstance(answer, str) else f'answered {_values(answer)}'
+def _shown(answer: pa.Table | Refused) -> str:
+    if isinstance(answer, Refused):
+        return f'refused ({answer.sqlstate}: {answer.said})'
+    return f'answered {_values(answer)}'
 
 
 @pytest.mark.parametrize('database', ['duckdb', 'sqlite', 'postgres'])
@@ -687,6 +816,9 @@ def test_java_hands_the_core_what_python_s_provider_hands_it(
     )
     for _, entry in KNOWN.values():
         assert f'\n- id: {entry}\n' in register, entry
+    # Every case named a difference, a refusal or empty is one that runs.
+    named = {name for cases in CASES.values() for name, _ in cases}
+    assert set(KNOWN) | REFUSED | EMPTY <= named
     java = _java()
     if java is None or (database == 'postgres' and databases.scoped is None):
         return
@@ -706,24 +838,7 @@ def test_java_hands_the_core_what_python_s_provider_hands_it(
     problems: dict[str, list[str]] = {}
     for name, a, b in zip(names, mine, theirs, strict=True):
         case, run = name.rsplit(' (', 1)
-        known = KNOWN.get(case)
-        if known is not None:
-            answers = known[0]
-            stated = (
-                not isinstance(a, str) and isinstance(b, str)
-                if answers == 'python'
-                else isinstance(a, str) and not isinstance(b, str)
-            )
-            found = (
-                None
-                if stated
-                else (
-                    f'not the difference {known[1]} states: Python {_shown(a)}; '
-                    f'Java {_shown(b)}'
-                )
-            )
-        else:
-            found = _difference(a, b)
+        found = _judged(case, a, b)
         if found is not None:
             problems.setdefault(f'{case}: {found}', []).append(run.rstrip(')'))
     assert not problems, '\n'.join(

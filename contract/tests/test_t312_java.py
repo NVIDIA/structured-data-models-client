@@ -424,7 +424,9 @@ def test_t312_a_java_path_s_test_is_a_junit_method_the_tree_defines() -> None:
 
 
 def test_t312_a_java_method_that_is_no_junit_test_claims_nothing() -> None:
-    # Codex T3.12 r1 P1-5: a method with no JUnit annotation is no test.
+    # Codex T3.12 r1 P1-5 and r2 P1-5: only a method JUnit runs is a test:
+    # annotated @Test or @ParameterizedTest, neither private, static nor
+    # abstract, in the file's own class (not abstract) or a @Nested one.
     coverage = _tool('coverage')
     path = 'java/src/test/java/com/nvidia/sdm/Helpers.java'
     tree = _Tree(
@@ -438,12 +440,48 @@ def test_t312_a_java_method_that_is_no_junit_test_claims_nothing() -> None:
             '  @Test\n'
             '  @Timeout(5)\n'
             '  public void anotherTest() {}\n'
+            '\n'
+            '  @Test\n'
+            '  private void privateOne() {}\n'
+            '\n'
+            '  @Test\n'
+            '  static void staticOne() {}\n'
+            '\n'
+            '  @Test\n'
+            '  abstract void abstractOne();\n'
+            '\n'
+            '  static class Inner {\n'
+            '    @Test\n'
+            '    void innerOne() {}\n'
+            '  }\n'
+            '\n'
+            '  @Nested\n'
+            '  class Grouped {\n'
+            '    @Test\n'
+            '    void nestedOne() {}\n'
+            '  }\n'
             '}\n'
         }
     )
-    assert coverage._test_problem(f'{path}#aTest', tree, 'java') is None
-    assert coverage._test_problem(f'{path}#anotherTest', tree, 'java') is None
-    assert coverage._test_problem(f'{path}#helper', tree, 'java') == (
+    for runs in ('aTest', 'anotherTest', 'nestedOne'):
+        assert coverage._test_problem(f'{path}#{runs}', tree, 'java') is None, (
+            runs
+        )
+    for never in (
+        'helper',
+        'privateOne',
+        'staticOne',
+        'abstractOne',
+        'innerOne',
+    ):
+        assert coverage._test_problem(f'{path}#{never}', tree, 'java') == (
+            'no test the tree defines'
+        ), never
+    abstract = 'java/src/test/java/com/nvidia/sdm/Base.java'
+    tree = _Tree(
+        {abstract: 'abstract class Base {\n  @Test\n  void aTest() {}\n}\n'}
+    )
+    assert coverage._test_problem(f'{abstract}#aTest', tree, 'java') == (
         'no test the tree defines'
     )
 
