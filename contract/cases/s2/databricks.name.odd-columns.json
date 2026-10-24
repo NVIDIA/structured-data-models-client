@@ -47,14 +47,7 @@
     "client.predict/ranking/databricks-spark",
     "client.predict/forecast/databricks-spark"
   ],
-  "cells": [
-    "int64/primary-key",
-    "int64/foreign-key",
-    "timestamp-us/time-column",
-    "utf8/feature",
-    "int32/feature",
-    "float64/feature"
-  ],
+  "cells": [],
   "input": {
     "base": "shop",
     "setup": [

@@ -26,8 +26,6 @@
     "client.predict/forecast/databricks-metric-view"
   ],
   "cells": [
-    "int64/primary-key",
-    "int64/foreign-key",
     "timestamp-us/time-column"
   ],
   "input": {

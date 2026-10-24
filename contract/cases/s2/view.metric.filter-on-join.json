@@ -25,11 +25,7 @@
     "client.predict/ranking/databricks-metric-view",
     "client.predict/forecast/databricks-metric-view"
   ],
-  "cells": [
-    "int64/primary-key",
-    "int64/foreign-key",
-    "timestamp-us/time-column"
-  ],
+  "cells": [],
   "input": {
     "base": "shop",
     "pql": "PREDICT COUNT(orders.*, 0, 30, days) > 0 FOR EACH users.user_id",
