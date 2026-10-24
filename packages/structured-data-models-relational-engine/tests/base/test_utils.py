@@ -79,12 +79,15 @@ def test_to_datetime_does_not_warn_about_already_null_values() -> None:
         pd.DateOffset(days=1),
         pd.DateOffset(months=1, days=-31),
         -pd.DateOffset(days=2) * 3,
+        pd.DateOffset(n=0, year=2022),
+        pd.DateOffset(days=0, normalize=True),
+        pd.offsets.MonthEnd(0),
     ],
 )
 def test_shift_time_moves_by_an_offset_that_moves(
     offset: pd.DateOffset,
 ) -> None:
-    time = pd.Timestamp('2020-02-01')
+    time = pd.Timestamp('2020-02-01 13:30')
     assert shift_time(time, offset) == time + offset
 
 
