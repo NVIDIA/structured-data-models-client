@@ -553,6 +553,7 @@ def test_one_dirty_excuse_reaches_the_recording_and_its_checker(
                     'identity': {'commit': {'clean': False}},
                 }
             )
+            + '\n'
         )
         return lines
 
