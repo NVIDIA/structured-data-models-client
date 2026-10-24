@@ -3822,13 +3822,14 @@ def warehouse_source(
     leg: str, captured: Any, names: Mapping[str, str], given: Mapping[str, Any]
 ) -> Any:
     r"""The public source a user builds on ``leg`` over the captured
-    connection: the raw connection itself for a connect case (found by
-    detection, CN/source.py:97-107); the leg's source class in the test
+    connection: for a connect case, ``Source(connection)``, which finds the
+    leg's source class by the connection's type (CN/source.py:97-107), as
+    the case's ``Source(session)`` does; the leg's source class in the test
     schema otherwise, and a view case's semantic model of it."""
     import sdm_connectors
 
     if 'connect' in given:
-        return captured
+        return sdm_connectors.Source(captured)
     catalog, schema = names.get('catalog'), names.get('schema')
     if leg in ('databricks-sql', 'databricks-spark'):
         source = sdm_connectors.DatabricksSource(
