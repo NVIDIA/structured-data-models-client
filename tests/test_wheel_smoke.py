@@ -489,7 +489,7 @@ JUDGES = (
     'getenv_shim.c',
 )
 #: The one line of ``messages.py`` the suite sets.
-CONTRACT_LINE = re.compile(r'^CONTRACT = \d+$', re.M)
+CONTRACT_LINE = re.compile(r'^CONTRACT = (?:\d+|_crate_version\(\))$', re.M)
 
 
 def _builder(label: str, version: int) -> str:

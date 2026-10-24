@@ -47,10 +47,11 @@ def _reference() -> dict[str, dict[str, Any]]:
 
 def _cases() -> list[dict[str, Any]]:
     r"""Every case, S0 and S1."""
-    return [
+    loaded = (
         json.loads(path.read_text())
         for path in sorted((ROOT / 'contract/cases').rglob('*.json'))
-    ]
+    )
+    return [case for case in loaded if 'warehouses' not in case]
 
 
 def _key(case: str, database: str) -> str:

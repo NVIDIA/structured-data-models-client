@@ -72,7 +72,21 @@ def test_t33_the_numeric_spelling_cases_run_on_ci_s_postgres_service() -> None:
     assert with_service
     for name, job in with_service.items():
         env = {**top, **(job.get('env') or {})}
-        assert env.get('SDM_REQUIRE_POSTGRES'), name
+        if env.get('SDM_REQUIRE_POSTGRES'):
+            continue
+        # The JDBC matrix needs Postgres only in its service-backed
+        # parity step; a step's environment overrides the job's.
+        tests = [
+            step
+            for step in job.get('steps', [])
+            if '-m pytest' in str(step.get('run', ''))
+        ]
+        assert tests, name
+        for step in tests:
+            assert {
+                **env,
+                **(step.get('env') or {}),
+            }.get('SDM_REQUIRE_POSTGRES'), name
     assert any(
         'test_t214c_numeric_spelling.py' in run
         for job in with_service.values()

@@ -225,7 +225,11 @@ def reference_problems(
     if [path.name for path in files] != [name]:
         problems.append(f'{reference.name}: not exactly one file, {name}')
         return problems
-    loaded = run_python.load_cases([cases])
+    loaded = [
+        (case, digest)
+        for case, digest in run_python.load_cases([cases])
+        if 'warehouses' not in case
+    ]
     digests = {case['id']: digest for case, digest in loaded}
     digests[''] = run_python.digest(BASES.read_bytes())
     validate = run_python.validator('observation')

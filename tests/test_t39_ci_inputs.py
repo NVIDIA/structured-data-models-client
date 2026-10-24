@@ -80,7 +80,14 @@ def test_passing_temp_trees_are_removed_and_failed_ones_preserved(
             '-q',
             str(test),
         ],
-        env={**os.environ, 'PYTEST_DISABLE_PLUGIN_AUTOLOAD': '1'},
+        env={
+            **{
+                name: value
+                for name, value in os.environ.items()
+                if not name.startswith('PYTEST_')
+            },
+            'PYTEST_DISABLE_PLUGIN_AUTOLOAD': '1',
+        },
         capture_output=True,
         text=True,
         timeout=60,

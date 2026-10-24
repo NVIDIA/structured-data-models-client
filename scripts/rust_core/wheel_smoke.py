@@ -146,6 +146,20 @@ EXPECTED: dict[str, tuple[str, ...]] = {
         'test_a_null_in_a_middle_page_is_refused',
         'test_a_valid_paged_answer_reads_whole',
     ),
+    'test_results.py': (
+        'test_every_result_variant_has_a_sample',
+        'test_a_validation_decodes_typed',
+        'test_a_description_and_an_edit_decode_typed',
+        'test_a_materialized_request_decodes_typed',
+        'test_a_prediction_decodes_typed',
+        'test_source_facts_read_and_write_as_the_contract_spells_them',
+        'test_a_result_of_another_shape_is_refused_by_name[describe_source]',
+        'test_a_result_of_another_shape_is_refused_by_name[edit_schema]',
+        'test_a_result_of_another_shape_is_refused_by_name[materialize]',
+        'test_a_result_of_another_shape_is_refused_by_name[predict]',
+        'test_a_result_of_another_shape_is_refused_by_name[validate_query]',
+        'test_an_operation_the_host_does_not_know_is_refused_by_name',
+    ),
     'test_test_ops.py': (
         'test_another_thread_runs_and_logs_while_the_core_holds_a_call',
         'test_a_second_call_while_one_is_in_the_run_is_refused_as_busy',
@@ -314,7 +328,7 @@ def suite(
     builder = tests / 'messages.py'
     text = builder.read_text() if builder.is_file() else ''
     staged, count = re.subn(
-        r'^CONTRACT = \d+$',
+        r'^CONTRACT = (?:\d+|_crate_version\(\))$',
         f'CONTRACT = {int(declared[0])}',
         text,
         flags=re.MULTILINE,
