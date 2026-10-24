@@ -1275,6 +1275,15 @@ pub enum FetchPlan {
 }
 
 impl FetchPlan {
+    /// Whether catalog requests with these complete concrete plans may
+    /// share the same fetched rows within one discovery step.
+    /// All statements, parameters and the expected schema must match.
+    /// Host plans omit the request itself and carry only its answer schema,
+    /// so equality of two host plans never establishes the same read.
+    pub fn same_catalog_read(&self, other: &Self) -> bool {
+        matches!(self, Self::Sql { .. }) && self == other
+    }
+
     /// The schema the plan returns.
     pub fn expect(&self) -> &ExpectedSchema {
         match self {

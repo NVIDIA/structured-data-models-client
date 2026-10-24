@@ -323,15 +323,17 @@ pub(crate) async fn columns(
     Ok(Ok(Some(Catalog { columns: declared })))
 }
 
-/// Ask identical SQL catalog plans once, while host requests remain distinct.
+/// Ask each distinct concrete catalog read once, as its plan establishes.
 async fn catalog_replies(asker: &Asker, asked: &[DataRequest]) -> Result<Vec<Reply>, CoreError> {
     let plans: Vec<_> = asked.iter().map(|request| asker.planned(request)).collect();
     let first: Vec<usize> = (0..asked.len())
         .map(|i| {
             (0..i)
                 .find(|&j| {
-                    matches!(&plans[j], Some(sdm_contract::data::FetchPlan::Sql { .. }))
-                        && plans[j] == plans[i]
+                    plans[j]
+                        .as_ref()
+                        .zip(plans[i].as_ref())
+                        .is_some_and(|(left, right)| left.same_catalog_read(right))
                 })
                 .unwrap_or(i)
         })
