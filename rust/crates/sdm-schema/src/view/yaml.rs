@@ -629,11 +629,21 @@ impl Composer {
     /// `yaml-rust2` gives a block with no content a line break, and the
     /// text was read with a break it may not end with.
     fn block_breaks(&mut self, text: &str) {
+        if self.blocks.is_empty() {
+            return;
+        }
+        // Each character's byte, found once for every block: the marks
+        // count characters.
+        let bytes: Vec<usize> = text
+            .char_indices()
+            .map(|(byte, _)| byte)
+            .chain(std::iter::once(text.len()))
+            .collect();
         for block in std::mem::take(&mut self.blocks) {
             let Raw::Scalar { text: value, .. } = &self.nodes[block.node] else {
                 continue;
             };
-            if let Some(kept) = block_value(text, block.indicator, block.at, value) {
+            if let Some(kept) = block_value(text, &bytes, block.indicator, block.at, value) {
                 self.nodes[block.node] = Raw::Scalar {
                     text: kept,
                     kind: None,
@@ -650,32 +660,31 @@ struct Line<'a> {
     broken: bool,
 }
 
-/// The lines of `text` from byte `from`, each without its break.
-fn lines_from(text: &str, from: usize) -> Vec<Line<'_>> {
-    let mut lines = Vec::new();
-    let mut rest = &text[from..];
-    loop {
-        match rest.find(['\n', '\r']) {
+/// The lines of `text` from byte `from`, each without its break, read
+/// one at a time, so a block's reading stops at the line that ends it.
+fn lines_from(text: &str, from: usize) -> impl Iterator<Item = Line<'_>> {
+    let mut rest = Some(&text[from..]);
+    std::iter::from_fn(move || {
+        let left = rest?;
+        match left.find(['\n', '\r']) {
             None => {
-                lines.push(Line {
-                    text: rest,
+                rest = None;
+                Some(Line {
+                    text: left,
                     broken: false,
-                });
-                return lines;
+                })
             }
             Some(at) => {
-                lines.push(Line {
-                    text: &rest[..at],
+                let width = if left[at..].starts_with("\r\n") { 2 } else { 1 };
+                let after = &left[at + width..];
+                rest = (!after.is_empty()).then_some(after);
+                Some(Line {
+                    text: &left[..at],
                     broken: true,
-                });
-                let width = if rest[at..].starts_with("\r\n") { 2 } else { 1 };
-                rest = &rest[at + width..];
-                if rest.is_empty() {
-                    return lines;
-                }
+                })
             }
         }
-    }
+    })
 }
 
 /// Where the line holding byte `at` starts.
@@ -727,12 +736,14 @@ fn chomping(header: &str) -> Option<Option<bool>> {
 /// Its content is `yaml-rust2`'s without the breaks that end it; after the
 /// content comes its last line's break unless it is stripped, and the
 /// breaks of the blank lines after it if it is kept.
-fn block_value(text: &str, indicator: Option<usize>, at: usize, value: &str) -> Option<String> {
-    let byte = |chars: usize| {
-        text.char_indices()
-            .nth(chars)
-            .map_or(text.len(), |(b, _)| b)
-    };
+fn block_value(
+    text: &str,
+    bytes: &[usize],
+    indicator: Option<usize>,
+    at: usize,
+    value: &str,
+) -> Option<String> {
+    let byte = |chars: usize| bytes.get(chars).copied().unwrap_or(text.len());
     let mark = byte(at);
     let header = byte(indicator?);
     let keep = chomping(&text[header..])?;
@@ -751,10 +762,8 @@ fn block_value(text: &str, indicator: Option<usize>, at: usize, value: &str) -> 
         if keep != Some(true) || header_end >= text.len() {
             return Some(String::new());
         }
-        let lines = lines_from(text, header_end);
         // The header's own line's break opens the first.
-        let breaks = lines
-            .iter()
+        let breaks = lines_from(text, header_end)
             .skip(1)
             .take_while(|line| blank(line.text) && line.broken)
             .count();
@@ -765,26 +774,25 @@ fn block_value(text: &str, indicator: Option<usize>, at: usize, value: &str) -> 
     if !blank(&text[start..mark]) {
         return None;
     }
-    let lines = lines_from(text, start);
     let is_content = |line: &Line| {
         let spaces = line.text.len() - line.text.trim_start_matches(' ').len();
         spaces >= indent && line.text.len() > indent
     };
-    let mut last = 0;
-    let mut stop = lines.len();
-    for (i, line) in lines.iter().enumerate().skip(1) {
-        if is_content(line) {
-            last = i;
-        } else if !(blank(line.text) && line.broken) {
-            stop = i;
+    // The scalar's lines, up to the first that ends it: whether the last
+    // content line has its break, and the blank lines' breaks after it.
+    let mut lines = lines_from(text, start);
+    let mut line_break = usize::from(lines.next()?.broken);
+    let mut breaks = 0;
+    for line in lines {
+        if is_content(&line) {
+            line_break = usize::from(line.broken);
+            breaks = 0;
+        } else if blank(line.text) && line.broken {
+            breaks += 1;
+        } else {
             break;
         }
     }
-    let line_break = usize::from(lines[last].broken);
-    let breaks = lines[last + 1..stop]
-        .iter()
-        .filter(|line| blank(line.text) && line.broken)
-        .count();
     let tail = match keep {
         Some(false) => 0,
         None => line_break,
