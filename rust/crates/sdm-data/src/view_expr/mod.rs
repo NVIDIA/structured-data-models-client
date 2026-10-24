@@ -83,7 +83,7 @@ pub fn expression_message<S: AsRef<str>>(
     text: TextRules<'_>,
 ) -> Option<String> {
     let mut hatch = "";
-    let mut reason = unsafe_reason(expr, Some(dialect));
+    let mut reason = unsafe_reason(expr, Some(dialect), text.spaces);
     if reason.is_none() && !trust_expressions {
         reason = untrusted_call_reason(expr, dialect, columns, text.spaces);
         hatch = ". Pass trust_expressions=True to keep it if you trust whoever authored the view";
@@ -102,28 +102,77 @@ pub fn expression_message<S: AsRef<str>>(
 #[derive(Clone, Copy)]
 pub struct TextRules<'a> {
     pub quote: &'a dyn Fn(&str) -> String,
-    pub spaces: Spaces,
+    pub spaces: &'a Spaces,
 }
 
 /// White space as the old client's Python reads it (`str.isspace`, what
-/// `strip`, `rstrip` and `split` take off): the rule is `sdm-pql`'s, the
-/// one place it is written, and the core hands it in.
-#[derive(Clone, Copy, Debug)]
-pub struct Spaces(pub fn(char) -> bool);
+/// `strip`, `rstrip` and `split` take off, and `re`'s `\s`): the rule is
+/// `sdm-pql`'s, the one place it is written, and the core hands it in.
+/// Its class for patterns is derived from it, by testing every code point
+/// once, so a pattern's `\s` holds exactly what the rule holds.
+#[derive(Clone, Debug)]
+pub struct Spaces {
+    is: fn(char) -> bool,
+    class: String,
+}
 
 impl Spaces {
+    /// The rule `is`, with its class: each run of code points it holds, as
+    /// a pattern's range.
+    pub fn new(is: fn(char) -> bool) -> Spaces {
+        let mut class = String::new();
+        let mut run: Option<(u32, u32)> = None;
+        let close = |run: (u32, u32), class: &mut String| {
+            if run.0 == run.1 {
+                class.push_str(&format!("\\x{{{:x}}}", run.0));
+            } else {
+                class.push_str(&format!("\\x{{{:x}}}-\\x{{{:x}}}", run.0, run.1));
+            }
+        };
+        for code in 0..=u32::from(char::MAX) {
+            let holds = char::from_u32(code).is_some_and(is);
+            run = match (run, holds) {
+                (Some((first, last)), true) if last + 1 == code => Some((first, code)),
+                (Some(done), true) => {
+                    close(done, &mut class);
+                    Some((code, code))
+                }
+                (None, true) => Some((code, code)),
+                (Some(done), false) => {
+                    close(done, &mut class);
+                    None
+                }
+                (None, false) => None,
+            };
+        }
+        if let Some(done) = run {
+            close(done, &mut class);
+        }
+        Spaces { is, class }
+    }
+
+    /// Whether `c` is white space.
+    pub fn holds(&self, c: char) -> bool {
+        (self.is)(c)
+    }
+
+    /// The members of a pattern's class of white space.
+    pub fn class(&self) -> &str {
+        &self.class
+    }
+
     /// `text.strip()`.
-    pub(crate) fn strip(self, text: &str) -> &str {
-        text.trim_matches(self.0)
+    pub(crate) fn strip<'a>(&self, text: &'a str) -> &'a str {
+        text.trim_matches(self.is)
     }
 
     /// `text.rstrip()`.
-    pub(crate) fn rstrip(self, text: &str) -> &str {
-        text.trim_end_matches(self.0)
+    pub(crate) fn rstrip<'a>(&self, text: &'a str) -> &'a str {
+        text.trim_end_matches(self.is)
     }
 
     /// `text.split()`: the words between runs of white space.
-    pub(crate) fn split(self, text: &str) -> impl Iterator<Item = &str> {
-        text.split(self.0).filter(|part| !part.is_empty())
+    pub(crate) fn split<'a>(&self, text: &'a str) -> impl Iterator<Item = &'a str> {
+        text.split(self.is).filter(|part| !part.is_empty())
     }
 }

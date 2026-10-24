@@ -6,23 +6,28 @@
 //! is the old client's, written as it wrote it; two things make it match
 //! as its `re` matched:
 //!
-//! - `\s` is the old client's white space, which holds the four separators
-//!   U+001C to U+001F that Rust's `\s` does not (T3.5 fix 1): read either
-//!   way, `WITH\x1cx AS (x)` would open a sub-query for the warehouse and
-//!   none for the check. This is a pattern's class, written into each
-//!   fixed pattern once it is compiled; the same white space as a test of
-//!   a character, for `strip` and `split`, is `sdm-pql`'s rule, which the
-//!   core hands in ([`super::Spaces`]);
+//! - `\s` is the old client's white space, Python's (`str.isspace`), which
+//!   holds the four separators U+001C to U+001F that Rust's `\s` does not
+//!   (T3.5 fix 1): read either way, `WITH\x1cx AS (x)` would open a
+//!   sub-query for the warehouse and none for the check. The rule is
+//!   `sdm-pql`'s, handed in by the core as [`Spaces`]; a pattern's `\s` is
+//!   the class derived from it (every code point the rule holds), and `\S`
+//!   its complement, so no pattern holds the engine's own `\s`. Each fixed
+//!   pattern is compiled on first use with that class, and kept
+//!   ([`Lazy`]);
 //! - a match is total: a pattern that runs out of its backtracking budget
 //!   answers [`Unreadable::TooDeep`], never "no match", so no check can
 //!   accept an expression because a pattern failed on it. Each caller
 //!   refuses on it. So does a pattern made of a definition's text that is
 //!   past the compiler's bounds ([`Pattern::build`]).
 
+use std::borrow::Cow;
 use std::ops::Range;
+use std::sync::OnceLock;
 
 use fancy_regex::{Regex, RegexBuilder};
 
+use super::Spaces;
 use super::names::Unreadable;
 
 /// How many backtracking steps a match may take: far past what any
@@ -32,14 +37,44 @@ const BACKTRACK_LIMIT: usize = 1 << 31;
 pub(crate) type Read<T> = Result<T, Unreadable>;
 
 /// A compiled pattern.
+#[derive(Clone)]
 pub(crate) struct Pattern(Regex);
 
-/// The old client's `\s` in a pattern: outside a class `[\s\x1C-\x1F]`,
-/// inside one `\s\x1C-\x1F`.
-fn white_space(pattern: &str) -> String {
+/// A fixed pattern (or patterns), compiled on first use with the white
+/// space handed in, and kept for each later use with the same white space;
+/// with another, compiled again for that use.
+pub(crate) struct Lazy<T> {
+    make: fn(&Spaces) -> T,
+    made: OnceLock<(String, T)>,
+}
+
+impl<T: Clone> Lazy<T> {
+    pub(crate) const fn new(make: fn(&Spaces) -> T) -> Lazy<T> {
+        Lazy {
+            make,
+            made: OnceLock::new(),
+        }
+    }
+
+    pub(crate) fn get(&self, spaces: &Spaces) -> Cow<'_, T> {
+        let (class, made) = self
+            .made
+            .get_or_init(|| (spaces.class().to_owned(), (self.make)(spaces)));
+        if class == spaces.class() {
+            Cow::Borrowed(made)
+        } else {
+            Cow::Owned((self.make)(spaces))
+        }
+    }
+}
+
+/// The old client's `\s` and `\S` in a pattern, by `class`, the white
+/// space's members: outside a class `[class]` and `[^class]`, inside one
+/// `class`; `None` for a `\S` inside a class, which no fixed pattern holds.
+fn white_space(pattern: &str, class: &str) -> Option<String> {
     let mut out = String::with_capacity(pattern.len());
     let mut chars = pattern.chars();
-    let mut class = false;
+    let mut in_class = false;
     while let Some(c) = chars.next() {
         match c {
             '\\' => {
@@ -47,17 +82,19 @@ fn white_space(pattern: &str) -> String {
                     out.push(c);
                     break;
                 };
-                match (next, class) {
-                    ('s', false) => out.push_str(r"[\s\x1C-\x1F]"),
-                    ('s', true) => out.push_str(r"\s\x1C-\x1F"),
+                match (next, in_class) {
+                    ('s', false) => out.push_str(&format!("[{class}]")),
+                    ('s', true) => out.push_str(class),
+                    ('S', false) => out.push_str(&format!("[^{class}]")),
+                    ('S', true) => return None,
                     _ => {
                         out.push('\\');
                         out.push(next);
                     }
                 }
             }
-            '[' if !class => {
-                class = true;
+            '[' if !in_class => {
+                in_class = true;
                 out.push(c);
                 // A `]` or `^]` first in a class is a member, not its end.
                 let rest = chars.as_str();
@@ -72,14 +109,14 @@ fn white_space(pattern: &str) -> String {
                     out.extend(chars.next());
                 }
             }
-            ']' if class => {
-                class = false;
+            ']' if in_class => {
+                in_class = false;
                 out.push(c);
             }
             _ => out.push(c),
         }
     }
-    out
+    Some(out)
 }
 
 fn unreadable(_: fancy_regex::Error) -> Unreadable {
@@ -89,14 +126,15 @@ fn unreadable(_: fancy_regex::Error) -> Unreadable {
 impl Pattern {
     /// Compiles one of the old client's fixed patterns, read with its
     /// `\s`; each compiles, as the tests of the patterns show.
-    pub(crate) fn new(pattern: &str) -> Pattern {
-        Pattern::build(pattern).expect("a fixed pattern compiles")
+    pub(crate) fn new(pattern: &str, spaces: &Spaces) -> Pattern {
+        Pattern::build(pattern, spaces).expect("a fixed pattern compiles")
     }
 
     /// Compiles a pattern made of a definition's text, a table's name in
     /// it: one past the compiler's bounds is unreadable, never a panic.
-    pub(crate) fn build(pattern: &str) -> Read<Pattern> {
-        RegexBuilder::new(&white_space(pattern))
+    pub(crate) fn build(pattern: &str, spaces: &Spaces) -> Read<Pattern> {
+        let text = white_space(pattern, spaces.class()).ok_or(Unreadable::NotUnderstood)?;
+        RegexBuilder::new(&text)
             .backtrack_limit(BACKTRACK_LIMIT)
             .build()
             .map(Pattern)
@@ -207,13 +245,38 @@ mod tests {
     use super::*;
 
     #[test]
-    fn white_space_is_the_old_client_s_inside_and_outside_a_class() {
-        assert_eq!(white_space(r"a\sb"), r"a[\s\x1C-\x1F]b");
-        assert_eq!(white_space(r"[^\s.]"), r"[^\s\x1C-\x1F.]");
-        assert_eq!(white_space(r"[\s\S]"), r"[\s\x1C-\x1F\S]");
-        assert_eq!(white_space(r"\\s"), r"\\s");
-        assert_eq!(white_space(r"[]\s]"), r"[]\s\x1C-\x1F]");
-        let p = Pattern::new(r"^with\s+x$");
-        assert!(p.is_match("with\u{1c}x").unwrap());
+    fn white_space_is_the_class_inside_and_outside_a_class() {
+        let class = r"\x{9}-\x{d}";
+        assert_eq!(white_space(r"a\sb", class).unwrap(), r"a[\x{9}-\x{d}]b");
+        assert_eq!(white_space(r"[^\s.]", class).unwrap(), r"[^\x{9}-\x{d}.]");
+        assert_eq!(white_space(r"a\S", class).unwrap(), r"a[^\x{9}-\x{d}]");
+        assert_eq!(white_space(r"\\s", class).unwrap(), r"\\s");
+        assert_eq!(white_space(r"[]\s]", class).unwrap(), r"[]\x{9}-\x{d}]");
+        assert_eq!(white_space(r"[\S]", class), None);
+    }
+
+    /// A pattern's `\s` and `\S`, outside a class and inside one, match
+    /// exactly what the white space handed in holds, over every code
+    /// point.
+    #[test]
+    fn a_pattern_s_white_space_is_the_rule_s() {
+        let spaces = Spaces::new(|c| c.is_whitespace() || ('\u{1c}'..='\u{1f}').contains(&c));
+        let inside = Pattern::new(r"^[\sx]$", &spaces);
+        let outside = Pattern::new(r"^\s$", &spaces);
+        let not = Pattern::new(r"^\S$", &spaces);
+        for code in 0..=u32::from(char::MAX) {
+            let Some(c) = char::from_u32(code) else {
+                continue;
+            };
+            let text = c.to_string();
+            let holds = spaces.holds(c);
+            assert_eq!(outside.is_match(&text), Ok(holds), "U+{code:04X}");
+            assert_eq!(not.is_match(&text), Ok(!holds), "U+{code:04X}");
+            assert_eq!(
+                inside.is_match(&text),
+                Ok(holds || c == 'x'),
+                "U+{code:04X}"
+            );
+        }
     }
 }

@@ -5,11 +5,9 @@
 //! Why an expression is unsafe to splice into a statement, and why it
 //! calls a function that is not trusted (`RE/view_expr.py:192-1044`).
 
-use std::sync::LazyLock;
-
 use super::lex::{Kind, lex, masked};
 use super::names::Unreadable;
-use super::pattern::{Pattern, Read};
+use super::pattern::{Lazy, Pattern, Read};
 use super::words::{self, has};
 use super::{ExprDialect, Spaces};
 
@@ -110,40 +108,49 @@ const QUOTE_DELIMITERS: [&str; 4] = ["$$", "'", "\"", "`"];
 /// quoted name stays visible as a call.
 pub(crate) const QUOTED: char = '\u{E000}';
 
-static UNSAFE_KEYWORDS: LazyLock<Pattern> = LazyLock::new(|| {
+static UNSAFE_KEYWORDS: Lazy<Pattern> = Lazy::new(|spaces| {
     Pattern::new(
         r"(?i)(?<![\w.])(?:(?:select|table|update|delete|merge|create|alter|drop|grant|revoke|execute)\b|(?:insert|truncate)\b(?!\s*\())",
+        spaces,
     )
 });
 // Databricks runs each of these as a sub-query where it opens the
 // expression or a `(`; the script transforms need a USING before their
 // bracket closes.
-static QUERY_START: LazyLock<Pattern> = LazyLock::new(|| {
+static QUERY_START: Lazy<Pattern> = Lazy::new(|spaces| {
     Pattern::new(
         r"(?i)(?:^|\()\s*(?:(?:from|values)\b|with\s+(?:recursive\s+)?(?:[\w$]+\s*)?(?:\([^()]*\)\s*)?as\s*\(|(?P<script>(?:map|reduce)\b(?!\s*\()))",
+        spaces,
     )
 });
-static USING: LazyLock<Pattern> = LazyLock::new(|| Pattern::new(r"(?i)\busing\b"));
-static NOT_ASCII: LazyLock<Pattern> = LazyLock::new(|| Pattern::new(r"[^\x00-\x7f]"));
-static SESSION_VALUES: LazyLock<Pattern> = LazyLock::new(|| {
-    Pattern::new(&format!(
-        r"(?i)(?<![\w$.\x{{e000}}])({})\b(?!\s*\()",
-        words::SESSION_WORDS.join("|")
-    ))
+static USING: Lazy<Pattern> = Lazy::new(|spaces| Pattern::new(r"(?i)\busing\b", spaces));
+static NOT_ASCII: Lazy<Pattern> = Lazy::new(|spaces| Pattern::new(r"[^\x00-\x7f]", spaces));
+static SESSION_VALUES: Lazy<Pattern> = Lazy::new(|spaces| {
+    Pattern::new(
+        &format!(
+            r"(?i)(?<![\w$.\x{{e000}}])({})\b(?!\s*\()",
+            words::SESSION_WORDS.join("|")
+        ),
+        spaces,
+    )
 });
-pub(crate) static LAST_TOKEN: LazyLock<Pattern> =
-    LazyLock::new(|| Pattern::new(r"([\w$\x{e000}]+)\s*$"));
-pub(crate) static QUALIFIED: LazyLock<Pattern> = LazyLock::new(|| Pattern::new(r"\.\s*$"));
-static AFTER_DOUBLE_COLON: LazyLock<Pattern> = LazyLock::new(|| Pattern::new(r"::\s*$"));
-static AFTER_AS: LazyLock<Pattern> = LazyLock::new(|| Pattern::new(r"(?i)(?<![\w$])as\s*$"));
+pub(crate) static LAST_TOKEN: Lazy<Pattern> =
+    Lazy::new(|spaces| Pattern::new(r"([\w$\x{e000}]+)\s*$", spaces));
+pub(crate) static QUALIFIED: Lazy<Pattern> = Lazy::new(|spaces| Pattern::new(r"\.\s*$", spaces));
+static AFTER_DOUBLE_COLON: Lazy<Pattern> = Lazy::new(|spaces| Pattern::new(r"::\s*$", spaces));
+static AFTER_AS: Lazy<Pattern> = Lazy::new(|spaces| Pattern::new(r"(?i)(?<![\w$])as\s*$", spaces));
 // The field of `EXTRACT(YEAR FROM d)` is a value, whatever its name.
-static DATETIME_FIELD: LazyLock<Pattern> =
-    LazyLock::new(|| Pattern::new(r"(?i)(?<![\w$.])(?:extract|date_part)\s*\(\s*$"));
-static LAMBDA_PARAMETERS: LazyLock<Pattern> =
-    LazyLock::new(|| Pattern::new(r"(?:\(\s*([\w$]+(?:\s*,\s*[\w$]+)*)\s*\)|([\w$]+))\s*->"));
-static WORD_OR_BRACKET: LazyLock<Pattern> =
-    LazyLock::new(|| Pattern::new(r"[\w$\x{e000}]+|[()\[\]]"));
-static WHEN: LazyLock<Pattern> = LazyLock::new(|| Pattern::new(r"(?i)^\s*when\b"));
+static DATETIME_FIELD: Lazy<Pattern> =
+    Lazy::new(|spaces| Pattern::new(r"(?i)(?<![\w$.])(?:extract|date_part)\s*\(\s*$", spaces));
+static LAMBDA_PARAMETERS: Lazy<Pattern> = Lazy::new(|spaces| {
+    Pattern::new(
+        r"(?:\(\s*([\w$]+(?:\s*,\s*[\w$]+)*)\s*\)|([\w$]+))\s*->",
+        spaces,
+    )
+});
+static WORD_OR_BRACKET: Lazy<Pattern> =
+    Lazy::new(|spaces| Pattern::new(r"[\w$\x{e000}]+|[()\[\]]", spaces));
+static WHEN: Lazy<Pattern> = Lazy::new(|spaces| Pattern::new(r"(?i)^\s*when\b", spaces));
 
 /// The first match of `pattern` in `text`: where its first group starts,
 /// and that group's text.
@@ -186,12 +193,20 @@ const OPENS_A_GROUP: &str = "+-*/%=<>!|&^~,([?:";
 /// left unpaired, brackets that do not balance, a statement keyword, or a
 /// sub-query's start. `None` for the dialect checks only what both share.
 /// An expression the check cannot read is refused.
-pub fn unsafe_reason(expr: &str, dialect: Option<ExprDialect>) -> Option<ExprRefusal> {
-    unsafe_read(expr, dialect)
+pub fn unsafe_reason(
+    expr: &str,
+    dialect: Option<ExprDialect>,
+    spaces: &Spaces,
+) -> Option<ExprRefusal> {
+    unsafe_read(expr, dialect, spaces)
         .unwrap_or_else(|unreadable| Some(ExprRefusal::Unreadable(unreadable)))
 }
 
-fn unsafe_read(expr: &str, dialect: Option<ExprDialect>) -> Read<Option<ExprRefusal>> {
+fn unsafe_read(
+    expr: &str,
+    dialect: Option<ExprDialect>,
+    spaces: &Spaces,
+) -> Read<Option<ExprRefusal>> {
     for token in UNSAFE_TOKENS {
         if expr.contains(token) {
             return Ok(Some(ExprRefusal::Contains(token)));
@@ -202,7 +217,7 @@ fn unsafe_read(expr: &str, dialect: Option<ExprDialect>) -> Read<Option<ExprRefu
         return Ok(Some(ExprRefusal::DollarQuotes));
     }
     if dialect == Some(ExprDialect::Snowflake) {
-        let tokens = lex(expr, dialect)?;
+        let tokens = lex(expr, dialect, spaces)?;
         // Snowflake also comments out the rest of a line with `//`.
         if tokens.iter().any(|token| token.kind == Kind::Comment) {
             return Ok(Some(ExprRefusal::SlashComment));
@@ -214,8 +229,8 @@ fn unsafe_read(expr: &str, dialect: Option<ExprDialect>) -> Read<Option<ExprRefu
             return Ok(Some(ExprRefusal::BackslashInQuotedName));
         }
     }
-    let unquoted = masked(expr, dialect, " ")?;
-    if let Some(other) = NOT_ASCII.find(&unquoted)? {
+    let unquoted = masked(expr, dialect, " ", spaces)?;
+    if let Some(other) = NOT_ASCII.get(spaces).find(&unquoted)? {
         return Ok(Some(ExprRefusal::NotAscii(
             unquoted[other].chars().next().unwrap(),
         )));
@@ -239,10 +254,10 @@ fn unsafe_read(expr: &str, dialect: Option<ExprDialect>) -> Read<Option<ExprRefu
     if depth != 0 {
         return Ok(Some(ExprRefusal::LeavesUnclosed));
     }
-    if let Some(keyword) = UNSAFE_KEYWORDS.find(&unquoted)? {
+    if let Some(keyword) = UNSAFE_KEYWORDS.get(spaces).find(&unquoted)? {
         return Ok(Some(ExprRefusal::Keyword(unquoted[keyword].to_owned())));
     }
-    if starts_a_query(&unquoted)? {
+    if starts_a_query(&unquoted, spaces)? {
         return Ok(Some(ExprRefusal::SubQuery));
     }
     Ok(None)
@@ -251,8 +266,8 @@ fn unsafe_read(expr: &str, dialect: Option<ExprDialect>) -> Read<Option<ExprRefu
 /// Whether `unquoted`, its quoted text masked, opens a sub-query: `FROM`,
 /// `VALUES` or `WITH .. AS (` where the expression or a `(` opens, or
 /// `MAP` or `REDUCE` with a `USING` before its bracket closes.
-fn starts_a_query(unquoted: &str) -> Read<bool> {
-    for groups in QUERY_START.groups_all(unquoted)? {
+fn starts_a_query(unquoted: &str, spaces: &Spaces) -> Read<bool> {
+    for groups in QUERY_START.get(spaces).groups_all(unquoted)? {
         if groups.name("script").is_none() {
             return Ok(true);
         }
@@ -272,7 +287,11 @@ fn starts_a_query(unquoted: &str) -> Read<bool> {
         }
         // Searched as Python searches `[after, end)`: the text ends at
         // `end`, and what precedes `after` is still seen.
-        if USING.find_from(&unquoted[..end], after)?.is_some() {
+        if USING
+            .get(spaces)
+            .find_from(&unquoted[..end], after)?
+            .is_some()
+        {
             return Ok(true);
         }
     }
@@ -281,9 +300,9 @@ fn starts_a_query(unquoted: &str) -> Read<bool> {
 
 /// Whether a `CASE` is open at the end of `lead`, in the same group
 /// (`_closes_a_case`).
-fn closes_a_case(lead: &str) -> Read<bool> {
+fn closes_a_case(lead: &str, spaces: &Spaces) -> Read<bool> {
     let mut open_cases = vec![0usize];
-    for span in WORD_OR_BRACKET.find_all(lead)? {
+    for span in WORD_OR_BRACKET.get(spaces).find_all(lead)? {
         let text = &lead[span.clone()];
         if text == "(" || text == "[" {
             open_cases.push(0);
@@ -291,7 +310,7 @@ fn closes_a_case(lead: &str) -> Read<bool> {
             if open_cases.len() > 1 {
                 open_cases.pop();
             }
-        } else if QUALIFIED.is_match(&lead[..span.start])? {
+        } else if QUALIFIED.get(spaces).is_match(&lead[..span.start])? {
             continue;
         } else if text.to_lowercase() == "case" {
             *open_cases.last_mut().unwrap() += 1;
@@ -307,7 +326,7 @@ fn closes_a_case(lead: &str) -> Read<bool> {
 /// qualified name, a type after `::`, the field of `EXTRACT`, the `END` of
 /// an open `CASE`, or a bare word naming one of `columns` the parser cannot
 /// read as grammar instead.
-fn follows_a_value(lead: &str, columns: &[String], spaces: Spaces) -> Read<bool> {
+fn follows_a_value(lead: &str, columns: &[String], spaces: &Spaces) -> Read<bool> {
     let lead = spaces.rstrip(lead);
     let Some(last_char) = lead.chars().last() else {
         return Ok(false);
@@ -315,13 +334,13 @@ fn follows_a_value(lead: &str, columns: &[String], spaces: Spaces) -> Read<bool>
     if matches!(last_char, ')' | ']' | QUOTED) {
         return Ok(true);
     }
-    let Some((start, word)) = first(&LAST_TOKEN, lead)? else {
+    let Some((start, word)) = first(&LAST_TOKEN.get(spaces), lead)? else {
         return Ok(false);
     };
     let before = &lead[..start];
-    if QUALIFIED.is_match(before)?
-        || AFTER_DOUBLE_COLON.is_match(before)?
-        || DATETIME_FIELD.is_match(before)?
+    if QUALIFIED.get(spaces).is_match(before)?
+        || AFTER_DOUBLE_COLON.get(spaces).is_match(before)?
+        || DATETIME_FIELD.get(spaces).is_match(before)?
     {
         return Ok(true);
     }
@@ -332,7 +351,7 @@ fn follows_a_value(lead: &str, columns: &[String], spaces: Spaces) -> Read<bool>
         return Ok(true);
     }
     if word == "end" {
-        return Ok(closes_a_case(before)? && follows_a_value(before, columns, spaces)?);
+        return Ok(closes_a_case(before, spaces)? && follows_a_value(before, columns, spaces)?);
     }
     // A table may name a column `where`, which the parser still reads as
     // WHERE.
@@ -341,7 +360,7 @@ fn follows_a_value(lead: &str, columns: &[String], spaces: Spaces) -> Read<bool>
 
 /// Whether `CASE` before `group` starts `CASE (x) WHEN ...`: where a CASE
 /// can start, and a WHEN follows the bracket (`_opens_a_simple_case`).
-fn opens_a_simple_case(lead: &str, group: &str, spaces: Spaces) -> Read<bool> {
+fn opens_a_simple_case(lead: &str, group: &str, spaces: &Spaces) -> Read<bool> {
     let lead = spaces.rstrip(lead);
     if let Some(c) = lead.chars().last()
         && c != '('
@@ -357,7 +376,7 @@ fn opens_a_simple_case(lead: &str, group: &str, spaces: Spaces) -> Read<bool> {
             _ => 0,
         };
         if depth == 0 {
-            return WHEN.is_match(&group[at + c.len_utf8()..]);
+            return WHEN.get(spaces).is_match(&group[at + c.len_utf8()..]);
         }
     }
     Ok(false)
@@ -371,7 +390,7 @@ fn acts_as_keyword(
     lead: &str,
     group: &str,
     columns: &[String],
-    spaces: Spaces,
+    spaces: &Spaces,
 ) -> Read<bool> {
     match word {
         "not" => Ok(true),
@@ -383,12 +402,12 @@ fn acts_as_keyword(
 /// Whether `word` sits where a keyword may: after a value, or after a
 /// keyword SQL writes it after, that one itself in keyword position
 /// (`_in_keyword_position`).
-fn in_keyword_position(word: &str, lead: &str, columns: &[String], spaces: Spaces) -> Read<bool> {
+fn in_keyword_position(word: &str, lead: &str, columns: &[String], spaces: &Spaces) -> Read<bool> {
     if follows_a_value(lead, columns, spaces)? {
         return Ok(true);
     }
     let lead = spaces.rstrip(lead);
-    let Some((start, previous)) = first(&LAST_TOKEN, lead)? else {
+    let Some((start, previous)) = first(&LAST_TOKEN.get(spaces), lead)? else {
         return Ok(false);
     };
     let before = previous.to_lowercase();
@@ -404,11 +423,11 @@ fn in_keyword_position(word: &str, lead: &str, columns: &[String], spaces: Space
 /// Whether the word after `lead` stands where only a type can: after
 /// `::`, or after an `AS` directly inside `CAST(` or `TRY_CAST(`
 /// (`_names_a_type`).
-fn names_a_type(lead: &str, spaces: Spaces) -> Read<bool> {
-    if AFTER_DOUBLE_COLON.is_match(lead)? {
+fn names_a_type(lead: &str, spaces: &Spaces) -> Read<bool> {
+    if AFTER_DOUBLE_COLON.get(spaces).is_match(lead)? {
         return Ok(true);
     }
-    let Some(after_as) = AFTER_AS.find(lead)? else {
+    let Some(after_as) = AFTER_AS.get(spaces).find(lead)? else {
         return Ok(false);
     };
     let mut depth: i64 = 0;
@@ -420,10 +439,10 @@ fn names_a_type(lead: &str, spaces: Spaces) -> Read<bool> {
         };
         if depth < 0 {
             let opener = spaces.rstrip(&lead[..index]);
-            return Ok(match first(&LAST_TOKEN, opener)? {
+            return Ok(match first(&LAST_TOKEN.get(spaces), opener)? {
                 Some((start, name)) => {
                     CASTS.contains(&name.to_lowercase().as_str())
-                        && !QUALIFIED.is_match(&opener[..start])?
+                        && !QUALIFIED.get(spaces).is_match(&opener[..start])?
                 }
                 None => false,
             });
@@ -433,9 +452,9 @@ fn names_a_type(lead: &str, spaces: Spaces) -> Read<bool> {
 }
 
 /// The folded names `text` binds in lambdas, as in `x -> x + 1`.
-fn lambda_parameters(text: &str, spaces: Spaces) -> Read<Vec<String>> {
+fn lambda_parameters(text: &str, spaces: &Spaces) -> Read<Vec<String>> {
     let mut names = Vec::new();
-    for groups in LAMBDA_PARAMETERS.groups_all(text)? {
+    for groups in LAMBDA_PARAMETERS.get(spaces).groups_all(text)? {
         let Some(bound) = groups.get(1).or_else(|| groups.get(2)) else {
             continue;
         };
@@ -464,7 +483,7 @@ pub fn untrusted_call_reason<S: AsRef<str>>(
     expr: &str,
     dialect: ExprDialect,
     columns: &[S],
-    spaces: Spaces,
+    spaces: &Spaces,
 ) -> Option<ExprRefusal> {
     calls_read(expr, dialect, columns, spaces)
         .unwrap_or_else(|unreadable| Some(ExprRefusal::Unreadable(unreadable)))
@@ -474,13 +493,13 @@ fn calls_read<S: AsRef<str>>(
     expr: &str,
     dialect: ExprDialect,
     columns: &[S],
-    spaces: Spaces,
+    spaces: &Spaces,
 ) -> Read<Option<ExprRefusal>> {
     let trusted = match dialect {
         ExprDialect::Databricks => words::DATABRICKS_FUNCTIONS,
         ExprDialect::Snowflake => words::SNOWFLAKE_FUNCTIONS,
     };
-    let text = masked(expr, Some(dialect), &QUOTED.to_string())?;
+    let text = masked(expr, Some(dialect), &QUOTED.to_string(), spaces)?;
     let named: Vec<String> = columns.iter().map(|c| c.as_ref().to_lowercase()).collect();
     let mut visible = named.clone();
     visible.extend(lambda_parameters(&text, spaces)?);
@@ -498,7 +517,7 @@ fn calls_read<S: AsRef<str>>(
         if last == ')' || last == ']' {
             return Ok(Some(ExprRefusal::CallsResult));
         }
-        let Some((start, name)) = first(&LAST_TOKEN, before)? else {
+        let Some((start, name)) = first(&LAST_TOKEN.get(spaces), before)? else {
             let tail: String = {
                 let chars: Vec<char> = before.chars().collect();
                 chars[chars.len().saturating_sub(10)..].iter().collect()
@@ -508,7 +527,7 @@ fn calls_read<S: AsRef<str>>(
         if name.contains(QUOTED) {
             return Ok(Some(ExprRefusal::QuotedFunction));
         }
-        if QUALIFIED.is_match(&before[..start])? {
+        if QUALIFIED.get(spaces).is_match(&before[..start])? {
             return Ok(Some(ExprRefusal::QualifiedFunction(name)));
         }
         let folded = name.to_lowercase();
@@ -534,7 +553,7 @@ fn calls_read<S: AsRef<str>>(
             && named.iter().any(|n| n == word)
             && has(words::DATABRICKS_COLUMN_OVER_SESSION, word)
     };
-    for groups in SESSION_VALUES.groups_all(&text)? {
+    for groups in SESSION_VALUES.get(spaces).groups_all(&text)? {
         let session = &text[groups.get(1).unwrap()];
         if !overridden(&session.to_lowercase()) {
             return Ok(Some(ExprRefusal::SessionValue(session.to_owned())));
@@ -547,8 +566,8 @@ fn calls_read<S: AsRef<str>>(
             && named.iter().any(|n| n == word)
             && has(words::SESSION_WORDS, word)
     };
-    for token in lex(expr, Some(dialect))? {
-        if token.kind != Kind::Quoted || QUALIFIED.is_match(&expr[..token.start])? {
+    for token in lex(expr, Some(dialect), spaces)? {
+        if token.kind != Kind::Quoted || QUALIFIED.get(spaces).is_match(&expr[..token.start])? {
             continue;
         }
         let word = token.unquoted().to_lowercase();

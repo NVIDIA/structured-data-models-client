@@ -12,16 +12,14 @@
 //! Each is a pure function of text; the core calls each in the old
 //! client's order and words each refusal (`sdm-core::view_words`).
 
-use std::sync::LazyLock;
-
 use super::check::{ExprRefusal, unsafe_reason};
 use super::lex::{bare_name, string_literals};
 use super::names::{Unreadable, name_references};
-use super::pattern::{Pattern, Read};
+use super::pattern::{Lazy, Pattern, Read};
 use super::{ExprDialect, Spaces};
 
-fn pattern(text: &str) -> Pattern {
-    Pattern::new(text)
+fn pattern(text: &str, spaces: &Spaces) -> Pattern {
+    Pattern::new(text, spaces)
 }
 
 /// A part of a name: backticked, or a run Databricks reads as a name.
@@ -34,39 +32,47 @@ fn chain() -> String {
     format!(r"(?:{ident})(?:\s*\.\s*(?:{ident}))*")
 }
 
-static TABLE_REFERENCE: LazyLock<Pattern> = LazyLock::new(|| {
+static TABLE_REFERENCE: Lazy<Pattern> = Lazy::new(|spaces| {
     let ident = ident();
-    pattern(&format!(
-        r"^\s*({ident})(?:\.({ident}))?(?:\.({ident}))?\s*$"
-    ))
+    pattern(
+        &format!(r"^\s*({ident})(?:\.({ident}))?(?:\.({ident}))?\s*$"),
+        spaces,
+    )
 });
 // An unquoted part of a view's name is any run of characters but a dot, a
 // backtick and white space, as a caller writes `my-catalog` unquoted.
-static VIEW_NAME: LazyLock<Pattern> = LazyLock::new(|| {
+static VIEW_NAME: Lazy<Pattern> = Lazy::new(|spaces| {
     let part = r"`(?:[^`]|``)+`|[^\s.`]+";
-    pattern(&format!(r"^\s*({part})(?:\.({part}))?(?:\.({part}))?\s*$"))
+    pattern(
+        &format!(r"^\s*({part})(?:\.({part}))?(?:\.({part}))?\s*$"),
+        spaces,
+    )
 });
-static JOIN_CONDITION: LazyLock<Pattern> = LazyLock::new(|| {
+static JOIN_CONDITION: Lazy<Pattern> = Lazy::new(|spaces| {
     let chain = chain();
-    pattern(&format!(r"^\s*({chain})\s*=\s*({chain})\s*$"))
+    pattern(&format!(r"^\s*({chain})\s*=\s*({chain})\s*$"), spaces)
 });
-static IDENT: LazyLock<Pattern> = LazyLock::new(|| pattern(&ident()));
-static WHOLE_IDENT: LazyLock<Pattern> = LazyLock::new(|| pattern(&format!("^(?:{})$", ident())));
-static CHAIN: LazyLock<Pattern> = LazyLock::new(|| pattern(&chain()));
+static IDENT: Lazy<Pattern> = Lazy::new(|spaces| pattern(&ident(), spaces));
+static WHOLE_IDENT: Lazy<Pattern> =
+    Lazy::new(|spaces| pattern(&format!("^(?:{})$", ident()), spaces));
+static CHAIN: Lazy<Pattern> = Lazy::new(|spaces| pattern(&chain(), spaces));
 // `- expr: source.*` or `- expr: customers.* EXCEPT (a, b)`.
-static WILDCARD: LazyLock<Pattern> = LazyLock::new(|| {
+static WILDCARD: Lazy<Pattern> = Lazy::new(|spaces| {
     let chain = chain();
-    pattern(&format!(
-        r"(?i)^\s*({chain})\s*\.\s*\*(?:\s*EXCEPT\s*\(\s*({chain}(?:\s*,\s*{chain})*)\s*\))?\s*$"
-    ))
+    pattern(
+        &format!(
+            r"(?i)^\s*({chain})\s*\.\s*\*(?:\s*EXCEPT\s*\(\s*({chain}(?:\s*,\s*{chain})*)\s*\))?\s*$"
+        ),
+        spaces,
+    )
 });
-static RENAMED: LazyLock<Pattern> =
-    LazyLock::new(|| pattern(r"^(?:`((?:[^`]|``)+)`|([A-Za-z_]\w*))$"));
-static WHOLE_BARE_NAME: LazyLock<Pattern> =
-    LazyLock::new(|| pattern(&format!("^(?:{})$", bare_name())));
+static RENAMED: Lazy<Pattern> =
+    Lazy::new(|spaces| pattern(r"^(?:`((?:[^`]|``)+)`|([A-Za-z_]\w*))$", spaces));
+static WHOLE_BARE_NAME: Lazy<Pattern> =
+    Lazy::new(|spaces| pattern(&format!("^(?:{})$", bare_name()), spaces));
 // What a timestamp dimension may wrap a column in and still say when the
 // row happened: a truncation, or a cast to a date or time.
-static DERIVATIONS: LazyLock<Vec<Pattern>> = LazyLock::new(|| {
+static DERIVATIONS: Lazy<Vec<Pattern>> = Lazy::new(|spaces| {
     let time = "(?:date|timestamp(?:_ntz|_ltz)?)";
     [
         r#"\(\s*(?P<inner>.+)\s*\)"#.to_owned(),
@@ -77,22 +83,29 @@ static DERIVATIONS: LazyLock<Vec<Pattern>> = LazyLock::new(|| {
         format!(r"(?P<inner>.+?)\s*::\s*{time}"),
     ]
     .iter()
-    .map(|p| pattern(&format!("(?is)^(?:{p})$")))
+    .map(|p| pattern(&format!("(?is)^(?:{p})$"), spaces))
     .collect()
 });
 // The first part of a name, backticked or not.
-static FIRST_PART: LazyLock<Pattern> =
-    LazyLock::new(|| pattern(r"^(?:`(?:``|[^`])*`|[A-Za-z0-9_]+)"));
-static SIMPLE_MEASURE: LazyLock<Pattern> = LazyLock::new(|| {
-    pattern(&format!(
-        r"(?i)^\s*(sum|avg|min|max|count)\s*\(\s*(distinct\s+)?(\*|1|{})\s*\)\s*$",
-        chain()
-    ))
+static FIRST_PART: Lazy<Pattern> =
+    Lazy::new(|spaces| pattern(r"^(?:`(?:``|[^`])*`|[A-Za-z0-9_]+)", spaces));
+static SIMPLE_MEASURE: Lazy<Pattern> = Lazy::new(|spaces| {
+    pattern(
+        &format!(
+            r"(?i)^\s*(sum|avg|min|max|count)\s*\(\s*(distinct\s+)?(\*|1|{})\s*\)\s*$",
+            chain()
+        ),
+        spaces,
+    )
 });
-static DECIMAL_TYPE: LazyLock<Pattern> =
-    LazyLock::new(|| pattern(r"^(?:decimal|dec|numeric)(?:\(\s*\d+\s*(?:,\s*\d+\s*)?\))?$"));
-static STRING_TYPE: LazyLock<Pattern> =
-    LazyLock::new(|| pattern(r"^(?:string|(?:var)?char\(\s*\d+\s*\))$"));
+static DECIMAL_TYPE: Lazy<Pattern> = Lazy::new(|spaces| {
+    pattern(
+        r"^(?:decimal|dec|numeric)(?:\(\s*\d+\s*(?:,\s*\d+\s*)?\))?$",
+        spaces,
+    )
+});
+static STRING_TYPE: Lazy<Pattern> =
+    Lazy::new(|spaces| pattern(r"^(?:string|(?:var)?char\(\s*\d+\s*\))$", spaces));
 
 const SOURCE_ALIAS: &str = "source";
 
@@ -121,7 +134,7 @@ pub struct KeyRef {
 }
 
 /// A name without its backticks, if it is backticked (`unquote_ident`).
-pub fn unquote(name: &str, spaces: Spaces) -> String {
+pub fn unquote(name: &str, spaces: &Spaces) -> String {
     let name = spaces.strip(name);
     match name
         .strip_prefix('`')
@@ -132,7 +145,7 @@ pub fn unquote(name: &str, spaces: Spaces) -> String {
     }
 }
 
-fn name_parts(pattern: &Pattern, name: &str, spaces: Spaces) -> Option<Vec<String>> {
+fn name_parts(pattern: &Pattern, name: &str, spaces: &Spaces) -> Option<Vec<String>> {
     let groups = pattern.groups(name).ok()??;
     Some(
         (1..=3)
@@ -144,18 +157,19 @@ fn name_parts(pattern: &Pattern, name: &str, spaces: Spaces) -> Option<Vec<Strin
 
 /// A plain, one-to-three-part table name's parts, unquoted; `None` for
 /// anything else, a query say (`parse_table_reference`).
-pub fn table_reference(name: &str, spaces: Spaces) -> Option<Vec<String>> {
-    name_parts(&TABLE_REFERENCE, name, spaces)
+pub fn table_reference(name: &str, spaces: &Spaces) -> Option<Vec<String>> {
+    name_parts(&TABLE_REFERENCE.get(spaces), name, spaces)
 }
 
 /// A metric view's name as a caller passes it, its parts unquoted; an
 /// unquoted part may hold what SQL reads only quoted (`parse_view_name`).
-pub fn view_name(name: &str, spaces: Spaces) -> Option<Vec<String>> {
-    name_parts(&VIEW_NAME, name, spaces)
+pub fn view_name(name: &str, spaces: &Spaces) -> Option<Vec<String>> {
+    name_parts(&VIEW_NAME.get(spaces), name, spaces)
 }
 
-fn key_ref(chain: &str, spaces: Spaces) -> KeyRef {
+fn key_ref(chain: &str, spaces: &Spaces) -> KeyRef {
     let mut parts: Vec<String> = IDENT
+        .get(spaces)
         .find_all(chain)
         .unwrap_or_default()
         .into_iter()
@@ -170,8 +184,8 @@ fn key_ref(chain: &str, spaces: Spaces) -> KeyRef {
 
 /// A single-column equality join condition's two sides; `None` for any
 /// other (`parse_join_condition`).
-pub fn join_condition(condition: &str, spaces: Spaces) -> Option<[KeyRef; 2]> {
-    let groups = JOIN_CONDITION.groups(condition).ok()??;
+pub fn join_condition(condition: &str, spaces: &Spaces) -> Option<[KeyRef; 2]> {
+    let groups = JOIN_CONDITION.get(spaces).groups(condition).ok()??;
     Some([
         key_ref(&condition[groups.get(1)?], spaces),
         key_ref(&condition[groups.get(2)?], spaces),
@@ -180,10 +194,11 @@ pub fn join_condition(condition: &str, spaces: Spaces) -> Option<[KeyRef; 2]> {
 
 /// A wildcard dimension, `alias.*` or `alias.* EXCEPT (a, b)`: the folded
 /// path it names, and the columns it leaves out, unquoted.
-pub fn wildcard(expr: &str, spaces: Spaces) -> Option<(Vec<String>, Vec<String>)> {
-    let groups = WILDCARD.groups(expr).ok()??;
+pub fn wildcard(expr: &str, spaces: &Spaces) -> Option<(Vec<String>, Vec<String>)> {
+    let groups = WILDCARD.get(spaces).groups(expr).ok()??;
     let named = &expr[groups.get(1)?];
     let path = IDENT
+        .get(spaces)
         .find_all(named)
         .ok()?
         .into_iter()
@@ -194,9 +209,9 @@ pub fn wildcard(expr: &str, spaces: Spaces) -> Option<(Vec<String>, Vec<String>)
         Some(list) => {
             let list = &expr[list];
             let mut excluded = Vec::new();
-            for chain in CHAIN.find_all(list).ok()? {
+            for chain in CHAIN.get(spaces).find_all(list).ok()? {
                 let chain = &list[chain];
-                if let Some(last) = IDENT.find_all(chain).ok()?.pop() {
+                if let Some(last) = IDENT.get(spaces).find_all(chain).ok()?.pop() {
                     excluded.push(unquote(&chain[last], spaces));
                 }
             }
@@ -207,9 +222,9 @@ pub fn wildcard(expr: &str, spaces: Spaces) -> Option<(Vec<String>, Vec<String>)
 }
 
 /// The pattern of `part`, backticked or, where it is a bare name, bare.
-fn quoted_variants(part: &str) -> String {
+fn quoted_variants(part: &str, spaces: &Spaces) -> String {
     let quoted = fancy_regex::escape(&format!("`{}`", part.replace('`', "``"))).into_owned();
-    if matches(&WHOLE_BARE_NAME, part) {
+    if matches(&WHOLE_BARE_NAME.get(spaces), part) {
         format!("{quoted}|{}", fancy_regex::escape(part))
     } else {
         quoted
@@ -218,20 +233,20 @@ fn quoted_variants(part: &str) -> String {
 
 /// The pattern of a qualifier `path.` in any case, not after a name's
 /// character, a backtick, `$` or a dot (`_path_pattern`).
-fn path_pattern<S: AsRef<str>>(path: &[S]) -> Read<Pattern> {
+fn path_pattern<S: AsRef<str>>(path: &[S], spaces: &Spaces) -> Read<Pattern> {
     let chain = path
         .iter()
-        .map(|part| format!("(?:{})", quoted_variants(part.as_ref())))
+        .map(|part| format!("(?:{})", quoted_variants(part.as_ref(), spaces)))
         .collect::<Vec<_>>()
         .join(r"\s*\.\s*");
-    Pattern::build(&format!(r"(?i)(?<![A-Za-z0-9_`$.]){chain}\s*\."))
+    Pattern::build(&format!(r"(?i)(?<![A-Za-z0-9_`$.]){chain}\s*\."), spaces)
 }
 
 /// `expr` with each string literal emptied (`_masked_strings`).
-fn masked_strings(expr: &str) -> Read<String> {
+fn masked_strings(expr: &str, spaces: &Spaces) -> Read<String> {
     let mut out = String::with_capacity(expr.len());
     let mut last = 0;
-    for span in string_literals(expr)? {
+    for span in string_literals(expr, spaces)? {
         out.push_str(&expr[last..span.start]);
         out.push_str("''");
         last = span.end;
@@ -242,8 +257,12 @@ fn masked_strings(expr: &str) -> Read<String> {
 
 /// Whether `expr` reads a column of the table `path` names, outside its
 /// literals (`references_alias`).
-pub fn references_alias<S: AsRef<str>>(expr: &str, path: &[S]) -> Result<bool, Unreadable> {
-    path_pattern(path)?.is_match(&masked_strings(expr)?)
+pub fn references_alias<S: AsRef<str>>(
+    expr: &str,
+    path: &[S],
+    spaces: &Spaces,
+) -> Result<bool, Unreadable> {
+    path_pattern(path, spaces)?.is_match(&masked_strings(expr, spaces)?)
 }
 
 /// `expr` with every qualifier `path.` taken out, its literals as they are,
@@ -251,12 +270,12 @@ pub fn references_alias<S: AsRef<str>>(expr: &str, path: &[S]) -> Result<bool, U
 pub fn strip_alias<S: AsRef<str>>(
     expr: &str,
     path: &[S],
-    spaces: Spaces,
+    spaces: &Spaces,
 ) -> Result<String, Unreadable> {
-    let pattern = path_pattern(path)?;
+    let pattern = path_pattern(path, spaces)?;
     let mut out = String::with_capacity(expr.len());
     let mut last = 0;
-    for span in string_literals(expr)? {
+    for span in string_literals(expr, spaces)? {
         out.push_str(&pattern.replace_all(&expr[last..span.start], "")?);
         out.push_str(&expr[span.clone()]);
         last = span.end;
@@ -268,18 +287,18 @@ pub fn strip_alias<S: AsRef<str>>(
 /// The column `expr` truncates or casts to a date or time, as
 /// `order_date` in `DATE_TRUNC('MONTH', order_date)`; `None` for anything
 /// else, a bare column included (`derived_column`).
-pub fn derived_column(expr: &str, spaces: Spaces) -> Option<String> {
+pub fn derived_column(expr: &str, spaces: &Spaces) -> Option<String> {
     let column = column_under(expr, spaces)?;
     let bare = spaces.strip(expr).trim_matches(['(', ')', ' ']);
-    (!matches(&WHOLE_IDENT, bare)).then_some(column)
+    (!matches(&WHOLE_IDENT.get(spaces), bare)).then_some(column)
 }
 
-fn column_under(expr: &str, spaces: Spaces) -> Option<String> {
+fn column_under(expr: &str, spaces: &Spaces) -> Option<String> {
     let expr = spaces.strip(expr);
-    if matches(&WHOLE_IDENT, expr) {
+    if matches(&WHOLE_IDENT.get(spaces), expr) {
         return Some(unquote(expr, spaces));
     }
-    for derivation in DERIVATIONS.iter() {
+    for derivation in DERIVATIONS.get(spaces).iter() {
         let Ok(Some(groups)) = derivation.groups(expr) else {
             continue;
         };
@@ -287,7 +306,7 @@ fn column_under(expr: &str, spaces: Spaces) -> Option<String> {
         // `.+` reaches past a bracket that closes early, as in
         // `date(a) - date(b)`, so what it holds must balance.
         let mut depth: i64 = 0;
-        for c in masked_strings(inner).ok()?.chars() {
+        for c in masked_strings(inner, spaces).ok()?.chars() {
             depth += match c {
                 '(' => 1,
                 ')' => -1,
@@ -308,9 +327,9 @@ fn column_under(expr: &str, spaces: Spaces) -> Option<String> {
 
 /// The column an expression is, if it is one column and nothing else
 /// (`_renamed_column`).
-pub fn renamed_column(expr: &str, spaces: Spaces) -> Option<String> {
+pub fn renamed_column(expr: &str, spaces: &Spaces) -> Option<String> {
     let expr = spaces.strip(expr);
-    let groups = RENAMED.groups(expr).ok()??;
+    let groups = RENAMED.get(spaces).groups(expr).ok()??;
     match (groups.get(1), groups.get(2)) {
         (Some(quoted), _) => Some(expr[quoted].replace("``", "`")),
         (None, Some(bare)) => Some(expr[bare].to_owned()),
@@ -339,7 +358,7 @@ pub enum TypeClass {
 }
 
 /// The class of `data_type`.
-pub fn type_class(data_type: &str, spaces: Spaces) -> TypeClass {
+pub fn type_class(data_type: &str, spaces: &Spaces) -> TypeClass {
     let folded = spaces
         .split(&data_type.to_lowercase())
         .collect::<Vec<_>>()
@@ -348,9 +367,10 @@ pub fn type_class(data_type: &str, spaces: Spaces) -> TypeClass {
         TypeClass::Boolean
     } else if INTEGER_TYPES.contains(&folded.as_str()) {
         TypeClass::Integer
-    } else if FLOAT_TYPES.contains(&folded.as_str()) || matches(&DECIMAL_TYPE, &folded) {
+    } else if FLOAT_TYPES.contains(&folded.as_str()) || matches(&DECIMAL_TYPE.get(spaces), &folded)
+    {
         TypeClass::Decimal
-    } else if matches(&STRING_TYPE, &folded) {
+    } else if matches(&STRING_TYPE.get(spaces), &folded) {
         TypeClass::String
     } else if folded == "date" {
         TypeClass::Date
@@ -427,7 +447,7 @@ pub fn read_parameters<D>(
     inputs: &[ParameterInput<D>],
     described: &[(String, String)],
     convert: impl Fn(&str, &D) -> Result<String, DefaultRefusal>,
-    spaces: Spaces,
+    spaces: &Spaces,
 ) -> Vec<(String, Parameter)> {
     let mut parameters: Vec<(String, Parameter)> = Vec::new();
     for input in inputs {
@@ -474,8 +494,9 @@ pub fn read_parameters<D>(
 pub fn substitute_parameters(
     expr: &str,
     parameters: &[(String, Parameter)],
+    spaces: &Spaces,
 ) -> Result<(String, Vec<String>), Unreadable> {
-    let found: Vec<(std::ops::Range<usize>, &Parameter)> = name_references(expr)?
+    let found: Vec<(std::ops::Range<usize>, &Parameter)> = name_references(expr, spaces)?
         .into_iter()
         .filter(|reference| reference.bare)
         .filter_map(|reference| {
@@ -508,10 +529,11 @@ pub fn substitute_fields(
     expr: &str,
     fields: &[(String, Option<String>)],
     qualifiers: &[Vec<String>],
+    spaces: &Spaces,
 ) -> Result<(String, Option<String>), Unreadable> {
     let mut out = expr.to_owned();
     let mut refused = None;
-    for reference in name_references(expr)?.into_iter().rev() {
+    for reference in name_references(expr, spaces)?.into_iter().rev() {
         let parts: Vec<String> = reference.parts.iter().map(|p| p.to_lowercase()).collect();
         let qualified = qualifiers
             .iter()
@@ -528,6 +550,7 @@ pub fn substitute_fields(
         };
         let start = reference.span.start;
         let first = FIRST_PART
+            .get(spaces)
             .find(&out[start..])?
             .map_or(start, |m| start + m.end);
         out.replace_range(start..first, &format!("({field})"));
@@ -537,8 +560,8 @@ pub fn substitute_fields(
 
 /// Whether `expr` reads every column of a table through `*`, as
 /// `struct(*)` does; `COUNT(*)` counts rows instead (`_star`).
-pub fn reads_star(expr: &str) -> Result<bool, Unreadable> {
-    Ok(name_references(expr)?
+pub fn reads_star(expr: &str, spaces: &Spaces) -> Result<bool, Unreadable> {
+    Ok(name_references(expr, spaces)?
         .iter()
         .any(|reference| reference.parts.last().is_some_and(|p| p == "*")))
 }
@@ -562,18 +585,18 @@ pub enum FilterRefusal {
 pub fn check_filter(
     filter: Option<&str>,
     candidates: &[(Vec<String>, String)],
-    spaces: Spaces,
+    spaces: &Spaces,
 ) -> Result<String, FilterRefusal> {
     let Some(filter) = filter.filter(|f| !spaces.strip(f).is_empty()) else {
         return Err(FilterRefusal::NotACondition);
     };
-    if let Some(reason) = unsafe_reason(filter, Some(ExprDialect::Databricks)) {
+    if let Some(reason) = unsafe_reason(filter, Some(ExprDialect::Databricks), spaces) {
         return Err(FilterRefusal::Unsafe(reason));
     }
-    let masked = masked_strings(filter).map_err(FilterRefusal::Unreadable)?;
+    let masked = masked_strings(filter, spaces).map_err(FilterRefusal::Unreadable)?;
     for (path, alias) in candidates {
         if alias != SOURCE_ALIAS
-            && references_alias(&masked, path).map_err(FilterRefusal::Unreadable)?
+            && references_alias(&masked, path, spaces).map_err(FilterRefusal::Unreadable)?
         {
             return Err(FilterRefusal::JoinedTable(alias.clone()));
         }
@@ -634,7 +657,7 @@ pub fn read_measures(
     dimensions: &[(String, DimensionRef)],
     refused: &[String],
     parameters: &[String],
-    spaces: Spaces,
+    spaces: &Spaces,
 ) -> (Vec<MeasureRead>, Vec<MeasureRefusal>) {
     let paths: Vec<(Vec<String>, &str)> = {
         let mut paths: Vec<(Vec<String>, &str)> = Vec::new();
@@ -666,7 +689,7 @@ pub fn read_measures(
             continue;
         };
         let (expr, names) = match super::strip_comments(expr, spaces).and_then(|expr| {
-            let names = name_references(&expr)?;
+            let names = name_references(&expr, spaces)?;
             Ok((expr, names))
         }) {
             Ok(read) => read,
@@ -763,13 +786,13 @@ fn aggregation<'a>(
     expr: &str,
     inputs: &[(String, String)],
     dimension: &dyn Fn(&str) -> Option<&'a DimensionRef>,
-    spaces: Spaces,
+    spaces: &Spaces,
 ) -> Option<(String, Option<String>)> {
     if window {
         return None;
     }
-    let masked = masked_strings(expr).ok()?;
-    let groups = SIMPLE_MEASURE.groups(&masked).ok()??;
+    let masked = masked_strings(expr, spaces).ok()?;
+    let groups = SIMPLE_MEASURE.get(spaces).groups(&masked).ok()??;
     let function = masked[groups.get(1)?].to_uppercase();
     let distinct = groups.get(2).is_some();
     let argument = &masked[groups.get(3)?];

@@ -24,9 +24,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::ops::Range;
 
-use super::ExprDialect;
 use super::lex::{Kind, Token, lex};
 use super::words::{self, has};
+use super::{ExprDialect, Spaces};
 
 /// A name an expression reads as a value, possibly qualified.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -64,8 +64,8 @@ impl std::error::Error for Unreadable {}
 /// The names a Databricks expression reads as values (`name_references`).
 /// An expression that does not parse as the scan reads SQL is refused,
 /// since a failed reading of a form makes its word a column.
-pub fn name_references(expr: &str) -> Result<Vec<NameReference>, Unreadable> {
-    let tokens = lex(expr, Some(ExprDialect::Databricks))?
+pub fn name_references(expr: &str, spaces: &Spaces) -> Result<Vec<NameReference>, Unreadable> {
+    let tokens = lex(expr, Some(ExprDialect::Databricks), spaces)?
         .into_iter()
         .filter(|token| token.kind != Kind::Comment)
         .collect();
