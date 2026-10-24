@@ -201,7 +201,8 @@ pub(crate) async fn table(
     let constraints = key_columns(asker, &table.source, keys).await?;
     if previewed.is_none() && declared.is_empty() {
         // None of the columns kept is the source's: nothing to preview, and
-        // the caller says which it lacks.
+        // the caller says which it lacks (plan B's read of a table as it
+        // stands, `describe::as_it_stands`, refuses the first by name).
         return Ok(Discovered {
             declared,
             constraints,

@@ -1046,13 +1046,13 @@ class _Capture:
                 self.driver_log.purpose = (
                     purposes.pop() if len(purposes) == 1 else None
                 )
-        elif self.driver_log is not None:
-            self.driver_log.purpose = None
             for asked in step['requests']:
                 self._asked[asked['id']] = {
                     'request': asked['request'],
                     'plan': asked['plan'],
                 }
+        elif self.driver_log is not None:
+            self.driver_log.purpose = None
         if step.get('step') == 'call_model':
             self._call = step['body']
 

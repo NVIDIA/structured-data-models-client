@@ -68,7 +68,8 @@
                   "sql": {"type": ["string", "null"]},
                   "parameters": {"type": ["array", "null"], "items": {"$ref": "#/$defs/parameter"}},
                   "results": {"type": "array", "items": {"$ref": "#/$defs/result"}},
-                  "error": {"type": ["string", "null"]}
+                  "error": {"type": ["string", "null"]},
+                  "purpose": {"description": "The purpose of the core's fetch the statement answers, where the core gave one (FetchStep.purpose): locate, plan B's read of a table as it stands (T3.4).", "enum": ["locate"]}
                 }
               }
             },
@@ -242,7 +243,7 @@
             "type": "object",
             "additionalProperties": false,
             "required": ["request", "plan"],
-            "properties": {"request": {"type": "object"}, "plan": {"type": "object"}}
+            "properties": {"request": {"type": "object"}, "plan": {"type": "object"}, "purpose": {"enum": ["locate"]}}
           }
         },
         "accepted": {"type": ["boolean", "null"]},
