@@ -592,3 +592,88 @@ def test_a_failed_case_is_recorded_and_the_rest_continue(
         'c': 'ValueError: a driver error outside the runner',
         'd': 'the write guard refused: SELECT SETSEED: SETSEED(), a function on no list',
     }
+
+
+def test_the_job_loads_the_reference_client_in_its_own_process(
+    tmp_path: Path,
+) -> None:
+    # C-1's Spark leg: a notebook's environment reads no .pth file, so the
+    # job puts the checkout's client source first on sys.path in the
+    # recording's own process, over any sdm_client imported already, and
+    # the runner's check that the client is the checkout's passes.
+    import subprocess
+
+    reference = tmp_path / 'reference'
+    client = reference / capture_run.CLIENT_SOURCE / 'sdm_client'
+    client.mkdir(parents=True)
+    (client / '__init__.py').write_text('')
+    stale = tmp_path / 'installed/sdm_client'
+    stale.mkdir(parents=True)
+    (stale / '__init__.py').write_text('')
+    probe = (
+        'import importlib.util, sys; from pathlib import Path; '
+        f'sys.path.insert(0, {str(stale.parent)!r}); import sdm_client; '
+        "spec = importlib.util.spec_from_file_location('c', "
+        f'{str(LIVE / "capture_run.py")!r}); '
+        'capture = importlib.util.module_from_spec(spec); '
+        'spec.loader.exec_module(capture); '
+        f'capture.use_reference_client(Path({str(reference)!r})); '
+        "spec = importlib.util.spec_from_file_location('r', "
+        f'{str(ROOT / "contract/runners/run_python.py")!r}); '
+        'module = importlib.util.module_from_spec(spec); '
+        "sys.modules['r'] = module; spec.loader.exec_module(module); "
+        f'module._require_reference_client(Path({str(reference)!r})); '
+        "print('ok')"
+    )
+    done = subprocess.run(
+        [sys.executable, '-I', '-S', '-c', probe],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert done.stdout.strip() == 'ok', done.stderr[-2000:]
+    # The job writes no .pth file (capture_run.py bootstrap) any more.
+    assert "'bootstrap'" not in (LIVE / 'capture_job.py').read_text()
+    with pytest.raises(SystemExit, match='no reference client'):
+        capture_run.use_reference_client(tmp_path / 'installed')
+
+
+def test_the_job_installs_only_its_hosts_wheels(tmp_path: Path) -> None:
+    # C-1's Spark leg: serverless runs on x86_64 and aarch64 hosts, so the
+    # wheel folder holds both platforms' builds, and the job hands pip only
+    # the ones its own host installs (an unsupported wheel named to pip
+    # fails the whole install).
+    from packaging.tags import Tag
+
+    names = [
+        'structured_data_models_api-1.0.0-py3-none-any.whl',
+        'structured_data_models_relational_engine-1.0.0-cp312-cp312-'
+        'manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl',
+        'structured_data_models_relational_engine-1.0.0-cp312-cp312-'
+        'manylinux_2_28_aarch64.whl',
+        'duckdb-1.5.6-cp312-cp312-manylinux_2_26_aarch64.'
+        'manylinux_2_28_aarch64.whl',
+    ]
+    for name in names:
+        (tmp_path / name).write_bytes(b'')
+    arm = [
+        Tag('cp312', 'cp312', 'manylinux_2_28_aarch64'),
+        Tag('py3', 'none', 'any'),
+    ]
+    chosen = capture_run.installable_wheels(tmp_path, arm)
+    assert [Path(path).name for path in chosen] == sorted(
+        name for name in names if 'x86_64' not in name
+    )
+    x86 = [
+        Tag('cp312', 'cp312', 'manylinux_2_28_x86_64'),
+        Tag('py3', 'none', 'any'),
+    ]
+    assert [
+        Path(path).name
+        for path in capture_run.installable_wheels(tmp_path, x86)
+    ] == sorted(names[:2])
+    # The job hands pip the chosen wheels, never the folder's every wheel.
+    assert (
+        'capture_run.installable_wheels'
+        in (LIVE / 'capture_job.py').read_text()
+    )

@@ -11,11 +11,14 @@
 one-time serverless job (capture.job.template.json; design, the live-test
 plan).
 
-The first cell installs the reference's wheels from ``wheel_dir``, removes
-its client wheel and names the reference checkout's client source in the
-site directory (``capture_run.py bootstrap``), since the recording runs
-the checkout's own client, then restarts Python so the import takes it.
-The second cell sets the run's environment from the job's parameters
+The first cell installs the reference's wheels from ``wheel_dir``, those
+of this host's platform (``capture_run.installable_wheels``; serverless
+runs on x86_64 and aarch64), and removes its client wheel, then restarts
+Python. The second cell puts the
+reference checkout's client source first on ``sys.path``
+(``capture_run.use_reference_client``), since the recording runs the
+checkout's own client; a notebook's environment does not read a ``.pth``
+file, so this is done in the process itself. It then sets the run's environment from the job's parameters
 (the live configuration's path, the placeholders' private names and the
 write guard's test schema; ``capture_run.job_environment``, filled when
 the job is submitted, never printed, never in the repository) and runs ``capture_run.run`` in
@@ -61,15 +64,15 @@ WIDGETS = (
 for name in WIDGETS:
     dbutils.widgets.text(name, '', name)
 
-import glob
-import site
 import subprocess
 from pathlib import Path
 
-wheels = sorted(
-    glob.glob(dbutils.widgets.get('wheel_dir').rstrip('/') + '/*.whl')
-)
-assert wheels, 'no reference wheel in wheel_dir'
+sys.path.insert(0, str(Path(dbutils.widgets.get('repo_dir')) / 'scripts/live'))
+import capture_run
+
+# The folder holds each platform's wheels; this host's only go to pip.
+wheels = capture_run.installable_wheels(dbutils.widgets.get('wheel_dir'))
+assert wheels, 'no reference wheel in wheel_dir for this host'
 subprocess.run(
     [sys.executable, '-m', 'pip', 'install', '-q', *wheels], check=True
 )
@@ -82,21 +85,6 @@ subprocess.run(
         '-q',
         '-y',
         'structured-data-models-client',
-    ],
-    check=True,
-)
-subprocess.run(
-    [
-        sys.executable,
-        str(
-            Path(dbutils.widgets.get('repo_dir'))
-            / 'scripts/live/capture_run.py'
-        ),
-        'bootstrap',
-        '--reference',
-        dbutils.widgets.get('reference_dir'),
-        '--site',
-        site.getsitepackages()[0],
     ],
     check=True,
 )
@@ -116,6 +104,7 @@ assert campaign in ('c1', 'e0'), campaign
 sys.path.insert(0, str(Path(dbutils.widgets.get('repo_dir')) / 'scripts/live'))
 import capture_run
 
+capture_run.use_reference_client(Path(dbutils.widgets.get('reference_dir')))
 names = capture_run.job_environment(
     {name: dbutils.widgets.get(name) for name in capture_run.JOB_ENVIRONMENT}
 )

@@ -1,0 +1,3290 @@
+{
+ "format": "sdm-capture/1",
+ "case": "shape.two-paths.keyed",
+ "leg": "lakebase",
+ "recording_commit": "8f3eb648abc0d00abfd34087fe5124106e137fa4",
+ "reference_commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+ "versions": {
+  "databricks-sdk": "0.148.0",
+  "duckdb": "1.5.6",
+  "numpy": "2.5.3",
+  "pandas": "3.0.6",
+  "psycopg": "3.3.6",
+  "pyarrow": "25.0.1",
+  "python": "3.12.15"
+ },
+ "input_hash": "bcc5f3c6ddc23cb8f31b6eee29075cdadcce817bd62ebc75bd63d680141e8c89",
+ "session": {
+  "time_zone": "GMT",
+  "null_order": "nulls_last"
+ },
+ "reference": {
+  "case": "shape.two-paths.keyed@lakebase",
+  "core": null,
+  "driver": {
+   "capture": {
+    "bindings": [],
+    "cursors": 21,
+    "events": [
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 1
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 2
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 3
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 4
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 5
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 6
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 7
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 8
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 9
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 10
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 11
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 12
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 13
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 14
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 15
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 16
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 17
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 18
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 19
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 20
+     },
+     {
+      "event": "cursor",
+      "handle": 0
+     },
+     {
+      "event": "exit",
+      "handle": 21
+     }
+    ],
+    "incomplete": [],
+    "passed_through": [
+     "autocommit",
+     "description"
+    ],
+    "statements": [
+     {
+      "error": null,
+      "handle": 1,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{schema}'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'customers'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "34ec877c770d5c4e09a6e5c974152595bb620f92de84c03351929d07abe84553",
+        "method": "fetchall",
+        "rows": 2,
+        "values": {
+         "columns": [
+          "column_name",
+          "data_type",
+          "udt_name",
+          "numeric_scale",
+          "is_nullable",
+          "table_schema",
+          "table_name",
+          "format_type"
+         ],
+         "ordered": "0e613225fbb43652ec38ef46aa45aa001a91e19439f8885231beaf0d854f0f04",
+         "types": [
+          "name",
+          "varchar",
+          "name",
+          "int4",
+          "varchar(3)",
+          "name",
+          "name",
+          "text"
+         ],
+         "unencodable": [],
+         "unordered": "0e613225fbb43652ec38ef46aa45aa001a91e19439f8885231beaf0d854f0f04"
+        }
+       }
+      ],
+      "sql": "SELECT c.column_name, c.data_type, c.udt_name,\n       c.numeric_scale, c.is_nullable, c.table_schema,\n       c.table_name,\n       pg_catalog.format_type(a.atttypid, a.atttypmod)\nFROM information_schema.columns c\nJOIN pg_catalog.pg_namespace n\n  ON n.nspname = c.table_schema\nJOIN pg_catalog.pg_class rel\n  ON rel.relnamespace = n.oid AND rel.relname = c.table_name\nJOIN pg_catalog.pg_attribute a\n  ON a.attrelid = rel.oid AND a.attname = c.column_name\n AND a.attnum > 0 AND NOT a.attisdropped\nWHERE c.table_schema = %s AND c.table_name = %s\nORDER BY c.ordinal_position",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 1,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{schema}'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'customers'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "method": "fetchall",
+        "rows": 0,
+        "values": {
+         "columns": [
+          "constraint_type",
+          "constraint_name",
+          "column_name",
+          "ordinal_position"
+         ],
+         "ordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+         "types": [
+          "varchar",
+          "name",
+          "name",
+          "int4"
+         ],
+         "unencodable": [],
+         "unordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        }
+       }
+      ],
+      "sql": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = %s AND tc.table_name = %s\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE', 'FOREIGN KEY')",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 2,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "24a5317639c14171109f5c06ef8a068dce5cec3eddd6d9ffdb39530dbf1f48ee",
+        "method": "fetchall",
+        "rows": 10,
+        "values": {
+         "columns": [
+          "cid",
+          "seg"
+         ],
+         "ordered": "6d4d152aefe2b8b6f48a6c3ebb614d6de7070816e2ec9908efd48d3e5de708bb",
+         "types": [
+          "int8",
+          "text"
+         ],
+         "unencodable": [],
+         "unordered": "6d4d152aefe2b8b6f48a6c3ebb614d6de7070816e2ec9908efd48d3e5de708bb"
+        }
+       }
+      ],
+      "sql": "SELECT \"cid\", \"seg\" FROM \"{schema}\".\"customers\" LIMIT 1000",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 3,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{schema}'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'details'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "56cf86131638388b8e644cfaebf6821e6dd749827d5c979f89e51e30389f4d6c",
+        "method": "fetchall",
+        "rows": 4,
+        "values": {
+         "columns": [
+          "column_name",
+          "data_type",
+          "udt_name",
+          "numeric_scale",
+          "is_nullable",
+          "table_schema",
+          "table_name",
+          "format_type"
+         ],
+         "ordered": "62817094020065271d8b4064d77e437262372eca44292117b5410bd77eb8841e",
+         "types": [
+          "name",
+          "varchar",
+          "name",
+          "int4",
+          "varchar(3)",
+          "name",
+          "name",
+          "text"
+         ],
+         "unencodable": [],
+         "unordered": "389e81339a8993cfc372d8501311b6775b7464c6119d5701375bbe70e324a647"
+        }
+       }
+      ],
+      "sql": "SELECT c.column_name, c.data_type, c.udt_name,\n       c.numeric_scale, c.is_nullable, c.table_schema,\n       c.table_name,\n       pg_catalog.format_type(a.atttypid, a.atttypmod)\nFROM information_schema.columns c\nJOIN pg_catalog.pg_namespace n\n  ON n.nspname = c.table_schema\nJOIN pg_catalog.pg_class rel\n  ON rel.relnamespace = n.oid AND rel.relname = c.table_name\nJOIN pg_catalog.pg_attribute a\n  ON a.attrelid = rel.oid AND a.attname = c.column_name\n AND a.attnum > 0 AND NOT a.attisdropped\nWHERE c.table_schema = %s AND c.table_name = %s\nORDER BY c.ordinal_position",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 3,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{schema}'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'details'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "method": "fetchall",
+        "rows": 0,
+        "values": {
+         "columns": [
+          "constraint_type",
+          "constraint_name",
+          "column_name",
+          "ordinal_position"
+         ],
+         "ordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+         "types": [
+          "varchar",
+          "name",
+          "name",
+          "int4"
+         ],
+         "unencodable": [],
+         "unordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        }
+       }
+      ],
+      "sql": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = %s AND tc.table_name = %s\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE', 'FOREIGN KEY')",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 4,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "aabf1a83f46867640410f73a9b14af2d6f274540c9ed605f22065f84088d8dfb",
+        "method": "fetchall",
+        "rows": 120,
+        "values": {
+         "columns": [
+          "did",
+          "hid",
+          "cid",
+          "ts"
+         ],
+         "ordered": "8218a73fb2dd04549181be4718e72758c34e8ee222caf41dde5758f5a9818353",
+         "types": [
+          "int8",
+          "int8",
+          "int8",
+          "timestamp"
+         ],
+         "unencodable": [],
+         "unordered": "c369e04a6979959d23e67f9d20c32fbe780b74448f3e843e9309b1f682f3c8df"
+        }
+       }
+      ],
+      "sql": "SELECT \"did\", \"hid\", \"cid\", \"ts\" FROM \"{schema}\".\"details\" LIMIT 1000",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 5,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{schema}'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'headers'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "7872bcd9675ad26344fdb497806488e217fc045dac37de162cc097fcd5e51fec",
+        "method": "fetchall",
+        "rows": 3,
+        "values": {
+         "columns": [
+          "column_name",
+          "data_type",
+          "udt_name",
+          "numeric_scale",
+          "is_nullable",
+          "table_schema",
+          "table_name",
+          "format_type"
+         ],
+         "ordered": "5d403e3333b9dea21e84b0edfaee65a50cc0ba6732fca0f1743fc39a48b7b35f",
+         "types": [
+          "name",
+          "varchar",
+          "name",
+          "int4",
+          "varchar(3)",
+          "name",
+          "name",
+          "text"
+         ],
+         "unencodable": [],
+         "unordered": "53f87ab9cc5a65f01fa95c56c6065e16a0e98f52893d18fc7f917bab1808fad5"
+        }
+       }
+      ],
+      "sql": "SELECT c.column_name, c.data_type, c.udt_name,\n       c.numeric_scale, c.is_nullable, c.table_schema,\n       c.table_name,\n       pg_catalog.format_type(a.atttypid, a.atttypmod)\nFROM information_schema.columns c\nJOIN pg_catalog.pg_namespace n\n  ON n.nspname = c.table_schema\nJOIN pg_catalog.pg_class rel\n  ON rel.relnamespace = n.oid AND rel.relname = c.table_name\nJOIN pg_catalog.pg_attribute a\n  ON a.attrelid = rel.oid AND a.attname = c.column_name\n AND a.attnum > 0 AND NOT a.attisdropped\nWHERE c.table_schema = %s AND c.table_name = %s\nORDER BY c.ordinal_position",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 5,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{schema}'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'headers'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "method": "fetchall",
+        "rows": 0,
+        "values": {
+         "columns": [
+          "constraint_type",
+          "constraint_name",
+          "column_name",
+          "ordinal_position"
+         ],
+         "ordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+         "types": [
+          "varchar",
+          "name",
+          "name",
+          "int4"
+         ],
+         "unencodable": [],
+         "unordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        }
+       }
+      ],
+      "sql": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = %s AND tc.table_name = %s\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE', 'FOREIGN KEY')",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 6,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "8582d16e9f7935d752295ccbfcae2c7d5674ae2c3103ec7a07aeafe55075fc7a",
+        "method": "fetchall",
+        "rows": 40,
+        "values": {
+         "columns": [
+          "hid",
+          "cid",
+          "ts"
+         ],
+         "ordered": "50c7af9abcd83fba16af743d07d9a2f42829e02e6754d27ec1a86211dc799aa0",
+         "types": [
+          "int8",
+          "int8",
+          "timestamp"
+         ],
+         "unencodable": [],
+         "unordered": "8d62406855e387b40548fe5bb90d142e04c5745049b471310a0260f281694883"
+        }
+       }
+      ],
+      "sql": "SELECT \"hid\", \"cid\", \"ts\" FROM \"{schema}\".\"headers\" LIMIT 1000",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 7,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{schema}'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'customers'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "method": "fetchall",
+        "rows": 0,
+        "values": {
+         "columns": [
+          "constraint_name",
+          "column_name",
+          "table_schema",
+          "table_name",
+          "column_name",
+          "ordinal_position"
+         ],
+         "ordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+         "types": [
+          "name",
+          "name",
+          "name",
+          "name",
+          "name",
+          "int4"
+         ],
+         "unencodable": [],
+         "unordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        }
+       }
+      ],
+      "sql": "SELECT tc.constraint_name, kcu.column_name,\n       target_kcu.table_schema, target_kcu.table_name,\n       target_kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN information_schema.key_column_usage target_kcu\n  ON rc.unique_constraint_catalog = target_kcu.constraint_catalog\n AND rc.unique_constraint_schema = target_kcu.constraint_schema\n AND rc.unique_constraint_name = target_kcu.constraint_name\n AND target_kcu.ordinal_position = kcu.position_in_unique_constraint\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = %s AND tc.table_name = %s\nORDER BY tc.constraint_name, kcu.ordinal_position",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 8,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{schema}'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'details'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "method": "fetchall",
+        "rows": 0,
+        "values": {
+         "columns": [
+          "constraint_name",
+          "column_name",
+          "table_schema",
+          "table_name",
+          "column_name",
+          "ordinal_position"
+         ],
+         "ordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+         "types": [
+          "name",
+          "name",
+          "name",
+          "name",
+          "name",
+          "int4"
+         ],
+         "unencodable": [],
+         "unordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        }
+       }
+      ],
+      "sql": "SELECT tc.constraint_name, kcu.column_name,\n       target_kcu.table_schema, target_kcu.table_name,\n       target_kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN information_schema.key_column_usage target_kcu\n  ON rc.unique_constraint_catalog = target_kcu.constraint_catalog\n AND rc.unique_constraint_schema = target_kcu.constraint_schema\n AND rc.unique_constraint_name = target_kcu.constraint_name\n AND target_kcu.ordinal_position = kcu.position_in_unique_constraint\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = %s AND tc.table_name = %s\nORDER BY tc.constraint_name, kcu.ordinal_position",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 9,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'{schema}'"
+       },
+       {
+        "type": "builtins.str",
+        "value": "'headers'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "method": "fetchall",
+        "rows": 0,
+        "values": {
+         "columns": [
+          "constraint_name",
+          "column_name",
+          "table_schema",
+          "table_name",
+          "column_name",
+          "ordinal_position"
+         ],
+         "ordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+         "types": [
+          "name",
+          "name",
+          "name",
+          "name",
+          "name",
+          "int4"
+         ],
+         "unencodable": [],
+         "unordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        }
+       }
+      ],
+      "sql": "SELECT tc.constraint_name, kcu.column_name,\n       target_kcu.table_schema, target_kcu.table_name,\n       target_kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN information_schema.key_column_usage target_kcu\n  ON rc.unique_constraint_catalog = target_kcu.constraint_catalog\n AND rc.unique_constraint_schema = target_kcu.constraint_schema\n AND rc.unique_constraint_name = target_kcu.constraint_name\n AND target_kcu.ordinal_position = kcu.position_in_unique_constraint\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = %s AND tc.table_name = %s\nORDER BY tc.constraint_name, kcu.ordinal_position",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 10,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "36c4b83122c4ca26c223f05ebcadb99549af378c96e6246ef5b69170d1dd8be6",
+        "method": "fetchall",
+        "rows": 3,
+        "values": {
+         "columns": [
+          "k",
+          "n",
+          "d",
+          "z"
+         ],
+         "ordered": "b32d04d8f1ceb916e5618e07c13d45f7a75e15eeeb18b3459a778df021506d92",
+         "types": [
+          "int4",
+          "int8",
+          "int8",
+          "int8"
+         ],
+         "unencodable": [],
+         "unordered": "b32d04d8f1ceb916e5618e07c13d45f7a75e15eeeb18b3459a778df021506d92"
+        }
+       }
+      ],
+      "sql": "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT \"cid\") AS d, COUNT(CASE WHEN \"cid\" IS NULL THEN 1 END) AS z\nFROM \"{schema}\".\"customers\"\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT \"did\") AS d, COUNT(CASE WHEN \"did\" IS NULL THEN 1 END) AS z\nFROM \"{schema}\".\"details\"\nUNION ALL\nSELECT 2 AS k, COUNT(*) AS n, COUNT(DISTINCT \"hid\") AS d, COUNT(CASE WHEN \"hid\" IS NULL THEN 1 END) AS z\nFROM \"{schema}\".\"headers\"",
+      "stage": "from_source"
+     },
+     {
+      "error": null,
+      "handle": 11,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "0567369bf561c014f2d7e5b05ce76907cfe7451cc59562c638a3a9c34d1ce00c",
+        "method": "fetchone",
+        "rows": 1,
+        "values": {
+         "columns": [
+          "count"
+         ],
+         "ordered": "de307ced6291725bc729d1cf303a0b20fe237d05ab1029cc37d4c12ad9025291",
+         "types": [
+          "int8"
+         ],
+         "unencodable": [],
+         "unordered": "de307ced6291725bc729d1cf303a0b20fe237d05ab1029cc37d4c12ad9025291"
+        }
+       }
+      ],
+      "sql": "SELECT COUNT(*) FROM \"{schema}\".\"customers\"",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 12,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "0d194df8bfcb958a73ea0dd739a6fa308abde68d4802e2463c1905c215e6e5fa",
+        "method": "fetchone",
+        "rows": 1,
+        "values": {
+         "columns": [
+          "count"
+         ],
+         "ordered": "738d8afc163801b71c00b4e4a7b289b7972d0d79cdd6b02c4e24d80a922d599c",
+         "types": [
+          "int8"
+         ],
+         "unencodable": [],
+         "unordered": "738d8afc163801b71c00b4e4a7b289b7972d0d79cdd6b02c4e24d80a922d599c"
+        }
+       }
+      ],
+      "sql": "SELECT COUNT(*) FROM \"{schema}\".\"details\"",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 13,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "4edee1f1c6ac6bb1fe48ce842712f26c1e42af3be535c85a2a394748318d9716",
+        "method": "fetchone",
+        "rows": 1,
+        "values": {
+         "columns": [
+          "count"
+         ],
+         "ordered": "4592d7984c4afd92e17dd998e0e733ee1ec440d7e2b2ae1f91b422f55ed8069f",
+         "types": [
+          "int8"
+         ],
+         "unencodable": [],
+         "unordered": "4592d7984c4afd92e17dd998e0e733ee1ec440d7e2b2ae1f91b422f55ed8069f"
+        }
+       }
+      ],
+      "sql": "SELECT COUNT(*) FROM \"{schema}\".\"headers\"",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 14,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "96019efe00ae02e055f5b19cc616f73d0630caef393e5f6480ebf3f64709ed69",
+        "method": "fetchall",
+        "rows": 1,
+        "values": {
+         "columns": [
+          "table_index",
+          "min_date",
+          "max_date"
+         ],
+         "ordered": "b3e30af7d1a71b74dc0591ba49ab0b43fb159995abefef4ccb023b3061551781",
+         "types": [
+          "int4",
+          "timestamp",
+          "timestamp"
+         ],
+         "unencodable": [],
+         "unordered": "b3e30af7d1a71b74dc0591ba49ab0b43fb159995abefef4ccb023b3061551781"
+        }
+       }
+      ],
+      "sql": "SELECT 0 AS table_index, MIN(\"ts\") AS min_date, MAX(\"ts\") AS max_date\nFROM \"{schema}\".\"details\"",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 15,
+      "parameters": [
+       {
+        "type": "builtins.float",
+        "value": "-0.31481207155156876"
+       }
+      ],
+      "results": [],
+      "sql": "SELECT setseed(%s)",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 15,
+      "parameters": null,
+      "results": [
+       {
+        "digest": "88992a96bf038cfc90d71f4fea923ce063537ff9c10f099a523409f554e5ab4e",
+        "method": "fetchall",
+        "rows": 10,
+        "values": {
+         "columns": [
+          "cid"
+         ],
+         "ordered": "f05f2d1c6a8a3281910784b5f1df33cb827760b6099a4043229cfa0c1d76079d",
+         "types": [
+          "int8"
+         ],
+         "unencodable": [],
+         "unordered": "9f59b0176b29e749901842b2dd843711c68d68478164830b8a998db14176e6af"
+        }
+       }
+      ],
+      "sql": "SELECT \"cid\"\nFROM \"{schema}\".\"customers\"\nWHERE \"cid\" IS NOT NULL\nORDER BY random()\nLIMIT 10000",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 16,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'[{\"id\":8,\"e\":\"2024-02-01T00:00:00\",\"s\":\"2024-01-02T00:00:00\"},{\"id\":3,\"e\":\"2024-02-01T00:00:00\",\"s\":\"2024-01-02T00:00:00\"},{\"id\":5,\"e\":\"2024-02-01T00:00:00\",\"s\":\"2024-01-02T00:00:00\"},{\"id\":2,\"e\":\"2024-02-01T00:00:00\",\"s\":\"2024-01-02T00:00:00\"},{\"id\":7,\"e\":\"2024-02-01T00:00:00\",\"s\":\"2024-01-02T00:00:00\"},{\"id\":1,\"e\":\"2024-02-01T00:00:00\",\"s\":\"2024-01-02T00:00:00\"},{\"id\":4,\"e\":\"2024-02-01T00:00:00\",\"s\":\"2024-01-02T00:00:00\"},{\"id\":0,\"e\":\"2024-02-01T00:00:00\",\"s\":\"2024-01-02T00:00:00\"},{\"id\":9,\"e\":\"2024-02-01T00:00:00\",\"s\":\"2024-01-02T00:00:00\"},{\"id\":6,\"e\":\"2024-02-01T00:00:00\",\"s\":\"2024-01-02T00:00:00\"}]'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "22f67501c464967223892cdb62f703c0dbbbc4a7c4d12e61e197ef409229a8f8",
+        "method": "fetchall",
+        "rows": 90,
+        "values": {
+         "columns": [
+          "__kumo_batch__",
+          "ts"
+         ],
+         "ordered": "2176749a11c5e60fee2af1c6d6a1881259ad3ec5d0018a1af5716aedec944c88",
+         "types": [
+          "int8",
+          "timestamp"
+         ],
+         "unencodable": [],
+         "unordered": "2176749a11c5e60fee2af1c6d6a1881259ad3ec5d0018a1af5716aedec944c88"
+        }
+       }
+      ],
+      "sql": "WITH TMP AS (\n  SELECT (ordinality - 1)::bigint AS __KUMO_BATCH__, (value->>'id')::bigint AS __KUMO_ID__, (value->>'e')::timestamp without time zone AS __KUMO_END_TIME__, (value->>'s')::timestamp without time zone AS __KUMO_START_TIME__\n  FROM jsonb_array_elements(%s::jsonb) WITH ORDINALITY\n       AS input(value, ordinality)\n)\nSELECT TMP.__KUMO_BATCH__, \"ts\"\nFROM TMP\nJOIN \"{schema}\".\"details\"\n  ON \"cid\" = TMP.__KUMO_ID__\n AND \"ts\" <= TMP.__KUMO_END_TIME__\n AND \"ts\" > TMP.__KUMO_START_TIME__\nORDER BY TMP.__KUMO_BATCH__, \"ts\"",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 17,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'[8,3,5,2,7,1,4,0,9,6,0,1,2]'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "5dd486457b8e36e68f6cf30cebbd80af8eebf78cbafdb407f78f1919e4e1a863",
+        "method": "fetchall",
+        "rows": 13,
+        "values": {
+         "columns": [
+          "__kumo_batch__",
+          "cid",
+          "seg",
+          "__kumo_row__",
+          "__kumo_matches__"
+         ],
+         "ordered": "f9120554eddab509c1db9d91912ae833d5aa5c983ed930c1ac0764560328ad22",
+         "types": [
+          "int8",
+          "int8",
+          "text",
+          "int8",
+          "int8"
+         ],
+         "unencodable": [],
+         "unordered": "4869684ce2b36388988cab47407a2f1042dfb80e273c784055ac0937f64c8adc"
+        }
+       }
+      ],
+      "sql": "WITH TMP AS (\n  SELECT (ordinality - 1)::bigint AS __KUMO_BATCH__, (value #>> '{}')::bigint AS __KUMO_ID__\n  FROM jsonb_array_elements(%s::jsonb) WITH ORDINALITY\n       AS input(value, ordinality)\n)\nSELECT * FROM (\n  SELECT TMP.__KUMO_BATCH__, \"cid\", \"seg\",\n         ROW_NUMBER() OVER (PARTITION BY TMP.__KUMO_BATCH__\n           ORDER BY \"cid\") AS __KUMO_ROW__,\n         COUNT(*) OVER (PARTITION BY TMP.__KUMO_BATCH__) AS __KUMO_MATCHES__\n  FROM TMP\n  JOIN \"{schema}\".\"customers\"\n    ON \"cid\" = TMP.__KUMO_ID__\n) AS sampled\nWHERE __KUMO_ROW__ = 1\nORDER BY __KUMO_BATCH__",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 18,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'[{\"id\":8,\"e\":\"2024-01-02T00:00:00\"},{\"id\":3,\"e\":\"2024-01-02T00:00:00\"},{\"id\":5,\"e\":\"2024-01-02T00:00:00\"},{\"id\":2,\"e\":\"2024-01-02T00:00:00\"},{\"id\":7,\"e\":\"2024-01-02T00:00:00\"},{\"id\":1,\"e\":\"2024-01-02T00:00:00\"},{\"id\":4,\"e\":\"2024-01-02T00:00:00\"},{\"id\":0,\"e\":\"2024-01-02T00:00:00\"},{\"id\":9,\"e\":\"2024-01-02T00:00:00\"},{\"id\":6,\"e\":\"2024-01-02T00:00:00\"},{\"id\":0,\"e\":\"2024-02-01T00:00:00\"},{\"id\":1,\"e\":\"2024-02-01T00:00:00\"},{\"id\":2,\"e\":\"2024-02-01T00:00:00\"}]'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "7eb6c0e1c03bf1b51413d6959eab56dcb070d91b377e4503e2a41ec2080f7bc4",
+        "method": "fetchall",
+        "rows": 13,
+        "values": {
+         "columns": [
+          "__kumo_batch__",
+          "hid",
+          "cid",
+          "ts",
+          "__kumo_row__"
+         ],
+         "ordered": "7d7b7054575ecc33a752b6649e1e9db1c924d38fbe45fc486a079d2d5ddd1ae5",
+         "types": [
+          "int8",
+          "int8",
+          "int8",
+          "timestamp",
+          "int8"
+         ],
+         "unencodable": [],
+         "unordered": "65e4b172d11bc3fb61bf3ac0ce404204efd8c69541a8717e822b2c875ded4de5"
+        }
+       }
+      ],
+      "sql": "WITH TMP AS (\n  SELECT (ordinality - 1)::bigint AS __KUMO_BATCH__, (value->>'id')::bigint AS __KUMO_ID__, (value->>'e')::timestamp without time zone AS __KUMO_END_TIME__\n  FROM jsonb_array_elements(%s::jsonb) WITH ORDINALITY\n       AS input(value, ordinality)\n)\nSELECT TMP.__KUMO_BATCH__, sampled.*\nFROM TMP\nJOIN LATERAL (\n  SELECT \"hid\", \"cid\", \"ts\",\n         ROW_NUMBER() OVER (ORDER BY \"ts\" DESC, \"hid\") AS __KUMO_ROW__\n  FROM \"{schema}\".\"headers\"\n  WHERE \"cid\" = TMP.__KUMO_ID__\n    AND \"ts\" <= TMP.__KUMO_END_TIME__\n  ORDER BY \"ts\" DESC, \"hid\"\n  LIMIT 32\n) AS sampled ON TRUE\nORDER BY __KUMO_BATCH__, __KUMO_ROW__",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 19,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'[{\"id\":8,\"e\":\"2024-01-02T00:00:00\"},{\"id\":3,\"e\":\"2024-01-02T00:00:00\"},{\"id\":5,\"e\":\"2024-01-02T00:00:00\"},{\"id\":2,\"e\":\"2024-01-02T00:00:00\"},{\"id\":7,\"e\":\"2024-01-02T00:00:00\"},{\"id\":1,\"e\":\"2024-01-02T00:00:00\"},{\"id\":4,\"e\":\"2024-01-02T00:00:00\"},{\"id\":0,\"e\":\"2024-01-02T00:00:00\"},{\"id\":9,\"e\":\"2024-01-02T00:00:00\"},{\"id\":6,\"e\":\"2024-01-02T00:00:00\"},{\"id\":0,\"e\":\"2024-02-01T00:00:00\"},{\"id\":1,\"e\":\"2024-02-01T00:00:00\"},{\"id\":2,\"e\":\"2024-02-01T00:00:00\"}]'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "3166d8f5b23be946fdae4d2a1d1a0192844f69f570284b6ba3c754a6aa330338",
+        "method": "fetchall",
+        "rows": 39,
+        "values": {
+         "columns": [
+          "__kumo_batch__",
+          "did",
+          "hid",
+          "cid",
+          "ts",
+          "__kumo_row__"
+         ],
+         "ordered": "0abd94422a7f781a03152f341fb5885e06414447efffafe5cb71b019f02554b3",
+         "types": [
+          "int8",
+          "int8",
+          "int8",
+          "int8",
+          "timestamp",
+          "int8"
+         ],
+         "unencodable": [],
+         "unordered": "c18babe72c1576e47eca09a17c03c079408f6bcb79f5f6029cdea5e0d10f9158"
+        }
+       }
+      ],
+      "sql": "WITH TMP AS (\n  SELECT (ordinality - 1)::bigint AS __KUMO_BATCH__, (value->>'id')::bigint AS __KUMO_ID__, (value->>'e')::timestamp without time zone AS __KUMO_END_TIME__\n  FROM jsonb_array_elements(%s::jsonb) WITH ORDINALITY\n       AS input(value, ordinality)\n)\nSELECT TMP.__KUMO_BATCH__, sampled.*\nFROM TMP\nJOIN LATERAL (\n  SELECT \"did\", \"hid\", \"cid\", \"ts\",\n         ROW_NUMBER() OVER (ORDER BY \"ts\" DESC, \"did\") AS __KUMO_ROW__\n  FROM \"{schema}\".\"details\"\n  WHERE \"cid\" = TMP.__KUMO_ID__\n    AND \"ts\" <= TMP.__KUMO_END_TIME__\n  ORDER BY \"ts\" DESC, \"did\"\n  LIMIT 32\n) AS sampled ON TRUE\nORDER BY __KUMO_BATCH__, __KUMO_ROW__",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 20,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'[{\"id\":1,\"e\":\"2024-01-02T00:00:00\"},{\"id\":0,\"e\":\"2024-01-02T00:00:00\"},{\"id\":30,\"e\":\"2024-02-01T00:00:00\"},{\"id\":20,\"e\":\"2024-02-01T00:00:00\"},{\"id\":10,\"e\":\"2024-02-01T00:00:00\"},{\"id\":0,\"e\":\"2024-02-01T00:00:00\"},{\"id\":31,\"e\":\"2024-02-01T00:00:00\"},{\"id\":21,\"e\":\"2024-02-01T00:00:00\"},{\"id\":11,\"e\":\"2024-02-01T00:00:00\"},{\"id\":1,\"e\":\"2024-02-01T00:00:00\"},{\"id\":22,\"e\":\"2024-02-01T00:00:00\"},{\"id\":12,\"e\":\"2024-02-01T00:00:00\"},{\"id\":2,\"e\":\"2024-02-01T00:00:00\"}]'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "d968cf8e18d0912b5a94aa32521f50de18629fd9f18df6617cd47ee3a1a7012e",
+        "method": "fetchall",
+        "rows": 39,
+        "values": {
+         "columns": [
+          "__kumo_batch__",
+          "did",
+          "hid",
+          "cid",
+          "ts",
+          "__kumo_row__"
+         ],
+         "ordered": "e4fd63034deea70e061802b50810b58ee8521efde1aed7466b031a9ee850cd46",
+         "types": [
+          "int8",
+          "int8",
+          "int8",
+          "int8",
+          "timestamp",
+          "int8"
+         ],
+         "unencodable": [],
+         "unordered": "d3d0359304cbd53eebea364f0f64bd8b58e17e522d6af44ee90d7bb2668375e9"
+        }
+       }
+      ],
+      "sql": "WITH TMP AS (\n  SELECT (ordinality - 1)::bigint AS __KUMO_BATCH__, (value->>'id')::bigint AS __KUMO_ID__, (value->>'e')::timestamp without time zone AS __KUMO_END_TIME__\n  FROM jsonb_array_elements(%s::jsonb) WITH ORDINALITY\n       AS input(value, ordinality)\n)\nSELECT TMP.__KUMO_BATCH__, sampled.*\nFROM TMP\nJOIN LATERAL (\n  SELECT \"did\", \"hid\", \"cid\", \"ts\",\n         ROW_NUMBER() OVER (ORDER BY \"ts\" DESC, \"did\") AS __KUMO_ROW__\n  FROM \"{schema}\".\"details\"\n  WHERE \"hid\" = TMP.__KUMO_ID__\n    AND \"ts\" <= TMP.__KUMO_END_TIME__\n  ORDER BY \"ts\" DESC, \"did\"\n  LIMIT 32\n) AS sampled ON TRUE\nORDER BY __KUMO_BATCH__, __KUMO_ROW__",
+      "stage": "materialize"
+     },
+     {
+      "error": null,
+      "handle": 21,
+      "parameters": [
+       {
+        "type": "builtins.str",
+        "value": "'[1,0,29,19,9,30,20,10,31,21,11]'"
+       }
+      ],
+      "results": [
+       {
+        "digest": "0faba68335981839cb97aa01353d6cb1868faca5a5f76c7f629915a300957ef0",
+        "method": "fetchall",
+        "rows": 11,
+        "values": {
+         "columns": [
+          "__kumo_batch__",
+          "hid",
+          "cid",
+          "ts",
+          "__kumo_row__",
+          "__kumo_matches__"
+         ],
+         "ordered": "ddd4871762d9aaca002a0a66d83cfd548a5ea25306afffae7a631f74bc8a2330",
+         "types": [
+          "int8",
+          "int8",
+          "int8",
+          "timestamp",
+          "int8",
+          "int8"
+         ],
+         "unencodable": [],
+         "unordered": "749f0b1ab6907213cbe30c88fdce8c31cfd867a1046a873dc19053f3b1a0cb07"
+        }
+       }
+      ],
+      "sql": "WITH TMP AS (\n  SELECT (ordinality - 1)::bigint AS __KUMO_BATCH__, (value #>> '{}')::bigint AS __KUMO_ID__\n  FROM jsonb_array_elements(%s::jsonb) WITH ORDINALITY\n       AS input(value, ordinality)\n)\nSELECT * FROM (\n  SELECT TMP.__KUMO_BATCH__, \"hid\", \"cid\", \"ts\",\n         ROW_NUMBER() OVER (PARTITION BY TMP.__KUMO_BATCH__\n           ORDER BY \"hid\") AS __KUMO_ROW__,\n         COUNT(*) OVER (PARTITION BY TMP.__KUMO_BATCH__) AS __KUMO_MATCHES__\n  FROM TMP\n  JOIN \"{schema}\".\"headers\"\n    ON \"hid\" = TMP.__KUMO_ID__\n) AS sampled\nWHERE __KUMO_ROW__ = 1\nORDER BY __KUMO_BATCH__",
+      "stage": "materialize"
+     }
+    ]
+   },
+   "query_log": {
+    "bindings": 0,
+    "compared": 25,
+    "differing": [],
+    "statements": 25
+   }
+  },
+  "format": "sdm-observation/1",
+  "host": {
+   "warnings": [
+    "UserWarning",
+    "SDMWarning"
+   ]
+  },
+  "identity": {
+   "cell": "ref-pandas3",
+   "commit": {
+    "clean": true,
+    "sha": "8f3eb648abc0d00abfd34087fe5124106e137fa4"
+   },
+   "contract": null,
+   "inputs": {
+    "bases": "9d69fe4aea2be4a6a2d96ea03f5258147c537927e2c6e6716b6030836ebc62f8",
+    "case": "b1f32ffd2e0617a666d57264624b24a7542b5bc077d1810527c55aae114aa92e"
+   },
+   "native": null,
+   "native_loaded": false,
+   "operations": [],
+   "platform": "linux-x86_64",
+   "reference": {
+    "commit": {
+     "clean": true,
+     "sha": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1"
+    },
+    "environment": "4848c08cc7bbb66e99d4a7416854e401ab51e44413b509172cf0c121a55c78e3",
+    "guard": {
+     "after": "passed",
+     "before": "passed"
+    }
+   },
+   "runner": "python-ref",
+   "versions": {
+    "duckdb": "1.5.6",
+    "numpy": "2.5.3",
+    "pandas": "3.0.6",
+    "pyarrow": "25.0.1",
+    "python": "3.12.15"
+   }
+  },
+  "outcome": {
+   "code": null,
+   "error": null,
+   "result": "success",
+   "stage": "predict"
+  },
+  "public": {
+   "payloads": [
+    {
+     "method": "POST",
+     "parsed": {
+      "context": {
+       "instance_table": {
+        "columns": [
+         "instance_id",
+         "__kumo_entity_ref_0",
+         "__kumo_anchor_time",
+         "TARGET"
+        ],
+        "format": "arrays",
+        "rows": [
+         [
+          {
+           "number": "0"
+          },
+          {
+           "number": "8"
+          },
+          "2024-01-02T00:00:00.000000Z",
+          {
+           "number": "9.0"
+          }
+         ],
+         [
+          {
+           "number": "1"
+          },
+          {
+           "number": "3"
+          },
+          "2024-01-02T00:00:00.000000Z",
+          {
+           "number": "9.0"
+          }
+         ],
+         [
+          {
+           "number": "2"
+          },
+          {
+           "number": "5"
+          },
+          "2024-01-02T00:00:00.000000Z",
+          {
+           "number": "9.0"
+          }
+         ],
+         [
+          {
+           "number": "3"
+          },
+          {
+           "number": "2"
+          },
+          "2024-01-02T00:00:00.000000Z",
+          {
+           "number": "9.0"
+          }
+         ],
+         [
+          {
+           "number": "4"
+          },
+          {
+           "number": "7"
+          },
+          "2024-01-02T00:00:00.000000Z",
+          {
+           "number": "9.0"
+          }
+         ],
+         [
+          {
+           "number": "5"
+          },
+          {
+           "number": "1"
+          },
+          "2024-01-02T00:00:00.000000Z",
+          {
+           "number": "9.0"
+          }
+         ],
+         [
+          {
+           "number": "6"
+          },
+          {
+           "number": "4"
+          },
+          "2024-01-02T00:00:00.000000Z",
+          {
+           "number": "9.0"
+          }
+         ],
+         [
+          {
+           "number": "7"
+          },
+          {
+           "number": "0"
+          },
+          "2024-01-02T00:00:00.000000Z",
+          {
+           "number": "9.0"
+          }
+         ],
+         [
+          {
+           "number": "8"
+          },
+          {
+           "number": "9"
+          },
+          "2024-01-02T00:00:00.000000Z",
+          {
+           "number": "9.0"
+          }
+         ],
+         [
+          {
+           "number": "9"
+          },
+          {
+           "number": "6"
+          },
+          "2024-01-02T00:00:00.000000Z",
+          {
+           "number": "9.0"
+          }
+         ]
+        ]
+       },
+       "related_tables": {
+        "customers": {
+         "columns": [
+          "instance_id",
+          "cid",
+          "seg"
+         ],
+         "format": "arrays",
+         "rows": [
+          [
+           {
+            "number": "0"
+           },
+           {
+            "number": "8"
+           },
+           "x"
+          ],
+          [
+           {
+            "number": "1"
+           },
+           {
+            "number": "3"
+           },
+           "x"
+          ],
+          [
+           {
+            "number": "2"
+           },
+           {
+            "number": "5"
+           },
+           "x"
+          ],
+          [
+           {
+            "number": "3"
+           },
+           {
+            "number": "2"
+           },
+           "x"
+          ],
+          [
+           {
+            "number": "4"
+           },
+           {
+            "number": "7"
+           },
+           "x"
+          ],
+          [
+           {
+            "number": "5"
+           },
+           {
+            "number": "1"
+           },
+           "x"
+          ],
+          [
+           {
+            "number": "6"
+           },
+           {
+            "number": "4"
+           },
+           "x"
+          ],
+          [
+           {
+            "number": "7"
+           },
+           {
+            "number": "0"
+           },
+           "x"
+          ],
+          [
+           {
+            "number": "8"
+           },
+           {
+            "number": "9"
+           },
+           "x"
+          ],
+          [
+           {
+            "number": "9"
+           },
+           {
+            "number": "6"
+           },
+           "x"
+          ]
+         ]
+        },
+        "details": {
+         "columns": [
+          "instance_id",
+          "__node_id",
+          "ts",
+          "cid",
+          "hid"
+         ],
+         "format": "arrays",
+         "rows": [
+          [
+           {
+            "number": "3"
+           },
+           {
+            "number": "0"
+           },
+           "2024-01-02T00:00:00.000000Z",
+           {
+            "number": "2.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "3"
+           },
+           {
+            "number": "1"
+           },
+           "2024-01-02T00:00:00.000000Z",
+           {
+            "number": "2.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "3"
+           },
+           {
+            "number": "2"
+           },
+           "2024-01-02T00:00:00.000000Z",
+           {
+            "number": "2.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "5"
+           },
+           {
+            "number": "3"
+           },
+           "2024-01-01T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "5"
+           },
+           {
+            "number": "4"
+           },
+           "2024-01-01T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "5"
+           },
+           {
+            "number": "5"
+           },
+           "2024-01-01T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "5"
+           },
+           {
+            "number": "39"
+           },
+           "2024-01-02T00:00:00.000000Z",
+           null,
+           {
+            "number": "0.0"
+           }
+          ],
+          [
+           {
+            "number": "5"
+           },
+           {
+            "number": "40"
+           },
+           "2024-01-02T00:00:00.000000Z",
+           null,
+           {
+            "number": "0.0"
+           }
+          ],
+          [
+           {
+            "number": "5"
+           },
+           {
+            "number": "41"
+           },
+           "2024-01-02T00:00:00.000000Z",
+           null,
+           {
+            "number": "0.0"
+           }
+          ],
+          [
+           {
+            "number": "7"
+           },
+           {
+            "number": "42"
+           },
+           "2024-01-01T00:00:00.000000Z",
+           null,
+           {
+            "number": "1.0"
+           }
+          ],
+          [
+           {
+            "number": "7"
+           },
+           {
+            "number": "43"
+           },
+           "2024-01-01T00:00:00.000000Z",
+           null,
+           {
+            "number": "1.0"
+           }
+          ],
+          [
+           {
+            "number": "7"
+           },
+           {
+            "number": "44"
+           },
+           "2024-01-01T00:00:00.000000Z",
+           null,
+           {
+            "number": "1.0"
+           }
+          ]
+         ]
+        },
+        "headers": {
+         "columns": [
+          "instance_id",
+          "__node_id",
+          "ts",
+          "cid"
+         ],
+         "format": "arrays",
+         "rows": [
+          [
+           {
+            "number": "5"
+           },
+           {
+            "number": "0"
+           },
+           "2024-01-02T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           }
+          ],
+          [
+           {
+            "number": "7"
+           },
+           {
+            "number": "1"
+           },
+           "2024-01-01T00:00:00.000000Z",
+           {
+            "number": "0.0"
+           }
+          ],
+          [
+           {
+            "number": "3"
+           },
+           {
+            "number": "13"
+           },
+           "2024-01-02T00:00:00.000000Z",
+           null
+          ],
+          [
+           {
+            "number": "5"
+           },
+           {
+            "number": "14"
+           },
+           "2024-01-01T00:00:00.000000Z",
+           null
+          ]
+         ]
+        }
+       }
+      },
+      "inference": {
+       "run_mode": "fast",
+       "use_prediction_time": false
+      },
+      "metadata": {
+       "num_context_examples": {
+        "number": "10"
+       },
+       "num_prediction_examples": {
+        "number": "3"
+       },
+       "request_id": "sdm-01928b4579fc",
+       "source_query": "PREDICT COUNT(details.*, 0, 30, days) FOR EACH customers.cid"
+      },
+      "model": "kumo-relational",
+      "output": {
+       "fields": [
+        "prediction"
+       ],
+       "prediction_statistic": "median"
+      },
+      "predict": {
+       "instance_table": {
+        "columns": [
+         "instance_id",
+         "__kumo_entity_ref_0",
+         "__kumo_anchor_time"
+        ],
+        "format": "arrays",
+        "rows": [
+         [
+          {
+           "number": "10"
+          },
+          {
+           "number": "0"
+          },
+          "2024-02-01T00:00:00.000000Z"
+         ],
+         [
+          {
+           "number": "11"
+          },
+          {
+           "number": "1"
+          },
+          "2024-02-01T00:00:00.000000Z"
+         ],
+         [
+          {
+           "number": "12"
+          },
+          {
+           "number": "2"
+          },
+          "2024-02-01T00:00:00.000000Z"
+         ]
+        ]
+       },
+       "related_tables": {
+        "customers": {
+         "columns": [
+          "instance_id",
+          "cid",
+          "seg"
+         ],
+         "format": "arrays",
+         "rows": [
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "0"
+           },
+           "x"
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "1"
+           },
+           "x"
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "2"
+           },
+           "x"
+          ]
+         ]
+        },
+        "details": {
+         "columns": [
+          "instance_id",
+          "__node_id",
+          "ts",
+          "cid",
+          "hid"
+         ],
+         "format": "arrays",
+         "rows": [
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "6"
+           },
+           "2024-01-30T00:00:00.000000Z",
+           {
+            "number": "0.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "7"
+           },
+           "2024-01-30T00:00:00.000000Z",
+           {
+            "number": "0.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "8"
+           },
+           "2024-01-30T00:00:00.000000Z",
+           {
+            "number": "0.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "9"
+           },
+           "2024-01-20T00:00:00.000000Z",
+           {
+            "number": "0.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "10"
+           },
+           "2024-01-20T00:00:00.000000Z",
+           {
+            "number": "0.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "11"
+           },
+           "2024-01-20T00:00:00.000000Z",
+           {
+            "number": "0.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "12"
+           },
+           "2024-01-10T00:00:00.000000Z",
+           {
+            "number": "0.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "13"
+           },
+           "2024-01-10T00:00:00.000000Z",
+           {
+            "number": "0.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "14"
+           },
+           "2024-01-10T00:00:00.000000Z",
+           {
+            "number": "0.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "15"
+           },
+           "2024-01-31T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "16"
+           },
+           "2024-01-31T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "17"
+           },
+           "2024-01-31T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "18"
+           },
+           "2024-01-21T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "19"
+           },
+           "2024-01-21T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "20"
+           },
+           "2024-01-21T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "21"
+           },
+           "2024-01-11T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "22"
+           },
+           "2024-01-11T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "23"
+           },
+           "2024-01-11T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "24"
+           },
+           "2024-01-01T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "25"
+           },
+           "2024-01-01T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "26"
+           },
+           "2024-01-01T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "27"
+           },
+           "2024-02-01T00:00:00.000000Z",
+           {
+            "number": "2.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "28"
+           },
+           "2024-02-01T00:00:00.000000Z",
+           {
+            "number": "2.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "29"
+           },
+           "2024-02-01T00:00:00.000000Z",
+           {
+            "number": "2.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "30"
+           },
+           "2024-01-22T00:00:00.000000Z",
+           {
+            "number": "2.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "31"
+           },
+           "2024-01-22T00:00:00.000000Z",
+           {
+            "number": "2.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "32"
+           },
+           "2024-01-22T00:00:00.000000Z",
+           {
+            "number": "2.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "33"
+           },
+           "2024-01-12T00:00:00.000000Z",
+           {
+            "number": "2.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "34"
+           },
+           "2024-01-12T00:00:00.000000Z",
+           {
+            "number": "2.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "35"
+           },
+           "2024-01-12T00:00:00.000000Z",
+           {
+            "number": "2.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "36"
+           },
+           "2024-01-02T00:00:00.000000Z",
+           {
+            "number": "2.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "37"
+           },
+           "2024-01-02T00:00:00.000000Z",
+           {
+            "number": "2.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "38"
+           },
+           "2024-01-02T00:00:00.000000Z",
+           {
+            "number": "2.0"
+           },
+           null
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "45"
+           },
+           "2024-01-31T00:00:00.000000Z",
+           null,
+           {
+            "number": "2.0"
+           }
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "46"
+           },
+           "2024-01-31T00:00:00.000000Z",
+           null,
+           {
+            "number": "2.0"
+           }
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "47"
+           },
+           "2024-01-31T00:00:00.000000Z",
+           null,
+           {
+            "number": "2.0"
+           }
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "48"
+           },
+           "2024-01-21T00:00:00.000000Z",
+           null,
+           {
+            "number": "3.0"
+           }
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "49"
+           },
+           "2024-01-21T00:00:00.000000Z",
+           null,
+           {
+            "number": "3.0"
+           }
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "50"
+           },
+           "2024-01-21T00:00:00.000000Z",
+           null,
+           {
+            "number": "3.0"
+           }
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "51"
+           },
+           "2024-01-11T00:00:00.000000Z",
+           null,
+           {
+            "number": "4.0"
+           }
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "52"
+           },
+           "2024-01-11T00:00:00.000000Z",
+           null,
+           {
+            "number": "4.0"
+           }
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "53"
+           },
+           "2024-01-11T00:00:00.000000Z",
+           null,
+           {
+            "number": "4.0"
+           }
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "54"
+           },
+           "2024-01-01T00:00:00.000000Z",
+           null,
+           {
+            "number": "5.0"
+           }
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "55"
+           },
+           "2024-01-01T00:00:00.000000Z",
+           null,
+           {
+            "number": "5.0"
+           }
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "56"
+           },
+           "2024-01-01T00:00:00.000000Z",
+           null,
+           {
+            "number": "5.0"
+           }
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "57"
+           },
+           "2024-02-01T00:00:00.000000Z",
+           null,
+           {
+            "number": "6.0"
+           }
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "58"
+           },
+           "2024-02-01T00:00:00.000000Z",
+           null,
+           {
+            "number": "6.0"
+           }
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "59"
+           },
+           "2024-02-01T00:00:00.000000Z",
+           null,
+           {
+            "number": "6.0"
+           }
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "60"
+           },
+           "2024-01-22T00:00:00.000000Z",
+           null,
+           {
+            "number": "7.0"
+           }
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "61"
+           },
+           "2024-01-22T00:00:00.000000Z",
+           null,
+           {
+            "number": "7.0"
+           }
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "62"
+           },
+           "2024-01-22T00:00:00.000000Z",
+           null,
+           {
+            "number": "7.0"
+           }
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "63"
+           },
+           "2024-01-12T00:00:00.000000Z",
+           null,
+           {
+            "number": "8.0"
+           }
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "64"
+           },
+           "2024-01-12T00:00:00.000000Z",
+           null,
+           {
+            "number": "8.0"
+           }
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "65"
+           },
+           "2024-01-12T00:00:00.000000Z",
+           null,
+           {
+            "number": "8.0"
+           }
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "66"
+           },
+           "2024-01-02T00:00:00.000000Z",
+           null,
+           {
+            "number": "9.0"
+           }
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "67"
+           },
+           "2024-01-02T00:00:00.000000Z",
+           null,
+           {
+            "number": "9.0"
+           }
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "68"
+           },
+           "2024-01-02T00:00:00.000000Z",
+           null,
+           {
+            "number": "9.0"
+           }
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "69"
+           },
+           "2024-01-23T00:00:00.000000Z",
+           null,
+           {
+            "number": "10.0"
+           }
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "70"
+           },
+           "2024-01-23T00:00:00.000000Z",
+           null,
+           {
+            "number": "10.0"
+           }
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "71"
+           },
+           "2024-01-23T00:00:00.000000Z",
+           null,
+           {
+            "number": "10.0"
+           }
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "72"
+           },
+           "2024-01-13T00:00:00.000000Z",
+           null,
+           {
+            "number": "11.0"
+           }
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "73"
+           },
+           "2024-01-13T00:00:00.000000Z",
+           null,
+           {
+            "number": "11.0"
+           }
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "74"
+           },
+           "2024-01-13T00:00:00.000000Z",
+           null,
+           {
+            "number": "11.0"
+           }
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "75"
+           },
+           "2024-01-03T00:00:00.000000Z",
+           null,
+           {
+            "number": "12.0"
+           }
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "76"
+           },
+           "2024-01-03T00:00:00.000000Z",
+           null,
+           {
+            "number": "12.0"
+           }
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "77"
+           },
+           "2024-01-03T00:00:00.000000Z",
+           null,
+           {
+            "number": "12.0"
+           }
+          ]
+         ]
+        },
+        "headers": {
+         "columns": [
+          "instance_id",
+          "__node_id",
+          "ts",
+          "cid"
+         ],
+         "format": "arrays",
+         "rows": [
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "2"
+           },
+           "2024-01-31T00:00:00.000000Z",
+           {
+            "number": "0.0"
+           }
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "3"
+           },
+           "2024-01-21T00:00:00.000000Z",
+           {
+            "number": "0.0"
+           }
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "4"
+           },
+           "2024-01-11T00:00:00.000000Z",
+           {
+            "number": "0.0"
+           }
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "5"
+           },
+           "2024-01-01T00:00:00.000000Z",
+           {
+            "number": "0.0"
+           }
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "6"
+           },
+           "2024-02-01T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           }
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "7"
+           },
+           "2024-01-22T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           }
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "8"
+           },
+           "2024-01-12T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           }
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "9"
+           },
+           "2024-01-02T00:00:00.000000Z",
+           {
+            "number": "1.0"
+           }
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "10"
+           },
+           "2024-01-23T00:00:00.000000Z",
+           {
+            "number": "2.0"
+           }
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "11"
+           },
+           "2024-01-13T00:00:00.000000Z",
+           {
+            "number": "2.0"
+           }
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "12"
+           },
+           "2024-01-03T00:00:00.000000Z",
+           {
+            "number": "2.0"
+           }
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "15"
+           },
+           "2024-01-30T00:00:00.000000Z",
+           null
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "16"
+           },
+           "2024-01-20T00:00:00.000000Z",
+           null
+          ],
+          [
+           {
+            "number": "10"
+           },
+           {
+            "number": "17"
+           },
+           "2024-01-10T00:00:00.000000Z",
+           null
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "18"
+           },
+           "2024-01-31T00:00:00.000000Z",
+           null
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "19"
+           },
+           "2024-01-21T00:00:00.000000Z",
+           null
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "20"
+           },
+           "2024-01-11T00:00:00.000000Z",
+           null
+          ],
+          [
+           {
+            "number": "11"
+           },
+           {
+            "number": "21"
+           },
+           "2024-01-01T00:00:00.000000Z",
+           null
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "22"
+           },
+           "2024-02-01T00:00:00.000000Z",
+           null
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "23"
+           },
+           "2024-01-22T00:00:00.000000Z",
+           null
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "24"
+           },
+           "2024-01-12T00:00:00.000000Z",
+           null
+          ],
+          [
+           {
+            "number": "12"
+           },
+           {
+            "number": "25"
+           },
+           "2024-01-02T00:00:00.000000Z",
+           null
+          ]
+         ]
+        }
+       }
+      },
+      "schema": {
+       "instance_table": {
+        "columns": {
+         "TARGET": {
+          "dtype": "float32",
+          "stype": "numerical"
+         },
+         "__kumo_anchor_time": {
+          "dtype": "timestamp[us]",
+          "nullable": false,
+          "stype": "timestamp"
+         },
+         "__kumo_entity_ref_0": {
+          "dtype": "int64",
+          "stype": "ID"
+         },
+         "instance_id": {
+          "dtype": "int64",
+          "nullable": false,
+          "stype": "ID"
+         }
+        },
+        "primary_key": "instance_id"
+       },
+       "related_tables": {
+        "customers": {
+         "columns": {
+          "cid": {
+           "dtype": "int64",
+           "nullable": false
+          },
+          "instance_id": {
+           "dtype": "int64",
+           "nullable": false,
+           "stype": "ID"
+          },
+          "seg": {
+           "dtype": "string",
+           "stype": "categorical"
+          }
+         },
+         "primary_key": [
+          "instance_id",
+          "cid"
+         ]
+        },
+        "details": {
+         "columns": {
+          "__node_id": {
+           "dtype": "int64",
+           "nullable": false,
+           "stype": "ID"
+          },
+          "cid": {
+           "dtype": "float64",
+           "stype": "ID"
+          },
+          "hid": {
+           "dtype": "float64",
+           "stype": "ID"
+          },
+          "instance_id": {
+           "dtype": "int64",
+           "nullable": false,
+           "stype": "ID"
+          },
+          "ts": {
+           "dtype": "timestamp[us]",
+           "stype": "timestamp"
+          }
+         },
+         "primary_key": [
+          "instance_id",
+          "__node_id"
+         ]
+        },
+        "headers": {
+         "columns": {
+          "__node_id": {
+           "dtype": "int64",
+           "nullable": false,
+           "stype": "ID"
+          },
+          "cid": {
+           "dtype": "float64",
+           "stype": "ID"
+          },
+          "instance_id": {
+           "dtype": "int64",
+           "nullable": false,
+           "stype": "ID"
+          },
+          "ts": {
+           "dtype": "timestamp[us]",
+           "stype": "timestamp"
+          }
+         },
+         "primary_key": [
+          "instance_id",
+          "__node_id"
+         ]
+        }
+       },
+       "relationships": [
+        {
+         "source_columns": [
+          "__kumo_entity_ref_0"
+         ],
+         "target_columns": [
+          "cid"
+         ],
+         "target_table": "customers"
+        },
+        {
+         "source_columns": [
+          "cid"
+         ],
+         "source_table": "headers",
+         "target_columns": [
+          "cid"
+         ],
+         "target_table": "customers"
+        },
+        {
+         "source_columns": [
+          "cid"
+         ],
+         "source_table": "details",
+         "target_columns": [
+          "cid"
+         ],
+         "target_table": "customers"
+        },
+        {
+         "source_columns": [
+          "hid"
+         ],
+         "source_table": "details",
+         "target_columns": [
+          "__node_id"
+         ],
+         "target_table": "headers"
+        }
+       ]
+      },
+      "task": {
+       "anchor_time_column": "__kumo_anchor_time",
+       "entity_table_names": [
+        "customers"
+       ],
+       "kind": "regression",
+       "target": {
+        "column_name": "TARGET",
+        "dtype": "float32"
+       }
+      }
+     },
+     "path": "/v1/predictions",
+     "sha256": "ca6c22f2e8f367a2a8e584958da130b7cfd716403d7f1ed5c624b8f19d6d91ec"
+    }
+   ],
+   "result": {
+    "columns": [
+     {
+      "dtype": "int64",
+      "name": "row_index"
+     },
+     {
+      "dtype": "int64",
+      "name": "id"
+     },
+     {
+      "dtype": "float64",
+      "name": "prediction"
+     }
+    ],
+    "digest": "eb0e794d963bbd6f082e99b1ef5efd7095c91a3ee92f0cb7492aa8600cf1f6e4",
+    "rows": 3
+   },
+   "result_text": "f4035b1d60cfa07c3d687b35bea2fe7cc4b6d22aa7560e4fe81327ea1cd85d41",
+   "schema": {
+    "links": [
+     [
+      "headers",
+      "cid",
+      "customers",
+      "cid"
+     ],
+     [
+      "details",
+      "hid",
+      "headers",
+      "hid"
+     ],
+     [
+      "details",
+      "cid",
+      "customers",
+      "cid"
+     ]
+    ],
+    "tables": [
+     {
+      "columns": [
+       {
+        "dtype": "int64",
+        "name": "cid",
+        "stype": "ID"
+       },
+       {
+        "dtype": "string",
+        "name": "seg",
+        "stype": "categorical"
+       }
+      ],
+      "duplicate_keys": 0,
+      "name": "customers",
+      "primary_key": "cid",
+      "time_column": null
+     },
+     {
+      "columns": [
+       {
+        "dtype": "int64",
+        "name": "did",
+        "stype": "ID"
+       },
+       {
+        "dtype": "int64",
+        "name": "hid",
+        "stype": "ID"
+       },
+       {
+        "dtype": "int64",
+        "name": "cid",
+        "stype": "ID"
+       },
+       {
+        "dtype": "timestamp[us]",
+        "name": "ts",
+        "stype": "timestamp"
+       }
+      ],
+      "duplicate_keys": 0,
+      "name": "details",
+      "primary_key": "did",
+      "time_column": "ts"
+     },
+     {
+      "columns": [
+       {
+        "dtype": "int64",
+        "name": "hid",
+        "stype": "ID"
+       },
+       {
+        "dtype": "int64",
+        "name": "cid",
+        "stype": "ID"
+       },
+       {
+        "dtype": "timestamp[us]",
+        "name": "ts",
+        "stype": "timestamp"
+       }
+      ],
+      "duplicate_keys": 0,
+      "name": "headers",
+      "primary_key": "hid",
+      "time_column": "ts"
+     }
+    ]
+   }
+  }
+ },
+ "tables": [
+  {
+   "name": "customers",
+   "data": "tables/5477a6073e7d23886ad68834c15669db1176c2af3808549b0fef2326dfaeda5e.arrows"
+  },
+  {
+   "name": "details",
+   "data": "tables/901ab41c95083ac3612b1c180cf83013eeb60eb516b152cb7b43cc3206feb956.arrows"
+  },
+  {
+   "name": "headers",
+   "data": "tables/e19088cacfc215fedc362109cd268a4ffcb023e2cb85b465b7c33dfa9cea5ec7.arrows"
+  }
+ ],
+ "derived": [],
+ "draws": [],
+ "statements": [
+  {
+   "text": "SELECT c.column_name, c.data_type, c.udt_name,\n       c.numeric_scale, c.is_nullable, c.table_schema,\n       c.table_name,\n       pg_catalog.format_type(a.atttypid, a.atttypmod)\nFROM information_schema.columns c\nJOIN pg_catalog.pg_namespace n\n  ON n.nspname = c.table_schema\nJOIN pg_catalog.pg_class rel\n  ON rel.relnamespace = n.oid AND rel.relname = c.table_name\nJOIN pg_catalog.pg_attribute a\n  ON a.attrelid = rel.oid AND a.attname = c.column_name\n AND a.attnum > 0 AND NOT a.attisdropped\nWHERE c.table_schema = %s AND c.table_name = %s\nORDER BY c.ordinal_position",
+   "parameters": [
+    "{schema}",
+    "customers"
+   ],
+   "result": "tables/0d5ff98b8e826eb3b43ac5b6a75e30a6c0ae6f021247d6447397059a895ce9cb.arrows"
+  },
+  {
+   "text": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = %s AND tc.table_name = %s\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE', 'FOREIGN KEY')",
+   "parameters": [
+    "{schema}",
+    "customers"
+   ],
+   "result": "tables/e286250e156c178de91f308c659bcadbbe16d0439b1bb53538cfd8c7e30c5f63.arrows"
+  },
+  {
+   "text": "SELECT \"cid\", \"seg\" FROM \"{schema}\".\"customers\" LIMIT 1000",
+   "parameters": [],
+   "result": "tables/5477a6073e7d23886ad68834c15669db1176c2af3808549b0fef2326dfaeda5e.arrows"
+  },
+  {
+   "text": "SELECT c.column_name, c.data_type, c.udt_name,\n       c.numeric_scale, c.is_nullable, c.table_schema,\n       c.table_name,\n       pg_catalog.format_type(a.atttypid, a.atttypmod)\nFROM information_schema.columns c\nJOIN pg_catalog.pg_namespace n\n  ON n.nspname = c.table_schema\nJOIN pg_catalog.pg_class rel\n  ON rel.relnamespace = n.oid AND rel.relname = c.table_name\nJOIN pg_catalog.pg_attribute a\n  ON a.attrelid = rel.oid AND a.attname = c.column_name\n AND a.attnum > 0 AND NOT a.attisdropped\nWHERE c.table_schema = %s AND c.table_name = %s\nORDER BY c.ordinal_position",
+   "parameters": [
+    "{schema}",
+    "details"
+   ],
+   "result": "tables/59eb25e0ceb8aabaca85c29791b82c49ba8fa912a6f070cdd36fffcf87b6b870.arrows"
+  },
+  {
+   "text": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = %s AND tc.table_name = %s\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE', 'FOREIGN KEY')",
+   "parameters": [
+    "{schema}",
+    "details"
+   ],
+   "result": "tables/e286250e156c178de91f308c659bcadbbe16d0439b1bb53538cfd8c7e30c5f63.arrows"
+  },
+  {
+   "text": "SELECT \"did\", \"hid\", \"cid\", \"ts\" FROM \"{schema}\".\"details\" LIMIT 1000",
+   "parameters": [],
+   "result": "tables/901ab41c95083ac3612b1c180cf83013eeb60eb516b152cb7b43cc3206feb956.arrows"
+  },
+  {
+   "text": "SELECT c.column_name, c.data_type, c.udt_name,\n       c.numeric_scale, c.is_nullable, c.table_schema,\n       c.table_name,\n       pg_catalog.format_type(a.atttypid, a.atttypmod)\nFROM information_schema.columns c\nJOIN pg_catalog.pg_namespace n\n  ON n.nspname = c.table_schema\nJOIN pg_catalog.pg_class rel\n  ON rel.relnamespace = n.oid AND rel.relname = c.table_name\nJOIN pg_catalog.pg_attribute a\n  ON a.attrelid = rel.oid AND a.attname = c.column_name\n AND a.attnum > 0 AND NOT a.attisdropped\nWHERE c.table_schema = %s AND c.table_name = %s\nORDER BY c.ordinal_position",
+   "parameters": [
+    "{schema}",
+    "headers"
+   ],
+   "result": "tables/14a6c4cbe8cc9851408aebd7680f3498260f3a97c2cd60b5eef4ce41c9fe7c95.arrows"
+  },
+  {
+   "text": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = %s AND tc.table_name = %s\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE', 'FOREIGN KEY')",
+   "parameters": [
+    "{schema}",
+    "headers"
+   ],
+   "result": "tables/e286250e156c178de91f308c659bcadbbe16d0439b1bb53538cfd8c7e30c5f63.arrows"
+  },
+  {
+   "text": "SELECT \"hid\", \"cid\", \"ts\" FROM \"{schema}\".\"headers\" LIMIT 1000",
+   "parameters": [],
+   "result": "tables/e19088cacfc215fedc362109cd268a4ffcb023e2cb85b465b7c33dfa9cea5ec7.arrows"
+  },
+  {
+   "text": "SELECT tc.constraint_name, kcu.column_name,\n       target_kcu.table_schema, target_kcu.table_name,\n       target_kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN information_schema.key_column_usage target_kcu\n  ON rc.unique_constraint_catalog = target_kcu.constraint_catalog\n AND rc.unique_constraint_schema = target_kcu.constraint_schema\n AND rc.unique_constraint_name = target_kcu.constraint_name\n AND target_kcu.ordinal_position = kcu.position_in_unique_constraint\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = %s AND tc.table_name = %s\nORDER BY tc.constraint_name, kcu.ordinal_position",
+   "parameters": [
+    "{schema}",
+    "customers"
+   ],
+   "result": "tables/394d63ec01769df0784105fd26102fc50851ceb1c753d9da8d1d61b3047e386e.arrows"
+  },
+  {
+   "text": "SELECT tc.constraint_name, kcu.column_name,\n       target_kcu.table_schema, target_kcu.table_name,\n       target_kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN information_schema.key_column_usage target_kcu\n  ON rc.unique_constraint_catalog = target_kcu.constraint_catalog\n AND rc.unique_constraint_schema = target_kcu.constraint_schema\n AND rc.unique_constraint_name = target_kcu.constraint_name\n AND target_kcu.ordinal_position = kcu.position_in_unique_constraint\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = %s AND tc.table_name = %s\nORDER BY tc.constraint_name, kcu.ordinal_position",
+   "parameters": [
+    "{schema}",
+    "details"
+   ],
+   "result": "tables/394d63ec01769df0784105fd26102fc50851ceb1c753d9da8d1d61b3047e386e.arrows"
+  },
+  {
+   "text": "SELECT tc.constraint_name, kcu.column_name,\n       target_kcu.table_schema, target_kcu.table_name,\n       target_kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN information_schema.key_column_usage target_kcu\n  ON rc.unique_constraint_catalog = target_kcu.constraint_catalog\n AND rc.unique_constraint_schema = target_kcu.constraint_schema\n AND rc.unique_constraint_name = target_kcu.constraint_name\n AND target_kcu.ordinal_position = kcu.position_in_unique_constraint\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = %s AND tc.table_name = %s\nORDER BY tc.constraint_name, kcu.ordinal_position",
+   "parameters": [
+    "{schema}",
+    "headers"
+   ],
+   "result": "tables/394d63ec01769df0784105fd26102fc50851ceb1c753d9da8d1d61b3047e386e.arrows"
+  },
+  {
+   "text": "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT \"cid\") AS d, COUNT(CASE WHEN \"cid\" IS NULL THEN 1 END) AS z\nFROM \"{schema}\".\"customers\"\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT \"did\") AS d, COUNT(CASE WHEN \"did\" IS NULL THEN 1 END) AS z\nFROM \"{schema}\".\"details\"\nUNION ALL\nSELECT 2 AS k, COUNT(*) AS n, COUNT(DISTINCT \"hid\") AS d, COUNT(CASE WHEN \"hid\" IS NULL THEN 1 END) AS z\nFROM \"{schema}\".\"headers\"",
+   "parameters": [],
+   "result": "tables/6b8e6331b386d31fd06978375c6748a553f8bb9290b295e737344da8a58ffe10.arrows"
+  },
+  {
+   "text": "SELECT COUNT(*) FROM \"{schema}\".\"customers\"",
+   "parameters": [],
+   "result": "tables/f4481973642fc3d8c9d1fe562146d351af29f2c7cf692e337deab88638b11a72.arrows"
+  },
+  {
+   "text": "SELECT COUNT(*) FROM \"{schema}\".\"details\"",
+   "parameters": [],
+   "result": "tables/9d4ccfb4a5b2c42fd08dad5af92476fd3338b20e6572cef819b112f15ad7bb03.arrows"
+  },
+  {
+   "text": "SELECT COUNT(*) FROM \"{schema}\".\"headers\"",
+   "parameters": [],
+   "result": "tables/91fddec48ce99f165974f1451b30a0ae41d78c1d3b8764fc2186d2fd555d09e9.arrows"
+  },
+  {
+   "text": "SELECT 0 AS table_index, MIN(\"ts\") AS min_date, MAX(\"ts\") AS max_date\nFROM \"{schema}\".\"details\"",
+   "parameters": [],
+   "result": "tables/444a74c04ac406f98c35aae2b7b9803e8b28ec263850d1edec507242e00191a3.arrows"
+  },
+  {
+   "text": "SELECT setseed(%s)",
+   "parameters": [
+    -0.31481207155156876
+   ],
+   "result": null
+  },
+  {
+   "text": "SELECT \"cid\"\nFROM \"{schema}\".\"customers\"\nWHERE \"cid\" IS NOT NULL\nORDER BY random()\nLIMIT 10000",
+   "parameters": [],
+   "result": "tables/7b496a8058b4f7d5cca4a596042370de6397c9e43a4eb604e405ae6cfd74b615.arrows"
+  },
+  {
+   "text": "WITH TMP AS (\n  SELECT (ordinality - 1)::bigint AS __KUMO_BATCH__, (value->>'id')::bigint AS __KUMO_ID__, (value->>'e')::timestamp without time zone AS __KUMO_END_TIME__, (value->>'s')::timestamp without time zone AS __KUMO_START_TIME__\n  FROM jsonb_array_elements(%s::jsonb) WITH ORDINALITY\n       AS input(value, ordinality)\n)\nSELECT TMP.__KUMO_BATCH__, \"ts\"\nFROM TMP\nJOIN \"{schema}\".\"details\"\n  ON \"cid\" = TMP.__KUMO_ID__\n AND \"ts\" <= TMP.__KUMO_END_TIME__\n AND \"ts\" > TMP.__KUMO_START_TIME__\nORDER BY TMP.__KUMO_BATCH__, \"ts\"",
+   "parameters": [
+    "[{\"id\":8,\"e\":\"2024-02-01T00:00:00\",\"s\":\"2024-01-02T00:00:00\"},{\"id\":3,\"e\":\"2024-02-01T00:00:00\",\"s\":\"2024-01-02T00:00:00\"},{\"id\":5,\"e\":\"2024-02-01T00:00:00\",\"s\":\"2024-01-02T00:00:00\"},{\"id\":2,\"e\":\"2024-02-01T00:00:00\",\"s\":\"2024-01-02T00:00:00\"},{\"id\":7,\"e\":\"2024-02-01T00:00:00\",\"s\":\"2024-01-02T00:00:00\"},{\"id\":1,\"e\":\"2024-02-01T00:00:00\",\"s\":\"2024-01-02T00:00:00\"},{\"id\":4,\"e\":\"2024-02-01T00:00:00\",\"s\":\"2024-01-02T00:00:00\"},{\"id\":0,\"e\":\"2024-02-01T00:00:00\",\"s\":\"2024-01-02T00:00:00\"},{\"id\":9,\"e\":\"2024-02-01T00:00:00\",\"s\":\"2024-01-02T00:00:00\"},{\"id\":6,\"e\":\"2024-02-01T00:00:00\",\"s\":\"2024-01-02T00:00:00\"}]"
+   ],
+   "result": "tables/023e6fc0ec5e6fbba4ad2997a2d011f7206379f6667ef42755e5cd680684020a.arrows"
+  },
+  {
+   "text": "WITH TMP AS (\n  SELECT (ordinality - 1)::bigint AS __KUMO_BATCH__, (value #>> '{}')::bigint AS __KUMO_ID__\n  FROM jsonb_array_elements(%s::jsonb) WITH ORDINALITY\n       AS input(value, ordinality)\n)\nSELECT * FROM (\n  SELECT TMP.__KUMO_BATCH__, \"cid\", \"seg\",\n         ROW_NUMBER() OVER (PARTITION BY TMP.__KUMO_BATCH__\n           ORDER BY \"cid\") AS __KUMO_ROW__,\n         COUNT(*) OVER (PARTITION BY TMP.__KUMO_BATCH__) AS __KUMO_MATCHES__\n  FROM TMP\n  JOIN \"{schema}\".\"customers\"\n    ON \"cid\" = TMP.__KUMO_ID__\n) AS sampled\nWHERE __KUMO_ROW__ = 1\nORDER BY __KUMO_BATCH__",
+   "parameters": [
+    "[8,3,5,2,7,1,4,0,9,6,0,1,2]"
+   ],
+   "result": "tables/1506c883abf9948aedd5e96cf31a41f0dd0ea35192e98246171764cd9a81832c.arrows"
+  },
+  {
+   "text": "WITH TMP AS (\n  SELECT (ordinality - 1)::bigint AS __KUMO_BATCH__, (value->>'id')::bigint AS __KUMO_ID__, (value->>'e')::timestamp without time zone AS __KUMO_END_TIME__\n  FROM jsonb_array_elements(%s::jsonb) WITH ORDINALITY\n       AS input(value, ordinality)\n)\nSELECT TMP.__KUMO_BATCH__, sampled.*\nFROM TMP\nJOIN LATERAL (\n  SELECT \"hid\", \"cid\", \"ts\",\n         ROW_NUMBER() OVER (ORDER BY \"ts\" DESC, \"hid\") AS __KUMO_ROW__\n  FROM \"{schema}\".\"headers\"\n  WHERE \"cid\" = TMP.__KUMO_ID__\n    AND \"ts\" <= TMP.__KUMO_END_TIME__\n  ORDER BY \"ts\" DESC, \"hid\"\n  LIMIT 32\n) AS sampled ON TRUE\nORDER BY __KUMO_BATCH__, __KUMO_ROW__",
+   "parameters": [
+    "[{\"id\":8,\"e\":\"2024-01-02T00:00:00\"},{\"id\":3,\"e\":\"2024-01-02T00:00:00\"},{\"id\":5,\"e\":\"2024-01-02T00:00:00\"},{\"id\":2,\"e\":\"2024-01-02T00:00:00\"},{\"id\":7,\"e\":\"2024-01-02T00:00:00\"},{\"id\":1,\"e\":\"2024-01-02T00:00:00\"},{\"id\":4,\"e\":\"2024-01-02T00:00:00\"},{\"id\":0,\"e\":\"2024-01-02T00:00:00\"},{\"id\":9,\"e\":\"2024-01-02T00:00:00\"},{\"id\":6,\"e\":\"2024-01-02T00:00:00\"},{\"id\":0,\"e\":\"2024-02-01T00:00:00\"},{\"id\":1,\"e\":\"2024-02-01T00:00:00\"},{\"id\":2,\"e\":\"2024-02-01T00:00:00\"}]"
+   ],
+   "result": "tables/e53511e55c80650c80c31f26ef0cd1e13c7a6f26d4a465c744a82734730135b2.arrows"
+  },
+  {
+   "text": "WITH TMP AS (\n  SELECT (ordinality - 1)::bigint AS __KUMO_BATCH__, (value->>'id')::bigint AS __KUMO_ID__, (value->>'e')::timestamp without time zone AS __KUMO_END_TIME__\n  FROM jsonb_array_elements(%s::jsonb) WITH ORDINALITY\n       AS input(value, ordinality)\n)\nSELECT TMP.__KUMO_BATCH__, sampled.*\nFROM TMP\nJOIN LATERAL (\n  SELECT \"did\", \"hid\", \"cid\", \"ts\",\n         ROW_NUMBER() OVER (ORDER BY \"ts\" DESC, \"did\") AS __KUMO_ROW__\n  FROM \"{schema}\".\"details\"\n  WHERE \"cid\" = TMP.__KUMO_ID__\n    AND \"ts\" <= TMP.__KUMO_END_TIME__\n  ORDER BY \"ts\" DESC, \"did\"\n  LIMIT 32\n) AS sampled ON TRUE\nORDER BY __KUMO_BATCH__, __KUMO_ROW__",
+   "parameters": [
+    "[{\"id\":8,\"e\":\"2024-01-02T00:00:00\"},{\"id\":3,\"e\":\"2024-01-02T00:00:00\"},{\"id\":5,\"e\":\"2024-01-02T00:00:00\"},{\"id\":2,\"e\":\"2024-01-02T00:00:00\"},{\"id\":7,\"e\":\"2024-01-02T00:00:00\"},{\"id\":1,\"e\":\"2024-01-02T00:00:00\"},{\"id\":4,\"e\":\"2024-01-02T00:00:00\"},{\"id\":0,\"e\":\"2024-01-02T00:00:00\"},{\"id\":9,\"e\":\"2024-01-02T00:00:00\"},{\"id\":6,\"e\":\"2024-01-02T00:00:00\"},{\"id\":0,\"e\":\"2024-02-01T00:00:00\"},{\"id\":1,\"e\":\"2024-02-01T00:00:00\"},{\"id\":2,\"e\":\"2024-02-01T00:00:00\"}]"
+   ],
+   "result": "tables/a2f770cef0c2e71f17b2ee3ed8d7601cf7db88b4f1f2d693870b05b24571ce22.arrows"
+  },
+  {
+   "text": "WITH TMP AS (\n  SELECT (ordinality - 1)::bigint AS __KUMO_BATCH__, (value->>'id')::bigint AS __KUMO_ID__, (value->>'e')::timestamp without time zone AS __KUMO_END_TIME__\n  FROM jsonb_array_elements(%s::jsonb) WITH ORDINALITY\n       AS input(value, ordinality)\n)\nSELECT TMP.__KUMO_BATCH__, sampled.*\nFROM TMP\nJOIN LATERAL (\n  SELECT \"did\", \"hid\", \"cid\", \"ts\",\n         ROW_NUMBER() OVER (ORDER BY \"ts\" DESC, \"did\") AS __KUMO_ROW__\n  FROM \"{schema}\".\"details\"\n  WHERE \"hid\" = TMP.__KUMO_ID__\n    AND \"ts\" <= TMP.__KUMO_END_TIME__\n  ORDER BY \"ts\" DESC, \"did\"\n  LIMIT 32\n) AS sampled ON TRUE\nORDER BY __KUMO_BATCH__, __KUMO_ROW__",
+   "parameters": [
+    "[{\"id\":1,\"e\":\"2024-01-02T00:00:00\"},{\"id\":0,\"e\":\"2024-01-02T00:00:00\"},{\"id\":30,\"e\":\"2024-02-01T00:00:00\"},{\"id\":20,\"e\":\"2024-02-01T00:00:00\"},{\"id\":10,\"e\":\"2024-02-01T00:00:00\"},{\"id\":0,\"e\":\"2024-02-01T00:00:00\"},{\"id\":31,\"e\":\"2024-02-01T00:00:00\"},{\"id\":21,\"e\":\"2024-02-01T00:00:00\"},{\"id\":11,\"e\":\"2024-02-01T00:00:00\"},{\"id\":1,\"e\":\"2024-02-01T00:00:00\"},{\"id\":22,\"e\":\"2024-02-01T00:00:00\"},{\"id\":12,\"e\":\"2024-02-01T00:00:00\"},{\"id\":2,\"e\":\"2024-02-01T00:00:00\"}]"
+   ],
+   "result": "tables/ffafe4bbed6218969819b0f8f45e228f31c5903963a81497080244ec77b6aabb.arrows"
+  },
+  {
+   "text": "WITH TMP AS (\n  SELECT (ordinality - 1)::bigint AS __KUMO_BATCH__, (value #>> '{}')::bigint AS __KUMO_ID__\n  FROM jsonb_array_elements(%s::jsonb) WITH ORDINALITY\n       AS input(value, ordinality)\n)\nSELECT * FROM (\n  SELECT TMP.__KUMO_BATCH__, \"hid\", \"cid\", \"ts\",\n         ROW_NUMBER() OVER (PARTITION BY TMP.__KUMO_BATCH__\n           ORDER BY \"hid\") AS __KUMO_ROW__,\n         COUNT(*) OVER (PARTITION BY TMP.__KUMO_BATCH__) AS __KUMO_MATCHES__\n  FROM TMP\n  JOIN \"{schema}\".\"headers\"\n    ON \"hid\" = TMP.__KUMO_ID__\n) AS sampled\nWHERE __KUMO_ROW__ = 1\nORDER BY __KUMO_BATCH__",
+   "parameters": [
+    "[1,0,29,19,9,30,20,10,31,21,11]"
+   ],
+   "result": "tables/ee7cea0a2a71e957eb397fc2750ae6abebef7da0311bd91d3545f81c95f020e3.arrows"
+  }
+ ],
+ "loader": []
+}
