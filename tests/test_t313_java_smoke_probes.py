@@ -18,7 +18,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_a_relative_jar_is_resolved_before_the_probe_changes_directory(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     spec = importlib.util.spec_from_file_location(
         't313_java_acceptance', ROOT / 'contract/tests/test_t311_java.py'
@@ -31,7 +32,9 @@ def test_a_relative_jar_is_resolved_before_the_probe_changes_directory(
     monkeypatch.setenv('SDM_JAVA_JAR', 'jar/client.jar')
     commands = []
 
-    def run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+    def run(
+        command: list[str], **kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
         commands.append((command, kwargs))
         return subprocess.CompletedProcess(command, 0, '', '')
 
@@ -42,15 +45,26 @@ def test_a_relative_jar_is_resolved_before_the_probe_changes_directory(
     assert options['cwd'] == tmp_path / 'scratch'
 
 
-def test_the_ci_jar_load_source_compiles_against_the_shipped_api(tmp_path: Path) -> None:
+def test_the_ci_jar_load_source_compiles_against_the_shipped_api(
+    tmp_path: Path,
+) -> None:
     given = os.environ.get('SDM_JAVA_JAR')
     home = os.environ.get('SDM_JAVA_HOME') or os.environ.get('JAVA_HOME')
     if not given or not home:
         pytest.skip('needs the package JAR and JDK, as the nightly load job does')
     jar = Path(given).resolve()
     done = subprocess.run(
-        [str(Path(home) / 'bin/javac'), '-cp', str(jar), '-d', str(tmp_path),
-         str(ROOT / 'java/jar-load/JarLoad.java')],
-        capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=120,
+        [
+            str(Path(home) / 'bin/javac'),
+            '-cp',
+            str(jar),
+            '-d',
+            str(tmp_path),
+            str(ROOT / 'java/jar-load/JarLoad.java'),
+        ],
+        capture_output=True,
+        text=True,
+        stdin=subprocess.DEVNULL,
+        timeout=120,
     )
     assert done.returncode == 0, done.stdout + done.stderr

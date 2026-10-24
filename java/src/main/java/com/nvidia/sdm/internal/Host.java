@@ -26,8 +26,8 @@ import org.slf4j.LoggerFactory;
  * StructuredDataException}, its code and fields the core's. Not part of the API.
  *
  * <p>A provider's failure reaches the core as the contract's {@code ProviderError}: its kind,
- * whether it may be retried, its SQLSTATE and vendor code and an internal driver diagnostic; the diagnostic is never public (decision
- * H17); the error the run then ends with names the driver's exception class ({@code
+ * whether it may be retried, its SQLSTATE and vendor code and an internal driver diagnostic.
+ * The diagnostic is never public (decision H17); the error the run then ends with names the driver's exception class ({@code
  * driver_class}). A model's {@link TransportFailed} is told to the core as the contract's
  * transport error; a {@link Refused} call is told as its status, and once the core ends the run,
  * the refusal is raised with what the core counted as answered before it.
@@ -60,7 +60,7 @@ public final class Host {
 
     /**
      * The facts {@code failure} tells the core ({@code ProviderError}'s {@code sqlstate}, {@code
-     * vendor_code} and {@code error_class}), each where it says one: a driver's {@link
+     * vendor_code}, {@code error_class} and internal {@code driver_message}), each where it says one: a driver's {@link
      * java.sql.SQLException}'s state and vendor code, by default.
      */
     default Map<String, Object> failure(Exception failure) {
