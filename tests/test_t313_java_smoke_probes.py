@@ -51,7 +51,9 @@ def test_the_ci_jar_load_source_compiles_against_the_shipped_api(
     given = os.environ.get('SDM_JAVA_JAR')
     home = os.environ.get('SDM_JAVA_HOME') or os.environ.get('JAVA_HOME')
     if not given or not home:
-        pytest.skip('needs the package JAR and JDK, as the nightly load job does')
+        pytest.skip(
+            'needs the package JAR and JDK, as the nightly load job does'
+        )
     jar = Path(given).resolve()
     done = subprocess.run(
         [
