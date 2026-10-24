@@ -1,0 +1,1378 @@
+{
+  "phase-2": {
+    "commit": "3ae4d1afc9d11b8e2781d6f76072f2f34281e7a0",
+    "pandas": "3.1.0",
+    "protocol": 4,
+    "python": "3.12.15",
+    "requests": {
+      "batched": [
+        {
+          "answer": {
+            "explanation": null,
+            "frame": "a2aaebb168e7adbd05b0f4a0b94734ea0ab21a05cf23d5ffdab81ba00e512592",
+            "items": [
+              {
+                "id": 0,
+                "metadata": {
+                  "call": 0,
+                  "row_index": 0,
+                  "source": "scripted"
+                },
+                "prediction": 1.0,
+                "row_index": 0
+              },
+              {
+                "id": 1,
+                "metadata": {
+                  "call": 0,
+                  "row_index": 1,
+                  "source": "scripted"
+                },
+                "prediction": 1.0,
+                "row_index": 1
+              },
+              {
+                "id": 2,
+                "metadata": {
+                  "call": 1,
+                  "row_index": 0,
+                  "source": "scripted"
+                },
+                "prediction": 1.0,
+                "row_index": 2
+              },
+              {
+                "id": 3,
+                "metadata": {
+                  "call": 1,
+                  "row_index": 1,
+                  "source": "scripted"
+                },
+                "prediction": 1.0,
+                "row_index": 3
+              },
+              {
+                "id": 4,
+                "metadata": {
+                  "call": 2,
+                  "row_index": 0,
+                  "source": "scripted"
+                },
+                "prediction": 1.0,
+                "row_index": 4
+              },
+              {
+                "id": 5,
+                "metadata": {
+                  "call": 2,
+                  "row_index": 1,
+                  "source": "scripted"
+                },
+                "prediction": 1.0,
+                "row_index": 5
+              }
+            ],
+            "metadata": {
+              "batch_request_ids": [
+                "r1",
+                "r1",
+                "r1"
+              ],
+              "batches": 3
+            },
+            "outputs": [
+              "prediction"
+            ],
+            "unscored": []
+          },
+          "bodies": [
+            "252084b31c97f06df54e9e899e5751914e01860ca2cfa8afb2b1e7d504054d26",
+            "b2744343f75eb73f1e4241e284767d167dd7d489e472b20b82c06c8dfd8daa01",
+            "1dd006997faf4619a188c74f4f39410470d29410e93102f39b8a7bc7c44fbf7b"
+          ],
+          "notices": []
+        },
+        {
+          "answer": {
+            "explanation": null,
+            "frame": "a2aaebb168e7adbd05b0f4a0b94734ea0ab21a05cf23d5ffdab81ba00e512592",
+            "items": [
+              {
+                "id": 0,
+                "metadata": {
+                  "call": 0,
+                  "row_index": 0,
+                  "source": "scripted"
+                },
+                "prediction": 1.0,
+                "row_index": 0
+              },
+              {
+                "id": 1,
+                "metadata": {
+                  "call": 0,
+                  "row_index": 1,
+                  "source": "scripted"
+                },
+                "prediction": 1.0,
+                "row_index": 1
+              },
+              {
+                "id": 2,
+                "metadata": {
+                  "call": 1,
+                  "row_index": 0,
+                  "source": "scripted"
+                },
+                "prediction": 1.0,
+                "row_index": 2
+              },
+              {
+                "id": 3,
+                "metadata": {
+                  "call": 1,
+                  "row_index": 1,
+                  "source": "scripted"
+                },
+                "prediction": 1.0,
+                "row_index": 3
+              },
+              {
+                "id": 4,
+                "metadata": {
+                  "call": 2,
+                  "row_index": 0,
+                  "source": "scripted"
+                },
+                "prediction": 1.0,
+                "row_index": 4
+              },
+              {
+                "id": 5,
+                "metadata": {
+                  "call": 2,
+                  "row_index": 1,
+                  "source": "scripted"
+                },
+                "prediction": 1.0,
+                "row_index": 5
+              }
+            ],
+            "metadata": {
+              "batch_request_ids": [
+                "r1",
+                "r1",
+                "r1"
+              ],
+              "batches": 3
+            },
+            "outputs": [
+              "prediction",
+              "quantiles"
+            ],
+            "unscored": []
+          },
+          "bodies": [
+            "1f70c3083a31ab9b3e1ae146e2b7b662d19efb9ed19978b09fce33ef56a8acd4",
+            "5410d130bbd4cd1b492843d7135a1c438cc1c840eb35f80be114479b04ad8d6f",
+            "00ca5565157cdd3cd6231146288198b9285314532e554bcc125a536a027e350c"
+          ],
+          "notices": [
+            "kumo-relational answered without ['quantiles'], which this request asked for, so no column of to_pandas() will carry it. The answer to the rest of the request is unaffected."
+          ]
+        }
+      ],
+      "binary": [
+        {
+          "answer": {
+            "explanation": null,
+            "frame": "19a8a7e88ef071885b9d6be6c4dc3b9fe32d8ade8985bb7e8195b97896e8f8e4",
+            "items": [
+              {
+                "id": 0,
+                "metadata": {
+                  "call": 0,
+                  "row_index": 0,
+                  "source": "scripted"
+                },
+                "prediction": false,
+                "probabilities": {
+                  "False": 0.9,
+                  "True": 0.1
+                },
+                "row_index": 0
+              },
+              {
+                "id": 1,
+                "metadata": {
+                  "call": 0,
+                  "row_index": 1,
+                  "source": "scripted"
+                },
+                "prediction": true,
+                "probabilities": {
+                  "False": 0.4,
+                  "True": 0.6
+                },
+                "row_index": 1
+              },
+              {
+                "id": 2,
+                "metadata": {
+                  "call": 0,
+                  "row_index": 2,
+                  "source": "scripted"
+                },
+                "prediction": false,
+                "probabilities": {
+                  "False": 0.8,
+                  "True": 0.2
+                },
+                "row_index": 2
+              },
+              {
+                "id": 3,
+                "metadata": {
+                  "call": 0,
+                  "row_index": 3,
+                  "source": "scripted"
+                },
+                "prediction": true,
+                "probabilities": {
+                  "False": 0.3,
+                  "True": 0.7
+                },
+                "row_index": 3
+              }
+            ],
+            "metadata": {},
+            "outputs": [
+              "prediction",
+              "probabilities"
+            ],
+            "unscored": []
+          },
+          "bodies": [
+            "ebc9ce94bc17c83ceb4abbe69b9b64cf78fd6299ed6f93c8e160e3fcd1a2b618"
+          ],
+          "notices": []
+        },
+        {
+          "answer": {
+            "explanation": null,
+            "frame": "19a8a7e88ef071885b9d6be6c4dc3b9fe32d8ade8985bb7e8195b97896e8f8e4",
+            "items": [
+              {
+                "id": 0,
+                "metadata": {
+                  "call": 0,
+                  "row_index": 0,
+                  "source": "scripted"
+                },
+                "prediction": false,
+                "probabilities": {
+                  "False": 0.9,
+                  "True": 0.1
+                },
+                "row_index": 0
+              },
+              {
+                "id": 1,
+                "metadata": {
+                  "call": 0,
+                  "row_index": 1,
+                  "source": "scripted"
+                },
+                "prediction": true,
+                "probabilities": {
+                  "False": 0.4,
+                  "True": 0.6
+                },
+                "row_index": 1
+              },
+              {
+                "id": 2,
+                "metadata": {
+                  "call": 0,
+                  "row_index": 2,
+                  "source": "scripted"
+                },
+                "prediction": false,
+                "probabilities": {
+                  "False": 0.8,
+                  "True": 0.2
+                },
+                "row_index": 2
+              },
+              {
+                "id": 3,
+                "metadata": {
+                  "call": 0,
+                  "row_index": 3,
+                  "source": "scripted"
+                },
+                "prediction": true,
+                "probabilities": {
+                  "False": 0.3,
+                  "True": 0.7
+                },
+                "row_index": 3
+              }
+            ],
+            "metadata": {},
+            "outputs": [
+              "prediction",
+              "probabilities"
+            ],
+            "unscored": []
+          },
+          "bodies": [
+            "ebc9ce94bc17c83ceb4abbe69b9b64cf78fd6299ed6f93c8e160e3fcd1a2b618"
+          ],
+          "notices": []
+        }
+      ],
+      "forecast": [
+        {
+          "answer": {
+            "explanation": null,
+            "frame": "d89da1e053b593bb17dbea6034532726bc92e4aa137b3fcfe5e1e5a837c7afc4",
+            "items": [
+              {
+                "forecast_step": 1,
+                "id": 3,
+                "metadata": {
+                  "call": 0,
+                  "row_index": 0,
+                  "source": "scripted"
+                },
+                "prediction": 1.0,
+                "row_index": 0
+              },
+              {
+                "forecast_step": 2,
+                "id": 3,
+                "metadata": {
+                  "call": 1,
+                  "row_index": 0,
+                  "source": "scripted"
+                },
+                "prediction": 1.0,
+                "row_index": 0
+              }
+            ],
+            "metadata": {},
+            "outputs": [
+              "prediction"
+            ],
+            "unscored": []
+          },
+          "bodies": [
+            "93b8cf65b3a9dda15e7f167f27cff4d256b3e109c13e032ced8b9aa21767f558",
+            "c919c334efc494bff16b115e653a43c5cf24cdb7e90af1ede9457a4409942cc3"
+          ],
+          "notices": []
+        },
+        {
+          "answer": {
+            "explanation": {
+              "by_forecast_step": {
+                "1": {
+                  "detail": {
+                    "call": 0,
+                    "note": null,
+                    "row_index": 0
+                  },
+                  "format": "scripted",
+                  "path": [
+                    0,
+                    0
+                  ],
+                  "rank": 1,
+                  "score": 0.1,
+                  "summary": "row 0 of call 0"
+                },
+                "2": {
+                  "detail": {
+                    "call": 1,
+                    "note": null,
+                    "row_index": 0
+                  },
+                  "format": "scripted",
+                  "path": [
+                    1,
+                    0
+                  ],
+                  "rank": 4,
+                  "score": 0.4,
+                  "summary": "row 0 of call 1"
+                }
+              }
+            },
+            "frame": "d89da1e053b593bb17dbea6034532726bc92e4aa137b3fcfe5e1e5a837c7afc4",
+            "items": [
+              {
+                "explanation": {
+                  "detail": {
+                    "call": 0,
+                    "note": null,
+                    "row_index": 0
+                  },
+                  "format": "scripted",
+                  "path": [
+                    0,
+                    0
+                  ],
+                  "rank": 1,
+                  "score": 0.1,
+                  "summary": "row 0 of call 0"
+                },
+                "forecast_step": 1,
+                "id": 3,
+                "metadata": {
+                  "call": 0,
+                  "row_index": 0,
+                  "source": "scripted"
+                },
+                "prediction": 1.0,
+                "row_index": 0
+              },
+              {
+                "explanation": {
+                  "detail": {
+                    "call": 1,
+                    "note": null,
+                    "row_index": 0
+                  },
+                  "format": "scripted",
+                  "path": [
+                    1,
+                    0
+                  ],
+                  "rank": 4,
+                  "score": 0.4,
+                  "summary": "row 0 of call 1"
+                },
+                "forecast_step": 2,
+                "id": 3,
+                "metadata": {
+                  "call": 1,
+                  "row_index": 0,
+                  "source": "scripted"
+                },
+                "prediction": 1.0,
+                "row_index": 0
+              }
+            ],
+            "metadata": {},
+            "outputs": [
+              "prediction",
+              "explanation",
+              "quantiles"
+            ],
+            "unscored": []
+          },
+          "bodies": [
+            "d9e373f1d4d35905976e8cf96b55482fdf1ff1f887df082d6387158190d420bf",
+            "8f1ce59c7e9fd7841db39081d6fc5915d3e85e7a71bb7c343ede550d4cd5e916"
+          ],
+          "notices": [
+            "kumo-relational answered without ['quantiles'], which this request asked for, so no column of to_pandas() will carry it. The answer to the rest of the request is unaffected.",
+            "kumo-relational answered without ['quantiles'], which this request asked for, so no column of to_pandas() will carry it. The answer to the rest of the request is unaffected.",
+            "kumo-relational answered without ['quantiles'], which this request asked for, so no column of to_pandas() will carry it. The answer to the rest of the request is unaffected."
+          ]
+        }
+      ],
+      "ranking": [
+        {
+          "answer": {
+            "explanation": null,
+            "frame": "549b51a54f61426ce9f62b94f90db1e58b8450c62070fdaf1898bd54926b3eac",
+            "items": [
+              {
+                "id": 0,
+                "prediction": [
+                  0,
+                  1
+                ],
+                "rankings": [
+                  {
+                    "candidate": 0,
+                    "score": 0.7
+                  },
+                  {
+                    "candidate": 1,
+                    "score": 0.4
+                  }
+                ],
+                "row_index": 0
+              },
+              {
+                "id": 1,
+                "prediction": [
+                  1,
+                  2
+                ],
+                "rankings": [
+                  {
+                    "candidate": 1,
+                    "score": 0.9
+                  },
+                  {
+                    "candidate": 2,
+                    "score": 0.6
+                  }
+                ],
+                "row_index": 1
+              }
+            ],
+            "metadata": {},
+            "outputs": [
+              "prediction",
+              "rankings"
+            ],
+            "unscored": [
+              9
+            ]
+          },
+          "bodies": [
+            "57ea0a6f5ed3056e0506e9698972d5aa7b4b37915b3f56386287249d0fed01ce",
+            "cd52a9073bb158a49fe19b67ebb7ec94f3d193feca1d59057ffd3d7471fc97ed",
+            "6880f199a2ad0154d5f368fbdf2cb4c22abb604b6f5aac7db267581f0253833e"
+          ],
+          "notices": [
+            "candidate 9 is left out of this ranking, unscored: the context sampled for it holds one answer only, nearly always because no entity in it linked to the candidate in the window, and a classification needs two to learn from. No call was sent for it, so each row ranks only the rest, and the result's unscored_candidates names it. Gather a wider context with num_context_samples if other entities in the data answer differently, or ask over a table of (entity, candidate) pairs, which scores every candidate from its features."
+          ]
+        },
+        {
+          "answer": {
+            "explanation": null,
+            "frame": "f0a4df71e34b9f8dbb122d42be7ad6469f977e2626220dbaf23046e09ce09646",
+            "items": [
+              {
+                "id": 0,
+                "rankings": [
+                  {
+                    "candidate": 0,
+                    "score": 0.7
+                  },
+                  {
+                    "candidate": 1,
+                    "score": 0.4
+                  }
+                ],
+                "row_index": 0
+              },
+              {
+                "id": 1,
+                "rankings": [
+                  {
+                    "candidate": 1,
+                    "score": 0.9
+                  },
+                  {
+                    "candidate": 2,
+                    "score": 0.6
+                  }
+                ],
+                "row_index": 1
+              }
+            ],
+            "metadata": {},
+            "outputs": [
+              "rankings"
+            ],
+            "unscored": [
+              9
+            ]
+          },
+          "bodies": [
+            "57ea0a6f5ed3056e0506e9698972d5aa7b4b37915b3f56386287249d0fed01ce",
+            "cd52a9073bb158a49fe19b67ebb7ec94f3d193feca1d59057ffd3d7471fc97ed",
+            "6880f199a2ad0154d5f368fbdf2cb4c22abb604b6f5aac7db267581f0253833e"
+          ],
+          "notices": [
+            "candidate 9 is left out of this ranking, unscored: the context sampled for it holds one answer only, nearly always because no entity in it linked to the candidate in the window, and a classification needs two to learn from. No call was sent for it, so each row ranks only the rest, and the result's unscored_candidates names it. Gather a wider context with num_context_samples if other entities in the data answer differently, or ask over a table of (entity, candidate) pairs, which scores every candidate from its features."
+          ]
+        }
+      ],
+      "regression": [
+        {
+          "answer": {
+            "explanation": null,
+            "frame": "89b7ed92832c54e88d4db99b2b445080d1a7b43286a77d2bb28dbab03f08fa0b",
+            "items": [
+              {
+                "id": 3,
+                "metadata": {
+                  "call": 0,
+                  "row_index": 0,
+                  "source": "scripted"
+                },
+                "prediction": 1.0,
+                "row_index": 0
+              }
+            ],
+            "metadata": {},
+            "outputs": [
+              "prediction"
+            ],
+            "unscored": []
+          },
+          "bodies": [
+            "93b8cf65b3a9dda15e7f167f27cff4d256b3e109c13e032ced8b9aa21767f558"
+          ],
+          "notices": []
+        },
+        {
+          "answer": {
+            "explanation": {
+              "detail": {
+                "call": 0,
+                "note": null,
+                "row_index": 0
+              },
+              "format": "scripted",
+              "path": [
+                0,
+                0
+              ],
+              "rank": 1,
+              "score": 0.1,
+              "summary": "row 0 of call 0"
+            },
+            "frame": "89b7ed92832c54e88d4db99b2b445080d1a7b43286a77d2bb28dbab03f08fa0b",
+            "items": [
+              {
+                "explanation": {
+                  "detail": {
+                    "call": 0,
+                    "note": null,
+                    "row_index": 0
+                  },
+                  "format": "scripted",
+                  "path": [
+                    0,
+                    0
+                  ],
+                  "rank": 1,
+                  "score": 0.1,
+                  "summary": "row 0 of call 0"
+                },
+                "id": 3,
+                "metadata": {
+                  "call": 0,
+                  "row_index": 0,
+                  "source": "scripted"
+                },
+                "prediction": 1.0,
+                "row_index": 0
+              }
+            ],
+            "metadata": {},
+            "outputs": [
+              "prediction",
+              "explanation",
+              "quantiles"
+            ],
+            "unscored": []
+          },
+          "bodies": [
+            "d9e373f1d4d35905976e8cf96b55482fdf1ff1f887df082d6387158190d420bf"
+          ],
+          "notices": [
+            "kumo-relational answered without ['quantiles'], which this request asked for, so no column of to_pandas() will carry it. The answer to the rest of the request is unaffected."
+          ]
+        }
+      ]
+    }
+  },
+  "reference": {
+    "commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+    "pandas": "3.0.6",
+    "protocol": 4,
+    "python": "3.12.13",
+    "requests": {
+      "batched": [
+        {
+          "answer": {
+            "explanation": null,
+            "frame": "a2aaebb168e7adbd05b0f4a0b94734ea0ab21a05cf23d5ffdab81ba00e512592",
+            "items": [
+              {
+                "id": 0,
+                "metadata": {
+                  "call": 0,
+                  "row_index": 0,
+                  "source": "scripted"
+                },
+                "prediction": 1.0,
+                "row_index": 0
+              },
+              {
+                "id": 1,
+                "metadata": {
+                  "call": 0,
+                  "row_index": 1,
+                  "source": "scripted"
+                },
+                "prediction": 1.0,
+                "row_index": 1
+              },
+              {
+                "id": 2,
+                "metadata": {
+                  "call": 1,
+                  "row_index": 0,
+                  "source": "scripted"
+                },
+                "prediction": 1.0,
+                "row_index": 2
+              },
+              {
+                "id": 3,
+                "metadata": {
+                  "call": 1,
+                  "row_index": 1,
+                  "source": "scripted"
+                },
+                "prediction": 1.0,
+                "row_index": 3
+              },
+              {
+                "id": 4,
+                "metadata": {
+                  "call": 2,
+                  "row_index": 0,
+                  "source": "scripted"
+                },
+                "prediction": 1.0,
+                "row_index": 4
+              },
+              {
+                "id": 5,
+                "metadata": {
+                  "call": 2,
+                  "row_index": 1,
+                  "source": "scripted"
+                },
+                "prediction": 1.0,
+                "row_index": 5
+              }
+            ],
+            "metadata": {
+              "batch_request_ids": [
+                "r1",
+                "r1",
+                "r1"
+              ],
+              "batches": 3
+            },
+            "outputs": [
+              "prediction"
+            ],
+            "unscored": []
+          },
+          "bodies": [
+            "252084b31c97f06df54e9e899e5751914e01860ca2cfa8afb2b1e7d504054d26",
+            "b2744343f75eb73f1e4241e284767d167dd7d489e472b20b82c06c8dfd8daa01",
+            "1dd006997faf4619a188c74f4f39410470d29410e93102f39b8a7bc7c44fbf7b"
+          ],
+          "notices": []
+        },
+        {
+          "answer": {
+            "explanation": null,
+            "frame": "a2aaebb168e7adbd05b0f4a0b94734ea0ab21a05cf23d5ffdab81ba00e512592",
+            "items": [
+              {
+                "id": 0,
+                "metadata": {
+                  "call": 0,
+                  "row_index": 0,
+                  "source": "scripted"
+                },
+                "prediction": 1.0,
+                "row_index": 0
+              },
+              {
+                "id": 1,
+                "metadata": {
+                  "call": 0,
+                  "row_index": 1,
+                  "source": "scripted"
+                },
+                "prediction": 1.0,
+                "row_index": 1
+              },
+              {
+                "id": 2,
+                "metadata": {
+                  "call": 1,
+                  "row_index": 0,
+                  "source": "scripted"
+                },
+                "prediction": 1.0,
+                "row_index": 2
+              },
+              {
+                "id": 3,
+                "metadata": {
+                  "call": 1,
+                  "row_index": 1,
+                  "source": "scripted"
+                },
+                "prediction": 1.0,
+                "row_index": 3
+              },
+              {
+                "id": 4,
+                "metadata": {
+                  "call": 2,
+                  "row_index": 0,
+                  "source": "scripted"
+                },
+                "prediction": 1.0,
+                "row_index": 4
+              },
+              {
+                "id": 5,
+                "metadata": {
+                  "call": 2,
+                  "row_index": 1,
+                  "source": "scripted"
+                },
+                "prediction": 1.0,
+                "row_index": 5
+              }
+            ],
+            "metadata": {
+              "batch_request_ids": [
+                "r1",
+                "r1",
+                "r1"
+              ],
+              "batches": 3
+            },
+            "outputs": [
+              "prediction",
+              "quantiles"
+            ],
+            "unscored": []
+          },
+          "bodies": [
+            "1f70c3083a31ab9b3e1ae146e2b7b662d19efb9ed19978b09fce33ef56a8acd4",
+            "5410d130bbd4cd1b492843d7135a1c438cc1c840eb35f80be114479b04ad8d6f",
+            "00ca5565157cdd3cd6231146288198b9285314532e554bcc125a536a027e350c"
+          ],
+          "notices": [
+            "kumo-relational answered without ['quantiles'], which this request asked for, so no column of to_pandas() will carry it. The answer to the rest of the request is unaffected."
+          ]
+        }
+      ],
+      "binary": [
+        {
+          "answer": {
+            "explanation": null,
+            "frame": "19a8a7e88ef071885b9d6be6c4dc3b9fe32d8ade8985bb7e8195b97896e8f8e4",
+            "items": [
+              {
+                "id": 0,
+                "metadata": {
+                  "call": 0,
+                  "row_index": 0,
+                  "source": "scripted"
+                },
+                "prediction": false,
+                "probabilities": {
+                  "False": 0.9,
+                  "True": 0.1
+                },
+                "row_index": 0
+              },
+              {
+                "id": 1,
+                "metadata": {
+                  "call": 0,
+                  "row_index": 1,
+                  "source": "scripted"
+                },
+                "prediction": true,
+                "probabilities": {
+                  "False": 0.4,
+                  "True": 0.6
+                },
+                "row_index": 1
+              },
+              {
+                "id": 2,
+                "metadata": {
+                  "call": 0,
+                  "row_index": 2,
+                  "source": "scripted"
+                },
+                "prediction": false,
+                "probabilities": {
+                  "False": 0.8,
+                  "True": 0.2
+                },
+                "row_index": 2
+              },
+              {
+                "id": 3,
+                "metadata": {
+                  "call": 0,
+                  "row_index": 3,
+                  "source": "scripted"
+                },
+                "prediction": true,
+                "probabilities": {
+                  "False": 0.3,
+                  "True": 0.7
+                },
+                "row_index": 3
+              }
+            ],
+            "metadata": {},
+            "outputs": [
+              "prediction",
+              "probabilities"
+            ],
+            "unscored": []
+          },
+          "bodies": [
+            "ebc9ce94bc17c83ceb4abbe69b9b64cf78fd6299ed6f93c8e160e3fcd1a2b618"
+          ],
+          "notices": []
+        },
+        {
+          "answer": {
+            "explanation": null,
+            "frame": "19a8a7e88ef071885b9d6be6c4dc3b9fe32d8ade8985bb7e8195b97896e8f8e4",
+            "items": [
+              {
+                "id": 0,
+                "metadata": {
+                  "call": 0,
+                  "row_index": 0,
+                  "source": "scripted"
+                },
+                "prediction": false,
+                "probabilities": {
+                  "False": 0.9,
+                  "True": 0.1
+                },
+                "row_index": 0
+              },
+              {
+                "id": 1,
+                "metadata": {
+                  "call": 0,
+                  "row_index": 1,
+                  "source": "scripted"
+                },
+                "prediction": true,
+                "probabilities": {
+                  "False": 0.4,
+                  "True": 0.6
+                },
+                "row_index": 1
+              },
+              {
+                "id": 2,
+                "metadata": {
+                  "call": 0,
+                  "row_index": 2,
+                  "source": "scripted"
+                },
+                "prediction": false,
+                "probabilities": {
+                  "False": 0.8,
+                  "True": 0.2
+                },
+                "row_index": 2
+              },
+              {
+                "id": 3,
+                "metadata": {
+                  "call": 0,
+                  "row_index": 3,
+                  "source": "scripted"
+                },
+                "prediction": true,
+                "probabilities": {
+                  "False": 0.3,
+                  "True": 0.7
+                },
+                "row_index": 3
+              }
+            ],
+            "metadata": {},
+            "outputs": [
+              "prediction",
+              "probabilities"
+            ],
+            "unscored": []
+          },
+          "bodies": [
+            "ebc9ce94bc17c83ceb4abbe69b9b64cf78fd6299ed6f93c8e160e3fcd1a2b618"
+          ],
+          "notices": []
+        }
+      ],
+      "forecast": [
+        {
+          "answer": {
+            "explanation": null,
+            "frame": "d89da1e053b593bb17dbea6034532726bc92e4aa137b3fcfe5e1e5a837c7afc4",
+            "items": [
+              {
+                "forecast_step": 1,
+                "id": 3,
+                "metadata": {
+                  "call": 0,
+                  "row_index": 0,
+                  "source": "scripted"
+                },
+                "prediction": 1.0,
+                "row_index": 0
+              },
+              {
+                "forecast_step": 2,
+                "id": 3,
+                "metadata": {
+                  "call": 1,
+                  "row_index": 0,
+                  "source": "scripted"
+                },
+                "prediction": 1.0,
+                "row_index": 0
+              }
+            ],
+            "metadata": {},
+            "outputs": [
+              "prediction"
+            ],
+            "unscored": []
+          },
+          "bodies": [
+            "93b8cf65b3a9dda15e7f167f27cff4d256b3e109c13e032ced8b9aa21767f558",
+            "c919c334efc494bff16b115e653a43c5cf24cdb7e90af1ede9457a4409942cc3"
+          ],
+          "notices": []
+        },
+        {
+          "answer": {
+            "explanation": {
+              "by_forecast_step": {
+                "1": {
+                  "detail": {
+                    "call": 0,
+                    "note": null,
+                    "row_index": 0
+                  },
+                  "format": "scripted",
+                  "path": [
+                    0,
+                    0
+                  ],
+                  "rank": 1,
+                  "score": 0.1,
+                  "summary": "row 0 of call 0"
+                },
+                "2": {
+                  "detail": {
+                    "call": 1,
+                    "note": null,
+                    "row_index": 0
+                  },
+                  "format": "scripted",
+                  "path": [
+                    1,
+                    0
+                  ],
+                  "rank": 4,
+                  "score": 0.4,
+                  "summary": "row 0 of call 1"
+                }
+              }
+            },
+            "frame": "d89da1e053b593bb17dbea6034532726bc92e4aa137b3fcfe5e1e5a837c7afc4",
+            "items": [
+              {
+                "explanation": {
+                  "detail": {
+                    "call": 0,
+                    "note": null,
+                    "row_index": 0
+                  },
+                  "format": "scripted",
+                  "path": [
+                    0,
+                    0
+                  ],
+                  "rank": 1,
+                  "score": 0.1,
+                  "summary": "row 0 of call 0"
+                },
+                "forecast_step": 1,
+                "id": 3,
+                "metadata": {
+                  "call": 0,
+                  "row_index": 0,
+                  "source": "scripted"
+                },
+                "prediction": 1.0,
+                "row_index": 0
+              },
+              {
+                "explanation": {
+                  "detail": {
+                    "call": 1,
+                    "note": null,
+                    "row_index": 0
+                  },
+                  "format": "scripted",
+                  "path": [
+                    1,
+                    0
+                  ],
+                  "rank": 4,
+                  "score": 0.4,
+                  "summary": "row 0 of call 1"
+                },
+                "forecast_step": 2,
+                "id": 3,
+                "metadata": {
+                  "call": 1,
+                  "row_index": 0,
+                  "source": "scripted"
+                },
+                "prediction": 1.0,
+                "row_index": 0
+              }
+            ],
+            "metadata": {},
+            "outputs": [
+              "prediction",
+              "explanation",
+              "quantiles"
+            ],
+            "unscored": []
+          },
+          "bodies": [
+            "d9e373f1d4d35905976e8cf96b55482fdf1ff1f887df082d6387158190d420bf",
+            "8f1ce59c7e9fd7841db39081d6fc5915d3e85e7a71bb7c343ede550d4cd5e916"
+          ],
+          "notices": [
+            "kumo-relational answered without ['quantiles'], which this request asked for, so no column of to_pandas() will carry it. The answer to the rest of the request is unaffected.",
+            "kumo-relational answered without ['quantiles'], which this request asked for, so no column of to_pandas() will carry it. The answer to the rest of the request is unaffected.",
+            "kumo-relational answered without ['quantiles'], which this request asked for, so no column of to_pandas() will carry it. The answer to the rest of the request is unaffected."
+          ]
+        }
+      ],
+      "ranking": [
+        {
+          "answer": {
+            "explanation": null,
+            "frame": "549b51a54f61426ce9f62b94f90db1e58b8450c62070fdaf1898bd54926b3eac",
+            "items": [
+              {
+                "id": 0,
+                "prediction": [
+                  0,
+                  1
+                ],
+                "rankings": [
+                  {
+                    "candidate": 0,
+                    "score": 0.7
+                  },
+                  {
+                    "candidate": 1,
+                    "score": 0.4
+                  }
+                ],
+                "row_index": 0
+              },
+              {
+                "id": 1,
+                "prediction": [
+                  1,
+                  2
+                ],
+                "rankings": [
+                  {
+                    "candidate": 1,
+                    "score": 0.9
+                  },
+                  {
+                    "candidate": 2,
+                    "score": 0.6
+                  }
+                ],
+                "row_index": 1
+              }
+            ],
+            "metadata": {},
+            "outputs": [
+              "prediction",
+              "rankings"
+            ],
+            "unscored": [
+              9
+            ]
+          },
+          "bodies": [
+            "57ea0a6f5ed3056e0506e9698972d5aa7b4b37915b3f56386287249d0fed01ce",
+            "cd52a9073bb158a49fe19b67ebb7ec94f3d193feca1d59057ffd3d7471fc97ed",
+            "6880f199a2ad0154d5f368fbdf2cb4c22abb604b6f5aac7db267581f0253833e"
+          ],
+          "notices": [
+            "candidate 9 is left out of this ranking, unscored: the context sampled for it holds one answer only, nearly always because no entity in it linked to the candidate in the window, and a classification needs two to learn from. No call was sent for it, so each row ranks only the rest, and the result's unscored_candidates names it. Gather a wider context with num_context_samples if other entities in the data answer differently, or ask over a table of (entity, candidate) pairs, which scores every candidate from its features."
+          ]
+        },
+        {
+          "answer": {
+            "explanation": null,
+            "frame": "f0a4df71e34b9f8dbb122d42be7ad6469f977e2626220dbaf23046e09ce09646",
+            "items": [
+              {
+                "id": 0,
+                "rankings": [
+                  {
+                    "candidate": 0,
+                    "score": 0.7
+                  },
+                  {
+                    "candidate": 1,
+                    "score": 0.4
+                  }
+                ],
+                "row_index": 0
+              },
+              {
+                "id": 1,
+                "rankings": [
+                  {
+                    "candidate": 1,
+                    "score": 0.9
+                  },
+                  {
+                    "candidate": 2,
+                    "score": 0.6
+                  }
+                ],
+                "row_index": 1
+              }
+            ],
+            "metadata": {},
+            "outputs": [
+              "rankings"
+            ],
+            "unscored": [
+              9
+            ]
+          },
+          "bodies": [
+            "57ea0a6f5ed3056e0506e9698972d5aa7b4b37915b3f56386287249d0fed01ce",
+            "cd52a9073bb158a49fe19b67ebb7ec94f3d193feca1d59057ffd3d7471fc97ed",
+            "6880f199a2ad0154d5f368fbdf2cb4c22abb604b6f5aac7db267581f0253833e"
+          ],
+          "notices": [
+            "candidate 9 is left out of this ranking, unscored: the context sampled for it holds one answer only, nearly always because no entity in it linked to the candidate in the window, and a classification needs two to learn from. No call was sent for it, so each row ranks only the rest, and the result's unscored_candidates names it. Gather a wider context with num_context_samples if other entities in the data answer differently, or ask over a table of (entity, candidate) pairs, which scores every candidate from its features."
+          ]
+        }
+      ],
+      "regression": [
+        {
+          "answer": {
+            "explanation": null,
+            "frame": "89b7ed92832c54e88d4db99b2b445080d1a7b43286a77d2bb28dbab03f08fa0b",
+            "items": [
+              {
+                "id": 3,
+                "metadata": {
+                  "call": 0,
+                  "row_index": 0,
+                  "source": "scripted"
+                },
+                "prediction": 1.0,
+                "row_index": 0
+              }
+            ],
+            "metadata": {},
+            "outputs": [
+              "prediction"
+            ],
+            "unscored": []
+          },
+          "bodies": [
+            "93b8cf65b3a9dda15e7f167f27cff4d256b3e109c13e032ced8b9aa21767f558"
+          ],
+          "notices": []
+        },
+        {
+          "answer": {
+            "explanation": {
+              "detail": {
+                "call": 0,
+                "note": null,
+                "row_index": 0
+              },
+              "format": "scripted",
+              "path": [
+                0,
+                0
+              ],
+              "rank": 1,
+              "score": 0.1,
+              "summary": "row 0 of call 0"
+            },
+            "frame": "89b7ed92832c54e88d4db99b2b445080d1a7b43286a77d2bb28dbab03f08fa0b",
+            "items": [
+              {
+                "explanation": {
+                  "detail": {
+                    "call": 0,
+                    "note": null,
+                    "row_index": 0
+                  },
+                  "format": "scripted",
+                  "path": [
+                    0,
+                    0
+                  ],
+                  "rank": 1,
+                  "score": 0.1,
+                  "summary": "row 0 of call 0"
+                },
+                "id": 3,
+                "metadata": {
+                  "call": 0,
+                  "row_index": 0,
+                  "source": "scripted"
+                },
+                "prediction": 1.0,
+                "row_index": 0
+              }
+            ],
+            "metadata": {},
+            "outputs": [
+              "prediction",
+              "explanation",
+              "quantiles"
+            ],
+            "unscored": []
+          },
+          "bodies": [
+            "d9e373f1d4d35905976e8cf96b55482fdf1ff1f887df082d6387158190d420bf"
+          ],
+          "notices": [
+            "kumo-relational answered without ['quantiles'], which this request asked for, so no column of to_pandas() will carry it. The answer to the rest of the request is unaffected."
+          ]
+        }
+      ]
+    }
+  }
+}

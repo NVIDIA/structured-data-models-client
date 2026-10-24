@@ -418,12 +418,17 @@ def test_a_request_materialized_on_the_core_keeps_a_typed_core_request(
     assert not hasattr(request, '_core_state')
 
 
-def test_predict_of_a_request_the_core_never_materialized_asks_to_materialize_again(
+def test_predict_of_a_request_the_core_never_materialized_answers_as_the_old_route(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # An old route's request, as an old pickle holds it, predicted with the
-    # core's predict forced: refused by name before any call is sent, as a
-    # StructuredDataError the caller can act on, never a RouteError.
+    # core's predict forced: answered from its own contents as the old
+    # route answers it, never a RouteError (T3.26, owner decision
+    # 2026-10-23).
+    import importlib.util
+    import sys
+    from pathlib import Path
+
     from sdm_client import KumoRelational, SDMClient
 
     _on('old' if ENGINE else 'core', monkeypatch)
@@ -437,14 +442,25 @@ def test_predict_of_a_request_the_core_never_materialized_asks_to_materialize_ag
         # as an old pickle holds none.
         request._core = None
     assert request._core is None
-    _on('core', monkeypatch)
-    with SDMClient('http://127.0.0.1:9', max_retries=0) as client:
-        with pytest.raises(StructuredDataError) as refused:
-            client.predict(request, model=KumoRelational())
-    assert not isinstance(refused.value, _routing.RouteError)
-    assert refused.value.code == 'INVALID_REQUEST'
-    assert refused.value.details['rule'] == 'materialize_again'
-    assert 'materialize' in str(refused.value)
+    name = 'scripted_endpoint'
+    if name not in sys.modules:
+        spec = importlib.util.spec_from_file_location(
+            name,
+            Path(__file__).resolve().parents[3]
+            / 'contract/runners/scripted_endpoint.py',
+        )
+        assert spec is not None and spec.loader is not None
+        sys.modules[name] = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(sys.modules[name])
+    answers = []
+    for route in ('core', 'old'):
+        _on(route, monkeypatch)
+        with sys.modules[name].serve() as (url, _):
+            with SDMClient(url, max_retries=0) as client:
+                answers.append(
+                    client.predict(request, model=KumoRelational()).to_pandas()
+                )
+    pd.testing.assert_frame_equal(*answers)
 
 
 # --- Postgres: a NUMERIC key, through copies and edits ---------------------------
