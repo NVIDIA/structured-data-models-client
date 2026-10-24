@@ -125,6 +125,14 @@ pub(crate) trait SqlDialect: Sync {
         false
     }
 
+    /// Settle a namespace from the catalog answer. Most namespace reads
+    /// already resolve and align all supplied parts, so their full answer
+    /// is retained. A dialect returning raw session parts overlays its
+    /// supplied parts here instead.
+    fn settled_namespace(&self, _given: &[Option<String>], resolved: Vec<String>) -> Vec<String> {
+        resolved
+    }
+
     /// The refusal of `relation` where it names fewer parts than the
     /// dialect reads every relation in: none by default, a relation of
     /// fewer parts read where the connection finds it.

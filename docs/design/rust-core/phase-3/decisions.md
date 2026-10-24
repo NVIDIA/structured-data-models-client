@@ -152,7 +152,7 @@ None yet beyond the rows above: the open questions are in [design.md](design.md)
 ## Snowflake continuation answers (2026-10-24)
 
 These rows preserve the owner's scoped continuation answers.
-Missing-anchor handling remains an improvement proposed for reviewer approval, not an owner-approved policy.
+Missing-anchor handling is approved by both independent round-1 reviewers under the standing better-support rule, not by a final owner-policy decision.
 
 | # | Decision | Owner's words | Status |
 |---|---|---|---|

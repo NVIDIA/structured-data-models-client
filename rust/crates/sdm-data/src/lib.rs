@@ -245,21 +245,26 @@ impl DataLayer for Data {
         }
     }
 
-    /// The parts the provider gives kept, each other one the source's
-    /// answer for it, outermost first, as the reference fills only the parts
-    /// a source leaves out (`RE/graph.py:1024-1033`); a part the session has
-    /// none of ends the namespace there, so no relation can be read past it.
+    /// The full namespace answer, settled by its dialect: an already
+    /// resolved answer is retained; raw session parts are combined with
+    /// supplied parts according to that dialect's namespace alignment.
     fn settled(&self, provider: &ProviderChoice, parts: Vec<String>) -> ProviderChoice {
         match provider {
             ProviderChoice::Sql {
                 dialect,
                 namespace,
                 view,
-            } => ProviderChoice::Sql {
-                dialect: dialect.clone(),
-                namespace: merged(namespace, parts).into_iter().map(Some).collect(),
-                view: view.clone(),
-            },
+            } => {
+                let parts = match sql_dialect(provider) {
+                    Some(dialect) => dialect.settled_namespace(namespace, parts),
+                    None => parts,
+                };
+                ProviderChoice::Sql {
+                    dialect: dialect.clone(),
+                    namespace: parts.into_iter().map(Some).collect(),
+                    view: view.clone(),
+                }
+            }
             ProviderChoice::Host { .. } => provider.clone(),
         }
     }
@@ -311,27 +316,6 @@ impl DataLayer for Data {
         debug_assert_eq!(answer.part(), *part);
         Ok(answer)
     }
-}
-
-/// The namespace the source settles: each part `given`, outermost first,
-/// else the part of the source's answer `read` at its place, up to the
-/// first place neither holds one. An answer of as many parts as the
-/// namespace, or of the parts from the outermost, aligns by place; an
-/// empty namespace (none named) takes the answer as it is.
-fn merged(given: &[Option<String>], read: Vec<String>) -> Vec<String> {
-    if given.is_empty() {
-        return read;
-    }
-    let mut read = read.into_iter();
-    let mut parts = Vec::with_capacity(given.len());
-    for part in given {
-        let answered = read.next();
-        match part.clone().or(answered) {
-            Some(part) => parts.push(part),
-            None => break,
-        }
-    }
-    parts
 }
 
 /// The parts a relation of one part is read under, of the provider's

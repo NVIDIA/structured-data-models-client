@@ -231,7 +231,7 @@
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::<module>": {
-      "moved": "T3.6: the reference's warning that Snowflake's sample takes no seed (SNOW/sampler.py:87-90) is the core's SEED_IGNORED, shown as the UserWarning the reference raises"
+      "moved": "T3.6: owner-approved P3D-13 removes the routine Snowflake seed warning because the seed is optional; the sampling limitation is documented and no Python SEED_IGNORED mapping remains"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_Words.convert_field": {
       "moved": "T3.17: the one value formatter gains the conversions the shared templates name (d, p); fix 1: host-held values from the call in progress (holding), the a and I conversions and the to() pairing"

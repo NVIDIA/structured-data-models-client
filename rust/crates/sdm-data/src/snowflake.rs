@@ -110,8 +110,8 @@ impl SqlDialect for Snowflake {
             reads_nan_as_missing: false,
             optional: sql::rendered(),
             max_keys_per_request: None,
-            // `SAMPLE ROW (n ROWS)` takes no seed (owner option C): the
-            // core says so once, as the reference warns.
+            // `SAMPLE ROW (n ROWS)` takes no seed (owner option C).
+            // P3D-13 documents this without a routine optional-seed warning.
             sampling: Determinism::Unseeded,
             // Any seed is taken, and none is written.
             max_seed: u64::MAX,
@@ -150,6 +150,25 @@ impl SqlDialect for Snowflake {
     /// reference names every table it reads.
     fn settles_namespace(&self) -> bool {
         true
+    }
+
+    /// Snowflake returns the raw session database and schema. Supplied
+    /// parts align from the database outward, and missing session parts
+    /// stop resolution without dropping a database the source names.
+    fn settled_namespace(&self, given: &[Option<String>], session: Vec<String>) -> Vec<String> {
+        let mut parts = Vec::with_capacity(given.len().max(session.len()));
+        for at in 0..given.len().max(session.len()) {
+            match given
+                .get(at)
+                .cloned()
+                .flatten()
+                .or_else(|| session.get(at).cloned())
+            {
+                Some(part) => parts.push(part),
+                None => break,
+            }
+        }
+        parts
     }
 
     fn unqualified(&self, relation: &Relation) -> Option<CoreError> {
