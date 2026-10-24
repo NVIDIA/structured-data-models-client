@@ -6,98 +6,20 @@
 //! calls a function that is not trusted (`RE/view_expr.py:192-1044`).
 
 use super::lex::{Kind, lex, masked};
-use super::names::Unreadable;
 use super::pattern::{Lazy, Pattern, Read};
 use super::words::{self, has};
 use super::{ExprDialect, Spaces};
+pub use sdm_contract::view::ExprRefusal;
 
-/// Why an expression is refused (old-behaviour rows 64 to 66), typed so
-/// the core words it as the old client did (`sdm-core::view_words`).
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum ExprRefusal {
-    /// It holds `;`, `--`, `/*`, `*/`, `|>` or `->>`, anywhere.
-    Contains(&'static str),
-    /// `$$` on Databricks, which quotes nothing with it.
-    DollarQuotes,
-    /// A Snowflake comment, `//` or another.
-    SlashComment,
-    /// A backslash inside a Snowflake double-quoted name.
-    BackslashInQuotedName,
-    /// A character outside quotes that is not ASCII.
-    NotAscii(char),
-    /// A quote left unpaired: `$$`, `'`, `"` or a backtick.
-    Unpaired(&'static str),
-    ClosesUnopened,
-    LeavesUnclosed,
-    /// A statement keyword outside quotes, as written.
-    Keyword(String),
-    SubQuery,
-    /// A call of what a bracket or an index gives.
-    CallsResult,
-    /// A call of something that is no name, with the ten characters before
-    /// its `(`, quoted text masked.
-    CallsAfter(String),
-    /// A call of a quoted name.
-    QuotedFunction,
-    /// A call of a qualified name: its last part.
-    QualifiedFunction(String),
-    /// A function named through `IDENTIFIER()`.
-    Identifier,
-    /// A call of a function off the dialect's allow-list, as written.
-    NotPure(String),
-    /// A session word read bare, as written.
-    SessionValue(String),
-    /// A session word read quoted, its quotes included.
-    QuotedSessionValue(String),
-    /// A pattern the check reads it by failed on it, so it cannot be read
-    /// safely (T3.5 fix 1; the old client has no such limit).
-    Unreadable(Unreadable),
-}
-
-impl ExprRefusal {
-    /// The old client's words for the refusal, `quote` writing a piece of
-    /// the expression as it quoted it (Python's `repr`, which the core
-    /// hands in: no code here writes Python's text).
-    pub fn words(&self, quote: &dyn Fn(&str) -> String) -> String {
-        match self {
-            ExprRefusal::Contains(token) => format!("it contains {}", quote(token)),
-            ExprRefusal::DollarQuotes => {
-                "it contains '$$', which Databricks SQL does not quote with".into()
-            }
-            ExprRefusal::SlashComment => "it contains '//'".into(),
-            ExprRefusal::BackslashInQuotedName => {
-                "it has a backslash inside a double-quoted name".into()
-            }
-            ExprRefusal::NotAscii(c) => format!(
-                "it has {} outside quotes, which is not ASCII",
-                quote(&c.to_string())
-            ),
-            ExprRefusal::Unpaired(delimiter) => format!(
-                "it leaves {} unpaired, so which part of it is quoted text cannot be established",
-                quote(delimiter)
-            ),
-            ExprRefusal::ClosesUnopened => "it closes a '(' it never opened".into(),
-            ExprRefusal::LeavesUnclosed => "it leaves a '(' unclosed".into(),
-            ExprRefusal::Keyword(keyword) => format!("it contains the SQL keyword '{keyword}'"),
-            ExprRefusal::SubQuery => "it contains a sub-query".into(),
-            ExprRefusal::CallsResult => "it calls the result of an expression".into(),
-            ExprRefusal::CallsAfter(before) => {
-                format!("it calls what precedes '(' after {}", quote(before))
-            }
-            ExprRefusal::QuotedFunction => "it calls a function by a quoted name".into(),
-            ExprRefusal::QualifiedFunction(name) => {
-                format!("it calls the qualified function '{name}'")
-            }
-            ExprRefusal::Identifier => "it names a function through IDENTIFIER()".into(),
-            ExprRefusal::NotPure(name) => {
-                format!("it calls '{name}', which is not a pure built-in SQL function")
-            }
-            ExprRefusal::SessionValue(word) => format!("it reads the session value '{word}'"),
-            ExprRefusal::QuotedSessionValue(quoted) => {
-                format!("it reads the session value {quoted}")
-            }
-            ExprRefusal::Unreadable(unreadable) => unreadable.to_string(),
+/// The dialect's own words for a refusal's reason that names its
+/// warehouse (`ViewTextAsk::ReasonWords`): Databricks's `$$`; none for
+/// every other reason, which the core words as the old client did.
+pub fn reason_words(reason: &ExprRefusal) -> Option<String> {
+    match reason {
+        ExprRefusal::DollarQuotes => {
+            Some("it contains '$$', which Databricks SQL does not quote with".into())
         }
+        _ => None,
     }
 }
 

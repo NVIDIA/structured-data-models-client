@@ -9,11 +9,10 @@
 //! ordered routine of stage 2 (`view.rs`) asks them in turn, between its
 //! reads.
 
-use sdm_data::view_expr::metric::{
-    DefaultRefusal, Parameter, ParameterInput, TypeClass, join_condition, read_parameters,
-    table_reference, type_class,
+use sdm_contract::view::{
+    DefaultRefusal, DefaultTexts, Parameter, ParameterInput, TypeClass, ViewTextAnswer, ViewTextAsk,
 };
-use sdm_data::view_expr::strip_comments;
+use sdm_contract::{CoreError, Sentence};
 use sdm_schema::view::joins::{self, JoinWalk};
 use sdm_schema::view::spec::{Source, TableItem, TableSpec, ViewRefusal, ViewSpec};
 use sdm_schema::view::yaml::{Document, NodeId, Value};
@@ -21,7 +20,39 @@ use sdm_schema::view::yaml::{Document, NodeId, Value};
 use crate::pql::conversions::{
     Unconverted, date_text, datetime_text, decimal_text, int_text, strip,
 };
-use crate::pql::{date_iso, datetime_iso, spaces, value_text};
+use crate::pql::{date_iso, datetime_iso, value_text};
+
+/// The data layer's answers to the routine's questions of text
+/// (`DataLayer::view_text`), in the run provider's dialect.
+pub type Ask<'a> = &'a dyn Fn(ViewTextAsk) -> Result<ViewTextAnswer, CoreError>;
+
+/// An answer of another kind than the question's, which no data layer
+/// gives: the core's fault, refused as an internal error.
+fn mismatched(asked: &str) -> CoreError {
+    CoreError::new(
+        Sentence::Internal,
+        "the data layer answered a question of a view's text with another kind of answer",
+    )
+    .with_field("asked", sdm_contract::Detail::text(asked))
+}
+
+/// A name's parts, or none (`ViewName`, `TableReference`).
+pub fn names(ask: Ask<'_>, question: ViewTextAsk) -> Result<Option<Vec<String>>, CoreError> {
+    match ask(question)? {
+        ViewTextAnswer::Names(names) => Ok(names),
+        _ => Err(mismatched("names")),
+    }
+}
+
+/// A type's class (`TypeClass`).
+pub fn type_class(ask: Ask<'_>, data_type: &str) -> Result<TypeClass, CoreError> {
+    match ask(ViewTextAsk::TypeClass {
+        data_type: data_type.to_owned(),
+    })? {
+        ViewTextAnswer::TypeClass(class) => Ok(class),
+        _ => Err(mismatched("type_class")),
+    }
+}
 
 /// Why the data layer refuses a join's source or condition.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -36,17 +67,27 @@ pub enum JoinJudgement {
 /// source that is no plain table name, which refuses the view
 /// (`:784-791`), or `None` for a definition with no metric view's source
 /// (a semantic view's).
-pub fn fact_source(spec: &ViewSpec) -> Result<Vec<String>, Option<NodeId>> {
+pub fn fact_source(
+    spec: &ViewSpec,
+    ask: Ask<'_>,
+) -> Result<Result<Vec<String>, Option<NodeId>>, CoreError> {
     let Some(TableItem::Table(TableSpec {
         source: Source::Name(Some(node)),
         ..
     })) = spec.tables.first()
     else {
-        return Err(None);
+        return Ok(Err(None));
     };
-    spec.text(*node)
-        .and_then(|name| table_reference(name, spaces()))
-        .ok_or(Some(*node))
+    let Some(name) = spec.text(*node) else {
+        return Ok(Err(Some(*node)));
+    };
+    Ok(names(
+        ask,
+        ViewTextAsk::TableReference {
+            name: name.to_owned(),
+        },
+    )?
+    .ok_or(Some(*node)))
 }
 
 /// The text a parameter's default casts from, checked against its type so
@@ -54,11 +95,10 @@ pub fn fact_source(spec: &ViewSpec) -> Result<Vec<String>, Option<NodeId>> {
 /// `DB/metric_view.py:513-566`): the data layer tells the type's class,
 /// and the default is converted as the old client's Python converted it.
 pub fn default_text(
-    data_type: &str,
+    class: TypeClass,
     document: &Document,
     default: NodeId,
 ) -> Result<String, DefaultRefusal> {
-    let class = type_class(data_type, spaces());
     let value = document.value(default);
     // `str(default)`, which a text too large to write refuses.
     let text = || value_text(document, default).map_err(|_| DefaultRefusal::TooLong);
@@ -97,51 +137,124 @@ pub fn default_text(
 }
 
 /// Each parameter of the view as the data layer reads it: its type if the
-/// definition writes it as text, its default unless null.
-pub fn parameter_inputs(spec: &ViewSpec) -> Vec<ParameterInput<NodeId>> {
-    spec.parameters
-        .iter()
-        .map(|parameter| ParameterInput {
+/// definition writes it as text, and its default, unless null, converted
+/// for each type it may be read as, the definition's and any `described`
+/// for its name (D3 of T3.27).
+pub fn parameter_inputs(
+    spec: &ViewSpec,
+    described: &[(String, String)],
+    ask: Ask<'_>,
+) -> Result<Vec<ParameterInput<DefaultTexts>>, CoreError> {
+    let mut inputs = Vec::new();
+    for parameter in &spec.parameters {
+        let data_type = parameter
+            .data_type
+            .and_then(|n| spec.text(n))
+            .map(str::to_owned);
+        let default = match parameter.default {
+            None => None,
+            Some(node) => {
+                let folded = parameter.name.to_lowercase();
+                let mut types: Vec<String> = data_type.iter().cloned().collect();
+                for (name, written) in described {
+                    if name.to_lowercase() == folded && !types.contains(written) {
+                        types.push(written.clone());
+                    }
+                }
+                let mut texts = Vec::new();
+                for written in types {
+                    let class = type_class(ask, &written)?;
+                    texts.push((written, default_text(class, &spec.document, node)));
+                }
+                Some(DefaultTexts(texts))
+            }
+        };
+        inputs.push(ParameterInput {
             name: parameter.name.clone(),
-            data_type: parameter
-                .data_type
-                .and_then(|n| spec.text(n))
-                .map(str::to_owned),
-            default: parameter.default,
-        })
-        .collect()
+            data_type,
+            default,
+        });
+    }
+    Ok(inputs)
 }
 
 /// The `parameters` section read (`_read_parameters`), by folded name,
-/// the types Databricks describes, `described`, winning.
-pub fn parameters(spec: &ViewSpec, described: &[(String, String)]) -> Vec<(String, Parameter)> {
-    read_parameters(
-        &parameter_inputs(spec),
-        described,
-        |data_type, default| default_text(data_type, &spec.document, *default),
-        spaces(),
-    )
+/// the types the warehouse describes, `described`, winning.
+pub fn parameters(
+    spec: &ViewSpec,
+    described: &[(String, String)],
+    ask: Ask<'_>,
+) -> Result<Vec<(String, Parameter)>, CoreError> {
+    let inputs = parameter_inputs(spec, described, ask)?;
+    match ask(ViewTextAsk::Parameters {
+        inputs,
+        described: described.to_vec(),
+    })? {
+        ViewTextAnswer::Parameters(read) => Ok(read),
+        _ => Err(mismatched("parameters")),
+    }
 }
 
 /// The joins kept and skipped (`_add_joins`): a source read as a plain
 /// table name, a condition with its comments dropped read as a
 /// single-column equality, each refusal skipping the join.
-pub fn walk_joins(spec: &mut ViewSpec) -> Result<JoinWalk<JoinJudgement>, ViewRefusal> {
-    joins::walk(
+pub fn walk_joins(
+    spec: &mut ViewSpec,
+    ask: Ask<'_>,
+) -> Result<Result<JoinWalk<JoinJudgement>, ViewRefusal>, CoreError> {
+    // A question the data layer fails stops the walk, and is the run's
+    // failure.
+    let failed: std::cell::RefCell<Option<CoreError>> = std::cell::RefCell::new(None);
+    let keep = |answer: Result<bool, CoreError>| match answer {
+        Ok(read) => read,
+        Err(error) => {
+            failed.borrow_mut().get_or_insert(error);
+            false
+        }
+    };
+    let walked = joins::walk(
         spec,
         |spec, source| {
-            source
-                .and_then(|node| spec.text(node))
-                .and_then(|name| table_reference(name, spaces()))
-                .map(|_| ())
-                .ok_or(JoinJudgement::NotPlainSource)
+            let read = source.and_then(|node| spec.text(node)).map(|name| {
+                names(
+                    ask,
+                    ViewTextAsk::TableReference {
+                        name: name.to_owned(),
+                    },
+                )
+                .map(|parts| parts.is_some())
+            });
+            if keep(read.unwrap_or(Ok(false))) {
+                Ok(())
+            } else {
+                Err(JoinJudgement::NotPlainSource)
+            }
         },
         |spec, on| {
-            on.and_then(|node| spec.text(node))
-                .and_then(|text| strip_comments(text, spaces()).ok())
-                .and_then(|text| join_condition(&text, spaces()))
-                .map(|_| ())
-                .ok_or(JoinJudgement::NotSingleEquality)
+            let read = on.and_then(|node| spec.text(node)).map(|text| {
+                let stripped = match ask(ViewTextAsk::StripComments {
+                    expr: text.to_owned(),
+                })? {
+                    ViewTextAnswer::Text(Ok(stripped)) => stripped,
+                    ViewTextAnswer::Text(Err(_)) => return Ok(false),
+                    _ => return Err(mismatched("strip_comments")),
+                };
+                match ask(ViewTextAsk::JoinCondition {
+                    condition: stripped,
+                })? {
+                    ViewTextAnswer::Condition(condition) => Ok(condition.is_some()),
+                    _ => Err(mismatched("join_condition")),
+                }
+            });
+            if keep(read.unwrap_or(Ok(false))) {
+                Ok(())
+            } else {
+                Err(JoinJudgement::NotSingleEquality)
+            }
         },
-    )
+    );
+    if let Some(error) = failed.into_inner() {
+        return Err(error);
+    }
+    Ok(walked)
 }

@@ -12,11 +12,16 @@
 //! Each is a pure function of text; the core calls each in the old
 //! client's order and words each refusal (`sdm-core::view_words`).
 
-use super::check::{ExprRefusal, unsafe_reason};
+use super::check::unsafe_reason;
 use super::lex::{bare_name, string_literals};
 use super::names::{Unreadable, name_references};
 use super::pattern::{Lazy, Pattern, Read};
 use super::{ExprDialect, Spaces};
+pub use sdm_contract::view::{
+    DefaultRefusal, DefaultTexts, DimensionRef, FilterRefusal, JoinRef, KeyRef, MeasureInput,
+    MeasureRead, MeasureReason, MeasureRefusal, Parameter, ParameterInput, ParameterRead,
+    TypeClass, Unread,
+};
 
 fn pattern(text: &str, spaces: &Spaces) -> Pattern {
     Pattern::new(text, spaces)
@@ -123,14 +128,6 @@ const TIMESTAMP_TYPES: &[&str] = &["timestamp", "timestamp_ltz", "timestamp_ntz"
 /// not read as one, a type with no literal, no derived column.
 fn matches(pattern: &Pattern, text: &str) -> bool {
     pattern.is_match(text).unwrap_or(false)
-}
-
-/// One side of a join condition: the (dot-joined) table alias or join path
-/// qualifying the column, if any, and the column.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct KeyRef {
-    pub qualifier: Option<String>,
-    pub column: String,
 }
 
 /// A name without its backticks, if it is backticked (`unquote_ident`).
@@ -337,26 +334,6 @@ pub fn renamed_column(expr: &str, spaces: &Spaces) -> Option<String> {
     }
 }
 
-/// The literal a parameter's type takes, as `_default_text` tells types
-/// apart (`DB/metric_view.py:513-566`): by the type in lower case, its
-/// white space single.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum TypeClass {
-    Boolean,
-    /// `int`, `bigint` and the like.
-    Integer,
-    /// `double`, `float`, `real`, and `decimal` with or without its
-    /// precision.
-    Decimal,
-    /// `string`, `char(n)` and `varchar(n)`.
-    String,
-    Date,
-    /// `timestamp`, `timestamp_ntz` and `timestamp_ltz`.
-    Timestamp,
-    /// Any other type, which has no literal here.
-    NoLiteral,
-}
-
 /// The class of `data_type`.
 pub fn type_class(data_type: &str, spaces: &Spaces) -> TypeClass {
     let folded = spaces
@@ -381,55 +358,15 @@ pub fn type_class(data_type: &str, spaces: &Spaces) -> TypeClass {
     }
 }
 
-/// Why a default gives no literal of its type.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum DefaultRefusal {
-    /// The type has no literal here.
-    NoLiteral,
-    /// The default is no value of the type.
-    NotOfType,
-    /// An integer of more digits than Python reads, so many.
-    TooManyDigits(usize),
-    /// A text `int` cannot read though the old client's pattern took it.
-    NotAnInteger,
-    /// A value whose text would be longer than the core writes.
-    TooLong,
-}
-
-/// What a parameter of the view is given, as the core hands it over: its
-/// name, its type as the definition writes it if text, and its default
-/// unless null, as the core holds it (`D`).
-#[derive(Clone, Debug, PartialEq)]
-pub struct ParameterInput<D> {
-    pub name: String,
-    pub data_type: Option<String>,
-    pub default: Option<D>,
-}
-
-/// A parameter as a query of the view without arguments reads it.
-#[derive(Clone, Debug, PartialEq)]
-pub struct Parameter {
-    pub name: String,
-    pub read: Result<ParameterRead, Unread>,
-}
-
-/// A parameter's default as a typed SQL literal, and as text.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ParameterRead {
-    pub literal: String,
-    pub text: String,
-}
-
-/// Why a parameter has no literal.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Unread {
-    NoDefault,
-    NoType,
-    /// Its default is refused for its type, which is given.
-    Refused {
-        refusal: DefaultRefusal,
-        data_type: String,
-    },
+/// The text the core converted a default to for `data_type`, as written;
+/// a type it was not converted for has no literal here.
+fn converted(default: &DefaultTexts, data_type: &str) -> Result<String, DefaultRefusal> {
+    default
+        .0
+        .iter()
+        .rev()
+        .find(|(written, _)| written == data_type)
+        .map_or(Err(DefaultRefusal::NoLiteral), |(_, text)| text.clone())
 }
 
 /// A Databricks string literal holding `text`, a quote and a backslash
@@ -440,13 +377,12 @@ fn sql_string(text: &str) -> String {
 
 /// The `parameters` section read, by folded name, a later one replacing an
 /// earlier of the same name in its place (`_read_parameters`). The type
-/// Databricks describes, `described`, wins over the definition's. The
-/// core converts each default to the text its type casts from
-/// (`convert`, `_default_text`).
-pub fn read_parameters<D>(
-    inputs: &[ParameterInput<D>],
+/// Databricks describes, `described`, wins over the definition's; each
+/// default is the text the core converted it to for that type
+/// (`DefaultTexts`, `_default_text`).
+pub fn read_parameters(
+    inputs: &[ParameterInput<DefaultTexts>],
     described: &[(String, String)],
-    convert: impl Fn(&str, &D) -> Result<String, DefaultRefusal>,
     spaces: &Spaces,
 ) -> Vec<(String, Parameter)> {
     let mut parameters: Vec<(String, Parameter)> = Vec::new();
@@ -461,7 +397,7 @@ pub fn read_parameters<D>(
         let read = match (&input.default, data_type) {
             (None, _) => Err(Unread::NoDefault),
             (Some(_), None) => Err(Unread::NoType),
-            (Some(default), Some(data_type)) => match convert(&data_type, default) {
+            (Some(default), Some(data_type)) => match converted(default, &data_type) {
                 Ok(text) => {
                     let sql_type = spaces
                         .split(&data_type)
@@ -566,18 +502,6 @@ pub fn reads_star(expr: &str, spaces: &Spaces) -> Result<bool, Unreadable> {
         .any(|reference| reference.parts.last().is_some_and(|p| p == "*")))
 }
 
-/// Why the filter cannot be applied to the source table alone.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum FilterRefusal {
-    /// It is no text, or blank.
-    NotACondition,
-    Unsafe(ExprRefusal),
-    /// It reads a joined table, by alias.
-    JoinedTable(String),
-    /// A pattern the check reads it by failed on it.
-    Unreadable(Unreadable),
-}
-
 /// The filter, trimmed, if it can be applied to the source table alone
 /// (`_check_filter`): text, safe, and reading no joined table. `filter` is
 /// `None` for a filter that is no text; `candidates` each join path or
@@ -602,49 +526,6 @@ pub fn check_filter(
         }
     }
     Ok(spaces.strip(filter).to_owned())
-}
-
-/// A measure as the core hands it over: an entry of `measures` that is a
-/// mapping with a text name, its `expr` if text, and whether it has a
-/// `window`.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct MeasureInput {
-    pub name: String,
-    pub expr: Option<String>,
-    pub window: bool,
-}
-
-/// A dimension resolved onto one table: its name, the table's alias, and
-/// its expression with that table's qualifier taken out.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct DimensionRef {
-    pub name: String,
-    pub alias: String,
-    pub expr: String,
-}
-
-/// What a measure reads: each column with its table's alias, and the
-/// predictive query aggregation it is, if one plain aggregate of the
-/// source table.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct MeasureRead {
-    pub name: String,
-    pub inputs: Vec<(String, String)>,
-    pub aggregation: Option<(String, Option<String>)>,
-}
-
-/// A measure left out, and why.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct MeasureRefusal {
-    pub name: String,
-    pub reason: MeasureReason,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum MeasureReason {
-    Unreadable(Unreadable),
-    /// It names a refused dimension, as written.
-    NamesRefused(String),
 }
 
 /// Which columns each measure reads, never running it (`_read_measures`).
@@ -808,16 +689,6 @@ fn aggregation<'a>(
         return (function == "COUNT").then(|| ("COUNT_DISTINCT".to_owned(), Some(column)));
     }
     Some((function, Some(column)))
-}
-
-/// A join as its keys are resolved: its alias, the alias it is declared
-/// on, its path, and its condition's two sides.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct JoinRef {
-    pub alias: String,
-    pub parent_alias: String,
-    pub path: Vec<String>,
-    pub condition: [KeyRef; 2],
 }
 
 /// A join condition resolved into `(other_alias, other_key, child_key)`,

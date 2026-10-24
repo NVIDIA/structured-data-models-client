@@ -157,6 +157,51 @@ impl SqlDialect for Databricks {
         NameCase::Insensitive
     }
 
+    /// A metric view's expressions are checked as Databricks reads them
+    /// (T3.5).
+    fn expr_dialect(&self) -> Option<crate::view_expr::ExprDialect> {
+        Some(crate::view_expr::ExprDialect::Databricks)
+    }
+
+    /// A metric view's described column type by the table type map
+    /// (`DatabricksTable._to_dtype`, old-behaviour row 41).
+    fn declared_type(&self, data_type: &str) -> sdm_contract::view::DeclaredType {
+        use sdm_contract::view::DeclaredType;
+        match declared_dtype(data_type) {
+            Some(sdm_contract::ops::Dtype::Unsupported) => DeclaredType::Unsupported,
+            Some(dtype) => DeclaredType::Known(dtype),
+            None => DeclaredType::Unknown,
+        }
+    }
+
+    /// What a Databricks failure says (`DB/errors.py:66-99`): an expression
+    /// refused for what it says or reads, SQLSTATE class `22` or `42`; a
+    /// table missing or hidden, `42P01`; one the caller may not read,
+    /// `42501` or a permission error class.
+    fn failure(
+        &self,
+        error: &sdm_contract::data::ProviderError,
+    ) -> sdm_contract::data::FailureFacts {
+        use sdm_contract::data::{FailureFacts, Unusable};
+        let state = error.sqlstate.as_deref();
+        let class = error
+            .error_class
+            .as_deref()
+            .map(|name| name.split('.').next().unwrap_or(name));
+        let unusable = if state == Some("42P01") {
+            Some(Unusable::Missing)
+        } else if state == Some("42501") || class.is_some_and(|c| PERMISSION_CLASSES.contains(&c)) {
+            Some(Unusable::Forbidden)
+        } else {
+            None
+        };
+        FailureFacts {
+            not_found: false,
+            refuses_expression: state.is_some_and(|s| s.starts_with("22") || s.starts_with("42")),
+            unusable,
+        }
+    }
+
     /// In backticks, each one in it doubled (`quote_ident(name, '`')`).
     fn identifier(&self, name: &str) -> String {
         format!("`{}`", name.replace('`', "``"))
@@ -377,6 +422,15 @@ impl SqlDialect for Databricks {
         read(request, part, batches)
     }
 
+    fn read_view(
+        &self,
+        request: &DataRequest,
+        batches: &[RecordBatch],
+        spaces: &crate::view_expr::Spaces,
+    ) -> Result<CatalogAnswer, CoreError> {
+        read_view(request, batches, spaces)
+    }
+
     fn bound_keys(
         &self,
         schema: &SchemaRef,
@@ -485,8 +539,15 @@ fn describe(
 ) -> Result<(String, Vec<SqlParam>), CoreError> {
     let one = || CatalogTarget::of(request, sql::one_table(request, tables)?);
     Ok(match part {
-        // No view is read here (T3.27): only a dialect that reads views answers it.
-        DescribePart::ViewDefinition => return Err(views_unread()),
+        // A metric view's description, as the reference asks it, each part
+        // of its name quoted (`DB/metric_view.py:1440-1450`).
+        DescribePart::ViewDefinition => {
+            let view = sql::one_table(request, tables)?;
+            (
+                format!("DESCRIBE TABLE EXTENDED {}", quoted_name(view)),
+                vec![],
+            )
+        }
         // The source's namespace, one row per part, outermost first, each
         // given or the session's current one.
         DescribePart::Namespace => {
@@ -684,7 +745,8 @@ pub(crate) fn read(
     batches: &[RecordBatch],
 ) -> Result<CatalogAnswer, CoreError> {
     match part {
-        // No view is read here (T3.27): only a dialect that reads views answers it.
+        // Read only with the white space its sections are read by
+        // ([`read_view`]).
         DescribePart::ViewDefinition => Err(views_unread()),
         DescribePart::Namespace => {
             crate::read::namespace(batches, sdm_contract::data::catalog_columns::NAME)
@@ -846,6 +908,10 @@ fn read_columns(
     Ok(CatalogAnswer::Columns(found))
 }
 
+/// The error classes that say the caller may not read a table
+/// (`DB/errors.py`, `_PERMISSION_CLASSES`).
+const PERMISSION_CLASSES: [&str; 2] = ["INSUFFICIENT_PERMISSIONS", "PERMISSION_DENIED"];
+
 /// The data type a column's declared type fixes, as the reference types a
 /// Databricks column by its declaration (`DatabricksTable._to_dtype`): the
 /// integer types an integer; `float`, `real` and `double` a float; a
@@ -940,6 +1006,65 @@ fn unread(at: usize) -> CoreError {
         "a catalog answer's column is missing or not text",
     )
     .with_field("position", Detail::text(at.to_string()))
+}
+
+/// A relation's name as the reference quotes a metric view's, each part
+/// in backticks, joined by dots (`RE/graph.py:1512-1518`).
+fn quoted_name(relation: &Relation) -> String {
+    relation
+        .source
+        .iter()
+        .map(|part| identifier(part))
+        .collect::<Vec<_>>()
+        .join(".")
+}
+
+/// A metric view's description read (`DB/metric_view.py:1389-1475`): its
+/// definition, the dimensions' and parameters' types, and the catalog and
+/// schema it is in; a relation that is no metric view, or one with no
+/// definition, refused by name, quoting the view's name as asked.
+pub(crate) fn read_view(
+    request: &DataRequest,
+    batches: &[RecordBatch],
+    spaces: &crate::view_expr::Spaces,
+) -> Result<CatalogAnswer, CoreError> {
+    use crate::view_expr::describe::{DescribeRefusal, describe_view};
+    let DataRequest::Describe { tables, .. } = request else {
+        return Err(views_unread());
+    };
+    let view = quoted_name(sql::one_table(request, tables)?);
+    let mut rows = Vec::new();
+    for batch in batches {
+        let width = batch.num_columns().min(2);
+        let cells: Vec<StringArray> = (0..width)
+            .map(|at| text_at(batch, at))
+            .collect::<Result<_, _>>()?;
+        for row in 0..batch.num_rows() {
+            rows.push(cells.iter().map(|cell| value(cell, row)).collect());
+        }
+    }
+    match describe_view(&rows, spaces) {
+        Ok(found) => Ok(CatalogAnswer::ViewDefinition(
+            sdm_contract::catalog::ViewDefinition {
+                kind: sdm_contract::view::ViewKind::Metric,
+                text: found.definition,
+                parameters: found.parameters,
+                located: vec![found.catalog, found.schema],
+                columns: found.dtypes,
+            },
+        )),
+        Err(DescribeRefusal::NotAMetricView { got }) => Err(CoreError::new(
+            Sentence::ViewNotAMetricView,
+            "the relation named is not a metric view",
+        )
+        .with_field("view", Detail::text(&view))
+        .with_field("got", Detail::text(got.unwrap_or_else(|| "UNKNOWN".into())))),
+        Err(DescribeRefusal::NoDefinition) => Err(CoreError::new(
+            Sentence::ViewNoDefinition,
+            "the metric view gives no definition",
+        )
+        .with_field("view", Detail::text(&view))),
+    }
 }
 
 /// The column at `at` of `batch` as text: a string column, or a column of

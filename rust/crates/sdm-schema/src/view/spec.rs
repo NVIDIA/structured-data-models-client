@@ -20,22 +20,8 @@ use std::fmt;
 
 use super::yaml::{Document, NodeId, Value, YamlError};
 
-/// The kind of view a definition is.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ViewKind {
-    Metric,
-    Semantic,
-}
-
-impl ViewKind {
-    /// The view's kind as a sentence names it.
-    pub fn noun(self) -> &'static str {
-        match self {
-            ViewKind::Metric => "metric view",
-            ViewKind::Semantic => "semantic view",
-        }
-    }
-}
+/// The kind of view a definition is, as the contract names it.
+pub use sdm_contract::view::ViewKind;
 
 /// A view's definition.
 #[derive(Clone, Debug, PartialEq)]

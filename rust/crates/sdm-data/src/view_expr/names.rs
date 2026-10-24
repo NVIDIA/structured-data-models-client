@@ -20,8 +20,8 @@
 //! refused as unreadable, so a long expression is read in time linear in its
 //! length and none is read wrong.
 
+pub use sdm_contract::view::Unreadable;
 use std::collections::{BTreeMap, BTreeSet};
-use std::fmt;
 use std::ops::Range;
 
 use super::lex::{Kind, Token, lex};
@@ -38,29 +38,6 @@ pub struct NameReference {
     /// Whether it is one unquoted part.
     pub bare: bool,
 }
-
-/// An expression whose names could not be settled within the bounds the
-/// scan keeps, so no reading of it is safe (`UnreadableExpressionError`).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Unreadable {
-    TooDeep,
-    NotUnderstood,
-}
-
-impl fmt::Display for Unreadable {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match self {
-            Unreadable::TooDeep => "it is too deeply nested or too long to read safely",
-            Unreadable::NotUnderstood => {
-                "it has syntax that is not understood, so which of its words name columns \
-                 cannot be settled"
-            }
-        })
-    }
-}
-
-impl std::error::Error for Unreadable {}
-
 /// The names a Databricks expression reads as values (`name_references`).
 /// An expression that does not parse as the scan reads SQL is refused,
 /// since a failed reading of a form makes its word a column.

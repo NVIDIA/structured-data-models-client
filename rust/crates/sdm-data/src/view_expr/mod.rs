@@ -36,10 +36,12 @@ mod pattern;
 mod qualifier;
 mod words;
 
-pub use check::{ExprRefusal, unsafe_reason, untrusted_call_reason};
+pub use check::{ExprRefusal, reason_words, unsafe_reason, untrusted_call_reason};
 pub use lex::{string_literals, strip_comments};
 pub use names::{NameReference, Unreadable, name_references};
 pub use qualifier::{mask_literals, qualifier_found, strip_qualifier};
+use sdm_contract::data::Relation;
+pub use sdm_contract::view::{DeclaredType, ExprVerdict, ViewTextAnswer, ViewTextAsk};
 
 /// The dialect an expression is written in, which decides how it lexes
 /// and which functions it may call.
@@ -48,61 +50,31 @@ pub enum ExprDialect {
     Databricks,
     Snowflake,
 }
-
-/// The kind of view an expression is taken from, as a dropped column's
-/// message names it.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ViewKind {
-    MetricView,
-    SemanticView,
-}
-
-impl ViewKind {
-    fn noun(self) -> &'static str {
-        match self {
-            ViewKind::MetricView => "metric view",
-            ViewKind::SemanticView => "semantic view",
-        }
-    }
-}
-
-/// Why a view's column expression is dropped, or `None` to keep it
-/// (`_view_expr_message`, `RE/graph.py:159-191`): unsafe text whatever the
-/// trust, and unless `trust_expressions`, a call that is not trusted, with
-/// the way out. `column` names the column as the message does (`column
-/// 'x'`, or `column 'x' of table 't'`); `columns` are the columns of the
-/// table the expression is evaluated on; `text` holds Python's rules the
-/// core hands in.
-pub fn expression_message<S: AsRef<str>>(
-    column: &str,
+/// Why a view's column expression is refused, and whether trusting the
+/// view would keep it, or `None` to keep it (`_view_expr_message`'s
+/// reason, `RE/graph.py:159-191`): unsafe text whatever the trust, and
+/// unless `trust_expressions`, a call that is not trusted. `columns` are
+/// the columns of the table the expression is evaluated on.
+pub fn expression_verdict<S: AsRef<str>>(
     expr: &str,
-    view: ViewKind,
     dialect: ExprDialect,
     trust_expressions: bool,
     columns: &[S],
-    text: TextRules<'_>,
-) -> Option<String> {
-    let mut hatch = "";
-    let mut reason = unsafe_reason(expr, Some(dialect), text.spaces);
-    if reason.is_none() && !trust_expressions {
-        reason = untrusted_call_reason(expr, dialect, columns, text.spaces);
-        hatch = ". Pass trust_expressions=True to keep it if you trust whoever authored the view";
+    spaces: &Spaces,
+) -> Option<ExprVerdict> {
+    if let Some(reason) = unsafe_reason(expr, Some(dialect), spaces) {
+        return Some(ExprVerdict {
+            reason,
+            untrusted: false,
+        });
     }
-    let reason = reason?.words(text.quote);
-    Some(format!(
-        "Failed to add {column} since {reason}, and expressions taken from the {} are executed \
-         as SQL under your warehouse credentials{hatch}",
-        view.noun()
-    ))
-}
-
-/// The Python text rules the core hands in to word an expression's
-/// refusal: how the old client quoted a piece of it (`repr`), and white
-/// space.
-#[derive(Clone, Copy)]
-pub struct TextRules<'a> {
-    pub quote: &'a dyn Fn(&str) -> String,
-    pub spaces: &'a Spaces,
+    if trust_expressions {
+        return None;
+    }
+    untrusted_call_reason(expr, dialect, columns, spaces).map(|reason| ExprVerdict {
+        reason,
+        untrusted: true,
+    })
 }
 
 /// White space as the old client's Python reads it (`str.isspace`, what
@@ -175,4 +147,130 @@ impl Spaces {
     pub(crate) fn split<'a>(&self, text: &'a str) -> impl Iterator<Item = &'a str> {
         text.split(self.is).filter(|part| !part.is_empty())
     }
+}
+
+/// The answer to one question of a semantic model's text
+/// (`DataLayer::view_text`, T3.27), in `dialect`, its white space
+/// `spaces`, each the helper the question is named after; `declared` reads
+/// a declared type by the dialect's type map. A [`ViewTextAsk::Derive`]
+/// is the relation itself, which the dialect renders where it reads it.
+pub fn answer(
+    ask: ViewTextAsk,
+    dialect: ExprDialect,
+    spaces: &Spaces,
+    declared: &dyn Fn(&str) -> DeclaredType,
+) -> ViewTextAnswer {
+    use metric::{
+        check_filter, derived_column, join_condition, read_measures, read_parameters, reads_star,
+        references_alias, renamed_column, resolve_join_keys, strip_alias, substitute_fields,
+        substitute_parameters, table_reference, type_class, view_name, wildcard,
+    };
+    match ask {
+        ViewTextAsk::ViewName { name } => ViewTextAnswer::Names(view_name(&name, spaces)),
+        ViewTextAsk::TableReference { name } => {
+            ViewTextAnswer::Names(table_reference(&name, spaces))
+        }
+        ViewTextAsk::JoinCondition { condition } => {
+            ViewTextAnswer::Condition(join_condition(&condition, spaces))
+        }
+        ViewTextAsk::StripComments { expr } => ViewTextAnswer::Text(strip_comments(&expr, spaces)),
+        ViewTextAsk::TypeClass { data_type } => {
+            ViewTextAnswer::TypeClass(type_class(&data_type, spaces))
+        }
+        ViewTextAsk::Parameters { inputs, described } => {
+            ViewTextAnswer::Parameters(read_parameters(&inputs, &described, spaces))
+        }
+        ViewTextAsk::SubstituteParameters { expr, parameters } => {
+            ViewTextAnswer::Substituted(substitute_parameters(&expr, &parameters, spaces))
+        }
+        ViewTextAsk::SubstituteFields {
+            expr,
+            fields,
+            qualifiers,
+        } => ViewTextAnswer::Fields(substitute_fields(&expr, &fields, &qualifiers, spaces)),
+        ViewTextAsk::Filter { filter, candidates } => {
+            ViewTextAnswer::Filter(check_filter(filter.as_deref(), &candidates, spaces))
+        }
+        ViewTextAsk::Wildcard { expr } => ViewTextAnswer::Wildcard(wildcard(&expr, spaces)),
+        ViewTextAsk::ReadsStar { expr } => ViewTextAnswer::Flag(reads_star(&expr, spaces)),
+        ViewTextAsk::ReferencesAlias { expr, path } => {
+            ViewTextAnswer::Flag(references_alias(&expr, &path, spaces))
+        }
+        ViewTextAsk::StripAlias { expr, path } => {
+            ViewTextAnswer::Text(strip_alias(&expr, &path, spaces))
+        }
+        ViewTextAsk::DerivedColumn { expr } => {
+            ViewTextAnswer::Column(derived_column(&expr, spaces))
+        }
+        ViewTextAsk::RenamedColumn { expr } => {
+            ViewTextAnswer::Column(renamed_column(&expr, spaces))
+        }
+        ViewTextAsk::Measures {
+            measures,
+            candidates,
+            kept,
+            dimensions,
+            refused,
+            parameters,
+        } => {
+            let (read, left_out) = read_measures(
+                &measures,
+                &candidates,
+                &kept,
+                &dimensions,
+                &refused,
+                &parameters,
+                spaces,
+            );
+            ViewTextAnswer::Measures(read, left_out)
+        }
+        ViewTextAsk::JoinKeys {
+            join,
+            child_columns,
+            parent_columns,
+        } => ViewTextAnswer::JoinKeys(resolve_join_keys(&join, &child_columns, &parent_columns)),
+        ViewTextAsk::DeclaredType { data_type } => {
+            ViewTextAnswer::DeclaredType(declared(&data_type))
+        }
+        ViewTextAsk::ReasonWords { reason } => ViewTextAnswer::Words(reason_words(&reason)),
+        ViewTextAsk::Expression {
+            expr,
+            trust_expressions,
+            columns,
+        } => ViewTextAnswer::Expression(expression_verdict(
+            &expr,
+            dialect,
+            trust_expressions,
+            &columns,
+            spaces,
+        )),
+        ViewTextAsk::CrossTable { expr, others } => {
+            ViewTextAnswer::Flag(cross_table(&expr, &others, spaces))
+        }
+        ViewTextAsk::StripQualifier { table, expr } => {
+            ViewTextAnswer::Text(strip_qualifier(&table, &expr, spaces))
+        }
+        ViewTextAsk::Derive {
+            table,
+            columns,
+            filter,
+        } => ViewTextAnswer::Relation(Relation {
+            source: table.source,
+            columns,
+            filter,
+            found: false,
+        }),
+    }
+}
+
+/// Whether `expr` names any of the logical tables `others`, outside
+/// single-quoted literals (`RE/graph.py:2134`).
+fn cross_table(expr: &str, others: &[String], spaces: &Spaces) -> Result<bool, Unreadable> {
+    let masked = mask_literals(expr, spaces)?;
+    for other in others {
+        if qualifier_found(other, &masked, spaces)? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }

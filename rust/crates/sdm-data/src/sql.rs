@@ -129,6 +129,39 @@ pub(crate) trait SqlDialect: Sync {
         NameCase::AsWritten
     }
 
+    /// The dialect a semantic model's expressions are checked in, where
+    /// this dialect reads semantic models (T3.5); `None`, the default: it
+    /// reads none, and each question of one is refused by name.
+    fn expr_dialect(&self) -> Option<crate::view_expr::ExprDialect> {
+        None
+    }
+
+    /// A semantic model's declared column type read by the dialect's type
+    /// map (T3.5); unknown, the default, left to the sampled values.
+    fn declared_type(&self, _data_type: &str) -> sdm_contract::view::DeclaredType {
+        sdm_contract::view::DeclaredType::Unknown
+    }
+
+    /// A semantic model's definition read (`DescribePart::ViewDefinition`),
+    /// its text read by `spaces`; refused by name, the default, by a
+    /// dialect that reads none.
+    fn read_view(
+        &self,
+        _request: &DataRequest,
+        _batches: &[RecordBatch],
+        _spaces: &crate::view_expr::Spaces,
+    ) -> Result<CatalogAnswer, CoreError> {
+        Err(sdm_contract::data::views_unread())
+    }
+
+    /// What a provider's failure says (design S3); none, the default.
+    fn failure(
+        &self,
+        _error: &sdm_contract::data::ProviderError,
+    ) -> sdm_contract::data::FailureFacts {
+        sdm_contract::data::FailureFacts::default()
+    }
+
     /// A derived relation's `FROM` (contract v28), `source` the rendering
     /// of the relation it reads; `None` for a dialect that reads none, where
     /// a derived relation is refused by name (`derived_relations` is false

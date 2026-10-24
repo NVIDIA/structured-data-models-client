@@ -127,7 +127,9 @@ pub fn normalized_query(query: &str) -> Option<String> {
 /// `sdm-data`'s, built here where every binding reaches it (decisions E21,
 /// H14, E30).
 pub fn default_root() -> CompositionRoot {
-    CompositionRoot::new(std::sync::Arc::new(sdm_data::Data::new()))
+    CompositionRoot::new(std::sync::Arc::new(sdm_data::Data::reading_views(
+        sdm_core::pql::spaces(),
+    )))
 }
 
 #[cfg(test)]

@@ -15,6 +15,8 @@
 //! refused by name ([`TooLarge`]).
 
 use sdm_contract::ops::Dtype;
+use sdm_contract::view::ViewKind;
+use sdm_contract::{CoreWarning, Detail, Sentence};
 use sdm_data::view_expr::ExprRefusal;
 use sdm_data::view_expr::metric::{
     DefaultRefusal, FilterRefusal, MeasureReason, MeasureRefusal, Parameter, Unread,
@@ -50,9 +52,90 @@ pub fn quote(text: &str) -> String {
 }
 
 /// Why an expression is refused, in the old client's words
-/// (`RE/view_expr.py`, old-behaviour rows 64 to 66), quoted as it quoted.
-pub fn expr_reason(reason: &ExprRefusal) -> String {
-    reason.words(&quote)
+/// (`RE/view_expr.py`, old-behaviour rows 64 to 66), quoted as it quoted:
+/// `words` the data layer's own words for a reason that names its warehouse
+/// (`ViewTextAsk::ReasonWords`), which win.
+pub fn expr_reason(reason: &ExprRefusal, words: Option<String>) -> String {
+    if let Some(words) = words {
+        return words;
+    }
+    match reason {
+        ExprRefusal::Contains(token) => format!("it contains {}", quote(token)),
+        // A warehouse's own: the dialect words it.
+        ExprRefusal::DollarQuotes => "it contains '$$'".into(),
+        ExprRefusal::SlashComment => "it contains '//'".into(),
+        ExprRefusal::BackslashInQuotedName => {
+            "it has a backslash inside a double-quoted name".into()
+        }
+        ExprRefusal::NotAscii(c) => format!(
+            "it has {} outside quotes, which is not ASCII",
+            quote(&c.to_string())
+        ),
+        ExprRefusal::Unpaired(delimiter) => format!(
+            "it leaves {} unpaired, so which part of it is quoted text cannot be established",
+            quote(delimiter)
+        ),
+        ExprRefusal::ClosesUnopened => "it closes a '(' it never opened".into(),
+        ExprRefusal::LeavesUnclosed => "it leaves a '(' unclosed".into(),
+        ExprRefusal::Keyword(keyword) => format!("it contains the SQL keyword '{keyword}'"),
+        ExprRefusal::SubQuery => "it contains a sub-query".into(),
+        ExprRefusal::CallsResult => "it calls the result of an expression".into(),
+        ExprRefusal::CallsAfter(before) => {
+            format!("it calls what precedes '(' after {}", quote(before))
+        }
+        ExprRefusal::QuotedFunction => "it calls a function by a quoted name".into(),
+        ExprRefusal::QualifiedFunction(name) => format!("it calls the qualified function '{name}'"),
+        ExprRefusal::Identifier => "it names a function through IDENTIFIER()".into(),
+        ExprRefusal::NotPure(name) => {
+            format!("it calls '{name}', which is not a pure built-in SQL function")
+        }
+        ExprRefusal::SessionValue(word) => format!("it reads the session value '{word}'"),
+        ExprRefusal::QuotedSessionValue(quoted) => format!("it reads the session value {quoted}"),
+        ExprRefusal::Unreadable(unreadable) => unreadable.to_string(),
+    }
+}
+
+/// A view column whose expression is refused, left out
+/// (`_view_expr_message`, `RE/graph.py:159-191`, rows 41, 55 and 61): a
+/// metric view's dimension by its name, a semantic view's column with its
+/// table; `reason` the refusal's clause, and the way out for a call the
+/// caller does not trust.
+pub fn expression_dropped(
+    kind: ViewKind,
+    column: &str,
+    table: Option<&str>,
+    reason: &str,
+    untrusted: bool,
+) -> CoreWarning {
+    let hatch = if untrusted {
+        ". Pass trust_expressions=True to keep it if you trust whoever authored the view"
+    } else {
+        ""
+    };
+    let named = match table {
+        Some(table) => format!("column '{column}' of table '{table}'"),
+        None => format!("column '{column}'"),
+    };
+    let sentence = match (table.is_some(), untrusted) {
+        (false, false) => Sentence::ViewExpressionDropped,
+        (false, true) => Sentence::ViewExpressionDroppedUntrusted,
+        (true, false) => Sentence::ViewTableExpressionDropped,
+        (true, true) => Sentence::ViewTableExpressionDroppedUntrusted,
+    };
+    let mut warning = CoreWarning::new(
+        sentence,
+        format!(
+            "Failed to add {named} since {reason}, and expressions taken from the {} are \
+             executed as SQL under your warehouse credentials{hatch}",
+            kind.noun()
+        ),
+    )
+    .with_field("column", Detail::text(column))
+    .with_field("reason", Detail::text(reason));
+    if let Some(table) = table {
+        warning = warning.with_field("table", Detail::text(table));
+    }
+    warning
 }
 
 /// Why a default gives no literal of `data_type` (`_default_text`'s
@@ -140,15 +223,17 @@ pub fn filter_message(
 }
 
 /// The refusal of a filter the source table alone cannot apply
-/// (`_check_filter`).
+/// (`_check_filter`), `words` the data layer's own words for an unsafe
+/// reason that names its warehouse.
 pub fn filter_refusal_text(
     document: &Document,
     filter: NodeId,
     refusal: &FilterRefusal,
+    words: Option<String>,
 ) -> Result<String, TooLarge> {
     let reason = match refusal {
         FilterRefusal::NotACondition => "it is not a SQL condition".to_owned(),
-        FilterRefusal::Unsafe(reason) => expr_reason(reason),
+        FilterRefusal::Unsafe(reason) => expr_reason(reason, words),
         FilterRefusal::JoinedTable(alias) => format!("it references the joined table '{alias}'"),
         FilterRefusal::Unreadable(unreadable) => unreadable.to_string(),
     };
