@@ -654,3 +654,115 @@ def test_a_column_the_source_dropped_is_left_out_as_the_old_client_leaves_it_out
     outcomes = _both(monkeypatch, act)
     assert not isinstance(outcomes['old'], tuple)
     assert outcomes['core'] == outcomes['old']
+
+
+def _shop_over(connection: Any) -> Schema:
+    for statement in SHOP:
+        connection.execute(statement)
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        return Schema.from_source(
+            DuckDBSource(connection), {'users': 'users', 'orders': 'orders'}
+        )
+
+
+def _rebuilt_over(connection: Any) -> Schema:
+    described = _shop_over(connection)
+    return Schema(
+        described.tables, described.relationships, source=described.source
+    )
+
+
+def test_a_column_the_source_dropped_stays_left_out_on_every_later_materialize(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Round 13 of T3.4 (Claude's P1-1): the old route keeps the table its
+    # engine read, without the dropped column, and reads it so again on
+    # the schema's next materialize.
+    def act() -> Any:
+        connection = duckdb.connect()
+        schema = _rebuilt_over(connection)
+        connection.execute('ALTER TABLE users DROP COLUMN age')
+        return [_materialized(schema), _materialized(schema)]
+
+    outcomes = _both(monkeypatch, act)
+    assert not isinstance(outcomes['old'][1], tuple)
+    assert outcomes['core'] == outcomes['old']
+
+
+@pytest.mark.parametrize('how', ['added', 'replaced'])
+def test_a_column_the_source_changed_after_the_tables_were_kept_is_read_as_kept(
+    how: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Round 13 of T3.4 (Codex's P0-1, Claude's P2-2): the old route keeps
+    # the engine's table as `from_source` read it, its columns and their
+    # source types, and reads no catalog of it again. A column added to the
+    # source since is no column of it, and one the source retyped since
+    # keeps the type it was read with.
+    def act() -> Any:
+        connection = duckdb.connect()
+        schema = _shop_over(connection)
+        if how == 'added':
+            connection.execute(
+                "ALTER TABLE users ADD COLUMN plan VARCHAR DEFAULT 'NEW_FEATURE'"
+            )
+            schema['users'].columns['plan'] = Column('plan', 'string', 'text')
+        else:
+            connection.execute(
+                'ALTER TABLE users ALTER COLUMN age TYPE VARCHAR'
+            )
+            connection.execute("UPDATE users SET age = 'NEW_FEATURE'")
+            schema['users'].columns['age'] = Column('age', 'string', 'text')
+        return _materialized(schema)
+
+    outcomes = _both(monkeypatch, act)
+    assert 'NEW_FEATURE' not in repr(outcomes['old'])
+    assert outcomes['core'] == outcomes['old']
+
+
+def test_a_source_type_changed_before_a_schema_built_anew_reads_it_is_read_fresh(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Round 13 of T3.4 (Codex's P1-2): a schema built anew reads each table
+    # in full, and its run reads each column by the type the source holds
+    # now, the caller's meanings kept.
+    def act() -> Any:
+        connection = duckdb.connect()
+        schema = _rebuilt_over(connection)
+        connection.execute('ALTER TABLE users ALTER COLUMN age TYPE VARCHAR')
+        connection.execute("UPDATE users SET age = 'CHANGED'")
+        schema['users']['age'].dtype = 'string'
+        schema['users']['age'].stype = 'text'
+        return _materialized(schema)
+
+    outcomes = _both(monkeypatch, act)
+    assert not isinstance(outcomes['old'], tuple)
+    assert outcomes['core'] == outcomes['old']
+
+
+def test_a_host_taking_no_notices_reads_what_one_taking_them_reads(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Round 13 of T3.4 (Codex's P1-3): whether a run says its notices
+    # (`Materialize.progress`) decides nothing of what it reads: a schema
+    # built anew over a table that has since lost a column completes the
+    # same either way.
+    from sdm_client._rust import materialize
+
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    real = materialize.run
+    answers = {}
+    for progress in (True, False):
+
+        def run(
+            operation: Any, *args: Any, _p: bool = progress, **how: Any
+        ) -> Any:
+            return real(dict(operation, progress=_p), *args, **how)
+
+        monkeypatch.setattr(materialize, 'run', run)
+        connection = duckdb.connect()
+        schema = _rebuilt_over(connection)
+        connection.execute('ALTER TABLE users DROP COLUMN age')
+        answers[progress] = _materialized(schema)
+    assert not isinstance(answers[True], tuple)
+    assert answers[False] == answers[True]
