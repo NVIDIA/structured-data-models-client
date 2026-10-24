@@ -322,6 +322,30 @@ fn semantic_definition_names_are_bound_without_physical_table_qualification() {
             ViewTextAnswer::Names(Some(vec![name.into()]))
         );
     }
+    for (namespace, expected) in [
+        (vec![None, None], "V"),
+        (vec![Some("DB".into()), None], "DB.V"),
+        (vec![None, Some("SHOP".into())], "SHOP.V"),
+        (vec![Some("DB".into()), Some("SHOP".into())], "DB.SHOP.V"),
+    ] {
+        let source = ProviderChoice::Sql {
+            dialect: Dialect::new("snowflake"),
+            namespace,
+            view: None,
+        };
+        let FetchPlan::Sql { statements, .. } = Data::reading_views(spaces())
+            .plan(&definition_request(&["V"]), &source)
+            .unwrap()
+        else {
+            panic!("a SQL plan")
+        };
+        assert_eq!(
+            statements[0].params,
+            vec![SqlParam::Value {
+                value: Scalar::Utf8(expected.into()),
+            }]
+        );
+    }
     // Only definition lookups bypass physical qualification.
     assert!(
         Data::new()
