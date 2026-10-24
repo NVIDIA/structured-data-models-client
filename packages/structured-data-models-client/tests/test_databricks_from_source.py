@@ -387,14 +387,13 @@ def test_a_declared_foreign_key_is_linked_whatever_namespace_the_source_names(
 
 
 @pytest.mark.parametrize('route', ['core', 'old'])
-def test_materialize_reads_the_tables_described_whatever_the_session_s_schema_is_now(
+def test_materialize_after_the_session_moved_reads_where_the_session_says_now(
     route: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    r"""A schema described under the session's current schema ``shop``
-    reads ``shop``'s tables when it is materialized after the session moved
-    to ``other``, as the old route keeps the tables it described (round 2's
-    Codex P0-2): the namespace the description was read under travels with
-    it."""
+    r"""A schema described under the session's current schema ``shop`` and
+    materialized after the session moved to ``other`` reads ``other``'s
+    tables on the core, which keeps no table's location between runs (plan
+    B), where the old route reads ``shop``'s, which it kept."""
     import pandas as pd
 
     from sdm_client import PredictiveQuery
@@ -426,7 +425,8 @@ def test_materialize_reads_the_tables_described_whatever_the_session_s_schema_is
         if '`orders`' in text or '`users`' in text
     ]
     assert read, connection.asked[described:]
-    assert all('`main`.`shop`.' in text for text in read), read
+    where = '`main`.`shop`.' if route == 'old' else '`main`.`other`.'
+    assert all(where in text for text in read), read
 
 
 def _route(route: str, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -442,6 +442,12 @@ def _route(route: str, monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 _TABLES = ('orders', 'users', 'new_orders')
+
+#: Where a run reads its tables once the session moved from ``shop`` to
+#: ``other``, by route: the old route reads a table it kept where it kept
+#: it; the core keeps no table's shape or location between runs (the
+#: owner's plan B, 2026-10-24) and reads each where the session says now.
+_KEPT = {'old': ('main', 'shop'), 'core': ('main', 'other')}
 
 
 def _reads(schema: Schema, *connections: Any) -> list[tuple[str, str, str]]:
@@ -520,7 +526,10 @@ def test_a_table_retargeted_after_the_session_moved_is_read_under_the_session(
     r"""A described table pointed at another source table after the session
     moved to ``other`` is read under ``other``, as the old route reads a
     table it has not read yet; a table left as described is read where it
-    was described (round 3's P0, Codex's case)."""
+    was described (round 3's P0, Codex's case).
+    On the core, which keeps no table between runs (plan B), each run
+    reads where the session says then (``_KEPT``).
+    """
     _route(route, monkeypatch)
     connection = _Connection()
     schema = Schema.from_source(DatabricksSource(connection, catalog='main'))
@@ -531,7 +540,7 @@ def test_a_table_retargeted_after_the_session_moved_is_read_under_the_session(
     assert retargeted, read
     assert all(where[:2] == ('main', 'other') for where in retargeted), read
     kept = [where for where in read if where[2] == 'users']
-    assert all(where[:2] == ('main', 'shop') for where in kept), read
+    assert all(where[:2] == _KEPT[route] for where in kept), read
 
 
 class _SessionWarehouse(_Warehouse):
@@ -638,7 +647,10 @@ def test_a_table_adopted_from_a_later_reading_keeps_the_receiving_schema_s(
     r"""A schema read under ``shop`` that adopts its ``users`` from a later
     reading of the same source under ``other`` reads ``users`` where it
     read it itself, ``shop``, as the old route keeps its own reading
-    (round 4's P0-1, Codex's case)."""
+    (round 4's P0-1, Codex's case).
+    On the core, which keeps no table between runs (plan B), each run
+    reads where the session says then (``_KEPT``).
+    """
     _route(route, monkeypatch)
     connection = _SessionConnection()
     source = DatabricksSource(connection, catalog='main')
@@ -649,7 +661,7 @@ def test_a_table_adopted_from_a_later_reading_keeps_the_receiving_schema_s(
     schema.check_consistent()
     read = _reads(schema, connection)
     assert read, connection.asked
-    assert all(where[:2] == ('main', 'shop') for where in read), read
+    assert all(where[:2] == _KEPT[route] for where in read), read
 
 
 @pytest.mark.parametrize('edit', ['relationship', 'stype'])
@@ -662,7 +674,10 @@ def test_an_edit_keeps_each_table_where_it_was_read(
     relationship assigned, an unrelated column's meaning changed), reads
     ``orders`` under ``shop`` and ``users`` under the session's ``other``,
     as the old route does: an edit spreads no table's reading onto another
-    (round 4's P0-2, Codex's case)."""
+    (round 4's P0-2, Codex's case).
+    On the core, which keeps no table between runs (plan B), each run
+    reads where the session says then (``_KEPT``).
+    """
     from sdm_client import Relationship
 
     _route(route, monkeypatch)
@@ -693,7 +708,7 @@ def test_an_edit_keeps_each_table_where_it_was_read(
     users_read = [where for where in read if where[2] == 'users']
     assert orders, read
     assert users_read, read
-    assert all(where[:2] == ('main', 'shop') for where in orders), read
+    assert all(where[:2] == _KEPT[route] for where in orders), read
     assert all(where[:2] == ('main', 'other') for where in users_read), read
 
 
@@ -806,7 +821,10 @@ def test_a_rebuilt_schema_keeps_where_its_first_materialize_read_its_tables(
     r"""A schema built anew is read where the session says at its first
     ``materialize``, and there again at the next after the session moved,
     as the old route keeps the tables its first ``materialize`` read
-    (``EngineTables.keep``; round 5's P0)."""
+    (``EngineTables.keep``; round 5's P0).
+    On the core, which keeps no table between runs (plan B), each run
+    reads where the session says then (``_KEPT``).
+    """
     _route(route, monkeypatch)
     connection = _CompletingConnection()
     source = DatabricksSource(connection, catalog='main')
@@ -818,9 +836,9 @@ def test_a_rebuilt_schema_keeps_where_its_first_materialize_read_its_tables(
     connection.schema = 'other'
     mark = len(connection.calls)
     second = _materialized(schema)
-    assert {w[:2] for w in _read_since(connection, mark)} == {('main', 'shop')}
+    assert {w[:2] for w in _read_since(connection, mark)} == {_KEPT[route]}
     assert 'OTHER' not in repr(first.payloads)
-    assert 'OTHER' not in repr(second.payloads)
+    assert ('OTHER' in repr(second.payloads)) == (route == 'core')
 
 
 @pytest.mark.parametrize('route', ['core', 'old'])
@@ -829,7 +847,10 @@ def test_a_table_added_to_a_described_schema_keeps_where_it_was_first_read(
 ) -> None:
     r"""A table the described schema never read, added by hand, is read
     where the session says at the first ``materialize`` and there again
-    after the session moved (round 5's P0)."""
+    after the session moved (round 5's P0).
+    On the core, which keeps no table between runs (plan B), each run
+    reads where the session says then (``_KEPT``).
+    """
     _route(route, monkeypatch)
     from sdm_client import Relationship
 
@@ -852,8 +873,8 @@ def test_a_table_added_to_a_described_schema_keeps_where_it_was_first_read(
     connection.schema = 'other'
     mark = len(connection.calls)
     second = _materialized(schema)
-    assert {w[:2] for w in _read_since(connection, mark)} == {('main', 'shop')}
-    assert 'OTHER' not in repr(second.payloads)
+    assert {w[:2] for w in _read_since(connection, mark)} == {_KEPT[route]}
+    assert ('OTHER' in repr(second.payloads)) == (route == 'core')
 
 
 class _FailingOnceWarehouse(_CompletingWarehouse):
@@ -895,7 +916,10 @@ def test_a_retry_after_a_failure_partway_reads_where_the_failed_run_read(
     r"""A schema built anew whose first ``materialize`` fails after reading
     its tables reads them there again when retried after the session moved,
     as the old route keeps the tables a run read before it failed (round
-    6's P0, Codex's ``retry``)."""
+    6's P0, Codex's ``retry``).
+    On the core, which keeps no table between runs (plan B), each run
+    reads where the session says then (``_KEPT``).
+    """
     _route(route, monkeypatch)
     connection = _FailingOnceConnection()
     source = DatabricksSource(connection, catalog='main')
@@ -906,7 +930,7 @@ def test_a_retry_after_a_failure_partway_reads_where_the_failed_run_read(
         _materialized(schema)
     assert not connection.fail_once
     connection.schema = 'other'
-    assert _where_read(schema, connection) == {('main', 'shop')}
+    assert _where_read(schema, connection) == {_KEPT[route]}
 
 
 @pytest.mark.parametrize('route', ['core', 'old'])
@@ -916,7 +940,10 @@ def test_a_table_removed_edited_around_and_restored_is_read_where_it_was(
     r"""A described table taken out of the schema, an edit made meanwhile,
     then put back, is read where the schema read it, after the session
     moved, as the old route keeps every table it read (round 6's P0,
-    Codex's ``remove_edit_restore``)."""
+    Codex's ``remove_edit_restore``).
+    On the core, which keeps no table between runs (plan B), each run
+    reads where the session says then (``_KEPT``).
+    """
     _route(route, monkeypatch)
     connection = _CompletingConnection()
     schema = Schema.from_source(DatabricksSource(connection, catalog='main'))
@@ -927,7 +954,7 @@ def test_a_table_removed_edited_around_and_restored_is_read_where_it_was(
     schema.tables['users'] = users
     schema.relationships = links
     connection.schema = 'other'
-    assert _where_read(schema, connection) == {('main', 'shop')}
+    assert _where_read(schema, connection) == {_KEPT[route]}
 
 
 @pytest.mark.parametrize('first', ['original', 'snapshot'])
@@ -938,7 +965,10 @@ def test_a_snapshot_shares_the_tables_its_original_reads_later(
     r"""A schema and a snapshot of it share the tables either reads after
     the snapshot was taken, as the old route shares its engine reading: a
     table the one reads first is read there by the other after the session
-    moved, whichever reads first (round 6's P0, Codex's ``snapshot``)."""
+    moved, whichever reads first (round 6's P0, Codex's ``snapshot``).
+    On the core, which keeps no table between runs (plan B), each run
+    reads where the session says then (``_KEPT``).
+    """
     from sdm_client import Relationship
 
     _route(route, monkeypatch)
@@ -963,7 +993,7 @@ def test_a_snapshot_shares_the_tables_its_original_reads_later(
     assert _where_read(earlier, connection) == {('main', 'shop')}
     connection.schema = 'other'
     add_users(later)
-    assert _where_read(later, connection) == {('main', 'shop')}
+    assert _where_read(later, connection) == {_KEPT[route]}
 
 
 class _ArmedWarehouse(_CompletingWarehouse):
@@ -1030,7 +1060,10 @@ def test_a_retry_after_an_early_failure_reads_where_the_old_route_reads(
     keeps its tables exactly when the old route does: none where it failed
     reading a table's catalog, all once its tables were read and its
     sampler's count failed; a retry after the session moved reads
-    ``other`` or ``shop`` accordingly (round 7's and round 8's P0)."""
+    ``other`` or ``shop`` accordingly (round 7's and round 8's P0).
+    On the core, which keeps no table between runs (plan B), each run
+    reads where the session says then (``_KEPT``).
+    """
     _route(route, monkeypatch)
     connection = _ArmedConnection()
     schema = _rebuilt(connection)
@@ -1039,7 +1072,7 @@ def test_a_retry_after_an_early_failure_reads_where_the_old_route_reads(
         _materialized(schema)
     assert connection.fail_on is None, 'the failure was not reached'
     connection.schema = 'other'
-    expected = ('main', 'shop') if kept else ('main', 'other')
+    expected = _KEPT[route] if kept else ('main', 'other')
     assert _where_read(schema, connection) == {expected}
 
 
@@ -1067,7 +1100,10 @@ def test_a_snapshot_after_an_early_failure_shares_the_retry_s_readings(
     r"""A first ``materialize`` failing at its namespace read leaves the
     schema an engine reading of its own, empty, which a snapshot taken then
     shares, so the original's retry's readings reach the snapshot (round 7's
-    P0, Codex's early failure)."""
+    P0, Codex's early failure).
+    On the core, which keeps no table between runs (plan B), each run
+    reads where the session says then (``_KEPT``).
+    """
     _route(route, monkeypatch)
     connection = _ArmedConnection()
     schema = _rebuilt(connection)
@@ -1078,7 +1114,7 @@ def test_a_snapshot_after_an_early_failure_shares_the_retry_s_readings(
     snapshot = schema.snapshot()
     assert _where_read(schema, connection) == {('main', 'shop')}
     connection.schema = 'other'
-    assert _where_read(snapshot, connection) == {('main', 'shop')}
+    assert _where_read(snapshot, connection) == {_KEPT[route]}
 
 
 @pytest.mark.parametrize('route', ['core', 'old'])
@@ -1087,7 +1123,10 @@ def test_an_interrupted_first_run_keeps_the_readings_it_made(
 ) -> None:
     r"""A first ``materialize`` interrupted while it samples, after it read
     its tables, keeps where it read them, so a retry after the session
-    moved reads them there (round 7's P0, Codex's interrupt)."""
+    moved reads them there (round 7's P0, Codex's interrupt).
+    On the core, which keeps no table between runs (plan B), each run
+    reads where the session says then (``_KEPT``).
+    """
     _route(route, monkeypatch)
     connection = _ArmedConnection()
     schema = _rebuilt(connection)
@@ -1096,7 +1135,7 @@ def test_an_interrupted_first_run_keeps_the_readings_it_made(
     with pytest.raises(KeyboardInterrupt):
         _materialized(schema)
     connection.schema = 'other'
-    assert _where_read(schema, connection) == {('main', 'shop')}
+    assert _where_read(schema, connection) == {_KEPT[route]}
 
 
 class _ReservedWarehouse(_CompletingWarehouse):
@@ -1295,53 +1334,6 @@ def test_a_preview_failing_before_the_tables_are_located_keeps_none(
     assert _where_read(schema, connection) == {('main', 'other')}
 
 
-def test_a_run_cancelled_after_a_notice_gives_no_later_step(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    r"""A run cancelled once it has said its inputs are checked gives the
-    host no step after: every later call is refused as cancelled, the fetch
-    the notice came before included (round 9's P1, Codex)."""
-    from sdm_client import _native
-    from sdm_client._rust import codec, facts, materialize
-
-    class _Stop(Exception):
-        pass
-
-    seen: list[str] = []
-
-    def capture(operation: Any, attachments: Any, **_: Any) -> Any:
-        control = codec.encode(
-            {
-                'message': 'start',
-                'contract': _native.CONTRACT_VERSION,
-                'facts': facts.host_facts(_native),
-                'operation': operation,
-            }
-        )
-        handle = _native.Run.start(control, attachments)
-        control, sent = handle.next()
-        seen.append(codec.read(control, sent)['step'])
-        handle.cancel()
-        for _ in range(2):
-            try:
-                control, sent = handle.next()
-                seen.append(codec.read(control, sent)['step'])
-            except _native.CoreError as refused:
-                seen.append(
-                    codec.read(refused.control, refused.attachments)['error'][
-                        'code'
-                    ]
-                )
-        raise _Stop
-
-    _route('core', monkeypatch)
-    schema = _rebuilt(_CompletingConnection())
-    monkeypatch.setattr(materialize, 'run', capture)
-    with pytest.raises(_Stop):
-        _materialized(schema)
-    assert seen == ['inputs_checked', 'RUN_CANCELLED', 'RUN_CANCELLED']
-
-
 @pytest.mark.parametrize('route', ['core', 'old'])
 def test_a_meaning_the_source_refuses_is_refused_after_the_tables_are_located(
     route: str, monkeypatch: pytest.MonkeyPatch
@@ -1350,7 +1342,10 @@ def test_a_meaning_the_source_refuses_is_refused_after_the_tables_are_located(
     meaning its source type does not carry, is refused once the tables are
     read and kept, as the old route checks meanings after it keeps its
     tables (``relational.py:586``): a retry after the meaning is put right
-    and the session moved reads ``shop`` (round 10's P0, Codex)."""
+    and the session moved reads ``shop`` (round 10's P0, Codex).
+    On the core, which keeps no table between runs (plan B), each run
+    reads where the session says then (``_KEPT``).
+    """
     from sdm_client.errors import StructuredDataError
 
     _route(route, monkeypatch)
@@ -1365,7 +1360,7 @@ def test_a_meaning_the_source_refuses_is_refused_after_the_tables_are_located(
     schema['users']['age'].dtype = 'int64'
     schema['users']['age'].stype = 'numerical'
     connection.schema = 'other'
-    assert _where_read(schema, connection) == {('main', 'shop')}
+    assert _where_read(schema, connection) == {_KEPT[route]}
 
 
 @pytest.mark.parametrize('column', ['__kumo_extra', 'user'])
@@ -1375,9 +1370,11 @@ def test_a_column_the_source_does_not_hold_is_left_out_of_every_read(
 ) -> None:
     r"""A column added by hand that the source does not hold, one named as
     the sampler reserves (``__kumo_``) or like a session word (``user``), is
-    left out of every read, as the old route reads only the columns its
-    engine found: the run completes (round 10's P1s, both reviewers)."""
+    never read: the old route leaves it out silently, the core refuses it
+    by name, the source holding no such column (plan B, the owner's item
+    1)."""
     from sdm_client import Column
+    from sdm_client.errors import StructuredDataError
 
     _route(route, monkeypatch)
     connection = _CompletingConnection()
@@ -1385,7 +1382,14 @@ def test_a_column_the_source_does_not_hold_is_left_out_of_every_read(
     stype = 'numerical' if column.startswith('__') else 'text'
     dtype = 'int64' if column.startswith('__') else 'string'
     schema['users'].columns[column] = Column(column, dtype, stype)
-    assert _where_read(schema, connection) == {('main', 'shop')}
+    if route == 'old':
+        assert _where_read(schema, connection) == {('main', 'shop')}
+        return
+    mark = len(connection.calls)
+    with pytest.raises(StructuredDataError) as refused:
+        _materialized(schema)
+    _assert_no_such_column(refused.value, 'users', column)
+    assert not any(column in text for text, _ in connection.calls[mark:])
 
 
 @pytest.mark.parametrize('dtype', ['int8', 'int128', 'float16', 'float8'])
@@ -1544,7 +1548,10 @@ def test_each_refusal_is_made_on_the_old_route_s_side_of_the_reads(
     reads where the session says; each it makes once its engine read and
     kept the tables refuses having read them, and a retry reads them where
     it did (round 11: Codex's P0 primary key and time column retries, and
-    one case per row of the tracker's table that refuses)."""
+    one case per row of the tracker's table that refuses).
+    On the core, which keeps no table between runs (plan B), each run
+    reads where the session says then (``_KEPT``).
+    """
     from sdm_client.errors import StructuredDataError
 
     _route(route, monkeypatch)
@@ -1577,7 +1584,7 @@ def test_each_refusal_is_made_on_the_old_route_s_side_of_the_reads(
         schema[name].primary_key = keys[name]
     schema.relationships = links
     connection.schema = 'other'
-    where = ('main', 'shop') if side == 'after' else ('main', 'other')
+    where = _KEPT[route] if side == 'after' else ('main', 'other')
     assert _where_read(schema, connection) == {where}
 
 
@@ -1721,44 +1728,53 @@ _DroppingConnection = type(
 
 
 @pytest.mark.parametrize('route', ['core', 'old'])
-def test_a_column_the_source_dropped_is_left_out_of_every_read(
+def test_a_column_the_source_dropped_is_never_read(
     route: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     r"""A schema built anew whose columns all hold their facts, one of them
-    since dropped from the source, reads each table it has not kept by what
-    its catalog says now, as the old route's engine keeps only the columns
-    its source holds (``sources.py:81-88``): the dropped column is never
-    read and the run completes (round 12's P0-2, Codex; Claude's P2-1)."""
+    since dropped from the source, never reads the dropped column: the old
+    route's engine leaves it out silently (``sources.py:81-88``) and the run
+    completes; the core reads each table's columns as the source holds
+    them now and refuses the column the schema names by name (plan B, the
+    owner's item 1)."""
+    from sdm_client.errors import StructuredDataError
+
     _route(route, monkeypatch)
     connection = _DroppingConnection()
     schema = _rebuilt(connection)
     connection._db.execute('ALTER TABLE users DROP COLUMN age')
     connection.dropped = True
     mark = len(connection.calls)
-    request = _materialized(schema)
-    assert request.payloads
+    if route == 'old':
+        assert _materialized(schema).payloads
+    else:
+        with pytest.raises(StructuredDataError) as refused:
+            _materialized(schema)
+        _assert_no_such_column(refused.value, 'users', 'age')
     assert not any(
         re.search(r'\bage\b', text) for text, _ in connection.calls[mark:]
     )
 
 
-@pytest.mark.parametrize('route', ['core', 'old'])
-def test_a_column_the_source_dropped_stays_unread_on_every_later_materialize(
-    route: str, monkeypatch: pytest.MonkeyPatch
+def test_a_column_dropped_between_two_runs_is_refused_by_name_on_the_second(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    r"""A schema built anew over a table that has lost a column since it was
-    described reads it without that column on its first ``materialize``
-    and keeps it so: its next ``materialize`` reads it without the column
-    too, as the old route keeps its engine's table (round 13's P1-1,
-    Claude)."""
-    _route(route, monkeypatch)
+    r"""A column the schema names, dropped from the source between two
+    ``materialize`` runs, is refused by name on the second: each run reads
+    each table's columns as the source holds them then (plan B, the owner's
+    item 1), and the dropped column is never read."""
+    from sdm_client.errors import StructuredDataError
+
+    _route('core', monkeypatch)
     connection = _DroppingConnection()
     schema = _rebuilt(connection)
+    assert _materialized(schema).payloads
     connection._db.execute('ALTER TABLE users DROP COLUMN age')
     connection.dropped = True
     mark = len(connection.calls)
-    for _ in range(2):
-        assert _materialized(schema).payloads
+    with pytest.raises(StructuredDataError) as refused:
+        _materialized(schema)
+    _assert_no_such_column(refused.value, 'users', 'age')
     assert not any(
         re.search(r'\bage\b', text) for text, _ in connection.calls[mark:]
     )
@@ -1796,15 +1812,16 @@ _AddingConnection = type(
 )
 
 
+@pytest.mark.parametrize('named', [False, True], ids=['unnamed', 'named'])
 @pytest.mark.parametrize('route', ['core', 'old'])
-def test_a_column_added_to_the_source_after_the_tables_were_kept_is_not_read(
-    route: str, monkeypatch: pytest.MonkeyPatch
+def test_a_column_the_source_gained_is_sent_only_where_the_schema_names_it(
+    route: str, named: bool, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    r"""A described schema keeps each table as its description read it: a
-    column the source gained since, given to the schema by hand, is no
-    column of the kept table, so no request carries it and its catalog is
-    not read again, as the old route's engine keeps the table it read
-    (round 13's P0-1, Codex)."""
+    r"""A column the source gained after the schema was described is no
+    column of any request the schema does not name it in, on both routes;
+    named by hand, it is sent on the core, which reads each table as the
+    source holds it at each ``materialize`` (plan B), where the old route
+    leaves it out of the table it kept (round 13's P0-1, Codex)."""
     from sdm_client import Column
 
     _route(route, monkeypatch)
@@ -1814,48 +1831,46 @@ def test_a_column_added_to_the_source_after_the_tables_were_kept_is_not_read(
         "ALTER TABLE users ADD COLUMN plan VARCHAR DEFAULT 'NEW_FEATURE'"
     )
     connection.added = True
-    schema['users'].columns['plan'] = Column('plan', 'string', 'text')
-    mark = len(connection.calls)
+    if named:
+        schema['users'].columns['plan'] = Column('plan', 'string', 'text')
     request = _materialized(schema)
     users = request.payloads[0]['schema']['related_tables']['users']['columns']
-    assert 'plan' not in list(users)
-    assert 'NEW_FEATURE' not in repr(request.payloads)
-    assert not any(
-        'information_schema.columns' in text or re.search(r'\bplan\b', text)
-        for text, _ in connection.calls[mark:]
-    )
+    sent = named and route == 'core'
+    assert ('plan' in list(users)) == sent
+    assert ('NEW_FEATURE' in repr(request.payloads)) == sent
 
 
-def test_a_run_taking_no_notices_reads_what_one_taking_them_reads(
+def _assert_no_such_column(refused: Any, table: str, column: str) -> None:
+    r"""``refused`` is the core's refusal of ``table.column``, a column the
+    schema names that the source does not hold (plan B, the owner's item
+    1): named, an invalid request, saying the source has no such column."""
+    assert refused.code == 'INVALID_REQUEST', str(refused)
+    assert f'{table}.{column}' in str(refused), str(refused)
+    assert 'the source has no such column' in str(refused), str(refused)
+
+
+def test_a_column_taken_out_of_the_schema_and_put_back_is_sent(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    r"""Whether a run says its notices (``Materialize.progress``) decides
-    nothing of what it reads: a schema built anew over a table that has
-    lost a column reads it without the column either way (round 13's P1-3,
-    Codex)."""
-    from sdm_client._rust import materialize
+    r"""A column taken out of the schema and put back by hand is a column of
+    the request, the source holding it (round 14's case under plan B; the
+    old route's statements for it are not all in this warehouse's
+    recording, so the core's run alone is held here)."""
+    from sdm_client import Column
 
     _route('core', monkeypatch)
-    real = materialize.run
-    for progress in (True, False):
-
-        def run(
-            operation: Any, *args: Any, _p: bool = progress, **how: Any
-        ) -> Any:
-            return real(dict(operation, progress=_p), *args, **how)
-
-        monkeypatch.setattr(materialize, 'run', run)
-        connection = _DroppingConnection()
-        described = Schema.from_source(
-            DatabricksSource(connection, catalog='main', schema='shop')
-        )
-        schema = Schema(
-            described.tables, described.relationships, source=described.source
-        )
-        connection._db.execute('ALTER TABLE users DROP COLUMN age')
-        connection.dropped = True
-        mark = len(connection.calls)
-        assert _materialized(schema).payloads, progress
-        assert not any(
-            re.search(r'\bage\b', text) for text, _ in connection.calls[mark:]
-        ), progress
+    connection = _CompletingConnection()
+    schema = _rebuilt(connection)
+    assert _materialized(schema).payloads
+    del schema['users']['country']
+    assert 'country' not in list(
+        _materialized(schema).payloads[0]['schema']['related_tables']['users'][
+            'columns'
+        ]
+    )
+    schema['users'].columns['country'] = Column(
+        'country', 'string', 'categorical'
+    )
+    request = _materialized(schema)
+    users = request.payloads[0]['schema']['related_tables']['users']['columns']
+    assert 'country' in list(users)

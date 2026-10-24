@@ -323,7 +323,7 @@ def _copies() -> dict[str, Callable[[Schema], Schema]]:
 
 
 @pytest.mark.parametrize('made', sorted(_copies()))
-def test_a_described_schema_however_copied_asks_the_source_nothing_more(
+def test_a_described_schema_however_copied_asks_what_the_described_one_asks(
     made: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from sdm_client._rust import providers
@@ -351,19 +351,12 @@ def test_a_described_schema_however_copied_asks_the_source_nothing_more(
         asked.clear()
         copied = _payload(_copies()[made](described))
         if os.environ.get(_routing.ENVIRONMENT):
-            if made in ('rebuilt', 'pickled'):
-                # A schema of its own over the described tables keeps no
-                # reading of them, so its materialize reads each table's
-                # catalog and preview again, as the old route's engine reads
-                # every table its new schema has not kept (T3.4 fix 12).
-                assert 'describe' in asked and 'preview' in asked
-                assert 'preview' not in first
-            else:
-                # On the core, the copy's materialize asks what the schema's
-                # own asked: no catalog question or preview of a table
-                # already described.
-                assert asked == first
-                assert 'preview' not in asked
+            # On the core, which keeps no table's shape between runs (the
+            # owner's plan B, T3.4), every materialize reads each table's
+            # catalog and preview as the source holds it, so a copy however
+            # made asks what the described schema's own asked.
+            assert asked == first
+            assert 'describe' in asked and 'preview' in asked
         return once, copied
 
     outcomes = _both(monkeypatch, act)

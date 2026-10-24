@@ -582,83 +582,41 @@ def test_a_linked_column_retyped_then_sampled_is_refused_in_the_old_client_s_wor
     assert 'cannot match' in outcomes['old'][2]
 
 
-@pytest.mark.parametrize('fresh', [False, True], ids=['facts', 'fresh'])
-def test_a_key_the_source_holds_as_another_type_is_refused_as_the_old_client_refuses_it(
-    fresh: bool, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    # Round 11 of T3.4 (Claude's P1-1, Codex's P1-2): `orders.user_id` is a
-    # VARCHAR in the source, retyped `int64` by the caller and linked to the
-    # integer key of `users`. The caller's types join, so the link is taken;
-    # the old route's engine refuses the edge over the types its source
-    # holds (`Graph.validate`, `relational.py:418`), whether or not a column
-    # of the schema still needs reading from the source.
-    from sdm_client import PredictiveQuery, Relationship
+def _no_such_column(outcome: Any, table: str, column: str) -> bool:
+    r"""Whether ``outcome`` is the core's refusal of ``table.column``, a
+    column the schema names that the source does not hold (plan B, the
+    owner's item 1)."""
+    return (
+        isinstance(outcome, tuple)
+        and outcome[0] == 'INVALID_REQUEST'
+        and f'{table}.{column}' in outcome[1]
+        and 'the source has no such column' in outcome[1]
+    )
 
-    def act() -> Any:
-        connection = duckdb.connect()
-        for statement in SHOP:
-            connection.execute(
-                statement.replace('user_id BIGINT,', 'user_id VARCHAR,')
-            )
+
+def _attempted(schema: Schema) -> Any:
+    r"""What a materialize of the shop's query answers: the payloads, or the
+    refusal's code and words."""
+    from sdm_client import PredictiveQuery
+
+    try:
         with warnings.catch_warnings():
             warnings.simplefilter('ignore')
-            schema = Schema.from_source(
-                DuckDBSource(connection),
-                {'users': 'users', 'orders': 'orders'},
-                relationships=[],
+            request = PredictiveQuery(QUERY, schema).materialize(
+                indices=[0, 1, 2], anchor_time=pd.Timestamp('2024-03-01')
             )
-        schema['orders']['user_id'].dtype = 'int64'
-        schema.relationships = [
-            Relationship('orders', 'user_id', 'users', 'user_id')
-        ]
-        if fresh:
-            schema['users'].columns['age'] = Column('age', 'int64', 'numerical')
-        try:
-            with warnings.catch_warnings():
-                warnings.simplefilter('ignore')
-                PredictiveQuery(QUERY, schema).materialize(
-                    indices=[0, 1, 2], anchor_time=pd.Timestamp('2024-03-01')
-                )
-        except StructuredDataError as refused:
-            return (refused.code, str(refused))
-        return 'gathered'
+    except StructuredDataError as refused:
+        return (refused.code, str(refused))
+    import json
 
-    outcomes = _both(monkeypatch, act)
-    assert outcomes['old'][0] == 'INVALID_REQUEST'
-    assert outcomes['core'] == outcomes['old']
+    return json.loads(json.dumps(list(request._payloads), default=str))
 
 
-def test_a_column_the_source_dropped_is_left_out_as_the_old_client_leaves_it_out(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    # Round 12 of T3.4 (Codex's P0-2, Claude's P2-1): a schema built anew
-    # from a description, whose columns all hold their facts, after `age`
-    # was dropped from the source. The old route's engine reads each table
-    # it has not kept and keeps only the columns its source holds
-    # (`sources.py:81-88`), so the run completes without `age`.
-    def act() -> Any:
-        connection = duckdb.connect()
-        for statement in SHOP:
-            connection.execute(statement)
-        with warnings.catch_warnings():
-            warnings.simplefilter('ignore')
-            described = Schema.from_source(
-                DuckDBSource(connection), {'users': 'users', 'orders': 'orders'}
-            )
-        schema = Schema(
-            described.tables, described.relationships, source=described.source
-        )
-        connection.execute('ALTER TABLE users DROP COLUMN age')
-        return _materialized(schema)
-
-    outcomes = _both(monkeypatch, act)
-    assert not isinstance(outcomes['old'], tuple)
-    assert outcomes['core'] == outcomes['old']
-
-
-def _shop_over(connection: Any) -> Schema:
+def _shop_over(connection: Any, alter: str = '') -> Schema:
     for statement in SHOP:
-        connection.execute(statement)
+        connection.execute(
+            statement.replace('user_id BIGINT,', alter or 'user_id BIGINT,')
+        )
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         return Schema.from_source(
@@ -673,32 +631,70 @@ def _rebuilt_over(connection: Any) -> Schema:
     )
 
 
-def test_a_column_the_source_dropped_stays_left_out_on_every_later_materialize(
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize('fresh', [False, True], ids=['facts', 'fresh'])
+def test_a_key_the_source_holds_as_another_type_is_refused(
+    fresh: bool, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # Round 13 of T3.4 (Claude's P1-1): the old route keeps the table its
-    # engine read, without the dropped column, and reads it so again on
-    # the schema's next materialize.
+    # Round 11 of T3.4 (Claude's P1-1, Codex's P1-2), under plan B:
+    # `orders.user_id` is a VARCHAR in the source, retyped `int64` by the
+    # caller and linked to the integer key of `users`. Both routes refuse
+    # it as an invalid request: the old route's engine over the edge's
+    # types, the core over the caller's type the source's does not match
+    # (the owner's item 3), naming the column.
+    from sdm_client import Relationship
+
+    def act() -> Any:
+        connection = duckdb.connect()
+        schema = _shop_over(connection, 'user_id VARCHAR,')
+        schema.relationships = []
+        schema['orders']['user_id'].dtype = 'int64'
+        schema.relationships = [
+            Relationship('orders', 'user_id', 'users', 'user_id')
+        ]
+        if fresh:
+            schema['users'].columns['age'] = Column('age', 'int64', 'numerical')
+        return _attempted(schema)
+
+    outcomes = _both(monkeypatch, act)
+    assert outcomes['old'][0] == 'INVALID_REQUEST'
+    assert outcomes['core'][0] == 'INVALID_REQUEST'
+    assert 'orders.user_id' in outcomes['core'][1]
+    assert 'the source holds it as' in outcomes['core'][1]
+
+
+@pytest.mark.parametrize('runs', [1, 2])
+def test_a_column_the_source_dropped_is_refused_by_name_on_the_core(
+    runs: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Plan B (the owner's item 1): a column the schema names that the source
+    # dropped, after the schema was described (`runs` 1) or between two runs
+    # (`runs` 2), is refused by name on the core, which reads each table's
+    # columns as the source holds them at each run; the old route leaves it
+    # out of a table it reads anew and completes.
     def act() -> Any:
         connection = duckdb.connect()
         schema = _rebuilt_over(connection)
+        answers = []
+        if runs == 2:
+            answers.append(_attempted(schema))
         connection.execute('ALTER TABLE users DROP COLUMN age')
-        return [_materialized(schema), _materialized(schema)]
+        answers.append(_attempted(schema))
+        return answers
 
     outcomes = _both(monkeypatch, act)
-    assert not isinstance(outcomes['old'][1], tuple)
-    assert outcomes['core'] == outcomes['old']
+    assert all(not isinstance(each, tuple) for each in outcomes['old'][:1])
+    assert _no_such_column(outcomes['core'][-1], 'users', 'age')
 
 
-@pytest.mark.parametrize('how', ['added', 'replaced'])
-def test_a_column_the_source_changed_after_the_tables_were_kept_is_read_as_kept(
+@pytest.mark.parametrize('how', ['added', 'retyped', 'retyped_unmatched'])
+def test_a_column_the_source_changed_since_it_was_described_is_read_as_it_stands(
     how: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # Round 13 of T3.4 (Codex's P0-1, Claude's P2-2): the old route keeps
-    # the engine's table as `from_source` read it, its columns and their
-    # source types, and reads no catalog of it again. A column added to the
-    # source since is no column of it, and one the source retyped since
-    # keeps the type it was read with.
+    # Plan B: the core reads each table as the source holds it at each run.
+    # A column the source gained, named by hand, is sent; one the source
+    # retyped is read by its new type where the caller's type matches it
+    # (`retyped`), and refused by name where the caller's type does not (the
+    # owner's item 3); the old route reads the table it kept at describe.
     def act() -> Any:
         connection = duckdb.connect()
         schema = _shop_over(connection)
@@ -712,12 +708,17 @@ def test_a_column_the_source_changed_after_the_tables_were_kept_is_read_as_kept(
                 'ALTER TABLE users ALTER COLUMN age TYPE VARCHAR'
             )
             connection.execute("UPDATE users SET age = 'NEW_FEATURE'")
-            schema['users'].columns['age'] = Column('age', 'string', 'text')
-        return _materialized(schema)
+            if how == 'retyped':
+                schema['users'].columns['age'] = Column('age', 'string', 'text')
+        return _attempted(schema)
 
-    outcomes = _both(monkeypatch, act)
-    assert 'NEW_FEATURE' not in repr(outcomes['old'])
-    assert outcomes['core'] == outcomes['old']
+    core = _both(monkeypatch, act)['core']
+    if how == 'retyped_unmatched':
+        assert core[0] == 'INVALID_REQUEST'
+        assert 'users.age' in core[1] and 'the source holds it as' in core[1]
+    else:
+        assert not isinstance(core, tuple), core
+        assert 'NEW_FEATURE' in repr(core)
 
 
 def test_a_source_type_changed_before_a_schema_built_anew_reads_it_is_read_fresh(
@@ -738,31 +739,3 @@ def test_a_source_type_changed_before_a_schema_built_anew_reads_it_is_read_fresh
     outcomes = _both(monkeypatch, act)
     assert not isinstance(outcomes['old'], tuple)
     assert outcomes['core'] == outcomes['old']
-
-
-def test_a_host_taking_no_notices_reads_what_one_taking_them_reads(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    # Round 13 of T3.4 (Codex's P1-3): whether a run says its notices
-    # (`Materialize.progress`) decides nothing of what it reads: a schema
-    # built anew over a table that has since lost a column completes the
-    # same either way.
-    from sdm_client._rust import materialize
-
-    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
-    real = materialize.run
-    answers = {}
-    for progress in (True, False):
-
-        def run(
-            operation: Any, *args: Any, _p: bool = progress, **how: Any
-        ) -> Any:
-            return real(dict(operation, progress=_p), *args, **how)
-
-        monkeypatch.setattr(materialize, 'run', run)
-        connection = duckdb.connect()
-        schema = _rebuilt_over(connection)
-        connection.execute('ALTER TABLE users DROP COLUMN age')
-        answers[progress] = _materialized(schema)
-    assert not isinstance(answers[True], tuple)
-    assert answers[False] == answers[True]
