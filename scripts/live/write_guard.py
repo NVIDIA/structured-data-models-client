@@ -1088,7 +1088,7 @@ def _closing(original: Any) -> Any:
 
 def _closing_admits(dialect: str, cursor: Any, text: str) -> bool:
     r"""Whether ``text`` on ``cursor`` is the closing Snowpark session's
-    own cancel: a Snowflake cursor of that session's connection, or of the
+    own cancel: on that session's connection or a cursor of it, or on the
     driver connection a capture of it wraps."""
     closing = _CLOSING.get()
     if closing is None or dialect != 'snowflake':
@@ -1096,13 +1096,15 @@ def _closing_admits(dialect: str, cursor: Any, text: str) -> bool:
     statement, connection = closing
     if text != statement:
         return False
-    own = getattr(cursor, 'connection', None)
+    # A cursor of the connection, or the connection itself (the connector
+    # sends a cursor's statement on through its cmd_query).
+    own = (cursor, getattr(cursor, 'connection', None))
     # The recording mode hands Snowpark its capture of the connection,
     # keeping the driver's as ``_driver``; the cursor is the driver's.
     for _ in range(4):
         if connection is None:
             return False
-        if own is connection:
+        if any(each is connection for each in own):
             return True
         connection = getattr(connection, '_driver', None)
     return False
