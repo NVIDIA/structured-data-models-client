@@ -37,9 +37,11 @@
 //! A key set is bound as the reference's Postgres sampler binds one: JSON
 //! text in the statement's one parameter, `$1`, unpacked by a common table
 //! expression named as the plan's relation ([`SEEDS`]; `P1 d:131`). The
-//! provider writes the key set's rows as a JSON array of rows, each row an
+//! dialect writes the key set's rows as a JSON array of rows, each row an
 //! array of its cells' texts in the key set's column order (null for a
-//! null), which Postgres's own input functions read ([`seed_cte`]): an
+//! null; `pg_values::key_rows`), split past the reference's budget as it
+//! splits one ([`crate::key_text`], T3.28), the provider binding the text
+//! it is handed, which Postgres's own input functions read ([`seed_cte`]): an
 //! integer or decimal key as `bigint` or `numeric`, so the join compares
 //! the two keys by value, exactly (an integer and a `numeric` meet when
 //! their values are equal, whatever their scales, and two `numeric` values
@@ -72,6 +74,7 @@ use sdm_contract::data::{
 use sdm_contract::types::ColumnType;
 use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 
+use crate::key_text;
 use crate::pg_values;
 use crate::quote::identifier;
 use crate::sql::{self, Sample, SeedRead, SqlDialect};
@@ -328,12 +331,19 @@ impl SqlDialect for Postgres {
         pg_values::conform(schema, batches, float_text)
     }
 
-    fn bound_keys(
+    fn key_rows(
         &self,
         schema: &arrow_schema::SchemaRef,
         batches: &[RecordBatch],
-    ) -> Result<Option<sql::Batches>, CoreError> {
-        pg_values::bound_keys(schema, batches)
+    ) -> Result<Option<Vec<String>>, CoreError> {
+        pg_values::key_rows(schema, batches).map(Some)
+    }
+
+    /// The reference's budget of a key set's JSON text (`_chunk_rows`,
+    /// `PG/sampler.py:125-182`); each row carries its batch, so a chunk's
+    /// statement is the plan's own.
+    fn key_budget(&self) -> Option<usize> {
+        Some(key_text::BUDGET)
     }
 }
 

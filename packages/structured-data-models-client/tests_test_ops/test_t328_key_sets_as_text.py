@@ -244,8 +244,11 @@ def test_a_later_databricks_chunk_failing_fails_the_request() -> None:
             seen,
         )
     assert len(seen) >= 2
+    # The request failed with the warehouse's failure, named by its class.
     assert raised.value.code == 'PROVIDER_ERROR'
-    assert '42501' in repr(vars(raised.value))
+    assert raised.value.details['driver_class'] == (
+        'databricks.sql.exc.ServerOperationError'
+    )
 
 
 # --- Postgres, over a real server ----------------------------------------------------

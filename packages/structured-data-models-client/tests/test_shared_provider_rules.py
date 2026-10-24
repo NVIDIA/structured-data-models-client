@@ -29,7 +29,11 @@ MODULES = {
 def test_each_provider_refuses_with_the_one_shared_rule(dialect: str) -> None:
     module, provider = MODULES[dialect]
     assert module.PlanNotRun is shared.PlanNotRun
-    assert module.arrow_table is shared.arrow_table
+    # A key set's Arrow is read with the one reader; a provider binding the
+    # text the core wrote of one (T3.28) reads it with the one text reader.
+    assert getattr(module, 'arrow_table', shared.arrow_table) is (
+        shared.arrow_table
+    )
     host: dict[str, Any] = {'plan': {'plan': 'host', 'expect': {}}}
     with pytest.raises(shared.PlanNotRun, match='host plan'):
         provider(None)(host, {})

@@ -40,6 +40,8 @@
 mod blake2b;
 mod databricks;
 mod duckdb;
+mod json;
+mod key_text;
 mod keys;
 mod mt19937;
 mod pg_values;
@@ -56,9 +58,11 @@ pub use pg_values::json_text;
 
 use arrow_array::RecordBatch;
 use sdm_contract::catalog::CatalogAnswer;
+use std::collections::BTreeMap;
+
 use sdm_contract::data::{
-    DataLayer, DataRequest, DescribePart, Dialect, FetchPlan, ProviderCapabilities, ProviderChoice,
-    Relation, SqlStatement, views_unread,
+    AttachmentId, BoundFetch, BoundRequest, DataLayer, DataRequest, DescribePart, Dialect,
+    FetchPlan, KeyData, ProviderCapabilities, ProviderChoice, Relation, SqlStatement, views_unread,
 };
 use sdm_contract::wording::DatabaseNames;
 use sdm_contract::{CoreError, Detail, Sentence};
@@ -235,15 +239,27 @@ impl DataLayer for Data {
         }
     }
 
-    fn bound_keys(
+    /// `plan` bound as the run's provider binds it: a built-in dialect's key
+    /// set written as the text its statement reads where it binds one so,
+    /// split past its budget, one fetch per chunk ([`key_text`], T3.28); a
+    /// host provider's plan, or one binding the core's Arrow key set as a
+    /// relation, one fetch as it is.
+    fn bind(
         &self,
         provider: &ProviderChoice,
-        schema: &arrow_schema::SchemaRef,
-        batches: &[RecordBatch],
-    ) -> Result<Option<(arrow_schema::SchemaRef, Vec<RecordBatch>)>, CoreError> {
+        request: &DataRequest,
+        plan: FetchPlan,
+        keys: &BTreeMap<AttachmentId, KeyData>,
+    ) -> Result<BoundRequest, CoreError> {
+        let _ = request;
         match sql_dialect(provider) {
-            Some(dialect) => dialect.bound_keys(schema, batches),
-            None => Ok(None),
+            Some(dialect) => key_text::bind(dialect, plan, keys),
+            None => Ok(BoundRequest {
+                fetches: vec![BoundFetch {
+                    plan,
+                    batches: BTreeMap::new(),
+                }],
+            }),
         }
     }
 

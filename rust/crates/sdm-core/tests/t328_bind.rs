@@ -188,7 +188,11 @@ fn a_key_set_past_the_budget_is_asked_as_chunks_in_one_hop_and_joined_in_order()
     let Step::Fetch { requests } = run.next().unwrap() else {
         panic!("not a fetch")
     };
-    assert!(requests.len() >= 3, "one fetch per chunk: {}", requests.len());
+    assert!(
+        requests.len() >= 3,
+        "one fetch per chunk: {}",
+        requests.len()
+    );
     // The core's own key set is not what the provider is handed.
     let original = seen.lock().unwrap().keys.unwrap();
     let named: BTreeSet<AttachmentId> = requests.iter().map(text_param).collect();

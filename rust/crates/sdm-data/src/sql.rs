@@ -9,8 +9,9 @@
 //! A dialect (`duckdb.rs`, `sqlite.rs`, `postgres.rs`) implements the
 //! trait, and holds only what differs: its name and capabilities, its
 //! quoting, the name parts a relation takes and whether its source reads
-//! under a namespace, how a key set is named, bound and joined, how a time
-//! is cast, the seeded sample, the per-seed neighbor read and the key
+//! under a namespace, how a key set is named, bound and joined (written as
+//! JSON text where the statement reads it so, [`crate::key_text`]), how a
+//! time is cast, the seeded sample, the per-seed neighbor read and the key
 //! lookup, its catalog statements and the reading of their answers, and
 //! the quirks the core asks of a provider. A warehouse dialect (T3.4
 //! onward) plugs in the same way: one more `impl SqlDialect` and one more
@@ -321,14 +322,34 @@ pub(crate) trait SqlDialect: Sync {
         Ok(None)
     }
 
-    /// A key set as the dialect's provider binds it, if it changes any
-    /// (`DataLayer::bound_keys`).
-    fn bound_keys(
+    // --- a key set bound as text (T3.28, [`crate::key_text`]) -------------------
+
+    /// Each seed of a key set, `schema` and `batches` as the core made it,
+    /// as the JSON its statement reads, in order, where the dialect binds
+    /// its key sets as JSON text the statement unpacks; `None`, the
+    /// default, where its provider binds the core's Arrow key set as a
+    /// relation (DuckDB, SQLite).
+    fn key_rows(
         &self,
         _schema: &arrow_schema::SchemaRef,
         _batches: &[RecordBatch],
-    ) -> Result<Option<Batches>, CoreError> {
+    ) -> Result<Option<Vec<String>>, CoreError> {
         Ok(None)
+    }
+
+    /// The bytes one statement's key set text may hold before the key set
+    /// is split into chunks, one fetch each; `None`, the default: never
+    /// split.
+    fn key_budget(&self) -> Option<usize> {
+        None
+    }
+
+    /// `text`, a statement binding a key set's text, as it reads a chunk
+    /// whose first seed is the `offset`th of the key set; as it is, the
+    /// default, where each seed's JSON carries its batch.
+    fn chunk_text(&self, text: &str, offset: usize) -> Result<String, CoreError> {
+        let _ = offset;
+        Ok(text.to_owned())
     }
 }
 

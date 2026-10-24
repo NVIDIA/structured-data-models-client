@@ -7,59 +7,14 @@ package com.nvidia.sdm.internal.jdbc;
 import java.math.BigDecimal;
 import java.math.MathContext;
 import java.math.RoundingMode;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.ZoneOffset;
-import java.time.format.DateTimeFormatter;
-import org.apache.arrow.vector.types.pojo.ArrowType;
-import org.apache.arrow.vector.types.pojo.Field;
 
 /**
- * A value as Arrow writes it as text (pyarrow's cast to {@code string}), as the Python Postgres
- * provider writes each cell of a key set it binds: an integer as its digits, a boolean as {@code
- * true} or {@code false}, a float as its shortest digits (plainly from {@code 1e-6} to below
- * {@code 1e10}, else with an exponent: {@code 1e+16}, {@code 1e-7}), a decimal with its scale's
- * digits, a date as {@code 2024-01-02}, a timestamp as {@code 2024-01-02 03:04:05.000000} with
- * its unit's digits, and {@code Z} after a zoned one. Not part of the API.
+ * A float as Arrow writes it as text (pyarrow's cast to {@code string}): its shortest digits,
+ * plainly from {@code 1e-6} to below {@code 1e10}, else with an exponent ({@code 1e+16}, {@code
+ * 1e-7}). Not part of the API.
  */
 final class ArrowText {
   private ArrowText() {}
-
-  static String of(Object value, Field field) {
-    if (value instanceof String text) {
-      return text;
-    }
-    if (value instanceof Boolean flag) {
-      return flag ? "true" : "false";
-    }
-    if (value instanceof Long || value instanceof java.math.BigInteger) {
-      return value.toString();
-    }
-    if (value instanceof Double real) {
-      return floating(real);
-    }
-    if (value instanceof BigDecimal decimal) {
-      return decimal.toPlainString();
-    }
-    if (value instanceof LocalDate date) {
-      return date.toString();
-    }
-    if (value instanceof KeySets.Stamp stamp) {
-      ArrowType.Timestamp type = stamp.type();
-      String pattern =
-          switch (type.getUnit()) {
-            case SECOND -> "uuuu-MM-dd HH:mm:ss";
-            case MILLISECOND -> "uuuu-MM-dd HH:mm:ss.SSS";
-            case MICROSECOND -> "uuuu-MM-dd HH:mm:ss.SSSSSS";
-            case NANOSECOND -> "uuuu-MM-dd HH:mm:ss.SSSSSSSSS";
-          };
-      String text =
-          LocalDateTime.ofInstant(stamp.instant(), ZoneOffset.UTC)
-              .format(DateTimeFormatter.ofPattern(pattern));
-      return type.getTimezone() == null ? text : text + "Z";
-    }
-    throw new IllegalArgumentException("a key set cell of " + field.getType() + " has no text here");
-  }
 
   /** A float32 as Arrow's cast to text writes it: the shortest digits that read back as it. */
   static String floating32(float value) {

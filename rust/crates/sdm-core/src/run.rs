@@ -29,8 +29,8 @@ use arrow_array::RecordBatch;
 use arrow_schema::SchemaRef;
 use sdm_contract::catalog::CatalogAnswer;
 use sdm_contract::data::{
-    AttachmentId, DataRequest, ExpectedSchema, FetchPlan, ProviderCapabilities, ProviderError,
-    Relation, RelationColumn,
+    AttachmentId, DataRequest, ExpectedSchema, FetchPlan, KeyData, ProviderCapabilities,
+    ProviderError, Relation, RelationColumn,
 };
 use sdm_contract::ops::{OperationResult, SAMPLER_STATE_VERSION, SamplerMemo, SamplerState};
 use sdm_contract::run::{Endpoint, FetchStep, ModelCall, ReplyId};
@@ -156,9 +156,6 @@ struct Shared {
     /// The sampler memo the operation leaves for the host (decision E52),
     /// as it last kept it.
     memo: Option<SamplerMemo>,
-    /// The key sets bound as the run's provider binds them
-    /// (`DataAccess::bound_keys`), each once.
-    bound: BTreeSet<AttachmentId>,
     /// Answered, not yet taken by the body.
     replies: BTreeMap<ReplyId, Reply>,
     /// Each table's columns as the source's catalog read them, by the
@@ -301,8 +298,10 @@ impl Asker {
     }
 
     /// The answer to one data request, planned by the run's data layer for
-    /// its provider (decision H14); a request the plan refuses, or an
-    /// operation that names no provider, is the error.
+    /// its provider (decision H14) and bound as the provider binds it, one
+    /// fetch or several asked in one step, their answers joined in order
+    /// (T3.28); a request the plan refuses, or an operation that names no
+    /// provider, is the error.
     pub fn fetch(&self, request: DataRequest) -> Result<Ask, CoreError> {
         let Some(data) = &self.data else {
             return Err(internal(
@@ -312,8 +311,8 @@ impl Asker {
         let request = self.guarded(request);
         let limits = match data.route(&request)? {
             Route::Plan(plan) => {
-                self.bind_keys(data, &plan)?;
-                return Ok(self.ask_planned(request, plan));
+                let plans = self.bind(data, &request, plan)?;
+                return Ok(self.ask_bound(request, plans));
             }
             Route::Fallback(limits) => limits,
         };
@@ -348,26 +347,60 @@ impl Asker {
         Ok(ask)
     }
 
-    /// Each key set `plan` binds, as the run's provider binds it where its
-    /// dialect binds keys as text (`DataAccess::bound_keys`, T2.14d): the
-    /// attachment replaced, once, before the host takes it.
-    fn bind_keys(&self, data: &DataAccess, plan: &FetchPlan) -> Result<(), CoreError> {
-        for attachment in plan.key_sets() {
-            let mut shared = lock(&self.shared);
-            if shared.bound.contains(&attachment) {
-                continue;
+    /// `plan` bound as the run's provider binds it (`DataAccess::bind`,
+    /// T3.28): the key sets it names handed to the data layer as the core
+    /// made them; each batch a fetch binds installed as one of the run's
+    /// attachments, its fetch's plan naming it by that id; and each key set
+    /// the core made that no fetch names any longer taken back, so the host
+    /// is handed only what it binds. The plans of the fetches, in order.
+    fn bind(
+        &self,
+        data: &DataAccess,
+        request: &DataRequest,
+        plan: FetchPlan,
+    ) -> Result<Vec<FetchPlan>, CoreError> {
+        let named: BTreeSet<AttachmentId> = plan.key_sets().into_iter().collect();
+        let keys: BTreeMap<AttachmentId, KeyData> = {
+            let shared = lock(&self.shared);
+            named
+                .iter()
+                .filter_map(|id| match shared.attachments.get(id) {
+                    Some(Attachment::Arrow(made)) => Some((
+                        *id,
+                        KeyData {
+                            schema: Arc::clone(&made.schema),
+                            batches: made.batches.clone(),
+                        },
+                    )),
+                    _ => None,
+                })
+                .collect()
+        };
+        let bound = data.bind(request, plan, &keys)?;
+        let mut shared = lock(&self.shared);
+        let mut plans = Vec::with_capacity(bound.fetches.len());
+        for fetch in bound.fetches {
+            let mut installed = BTreeMap::new();
+            for (local, batch) in fetch.batches {
+                let id = attach(
+                    &mut shared,
+                    Attachment::Arrow(ArrowData::new(batch.schema, batch.batches)),
+                )?;
+                installed.insert(local, id);
             }
-            let Some(Attachment::Arrow(made)) = shared.attachments.get(&attachment) else {
-                continue;
-            };
-            if let Some(bound) = data.bound_keys(made)? {
-                shared
-                    .attachments
-                    .insert(attachment, Attachment::Arrow(bound));
+            let plan = renamed(fetch.plan, &installed)?;
+            let known =
+                |id: &AttachmentId| named.contains(id) || installed.values().any(|made| made == id);
+            if !plan.key_sets().iter().all(known) {
+                return Err(internal("a bound fetch binds a batch it does not hold"));
             }
-            shared.bound.insert(attachment);
+            plans.push(plan);
         }
-        Ok(())
+        let still: BTreeSet<AttachmentId> = plans.iter().flat_map(FetchPlan::key_sets).collect();
+        for id in named.difference(&still) {
+            shared.attachments.remove(id);
+        }
+        Ok(plans)
     }
 
     /// The Arrow data the body attached as `id`, taken back before the host
@@ -464,6 +497,27 @@ impl Asker {
         self.ask_planned(request, plan)
     }
 
+    /// The answer to `request`, asked as the fetches `plans` bind it into,
+    /// in one step: their answers joined in order, and the first that
+    /// failed, in order, failing it.
+    fn ask_bound(&self, request: DataRequest, mut plans: Vec<FetchPlan>) -> Ask {
+        if plans.len() == 1
+            && let Some(plan) = plans.pop()
+        {
+            return self.ask_planned(request, plan);
+        }
+        Ask {
+            shared: Arc::clone(&self.shared),
+            state: AskState::Chunks(
+                plans
+                    .into_iter()
+                    .map(|plan| Part::Asking(self.ask_planned(request.clone(), plan)))
+                    .collect(),
+            ),
+            budget: None,
+        }
+    }
+
     fn ask_planned(&self, request: DataRequest, plan: FetchPlan) -> Ask {
         Ask {
             shared: Arc::clone(&self.shared),
@@ -509,6 +563,42 @@ fn attach(shared: &mut Shared, attachment: Attachment) -> Result<AttachmentId, C
     let id = reserve(shared)?;
     shared.attachments.insert(id, attachment);
     Ok(id)
+}
+
+/// `plan` with each attachment it names by a local reference `installed`
+/// holds named by the run's id it was installed under. The core reads no
+/// plan's shape (a provider's or a dialect's): every `attachment` the plan
+/// names, as the contract writes it, is renamed alike.
+fn renamed(
+    plan: FetchPlan,
+    installed: &BTreeMap<AttachmentId, AttachmentId>,
+) -> Result<FetchPlan, CoreError> {
+    if installed.is_empty() {
+        return Ok(plan);
+    }
+    fn rename(value: &mut serde_json::Value, installed: &BTreeMap<AttachmentId, AttachmentId>) {
+        match value {
+            serde_json::Value::Object(fields) => {
+                for (name, field) in fields.iter_mut() {
+                    let local = field.as_u64().and_then(|n| u32::try_from(n).ok());
+                    match local.and_then(|n| installed.get(&AttachmentId(n))) {
+                        Some(id) if name == "attachment" => *field = serde_json::json!(id.0),
+                        _ => rename(field, installed),
+                    }
+                }
+            }
+            serde_json::Value::Array(items) => {
+                for item in items {
+                    rename(item, installed);
+                }
+            }
+            _ => {}
+        }
+    }
+    let unreadable = || internal("a bound fetch's plan does not read back");
+    let mut value = serde_json::to_value(&plan).map_err(|_| unreadable())?;
+    rename(&mut value, installed);
+    serde_json::from_value(value).map_err(|_| unreadable())
 }
 
 /// The run's next attachment id, or `INTERNAL_ERROR` once they are used up.
@@ -595,8 +685,18 @@ fn past(budget: &Option<Box<Budget>>, data: &ArrowData) -> Option<CoreError> {
     budget.as_ref().and_then(|budget| budget.exceeded(data))
 }
 
+/// One fetch of a request the data layer bound into several
+/// ([`Asker::ask_bound`]): asked, or answered and kept until all are.
+enum Part {
+    Asking(Ask),
+    Answered(Reply),
+}
+
 enum AskState {
     New(Asked),
+    /// Asked as several fetches in one step, each a chunk of the request's
+    /// key set (T3.28), whose answers are the request's, in order.
+    Chunks(Vec<Part>),
     /// Answered by the in-memory fallback (T2.6), which asks its own
     /// requests of the host through the run.
     Fallback(Pin<Box<dyn Future<Output = Reply> + Send>>),
@@ -624,18 +724,78 @@ fn next_reply(shared: &mut Shared) -> Option<ReplyId> {
 /// `page` added to the pages read before it, which it must match in
 /// schema: a provider's pages are one answer (design choice 1, paging).
 fn add_page(pages: Option<ArrowData>, page: ArrowData) -> Result<ArrowData, CoreError> {
-    let Some(mut pages) = pages else {
-        return Ok(page);
+    add_part(pages, page, "page")
+}
+
+/// `more`, a `part` of an answer (a page, a chunk's answer), added to the
+/// parts read before it, which it must match in schema.
+fn add_part(
+    earlier: Option<ArrowData>,
+    more: ArrowData,
+    part: &str,
+) -> Result<ArrowData, CoreError> {
+    let Some(mut earlier) = earlier else {
+        return Ok(more);
     };
-    if pages.schema != page.schema || pages.received != page.received {
+    if earlier.schema != more.schema || earlier.received != more.received {
         return Err(schema_mismatch(
-            "pages",
+            &format!("{part}s"),
             None,
-            "a page of the answer has another schema than the pages before it",
+            &format!("a {part} of the answer has another schema than the {part}s before it"),
         ));
     }
-    pages.batches.extend(page.batches);
-    Ok(pages)
+    earlier.batches.extend(more.batches);
+    Ok(earlier)
+}
+
+/// A request asked as several fetches, `parts`, polled: pending until
+/// every part is answered; then the first answer, in order, that is not
+/// data, else every answer's data joined in order and held to `budget`.
+fn poll_parts(
+    parts: &mut Vec<Part>,
+    shared: &Mutex<Shared>,
+    budget: &Option<Box<Budget>>,
+    context: &mut Context<'_>,
+) -> Poll<Reply> {
+    let mut pending = false;
+    for part in parts.iter_mut() {
+        if let Part::Asking(ask) = part {
+            match Pin::new(ask).poll(context) {
+                Poll::Ready(reply) => *part = Part::Answered(reply),
+                Poll::Pending => pending = true,
+            }
+        }
+    }
+    if pending {
+        return Poll::Pending;
+    }
+    let mut joined = None;
+    for part in mem::take(parts) {
+        let Part::Answered(reply) = part else {
+            unreachable!("every part is answered")
+        };
+        match reply {
+            Reply::Fetch(FetchResult::Data(data)) => match add_part(joined, data, "chunk") {
+                Ok(more) => joined = Some(more),
+                Err(err) => {
+                    lock(shared).exhausted.get_or_insert(err);
+                    return Poll::Pending;
+                }
+            },
+            other => return Poll::Ready(other),
+        }
+    }
+    let Some(whole) = joined else {
+        lock(shared)
+            .exhausted
+            .get_or_insert_with(|| internal("a request bound into no fetch"));
+        return Poll::Pending;
+    };
+    if let Some(err) = past(budget, &whole) {
+        lock(shared).exhausted.get_or_insert(err);
+        return Poll::Pending;
+    }
+    Poll::Ready(Reply::Fetch(FetchResult::Data(whole)))
 }
 
 impl Future for Ask {
@@ -643,9 +803,13 @@ impl Future for Ask {
 
     fn poll(self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<Reply> {
         let this = self.get_mut();
-        // The fallback's own asks lock the run's state as they are polled.
+        // The fallback's own asks, and a chunked request's fetches, lock the
+        // run's state as they are polled.
         if let AskState::Fallback(answer) = &mut this.state {
             return answer.as_mut().poll(context);
+        }
+        if let AskState::Chunks(parts) = &mut this.state {
+            return poll_parts(parts, &this.shared, &this.budget, context);
         }
         let mut shared = lock(&this.shared);
         match mem::replace(&mut this.state, AskState::Answered) {
@@ -754,7 +918,7 @@ impl Future for Ask {
                 },
                 Some(reply) => Poll::Ready(reply),
             },
-            AskState::Fallback(_) => unreachable!("polled above"),
+            AskState::Fallback(_) | AskState::Chunks(_) => unreachable!("polled above"),
             AskState::Answered => panic!("a request's reply was awaited after it was taken"),
         }
     }

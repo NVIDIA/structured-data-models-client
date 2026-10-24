@@ -193,7 +193,11 @@ fn a_databricks_key_set_is_one_text_of_the_old_client_s_json() {
 fn a_databricks_text_key_is_written_ascii_only() {
     let request = lookup(r#"{"type":"utf8"}"#, DATABRICKS_USERS);
     let keys = seeds(Arc::new(StringArray::from(vec![
-        "é", "a\"b\\c", "x\ny\t\u{1}", "\u{1F600}", "\u{7f}",
+        "é",
+        "a\"b\\c",
+        "x\ny\t\u{1}",
+        "\u{1F600}",
+        "\u{7f}",
     ])));
     let (_, bound) = bind_on("databricks", &request, keys);
     let [only] = &texts(&bound)[..] else {
@@ -424,7 +428,9 @@ fn a_postgres_seed_time_is_written_as_the_old_client_writes_it() {
             Arc::new(TimestampNanosecondArray::from(vec![
                 1_709_251_200_500_000_000,
             ])),
-            Arc::new(TimestampNanosecondArray::from(vec![1_709_164_800_000_000_000])),
+            Arc::new(TimestampNanosecondArray::from(vec![
+                1_709_164_800_000_000_000,
+            ])),
         ],
     )
     .unwrap();

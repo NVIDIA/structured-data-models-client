@@ -9246,3 +9246,34 @@ entries:
     fixed, at the orchestrator's direction. The fix it points to keys the
     memo to the source as the run resolves it, so a run after the change
     starts afresh.
+- id: P3K-1
+  title: A key set past the budget may split a few seeds earlier or later than the old client splits it, each seed's value the same
+  kind: change
+  old_behavior: >-
+    The old client writes a Databricks or Postgres key set as Python's
+    json.dumps writes it, ASCII only, a double as Python's repr (1e+16,
+    1e-05), and splits it past 900,000 characters of that text
+    (_chunk_rows, DB/sampler.py:32-44, PG/sampler.py:125-182). The Phase 2
+    core route wrote a Postgres key set's cells as pyarrow's text of them,
+    its characters as they are, and never split it.
+  new_behavior: >-
+    The core writes each key set (T3.28): on Databricks as the old client
+    does, but a double as its shortest digits in Rust's layout (1e16,
+    1e-5); on Postgres each cell as its own text (a double the same way),
+    its characters as they are, as the Phase 2 core route bound it. Both
+    split past 900,000 bytes of that text as the old client splits, one
+    fetch per chunk, the answers joined in order. Every seed reads as the
+    same value, so the answers are the same; only where a chunk ends can
+    move, for a key set of doubles or of text past ASCII near the budget.
+  affected_inputs: >-
+    A Databricks key set of float keys, or a Postgres key set of float keys
+    or of text past ASCII, whose text is near or past 900,000 bytes.
+  cases: [T3.28]
+  refs: [T3.28]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: owner. Writing a double as Python's repr would copy a
+    library's layout into sdm-data, which the emulation allowlist keeps in
+    the parser crate; the value each seed reads as is the same either way.

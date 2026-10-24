@@ -33,13 +33,15 @@ import org.apache.arrow.vector.types.pojo.Schema;
  * <ul>
  *   <li>how a key set the plan names is bound ({@link KeySets}): DuckDB registers it as Arrow and
  *       keeps it as a temporary table, SQLite ingests it as a temporary table as ADBC does,
- *       Postgres binds it as the statement's one parameter, JSON text;
+ *       Postgres binds the JSON text the core wrote of it (T3.28), handed over as one text cell,
+ *       as the statement's one parameter, as it was handed;
  *   <li>how a result becomes Arrow: the driver's column of the conversion table ({@link
  *       ConversionTable}).
  * </ul>
  *
  * A plan this provider cannot run (one for a host provider, one of another dialect, one with a
- * scalar parameter, one naming a key set it was not handed, two key sets under one name) is
+ * scalar parameter, one naming a key set it was not handed, two key sets under one name, a key
+ * set's Arrow on Postgres or a text elsewhere) is
  * refused by an exception whose text names no value, and the run loop hands the core a provider
  * error. Not part of the API.
  */
@@ -95,8 +97,11 @@ public final class JdbcProvider implements Host.Provider {
     }
   }
 
-  /** One statement of a plan: its text, and the key set it binds by relation, if any. */
-  record Planned(String text, Map<String, Integer> relations) {}
+  /**
+   * One statement of a plan: its text, the key set it binds by relation, if any, and the text it
+   * binds as its one parameter, by attachment, if any.
+   */
+  record Planned(String text, Map<String, Integer> relations, Integer keyText) {}
 
   @Override
   @SuppressWarnings("unchecked")
@@ -119,10 +124,30 @@ public final class JdbcProvider implements Host.Provider {
         throw new PlanNotRun("a plan with no statement or another dialect");
       }
       Map<String, Integer> bound = new LinkedHashMap<>();
+      Integer text = null;
       for (Object p : (List<Object>) statement.get("params")) {
         Map<String, Object> param = (Map<String, Object>) p;
-        if (!"key_set".equals(param.get("param"))) {
+        Object kind = param.get("param");
+        if ("text".equals(kind)) {
+          // The key set's JSON text the core wrote (T3.28), which Postgres binds.
+          if (driver != Driver.POSTGRES) {
+            throw new PlanNotRun("a key set's text on a driver binding key sets as relations");
+          }
+          int attachment = ((Number) param.get("attachment")).intValue();
+          if (!keys.containsKey(attachment)) {
+            throw new PlanNotRun("a plan naming a key set not handed over");
+          }
+          if (text != null) {
+            throw new PlanNotRun("a statement binding more than one key set");
+          }
+          text = attachment;
+          continue;
+        }
+        if (!"key_set".equals(kind)) {
           throw new PlanNotRun("a plan with a scalar parameter");
+        }
+        if (driver == Driver.POSTGRES) {
+          throw new PlanNotRun("a key set Postgres binds only as the text the core wrote of it");
         }
         int attachment =
             ((Number) ((Map<String, Object>) param.get("keys")).get("attachment")).intValue();
@@ -136,18 +161,31 @@ public final class JdbcProvider implements Host.Provider {
         }
         bound.put(relation, attachment);
       }
-      planned.add(new Planned(String.valueOf(statement.get("text")), bound));
+      planned.add(new Planned(String.valueOf(statement.get("text")), bound, text));
     }
-    // Each key set read once, whole: a key set is the core's, and small.
+    return switch (driver) {
+      case DUCKDB -> duckdb(planned, relations, read(keys), allocator);
+      case SQLITE -> sqlite(planned, relations, read(keys), allocator);
+      case POSTGRES -> postgres(planned, texts(keys), allocator);
+    };
+  }
+
+  /** Each key set read once, whole: a key set is the core's, and small. */
+  private static Map<Integer, KeySets.Keys> read(Map<Integer, ArrowReader> keys) throws Exception {
     Map<Integer, KeySets.Keys> read = new LinkedHashMap<>();
     for (Map.Entry<Integer, ArrowReader> each : keys.entrySet()) {
       read.put(each.getKey(), KeySets.Keys.read(each.getValue()));
     }
-    return switch (driver) {
-      case DUCKDB -> duckdb(planned, relations, read, allocator);
-      case SQLITE -> sqlite(planned, relations, read, allocator);
-      case POSTGRES -> postgres(planned, read, allocator);
-    };
+    return read;
+  }
+
+  /** Each key set's text read once: the one cell the core wrote ({@link KeySets#text}). */
+  private static Map<Integer, String> texts(Map<Integer, ArrowReader> keys) throws Exception {
+    Map<Integer, String> texts = new LinkedHashMap<>();
+    for (Map.Entry<Integer, ArrowReader> each : keys.entrySet()) {
+      texts.put(each.getKey(), KeySets.text(each.getValue()));
+    }
+    return texts;
   }
 
   // --- DuckDB ---------------------------------------------------------------------------
@@ -237,20 +275,15 @@ public final class JdbcProvider implements Host.Provider {
    * connection.transaction()}): none under autocommit; outside a transaction, one of its own,
    * committed, or rolled back if the read fails; inside the caller's, a savepoint, so a failed read
    * leaves the caller's transaction usable and the caller's work is the caller's to commit. Each
-   * statement binds its key set as its one parameter ({@link KeySets#postgresText}), every value
+   * statement binds its key set's text, as the core wrote it, as its one parameter, every value
    * read in text, and the last one's rows are read by the Postgres column of the conversion table.
    */
   private ArrowReader postgres(
-      List<Planned> planned, Map<Integer, KeySets.Keys> keys, BufferAllocator allocator)
+      List<Planned> planned, Map<Integer, String> keys, BufferAllocator allocator)
       throws Exception {
     Trace trace = Trace.installed();
     if (trace != null) {
       trace.cursor(0);
-    }
-    for (Planned statement : planned) {
-      if (statement.relations().size() > 1) {
-        throw new PlanNotRun("a statement binding more than one key set");
-      }
     }
     // Every value read in text, as psycopg reads it: a binary transfer the caller's connection
     // forces is off for this read's statements, and given back after.
@@ -278,7 +311,7 @@ public final class JdbcProvider implements Host.Provider {
 
   private ArrowReader postgresRead(
       List<Planned> planned,
-      Map<Integer, KeySets.Keys> keys,
+      Map<Integer, String> keys,
       BufferAllocator allocator,
       Trace trace)
       throws Exception {
@@ -332,12 +365,12 @@ public final class JdbcProvider implements Host.Provider {
 
   /**
    * The statement as the driver runs it: one with no key set as a plain statement, read with no
-   * escape processing, so its text is sent as the core wrote it; one binding a key set prepared
-   * with it as its parameter.
+   * escape processing, so its text is sent as the core wrote it; one binding a key set's text
+   * prepared with it as its parameter.
    */
-  private Statement prepared(Planned statement, Map<Integer, KeySets.Keys> keys)
+  private Statement prepared(Planned statement, Map<Integer, String> keys)
       throws SQLException, PlanNotRun {
-    if (statement.relations().isEmpty()) {
+    if (statement.keyText() == null) {
       Statement plain = connection.createStatement();
       try {
         plain.setEscapeProcessing(false);
@@ -348,12 +381,12 @@ public final class JdbcProvider implements Host.Provider {
       }
       return plain;
     }
-    KeySets.Keys bound = keys.get(statement.relations().values().iterator().next());
+    String bound = keys.get(statement.keyText());
     PreparedStatement prepared =
         connection.prepareStatement(KeySets.jdbcText(statement.text()));
     try {
       PgSession.inText(prepared);
-      prepared.setString(1, KeySets.postgresText(bound));
+      prepared.setString(1, bound);
     } catch (SQLException | RuntimeException e) {
       prepared.close();
       throw e;
