@@ -9742,13 +9742,14 @@ entries:
     A caller reading a serving refusal's details by key.
   cases: [T3.13]
   refs: [T3.13, T3.27]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: reviewer
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T313-REVIEW-P3S-3}
   notes: >-
-    Approver: owner. Proposed by T3.13's implementer, never self-approved.
-    The null omission is repaired using the existing nullable scalar.
-    Only the remaining additive diagnostic fields await scoped review.
+    Both independent Sol High round-6 reviewers explicitly recorded
+    APPROVE-P3S-3 after the caller-fault endpoint_code null was restored.
+    Their approval covers only additive structured diagnostic context,
+    without dropping old detail values or inventing host exception classes.
     The sentences are T3.27's; the client's test_t313_serving_route holds
     each value the old client gives.
 - id: P3S-4
