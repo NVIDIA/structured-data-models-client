@@ -178,3 +178,11 @@ The owner subsequently confirmed the missing-anchor behavior already approved by
 | T36-OWNER-2026-10-24-SEED | Remove the routine Snowflake seed warning, since the seed is optional, and document the limitation | "The question is, are users expected to provide a seed? If not, I'd suggest not having a warning at all." | approved by owner 2026-10-24 |
 | T36-OWNER-2026-10-24-HYBRID | Detect enforced hybrid-table primary keys and preserve the old client's counting behavior | "Yes, check them." | approved by owner 2026-10-24 |
 | T36-OWNER-2026-10-24-ANCHORS | P3D-8 and P3K-2: retain an entity with a missing anchor, use empty temporal history, continue other rows, and invent no replacement timestamp | "Use empty window history" | approved by owner 2026-10-24 |
+
+## T3.10 implementation of the approved switch
+
+| ID | Decision | Authority | Status |
+| --- | --- | --- | --- |
+| T310-DEFAULTS | Covered S0/S1/S2 entrypoints default to the core together; an explicit private routing selection preserves legacy comparison controls and invalid selections still fail | KO3-36; owner-approved switch, implemented without a new user setting | implementation of approved owner policy |
+| T310-LEGACY-TESTS | Existing old-route comparisons explicitly select legacy code; the engine package alone keeps its internal suite on the old route until Phase 5 | KO3-37 | implementation of approved owner policy |
+| T310-S2-INVENTORY | Append the 77 landed S2 acceptance IDs to half 3a, preserving the 309 existing IDs and every check | Locked-set design: the S2 list joins once in T3.10 | implementation of approved inventory extension |
