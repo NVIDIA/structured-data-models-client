@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 import sys
 import types
 from pathlib import Path
@@ -1234,6 +1235,16 @@ _SEEDS = (
 )
 
 
+def _seeding() -> Any:
+    r"""A Postgres guard under which the loader made ``live_tests.orders``,
+    the only table whose rows the core's seed-time read may convert."""
+    guard = wg.WriteGuard('postgres', None, 'live_tests')
+    guard.check(
+        'CREATE TABLE "live_tests"."orders" (user_id BIGINT, ts TIMESTAMP)'
+    )
+    return guard
+
+
 @pytest.mark.parametrize(
     'sql',
     [
@@ -1267,9 +1278,195 @@ _SEEDS = (
 def test_the_core_s_seed_time_reads_pass_on_postgres_as_reads_only(
     sql: str,
 ) -> None:
-    POSTGRES.check(_SEEDS)
+    guard = _seeding()
+    guard.check(_SEEDS)
     with pytest.raises(wg.WriteRefused):
-        POSTGRES.check(sql)
+        guard.check(sql)
     # Only Postgres reads them so.
     with pytest.raises(wg.WriteRefused):
         DATABRICKS.check(_SEEDS)
+
+
+#: A row of the loader's table, read by its alias, converted with a
+#: seed's value.
+_BY_ALIAS = (
+    'SELECT w.ts FROM "live_tests"."orders" AS o '
+    "CROSS JOIN LATERAL jsonb_populate_record(o, jsonb_build_object('ts', 1)) AS w"
+)
+
+
+def test_only_a_table_made_under_the_guard_is_converted_or_cast_to() -> None:
+    guard = _seeding()
+    guard.check(_BY_ALIAS)
+    # A table of the test schema the guard did not see made, or one it saw
+    # dropped, may hold a type whose checks call anything.
+    fresh = wg.WriteGuard('postgres', None, 'live_tests')
+    for sql in (_SEEDS, _BY_ALIAS):
+        with pytest.raises(wg.WriteRefused, match='test schema table'):
+            fresh.check(sql)
+    guard.check('DROP TABLE live_tests.orders')
+    with pytest.raises(wg.WriteRefused, match='test schema table'):
+        guard.check(_SEEDS)
+
+
+#: The seed read's two shapes, each a fragment the cases below change.
+_LATERAL = "CROSS JOIN LATERAL jsonb_populate_record({base}, jsonb_build_object('ts', {value})) AS w"
+_SEED_ROW = 'CROSS JOIN (SELECT ROW(t.*)::{type} AS base FROM {table} AS t LIMIT 1) AS b'
+
+
+def _seed(
+    base: str = 'b.base',
+    value: str = '1',
+    type_: str = '"live_tests"."orders"',
+    table: str = '"live_tests"."orders"',
+    head: str = 'SELECT w.ts FROM "live_tests"."orders" AS o ',
+) -> str:
+    return (
+        head
+        + _SEED_ROW.format(type=type_, table=table)
+        + ' '
+        + _LATERAL.format(base=base, value=value)
+    )
+
+
+@pytest.mark.parametrize(
+    ('sql', 'reason'),
+    [
+        # The converted row: only one of the loader's table, by its alias or
+        # the seed row of it; never another schema's, the catalog's, a
+        # subquery's, a function's or a cast's (Codex r2 P1: a domain's
+        # check runs in the conversion).
+        (
+            'SELECT p.x FROM information_schema.columns AS c '
+            + _LATERAL.format(base='c', value='-1').replace(' AS w', ' AS p'),
+            "a row converted that is not a test schema table's",
+        ),
+        (
+            'SELECT 1 FROM other.t AS t '
+            + _LATERAL.format(base='t', value='1'),
+            "a row converted that is not a test schema table's",
+        ),
+        (
+            'SELECT 1 FROM live_tests.other AS t '
+            + _LATERAL.format(base='t', value='1'),
+            "a row converted that is not a test schema table's",
+        ),
+        (
+            'SELECT 1 FROM "live_tests"."orders" AS o '
+            'CROSS JOIN (SELECT 1 AS base) AS b '
+            + _LATERAL.format(base='b.base', value='1'),
+            "a row converted that is not a test schema table's",
+        ),
+        (
+            _seed(base="jsonb_build_object('ts', 1)"),
+            "a row converted that is not a test schema table's",
+        ),
+        (
+            _seed(base='NULL::"live_tests"."orders"'),
+            "a row converted that is not a test schema table's",
+        ),
+        (
+            _seed(base='pg_sleep(1)'),
+            "a row converted that is not a test schema table's",
+        ),
+        (
+            _seed(base='o.base'),
+            "a row converted that is not a test schema table's",
+        ),
+        # The seed row read from another table than the one it is cast to.
+        (
+            _seed(table='other.t'),
+            "a row converted that is not a test schema table's",
+        ),
+        # The cast: only to a table made under the guard.
+        (
+            'SELECT ROW(1)::live_tests.some_domain',
+            'a row cast to a type not of a test schema table',
+        ),
+        (
+            _seed(type_='other.orders'),
+            'a row cast to a type not of a test schema table',
+        ),
+        # Calls and writes inside each shape.
+        (_seed(value="nextval('s')"), 'NEXTVAL, a sequence'),
+        (_seed(value='pg_sleep(1)'), 'PG_SLEEP(), a function on no list'),
+        (
+            _seed().replace('ROW(t.*)', "ROW(nextval('s'))"),
+            'NEXTVAL, a sequence',
+        ),
+        (
+            _seed().replace('ROW(t.*)', 'ROW(pg_sleep(1))'),
+            'PG_SLEEP(), a function on no list',
+        ),
+        (
+            _seed().replace('AS base FROM', 'AS base INTO live_tests.x FROM'),
+            'INTO where no write may be',
+        ),
+        (
+            'WITH x AS (' + _seed() + ') INSERT INTO live_tests.t SELECT 1',
+            'INSERT where no write may be',
+        ),
+        # Each shape inside a write's SELECT, refused for itself.
+        (
+            'INSERT INTO live_tests.t SELECT 1 FROM "live_tests"."orders" AS o '
+            'CROSS JOIN (SELECT 1 AS x) AS b',
+            'JOIN(), a function on no list',
+        ),
+        (
+            'INSERT INTO live_tests.t SELECT 1 FROM "live_tests"."orders" AS o '
+            + _LATERAL.format(base='o', value='1'),
+            'JSONB_POPULATE_RECORD(), a function on no list',
+        ),
+        (
+            'INSERT INTO live_tests.t SELECT ROW(o.*)::"live_tests"."orders" '
+            'FROM "live_tests"."orders" AS o',
+            'a cast to a type that is not built in',
+        ),
+        # Each outside its one place.
+        (
+            'SELECT 1 FROM "live_tests"."orders" AS o, '
+            + _LATERAL.format(base='o', value='1').replace(
+                'CROSS JOIN LATERAL ', ''
+            ),
+            'JSONB_POPULATE_RECORD(), a function on no list',
+        ),
+        (
+            "SELECT jsonb_build_object('ts', 1)",
+            'JSONB_BUILD_OBJECT(), a function on no list',
+        ),
+        (
+            'SELECT 1 FROM t JOIN (SELECT 1 AS x) AS b ON TRUE',
+            'JOIN(), a function on no list',
+        ),
+        # Cut short (Codex r2 P3).
+        ('SELECT 1 FROM t CROSS JOIN (', 'JOIN(), a function on no list'),
+    ],
+)
+def test_each_seed_read_shape_is_refused_where_it_is_not_the_core_s(
+    sql: str, reason: str
+) -> None:
+    with pytest.raises(wg.WriteRefused, match=re.escape(reason)):
+        _seeding().check(sql)
+
+
+@pytest.mark.parametrize(
+    ('sql', 'reason'),
+    [
+        (
+            'SELECT 1 FROM t CROSS JOIN (SELECT 1 AS x) AS b',
+            'JOIN(), a function on no list',
+        ),
+        (
+            'SELECT 1 FROM t AS o ' + _LATERAL.format(base='o', value='1'),
+            'JSONB_POPULATE_RECORD(), a function on no list',
+        ),
+        (
+            'SELECT ROW(t.*)::live_tests.orders FROM t',
+            'a cast to a type that is not built in',
+        ),
+    ],
+)
+def test_no_other_dialect_reads_a_seed_shape(sql: str, reason: str) -> None:
+    for guard in (DATABRICKS, SNOWFLAKE):
+        with pytest.raises(wg.WriteRefused, match=re.escape(reason)):
+            guard.check(sql)
