@@ -346,3 +346,57 @@ def test_a_warehouse_only_case_is_held_to_its_captures_reference_line() -> None:
     assert 'no reference observation' in none
     [rows] = problems({'w.case': [line(None)]})
     assert 'a sample read as rows' in rows
+
+
+def test_a_row_read_sample_is_typed_by_the_arrow_its_capture_holds() -> None:
+    # T3.20 r2: a Postgres leg's driver reads rows; its capture holds each
+    # read as the Arrow the core's Postgres provider builds from the
+    # driver's type codes, and rule 6 reads that Arrow's types for a sample
+    # its reference line holds as rows.
+    pa = pytest.importorskip('pyarrow')
+    coverage = _coverage_module()
+    sample = 'SELECT "id", "ts" FROM "{schema}"."orders" LIMIT 1000'
+    line = {
+        'case': 'w.case@lakebase',
+        'outcome': {'result': 'success', 'stage': 'from_source'},
+        'driver': {
+            'capture': {
+                'statements': [
+                    {'stage': 'from_source', 'sql': sample, 'results': [{}]}
+                ]
+            }
+        },
+        'public': {
+            'schema': {
+                'tables': [
+                    {
+                        'name': 'orders',
+                        'columns': [{'name': 'id'}, {'name': 'ts'}],
+                        'primary_key': 'id',
+                        'time_column': 'ts',
+                    }
+                ],
+                'links': [],
+            }
+        },
+    }
+    capture = {'statements': [{'text': sample, 'result': 'tables/a.arrows'}]}
+    table = pa.table(
+        {
+            'id': pa.array([1], pa.int32()),
+            'ts': pa.array([0], pa.timestamp('us')),
+        }
+    )
+    sink = pa.BufferOutputStream()
+    with pa.ipc.new_stream(sink, table.schema) as writer:
+        writer.write_table(table)
+    blobs = {'tables/a.arrows': sink.getvalue().to_pybytes()}
+    coverage.row_schemas(capture, line, blobs.get)
+    case = {
+        'id': 'w.case',
+        'cells': ['int32/primary-key', 'timestamp-us/time-column'],
+        'input': {},
+    }
+    report = coverage.Report()
+    coverage.rule_6({'w.case': case}, {}, report, {'w.case': [line]})
+    assert report.problems == []
