@@ -930,7 +930,9 @@ fn key_type(column_type: &sdm_contract::ColumnType) -> Option<&'static str> {
     use sdm_contract::ColumnType as T;
     Some(match column_type {
         T::Int8 | T::Int16 | T::Int32 | T::Int64 | T::Uint8 | T::Uint16 | T::Uint32 => "bigint",
-        T::Uint64 | T::Float32 | T::Float64 | T::Decimal128 { .. } | T::Decimal256 { .. } => "numeric",
+        T::Uint64 | T::Float32 | T::Float64 | T::Decimal128 { .. } | T::Decimal256 { .. } => {
+            "numeric"
+        }
         _ => return None,
     })
 }

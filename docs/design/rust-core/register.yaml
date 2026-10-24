@@ -9096,45 +9096,40 @@ entries:
     equal; DeepJsonMain holds the public call on a 256 KiB stack.
 
 - id: JV-4
-  title: A Postgres zoned time written as text names the session's zone, which pgjdbc sets to the JVM's
+  title: Zoned Postgres values carried as text use UTC on both hosts
   kind: change
   old_behavior: >-
-    Python's Postgres provider writes an element of a timestamptz array,
-    and a bound of a tstzrange or tstzmultirange, as Python's text of the
-    datetime psycopg read: the instant in the session's TimeZone where
-    Python's ZoneInfo names it, else in UTC. psycopg leaves the session's
-    zone libpq's default: the server's, role's or database's setting, or
-    PGTZ in the Python process.
+    Python writes a timestamptz array element or a tstzrange or tstzmultirange
+    bound as the native datetime's text in psycopg's session timezone.
+    Java connections normally start in the JVM timezone, while psycopg
+    inherits its connection defaults, so equal instants can become different
+    text features when those startup settings differ.
   new_behavior: >-
-    Java's Postgres provider writes the same text, the instant in the zone
-    psycopg resolves the session's TimeZone to, read from the zone data
-    Python reads (its zone lookup roots, then the core's bundled copy, as
-    Python falls back to its tzdata package; sdm_host::session_zone_offset),
-    so on sessions of one zone both hosts write the same text: measured in
-    every zone pg_timezone_names and pg_timezone_abbrevs name, and
-    posixrules, localtime and Factory, at historic instants and DST edges. pgjdbc sets the session's zone to the
-    JVM's default zone when it connects, replacing the default psycopg's
-    session would have, and the server's default cannot be read back from
-    the connection without a privileged role (pg_file_settings). So on a
-    JVM whose zone is not that default, the text names the same instant in
-    another zone. A scalar tstzrange or tstzmultirange is kept as a text
-    feature, so the feature's values in the payload differ; a timestamptz
-    column, read as the instant in UTC, is the same on both.
+    Both hosts write these zoned text values in UTC, retaining the instant,
+    microseconds, nulls, empty and unbounded ranges.
+    A readable wall date whose UTC year is 0 or 10000 is written with that
+    UTC year rather than failing or retaining a session-dependent offset.
+    Scalar timestamp columns and timezone-free values retain their existing
+    semantics, and no caller connection or JVM timezone is changed.
   affected_inputs: >-
-    A tstzrange or tstzmultirange column, or a timestamptz array, read on a
-    JVM whose default zone is not the zone a psycopg session to the same
-    database would have.
+    Postgres timestamptz array elements and tstzrange or tstzmultirange
+    bounds, including range array elements, that are carried as text.
+    Their non-UTC old Python text changes to the same UTC representation
+    used by Java; native driver refusals for unreadable dates remain.
   cases: []
-  refs: [T3.12, packages/structured-data-models-client/tests_test_ops/test_t312_driver_parity.py]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  refs:
+    - T3.9
+    - packages/structured-data-models-client/tests_test_ops/test_t39_postgres_utc_text.py
+    - java/src/test/java/com/nvidia/sdm/internal/jdbc/T39PostgresUtcTextTest.java
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T39-OWNER-2026-10-24-UTC-TEXT}
   notes: >-
-    Approver: owner. Proposed by T3.12's implementer (fix rounds 1 and 2,
-    Codex P2-8 and r2 P2-6; Claude r2 confirmed no fix short of changing the
-    caller's session). The driver parity test holds the text equal on
-    sessions of the same zone, a zone Python does not name (GMT+3) among
-    them.
+    The owner explicitly chose "Use UTC consistently in both hosts
+    (recommended)" after being told that this changes old Python text in
+    non-UTC sessions. This replaces the earlier unapproved proposal to
+    retain Java's startup-session divergence. Public materialization and
+    native conversion regressions cover the bounded policy.
 
 # --- Phase 3 lane A entries (P3A-1..19) ---
 - id: P3A-1
