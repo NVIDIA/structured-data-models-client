@@ -5,9 +5,11 @@
 package com.nvidia.sdm.internal.jdbc;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.nvidia.sdm.internal.ArrowData;
+import com.nvidia.sdm.internal.NativeCore;
 import com.nvidia.sdm.internal.PythonText;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -101,6 +103,25 @@ class T312ConversionTableTest {
     }
   }
 
+  /**
+   * Codex T3.12 r1 P0-1: C's {@code %e}, as ADBC SQLite writes a real into a text column, rounds
+   * the double's exact value to seven digits, an exact tie to even (glibc's printf), never half up
+   * (as Python's {@code '%e' % value} writes each, probed).
+   */
+  @Test
+  void aRealIsWrittenAsCsExponentFormWritesIt() {
+    double[] values = {1234562.5, 1234563.5, 0.1, 1e300, 2.5e-7, 1.0000005, 1.0000015, -0.0, 0.0, 9.9999995, 1e-310};
+    String[] written = {
+      "1.234562e+06", "1.234564e+06", "1.000000e-01", "1.000000e+300", "2.500000e-07",
+      "1.000001e+00", "1.000001e+00", "-0.000000e+00", "0.000000e+00", "9.999999e+00", "1.000000e-310"
+    };
+    for (int at = 0; at < values.length; at++) {
+      assertEquals(written[at], ConversionTable.cExponent(values[at]), Double.toString(values[at]));
+    }
+    assertEquals("inf", ConversionTable.cExponent(Double.POSITIVE_INFINITY));
+    assertEquals("-inf", ConversionTable.cExponent(Double.NEGATIVE_INFINITY));
+  }
+
   /** psycopg's timedelta of each, as days, seconds and microseconds (probed). */
   @Test
   void anIntervalIsReadAsPsycopgReadsIt() {
@@ -112,17 +133,24 @@ class T312ConversionTableTest {
     }
   }
 
-  /** {@code json.dumps(json.loads(text), separators=(',', ':'))} (probed). */
+  /**
+   * {@code json.dumps(json.loads(text), separators=(',', ':'))} (probed), as the core writes it
+   * (Codex T3.12 r1 P1-4: the rule is the core's alone, at any depth Python's reader reads), a
+   * JSON null none.
+   */
   @Test
   void aJsonValueIsWrittenBackAsPythonWritesIt() {
     assertEquals(
         "{\"a\":2,\"b\":[1.0,1e+16,-0.0,\"\\u00e9\\ud800\",100.0,0,12345678901234567890]}",
-        PythonText.json(
+        NativeCore.jsonText(
             "{\"a\": 1, \"b\": [1.0, 1e16, -0.0, \"\\u00e9\\ud800\", 1E2, -0, 12345678901234567890], \"a\": 2}"));
-    assertEquals("[true,null,\"x\\n\\u0001\\u007f\"]", PythonText.json("[true,null,\"x\\n\\u0001\\u007f\"]"));
+    assertEquals("[true,null,\"x\\n\\u0001\\u007f\"]", NativeCore.jsonText("[true,null,\"x\\n\\u0001\\u007f\"]"));
     assertEquals(
         "{\"k\":0.1,\"z\":Infinity,\"e\":1.5e-05,\"n\":0.0001}",
-        PythonText.json("{\"k\": 0.1, \"z\": 1e400, \"e\": 1.5e-05, \"n\": 0.0001}"));
+        NativeCore.jsonText("{\"k\": 0.1, \"z\": 1e400, \"e\": 1.5e-05, \"n\": 0.0001}"));
+    assertNull(NativeCore.jsonText("null"));
+    String deep = "[".repeat(920) + "]".repeat(920);
+    assertEquals(deep, NativeCore.jsonText(deep));
   }
 
   /** Python's {@code repr} of each (probed). */

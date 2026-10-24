@@ -7,6 +7,7 @@ package com.nvidia.sdm.internal;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.nvidia.sdm.ModelEndpointException;
 import com.sun.net.httpserver.HttpServer;
@@ -20,6 +21,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
@@ -117,6 +119,58 @@ class T312TransportTest {
       assertArrayEquals(
           "{}".getBytes(StandardCharsets.UTF_8),
           endpoint.transport(0).predict("{}".getBytes(StandardCharsets.UTF_8)));
+    }
+  }
+
+  /**
+   * Codex T3.12 r1 P1-6: the timeout bounds the whole attempt, the answer's body included: an
+   * endpoint that sends its headers and then holds its body back, or never ends it, is a timed-out
+   * transport within the timeout, its exchange given up.
+   */
+  @Test
+  void anAnswerWhoseBodyIsHeldBackTimesOut() throws Exception {
+    AtomicBoolean closed = new AtomicBoolean();
+    HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+    server.setExecutor(java.util.concurrent.Executors.newCachedThreadPool(runnable -> {
+      Thread thread = new Thread(runnable);
+      thread.setDaemon(true);
+      return thread;
+    }));
+    server.createContext(
+        "/",
+        exchange -> {
+          try (InputStream in = exchange.getRequestBody()) {
+            in.readAllBytes();
+          }
+          exchange.sendResponseHeaders(200, 2);
+          OutputStream out = exchange.getResponseBody();
+          out.write('{');
+          out.flush();
+          // The rest of the body never comes while the test runs.
+          for (int waited = 0; waited < 300 && !closed.get(); waited++) {
+            try {
+              Thread.sleep(100);
+            } catch (InterruptedException e) {
+              return;
+            }
+          }
+        });
+    server.start();
+    try {
+      HttpTransport transport =
+          new HttpTransport(
+              "http://127.0.0.1:" + server.getAddress().getPort(), null, Duration.ofMillis(300), 0);
+      long started = System.nanoTime();
+      HttpTransport.Failed failed =
+          assertThrows(
+              HttpTransport.Failed.class,
+              () -> transport.predict("{}".getBytes(StandardCharsets.UTF_8)));
+      long millis = (System.nanoTime() - started) / 1_000_000;
+      assertTrue(millis < 5_000, "the call took " + millis + " ms");
+      assertTrue(failed.getMessage().contains("timed out"), failed.getMessage());
+    } finally {
+      closed.set(true);
+      server.stop(0);
     }
   }
 }

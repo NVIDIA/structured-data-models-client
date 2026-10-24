@@ -115,6 +115,45 @@ class T312PredictTest {
     }
   }
 
+  /** The scripted answer with an empty quantiles mapping on each prediction. */
+  @SuppressWarnings("unchecked")
+  private static byte[] withEmptyQuantiles(byte[] answer) {
+    try {
+      Map<String, Object> read = (Map<String, Object>) com.nvidia.sdm.internal.Json.read(answer);
+      for (Object item : (List<Object>) read.get("predictions")) {
+        ((Map<String, Object>) item).put("quantiles", new java.util.LinkedHashMap<>());
+      }
+      return com.nvidia.sdm.internal.Json.write(read);
+    } catch (com.nvidia.sdm.internal.Json.JsonException e) {
+      throw new IllegalStateException(e);
+    }
+  }
+
+  /**
+   * Codex T3.12 r1 P0-3: what the answer left out is the core's reading of it, as Python's
+   * {@code absent()} reads it: an empty quantiles mapping on every row is absent, each name
+   * once, in the order named, and a name the result does not look for is carried.
+   */
+  @Test
+  void whatTheAnswerLeftOutIsTheCoresReadingOfIt() throws Exception {
+    try (Connection connection = T312Shop.open("duckdb");
+        T312Shop.Endpoint endpoint =
+            new T312Shop.Endpoint(body -> Map.entry(200, withEmptyQuantiles(T312Shop.scripted(body))));
+        SdmClient client = SdmClient.connect(endpoint.url())) {
+      Request request =
+          PredictiveQuery.parse(REGRESSION)
+              .materialize(Schema.fromSource(DuckDbSource.of(connection)), twoUsers());
+      PredictionResult result =
+          client.predict(request, SdmClient.KUMO_RELATIONAL, List.of("prediction", "quantiles"));
+      assertEquals(2, result.rows());
+      assertEquals(
+          List.of("quantiles"),
+          result.absent(List.of("quantiles", "prediction", "quantiles", "no_such_output")));
+      assertEquals(
+          List.of("explanation", "quantiles"), result.absent(List.of("explanation", "quantiles")));
+    }
+  }
+
   @Test
   void theTransportSendsTheCoresBytesUnchanged() throws Exception {
     Calls calls = new Calls();

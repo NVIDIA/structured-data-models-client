@@ -829,6 +829,28 @@ mod tests {
         assert_eq!(text("1 2"), None);
     }
 
+    /// T3.12 fix 1 (Codex P1-4): a JSON value handed over as the text the
+    /// reference's provider writes of it (`json.dumps` of the value its
+    /// driver read: compact, ASCII only), a JSON null none, at any depth
+    /// the reference's reader reads; for a host whose driver gives the
+    /// server's text, so the rule stays here.
+    #[test]
+    fn a_json_value_is_written_back_as_the_reference_s_provider_writes_it() {
+        let written = |json: &str| json_text(json, |f| format!("{f:?}"));
+        assert_eq!(
+            written("{\"a\": 1, \"b\": [1.0, 1E2, -0, \"\\u00e9\\ud800\"], \"a\": 2}"),
+            Some(Some("{\"a\":2,\"b\":[1.0,100.0,0,\"\\u00e9\\ud800\"]}".into()))
+        );
+        assert_eq!(written("null"), Some(None));
+        assert_eq!(written(" \"text\" "), Some(Some("\"text\"".into())));
+        assert_eq!(written("true"), Some(Some("true".into())));
+        assert_eq!(written("12345678901234567890"), Some(Some("12345678901234567890".into())));
+        assert_eq!(written("[null, {}]"), Some(Some("[null,{}]".into())));
+        let deep = format!("{}{}", "[".repeat(920), "]".repeat(920));
+        assert_eq!(written(&deep), Some(Some(deep.clone())));
+        assert_eq!(written("{"), None);
+    }
+
     #[test]
     fn a_whole_number_s_digits() {
         assert_eq!(whole("12"), Some("12".into()));
