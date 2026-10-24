@@ -5,6 +5,9 @@
 package com.nvidia.sdm.internal;
 
 import com.nvidia.sdm.FromSourceOptions;
+import com.nvidia.sdm.MaterializeOptions;
+import com.nvidia.sdm.PredictiveQuery;
+import com.nvidia.sdm.Request;
 import com.nvidia.sdm.PostgresSource;
 import com.nvidia.sdm.Schema;
 import com.nvidia.sdm.StructuredDataException;
@@ -12,12 +15,14 @@ import java.net.URI;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.Statement;
+import java.util.List;
 import java.util.UUID;
 
 /**
- * Codex T3.12 r2 P1-2: a Postgres JSON value nested deep, described through the public {@code
- * Schema.fromSource} on a thread whose stack is small (256 KiB), as a JVM's may be: a value the
- * core reads (920 and 1,900 levels) is described, one past its depth (2,100) refused by name, and
+ * Codex T3.12 r2 P1-2 and r3 P1-3: a Postgres JSON value nested deep, described through the
+ * public {@code Schema.fromSource} and materialized through {@code PredictiveQuery.materialize}
+ * on a thread whose stack is small (256 KiB), as a JVM's may be: a value the core reads (920 and
+ * 1,900 levels) is described and materialized, one past its depth (2,100) refused by name, and
  * the JVM runs on. The database is made on {@code SDM_POSTGRES_TEST_DSN}'s server and dropped.
  */
 public final class DeepJsonMain {
@@ -41,9 +46,11 @@ public final class DeepJsonMain {
       try (Connection connection = DriverManager.getConnection(server + name, user[0], user[1]);
           Statement statement = connection.createStatement()) {
         for (int depth : new int[] {920, 1900, 2100}) {
-          statement.execute("CREATE TABLE deep" + depth + " (id bigint PRIMARY KEY, doc json)");
           statement.execute(
-              "INSERT INTO deep" + depth + " VALUES (1, '" + nested(depth) + "'), (2, '[1]')");
+              "CREATE TABLE deep" + depth + " (id bigint PRIMARY KEY, y double precision, doc json)");
+          statement.execute(
+              "INSERT INTO deep" + depth + " VALUES (1, 1.0, '" + nested(depth) + "'), (2, 2.0,"
+                  + " '[1]'), (3, 3.0, '[2]'), (4, 4.0, '[3]')");
         }
         Thread small =
             new Thread(
@@ -57,6 +64,14 @@ public final class DeepJsonMain {
                               FromSourceOptions.builder().table("deep" + depth).build());
                       System.out.println(
                           "described " + depth + " tables=" + schema.tables().size());
+                      Request request =
+                          PredictiveQuery.parse(
+                                  "PREDICT deep" + depth + ".y FOR EACH deep" + depth + ".id")
+                              .materialize(
+                                  schema,
+                                  MaterializeOptions.builder().indices(List.of(1L, 2L)).build());
+                      System.out.println(
+                          "materialized " + depth + " rows=" + request.predictRows());
                     } catch (StructuredDataException refused) {
                       System.out.println("refused " + depth + " " + refused.code());
                     }

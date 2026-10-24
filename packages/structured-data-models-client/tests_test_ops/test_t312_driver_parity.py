@@ -537,6 +537,13 @@ REFUSED = {
     'a later text in an integer column',
 }
 
+#: The errors a driver's own refusal of a value is, by host: psycopg's
+#: loaders' and ADBC's, and the Java provider's (its conversion table's).
+CLIENT_REFUSALS = {
+    'python': {'DataError', 'NotImplementedError', 'ProgrammingError'},
+    'java': {'java.sql.SQLDataException'},
+}
+
 #: The cases whose answer has no row.
 EMPTY = {'no row'}
 
@@ -785,6 +792,13 @@ def _judged(case: str, mine: Any, theirs: Any) -> str | None:
             return f'both refuse: Python {_shown(mine)}; Java {_shown(theirs)}'
         if mine.sqlstate != theirs.sqlstate:
             return f'refused by SQLSTATE {theirs.sqlstate}, not {mine.sqlstate}'
+        if mine.sqlstate is None and (
+            mine.said.split(':')[0] not in CLIENT_REFUSALS['python']
+            or theirs.said not in CLIENT_REFUSALS['java']
+        ):
+            # A refusal of the driver's own, no SQLSTATE named: the error a
+            # driver's reading of a value raises (Claude T3.12 r3 P3).
+            return f'not a refusal of a value: Python {mine.said}; Java {theirs.said}'
         return None
     if isinstance(mine, Refused) or isinstance(theirs, Refused):
         return f'both answer: Python {_shown(mine)}; Java {_shown(theirs)}'
@@ -843,4 +857,95 @@ def test_java_hands_the_core_what_python_s_provider_hands_it(
             problems.setdefault(f'{case}: {found}', []).append(run.rstrip(')'))
     assert not problems, '\n'.join(
         f'{found} [{", ".join(runs)}]' for found, runs in problems.items()
+    )
+
+
+#: Instants each zone is read at: before and at its first rules, historic
+#: offsets, and both sides of DST changes in Europe and North America.
+INSTANTS = [
+    '1850-01-01 00:00+00',
+    '1900-01-01 00:00+00',
+    '1916-05-01 00:00+00',
+    '1937-07-01 00:00+00',
+    '1945-08-01 00:00+00',
+    '1970-01-01 00:00+00',
+    '1996-10-27 00:59:59+00',
+    '1996-10-27 01:00:00+00',
+    '2000-03-26 00:59:59+00',
+    '2000-03-26 01:00:00+00',
+    '2024-03-10 06:59:59+00',
+    '2024-03-10 07:00:00+00',
+    '2024-11-03 05:59:59+00',
+    '2024-11-03 06:00:00+00',
+    '2038-06-01 12:00+00',
+    '2100-07-01 12:00+00',
+]
+
+
+def test_zoned_text_is_python_s_in_every_zone_postgres_names(
+    databases: Databases,
+) -> None:
+    # Codex T3.12 r3 P0-1: a timestamptz written as text is the instant in
+    # the zone psycopg resolves the session's to, by the zone data Python
+    # reads (its ZoneInfo), in every zone Postgres names and the names Python
+    # reads that no listing gives, at historic instants and DST edges alike.
+    java = _java()
+    if java is None or databases.scoped is None:
+        return
+    import psycopg
+
+    with psycopg.connect(databases.scoped, autocommit=True) as connection:
+        names = sorted(
+            {
+                row[0]
+                for row in connection.execute(
+                    'SELECT name FROM pg_timezone_names'
+                )
+            }
+            | {
+                row[0]
+                for row in connection.execute(
+                    'SELECT abbrev FROM pg_timezone_abbrevs'
+                )
+            }
+            | {
+                'posixrules',
+                'localtime',
+                'Factory',
+                'UTC',
+                'GMT+3',
+                'asia/kolkata',
+            }
+        )
+    values = ','.join(f'"{at}"' for at in INSTANTS)
+    read = _rows('timestamptz[]', f"'{{{values}}}'")
+    steps = [
+        {
+            'plan': {
+                'plan': 'sql',
+                'statements': [
+                    {'dialect': 'postgres', 'text': text, 'params': []}
+                    for text in (f"SET TimeZone = '{name}'", read)
+                ],
+            }
+        }
+        for name in names
+    ]
+    provider = databases.python('postgres')
+    mine = [_python_answer(provider, step) for step in steps]
+    theirs = _java_answers(java, databases, 'postgres', steps)
+    differ = []
+    for name, a, b in zip(names, mine, theirs, strict=True):
+        if isinstance(a, Refused) and isinstance(b, Refused):
+            continue  # A name Postgres does not take as a session's zone.
+        found = (
+            _difference(a, b)
+            if not isinstance(a, Refused) and not isinstance(b, Refused)
+            else f'Python {_shown(a)}; Java {_shown(b)}'
+        )
+        if found is not None:
+            differ.append(f'{name}: {found}')
+    assert not differ, (
+        f'{len(differ)} of {len(names)} zones differ:\n'
+        + '\n'.join(differ[:40])
     )

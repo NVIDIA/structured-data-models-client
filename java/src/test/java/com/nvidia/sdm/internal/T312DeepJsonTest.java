@@ -28,6 +28,8 @@ class T312DeepJsonTest {
     assertEquals(0, ended.status(), ended.out() + ended.err());
     assertTrue(ended.out().contains("described 920 tables=1"), ended.out());
     assertTrue(ended.out().contains("described 1900 tables=1"), ended.out());
+    assertTrue(ended.out().contains("materialized 920 rows=2"), ended.out());
+    assertTrue(ended.out().contains("materialized 1900 rows=2"), ended.out());
     assertTrue(ended.out().contains("refused 2100 "), ended.out());
     assertTrue(ended.out().contains("survived"), ended.out());
   }
