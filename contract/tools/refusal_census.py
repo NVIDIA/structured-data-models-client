@@ -345,11 +345,16 @@ def _case(
 
 
 def _routes() -> list[str]:
+    r"""Every route the cases name that this build's core has (the client's
+    ``_routing.CORE_ROUTED``): a case's warehouse route the core has none
+    for yet is not forced (T3.20 r3)."""
+    from sdm_client import _routing
+
     runner = _runner()
     found: set[str] = set()
     for case, _ in runner.load_cases([REPO / 'contract/cases']):
         found.update(case['routes'])
-    return sorted(found)
+    return sorted(found & _routing.CORE_ROUTED)
 
 
 def _outcome(
