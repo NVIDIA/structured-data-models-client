@@ -29,8 +29,8 @@
     "client.predict/forecast/snowflake"
   ],
   "cells": [
-    "int32/primary-key",
-    "int32/foreign-key",
+    "int8/primary-key",
+    "int8/foreign-key",
     "float64/target"
   ],
   "input": {
