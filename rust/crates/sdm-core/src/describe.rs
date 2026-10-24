@@ -32,7 +32,7 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use arrow_schema::TimeUnit;
-use sdm_contract::catalog::{CatalogAnswer, CatalogForeignKey};
+use sdm_contract::catalog::{CatalogAnswer, CatalogForeignKey, KeyKind};
 use sdm_contract::data::{DataRequest, DescribePart, Relation, TableKey};
 use sdm_contract::ops::{
     ColumnRef, DescribedSource, HeldSchema, NamedTable, OperationResult, SourceDescription,
@@ -133,8 +133,9 @@ pub(crate) async fn run(
     };
 
     let mut tables = Vec::with_capacity(names.len());
-    // Each table's marked big integers' declared types (big_integer_types).
-    let mut big_types = Vec::with_capacity(names.len());
+    // Catalog types retained for big-integer key casts and temporal windows.
+    let mut source_types = Vec::with_capacity(names.len());
+    let mut primary_constraints = Vec::with_capacity(names.len());
     for table in &names {
         // The table read as `materialize` reads a column it holds no facts
         // of (crate::discover): its catalog, its preview, each big
@@ -143,9 +144,16 @@ pub(crate) async fn run(
             declared,
             constraints,
             preview,
-            big_types: types,
+            source_types: types,
         } = crate::discover::table(&asker, table, caller_named, None).await?;
-        big_types.push(types);
+        source_types.push(types);
+        primary_constraints.push(
+            constraints
+                .iter()
+                .find(|key| key.kind == KeyKind::Primary)
+                .map(|key| key.columns.clone())
+                .unwrap_or_default(),
+        );
         let previewed = infer::preview_keyed(
             &table.name,
             &table.source,
@@ -268,7 +276,14 @@ pub(crate) async fn run(
     // are inferred: a declined key is one no link can point at.
     let counted = if check_keys {
         let stated = spec.primary_keys.keys().cloned().collect();
-        let held = count_keys(&asker, &mut tables, &stated, given.is_none()).await?;
+        let held = count_keys(
+            &asker,
+            &mut tables,
+            &primary_constraints,
+            &stated,
+            given.is_none(),
+        )
+        .await?;
         for warning in held.warnings {
             asker.warn(warning);
         }
@@ -297,7 +312,7 @@ pub(crate) async fn run(
     for warning in warnings {
         asker.warn(warning);
     }
-    for (table, types) in description.tables.iter_mut().zip(big_types) {
+    for (table, types) in description.tables.iter_mut().zip(source_types) {
         for column in &mut table.columns {
             column.declared_type = types
                 .iter()
@@ -549,6 +564,47 @@ fn key_labels(tables: &[KeyShape]) -> Vec<(usize, u64)> {
     out
 }
 
+/// Enforcement learned only for the key-count operation. Keeping these
+/// facts separate from inferred column uniqueness preserves lookup checks
+/// when a reading role masks an enforced stored key.
+async fn enforced_primary_keys(
+    asker: &Asker,
+    tables: &[InferredTable],
+    primary: &[Vec<String>],
+) -> Result<Vec<bool>, CoreError> {
+    let mut enforced = vec![false; tables.len()];
+    if !asker.capabilities()?.key_enforcement {
+        return Ok(enforced);
+    }
+    let mut namespaces = std::collections::BTreeMap::<Vec<String>, Vec<String>>::new();
+    for (at, (table, primary)) in tables.iter().zip(primary).enumerate() {
+        if primary.is_empty() || !primary.iter().all(|c| table.primary_key.contains(c)) {
+            continue;
+        }
+        let relation = asker.read_as(&table.source);
+        let Some((name, namespace)) = relation.source.split_last() else {
+            continue;
+        };
+        let names = if let Some(names) = namespaces.get(namespace) {
+            names
+        } else {
+            let request = DataRequest::Describe {
+                tables: vec![table.source.clone()],
+                part: DescribePart::KeyEnforcement,
+            };
+            // An unavailable or unrecognizable listing establishes no
+            // enforcement, so the ordinary key count still runs.
+            let names = match describe(asker, request).await {
+                Ok(CatalogAnswer::KeyEnforcement(names)) => names,
+                _ => Vec::new(),
+            };
+            namespaces.entry(namespace.to_vec()).or_insert(names)
+        };
+        enforced[at] = names.contains(name);
+    }
+    Ok(enforced)
+}
+
 /// Counts every key the source does not enforce in one request, then, for
 /// each that repeats a value, reads one such value (`repeated_key`), in
 /// table order, as the reference's `count_keys` does, and holds the keys to
@@ -560,15 +616,25 @@ fn key_labels(tables: &[KeyShape]) -> Vec<(usize, u64)> {
 async fn count_keys(
     asker: &Asker,
     tables: &mut [InferredTable],
+    primary_constraints: &[Vec<String>],
     stated: &std::collections::BTreeSet<String>,
     infer_links: bool,
 ) -> Result<keys::Held, CoreError> {
+    let enforced = enforced_primary_keys(asker, tables, primary_constraints).await?;
     let shapes: Vec<KeyShape> = tables
         .iter()
-        .map(|t| KeyShape {
-            keyed: !t.primary_key.is_empty(),
-            asked: !t.primary_key.is_empty() && !t.enforces(&t.primary_key),
-            unsayable: t.primary_key.iter().any(|c| unsayable(c)),
+        .enumerate()
+        .map(|(at, t)| {
+            let never_null = t
+                .primary_key
+                .iter()
+                .all(|name| t.columns.iter().any(|c| &c.name == name && !c.nullable));
+            KeyShape {
+                keyed: !t.primary_key.is_empty(),
+                asked: !t.primary_key.is_empty()
+                    && !(t.enforces(&t.primary_key) || (enforced[at] && never_null)),
+                unsayable: t.primary_key.iter().any(|c| unsayable(c)),
+            }
         })
         .collect();
     let labelled = key_labels(&shapes);
@@ -585,7 +651,7 @@ async fn count_keys(
         .map(|(at, &(i, label))| TableKey {
             // A key the source keeps unique, counted as the reference
             // counts one (`_key_count_sql`, carried row P2-T2.2-3).
-            unique: tables[i].keeps_unique(&tables[i].primary_key),
+            unique: enforced[i] || tables[i].keeps_unique(&tables[i].primary_key),
             table: tables[i].source.clone(),
             columns: tables[i].primary_key.clone(),
             label: (label != at as u64).then_some(label),
@@ -760,8 +826,11 @@ async fn read_as_it_stands(
         let CatalogAnswer::Namespace(parts) = describe(asker, asked).await? else {
             return Err(another_part());
         };
-        for relation in relations.iter().filter(|r| r.single().is_some()) {
-            asker.pin(relation, parts.clone());
+        // The parts the source gives kept, the session's for the others.
+        if let Some(settled) = asker.data().map(|data| data.settled(parts)) {
+            for relation in relations.iter().filter(|r| r.single().is_some()) {
+                asker.pin(relation, settled.read_as(relation));
+            }
         }
     }
     let mut found = std::collections::BTreeMap::new();
@@ -871,18 +940,6 @@ pub(crate) async fn describe(
     asker.read(&request, &data)
 }
 
-/// The catalog's answers to `requests`, asked together in one step, in
-/// order.
-pub(crate) async fn describe_all<const N: usize>(
-    asker: &Asker,
-    requests: [DataRequest; N],
-) -> Result<[CatalogAnswer; N], CoreError> {
-    let answers = describe_vec(asker, requests.into()).await?;
-    answers
-        .try_into()
-        .map_err(|_| internal("a step answered another number of requests"))
-}
-
 async fn describe_vec(
     asker: &Asker,
     requests: Vec<DataRequest>,
@@ -920,22 +977,32 @@ pub(crate) async fn ask_all_vec(
     requests: Vec<DataRequest>,
 ) -> Result<Vec<ArrowData>, CoreError> {
     let names: Vec<&'static str> = requests.iter().map(DataRequest::name).collect();
-    let asks = requests
-        .into_iter()
-        .map(|request| asker.fetch(request))
-        .collect::<Result<Vec<_>, _>>()?;
-    Together::new(asks)
-        .await
+    replies(asker, requests)
+        .await?
         .into_iter()
         .zip(names)
         .map(|(reply, name)| data(reply, name))
         .collect()
 }
 
+/// The replies to `requests`, asked together in one step, in order, a
+/// provider's failure among them as it failed: for a step that reads what
+/// the failure says (`Asker::failure`).
+pub(crate) async fn replies(
+    asker: &Asker,
+    requests: Vec<DataRequest>,
+) -> Result<Vec<Reply>, CoreError> {
+    let asks = requests
+        .into_iter()
+        .map(|request| asker.fetch(request))
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(Together::new(asks).await)
+}
+
 /// The data a fetch's reply holds, or the provider's error naming the
 /// request it failed (`request`, its name: never the driver's text, H17),
 /// so no provider error leaves the core saying nothing of where it failed.
-fn data(reply: Reply, request: &'static str) -> Result<ArrowData, CoreError> {
+pub(crate) fn data(reply: Reply, request: &'static str) -> Result<ArrowData, CoreError> {
     match reply {
         Reply::Fetch(FetchResult::Data(data)) => Ok(data),
         Reply::Fetch(FetchResult::Error(error)) => {

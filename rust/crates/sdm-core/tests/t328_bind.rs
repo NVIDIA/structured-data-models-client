@@ -269,6 +269,8 @@ fn a_later_chunk_failing_fails_the_request() {
         let result = if at == failing {
             FetchResult::Error(ProviderError {
                 error_class: Some("INSUFFICIENT_PERMISSIONS".into()),
+
+                driver_message: None,
                 kind: ErrorKind::DataSource,
                 retryable: false,
                 sqlstate: Some("42501".into()),
@@ -399,6 +401,7 @@ fn a_host_provider_is_handed_the_core_s_key_set_as_it_was_made() {
             derived_relations: false,
             neighbor_lookback: false,
             keys_optional: false,
+            key_enforcement: false,
             sample_rows: false,
             optional: BTreeSet::from([OptionalRequest::Lookup]),
             max_keys_per_request: None,
@@ -491,6 +494,7 @@ fn chunked_postgres(answers: Vec<FetchResult>) -> Option<Reply> {
             retryable: false,
             sqlstate: None,
             vendor_code: None,
+            driver_message: None,
         }))),
     }
 }

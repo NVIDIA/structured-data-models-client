@@ -172,6 +172,7 @@ impl SqlDialect for Sqlite {
             derived_relations: false,
             neighbor_lookback: false,
             keys_optional: false,
+            key_enforcement: false,
             sample_rows: false,
             optional: sql::rendered(),
             max_keys_per_request: None,
@@ -398,7 +399,7 @@ fn describe(
     let one = || sql::one_table(request, tables);
     Ok(match part {
         // No view is read here (T3.27): only a dialect that reads views answers it.
-        DescribePart::ViewDefinition => return Err(views_unread()),
+        DescribePart::KeyEnforcement | DescribePart::ViewDefinition => return Err(views_unread()),
         DescribePart::Tables if tables.is_empty() => {
             "SELECT name FROM sqlite_master WHERE type='table'".to_owned()
         }
@@ -727,7 +728,7 @@ fn read(
     use catalog as c;
     match part {
         // No view is read here (T3.27): only a dialect that reads views answers it.
-        DescribePart::ViewDefinition => Err(views_unread()),
+        DescribePart::KeyEnforcement | DescribePart::ViewDefinition => Err(views_unread()),
         DescribePart::Namespace => crate::read::namespace(batches, c::NAME),
         DescribePart::Tables => {
             let mut found = Vec::new();

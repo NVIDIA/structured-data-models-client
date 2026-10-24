@@ -321,6 +321,7 @@ fn fetching_run() -> Run {
             derived_relations: false,
             neighbor_lookback: false,
             keys_optional: false,
+            key_enforcement: false,
             sample_rows: false,
             optional: Default::default(),
             max_keys_per_request: None,
@@ -406,6 +407,7 @@ fn fetched_data_is_admitted_and_host_ids_are_scoped_to_their_message() {
     // now.
     let error = ProviderError {
         error_class: None,
+        driver_message: None,
         kind: ErrorKind::DataSource,
         retryable: false,
         sqlstate: None,

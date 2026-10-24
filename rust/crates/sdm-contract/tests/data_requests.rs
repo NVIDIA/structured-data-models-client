@@ -27,6 +27,7 @@ fn term(column: &str) -> TieTerm {
 
 fn upper(seed_column: &str) -> Window {
     Window {
+        source_type: None,
         column: "ts".into(),
         lower: None,
         upper: Some(SeedBound {
@@ -80,6 +81,7 @@ fn both_neighbor_fetches_of_the_reference_are_expressible() {
     // limit and no order.
     let by_time = neighbors(
         Some(Window {
+            source_type: None,
             column: "ts".into(),
             lower: Some(SeedBound {
                 seed_column: "start".into(),
@@ -119,6 +121,7 @@ fn a_window_bound_names_a_zone_less_nanosecond_seed_column() {
     refused(
         &neighbors(
             Some(Window {
+                source_type: None,
                 column: "ts".into(),
                 lower: None,
                 upper: None,

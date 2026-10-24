@@ -22,8 +22,9 @@ use std::sync::Arc;
 use arrow_array::RecordBatch;
 use sdm_contract::catalog::CatalogAnswer;
 use sdm_contract::data::{
-    AttachmentId, BoundRequest, DataLayer, DataRequest, FallbackLimits, FetchPlan, KeyData,
-    ProviderCapabilities, ProviderChoice, Relation, refuse_derived, seed_integer,
+    AttachmentId, BoundRequest, DataLayer, DataRequest, FailureFacts, FallbackLimits, FetchPlan,
+    KeyData, ProviderCapabilities, ProviderChoice, ProviderError, Relation, refuse_derived,
+    seed_integer,
 };
 use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 
@@ -140,6 +141,18 @@ impl DataAccess {
     /// `relation` as the run's provider reads it (`DataLayer::read_as`).
     pub fn read_as(&self, relation: &Relation) -> Relation {
         self.layer.read_as(&self.provider, relation)
+    }
+
+    /// What the run's provider's failure says (`DataLayer::failure`): the
+    /// facts the step that asked reads the one of that fits it.
+    pub fn failure(&self, error: &ProviderError) -> FailureFacts {
+        self.layer.failure(&self.provider, error)
+    }
+
+    /// The name forms the catalog read of `relation`, as the run's
+    /// provider reads it, tries in order (`DataLayer::spellings`).
+    pub fn spellings(&self, relation: &Relation) -> Vec<Relation> {
+        self.layer.spellings(&self.provider, relation)
     }
 
     /// An admitted answer of the run's provider, its values read as the

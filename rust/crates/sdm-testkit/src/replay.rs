@@ -231,6 +231,7 @@ impl Replay<'_> {
                     statements: &[],
                     answer: Err(ProviderError {
                         error_class: None,
+                        driver_message: None,
                         kind: ErrorKind::DataSource,
                         retryable: false,
                         sqlstate: None,
