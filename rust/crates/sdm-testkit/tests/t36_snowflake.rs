@@ -1506,16 +1506,18 @@ fn zoned_windows_keep_utc_bounds_at_non_utc_dst_edges() {
 
 #[test]
 fn an_unreadable_semantic_definition_is_refused_by_name() {
-    let batch = RecordBatch::try_new(
-        Arc::new(Schema::new(vec![Field::new("yaml", DataType::Utf8, true)])),
-        vec![Arc::new(StringArray::from(vec![None::<&str>])) as ArrayRef],
-    )
-    .unwrap();
-    let error = read(
-        json!({"request": "describe", "part": "view_definition", "tables": [table("v")]}),
-        &[batch],
-    )
-    .unwrap_err();
-    assert_eq!(error.sentence, Sentence::ViewSemanticDefinitionUnread);
-    assert_eq!(error.fields["view"], Detail::text("v"));
+    let columns: Vec<ArrayRef> = vec![
+        Arc::new(StringArray::from(vec![None::<&str>])),
+        Arc::new(StringArray::from(vec![""])),
+        Arc::new(arrow_array::Int64Array::from(vec![1])),
+    ];
+    for values in columns {
+        let batch = RecordBatch::try_new(
+            Arc::new(Schema::new(vec![Field::new("yaml", values.data_type().clone(), true)])),
+            vec![values],
+        ).unwrap();
+        let error = read(json!({"request": "describe", "part": "view_definition", "tables": [table("v")]}), &[batch]).unwrap_err();
+        assert_eq!(error.sentence, Sentence::ViewSemanticDefinitionUnread);
+        assert_eq!(error.fields["view"], Detail::text("v"));
+    }
 }
