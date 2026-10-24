@@ -342,6 +342,28 @@ def test_a_table_stored_upper_cased_is_found_upper_cased_and_read_so(
     assert any('"USERS"' in text for text in after)
 
 
+@pytest.mark.parametrize(
+    ('case', 'given'),
+    [
+        ('base.binary', _NAMED),
+        ('key.past-2-53.catalog', _NAMED),
+        ('snowflake.name.upper-case-folded', {**_NAMED, 'tables': _TABLES}),
+    ],
+    ids=['base.binary', 'declared-key', 'upper-case-folded'],
+)
+def test_each_spelling_is_described_once_as_on_the_old_route(
+    case: str, given: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""One DESCRIBE TABLE per spelling tried, its columns and its keys
+    read from that one answer (``SNOW/table.py:123-170``)."""
+    asked = {}
+    for route in ('core', 'old'):
+        warehouse = _Warehouse(case)
+        _described(route, monkeypatch, warehouse, **dict(given))
+        asked[route] = _describes(warehouse)
+    assert asked['core'] == asked['old']
+
+
 def test_an_all_upper_name_is_tried_once(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
