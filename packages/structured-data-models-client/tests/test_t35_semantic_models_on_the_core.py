@@ -95,18 +95,37 @@ def test_a_metric_view_s_choice_names_the_model_on_its_source() -> None:
     assert 'view' not in choice
 
 
-def test_a_snowflake_semantic_view_waits_for_the_snowflake_dialect() -> None:
+def test_a_snowflake_semantic_view_uses_its_source_provider_and_own_paths(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     model = SnowflakeSource(
         _snowflake(), database='SALES', schema='PUBLIC'
     ).semantic_model('SALES_SEMANTICS')
-    assert model.kind == 'snowflake-semantic-view'
-    with pytest.raises(_routing.RouteError, match='T3.6'):
-        providers.for_source(model)
-    # Its paths have no core route in this build, so forcing one fails.
-    assert not any(
-        path.endswith('/snowflake-semantic-view')
-        for path in _routing.CORE_ROUTED
+    choice, provider = providers.for_source(model)
+    assert choice == {
+        'provider': 'sql',
+        'dialect': 'snowflake',
+        'namespace': ['SALES', 'PUBLIC'],
+        'view': {'name': 'SALES_SEMANTICS', 'trust_expressions': False},
+    }
+    assert type(provider) is providers.SnowflakeProvider
+    assert provider._connection is model.source.connection
+    paths = (
+        _routing.FROM_SOURCE_SNOWFLAKE_SEMANTIC_VIEW
+        + _routing.MATERIALIZE_SNOWFLAKE_SEMANTIC_VIEW
+        + _routing.PREDICT_SNOWFLAKE_SEMANTIC_VIEW
     )
+    assert set(paths) <= _routing.CORE_ROUTED
+    assert set(paths) <= set(_routing.PATHS)
+    monkeypatch.setenv(_routing.ENVIRONMENT, ','.join(paths))
+    for group in (
+        _routing.FROM_SOURCE,
+        _routing.FROM_SOURCE_TABLES,
+        _routing.MATERIALIZE,
+        _routing.PREDICT,
+    ):
+        assert _routing.on_the_core(model, group)
+        assert not _routing.on_the_core(model.source, group)
 
 
 def test_a_metric_view_s_calls_route_as_their_own_paths(

@@ -127,6 +127,9 @@ def test_every_core_path_of_the_manifest_is_routed_and_every_default_is_old() ->
         + _routing.FROM_SOURCE_DATABRICKS_METRIC_VIEW
         + _routing.MATERIALIZE_DATABRICKS_METRIC_VIEW
         + _routing.PREDICT_DATABRICKS_METRIC_VIEW
+        + _routing.FROM_SOURCE_SNOWFLAKE_SEMANTIC_VIEW
+        + _routing.MATERIALIZE_SNOWFLAKE_SEMANTIC_VIEW
+        + _routing.PREDICT_SNOWFLAKE_SEMANTIC_VIEW
         # From T3.6, over a Snowflake connection or a Snowpark session.
         + _routing.FROM_SOURCE_SNOWFLAKE
         + _routing.FROM_SOURCE_SNOWFLAKE_TABLES

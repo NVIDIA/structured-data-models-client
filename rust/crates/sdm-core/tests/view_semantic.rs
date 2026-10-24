@@ -12,8 +12,10 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use arrow_array::{ArrayRef, Float64Array, Int64Array, RecordBatch, StringArray};
-use arrow_schema::{DataType, Field, Schema};
+use arrow_array::{
+    ArrayRef, Float64Array, Int64Array, RecordBatch, StringArray, TimestampMicrosecondArray,
+};
+use arrow_schema::{DataType, Field, Schema, TimeUnit};
 use sdm_contract::catalog::{CatalogAnswer, CatalogColumn, ViewDefinition};
 use sdm_contract::data::{
     AttachmentId, DataLayer, DataRequest, DescribePart, ExpectedSchema, FetchPlan,
@@ -113,7 +115,11 @@ impl DataLayer for Fake {
                         .iter()
                         .map(|name| CatalogColumn {
                             name: (*name).to_owned(),
-                            declared_type: String::new(),
+                            declared_type: if *name == "TS" {
+                                "TIMESTAMP_LTZ(6)".into()
+                            } else {
+                                String::new()
+                            },
                             not_null: false,
                             primary_key: false,
                             key_nullable: false,
@@ -170,8 +176,10 @@ fn rows(relation: &Relation, columns: &[String]) -> ArrowData {
                 .iter()
                 .any(|c| c.name == *name && c.expression.is_some());
             let data_type = match name.to_lowercase().as_str() {
-                _ if expression => DataType::Float64,
                 "country" => DataType::Utf8,
+                "ts" | "day_ts" => DataType::Timestamp(TimeUnit::Microsecond, None),
+                "user_id" | "order_id" | "age" => DataType::Int64,
+                _ if expression => DataType::Float64,
                 _ => DataType::Int64,
             };
             Field::new(name.clone(), data_type, true)
@@ -183,6 +191,11 @@ fn rows(relation: &Relation, columns: &[String]) -> ArrowData {
             match field.data_type() {
                 DataType::Utf8 => Arc::new(StringArray::from(vec!["US", "DE", "US"])),
                 DataType::Float64 => Arc::new(Float64Array::from(vec![1.2, 2.4, 3.6])),
+                DataType::Timestamp(..) => Arc::new(TimestampMicrosecondArray::from(vec![
+                    1_704_067_200_000_000,
+                    1_704_153_600_000_000,
+                    1_704_240_000_000_000,
+                ])),
                 _ => Arc::new(Int64Array::from(vec![1, 2, 3])),
             }
         })
@@ -214,7 +227,10 @@ fn semantic_run(definition: &str, spec: SourceSpec) -> sdm_core::Run {
         definition: definition.to_owned(),
         catalogs: BTreeMap::from([
             ("USERS".to_owned(), vec!["USER_ID", "COUNTRY"]),
-            ("ORDERS".to_owned(), vec!["ORDER_ID", "USER_ID", "PRICE"]),
+            (
+                "ORDERS".to_owned(),
+                vec!["ORDER_ID", "USER_ID", "PRICE", "TS"],
+            ),
         ]),
     };
     let provider: ProviderChoice = serde_json::from_value(json!({
@@ -359,4 +375,58 @@ fn semantic_models_never_infer_additional_links_from_column_names() {
     let (description, _) = describe_view(definition, source_spec());
     assert_eq!(description.tables.len(), 2);
     assert!(description.links.is_empty(), "{:?}", description.links);
+}
+
+#[test]
+fn converted_temporal_facts_reach_the_existing_zoned_window_planner() {
+    let definition = VIEW.replace("relationships:\n", "    time_dimensions:\n      - {name: DAY_TS, expr: DATE_TRUNC('DAY', TS), data_type: TIMESTAMP_LTZ(6)}\nrelationships:\n");
+    let (description, _) = describe_view(&definition, source_spec());
+    let orders = description
+        .tables
+        .iter()
+        .find(|t| t.name == "ORDERS")
+        .unwrap();
+    let time = orders.columns.iter().find(|c| c.name == "DAY_TS").unwrap();
+    assert_eq!(time.declared_type.as_deref(), Some("TIMESTAMP_LTZ(6)"));
+    let graph = sdm_engine::graph::Graph::new(&description).unwrap();
+    let mut table = graph.table("ORDERS").unwrap().clone();
+    table.source = Relation::of(vec!["DB".into(), "SHOP".into(), "ORDERS".into()]);
+    let seeds = sdm_contract::data::KeySet {
+        attachment: AttachmentId(9),
+        columns: vec![
+            sdm_contract::data::field("key", sdm_contract::ColumnType::Int64, false),
+            sdm_contract::data::field("batch", sdm_contract::ColumnType::Int64, false),
+            sdm_contract::data::field(
+                "end",
+                sdm_contract::ColumnType::Timestamp {
+                    unit: Unit::Ns,
+                    zone: None,
+                },
+                false,
+            ),
+        ],
+    };
+    let request =
+        sdm_engine::sample::by_time(&table, "USER_ID", vec!["DAY_TS".into()], seeds, false)
+            .unwrap();
+    let DataRequest::Neighbors {
+        window: Some(window),
+        ..
+    } = &request
+    else {
+        panic!("no temporal window");
+    };
+    assert_eq!(window.source_type.as_deref(), Some("TIMESTAMP_LTZ(6)"));
+    let FetchPlan::Sql { statements, .. } = sdm_data::Data::new()
+        .plan(&request, &ProviderChoice::sql("snowflake"))
+        .unwrap()
+    else {
+        panic!("no Snowflake SQL");
+    };
+    assert!(
+        statements
+            .iter()
+            .any(|s| s.text.contains("CONVERT_TIMEZONE('UTC'")),
+        "{statements:?}"
+    );
 }

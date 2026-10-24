@@ -1547,3 +1547,41 @@ fn a_failed_duplicate_example_keeps_joins_unchecked() {
             .any(|w| w.sentence == sdm_contract::Sentence::ViewJoinUnchecked)
     );
 }
+
+#[test]
+fn metric_view_physical_time_columns_keep_their_declared_window_kind() {
+    let document = captures();
+    let description = described(&document, "view.metric.from-source");
+    let orders = description
+        .tables
+        .iter()
+        .find(|t| t.name == "orders")
+        .unwrap();
+    let time = orders.columns.iter().find(|c| c.name == "ts").unwrap();
+    assert!(
+        time.declared_type
+            .as_deref()
+            .is_some_and(|kind| kind.eq_ignore_ascii_case("timestamp")),
+        "{time:?}"
+    );
+    let graph = sdm_engine::graph::Graph::new(&description).unwrap();
+    let request = sdm_engine::sample::by_time(
+        graph.table("orders").unwrap(),
+        "user_id",
+        vec!["ts".into()],
+        sdm_contract::data::KeySet {
+            attachment: sdm_contract::data::AttachmentId(9),
+            columns: Vec::new(),
+        },
+        false,
+    )
+    .unwrap();
+    let DataRequest::Neighbors {
+        window: Some(window),
+        ..
+    } = request
+    else {
+        panic!("no window");
+    };
+    assert_eq!(window.source_type, time.declared_type);
+}

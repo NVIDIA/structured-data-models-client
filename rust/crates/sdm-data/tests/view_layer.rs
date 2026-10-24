@@ -366,4 +366,8 @@ fn a_views_kind_is_known_before_its_definition_is_fetched() {
         Some(ViewKind::Metric)
     );
     assert_eq!(data.view_kind(&ProviderChoice::sql("duckdb")), None);
+    assert_eq!(
+        data.view_kind(&ProviderChoice::sql("snowflake")),
+        Some(ViewKind::Semantic)
+    );
 }
