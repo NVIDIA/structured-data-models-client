@@ -282,6 +282,19 @@ def _holds_set(item: Any, seen: tuple[int, ...] = ()) -> bool:
 
 # A repr longer than this is not written out: its length is.
 _LONGEST_REPR = 20_000
+# A value nested deeper than this is written as its depth alone: its typed
+# form would pass the nesting a JSON reader takes.
+_DEEPEST_VALUE = 50
+
+
+def _depth(item: Any, seen: tuple[int, ...] = ()) -> int:
+    r"""How many collections deep ``item`` is, a collection inside itself
+    counted once."""
+    if id(item) in seen or not isinstance(item, list | dict):
+        return 0
+    seen = (*seen, id(item))
+    members = item if isinstance(item, list) else [*item, *item.values()]
+    return 1 + max((_depth(member, seen) for member in members), default=0)
 
 
 def yaml_vector(text: str) -> dict[str, Any]:
@@ -293,6 +306,9 @@ def yaml_vector(text: str) -> dict[str, Any]:
         loaded = yaml.safe_load(text)
     except Exception as error:  # noqa: BLE001 - every failure is an answer
         return {'yaml': text, 'error': type(error).__name__}
+    depth = _depth(loaded)
+    if depth > _DEEPEST_VALUE:
+        return {'yaml': text, 'depth': depth}
     vector: dict[str, Any] = {'yaml': text, 'value': value(loaded)}
     if _holds_set(loaded):
         vector['unordered'] = True
@@ -1373,11 +1389,134 @@ def _probe_fix1() -> None:
             pass
 
 
+# The cases of T3.5's second reviews (fix 2): block scalars whose last
+# line looks like a comment or a document end, a key that is its own
+# mapping, long padding, deep nesting, and the YAML outside the subset view
+# definitions use (explicit tags, complex keys, merges).
+FIX2_YAML_INPUTS = (
+    'v: |\n  #hello', 'v: |\n  hi\n...', 'v: >\n  #hello', 'v: |\n  a\n  #b',
+    'v: |\n  a\n\n  #b\n', 'v: |2\n   a', 'v: |-\n  a\n\n', 'v: >+\n  a\n\n',
+    'v: |\n\n  a', 'v: |\n  a\nw: b', 'v: >\n  a\n  b\n\n  c', 'v: |\r\n  a\r\n',
+    '- |\n  a\n- b', 'k:\n  v: |\n    a\n    b\n  w: c',
+    '&a {? *a : x}', 'v: &a {? *a : x}', '? [a]\n: b', '{[1]: x}',
+    'v: !!str x', 'v: !custom x', 'v: ! x', 'base: &b {k: 1}\nv:\n  <<: *b',
+    'v: ' + '[' * 50 + ']' * 50, 'v: ' + '[' * 99 + ']' * 99,
+    'v: ' + '[' * 100 + ']' * 100, 'v: ' + '[' * 101 + ']' * 101,
+    'v: ' + '[' * 400 + ']' * 400,
+    'v: 0x' + 'f' * 3500, 'v: 0b' + '1' * 14300,
+    'v: |\n  a\n # c', 'v: |+\n  a\n  ', 'v: |\n  ', 'v: |+\n  ', 'v: |', 'v: |-',
+    'v: >-\n  a\n  b', 'v: |1\n  a', 'v: |+\n  a\n\n  #b', 'v: >\n  a\n\n',
+    'w: x\nv: |\n  a\n  b\n   ', 'v: |\n  a\n\t', 'v: |\n  a\n...\n',
+    'v: |\n  a\n---', '|\n a', '|+\n a\n ', 'v: |\n  a\r\n  b', 'v: |\r  a\r  b',
+    'v: |\n  a\u2028b', 'v: |\n  a\x85', 'v: a\x85b', 'v: |\n  a\n  \n # c',
+    'v: |+\n  a\n  \n# c', '- >\n a\n- |+\n b\n\n', 'v: |2-\n   a\n  ',
+    ''.join(f'a{i}: &a{i} [*a{i - 1}]\n' if i else 'a0: &a0 [x]\n' for i in range(120)),
+    ''.join(f'a{i}: &a{i} [*a{i - 1}]\n' if i else 'a0: &a0 [x]\n' for i in range(450)),
+)  # fmt: skip
+
+_DIGIT_ZEROS = ('0', '\u0660', '\u06f0', '\u0966', '\uff10', '\U0001d7ce')
+
+
+def _iso_texts() -> list[str]:
+    r"""Timestamps of the shapes `datetime.fromisoformat` reads, and near
+    them: each date form, separator, clock form, fraction and offset form,
+    crossed, then a deterministic shuffle of their pieces."""
+    import random
+
+    dates = ['2024-01-01', '20240101', '2024-W01', '2024-W01-2', '2024W01',
+             '2024W012', '2024-1-1', '9999-12-31', '0001-01-01', '9999-W52-7',
+             '2024-02-30', '2024-W53', '2020-W53-1', '2024-13-01', '2024-01']
+    separators = ['T', ' ', 'x', 't', '_', '\u00e9', '', '  ']
+    clocks = ['10', '10:30', '1030', '10:30:15', '103015', '10:30:15.5',
+              '10:30:15,5', '10:30:15.1234567', '12.5', '12:34.5', '24:00',
+              '23:59:60', '1', '10:3', '10:30:1', '103', '10::30',
+              '10:30:15.', '10:30:15 ', ' 10:30']
+    zones = ['', 'Z', 'z', ' Z', '+05:30', '+0530', ' +0530', '-05', '+05',
+             '+01:60', '+00:00', '-00:00', '+00:00:00.5', '+23:59',
+             '+24:00', '+05:30:15', '+05:30:15.25', '+5', '+05:3', 'Z ',
+             '+05:30 ', '-0530.5']
+    texts = []
+    for date in dates:
+        texts.append(date)
+        for separator in separators[:4]:
+            for clock in clocks:
+                texts += [f'{date}{separator}{clock}{zone}' for zone in zones[:3]]
+            for zone in zones:
+                texts += [f'{date}{separator}{clock}{zone}' for clock in clocks[3:7]]
+        texts += [f'{date}{separator}10:30' for separator in separators[4:]]
+    rng = random.Random(35)
+    pieces = [*dates, *separators, *clocks, *zones, '-', ':', '.', '0', '1']
+    for _ in range(2000):
+        texts.append(''.join(rng.choice(pieces) for _ in range(rng.randint(1, 5))))
+    return list(dict.fromkeys(texts))
+
+
+def _numeric_texts() -> list[str]:
+    r"""Numbers as a default's text: signs, digits of other scripts,
+    underscores, points, exponents near Decimal's bounds, infinities, NaNs,
+    white space Python strips."""
+    texts = []
+    for zero in _DIGIT_ZEROS:
+        one, two = chr(ord(zero) + 1), chr(ord(zero) + 2)
+        texts += [f'{one}{two}', f'-{one}{two}', f'{one}{two}.{one}',
+                  f'{one}_{two}', f'{one}e{two}']
+    texts += [
+        '0', '-0', '+0', '00', '007', '1_000', '1__000', '_1', '1_', '1.5',
+        '.5', '5.', '1e3', '1E+3', '1e-3', '1.50', '-0.0', '1e999999999999999999',
+        '1e1000000000000000000', '1e-999999999999999999', '12e999999999999999998',
+        '1e9223372036854775807', '1.0e-9223372036854775808', 'inf', 'Infinity',
+        '-inf', 'nan', 'NaN123', 'sNaN', '1e', 'e1', '1.2.3', '+-1', ' 7 ',
+        '\x1c7\x1f', '\u20037', '1_000.000_1', '1e1_0', '9' * 4300, '9' * 4301,
+        '1' + '0' * 4299 + '_0', '0x10', '1 2', '',
+    ]
+    return list(dict.fromkeys(texts))
+
+
+DEFAULT_TYPES_FIX2 = ('TIMESTAMP', 'DATE', 'DOUBLE', 'DECIMAL(10,2)', 'INT', 'BOOLEAN', 'STRING')
+
+
+def _probe_fix2() -> None:
+    r"""Puts the second reviews' cases to the old client: each timestamp and
+    number above through `_default_text` (the recording wrapper), and
+    Codex's metric views through `parse_metric_view`."""
+    import sdm_relational_engine.rfm.backend.databricks.metric_view as metric
+
+    for text in _iso_texts():
+        # A date's text has no clock: the dates, and the shuffled pieces.
+        date_too = ':' not in text or len(text) < 12
+        for data_type in ('TIMESTAMP', 'DATE') if date_too else ('TIMESTAMP',):
+            try:
+                metric._default_text(data_type, text)
+            except (ValueError, MemoryError):
+                pass
+    for text in _numeric_texts():
+        for data_type in ('DOUBLE', 'DECIMAL(10,2)', 'INT', 'TIMESTAMP', 'STRING'):
+            try:
+                metric._default_text(data_type, text)
+            except (ValueError, MemoryError):
+                pass
+    for value in ('|\n    #hello', '|\n    hi\n...', '>\n    #hello', '|+\n    a\n    ',
+                  '"2024-01-01T12.5"', '"\u0661\u0662"', '1e9223372036854775807'):
+        for data_type in ('STRING', 'TIMESTAMP', 'DOUBLE', 'INT'):
+            # The parameter last, its default ending the text with no line
+            # break, as the second reviews wrote it.
+            text = (
+                'source: c.s.t\ndimensions:\n- name: x\n  expr: p\n'
+                f'parameters:\n- name: p\n  data_type: {data_type}\n'
+                f'  default: {value}'
+            )
+            try:
+                metric.parse_metric_view(text)
+            except Exception:  # noqa: BLE001, S110 - recorded by the wrapper
+                pass
+
+
 def pytest_sessionfinish(session: Any) -> None:
     out = Path(session.config.getoption('--record-out'))
     _probe_words()
     _probe_helpers()
     _probe_fix1()
+    _probe_fix2()
     from sdm_relational_engine.rfm.backend.databricks import metric_view
 
     cases = case_texts(session.config.getoption('--record-cases'))
@@ -1459,6 +1598,7 @@ def pytest_sessionfinish(session: Any) -> None:
     )
     texts = dict.fromkeys(YAML_INPUTS)
     texts.update(dict.fromkeys(FIX1_YAML_INPUTS))
+    texts.update(dict.fromkeys(FIX2_YAML_INPUTS))
     texts.update(dict.fromkeys(semantic_texts()))
     texts.update(dict.fromkeys(text for _, text in cases))
     texts.update(RECORDER.yaml_texts)

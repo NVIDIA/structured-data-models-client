@@ -198362,6 +198362,38 @@
    "references": []
   },
   {
+   "expr": "CAST('#hello' AS STRING)",
+   "references": []
+  },
+  {
+   "expr": "CAST('hi\n' AS STRING)",
+   "references": []
+  },
+  {
+   "expr": "CAST('2024-01-01T12.5' AS STRING)",
+   "references": []
+  },
+  {
+   "expr": "CAST('2024-01-01 12:00:00.500000' AS TIMESTAMP)",
+   "references": []
+  },
+  {
+   "expr": "CAST('١٢' AS STRING)",
+   "references": []
+  },
+  {
+   "expr": "CAST('12' AS DOUBLE)",
+   "references": []
+  },
+  {
+   "expr": "CAST('12' AS INT)",
+   "references": []
+  },
+  {
+   "expr": "CAST('1e9223372036854775807' AS STRING)",
+   "references": []
+  },
+  {
    "expr": "source.order_id",
    "references": [
     {
@@ -200964,6 +200996,54 @@
    "expr": "CAST('a\n' AS STRING)",
    "literals": [
     "'a\n'"
+   ]
+  },
+  {
+   "expr": "CAST('#hello' AS STRING)",
+   "literals": [
+    "'#hello'"
+   ]
+  },
+  {
+   "expr": "CAST('hi\n' AS STRING)",
+   "literals": [
+    "'hi\n'"
+   ]
+  },
+  {
+   "expr": "CAST('2024-01-01T12.5' AS STRING)",
+   "literals": [
+    "'2024-01-01T12.5'"
+   ]
+  },
+  {
+   "expr": "CAST('2024-01-01 12:00:00.500000' AS TIMESTAMP)",
+   "literals": [
+    "'2024-01-01 12:00:00.500000'"
+   ]
+  },
+  {
+   "expr": "CAST('١٢' AS STRING)",
+   "literals": [
+    "'١٢'"
+   ]
+  },
+  {
+   "expr": "CAST('12' AS DOUBLE)",
+   "literals": [
+    "'12'"
+   ]
+  },
+  {
+   "expr": "CAST('12' AS INT)",
+   "literals": [
+    "'12'"
+   ]
+  },
+  {
+   "expr": "CAST('1e9223372036854775807' AS STRING)",
+   "literals": [
+    "'1e9223372036854775807'"
    ]
   },
   {

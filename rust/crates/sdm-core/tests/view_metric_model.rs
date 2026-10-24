@@ -19,14 +19,17 @@
 
 use std::collections::BTreeSet;
 
+use sdm_core::pql::yaml_rules;
 use sdm_core::view_steps::{self, JoinJudgement};
 use sdm_core::view_words;
 use sdm_data::view_expr::metric as data;
 use sdm_data::view_expr::strip_comments;
 use sdm_schema::view::joins::JoinWalk;
 use sdm_schema::view::metric;
-use sdm_schema::view::spec::{Cardinality, ColumnItem, JoinKeys, Source, TableItem, ViewSpec};
-use sdm_schema::view::yaml::Value;
+use sdm_schema::view::spec::{
+    Cardinality, ColumnItem, JoinKeys, RefusalReason, Source, TableItem, ViewRefusal, ViewSpec,
+};
+use sdm_schema::view::yaml::{Outside, Value, YamlError};
 use serde_json::Value as Json;
 
 const VECTORS: &str = include_str!("../../../../contract/view-metric-vectors.json");
@@ -86,7 +89,7 @@ fn kept_joins(spec: &ViewSpec, walk: &JoinWalk<JoinJudgement>) -> Vec<Json> {
             let parts = data::table_reference(spec.text(source).unwrap()).unwrap();
             let condition = match join.keys {
                 JoinKeys::Using(column) => {
-                    let column = unquoted(&view_words::value_text(&spec.document, column));
+                    let column = unquoted(&view_words::value_text(&spec.document, column).unwrap());
                     serde_json::json!([
                         {"qualifier": parent_alias, "column": column},
                         {"qualifier": table.alias, "column": column},
@@ -111,7 +114,7 @@ fn kept_joins(spec: &ViewSpec, walk: &JoinWalk<JoinJudgement>) -> Vec<Json> {
                 "cardinality": match join.cardinality {
                     Cardinality::ManyToOne => "many_to_one",
                     Cardinality::OneToMany => "one_to_many",
-                    Cardinality::Unsupported(_) => unreachable!(),
+                    Cardinality::Unsupported(_) | Cardinality::Unhashable => unreachable!(),
                 },
             })
         })
@@ -125,10 +128,10 @@ fn dimension_messages(spec: &ViewSpec) -> Vec<String> {
         .iter()
         .filter_map(|item| match item {
             ColumnItem::NotAMapping { cfg } => {
-                Some(view_words::dimension_not_a_mapping(spec, *cfg))
+                Some(view_words::dimension_not_a_mapping(spec, *cfg).unwrap())
             }
             ColumnItem::Column(column) if column.expr.and_then(|e| spec.text(e)).is_none() => {
-                Some(view_words::dimension_misses_text(spec, column.cfg))
+                Some(view_words::dimension_misses_text(spec, column.cfg).unwrap())
             }
             ColumnItem::Column(_) => None,
         })
@@ -143,8 +146,38 @@ fn each_definition_reads_as_the_old_client_read_it() {
     for vector in &vectors {
         let definition = vector["definition"].as_str().unwrap();
         let refused = vector["error"]["message"].as_str();
-        let mut spec = match metric::parse(definition) {
+        let mut spec = match metric::parse(definition, &yaml_rules()) {
             Ok(spec) => spec,
+            // YAML outside what view definitions use, refused by name
+            // where the old client read it (register P3J-9).
+            Err(ViewRefusal {
+                reason:
+                    RefusalReason::Yaml(YamlError {
+                        outside: Some(what),
+                        ..
+                    }),
+                ..
+            }) => {
+                let written = match what {
+                    Outside::Tag(_) => definition.contains('!'),
+                    Outside::Merge => definition.contains("<<"),
+                    _ => true,
+                };
+                if !written {
+                    wrong.push(format!("{definition:?}: refused as outside ({what})"));
+                }
+                continue;
+            }
+            // A text PyYAML refused too, in its own words (P3J-1).
+            Err(ViewRefusal {
+                reason: RefusalReason::Yaml(_),
+                ..
+            }) if vector["error"]["type"]
+                .as_str()
+                .is_some_and(|class| class.ends_with("Error") && class != "ValueError") =>
+            {
+                continue;
+            }
             Err(refusal) => {
                 if Some(refusal.to_string().as_str()) != refused {
                     wrong.push(format!("{definition:?}: {refusal} where {refused:?}"));
@@ -154,7 +187,7 @@ fn each_definition_reads_as_the_old_client_read_it() {
         };
         // The source, which the old client parses before anything else.
         if let Err(node) = view_steps::fact_source(&spec) {
-            let text = view_words::unsupported_source_text(&spec, node);
+            let text = view_words::unsupported_source_text(&spec, node.unwrap()).unwrap();
             if Some(text.as_str()) != refused {
                 wrong.push(format!("{definition:?}: {text} where {refused:?}"));
             }
@@ -187,7 +220,7 @@ fn each_definition_reads_as_the_old_client_read_it() {
             .map(|s| {
                 serde_json::json!({
                     "alias": s.alias,
-                    "reason": view_words::skip_reason_text(&spec, &s.alias, &s.reason),
+                    "reason": view_words::skip_reason_text(&spec, &s.alias, &s.reason).unwrap(),
                     "nested": s.nested,
                 })
             })
@@ -206,7 +239,7 @@ fn each_definition_reads_as_the_old_client_read_it() {
         let join_messages: Vec<String> = walk
             .messages
             .iter()
-            .map(|m| view_words::join_message_text(&spec, m))
+            .map(|m| view_words::join_message_text(&spec, m).unwrap())
             .collect();
         let old_join_messages: Vec<String> = old_messages
             .iter()
@@ -274,10 +307,24 @@ fn each_definition_reads_as_the_old_client_read_it() {
         }
 
         let parameters: BTreeSet<String> = spec.parameters.iter().map(|p| p.name.clone()).collect();
+        // Each parameter read as its default, with its default's text, the
+        // literal's (Codex review 2, P0-1).
+        let read = view_steps::parameters(&spec, &[]);
         for note in old["notes"].as_array().unwrap() {
             let name = note[0].as_str().unwrap();
             if !parameters.contains(name) {
                 wrong.push(format!("{definition:?}: no parameter {name}"));
+            }
+            let text = read
+                .iter()
+                .find(|(folded, _)| *folded == name.to_lowercase())
+                .and_then(|(_, parameter)| parameter.read.as_ref().ok())
+                .map(|read| read.text.as_str());
+            if text != note[1].as_str() {
+                wrong.push(format!(
+                    "{definition:?}: {name} read as {text:?} where {}",
+                    note[1]
+                ));
             }
         }
     }
@@ -314,6 +361,7 @@ fn a_join_keeps_what_it_says_as_written() {
          \x20   source: c.s.shops\n\
          \x20   using: [a, b]\n\
          \x20   cardinality: many_to_many\n",
+        &yaml_rules(),
     )
     .unwrap();
     assert_eq!(
