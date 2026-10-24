@@ -1343,6 +1343,16 @@ def test_snowpark_close_admits_its_cancel_only_on_its_own_connection(
     assert statement not in seen
     d['Session']().close()
     assert seen == [statement]
+    # The recording mode hands Snowpark its capture of the connection,
+    # which keeps the driver's connection as its _driver: the cursor the
+    # capture makes is the driver connection's, and its cancel passes.
+    session = d['Session']()
+    capture = types.SimpleNamespace(
+        _driver=session.connection, cursor=session.connection.cursor
+    )
+    session._conn = types.SimpleNamespace(_conn=capture)
+    session.close()
+    assert seen == [statement, statement]
 
 
 def test_a_plain_view_is_admitted_only_in_the_loaders_setup_in_the_test_schema() -> (
