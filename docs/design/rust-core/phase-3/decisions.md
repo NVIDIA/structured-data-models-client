@@ -132,6 +132,18 @@ Private names in the owner's words are replaced by a bracketed description; the 
 | KO3-57 | Q10 of the simplified list also listed "7 of my Phase 2 overnight decisions for you to confirm: error wording; Postgres key equality; the data time-range wording in errors; and four others"; the owner's answer confirms the items it named that map to register entries exactly: "Postgres key equality" (P2G-4 and P2G-5, the two entries on Postgres numeric key equality) and "the data time-range wording in errors" (KO2-89); "error wording" names no entry exactly, so it confirms nothing, and P2D-2 to P2D-5 stand under the overnight delegation (KO2-88), listed for the owner's morning reading | "10: Sure, although you might potentially find bugs in the old client. Ideally our new client has feature parity or is even better than old client. Better means better error or more support." | approved by owner 2026-10-22 (P2G-4, P2G-5 and KO2-89 only) |
 | KO3-58 | The night's mandate: by the morning, T3.0 done and this design reviewed and approved with the Java work; Phase 3 may start in full if it looks good | "Ok - I'm going to bed. By the morning: ensure that T3.0 is done, the design doc is ready (after reviews and approval), includes the java work. In fact, you can even get started on phase 3 fully if it looks good. Add this to your memory. Any questions before I leave?" | approved by owner 2026-10-22 |
 
+## Warehouse table shape (2026-10-24)
+
+Source: the owner's answers on 2026-10-24 to the orchestrator's question on how a schema reused across materialize calls reads a warehouse table that changed (A, keep what the first read found, as the old client does; or B, read each table as it stands at every run), and the items listed with it.
+The register's entries P3A-1 to P3A-4 name these rows; they stay proposed until the owner approves each.
+
+| # | Decision | Owner's words | Status |
+|---|---|---|---|
+| KO3-59 | Plan B: no remembered table shape between materialize runs; each materialize reads each table's location, columns and types as they stand (rows were always read fresh) | "Ok, I'm convinced. Let's plan B." | approved by owner 2026-10-24 |
+| KO3-60 | Item 1: a column the user adds that the source lacks is a named error, not silently dropped | "1. Sure" | approved by owner 2026-10-24 |
+| KO3-61 | Item 3: a column retyped against the source is a named error | "3. Sure" | approved by owner 2026-10-24 |
+| KO3-62 | Item 6: one query object freezing its graph at first materialize, on the old client, is registered and confirmed | "6. Hmm ok" | approved by owner 2026-10-24 |
+
 ## Kickoff answers
 
 None yet beyond the rows above: the open questions are in [design.md](design.md), "Owner questions", each with a recommendation.

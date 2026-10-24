@@ -9094,29 +9094,42 @@ entries:
     A schema reused across materialize calls after the warehouse table
     changed (a column added, dropped or retyped) or after the session's
     current catalog or schema changed, where the source leaves that part to
-    the session; and every materialize of a source's schema, which now
-    reads each table's catalog and preview as well as its rows.
+    the session; a described table since emptied (refused at materialize,
+    Table '...' is empty) or dropped (refused at materialize, no_such_table),
+    where the old client reads what it kept until its sampler meets the
+    change; and every materialize of a source's schema, which now reads
+    each table's catalog, keys and preview as well as its rows.
   cases: [T3.4]
-  refs: [T3.4, P3E-4, P3A-2, P3A-3, P3A-4]
+  refs: [T3.4, P3E-4, P3A-2, P3A-3, P3A-4, P3A-5, sdm-testkit/src/plan_b.rs, scripts/rust_core/compare.py]
   status: proposed
   approved_by: null
-  decision_ref: null
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: KO3-59}
   notes: >-
     Approver: owner. Decision: the owner's answers of 2026-10-24, "warehouse
-    table shape: B" ("Ok, I'm convinced. Let's plan B."), to be recorded as
-    a decisions row and named in decision_ref. Held by
+    table shape: B" ("Ok, I'm convinced. Let's plan B.") (decisions.md KO3-59). Held by
     test_databricks_from_source.py (the _KEPT expectations: the old route
     reads where it kept each table, the core where the session says now)
-    and test_t316_the_schema_as_it_stands.py.
+    and test_t316_the_schema_as_it_stands.py. The comparisons of a run's
+    statements with the old client's take the reads this adds out by one
+    rule, the leading statements of a materialize that repeat, word for
+    word, a statement from_source ran (sdm_testkit::plan_b, and
+    compare.py's reads_as_it_stands for the Python tools), and hold every
+    statement after them to the old client's exactly: the families' sql
+    and vector tests (t132a to t132e on the Rust host, their twins in
+    contract/tests), duckdb_provider.rs, the materialize and predict
+    route tests, and compare.py's own comparisons.
 - id: P3A-2
   title: A column the schema names that the source does not hold is refused by name on the core route
   kind: change
   old_behavior: >-
-    The reference copies each table its engine read keeping only the
-    schema's columns the source holds (materializers/sources.py:81-88), so
-    a column the schema names that the source does not hold (one the source
-    dropped, or one the caller added by hand that it never held) is left out
-    of the request silently.
+    The reference copies the table its engine read keeping only the
+    schema's columns that table holds (materializers/sources.py:81-88): a
+    column the schema names that a table read anew does not hold (one the
+    caller added by hand that the source never held, or one the source
+    dropped before the read) is left out of the request silently; one the
+    source dropped after its engine kept the table is still selected, and
+    the read fails (INTERNAL_ERROR, the database's "Referenced column ...
+    not found").
   new_behavior: >-
     On the core route, which only SDM_CORE_ROUTES forces in this build, such
     a column is refused at materialize, INVALID_REQUEST, sentence
@@ -9132,11 +9145,10 @@ entries:
   refs: [T3.4, P3A-1]
   status: proposed
   approved_by: null
-  decision_ref: null
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: KO3-60}
   notes: >-
     Approver: owner. Decision: the owner's answers of 2026-10-24, item 1
-    ("1. Sure": a named error, not silently dropped), to be recorded as a
-    decisions row. Held by test_databricks_from_source.py and
+    ("1. Sure": a named error, not silently dropped) (decisions.md). Held by test_databricks_from_source.py and
     test_t316_the_schema_as_plain_data.py.
 - id: P3A-3
   title: A type the caller gave a column that the source's does not match is refused by name on the core route
@@ -9163,10 +9175,10 @@ entries:
   refs: [T3.4, P3A-1]
   status: proposed
   approved_by: null
-  decision_ref: null
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: KO3-61}
   notes: >-
     Approver: owner. Decision: the owner's answers of 2026-10-24, item 3
-    ("3. Sure": a named error), to be recorded as a decisions row. Held by
+    ("3. Sure": a named error) (decisions.md). Held by
     test_t316_the_schema_as_it_stands.py and
     test_t316_the_schema_as_plain_data.py.
 - id: P3A-4
@@ -9177,7 +9189,8 @@ entries:
     model, and with it the graph its first materialize built over the
     tables its engine read (RelationalMaterializer._get_model,
     relational.py:409-418): a second materialize of the same object reads
-    no table again.
+    no table's catalog or preview again and reuses its sampler's time
+    bounds and row counts, reading only the rows it samples.
   new_behavior: >-
     On the core route, which only SDM_CORE_ROUTES forces in this build, each
     materialize reads each table as it stands (P3A-1), the same object's
@@ -9189,7 +9202,43 @@ entries:
   refs: [T3.4, P3A-1]
   status: proposed
   approved_by: null
-  decision_ref: null
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: KO3-62}
   notes: >-
     Approver: owner. Decision: the owner's answers of 2026-10-24, item 6
-    ("6. Hmm ok": register and confirm), to be recorded as a decisions row.
+    ("6. Hmm ok": register and confirm) (decisions.md).
+- id: P3A-5
+  title: A query object's sampler memo and query plan follow the schema as the caller holds it, not as the source holds it at the run
+  kind: change
+  old_behavior: >-
+    The reference's PredictiveQuery keeps its model and sampler (P3A-4): a
+    second materialize of the same object, after the session moved to
+    another schema or the source retyped a column, samples the graph and
+    reuses the time bounds and row counts its first materialize read.
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build,
+    each materialize reads every table as it stands (P3A-1), but the
+    sampler memo it hands back (decision E52: time bounds, row counts, the
+    index check) and the query's plan (a ranking's or forecast's parts, the
+    QueryFacts handed to the host, a ranked column's type) are keyed to the
+    schema as the caller holds it before the run reads the source. A query
+    object materialized again after the session moved, or after the source
+    retyped a column within its kind, reads the tables as they stand and
+    reuses the bounds and counts its first run read, so its context's
+    anchors and labels can differ from a new query object's over the same
+    source.
+  affected_inputs: >-
+    One PredictiveQuery object materialized more than once over a source
+    whose session's schema changed, or whose column was retyped within its
+    kind, in between.
+  cases: [T3.4]
+  refs: [T3.4, P3A-1, P3A-4, E52]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: owner. Found by T3.4's round 15 reviews (Codex P2-1, Claude
+    P2-2), rare (a successful run, then a change of the source or its
+    session, then the same query object again); registered as found, not
+    fixed, at the orchestrator's direction. The fix it points to keys the
+    memo to the source as the run resolves it, so a run after the change
+    starts afresh.
