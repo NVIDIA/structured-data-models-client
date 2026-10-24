@@ -28,10 +28,21 @@ run, check = OWN.run, OWN.check
 
 
 @pytest.mark.parametrize(
-    'method',
-    ['fetchall', 'fetchmany', 'fetchone', 'fetchall_arrow', 'fetchmany_arrow'],
+    ('capture', 'method'),
+    [
+        (run._CapturedDatabricks, 'fetchall'),
+        (run._CapturedDatabricks, 'fetchmany'),
+        (run._CapturedDatabricks, 'fetchone'),
+        (run._CapturedDatabricks, 'fetchall_arrow'),
+        (run._CapturedDatabricks, 'fetchmany_arrow'),
+        (run._CapturedSnowflake, 'fetch_arrow_all'),
+        (run._CapturedSnowflake, 'fetch_pandas_all'),
+        (run._CapturedPsycopg, 'fetchall'),
+    ],
 )
-def test_a_fetch_failure_is_kept_on_its_executed_statement(method: str) -> None:
+def test_a_fetch_failure_is_kept_on_its_executed_statement(
+    capture: Any, method: str
+) -> None:
     # The live Databricks FK query executes, then fetchall raises
     # ArrowInvalid for duplicate field names; the old client catches it.
     failure = pa.ArrowInvalid('Multiple matches for FieldRef.Name(table_name)')
@@ -54,7 +65,7 @@ def test_a_fetch_failure_is_kept_on_its_executed_statement(method: str) -> None:
 
     log = run.DriverLog()
     log.recorder = run.Recorder()
-    cursor = run._CapturedDatabricks(Cursor(), log)
+    cursor = capture(Cursor(), log)
     cursor.execute('SELECT * FROM information_schema.referential_constraints')
     with pytest.raises(pa.ArrowInvalid) as raised:
         getattr(cursor, method)()
@@ -64,6 +75,18 @@ def test_a_fetch_failure_is_kept_on_its_executed_statement(method: str) -> None:
     assert log.statements[0]['results'] == []
     assert log.recorder.kept == {}
     assert log.incomplete == []
+
+
+def test_a_fetch_failure_without_a_statement_is_incomplete() -> None:
+    class Cursor:
+        def fetchall(self) -> Any:
+            raise pa.ArrowInvalid('no executed statement')
+
+    log = run.DriverLog()
+    cursor = run._CapturedDatabricks(Cursor(), log)
+    with pytest.raises(pa.ArrowInvalid):
+        cursor.fetchall()
+    assert log.incomplete == ['fetchall:no_statement']
 
 
 def _unread(sql: str, leg: str) -> tuple[Any, Any, Any]:
