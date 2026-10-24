@@ -335,7 +335,7 @@ fn describe_raw(spec: &[u8], bases: &Bases) -> (Got, Option<Value>) {
 fn edit_raw(description: &Value, edit: &Value) -> Got {
     let schema: sdm_contract::ops::SourceDescription =
         serde_json::from_value(description.clone()).unwrap();
-    let held = serde_json::to_vec(&edits::held(&schema)).unwrap();
+    let held = serde_json::to_vec(&edits::held(&schema, &edits::kept(&schema))).unwrap();
     let attachments = BTreeMap::from([
         (AttachmentId(1), Attachment::Bytes(held)),
         (
