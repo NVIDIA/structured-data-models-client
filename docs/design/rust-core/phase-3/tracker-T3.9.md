@@ -55,6 +55,22 @@ P3J-12 and P3J-14 remain proposed pending explicit review of equivalent expressi
 The owner's Plan B and output-safety policies do not supply blanket approval of new register entries.
 Java P3S entries remain owned by the Java package until it lands; its existing P3S-2 reviewer approval and P3S-7 retirement must be preserved, with the other unresolved entries assessed on their actual evidence.
 
+## Remaining Databricks measurements
+
+The genuine T3.20f SQL captures and the validated reused Spark captures were inspected for the T3.20d review's four unregistered candidates.
+Both `databricks.name.three-part` cases, including `-quoted`, refuse INVALID_REQUEST at from_source on both reference legs.
+`databricks.key.bigint-string` refuses INVALID_REQUEST at materialize on both, and `databricks.key.bigint-string-linked` refuses the same code at from_source on both.
+All four agree with their generic case expectations; their recorded reference has no core result.
+No core improvement is claimed or approved from these reference-only observations.
+E-1 must measure each candidate core leg against its own actual reference and register any real improvement before accepting it.
+
+The old-client leg differences also persist in those genuine captures.
+`key.declared-int32` refuses INVALID_REQUEST at materialize on SQL and succeeds at predict on Spark.
+Both `sample.anchor-entity.null-time` cases, including `.prediction-time`, succeed at predict on SQL and refuse INVALID_REQUEST at materialize on Spark.
+The SQL references record actual ArrowInvalid catalog-read failures that the Spark references do not; these observations alone do not establish the cause of each outcome difference or attribute it to sampling randomness.
+Under the owner's answer 9, each leg's recorded outcome remains its own baseline, without copying or normalizing these outcomes into the case files.
+E-1 must check the core on all three, including the approved missing-anchor policy, before proposing any measured difference.
+
 ## Validation state
 
 Regression tests precede each production change.
