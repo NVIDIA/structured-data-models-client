@@ -80,7 +80,9 @@ def test_comparison_builders_select_the_requested_source_route(
     class StopAtSource(BaseException):
         pass
 
-    def source_boundary(cls: Any, source: Any, *args: Any, **kwargs: Any) -> Any:
+    def source_boundary(
+        cls: Any, source: Any, *args: Any, **kwargs: Any
+    ) -> Any:
         seen.append(_routing.route(_routing.FROM_SOURCE_DUCKDB))
         source.connection.close()
         raise StopAtSource
@@ -93,7 +95,9 @@ def test_comparison_builders_select_the_requested_source_route(
                 dataset, None, route, 0, [1]
             )
         elif tool == 'real-data':
-            _module('scripts/live/real_data_benchmark.py').describe(dataset, route)
+            _module('scripts/live/real_data_benchmark.py').describe(
+                dataset, route
+            )
         else:
             _module('contract/tools/key_rules_probe.py').probe(
                 {'statements': [], 'primary_keys': {}}, route
