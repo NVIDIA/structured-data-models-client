@@ -58,7 +58,10 @@ No view parsing, SQL planning or diagnostic policy lives in Java.
 
 The four base J2 shapes have equivalent shop-data tests through Java's core calls and both direct and serving transports: regression, the same historical regression 180 days earlier, 90-day inactivity and multiclass classification.
 These tests use the existing DuckDB fixture to exercise the shared semantics; they do not claim live Databricks or AdventureWorks evidence.
-JDBC conversion tests separately cover non-UTC JVM settings and the spring DST edge, retaining timezone-free timestamps as wall times.
+JDBC conversion tests separately express the required non-UTC JVM and spring DST parity.
+The fake now follows released JDBC 3.4.2's unsupported typed getter and initial JVM-zone timestamp conversion, rather than inventing `LocalDateTime` support.
+A narrow probe with that released driver's actual result-set getters confirms ordinary NTZ reads are repaired, but DST-gap wall fields still normalize before reaching the host.
+The gap regression retains the desired original wall fields and needs a further fix; it is not passing acceptance evidence.
 A live non-UTC warehouse check and the actual E-7 comparison remain phase-end work.
 
 The two known nightly Java probe defects were reproduced with the package artifact: the relative classpath failed after changing to scratch, and the load source failed to compile against the current API.
@@ -73,3 +76,13 @@ P3S-2 has the independent broad reviewer's explicit approval for the better malf
 P3S-1 and P3S-3 through P3S-7 remain proposed; no approval is inferred from this implementation.
 P3S-8 records the focused reviewer's nonblocking large-diagnostic control-limit finding for follow-up.
 JV-4's startup-session timezone difference remains proposed and is handed to T3.9 for policy resolution; the existing same-zone offset helper does not fix it.
+
+## Round 1 follow-up
+
+The serving transport now shares the existing HTTP transport's cancellable whole-body exchange helper.
+Each serving attempt receives only the remaining overall call budget, including retries and response-body reads.
+New tests were committed before the fix and hold response bodies open after headers, both on an initial attempt and after a retry.
+A bounded local-server probe returned success after 1,477 ms with the original 150 ms timeout, then raised the intended endpoint failure after 167 ms with the fix.
+That probe compiled only the two affected Java sources in private scratch; it was not a package build or suite.
+The NTZ fix uses the driver's supported calendar getter instead of the unsupported typed getter and preserves nulls, microseconds and pre-epoch values.
+The remaining DST-gap issue requires a lossless transport decision before this package's final checks.

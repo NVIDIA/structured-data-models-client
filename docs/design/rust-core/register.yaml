@@ -9781,11 +9781,16 @@ entries:
     Java's Databricks column reads a TIMESTAMP's instant as its wall time
     in UTC, and a STRUCT, MAP, INTERVAL or an ARRAY of decimals or time
     stamps as utf8 of the driver's text; every other type as the connector
-    gives it. Where the session zone is UTC the time stamps are the same.
-    The Databricks JDBC driver's own types and getters are seen only live.
+    gives it. The supported TIMESTAMP_NTZ calendar getter preserves
+    ordinary wall fields and microseconds, but released JDBC 3.4.2 first
+    normalizes a wall time in the JVM zone. A nonexistent DST-gap wall
+    time can therefore change before the host reads it, even with a UTC
+    warehouse session. This is an unresolved implementation issue, not an
+    accepted loss of parity. Other live timestamp behavior is unverified.
   affected_inputs: >-
     Java over a Databricks session whose zone is not UTC with a TIMESTAMP
-    column, or a nested or interval column the core reads as data.
+    column, a TIMESTAMP_NTZ wall time in the JVM zone's DST gap, or a
+    nested or interval column the core reads as data.
   cases: [T3.13]
   refs: [T3.13]
   status: proposed
@@ -9793,6 +9798,10 @@ entries:
   decision_ref: null
   notes: >-
     Approver: owner. Proposed by T3.13's implementer, never self-approved.
+    A narrow probe with released Databricks JDBC 3.4.2 reproduced both
+    the unsupported LocalDateTime typed getter and the gap normalization.
+    The typed-getter failure is repaired; the driver-faithful gap
+    regression retains the desired wall fields and still needs a fix.
     The proposed live JDBC probe (B7) settles it: the driver's type names,
     getters, time zone handling and whether getSQLState() is generic.
 - id: P3S-6
