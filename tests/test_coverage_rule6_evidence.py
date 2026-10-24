@@ -400,3 +400,44 @@ def test_a_row_read_sample_is_typed_by_the_arrow_its_capture_holds() -> None:
     report = coverage.Report()
     coverage.rule_6({'w.case': case}, {}, report, {'w.case': [line]})
     assert report.problems == []
+
+
+def test_the_captures_tables_are_read_through_one_git_process(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Claude T3.20 r3 P3: each Lakebase sample's Arrow was read with its own
+    # git cat-file, which made a coverage run take minutes; every table of
+    # one commit is read through one git cat-file --batch process.
+    coverage = _coverage_module()
+    started: list[Any] = []
+    real = coverage.subprocess.Popen
+
+    def counting(*args: Any, **kwargs: Any) -> Any:
+        started.append(args[0])
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(coverage.subprocess, 'Popen', counting)
+    paths = [
+        name
+        for name in _git(
+            dict(os.environ),
+            'ls-tree',
+            '-r',
+            '--name-only',
+            'HEAD',
+            'contract/captures/lakebase/base.binary/tables/',
+        ).splitlines()
+    ][:3]
+    assert len(paths) == 3
+    tree = coverage._module('ratchet').Tree(
+        ROOT, _git(dict(os.environ), 'rev-parse', 'HEAD')
+    )
+    blobs = coverage.Blobs(tree)
+    try:
+        read = [blobs.read(path) for path in paths]
+        assert blobs.read('contract/captures/no-such-file') is None
+    finally:
+        blobs.close()
+    assert len(started) == 1
+    for path, data in zip(paths, read, strict=True):
+        assert data == (ROOT / path).read_bytes()
