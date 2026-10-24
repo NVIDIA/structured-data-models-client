@@ -9150,9 +9150,16 @@ entries:
     it ("it is too deeply nested or too long to read safely"), never accepts
     it. Databricks' numbers and names are matched by hand, so a run of a
     megabyte reads as the old client reads it. No recorded expression, up to
-    1,200,000 characters, reaches the limit.
+    1,200,000 characters, reaches the limit. From fix 2 (Codex review 2,
+    P1-7), a pattern built from a definition's text, a semantic view's
+    table name or a metric view's join path, that is past the pattern
+    compiler's size bound makes the expression unreadable too, where the old
+    client's `re` compiled it: a table name of 100,000 characters, which
+    the old client finds in no expression.
   affected_inputs: >-
-    A view expression on which a pattern exceeds the budget; none is known.
+    A view expression on which a pattern exceeds the budget, none known;
+    and a table name or join path past the compiler's bound, about 100,000
+    characters.
   cases: []
   refs: [T3.5, contract/view-expr-vectors.json]
   status: proposed
@@ -9164,18 +9171,19 @@ entries:
     refuses, which no input known reaches.
 
 - id: P3J-6
-  title: Four YAML texts the core's scanner reads otherwise than PyYAML
+  title: Five YAML texts the core's scanner reads otherwise than PyYAML
   kind: change
   old_behavior: >-
     PyYAML refuses a tab after a plain scalar on its line (`v: a<TAB>b`,
-    ScannerError), and reads a quoted scalar whose next line starts with a
-    tab, and an alias of an anchor written on a flow mapping's key
-    (`{&n .nan: a, *n: b}`).
+    ScannerError) and a tab alone on the line after a block scalar, and
+    reads a quoted scalar whose next line starts with a tab, and an alias of
+    an anchor written on a flow mapping's key (`{&n .nan: a, *n: b}`).
   new_behavior: >-
     The core's YAML scanner (yaml-rust2 0.13) reads the first, the tab kept in
-    the text, and refuses the other two as no readable YAML (P3J-1).
+    the text, and the second, the block scalar ending before the tab; it
+    refuses the other two as no readable YAML (P3J-1).
   affected_inputs: >-
-    A view definition with one of those three forms; a warehouse writes none
+    A view definition with one of those four forms; a warehouse writes none
     of them.
   cases: []
   refs: [T3.5, contract/view-yaml-vectors.json]
@@ -9207,7 +9215,10 @@ entries:
   decision_ref: null
   notes: >-
     Approver: owner. Proposed by T3.5's implementer (fix 1; Codex review 1,
-    P1-5). The set's members, and its equality, are PyYAML's.
+    P1-5). Superseded at fix 2 by P3J-9: the core no longer reads `!!set`,
+    which is outside the YAML view definitions use, and refuses it by name;
+    no behavior of this entry is left, so the implementer recommends the
+    owner reject it.
 
 - id: P3J-8
   title: An integer of more than 4,300 digits in a view definition is quoted whole
@@ -9229,4 +9240,113 @@ entries:
   decision_ref: null
   notes: >-
     Approver: owner. Proposed by T3.5's implementer (fix 1). A decimal
-    integer past 4,300 digits is refused as PyYAML refuses it.
+    integer past 4,300 digits is refused as PyYAML refuses it. Superseded
+    at fix 2 by P3J-9: an integer of more than 4,300 digits written in
+    another base is outside the YAML view definitions use and refused by
+    name, so the core writes no such integer; the implementer recommends
+    the owner reject this entry.
+
+- id: P3J-9
+  title: YAML outside the subset view definitions use is refused by name
+  kind: change
+  old_behavior: >-
+    The old client reads a view definition with PyYAML 6.0.3's safe_load,
+    which takes all of YAML 1.1: explicit tags (`!!binary`, `!!set`,
+    `!!omap`, `!!pairs`, `!!str` and the rest), merge keys (`<<`), any
+    nesting up to Python's recursion limit (about 490 levels), aliases read
+    as references however far they expand, integers of any size in
+    hexadecimal, octal, binary or base 60, and U+0085, U+2028 and U+2029 as
+    line breaks. A key that is a list or a mapping, a mapping keyed by
+    itself among them, fails in PyYAML's constructor.
+  new_behavior: >-
+    The core reads exactly the YAML view definitions use: scalars with
+    PyYAML 1.1's values, block and flow mappings and lists, block scalars,
+    comments, and anchors and aliases as plain references. It refuses by
+    name, "The metric view definition is not readable YAML: the text holds
+    the explicit tag '!!binary', which is outside the YAML view definitions
+    use" (the thing named), each of: an explicit tag, any; a merge key; a
+    key that is a list or a mapping, before it is made; collections nested
+    deeper than 200 levels, each alias's counted (yaml-rust2 scans 255 flow
+    levels); aliases that, each read as a copy, give more than 4,194,304
+    values; an integer of more than 4,300 decimal digits written in another
+    base, which Python would not write; and a U+0085, U+2028 or U+2029.
+  affected_inputs: >-
+    A view definition holding any of those; the old client's tests and the
+    warehouses' definitions hold none. A collection key PyYAML refused too,
+    with another message.
+  cases: []
+  refs: [T3.5, contract/view-yaml-vectors.json, contract/view-metric-vectors.json]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: owner. Proposed by T3.5's implementer at fix 2, by the
+    coordinator's direction under the owner's stop rule: bound the YAML the
+    core emulates, refuse the rest by name, and delete the code for the
+    refused features (the base64 reader, sets, ordered maps and pairs,
+    merges). Answers Codex review 2's P1-2 (a mapping keyed by itself
+    overflowed the stack), P1-3 (base64 padding overflowed a counter) and
+    P2 (a replaced value was not checked), and replaces P3J-7 and P3J-8.
+    The YAML vectors hold each refusal to the recorded text that holds the
+    thing refused.
+
+- id: P3J-10
+  title: A parameter default or a quoted value too large to write is refused by name
+  kind: change
+  old_behavior: >-
+    The old client writes a DOUBLE or DECIMAL parameter's default with
+    `format(Decimal(text), 'f')` and quotes a value with Python's `repr` or
+    `str`, however long the text: `1e999999999999999999` or
+    `1e-999999999999999999` asks for a string of 10^18 characters and fails
+    with a MemoryError, which ends the conversion (DB/metric_view.py:533-539),
+    and a value aliased many times over is written out whole.
+  new_behavior: >-
+    The core builds no text longer than 4,194,304 characters. A default
+    whose text would be longer is not read, "its default is too long to
+    write as a literal of type DOUBLE", the parameter then left without a
+    literal as one whose default is not of its type; a message that would
+    quote a longer value, or one whose collections met again inside
+    themselves nest past 400 levels, is refused by name (`TooLarge`).
+  affected_inputs: >-
+    A metric view whose numeric default has an exponent past about four
+    million, or a definition whose quoted value expands past four million
+    characters through its aliases.
+  cases: []
+  refs: [T3.5, contract/view-step-vectors.json]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: owner. Proposed by T3.5's implementer at fix 2 (Codex review
+    2, P1-5; Claude review 2's addendum: no huge allocation, refuse
+    `1e999999999999999999` by name). Every other default the second
+    reviews named, `1e9223372036854775807` and `1.0e-9223372036854775808`
+    among them, is read as Python reads it, held by the step vectors.
+
+- id: P3J-11
+  title: A definition entry the old client failed on as a set member or a pattern is refused by name
+  kind: change
+  old_behavior: >-
+    The old client looks a join's `cardinality` up in a set, so a list or a
+    mapping there fails with a raw TypeError, as does a semantic view
+    table's name that is a list or a mapping when it collects the names in
+    a set; a table name that is no text fails when it is made a pattern
+    (DB/metric_view.py:860, RE/graph.py:2069-2092).
+  new_behavior: >-
+    The core refuses the view by name at the same point: "The metric view
+    definition's 'cardinality' is a list or a mapping", "The semantic view
+    definition's 'name' is a list or a mapping", "The semantic view
+    definition's 'name' is not text".
+  affected_inputs: >-
+    A metric view join whose cardinality is a list or a mapping; a semantic
+    view whose table name is no text.
+  cases: []
+  refs: [T3.5]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: owner. Proposed by T3.5's implementer at fix 2: a named
+    refusal where the old client failed with a TypeError, found while
+    making the join walk total; nothing the old client converted is
+    refused.

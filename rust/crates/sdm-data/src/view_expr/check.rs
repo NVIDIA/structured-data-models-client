@@ -430,11 +430,13 @@ fn names_a_type(lead: &str) -> Read<bool> {
 fn lambda_parameters(text: &str) -> Read<Vec<String>> {
     let mut names = Vec::new();
     for groups in LAMBDA_PARAMETERS.groups_all(text)? {
-        let bound = groups.get(1).or_else(|| groups.get(2)).unwrap();
+        let Some(bound) = groups.get(1).or_else(|| groups.get(2)) else {
+            continue;
+        };
         names.extend(
             text[bound]
                 .split(',')
-                .map(|name| name.trim().to_lowercase()),
+                .map(|name| super::stripped(name).to_lowercase()),
         );
     }
     Ok(names)

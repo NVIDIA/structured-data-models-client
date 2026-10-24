@@ -13,7 +13,7 @@
 //! caller hands in, each asked at its point in that order.
 
 use super::metric::SOURCE_ALIAS;
-use super::spec::{Cardinality, JoinKeys, Source, TableItem, ViewRefusal, ViewSpec};
+use super::spec::{Cardinality, JoinKeys, RefusalReason, Source, TableItem, ViewRefusal, ViewSpec};
 use super::yaml::NodeId;
 
 /// Why a join is skipped; `R` is a judge's reason.
@@ -64,7 +64,9 @@ pub struct JoinWalk<R> {
 
 /// Walks the joins of `spec`. `source` judges a join's `source` (absent,
 /// or a node), `condition` its `on` (absent, or a node), each refusing with
-/// its reason.
+/// its reason. A semantic view has no joins: its walk keeps and skips
+/// none. A cardinality that is a list or a mapping refuses the view where
+/// the old client failed on it.
 pub fn walk<R>(
     spec: &mut ViewSpec,
     mut source: impl FnMut(&ViewSpec, Option<NodeId>) -> Result<(), R>,
@@ -79,16 +81,17 @@ pub fn walk<R>(
     };
     // The source table counts as kept, so its joins are visited.
     let mut visited = vec![false; spec.tables.len()];
-    if !visited.is_empty() {
-        visited[0] = true;
+    if let Some(first) = visited.first_mut() {
+        *first = true;
     }
     let mut kept_names: Vec<String> = Vec::new();
     for at in 1..spec.tables.len() {
         let parent = match &spec.tables[at] {
             TableItem::NotAMapping { parent, .. } | TableItem::Nameless { parent, .. } => *parent,
             TableItem::Table(table) => table.parent.unwrap_or(0),
+            TableItem::Declared { .. } => continue,
         };
-        if !visited[parent] {
+        if !visited.get(parent).copied().unwrap_or(false) {
             continue;
         }
         let table = match spec.tables[at].clone() {
@@ -100,30 +103,29 @@ pub fn walk<R>(
                 walk.messages.push(JoinMessage::Nameless(cfg));
                 continue;
             }
+            TableItem::Declared { .. } => continue,
             TableItem::Table(table) => table,
         };
-        let join = table.join.clone().expect("a join has its keys");
+        // Only a metric view's join has keys and a source name.
+        let (Some(join), Source::Name(node)) = (table.join.clone(), table.source.clone()) else {
+            continue;
+        };
         let judged = if table.alias == SOURCE_ALIAS || kept_names.contains(&table.alias) {
             Err(SkipReason::NameInUse)
+        } else if let Err(reason) = source(spec, node) {
+            Err(SkipReason::Judged(reason))
         } else {
-            let Source::Name(node) = table.source else {
-                unreachable!("a join reads a name")
-            };
-            source(spec, node)
-                .map_err(SkipReason::Judged)
-                .and_then(|()| {
-                    match join.cardinality {
-                        Cardinality::Unsupported(node) => {
-                            return Err(SkipReason::Cardinality(node));
-                        }
-                        Cardinality::ManyToOne | Cardinality::OneToMany => {}
-                    }
-                    match join.keys {
-                        JoinKeys::UsingSeveral => Err(SkipReason::UsingSeveral),
-                        JoinKeys::Using(_) => Ok(()),
-                        JoinKeys::On(on) => condition(spec, on).map_err(SkipReason::Judged),
-                    }
-                })
+            match join.cardinality {
+                Cardinality::Unhashable => {
+                    return Err(spec.refusal(RefusalReason::Unhashable("cardinality".into())));
+                }
+                Cardinality::Unsupported(node) => Err(SkipReason::Cardinality(node)),
+                Cardinality::ManyToOne | Cardinality::OneToMany => match join.keys {
+                    JoinKeys::UsingSeveral => Err(SkipReason::UsingSeveral),
+                    JoinKeys::Using(_) => Ok(()),
+                    JoinKeys::On(on) => condition(spec, on).map_err(SkipReason::Judged),
+                },
+            }
         };
         match judged {
             Ok(()) => {

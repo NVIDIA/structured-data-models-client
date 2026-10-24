@@ -88,7 +88,6 @@ pub enum Shown {
     Int(String),
     Float(f64),
     Text(String),
-    Bytes(Vec<u8>),
     Date {
         year: i32,
         month: u8,
@@ -108,9 +107,6 @@ pub enum Shown {
     List(Vec<Shown>),
     /// A `dict`'s entries in order.
     Dict(Vec<(Shown, Shown)>),
-    /// A `set`'s members, in the order they are to be written.
-    Set(Vec<Shown>),
-    Tuple(Vec<Shown>),
     /// A list (`true`) or a `dict` (`false`) inside itself, which Python
     /// writes as `[...]` or `{...}`.
     Recursive(bool),
@@ -127,7 +123,6 @@ impl Shown {
             Shown::Int(n) => n.clone(),
             Shown::Float(x) => float_repr(*x),
             Shown::Text(text) => text_repr(text),
-            Shown::Bytes(bytes) => bytes_repr(bytes),
             Shown::Date { year, month, day } => format!("datetime.date({year}, {month}, {day})"),
             Shown::DateTime {
                 year,
@@ -179,20 +174,6 @@ impl Shown {
                     .collect::<Vec<_>>()
                     .join(", ")
             ),
-            Shown::Set(members) if members.is_empty() => "set()".into(),
-            Shown::Set(members) => format!(
-                "{{{}}}",
-                members
-                    .iter()
-                    .map(Shown::repr)
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ),
-            Shown::Tuple(items) if items.len() == 1 => format!("({},)", items[0].repr()),
-            Shown::Tuple(items) => format!(
-                "({})",
-                items.iter().map(Shown::repr).collect::<Vec<_>>().join(", ")
-            ),
             Shown::Recursive(true) => "[...]".into(),
             Shown::Recursive(false) => "{...}".into(),
         }
@@ -237,31 +218,6 @@ impl Shown {
             _ => self.repr(),
         }
     }
-}
-
-fn bytes_repr(bytes: &[u8]) -> String {
-    let quote = if bytes.contains(&b'\'') && !bytes.contains(&b'"') {
-        '"'
-    } else {
-        '\''
-    };
-    let mut text = format!("b{quote}");
-    for &b in bytes {
-        match b {
-            b'\\' => text.push_str("\\\\"),
-            b'\t' => text.push_str("\\t"),
-            b'\n' => text.push_str("\\n"),
-            b'\r' => text.push_str("\\r"),
-            _ if char::from(b) == quote => {
-                text.push('\\');
-                text.push(quote);
-            }
-            0x20..=0x7E => text.push(char::from(b)),
-            _ => text.push_str(&format!("\\x{b:02x}")),
-        }
-    }
-    text.push(quote);
-    text
 }
 
 /// Python's `repr` of a text: in single quotes unless it holds one and no

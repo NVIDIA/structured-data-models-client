@@ -13,7 +13,8 @@
 //! - a match is total: a pattern that runs out of its backtracking budget
 //!   answers [`Unreadable::TooDeep`], never "no match", so no check can
 //!   accept an expression because a pattern failed on it. Each caller
-//!   refuses on it.
+//!   refuses on it. So does a pattern made of a definition's text that is
+//!   past the compiler's bounds ([`Pattern::build`]).
 
 use std::ops::Range;
 
@@ -65,7 +66,7 @@ fn white_space(pattern: &str) -> String {
                     0
                 };
                 for _ in 0..skip {
-                    out.push(chars.next().unwrap());
+                    out.extend(chars.next());
                 }
             }
             ']' if class => {
@@ -83,14 +84,20 @@ fn unreadable(_: fancy_regex::Error) -> Unreadable {
 }
 
 impl Pattern {
-    /// Compiles `pattern`, the old client's text, read with its `\s`.
+    /// Compiles one of the old client's fixed patterns, read with its
+    /// `\s`; each compiles, as the tests of the patterns show.
     pub(crate) fn new(pattern: &str) -> Pattern {
-        Pattern(
-            RegexBuilder::new(&white_space(pattern))
-                .backtrack_limit(BACKTRACK_LIMIT)
-                .build()
-                .unwrap(),
-        )
+        Pattern::build(pattern).expect("a fixed pattern compiles")
+    }
+
+    /// Compiles a pattern made of a definition's text, a table's name in
+    /// it: one past the compiler's bounds is unreadable, never a panic.
+    pub(crate) fn build(pattern: &str) -> Read<Pattern> {
+        RegexBuilder::new(&white_space(pattern))
+            .backtrack_limit(BACKTRACK_LIMIT)
+            .build()
+            .map(Pattern)
+            .map_err(unreadable)
     }
 
     pub(crate) fn is_match(&self, text: &str) -> Read<bool> {

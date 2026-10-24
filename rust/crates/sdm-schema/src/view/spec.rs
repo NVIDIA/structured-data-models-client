@@ -76,6 +76,12 @@ pub enum Ignored {
 /// An entry of the logical tables.
 #[derive(Clone, Debug, PartialEq)]
 pub enum TableItem {
+    /// A semantic view's table, its name read and the rest of it not yet
+    /// ([`super::semantic::table`] reads it, in the conversion's order).
+    Declared {
+        name: NodeId,
+        cfg: NodeId,
+    },
     /// A join that is no mapping, declared on the table at `parent`.
     NotAMapping {
         cfg: NodeId,
@@ -134,8 +140,11 @@ pub struct JoinSpec {
 pub enum Cardinality {
     ManyToOne,
     OneToMany,
-    /// Any other value.
+    /// Any other value Python can look up in a set.
     Unsupported(NodeId),
+    /// A list or a mapping, which the old client failed on looking it up
+    /// in its set of cardinalities (`TypeError`); refused by name.
+    Unhashable,
 }
 
 /// What a join is joined on.
@@ -155,7 +164,8 @@ pub enum JoinKeys {
 pub enum PrimaryKey {
     /// None declared, or one of no columns.
     None,
-    /// One column, as written.
+    /// One column, `columns[0]` as Python indexes it: a list's first item,
+    /// a mapping's entry keyed 0, a text's first character.
     One(NodeId),
     /// More than one, which the conversion leaves out without reading them.
     Composite,
@@ -197,7 +207,8 @@ pub enum Section {
 #[derive(Clone, Debug, PartialEq)]
 pub struct RelationshipItem {
     pub name: NodeId,
-    /// How many column pairs it has.
+    /// How many column pairs it has: `len(relationship_columns)`, a
+    /// mapping's entries or a text's characters as a list's items.
     pub pairs: usize,
     pub cfg: NodeId,
 }
@@ -253,6 +264,12 @@ pub enum RefusalReason {
     /// A join nests itself, which the old client follows until Python
     /// stops it.
     NestsItself,
+    /// An entry the old client looked up in a set or used as a key is a
+    /// list or a mapping (its `TypeError`).
+    Unhashable(String),
+    /// A name the old client wrote into a pattern is not text (its
+    /// `TypeError`).
+    NotText(String),
 }
 
 impl fmt::Display for ViewRefusal {
@@ -270,6 +287,15 @@ impl fmt::Display for ViewRefusal {
             }
             RefusalReason::NestsItself => {
                 write!(f, "The {noun} definition has a join nested in itself")
+            }
+            RefusalReason::Unhashable(entry) => {
+                write!(
+                    f,
+                    "The {noun} definition's '{entry}' is a list or a mapping"
+                )
+            }
+            RefusalReason::NotText(entry) => {
+                write!(f, "The {noun} definition's '{entry}' is not text")
             }
         }
     }
@@ -345,25 +371,31 @@ impl ViewSpec {
             .ok_or_else(|| self.refusal(RefusalReason::NotAList(name.to_owned())))
     }
 
-    /// A relationship's tables and keys, read only for one column pair
-    /// (`RE/graph.py:2215-2218`).
-    pub fn relationship(&self, item: &RelationshipItem) -> Result<Relationship, ViewRefusal> {
-        let required = |node: NodeId, entry: &str| {
-            self.document
-                .get(node, entry)
-                .ok_or_else(|| self.refusal(RefusalReason::Misses(entry.to_owned())))
-        };
-        let pairs = required(item.cfg, "relationship_columns")?;
-        let pair = match self.value(pairs) {
-            Value::Seq(items) => items[0],
-            Value::Pairs(items) => items[0].0,
-            _ => return Err(self.refusal(RefusalReason::Misses("relationship_columns".into()))),
-        };
+    /// `cfg[entry]`, a mapping's entry that must be there.
+    pub(crate) fn required(&self, cfg: NodeId, entry: &str) -> Result<NodeId, ViewRefusal> {
+        self.document
+            .get(cfg, entry)
+            .ok_or_else(|| self.refusal(RefusalReason::Misses(entry.to_owned())))
+    }
+
+    /// A relationship's tables and keys, read only for one column pair, in
+    /// the old client's order (`RE/graph.py:2215-2218`): its
+    /// `relationship_columns[0]` as Python indexes it.
+    pub fn relationship(&mut self, item: &RelationshipItem) -> Result<Relationship, ViewRefusal> {
+        let left_table = self.required(item.cfg, "left_table")?;
+        let pairs = self.required(item.cfg, "relationship_columns")?;
+        let pair = self
+            .document
+            .first(pairs)
+            .ok_or_else(|| self.refusal(RefusalReason::Misses("relationship_columns".into())))?;
+        let left_column = self.required(pair, "left_column")?;
+        let right_table = self.required(item.cfg, "right_table")?;
+        let right_column = self.required(pair, "right_column")?;
         Ok(Relationship {
-            left_table: required(item.cfg, "left_table")?,
-            left_column: required(pair, "left_column")?,
-            right_table: required(item.cfg, "right_table")?,
-            right_column: required(pair, "right_column")?,
+            left_table,
+            left_column,
+            right_table,
+            right_column,
         })
     }
 }

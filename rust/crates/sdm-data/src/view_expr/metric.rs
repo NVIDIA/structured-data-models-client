@@ -89,7 +89,6 @@ static SIMPLE_MEASURE: LazyLock<Pattern> = LazyLock::new(|| {
         chain()
     ))
 });
-static INTEGER_TEXT: LazyLock<Pattern> = LazyLock::new(|| pattern(r"^[+-]?\d+$"));
 static DECIMAL_TYPE: LazyLock<Pattern> =
     LazyLock::new(|| pattern(r"^(?:decimal|dec|numeric)(?:\(\s*\d+\s*(?:,\s*\d+\s*)?\))?$"));
 static STRING_TYPE: LazyLock<Pattern> =
@@ -219,13 +218,13 @@ fn quoted_variants(part: &str) -> String {
 
 /// The pattern of a qualifier `path.` in any case, not after a name's
 /// character, a backtick, `$` or a dot (`_path_pattern`).
-fn path_pattern<S: AsRef<str>>(path: &[S]) -> Pattern {
+fn path_pattern<S: AsRef<str>>(path: &[S]) -> Read<Pattern> {
     let chain = path
         .iter()
         .map(|part| format!("(?:{})", quoted_variants(part.as_ref())))
         .collect::<Vec<_>>()
         .join(r"\s*\.\s*");
-    pattern(&format!(r"(?i)(?<![A-Za-z0-9_`$.]){chain}\s*\."))
+    Pattern::build(&format!(r"(?i)(?<![A-Za-z0-9_`$.]){chain}\s*\."))
 }
 
 /// `expr` with each string literal emptied (`_masked_strings`).
@@ -244,13 +243,13 @@ fn masked_strings(expr: &str) -> Read<String> {
 /// Whether `expr` reads a column of the table `path` names, outside its
 /// literals (`references_alias`).
 pub fn references_alias<S: AsRef<str>>(expr: &str, path: &[S]) -> Result<bool, Unreadable> {
-    path_pattern(path).is_match(&masked_strings(expr)?)
+    path_pattern(path)?.is_match(&masked_strings(expr)?)
 }
 
 /// `expr` with every qualifier `path.` taken out, its literals as they are,
 /// trimmed (`strip_alias_qualifier`).
 pub fn strip_alias<S: AsRef<str>>(expr: &str, path: &[S]) -> Result<String, Unreadable> {
-    let pattern = path_pattern(path);
+    let pattern = path_pattern(path)?;
     let mut out = String::with_capacity(expr.len());
     let mut last = 0;
     for span in string_literals(expr)? {
@@ -315,28 +314,49 @@ pub fn renamed_column(expr: &str) -> Option<String> {
     }
 }
 
-/// A parameter's default as the data layer reads it: the kind of value it
-/// is, and the text Python's `str` gives it, which the core writes.
-#[derive(Clone, Debug, PartialEq)]
-pub struct ParameterDefault {
-    pub kind: DefaultKind,
-    pub text: String,
+/// The literal a parameter's type takes, as `_default_text` tells types
+/// apart (`DB/metric_view.py:513-566`): by the type in lower case, its
+/// white space single.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TypeClass {
+    Boolean,
+    /// `int`, `bigint` and the like.
+    Integer,
+    /// `double`, `float`, `real`, and `decimal` with or without its
+    /// precision.
+    Decimal,
+    /// `string`, `char(n)` and `varchar(n)`.
+    String,
+    Date,
+    /// `timestamp`, `timestamp_ntz` and `timestamp_ltz`.
+    Timestamp,
+    /// Any other type, which has no literal here.
+    NoLiteral,
 }
 
-/// The kinds of default `_default_text` tells apart.
-#[derive(Clone, Debug, PartialEq)]
-pub enum DefaultKind {
-    Bool(bool),
-    /// An integer: its text is its decimal digits.
-    Int,
-    /// A date with no time of day: its text is its ISO form.
-    Date,
-    /// A date and time: its text is its ISO form with a space, and its
-    /// `isoformat()` with a `T` is `iso`.
-    DateTime {
-        iso: String,
-    },
-    Other,
+/// The class of `data_type`.
+pub fn type_class(data_type: &str) -> TypeClass {
+    let folded = data_type
+        .to_lowercase()
+        .split(spacing)
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ");
+    if folded == "boolean" {
+        TypeClass::Boolean
+    } else if INTEGER_TYPES.contains(&folded.as_str()) {
+        TypeClass::Integer
+    } else if FLOAT_TYPES.contains(&folded.as_str()) || matches(&DECIMAL_TYPE, &folded) {
+        TypeClass::Decimal
+    } else if matches(&STRING_TYPE, &folded) {
+        TypeClass::String
+    } else if folded == "date" {
+        TypeClass::Date
+    } else if TIMESTAMP_TYPES.contains(&folded.as_str()) {
+        TypeClass::Timestamp
+    } else {
+        TypeClass::NoLiteral
+    }
 }
 
 /// Why a default gives no literal of its type.
@@ -346,302 +366,22 @@ pub enum DefaultRefusal {
     NoLiteral,
     /// The default is no value of the type.
     NotOfType,
-}
-
-/// The text a parameter's default casts from, checked against its type so
-/// that nothing but the value reaches the SQL (`_default_text`).
-pub fn default_text(data_type: &str, default: &ParameterDefault) -> Result<String, DefaultRefusal> {
-    let folded = data_type
-        .to_lowercase()
-        .split(spacing)
-        .filter(|part| !part.is_empty())
-        .collect::<Vec<_>>()
-        .join(" ");
-    let string_type = matches(&STRING_TYPE, &folded);
-    let text = stripped(&default.text);
-    let answer = if let DefaultKind::Bool(flag) = default.kind {
-        (folded == "boolean" || string_type).then(|| flag.to_string())
-    } else if folded == "boolean" {
-        let lower = text.to_lowercase();
-        (lower == "true" || lower == "false").then_some(lower)
-    } else if INTEGER_TYPES.contains(&folded.as_str()) {
-        match default.kind {
-            DefaultKind::Int => Some(default.text.clone()),
-            _ if matches(&INTEGER_TEXT, text) => integer_text(text),
-            _ => None,
-        }
-    } else if FLOAT_TYPES.contains(&folded.as_str()) || matches(&DECIMAL_TYPE, &folded) {
-        decimal_text(text)
-    } else if string_type {
-        Some(match &default.kind {
-            DefaultKind::DateTime { iso } => iso.clone(),
-            _ => default.text.clone(),
-        })
-    } else if folded == "date" {
-        match default.kind {
-            DefaultKind::Date => Some(default.text.clone()),
-            DefaultKind::DateTime { .. } => None,
-            _ => iso_date(text)
-                .filter(|(_, used)| *used == text.len())
-                .map(|(day, _)| day),
-        }
-    } else if TIMESTAMP_TYPES.contains(&folded.as_str()) {
-        match default.kind {
-            DefaultKind::Date | DefaultKind::DateTime { .. } => Some(default.text.clone()),
-            _ => iso_datetime(text),
-        }
-    } else {
-        return Err(DefaultRefusal::NoLiteral);
-    };
-    answer.ok_or(DefaultRefusal::NotOfType)
-}
-
-/// `str(int(text))` for a text of digits, an optional sign first.
-fn integer_text(text: &str) -> Option<String> {
-    let (negative, digits) = match text.as_bytes().first()? {
-        b'-' => (true, &text[1..]),
-        b'+' => (false, &text[1..]),
-        _ => (false, text),
-    };
-    let digits: String = digits
-        .chars()
-        .map(|c| c.to_digit(10).map_or(c, |d| char::from(b'0' + d as u8)))
-        .collect();
-    let digits = digits.trim_start_matches('0');
-    Some(match (negative, digits) {
-        (_, "") => "0".into(),
-        (true, d) => format!("-{d}"),
-        (false, d) => d.to_owned(),
-    })
-}
-
-/// `format(Decimal(text), 'f')` for a finite decimal: the digits of its
-/// coefficient placed by its exponent, no exponent written.
-fn decimal_text(text: &str) -> Option<String> {
-    let text = text.replace('_', "");
-    let (negative, rest) = match text.as_bytes().first()? {
-        b'-' => (true, &text[1..]),
-        b'+' => (false, &text[1..]),
-        _ => (false, text.as_str()),
-    };
-    let (mantissa, exponent) = match rest.find(['e', 'E']) {
-        Some(at) => (&rest[..at], rest[at + 1..].parse::<i64>().ok()?),
-        None => (rest, 0),
-    };
-    let (whole, fraction) = mantissa.split_once('.').unwrap_or((mantissa, ""));
-    if (whole.is_empty() && fraction.is_empty())
-        || !whole
-            .bytes()
-            .chain(fraction.bytes())
-            .all(|b| b.is_ascii_digit())
-    {
-        return None;
-    }
-    let digits = format!("{whole}{fraction}");
-    let digits = match digits.trim_start_matches('0') {
-        "" => "0",
-        kept => kept,
-    };
-    let exponent = exponent - i64::try_from(fraction.len()).ok()?;
-    let sign = if negative { "-" } else { "" };
-    if exponent >= 0 {
-        if digits == "0" {
-            return Some(format!("{sign}0"));
-        }
-        return Some(format!(
-            "{sign}{digits}{}",
-            "0".repeat(usize::try_from(exponent).ok()?)
-        ));
-    }
-    let places = usize::try_from(-exponent).ok()?;
-    let padded = if digits.len() <= places {
-        format!("{}{digits}", "0".repeat(places - digits.len() + 1))
-    } else {
-        digits.to_owned()
-    };
-    let (whole, fraction) = padded.split_at(padded.len() - places);
-    Some(format!("{sign}{whole}.{fraction}"))
-}
-
-/// A date in one of the ISO forms Python 3.12's `date.fromisoformat`
-/// reads (`2024-01-01`, `20240101`, `2024-W01-2`, `2024W012`), as
-/// `YYYY-MM-DD`, with how many characters it took.
-fn iso_date(text: &str) -> Option<(String, usize)> {
-    let bytes = text.as_bytes();
-    let digits = |from: usize, count: usize| -> Option<u32> {
-        let slice = text.get(from..from + count)?;
-        slice
-            .bytes()
-            .all(|b| b.is_ascii_digit())
-            .then(|| slice.parse().ok())?
-    };
-    let year = digits(0, 4)?;
-    let extended = bytes.get(4) == Some(&b'-');
-    let at = if extended { 5 } else { 4 };
-    let (date, used) = if bytes.get(at) == Some(&b'W') {
-        let week = digits(at + 1, 2)?;
-        let day_at = at + 3 + usize::from(extended);
-        let (day, used) = match (extended, bytes.get(at + 3)) {
-            (true, Some(b'-')) => (digits(day_at, 1)?, day_at + 1),
-            (false, Some(b)) if b.is_ascii_digit() => (digits(day_at, 1)?, day_at + 1),
-            _ => (1, at + 3),
-        };
-        (iso_week_date(year, week, day)?, used)
-    } else {
-        let month = digits(at, 2)?;
-        let day_at = at + 2 + usize::from(extended);
-        if extended && bytes.get(at + 2) != Some(&b'-') {
-            return None;
-        }
-        let day = digits(day_at, 2)?;
-        ((year, month, day), day_at + 2)
-    };
-    let (year, month, day) = date;
-    let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
-    let days = match month {
-        2 if leap => 29,
-        2 => 28,
-        4 | 6 | 9 | 11 => 30,
-        1..=12 => 31,
-        _ => return None,
-    };
-    (year >= 1 && (1..=days).contains(&day))
-        .then(|| (format!("{year:04}-{month:02}-{day:02}"), used))
-}
-
-/// The calendar date of ISO year `year`'s week `week`, day `day`.
-fn iso_week_date(year: u32, week: u32, day: u32) -> Option<(u32, u32, u32)> {
-    if !(1..=53).contains(&week) || !(1..=7).contains(&day) {
-        return None;
-    }
-    // Days from 0001-01-01 (a Monday) to `year`-01-04, which week 1 holds.
-    let ordinal = |y: u32, m: u32, d: u32| -> i64 {
-        let y = i64::from(y) - 1;
-        let leap = |y: i64| y % 4 == 0 && (y % 100 != 0 || y % 400 == 0);
-        let before: [i64; 12] = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
-        let mut days =
-            y * 365 + y / 4 - y / 100 + y / 400 + before[(m - 1) as usize] + i64::from(d);
-        if m > 2 && leap(y + 1) {
-            days += 1;
-        }
-        days
-    };
-    let jan4 = ordinal(year, 1, 4);
-    let week1 = jan4 - (jan4 - 1).rem_euclid(7);
-    let target = week1 + i64::from(week - 1) * 7 + i64::from(day - 1);
-    // Back to a calendar date.
-    let mut y = u32::try_from((target * 400 / 146_097).max(1)).ok()?;
-    while ordinal(y + 1, 1, 1) <= target {
-        y += 1;
-    }
-    while ordinal(y, 1, 1) > target {
-        y -= 1;
-    }
-    let mut m = 12;
-    while ordinal(y, m, 1) > target {
-        m -= 1;
-    }
-    let d = u32::try_from(target - ordinal(y, m, 1) + 1).ok()?;
-    // Week 53 exists only in a year that has it.
-    let next_week1 = {
-        let jan4 = ordinal(year + 1, 1, 4);
-        jan4 - (jan4 - 1).rem_euclid(7)
-    };
-    (target < next_week1).then_some((y, m, d))
-}
-
-/// A date and time in the ISO forms Python 3.12's `datetime.fromisoformat`
-/// reads, written as `isoformat(' ')` writes it.
-fn iso_datetime(text: &str) -> Option<String> {
-    let (day, used) = iso_date(text)?;
-    let rest = &text[used..];
-    if rest.is_empty() {
-        return Some(format!("{day} 00:00:00"));
-    }
-    // Any one character stands between the date and the time.
-    let mut chars = rest.chars();
-    chars.next()?;
-    let time = chars.as_str();
-    let zone_at = time.find(['Z', '+', '-']).unwrap_or(time.len());
-    let (clock, zone) = time.split_at(zone_at);
-    let (hour, minute, second, micro) = iso_clock(clock)?;
-    let mut out = format!("{day} {hour:02}:{minute:02}:{second:02}");
-    if micro > 0 {
-        out.push_str(&format!(".{micro:06}"));
-    }
-    if !zone.is_empty() {
-        out.push_str(&iso_zone(zone)?);
-    }
-    Some(out)
-}
-
-/// `HH[:MM[:SS[.f]]]` or `HH[MM[SS[.f]]]`, a fraction cut to
-/// microseconds.
-fn iso_clock(clock: &str) -> Option<(u32, u32, u32, u32)> {
-    let (main, fraction) = match clock.find(['.', ',']) {
-        Some(at) => (&clock[..at], Some(&clock[at + 1..])),
-        None => (clock, None),
-    };
-    let parts: Vec<&str> = if main.contains(':') {
-        main.split(':').collect()
-    } else {
-        (0..main.len())
-            .step_by(2)
-            .map(|at| main.get(at..at + 2).unwrap_or(""))
-            .collect()
-    };
-    if parts.is_empty()
-        || parts.len() > 3
-        || parts
-            .iter()
-            .any(|p| p.len() != 2 || !p.bytes().all(|b| b.is_ascii_digit()))
-    {
-        return None;
-    }
-    let field = |i: usize| parts.get(i).map_or(0, |p| p.parse().unwrap());
-    let (hour, minute, second) = (field(0), field(1), field(2));
-    if fraction.is_some() && parts.len() != 3 {
-        return None;
-    }
-    let micro = match fraction {
-        None => 0,
-        Some(f) if !f.is_empty() && f.bytes().all(|b| b.is_ascii_digit()) => {
-            let mut digits: String = f.chars().take(6).collect();
-            while digits.len() < 6 {
-                digits.push('0');
-            }
-            digits.parse().unwrap()
-        }
-        Some(_) => return None,
-    };
-    (hour < 24 && minute < 60 && second < 60).then_some((hour, minute, second, micro))
-}
-
-/// `Z`, or `±HH[:MM[:SS[.f]]]` or `±HHMM[SS]`, written as `+HH:MM[:SS]`.
-fn iso_zone(zone: &str) -> Option<String> {
-    if zone == "Z" {
-        return Some("+00:00".into());
-    }
-    let (sign, rest) = zone.split_at(1);
-    let (hour, minute, second, micro) = iso_clock(rest)?;
-    let mut out = format!("{sign}{hour:02}:{minute:02}");
-    if second > 0 || micro > 0 {
-        out.push_str(&format!(":{second:02}"));
-    }
-    if micro > 0 {
-        out.push_str(&format!(".{micro:06}"));
-    }
-    Some(out)
+    /// An integer of more digits than Python reads, so many.
+    TooManyDigits(usize),
+    /// A text `int` cannot read though the old client's pattern took it.
+    NotAnInteger,
+    /// A value whose text would be longer than the core writes.
+    TooLong,
 }
 
 /// What a parameter of the view is given, as the core hands it over: its
 /// name, its type as the definition writes it if text, and its default
-/// unless null.
+/// unless null, as the core holds it (`D`).
 #[derive(Clone, Debug, PartialEq)]
-pub struct ParameterInput {
+pub struct ParameterInput<D> {
     pub name: String,
     pub data_type: Option<String>,
-    pub default: Option<ParameterDefault>,
+    pub default: Option<D>,
 }
 
 /// A parameter as a query of the view without arguments reads it.
@@ -678,10 +418,13 @@ fn sql_string(text: &str) -> String {
 
 /// The `parameters` section read, by folded name, a later one replacing an
 /// earlier of the same name in its place (`_read_parameters`). The type
-/// Databricks describes, `described`, wins over the definition's.
-pub fn read_parameters(
-    inputs: &[ParameterInput],
+/// Databricks describes, `described`, wins over the definition's. The
+/// core converts each default to the text its type casts from
+/// (`convert`, `_default_text`).
+pub fn read_parameters<D>(
+    inputs: &[ParameterInput<D>],
     described: &[(String, String)],
+    convert: impl Fn(&str, &D) -> Result<String, DefaultRefusal>,
 ) -> Vec<(String, Parameter)> {
     let mut parameters: Vec<(String, Parameter)> = Vec::new();
     for input in inputs {
@@ -695,7 +438,7 @@ pub fn read_parameters(
         let read = match (&input.default, data_type) {
             (None, _) => Err(Unread::NoDefault),
             (Some(_), None) => Err(Unread::NoType),
-            (Some(default), Some(data_type)) => match default_text(&data_type, default) {
+            (Some(default), Some(data_type)) => match convert(&data_type, default) {
                 Ok(text) => {
                     let sql_type = data_type
                         .split(spacing)

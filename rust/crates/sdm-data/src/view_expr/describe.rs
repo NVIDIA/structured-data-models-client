@@ -47,14 +47,14 @@ fn sections(rows: &[Vec<Option<String>>]) -> Vec<(String, Vec<(String, String)>)
         let name = row
             .first()
             .and_then(Option::as_deref)
-            .map_or(String::new(), |cell| cell.trim().to_owned());
+            .map_or(String::new(), |cell| super::stripped(cell).to_owned());
         let value = row
             .get(1)
             .and_then(Option::as_deref)
             .unwrap_or("")
             .to_owned();
-        if name.starts_with('#') && value.trim().is_empty() {
-            let header = name.trim_start_matches('#').trim().to_lowercase();
+        if name.starts_with('#') && super::stripped(&value).is_empty() {
+            let header = super::stripped(name.trim_start_matches('#')).to_lowercase();
             // Spark heads the rows of some sections with `# col_name`.
             if header != "col_name" {
                 current = Some(match sections.iter().position(|(h, _)| *h == header) {

@@ -17,14 +17,16 @@
 //! `scripts/rust_core/emulation-allowlist.txt`: [`pyint`], Python's limit of
 //! 4,300 digits on reading an integer, and [`float_repr`], the text Python
 //! gives a float (Phase 1 decisions, A4), and [`escapes`], how the reference
-//! reads a string literal's escapes (E9). Message text is not promised, so
-//! nothing else copies Python's printing.
+//! reads a string literal's escapes (E9), and from T3.5 [`conversions`], the
+//! conversions a view's parameter default goes through. Message text is not
+//! promised, so nothing else copies Python's printing.
 
 #![forbid(unsafe_code)]
 
 mod api;
 pub mod ast;
 pub mod codes;
+pub mod conversions;
 pub mod dates;
 pub mod dor;
 pub mod escapes;

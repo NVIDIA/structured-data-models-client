@@ -26,13 +26,14 @@ use super::yaml::{self, NodeId, Value};
 /// The alias the source table goes by in a metric view.
 pub const SOURCE_ALIAS: &str = "source";
 
-/// Reads a metric view's definition (`DB/metric_view.py:773-1082`).
-pub fn parse(definition: &str) -> Result<ViewSpec, ViewRefusal> {
+/// Reads a metric view's definition (`DB/metric_view.py:773-1082`), its
+/// YAML by `rules`.
+pub fn parse(definition: &str, rules: &yaml::Rules) -> Result<ViewSpec, ViewRefusal> {
     let refusal = |reason| ViewRefusal {
         kind: ViewKind::Metric,
         reason,
     };
-    let document = yaml::load(definition).map_err(|e| refusal(RefusalReason::Yaml(e)))?;
+    let document = yaml::load(definition, rules).map_err(|e| refusal(RefusalReason::Yaml(e)))?;
     let root = document.root();
     if !matches!(document.value(root), Value::Map(_)) {
         return Err(refusal(RefusalReason::NotAMapping));
@@ -164,9 +165,10 @@ fn add_joins(
         }
         let cardinality = match spec.document.get(cfg, "cardinality") {
             None => Cardinality::ManyToOne,
-            Some(node) => match spec.text(node) {
-                Some("many_to_one") => Cardinality::ManyToOne,
-                Some("one_to_many") => Cardinality::OneToMany,
+            Some(node) => match spec.value(node) {
+                Value::Str(text) if text == "many_to_one" => Cardinality::ManyToOne,
+                Value::Str(text) if text == "one_to_many" => Cardinality::OneToMany,
+                Value::Seq(_) | Value::Map(_) => Cardinality::Unhashable,
                 _ => Cardinality::Unsupported(node),
             },
         };
