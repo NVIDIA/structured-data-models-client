@@ -496,14 +496,15 @@ def test_a_semantic_view_is_created_and_dropped_under_the_case_s_name() -> None:
     )
     (call,) = [s for s in warehouse.ran if s.startswith('CALL')]
     assert 'name: view_semantic_binary' in call and 'shop_semantics' not in call
-    # The YAML names its columns unquoted, which Snowflake reads in upper
-    # case: the case's columns are created so, and the YAML names its base
-    # tables quoted, as created (reviews r2 and r3).
+    # The YAML names its tables and columns unquoted, as a user writes it,
+    # which Snowflake reads in upper case: the case's tables and columns are
+    # created so, and the base tables are left unquoted, since the old
+    # client quotes a quoted name a second time ("""users""").
     assert (
-        'CREATE TABLE "DB_V"."SCH_V"."users" ("I" NUMBER(38,0))'
+        'CREATE TABLE "DB_V"."SCH_V"."USERS" ("I" NUMBER(38,0))'
         in warehouse.ran
     )
-    assert """table: '"users"'""" in call
+    assert 'table: users' in call and '"users"' not in call
     nxt = _Warehouse(warehouse.held)
     databases.load(
         _duck('CREATE TABLE users (i INTEGER)'),
@@ -512,7 +513,7 @@ def test_a_semantic_view_is_created_and_dropped_under_the_case_s_name() -> None:
     )
     assert nxt.ran[:2] == [
         'DROP SEMANTIC VIEW IF EXISTS "DB_V"."SCH_V".view_semantic_binary',
-        'DROP TABLE IF EXISTS "DB_V"."SCH_V"."users"',
+        'DROP TABLE IF EXISTS "DB_V"."SCH_V"."USERS"',
     ]
     # A case with no semantic view keeps its names as written.
     assert 'CREATE TABLE "DB_V"."SCH_V"."users" ("i" NUMBER(38,0))' in nxt.ran

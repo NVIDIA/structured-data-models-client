@@ -31,7 +31,7 @@ import hashlib
 import json
 import math
 import re
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import closing
 from decimal import Decimal
 from pathlib import Path
@@ -1376,12 +1376,12 @@ def _sql_text(text: str | None) -> str:
 def _qualified(
     engine: str, namespace: tuple[str, ...], table: str, fold: bool = False
 ) -> str:
-    r"""``table`` in ``namespace``, quoted as ``engine`` reads names; a
-    table keeps its name as written whether its columns are folded or
-    not."""
-    del fold
+    r"""``table`` in ``namespace``, quoted as ``engine`` reads names; with
+    ``fold``, the table named as Snowflake stores an unquoted name, in
+    upper case, as its columns are."""
     quoting = backtick if engine == 'databricks' else quote
-    return '.'.join(quoting(part) for part in (*namespace, table))
+    stored_as = table.upper() if fold else table
+    return '.'.join(quoting(part) for part in (*namespace, stored_as))
 
 
 def _warehouse_constraints(
@@ -1479,10 +1479,10 @@ def warehouse_statements(
     each table dropped first, every value as :func:`stored` sends it, and
     a note for each constraint the engine does not store. A value the
     engine cannot hold is refused by name (:class:`Unloadable`). With
-    ``fold``, every column is named as Snowflake stores an unquoted name,
-    in upper case, so a semantic view's YAML, which names columns unquoted
-    in its expressions, reads them; the tables keep their names, which the
-    view's YAML names quoted (:meth:`CaseSchema.create_view`)."""
+    ``fold``, every table and column is named as Snowflake stores an
+    unquoted name, in upper case, so a semantic view's YAML, which names
+    them unquoted as a user writes it, reads them
+    (:meth:`CaseSchema.create_view`)."""
     if engine not in WAREHOUSE_ENGINES:
         raise ValueError(f'no warehouse engine {engine!r}')
     if len(namespace) != 2 or not all(namespace):
@@ -1668,6 +1668,8 @@ class CaseSchema:
         self.tables: list[str] = []
         self.types: list[str] = []
         self.views: list[tuple[str, str]] = []
+        # Whether the tables loaded are named as unquoted names are stored.
+        self.folded = False
         # What the schema holds now, as :func:`holding` digests it, and the
         # notes its load gave; ``None`` once anything else may be there.
         self.loaded: tuple[str, bool] | None = None
@@ -1707,7 +1709,9 @@ class CaseSchema:
             else:
                 self._run(
                     'DROP TABLE IF EXISTS '
-                    + _qualified(self.database, self.namespace, table)
+                    + _qualified(
+                        self.database, self.namespace, table, self.folded
+                    )
                 )
         for composite in reversed(self.types):
             self._run(f'DROP TYPE IF EXISTS {composite}')
@@ -1743,18 +1747,9 @@ class CaseSchema:
                     f'{name}: a semantic view YAML that is no mapping'
                 )
             document['name'] = name
-            # Each base table the case loaded named as it was created,
-            # quoted, so Snowflake reads it in its own case rather than
-            # upper-cased (its columns are created upper-cased, as the
-            # YAML's unquoted expressions read them).
-            loaded = {table.lower(): table for table in self.tables}
-            for entry in document.get('tables') or []:
-                base = (
-                    entry.get('base_table') if isinstance(entry, dict) else None
-                )
-                key = str((base or {}).get('table', '')).lower()
-                if isinstance(base, dict) and key in loaded:
-                    base['table'] = '"' + loaded[key].replace('"', '""') + '"'
+            # Each base table stays as the case's YAML names it, unquoted,
+            # as a user writes it: Snowflake reads it in upper case, as the
+            # case's tables are created (:func:`warehouse_statements`).
             text = pyyaml.safe_dump(
                 document, sort_keys=False, allow_unicode=True
             )
@@ -1784,6 +1779,7 @@ class CaseSchema:
             return list(self.notes)
         self.clear()
         self.tables = _tables(duck)
+        self.folded = fold
         if self.database == 'lakebase':
             self.types = _load_postgres(
                 duck, self.target, self.namespace[0], replace=True
@@ -1816,6 +1812,18 @@ def _spark_runner(session: Any) -> Callable[[str], Any]:
     return run
 
 
+def folds(leg: str, view: Mapping[str, Any] | None) -> bool:
+    r"""Whether ``leg`` stores a case's tables and columns as Snowflake
+    stores unquoted names, in upper case: for a semantic view created from
+    the case's YAML, which names them unquoted, as a user writes it."""
+    return bool(
+        leg == 'snowflake'
+        and view
+        and view.get('yaml')
+        and view.get('kind') == 'semantic_view'
+    )
+
+
 def load_leg(duck: Any, leg: str, target: Any) -> list[str]:
     r"""The case's tables in ``leg``'s test schema, alone, through
     ``target`` (``run_python.py``'s ``WarehouseTarget``: ``connection``,
@@ -1844,16 +1852,7 @@ def load_leg(duck: Any, leg: str, target: Any) -> list[str]:
         schema = _SCHEMAS[key] = CaseSchema(database, writer, namespace)
     schema.target = writer
     view = target.view
-    # A Snowflake semantic view's YAML names its columns unquoted, which
-    # Snowflake reads in upper case: the case's columns are created so, and
-    # the view's YAML names its tables quoted, as created.
-    fold = bool(
-        leg == 'snowflake'
-        and view
-        and view.get('yaml')
-        and view.get('kind') == 'semantic_view'
-    )
-    notes = schema.load(duck, fold)
+    notes = schema.load(duck, folds(leg, view))
     if view and view.get('yaml'):
         schema.create_view(view['kind'], view['name'], view['yaml'])
     # The old client reads every table of the schema when a case names
