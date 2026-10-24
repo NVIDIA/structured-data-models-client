@@ -35,7 +35,11 @@ design "Contract corpus"). The rules, each problem printed naming its rule:
 6. a contradicted cell claim fails (T1.32g; design, "Coverage generator"):
    each cell a case claims, acceptance or diagnostic alike, must be held by
    a column of the case's source in the case's ``python-ref`` observation
-   (``contract/reference/*.jsonl``), at a stage the case reached. A claim
+   (``contract/reference/*.jsonl``), or, for a case with none there (a
+   warehouse-only case), in the old client's reference line of any of its
+   warehouse captures (``contract/captures/**/<leg>/<case>/capture.json``,
+   the sample read by the relation's last name part, case-folded), at a
+   stage the case reached. A claim
    ``<type>/<role>`` holds when some column the reference read is admitted
    as ``<type>`` (:func:`cell_type`: the Arrow type the driver returned, in
    the reference's sample of the table at ``from_source``, through the
@@ -89,6 +93,11 @@ SCHEMA = f'{PHASE_0}/scope.schema.json'
 CASES = 'contract/cases'
 #: The reference observations rule 6 holds the cells' claims to (T1.13).
 REFERENCE = 'contract/reference'
+#: The warehouse legs' captures (Phase 3, design choice 2): each holds the
+#: old client's reference line of its case on its leg (``<case>@<leg>``),
+#: which rule 6 reads for a case with no line in :data:`REFERENCE`.
+CAPTURES = 'contract/captures'
+CAPTURE_FORMAT = 'sdm-capture/1'
 #: Where every phase's ``decisions.md`` is (T2.0).
 DECISIONS_DIR = 'docs/design/rust-core'
 SLICES = ('S0', 'S1', 'S2', 'S3')
@@ -310,6 +319,48 @@ def read_reference(tree: Any, report: Report) -> dict[str, Any] | None:
                 continue
             found[observation['case']] = observation
     return None if unread else found
+
+
+def read_captures(
+    tree: Any, report: Report, wanted: set[str]
+) -> dict[str, list[dict[str, Any]]]:
+    r"""The reference lines of the warehouse captures of the cases in
+    ``wanted``, by case, one per leg (``<leg>/<case>/capture.json`` under
+    :data:`CAPTURES`, of :data:`CAPTURE_FORMAT`, its line keyed
+    ``<case>@<leg>``); a capture it cannot read, or whose line is not its
+    case's on its leg, reported. A sample the old client read as rows (a
+    Postgres leg) shows no Arrow type, so it shows no cell: the Arrow the
+    recorder built of those rows is not the driver's."""
+    found: dict[str, list[dict[str, Any]]] = {}
+    try:
+        names = [
+            name
+            for name in tree.files(CAPTURES)
+            if name.endswith('/capture.json') and name.split('/')[-2] in wanted
+        ]
+    except _module('ratchet').Unreadable as error:
+        report.fail('read', str(error))
+        return found
+    for name in names:
+        case_id, leg = name.split('/')[-2], name.split('/')[-3]
+        try:
+            capture = _json(_text(tree, name), name)
+        except Unreadable as error:
+            report.fail('read', str(error))
+            continue
+        line = capture.get('reference') if isinstance(capture, dict) else None
+        if not (
+            isinstance(capture, dict)
+            and capture.get('format') == CAPTURE_FORMAT
+            and capture.get('case') == case_id
+            and capture.get('leg') == leg
+            and isinstance(line, dict)
+            and line.get('case') == f'{case_id}@{leg}'
+        ):
+            report.fail('read', f'{name}: not a capture of {case_id} on {leg}')
+            continue
+        found.setdefault(case_id, []).append(line)
+    return found
 
 
 # --- the rules -----------------------------------------------------------------
@@ -754,6 +805,17 @@ _UNIT = re.compile(
 #: The reference's sample of a table at ``from_source``, and its read of the
 #: table's declared constraints (contract/reference's statements).
 _SAMPLE = re.compile(r'SELECT .+ FROM "((?:[^"]|"")+)" LIMIT [0-9]+', re.S)
+#: A warehouse's sample of a table at ``from_source``: its relation, a
+#: quoted name of one to three parts (``"db"."s"."t"``, `` `c`.`s`.`t` ``),
+#: or the view's filtered relation over it (``(SELECT ... FROM <relation>
+#: AS source ...)``).
+_PART = r'(?:"(?:[^"]|"")+"|`(?:[^`]|``)+`)'
+_RELATION = rf'{_PART}(?:\.{_PART}){{0,2}}'
+_WAREHOUSE_SAMPLE = re.compile(
+    rf'SELECT .+? FROM (?:({_RELATION})|\(SELECT .+ FROM ({_RELATION}) '
+    r'AS source\b.*\)) LIMIT [0-9]+',
+    re.S,
+)
 _CONSTRAINTS = re.compile(
     r"FROM duckdb_constraints\(\)\s+WHERE table_name = '((?:[^']|'')+)'"
 )
@@ -868,14 +930,23 @@ def received(line: dict[str, Any]) -> dict[tuple[str, str], set[str]]:
     table and name, with the cell types the core admits it as: the Arrow
     schema of the driver's answer to the reference's sample of the table."""
     found: dict[tuple[str, str], set[str]] = {}
+    warehouse = _is_capture(line)
+    as_rows = False
     for statement in _statements(line):
-        sample = _SAMPLE.fullmatch(statement['sql'].strip())
-        if sample is None:
-            continue
-        table = sample.group(1).replace('""', '"')
+        if warehouse:
+            sample = _WAREHOUSE_SAMPLE.fullmatch(statement['sql'].strip())
+            if sample is None:
+                continue
+            table = _relation_key(sample.group(1) or sample.group(2))
+        else:
+            sample = _SAMPLE.fullmatch(statement['sql'].strip())
+            if sample is None:
+                continue
+            table = sample.group(1).replace('""', '"')
         for result in statement['results']:
             schema = result.get('schema') if isinstance(result, dict) else None
             if not isinstance(schema, list):
+                as_rows = True
                 continue
             for field in schema:
                 if not (
@@ -888,9 +959,49 @@ def received(line: dict[str, Any]) -> dict[tuple[str, str], set[str]]:
                 found.setdefault((table, field['name']), set()).update(
                     [cell] if cell is not None else []
                 )
+    if not found and warehouse and as_rows:
+        # A Postgres leg's driver reads rows: no Arrow type to hold a
+        # claim to.
+        raise Unevidenced('a sample read as rows, with no Arrow type')
     if not found:
         raise Unevidenced('no sample of a table at from_source')
     return found
+
+
+def _is_capture(line: dict[str, Any]) -> bool:
+    r"""Whether ``line`` is a warehouse capture's reference line, keyed
+    ``<case>@<leg>``; a DuckDB reference line is keyed by its case."""
+    return '@' in str(line.get('case'))
+
+
+def _relation_key(relation: str) -> str:
+    r"""A warehouse relation by its table: the last part of its name,
+    unquoted and case-folded (Snowflake folds an unquoted name, and a view
+    names its tables as the warehouse gives them back)."""
+    last = relation
+    for part in re.finditer(_PART, relation):
+        last = part.group(0)
+    quote = last[:1]
+    if quote in ('"', '`') and last.endswith(quote):
+        last = last[1:-1].replace(quote * 2, quote)
+    return last.rpartition('.')[2].casefold()
+
+
+def _as_named(
+    types: dict[tuple[str, str], set[str]], names: list[str]
+) -> dict[tuple[str, str], set[str]]:
+    r"""A capture's sampled columns keyed by the source name the case or
+    the described schema gives each table (``names``), matched by
+    :func:`_relation_key`; a table two names would match stays unmatched."""
+    by_key: dict[str, list[str]] = {}
+    for name in names:
+        by_key.setdefault(_relation_key(name), []).append(name)
+    out: dict[tuple[str, str], set[str]] = {}
+    for (table, column), cells in types.items():
+        found = by_key.get(table, [])
+        source = found[0] if len(set(found)) == 1 else table
+        out.setdefault((source, column), set()).update(cells)
+    return out
 
 
 def _undeclared(line: dict[str, Any]) -> set[str]:
@@ -1034,6 +1145,18 @@ def observed(case: dict[str, Any], line: dict[str, Any]) -> set[str]:
     free = _undeclared(line)
     public = line.get('public')
     schema = public.get('schema') if isinstance(public, dict) else None
+    if _is_capture(line):
+        tables = schema.get('tables') if isinstance(schema, dict) else None
+        names = (
+            [str(v) for v in named.values()]
+            if named is not None
+            else [
+                str(table.get('name'))
+                for table in tables or []
+                if isinstance(table, dict)
+            ]
+        )
+        types = _as_named(types, names)
     roles: dict[tuple[str, str], set[str]] = {}
     held: set[tuple[str, str]] = set()
     if schema is not None:
@@ -1114,28 +1237,38 @@ def rule_6(
     corpus: dict[str, dict[str, Any]],
     reference: dict[str, Any],
     report: Report,
+    captured: dict[str, list[dict[str, Any]]] | None = None,
 ) -> None:
     r"""Each case's cell claims, acceptance and diagnostic alike, held to
-    its reference observation; a claim with none to hold it to fails."""
+    its reference observation: its DuckDB line, else (a warehouse-only
+    case) the reference lines of its warehouse captures, a claim held when
+    any leg's line shows it; a claim with none to hold it to fails."""
     for case_id, case in sorted(corpus.items()):
         claims = case['cells']
         if not claims:
             continue
         line = reference.get(case_id)
-        if line is None:
+        lines = [line] if line is not None else (captured or {}).get(case_id)
+        if not lines:
             report.fail(
                 'rule 6',
                 f'case {case_id}: claims {", ".join(claims)} with no '
                 'reference observation of the case to hold them to',
             )
             continue
-        try:
-            shown = observed(case, line)
-        except Unevidenced as error:
+        shown = set()
+        errors = []
+        for each in lines:
+            try:
+                shown |= observed(case, each)
+            except Unevidenced as error:
+                errors.append(str(error))
+        if len(errors) == len(lines):
             report.fail(
                 'rule 6',
                 f'case {case_id}: claims {", ".join(claims)}, and its '
-                f'reference observation shows none of them: {error}',
+                'reference observation shows none of them: '
+                + '; '.join(sorted(set(errors))),
             )
             continue
         for claim in claims:
@@ -1232,7 +1365,13 @@ def check(
     corpus = read_cases(candidate, report)
     reference = read_reference(candidate, report)
     if corpus is not None and reference is not None:
-        rule_6(corpus, reference, report)
+        wanted = {
+            case_id
+            for case_id, case in corpus.items()
+            if case['cells'] and case_id not in reference
+        }
+        captured = read_captures(candidate, report, wanted)
+        rule_6(corpus, reference, report, captured)
     if corpus is not None and len(manifests) == len(MANIFESTS):
         rule_4(manifests, corpus, report, candidate)
         for gate in gates:
