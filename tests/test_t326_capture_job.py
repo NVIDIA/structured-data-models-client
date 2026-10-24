@@ -577,3 +577,32 @@ def test_one_dirty_excuse_reaches_the_recording_and_its_checker(
     )
     assert imported == list('abcde')
     assert os.environ['SDM_RECORD_EXCUSE'] == expected
+
+
+def test_heldout_spark_requires_the_existing_global_stamp_before_reading_cases(
+    tmp_path, monkeypatch
+):
+    class NotRead:
+        def __fspath__(self):
+            raise AssertionError('sealed cases were exposed')
+
+    with pytest.raises(SystemExit, match='started marker'):
+        capture_run.heldout_spark(
+            'python-core',
+            NotRead(),
+            tmp_path / 'out',
+            payload=tmp_path / 'job.json',
+            volume='/Volumes/test/run',
+            commit='a' * 40,
+            reference_commit='b' * 40,
+            stamp=tmp_path / 'not-started',
+        )
+
+
+def test_heldout_job_parameters_preserve_existing_capture_defaults():
+    text = (LIVE / 'capture_job.py').read_text()
+    assert "'mode'" in text and "'case_dir'" in text
+    assert 'if mode:' in text
+    assert 'capture_run.run(' in text
+    assert 'runner.main(' in text
+    assert "'--guard-live'" in text
