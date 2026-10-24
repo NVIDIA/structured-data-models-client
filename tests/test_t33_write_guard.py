@@ -1353,6 +1353,14 @@ def test_snowpark_close_admits_its_cancel_only_on_its_own_connection(
     session._conn = types.SimpleNamespace(_conn=capture)
     session.close()
     assert seen == [statement, statement]
+    # The connector runs a cursor's statement through its connection's
+    # cmd_query, which the guard checks too: the same connection passes.
+    session = d['Session']()
+    session.cancel_all = (  # type: ignore[method-assign]
+        lambda: session.connection.cmd_query(statement, 1, None)
+    )
+    session.close()
+    assert seen == [statement] * 3
 
 
 def test_a_plain_view_is_admitted_only_in_the_loaders_setup_in_the_test_schema() -> (
