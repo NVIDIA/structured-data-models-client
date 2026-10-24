@@ -1023,27 +1023,71 @@ pub fn float_text(x: f64) -> String {
     parser::float_repr::float_repr(x)
 }
 
+/// A view definition's value too large to quote: its text would pass
+/// [`sdm_pql::conversions::LONGEST_TEXT`], or its nesting, through the
+/// aliases of collections inside themselves, the depth a quote follows.
+/// Python wrote such a text or ran out of memory; it is refused by name
+/// (register P3J-10).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TooLarge;
+
+/// How deep a quote follows a value: twice the nesting a definition may
+/// have, for the collections met again inside themselves.
+const QUOTE_DEPTH: usize = 2 * sdm_schema::view::yaml::MAX_DEPTH;
+
+/// What a quote may still spend, in characters, and the nodes it is
+/// inside.
+struct Quote {
+    budget: usize,
+    open: Vec<sdm_schema::view::yaml::NodeId>,
+    on_path: BTreeSet<sdm_schema::view::yaml::NodeId>,
+}
+
+impl Quote {
+    fn new() -> Quote {
+        Quote {
+            budget: parser::conversions::LONGEST_TEXT,
+            open: Vec::new(),
+            on_path: BTreeSet::new(),
+        }
+    }
+
+    fn spend(&mut self, cost: usize) -> Result<(), TooLarge> {
+        self.budget = self.budget.checked_sub(cost).ok_or(TooLarge)?;
+        Ok(())
+    }
+}
+
 /// A node of a view definition, as the parser's text helpers take it: a
 /// collection met again inside itself is Python's `[...]` or `{...}`.
 fn shown(
     document: &sdm_schema::view::yaml::Document,
     node: sdm_schema::view::yaml::NodeId,
-    open: &mut Vec<sdm_schema::view::yaml::NodeId>,
-) -> parser::float_repr::Shown {
+    quote: &mut Quote,
+) -> Result<parser::float_repr::Shown, TooLarge> {
     use parser::float_repr::Shown;
     use sdm_schema::view::yaml::Value;
     let value = document.value(node);
-    if open.contains(&node) {
-        return Shown::Recursive(!matches!(value, Value::Map(_)));
+    if quote.on_path.contains(&node) {
+        quote.spend(5)?;
+        return Ok(Shown::Recursive(!matches!(value, Value::Map(_))));
     }
-    open.push(node);
+    if quote.open.len() >= QUOTE_DEPTH {
+        return Err(TooLarge);
+    }
+    quote.spend(match value {
+        Value::Str(text) => text.len() + 2,
+        Value::Int(n) => n.text().len(),
+        _ => 8,
+    })?;
+    quote.open.push(node);
+    quote.on_path.insert(node);
     let shown = match value {
         Value::Null => Shown::None,
         Value::Bool(flag) => Shown::Bool(*flag),
         Value::Int(n) => Shown::Int(n.text().to_owned()),
         Value::Float(x) => Shown::Float(*x),
         Value::Str(text) => Shown::Text(text.clone()),
-        Value::Bytes(bytes) => Shown::Bytes(bytes.clone()),
         Value::Date(date) => Shown::Date {
             year: date.year,
             month: date.month,
@@ -1059,27 +1103,22 @@ fn shown(
             microsecond: moment.microsecond,
             offset: moment.offset,
         },
-        Value::Seq(items) => Shown::List(items.iter().map(|n| shown(document, *n, open)).collect()),
+        Value::Seq(items) => Shown::List(
+            items
+                .iter()
+                .map(|n| shown(document, *n, quote))
+                .collect::<Result<_, _>>()?,
+        ),
         Value::Map(pairs) => Shown::Dict(
             pairs
                 .iter()
-                .map(|(k, v)| (shown(document, *k, open), shown(document, *v, open)))
-                .collect(),
-        ),
-        Value::Set(members) => {
-            Shown::Set(members.iter().map(|n| shown(document, *n, open)).collect())
-        }
-        Value::Pairs(pairs) => Shown::List(
-            pairs
-                .iter()
-                .map(|(k, v)| {
-                    Shown::Tuple(vec![shown(document, *k, open), shown(document, *v, open)])
-                })
-                .collect(),
+                .map(|(k, v)| Ok((shown(document, *k, quote)?, shown(document, *v, quote)?)))
+                .collect::<Result<_, _>>()?,
         ),
     };
-    open.pop();
-    shown
+    quote.open.pop();
+    quote.on_path.remove(&node);
+    Ok(shown)
 }
 
 /// The text the old client's messages quote a view definition's value by,
@@ -1088,8 +1127,8 @@ fn shown(
 pub(crate) fn value_repr(
     document: &sdm_schema::view::yaml::Document,
     node: sdm_schema::view::yaml::NodeId,
-) -> String {
-    shown(document, node, &mut Vec::new()).repr()
+) -> Result<String, TooLarge> {
+    Ok(shown(document, node, &mut Quote::new())?.repr())
 }
 
 /// Python's `str` of a view definition's value, as the old client wrote
@@ -1097,14 +1136,32 @@ pub(crate) fn value_repr(
 pub(crate) fn value_text(
     document: &sdm_schema::view::yaml::Document,
     node: sdm_schema::view::yaml::NodeId,
-) -> String {
-    shown(document, node, &mut Vec::new()).text()
+) -> Result<String, TooLarge> {
+    Ok(shown(document, node, &mut Quote::new())?.text())
 }
 
 /// Python's `repr` of a text, as the old client quotes a piece of an
 /// expression or a name (T3.5).
 pub(crate) fn text_repr(text: &str) -> String {
     parser::float_repr::text_repr(text)
+}
+
+/// How a view definition's YAML is read: Python's limit on an integer's
+/// digits, from the parser (T3.5).
+pub fn yaml_rules() -> sdm_schema::view::yaml::Rules {
+    sdm_schema::view::yaml::Rules {
+        most_digits: parser::conversions::MAX_STR_DIGITS,
+    }
+}
+
+/// The conversions of a parameter's default, as the old client's Python
+/// made them ([`sdm_pql::conversions`]): `text.strip()`, `str(int(text))`,
+/// `format(Decimal(text), 'f')`, and the ISO readers and writers.
+pub(crate) mod conversions {
+    pub(crate) use sdm_pql::conversions::{
+        Unconverted, date_text, datetime_text, decimal_text, int_text, not_an_integer_text, strip,
+        too_many_digits_text,
+    };
 }
 
 #[cfg(test)]

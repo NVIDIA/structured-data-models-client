@@ -11,13 +11,13 @@
 //!
 //! Each function gives the sentence's text; T3.27 turns each into a
 //! `Sentence` of the contract, its template and fields, which every host
-//! words alike.
+//! words alike. A sentence that quotes a value too large to quote is
+//! refused by name ([`TooLarge`]).
 
 use sdm_contract::ops::Dtype;
 use sdm_data::view_expr::ExprRefusal;
 use sdm_data::view_expr::metric::{
-    DefaultKind, DefaultRefusal, FilterRefusal, MeasureReason, MeasureRefusal, Parameter,
-    ParameterDefault, ParameterInput, Unread,
+    DefaultRefusal, FilterRefusal, MeasureReason, MeasureRefusal, Parameter, Unread,
 };
 use sdm_schema::view::joins::{JoinMessage, SkipReason};
 use sdm_schema::view::model::{
@@ -25,19 +25,21 @@ use sdm_schema::view::model::{
     RelationshipRefusal, TimeColumnNote,
 };
 use sdm_schema::view::spec::{Ignored, ViewSpec};
-use sdm_schema::view::yaml::{Document, NodeId, Value};
+use sdm_schema::view::yaml::{Document, NodeId};
 
+pub use crate::pql::TooLarge;
+use crate::pql::conversions::{not_an_integer_text, too_many_digits_text};
 use crate::pql::{text_repr, value_repr as repr, value_text as text};
 use crate::view_steps::JoinJudgement;
 
 /// The text the old client's messages quote a view definition's value by:
 /// Python's `repr` of it.
-pub fn value_repr(document: &Document, node: NodeId) -> String {
+pub fn value_repr(document: &Document, node: NodeId) -> Result<String, TooLarge> {
     repr(document, node)
 }
 
 /// Python's `str` of a view definition's value.
-pub fn value_text(document: &Document, node: NodeId) -> String {
+pub fn value_text(document: &Document, node: NodeId) -> Result<String, TooLarge> {
     text(document, node)
 }
 
@@ -53,42 +55,6 @@ pub fn expr_reason(reason: &ExprRefusal) -> String {
     reason.words(&quote)
 }
 
-/// A parameter's default as the data layer reads it: its kind, and
-/// Python's `str` of it.
-pub fn parameter_default(document: &Document, node: NodeId) -> ParameterDefault {
-    let kind = match document.value(node) {
-        Value::Bool(flag) => DefaultKind::Bool(*flag),
-        Value::Int(_) => DefaultKind::Int,
-        Value::Date(_) => DefaultKind::Date,
-        Value::Timestamp(moment) => DefaultKind::DateTime {
-            iso: moment.isoformat(),
-        },
-        _ => DefaultKind::Other,
-    };
-    ParameterDefault {
-        kind,
-        text: text(document, node),
-    }
-}
-
-/// Each parameter of the view as the data layer reads it: its type if the
-/// definition writes it as text, its default unless null.
-pub fn parameter_inputs(spec: &ViewSpec) -> Vec<ParameterInput> {
-    spec.parameters
-        .iter()
-        .map(|parameter| ParameterInput {
-            name: parameter.name.clone(),
-            data_type: parameter
-                .data_type
-                .and_then(|n| spec.text(n))
-                .map(str::to_owned),
-            default: parameter
-                .default
-                .map(|n| parameter_default(&spec.document, n)),
-        })
-        .collect()
-}
-
 /// Why a default gives no literal of `data_type` (`_default_text`'s
 /// refusals).
 pub fn default_refusal_text(
@@ -96,16 +62,22 @@ pub fn default_refusal_text(
     data_type: &str,
     document: &Document,
     default: NodeId,
-) -> String {
-    match refusal {
+) -> Result<String, TooLarge> {
+    Ok(match refusal {
         DefaultRefusal::NoLiteral => format!("its type '{data_type}' has no literal here"),
         DefaultRefusal::NotOfType => {
             format!(
                 "its default {} is not of type {data_type}",
-                repr(document, default)
+                repr(document, default)?
             )
         }
-    }
+        // Python's own words, which the old client passed on.
+        DefaultRefusal::TooManyDigits(digits) => too_many_digits_text(*digits),
+        DefaultRefusal::NotAnInteger => not_an_integer_text(&text(document, default)?),
+        DefaultRefusal::TooLong => {
+            format!("its default is too long to write as a literal of type {data_type}")
+        }
+    })
 }
 
 /// A parameter's text: its default's, or why it has no literal
@@ -115,15 +87,15 @@ pub fn parameter_text(
     parameter: &Parameter,
     document: &Document,
     default: Option<NodeId>,
-) -> String {
-    match (&parameter.read, default) {
+) -> Result<String, TooLarge> {
+    Ok(match (&parameter.read, default) {
         (Ok(read), _) => read.text.clone(),
         (Err(Unread::Refused { refusal, data_type }), Some(default)) => {
-            default_refusal_text(refusal, data_type, document, default)
+            default_refusal_text(refusal, data_type, document, default)?
         }
         (Err(Unread::NoType), _) => "has no type".into(),
         (Err(_), _) => "has no default".into(),
-    }
+    })
 }
 
 /// The note of a parameter read as its default (`ParameterNote`).
@@ -151,7 +123,7 @@ pub fn filter_message(
     filter: NodeId,
     reason: &str,
     hatch: FilterHatch,
-) -> String {
+) -> Result<String, TooLarge> {
     let hatch = match hatch {
         FilterHatch::None => "",
         FilterHatch::Default => ", or give the parameter a default of its type",
@@ -159,17 +131,21 @@ pub fn filter_message(
             ", or pass trust_expressions=True to apply it if you trust whoever authored the view"
         }
     };
-    format!(
+    Ok(format!(
         "Cannot apply the metric view filter {} since {reason}. The graph would otherwise read \
          rows the view leaves out. Create a regular view with this WHERE clause and point the \
          metric view's source at it{hatch}",
-        repr(document, filter)
-    )
+        repr(document, filter)?
+    ))
 }
 
 /// The refusal of a filter the source table alone cannot apply
 /// (`_check_filter`).
-pub fn filter_refusal_text(document: &Document, filter: NodeId, refusal: &FilterRefusal) -> String {
+pub fn filter_refusal_text(
+    document: &Document,
+    filter: NodeId,
+    refusal: &FilterRefusal,
+) -> Result<String, TooLarge> {
     let reason = match refusal {
         FilterRefusal::NotACondition => "it is not a SQL condition".to_owned(),
         FilterRefusal::Unsafe(reason) => expr_reason(reason),
@@ -483,27 +459,27 @@ pub fn ignored_text(ignored: Ignored) -> String {
 
 /// A source that is no plain table name, which refuses the view
 /// (`DB/metric_view.py:784-791`).
-pub fn unsupported_source_text(spec: &ViewSpec, source: NodeId) -> String {
-    format!(
+pub fn unsupported_source_text(spec: &ViewSpec, source: NodeId) -> Result<String, TooLarge> {
+    Ok(format!(
         "Unsupported metric view source {}. Only plain table names are supported as the source \
          of a metric view when converting it into a graph. Create a regular view with this query \
          and point the metric view's source at it",
-        repr(&spec.document, source)
-    )
+        repr(&spec.document, source)?
+    ))
 }
 
 /// A join entry the conversion cannot read (`:828-839`).
-pub fn join_message_text(spec: &ViewSpec, message: &JoinMessage) -> String {
-    match message {
+pub fn join_message_text(spec: &ViewSpec, message: &JoinMessage) -> Result<String, TooLarge> {
+    Ok(match message {
         JoinMessage::NotAMapping(cfg) => format!(
             "Failed to add join {} since it is not a mapping",
-            repr(&spec.document, *cfg)
+            repr(&spec.document, *cfg)?
         ),
         JoinMessage::Nameless(cfg) => format!(
             "Failed to add join {} since it misses a name",
-            repr(&spec.document, *cfg)
+            repr(&spec.document, *cfg)?
         ),
-    }
+    })
 }
 
 /// Why a join is skipped, as a clause (`:849-889`).
@@ -511,8 +487,8 @@ pub fn skip_reason_text(
     spec: &ViewSpec,
     alias: &str,
     reason: &SkipReason<JoinJudgement>,
-) -> String {
-    match reason {
+) -> Result<String, TooLarge> {
+    Ok(match reason {
         SkipReason::NameInUse => format!("the name '{alias}' is already in use"),
         SkipReason::Judged(JoinJudgement::NotPlainSource) => {
             "only plain table names are supported as join sources. Create a regular view with its \
@@ -522,7 +498,7 @@ pub fn skip_reason_text(
         SkipReason::Cardinality(node) => {
             format!(
                 "of its unsupported cardinality '{}'",
-                text(&spec.document, *node)
+                text(&spec.document, *node)?
             )
         }
         SkipReason::UsingSeveral => {
@@ -531,21 +507,21 @@ pub fn skip_reason_text(
         SkipReason::Judged(JoinJudgement::NotSingleEquality) => {
             "only single-column equality join conditions are supported".into()
         }
-    }
+    })
 }
 
 /// A dimension that is no mapping (`:959-963`).
-pub fn dimension_not_a_mapping(spec: &ViewSpec, cfg: NodeId) -> String {
-    format!(
+pub fn dimension_not_a_mapping(spec: &ViewSpec, cfg: NodeId) -> Result<String, TooLarge> {
+    Ok(format!(
         "Failed to add dimension {} since it is not a mapping",
-        repr(&spec.document, cfg)
-    )
+        repr(&spec.document, cfg)?
+    ))
 }
 
 /// A dimension that misses its name or its expression (`:991-996`).
-pub fn dimension_misses_text(spec: &ViewSpec, cfg: NodeId) -> String {
-    format!(
+pub fn dimension_misses_text(spec: &ViewSpec, cfg: NodeId) -> Result<String, TooLarge> {
+    Ok(format!(
         "Failed to add dimension {} since it misses a name or expression",
-        repr(&spec.document, cfg)
-    )
+        repr(&spec.document, cfg)?
+    ))
 }

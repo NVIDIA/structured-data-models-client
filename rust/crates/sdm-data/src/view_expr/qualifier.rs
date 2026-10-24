@@ -19,9 +19,9 @@ static STRING_LITERAL: LazyLock<Pattern> = LazyLock::new(|| Pattern::new(r"'(?:'
 
 /// The pattern of `table`'s qualifier (`_qualifier_pattern`): the name
 /// double-quoted, doubling a quote in it, or as written, then a dot.
-fn qualifier(table: &str) -> Pattern {
+fn qualifier(table: &str) -> Result<Pattern, Unreadable> {
     let quoted = format!("\"{}\"", table.replace('"', "\"\""));
-    Pattern::new(&format!(
+    Pattern::build(&format!(
         r#"(?i)(?<![A-Za-z0-9_$."])(?:{}|{})\s*\."#,
         fancy_regex::escape(&quoted),
         fancy_regex::escape(table)
@@ -44,13 +44,13 @@ pub fn mask_literals(expr: &str) -> Result<String, Unreadable> {
 
 /// Whether `text` holds `table`'s qualifier.
 pub fn qualifier_found(table: &str, text: &str) -> Result<bool, Unreadable> {
-    qualifier(table).is_match(text)
+    qualifier(table)?.is_match(text)
 }
 
 /// `expr` with `table`'s qualifier taken out wherever it stands outside a
 /// single-quoted literal (`_sub_outside_literals`).
 pub fn strip_qualifier(table: &str, expr: &str) -> Result<String, Unreadable> {
-    let pattern = qualifier(table);
+    let pattern = qualifier(table)?;
     let mut out = String::with_capacity(expr.len());
     let mut last = 0;
     for literal in STRING_LITERAL.find_all(expr)? {

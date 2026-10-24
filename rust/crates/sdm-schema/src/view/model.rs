@@ -324,14 +324,17 @@ impl ViewModel {
                 let target = self.table_or_child(&mut child, table);
                 match target.column(key).map(|c| c.expr.is_some()) {
                     None => {
-                        target.columns.push(source_column(table, key, source)?);
+                        target.columns.push(
+                            source_column(table, key, source).map_err(JoinRefusal::NotLinked)?,
+                        );
                         changes.push(Change::Added {
                             table: table.clone(),
                             key: key.clone(),
                         });
                     }
                     Some(true) => {
-                        let column = source_column(table, key, source)?;
+                        let column =
+                            source_column(table, key, source).map_err(JoinRefusal::NotLinked)?;
                         let before = target.remove(key).unwrap();
                         target.columns.push(column);
                         changes.push(Change::Replaced {
@@ -477,10 +480,7 @@ impl ViewModel {
                 &step.left_key,
                 step.left_key_column.clone(),
             )
-            .map_err(|failure| match failure {
-                JoinRefusal::NotLinked(failure) => RelationshipRefusal::NotLinked(failure),
-                _ => unreachable!(),
-            })?;
+            .map_err(RelationshipRefusal::NotLinked)?;
             left.columns.push(column);
             added = true;
         }
@@ -541,17 +541,15 @@ fn source_column(
     table: &str,
     key: &str,
     column: Option<ModelColumn>,
-) -> Result<ModelColumn, JoinRefusal> {
-    let column = column.ok_or_else(|| {
-        JoinRefusal::NotLinked(LinkFailure::NoSourceColumn {
-            key: key.to_owned(),
-        })
+) -> Result<ModelColumn, LinkFailure> {
+    let column = column.ok_or_else(|| LinkFailure::NoSourceColumn {
+        key: key.to_owned(),
     })?;
     if column.dtype == Dtype::Unsupported {
-        return Err(JoinRefusal::NotLinked(LinkFailure::UnsupportedType {
+        return Err(LinkFailure::UnsupportedType {
             table: table.to_owned(),
             key: key.to_owned(),
-        }));
+        });
     }
     Ok(column)
 }

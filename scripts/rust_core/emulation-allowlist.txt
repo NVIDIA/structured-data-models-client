@@ -24,3 +24,8 @@ rust/crates/sdm-pql/src/float_repr.rs
 # How the reference reads a string literal's escapes, which decides validity
 # (Phase 1 decisions, E9).
 rust/crates/sdm-pql/src/escapes.rs
+# The conversions a view's parameter default goes through, Python 3.12's
+# int(), Decimal formatting and fromisoformat, which decide whether a
+# default is a value of its type (T3.5 fix 2, by the coordinator's direction;
+# its decisions row is the owner's).
+rust/crates/sdm-pql/src/conversions.rs
