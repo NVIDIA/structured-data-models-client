@@ -24,13 +24,13 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use sdm_contract::catalog::{CatalogAnswer, CatalogColumn, CatalogKey, KeyKind};
-use sdm_contract::data::{DataRequest, DescribePart, Relation};
+use sdm_contract::data::{DataRequest, DescribePart, ProviderError, Relation};
 use sdm_contract::ops::{HeldSchema, NamedTable, SourceFacts};
 use sdm_contract::{CoreError, Detail, ErrorCode, Scalar, Sentence};
 use sdm_schema::held::ColumnAt;
 use sdm_schema::infer::PREVIEW_ROWS;
 
-use crate::describe::{another_part, ask, describe, describe_all, table_names};
+use crate::describe::{another_part, ask, attempt, describe, describe_all, table_names};
 use crate::run::{ArrowData, Asker, schema_mismatch};
 use crate::{big_integer, exact_number};
 
@@ -256,6 +256,68 @@ pub(crate) async fn table(
         preview,
         big_types,
     })
+}
+
+/// What the source's catalog declares of one table: its columns, in the
+/// catalog's order. Its keys are read with them, as the old client reads
+/// them, and a semantic model's conversion keys its tables by the view's
+/// joins and keys alone.
+#[derive(Debug, Clone)]
+pub(crate) struct Catalog {
+    pub columns: Vec<CatalogColumn>,
+}
+
+/// One table's catalog alone, as a semantic model's conversion reads a base
+/// table before any of its rows (T3.5, design S5): its columns, then its
+/// keys, asked as [`table`] asks them, never its rows. `Ok(None)` where the
+/// source answers no column, as for a table it does not hold; the
+/// provider's failure, whole, for the caller to read by what it asked
+/// (`DataLayer::failure`). Every later read of the table reads the columns
+/// found ([`Asker::guard`]).
+pub(crate) async fn columns(
+    asker: &Asker,
+    source: &Relation,
+) -> Result<Result<Option<Catalog>, ProviderError>, CoreError> {
+    let asked = |part| DataRequest::Describe {
+        tables: vec![source.clone()],
+        part,
+    };
+    let read = |request: DataRequest, data: ArrowData| asker.read(&request, &data);
+    let (columns, keys) = if asker.capabilities()?.keys_optional {
+        let request = asked(DescribePart::Columns);
+        let columns = match attempt(asker, request.clone()).await? {
+            Ok(data) => read(request, data)?,
+            Err(failed) => return Ok(Err(failed)),
+        };
+        let request = asked(DescribePart::Keys);
+        // A failed read of the keys is read as none.
+        let keys = match attempt(asker, request.clone()).await? {
+            Ok(data) => read(request, data)?,
+            Err(_) => CatalogAnswer::Keys(Vec::new()),
+        };
+        (columns, keys)
+    } else {
+        let requests = [asked(DescribePart::Columns), asked(DescribePart::Keys)];
+        let answers = match crate::describe::attempt_all(asker, requests.to_vec()).await? {
+            Ok(answers) => answers,
+            Err(failed) => return Ok(Err(failed)),
+        };
+        let mut read_all = requests
+            .into_iter()
+            .zip(answers)
+            .map(|(request, data)| read(request, data));
+        let (Some(columns), Some(keys)) = (read_all.next(), read_all.next()) else {
+            return Err(another_part());
+        };
+        (columns?, keys?)
+    };
+    let declared = declared_columns(columns)?;
+    if declared.is_empty() {
+        return Ok(Ok(None));
+    }
+    asker.guard(source, declared.iter().map(|c| c.name.clone()).collect());
+    key_columns(asker, source, declared_keys(keys)?).await?;
+    Ok(Ok(Some(Catalog { columns: declared })))
 }
 
 /// Whether the time column's choice falls back to the preview on

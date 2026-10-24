@@ -83,6 +83,12 @@ pub fn start(
             let check_keys = request.check_keys;
             let zones = Arc::clone(&zones);
             Run::with_data(access, move |asker| async move {
+                // A semantic model is read through its own definition, which
+                // names its base tables: no session read settles them (T3.5).
+                if asker.data().is_some_and(|data| data.view().is_some()) {
+                    let reader = crate::describe::text_reader(&facts)?;
+                    return crate::view::describe_source(asker, source, &reader).await;
+                }
                 let asker = crate::describe::settled(asker).await?;
                 crate::describe::run(asker, source, check_keys, facts, zones).await
             })

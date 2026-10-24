@@ -349,6 +349,21 @@ FROM_SOURCE_DATABRICKS_SPARK_TABLES = _on(
 MATERIALIZE_DATABRICKS_SPARK = _on(MATERIALIZE_DUCKDB, 'databricks-spark')
 PREDICT_DATABRICKS_SPARK = _on(PREDICT_DUCKDB, 'databricks-spark')
 
+#: The same calls over a Databricks metric view (T3.5), a semantic model of
+#: its own kind (``Source.kind``) on either Databricks connection:
+#: ``Schema.from_source`` of the model, with tables named or none, is one
+#: path, and materialize and predict of a schema built from it are routed
+#: as DuckDB's are. The core reads the view afresh at each call (the
+#: owner's plan B). A Snowflake semantic view waits for the Snowflake
+#: dialect and provider (T3.6), so its paths have no core route yet.
+FROM_SOURCE_DATABRICKS_METRIC_VIEW = (
+    'schema.from-source/semantic-model/databricks-metric-view',
+)
+MATERIALIZE_DATABRICKS_METRIC_VIEW = _on(
+    MATERIALIZE_DUCKDB, 'databricks-metric-view'
+)
+PREDICT_DATABRICKS_METRIC_VIEW = _on(PREDICT_DUCKDB, 'databricks-metric-view')
+
 #: The kinds of source the core reads (:func:`kind_of`), and each call's
 #: paths over each: ``Schema.from_source`` with no tables named and with
 #: tables named, ``PredictiveQuery.materialize`` and ``SDMClient.predict``.
@@ -358,6 +373,7 @@ FROM_SOURCE = {
     'postgres': FROM_SOURCE_POSTGRES,
     'databricks-sql': FROM_SOURCE_DATABRICKS_SQL,
     'databricks-spark': FROM_SOURCE_DATABRICKS_SPARK,
+    'databricks-metric-view': FROM_SOURCE_DATABRICKS_METRIC_VIEW,
 }
 FROM_SOURCE_TABLES = {
     'duckdb': FROM_SOURCE_DUCKDB_TABLES,
@@ -365,6 +381,7 @@ FROM_SOURCE_TABLES = {
     'postgres': FROM_SOURCE_POSTGRES_TABLES,
     'databricks-sql': FROM_SOURCE_DATABRICKS_SQL_TABLES,
     'databricks-spark': FROM_SOURCE_DATABRICKS_SPARK_TABLES,
+    'databricks-metric-view': FROM_SOURCE_DATABRICKS_METRIC_VIEW,
 }
 MATERIALIZE = {
     'duckdb': MATERIALIZE_DUCKDB,
@@ -372,6 +389,7 @@ MATERIALIZE = {
     'postgres': MATERIALIZE_POSTGRES,
     'databricks-sql': MATERIALIZE_DATABRICKS_SQL,
     'databricks-spark': MATERIALIZE_DATABRICKS_SPARK,
+    'databricks-metric-view': MATERIALIZE_DATABRICKS_METRIC_VIEW,
 }
 PREDICT = {
     'duckdb': PREDICT_DUCKDB,
@@ -379,6 +397,7 @@ PREDICT = {
     'postgres': PREDICT_POSTGRES,
     'databricks-sql': PREDICT_DATABRICKS_SQL,
     'databricks-spark': PREDICT_DATABRICKS_SPARK,
+    'databricks-metric-view': PREDICT_DATABRICKS_METRIC_VIEW,
 }
 
 #: ``SDMClient.capabilities``: each model described from the core's table
@@ -409,6 +428,9 @@ CORE_ROUTED = frozenset(
     + FROM_SOURCE_DATABRICKS_SPARK_TABLES
     + MATERIALIZE_DATABRICKS_SPARK
     + PREDICT_DATABRICKS_SPARK
+    + FROM_SOURCE_DATABRICKS_METRIC_VIEW
+    + MATERIALIZE_DATABRICKS_METRIC_VIEW
+    + PREDICT_DATABRICKS_METRIC_VIEW
 )
 
 

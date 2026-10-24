@@ -3,7 +3,7 @@
   "about": "Each change to frozen bridge code against the merge base, with one reason: moved (a rule moved into Rust, naming its task), refactor (behaviour kept), gone (an entry that left the freeze) or main (a change main made, merged by this change: the full SHA of the main commit, then its title). Entries the merge base already holds are spent and may be pruned.",
   "changes": {
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::<module>": {
-      "moved": "T3.8: RouteError no longer raised here, and the provider choice from _rust/providers; T3.8 fix 3: the core route reads what it needs of a query from the core's own validation through CoreQuery; T3.16: the schema handed over as plain data (spec.held_schema), the results read typed (results), CoreQuery moved to results"
+      "moved": "T3.8: RouteError no longer raised here, and the provider choice from _rust/providers; T3.8 fix 3: the core route reads what it needs of a query from the core's own validation through CoreQuery; T3.16: the schema handed over as plain data (spec.held_schema), the results read typed (results), CoreQuery moved to results; T3.5: the model's values held while a schema of a semantic model is materialized, for the core's refusals naming it"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_indices": {
       "moved": "T1.32a: the cast to the key's type with pandas (pd.Series(indices, dtype=...)) and its INVALID_REQUEST and INTERNAL_ERROR split are the core's rule table; the bridge hands over the values as pyarrow infers them, or as their text where it infers no one type"
@@ -15,13 +15,13 @@
       "moved": "T1.32a: the bridge's key_type refusal, for a key type it had no cast for, is the core's (sdm_engine::keys::cast refuses a key type no rule casts to)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::gather": {
-      "moved": "T3.16 (fix A): the schema as plain data, each column with its source facts, the core reading the rest (no description or held pair); T3.16 (fix D): the result decoded once into results.Gathered and kept as results.CoreRequest"
+      "moved": "T3.16 (fix A): the schema as plain data, each column with its source facts, the core reading the rest (no description or held pair); T3.16 (fix D): the result decoded once into results.Gathered and kept as results.CoreRequest; T3.5: the model's values held for the core's refusals of a table or column the view no longer gives"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_text": {
       "moved": "T1.36 fix 4 (the final review's P2-2): the host's half of the moved cast: a float in a mix written as the core now writes a float entity (sdm_engine::keys's float_text), the reference's text of it, pyarrow's cast of the float to text at its own width (1e16 is 1e+16), so the core reads back the number the host was given; a boolean as before"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::from_source": {
-      "moved": "T3.17 fix 1: the source with no table is the core's sentence, filled with the source as a host value; the Python sentence is gone"
+      "moved": "T3.17 fix 1: the source with no table is the core's sentence, filled with the source as a host value; the Python sentence is gone; T3.5: a semantic model described on the core, the model's values held for its sentences and its notes said on the schema"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::<module>": {
       "moved": "T3.26: the materialize_again refusal is gone: a request the core did not materialize is handed over as plain data (_held, Predict.held) and the core rebuilds what it predicts from (sdm-core held.rs); RANKING read from decompose to tell a ranking by its decomposition"
@@ -93,7 +93,7 @@
       "gone": "T3.16 (fix A): the schema is handed over as plain data by _rust/spec.py's held_schema; no saved description, no merge (sdm_schema::edit::read_held is gone)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::<module>": {
-      "moved": "T3.17 fix 1: imports the errors module for its host values"
+      "moved": "T3.17 fix 1: imports the errors module for its host values; T3.5: conversion_notes, the host's saying of the core's typed notes of a semantic model"
     },
     "packages/structured-data-models-client/src/sdm_client/client.py::_predicts_on_the_core": {
       "refactor": "T2.2: a request over a SQLite source routes as one over DuckDB (_routing.on_the_core with the backend's predict paths); no rule added"
@@ -231,7 +231,7 @@
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::<module>": {
-      "refactor": "T3.4 fix 8: the semantic_model advice, Python's spelling of reading a metric view as a semantic model (source.semantic_model(name)), for the core's metric_view_as_table sentence; T3.27: the trust_expressions advice, Python's spelling of trusting a semantic model's expressions (trust_expressions=True), for the core's view sentences; T3.27 fix 1: NimRequestError imported, and ENDPOINT_REFUSED in ERRORS; no rule here"
+      "moved": "T3.5: source_values, decoded and _opening, saying a semantic model's sentences"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_Words.convert_field": {
       "moved": "T3.17: the one value formatter gains the conversions the shared templates name (d, p); fix 1: host-held values from the call in progress (holding), the a and I conversions and the to() pairing"
@@ -489,7 +489,7 @@
       "moved": "T3.17: the core's table of sentences, read once from _native.templates()"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::warn_from_core": {
-      "moved": "T3.17: warnings group by the table's data; host values replace the words callback; fix 1: host-held values from the call in progress (holding), the a and I conversions and the to() pairing"
+      "moved": "T3.17: warnings group by the table's data; host values replace the words callback; fix 1: host-held values from the call in progress (holding), the a and I conversions and the to() pairing; T3.5: a group's opening said with the call's held values"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::warn_held": {
       "moved": "T3.17: a held warning says its sentence"
@@ -520,6 +520,18 @@
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_state": {
       "moved": "T3.26 fix 1: the core's state is sent only while the request holds the calls it names; a request whose payloads were changed since goes as held, the core rebuilding the rest, as the old client predicts whatever payloads a request holds"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::conversion_notes": {
+      "moved": "T3.5: a semantic model's conversion notes, the core's typed notes (DescribedSource.notes) said by their sentences, a note of a table the schema does not take or of a time column its table no longer has left out, as the contract says a host shows them"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_opening": {
+      "moved": "T3.5: a group's opening said with the call's held values (host.semantic_model), as the core's read-in-part warning names the model"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::decoded": {
+      "moved": "T3.5: the core's fields decoded for a note's sentence, as for a warning's"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::source_values": {
+      "moved": "T3.5: the values a source's sentences name, the semantic model's repr among them (old-behaviour row 5)"
     }
   }
 }

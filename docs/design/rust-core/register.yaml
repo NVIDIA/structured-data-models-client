@@ -9586,3 +9586,98 @@ entries:
     refusal where the old client failed with a TypeError, found while
     making the join walk total; nothing the old client converted is
     refused.
+
+- id: P3J-12
+  title: A metric view's expression is read inside the relation the data layer renders
+  kind: change
+  old_behavior: >-
+    The old client samples a metric view's expression columns over the rows
+    it read of their table, `SELECT {expr} AS name FROM {the table, or its
+    renamed and filtered rows} LIMIT 1000` (DB/table.py:415-440), reads a
+    time column's range over every row as `MIN(({expr}))` over those rows
+    (RE/base/table.py:960-1000), and samples a source column it adds under
+    another name as the expression `` `{column}` `` (RE/graph.py:310-325).
+  new_behavior: >-
+    The core asks each as a preview, or a column range, of the relation the
+    data layer renders for the table: `SELECT name FROM (SELECT ({expr}) AS
+    name FROM t AS source WHERE ({filter})) LIMIT 1000`, the source column
+    added under another name read as `source.column AS name` there. The
+    rows are the same, each expression evaluated over the table's rows
+    under the view's filter; only the statement's text differs, as the
+    contract's requests name columns, not expressions. Every other
+    statement of the conversion is the old client's text, in its order,
+    held against the recordings (sdm-core/tests/view_captures.rs).
+  affected_inputs: >-
+    Every metric view with an expression column, or whose time column is
+    taken from a source column a dimension truncates or casts.
+  cases: []
+  refs: [T3.5, contract/view-captures.json]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: owner. Proposed by T3.5's implementer at stage 2: the
+    contract is frozen (T3.27) and its preview names its columns, so the
+    expression rides in the relation, as it does at every later read
+    (old-behaviour row 17). An expression reading a dimension's name rather
+    than its source column's would read the source's column inside the
+    relation where the old client read the renamed one; Databricks matches
+    names without case, and the view renames only by case, so no recorded
+    view reads otherwise.
+
+- id: P3J-13
+  title: A column the warehouse refuses, and a failed key count, are said by their SQLSTATE
+  kind: change
+  old_behavior: >-
+    The old client says a column whose expression the warehouse refused
+    with the driver's message, "Failed to add column 'x' to table 't':
+    {error}" (RE/graph.py:243-246), and a join kept unchecked with the
+    exception's type, "Kept join 'j' with its key 'k' unchecked, since
+    counting the keys failed: {ErrorType}" (:1804).
+  new_behavior: >-
+    The core says each by what the provider hands over, never the driver's
+    text, which can quote values: "[{error class}] SQLSTATE: {sqlstate}",
+    either alone where only one is given, or "the warehouse refused it"
+    where neither is (design S3, "two old view notes quote driver text").
+  affected_inputs: >-
+    A metric view whose expression the warehouse refuses, or whose join key
+    count fails.
+  cases: []
+  refs: [T3.5]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: owner. Proposed in the design (S3) and by T3.5's implementer
+    at stage 2; held by sdm-core/tests/view_captures.rs (a `42501` on an
+    expression's sample).
+
+- id: P3J-14
+  title: A semantic model is read again at each materialize, and what it no longer gives is refused by name
+  kind: change
+  old_behavior: >-
+    The old client reads the view once, at `from_source`, keeps the graph on
+    the schema and copies its tables at every materialize, so a view changed
+    since is not seen; a schema with no kept tables reads the whole view
+    again and warns again (CL/materializers/sources.py:26-78; old-behaviour
+    row 15).
+  new_behavior: >-
+    Plan B: each materialize reads the whole view again, every probe
+    included, and reads each table the schema holds as the relation the
+    view gives it at this run, a changed expression or filter as it now
+    reads. A table or column the schema holds that the view no longer
+    gives is refused by name, with this run's reason, "the semantic model
+    no longer gives the table 'users' this schema holds: its key 'user_id'
+    holds no value in table 'users'" (ViewTableOmitted, ViewColumnOmitted),
+    never dropped silently. Notes and the read-in-part warning are given at
+    describe only.
+  affected_inputs: >-
+    Every materialize of a schema described from a semantic model.
+  cases: []
+  refs: [T3.5]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: owner. The owner's plan B as design S5 applies it to views;
+    held by sdm-core/tests/view_captures.rs.

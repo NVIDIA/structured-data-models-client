@@ -152,15 +152,44 @@ def from_source(
         'check_keys': bool(check_keys),
     }
     # The source, which only this host holds, as the core's sentence of a
-    # source with no table names it (`engine_graph`'s refusal, T3.17).
-    with errors.holding(source=lambda fields: source):
+    # source with no table names it (`engine_graph`'s refusal, T3.17), and
+    # a semantic model's as its sentences name it (T3.5).
+    with errors.holding(**errors.source_values(source)):
         finished = run(
             operation,
             {1: codec.attachment(spec)},
             provider=provider,
         )
     described = results.expect(finished.result, results.Described)
-    return build(cls, source, json.loads(finished.take(described.description)))
+    schema = build(
+        cls, source, json.loads(finished.take(described.description))
+    )
+    schema._conversion_notes = conversion_notes(described.notes, schema)
+    return schema
+
+
+def conversion_notes(
+    notes: Sequence[results.ViewNote], schema: Schema
+) -> tuple[str, ...]:
+    r"""A semantic model's conversion notes, as the core gave them at
+    describe, in words: each rendered from its sentence and fields, the
+    core naming each table as the schema does. A note of a table the
+    schema does not hold, or of a time column its table no longer has,
+    says nothing the schema holds, so it is left out, as the old client
+    leaves it out (``CL/schema.py:1401-1433``)."""
+    said = []
+    for note in notes:
+        if note.table is not None:
+            table = schema.tables.get(note.table)
+            if table is None:
+                continue
+            if (
+                note.time_column is not None
+                and table.time_column != note.time_column
+            ):
+                continue
+        said.append(errors.render(note.sentence, errors.decoded(note.fields)))
+    return tuple(said)
 
 
 def build(cls: type[Schema], source: Any, described: dict[str, Any]) -> Schema:

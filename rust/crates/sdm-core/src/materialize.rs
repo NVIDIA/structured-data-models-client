@@ -2986,7 +2986,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // path, every check over what the source holds comes after: the
     // engine's meanings, time columns and edges ([`kept_checks`]), the
     // graph and what the sampler needs.
-    if let Some(located) = crate::describe::initialize(asker, pending.as_ref()).await? {
+    if let Some(located) = crate::describe::initialize(asker, pending.as_ref(), &facts).await? {
         description = located;
         sdm_schema::assemble::mark_keys(&mut description);
     }

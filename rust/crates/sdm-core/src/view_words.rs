@@ -207,6 +207,13 @@ pub fn filter_message(
     reason: &str,
     hatch: FilterHatch,
 ) -> Result<String, TooLarge> {
+    Ok(filter_refused_text(&repr(document, filter)?, reason, hatch))
+}
+
+/// The refusal of a view for its filter (`_refuse_filter`), `filter` as the
+/// old client quoted it (Python's `repr` of the text it read), `reason` a
+/// clause.
+pub fn filter_refused_text(filter: &str, reason: &str, hatch: FilterHatch) -> String {
     let hatch = match hatch {
         FilterHatch::None => "",
         FilterHatch::Default => ", or give the parameter a default of its type",
@@ -214,12 +221,23 @@ pub fn filter_message(
             ", or pass trust_expressions=True to apply it if you trust whoever authored the view"
         }
     };
-    Ok(format!(
-        "Cannot apply the metric view filter {} since {reason}. The graph would otherwise read \
-         rows the view leaves out. Create a regular view with this WHERE clause and point the \
-         metric view's source at it{hatch}",
-        repr(document, filter)?
-    ))
+    format!(
+        "Cannot apply the metric view filter {filter} since {reason}. The graph would otherwise \
+         read rows the view leaves out. Create a regular view with this WHERE clause and point \
+         the metric view's source at it{hatch}"
+    )
+}
+
+/// Why a filter the source table alone cannot apply is refused
+/// (`_check_filter`), as a clause, `words` the data layer's own words for an
+/// unsafe reason that names its warehouse.
+pub fn filter_reason_text(refusal: &FilterRefusal, words: Option<String>) -> String {
+    match refusal {
+        FilterRefusal::NotACondition => "it is not a SQL condition".to_owned(),
+        FilterRefusal::Unsafe(reason) => expr_reason(reason, words),
+        FilterRefusal::JoinedTable(alias) => format!("it references the joined table '{alias}'"),
+        FilterRefusal::Unreadable(unreadable) => unreadable.to_string(),
+    }
 }
 
 /// The refusal of a filter the source table alone cannot apply
@@ -231,24 +249,36 @@ pub fn filter_refusal_text(
     refusal: &FilterRefusal,
     words: Option<String>,
 ) -> Result<String, TooLarge> {
-    let reason = match refusal {
-        FilterRefusal::NotACondition => "it is not a SQL condition".to_owned(),
-        FilterRefusal::Unsafe(reason) => expr_reason(reason, words),
-        FilterRefusal::JoinedTable(alias) => format!("it references the joined table '{alias}'"),
-        FilterRefusal::Unreadable(unreadable) => unreadable.to_string(),
-    };
-    filter_message(document, filter, &reason, FilterHatch::None)
+    filter_message(
+        document,
+        filter,
+        &filter_reason_text(refusal, words),
+        FilterHatch::None,
+    )
 }
 
 /// A measure left out (`_read_measures`).
 pub fn measure_refusal_text(refusal: &MeasureRefusal) -> String {
-    let reason = match &refusal.reason {
+    format!(
+        "Failed to add measure '{}' since {}",
+        refusal.name,
+        measure_reason_text(&refusal.reason)
+    )
+}
+
+/// Why a measure is left out, as a clause.
+pub fn measure_reason_text(reason: &MeasureReason) -> String {
+    match reason {
         MeasureReason::Unreadable(unreadable) => unreadable.to_string(),
         MeasureReason::NamesRefused(dimension) => {
             format!("it names the dimension '{dimension}', which is refused")
         }
-    };
-    format!("Failed to add measure '{}' since {reason}", refusal.name)
+    }
+}
+
+/// `text` without the white space Python's `str.strip` takes off.
+pub fn stripped_text(text: &str) -> String {
+    crate::pql::conversions::strip(text).to_owned()
 }
 
 /// `n` with a comma between each three digits, as Python's `{n:,}`.
@@ -305,6 +335,16 @@ pub fn skipped_join_text(
     nested: &[String],
     dimensions: &[String],
 ) -> String {
+    let with_it = match lost_text(nested, dimensions) {
+        None => String::new(),
+        Some(lost) => format!(", and with it {lost},"),
+    };
+    format!("Failed to add join '{alias}'{with_it} since {reason}")
+}
+
+/// What goes with a join left out: the joins nested in it and the
+/// dimensions on it, or none.
+pub fn lost_text(nested: &[String], dimensions: &[String]) -> Option<String> {
     let mut lost = Vec::new();
     if !nested.is_empty() {
         let noun = if nested.len() == 1 { "join" } else { "joins" };
@@ -318,17 +358,12 @@ pub fn skipped_join_text(
         };
         lost.push(format!("the {noun} {}", quoted_list(dimensions)));
     }
-    let with_it = if lost.is_empty() {
-        String::new()
-    } else {
-        format!(", and with it {},", lost.join(" and "))
-    };
-    format!("Failed to add join '{alias}'{with_it} since {reason}")
+    (!lost.is_empty()).then(|| lost.join(" and "))
 }
 
 /// A name as a predictive query writes it, in backticks unless a bare name
 /// (`_pql_name`).
-fn pql_name(name: &str) -> String {
+pub fn pql_name(name: &str) -> String {
     let mut chars = name.chars();
     let bare = chars
         .next()
@@ -354,21 +389,6 @@ pub fn measure_note_text(note: &MeasureNote) -> String {
 
 /// A time column's note (`TimeColumnNote.__str__`).
 pub fn time_note_text(note: &TimeColumnNote) -> String {
-    let mut reasons = Vec::new();
-    if note.window_order {
-        reasons.push("a window measure of the view orders by it".to_owned());
-    }
-    if !note.instead_of.is_empty() {
-        let verbs = if note.instead_of.len() == 1 {
-            "truncates or casts"
-        } else {
-            "truncate or cast"
-        };
-        reasons.push(format!(
-            "{} {verbs} it, and it says when a row happened more precisely",
-            quoted_list(&note.instead_of)
-        ));
-    }
     let (added, renamed) = match &note.source_column {
         Some(source) => (
             String::new(),
@@ -384,8 +404,28 @@ pub fn time_note_text(note: &TimeColumnNote) -> String {
         "Took '{}' as the time column of table '{}'{added}, since {}{renamed}",
         note.column,
         note.table,
-        reasons.join(" and ")
+        time_note_reasons(note)
     )
+}
+
+/// Why a time column was taken, as a note says it.
+pub fn time_note_reasons(note: &TimeColumnNote) -> String {
+    let mut reasons = Vec::new();
+    if note.window_order {
+        reasons.push("a window measure of the view orders by it".to_owned());
+    }
+    if !note.instead_of.is_empty() {
+        let verbs = if note.instead_of.len() == 1 {
+            "truncates or casts"
+        } else {
+            "truncate or cast"
+        };
+        reasons.push(format!(
+            "{} {verbs} it, and it says when a row happened more precisely",
+            quoted_list(&note.instead_of)
+        ));
+    }
+    reasons.join(" and ")
 }
 
 fn dtype_name(dtype: Dtype) -> String {
@@ -511,7 +551,15 @@ pub fn join_note_text(note: &JoinNote, join: &str, failure: &str) -> String {
 
 /// A relationship left out (`RE/graph.py:2224-2252`).
 pub fn relationship_refusal_text(name: &str, refusal: &RelationshipRefusal) -> String {
-    let reason = match refusal {
+    format!(
+        "Failed to add relationship '{name}' since {}",
+        relationship_reason_text(refusal)
+    )
+}
+
+/// Why a relationship is left out, as a clause.
+pub fn relationship_reason_text(refusal: &RelationshipRefusal) -> String {
+    match refusal {
         RelationshipRefusal::NotPrimaryKey { key, table } => {
             format!("the referenced key '{key}' of table '{table}' is not a primary key")
         }
@@ -528,8 +576,7 @@ pub fn relationship_refusal_text(name: &str, refusal: &RelationshipRefusal) -> S
                 link_failure_text(failure)
             )
         }
-    };
-    format!("Failed to add relationship '{name}' since {reason}")
+    }
 }
 
 /// A section the conversion leaves out, as it says so.

@@ -46,6 +46,9 @@ Each is crate-local until T3.27; none is in `sdm-contract` yet.
 - P3J-9: YAML outside the subset view definitions use is refused by name (`!!str` read as text from fix 3; a lone `-` in a flow collection named).
 - P3J-10: a default or a quoted value too large to write is refused by name.
 - P3J-11: a cardinality or a table name the old client failed on as a set member or a pattern is refused by name.
+- P3J-12: a metric view's expression is sampled inside the relation the data layer renders (same rows, other text).
+- P3J-13: a refused column and a failed key count are said by error class and SQLSTATE, never the driver's text.
+- P3J-14: a semantic model is read again at each materialize; a table or column it no longer gives is refused by name.
 
 Withdrawn in fix 1, now read as the old client reads them: integers past 128 bits; a composite relationship's tables.
 
@@ -54,3 +57,12 @@ Fix 3 allow-lists `sdm-pql/src/printable.rs`, generated from Python 3.12, likewi
 ## Stage 2 (after T3.27)
 
 The ordered routine `sdm-core/src/view.rs` over these pieces, the wiring, providers, and each warehouse's `failure` facts.
+
+- `sdm-core/src/view.rs`: the conversion's entry, its tables and their relations, the time column, `describe_source` and plan B's `located`.
+- `sdm-core/src/view/definition.rs`: a metric view's definition read whole (joins, filter, dimensions, measures), held to `contract/view-metric-vectors.json`.
+- `sdm-core/src/view/metric.rs`: M1 to M11; `sdm-core/src/view/semantic.rs`: V1 to V7.
+- `sdm-core/src/discover.rs`: `columns`, the catalog-only read.
+- `sdm-data`: the contract's view types, `view_text`, Databricks's `failure` facts and `DESCRIBE TABLE EXTENDED`.
+- Parity: every Databricks SQL warehouse capture of T3.20's recordings (`contract/view-captures.json`, written by `contract/fixtures/views/captures.py`), each statement in the old client's order and the schema it gave.
+- Python: the semantic model's routes, its provider choice, `conversion_notes` and the model's sentences.
+- Open: Snowflake's statements and type map are T3.6's (a semantic view runs end to end once they land); the contract has no `ProviderChoice` accessor for its view, read in the core from its contract form.

@@ -4,18 +4,21 @@
   "files": {
     "packages/structured-data-models-client/src/sdm_client/_rust/schema.py": {
       "<module>": {
-        "fingerprint": "553696c0298aa51d32476051c0f414b6d4da3d68b1517eeaf69a3a268fc30abe"
+        "fingerprint": "d32d73169e280d5ecbfe20bf4691e72a1c9fecf9265dbfdf862c62f4ad2cf12a"
       },
       "build": {
         "fingerprint": "1ffa9b79f4ead237521dee3b3b02d7080dd908d00a0c39a53b29beee006830e0"
       },
+      "conversion_notes": {
+        "fingerprint": "508ac21006be52f300b68ce0ac50cfb65c45ab8ae95a20270866b9fc418f9de1"
+      },
       "from_source": {
-        "fingerprint": "1b2374de11a665ddf4e52a05e182a5593cdbae2ae771da175d79a11d8c968e5a"
+        "fingerprint": "20e26258e82b0520a361d3a91dd2e701785919b997768744ac85d5515a6d02cc"
       }
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py": {
       "<module>": {
-        "fingerprint": "7109ee831710a91f87779c75d77099630a34ad38b79c91807cf352d3f6d8ef68"
+        "fingerprint": "067965988a80ede5f2bc3732a824dafedbd91742ba8e5be596d2401039459cc9"
       },
       "_anchor": {
         "fingerprint": "8845c755285774562396f76aecab772e0dc002483f9f9ada1951406a3ebe523f"
@@ -39,7 +42,7 @@
         "fingerprint": "32485edb4f50fd57ef9c965f6d5eebcfdb8b2f520cb1c260b9cd8596a91390d5"
       },
       "gather": {
-        "fingerprint": "a70212fd3a074cbbde383510e40531d085921f71890c307b16ff032ab9cc8820"
+        "fingerprint": "438fa20f9c50d864798810da58cd9a58eff6df2cc7faa0211b09fe7e5a3b0606"
       }
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py": {
@@ -206,7 +209,7 @@
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py": {
       "<module>": {
-        "fingerprint": "4a1c6ce15e8902571827c2383db6ad79486e01e1bedc0b6528c8b4f816ccab2e"
+        "fingerprint": "224d05ad614b42d5ec284c52744b1513dc12e0ea0d77b0c3ef50a1a3d9714615"
       },
       "_Held.__getattr__": {
         "fingerprint": "1c11f042b8200ddeeed1c4f0ca22f07fa367d50bc7957f1262c3f92fde717fca"
@@ -256,6 +259,9 @@
       "_instance": {
         "fingerprint": "8e99f893c5d7c19b6aede406b64ce750a930905a6bb7e331c62af150bfb6e928"
       },
+      "_opening": {
+        "fingerprint": "c5c5a3198bdd3d95859c7ed6ae1fa6d30702581bd5a3b3cdc2ae86a13b9f3c91"
+      },
       "_said": {
         "fingerprint": "6afd24b6a4a58432d5d195936877378a1bf1caa0a414cdc2b84aab99ae3b72b9"
       },
@@ -267,6 +273,9 @@
       },
       "_timestamp": {
         "fingerprint": "a858e9c289e58eb69f6b99d8a1708af0640e58f732773b5969639d9917ade1a5"
+      },
+      "decoded": {
+        "fingerprint": "4c0cd92b0d16c9578b5dd4422038951893cd46dbc685e3afe4d005ba3cc85107"
       },
       "error_from_core": {
         "fingerprint": "f12d9124f45d58d837a6dd7be926095f2cee786fcb9595abdeba3bd9371cc72c"
@@ -286,11 +295,14 @@
       "said": {
         "fingerprint": "611bcdf8ce209203d2e4baae76bae222a37a1de6ec1d3718715ba83e032dc916"
       },
+      "source_values": {
+        "fingerprint": "6eda6355b07f6923543adb357776c483ccdc1a426463f50cdf672af2cd750712"
+      },
       "table": {
         "fingerprint": "0d4dfdebd8bbd6257ced1784723a96e754324c9301f1f918e112a9ed35fd8625"
       },
       "warn_from_core": {
-        "fingerprint": "60138f74363de3c099557977a13231a46f106cc15d719cef748105433f622aba"
+        "fingerprint": "a1d189de05393e612dc2aa96f7162f99656be387287307b31ba50347097d44ca"
       },
       "warn_held": {
         "fingerprint": "bfd36139c92eefac64653070dee6a6402f13bb6bbbe3f60573a86a3c2c24e1d3"
