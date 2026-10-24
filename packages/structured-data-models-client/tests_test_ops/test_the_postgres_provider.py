@@ -206,6 +206,8 @@ def _keyed(
         return provider(step, dict(seen['keys']))
 
     kinds = {
+        'float': {'type': 'float32'},
+        'double': {'type': 'float64'},
         'uint64': {'type': 'uint64'},
         'int64': {'type': 'int64'},
         'double': {'type': 'float64'},
@@ -233,6 +235,79 @@ def _keyed(
         provider=answer,
     )
     return _table(finished), seen
+
+
+@pytest.mark.parametrize('sql_type', ['SMALLINT', 'INTEGER', 'BIGINT'])
+@pytest.mark.parametrize('arrow_type', [pa.float32(), pa.float64()])
+def test_integral_float_seeds_find_integer_keys_without_truncating_fractions(
+    server: Server | None, sql_type: str, arrow_type: Any
+) -> None:
+    if server is None:
+        pytest.skip('needs the local Postgres test service')
+    connection = server.database(
+        [
+            f'CREATE TABLE users(user_id {sql_type} PRIMARY KEY, age VARCHAR)',
+            "INSERT INTO users VALUES (1, 'one'), (2, 'two')",
+        ]
+    )
+    try:
+        seeds = pa.table(
+            {
+                'key': pa.array([1.0, 1.5, 2.0], type=arrow_type),
+                'batch': pa.array([0, 1, 2], type=pa.int64()),
+            }
+        )
+        result, _ = _keyed(
+            connection,
+            {
+                'request': 'lookup',
+                'table': {'source': ['public', 'users']},
+                'columns': ['user_id', 'age'],
+                'key': ['user_id'],
+            },
+            seeds,
+        )
+        assert result.column('age').to_pylist() == ['one', 'two']
+        assert result.column('__kumo_batch__').to_pylist() == [0, 2]
+    finally:
+        connection.close()
+
+
+def test_float_binding_never_rounds_integer_columns_into_a_match(
+    server: Server | None,
+) -> None:
+    if server is None:
+        pytest.skip('needs the local Postgres test service')
+    connection = server.database(
+        [
+            'CREATE TABLE users(user_id BIGINT PRIMARY KEY, age VARCHAR)',
+            "INSERT INTO users VALUES (9007199254740992, 'exact53'), "
+            "(9007199254740993, 'rounded53'), "
+            "(1000000000000000128, 'exact60'), "
+            "(1000000000000000100, 'shortest60')",
+        ]
+    )
+    try:
+        seeds = pa.table(
+            {
+                'key': pa.array([9007199254740992.0, 1000000000000000128.0]),
+                'batch': pa.array([0, 1], type=pa.int64()),
+            }
+        )
+        result, _ = _keyed(
+            connection,
+            {
+                'request': 'lookup',
+                'table': {'source': ['public', 'users']},
+                'columns': ['user_id', 'age'],
+                'key': ['user_id'],
+            },
+            seeds,
+        )
+        assert result.column('age').to_pylist() == ['exact53', 'exact60']
+        assert result.column('__kumo_batch__').to_pylist() == [0, 1]
+    finally:
+        connection.close()
 
 
 def _seeds(kind: dict[str, Any], values: list[str]) -> pa.Table:
