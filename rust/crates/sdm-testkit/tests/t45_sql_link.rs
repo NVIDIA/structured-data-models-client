@@ -97,6 +97,59 @@ fn both_fk_directions_keep_the_reference_labels_entity_roles_and_occurrences() {
 }
 
 #[test]
+fn repeated_entity_roles_keep_both_names_but_only_the_last_alias_is_an_id() {
+    let mut case = link_case(false, false);
+    case.input.pql = "PREDICT LIST_DISTINCT(buys.user_id, 0, 30, days) \
+                      FOR EACH users.user_id"
+        .into();
+    let observed = run(&case);
+    let actual = payload(&observed);
+    assert_eq!(
+        actual["task"]["entity_table_names"],
+        json!(["users", "users"])
+    );
+    let columns = &actual["schema"]["instance_table"]["columns"];
+    assert!(columns["__kumo_entity_ref_0"].get("stype").is_none());
+    assert_eq!(columns["__kumo_entity_ref_1"]["stype"], "id");
+    let entity_links: Vec<_> = actual["schema"]["relationships"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|link| link.get("source_table").is_none())
+        .cloned()
+        .collect();
+    assert_eq!(
+        entity_links,
+        vec![
+            json!({
+                "source_columns": ["__kumo_entity_ref_1"],
+                "target_table": "users", "target_columns": ["user_id"],
+            });
+            2
+        ]
+    );
+}
+
+#[test]
+fn a_non_fk_list_target_names_the_unqualified_column_before_any_model_call() {
+    let mut case = link_case(false, true);
+    case.input.pql = "PREDICT LIST_DISTINCT(orders.price, 0, 30, days) \
+                      FOR EACH users.user_id"
+        .into();
+    let observed = endpoint::answered_by(
+        |_, _| panic!("a non-FK list target must not call the model"),
+        || run(&case),
+    );
+    assert_eq!(observed.operations, ["describe_source", "materialize"]);
+    assert!(observed.materialized.is_none());
+    let Answer::Error { code, fields, .. } = observed.answer else {
+        panic!("the target must refuse as unsupported multilabel classification");
+    };
+    assert_eq!(code, "UNSUPPORTED_REQUEST");
+    assert_eq!(fields.get("column").map(String::as_str), Some("price"));
+}
+
+#[test]
 fn rhs_references_keep_float_and_missing_sampled_values_instead_of_target_labels() {
     let observed = run(&link_case(false, false));
     let actual = payload(&observed);
