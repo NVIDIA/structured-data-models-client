@@ -56,7 +56,8 @@ class T313HostTest {
     Connection connection = connection();
     Providers.Chosen both = Providers.of(DatabricksSource.of(connection, "main", "sales"));
     assertEquals(
-        Map.of("provider", "sql", "dialect", "databricks", "namespace", Arrays.asList("main", "sales")),
+        Map.of("provider", "sql", "dialect", "databricks", "namespace", Arrays.asList("main", "sales"),
+            "timestamp_encoding", "microseconds"),
         both.choice());
     assertInstanceOf(JdbcProvider.class, both.provider());
     assertEquals(
@@ -66,7 +67,8 @@ class T313HostTest {
         Arrays.asList("main", null),
         Providers.of(DatabricksSource.of(connection, "main", null)).choice().get("namespace"));
     Map<String, Object> current = Providers.of(DatabricksSource.of(connection)).choice();
-    assertEquals(Map.of("provider", "sql", "dialect", "databricks"), current);
+    assertEquals(Map.of("provider", "sql", "dialect", "databricks",
+        "timestamp_encoding", "microseconds"), current);
     assertFalse(current.containsKey("namespace"));
     DatabricksSource source = DatabricksSource.of(connection, "main", null);
     assertEquals(connection, source.connection());

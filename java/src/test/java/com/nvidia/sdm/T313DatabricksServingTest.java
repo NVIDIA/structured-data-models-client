@@ -144,12 +144,14 @@ class T313DatabricksServingTest {
   void officialSdkAuthenticationRefreshesEveryHeaderWithoutRewritingTheCoreBytes()
       throws Exception {
     AtomicInteger refreshes = new AtomicInteger();
-    try (Workspace workspace = new Workspace(body -> Answer.of(200, "{}"))) {
+    try (Workspace workspace = new Workspace(
+        body -> Answer.of(200, "{}"), body -> Answer.of(200, "{}"))) {
       DatabricksConfig config = new DatabricksConfig().setHost(workspace.host())
           .setCredentialsProvider(CredentialsProvider.from("sdm-test", ignored -> () -> Map.of(
               "Authorization", "Bearer sdk-" + refreshes.incrementAndGet(),
               "X-Databricks-Azure-SP-Management-Token", "management-scope")));
-      DatabricksServing serving = DatabricksServing.of(new WorkspaceClient(config), ENDPOINT);
+      DatabricksServing serving = DatabricksServing.of(new WorkspaceClient(config), ENDPOINT)
+          .timeout(Duration.ofSeconds(2));
       byte[] body = "{\"opaque\":\"\\u00e9\"}".getBytes(StandardCharsets.UTF_8);
       serving.post(body);
       serving.post(body);
