@@ -150,8 +150,13 @@ The owner's separate direction permits isolated foundation progress while Phase 
   A provider that declares an operation and then fails still returns its error; it never silently falls back.
 - Fix P2-T2.5-2 in `sdm-core::fallback`, `run` and `sdm-host::runs`: account for the logical Arrow page slice and retained data deliberately, including offsets, null buffers and nested children, without charging an unrelated shared parent buffer as transferred page bytes.
   Distinguish the transfer budget from actual retained memory and avoid unbounded retention as the price of correcting false refusals.
-- Resolve P2-T2.5-3 explicitly: Arrow byte order is not PostgreSQL locale collation, so fallback cannot claim equivalence for a provider whose text ordering changes selected rows.
-  Keep frame native ordering and external-provider collation separate; the owner choice below determines whether such a fallback remains restricted or gains an explicit supported ordering contract.
+- Settle P2-T2.5-3 against the existing fallback contract: the [`arrow-row` and fallback-sample dependency decisions](../phase-1/dependencies.md) define a backend-independent Arrow row order, including each term's direction and null placement.
+  For text this is byte order, so opting into fallback does not promise the native collation's selected rows; the provider's declared operation retains its own implementation and errors.
+  Built-in SQL providers declare their optional operations and have no fallback, preserving each database's native collation and registered sampling rules.
+  A bounded public SQLite NOCASE materialization selects the a-key neighbor's amount 9, while the same native sample/lookup answers with only `neighbors` undeclared select the Z-key neighbor's amount 1 through HostRun fallback; all other payload fields agree.
+  The frozen Python reference selects amount 9 on that SQL source too.
+  The [public Rust journey](../../../../rust/crates/sdm-testkit/tests/t43_fallback_journeys.rs) pins fallback's text cut independently of input scan order.
+  This clarifies the already implemented contract; it adds no refusal, locale approximation, provider metadata or frame-order decision.
 - Write public describe/materialize cases for undeclared `time_bounds`, `sample_entities`, `neighbors`, `lookup`, multi-page slices, exact/over limits, declared failures and text order affecting a cut.
 - Dependency: T4.1 only for any required ordering/budget clarification; T4.4 reuses fallback kernels only where their measured semantics agree.
 
@@ -222,10 +227,14 @@ Run complete user journeys early on Python and rust-host so the final switch doe
    Default and recommendation: keep each path's measured reference policies explicit in core-owned request/sampling rules, including order-sensitive float32 reductions.
    Record that compatibility settlement for F2 rather than making broad unification a prerequisite; propose unification to the owner only with a concrete measured benefit and examples of changed selected rows, labels or model inputs.
    Do not silently extend ORD-3's numerical allowance to arbitrary frame differences or copy its tolerance into a new comparator.
-2. **Choose the text-order promise for external-provider fallback.**
-   PostgreSQL locale collation and Arrow's byte order can choose different neighbors at a limit; Python-native frame ordering does not establish PostgreSQL equivalence.
-   Recommendation: support frame ordering from its defined data/facts, and restrict external fallback when it cannot honor the provider's ordering, with a named refusal and exact trigger proposed to the owner if it removes reference support.
-   Shipping a locale approximation or changing PostgreSQL pushdown order requires a separate owner decision.
+2. **Keep the existing fallback order distinct from native SQL collation.**
+   P2-T2.5-3 originally carried an unresolved choice, and this draft previously recommended a restriction; that recommendation was not owner approval or an implemented refusal.
+   T4.3 traced the earlier dependency decisions and reproduced both routes publicly: generic fallback already defines Arrow ordering, while the old and current built-in SQL paths keep native ordering.
+   Preserve those existing boundaries rather than treating every fallback as an emulation of the source's optional operation.
+   The Phase 2 provider-kit requirement that fallback gives the pushdown's answer applies to its fixture's matching comparison semantics; it does not establish locale-equivalent results on arbitrary external providers.
+   The Python source adapter selects built-in SQL providers only; the old Python client had no generic Host-provider fallback API whose locale behavior must be replaced.
+   Frame ordering remains its separate T4.1/T4.4 obligation, not evidence of SQL collation equivalence.
+   Changing native SQL selection or adding a new refusal, locale contract or approximation still requires a concrete owner proposal; none is part of this settlement.
 3. **Text-time support has an existing boundary, not an invitation to emulate pandas.**
    Implement the accepted formats and client whole-column decisions under E66(h), DT-15 and DT-16, while reconciling PK-7's older wording against the current `core/dates.py` and recorded reference.
    Inputs inside those documented formats that change reading still need owner approval; documented out-of-format refusals already have it.
