@@ -829,10 +829,13 @@ def freeze_cases(results: list[Result]) -> None:
         sites = [
             node
             for node in functions[0].body
-            if isinstance(node, ast.Assign) and ast.dump(node) == ast.dump(expected)
+            if isinstance(node, ast.Assign)
+            and ast.dump(node) == ast.dump(expected)
         ]
         if len(sites) != 1:
-            raise AssertionError(f'{path}: expected one schema build assignment')
+            raise AssertionError(
+                f'{path}: expected one schema build assignment'
+            )
         return path, text.splitlines(keepends=True), sites[0]
 
     def added_raise(root: Path) -> None:

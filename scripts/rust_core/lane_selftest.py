@@ -268,10 +268,14 @@ class World:
         if (
             self.remote.resolve() != self.tmp / 'remote.git'
             or self.worktree.resolve().parent != self.tmp
-            or self.git('rev-parse', '--is-bare-repository', cwd=self.remote).strip()
+            or self.git(
+                'rev-parse', '--is-bare-repository', cwd=self.remote
+            ).strip()
             != 'true'
         ):
-            raise AssertionError('bad-history seed is not a private bare fixture')
+            raise AssertionError(
+                'bad-history seed is not a private bare fixture'
+            )
         before = self.refs()
         pushed = self.git_ok(
             'push',
@@ -280,7 +284,11 @@ class World:
             f'{sha}:refs/heads/{BRANCH}',
             cwd=self.worktree,
         )
-        if pushed.code == 0 or 'REFUSED' not in pushed.text or self.refs() != before:
+        if (
+            pushed.code == 0
+            or 'REFUSED' not in pushed.text
+            or self.refs() != before
+        ):
             raise AssertionError(
                 f'the real pre-push hook did not refuse: {pushed.text}'
             )
@@ -893,7 +901,10 @@ def _(w: World) -> tuple[bool, str]:
 
 
 def candidate(
-    w: World, message: str = 'T1.11e: the work', *, preexisting_bad: bool = False
+    w: World,
+    message: str = 'T1.11e: the work',
+    *,
+    preexisting_bad: bool = False,
 ) -> str:
     w.start()
     sha = w.commit(w.worktree, message)
