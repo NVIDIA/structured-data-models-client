@@ -1,25 +1,25 @@
 {
- "description": "The refusal map's probes of base.adventureworks (contract/refusal-maps) on which both core hosts reach describe_source, each with the SHA-256 of describe_source's SourceDescription and, where it starts materialize, of the schema materialize samples (python-core's built from its Schema, rust-host's its own description with the probe's edits made), each as canonical JSON: keys sorted, no whitespace, UTF-8. contract/tests/test_refusal_map.py holds python-core to it and sdm-testkit's tests/refusal_map.rs holds rust-host to it, so CI gates that the two hosts' descriptions are identical wherever both reach describe_source (T1.21d, the AdventureWorks exit); a probe either host reaches describe_source on that the pin does not list, or one it lists that a host does not reach, fails. From T1.23 each probe also pins the digest of the core's warnings, each its code and fields (warnings), which each host words itself.",
- "probes": {
-  "no-inference-config": {
-   "described": "4320c2f4b7e79be61f472576d3e4c6ac157bc6e3fbc2f1407effe2acb60ee2f8",
-   "warnings": "b52de4793e7622571a0454e7d6350f125f90f10dd4d47b3eb2287312f1ade1d6",
-   "materialize_schema": "f11443de96f329c5077bde456b6ec3583da719321b21cd2a439f93cd06bb3487"
-  },
-  "no-text": {
-   "described": "0907ad6ec67a6e7c4728dab08ac8bc576d14da915c68cee5d2b07d61644e4f02",
-   "warnings": "5dfd8f6589bb38a7e067ca20d9b00f52e9636e69a593ddfce7b1fea2ec225370",
-   "materialize_schema": "ef4d00ec2088c696a170da4a25f9adafddbf1db4c78f35354dbb58148abef45d"
-  },
-  "notebook": {
-   "described": "4320c2f4b7e79be61f472576d3e4c6ac157bc6e3fbc2f1407effe2acb60ee2f8",
-   "warnings": "b52de4793e7622571a0454e7d6350f125f90f10dd4d47b3eb2287312f1ade1d6",
-   "materialize_schema": "f11443de96f329c5077bde456b6ec3583da719321b21cd2a439f93cd06bb3487"
-  },
-  "one-hop": {
-   "described": "0907ad6ec67a6e7c4728dab08ac8bc576d14da915c68cee5d2b07d61644e4f02",
-   "warnings": "a61d868f5ecc892fd21cdc5e34f9fd8729915b88fc5a5ca0e370b942cd28d344",
-   "materialize_schema": "d3c6d388bba09700e95a362a2201b2b44ce42a2a2eec207c49511454fccf2f97"
+  "description": "The refusal map's probes of base.adventureworks (contract/refusal-maps) on which both core hosts reach describe_source, each with the SHA-256 of describe_source's SourceDescription and, where it starts materialize, of the schema materialize samples (python-core's built from its Schema, rust-host's its own description with the probe's edits made), each as canonical JSON: keys sorted, no whitespace, UTF-8. contract/tests/test_refusal_map.py holds python-core to it and sdm-testkit's tests/refusal_map.rs holds rust-host to it, so CI gates that the two hosts' descriptions are identical wherever both reach describe_source (T1.21d, the AdventureWorks exit); a probe either host reaches describe_source on that the pin does not list, or one it lists that a host does not reach, fails. From T1.23 each probe also pins the digest of the core's warnings, each its code and fields (warnings), which each host words itself.",
+  "probes": {
+    "no-inference-config": {
+      "described": "786aadbfda79fde20def58572347582af9ebcbff219ca9a6d8eb1ed76979da32",
+      "materialize_schema": "31c746c1aa4adfed8b11084cdf3b4bc513c8caa6cfa61d1cbcc6b7907bcd66b4",
+      "warnings": "b52de4793e7622571a0454e7d6350f125f90f10dd4d47b3eb2287312f1ade1d6"
+    },
+    "no-text": {
+      "described": "3f4931bd2e150745e7e8341b502110bd84ae385df85a6acc277382bcadf7d5e6",
+      "materialize_schema": "d874ad087ed754e7f76c6fd9c04a9492409761d9b17efc54092df57394ee3e7f",
+      "warnings": "5dfd8f6589bb38a7e067ca20d9b00f52e9636e69a593ddfce7b1fea2ec225370"
+    },
+    "notebook": {
+      "described": "786aadbfda79fde20def58572347582af9ebcbff219ca9a6d8eb1ed76979da32",
+      "materialize_schema": "31c746c1aa4adfed8b11084cdf3b4bc513c8caa6cfa61d1cbcc6b7907bcd66b4",
+      "warnings": "b52de4793e7622571a0454e7d6350f125f90f10dd4d47b3eb2287312f1ade1d6"
+    },
+    "one-hop": {
+      "described": "3f4931bd2e150745e7e8341b502110bd84ae385df85a6acc277382bcadf7d5e6",
+      "materialize_schema": "c55254888f9810ba13a21ba4ca865f99c96570b1865fbfd1f5010a67e9896f8e",
+      "warnings": "a61d868f5ecc892fd21cdc5e34f9fd8729915b88fc5a5ca0e370b942cd28d344"
+    }
   }
- }
 }
