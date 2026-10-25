@@ -195,12 +195,29 @@ def _clone(tmp_path: Path) -> tuple[Path, Path, str]:
     the phase's fork point), and a topic branch checked out there."""
     origin, work = tmp_path / 'origin.git', tmp_path / 'work'
     _git(tmp_path, 'clone', '-q', '--bare', '--shared', str(ROOT), str(origin))
-    _git(tmp_path, 'clone', '-q', '--shared', str(origin), str(work))
+    _git(
+        tmp_path, 'clone', '-q', '--shared', '--no-checkout',
+        str(origin), str(work),
+    )  # fmt: skip
+    # These process controls use keys, cases and tools, not physical
+    # warehouse replays. Keep the full history and every original blob
+    # available to Git readers while avoiding the unused working copies.
+    # New linked worktrees inherit these clone-local sparse patterns.
+    _git(work, 'sparse-checkout', 'init', '--no-cone')
+    _git(
+        work,
+        'sparse-checkout',
+        'set',
+        '--no-cone',
+        '/*',
+        '!/contract/captures/',
+    )
     _git(work, 'checkout', '-q', '--detach', _git(ROOT, 'rev-parse', 'HEAD'))
     _overlay(work)
     if _git(work, 'status', '--porcelain'):
-        _git(work, 'add', '-A')
+        _git(work, 'add', '--sparse', '-A')
         _git(work, 'commit', '-q', '-s', '-m', 'T3.0: the tools under test')
+        _git(work, 'sparse-checkout', 'reapply')
     head = _git(work, 'rev-parse', 'HEAD')
     _git(
         work, 'push', '-q', 'origin',
