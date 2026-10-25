@@ -202,6 +202,31 @@ fn native_temporal_whole_frame_rebinds_with_exact_units_and_nanosecond_equality(
 }
 
 #[test]
+fn coarse_native_frame_units_are_not_silently_clamped_into_the_temporal_slice() {
+    use arrow_array::{ArrayRef, TimestampMillisecondArray, TimestampSecondArray};
+
+    for millis in [false, true] {
+        let values = vec![Some(i64::MAX - 1), Some(i64::MAX)];
+        let column: ArrayRef = if millis {
+            Arc::new(TimestampMillisecondArray::from(values))
+        } else {
+            Arc::new(TimestampSecondArray::from(values))
+        };
+        let batch = RecordBatch::try_from_iter([("observed_at", column)]).unwrap();
+        let mut attached = inputs();
+        attached.insert(
+            AttachmentId(3),
+            Attachment::Arrow(ArrowData::new(batch.schema(), vec![batch])),
+        );
+        let outgoing = match HostRun::start(&sdm_host::default_root(), &message(), attached) {
+            Ok(run) => run.next().unwrap(),
+            Err(outgoing) => outgoing,
+        };
+        assert_eq!(error(outgoing).code, ErrorCode::UnsupportedRequest);
+    }
+}
+
+#[test]
 fn frame_arrow_validity_retains_present_nan_and_merges_signed_zero() {
     use arrow_array::Float64Array;
 
