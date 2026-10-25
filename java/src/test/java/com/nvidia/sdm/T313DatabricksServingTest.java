@@ -36,6 +36,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -76,13 +77,15 @@ class T313DatabricksServingTest {
     }
   }
 
-  /** A workspace answering each call by {@code answers} in turn, then by the served model. */
+  /** A workspace answering invocations in turn, independently of SDK discovery requests. */
   static final class Workspace implements AutoCloseable {
     final List<byte[]> bodies = Collections.synchronizedList(new ArrayList<>());
     final List<String> paths = Collections.synchronizedList(new ArrayList<>());
     final List<Map<String, String>> headers = Collections.synchronizedList(new ArrayList<>());
     final List<String> userAgents = Collections.synchronizedList(new ArrayList<>());
     final List<String> managementTokens = Collections.synchronizedList(new ArrayList<>());
+    final List<String> discoveryPaths = Collections.synchronizedList(new ArrayList<>());
+    private final AtomicReference<Throwable> handlerFailure = new AtomicReference<>();
     private final HttpServer server;
 
     @SafeVarargs
@@ -92,35 +95,54 @@ class T313DatabricksServingTest {
       server.createContext(
           "/",
           exchange -> {
-            if (exchange.getRequestURI().getPath().equals("/.well-known/databricks-config")) {
-              byte[] metadata = "{}".getBytes(StandardCharsets.UTF_8);
-              exchange.sendResponseHeaders(200, metadata.length);
-              try (OutputStream out = exchange.getResponseBody()) {
-                out.write(metadata);
+            try (exchange) {
+              String method = exchange.getRequestMethod();
+              String path = exchange.getRequestURI().getPath();
+              if (method.equals("GET") && Set.of(
+                  "/.well-known/databricks-config",
+                  "/oidc/.well-known/oauth-authorization-server").contains(path)) {
+                discoveryPaths.add(method + " " + path);
+                byte[] metadata = "{}".getBytes(StandardCharsets.UTF_8);
+                exchange.sendResponseHeaders(200, metadata.length);
+                try (OutputStream out = exchange.getResponseBody()) {
+                  out.write(metadata);
+                }
+                return;
               }
-              return;
-            }
-            byte[] body;
-            try (InputStream in = exchange.getRequestBody()) {
-              body = in.readAllBytes();
-            }
-            bodies.add(body);
-            paths.add(exchange.getRequestMethod() + " " + exchange.getRequestURI().getPath());
-            Map<String, String> seen = new LinkedHashMap<>();
-            for (String name : List.of("Authorization", "Content-Type")) {
-              seen.put(name, exchange.getRequestHeaders().getFirst(name));
-            }
-            headers.add(seen);
-            userAgents.add(exchange.getRequestHeaders().getFirst("User-Agent"));
-            managementTokens.add(
-                exchange.getRequestHeaders().getFirst("X-Databricks-Azure-SP-Management-Token"));
-            int at = call.getAndIncrement();
-            Answer answer =
-                at < answers.length ? answers[at].apply(body) : served(body);
-            answer.headers().forEach((k, v) -> exchange.getResponseHeaders().add(k, v));
-            exchange.sendResponseHeaders(answer.status(), answer.body().length);
-            try (OutputStream out = exchange.getResponseBody()) {
-              out.write(answer.body());
+              if (!method.equals("POST") || !path.equals(INVOCATIONS)) {
+                handlerFailure.compareAndSet(null,
+                    new AssertionError("unexpected workspace request: " + method + " " + path));
+                exchange.sendResponseHeaders(404, -1);
+                return;
+              }
+              byte[] body;
+              try (InputStream in = exchange.getRequestBody()) {
+                body = in.readAllBytes();
+              }
+              bodies.add(body);
+              paths.add(method + " " + path);
+              Map<String, String> seen = new LinkedHashMap<>();
+              for (String name : List.of("Authorization", "Content-Type")) {
+                seen.put(name, exchange.getRequestHeaders().getFirst(name));
+              }
+              headers.add(seen);
+              userAgents.add(exchange.getRequestHeaders().getFirst("User-Agent"));
+              managementTokens.add(
+                  exchange.getRequestHeaders().getFirst("X-Databricks-Azure-SP-Management-Token"));
+              int at = call.getAndIncrement();
+              Answer answer;
+              try {
+                answer = at < answers.length ? answers[at].apply(body) : served(body);
+              } catch (RuntimeException | AssertionError error) {
+                handlerFailure.compareAndSet(null, error);
+                exchange.sendResponseHeaders(500, -1);
+                return;
+              }
+              answer.headers().forEach((k, v) -> exchange.getResponseHeaders().add(k, v));
+              exchange.sendResponseHeaders(answer.status(), answer.body().length);
+              try (OutputStream out = exchange.getResponseBody()) {
+                out.write(answer.body());
+              }
             }
           });
       server.start();
@@ -131,12 +153,17 @@ class T313DatabricksServingTest {
     }
 
     DatabricksServing serving(long limit) {
-      return DatabricksServing.of(host(), ENDPOINT, () -> "dapi-test", limit);
+      return DatabricksServing.of(host(), ENDPOINT, () -> "dapi-test", limit)
+          .timeout(Duration.ofSeconds(10));
     }
 
     @Override
     public void close() {
       server.stop(0);
+      Throwable failure = handlerFailure.get();
+      if (failure != null) {
+        throw new AssertionError("workspace fixture failed", failure);
+      }
     }
   }
 
@@ -175,8 +202,15 @@ class T313DatabricksServingTest {
           "[serving-test]\nhost = " + workspace.host() + "\ntoken = profile-token\n");
       WorkspaceClient client = new WorkspaceClient(new DatabricksConfig()
           .setConfigFile(profile.toString()).setProfile("serving-test"));
-      DatabricksServing.of(client, ENDPOINT, 1234).timeout(Duration.ofSeconds(2))
-          .post(new byte[] {'{', '}'});
+      byte[] body = new byte[] {'{', '}'};
+      byte[] response = DatabricksServing.of(client, ENDPOINT, 1234)
+          .timeout(Duration.ofSeconds(2)).post(body);
+      assertArrayEquals(body, response);
+      assertEquals(List.of(
+          "GET /.well-known/databricks-config",
+          "GET /oidc/.well-known/oauth-authorization-server"), workspace.discoveryPaths);
+      assertEquals(List.of("POST " + INVOCATIONS), workspace.paths);
+      assertArrayEquals(body, workspace.bodies.get(0));
       assertEquals("Bearer profile-token", workspace.headers.get(0).get("Authorization"));
     }
   }
@@ -396,6 +430,12 @@ class T313DatabricksServingTest {
         T312Shop.Endpoint nim = new T312Shop.Endpoint();
         SdmClient serving = SdmClient.forDatabricksServing(workspace.serving(16_000_000));
         SdmClient direct = SdmClient.connect(nim.url())) {
+      // Half the users stop ordering before June 2023; the others retain the full shop history.
+      // The unchanged 90-day inactivity question then has both real context answers.
+      try (var statement = connection.createStatement()) {
+        assertEquals(30, statement.executeUpdate(
+            "DELETE FROM orders WHERE user_id >= 4 AND ts >= TIMESTAMP '2023-06-01'"));
+      }
       Schema schema = Schema.fromSource(DuckDbSource.of(connection));
       for (int at = 0; at < queries.length; at++) {
         Request request = PredictiveQuery.parse(queries[at]).materialize(schema,
@@ -406,6 +446,15 @@ class T313DatabricksServingTest {
         assertEquals(2, result.rows(), queries[at]);
         assertEquals(predictions(expected), predictions(result), queries[at]);
         assertEquals(withoutId(nim.received.get(at)), withoutId(call(workspace.bodies.get(at))));
+        if (at == 2) {
+          Map<?, ?> context = (Map<?, ?>) withoutId(nim.received.get(at)).get("context");
+          Map<?, ?> instances = (Map<?, ?>) context.get("instance_table");
+          int target = ((List<?>) instances.get("columns")).indexOf("TARGET");
+          Set<?> answers = ((List<?>) instances.get("rows")).stream()
+              .map(row -> ((List<?>) row).get(target))
+              .collect(java.util.stream.Collectors.toSet());
+          assertEquals(Set.of(false, true), answers);
+        }
       }
     }
   }
