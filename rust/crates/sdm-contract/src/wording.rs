@@ -356,6 +356,9 @@ pub fn template(sentence: Sentence) -> Template {
         S::LinkNotTheKey => said(
             r#"{source_table}.{source_column} -> {target_table}.{target_column} does not join to a primary key: table {target_table!r} has {key[0]!r}. A relationship points at the key that identifies a row, so set that key first if it is not the one inference found"#,
         ),
+        S::FrameLinkNotTheKeySequence => said(
+            r#"{source_table}.{source_column} -> {target_table}.{target_column} does not join to a primary key: table {target_table!r} has {key!p}. A relationship points at the key that identifies a row, so set that key first if it is not the one inference found"#,
+        ),
         S::LinkNoKey => said(
             r#"{source_table}.{source_column} -> {target_table}.{target_column} does not join to a primary key: table {target_table!r} has no primary key. A relationship points at the key that identifies a row, so set that key first if it is not the one inference found"#,
         ),
