@@ -2312,7 +2312,7 @@ jobs:
           # installed-wheel has it, NumPy kept.
           keep_numpy="numpy==$(python -c 'import numpy; print(numpy.__version__)')"
           pip install --quiet --only-binary=:all: pytest requests-mock jsonschema \
-            "structured-data-models-client[sqlite,duckdb]" $keep_numpy
+            "structured-data-models-client[sqlite,duckdb,snowflake]" $keep_numpy
           python -m pytest rust/bindings/sdm-py/tests/test_binding.py -q \
             -p no:cacheprovider --native-build production
           cd /tmp
