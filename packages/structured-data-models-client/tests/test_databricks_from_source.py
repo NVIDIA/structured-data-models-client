@@ -712,8 +712,6 @@ class _CompletingWarehouse(_SessionWarehouse):
             self._db.unregister('rows')
 
     def answer(self, operation: str, parameters: list[Any]) -> pa.Table:
-        import pandas as pd
-
         try:
             found = super().answer(operation, parameters)
         except AssertionError:
@@ -727,35 +725,7 @@ class _CompletingWarehouse(_SessionWarehouse):
                 return found
             if not text.startswith('WITH TMP AS ( SELECT pos AS '):
                 raise
-            keys = json.loads(parameters[0])
-            # Each field of the old client's JSON (``id``, ``e``, ``s``) under
-            # the seed column the statement reads it as.
-            # Catalog-preserving temporal seeds explicitly cast their NTZ fields.
-            named = dict(
-                re.findall(
-                    r'col\.(\w+)(?: AS TIMESTAMP_NTZ\))? AS `(\w+)`', text
-                )
-            )
-            seeds = pd.DataFrame(
-                [{named.get(f, f): v for f, v in key.items()} for key in keys]
-                if keys and isinstance(keys[0], dict)
-                else [{'key': key} for key in keys]
-            )
-            seeds['batch'] = range(len(seeds))
-            for column in ('start', 'end', 'time'):
-                if column in seeds:
-                    seeds[column] = pd.to_datetime(seeds[column])
-            self._db.register(
-                'seeds', pa.Table.from_pandas(seeds, preserve_index=False)
-            )
-            text = re.sub(
-                r'^WITH TMP AS \( .*? \) SELECT ',
-                'WITH TMP AS (SELECT * FROM seeds) SELECT ',
-                text,
-                count=1,
-            )
-            text = re.sub(r'`main`\.`\w+`\.', '', text).replace('`', '"')
-            found = self._db.execute(text).to_arrow_table()
+            found = _seeded_over(self._db, text, parameters)
             self.calls[-1] = (_normal(operation), list(parameters))
         if (
             '`main`.`other`.`users`' in operation
@@ -1652,7 +1622,10 @@ def _seeded_over(db: Any, text: str, parameters: list[Any]) -> pa.Table:
 
     keys = json.loads(parameters[0])
     # The core reads the old client's fields under its seed columns' names.
-    named = dict(re.findall(r'col\.(\w+) AS `(\w+)`', text))
+    # Catalog-preserving temporal seeds explicitly cast their NTZ fields.
+    named = dict(
+        re.findall(r'col\.(\w+)(?: AS TIMESTAMP_NTZ\))? AS `(\w+)`', text)
+    )
     seeds = pd.DataFrame(
         [
             {**key, **{named[f]: v for f, v in key.items() if f in named}}
