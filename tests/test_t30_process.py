@@ -296,6 +296,30 @@ def test_t30_fixture_linked_worktrees_keep_capture_objects_and_sparse_boundary(
     assert _git(tiny_clone_source, 'status', '--porcelain') == ''
 
 
+def test_t30_fixture_overlay_keeps_changed_capture_blobs_without_materializing_them(
+    tiny_clone_source: Path, tmp_path: Path
+) -> None:
+    source = tiny_clone_source
+    capture = 'contract/captures/leg/case/capture.json'
+    case = 'contract/cases/case.json'
+    (source / capture).write_text('{"fixture": "overlay"}\n')
+    (source / case).write_text('{"id": "overlay"}\n')
+    before = _git(source, 'status', '--porcelain')
+    _, work, head = _clone(tmp_path)
+    assert _git(work, 'rev-parse', head + '^') == _git(
+        source, 'rev-parse', 'HEAD'
+    )
+    for name in (capture, case):
+        assert (
+            _git(work, 'show', f'{head}:{name}')
+            == (source / name).read_text().strip()
+        )
+    assert (work / case).read_bytes() == (source / case).read_bytes()
+    assert not (work / 'contract/captures').exists()
+    assert _git(work, 'status', '--porcelain') == ''
+    assert _git(source, 'status', '--porcelain') == before
+
+
 def _handoff(
     work: Path, env: dict[str, str], *args: str, timeout: float = 3600
 ) -> subprocess.CompletedProcess[str]:
