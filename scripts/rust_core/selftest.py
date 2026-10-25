@@ -813,14 +813,49 @@ def freeze_cases(results: list[Result]) -> None:
         '        return indices\n\n'
     )
 
+    def schema_build_site(root: Path) -> tuple[Path, list[str], ast.Assign]:
+        path = root / schema
+        text = path.read_text()
+        functions = [
+            node
+            for node in ast.parse(text).body
+            if isinstance(node, ast.FunctionDef) and node.name == 'from_source'
+        ]
+        if len(functions) != 1:
+            raise AssertionError(f'{path}: expected one from_source function')
+        expected = ast.parse(
+            'schema = build(cls, source, json.loads(finished.take(described.description)))'
+        ).body[0]
+        sites = [
+            node
+            for node in functions[0].body
+            if isinstance(node, ast.Assign) and ast.dump(node) == ast.dump(expected)
+        ]
+        if len(sites) != 1:
+            raise AssertionError(f'{path}: expected one schema build assignment')
+        return path, text.splitlines(keepends=True), sites[0]
+
     def added_raise(root: Path) -> None:
-        edit(
-            root / schema,
-            '    return build(cls, source, json.loads(finished.take(described.description)))\n',
+        path, lines, site = schema_build_site(root)
+        lines.insert(
+            site.lineno - 1,
             '    if described is None:\n'
-            "        raise StructuredDataError('none', code='INTERNAL_ERROR')\n"
-            '    return build(cls, source, json.loads(finished.take(described.description)))\n',
+            "        raise StructuredDataError('none', code='INTERNAL_ERROR')\n",
         )
+        path.write_text(''.join(lines))
+
+    def copied_description(root: Path) -> None:
+        path, lines, site = schema_build_site(root)
+        assert isinstance(site.value, ast.Call)
+        description = site.value.args[2]
+        assert description.end_lineno is not None
+        assert description.end_col_offset is not None
+        at = description.end_lineno - 1
+        # AST columns count UTF-8 bytes, even when earlier text is non-ASCII.
+        line = lines[at].encode('utf-8')
+        column = description.end_col_offset
+        lines[at] = (line[:column] + b'.copy()' + line[column:]).decode('utf-8')
+        path.write_text(''.join(lines))
 
     # The tree, through git, and its copy against itself.
     expect(
@@ -1339,11 +1374,7 @@ def freeze_cases(results: list[Result]) -> None:
         ),
         (
             'a copy on a value',
-            lambda r: edit(
-                r / schema,
-                '    return build(cls, source, json.loads(finished.take(described.description)))\n',
-                '    return build(cls, source, json.loads(finished.take(described.description)).copy())\n',
-            ),
+            copied_description,
             from_source,
         ),
     ):

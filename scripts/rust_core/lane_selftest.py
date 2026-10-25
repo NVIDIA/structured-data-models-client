@@ -259,6 +259,42 @@ class World:
     def put_lane(self, sha: str) -> None:
         self.git('push', '--quiet', 'origin', f'{sha}:refs/heads/{BRANCH}', cwd=self.seed)  # fmt: skip
 
+    def preexisting_bad_lane(self, sha: str) -> None:
+        """Seed untrusted history only in this case's owned bare input.
+
+        The real push must refuse it first; land.py must still refuse
+        history that was already on a remote before this checkout's hook.
+        """
+        if (
+            self.remote.resolve() != self.tmp / 'remote.git'
+            or self.worktree.resolve().parent != self.tmp
+            or self.git('rev-parse', '--is-bare-repository', cwd=self.remote).strip()
+            != 'true'
+        ):
+            raise AssertionError('bad-history seed is not a private bare fixture')
+        before = self.refs()
+        pushed = self.git_ok(
+            'push',
+            '--quiet',
+            'origin',
+            f'{sha}:refs/heads/{BRANCH}',
+            cwd=self.worktree,
+        )
+        if pushed.code == 0 or 'REFUSED' not in pushed.text or self.refs() != before:
+            raise AssertionError(
+                f'the real pre-push hook did not refuse: {pushed.text}'
+            )
+        self.git(
+            'fetch',
+            '--quiet',
+            '--no-tags',
+            str(self.worktree),
+            f'{sha}:refs/heads/{BRANCH}',
+            cwd=self.remote,
+        )
+        if self.refs() != {**before, f'refs/heads/{BRANCH}': sha}:
+            raise AssertionError('bad-history seed changed another fixture ref')
+
     def unlanded(self, *messages: str) -> list[str]:
         """Commits on the remote lane, on top of the phase head."""
         self.git('fetch', '--quiet', 'origin', cwd=self.seed)
@@ -856,10 +892,15 @@ def _(w: World) -> tuple[bool, str]:
 # --- land.py on a lane --------------------------------------------------------
 
 
-def candidate(w: World, message: str = 'T1.11e: the work') -> str:
+def candidate(
+    w: World, message: str = 'T1.11e: the work', *, preexisting_bad: bool = False
+) -> str:
     w.start()
     sha = w.commit(w.worktree, message)
-    w.git('push', '--quiet', 'origin', f'HEAD:{BRANCH}', cwd=w.worktree)
+    if preexisting_bad:
+        w.preexisting_bad_lane(sha)
+    else:
+        w.git('push', '--quiet', 'origin', f'HEAD:{BRANCH}', cwd=w.worktree)
     w.set_runs(green_on=[BRANCH, PHASE])
     return sha
 
@@ -905,7 +946,7 @@ def _(w: World) -> tuple[bool, str]:
 
 @case('land.py: refuses a lane commit that does not name the package')
 def _(w: World) -> tuple[bool, str]:
-    sha = candidate(w, 'An unnamed change')
+    sha = candidate(w, 'An unnamed change', preexisting_bad=True)
     before = w.refs()
     ran = w.land(*land_args(w, sha, 'Land T1.11e: the work'))
     ok = (
@@ -941,7 +982,7 @@ for message, why in REPROS:
 
     @case(f'land.py: refuses {message.splitlines()[0]!r} under T1.11e')
     def _(w: World, message: str = message, why: str = why) -> tuple[bool, str]:
-        sha = candidate(w, message)
+        sha = candidate(w, message, preexisting_bad=True)
         before = w.refs()
         ran = w.land(*land_args(w, sha, 'Land T1.11e: the work'))
         ok = ran.code == 2 and why in ran.text and w.refs() == before
@@ -1089,7 +1130,7 @@ for label, why in (
             change='changes' in label,
         )
         checked = w.lane('check', cwd=w.worktree)
-        w.git('push', '--quiet', 'origin', f'HEAD:{BRANCH}', cwd=w.worktree)
+        w.preexisting_bad_lane(sha)
         before = w.refs()
         ran = w.land(*land_args(w, sha, 'Land T1.11e: the work'))
         ok = (
