@@ -456,6 +456,26 @@ def test_qualified_source_must_match_the_proven_sample_identity(
 
 
 @pytest.mark.parametrize(
+    ('source', 'table'),
+    [
+        ('`{catalog}`.{schema}.USERS', 'users'),
+        ('{catalog}.`{schema}`.USERS', 'users'),
+        ('`cat``name`.schema.USERS', 'users'),
+        ('catalog.schema.`user.name`', 'user.name'),
+        ('`user``name`', 'user`name'),
+    ],
+)
+def test_table_alias_uses_the_complete_databricks_identity(
+    source: str, table: str
+) -> None:
+    coverage = _coverage_module()
+    assert coverage._relation_key(source) == table
+    assert coverage._as_named({(table, 'token'): {'binary'}}, [source]) == {
+        (source, 'token'): {'binary'}
+    }
+
+
+@pytest.mark.parametrize(
     'source',
     [
         '{catalog}.another.users',
