@@ -243,3 +243,12 @@ They grant no numeric tolerance, missing evidence, changed public identifiers or
 |---|---|---|---|
 | T310-OWNER-2026-10-25-EARLY-INVALID-1 | Keep the earlier rejection of a regression-only prediction statistic on a classification task with the same invalid-option error; the old client gathers data and may emit an anchor-after-data warning before rejecting, whereas Rust may omit that downstream warning and avoid the unnecessary gathering; valid requests retain the date warning | "Ok for the first question, keep Rust's behavior about reporting the same invalid-option error earlier" | approved by owner 2026-10-25 |
 | T310-OWNER-2026-10-25-H9-EQUIVALENCE-1 | Accept different internal table/seed numbering and query batching only when exact evidence proves the same source values, typed rows, row multiplicities and semantic table/seed identities; preserve raw SQL traces, require complete mappings and keep public payloads unchanged | "Accept with exact evidence (recommended)" | approved by owner 2026-10-25 |
+
+## Superseding phase completion instruction, 2026-10-25
+
+This instruction replaces the earlier stop-before-merging boundary once Phase 3 is complete.
+It does not waive required checks, evidence or final reviews, or approve a tabular ordering change before its requested benchmark.
+
+| # | Decision and presented context | Owner's words | Status |
+|---|---|---|---|
+| T310-OWNER-2026-10-25-MERGE-1 | After Phase 3 passes its required completion checks and final reviews, merge it into `rust-core` and push; then rebase Phase 4 and its dependent work onto the latest `rust-core`, preserving its commits instead of adding a merge commit; make necessary documentation or tooling updates | "Yes, merge Phase 3 into rust-core once it's complete, and push it. Then rebase phase 4 (not just a merge commit) onto latest rust-core. Update any docs/tooling if you need, but this is my command" | approved by owner 2026-10-25 |
