@@ -535,9 +535,21 @@ def driver_record(
     statements: list[dict[str, Any]] = []
     bindings: list[dict[str, Any]] = []
     cursors = 0
+    purpose = None
     for event in events:
         kind = event['event']
-        if kind == 'cursor':
+        if kind == 'started':
+            purpose = None
+        elif kind == 'stepped':
+            purpose = None
+            step = event['step']
+            if step.get('step') == 'fetch':
+                # The same batch attribution as run_python._Capture.stepped:
+                # only an actual, uniform core marker labels the driver work.
+                purposes = {asked.get('purpose') for asked in step['requests']}
+                if len(purposes) == 1:
+                    purpose = purposes.pop()
+        elif kind == 'cursor':
             cursors += 1
         elif kind == 'statement':
             statements.append(
@@ -548,6 +560,7 @@ def driver_record(
                     'parameters': None,
                     'results': [],
                     'error': None,
+                    **({'purpose': purpose} if purpose is not None else {}),
                 }
             )
         elif kind == 'answered' and statements:
@@ -578,6 +591,7 @@ def driver_record(
                     'schema': schema_of(table),
                     'digest': run_python._arrow_digest(table),
                     'values': run_python.arrow_values(table),
+                    **({'purpose': purpose} if purpose is not None else {}),
                 }
             )
     capture = {
