@@ -186,6 +186,7 @@ class World:
             'commit_msg.py',
             'judging.py',
             'handoff.py',
+            'affected.py',
         ):
             shutil.copy2(SCRIPTS / name, scripts / name)
         self.git('add', 'scripts', cwd=self.seed)
