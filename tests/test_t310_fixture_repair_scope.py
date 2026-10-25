@@ -253,7 +253,10 @@ def test_cli_stamps_only_completed_actual_selection_with_honest_scope_metadata(
     ]
     if scoped:
         argv += ['--fixture-repair-scope', SCOPE]
-    assert HANDOFF.main(argv) == (1 if fails else 0)
+    with monkeypatch.context() as environment:
+        # Register the key even when absent, owning the CLI's direct write.
+        environment.setenv('SDM_PYTHON', '/test-owned/python')
+        assert HANDOFF.main(argv) == (1 if fails else 0)
     assert os.environ.get('SDM_PYTHON') == prior_python
     said = capsys.readouterr().out
     assert len(received) == 1 and set(received[0]) == set(expected)
