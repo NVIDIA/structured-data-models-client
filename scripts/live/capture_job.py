@@ -142,11 +142,11 @@ assert mode in ('', 'python-ref', 'python-core'), mode
 if not mode:
     assert campaign in ('c1', 'e0'), campaign
 sys.path.insert(0, str(Path(dbutils.widgets.get('repo_dir')) / 'scripts/live'))
-import capture_run as staging
-
 # Both checkouts copied off the volume, each file's mode as its commit
 # holds it, so the run records from clean trees (it refuses others).
 import tempfile
+
+import capture_run as staging
 
 temporary = (
     Path(tempfile.mkdtemp(prefix='sdm-heldout-')) if mode else Path('/tmp')

@@ -17,7 +17,6 @@ from types import ModuleType, SimpleNamespace
 from typing import Any
 
 import pytest
-
 from sdm_client import Schema, _routing
 
 ROOT = Path(__file__).resolve().parents[1]
