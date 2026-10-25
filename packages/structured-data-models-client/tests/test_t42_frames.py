@@ -105,7 +105,7 @@ def test_original_override_error_is_preserved(monkeypatch, options):
 
 
 def test_first_table_warning_survives_later_column_failure(monkeypatch):
-    first = pd.DataFrame({'user_id': pd.Series([*range(19), None], dtype='Int64')})
+    first = pd.DataFrame({'user_id': pd.Series([*range(99), None], dtype='Int64')})
     second = pd.DataFrame([[1, 2]], columns=['same', 'same'])
     outcomes = []
     for core in (False, True):
