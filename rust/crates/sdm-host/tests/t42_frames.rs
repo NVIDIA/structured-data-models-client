@@ -153,8 +153,19 @@ fn frame_arrow_validity_retains_present_nan_and_merges_signed_zero() {
                 .unwrap_or_else(|e| panic!("{:?}", error(e)));
             let mut notices = 0;
             loop {
-                match sdm_host::read(&run.next().unwrap()).unwrap() {
-                    ControlMessage::Warnings { warnings, .. } => notices += warnings.len(),
+                let next = run.next().unwrap();
+                if let Some(out) = run.take_warnings().unwrap() {
+                    let ControlMessage::Warnings { warnings } = sdm_host::read(&out).unwrap()
+                    else {
+                        panic!("the warning channel must return warnings")
+                    };
+                    notices += warnings.len();
+                }
+                assert!(
+                    run.take_warnings().unwrap().is_none(),
+                    "warnings drain once"
+                );
+                match sdm_host::read(&next).unwrap() {
                     ControlMessage::Step(Step::Done {
                         result: OperationResult::DescribeSource(result),
                         ..
