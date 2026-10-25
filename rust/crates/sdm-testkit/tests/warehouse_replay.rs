@@ -9,9 +9,10 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use sdm_contract::data::{AttachmentId, FetchPlan};
+use sdm_contract::data::{AttachmentId, FetchPlan, ProviderError};
+use sdm_contract::error::{ErrorCode, ErrorKind};
 use sdm_contract::ops::{DescribeSource, Operation};
-use sdm_contract::run::StartRun;
+use sdm_contract::run::{FetchOutcome, FetchReply, StartRun};
 use sdm_contract::{CONTRACT_VERSION, ControlMessage, Step};
 use sdm_host::{Attachment, HostRun, default_root, encode, read};
 use sdm_testkit::host;
@@ -69,7 +70,7 @@ fn core(provider: &Value) -> Value {
     }})
 }
 
-/// Ask the actual core for its first fetch batch, and record driver failures.
+/// Record every actual fetch until the simulated driver failures end the run.
 /// Tests do not implement a warehouse or manufacture a successful table answer.
 fn recording(leg: &str, core: &Value) -> Value {
     let spec = &core["describe_source"];
@@ -92,22 +93,55 @@ fn recording(leg: &str, core: &Value) -> Value {
         )]),
     )
     .unwrap();
-    let out = run.next().unwrap();
-    let ControlMessage::Step(Step::Fetch { requests }) = read(&out).unwrap() else {
-        panic!("describe did not ask a fetch");
+    let failure = ProviderError {
+        kind: ErrorKind::DataSource,
+        retryable: false,
+        sqlstate: None,
+        vendor_code: None,
+        error_class: None,
+        driver_message: None,
     };
-    assert!(!requests.is_empty());
-    let fetches: Vec<Value> = requests
-        .iter()
-        .map(|step| {
+    let mut fetches = Vec::new();
+    loop {
+        let out = match run.next() {
+            Ok(out) => out,
+            Err(out) => {
+                let ControlMessage::Error { error } = read(&out).unwrap() else {
+                    panic!("describe did not end with a core error");
+                };
+                assert_eq!(error.code, ErrorCode::ProviderError);
+                break;
+            }
+        };
+        let ControlMessage::Step(Step::Fetch { requests }) = read(&out).unwrap() else {
+            panic!("describe did not ask a fetch");
+        };
+        assert!(!requests.is_empty());
+        for step in requests {
+            assert!(
+                fetches.len() < 8,
+                "describe did not finish after driver errors"
+            );
             let FetchPlan::Sql { statements, .. } = &step.plan else {
                 panic!("a warehouse fetch is not SQL");
             };
-            json!({"request": step.request, "plan": step.plan,
+            fetches.push(json!({"request": step.request, "plan": step.plan,
                "statements": statements.iter().map(|s| s.text.clone()).collect::<Vec<_>>(),
-               "error": {"kind": "data_source", "retryable": false}})
-        })
-        .collect();
+               "error": &failure}));
+            run.reply(
+                &encode(&ControlMessage::FetchReply(FetchReply {
+                    id: step.id,
+                    outcome: FetchOutcome::Error {
+                        error: failure.clone(),
+                    },
+                }))
+                .unwrap(),
+                BTreeMap::new(),
+            )
+            .unwrap();
+        }
+    }
+    assert!(!fetches.is_empty());
     json!({"format": "sdm-replay/1", "case": format!("t310.replay@{leg}"),
         "core": core, "fetches": fetches})
 }
