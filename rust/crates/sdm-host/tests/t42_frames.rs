@@ -114,6 +114,94 @@ fn primitive_frame_is_described_without_any_fetch() {
 }
 
 #[test]
+fn native_temporal_whole_frame_rebinds_with_exact_units_and_nanosecond_equality() {
+    use arrow_array::{ArrayRef, TimestampMicrosecondArray, TimestampNanosecondArray};
+    use arrow_schema::{DataType, TimeUnit};
+    use sdm_contract::ops::{Dtype, SourceDescription, Stype};
+
+    for unit in [TimeUnit::Microsecond, TimeUnit::Nanosecond] {
+        for variant in ["positive", "negative", "duplicate", "null"] {
+            let values = match variant {
+                "positive" => vec![Some(1), Some(2)],
+                "negative" => vec![Some(-2), Some(-1)],
+                "duplicate" => vec![Some(1), Some(1)],
+                _ => vec![Some(1), None],
+            };
+            let column: ArrayRef = match unit {
+                TimeUnit::Microsecond => Arc::new(TimestampMicrosecondArray::from(values.clone())),
+                TimeUnit::Nanosecond => Arc::new(TimestampNanosecondArray::from(values.clone())),
+                _ => unreachable!(),
+            };
+            let batch = RecordBatch::try_from_iter([("observed_at", column)]).unwrap();
+            let mut rows = Some(ArrowData::new(batch.schema(), vec![batch]));
+            for (stage, id) in [("table", 3), ("schema", 7)] {
+                let mut attached = inputs();
+                attached.remove(&AttachmentId(3));
+                attached.insert(
+                    AttachmentId(2),
+                    bytes(json!({
+                        "stage":stage,"tables":[{"source":{"source":["users"]},"rows":id}]
+                    })),
+                );
+                attached.insert(AttachmentId(id), Attachment::Arrow(rows.take().unwrap()));
+                let run = HostRun::start(&sdm_host::default_root(), &message(), attached)
+                    .unwrap_or_else(|e| panic!("{:?}", error(e)));
+                loop {
+                    let outgoing = run.next().unwrap();
+                    match sdm_host::read(&outgoing).unwrap() {
+                        ControlMessage::Warnings { .. } => {}
+                        ControlMessage::Step(Step::Done {
+                            result: OperationResult::DescribeSource(result),
+                            ..
+                        }) => {
+                            let Attachment::Bytes(data) =
+                                run.take_attachment(result.description).unwrap().unwrap()
+                            else {
+                                panic!("description bytes")
+                            };
+                            let described: SourceDescription =
+                                serde_json::from_slice(&data).unwrap();
+                            assert_eq!(described.tables[0].columns[0].dtype, Dtype::Date);
+                            assert_eq!(described.tables[0].columns[0].stype, Stype::Timestamp);
+                            assert!(described.tables[0].primary_key.is_empty());
+                            assert_eq!(
+                                described.tables[0].time_column.as_deref(),
+                                matches!(variant, "positive" | "negative").then_some("observed_at"),
+                                "{stage}/{unit:?}/{variant}"
+                            );
+                            if stage == "table" {
+                                let Attachment::Arrow(owned) = run
+                                    .take_attachment(result.frame_rows.unwrap())
+                                    .unwrap()
+                                    .unwrap()
+                                else {
+                                    panic!("owned temporal rows")
+                                };
+                                assert_eq!(
+                                    owned.schema.field(0).data_type(),
+                                    &DataType::Timestamp(unit, None)
+                                );
+                                assert_eq!(
+                                    owned.batches[0].column(0).null_count(),
+                                    usize::from(variant == "null")
+                                );
+                                rows = Some(owned);
+                            } else {
+                                assert!(result.frame_rows.is_none());
+                            }
+                            break;
+                        }
+                        other => {
+                            panic!("temporal constructor may not fetch or call a model: {other:?}")
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn frame_arrow_validity_retains_present_nan_and_merges_signed_zero() {
     use arrow_array::Float64Array;
 
