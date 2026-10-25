@@ -40,8 +40,18 @@ This is the one planned T3.10 inventory extension, not a reduction of the existi
 
 ## Validation status
 
-Tests are written and implementation is ready for two independent reviews.
-No package checks, full CI, warehouse runs, matrix jobs, timing campaign or held-out run are claimed here.
-Package checks follow both approvals on the final integrated SHA.
-The orchestrator owns final phase CI and live evidence on the frozen phase head.
-This code switch does not mark Phase 3 complete and does not merge `rust-core`.
+T3.10 remains open for final acceptance; its default switch and preceding repair batches have landed on the phase branch.
+The final-source CI run on `ef10270ec4f1d9c096678874148675e4fa448275` exposed dependency-lock freshness, stale isolated fixtures and an exact replay-plan mismatch.
+The current bounded repair batch regenerates the dependency lock and synthetic replay through their writers, restores historical scope-fixture bytes without changing the guard, and preserves decision rows and capture-check imports in isolated fixtures.
+The replay mismatch is the existing PostgreSQL UTC result-conversion metadata missing from the fixture; strict request and plan matching stays unchanged.
+
+The remaining checkpoints are:
+
+1. Obtain both independent code approvals, confirm the known failures and affected fixture consumers, and complete the required package handoff.
+2. Land the repairs and obtain green full CI and artifacts on the final frozen phase head.
+3. Complete remaining reference recordings and final-core warehouse, Java, model-matrix, original-notebook, full-data and performance comparisons.
+4. Run sealed held-out validation last, complete both whole-phase reviews and the locked exit checks, then merge and push to `rust-core` under the owner's explicit instruction.
+
+Private run receipts identify completed evidence and preserve failed attempts; preparation, recordings and a package stamp alone do not establish phase acceptance.
+No final CI, complete live campaign, performance or held-out pass is claimed by this tracker update.
+Phase 4 is rebased onto the resulting `rust-core` after the Phase 3 merge.

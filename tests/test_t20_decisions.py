@@ -91,13 +91,14 @@ def row(ident: str, names: str, status: str = APPROVED) -> str:
 
 
 def phase2(*rows: str, malformed: bool = False) -> Callable[[Path], None]:
-    r"""Writes ``phase-2/decisions.md`` holding ``rows``; malformed, its
+    r"""Adds ``rows`` beside existing Phase 2 approvals; malformed, its
     text is not UTF-8."""
 
     def edit(repo: Path) -> None:
         path = repo / PHASE2_DECISIONS
         path.parent.mkdir(parents=True, exist_ok=True)
-        text = (HEADER + ''.join(rows)).encode('utf-8')
+        before = path.read_bytes() if path.exists() else HEADER.encode('utf-8')
+        text = before.rstrip(b'\n') + b'\n' + ''.join(rows).encode('utf-8')
         path.write_bytes(NOT_UTF8 + text if malformed else text)
 
     return edit
@@ -376,6 +377,7 @@ def capture_tree(tmp_path: Path) -> tuple[Path, str]:
     tree = tmp_path / 'copy'
     for name in (
         'contract/runners/capture_check.py',
+        'contract/runners/captures.py',
         'contract/compare-policy.yaml',
         PHASE1_DECISIONS,
     ):

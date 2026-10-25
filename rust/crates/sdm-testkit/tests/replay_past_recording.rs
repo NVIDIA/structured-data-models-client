@@ -177,13 +177,15 @@ fn replay_refuses_a_recording_without_either_fetch_s_result_conversion() {
         ));
         std::fs::create_dir_all(&dir).unwrap();
         let answered = case(&dir, "t28.replay.answered", "acceptance");
-        let mut recording: Value =
-            serde_json::from_str(fixture.lines().next().unwrap()).unwrap();
+        let mut recording: Value = serde_json::from_str(fixture.lines().next().unwrap()).unwrap();
         let removed = recording["fetches"][position]["plan"]
             .as_object_mut()
             .unwrap()
             .remove("result_conversions");
-        assert!(removed.is_some(), "fetch {position} has no conversion to omit");
+        assert!(
+            removed.is_some(),
+            "fetch {position} has no conversion to omit"
+        );
         let path = dir.join("missing-conversion.jsonl");
         std::fs::write(&path, serde_json::to_vec(&recording).unwrap()).unwrap();
         let out = dir.join("answered.jsonl");

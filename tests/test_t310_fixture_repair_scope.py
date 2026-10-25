@@ -84,7 +84,17 @@ def _tree(tmp_path: Path) -> Path:
     for name in (*HANDOFF.FIXTURE_REPAIR_FILES, *SUBSTANTIVE):
         path = root / name
         path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(ROOT / name, path)
+        if name in HANDOFF.FIXTURE_REPAIR_FILES:
+            # This finite scope approves historical bytes, even after later
+            # packages legitimately change the live files.
+            path.write_bytes(
+                subprocess.check_output(
+                    ['git', '-C', str(ROOT), 'show', f'{SOURCE}:{name}'],
+                    stdin=subprocess.DEVNULL,
+                )
+            )
+        else:
+            shutil.copy2(ROOT / name, path)
     _policy(root, 'approved by owner 2026-10-25')
     return root
 
