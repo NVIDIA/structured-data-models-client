@@ -150,56 +150,32 @@ def test_both_public_sql_directions_match_frozen_labels_and_decode_rankings(
         assert rows[5][2] is None and rows[5][4] == ['2']
 
 
-def test_repeated_entity_table_roles_keep_the_last_reference_alias(monkeypatch):
-    query = 'PREDICT LIST_DISTINCT(buys.user_id, 0, 30, days) FOR EACH users.user_id'
-    observed = []
-    for core in (False, True):
-        route(monkeypatch, core)
-        with connection() as db:
-            request = materialize(db, query)
-            payload = request.payloads[0]
-            assert payload['task']['entity_table_names'] == ['users', 'users']
-            columns = payload['schema']['instance_table']['columns']
-            assert 'stype' not in columns['__kumo_entity_ref_0']
-            assert columns['__kumo_entity_ref_1']['stype'] == 'id'
-            entity_links = [
-                link
-                for link in payload['schema']['relationships']
-                if 'source_table' not in link
-            ]
-            assert (
-                entity_links
-                == [
-                    {
-                        'source_columns': ['__kumo_entity_ref_1'],
-                        'target_table': 'users',
-                        'target_columns': ['user_id'],
-                    }
-                ]
-                * 2
-            )
-            script = Scripted()
-            assert predict(request, script)['id'].tolist() == [0, 1]
-            assert len(script.calls) == 1
-            for part in ('schema', 'task', 'context', 'predict'):
-                assert script.calls[0][part] == payload[part]
-            observed.append(request.payloads)
-    assert observed[1] == observed[0]
-
-
-def test_non_fk_list_distinct_keeps_the_unqualified_reference_error(
-    monkeypatch,
+@pytest.mark.parametrize(
+    'query,reason',
+    [
+        (
+            'PREDICT LIST_DISTINCT(buys.user_id, 0, 30, days) FOR EACH users.user_id',
+            'creates a loop by pointing to the entity table',
+        ),
+        (
+            'PREDICT LIST_DISTINCT(orders.price, 0, 30, days) FOR EACH users.user_id',
+            'Foundation Model queries do not support multilabel tasks',
+        ),
+    ],
+)
+def test_public_sql_refuses_loop_and_non_fk_targets_before_payload_construction(
+    monkeypatch, query, reason
 ):
-    query = 'PREDICT LIST_DISTINCT(orders.price, 0, 30, days) FOR EACH users.user_id'
+    # Genuine frozen43e public observations reject both inputs in validation,
+    # before the internal alias writer and non-FK task diagnostic are reached.
     observed = []
     for core in (False, True):
         route(monkeypatch, core)
         with connection() as db:
             with pytest.raises(StructuredDataError) as error:
                 materialize(db, query)
-        assert error.value.code == 'UNSUPPORTED_REQUEST'
-        assert "register 'price' as a foreign key" in str(error.value)
-        assert "'orders.price'" not in str(error.value)
+        assert error.value.code == 'INVALID_REQUEST'
+        assert reason in str(error.value)
         observed.append((error.value.code, str(error.value)))
     assert observed[1] == observed[0]
 
