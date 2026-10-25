@@ -7,6 +7,7 @@ package com.nvidia.sdm;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -54,6 +55,38 @@ class T311BindingTest {
 
     private static String sha256(byte[] data) throws Exception {
         return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(data));
+    }
+
+    /** Warnings are a separate native channel, including on a failed run. */
+    private static void assertWarnings(Object run, Map<String, Object> vector, String name)
+            throws Exception {
+        List<?> expected = (List<?>) vector.get("warnings");
+        assertTrue(expected != null, name + ": the vector omits the warning channel");
+        Object taken = T311Names.call(run, "takeWarnings");
+        if (taken == null) {
+            assertEquals(List.of(), expected, name + ": missing warning controls");
+            return;
+        }
+        try {
+            byte[] control = (byte[]) T311Names.read(taken, "control", "getControl");
+            Map<String, Object> message = T311Json.object(
+                    T311Json.read(new String(control, StandardCharsets.UTF_8)));
+            if ("attached".equals(message.get("message"))) {
+                int id = ((Number) message.get("attachment")).intValue();
+                byte[] carried = (byte[]) T311Names.call(taken, "bytes", id);
+                message = T311Json.object(T311Json.read(new String(carried, StandardCharsets.UTF_8)));
+            }
+            assertEquals("warnings", message.get("message"), name);
+            assertEquals(1, expected.size(), name + ": unexpected warning control");
+            Map<String, Object> wanted = T311Json.object(expected.get(0));
+            assertEquals(wanted.get("control"), message,
+                    name + ": warning contents or ordering differ from Python");
+            assertEquals(wanted.get("digest"), sha256(control),
+                    name + ": warning control bytes differ from Python");
+        } finally {
+            T311Names.call(taken, "close");
+        }
+        assertNull(T311Names.call(run, "takeWarnings"), name + ": warnings were not drained");
     }
 
     /** Every S0 case's id, from its file in contract/cases/s0/. */
@@ -115,16 +148,28 @@ class T311BindingTest {
                 try {
                     String error = (String) vector.get("error");
                     if (error == null) {
-                        Object[] whole = T311Names.nextWhole(run);
+                        Object[] whole;
+                        try {
+                            whole = T311Names.nextWhole(run);
+                        } finally {
+                            assertWarnings(run, vector, each.getKey());
+                        }
                         byte[] control = (byte[]) whole[0];
-                        Map<String, Object> result = T311Json.object(T311Json.object(
-                                T311Json.read((String) whole[1])).get("result"));
+                        Map<String, Object> message = T311Json.object(T311Json.read((String) whole[1]));
+                        assertEquals("step", message.get("message"), each.getKey());
+                        assertEquals("done", message.get("step"), each.getKey());
+                        Map<String, Object> result = T311Json.object(message.get("result"));
+                        assertEquals("validate_query", result.get("op"), each.getKey());
                         assertEquals(vector.get("accepted"), result.get("accepted"), each.getKey());
                         assertEquals(vector.get("digest"), sha256(control),
                                 each.getKey() + ": the done step's bytes differ from Python's binding's");
                     } else {
                         try {
-                            T311Names.next(run);
+                            try {
+                                T311Names.next(run);
+                            } finally {
+                                assertWarnings(run, vector, each.getKey());
+                            }
                             fail(each.getKey() + ": no error; Python's binding raised " + error);
                         } catch (Exception raised) {
                             assertTrue(T311Names.isStructuredDataException(raised),

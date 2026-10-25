@@ -29,7 +29,9 @@ Written by T3.11's test author. Run from this repository's root:
     character outside the BMP, non-ASCII letters); the operation and its
     attachments as the bytes Python sent (base64), and the answer: the
     SHA-256 of the done step's control bytes, ``accepted`` and the error
-    diagnostics' codes (no message text, decision H17);
+    diagnostics' codes; the separate warning channel's complete ordered
+    controls and their raw-control digests are retained beside that terminal
+    outcome, including warnings from a run that raises;
   - ``errors``: for every code of ``ERROR_CODES``, the test-only ``fail``
     operation failing with an error of that code, the first kind the
     contract allows it (found by asking the core) and the code's first
@@ -70,9 +72,11 @@ FACTS: dict[str, Any] = {
 #: Texts no S0 case holds, each on the binary-classification case's schema:
 #: a NUL inside a string literal (JNI's modified UTF-8 writes it as two
 #: bytes), a character outside the BMP (a surrogate pair in Java, four
-#: bytes in UTF-8, six in modified UTF-8) and non-ASCII letters.
+#: bytes in UTF-8, six in modified UTF-8), non-ASCII letters and a single
+#: deprecated escape whose warning must cross both bindings.
 TEXTS = {
     'text.nul': "PREDICT users.country = 'a\x00b' FOR EACH users.user_id",
+    'text.escape-warning': r"PREDICT users.country = 'a\/' FOR EACH users.user_id",
     'text.non-bmp': "PREDICT users.country = '\U0001f600' FOR EACH users.user_id",
     'text.non-ascii': (
         "PREDICT users.country = 'Zürich 東京' FOR EACH users.user_id"
@@ -224,10 +228,11 @@ def _validate(native: Any) -> dict[str, Any]:
             },
             'text': text,
         }
+        entry['warnings'] = []
+        run = None
         try:
-            control, carried = native.Run.start(
-                _start(native, operation), attachments
-            ).next()
+            run = native.Run.start(_start(native, operation), attachments)
+            control, carried = run.next()
         except native.CoreError as error:
             entry.update(
                 error=error.code,
@@ -241,7 +246,13 @@ def _validate(native: Any) -> dict[str, Any]:
                 # A done step past the control cap travels as its bytes
                 # attachment (decision H7); the digest stays the control's.
                 step = json.loads(carried[step['attachment']])
+            if (step.get('message'), step.get('step')) != ('step', 'done'):
+                raise ValueError('validate_query did not return a done step')
             result = step['result']
+            if result.get('op') != 'validate_query':
+                raise ValueError(
+                    'validate_query did not return its done result'
+                )
             entry.update(
                 error=None,
                 digest=_digest(control),
@@ -252,6 +263,23 @@ def _validate(native: Any) -> dict[str, Any]:
                     if diagnostic['severity'] == 'error'
                 ],
             )
+        finally:
+            # Warnings are a separate binding channel, also available when
+            # next() raises. Keep their full ordered control beside the
+            # terminal result/error, rather than treating them as diagnostics.
+            taken = None if run is None else run.take_warnings()
+            if taken is not None:
+                warning_control, carried = taken
+                warning = json.loads(warning_control)
+                if warning['message'] == 'attached':
+                    warning = json.loads(carried[warning['attachment']])
+                if warning.get('message') != 'warnings':
+                    raise ValueError(
+                        'validate_query returned a non-warning control'
+                    )
+                entry['warnings'].append(
+                    {'digest': _digest(warning_control), 'control': warning}
+                )
         answers[name] = entry
     return answers
 
