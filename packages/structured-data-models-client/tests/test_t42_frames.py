@@ -237,3 +237,16 @@ def test_primitive_final_notices_and_key_remedies_match_original(monkeypatch, ax
     assert old_warnings, 'the reference control must reach its meaningful notice'
     assert projection(new) == projection(old)
     assert new_warnings == old_warnings
+
+
+@pytest.mark.parametrize('option', ['primary_keys', 'time_columns'])
+@pytest.mark.parametrize('order', [('z_missing', 'a_missing'), ('a_missing', 'z_missing')])
+def test_native_override_mapping_order_controls_first_error(monkeypatch, option, order):
+    found = []
+    for core in (False, True):
+        with pytest.raises(StructuredDataError) as caught:
+            describe(monkeypatch, {'users': users()}, core=core,
+                     **{option: {name: 'user_id' for name in order}})
+        found.append(str(caught.value))
+    assert order[0] in found[0]
+    assert found[1] == found[0]
