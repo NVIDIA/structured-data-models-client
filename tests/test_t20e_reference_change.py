@@ -188,10 +188,7 @@ def origin(owned_module_dir: Callable[[str], Path]) -> tuple[Path, str]:
 
 @pytest.fixture
 def repo(origin: tuple[Path, str], tmp_path: Path) -> Path:
-    source, landed = origin
-    tree = tmp_path / 'tree'
-    git(source, 'worktree', 'add', '-q', '--detach', str(tree), landed)
-    return tree
+    return helpers.repo.__wrapped__(origin, tmp_path)
 
 
 def row(text: str, status: str = APPROVED, ident: str = 'P2E-901') -> str:

@@ -259,9 +259,7 @@ def origin(owned_module_dir: Callable[[str], Path]) -> dict[str, Any]:
 
 
 def _worktree(origin: dict[str, Any], tmp_path: Path, at: str) -> Path:
-    tree = tmp_path / 'tree'
-    git(origin['repo'], 'worktree', 'add', '-q', '--detach', str(tree), at)
-    return tree
+    return helpers.repo.__wrapped__((origin['repo'], at), tmp_path)
 
 
 @pytest.fixture

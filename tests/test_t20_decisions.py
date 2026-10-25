@@ -147,10 +147,7 @@ def ratchet_origin(
 
 @pytest.fixture
 def repo(ratchet_origin: tuple[Path, str], tmp_path: Path) -> Path:
-    source, landed = ratchet_origin
-    tree = tmp_path / 'tree'
-    git(source, 'worktree', 'add', '-q', '--detach', str(tree), landed)
-    return tree
+    return helpers.repo.__wrapped__(ratchet_origin, tmp_path)
 
 
 def ratchet_check(
@@ -302,10 +299,7 @@ def coverage_origin(
 
 @pytest.fixture
 def manifests(coverage_origin: tuple[Path, str], tmp_path: Path) -> Path:
-    source, landed = coverage_origin
-    tree = tmp_path / 'tree'
-    git(source, 'worktree', 'add', '-q', '--detach', str(tree), landed)
-    return tree
+    return helpers.repo.__wrapped__(coverage_origin, tmp_path)
 
 
 def dropped(repo: Path) -> None:
