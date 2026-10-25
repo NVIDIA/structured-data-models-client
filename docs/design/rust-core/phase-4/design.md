@@ -61,13 +61,16 @@ The following are the proposed contract responsibilities; T4.1 locks their seria
 2. **Native conversion reports facts; the core decides behavior.**
    `_rust/frames.py` converts each pandas column once using a reviewed conversion table and existing codec scalars, preserving integer widths, decimals, nulls, zones, nested values and empty/all-null columns.
    Object columns are classified column-wise, with explicit diagnostics for values that have no lossless contract representation; they are never coerced wholesale through text or float64.
-   Native equality or ordering that cannot be derived from Arrow travels as a narrowly defined fact, including the index order of the exact subset the core retained and sampled.
+   Native index information travels only as typed input conversion facts, supplied before the run selects rows; the core owns filtering, sampling and ordering of the resulting subset.
    [`_context_within_limit`](../../../../packages/structured-data-models-client/src/sdm_client/materializers/tabular.py) runs `candidates.sample(...).sort_index()`: equal index labels can preserve sampled order, so sorting sampled rows by a precomputed full-frame permutation is insufficient.
-   After choosing rows, the core may suspend for one typed native index ordering fact: a manifest-local table id and an attachment of selected original row ordinals in their sampled order, answered with the permutation of positions produced by native `sort_index()` on exactly that ordered subset.
-   The host only obtains that subset's native index order; filtering, sample size, row choice, RNG and application of the returned permutation remain core-owned.
-   The core validates the table/snapshot and pending-request identity, ordinal bounds and reply's exact permutation length/bijection before use; a failed native sort is a structured native-conversion failure, not a substituted order.
-   The host retains the matching frame/index snapshot for that run, rejects stale or disposed-run replies, and releases it with the run; input-sized ordinals/permutations use attachments, with no Python index object or object handle crossing the contract.
-   This is one bounded typed fact exchange, not a generic callback facility; rust-host supplies equivalent facts from a native index representation or recorded subset-order vectors without invoking Python.
+   Candidate input facts are lossless typed labels where the closed set suffices, or explicit equality/comparison ranks and incomparable classes, null classifications, category ordering and MultiIndex level/code/row tuples where native comparison needs them.
+   They describe the original index independently of any eventual sample, retaining row identity and input order; one global permutation is not the proposed representation.
+   The exact sufficient representation and core algorithm remain a narrow T4.1 design obligation: trace the actual reference sorting call paths and prove their composition reproduces supported filtered/sampled subsets, including duplicate, mixed-label, null, categorical and MultiIndex behavior.
+   That proof must account for subset-dependent monotonic shortcuts and tie behavior rather than inventing a stable tie rule, and must cover any comparison failure only on the subsets where the reference encounters it.
+   Use existing Arrow/order primitives or a bounded defined algorithm established by that source analysis; do not build a generic pandas index/runtime emulator or an unbounded comparison framework.
+   Validate input fact lengths, row/level/code bounds, encoding consistency and correspondence to the admitted frame snapshot without demanding a total order for labels the reference cannot compare; carry input-sized facts in attachments whose lifetime and mutation invalidation follow the frame input.
+   Both Python and rust-host supply the same typed input facts without Python object handles; rust-host performs the actual subset sorting in the shared core, not by replaying a final host-sorted permutation.
+   The [locked L0 rule](../migration-plan.md#6-testing) and [`Step`](../../../../rust/crates/sdm-contract/src/run.rs) permit only fetch/model/done steps, with no request for language sorting; do not add a semantic callback or disguise one as fetch, done or a second prepare call after selection.
    A pandas dtype name, object handle, arbitrary callback, `repr` or inferred PQL tree never crosses the contract.
    Core inference, overrides, task choice, leakage checks, sampling, limits and warnings do not move into this converter.
 3. **State is an explicit value with a defined lifetime.**
@@ -117,18 +120,20 @@ This document does not authorize implementation, live work, phase activation or 
 
 - Own the contract work above, binding/message compatibility and the mapping from the current S3 manifest to the following package responsibilities.
 - Modify `sdm-contract`, `sdm-host`, `sdm-py`, Python codecs/stubs and the compatible Java/JNI decoders together; generate schemas and locks through the existing tooling.
-- Specify attachment ownership, close acknowledgments, failed-call state progression, the native ordering exchange for each selected subset, frame mutation invalidation and the large-offset admission boundary before freezing shapes.
+- Specify attachment ownership, close acknowledgments, failed-call state progression, native index input facts, frame mutation invalidation and the large-offset admission boundary before freezing shapes.
+- Resolve the RS-5 technical design obligation before freezing its input shape: show that the proposed facts and a concrete core sorting algorithm reproduce the reference on filtered/sampled subsets across every supported index family, including failures and duplicate-label ties.
+  The representation above is a candidate, not a claim of completeness; if that proof finds a real unsupported behavior or necessary boundary exception, bring the concrete source reproduction and alternatives to the owner rather than adding a callback, approximation or refusal.
 - Distinguish/version model-neutral prepared state from model-bound materialized state, preserving later model selection, immediate generic constructor checks and existing incompatible gathered-payload diagnostics.
-- Write round-trip, unknown-version, attachment-kind, selected-subset permutation validation, empty-delete-reply and existing Java-call compatibility tests first.
+- Write round-trip, unknown-version, attachment-kind, index-fact validation and core subset-order equivalence, empty-delete-reply and existing Java-call compatibility tests first.
 - Dependency: final Phase 3 contract/source reconciliation; T4.2, T4.3, T4.5 and T4.6 may develop against this reviewed interface after it lands.
 
 ### T4.2 – Frame conversion, schema and large-offset admission
 
 - Deliver `Schema.from_data`, mapping input and manually constructed frame tables through `_rust/frames.py`, `sdm-core::frames`, and existing `sdm-schema` inference/assembly/edit rules.
 - Reuse `_rust/spec.py`'s held-schema serialization and `Column._source` facts; do not introduce a second schema representation or persistent copy that overrides live edits.
-- Implement column-wise native conversion, index ordering facts for each selected subset and Arrow admission/lifetime changes, including FX-3 in `sdm-host::admission`, schema inference and the pre-materialize size guard.
+- Implement column-wise native conversion, the proven native index input facts and Arrow admission/lifetime changes, including FX-3 in `sdm-host::admission`, schema inference and the pre-materialize size guard.
 - Exercise public constructors, snapshots, edits and reference pickles with mixed object columns, nullable/wide numeric keys, nested values, indexes with nonmonotonic labels, all-equal labels, mixed duplicates or mixed label types, MultiIndex, and caller frame mutation.
-  Check subset filtering before sampling, sampled-order preservation for equal labels, native sort failures, malformed permutations, stale replies and retained-index lifetime.
+  Check filtering before sampling, the core's sampled-order preservation where the reference keeps equal labels, comparison failures on the affected subsets, malformed index facts, frame mutation and fact-buffer lifetime.
 - Prove FX-3 using the actual DuckDB `arrow_large_buffer_size` path: unread oversized BLOB, described oversized VARCHAR, named materialize refusal, and adjacent fitting values.
   A reduced-capacity unit check supplements that public reproduction; it does not replace the real large-offset acceptance case.
 - Dependency: T4.1; exports the Arrow frame input consumed by T4.4 and T4.6.
@@ -169,7 +174,7 @@ This document does not authorize implementation, live work, phase activation or 
 
 - Move `materializers/tabular.py` and `adapters/tabular.py` into `sdm-core::tabular` and `sdm-request::tabular`, with the direct constructor's model-neutral data-dependent validation in `sdm-core::prepare`, reusing wire/result primitives.
 - Support direct context/predict frames and single-table PQL via both indices and supplied predict rows, preserving constructor-time generic refusals and explicit task, PQL-only task derivation/overrides, later model/profile preflight, schema widening across both halves, identity mapping and empty scoring.
-- Preserve holdout/leakage behavior, remove rows with unknown targets before sampling, implement the 10,000-context-row limit and warning at the appropriate materialization/model-preflight boundary, and implement RS-5's core-selected fixed-seed sample followed by the exact sampled subset's native index-order fact.
+- Preserve holdout/leakage behavior, remove rows with unknown targets before sampling, implement the 10,000-context-row limit and warning at the appropriate materialization/model-preflight boundary, and implement RS-5's core-selected fixed-seed sample followed by core sorting of that subset using T4.1's proven input facts and algorithm.
 - Test constructing a request without a model, inspecting it, and reusing it with later supported models; include unchanged immediate constructor failures and explicit binary/multiclass task preservation on the same target values.
 - Lift `model` at the real model-selection/preflight boundary and test both `KumoTabular()` and `model='kumo-tabular'`; relational gathered payloads passed to the tabular model retain their existing diagnostic.
 - Compare payloads and results with the reference for classification/regression, one/two/many classes, all-null versus typed predict columns, exact/wide numeric targets, context limits, filtering before sampling, indexes with equal labels, mixed duplicates, mixed types or nonmonotonic labels, MultiIndex, and missing/incompatible features.
@@ -223,9 +228,13 @@ Run complete user journeys early on Python and rust-host so the final switch doe
    Phase 3's warm relational-v26 endpoint and Databricks serving transport are not evidence that tabular or session endpoints are available; Databricks serving explicitly has a one-shot sessions refusal today.
    Identify usable endpoints and permissions before T4.8's campaign and retain the existing unsupported-session diagnostics where the transport does not serve them.
    The historical suggestions to drop warehouse-session live tests or defer tabular were never authorization to shrink Phase 4.
+5. **RS-5 index ordering has an explicit technical proof obligation.**
+   T4.1 must establish sufficient input index facts and a concrete core algorithm before freezing that part of the contract; this planning draft does not claim the candidate representation already covers every supported index.
+   T4.2 and T4.6 depend on that proof, including equal and mixed duplicate labels, mixed label types, nulls, categories, MultiIndex and filtering before sampling.
+   This is an engineering obligation within the existing boundary, not an assumed owner exception; only a demonstrated need to change behavior or the locked boundary triggers a concrete owner proposal.
 
-Only a concrete proposed user-visible change or missing live-resource authorization needs owner input.
-Module names, use of existing Arrow kernels, package scheduling and precise contract serialization are reviewable engineering decisions within the stated scope.
+Concrete proposed user-visible changes, missing live-resource authorization and any change to locked acceptance or architectural boundaries need owner input.
+Module names, use of existing Arrow kernels, package scheduling and serialized field choices are reviewable engineering decisions within the stated scope; the contract bump itself retains its existing owner-approval requirement.
 No new owner decision is required to draft or independently review this plan.
 
 ## Exit conditions
