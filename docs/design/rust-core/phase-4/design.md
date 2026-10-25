@@ -31,7 +31,7 @@ The same Arrow frame input is usable by Python and the pure-Rust test host, and 
 | `sdm-engine` | `src/sample.rs`, `random.rs`, `keys.rs`, `graph.rs`, `labels.rs`, `time/text.rs` | `src/frames.rs` | Arrow row selection and frame indexes, frame sampling and random-state transitions, link labels and text-time rules |
 | `sdm-request` | `src/predict.rs`, `payload.rs`, `options.rs`, `ranking.rs` | `src/tabular.rs`, `src/session.rs` | Model-specific request validation, wire layout, session pin/scoring layouts, results and limits |
 | `sdm-wire` | `src/payload.rs`, `response.rs`, `key.rs` | None initially | Model wire encoding/decoding, including tabular and link responses; no transport |
-| `sdm-core` | `src/dispatch.rs`, `run.rs`, `compose.rs`, `describe.rs`, `materialize.rs`, `fallback.rs`, `subgraph.rs`, `predict.rs` | `src/frames.rs`, `src/tabular.rs`, `src/session.rs` | Operation orchestration, source selection, held state, leakage prevention, session transitions and request composition |
+| `sdm-core` | `src/dispatch.rs`, `run.rs`, `compose.rs`, `describe.rs`, `materialize.rs`, `fallback.rs`, `subgraph.rs`, `predict.rs` | `src/frames.rs`, `src/prepare.rs`, `src/tabular.rs`, `src/session.rs` | Operation orchestration, model-neutral request preparation, source selection, held state, leakage prevention, session transitions and request composition |
 | `sdm-data` | Existing dialect renderers only when a link-prediction request needs SQL support | None initially | Continue planning SQL and reading catalogs through `DataLayer`; no pandas or session rules |
 | `sdm-host` and `sdm-py` | `sdm-host/src/admission.rs`, `runs.rs`, `codec.rs`; `bindings/sdm-py/src/lib.rs` | None initially | Arrow admission, message validation, buffer/run ownership and panic containment |
 | `structured-data-models-client` / `sdm_client` | `schema.py`, `query.py`, `request.py`, `client.py`, `_routing.py`, `_rust/{schema,materialize,predict,spec,run,results,codec,errors}.py` | `_rust/frames.py`, `_rust/sessions.py` | Native conversion, object construction and lifetime, transport dispatch, exceptions and presentation |
@@ -61,7 +61,13 @@ The following are the proposed contract responsibilities; T4.1 locks their seria
 2. **Native conversion reports facts; the core decides behavior.**
    `_rust/frames.py` converts each pandas column once using a reviewed conversion table and existing codec scalars, preserving integer widths, decimals, nulls, zones, nested values and empty/all-null columns.
    Object columns are classified column-wise, with explicit diagnostics for values that have no lossless contract representation; they are never coerced wholesale through text or float64.
-   Native equality or ordering that cannot be derived from Arrow travels as a narrowly defined fact, such as the index-order permutation needed by the tabular reference's `sort_index()`.
+   Native equality or ordering that cannot be derived from Arrow travels as a narrowly defined fact, including the index order of the exact subset the core retained and sampled.
+   [`_context_within_limit`](../../../../packages/structured-data-models-client/src/sdm_client/materializers/tabular.py) runs `candidates.sample(...).sort_index()`: equal index labels can preserve sampled order, so sorting sampled rows by a precomputed full-frame permutation is insufficient.
+   After choosing rows, the core may suspend for one typed native index ordering fact: a manifest-local table id and an attachment of selected original row ordinals in their sampled order, answered with the permutation of positions produced by native `sort_index()` on exactly that ordered subset.
+   The host only obtains that subset's native index order; filtering, sample size, row choice, RNG and application of the returned permutation remain core-owned.
+   The core validates the table/snapshot and pending-request identity, ordinal bounds and reply's exact permutation length/bijection before use; a failed native sort is a structured native-conversion failure, not a substituted order.
+   The host retains the matching frame/index snapshot for that run, rejects stale or disposed-run replies, and releases it with the run; input-sized ordinals/permutations use attachments, with no Python index object or object handle crossing the contract.
+   This is one bounded typed fact exchange, not a generic callback facility; rust-host supplies equivalent facts from a native index representation or recorded subset-order vectors without invoking Python.
    A pandas dtype name, object handle, arbitrary callback, `repr` or inferred PQL tree never crosses the contract.
    Core inference, overrides, task choice, leakage checks, sampling, limits and warnings do not move into this converter.
 3. **State is an explicit value with a defined lifetime.**
@@ -69,15 +75,20 @@ The following are the proposed contract responsibilities; T4.1 locks their seria
    The host owns Arrow buffers and opaque versioned state between calls; the run borrows admitted data for its lifetime and returns replacement state, including the reference's state progression on failure.
    Data/schema identity and mutation invalidate cached frame indexes and incompatible sampler state; no process-global RNG, hidden core registry or host-object identity enters the memo.
    A request snapshots schema meaning as today, and changes to caller frames must follow the observed reference behavior rather than silently reusing stale converted data.
-4. **Direct requests and model selection are core operations.**
-   Add a typed prepare-request operation for context/predict Arrow halves, target, task, held schema and options, so direct `Request(...)` and PQL materialization share core validation and model-specific payload builders.
-   Preserve the public Python constructor and `materialize(..., model=...)` signatures.
-   The core chooses relational or tabular validation/layout from the model specification; the host does not select a Python adapter to decide semantics.
+4. **Direct preparation is model-neutral; model binding happens when supplied.**
+   Add a typed model-neutral prepare-request operation for context/predict Arrow halves, target, explicit task, held schema and options, preserving [`Request.__init__`](../../../../packages/structured-data-models-client/src/sdm_client/request.py)'s immediate generic checks and inspectable halves without a model argument or implicit default model.
+   Its held state is explicitly distinguished and versioned separately from a model-bound materialized request; preserve the caller's direct task instead of inferring it from target cardinality.
+   When `predict`, `fit` or explicitly model-bound `materialize` supplies a model, core preflight selects the model specification, checks capabilities/options and invokes the shared model-specific builders at the current [`SDMClient._prepare`](../../../../packages/structured-data-models-client/src/sdm_client/client.py) boundary.
+   PQL materialization may derive a task by its existing query/target rules; that does not change the direct constructor's explicit-task contract.
+   Preserve the public Python constructor and `materialize(..., model=...)` signatures, and permit reuse of model-neutral held state with a later supported model without mutating it into one model's state.
+   The host does not select a Python adapter to decide validation or payload semantics, and generic constructor failures do not move to prediction time.
    Existing request state and held-payload compatibility remain accepted, including requests made before the core switch and inspection of their halves.
 5. **Sessions are typed model calls and explicit session state.**
    Add fit, fitted-predict and close operations, and extend the current predict-only `Endpoint` with create-session, session-predict and delete-session calls carrying an explicit session id where required.
    The model-call contract must express the HTTP method, body presence and expected reply kind needed for DELETE and its successful empty reply; a successful close must not be parsed as a prediction response.
-   The host maps those calls onto existing transport methods and returns raw bytes or structured failure facts; it performs no retry or lifecycle transition the core did not request.
+   The host maps those calls onto existing transport methods and returns raw bytes or structured failure facts, preserving configured retries, timeouts and endpoint-specific idempotence rules in [`core/transport.py::_build_retry` and `_build_session`](../../../../packages/structured-data-models-client/src/sdm_client/core/transport.py).
+   Session creation retains connection-only retries, excluding read/status replay after a possible server-side effect; scoring retains its configured retry policy, and idempotent DELETE retains its retries and bounded cleanup timeout.
+   The bridge adds no application-level retry loop, fit replay or independent lifecycle transition; the core does not schedule individual transport attempts.
    Versioned session state holds the returned id, model, pinned question/schema/task, selected outputs and identities needed for leakage checks, without retaining the uploaded context payload.
    The core validates later requests against that pinned contract and sends only scoring rows; the host owns `FittedModel` context-manager behavior and transport lifetime.
    While a step is suspended, the host keeps its run and referenced Arrow buffers alive; callbacks submit a reply only to that live run, under the binding's existing ownership/busy rules.
@@ -106,16 +117,18 @@ This document does not authorize implementation, live work, phase activation or 
 
 - Own the contract work above, binding/message compatibility and the mapping from the current S3 manifest to the following package responsibilities.
 - Modify `sdm-contract`, `sdm-host`, `sdm-py`, Python codecs/stubs and the compatible Java/JNI decoders together; generate schemas and locks through the existing tooling.
-- Specify attachment ownership, close acknowledgments, failed-call state progression, native ordering facts, frame mutation invalidation and the large-offset admission boundary before freezing shapes.
-- Write round-trip, unknown-version, attachment-kind, empty-delete-reply and existing Java-call compatibility tests first.
+- Specify attachment ownership, close acknowledgments, failed-call state progression, the native ordering exchange for each selected subset, frame mutation invalidation and the large-offset admission boundary before freezing shapes.
+- Distinguish/version model-neutral prepared state from model-bound materialized state, preserving later model selection, immediate generic constructor checks and existing incompatible gathered-payload diagnostics.
+- Write round-trip, unknown-version, attachment-kind, selected-subset permutation validation, empty-delete-reply and existing Java-call compatibility tests first.
 - Dependency: final Phase 3 contract/source reconciliation; T4.2, T4.3, T4.5 and T4.6 may develop against this reviewed interface after it lands.
 
 ### T4.2 – Frame conversion, schema and large-offset admission
 
 - Deliver `Schema.from_data`, mapping input and manually constructed frame tables through `_rust/frames.py`, `sdm-core::frames`, and existing `sdm-schema` inference/assembly/edit rules.
 - Reuse `_rust/spec.py`'s held-schema serialization and `Column._source` facts; do not introduce a second schema representation or persistent copy that overrides live edits.
-- Implement column-wise native conversion, explicit index-order facts and Arrow admission/lifetime changes, including FX-3 in `sdm-host::admission`, schema inference and the pre-materialize size guard.
-- Exercise public constructors, snapshots, edits and reference pickles with mixed object columns, nullable/wide numeric keys, nested values, non-default/duplicate indexes and caller frame mutation.
+- Implement column-wise native conversion, index ordering facts for each selected subset and Arrow admission/lifetime changes, including FX-3 in `sdm-host::admission`, schema inference and the pre-materialize size guard.
+- Exercise public constructors, snapshots, edits and reference pickles with mixed object columns, nullable/wide numeric keys, nested values, indexes with nonmonotonic labels, all-equal labels, mixed duplicates or mixed label types, MultiIndex, and caller frame mutation.
+  Check subset filtering before sampling, sampled-order preservation for equal labels, native sort failures, malformed permutations, stale replies and retained-index lifetime.
 - Prove FX-3 using the actual DuckDB `arrow_large_buffer_size` path: unread oversized BLOB, described oversized VARCHAR, named materialize refusal, and adjacent fitting values.
   A reduced-capacity unit check supplements that public reproduction; it does not replace the real large-offset acceptance case.
 - Dependency: T4.1; exports the Arrow frame input consumed by T4.4 and T4.6.
@@ -154,11 +167,12 @@ This document does not authorize implementation, live work, phase activation or 
 
 ### T4.6 – Tabular preparation and one-shot prediction
 
-- Move `materializers/tabular.py`, `adapters/tabular.py` and the direct constructor's data-dependent validation into `sdm-core::tabular` and `sdm-request::tabular`, reusing wire/result primitives.
-- Support direct context/predict frames and single-table PQL via both indices and supplied predict rows, including task derivation/overrides, model/profile constraints, schema widening across both halves, identity mapping and empty scoring.
-- Preserve holdout/leakage behavior, remove rows with unknown targets before sampling, implement the 10,000-context-row limit and warning, and implement RS-5's fixed-seed sample followed by the supplied native index order.
+- Move `materializers/tabular.py` and `adapters/tabular.py` into `sdm-core::tabular` and `sdm-request::tabular`, with the direct constructor's model-neutral data-dependent validation in `sdm-core::prepare`, reusing wire/result primitives.
+- Support direct context/predict frames and single-table PQL via both indices and supplied predict rows, preserving constructor-time generic refusals and explicit task, PQL-only task derivation/overrides, later model/profile preflight, schema widening across both halves, identity mapping and empty scoring.
+- Preserve holdout/leakage behavior, remove rows with unknown targets before sampling, implement the 10,000-context-row limit and warning at the appropriate materialization/model-preflight boundary, and implement RS-5's core-selected fixed-seed sample followed by the exact sampled subset's native index-order fact.
+- Test constructing a request without a model, inspecting it, and reusing it with later supported models; include unchanged immediate constructor failures and explicit binary/multiclass task preservation on the same target values.
 - Lift `model` at the real model-selection/preflight boundary and test both `KumoTabular()` and `model='kumo-tabular'`; relational gathered payloads passed to the tabular model retain their existing diagnostic.
-- Compare payloads and results with the reference for classification/regression, one/two/many classes, all-null versus typed predict columns, exact/wide numeric targets, context limits, duplicate/non-default indexes, and missing/incompatible features.
+- Compare payloads and results with the reference for classification/regression, one/two/many classes, all-null versus typed predict columns, exact/wide numeric targets, context limits, filtering before sampling, indexes with equal labels, mixed duplicates, mixed types or nonmonotonic labels, MultiIndex, and missing/incompatible features.
 - Dependencies: T4.1 and T4.2; its prepared-request/session layout feeds T4.7.
 
 ### T4.7 – Fit, fitted prediction and close
@@ -169,6 +183,7 @@ This document does not authorize implementation, live work, phase activation or 
 - Keep existing refusals for rewritten/multi-question requests unless the reference supports the exact journey; a session pins one context and must not silently collapse ranking or forecasting decomposition into it.
 - Close becomes final only after successful deletion, remains retryable after a failed deletion, and is idempotent after success.
   Python context managers preserve an already active exception and client close handles outstanding fitted objects as today.
+- Preserve the existing configured endpoint-specific transport policy with no extra bridge retry loop: scripted checks distinguish create's connection retries from excluded read/status replay, scoring retries and idempotent DELETE retries, including `max_retries=0`, ambiguous/lost create replies, transient delete failure and the cleanup timeout.
 - Test create/predict/delete wire calls with a scripted endpoint, failed creation/deletion, repeated close, closed prediction, context-manager exceptions, concurrent separate handles, cancellation/late replies, native-buffer release, and state-version mismatch.
 - Dependencies: T4.4, T4.5 where link sessions are reference-supported, and T4.6; warehouse-session live evidence is part of T4.8, not silently postponed to Phase 5.
 
