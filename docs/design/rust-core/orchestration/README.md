@@ -138,6 +138,10 @@ The stamp is valid only while the candidate and tree remain unchanged.
 
 A failed check leads to a fix and renewed review before the next check run.
 Do not repeat checks between review rounds, or broaden testing merely because the candidate is waiting.
+On an unchanged candidate already approved by both reviewers, continue only required groups that have not executed to collect remaining failures before editing.
+Preserve their outputs, do not repeat groups that passed during collection, and never use a failed run as `--previous` stamp evidence.
+After fixes receive both exact-SHA approvals, confirm the fast targets that failed before running the normal package handoff.
+This changes neither the required checks nor the passing-stamp requirement.
 The general setup and test commands in [CONTRIBUTING.md](../../../../CONTRIBUTING.md) describe available suites, not permission to run them all within a topic.
 
 ## Landing
