@@ -427,12 +427,15 @@ def bound_parameters(capture: dict[str, Any], line: dict[str, Any]) -> None:
     statements = (
         recorded.get('statements') if isinstance(recorded, dict) else None
     )
-    held = capture.get('statements')
-    if not isinstance(statements, list) or not isinstance(held, list):
+    if not isinstance(statements, list):
         return
     for statement in statements:
         if isinstance(statement, dict):
             statement.pop('_coverage_parameters', None)
+    # Derived state is never evidence, even when the raw input is absent.
+    held = capture.get('statements')
+    if not isinstance(held, list):
+        return
     for statement, kept in zip(statements, held, strict=False):
         if not isinstance(statement, dict) or not isinstance(kept, dict):
             continue
@@ -1212,6 +1215,9 @@ def _databricks_undeclared(line: dict[str, Any]) -> set[str]:
         if sample is not None:
             relation = sample.group(1) or sample.group(2)
             samples[relation.casefold()] = _relation_key(relation)
+    # The later role join uses table aliases. Do not discard namespace
+    # identity when more than one sampled relation could supply that name.
+    names = Counter(samples.values())
     reads: dict[str, dict[str, list[int | None]]] = {}
     for statement in statements:
         sql = ' '.join(statement['sql'].split())
@@ -1252,7 +1258,9 @@ def _databricks_undeclared(line: dict[str, Any]) -> set[str]:
     return {
         samples[relation]
         for relation, kinds in reads.items()
-        if kinds.get('keys') == [0] and kinds.get('foreign') == [0]
+        if names[samples[relation]] == 1
+        and kinds.get('keys') == [0]
+        and kinds.get('foreign') == [0]
     }
 
 
