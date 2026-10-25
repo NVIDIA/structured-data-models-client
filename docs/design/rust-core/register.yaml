@@ -9316,7 +9316,7 @@ entries:
     Approver: owner. Decision: the owner's answers of 2026-10-24, item 6
     ("6. Hmm ok": register and confirm) (decisions.md).
 - id: P3A-5
-  title: A query object's sampler memo and query plan follow the schema as the caller holds it, not as the source holds it at the run
+  title: SQL-source materialization refreshes data-derived sampler facts on each run
   kind: change
   old_behavior: >-
     The reference's PredictiveQuery keeps its model and sampler (P3A-4): a
@@ -9324,23 +9324,24 @@ entries:
     another schema or the source retyped a column, samples the graph and
     reuses the time bounds and row counts its first materialize read.
   new_behavior: >-
-    On the core route, which only SDM_CORE_ROUTES forces in this build,
-    each materialize reads every table as it stands (P3A-1), but the
-    sampler memo it hands back (decision E52: time bounds, row counts, the
-    index check) and the query's plan (a ranking's or forecast's parts, the
-    QueryFacts handed to the host, a ranked column's type) are keyed to the
-    schema as the caller holds it before the run reads the source. A query
-    object materialized again after the session moved, or after the source
-    retyped a column within its kind, reads the tables as they stand and
-    reuses the bounds and counts its first run read, so its context's
-    anchors and labels can differ from a new query object's over the same
-    source.
+    On the default core SQL-source route, each materialize reads every
+    table as it stands (P3A-1). After the run's first successful fresh
+    source initialization, time bounds, row counts and stored-time
+    spellings expire, even when the schema and preview rows are unchanged.
+    Subsequent parts of the same run reuse the initialized source and its
+    current facts. A repeated SQLite materialize therefore reads MIN/MAX
+    and the stored-time sample again, in addition to its fresh metadata;
+    the reference caches those two reads. The source identity and
+    index-check lifetime remain intact, as does E52 fact reuse for host
+    providers without SQL-source refresh. The held schema and query-plan
+    objects retain their existing ownership; expiring sampler facts does
+    not recreate them.
   affected_inputs: >-
-    One PredictiveQuery object materialized more than once over a source
-    whose session's schema changed, or whose column was retyped within its
-    kind, in between.
+    Repeated SQL-source materialization, including a changed session,
+    semantic-view filter, rows appended beyond the unchanged preview, or
+    changed SQLite timestamp spellings between calls.
   cases: [T3.4, T3.6]
-  refs: [T3.4, P3A-1, P3A-4, E52]
+  refs: [T3.4, T3.10, P3A-1, P3A-4, E52]
   status: approved
   approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T310-OWNER-2026-10-24-PLAN-B-1}
@@ -9349,12 +9350,12 @@ entries:
     P3A-5 as presented: re-reading table location and shape at each
     materialize. This does not authorize incorrect stale sampler bounds or
     counts.
-    Approver: owner. Found by T3.4's round 15 reviews (Codex P2-1, Claude
-    P2-2), rare (a successful run, then a change of the source or its
-    session, then the same query object again); registered as found, not
-    fixed, at the orchestrator's direction. The fix it points to keys the
-    memo to the source as the run resolves it, so a run after the change
-    starts afresh.
+    The stale-fact defect originally recorded by T3.4's round 15 reviews
+    is repaired in T3.10. Public repeated-query regressions cover changed
+    metric-view filters, appended rows beyond an identical 1000-row
+    preview and stored-time spellings. A source fingerprint alone is not
+    evidence that its data stayed unchanged. No new comparison allowance
+    or permission to preserve stale model inputs is granted here.
 - id: P3K-1
   title: A few kinds of key are spelled otherwise than the old client spells them, so a key set of them near the budget can split at other seeds
   kind: change
@@ -9666,7 +9667,7 @@ entries:
     no later materialize reads them again (RE/graph.py:1024-1034,
     SNOW/table.py:124-152).
   new_behavior: >-
-    Each materialize resolves the session parts the source leaves out, retries table spellings, and reads current columns and types once for that run. It does not reload the whole database. Sampler row-count and bounds memo reuse remains separately tracked by P3A-5.
+    Each materialize resolves the session parts the source leaves out, retries table spellings, and reads current columns and types once for that run. It does not reload the whole database. Data-derived sampler facts refresh on the run's fresh source initialization as tracked by P3A-5.
   affected_inputs: >-
     PredictiveQuery.materialize over a SnowflakeSource after its session's
     current database or schema changed, or after a table was renamed
@@ -9677,7 +9678,7 @@ entries:
   approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T36-OWNER-2026-10-24-REFRESH-1}
   notes: >-
-    Approved by the owner after clarifying the scope. Fresh metadata must not be described as absence of all query-object state; the sampler memo has its existing lifetime.
+    Approved by the owner after clarifying the scope. Fresh source facts do not mean absence of all query-object state: source identity, index-check state and within-run reuse retain their existing lifetime.
 
 - id: P3D-13
   title: "Snowflake sampling emits no routine seed warning"
