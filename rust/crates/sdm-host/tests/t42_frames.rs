@@ -134,48 +134,74 @@ fn frame_arrow_validity_retains_present_nan_and_merges_signed_zero() {
             Arc::new(Float64Array::from(values)) as arrow_array::ArrayRef,
         )])
         .unwrap();
-        let mut attached = inputs();
-        attached.insert(
-            AttachmentId(2),
-            bytes(json!({
-                "stage":"schema", "tables":[{"source":{"source":["users"]},"rows":3}]
-            })),
-        );
-        attached.insert(
-            AttachmentId(3),
-            Attachment::Arrow(ArrowData::new(batch.schema(), vec![batch])),
-        );
-        let run = HostRun::start(&sdm_host::default_root(), &message(), attached)
-            .unwrap_or_else(|e| panic!("{:?}", error(e)));
-        let mut notices = 0;
-        loop {
-            match sdm_host::read(&run.next().unwrap()).unwrap() {
-                ControlMessage::Warnings { warnings, .. } => notices += warnings.len(),
-                ControlMessage::Step(Step::Done {
-                    result: OperationResult::DescribeSource(result),
-                    ..
-                }) => {
-                    let Attachment::Bytes(bytes) =
-                        run.take_attachment(result.description).unwrap().unwrap()
-                    else {
-                        panic!("description bytes")
-                    };
-                    let value: sdm_contract::ops::SourceDescription =
-                        serde_json::from_slice(&bytes).unwrap();
-                    assert_eq!(value.tables[0].primary_key, ["user_id"], "{variant}");
-                    assert_eq!(
-                        value.tables[0].duplicate_keys,
-                        Some(Scalar::UInt64(u64::from(matches!(
-                            variant,
-                            "nan_duplicate" | "zero_duplicate"
-                        )))),
-                        "{variant}"
-                    );
-                    assert_eq!(notices, usize::from(variant != "nan"), "{variant}");
-                    break;
+        let mut rows = Some(ArrowData::new(batch.schema(), vec![batch]));
+        let mut table_description = None;
+        for (stage, rows_id) in [("table", 3), ("schema", 7)] {
+            let mut attached = inputs();
+            attached.remove(&AttachmentId(3));
+            attached.insert(
+                AttachmentId(2),
+                bytes(json!({
+                    "stage":stage, "tables":[{"source":{"source":["users"]},"rows":rows_id}]
+                })),
+            );
+            attached.insert(
+                AttachmentId(rows_id),
+                Attachment::Arrow(rows.take().expect("the next stage owns its input")),
+            );
+            let run = HostRun::start(&sdm_host::default_root(), &message(), attached)
+                .unwrap_or_else(|e| panic!("{:?}", error(e)));
+            let mut notices = 0;
+            loop {
+                match sdm_host::read(&run.next().unwrap()).unwrap() {
+                    ControlMessage::Warnings { warnings, .. } => notices += warnings.len(),
+                    ControlMessage::Step(Step::Done {
+                        result: OperationResult::DescribeSource(result),
+                        ..
+                    }) => {
+                        let Attachment::Bytes(bytes) =
+                            run.take_attachment(result.description).unwrap().unwrap()
+                        else {
+                            panic!("description bytes")
+                        };
+                        let value: sdm_contract::ops::SourceDescription =
+                            serde_json::from_slice(&bytes).unwrap();
+                        assert_eq!(
+                            value.tables[0].primary_key,
+                            ["user_id"],
+                            "{stage}/{variant}"
+                        );
+                        assert_eq!(
+                            value.tables[0].duplicate_keys,
+                            Some(Scalar::UInt64(u64::from(matches!(
+                                variant,
+                                "nan_duplicate" | "zero_duplicate"
+                            )))),
+                            "{stage}/{variant}"
+                        );
+                        if stage == "table" {
+                            assert_eq!(notices, usize::from(variant != "nan"), "{variant}");
+                            let owned_id = result.frame_rows.expect("Table returns its owned rows");
+                            let Attachment::Arrow(owned) =
+                                run.take_attachment(owned_id).unwrap().unwrap()
+                            else {
+                                panic!("owned frame rows must be Arrow")
+                            };
+                            rows = Some(owned);
+                            table_description = Some(value);
+                        } else {
+                            assert_eq!(notices, 0, "Table notices must not repeat: {variant}");
+                            assert!(result.frame_rows.is_none());
+                            assert_eq!(Some(value), table_description, "{variant}");
+                        }
+                        break;
+                    }
+                    other => panic!("a frame must not call a provider: {other:?}"),
                 }
-                other => panic!("a frame must not call a provider: {other:?}"),
             }
+            // The taken stream, not a Run or an expired attachment id,
+            // survives and is rebound under a fresh input id for Schema.
+            drop(run);
         }
     }
 }
