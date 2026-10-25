@@ -15,6 +15,7 @@ import pytest
 
 from sdm_client import Schema, StructuredDataError, Table
 from sdm_client._routing import ROUTES
+from sdm_client.core.warnings import SDMWarning
 
 PATHS = 'schema.from-data/frames/frames,schema.from-data/mapping/frames'
 
@@ -159,6 +160,30 @@ def test_first_failure_never_reads_later_custom_frame(monkeypatch):
     with pytest.raises(StructuredDataError, match='duplicate column'):
         Schema.from_data({'first': first, 'later': Later({'x': [1]})})
     assert touched == []
+
+
+def test_warning_as_error_prevents_later_read_and_override(monkeypatch):
+    touched = []
+
+    class Later(pd.DataFrame):
+        @property
+        def columns(self):
+            touched.append('later columns')
+            return super().columns
+
+    later = Later({'x': [1]})
+    touched.clear()
+    first = pd.DataFrame({'user_id': pd.Series([*range(99), None], dtype='Int64')})
+    monkeypatch.setenv('SDM_CORE_ROUTES', PATHS)
+    with warnings.catch_warnings():
+        warnings.simplefilter('error', SDMWarning)
+        with pytest.raises(SDMWarning, match='have no value'):
+            Schema.from_data({'users': first, 'later': later}, primary_keys={'users': 'missing'})
+    assert touched == []
+    # No partial frame cache can survive and overwrite a fresh constructor.
+    first.loc[99, 'user_id'] = 99
+    schema, _ = describe(monkeypatch, {'users': first}, core=True)
+    assert schema['users'].primary_key == 'user_id'
 
 
 def test_snapshot_metadata_is_separate_but_rows_rebind_fresh(monkeypatch):
