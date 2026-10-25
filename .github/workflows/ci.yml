@@ -500,6 +500,45 @@ jobs:
       - run: cargo test --workspace --locked
         env:
           SDM_PYTHON: python
+      # Fresh dependency tests deliberately changed the lock, not the
+      # committed source the following observations and gate must judge.
+      # Preserve that experiment before restoring only its known change.
+      - name: Preserve fresh Cargo evidence and restore the committed lock
+        if: ${{ !cancelled() && env.FRESH == 'true' }}
+        working-directory: .
+        run: |
+          evidence="${RUNNER_TEMP:?}/fresh-cargo-lock"
+          mkdir -p "$evidence"
+          git rev-parse HEAD 'HEAD^{tree}' > "$evidence/source.txt"
+          git status --porcelain --untracked-files=no > "$evidence/status-before.txt"
+          git diff --binary HEAD > "$evidence/diff-before.patch"
+          git show HEAD:rust/Cargo.lock > "$evidence/committed-Cargo.lock"
+          cp rust/Cargo.lock "$evidence/fresh-Cargo.lock"
+          (cd "$evidence" && sha256sum committed-Cargo.lock fresh-Cargo.lock > lock-sha256.txt)
+          status=$(cat "$evidence/status-before.txt")
+          if { [ -n "$status" ] && [ "$status" != ' M rust/Cargo.lock' ]; } ||
+             ! git diff --cached --quiet ||
+             [ -n "$(git diff --summary HEAD -- rust/Cargo.lock)" ]; then
+            cat "$evidence/status-before.txt"
+            echo 'unexpected tracked changes after fresh Cargo; no source restored' >&2
+            exit 1
+          fi
+          git restore --source=HEAD --worktree -- rust/Cargo.lock
+          git status --porcelain --untracked-files=no > "$evidence/status-after.txt"
+          if [ -s "$evidence/status-after.txt" ]; then
+            cat "$evidence/status-after.txt"
+            git diff --binary HEAD > "$evidence/diff-after.patch"
+            echo 'unexpected tracked changes after restoring only Cargo.lock' >&2
+            exit 1
+          fi
+          cmp rust/Cargo.lock "$evidence/committed-Cargo.lock"
+      - name: Preserve fresh Cargo dependency provenance
+        if: ${{ !cancelled() && env.FRESH == 'true' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: fresh-cargo-lock-rust-test
+          path: ${{ runner.temp }}/fresh-cargo-lock
+          if-no-files-found: error
       # The pure-Rust host over the contract cases, its observations compared
       # with the cases' expectations and reference observations (T1.10;
       # T1.18 moves this to the checkpoint's comparator), from T1.11e under
