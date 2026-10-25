@@ -177,7 +177,9 @@ impl Held<'_> {
         Ok(Scanned { batch, received })
     }
 
-    /// Holds `batch`'s Arrow data against the byte limit.
+    /// Holds the compacted working data and answer against the retained
+    /// memory limit. Per-page transfer accounting separately measures only
+    /// the logical buffers and detaches shared parents before retention.
     fn hold(&mut self, batch: &RecordBatch) -> Result<(), CoreError> {
         self.bytes = self
             .bytes
