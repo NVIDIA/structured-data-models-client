@@ -208,14 +208,16 @@ def _git(root: Path, *args: str) -> str:
     ).stdout.strip()
 
 
-@pytest.mark.parametrize('scoped', [False, True])
+@pytest.mark.parametrize(
+    'scoped', [None, SCOPE, 't310-gate-captures-eb267cbf1']
+)
 @pytest.mark.parametrize('fails', [False, True])
 @pytest.mark.parametrize('prior_python', [None, '/previous/python'])
 def test_cli_stamps_only_completed_actual_selection_with_honest_scope_metadata(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
-    scoped: bool,
+    scoped: str | None,
     fails: bool,
     prior_python: str | None,
 ) -> None:
@@ -223,16 +225,22 @@ def test_cli_stamps_only_completed_actual_selection_with_honest_scope_metadata(
         monkeypatch.delenv('SDM_PYTHON', raising=False)
     else:
         monkeypatch.setenv('SDM_PYTHON', prior_python)
-    root = _tree(tmp_path)
+    k_scope = scoped == K_SCOPE
+    root = _k_tree(tmp_path) if k_scope else _tree(tmp_path)
     _git(root, 'init', '-q', '-b', 'topic')
     _git(root, 'commit', '-q', '--allow-empty', '-m', 'base')
     base = _git(root, 'rev-parse', 'HEAD')
     _git(root, 'add', '.')
     _git(root, 'commit', '-q', '-m', 'T3.10: synthetic fixture repair')
     sha = _git(root, 'rev-parse', 'HEAD')
-    touched = [*HANDOFF.FIXTURE_REPAIR_FILES, *SUBSTANTIVE, DECISIONS]
+    pinned = (
+        HANDOFF.K_FIXTURE_REPAIR_FILES
+        if k_scope
+        else HANDOFF.FIXTURE_REPAIR_FILES
+    )
+    touched = [*pinned, *([] if k_scope else SUBSTANTIVE), DECISIONS]
     expected = (
-        HANDOFF.fixture_repair_plan(root, touched, 'T3.10')[0]
+        HANDOFF.fixture_repair_plan(root, touched, 'T3.10', scope=scoped)[0]
         if scoped
         else HANDOFF.own_suites(root, touched)
     )
@@ -262,7 +270,7 @@ def test_cli_stamps_only_completed_actual_selection_with_honest_scope_metadata(
         '/lane/python',
     ]
     if scoped:
-        argv += ['--fixture-repair-scope', SCOPE]
+        argv += ['--fixture-repair-scope', scoped]
     with monkeypatch.context() as environment:
         # Register the key even when absent, owning the CLI's direct write.
         environment.setenv('SDM_PYTHON', '/test-owned/python')
@@ -280,9 +288,159 @@ def test_cli_stamps_only_completed_actual_selection_with_honest_scope_metadata(
             assert stamp['own_test_scope']['suites'] == [
                 list(suite) for suite in received[0]
             ]
-            assert (
-                stamp['own_test_scope']['files'] == HANDOFF.FIXTURE_REPAIR_FILES
-            )
-            assert SCOPE in said and SOURCE in said
+            assert stamp['own_test_scope']['files'] == pinned
+            assert scoped in said and (K_SOURCE if k_scope else SOURCE) in said
         else:
             assert 'own_test_scope' not in stamp and SCOPE not in said
+
+
+K_SCOPE = 't310-gate-captures-eb267cbf1'
+K_SOURCE = 'eb267cbf10ef130cf15e67dd5a9b20e7e85931f3'
+K_ROW = 'T310-OWNER-2026-10-25-FIXTURE-SCOPE-K'
+K_INPUTS = (
+    '.github/workflows/ci.yml',
+    'contract/tests/test_gate_controls.py',
+    'contract/tests/test_gate_modes.py',
+    'contract/tests/test_t20f_gate.py',
+    'tests/test_contract_ratchet.py',
+    'tests/test_t310_fresh_cargo_lock.py',
+    'tests/test_ci_workflow.py',
+    'conftest.py',
+    'contract/tests/conftest.py',
+    'scripts/rust_core/gate.sh',
+    'scripts/rust_core/coverage.py',
+    'contract/runners/capture_check.py',
+)
+K_NODES = (
+    'tests/test_ci_workflow.py',
+    'tests/test_t310_fresh_cargo_lock.py',
+    'tests/test_contract_ratchet.py',
+    'contract/tests/test_gate_controls.py',
+    'contract/tests/test_gate_modes.py::'
+    'test_real_coverage_gate_keeps_capture_evidence_without_duplicate_working_files',
+    'contract/tests/test_gate_modes.py::'
+    'test_locked_gate_preserves_real_manifest_admission',
+    'contract/tests/test_gate_modes.py::'
+    'test_locked_1b_passes_on_the_admitted_inventory_and_writes_the_evidence',
+    'contract/tests/test_t20f_gate.py::'
+    'test_reference_rekey_keeps_every_capture_citation_and_parent_blob',
+    'contract/tests/test_t20f_gate.py::'
+    'test_main_at_the_reference_commit_passes_the_main_step',
+    'contract/tests/test_t20f_gate.py::'
+    'test_main_merged_without_the_reference_rerun_fails_the_main_step',
+)
+
+
+def _k_policy(root: Path, status: str, source: str = K_SOURCE) -> None:
+    path = root / DECISIONS
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        '| # | Decision | Status |\n'
+        '|---|---|---|\n'
+        f'| {K_ROW} | {K_SCOPE}, source {source} | {status} |\n'
+    )
+
+
+def _k_tree(tmp_path: Path) -> Path:
+    root = tmp_path / 'repo'
+    root.mkdir()
+    for name in K_INPUTS:
+        path = root / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(
+            subprocess.check_output(
+                ['git', '-C', str(ROOT), 'show', f'{K_SOURCE}:{name}'],
+                stdin=subprocess.DEVNULL,
+            )
+        )
+    _k_policy(root, 'approved by owner 2026-10-25')
+    return root
+
+
+def test_k_scope_keeps_exact_mandatory_selectors_and_complete_other_files(
+    tmp_path: Path,
+) -> None:
+    root = _k_tree(tmp_path)
+    extra = root / 'tests/test_new_substantive_regression.py'
+    extra.write_text('def test_regression():\n    assert True\n')
+    suites, proof = HANDOFF.fixture_repair_plan(
+        root, [*K_INPUTS, extra.relative_to(root).as_posix()], 'T3.10',
+        scope=K_SCOPE,
+    )  # fmt: skip
+    prefix = HANDOFF.affected.PYTEST
+    assert {(*prefix, node) for node in K_NODES} <= set(suites)
+    assert (*prefix, extra.relative_to(root).as_posix()) in suites
+    for name in (
+        'contract/tests/test_gate_modes.py',
+        'contract/tests/test_t20f_gate.py',
+    ):
+        assert (*prefix, name) not in suites
+    assert len(suites) == len(K_NODES) + 1  # the extra substantive test
+    mandatory, _ = HANDOFF.fixture_repair_plan(root, [], 'T3.10', scope=K_SCOPE)
+    assert mandatory == [(*prefix, node) for node in K_NODES]
+    assert proof['id'] == K_SCOPE and proof['source'] == K_SOURCE
+    assert proof['suites'] == [list(suite) for suite in suites]
+    assert proof['files'] == {
+        name: hashlib.sha256((root / name).read_bytes()).hexdigest()
+        for name in K_INPUTS
+    }
+    assert proof['decision_ref'] == {
+        'file': DECISIONS,
+        'row': K_ROW,
+        'sha256': hashlib.sha256((root / DECISIONS).read_bytes()).hexdigest(),
+    }
+    assert hashlib.sha256(('\n'.join(K_NODES) + '\n').encode()).hexdigest() == (
+        '4a0d7c311dbe7229139a7060f2a8073f124fcdc3d38cae5f684ad6561ebb17eb'
+    )
+
+
+@pytest.mark.parametrize('name', K_INPUTS)
+def test_k_scope_refuses_every_mutated_or_missing_reviewed_input(
+    tmp_path: Path, name: str
+) -> None:
+    root = _k_tree(tmp_path)
+    path = root / name
+    path.write_bytes(path.read_bytes() + b'\n# unreviewed\n')
+    with pytest.raises(HANDOFF.Failure, match=name):
+        HANDOFF.fixture_repair_plan(root, [], 'T3.10', scope=K_SCOPE)
+    path.unlink()
+    with pytest.raises(HANDOFF.Failure, match=name):
+        HANDOFF.fixture_repair_plan(root, [], 'T3.10', scope=K_SCOPE)
+
+
+@pytest.mark.parametrize('package', ['T3.11', 'T4.3'])
+def test_k_scope_refuses_other_packages(tmp_path: Path, package: str) -> None:
+    with pytest.raises(HANDOFF.Failure, match='only T3.10'):
+        HANDOFF.fixture_repair_plan(
+            _k_tree(tmp_path), [], package, scope=K_SCOPE
+        )
+
+
+@pytest.mark.parametrize(
+    'status',
+    [
+        'PROPOSED, owner approval pending',
+        'approved by reviewer 2026-10-25',
+        'approved by owner 2026-10-25, pending',
+    ],
+)
+def test_k_scope_needs_complete_actual_owner_approval(
+    tmp_path: Path, status: str
+) -> None:
+    root = _k_tree(tmp_path)
+    _k_policy(root, status)
+    with pytest.raises(HANDOFF.Failure, match='owner-approved'):
+        HANDOFF.fixture_repair_plan(root, [], 'T3.10', scope=K_SCOPE)
+    (root / DECISIONS).unlink()
+    with pytest.raises(HANDOFF.Failure, match='owner-approved'):
+        HANDOFF.fixture_repair_plan(root, [], 'T3.10', scope=K_SCOPE)
+
+
+def test_k_scope_cannot_borrow_the_old_scope_approval(tmp_path: Path) -> None:
+    root = _k_tree(tmp_path)
+    _policy(root, 'approved by owner 2026-10-25')
+    with pytest.raises(HANDOFF.Failure, match='owner-approved'):
+        HANDOFF.fixture_repair_plan(root, [], 'T3.10', scope=K_SCOPE)
+    _k_policy(root, 'approved by owner 2026-10-25', SOURCE)
+    with pytest.raises(HANDOFF.Failure, match='owner-approved'):
+        HANDOFF.fixture_repair_plan(root, [], 'T3.10', scope=K_SCOPE)
