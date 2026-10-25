@@ -61,6 +61,7 @@ fn table(name: &str, columns: Vec<DescribedColumn>, key: Option<&str>) -> Descri
         name: name.into(),
         source: name.into(),
         columns,
+        frame_key_form: None,
         primary_key: key.map(Into::into).into_iter().collect(),
         time_column: None,
         time_column_inferred: None,

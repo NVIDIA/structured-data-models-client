@@ -497,6 +497,9 @@ pub struct DescribedTable {
     pub source: Relation,
     pub columns: Vec<DescribedColumn>,
     pub primary_key: Vec<String>,
+    /// Native frame key representation; absent for ordinary SQL schemas.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub frame_key_form: Option<crate::frames::FrameKeyForm>,
     pub time_column: Option<String>,
     /// The column inference took as the time column, when the table's
     /// time column is now another or none: a lone stamp of the last edit a
@@ -631,6 +634,9 @@ pub struct HeldTable {
     pub source: Relation,
     pub columns: Vec<HeldColumn>,
     pub primary_key: Vec<String>,
+    /// Native frame key representation; absent for ordinary SQL schemas.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub frame_key_form: Option<crate::frames::FrameKeyForm>,
     pub time_column: Option<String>,
     /// Rows sharing a key value, as the host holds it
     /// ([`DescribedTable::duplicate_keys`]): a `u64` scalar, or none.

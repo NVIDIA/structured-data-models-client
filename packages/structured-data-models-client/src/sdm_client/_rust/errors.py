@@ -681,6 +681,8 @@ def warn_from_core(
     quiet: frozenset[str] = frozenset(),
     given: set[str] | None = None,
     held: list[dict[str, Any]] | None = None,
+    *,
+    frame_constructor: bool = False,
 ) -> None:
     r"""Shows each warning of a ``warnings`` control message, in order, but
     those whose code ``quiet`` names: one the caller has shown already, or
@@ -734,8 +736,10 @@ def warn_from_core(
                 + words['closing']
             )
         warnings.warn(
-            f'[{first["code"]}] {text}',
-            category=WARNINGS.get(first['code'], SDMWarning),
+            text if frame_constructor else f'[{first["code"]}] {text}',
+            category=SDMWarning
+            if frame_constructor
+            else WARNINGS.get(first['code'], SDMWarning),
             stacklevel=caller_stacklevel(),
         )
 

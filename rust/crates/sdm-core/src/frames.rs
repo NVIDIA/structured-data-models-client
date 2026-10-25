@@ -50,11 +50,23 @@ pub(crate) async fn run(
             "frame override order must name each corresponding SourceSpec key exactly once",
         ));
     }
+    if spec.relationships.is_some() {
+        return Err(invalid(
+            "frame explicit relationships belong only to the ordered manifest slots",
+        ));
+    }
+    if manifest.key_forms.keys().collect::<BTreeSet<_>>()
+        != spec.primary_keys.keys().collect::<BTreeSet<_>>()
+    {
+        return Err(invalid(
+            "frame key forms must name each explicit key override exactly once",
+        ));
+    }
     if manifest.stage == FrameStage::Table
         && (named.len() != 1
             || !spec.primary_keys.is_empty()
             || !spec.time_columns.is_empty()
-            || spec.relationships.is_some())
+            || manifest.relationships.is_some())
     {
         return Err(invalid(
             "Table stage requires one complete table and no constructor overrides",
@@ -104,6 +116,9 @@ pub(crate) async fn run(
             )],
             links: vec![],
         };
+        if !description.tables[0].primary_key.is_empty() {
+            description.tables[0].frame_key_form = Some(sdm_contract::frames::FrameKeyForm::Scalar);
+        }
         assemble::mark_keys(&mut description);
         let rows = snapshot.ok_or_else(|| internal("Table stage lost its admitted snapshot"))?;
         return finish(&asker, description, Some(rows));
@@ -150,9 +165,11 @@ pub(crate) async fn run(
         tables,
         Given {
             time_columns: Some(&timed),
-            relationships: spec.relationships.as_deref(),
+            relationships: None,
         },
         Some(Scalar::UInt64(0)),
+        &manifest.key_forms,
+        manifest.relationships.as_deref(),
     )?;
     for (table, duplicates) in assembled.description.tables.iter_mut().zip(duplicates) {
         table.duplicate_keys = Some(Scalar::UInt64(duplicates));
@@ -163,7 +180,7 @@ pub(crate) async fn run(
     for warning in sdm_schema::frames::final_notices(
         &reads,
         &assembled.description,
-        spec.relationships.is_none(),
+        manifest.relationships.is_none(),
     )? {
         asker.warn(warning);
     }

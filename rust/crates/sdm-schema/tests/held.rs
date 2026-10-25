@@ -47,6 +47,7 @@ fn schema() -> HeldSchema {
                     source: None,
                 },
             ],
+            frame_key_form: None,
             primary_key: vec!["user_id".into()],
             time_column: Some("seen".into()),
             duplicate_keys: Some(Scalar::UInt64(3)),

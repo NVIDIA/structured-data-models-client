@@ -216,7 +216,9 @@ pub fn final_notices(
         for c in &table.columns {
             named.entry(&c.name).or_default().insert(&table.name);
         }
-        if let [key] = table.primary_key.as_slice() {
+        if table.frame_key_form != Some(sdm_contract::frames::FrameKeyForm::Sequence)
+            && let [key] = table.primary_key.as_slice()
+        {
             keyed.entry(key).or_default().push(&table.name);
         }
     }
@@ -248,6 +250,7 @@ pub fn final_notices(
                         .with_fields(fields),
                     );
                     spoken.insert(table.name.as_str());
+                    break;
                 }
             }
         }

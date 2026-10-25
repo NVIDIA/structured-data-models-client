@@ -391,6 +391,24 @@
             "primary_keys": [],
             "time_columns": []
           }
+        },
+        "key_forms": {
+          "description": "Native scalar/sequence form of each explicit key override.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/FrameKeyForm"
+          },
+          "default": {}
+        },
+        "relationships": {
+          "description": "The single authoritative ordered explicit link list, or inference.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/FrameRelationship"
+          }
         }
       },
       "additionalProperties": false,
@@ -508,6 +526,78 @@
         }
       },
       "additionalProperties": false
+    },
+    "FrameKeyForm": {
+      "description": "A native scalar name or ordered key sequence, even of one column.",
+      "type": "string",
+      "enum": [
+        "scalar",
+        "sequence"
+      ]
+    },
+    "FrameRelationship": {
+      "description": "One native relationship argument at its original validation position.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "source": {
+              "$ref": "#/$defs/ColumnRef"
+            },
+            "target": {
+              "$ref": "#/$defs/ColumnRef"
+            },
+            "kind": {
+              "type": "string",
+              "const": "link"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "source",
+            "target"
+          ]
+        },
+        {
+          "description": "Native presentation facts only; the core decides this slot is invalid.",
+          "type": "object",
+          "properties": {
+            "native_type": {
+              "type": "string"
+            },
+            "native_repr": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "invalid"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "native_type",
+            "native_repr"
+          ]
+        }
+      ]
+    },
+    "ColumnRef": {
+      "type": "object",
+      "properties": {
+        "table": {
+          "type": "string"
+        },
+        "column": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "table",
+        "column"
+      ]
     },
     "QuerySchema": {
       "description": "The schema a query is resolved against: names and types, no rows.",
@@ -631,22 +721,6 @@
         "sequence",
         "image",
         "unsupported"
-      ]
-    },
-    "ColumnRef": {
-      "type": "object",
-      "properties": {
-        "table": {
-          "type": "string"
-        },
-        "column": {
-          "type": "string"
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "table",
-        "column"
       ]
     },
     "SourceSpec": {
@@ -849,6 +923,17 @@
           "items": {
             "type": "string"
           }
+        },
+        "frame_key_form": {
+          "description": "Native frame key representation; absent for ordinary SQL schemas.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FrameKeyForm"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "time_column": {
           "type": [
@@ -1855,6 +1940,17 @@
           "items": {
             "type": "string"
           }
+        },
+        "frame_key_form": {
+          "description": "Native frame key representation; absent for ordinary SQL schemas.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FrameKeyForm"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "time_column": {
           "type": [
@@ -6060,6 +6156,7 @@
         "frame_key_repeats",
         "frame_key_repeats_composite",
         "frame_key_repeats_unusable",
+        "frame_relationship_invalid",
         "frame_key_missing",
         "frame_key_not_unique",
         "frame_name_empty",

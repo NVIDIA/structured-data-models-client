@@ -820,6 +820,7 @@ sentences! {
     FrameKeyRepeats = "frame_key_repeats", W::KeyRepeats;
     FrameKeyRepeatsComposite = "frame_key_repeats_composite", W::KeyRepeats;
     FrameKeyRepeatsUnusable = "frame_key_repeats_unusable", W::KeyRepeats;
+    FrameRelationshipInvalid = "frame_relationship_invalid", E::InvalidRequest;
     FrameKeyMissing = "frame_key_missing", E::InvalidRequest;
     FrameKeyNotUnique = "frame_key_not_unique", E::InvalidRequest;
     FrameNameEmpty = "frame_name_empty", E::InvalidRequest;
