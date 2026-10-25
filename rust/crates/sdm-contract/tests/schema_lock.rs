@@ -507,7 +507,8 @@ fn unaccounted(schema: &Value) -> Result<(), String> {
 
 /// The fields whose attachment is JSON of the contract's, with the entry of
 /// `$defs/Attachments` that locks it.
-const JSON: [(&str, &str); 26] = [
+const JSON: [(&str, &str); 27] = [
+    ("ProviderChoice/frames.manifest", "Frames.manifest"),
     ("Operation/validate_query.query", "ValidateQuery.query"),
     ("Operation/validate_query.schema", "ValidateQuery.schema"),
     ("Operation/describe_source.source", "DescribeSource.source"),
@@ -540,7 +541,9 @@ const JSON: [(&str, &str); 26] = [
 ];
 
 /// The other fields naming an attachment, and why the lock needs no entry.
-const OTHER: [(&str, &str); 10] = [
+const OTHER: [(&str, &str); 12] = [
+    ("FrameInput.rows", "Arrow, with its schema"),
+    ("OperationResult/describe_source.frame_rows", "Arrow, with its schema"),
     (
         "ControlMessage/attached.attachment",
         "a control message: the root schema",
@@ -606,6 +609,8 @@ fn a_field_added_to_an_attachment_fails_the_lock() {
     // made of: a field added to any of them is a new shape.
     for definition in [
         "SourceSpec",
+        "FrameManifest",
+        "FrameInput",
         "SourceDescription",
         "DescribedTable",
         "DescribedColumn",

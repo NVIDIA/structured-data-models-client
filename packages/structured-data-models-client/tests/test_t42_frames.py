@@ -210,3 +210,30 @@ def test_constructor_default_stays_old_and_custom_object_family_is_unchanged(mon
     frame = pd.DataFrame({'object_id': np.array([1, 2, 3], dtype=object)})
     schema = Schema.from_data({'objects': frame})
     assert schema['objects']['object_id'].dtype == 'int64'
+
+
+def test_typed_describe_result_preserves_arrow_role_without_changing_sql():
+    from sdm_client._rust import results
+
+    table = results.expect({'op': 'describe_source', 'description': 1, 'frame_rows': 2}, results.Described)
+    assert table.frame_rows == 2
+    sql = results.expect({'op': 'describe_source', 'description': 1}, results.Described)
+    assert sql.frame_rows is None
+
+
+@pytest.mark.parametrize('axis', ['categorical_sample', 'ambiguous_key', 'keyless_shared', 'duplicate_key'])
+def test_primitive_final_notices_and_key_remedies_match_original(monkeypatch, axis):
+    if axis == 'categorical_sample':
+        frames = {'users': pd.DataFrame({'user_id': range(40), 'label': pd.Series([str(i) for i in range(40)], dtype='str')})}
+    elif axis == 'ambiguous_key':
+        frames = {'a': pd.DataFrame({'id': [1, 2, 3]}), 'b': pd.DataFrame({'id': [4, 5, 6]})}
+    elif axis == 'keyless_shared':
+        frames = {'items': pd.DataFrame({'SKU': pd.Series(['a', 'b', 'c'], dtype='str')}),
+                  'sales': pd.DataFrame({'sale_id': [1, 2, 3], 'SKU': pd.Series(['a', 'a', 'b'], dtype='str')})}
+    else:
+        frames = {'users': pd.DataFrame({'user_id': [*range(99), 98], 'age': range(100)})}
+    old, old_warnings = describe(monkeypatch, frames, core=False)
+    new, new_warnings = describe(monkeypatch, frames, core=True)
+    assert old_warnings, 'the reference control must reach its meaningful notice'
+    assert projection(new) == projection(old)
+    assert new_warnings == old_warnings
