@@ -6,6 +6,7 @@ package com.nvidia.sdm.internal.jdbc;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -75,6 +76,18 @@ class T313ConversionTableTest {
 
   private static List<Object> values(Object... values) {
     return Arrays.asList(values);
+  }
+
+  private static List<String> utf8Items(Read column, int row) {
+    assertEquals("List", column.field().getType().toString());
+    assertEquals("Utf8", column.field().getChildren().get(0).getType().toString());
+    List<?> items = assertInstanceOf(List.class, column.values().get(row));
+    List<String> text = new ArrayList<>(items.size());
+    for (Object item : items) {
+      text.add(item == null ? null
+          : assertInstanceOf(org.apache.arrow.vector.util.Text.class, item).toString());
+    }
+    return text;
   }
 
   @Test
@@ -238,7 +251,7 @@ class T313ConversionTableTest {
         got.get("whole").values().get(0));
     assertEquals(Arrays.asList(1.25f, null), got.get("single").values().get(0));
     assertEquals(List.of(1.25, 2.5), got.get("double").values().get(0));
-    assertEquals("[Zoë, a,b, quote\", null]", got.get("text").values().get(0).toString());
+    assertEquals(Arrays.asList("Zoë", "a,b", "quote\"", null), utf8Items(got.get("text"), 0));
     for (String name : List.of("whole", "single", "double", "text")) {
       assertEquals("List", got.get(name).field().getType().toString());
       assertNull(got.get(name).values().get(1), name);
@@ -258,7 +271,7 @@ class T313ConversionTableTest {
     Map<String, Read> got = answered(
         FakeJdbc.Column.of("text", "ARRAY<STRING>",
             Arrays.asList("Zoë", "a,b", "quote\"", null), List.of(), null));
-    assertEquals("[Zoë, a,b, quote\", null]", got.get("text").values().get(0).toString());
+    assertEquals(Arrays.asList("Zoë", "a,b", "quote\"", null), utf8Items(got.get("text"), 0));
     assertEquals(List.of(), got.get("text").values().get(1));
     assertNull(got.get("text").values().get(2));
   }
@@ -270,8 +283,7 @@ class T313ConversionTableTest {
     try {
       for (String zone : List.of("UTC", "America/Los_Angeles", "Europe/Berlin")) {
         java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone(zone));
-        List<Object> dates = Arrays.asList(LocalDate.parse("1969-12-31"),
-            LocalDate.parse("2024-03-10"), LocalDate.parse("2024-03-31"), null);
+        List<Integer> dateDays = Arrays.asList(-1, 19792, 19813, null);
         for (boolean complexEnabled : List.of(false, true)) {
           Object tiny = complexEnabled ? Arrays.asList("-128", "127", null) : "[-128,127,null]";
           Object days = complexEnabled ? Arrays.asList(java.sql.Date.valueOf("1969-12-31"),
@@ -283,7 +295,8 @@ class T313ConversionTableTest {
               FakeJdbc.Column.of("dates", "ARRAY<DATE>", days, empty, null));
           assertEquals(Arrays.asList((byte) -128, (byte) 127, null),
               got.get("tiny").values().get(0), zone);
-          assertEquals(dates, got.get("dates").values().get(0), zone);
+          assertEquals(dateDays,
+              assertInstanceOf(List.class, got.get("dates").values().get(0)), zone);
           assertEquals("Int(8, true)",
               got.get("tiny").field().getChildren().get(0).getType().toString());
           assertEquals("Date(DAY)",
