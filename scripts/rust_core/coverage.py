@@ -997,6 +997,14 @@ _DB_FOREIGN = (
 _DB_CATALOG = re.compile(
     r' FROM (`(?:[^`]|``)+`).information_schema.table_constraints tc '
 )
+#: Actual corpus source forms: a logical name or three identifier parts,
+#: plain or backtick-quoted, with literal published namespace placeholders.
+_DB_SOURCE_PART = re.compile(
+    r'(?:`(?:[^`]|``)+`|\{(?:catalog|schema)\}|[A-Za-z_][A-Za-z_0-9]*)'
+)
+_DB_SOURCE = re.compile(
+    rf'{_DB_SOURCE_PART.pattern}(?:\.{_DB_SOURCE_PART.pattern}){{0,2}}'
+)
 #: A PQL query's first column reference before its ``FOR``: its target,
 #: with or without an ``EVALUATE`` or ``EXPLAIN`` before ``PREDICT``, for
 #: each entity (``FOR EACH t.c``) or for the ones it names (``FOR t.c = 1``,
@@ -1165,6 +1173,26 @@ def _relation_key(relation: str) -> str:
     return last.rpartition('.')[2].casefold()
 
 
+def _databricks_identity(source: str) -> tuple[str, ...] | None:
+    r"""One logical name or a complete qualified identity, never a suffix.
+
+    Placeholders are literal atoms, not wildcards or environment lookups.
+    Partial qualification and unknown spellings supply no identity proof.
+    """
+    if _DB_SOURCE.fullmatch(source) is None:
+        return None
+    parts = tuple(
+        part[1:-1].replace('``', '`') if part.startswith('`') else part
+        for part in _DB_SOURCE_PART.findall(source)
+    )
+    if len(parts) not in (1, 3) or any(
+        ('{' in part or '}' in part) and part not in ('{catalog}', '{schema}')
+        for part in parts
+    ):
+        return None
+    return tuple(part.casefold() for part in parts)
+
+
 def _as_named(
     types: dict[tuple[str, str], set[str]], names: list[str]
 ) -> dict[tuple[str, str], set[str]]:
@@ -1194,31 +1222,35 @@ def _undeclared(line: dict[str, Any]) -> set[str]:
             r.get('rows') if isinstance(r, dict) else None
             for r in statement['results']
         )
-    return {
-        table for table, counts in rows.items() if counts == [0]
-    } | _databricks_undeclared(line)
+    return {table for table, counts in rows.items() if counts == [0]}
 
 
-def _databricks_undeclared(line: dict[str, Any]) -> set[str]:
-    r"""Databricks tables with both recorded catalog reads empty.
+def _databricks_undeclared(
+    line: dict[str, Any], sources: list[str]
+) -> set[str]:
+    r"""Case sources joined to complete empty-constraint identity proof.
 
     Match the exact reference queries, typed bound names and the sampled
     three-part relation. Missing, failed, nonempty or unknown evidence
     does not prove that an omitted column was an unconstrained feature.
+    Qualified sources match all parts before any logical alias is granted.
     """
     if not str(line.get('case')).endswith('@databricks-sql'):
         return set()
     statements = _statements(line)
-    samples = {}
+    samples: dict[tuple[str, ...], str] = {}
     for statement in statements:
         sample = _WAREHOUSE_SAMPLE.fullmatch(statement['sql'].strip())
         if sample is not None:
             relation = sample.group(1) or sample.group(2)
-            samples[relation.casefold()] = _relation_key(relation)
+            identity = _databricks_identity(relation)
+            if identity is None or len(identity) != 3:
+                return set()
+            samples[identity] = _relation_key(relation)
     # The later role join uses table aliases. Do not discard namespace
     # identity when more than one sampled relation could supply that name.
     names = Counter(samples.values())
-    reads: dict[str, dict[str, list[int | None]]] = {}
+    reads: dict[tuple[str, ...], dict[str, list[int | None]]] = {}
     for statement in statements:
         sql = ' '.join(statement['sql'].split())
         catalog = _DB_CATALOG.search(sql)
@@ -1241,8 +1273,10 @@ def _databricks_undeclared(line: dict[str, Any]) -> set[str]:
         if not (_strs(parameters) and len(parameters) == 2):
             return set()
         schema, table = (value.replace('`', '``') for value in parameters)
-        relation = f'{catalog.group(1)}.`{schema}`.`{table}`'.casefold()
-        if relation not in samples:
+        identity = _databricks_identity(
+            f'{catalog.group(1)}.`{schema}`.`{table}`'
+        )
+        if identity is None or identity not in samples:
             continue
         results = statement['results']
         count = None
@@ -1254,14 +1288,29 @@ def _databricks_undeclared(line: dict[str, Any]) -> set[str]:
             and type(results[0].get('rows')) is int
         ):
             count = results[0]['rows']
-        reads.setdefault(relation, {}).setdefault(kind, []).append(count)
-    return {
-        samples[relation]
-        for relation, kinds in reads.items()
-        if names[samples[relation]] == 1
+        reads.setdefault(identity, {}).setdefault(kind, []).append(count)
+    proven = {
+        identity
+        for identity, kinds in reads.items()
+        if names[samples[identity]] == 1
         and kinds.get('keys') == [0]
         and kinds.get('foreign') == [0]
     }
+    found = set()
+    for source in sources:
+        identity = _databricks_identity(source)
+        if identity is None:
+            continue
+        if len(identity) == 1:
+            matching = [
+                sample for sample in samples if sample[-1] == identity[0]
+            ]
+            if len(matching) != 1:
+                continue
+            [identity] = matching
+        if identity in proven:
+            found.add(source)
+    return found
 
 
 def _keys(value: Any) -> set[str]:
@@ -1408,6 +1457,7 @@ def observed(case: dict[str, Any], line: dict[str, Any]) -> set[str]:
                 {(table, ''): set() for table in free}, names
             )
         }
+        free.update(_databricks_undeclared(line, names))
     roles: dict[tuple[str, str], set[str]] = {}
     held: set[tuple[str, str]] = set()
     if schema is not None:
