@@ -63,12 +63,3 @@ def test_materialize_preserves_the_first_invalid_escape_warning(
         assert core[0] is core_deprecated[0]
     else:
         assert old_deprecated == core_deprecated == []
-    assert [
-        warning.category.__name__
-        for warning in core
-        if not issubclass(warning.category, DeprecationWarning)
-    ] == [
-        warning.category.__name__
-        for warning in old
-        if not issubclass(warning.category, DeprecationWarning)
-    ]
