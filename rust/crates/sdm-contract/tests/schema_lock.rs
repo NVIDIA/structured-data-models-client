@@ -563,3 +563,39 @@ fn a_field_added_to_an_attachment_fails_the_lock() {
     let changed = serde_json::to_string_pretty(&schema).unwrap();
     assert!(verify(&CONTRACT, &changed, &lock, CONTRACT.version).is_err());
 }
+
+const MERGED_FOR_WRITER: &str = "# merged locks\n25 sha256:a sdm-contract-25.json\n26 sha256:b sdm-contract-26.json\n27 sha256:c sdm-contract-27.json\n";
+
+#[test]
+fn the_writer_replaces_only_the_one_proven_unmerged_working_version() {
+    let current = format!("{MERGED_FOR_WRITER}# keep this comment\n28 sha256:d sdm-contract-28.json\n");
+    let updated = updated_lock(&current, Some(MERGED_FOR_WRITER), 30, "e", "sdm-contract-30.json").unwrap();
+    assert_eq!(updated, format!("{MERGED_FOR_WRITER}# keep this comment\n30 sha256:e sdm-contract-30.json\n"));
+    // Regenerating the same working version changes only that entry.
+    let next = updated_lock(&updated, Some(MERGED_FOR_WRITER), 30, "f", "sdm-contract-30.json").unwrap();
+    assert_eq!(next, updated.replace("sha256:e", "sha256:f"));
+}
+
+#[test]
+fn the_writer_never_removes_or_rewrites_an_entry_proven_merged() {
+    for current in [MERGED_FOR_WRITER.replace("26 sha256:b sdm-contract-26.json\n", ""),
+        MERGED_FOR_WRITER.replace("sha256:b", "sha256:changed"),
+        MERGED_FOR_WRITER.replace("sdm-contract-26.json", "another.json")] {
+        assert!(updated_lock(&current, Some(MERGED_FOR_WRITER), 30, "e", "sdm-contract-30.json").is_err());
+    }
+    assert!(updated_lock(MERGED_FOR_WRITER, Some(MERGED_FOR_WRITER), 27, "changed", "sdm-contract-27.json").is_err());
+    assert_eq!(updated_lock(MERGED_FOR_WRITER, Some(MERGED_FOR_WRITER), 27, "c", "sdm-contract-27.json").unwrap(), MERGED_FOR_WRITER);
+}
+
+#[test]
+fn the_writer_refuses_multiple_unmerged_entries_instead_of_guessing_history() {
+    let current = format!("{MERGED_FOR_WRITER}28 sha256:d sdm-contract-28.json\n29 sha256:e sdm-contract-29.json\n");
+    assert!(updated_lock(&current, Some(MERGED_FOR_WRITER), 30, "f", "sdm-contract-30.json").is_err());
+}
+
+#[test]
+fn the_writer_refuses_unknown_or_unreadable_merged_version_proof() {
+    for proof in [None, Some("not a lock entry"), Some("")] {
+        assert!(updated_lock(MERGED_FOR_WRITER, proof, 30, "e", "sdm-contract-30.json").is_err());
+    }
+}
