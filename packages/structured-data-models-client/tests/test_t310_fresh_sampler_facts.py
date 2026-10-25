@@ -15,7 +15,6 @@ from pathlib import Path
 from typing import Any
 
 import duckdb
-import pandas as pd
 import pyarrow as pa
 import pytest
 from sdm_connectors import DatabricksSource, DuckDBSource
@@ -46,7 +45,7 @@ class _MetricWarehouse(_warehouse._CompletingWarehouse):
             catalog='main', schema='shop'
         )
         self.definition = self.definition.replace(
-            'source.price > 20', 'source.order_id < 5'
+            'source.price > 20', 'source.order_id < 40'
         )
         captures = json.loads(
             (ROOT / 'contract/view-captures.json').read_text()
@@ -117,7 +116,7 @@ def test_metric_filter_refresh_reuses_no_previous_sampler_bounds_or_counts(
         query = PredictiveQuery(QUERY, schema)
         first = _payloads(query)
         connection.definition = connection.definition.replace(
-            'source.order_id < 5', 'source.order_id >= 0'
+            'source.order_id < 40', 'source.order_id >= 0'
         )
         second = _payloads(query)
         fresh = _payloads(PredictiveQuery(QUERY, schema))
