@@ -230,12 +230,12 @@ def test_a_partial_unique_index_keeps_the_key_unique(
     assert got['payloads'] == wanted['payloads']
 
 
-def test_a_second_materialize_reads_no_more_than_the_reference_s(
+def test_each_sql_materialize_refreshes_its_sampler_facts_once(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     r"""``materialize`` twice on one query, the time column stored as text:
-    each call refreshes its source facts once, then gathers with the
-    reference's statement count and request."""
+    each call refreshes source facts, bounds and stored-time spelling;
+    the request and remaining gather reads match the reference."""
     wanted = _reference('materialize-twice')
     locate: list[int] = []
     got = _on_the_core(monkeypatch, 'materialize-twice', locate)
@@ -246,7 +246,9 @@ def test_a_second_materialize_reads_no_more_than_the_reference_s(
         'materialize': wanted['statements']['materialize'] + locate[0],
     }
     assert got['payloads'] == wanted['payloads']
+    # The reference caches both MIN/MAX and the stored-time sample after
+    # its first call. Fresh SQL-source facts require those two reads again.
     assert got['repeated'] == [
-        {**repeated, 'statements': repeated['statements'] + count}
+        {**repeated, 'statements': repeated['statements'] + count + 2}
         for repeated, count in zip(wanted['repeated'], locate[1:], strict=True)
     ]
