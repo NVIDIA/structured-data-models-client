@@ -782,3 +782,50 @@ fn a_declared_request_is_the_providers_and_none_undeclared_without_limits() {
     assert_eq!(field(error, "rule"), None);
     assert!(ran.asked.is_empty());
 }
+
+#[test]
+fn many_tiny_pages_hit_retained_memory_before_another_continuation() {
+    for array in [
+        Arc::new(arrow_array::NullArray::new(64)) as ArrayRef,
+        Arc::new(Int64Array::from_iter_values(0..64)) as ArrayRef,
+    ] {
+        let schema = Arc::new(Schema::new(vec![Field::new(
+            "v",
+            array.data_type().clone(),
+            true,
+        )]));
+        let parent = RecordBatch::try_new(schema.clone(), vec![array]).unwrap();
+        let max_bytes = 1024;
+        assert!(parent.get_array_memory_size() < max_bytes as usize);
+        let next = Mutex::new(0);
+        let ran = run_with(
+            host(&[], Some(limits(64, max_bytes))),
+            DataRequest::Preview {
+                table: "events".into(),
+                columns: vec!["v".into()],
+                limit: 64,
+            },
+            None,
+            |_| {
+                let mut at = next.lock().unwrap();
+                let data = ArrowData::new(schema.clone(), vec![parent.slice(*at, 1)]);
+                *at += 1;
+                if *at < 64 {
+                    FetchResult::Page {
+                        data,
+                        continuation: at.to_string(),
+                    }
+                } else {
+                    FetchResult::Data(data)
+                }
+            },
+        );
+        let error = refusal(&ran);
+        assert_eq!(field(error, "rule"), Some(&Detail::text("fallback_limit")));
+        assert_eq!(field(error, "limit"), Some(&Detail::text("max_bytes")));
+        assert!(
+            *next.lock().unwrap() < 64,
+            "all pages were retained before refusal"
+        );
+    }
+}
