@@ -1981,49 +1981,57 @@ def test_a_source_reads_the_catalogs_own_keys():
     )
 
 
-def test_describing_a_source_reads_a_thousand_rows_of_it():
+def test_describing_a_source_reads_a_thousand_rows_of_it(monkeypatch):
     """What the reference says leaves the warehouse before any prediction.
 
-    Counted by giving the source more rows than the sample takes and asking
-    what was read: a table left in place is not a table nothing is read from.
+    Observe the real provider's preview replies while the public call runs:
+    the default core need not retain the legacy engine's pandas sample cache.
     """
     duckdb = pytest.importorskip('duckdb')
     pytest.importorskip('sdm_relational_engine')
-    from sdm_client import Schema
+    from sdm_client import Schema, _routing
+    from sdm_client._rust import providers
     from sdm_connectors import DuckDBSource
-    from sdm_relational_engine.rfm.base.table import Table
 
-    connection = duckdb.connect()
-    connection.execute(
-        'CREATE TABLE t AS SELECT i AS id, i * 2 AS v FROM range(5000) x(i)'
-    )
-    schema = Schema.from_source(
-        DuckDBSource(connection), {'t': 't'}, primary_keys={'t': 'id'}
-    )
-    assert Table._NUM_SAMPLE_ROWS == 1000, (
-        f'the sample is {Table._NUM_SAMPLE_ROWS} rows and both files say a '
-        f'thousand'
-    )
-    sampled = schema._engine_tables._tables['t']._source_sample_df
-    read = len(sampled)
-    assert read == 1000, (
-        f'describing a 5,000-row source read {read} rows, and the reference '
-        f'says up to a thousand of each leave the warehouse'
-    )
+    samples = {}
 
-    connection.execute(
-        'CREATE TABLE small AS SELECT i AS id FROM range(12) y(i)'
-    )
-    smaller = Schema.from_source(
-        DuckDBSource(connection),
-        {'small': 'small'},
-        primary_keys={'small': 'id'},
-    )
-    whole = len(smaller._engine_tables._tables['small']._source_sample_df)
-    assert whole == 12, (
-        f'a 12-row source gave {whole} rows, and the reference says all of a '
-        f'table that small is what leaves'
-    )
+    class ObservingDuckDBProvider(providers.DuckDBProvider):
+        def __call__(self, step, keys=None):
+            result = super().__call__(step, keys)
+            request = step['request']
+            if request['request'] == 'preview':
+                table = tuple(request['table']['source'])
+                samples.setdefault(table, []).append(result.num_rows)
+            return result
+
+    monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+    monkeypatch.setattr(providers, 'DuckDBProvider', ObservingDuckDBProvider)
+    with duckdb.connect() as connection:
+        connection.execute(
+            'CREATE TABLE t AS SELECT i AS id, i * 2 AS v FROM range(5000) x(i)'
+        )
+        schema = Schema.from_source(
+            DuckDBSource(connection), {'t': 't'}, primary_keys={'t': 'id'}
+        )
+        assert set(schema.tables) == {'t'}
+        assert samples == {('t',): [1000]}, (
+            f'describing a 5,000-row source read previews {samples}, and the '
+            'reference says up to a thousand of each leave the warehouse'
+        )
+
+        connection.execute(
+            'CREATE TABLE small AS SELECT i AS id FROM range(12) y(i)'
+        )
+        smaller = Schema.from_source(
+            DuckDBSource(connection),
+            {'small': 'small'},
+            primary_keys={'small': 'id'},
+        )
+        assert set(smaller.tables) == {'small'}
+        assert samples == {('t',): [1000], ('small',): [12]}, (
+            f'the preview reads were {samples}, and the reference says all '
+            'of the 12-row source leaves'
+        )
 
 
 def test_an_empty_source_is_refused_in_the_words_the_reference_quotes():
