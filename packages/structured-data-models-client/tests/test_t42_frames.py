@@ -250,3 +250,20 @@ def test_native_override_mapping_order_controls_first_error(monkeypatch, option,
         found.append(str(caught.value))
     assert order[0] in found[0]
     assert found[1] == found[0]
+
+
+def test_unproved_native_text_probe_stays_on_unchanged_default_route(monkeypatch):
+    from sdm_client._routing import RouteError
+
+    frame = pd.DataFrame({'user_id': [1, 2, 3], 'stamp': pd.Series([
+        '2024-01-01', '2024-01-02', '2024-01-03',
+    ], dtype='str')})
+    monkeypatch.delenv('SDM_CORE_ROUTES', raising=False)
+    with pytest.warns(SDMWarning, match='holds dates but is stored as text'):
+        legacy = Schema.from_data({'users': frame})
+    assert legacy['users'].time_column is None
+    monkeypatch.setenv('SDM_CORE_ROUTES', PATHS)
+    # A development route gap is not a newly admitted SDK refusal or a
+    # warning the new core is allowed to suppress. Default remains old.
+    with pytest.raises(RouteError, match='unproved native text-probe family'):
+        Schema.from_data({'users': frame})
