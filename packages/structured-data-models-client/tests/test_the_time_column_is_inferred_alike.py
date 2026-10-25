@@ -445,6 +445,8 @@ def test_a_column_the_whole_table_could_not_check_is_kept_and_named(
     """
     from sdm_relational_engine.rfm.backend.duckdb import DuckDBTable
 
+    # The injected timeout belongs to the legacy engine's table reader.
+    monkeypatch.setenv('SDM_CORE_ROUTES', '')
     fetch = DuckDBTable._fetch_rows
 
     def timed_out(self: DuckDBTable, sql: str) -> list[tuple]:

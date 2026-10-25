@@ -42,6 +42,13 @@ from sdm_client import (  # noqa: E402
 )
 from sdm_client.materializers import RelationalMaterializer  # noqa: E402
 
+
+@pytest.fixture(autouse=True)
+def _legacy_engine(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Exercise the engine whose constructors and driver SQL are faked here."""
+    monkeypatch.setenv('SDM_CORE_ROUTES', '')
+
+
 _CATALOG, _SCHEMA = 'cat', 'sch'
 
 _VIEW = """

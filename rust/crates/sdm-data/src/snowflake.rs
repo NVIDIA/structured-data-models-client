@@ -985,10 +985,10 @@ fn key_enforcement(batches: &[RecordBatch]) -> Result<CatalogAnswer, CoreError> 
             return Ok(CatalogAnswer::KeyEnforcement(Vec::new()));
         };
         for row in 0..batch.num_rows() {
-            if text(&hybrid, row).is_some_and(|v| v.trim().eq_ignore_ascii_case("Y")) {
-                if let Some(name) = text(&name, row) {
-                    names.push(name);
-                }
+            if text(&hybrid, row).is_some_and(|v| v.trim().eq_ignore_ascii_case("Y"))
+                && let Some(name) = text(&name, row)
+            {
+                names.push(name);
             }
         }
     }

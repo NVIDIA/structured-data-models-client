@@ -79,7 +79,7 @@ def _scripted() -> Any:
 
 @pytest.fixture(autouse=True)
 def _old(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     # A proxied runner would otherwise send these local requests to its
     # proxy.
     for name in ('HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy'):
@@ -117,7 +117,7 @@ def _materialized(
         request = PredictiveQuery(QUERY, schema).materialize(
             indices=[0, 1], anchor_time=pd.Timestamp('2024-03-01')
         )
-    monkeypatch.delenv(_routing.ENVIRONMENT)
+    monkeypatch.setenv(_routing.ENVIRONMENT, '')
     return request
 
 
@@ -217,7 +217,7 @@ def _predict(
     r"""The call's outcome on ``routes`` (the old route with none), the
     result or the exception raised, and what the workspace received."""
     if routes is None:
-        monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+        monkeypatch.setenv(_routing.ENVIRONMENT, '')
     else:
         monkeypatch.setenv(_routing.ENVIRONMENT, routes)
     try:
@@ -230,7 +230,7 @@ def _predict(
                 except StructuredDataError as error:
                     outcome = error
     finally:
-        monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+        monkeypatch.setenv(_routing.ENVIRONMENT, '')
     return outcome, received
 
 
