@@ -114,6 +114,73 @@ fn primitive_frame_is_described_without_any_fetch() {
 }
 
 #[test]
+fn frame_arrow_validity_retains_present_nan_and_merges_signed_zero() {
+    use arrow_array::Float64Array;
+
+    for variant in ["nan", "nan_duplicate", "zero_duplicate", "null"] {
+        let mut values: Vec<_> = (0..100).map(|n| Some(f64::from(n))).collect();
+        match variant {
+            "nan" => values[99] = Some(f64::NAN),
+            "nan_duplicate" => {
+                values[98] = Some(f64::NAN);
+                values[99] = Some(f64::from_bits(0xfff8_0000_0000_0001));
+            }
+            "zero_duplicate" => values[99] = Some(-0.0),
+            "null" => values[99] = None,
+            _ => unreachable!(),
+        }
+        let batch = RecordBatch::try_from_iter([(
+            "user_id",
+            Arc::new(Float64Array::from(values)) as arrow_array::ArrayRef,
+        )])
+        .unwrap();
+        let mut attached = inputs();
+        attached.insert(
+            AttachmentId(2),
+            bytes(json!({
+                "stage":"schema", "tables":[{"source":{"source":["users"]},"rows":3}]
+            })),
+        );
+        attached.insert(
+            AttachmentId(3),
+            Attachment::Arrow(ArrowData::new(batch.schema(), vec![batch])),
+        );
+        let run = HostRun::start(&sdm_host::default_root(), &message(), attached)
+            .unwrap_or_else(|e| panic!("{:?}", error(e)));
+        let mut notices = 0;
+        loop {
+            match sdm_host::read(&run.next().unwrap()).unwrap() {
+                ControlMessage::Warnings { warnings, .. } => notices += warnings.len(),
+                ControlMessage::Step(Step::Done {
+                    result: OperationResult::DescribeSource(result),
+                    ..
+                }) => {
+                    let Attachment::Bytes(bytes) =
+                        run.take_attachment(result.description).unwrap().unwrap()
+                    else {
+                        panic!("description bytes")
+                    };
+                    let value: sdm_contract::ops::SourceDescription =
+                        serde_json::from_slice(&bytes).unwrap();
+                    assert_eq!(value.tables[0].primary_key, ["user_id"], "{variant}");
+                    assert_eq!(
+                        value.tables[0].duplicate_keys,
+                        Some(Scalar::UInt64(u64::from(matches!(
+                            variant,
+                            "nan_duplicate" | "zero_duplicate"
+                        )))),
+                        "{variant}"
+                    );
+                    assert_eq!(notices, usize::from(variant != "nan"), "{variant}");
+                    break;
+                }
+                other => panic!("a frame must not call a provider: {other:?}"),
+            }
+        }
+    }
+}
+
+#[test]
 fn manifest_expands_exact_attachments_and_precedes_unreadable_arrow() {
     for variant in ["missing", "extra", "kind", "collision", "malformed"] {
         let mut attached = inputs();

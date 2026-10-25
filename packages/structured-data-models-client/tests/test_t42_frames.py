@@ -370,7 +370,14 @@ def test_constructor_key_sequences_and_native_composite_examples(
 
 @pytest.mark.parametrize(
     'family',
-    ['text', 'date_text', 'object', 'nullable', 'datetime', 'categorical'],
+    [
+        'text',
+        'date_text',
+        'object',
+        'arrow_nullable',
+        'datetime',
+        'categorical',
+    ],
 )
 def test_unfinished_native_families_are_not_forced_through_numeric_constructor(
     monkeypatch, family
@@ -381,7 +388,7 @@ def test_unfinished_native_families_are_not_forced_through_numeric_constructor(
         'text': pd.Series(['a', 'b'], dtype='str'),
         'date_text': pd.Series(['2024-01-01', '2024-01-02'], dtype='str'),
         'object': pd.Series([1, 2], dtype=object),
-        'nullable': pd.Series([1, None], dtype='Int64'),
+        'arrow_nullable': pd.Series([1, None], dtype='int64[pyarrow]'),
         'datetime': pd.Series(pd.to_datetime(['2024-01-01', '2024-01-02'])),
         'categorical': pd.Series(['a', 'b'], dtype='category'),
     }
