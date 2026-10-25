@@ -309,6 +309,47 @@ fn data_requests_hold_no_expression_or_sql() {
 }
 
 #[test]
+fn the_window_catalog_type_is_a_scoped_source_fact() {
+    let found = findings(&schema::<DataRequest>());
+    assert!(
+        found.iter().any(|finding| {
+            matches!(finding, Finding::Identifier(path) if path.ends_with(" -> Window/source_type"))
+        }),
+        "{found:#?}"
+    );
+}
+
+#[derive(JsonSchema)]
+#[allow(dead_code, reason = "only its schema is read")]
+struct UnreviewedSourceType {
+    source_type: Option<String>,
+}
+
+#[test]
+fn a_source_type_name_outside_the_window_is_not_an_identifier() {
+    refused::<UnreviewedSourceType>("Text(\"#/source_type\")");
+}
+
+#[test]
+fn a_window_catalog_type_cannot_expand_to_structured_or_untyped_data() {
+    for widened in [
+        serde_json::json!({"type": "array", "items": {"type": "string"}}),
+        serde_json::json!({"type": "object", "additionalProperties": {"type": "string"}}),
+        Value::Bool(true),
+    ] {
+        let mut request = schema::<DataRequest>();
+        request["$defs"]["Window"]["properties"]["source_type"] = widened;
+        let found = problems(&request);
+        assert!(
+            found.iter().any(|finding| {
+                matches!(finding, Finding::Text(path) | Finding::Any(path) if path.contains(" -> Window/source_type"))
+            }),
+            "{found:#?}"
+        );
+    }
+}
+
+#[test]
 fn the_lists_do_not_overlap() {
     let refused: BTreeSet<_> = DENIED.iter().chain(DENIED_FOR_VALUES).collect();
     assert!(IDENTIFIERS.iter().all(|name| !refused.contains(name)));
