@@ -7,7 +7,8 @@
 //! before they are kept. The fallback still bounds its compacted working
 //! data and answer with its existing retained-memory check.
 
-use arrow_array::{RecordBatch, RecordBatchOptions, make_array};
+use arrow_array::cast::AsArray;
+use arrow_array::{Array, ArrayRef, RecordBatch, RecordBatchOptions, make_array};
 use arrow_data::{ArrayData, transform::MutableArrayData};
 use arrow_schema::DataType;
 use sdm_contract::CoreError;
@@ -16,14 +17,15 @@ use crate::run::{ArrowData, internal};
 
 pub(crate) fn logical_bytes(batch: &RecordBatch) -> Result<u64, CoreError> {
     batch.columns().iter().try_fold(0u64, |bytes, array| {
-        Ok(bytes.saturating_add(buffers(&array.to_data())?))
+        Ok(bytes.saturating_add(buffers(array.as_ref())?))
     })
 }
 
 /// The offsets include their trailing entry; children of lists/maps and
 /// structs are measured only over the slice they describe. A dictionary
 /// carries its complete dictionary, including values not used on this page.
-fn buffers(data: &ArrayData) -> Result<u64, CoreError> {
+fn buffers(array: &dyn Array) -> Result<u64, CoreError> {
+    let data = array.to_data();
     let n = data.len() as u64;
     let nulls = if data.nulls().is_some() {
         n.div_ceil(8)
@@ -45,7 +47,10 @@ fn buffers(data: &ArrayData) -> Result<u64, CoreError> {
             let end = offsets[data.offset() + data.len()] as usize;
             let child = match data.data_type() {
                 DataType::Utf8 | DataType::Binary => (end - start) as u64,
-                _ => buffers(&data.child_data()[0].slice(start, end - start))?,
+                _ => {
+                    let child = make_array(data.child_data()[0].clone());
+                    buffers(child.slice(start, end - start).as_ref())?
+                }
             };
             (n.saturating_add(1))
                 .saturating_mul(4)
@@ -60,27 +65,47 @@ fn buffers(data: &ArrayData) -> Result<u64, CoreError> {
             let end = offsets[data.offset() + data.len()] as usize;
             let child = match data.data_type() {
                 DataType::LargeUtf8 | DataType::LargeBinary => (end - start) as u64,
-                _ => buffers(&data.child_data()[0].slice(start, end - start))?,
+                _ => {
+                    let child = make_array(data.child_data()[0].clone());
+                    buffers(child.slice(start, end - start).as_ref())?
+                }
             };
             (n.saturating_add(1))
                 .saturating_mul(8)
                 .saturating_add(child)
         }
-        DataType::Struct(_) => data.child_data().iter().try_fold(0u64, |bytes, child| {
-            Ok::<_, CoreError>(
-                bytes.saturating_add(buffers(&child.slice(data.offset(), data.len()))?),
-            )
-        })?,
+        // Array-level Struct slices have already sliced their children.
+        // ArrayData::slice has different offset conventions, so never use
+        // it to select a nested child range before traversing a Struct.
+        DataType::Struct(_) => array
+            .as_struct()
+            .columns()
+            .iter()
+            .try_fold(0u64, |bytes, child| {
+                Ok::<_, CoreError>(bytes.saturating_add(buffers(child.as_ref())?))
+            })?,
         DataType::Dictionary(key, _) => {
             let width = key
                 .primitive_width()
                 .ok_or_else(|| internal("a page's dictionary has no integer key width"))?;
             n.saturating_mul(width as u64)
-                .saturating_add(buffers(&data.child_data()[0])?)
+                .saturating_add(buffers(make_array(data.child_data()[0].clone()).as_ref())?)
         }
         _ => return Err(internal("a bounded page holds a type outside admission")),
     };
     Ok(nulls.saturating_add(values))
+}
+
+/// Retained array allocations plus the batch and its column-pointer storage.
+/// Arrow's array sizes include buffer capacity and array objects, and may
+/// conservatively count shared buffers more than once.
+/// The outer batches vector's spare capacity is checked separately by Budget.
+pub(crate) fn retained_batch_bytes(batch: &RecordBatch) -> u64 {
+    (batch.get_array_memory_size() as u64)
+        .saturating_add(std::mem::size_of::<RecordBatch>() as u64)
+        .saturating_add(
+            (batch.num_columns() as u64).saturating_mul(std::mem::size_of::<ArrayRef>() as u64),
+        )
 }
 
 /// Copy the admitted slice using Arrow's own range-copy kernels, without
@@ -109,7 +134,7 @@ fn detach_dictionaries(data: ArrayData) -> Result<ArrayData, CoreError> {
 }
 
 pub(crate) fn compact(data: ArrowData) -> Result<ArrowData, CoreError> {
-    let mut batches = Vec::with_capacity(data.batches.len());
+    let mut batches = Vec::new();
     for batch in data.batches {
         // Empty pages contribute no rows and must not accumulate retained
         // batch objects while a provider keeps returning continuations.

@@ -139,6 +139,7 @@ impl Held<'_> {
         let budget = Budget {
             rows: left,
             bytes: self.limits.max_bytes.saturating_sub(self.bytes),
+            retained_bytes: self.limits.max_bytes.saturating_sub(self.bytes),
             past_rows: over(self.request, "max_rows", self.limits.max_rows),
             past_bytes: over(self.request, "max_bytes", self.limits.max_bytes),
         };
@@ -183,7 +184,7 @@ impl Held<'_> {
     fn hold(&mut self, batch: &RecordBatch) -> Result<(), CoreError> {
         self.bytes = self
             .bytes
-            .saturating_add(batch.get_array_memory_size() as u64);
+            .saturating_add(crate::pages::retained_batch_bytes(batch));
         if self.bytes > self.limits.max_bytes {
             return Err(over(self.request, "max_bytes", self.limits.max_bytes));
         }

@@ -720,6 +720,8 @@ pub struct Ask {
 pub(crate) struct Budget {
     pub(crate) rows: u64,
     pub(crate) bytes: u64,
+    /// Remaining compacted allocation allowance, independent of transfer.
+    pub(crate) retained_bytes: u64,
     pub(crate) past_rows: CoreError,
     pub(crate) past_bytes: CoreError,
 }
@@ -741,6 +743,32 @@ impl Budget {
             Ok(bytes) => (bytes > self.bytes).then(|| self.past_bytes.clone()),
             Err(error) => Some(error),
         }
+    }
+
+    /// Charge each compacted batch once, including zero-buffer arrays and
+    /// column/batch objects, before another continuation can be requested.
+    fn retain(&mut self, data: &ArrowData) -> Result<(), CoreError> {
+        let bytes = data.batches.iter().fold(0u64, |bytes, batch| {
+            bytes.saturating_add(crate::pages::retained_batch_bytes(batch))
+        });
+        self.retained_bytes = self
+            .retained_bytes
+            .checked_sub(bytes)
+            .ok_or_else(|| self.past_bytes.clone())?;
+        self.check_capacity(data)
+    }
+
+    /// Batch objects themselves were charged by retain. Include actual
+    /// spare vector slots, which can grow when page vectors are appended,
+    /// and the outstanding answer container before retaining that answer.
+    fn check_capacity(&self, data: &ArrowData) -> Result<(), CoreError> {
+        let overhead = ((data.batches.capacity() - data.batches.len()) as u64)
+            .saturating_mul(mem::size_of::<RecordBatch>() as u64)
+            .saturating_add(mem::size_of::<ArrowData>() as u64);
+        if overhead > self.retained_bytes {
+            return Err(self.past_bytes.clone());
+        }
+        Ok(())
     }
 
     /// Charge the incoming page once, before compaction can discard a
@@ -780,6 +808,7 @@ fn keep_page(
     if let Some(budget) = budget {
         budget.consume(&data).map_err(PageFailure::Limit)?;
         data = crate::pages::compact(data).map_err(PageFailure::Fatal)?;
+        budget.retain(&data).map_err(PageFailure::Limit)?;
     }
     Ok(data)
 }
@@ -794,7 +823,11 @@ fn append_page(
     if let Some(earlier) = &earlier {
         check_part(earlier, &more, "page").map_err(PageFailure::Fatal)?;
     }
-    add_page(earlier, keep_page(more, budget)?).map_err(PageFailure::Fatal)
+    let joined = add_page(earlier, keep_page(more, budget)?).map_err(PageFailure::Fatal)?;
+    if let Some(budget) = budget {
+        budget.check_capacity(&joined).map_err(PageFailure::Limit)?;
+    }
+    Ok(joined)
 }
 
 /// One fetch of a request the data layer bound into several
@@ -1690,6 +1723,7 @@ fn page_budgets_measure_logical_slices_at_exact_and_over_limits() {
     let mut budget = Budget {
         rows: 2,
         bytes: 18,
+        retained_bytes: u64::MAX,
         past_rows: internal("rows"),
         past_bytes: internal("bytes"),
     };
