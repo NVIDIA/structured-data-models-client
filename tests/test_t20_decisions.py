@@ -124,6 +124,18 @@ def both(*edits: Callable[[Path], None]) -> Callable[[Path], None]:
     return edit
 
 
+def test_seeding_a_phase_2_decision_preserves_existing_owner_rows(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / PHASE2_DECISIONS
+    path.parent.mkdir(parents=True)
+    original = HEADER + row('KO2-existing', '`register.yaml`')
+    path.write_text(original, encoding='utf-8')
+    seeded = row('P2-900', '`compare-policy.yaml`')
+    phase2(seeded)(tmp_path)
+    assert path.read_text(encoding='utf-8') == original + seeded
+
+
 # --- ratchet.py: policy and availability relaxations ---------------------------------
 
 POLICY = 'contract/compare-policy.yaml'
@@ -403,6 +415,7 @@ def test_capture_check_the_control_without_the_row_is_refused(
     tree, _ = capture_tree(tmp_path)
     done = capture_policy(tree)
     assert done.returncode != 0, done.stdout
+    assert 'Traceback' not in done.stderr, done.stderr
     assert 'exclusion request-id' in done.stderr, done.stderr
 
 
@@ -427,4 +440,5 @@ def test_capture_check_an_exclusion_approved_only_in_a_malformed_file_fails_by_n
     phase2(e35, malformed=True)(tree)
     done = capture_policy(tree)
     assert done.returncode != 0, done.stdout
+    assert 'Traceback' not in done.stderr, done.stderr
     assert NAMED[PHASE2_DECISIONS] in done.stderr, done.stderr
