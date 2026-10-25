@@ -200,13 +200,19 @@ def _git(root: Path, *args: str) -> str:
 
 @pytest.mark.parametrize('scoped', [False, True])
 @pytest.mark.parametrize('fails', [False, True])
+@pytest.mark.parametrize('prior_python', [None, '/previous/python'])
 def test_cli_stamps_only_completed_actual_selection_with_honest_scope_metadata(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
     scoped: bool,
     fails: bool,
+    prior_python: str | None,
 ) -> None:
+    if prior_python is None:
+        monkeypatch.delenv('SDM_PYTHON', raising=False)
+    else:
+        monkeypatch.setenv('SDM_PYTHON', prior_python)
     root = _tree(tmp_path)
     _git(root, 'init', '-q', '-b', 'topic')
     _git(root, 'commit', '-q', '--allow-empty', '-m', 'base')
@@ -224,6 +230,7 @@ def test_cli_stamps_only_completed_actual_selection_with_honest_scope_metadata(
 
     def run_suites(step, where, suites, python):
         assert where == root and python == '/lane/python'
+        assert os.environ['SDM_PYTHON'] == '/lane/python'
         received.append(suites)
         if fails:
             step.problems.append('the selected control failed')
@@ -247,6 +254,7 @@ def test_cli_stamps_only_completed_actual_selection_with_honest_scope_metadata(
     if scoped:
         argv += ['--fixture-repair-scope', SCOPE]
     assert HANDOFF.main(argv) == (1 if fails else 0)
+    assert os.environ.get('SDM_PYTHON') == prior_python
     said = capsys.readouterr().out
     assert len(received) == 1 and set(received[0]) == set(expected)
     path = root / '.git/sdm-handoff' / f'{sha}.json'
