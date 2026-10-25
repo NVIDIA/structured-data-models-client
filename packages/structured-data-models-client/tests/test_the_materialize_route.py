@@ -1415,6 +1415,7 @@ class _Located:
 
     def __init__(self) -> None:
         self.statements = 0
+        self.requests: list[dict[str, Any]] = []
 
     def __enter__(self) -> _Located:
         from sdm_client._rust import codec, run
@@ -1430,6 +1431,7 @@ class _Located:
                 control, sent = self._handle.next()
                 step = codec.read(control, sent)
                 if step.get('step') == 'fetch':
+                    located.requests.extend(step['requests'])
                     for asked in step['requests']:
                         if asked.get('purpose') == 'locate':
                             located.statements += len(
@@ -1519,17 +1521,46 @@ def _shop_logged() -> tuple[Any, Schema]:
 def test_a_second_call_runs_the_reference_s_statements(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # H9's counts on a repeated call (decision E52): the reference checks
-    # the indexes once, building its sampler, and keeps the time bounds it
-    # read, so its second call runs 4 statements where its first ran 6; the
-    # core is handed the state its first run left and skips the same two.
+    # The reference keeps indexes and time bounds (E52). P3A-5 refreshes
+    # SQL-source time bounds on the core, preserving its index lifetime:
+    # after the first six statements, the core runs five and the old four.
     def made() -> list[tuple[int, int]]:
         connection, schema = _shop_logged()
         query = PredictiveQuery(QUERY, schema)
         return _calls([query] * 3, connection, indices=[0, 1])
 
-    for found in _on_both_routes(monkeypatch, made):
-        assert found == [(6, 1), (4, 0), (4, 0)]
+    found = _on_both_routes(monkeypatch, made)
+    assert found[0] == [(6, 1), (5, 0), (5, 0)]
+    assert all(each == [(6, 1), (4, 0), (4, 0)] for each in found[1:])
+
+
+def test_source_refresh_reads_time_bounds_without_repeating_index_checks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # P3A-5 expires data-derived bounds even when the preview is unchanged.
+    # Their real fetch remains unmarked: only P3A-1's locate reads are
+    # subtracted when comparing statements with the old route.
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    connection, schema = _shop_logged()
+    query = PredictiveQuery(QUERY, schema)
+    for call in range(3):
+        with warnings.catch_warnings(), _Located() as located:
+            warnings.simplefilter('ignore')
+            query.materialize(anchor_time=ANCHOR, indices=[0, 1])
+        bounds = [
+            asked
+            for asked in located.requests
+            if asked['request'].get('request') == 'time_bounds'
+        ]
+        assert len(bounds) == 1
+        assert bounds[0].get('purpose') is None
+        indexes = [
+            asked
+            for asked in located.requests
+            if asked['request'].get('request') == 'describe'
+            and asked['request'].get('part') == 'indexes'
+        ]
+        assert len(indexes) == int(call == 0)
 
 
 def test_two_materializers_each_check_their_source_once(
@@ -1543,8 +1574,9 @@ def test_two_materializers_each_check_their_source_once(
         two = PredictiveQuery(QUERY, schema)
         return _calls([one, two, one, two], connection, indices=[0, 1])
 
-    for found in _on_both_routes(monkeypatch, made):
-        assert found == [(6, 1), (6, 1), (4, 0), (4, 0)]
+    found = _on_both_routes(monkeypatch, made)
+    assert found[0] == [(6, 1), (6, 1), (5, 0), (5, 0)]
+    assert all(each == [(6, 1), (6, 1), (4, 0), (4, 0)] for each in found[1:])
 
 
 def test_a_call_the_core_refuses_before_its_check_leaves_it_to_the_next(
@@ -1698,9 +1730,8 @@ def test_a_null_key_the_walk_reaches_links_nothing(
 def test_every_foreign_key_looked_up_null_is_the_reference_s_request(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # Where the reference is clean, the core is it: every item key null,
-    # the reference looks up no key (one statement, no row) and sends each
-    # null; so does the core, statement for statement.
+    # Every item key null, both routes look up no key and send each null.
+    # The core also refreshes the source's time bounds on reuse (P3A-5).
     def made() -> list[tuple[int, int]]:
         with warnings.catch_warnings():
             warnings.simplefilter('ignore')
@@ -1720,8 +1751,8 @@ def test_every_foreign_key_looked_up_null_is_the_reference_s_request(
         return _calls([query, query], connection, indices=[0, 1])
 
     found = _on_both_routes(monkeypatch, made)
-    assert found[0] == [(7, 1), (5, 0)]
-    assert all(each == found[0] for each in found)
+    assert found[0] == [(7, 1), (6, 0)]
+    assert all(each == [(7, 1), (5, 0)] for each in found[1:])
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     core = _deeper('UPDATE orders SET item_id = NULL', edit=False)._payloads[0]
     monkeypatch.setenv(_routing.ENVIRONMENT, '')
@@ -1874,7 +1905,7 @@ def test_a_state_the_core_refuses_is_not_handed_back_again(
     assert 'held' not in query._relational_materializer._core_sampler_state
     assert _calls([query, query], connection, indices=[0, 1]) == [
         (6, 1),
-        (4, 0),
+        (5, 0),
     ]
 
 

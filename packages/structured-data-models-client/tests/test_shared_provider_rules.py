@@ -35,6 +35,8 @@ def test_each_provider_refuses_with_the_one_shared_rule(dialect: str) -> None:
         shared.arrow_table
     )
     host: dict[str, Any] = {'plan': {'plan': 'host', 'expect': {}}}
+    if dialect == 'postgres':
+        host['plan']['result_conversions'] = [{'conversion': 'zoned_text_utc'}]
     with pytest.raises(shared.PlanNotRun, match='host plan'):
         provider(None)(host, {})
     other = {
@@ -44,8 +46,23 @@ def test_each_provider_refuses_with_the_one_shared_rule(dialect: str) -> None:
             'expect': {},
         }
     }
+    if dialect == 'postgres':
+        other['plan']['result_conversions'] = [{'conversion': 'zoned_text_utc'}]
     with pytest.raises(shared.PlanNotRun, match='another dialect'):
         provider(None)(other, {})
+
+
+@pytest.mark.parametrize(
+    'conversions', [None, [], [{'conversion': 'timestamp_micros'}]]
+)
+def test_postgres_refuses_an_unmarked_plan_before_shared_plan_rules(
+    conversions: Any,
+) -> None:
+    plan = {'plan': 'host', 'expect': {}}
+    if conversions is not None:
+        plan['result_conversions'] = conversions
+    with pytest.raises(shared.PlanNotRun, match='exact UTC text policy'):
+        postgres.PostgresProvider(None)({'plan': plan}, {})
 
 
 def test_a_key_set_not_handed_over_is_refused_by_name() -> None:
