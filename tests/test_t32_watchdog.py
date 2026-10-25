@@ -131,6 +131,30 @@ def test_a_lane_with_no_commit_and_no_process_is_idle(repo, tmp_path, capsys):
     ]
 
 
+def test_git_utc_dates_with_a_z_suffix_work_on_python_310(
+    repo, tmp_path, capsys, monkeypatch
+):
+    original = watchdog.git
+
+    def utc_git(cwd, *args):
+        done = original(cwd, *args)
+        if args == ('log', '-1', '--format=%cI', 'HEAD'):
+            return subprocess.CompletedProcess(
+                done.args,
+                done.returncode,
+                stdout=done.stdout.replace('+00:00', 'Z'),
+                stderr=done.stderr,
+            )
+        return done
+
+    monkeypatch.setattr(watchdog, 'git', utc_git)
+    out = run(capsys, repo, cwds=['/elsewhere'])
+    assert out == [
+        f'IDLE {tmp_path / "lane-a"} ({PHASE}-lane-a): '
+        'no commit for 120 min and no process'
+    ]
+
+
 def test_a_red_run_names_its_failed_jobs(repo, tmp_path, capsys):
     def red(args: Sequence[str]) -> str:
         if list(args[:2]) == ['run', 'list']:
