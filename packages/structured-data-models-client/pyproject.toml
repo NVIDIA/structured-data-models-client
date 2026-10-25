@@ -86,7 +86,7 @@ databricks-serving = ["databricks-sdk>=0.68.0,<1.0"]
 all = [
     "structured-data-models-client[relational,sqlite,duckdb,postgres,snowflake,databricks,lakebase,s3]",
 ]
-test = ["pytest", "pytest-xdist", "requests-mock"]
+test = ["pytest", "pytest-xdist", "requests-mock", "jsonschema>=4.18"]
 
 # The Python package is src/sdm_client, py.typed and _native.pyi included;
 # the extension module lands beside them. The shipped build has the

@@ -23,7 +23,8 @@
 //!   disguise, where the vocabulary has typed structures for both;
 //! - text (a string, at any depth of lists, maps, options or newtypes) is
 //!   held only by a property named as an identifier the request refers to
-//!   (`IDENTIFIERS`), the nearest property naming it;
+//!   (`IDENTIFIERS`), the nearest property naming it, or by an exact scoped
+//!   exception below;
 //! - an any-typed schema (`true` or `{}`, as `serde_json::Value` gives, or a
 //!   map of anything) is refused, since it can hold text of any shape;
 //! - the typed values (`TYPED_VALUES`: a scalar, an Arrow field and its
@@ -32,6 +33,7 @@
 //!
 //! A new text field fails until it is added to `IDENTIFIERS` in review, so
 //! it is a name the request refers to, never text a provider interprets.
+//! The reviewed exceptions retain their exact definition, property and shape.
 
 use std::collections::BTreeSet;
 
@@ -140,6 +142,21 @@ fn types(schema: &Map<String, Value>) -> Vec<&str> {
     }
 }
 
+/// P3D-7: only `Window.source_type` holds a catalog declaration as plain
+/// source metadata. The dialect matches fixed DATE/TIMESTAMP spellings;
+/// it never interpolates the declaration into SQL. Do not allow this name
+/// elsewhere, or an array, map, reference or any-typed payload here.
+fn window_catalog_type(schema: &Value) -> bool {
+    let Some(map) = schema.as_object() else {
+        return false;
+    };
+    let kinds = types(map);
+    map.keys()
+        .all(|key| key == "type" || ANNOTATIONS.contains(&key.as_str()))
+        && kinds.contains(&"string")
+        && kinds.iter().all(|kind| matches!(*kind, "string" | "null"))
+}
+
 impl Walk<'_> {
     /// Classify `schema`, reached at `path`, under the nearest property
     /// `name` (None at the root); `seen` holds the definitions entered on
@@ -220,6 +237,13 @@ impl Walk<'_> {
         if let Some(properties) = map.get("properties").and_then(Value::as_object) {
             for (property, child) in properties {
                 let at = format!("{path}/{property}");
+                if seen.last().is_some_and(|def| def == "Window")
+                    && property == "source_type"
+                    && window_catalog_type(child)
+                {
+                    self.found.push(Finding::Identifier(at));
+                    continue;
+                }
                 if seen
                     .last()
                     .is_some_and(|def| OPAQUE_SQL.iter().any(|(d, p)| d == def && p == property))
