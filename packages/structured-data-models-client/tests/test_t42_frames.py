@@ -119,6 +119,33 @@ def test_first_table_warning_survives_later_column_failure(monkeypatch):
     assert outcomes[1] == outcomes[0]
 
 
+@pytest.mark.parametrize('later_invalid', [False, True])
+def test_inferred_warning_precedes_whole_constructor_override(monkeypatch, later_invalid):
+    frame = pd.DataFrame({
+        'user_id': pd.Series([*range(99), None], dtype='Int64'),
+        'alternate_id': range(100),
+    })
+    frames = {'users': frame}
+    options = {'primary_keys': {'users': 'alternate_id'}}
+    if later_invalid:
+        frames['later'] = pd.DataFrame([[1, 2]], columns=['same', 'same'])
+        options = {'primary_keys': {'users': 'missing'}}
+    found = []
+    for core in (False, True):
+        monkeypatch.setenv('SDM_CORE_ROUTES', PATHS if core else '')
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter('always')
+            try:
+                schema = Schema.from_data(frames, **options)
+            except StructuredDataError as error:
+                outcome = str(error)
+            else:
+                outcome = projection(schema)
+        found.append((outcome, [str(w.message) for w in caught]))
+    assert found[0][1]
+    assert found[1] == found[0]
+
+
 def test_first_failure_never_reads_later_custom_frame(monkeypatch):
     touched = []
 
