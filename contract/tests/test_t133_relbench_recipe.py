@@ -149,10 +149,21 @@ def copy_of_the_tree(tmp: Path) -> Path:
     own."""
     assert (ROOT / TOOL).is_file(), f'{TOOL} is not on the branch'
     repo = tmp / 'worktree'
+
+    def ignored(directory: str, names: list[str]) -> set[str]:
+        omitted = shutil.ignore_patterns('__pycache__', '.pytest_cache')(
+            directory, names
+        )
+        # The recipe reads its registry and differential tools, never the
+        # independent warehouse replay corpus. Keep every other input.
+        if Path(directory) == ROOT / 'contract':
+            omitted.add('captures')
+        return omitted
+
     shutil.copytree(
         ROOT / 'contract',
         repo / 'contract',
-        ignore=shutil.ignore_patterns('__pycache__', '.pytest_cache'),
+        ignore=ignored,
     )
     for path in (REGISTRY, REGISTER):
         (repo / path).parent.mkdir(parents=True, exist_ok=True)

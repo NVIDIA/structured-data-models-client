@@ -1389,12 +1389,12 @@ fn a_listed_table_the_schema_may_not_name_is_refused() {
     assert_eq!(fields["field"], "tables");
 }
 
-/// Decision E52 on this host, the parity of the Python host's
-/// `test_a_second_call_runs_the_reference_s_statements`: one materializer's
-/// three calls on `base.regression`, each handed the sampler state the one
-/// before it left, run the reference's statements (6, then 4: the index
-/// read and the time bounds the first made are skipped), warn of the
-/// missing indexes once, and answer the same request each time.
+/// E52's index-check lifetime on the SQL provider, with P3A-5's fresh data
+/// facts: one materializer's three calls on `base.regression`, each handed
+/// the preceding call's sampler state, read time bounds on every run
+/// (6 statements, then 5), warn of missing indexes once, and answer the
+/// same request each time. Host providers without source refresh retain
+/// E52's cross-run data memo; this test uses DuckDB's SQL source.
 #[test]
 fn a_materializer_s_later_calls_skip_what_its_first_read() {
     let loaded = case::load(&[contract().join("cases/s1/base.regression.json")]).unwrap();
@@ -1424,7 +1424,13 @@ fn a_materializer_s_later_calls_skip_what_its_first_read() {
     for later in &kinds[1..] {
         assert_eq!(
             later,
-            &["sample_entities", "neighbors", "lookup", "neighbors"]
+            &[
+                "time_bounds",
+                "sample_entities",
+                "neighbors",
+                "lookup",
+                "neighbors"
+            ]
         );
     }
     let warned: Vec<Vec<String>> = calls
