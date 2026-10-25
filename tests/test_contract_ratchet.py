@@ -228,6 +228,7 @@ def repo(origin: tuple[Path, str], tmp_path: Path) -> Path:
         'decisions_manifests',
         'case_keys',
         'temporary_approval',
+        'reference_internal_error',
     ],
 )
 def test_the_fixture_reuses_a_removed_worktree_without_pruning_failed_evidence(
@@ -237,7 +238,6 @@ def test_the_fixture_reuses_a_removed_worktree_without_pruning_failed_evidence(
     source = tmp_path / 'origin'
     source.mkdir()
     git(source, 'init', '-q', '-b', 'fixture')
-    landed = commit(source, 'fixture origin')
     if factory == 'ratchet':
         create = repo.__wrapped__
     elif factory == 'coverage':
@@ -271,6 +271,39 @@ def test_the_fixture_reuses_a_removed_worktree_without_pruning_failed_evidence(
                 {'repo': origin[0]}, path, origin[1]
             )
 
+    elif factory == 'reference_internal_error':
+        crash_tests = _module(
+            ROOT / 'tests/test_t132g_reference_internal_error.py',
+            'internal_error_worktree_reuse',
+        )
+        fixture_cases = sorted((crash_tests.FIXTURES / 'cases').glob('*.json'))
+        assert fixture_cases
+        for fixture_case in fixture_cases:
+            spec = json.loads(fixture_case.read_text())
+            directory = source / 'contract/cases' / spec['slice'].lower()
+            directory.mkdir(parents=True, exist_ok=True)
+            (directory / '.keep').touch()
+        reference = source / 'contract/reference/fixture.jsonl'
+        reference.parent.mkdir(parents=True)
+        reference.write_text('')
+
+        def create(origin, path):
+            tree = crash_tests.repo.__wrapped__(origin, path)
+            assert git(tree, 'rev-parse', 'HEAD~2') == origin[1]
+            assert (tree / reference.relative_to(source)).read_text() == (
+                crash_tests.FIXTURES / 'python-ref.jsonl'
+            ).read_text()
+            for fixture_case in fixture_cases:
+                spec = json.loads(fixture_case.read_text())
+                added = (
+                    tree
+                    / 'contract/cases'
+                    / spec['slice'].lower()
+                    / fixture_case.name
+                )
+                assert added.read_bytes() == fixture_case.read_bytes()
+            return tree
+
     else:
         gate_tests = _module(
             ROOT / f'contract/tests/test_{factory}.py',
@@ -283,6 +316,7 @@ def test_the_fixture_reuses_a_removed_worktree_without_pruning_failed_evidence(
             def create(origin, path):
                 return gate_tests.worktree({'repo': origin[0]}, path, origin[1])
 
+    landed = commit(source, 'fixture origin')
     original = create((source, landed), tmp_path / 'reused')
     failed = create((source, landed), tmp_path / 'failed')
     evidence = failed / 'failure.txt'
@@ -293,8 +327,16 @@ def test_the_fixture_reuses_a_removed_worktree_without_pruning_failed_evidence(
     replacement = create((source, landed), tmp_path / 'reused')
     assert replacement == original and replacement.is_dir()
     assert evidence.read_text() == 'preserve this failed test evidence'
-    assert git(replacement, 'rev-parse', 'HEAD') == landed
-    assert git(failed, 'log', '-1', '--format=%s') == 'fixture origin'
+    if factory == 'reference_internal_error':
+        assert git(replacement, 'log', '-1', '--format=%s') == (
+            'Land T1.32e: the package'
+        )
+        assert git(failed, 'log', '-1', '--format=%s') == (
+            'Land T1.32e: the package'
+        )
+    else:
+        assert git(replacement, 'rev-parse', 'HEAD') == landed
+        assert git(failed, 'log', '-1', '--format=%s') == 'fixture origin'
     registrations = git(source, 'worktree', 'list', '--porcelain')
     assert f'worktree {replacement}' in registrations
     assert f'worktree {failed}' in registrations
