@@ -334,13 +334,46 @@ fn data_requests_hold_no_expression_or_sql() {
 
 #[test]
 fn the_window_catalog_type_is_a_scoped_source_fact() {
-    let found = findings(&schema::<DataRequest>());
-    assert!(
-        found.iter().any(|finding| {
-            matches!(finding, Finding::Identifier(path) if path.ends_with(" -> Window/source_type"))
-        }),
-        "{found:#?}"
-    );
+    for plain in [
+        serde_json::json!({"type": "string"}),
+        serde_json::json!({"type": ["string", "null"]}),
+    ] {
+        let mut request = schema::<DataRequest>();
+        request["$defs"]["Window"]["properties"]["source_type"] = plain;
+        let found = findings(&request);
+        assert!(
+            found.iter().any(|finding| {
+                matches!(finding, Finding::Identifier(path) if path.ends_with(" -> Window/source_type"))
+            }),
+            "{found:#?}"
+        );
+        assert!(problems(&request).is_empty(), "{found:#?}");
+    }
+}
+
+#[test]
+fn inline_descendants_of_window_cannot_inherit_the_catalog_exception() {
+    let nested = serde_json::json!({
+        "type": "object",
+        "properties": {"source_type": {"type": ["string", "null"]}},
+        "additionalProperties": false,
+    });
+    for descendant in [
+        nested.clone(),
+        serde_json::json!({"type": "array", "items": nested.clone()}),
+        serde_json::json!({"type": "object", "additionalProperties": nested.clone()}),
+        serde_json::json!({"allOf": [nested]}),
+    ] {
+        let mut request = schema::<DataRequest>();
+        request["$defs"]["Window"]["properties"]["unreviewed"] = descendant;
+        let found = problems(&request);
+        assert!(
+            found.iter().any(|finding| {
+                matches!(finding, Finding::Text(path) if path.contains(" -> Window/unreviewed/") && path.ends_with("/source_type"))
+            }),
+            "{found:#?}"
+        );
+    }
 }
 
 #[derive(JsonSchema)]
