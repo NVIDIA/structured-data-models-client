@@ -740,7 +740,7 @@ def workspace_sources(root: Path) -> list[Path]:
     ]
 
 
-def verified_helpers(root: Path, crate: str) -> Verified:
+def verified_error_members(root: Path) -> Verified:
     assoc: set[tuple[str, str]] = set()
     methods: set[str] = set()
     for path in workspace_sources(root):
@@ -758,13 +758,17 @@ def verified_helpers(root: Path, crate: str) -> Verified:
                 takes_self = re.match(r'\s*(?:mut\s+)?self\b', params)
                 if impl.group(1) == 'CoreError' and takes_self:
                     methods.add(name)
+    return Verified(frozenset(assoc), frozenset(methods))
+
+
+def verified_helpers(root: Path, crate: str, members: Verified) -> Verified:
     returns: dict[str, set[bool]] = {}
     for path in rust_files(crate_dir(root, crate) / 'src'):
         skeleton = read_rust(path.read_text()).skeleton
         for _, name, _, ret in fn_signatures(skeleton):
             returns.setdefault(name, set()).add(bool(_ERROR_RETURN.match(ret)))
     helpers = {name for name, oks in returns.items() if oks == {True}}
-    return Verified(frozenset(assoc), frozenset(methods), frozenset(helpers))
+    return Verified(members.assoc, members.methods, frozenset(helpers))
 
 
 def _callee_before(skeleton: str, end: int) -> tuple[int, str]:
@@ -1001,13 +1005,16 @@ PROVIDER_WORDS = frozenset(
 
 def check_sql(root: Path) -> list[str]:
     problems: list[str] = []
+    members: Verified | None = None
     for crate in SQL_FREE_CRATES:
         src = crate_dir(root, crate) / 'src'
         if not src.is_dir():
             problems.append(f'{src.relative_to(root)}: missing')
             continue
         tests = test_module_files(src)
-        verified = verified_helpers(root, crate)
+        if members is None:
+            members = verified_error_members(root)
+        verified = verified_helpers(root, crate, members)
         for path in rust_files(src):
             source = read_rust(path.read_text())
             rel = path.relative_to(root)
