@@ -160,8 +160,16 @@ fn window_catalog_type(schema: &Value) -> bool {
 impl Walk<'_> {
     /// Classify `schema`, reached at `path`, under the nearest property
     /// `name` (None at the root); `seen` holds the definitions entered on
-    /// this path.
-    fn classify(&mut self, schema: &Value, path: &str, name: Option<&str>, seen: &[String]) {
+    /// this path. `definition` names only this exact definition root,
+    /// never an inline descendant reached through its structure.
+    fn classify(
+        &mut self,
+        schema: &Value,
+        path: &str,
+        name: Option<&str>,
+        seen: &[String],
+        definition: Option<&str>,
+    ) {
         let map = match schema {
             Value::Bool(true) => return self.found.push(Finding::Any(path.into())),
             Value::Bool(false) => return,
@@ -195,7 +203,7 @@ impl Walk<'_> {
                     }
                     self.names_only(target, &at, &inner)
                 }
-                Some(target) => self.classify(target, &at, name, &inner),
+                Some(target) => self.classify(target, &at, name, &inner, Some(def)),
             }
         }
         for key in ["anyOf", "oneOf", "allOf"] {
@@ -206,7 +214,7 @@ impl Walk<'_> {
                 .flatten()
                 .enumerate()
             {
-                self.classify(branch, &format!("{path}/{key}/{i}"), name, seen);
+                self.classify(branch, &format!("{path}/{key}/{i}"), name, seen, None);
             }
         }
         let closed = map.contains_key("const") || map.contains_key("enum");
@@ -223,21 +231,21 @@ impl Walk<'_> {
                 None => self.found.push(Finding::Any(format!("{path}/items"))),
                 Some(Value::Array(items)) => {
                     for (i, item) in items.iter().enumerate() {
-                        self.classify(item, &format!("{path}/items/{i}"), name, seen);
+                        self.classify(item, &format!("{path}/items/{i}"), name, seen, None);
                     }
                 }
-                Some(items) => self.classify(items, &format!("{path}/items"), name, seen),
+                Some(items) => self.classify(items, &format!("{path}/items"), name, seen, None),
             }
             if let Some(more) = map.get("prefixItems").and_then(Value::as_array) {
                 for (i, item) in more.iter().enumerate() {
-                    self.classify(item, &format!("{path}/prefixItems/{i}"), name, seen);
+                    self.classify(item, &format!("{path}/prefixItems/{i}"), name, seen, None);
                 }
             }
         }
         if let Some(properties) = map.get("properties").and_then(Value::as_object) {
             for (property, child) in properties {
                 let at = format!("{path}/{property}");
-                if seen.last().is_some_and(|def| def == "Window")
+                if definition == Some("Window")
                     && property == "source_type"
                     && window_catalog_type(child)
                 {
@@ -254,12 +262,12 @@ impl Walk<'_> {
                 if denied(property, false) {
                     self.found.push(Finding::Denied(at.clone()));
                 }
-                self.classify(child, &at, Some(property), seen);
+                self.classify(child, &at, Some(property), seen, None);
             }
         }
         match map.get("additionalProperties") {
             None | Some(Value::Bool(false)) => {}
-            Some(values) => self.classify(values, &format!("{path}/*"), name, seen),
+            Some(values) => self.classify(values, &format!("{path}/*"), name, seen, None),
         }
     }
 
@@ -314,7 +322,7 @@ fn findings(schema: &Value) -> Vec<Finding> {
         defs,
         found: Vec::new(),
     };
-    walk.classify(schema, "#", None, &[]);
+    walk.classify(schema, "#", None, &[], None);
     walk.found
 }
 
