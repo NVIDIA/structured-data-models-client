@@ -34,7 +34,8 @@ use sdm_contract::ops::{
 };
 use sdm_contract::run::{Endpoint, StartRun};
 use sdm_contract::{
-    CONTRACT_VERSION, CoreError, Detail, ErrorCode, ErrorKind, HostFacts, Scalar, Step, Unit,
+    CONTRACT_VERSION, CoreError, Detail, ErrorCode, ErrorKind, HostFacts, Scalar, Sentence, Step,
+    Unit,
 };
 use sdm_core::{
     Attachment, Attachments, CompositionRoot, ModelResult, Run, UnknownZone, Zones, start,
@@ -878,6 +879,131 @@ fn a_non_finite_prediction_is_read_as_the_reference_reads_it() {
             .as_primitive::<Float64Type>()
             .value(0);
         assert_eq!(got.to_bits(), read.to_bits(), "{token}");
+    }
+}
+
+/// Competing faults through the existing Predict operation: unknown model
+/// precedes task decoding; a known model still reads the task before
+/// refusing empty outputs, even when defaults were not requested.
+#[test]
+fn model_resolution_preserves_payload_and_empty_output_error_order() {
+    for payload in ["[]".to_owned(), r#"{"task":{}}"#.to_owned(), payload_text()] {
+        let mut run = predict_run_with(REQUEST_STATE_VERSION, payload, CANARY, &[], false).unwrap();
+        let error = run.next().unwrap_err();
+        assert_eq!(error.sentence, Sentence::UnknownModel);
+        assert_eq!(error.fields["field"], text("model"));
+        assert!(!written(&error).contains(CANARY));
+    }
+    for (payload, reason) in [("[]", "not_an_object"), (r#"{"task":{}}"#, "task")] {
+        let mut run = predict_run_with(
+            REQUEST_STATE_VERSION,
+            payload.to_owned(),
+            "kumo-relational",
+            &[],
+            false,
+        )
+        .unwrap();
+        let error = run.next().unwrap_err();
+        assert_eq!(error.sentence, Sentence::StateUnread);
+        assert_eq!(error.fields["field"], text("state.payload"));
+        assert_eq!(error.fields["reason"], text(reason));
+    }
+    // Empty outputs precede the tabular shape refusal, rather than being
+    // treated as a request for defaults or an empty successful result.
+    let mut run = predict_run_with(
+        REQUEST_STATE_VERSION,
+        payload_text(),
+        "kumo-tabular",
+        &[],
+        false,
+    )
+    .unwrap();
+    let error = run.next().unwrap_err();
+    assert_eq!(error.sentence, Sentence::OutputsNone);
+    assert_eq!(error.fields["field"], text("outputs"));
+}
+
+/// Shape, task, output names and context limits are checked before empty
+/// scoring, with the tabular route still explicitly unported afterward.
+#[test]
+fn request_validation_preserves_competing_faults_before_empty_scoring() {
+    let refused = |payload: &Value, model: &str, outputs: &[&str]| {
+        let mut run =
+            predict_run_asking(REQUEST_STATE_VERSION, payload.to_string(), model, outputs).unwrap();
+        run.next().unwrap_err()
+    };
+    let mut payload: Value = serde_json::from_str(&payload_text()).unwrap();
+    payload["predict"]["instance_table"]["rows"] = json!([]);
+    payload["task"]["kind"] = json!("not-served");
+    let shape = refused(&payload, "kumo-tabular", &["not-produced"]);
+    assert_eq!(shape.sentence, Sentence::ModelLacksShape);
+    assert_eq!(
+        shape.fields["unsupported"],
+        Detail::List(vec![
+            Scalar::Utf8("multiple_tables".into()),
+            Scalar::Utf8("relationships".into())
+        ])
+    );
+    payload["schema"]["relationships"] = json!([]);
+    payload["schema"]["related_tables"] = json!({});
+    let task = refused(&payload, "kumo-tabular", &["not-produced"]);
+    assert_eq!(task.sentence, Sentence::ModelLacksTask);
+    assert_eq!(task.fields["task"], text("not-served"));
+    payload["task"]["kind"] = json!("regression");
+    let output = refused(&payload, "kumo-tabular", &["not-produced"]);
+    assert_eq!(output.sentence, Sentence::ModelLacksOutputs);
+    assert_eq!(
+        output.fields["unsupported_outputs"],
+        Detail::List(vec![Scalar::Utf8("not-produced".into())])
+    );
+    let unported = refused(&payload, "kumo-tabular", &["prediction"]);
+    assert_eq!(unported.sentence, Sentence::NotYetPredict);
+    assert_eq!(rule(&unported), Some(&text("model")));
+
+    payload["context"]["instance_table"]["rows"] =
+        Value::Array((0..10_001).map(|i| json!([i, i])).collect());
+    let output = refused(&payload, "kumo-relational", &["not-produced"]);
+    assert_eq!(output.sentence, Sentence::ModelLacksOutputs);
+    let cap = refused(&payload, "kumo-relational", &["prediction"]);
+    assert_eq!(cap.sentence, Sentence::ContextPastModel);
+    assert_eq!(
+        cap.fields["context_rows"],
+        Detail::Scalar(Scalar::UInt64(10_001))
+    );
+    assert_eq!(
+        cap.fields["context_rows_max"],
+        Detail::Scalar(Scalar::UInt64(10_000))
+    );
+}
+
+/// Defaults are chosen for each Predict invocation, ignoring the named
+/// list only when default_outputs is true, including the no-send path.
+#[test]
+fn empty_predictions_resolve_defaults_for_each_calls_task() {
+    for (kind, expected) in [
+        ("regression", vec!["prediction"]),
+        ("binary_classification", vec!["prediction", "probabilities"]),
+        ("regression", vec!["prediction"]),
+    ] {
+        let mut payload: Value = serde_json::from_str(&payload_text()).unwrap();
+        payload["task"]["kind"] = json!(kind);
+        payload["predict"]["instance_table"]["rows"] = json!([]);
+        let mut run = predict_run_with(
+            REQUEST_STATE_VERSION,
+            payload.to_string(),
+            "kumo-relational",
+            &["not-produced"],
+            true,
+        )
+        .unwrap();
+        let Step::Done {
+            result: OperationResult::Predict(predicted),
+        } = run.next().unwrap()
+        else {
+            panic!("empty prediction completes without a model call");
+        };
+        assert_eq!(predicted.outputs, expected);
+        assert!(run.take_warnings().is_empty());
     }
 }
 
