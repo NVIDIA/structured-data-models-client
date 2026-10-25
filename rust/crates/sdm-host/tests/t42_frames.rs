@@ -226,9 +226,10 @@ fn coarse_native_frame_units_are_not_silently_clamped_into_the_temporal_slice() 
     }
 }
 
-fn encoded_timestamps(column: arrow_array::ArrayRef, encoding: &str) -> arrow_array::ArrayRef {
+fn encoded_timestamp_batch(column: arrow_array::ArrayRef, encoding: &str) -> RecordBatch {
     use arrow_array::types::{Int8Type, Int16Type};
     use arrow_array::{ArrayRef, DictionaryArray, Int8Array, RunArray};
+    use arrow_schema::{Field, Schema};
 
     let dictionary = |values: ArrayRef| -> ArrayRef {
         Arc::new(
@@ -241,13 +242,21 @@ fn encoded_timestamps(column: arrow_array::ArrayRef, encoding: &str) -> arrow_ar
                 .unwrap(),
         )
     };
-    match encoding {
+    let column = match encoding {
         "dictionary" => dictionary(column),
         "run_end" => runs(column),
         "dictionary_run_end" => dictionary(runs(column)),
         "run_end_dictionary" => runs(dictionary(column)),
         _ => unreachable!(),
-    }
+    };
+    // Encoded values can be null even when every dictionary key is valid.
+    // Declare logical nullability rather than infer it from physical keys.
+    let schema = Arc::new(Schema::new(vec![Field::new(
+        "observed_at",
+        column.data_type().clone(),
+        true,
+    )]));
+    RecordBatch::try_new(schema, vec![column]).unwrap()
 }
 
 #[test]
@@ -268,11 +277,7 @@ fn encoded_coarse_timestamps_are_refused_at_both_constructor_stages() {
                 } else {
                     Arc::new(TimestampSecondArray::from(values))
                 };
-                let batch = RecordBatch::try_from_iter([(
-                    "observed_at",
-                    encoded_timestamps(plain, encoding),
-                )])
-                .unwrap();
+                let batch = encoded_timestamp_batch(plain, encoding);
                 let mut attached = inputs();
                 attached.insert(
                     AttachmentId(2),
@@ -329,11 +334,7 @@ fn encoded_fine_timestamps_keep_raw_counts_validity_and_constructor_time_choice(
                     }
                     _ => unreachable!(),
                 };
-                let batch = RecordBatch::try_from_iter([(
-                    "observed_at",
-                    encoded_timestamps(plain, encoding),
-                )])
-                .unwrap();
+                let batch = encoded_timestamp_batch(plain, encoding);
                 let mut attached = inputs();
                 attached.insert(
                     AttachmentId(2),
