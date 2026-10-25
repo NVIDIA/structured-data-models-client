@@ -123,13 +123,13 @@ def test_java_types_cells_are_witnessed_without_removing_ignored_inputs():
     case = json.loads(
         (ROOT / 'contract/cases/s2/java.databricks-sql.types.json').read_text()
     )
-    captured = json.loads(
-        (
-            ROOT
-            / 'contract/captures/databricks-sql/java.databricks-sql.types/capture.json'
-        ).read_text()
-    )
-    assert set(case['cells']) <= coverage.observed(case, captured['reference'])
+    # The gate enriches the reference with actual typed bindings and rows.
+    tree = coverage._module('ratchet').Tree(ROOT, 'HEAD')
+    report = coverage.Report()
+    captured = coverage.read_captures(tree, report, {case['id']})
+    assert report.problems == []
+    [reference] = captured[case['id']]
+    assert set(case['cells']) <= coverage.observed(case, reference)
     assert any(
         ' AS token' in sql and ' AS tags' in sql
         for sql in case['input']['setup']
