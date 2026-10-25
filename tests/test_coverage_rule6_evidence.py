@@ -18,6 +18,7 @@ not an observation is refused by name (``read:``), never a traceback.
 from __future__ import annotations
 
 import importlib.util
+import copy
 import json
 import os
 import subprocess
@@ -346,6 +347,109 @@ def test_a_warehouse_only_case_is_held_to_its_captures_reference_line() -> None:
     assert 'no reference observation' in none
     [rows] = problems({'w.case': [line(None)]})
     assert 'a sample read as rows' in rows
+
+
+def _databricks_omitted_features(
+    change: Callable[[dict[str, Any]], None],
+) -> list[str]:
+    """The real ordinary capture through the capture reader and rule 6."""
+    coverage = _coverage_module()
+    case_id = 'java.databricks-sql.types'
+    path = f'contract/captures/databricks-sql/{case_id}/capture.json'
+    capture = json.loads((ROOT / path).read_text())
+    change(capture)
+    case = json.loads((ROOT / f'contract/cases/s2/{case_id}.json').read_text())
+    case['cells'] = ['binary/feature', 'list/feature']
+    real_tree = coverage._module('ratchet').Tree(
+        ROOT, _git(dict(os.environ), 'rev-parse', 'HEAD')
+    )
+
+    class CaptureTree:
+        repo = real_tree.repo
+        sha = real_tree.sha
+
+        def files(self, prefix: str) -> list[str]:
+            assert prefix == coverage.CAPTURES
+            return [path]
+
+        def read(self, name: str) -> str | None:
+            return json.dumps(capture) if name == path else real_tree.read(name)
+
+    report = coverage.Report()
+    captured = coverage.read_captures(CaptureTree(), report, {case_id})
+    coverage.rule_6({case_id: case}, {}, report, captured)
+    return list(report.problems)
+
+
+def test_real_databricks_omitted_columns_keep_their_evidenced_input_roles() -> (
+    None
+):
+    # E96(b): the reference reads token:binary and tags:list<int32>, then
+    # leaves them out. Both real catalog constraint reads return no rows.
+    assert _databricks_omitted_features(lambda capture: None) == []
+
+
+@pytest.mark.parametrize('kind', ['keys', 'foreign'])
+@pytest.mark.parametrize(
+    'fault',
+    [
+        'missing',
+        'nonempty',
+        'unknown count',
+        'failed',
+        'missing parameters',
+        'wrong namespace',
+        'wrong table',
+        'unrecognized SQL',
+    ],
+)
+def test_omitted_warehouse_roles_need_complete_empty_constraint_evidence(
+    kind: str, fault: str
+) -> None:
+    def change(capture: dict[str, Any]) -> None:
+        recorded = capture['statements']
+        statements = capture['reference']['driver']['capture']['statements']
+        selected = [
+            i
+            for i, kept in enumerate(recorded)
+            if kept.get('parameters') == ['{schema}', 'users']
+            and (
+                "constraint_type IN ('PRIMARY KEY', 'UNIQUE')"
+                if kind == 'keys'
+                else "constraint_type = 'FOREIGN KEY'"
+            )
+            in kept['text']
+        ]
+        assert len(selected) == 1
+        [index] = selected
+        statement, kept = statements[index], recorded[index]
+        if fault == 'missing':
+            statements.pop(index)
+            recorded.pop(index)
+        elif fault == 'nonempty':
+            statement['results'][0]['rows'] = 1
+        elif fault == 'unknown count':
+            statement['results'][0]['rows'] = None
+        elif fault == 'failed':
+            statement['error'] = {'type': 'RuntimeError'}
+        elif fault == 'missing parameters':
+            kept.pop('parameters')
+        elif fault in ('wrong namespace', 'wrong table'):
+            parameter = 0 if fault == 'wrong namespace' else 1
+            kept['parameters'][parameter] = 'another'
+            statement['parameters'][parameter]['value'] = repr('another')
+        elif fault == 'unrecognized SQL':
+            kept['text'] += ' AND 1 = 0'
+            statement['sql'] = kept['text']
+        else:
+            raise AssertionError(fault)
+
+    problems = _databricks_omitted_features(change)
+    assert len(problems) == 2
+    assert all(
+        problem.startswith('rule 6: case java.databricks-sql.types: claims ')
+        for problem in problems
+    ), problems
 
 
 def test_a_row_read_sample_is_typed_by_the_arrow_its_capture_holds() -> None:
