@@ -11,13 +11,14 @@ import importlib.util
 import json
 import re
 import warnings
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 import duckdb
 import pyarrow as pa
 import pytest
-from sdm_connectors import DatabricksSource, DuckDBSource
+from sdm_connectors import DatabricksSource, DuckDBSource, SQLiteSource
 
 from sdm_client import PredictiveQuery, Schema
 
@@ -115,6 +116,15 @@ def test_metric_filter_refresh_reuses_no_previous_sampler_bounds_or_counts(
             schema = Schema.from_source(source)
         query = PredictiveQuery(QUERY, schema)
         first = _payloads(query)
+        first_memo = json.loads(
+            query._relational_materializer._core_sampler_state['held']['memo']
+        )
+        assert (
+            next(
+                r['rows'] for r in first_memo['rows'] if r['table'] == 'orders'
+            )
+            == 40
+        )
         connection.definition = connection.definition.replace(
             'source.order_id < 40', 'source.order_id >= 0'
         )
@@ -125,6 +135,17 @@ def test_metric_filter_refresh_reuses_no_previous_sampler_bounds_or_counts(
         )
         assert second == fresh, (
             'an existing query must use the same current bounds/counts as a fresh materializer'
+        )
+        current_memo = json.loads(
+            query._relational_materializer._core_sampler_state['held']['memo']
+        )
+        assert (
+            next(
+                r['rows']
+                for r in current_memo['rows']
+                if r['table'] == 'orders'
+            )
+            == 80
         )
     finally:
         connection._db.close()
@@ -166,6 +187,62 @@ def test_data_appended_past_unchanged_preview_refreshes_default_anchor(
         assert first != fresh
         assert second == fresh, (
             'same schema and preview do not make old time bounds current'
+        )
+    finally:
+        connection.close()
+
+
+def test_sqlite_changed_time_spelling_uses_current_window_bounds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    dbapi = pytest.importorskip('adbc_driver_sqlite.dbapi')
+    monkeypatch.delenv('SDM_CORE_ROUTES', raising=False)
+    connection = dbapi.connect()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                'CREATE TABLE users (user_id INTEGER PRIMARY KEY, age INTEGER)'
+            )
+            cursor.executemany(
+                'INSERT INTO users VALUES (?, ?)',
+                [(i, 20 + i) for i in range(4)],
+            )
+            cursor.execute(
+                'CREATE TABLE orders (order_id INTEGER PRIMARY KEY, user_id INTEGER, price REAL, ts TIMESTAMP)'
+            )
+            cursor.executemany(
+                'INSERT INTO orders VALUES (?, ?, ?, ?)',
+                [
+                    (
+                        i,
+                        i % 4,
+                        float(i),
+                        (datetime(2024, 1, 1) + timedelta(days=i)).strftime(
+                            '%Y-%m-%d %H:%M:%S'
+                        ),
+                    )
+                    for i in range(120)
+                ],
+            )
+        connection.commit()
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            schema = Schema.from_source(
+                SQLiteSource(connection),
+                primary_keys={'users': 'user_id', 'orders': 'order_id'},
+                time_columns={'orders': 'ts'},
+            )
+        query = PredictiveQuery(QUERY, schema)
+        _payloads(query)
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "UPDATE orders SET ts = replace(ts, ' ', 'T') || '.000'"
+            )
+        connection.commit()
+        second = _payloads(query)
+        fresh = _payloads(PredictiveQuery(QUERY, schema))
+        assert second == fresh, (
+            'SQL comparison spelling must come from the current source rows'
         )
     finally:
         connection.close()
