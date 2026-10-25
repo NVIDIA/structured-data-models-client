@@ -124,6 +124,114 @@ def _tool(name: str) -> ModuleType:
 # --- l0_deps.py and l0_scan.py ---------------------------------------------------
 
 
+@pytest.mark.parametrize('missing_first', [False, True])
+def test_sql_cli_discovers_error_members_once_and_refreshes_next_invocation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    missing_first: bool,
+) -> None:
+    scan = _tool('l0_scan')
+    declarations = tmp_path / 'rust/crates/sdm-contract/src/error.rs'
+    declarations.parent.mkdir(parents=True)
+    members = (
+        'impl CoreError {\n'
+        '    pub fn new(k: Kind, c: Code, m: &str) -> Self { todo!() }\n'
+        '    pub fn with_field(self, k: &str, v: Detail) -> Self { todo!() }\n'
+        '}\n'
+        'impl Detail {\n'
+        '    pub fn text(v: &str) -> Self { todo!() }\n'
+        '}\n'
+    )
+    declarations.write_text(members, encoding='utf-8')
+    present = (
+        scan.SQL_FREE_CRATES[1:] if missing_first else scan.SQL_FREE_CRATES
+    )
+    for crate in present:
+        source = tmp_path / f'rust/crates/{crate}/src/lib.rs'
+        source.parent.mkdir(parents=True)
+        # The existing nested-diagnostic control, with actual declarations
+        # in a non-SQL-free crate so only workspace discovery reads them.
+        source.write_text(
+            'pub fn f() -> CoreError { CoreError::new(K, C, "m")'
+            '.with_field("rule", Detail::text("select a from t where x = 1")) }\n',
+            encoding='utf-8',
+        )
+    real_read = Path.read_text
+    reads: list[Path] = []
+
+    def read_text(path: Path, *args: Any, **kwargs: Any) -> str:
+        if path == declarations:
+            reads.append(path)
+        return real_read(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, 'read_text', read_text)
+    missing = (
+        ['sql: rust/crates/sdm-schema/src: missing'] if missing_first else []
+    )
+    first_status = scan.main(['sql', '--root', str(tmp_path)])
+    first_output = capsys.readouterr()
+    first_reads = len(reads)
+    # Only Detail changes between complete CLI invocations, on disk.
+    # A process-global cache would wrongly retain its diagnostic exemption.
+    declarations.write_text(
+        members.replace(
+            'fn text(v: &str) -> Self',
+            'fn text(v: &str) -> Result<Self, CoreError>',
+        ),
+        encoding='utf-8',
+    )
+    second_status = scan.main(['sql', '--root', str(tmp_path)])
+    second_output = capsys.readouterr()
+
+    assert first_status == int(missing_first)
+    assert first_output.err == ''
+    assert first_output.out.splitlines() == [
+        *missing,
+        'sql: FAIL' if missing_first else 'sql: ok',
+    ]
+    assert second_status == 1
+    assert second_output.err == ''
+    assert second_output.out.splitlines() == [
+        *missing,
+        *[
+            f'sql: rust/crates/{crate}/src/lib.rs:1: the strings '
+            'of a statement hold `select a from t where`, SQL or a '
+            "provider's name; SQL and providers are sdm-data's alone"
+            for crate in present
+        ],
+        'sql: FAIL',
+    ]
+    assert (first_reads, len(reads)) == (1, 2)
+
+
+def test_sql_cli_without_present_crates_does_not_discover_error_members(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    scan = _tool('l0_scan')
+    real_read = Path.read_text
+    reads: list[Path] = []
+
+    def read_text(path: Path, *args: Any, **kwargs: Any) -> str:
+        reads.append(path)
+        return real_read(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, 'read_text', read_text)
+    assert scan.main(['sql', '--root', str(tmp_path)]) == 1
+    output = capsys.readouterr()
+    assert output.err == ''
+    assert output.out.splitlines() == [
+        *[
+            f'sql: rust/crates/{crate}/src: missing'
+            for crate in scan.SQL_FREE_CRATES
+        ],
+        'sql: FAIL',
+    ]
+    assert reads == []
+
+
 def _crate_manifest(name: str) -> Path:
     for parent in ('rust/crates', 'rust/bindings'):
         manifest = ROOT / parent / name / 'Cargo.toml'
