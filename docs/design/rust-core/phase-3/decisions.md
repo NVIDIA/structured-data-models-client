@@ -252,3 +252,14 @@ It does not waive required checks, evidence or final reviews, or approve a tabul
 | # | Decision and presented context | Owner's words | Status |
 |---|---|---|---|
 | T310-OWNER-2026-10-25-MERGE-1 | After Phase 3 passes its required completion checks and final reviews, merge it into `rust-core` and push; then rebase Phase 4 and its dependent work onto the latest `rust-core`, preserving its commits instead of adding a merge commit; make necessary documentation or tooling updates | "Yes, merge Phase 3 into rust-core once it's complete, and push it. Then rebase phase 4 (not just a merge commit) onto latest rust-core. Update any docs/tooling if you need, but this is my command" | approved by owner 2026-10-25 |
+
+## Stable invalid-escape wording, 2026-10-25
+
+The question was presented at 14:30 UTC and answered at 15:21 UTC.
+The question and answer below are copied from the retained primary transcript.
+The options were "Keep stable wording (recommended)" and "Match each Python version".
+P3E-9 records this one warning-body exception to P3E-2; every other warning requirement remains unchanged.
+
+| # | Question as presented | Owner's words | Status |
+|---|---|---|---|
+| T310-OWNER-2026-10-25-STABLE-ESCAPE-1 | Python 3.14 added a long explanation to its invalid-escape warning. May the core keep the concise body `invalid escape sequence '\\/'` across Python and Java? The warning code, category and timing stay the same; results are unchanged. I recommend stable wording. The existing compatibility rule requires your approval for this text difference. | "Keep stable wording (recommended)" | approved by owner 2026-10-25 |

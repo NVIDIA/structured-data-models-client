@@ -7767,9 +7767,10 @@ entries:
     On the core route each warning the core gives is shown as its code in
     brackets, then the reference's words: "[TIME_COLUMNS_GUESSED] Some time
     columns were inferred, ...", of the same class (decisions E41(i),
-    E59(d)). The words after the code are the reference's, and a caller can
-    filter on the code. An improvement: it adds the code and loses nothing
-    (KO3-41, KO3-47).
+    E59(d)). Except for P3E-9's owner-approved INVALID_STRING_ESCAPE body,
+    the words after the code are the reference's, and a caller can filter
+    on the code. An improvement: it adds the code and loses nothing
+    (KO3-41, KO3-47), with that one wording exception recorded separately.
   affected_inputs: >-
     Every call on the core route that warns: Schema.from_source's notices
     (time columns, keys, links, columns left out, time values), and
@@ -10567,3 +10568,36 @@ entries:
     Missing reads, changed predicates, unmatched rows, public identifier
     changes, numeric tolerances and changes of floating-point aggregation
     order are not covered.
+
+- id: P3E-9
+  title: Invalid string escapes keep the concise warning body across hosts
+  kind: keep
+  old_behavior: >-
+    Python 3.14's native unicode-escape decoder expands its invalid-escape
+    warning with a long explanation and a trailing space. Earlier supported
+    Python versions use the concise body retained by the shared core
+    template. P3E-2 otherwise requires the reference's words after the code.
+  new_behavior: >-
+    Keep the existing concise INVALID_STRING_ESCAPE body across Python and
+    Java instead of following Python 3.14's expanded native message.
+    The Python diagnostic-code prefix, warning code, category and timing
+    stay the same, and results are unchanged. The shared template and its
+    ownership remain unchanged; this approves only that warning body.
+  affected_inputs: >-
+    A PQL string literal containing the deprecated slash escape that emits
+    INVALID_STRING_ESCAPE, where Python 3.14's reference decoder uses its
+    expanded message. Every other warning retains its existing contract.
+  cases: [T3.10, s0.boundary.escapes]
+  refs:
+    - P3E-2
+    - packages/structured-data-models-client/tests/test_invalid_escape_warning_on_the_core.py
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T310-OWNER-2026-10-25-STABLE-ESCAPE-1}
+  notes: >-
+    Owner explicitly answered "Keep stable wording (recommended)" on
+    2026-10-25 to the question presented at 14:30 UTC, which said the code,
+    category, timing and results would stay unchanged. This is the narrow
+    exception to P3E-2's reference-word requirement; it grants no warning
+    suppression, category change, timing change, decoder emulation,
+    broader comparison exclusion or case metadata change.
