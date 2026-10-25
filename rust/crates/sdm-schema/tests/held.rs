@@ -213,3 +213,18 @@ fn every_spelling_the_old_client_takes_names_its_data_type() {
         assert_eq!(held::wire_dtype(name), dtype, "{name}");
     }
 }
+
+#[test]
+fn frame_key_form_survives_real_held_schema_read_and_write() {
+    let mut original = schema();
+    original.tables[0].frame_key_form = Some(sdm_contract::frames::FrameKeyForm::Sequence);
+    let read = held::read(original.clone(), &BTreeMap::new(), true).unwrap();
+    assert_eq!(
+        read.description.tables[0].frame_key_form,
+        original.tables[0].frame_key_form
+    );
+    assert_eq!(
+        held::held(&read.description, &read.unfacted, &read.retyped),
+        original
+    );
+}
