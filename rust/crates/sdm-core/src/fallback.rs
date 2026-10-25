@@ -17,11 +17,11 @@
 //! more than the limit allows, each page of a scan is held to what is left
 //! of both limits as it arrives, so none is asked for past them, and more
 //! rows than the limit, or more bytes of Arrow data held (the seeds, every
-//! scan and the answer) than `max_bytes`, end the run with `UNSUPPORTED_REQUEST` naming the request,
+//! scan and the answer) than `max_bytes`, fail the request with `UNSUPPORTED_REQUEST` naming the request,
 //! the rule `fallback_limit`, the `limit` and its `most`. A value the fallback does
 //! not read (a time in a column that is neither a zone-less timestamp nor a
 //! date, a key joined to seeds of another type, a column the row format
-//! does not order) ends the run the same way, rule `fallback`, naming the
+//! does not order) fails the request the same way, rule `fallback`, naming the
 //! `field`, never silently answered otherwise. A provider's failure of a scan is the
 //! request's answer, as the provider's own failure of the request would be.
 //!
@@ -70,8 +70,8 @@ use crate::run::{ArrowData, Asker, Budget, FetchResult, Reply, internal, schema_
 
 /// The answer to `request`, an optional request the run's provider does not
 /// declare, within `limits`: the rows the fallback computed, or the
-/// provider's failure of a scan it asked. Any other failure ends the run at
-/// its next step ([`Asker::fail`]); the request is then never answered.
+/// provider's failure of a scan it asked. Local failures return to the
+/// operation, so describe can apply its existing preview recovery.
 pub(crate) async fn answer(
     asker: Asker,
     request: DataRequest,
@@ -88,10 +88,7 @@ pub(crate) async fn answer(
     match answered(&mut held, seeds).await {
         Ok(data) => Reply::Fetch(FetchResult::Data(data)),
         Err(Failed::Provider(error)) => Reply::Fetch(FetchResult::Error(error)),
-        Err(Failed::Core(error)) => {
-            asker.fail(error);
-            std::future::pending().await
-        }
+        Err(Failed::Core(error)) => Reply::Failed(error),
     }
 }
 
@@ -160,6 +157,7 @@ impl Held<'_> {
         let data = match asked {
             Reply::Fetch(FetchResult::Data(data)) => data,
             Reply::Fetch(FetchResult::Error(error)) => return Err(Failed::Provider(error)),
+            Reply::Failed(error) => return Err(Failed::Core(error)),
             _ => {
                 return Err(internal("a scan the fallback asked is not answered with data").into());
             }
@@ -479,6 +477,7 @@ async fn first_column(held: &Held<'_>, table: &Relation) -> Result<String, Faile
     let data = match held.asker.fetch(request.clone())?.await {
         Reply::Fetch(FetchResult::Data(data)) => data,
         Reply::Fetch(FetchResult::Error(error)) => return Err(Failed::Provider(error)),
+        Reply::Failed(error) => return Err(Failed::Core(error)),
         _ => {
             return Err(internal("a describe the fallback asked is not answered with data").into());
         }
