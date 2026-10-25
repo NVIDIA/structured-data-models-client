@@ -187,6 +187,10 @@ def _overlay(work: Path) -> None:
             shutil.copy2(source, target)
         elif target.exists():
             target.unlink()
+        else:
+            # A sparse path can be absent on disk while still tracked.
+            # Record the source deletion without restoring its old blob.
+            _git(work, 'update-index', '--force-remove', '--', name)
 
 
 def _clone(tmp_path: Path) -> tuple[Path, Path, str]:
