@@ -410,7 +410,9 @@ def test_the_gate_fixture_keeps_real_coverage_inputs_across_capture_layouts(
         coverage.row_schemas(
             capture,
             projected_line,
-            lambda name, base=source / relative.parent: (base / name).read_bytes(),
+            lambda name, base=source / relative.parent: (
+                base / name
+            ).read_bytes(),
         )
         assert projected_line == original_line
     assert expected_blobs
