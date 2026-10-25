@@ -9328,8 +9328,9 @@ entries:
     table as it stands (P3A-1). After the run's first successful fresh
     source initialization, time bounds, row counts and stored-time
     spellings expire, even when the schema and preview rows are unchanged.
-    Subsequent parts of the same run reuse the initialized source and its
-    current facts. A repeated SQLite materialize therefore reads MIN/MAX
+    The initialized source description is reused within that run;
+    forecast and ranking parts retain their separate sampler facts.
+    A repeated SQLite materialize therefore reads MIN/MAX
     and the stored-time sample again, in addition to its fresh metadata;
     the reference caches those two reads. The source identity and
     index-check lifetime remain intact, as does E52 fact reuse for host
