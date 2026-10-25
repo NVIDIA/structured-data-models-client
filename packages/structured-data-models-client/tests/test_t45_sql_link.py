@@ -9,6 +9,7 @@ from __future__ import annotations
 import copy
 import importlib.util
 import json
+import sys
 import warnings
 from pathlib import Path
 
@@ -320,17 +321,21 @@ def test_link_labels_do_not_gain_regression_lag_features(
     )
 
 
+@pytest.mark.parametrize('include_null', [False, True])
 def test_distinct_labels_keep_executor_order_null_filter_and_window_boundaries(
-    monkeypatch,
+    monkeypatch, include_null
 ):
     setup = [
         "INSERT INTO buys VALUES (999000, 0, 0, TIMESTAMP '2023-01-30'), "
         "(999001, 0, 1, TIMESTAMP '2023-02-01'), "
         "(999002, 0, 1, TIMESTAMP '2023-02-02'), "
-        "(999003, 0, NULL, TIMESTAMP '2023-02-03'), "
         "(999004, 0, 3, TIMESTAMP '2023-03-01'), "
         "(999005, 0, 2, TIMESTAMP '2023-03-01 00:00:00.000001')",
     ]
+    if include_null:
+        setup.append(
+            "INSERT INTO buys VALUES (999003, 0, NULL, TIMESTAMP '2023-02-03')"
+        )
     query = 'PREDICT LIST_DISTINCT(buys.item_id WHERE buys.buy_id >= 999000, 0, 30, days) FOR EACH users.user_id'
     outputs = []
     for core in (False, True):
@@ -338,8 +343,48 @@ def test_distinct_labels_keep_executor_order_null_filter_and_window_boundaries(
         with connection(setup) as db:
             request = materialize(db, query)
             outputs.append(request.payloads)
-    assert outputs[1] == outputs[0]
-    table = outputs[0][0]['context']['instance_table']
+    if not include_null:
+        assert outputs[1] == outputs[0]
+    else:
+        # P1B-13/E94 already corrects a null FK's phantom last-item row
+        # and the shifted links it causes in the frozen SQL sampler.
+        register = yaml.safe_load(
+            (ROOT / 'docs/design/rust-core/register.yaml').read_text()
+        )
+        entry = next(e for e in register['entries'] if e['id'] == 'P1B-13')
+        assert (entry['status'], entry['approved_by']) == ('approved', 'owner')
+        old, core = outputs[0][0], outputs[1][0]
+        assert old != core
+        for part in core:
+            if part != 'predict':
+                assert core[part] == old[part], part
+        assert (
+            core['predict']['instance_table']
+            == old['predict']['instance_table']
+        )
+        for name in core['predict']['related_tables']:
+            if name not in ('buys', 'items'):
+                assert (
+                    core['predict']['related_tables'][name]
+                    == old['predict']['related_tables'][name]
+                )
+        buys = core['predict']['related_tables']['buys']
+        at_user = buys['columns'].index('user_id')
+        at_item = buys['columns'].index('item_id')
+        users_one = [row for row in buys['rows'] if row[at_user] == 1]
+        assert len(users_one) == 2
+        assert all(row[at_item] == 3 for row in users_one)
+        assert any(row[at_item] is None for row in buys['rows'])
+        items = core['predict']['related_tables']['items']
+        item_key = items['columns'].index('item_id')
+        keys = [(row[0], row[item_key]) for row in items['rows']]
+        assert len(keys) == len(set(keys))
+        assert all(
+            (row[0], row[at_item]) in keys
+            for row in buys['rows']
+            if row[at_item] is not None
+        )
+    table = outputs[1][0]['context']['instance_table']
     labels = [r[table['columns'].index('TARGET')] for r in table['rows']]
     assert labels
     assert all(
@@ -368,7 +413,9 @@ def test_link_replies_keep_existing_malformed_and_attribution_guards(
     assert error.value.code == 'INVALID_RESPONSE'
 
 
-def test_an_absent_ranking_output_keeps_the_reference_notice(monkeypatch):
+def test_an_absent_ranking_output_keeps_the_reference_result_and_no_notice(
+    monkeypatch,
+):
     outputs = []
     for core in (False, True):
         route(monkeypatch, core)
@@ -383,10 +430,14 @@ def test_an_absent_ranking_output_keeps_the_reference_notice(monkeypatch):
                 warnings.simplefilter('always')
                 answer = predict(request, Scripted(omit))
             outputs.append(
-                (answer.columns.tolist(), [str(n.message) for n in notices])
+                (
+                    answer.columns.tolist(),
+                    answer['id'].tolist(),
+                    [str(n.message) for n in notices],
+                )
             )
     assert outputs[1] == outputs[0]
-    assert any('rankings' in notice for notice in outputs[0][1])
+    assert outputs[0] == (['row_index', 'id'], [0, 1], [])
 
 
 @pytest.mark.parametrize(
@@ -415,6 +466,7 @@ def test_public_original_endpoint_keeps_its_no_classes_refusal(monkeypatch):
     )
     assert spec is not None and spec.loader is not None
     endpoint = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, spec.name, endpoint)
     spec.loader.exec_module(endpoint)
 
     class Original(Scripted):
