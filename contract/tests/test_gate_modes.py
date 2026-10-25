@@ -207,7 +207,7 @@ def origin(
     and a later landing whose harness has the locked steps' stubs."""
     owned = tmp_path_factory.mktemp('origin')
     try:
-        repo, landed = helpers.build(owned)
+        repo, landed = helpers.build(owned, coverage_inputs=True)
         stubbed = land(
             repo, 'T1.15', stub_the_checkpoint, protected='scripts/rust_core/**'
         )
@@ -308,9 +308,7 @@ def rust_host(lines: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def worktree(origin: dict[str, Any], tmp_path: Path, at: str) -> Path:
-    tree = tmp_path / 'tree'
-    git(origin['repo'], 'worktree', 'add', '-q', '--detach', str(tree), at)
-    return tree
+    return helpers.repo.__wrapped__((origin['repo'], at), tmp_path)
 
 
 @pytest.fixture

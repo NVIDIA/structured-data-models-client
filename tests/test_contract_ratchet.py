@@ -50,9 +50,9 @@ COPIED = (
     'packages/structured-data-models-client/src/sdm_client/_routing.py',
     'packages/structured-data-models-client/src/sdm_client/query.py',
 )
-# The ratchet unit histories never execute a warehouse replay or read its
-# per-case snapshots/Arrow tables. Keep the real manifests, cases, reference,
-# protection rules and checker sources; capture validation has its own tests.
+# Ratchet-only histories do not read the bulk warehouse captures. The real
+# gate fixtures opt into their exact metadata and the sample Arrow blobs
+# coverage reads, while leaving all other replay payloads out.
 UNCOPIED_PAYLOADS = (
     'contract/captures/r2/*/*/capture.json',
     'contract/captures/r2/*/*/tables/*.arrows',
@@ -125,7 +125,7 @@ def land(
     )
 
 
-def build(repo: Path) -> tuple[Path, str]:
+def build(repo: Path, *, coverage_inputs: bool = False) -> tuple[Path, str]:
     r"""The temporary repository, in ``repo``: a first landing with the
     harness's files but ``ratchet.py``, then a landing adding it, the
     checkpoint; with that landing's SHA."""
@@ -135,21 +135,45 @@ def build(repo: Path) -> tuple[Path, str]:
         capture_output=True,
         check=True,
     ).stdout.split(b'\0')
+    coverage_payloads: set[str] = set()
+    if coverage_inputs:
+        coverage = _module(
+            ROOT / 'scripts/rust_core/coverage.py', 'coverage_for_gate_fixture'
+        )
+        for raw in filter(None, listed):
+            name = raw.decode()
+            if Path(name).match('contract/captures/r2/*/*/capture.json'):
+                capture = json.loads((ROOT / name).read_text(encoding='utf-8'))
+                coverage_payloads.add(name)
+                # Use the real coverage reader's requested paths, retaining
+                # the complete committed blobs rather than inventing schemas.
+                coverage.row_schemas(
+                    capture,
+                    capture['reference'],
+                    lambda path, base=Path(name).parent: coverage_payloads.add(
+                        (base / path).as_posix()
+                    ),
+                )
     for name in filter(None, (item.decode() for item in listed)):
-        if any(Path(name).match(pattern) for pattern in UNCOPIED_PAYLOADS):
+        if (
+            any(Path(name).match(pattern) for pattern in UNCOPIED_PAYLOADS)
+            and name not in coverage_payloads
+        ):
             continue
         source = ROOT / name
         if source.is_file():
             (repo / name).parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, repo / name)
-    # The client tests the scope manifests claim a path by (``tests``,
-    # coverage's rule 4 from T3.2), which the copy's tree must define as the
-    # candidate's does.
+    # The Python and Java tests the scope manifests cite (``tests``,
+    # coverage's rule 4) must be defined in the copy's tree as in the source.
     for manifest in sorted(
         repo.glob('docs/design/rust-core/phase-*/scope-*.yaml')
     ):
         text = manifest.read_text(encoding='utf-8')
-        for name in sorted(set(re.findall(r'([\w./-]+\.py)::', text))):
+        claimed = re.findall(r'([\w./-]+\.py)::', text) + re.findall(
+            r'(java/src/test/java/[\w./-]+\.java)#', text
+        )
+        for name in sorted(set(claimed)):
             if (ROOT / name).is_file():
                 (repo / name).parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(ROOT / name, repo / name)

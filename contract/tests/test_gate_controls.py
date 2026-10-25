@@ -53,7 +53,7 @@ def origin(
 ) -> Iterator[tuple[Path, str]]:
     owned = tmp_path_factory.mktemp('origin')
     try:
-        built: tuple[Path, str] = helpers.build(owned)
+        built: tuple[Path, str] = helpers.build(owned, coverage_inputs=True)
         yield built
     finally:
         shutil.rmtree(owned)
@@ -98,9 +98,7 @@ def observed(
 @pytest.fixture
 def repo(origin: tuple[Path, str], tmp_path: Path) -> Path:
     source, landed = origin
-    tree = tmp_path / 'tree'
-    git(source, 'worktree', 'add', '-q', '--detach', str(tree), landed)
-    return tree
+    return helpers.repo.__wrapped__((source, landed), tmp_path)
 
 
 def files(
