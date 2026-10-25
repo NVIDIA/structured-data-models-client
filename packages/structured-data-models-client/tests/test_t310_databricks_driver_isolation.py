@@ -18,7 +18,7 @@ def test_the_fake_warehouse_restores_the_parent_packages(
     already_imported: bool,
 ) -> None:
     fixture = Path(__file__).with_name('test_databricks_from_source.py')
-    probe = r'''
+    probe = r"""
 import importlib
 import importlib.util
 import sys
@@ -57,9 +57,16 @@ if sys.argv[2] == 'True':
 else:
     assert name not in sys.modules
     assert not hasattr(backends, 'databricks')
-'''
+"""
     result = subprocess.run(
-        [sys.executable, '-I', '-c', probe, str(fixture), str(already_imported)],
+        [
+            sys.executable,
+            '-I',
+            '-c',
+            probe,
+            str(fixture),
+            str(already_imported),
+        ],
         capture_output=True,
         text=True,
         timeout=60,
