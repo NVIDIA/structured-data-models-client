@@ -337,6 +337,35 @@ def test_t30_fixture_overlay_keeps_changed_capture_blobs_without_materializing_t
     assert _git(source, 'status', '--porcelain') == before
 
 
+@pytest.mark.parametrize('mixed', [False, True])
+def test_t30_fixture_overlay_preserves_deleted_capture_files(
+    tiny_clone_source: Path, tmp_path: Path, mixed: bool
+) -> None:
+    source = tiny_clone_source
+    capture = 'contract/captures/leg/case/capture.json'
+    original = (source / capture).read_text().strip()
+    source_head = _git(source, 'rev-parse', 'HEAD')
+    source_config = (source / '.git/config').read_bytes()
+    (source / capture).unlink()
+    case = 'contract/cases/case.json'
+    if mixed:
+        (source / case).write_text('{"id": "mixed-overlay"}\n')
+    source_status = _git(source, 'status', '--porcelain')
+    _, work, head = _clone(tmp_path)
+    assert head != source_head
+    assert _git(work, 'rev-parse', head + '^') == source_head
+    assert _git(work, 'ls-tree', '-r', '--name-only', head, '--', capture) == ''
+    assert _git(work, 'ls-files', '--', capture) == ''
+    assert _git(work, 'show', f'{head}^:{capture}') == original
+    assert not (work / 'contract/captures').exists()
+    assert (work / case).read_bytes() == (source / case).read_bytes()
+    assert _git(work, 'status', '--porcelain') == ''
+    assert not (source / capture).exists()
+    assert _git(source, 'rev-parse', 'HEAD') == source_head
+    assert _git(source, 'status', '--porcelain') == source_status
+    assert (source / '.git/config').read_bytes() == source_config
+
+
 def _handoff(
     work: Path, env: dict[str, str], *args: str, timeout: float = 3600
 ) -> subprocess.CompletedProcess[str]:
