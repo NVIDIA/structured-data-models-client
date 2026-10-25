@@ -26,7 +26,10 @@ def _counts(run: Path, *extra: str) -> tuple[int, str]:
          '--prefix', 'h9.', '--threshold', '4', *extra],
         capture_output=True, text=True, timeout=60,
     )  # fmt: skip
-    return done.returncode, done.stdout
+    counts = run / 'counts.md'
+    return done.returncode, (
+        counts.read_text() if counts.is_file() else done.stdout + done.stderr
+    )
 
 
 def test_a_database_no_runner_wrote_is_counted_when_named(tmp_path):

@@ -608,7 +608,33 @@ def test_a_failed_case_is_recorded_and_the_rest_continue(
         return []
 
     monkeypatch.setattr(captures, 'import_recording', import_recording)
-    status = capture_run.run('lakebase', tmp_path, tmp_path / 'out')
+    # Both source identities are real, clean Git commits. Output and case
+    # files stay outside them, so the recording guard remains exercised.
+    import subprocess
+
+    identity = tmp_path / 'source'
+    identity.mkdir()
+    for args in (
+        ('init', '-q'),
+        (
+            '-c',
+            'user.name=Fixture',
+            '-c',
+            'user.email=fixture@example.com',
+            'commit',
+            '-q',
+            '--allow-empty',
+            '-m',
+            'clean source identity',
+        ),
+    ):
+        subprocess.run(
+            ['git', '-C', str(identity), *args],
+            check=True,
+            capture_output=True,
+        )
+    monkeypatch.setattr(capture_run, 'ROOT', identity)
+    status = capture_run.run('lakebase', identity, tmp_path / 'out')
     assert status == 1
     assert imported == [['a', 'e']]
     failed = json.loads((tmp_path / 'out' / 'lakebase.failed.json').read_text())

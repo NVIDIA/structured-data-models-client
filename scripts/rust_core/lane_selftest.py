@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -172,6 +173,22 @@ class World:
         self.git(
             'clone', '--quiet', str(self.remote), str(self.seed), cwd=self.tmp
         )
+        # A lane's installed hook runs that checkout's real checker.
+        # Keep its imports in the committed fixture instead of installing
+        # a hook that points to an absent prepush.sh in an empty tree.
+        scripts = self.seed / 'scripts/rust_core'
+        scripts.mkdir(parents=True)
+        for name in (
+            'prepush.sh',
+            'lane.py',
+            'land.py',
+            'phases.py',
+            'commit_msg.py',
+            'judging.py',
+            'handoff.py',
+        ):
+            shutil.copy2(SCRIPTS / name, scripts / name)
+        self.git('add', 'scripts', cwd=self.seed)
         self.base = self.commit(self.seed, 'Base')
         self.git('push', '--quiet', 'origin', 'HEAD:refs/heads/main', 'HEAD:refs/heads/rust-core', cwd=self.seed)  # fmt: skip
         self.phase = self.commit(self.seed, 'Land T1.11d: the landed package')

@@ -107,7 +107,16 @@ def test_published_warehouse_observations_agree_without_changing_raw_replay(
         'shop_metric_view': 'owner_metric_view',
     }
     environment = {
-        **os.environ,
+        **{
+            key: value
+            for key, value in os.environ.items()
+            if key not in run.PRIVATE_ENVIRONMENT
+            and not key.startswith('SDM_CAPTURE_')
+        },
+        # A CI account named "runner" collides with every identity's key;
+        # these synthetic private values belong only to this fixture.
+        'USER': 'fixture_warehouse_operator_7afe1',
+        'LOGNAME': 'fixture_warehouse_operator_7afe1',
         'SDM_LIVE_CONFIG': str(config),
         **{
             'SDM_CAPTURE_' + name.upper(): value
@@ -231,3 +240,28 @@ def test_published_warehouse_observations_agree_without_changing_raw_replay(
     report = comparator.Report()
     comparator._core_agree(report, {'id': raw['case']}, published[0], changed)
     assert report.failures  # meaningful result differences are still compared
+
+    leaked = copy.deepcopy(raw)
+    leaked['public']['payloads'][0]['parsed']['text'] = environment['USER']
+    source = tmp_path / 'leaked.raw.jsonl'
+    source.write_text(json.dumps(leaked) + '\n')
+    done = subprocess.run(
+        [
+            sys.executable,
+            '-I',
+            str(ROOT / 'contract/runners/run_python.py'),
+            'publish',
+            '--database',
+            'databricks-sql',
+            '--on',
+            str(source),
+            '--out',
+            str(tmp_path / 'leaked.jsonl'),
+        ],
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert done.returncode == 1
+    assert 'observation publication failed (RunnerFailure)' in done.stderr
