@@ -18,7 +18,9 @@ def workflow() -> dict:
     return yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text())
 
 
-def test_java_artifact_lookup_uses_the_current_run_authenticated_rest_route() -> None:
+def test_java_artifact_lookup_uses_the_current_run_authenticated_rest_route() -> (
+    None
+):
     document = workflow()
     downloads = [
         step
