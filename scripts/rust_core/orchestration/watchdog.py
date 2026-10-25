@@ -175,7 +175,9 @@ def idle_lanes(
         done = git(Path(path), 'log', '-1', '--format=%cI', 'HEAD')
         if done.returncode != 0:
             continue
-        at = dt.datetime.fromisoformat(done.stdout.strip())
+        at = dt.datetime.fromisoformat(
+            done.stdout.strip().replace('Z', '+00:00')
+        )
         age = (now - at).total_seconds() / 60
         if age <= minutes or any(inside(c, path) for c in cwds):
             continue

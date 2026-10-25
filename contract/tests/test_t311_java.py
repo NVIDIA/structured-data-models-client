@@ -65,7 +65,10 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any
 
-import tomllib
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    import tomli as tomllib
 
 ROOT = Path(__file__).resolve().parents[2]
 #: ASSUMED: the Java runner.

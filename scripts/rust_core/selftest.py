@@ -74,7 +74,10 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
-import tomllib
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    import tomli as tomllib
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import bridge_freeze  # noqa: E402
