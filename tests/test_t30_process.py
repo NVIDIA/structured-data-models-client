@@ -211,6 +211,91 @@ def _clone(tmp_path: Path) -> tuple[Path, Path, str]:
     return origin, work, head
 
 
+@pytest.fixture
+def tiny_clone_source(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A real history with tiny capture blobs, never a warehouse recording."""
+    source = tmp_path / 'source'
+    source.mkdir()
+    _git(source, 'init', '-q', '-b', 'fixture-source')
+    for name, text in {
+        'contract/captures/leg/case/capture.json': '{"fixture": 1}\n',
+        'contract/captures/leg/case/tables/sample.arrows': 'tiny blob\n',
+        'contract/cases/case.json': '{"id": "fixture"}\n',
+        '.github/workflows/ci.yml': 'fixture: true\n',
+        'rust/source.rs': '// fixture\n',
+        'other/captures/keep.txt': 'unrelated directory\n',
+        'uv.lock': '# fixture\n',
+    }.items():
+        path = source / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
+    _git(source, 'add', '-A')
+    _git(source, 'commit', '-q', '-m', 'first fixture revision')
+    (source / 'contract/captures/leg/case/capture.json').write_text(
+        '{"fixture": 2}\n'
+    )
+    _git(source, 'commit', '-qam', 'second fixture revision')
+    monkeypatch.setattr(sys.modules[__name__], 'ROOT', source)
+    return source
+
+
+def test_t30_fixture_clone_keeps_full_history_without_materializing_captures(
+    tiny_clone_source: Path, tmp_path: Path
+) -> None:
+    source = tiny_clone_source
+    source_config = (source / '.git/config').read_bytes()
+    origin, work, head = _clone(tmp_path)
+    assert head == _git(source, 'rev-parse', 'HEAD')
+    assert _git(work, 'rev-list', 'HEAD') == _git(source, 'rev-list', 'HEAD')
+    assert _git(origin, 'rev-parse', head + '^{tree}') == _git(
+        source, 'rev-parse', 'HEAD^{tree}'
+    )
+    for revision in (head, head + '^'):
+        for name in _git(
+            source, 'ls-tree', '-r', '--name-only', revision
+        ).splitlines():
+            assert _git(work, 'show', f'{revision}:{name}') == _git(
+                source, 'show', f'{revision}:{name}'
+            )
+    assert not (work / 'contract/captures').exists()
+    for name in _git(source, 'ls-files').splitlines():
+        if not name.startswith('contract/captures/'):
+            assert (work / name).read_bytes() == (source / name).read_bytes()
+    assert _git(work, 'status', '--porcelain') == ''
+    assert (source / 'contract/captures/leg/case/capture.json').is_file()
+    assert (source / '.git/config').read_bytes() == source_config
+    assert _git(source, 'status', '--porcelain') == ''
+
+
+def test_t30_fixture_linked_worktrees_keep_capture_objects_and_sparse_boundary(
+    tiny_clone_source: Path, tmp_path: Path
+) -> None:
+    source_config = (tiny_clone_source / '.git/config').read_bytes()
+    _, work, head = _clone(tmp_path)
+    # These are the protected-push and dry-run candidate/judge paths:
+    # different revisions and a checkout in an existing linked worktree.
+    for name, revision in (
+        ('protected', head),
+        ('scratch-tree', head),
+        ('scratch-judge', head + '^'),
+    ):
+        tree = tmp_path / name
+        _git(work, 'worktree', 'add', '-q', '--detach', str(tree), revision)
+        _git(tree, 'checkout', '-q', '--detach', head + '^')
+        assert not (tree / 'contract/captures').exists()
+        assert (tree / 'contract/cases/case.json').read_bytes() == (
+            tiny_clone_source / 'contract/cases/case.json'
+        ).read_bytes()
+        assert (
+            _git(tree, 'show', 'HEAD:contract/captures/leg/case/capture.json')
+            == '{"fixture": 1}'
+        )
+        assert _git(tree, 'status', '--porcelain') == ''
+    assert (tiny_clone_source / '.git/config').read_bytes() == source_config
+    assert (tiny_clone_source / 'contract/captures').is_dir()
+    assert _git(tiny_clone_source, 'status', '--porcelain') == ''
+
+
 def _handoff(
     work: Path, env: dict[str, str], *args: str, timeout: float = 3600
 ) -> subprocess.CompletedProcess[str]:
