@@ -589,3 +589,63 @@ def test_retained_schema_error_traceback_does_not_own_frame_streams(
             assert not owns(traceback.tb_frame.f_locals, set()), visited
         traceback = traceback.tb_next
     assert '_describe' in visited
+
+
+@pytest.mark.parametrize('key', [['user_id'], ('user_id',)])
+def test_wrong_existing_relationship_target_keeps_singleton_tuple_key_error(
+    monkeypatch, key
+):
+    from sdm_client import Relationship
+
+    frames = {
+        'users': pd.DataFrame({'user_id': [1, 2], 'alternate_id': [3, 4]}),
+        'orders': pd.DataFrame({'order_id': [10, 11], 'user_id': [1, 1]}),
+    }
+    outcomes = []
+    for core in (False, True):
+        with pytest.raises(StructuredDataError) as failed:
+            describe(
+                monkeypatch,
+                frames,
+                core=core,
+                primary_keys={'users': key},
+                relationships=[
+                    Relationship('orders', 'user_id', 'users', 'alternate_id')
+                ],
+            )
+        outcomes.append((failed.value.code, str(failed.value)))
+    assert "table 'users' has ('user_id',)." in outcomes[0][1]
+    assert outcomes[1] == outcomes[0]
+
+
+@pytest.mark.parametrize('rows', ['omitted', None, 4])
+def test_actual_describe_result_decode_accepts_sql_and_frame_attachment_shapes(
+    rows,
+):
+    from sdm_client._rust import results
+
+    # The ordinary SQL sample is the existing native messages.py result.
+    payload = {'op': 'describe_source', 'description': 3}
+    if rows != 'omitted':
+        payload['frame_rows'] = rows
+    answer = results.decode(payload)
+    assert isinstance(answer, results.Described)
+    assert answer.description == 3
+    assert answer.frame_rows == (4 if rows == 4 else None)
+    assert results.expect(payload, results.Described) == answer
+
+
+@pytest.mark.parametrize('rows', [True, -1, 1.5, '4', [], {}])
+def test_actual_describe_result_decode_refuses_malformed_frame_attachment_ids(
+    rows,
+):
+    from sdm_client._rust import results
+
+    with pytest.raises(
+        StructuredDataError, match='frame_rows is not a count'
+    ) as failed:
+        results.expect(
+            {'op': 'describe_source', 'description': 3, 'frame_rows': rows},
+            results.Described,
+        )
+    assert failed.value.code == 'INTERNAL_ERROR'
