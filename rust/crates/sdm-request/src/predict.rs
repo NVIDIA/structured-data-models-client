@@ -397,17 +397,37 @@ pub fn prepare(
     let Some(payload) = payloads.first() else {
         return Err(CoreError::new(Sentence::Internal, "a request of no call"));
     };
-    let spec = match model {
-        RELATIONAL => &KUMO_RELATIONAL,
-        TABULAR => &KUMO_TABULAR,
-        _ => {
-            return Err(CoreError::new(
+    let call = resolve_call(payload, model, asked, defaulted)?;
+    validate_call(payloads, payload, &call)?;
+    Ok(call.outputs)
+}
+
+/// Call-local model and output policy for the gathered payload, used only
+/// by `prepare`; no native-input observation or suspended work is held.
+struct ResolvedCall<'a> {
+    spec: &'static Spec,
+    kind: &'a str,
+    outputs: Vec<String>,
+}
+
+/// Resolve the model, read the task and choose explicit or default
+/// outputs, retaining the existing payload-path diagnostic order.
+fn resolve_call<'a>(
+    payload: &'a Value,
+    model: &str,
+    asked: &[String],
+    defaulted: bool,
+) -> Result<ResolvedCall<'a>, CoreError> {
+    let spec = MODELS
+        .into_iter()
+        .find(|spec| spec.id == model)
+        .ok_or_else(|| {
+            CoreError::new(
                 Sentence::UnknownModel,
                 "the model named is not one the contract carries",
             )
-            .with_field("field", Detail::text("model")));
-        }
-    };
+            .with_field("field", Detail::text("model"))
+        })?;
     let kind = kind_of(payload)?;
     let outputs: Vec<String> = if defaulted {
         default_outputs(kind)
@@ -424,6 +444,25 @@ pub fn prepare(
         )
         .with_field("field", Detail::text("outputs")));
     }
+
+    Ok(ResolvedCall {
+        spec,
+        kind,
+        outputs,
+    })
+}
+
+/// Check the resolved call in order: shape, task, output names, context
+/// cap, then this build's tabular refusal. The caller applies emptiness
+/// and adapter preflight only after all these checks succeed.
+fn validate_call(
+    payloads: &[Value],
+    payload: &Value,
+    call: &ResolvedCall<'_>,
+) -> Result<(), CoreError> {
+    let spec = call.spec;
+    let kind = call.kind;
+    let outputs = &call.outputs;
 
     // The shapes the request needs (`required_capabilities`), from the
     // payload: its links, its tables, its kind and its anchor.
@@ -517,7 +556,7 @@ pub fn prepare(
         // The tabular model takes no relational request this build sends.
         return Err(not_yet("model"));
     }
-    Ok(outputs)
+    Ok(())
 }
 
 /// The outputs a task asks for when the caller names none (the adapter's
