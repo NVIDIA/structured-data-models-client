@@ -190,15 +190,16 @@ def test_the_lock_holds_v26_locked_to_its_own_file() -> None:
     assert lock.main(['--no-base']) == 0
 
 
-def test_the_core_speaks_v28_and_refuses_a_v25_host_by_name() -> None:
-    # The binding on the bump: the native module is v28 (v26 with T2.12's
-    # key label, then Phase 3's v28), and a start written for v25 is
-    # refused by name, never read (decision H25).
+def test_the_core_speaks_the_locked_version_and_refuses_a_v25_host() -> None:
+    # The installed binding speaks the current locked contract, and a start
+    # written for v25 is refused by name, never read (decision H25).
     from sdm_client._rust import codec, errors, facts
     from sdm_client._rust.run import native
 
     core = native()
-    assert core.CONTRACT_VERSION == 28
+    assert core.CONTRACT_VERSION == max(
+        _lock_module().parse_lock(LOCK.read_text())
+    )
     start = codec.encode(
         {
             'message': 'start',
