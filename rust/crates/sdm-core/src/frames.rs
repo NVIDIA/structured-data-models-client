@@ -21,6 +21,17 @@ fn invalid(message: &str) -> CoreError {
     CoreError::protocol(Sentence::InvalidMessage, message)
 }
 
+// Admission unwraps these encodings before promoting their value type.
+// Check that original logical value type, including nested encodings.
+fn coarse_frame_timestamp(data_type: &DataType) -> bool {
+    match data_type {
+        DataType::Timestamp(TimeUnit::Second | TimeUnit::Millisecond, _) => true,
+        DataType::Dictionary(_, values) => coarse_frame_timestamp(values),
+        DataType::RunEndEncoded(_, values) => coarse_frame_timestamp(values.data_type()),
+        _ => false,
+    }
+}
+
 /// The actual describe consumer of the manifest's Arrow inputs.
 pub(crate) async fn run(
     asker: Asker,
@@ -94,12 +105,12 @@ pub(crate) async fn run(
         // source-specific overflow saturation. That is not a lossless
         // native constructor snapshot, so this closed family checks the
         // original received type, before reading promoted values.
-        if rows.received.fields().iter().any(|field| {
-            matches!(
-                field.data_type(),
-                DataType::Timestamp(TimeUnit::Second | TimeUnit::Millisecond, _)
-            )
-        }) {
+        if rows
+            .received
+            .fields()
+            .iter()
+            .any(|field| coarse_frame_timestamp(field.data_type()))
+        {
             return Err(sdm_schema::not_yet("frame_native_family"));
         }
         let mut read =
