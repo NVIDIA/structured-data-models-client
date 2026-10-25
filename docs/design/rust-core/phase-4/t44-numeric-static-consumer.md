@@ -31,8 +31,9 @@ Reuse Arrow take/filter/grouping, labels/keys, payload/results and RS-1; preserv
 Frame policies belong in `sdm-engine`; orchestration belongs in `sdm-core`.
 Extract the existing RS-2 MT primitive once, retaining SQL coefficient vectors; review shared ownership before implementation.
 RS-3 keeps modulo-biased Floyd draws only for over-cap static hops; RS-4 keeps legacy permutation order and approved OS entropy for `None`.
-Preserve native adjacency order: this cell uses NumPy 2.5.3 integer argsort; optional Torch uses its own argsort and stable lexsort chain.
-Recorded cases prove neither every NumPy dispatch nor Torch equivalence; those obligations remain before widening the consumer or switching defaults.
+Preserve approved DF-1 adjacency: frozen43e explicitly uses stable NumPy sort, independently of optional Torch.
+Current legacy-source unstable NumPy/Torch dispatch differs from that frozen reference; it does not define this consumer's compatibility baseline.
+Temporal lexsort and RS-5 index sorting remain separate policies and proof obligations.
 
 **Review gate and first tests.**
 Tests first: scalar inspection/prediction, multi-call merge, stream continuation/reset, failure before draws, snapshot reuse and aggregation refusals, with an old-engine tripwire.
@@ -53,3 +54,7 @@ Python holds opaque checkpoint values on the existing query materializer and nev
 HostRun twins will exercise rebinding with different ids, unknown state versions, pre/post-draw failures, cancellation and lifetime release, alongside existing Java decoding compatibility.
 The shared MT primitive moves once into `sdm-engine::random`; the existing SQLite coefficient adapter and RS-2 vectors continue to use that implementation.
 Temporal constructor files remain owned by their author; this consumer uses separate materialize orchestration and does not rewrite describe.
+
+The subsequent bounded source trace located the existing approval in register DF-1 and reference fix `d1590a170eb8d10afb43d3a85e13afcba15f3d04`.
+The numeric static consumer therefore uses a shared stable destination-row sort, not an unproved emulation of legacy SIMD or Torch ordering.
+The legacy graph-store blob is identical in Phase 3 L and Phase 4's base; repairing that existing difference remains outside this implementation's scope.
