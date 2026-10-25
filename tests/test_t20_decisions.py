@@ -416,7 +416,7 @@ def test_capture_check_the_control_without_the_row_is_refused(
     refused (passes on the base too: the copy is sound)."""
     tree, _ = capture_tree(tmp_path)
     done = capture_policy(tree)
-    assert done.returncode != 0, done.stdout
+    assert done.returncode == 2, done.stdout + done.stderr
     assert 'Traceback' not in done.stderr, done.stderr
     assert 'exclusion request-id' in done.stderr, done.stderr
 
@@ -441,6 +441,30 @@ def test_capture_check_an_exclusion_approved_only_in_a_malformed_file_fails_by_n
     tree, e35 = capture_tree(tmp_path)
     phase2(e35, malformed=True)(tree)
     done = capture_policy(tree)
-    assert done.returncode != 0, done.stdout
+    assert done.returncode == 2, done.stdout + done.stderr
     assert 'Traceback' not in done.stderr, done.stderr
     assert NAMED[PHASE2_DECISIONS] in done.stderr, done.stderr
+
+
+@pytest.mark.parametrize('fault', ['missing-import', 'runtime-error'])
+def test_capture_policy_does_not_mistake_unexpected_failures_for_policy_refusals(
+    tmp_path: Path, fault: str,
+) -> None:
+    tree, e35 = capture_tree(tmp_path)
+    phase2(e35)(tree)
+    sibling = tree / 'contract/runners/captures.py'
+    if fault == 'missing-import':
+        sibling.unlink()
+        diagnostic = 'FileNotFoundError'
+    else:
+        sibling.write_text(
+            sibling.read_text(encoding='utf-8')
+            + '\nraise RuntimeError("unexpected fixture failure")\n',
+            encoding='utf-8',
+        )
+        diagnostic = 'RuntimeError: unexpected fixture failure'
+    done = capture_policy(tree)
+    assert done.returncode == 1, done.stdout + done.stderr
+    assert 'Traceback' in done.stderr, done.stderr
+    assert diagnostic in done.stderr, done.stderr
+    assert 'policy ok' not in done.stdout, done.stdout
