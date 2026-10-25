@@ -551,7 +551,9 @@ def test_real_coverage_gate_keeps_capture_evidence_without_duplicate_working_fil
     )
     assert not (repo / 'contract/captures').exists()
     assert not (origin['repo'] / 'contract/captures').exists()
-    assert git(repo, 'status', '--porcelain') == ''
+    # The real gate guards tracked source; normal tool imports may leave
+    # untracked bytecode in this minimal synthetic history.
+    assert git(repo, 'status', '--porcelain', '--untracked-files=no') == ''
 
 
 def test_only_compare_judges_the_observations_given(
