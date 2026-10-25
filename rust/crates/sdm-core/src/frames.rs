@@ -6,6 +6,8 @@
 
 use std::collections::BTreeSet;
 
+use arrow_schema::{DataType, TimeUnit};
+
 use sdm_contract::data::AttachmentId;
 use sdm_contract::frames::{FrameManifest, FrameStage};
 use sdm_contract::ops::{DescribedSource, OperationResult, SourceDescription, SourceSpec};
@@ -88,6 +90,18 @@ pub(crate) async fn run(
         let Some(Attachment::Arrow(rows)) = attachments.remove(&bound.rows) else {
             return Err(invalid("a frame binding does not name admitted Arrow data"));
         };
+        // Source admission can promote coarse timestamps, including its
+        // source-specific overflow saturation. That is not a lossless
+        // native constructor snapshot, so this closed family checks the
+        // original received type, before reading promoted values.
+        if rows.received.fields().iter().any(|field| {
+            matches!(
+                field.data_type(),
+                DataType::Timestamp(TimeUnit::Second | TimeUnit::Millisecond, _)
+            )
+        }) {
+            return Err(sdm_schema::not_yet("frame_native_family"));
+        }
         let mut read =
             sdm_schema::frames::read(&table.name, &table.source, &rows.schema, &rows.batches)?;
         let immediate_table_notices = read.hold_inferred()?;

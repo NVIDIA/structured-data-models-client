@@ -184,7 +184,10 @@ T4.2 remains one canonical package, with these explicit implementation substeps:
 2. Native-family completion: text/date, object, Decimal, pandas nullable/other extension arrays and custom argument/hooks need their own conversion and stage facts before they join the development seam.
    The next bounded constructor substep admits the complete built-in pandas masked `Int8/16/32/64`, `UInt8/16/32/64`, `Float32/64` and Boolean family through the same Table/Schema consumer.
    Frozen public paired inputs prove Arrow validity already distinguishes masked-null and present-NaN values; a fixed core frame equality mode preserves present NaNs, equal NaN payloads and equal signed zeros, without native-origin metadata or a wire amendment.
-   Other extension arrays, datetime64/DatetimeTZ, text/date-like text, object, Decimal and custom hooks remain explicit open families; datetime needs the shared whole-frame time-choice adapter and constructor warning/override proof before admission.
+   The next temporal constructor substep admits native datetime64/DatetimeTZ at us/ns resolution through the same owned Table/Schema stages and shared whole-frame Rust time-choice rules.
+   Original units, timezone presentation, NaT validity and complete submicrosecond/negative counts stay intact; timestamp-shaped names cannot nominate an unsupported timestamp key.
+   Native s/ms remain on the old default route: the existing source admission's coarse-unit overflow promotion can collapse distinct native constructor values, so their full lossless frame representation is a separate concrete obligation.
+   Other extension arrays, text/date-like text, object, Decimal and custom hooks remain explicit open families.
    These remaining native families stay outside the development seam by type, with no content-based date detector, host semantic fallback, new SDK refusal policy or compatibility exception.
 3. Complete frame/index/mutation/edit behavior and the real large-offset admission cases listed below before claiming T4.2 complete or switching defaults.
    T4.4 sampling order, adjacency and random-state work remain separate dependencies.

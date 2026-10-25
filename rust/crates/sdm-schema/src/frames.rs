@@ -8,12 +8,12 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use arrow_array::RecordBatch;
-use arrow_schema::{DataType, Schema};
+use arrow_schema::{DataType, Schema, TimeUnit};
 use sdm_contract::data::Relation;
 use sdm_contract::ops::{Dtype, SourceDescription, Stype};
 use sdm_contract::{ColumnType, CoreError, CoreWarning, Detail, Scalar, Sentence};
 
-use crate::infer::{InferredColumn, InferredTable, TimeChoice};
+use crate::infer::{InferredColumn, InferredTable};
 use crate::keys::{Counted, KEY_UNIQUENESS};
 use crate::values::{self, Floats, Value};
 
@@ -128,7 +128,8 @@ impl Read {
                     .enumerate()
                     .find(|(_, c)| &c.name == *name)
                     .is_some_and(|(at, c)| {
-                        c.dtype != Dtype::Bool && self.values[at].iter().all(Option::is_some)
+                        crate::assemble::can_identify(c.dtype)
+                            && self.values[at].iter().all(Option::is_some)
                     })
             })
             .cloned()
@@ -234,7 +235,7 @@ pub fn final_notices(
                     .any(|suffix| c.name.to_lowercase().ends_with(suffix));
                 let count = read.count(std::slice::from_ref(&c.name));
                 if shaped
-                    && c.dtype != Dtype::Bool
+                    && crate::assemble::can_identify(c.dtype)
                     && !keyed.contains_key(c.name.as_str())
                     && named[c.name.as_str()].len() > 1
                     && count.distinct as f64 >= read.rows as f64 * 0.9
@@ -381,8 +382,8 @@ pub fn final_notices(
 }
 
 /// Whole-table frame inference, not preview-sized SQL inference. This first
-/// consumer accepts NumPy and pandas masked numeric/Boolean arrays, with
-/// no text, object, other extension, Decimal or time adapter. Native
+/// consumer accepts NumPy/pandas masked numeric/Boolean arrays and native
+/// us/ns timestamp arrays, without text, object or Decimal conversion. Native
 /// conversion has already encoded missingness in Arrow validity.
 pub fn read(
     name: &str,
@@ -417,11 +418,13 @@ pub fn read(
             }
             DataType::Float32 => Dtype::Float32,
             DataType::Float64 => Dtype::Float64,
+            DataType::Timestamp(TimeUnit::Microsecond | TimeUnit::Nanosecond, _) => Dtype::Date,
             _ => return Err(crate::not_yet("frame_native_family")),
         };
         let stype = match dtype {
             Dtype::Int64 | Dtype::Float32 | Dtype::Float64 => Stype::Numerical,
             Dtype::Bool => Stype::Categorical,
+            Dtype::Date => Stype::Timestamp,
             _ if values::distinct(&values) <= 64 => Stype::Categorical,
             _ => Stype::Text,
         };
@@ -450,11 +453,13 @@ pub fn read(
                 .iter()
                 .any(|suffix| name.ends_with(suffix));
             (shaped
-                && c.dtype != Dtype::Bool
+                && crate::assemble::can_identify(c.dtype)
                 && values::distinct(&all_values[at]) as f64 >= rows as f64 * KEY_UNIQUENESS)
                 .then(|| c.name.clone())
         })
     };
+    let primary_key: Vec<_> = primary_key.into_iter().collect();
+    let time = crate::infer::frame_time(&columns, &all_values, batches, rows, &primary_key)?;
     Ok(Read {
         rows,
         values: all_values,
@@ -463,13 +468,13 @@ pub fn read(
             name: name.into(),
             source: source.clone(),
             columns,
-            primary_key: primary_key.into_iter().collect(),
+            primary_key,
             left_out: vec![],
             unread_times: vec![],
             day_first: vec![],
             tied_keys: vec![],
-            time: TimeChoice::default(),
-            time_column: None,
+            time_column: time.column.clone(),
+            time,
             unique: vec![],
             declared: BTreeSet::new(),
         },

@@ -4,7 +4,7 @@
 # Bridge code: native conversion and public objects remain Python's;
 # the routing seam is removed in Phase 5 after the complete frame switch.
 
-"""Numeric/Boolean constructors, using fixed core Table/Schema stages."""
+"""Closed native-family constructors, using fixed core Table/Schema stages."""
 
 from __future__ import annotations
 
@@ -69,6 +69,24 @@ def _frame_key_candidate(fields: dict[str, Any]) -> str:
     return repr(candidates[0]) if len(candidates) == 1 else '...'
 
 
+def _frame_timestamp(
+    fields: dict[str, Any], native_types: Mapping[str, Mapping[str, Any]]
+) -> str:
+    # Only presentation of the core-selected scalar, in its original native
+    # timezone implementation and unit. No original frame values are read.
+    value = fields['value']
+    dtype = native_types[fields['table']][fields['column']]
+    if type(dtype) is pd.DatetimeTZDtype:
+        stamp = pd.Timestamp(value.value, unit=value.unit, tz='UTC').tz_convert(
+            dtype.tz
+        )
+        unit = dtype.unit
+    else:
+        stamp = pd.Timestamp(value.value, unit=value.unit)
+        unit = np.datetime_data(dtype)[0]
+    return str(stamp.as_unit(unit))
+
+
 def _convert(name: str, frame: pd.DataFrame) -> tuple[Any, dict[str, Any]]:
     # Validate one table before proceeding to the next. No preliminary
     # all-table scan or native-object conversion is permitted here.
@@ -125,9 +143,15 @@ def _convert(name: str, frame: pd.DataFrame) -> tuple[Any, dict[str, Any]]:
             pd.Float64Dtype,
             pd.BooleanDtype,
         )
-        if not (primitive or masked):
+        temporal = (
+            isinstance(dtype, np.dtype)
+            and dtype.isnative
+            and dtype.kind == 'M'
+            and np.datetime_data(dtype)[0] in ('us', 'ns')
+        ) or (type(dtype) is pd.DatetimeTZDtype and dtype.unit in ('us', 'ns'))
+        if not (primitive or masked or temporal):
             raise RouteError(
-                f'the partial frame constructor supports only NumPy or pandas masked numeric and Boolean columns: {name}.{column}'
+                f'the partial frame constructor supports only NumPy or pandas masked numeric and Boolean columns, or native us/ns datetimes: {name}.{column}'
             )
         # Convert values only. DataFrame export may add a non-Range index
         # column, which the public schema constructor never describes.
@@ -171,6 +195,9 @@ def _describe(
             frame_example=lambda fields: _frame_example(fields, native_types),
             frame_key=_frame_key,
             frame_key_candidate=_frame_key_candidate,
+            frame_timestamp=lambda fields: _frame_timestamp(
+                fields, native_types
+            ),
         ):
             return run(
                 {

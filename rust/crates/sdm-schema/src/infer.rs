@@ -1688,6 +1688,49 @@ fn choose_time_column(
     ))
 }
 
+/// The same time policy over a complete constructor snapshot. These are
+/// every row, not a SQL preview needing a later aggregate or text reader.
+pub(crate) fn frame_time(
+    columns: &[InferredColumn],
+    presence: &[Vec<Option<Value>>],
+    batches: &[RecordBatch],
+    rows: usize,
+    key: &[String],
+) -> Result<TimeChoice, CoreError> {
+    let instants: Vec<_> = columns
+        .iter()
+        .enumerate()
+        .map(|(at, column)| {
+            Ok(if column.stype == Stype::Timestamp {
+                values::instants(batches, at)
+            } else {
+                vec![]
+            })
+        })
+        .collect();
+    let firsts: Vec<_> = columns
+        .iter()
+        .enumerate()
+        .map(|(at, column)| {
+            (column.stype == Stype::Timestamp)
+                .then(|| values::first_temporal(batches, at))
+                .flatten()
+        })
+        .collect();
+    choose_time_column(
+        columns,
+        &Read {
+            instants: &instants,
+            presence,
+            firsts: &firsts,
+        },
+        rows,
+        key,
+        None,
+        false,
+    )
+}
+
 /// Why a column is passed over for its values (`_refused_for_values`):
 /// none held; more than half missing; or, in a table of more than one row,
 /// one value in every row that holds one, which is named. Read over the
