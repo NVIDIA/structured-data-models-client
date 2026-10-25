@@ -713,7 +713,7 @@ fn target(
                                 L::Text(v) => v.clone(),
                                 L::Decimal(v, scale) => decimal_text(*v, *scale),
                             };
-                            Ok(Value::text(text))
+                            Ok(Value::text(&text))
                         })
                         .collect::<Result<Vec<_>, _>>()
                         .map(Value::Array)
