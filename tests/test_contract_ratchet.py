@@ -342,20 +342,21 @@ def test_the_fixture_reuses_a_removed_worktree_without_pruning_failed_evidence(
     assert f'worktree {failed}' in registrations
 
 
-def test_the_synthetic_fixture_omits_only_bulk_r2_capture_inputs(
+def test_the_synthetic_fixture_omits_only_bulk_warehouse_capture_inputs(
     origin: tuple[Path, str],
 ) -> None:
     source, _ = origin
-    copied = source / 'contract/captures/r2'
-    manifests = sorted(copied.glob('*/manifest.json'))
-    expected = sorted((ROOT / 'contract/captures/r2').glob('*/manifest.json'))
-    assert manifests and len(manifests) == len(expected)
-    for path in manifests:
-        assert (
-            path.read_bytes() == (ROOT / path.relative_to(source)).read_bytes()
-        )
-    assert not list(copied.glob('*/*/capture.json'))
-    assert not list(copied.glob('*/*/tables/*.arrows'))
+    originals = ROOT / 'contract/captures'
+    copied = source / 'contract/captures'
+    expected = sorted(originals.rglob('manifest.json'))
+    assert expected
+    assert {path.relative_to(originals).parts[0] for path in expected} >= {
+        'r2', 'snowflake', 'lakebase', 's2', 'databricks-sql'
+    }
+    for path in expected:
+        assert (source / path.relative_to(ROOT)).read_bytes() == path.read_bytes()
+    assert not list(copied.rglob('capture.json'))
+    assert not list(copied.rglob('*.arrows'))
     assert (source / 'contract/protected-paths.txt').read_bytes() == (
         ROOT / 'contract/protected-paths.txt'
     ).read_bytes()
@@ -364,6 +365,50 @@ def test_the_synthetic_fixture_omits_only_bulk_r2_capture_inputs(
     ).read_bytes() == (
         ROOT / 'contract/cases/s2/databricks.name.three-part.json'
     ).read_bytes()
+
+
+def test_the_gate_fixture_keeps_real_coverage_inputs_across_capture_layouts(
+    owned_module_dir: Callable[[str], Path],
+) -> None:
+    source, _ = build(owned_module_dir('coverage-origin'), coverage_inputs=True)
+    coverage = _module(
+        ROOT / 'scripts/rust_core/coverage.py', 'coverage_projection_control'
+    )
+    expected_blobs: set[Path] = set()
+    originals = sorted((ROOT / 'contract/captures').rglob('capture.json'))
+    assert {path.relative_to(ROOT / 'contract/captures').parts[0] for path in originals} == {
+        'r2', 'snowflake', 'lakebase', 's2', 'databricks-sql'
+    }
+    for path in originals:
+        relative = path.relative_to(ROOT)
+        assert (source / relative).read_bytes() == path.read_bytes()
+        capture = json.loads(path.read_text())
+        original_line = copy.deepcopy(capture['reference'])
+
+        def read_original(name: str) -> bytes:
+            blob = (path.parent / name).relative_to(ROOT)
+            expected_blobs.add(blob)
+            return (ROOT / blob).read_bytes()
+
+        coverage.row_schemas(capture, original_line, read_original)
+        projected_line = copy.deepcopy(capture['reference'])
+        coverage.row_schemas(
+            capture,
+            projected_line,
+            lambda name: (source / relative.parent / name).read_bytes(),
+        )
+        assert projected_line == original_line
+    assert expected_blobs
+    actual_blobs = {
+        path.relative_to(source)
+        for path in (source / 'contract/captures').rglob('*.arrows')
+    }
+    assert actual_blobs == expected_blobs
+    for blob in expected_blobs:
+        assert (source / blob).read_bytes() == (ROOT / blob).read_bytes()
+    assert len(actual_blobs) < len(list((ROOT / 'contract/captures').rglob('*.arrows')))
+    for path in (ROOT / 'contract/captures').rglob('manifest.json'):
+        assert (source / path.relative_to(ROOT)).read_bytes() == path.read_bytes()
 
 
 def test_an_omitted_capture_path_still_requires_protected_edit_review(
