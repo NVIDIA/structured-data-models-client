@@ -23,9 +23,10 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import shutil
 import subprocess
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -47,39 +48,51 @@ CASE = 's0.accept.sum-window'
 
 
 @pytest.fixture(scope='module')
-def origin(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, str]:
-    built: tuple[Path, str] = helpers.build(tmp_path_factory.mktemp('origin'))
-    return built
+def origin(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> Iterator[tuple[Path, str]]:
+    owned = tmp_path_factory.mktemp('origin')
+    try:
+        built: tuple[Path, str] = helpers.build(owned)
+        yield built
+    finally:
+        shutil.rmtree(owned)
 
 
 @pytest.fixture(scope='module')
 def observed(
     origin: tuple[Path, str], tmp_path_factory: pytest.TempPathFactory
-) -> dict[str, list[dict[str, Any]]]:
+) -> Iterator[dict[str, list[dict[str, Any]]]]:
     r"""Each Python runner's observations of the repository's cases."""
-    repo, _ = origin
-    out = tmp_path_factory.mktemp('observed')
-    found = {}
-    for runner in ('python-core', 'python-old'):
-        path = out / f'{runner}.jsonl'
-        done = subprocess.run(
-            [
-                sys.executable,
-                '-I',
-                str(repo / 'contract/runners/run_python.py'),
-                '--mode',
-                runner,
-                '--out',
-                str(path),
-                str(repo / 'contract/cases'),
-            ],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        assert done.returncode == 0, done.stderr
-        found[runner] = [json.loads(x) for x in path.read_text().splitlines()]
-    return found
+    owned = tmp_path_factory.mktemp('observed')
+    try:
+        repo, _ = origin
+        out = owned
+        found = {}
+        for runner in ('python-core', 'python-old'):
+            path = out / f'{runner}.jsonl'
+            done = subprocess.run(
+                [
+                    sys.executable,
+                    '-I',
+                    str(repo / 'contract/runners/run_python.py'),
+                    '--mode',
+                    runner,
+                    '--out',
+                    str(path),
+                    str(repo / 'contract/cases'),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            assert done.returncode == 0, done.stderr
+            found[runner] = [
+                json.loads(x) for x in path.read_text().splitlines()
+            ]
+        yield found
+    finally:
+        shutil.rmtree(owned)
 
 
 @pytest.fixture

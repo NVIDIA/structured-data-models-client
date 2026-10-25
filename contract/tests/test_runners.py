@@ -23,9 +23,11 @@ import importlib.util
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import textwrap
+from collections.abc import Iterator
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -406,20 +408,26 @@ def test_python_ref_stops_when_the_guard_fails_after_the_last_case(
 
 
 @pytest.fixture(scope='module')
-def accepted_runs(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Path]:
+def accepted_runs(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> Iterator[dict[str, Path]]:
     r"""The accepted S0 case on both Python runners."""
-    where = tmp_path_factory.mktemp('accepted')
-    cases = where / 'cases'
-    cases.mkdir()
-    (cases / ACCEPTED.name).write_bytes(ACCEPTED.read_bytes())
-    found = {}
-    for mode in ('python-core', 'python-old'):
-        out = where / f'{mode}.jsonl'
-        run = _run(mode, out, cases)
-        assert run.returncode == 0, run.stderr
-        found[mode] = out
-    found['cases'] = cases
-    return found
+    owned = tmp_path_factory.mktemp('accepted')
+    try:
+        where = owned
+        cases = where / 'cases'
+        cases.mkdir()
+        (cases / ACCEPTED.name).write_bytes(ACCEPTED.read_bytes())
+        found = {}
+        for mode in ('python-core', 'python-old'):
+            out = where / f'{mode}.jsonl'
+            run = _run(mode, out, cases)
+            assert run.returncode == 0, run.stderr
+            found[mode] = out
+        found['cases'] = cases
+        yield found
+    finally:
+        shutil.rmtree(owned)
 
 
 @pytest.mark.parametrize(

@@ -34,9 +34,10 @@ from __future__ import annotations
 import importlib.util
 import json
 import re
+import shutil
 import subprocess
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -149,8 +150,14 @@ def build(repo: Path) -> tuple[Path, str]:
 
 
 @pytest.fixture(scope='module')
-def origin(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, str]:
-    return build(tmp_path_factory.mktemp('origin'))
+def origin(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> Iterator[tuple[Path, str]]:
+    owned = tmp_path_factory.mktemp('origin')
+    try:
+        yield build(owned)
+    finally:
+        shutil.rmtree(owned)
 
 
 @pytest.fixture

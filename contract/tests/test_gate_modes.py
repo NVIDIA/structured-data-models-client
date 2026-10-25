@@ -51,9 +51,10 @@ import importlib.util
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -199,46 +200,58 @@ def stub_the_checkpoint(repo: Path) -> None:
 
 
 @pytest.fixture(scope='module')
-def origin(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Any]:
+def origin(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> Iterator[dict[str, Any]]:
     r"""The temporary repository, its landing holding this tree's harness,
     and a later landing whose harness has the locked steps' stubs."""
-    repo, landed = helpers.build(tmp_path_factory.mktemp('origin'))
-    stubbed = land(
-        repo, 'T1.15', stub_the_checkpoint, protected='scripts/rust_core/**'
-    )
-    return {'repo': repo, 'landed': landed, 'stubbed': stubbed}
+    owned = tmp_path_factory.mktemp('origin')
+    try:
+        repo, landed = helpers.build(owned)
+        stubbed = land(
+            repo, 'T1.15', stub_the_checkpoint, protected='scripts/rust_core/**'
+        )
+        yield {'repo': repo, 'landed': landed, 'stubbed': stubbed}
+    finally:
+        shutil.rmtree(owned)
 
 
 @pytest.fixture(scope='module')
 def observed(
     origin: dict[str, Any], tmp_path_factory: pytest.TempPathFactory
-) -> dict[str, list[dict[str, Any]]]:
+) -> Iterator[dict[str, list[dict[str, Any]]]]:
     r"""Each Python runner's observations of the repository's cases, and
     rust-host's stubbed from python-core's."""
-    repo = origin['repo']
-    out = tmp_path_factory.mktemp('observed')
-    found = {}
-    for runner in ('python-core', 'python-old'):
-        path = out / f'{runner}.jsonl'
-        done = subprocess.run(
-            [
-                sys.executable,
-                '-I',
-                str(repo / 'contract/runners/run_python.py'),
-                '--mode',
-                runner,
-                '--out',
-                str(path),
-                str(repo / 'contract/cases'),
-            ],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        assert done.returncode == 0, done.stderr
-        found[runner] = [json.loads(x) for x in path.read_text().splitlines()]
-    found['rust-host'] = rust_host(found['python-core'])
-    return found
+    owned = tmp_path_factory.mktemp('observed')
+    try:
+        repo = origin['repo']
+        out = owned
+        found = {}
+        for runner in ('python-core', 'python-old'):
+            path = out / f'{runner}.jsonl'
+            done = subprocess.run(
+                [
+                    sys.executable,
+                    '-I',
+                    str(repo / 'contract/runners/run_python.py'),
+                    '--mode',
+                    runner,
+                    '--out',
+                    str(path),
+                    str(repo / 'contract/cases'),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            assert done.returncode == 0, done.stderr
+            found[runner] = [
+                json.loads(x) for x in path.read_text().splitlines()
+            ]
+        found['rust-host'] = rust_host(found['python-core'])
+        yield found
+    finally:
+        shutil.rmtree(owned)
 
 
 def rust_host(lines: list[dict[str, Any]]) -> list[dict[str, Any]]:

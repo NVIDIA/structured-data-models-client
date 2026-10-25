@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
+pytestmark = pytest.mark.tooling
 
 
 @pytest.mark.parametrize('fail_setup', [False, True])
@@ -71,6 +72,8 @@ def test_owned_module_directory_is_released_after_use(tmp_path, fail_setup):
             '-q',
             '-p',
             'no:cacheprovider',
+            '--basetemp',
+            str(tmp_path / 'module-temps'),
             str(script),
         ],
         cwd=tmp_path,

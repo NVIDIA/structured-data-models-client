@@ -49,9 +49,10 @@ import copy
 import importlib.util
 import json
 import os
+import shutil
 import subprocess
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -116,30 +117,38 @@ def handbook(name: str) -> Callable[[Path], None]:
 
 
 @pytest.fixture(scope='module')
-def world(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Any]:
+def world(tmp_path_factory: pytest.TempPathFactory) -> Iterator[dict[str, Any]]:
     r"""The history above, pushed to a bare origin; the SHAs by name."""
-    base = tmp_path_factory.mktemp('t20-world')
-    work = base / 'work'
-    work.mkdir()
-    helpers.build(work)
-    shas: dict[str, Any] = {'L1': git(work, 'rev-parse', 'HEAD')}
-    shas['L0'] = git(work, 'rev-list', '--max-parents=0', 'HEAD')
-    # rust-core before the merge, with the first landing's tree.
-    tree = git(work, 'rev-parse', shas['L0'] + '^{tree}')
-    shas['R0'] = git(work, 'commit-tree', tree, '-m', 'Merge Phase 0: prepare')
-    git(work, 'checkout', '-q', '-b', EPIC, shas['R0'])
-    git(
-        work, 'merge', '-q', '--no-ff', '--allow-unrelated-histories',
-        '-m', 'Merge Phase 1: the harness', PHASE1,
-    )  # fmt: skip
-    shas['M'] = git(work, 'rev-parse', 'HEAD')
-    shas['H1'] = commit(work, 'Handoff: the handbook', handbook('handbook'))
-    shas['F'] = commit(work, 'Handoff fix 1: the review', handbook('review'))
-    git(work, 'branch', PHASE2, shas['F'])
-    origin = base / 'origin.git'
-    git(base, 'init', '-q', '--bare', str(origin))
-    git(work, 'push', '-q', str(origin), PHASE1, EPIC, PHASE2)
-    return {'work': work, 'origin': origin, 'shas': shas}
+    owned = tmp_path_factory.mktemp('t20-world')
+    try:
+        base = owned
+        work = base / 'work'
+        work.mkdir()
+        helpers.build(work)
+        shas: dict[str, Any] = {'L1': git(work, 'rev-parse', 'HEAD')}
+        shas['L0'] = git(work, 'rev-list', '--max-parents=0', 'HEAD')
+        # rust-core before the merge, with the first landing's tree.
+        tree = git(work, 'rev-parse', shas['L0'] + '^{tree}')
+        shas['R0'] = git(
+            work, 'commit-tree', tree, '-m', 'Merge Phase 0: prepare'
+        )
+        git(work, 'checkout', '-q', '-b', EPIC, shas['R0'])
+        git(
+            work, 'merge', '-q', '--no-ff', '--allow-unrelated-histories',
+            '-m', 'Merge Phase 1: the harness', PHASE1,
+        )  # fmt: skip
+        shas['M'] = git(work, 'rev-parse', 'HEAD')
+        shas['H1'] = commit(work, 'Handoff: the handbook', handbook('handbook'))
+        shas['F'] = commit(
+            work, 'Handoff fix 1: the review', handbook('review')
+        )
+        git(work, 'branch', PHASE2, shas['F'])
+        origin = base / 'origin.git'
+        git(base, 'init', '-q', '--bare', str(origin))
+        git(work, 'push', '-q', str(origin), PHASE1, EPIC, PHASE2)
+        yield {'work': work, 'origin': origin, 'shas': shas}
+    finally:
+        shutil.rmtree(owned)
 
 
 @pytest.fixture
@@ -356,29 +365,33 @@ def epic_where(clone: Path, world: dict[str, Any], tmp_path: Path) -> list[str]:
 @pytest.fixture(scope='module')
 def observed(
     world: dict[str, Any], tmp_path_factory: pytest.TempPathFactory
-) -> list[dict[str, Any]]:
+) -> Iterator[list[dict[str, Any]]]:
     r"""python-core's real observations of the cases at ``rust-core``'s
     head, as contract-python's gate step makes them."""
-    work = world['work']
-    out = tmp_path_factory.mktemp('t20-observed') / 'python-core.jsonl'
-    done = subprocess.run(
-        [
-            sys.executable,
-            '-I',
-            str(work / 'contract/runners/run_python.py'),
-            '--mode',
-            'python-core',
-            '--out',
-            str(out),
-            str(work / 'contract/cases'),
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-        stdin=subprocess.DEVNULL,
-    )
-    assert done.returncode == 0, done.stderr
-    return [json.loads(line) for line in out.read_text().splitlines()]
+    owned = tmp_path_factory.mktemp('t20-observed')
+    try:
+        work = world['work']
+        out = owned / 'python-core.jsonl'
+        done = subprocess.run(
+            [
+                sys.executable,
+                '-I',
+                str(work / 'contract/runners/run_python.py'),
+                '--mode',
+                'python-core',
+                '--out',
+                str(out),
+                str(work / 'contract/cases'),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            stdin=subprocess.DEVNULL,
+        )
+        assert done.returncode == 0, done.stderr
+        yield [json.loads(line) for line in out.read_text().splitlines()]
+    finally:
+        shutil.rmtree(owned)
 
 
 def written(

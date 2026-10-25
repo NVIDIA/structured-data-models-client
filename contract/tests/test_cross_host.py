@@ -44,7 +44,7 @@ import shutil
 import stat
 import subprocess
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -118,28 +118,34 @@ def test_the_job_takes_both_hosts_observations_by_name() -> None:
 
 
 @pytest.fixture(scope='module')
-def observed(tmp_path_factory: pytest.TempPathFactory) -> dict[str, list[Any]]:
+def observed(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> Iterator[dict[str, list[Any]]]:
     r"""python-core's observations of every case, and the rust-host
     stand-in made from them."""
-    out = tmp_path_factory.mktemp('observed') / 'python-core.jsonl'
-    done = subprocess.run(
-        [
-            sys.executable,
-            '-I',
-            str(ROOT / 'contract/runners/run_python.py'),
-            '--mode',
-            'python-core',
-            '--out',
-            str(out),
-            str(ROOT / 'contract/cases'),
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert done.returncode == 0, done.stderr
-    core = [json.loads(line) for line in out.read_text().splitlines()]
-    return {'python-core': core, 'rust-host': _rust_host(core)}
+    owned = tmp_path_factory.mktemp('observed')
+    try:
+        out = owned / 'python-core.jsonl'
+        done = subprocess.run(
+            [
+                sys.executable,
+                '-I',
+                str(ROOT / 'contract/runners/run_python.py'),
+                '--mode',
+                'python-core',
+                '--out',
+                str(out),
+                str(ROOT / 'contract/cases'),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert done.returncode == 0, done.stderr
+        core = [json.loads(line) for line in out.read_text().splitlines()]
+        yield {'python-core': core, 'rust-host': _rust_host(core)}
+    finally:
+        shutil.rmtree(owned)
 
 
 def _rust_host(lines: list[dict[str, Any]]) -> list[dict[str, Any]]:
