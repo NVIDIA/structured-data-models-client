@@ -413,6 +413,8 @@ def _route(route: str, monkeypatch: pytest.MonkeyPatch) -> None:
                 + _routing.MATERIALIZE_DATABRICKS_SQL
             ),
         )
+    else:
+        monkeypatch.setenv(_routing.ENVIRONMENT, '')
 
 
 _TABLES = ('orders', 'users', 'new_orders')
@@ -728,7 +730,12 @@ class _CompletingWarehouse(_SessionWarehouse):
             keys = json.loads(parameters[0])
             # Each field of the old client's JSON (``id``, ``e``, ``s``) under
             # the seed column the statement reads it as.
-            named = dict(re.findall(r'col\.(\w+) AS `(\w+)`', text))
+            # Catalog-preserving temporal seeds explicitly cast their NTZ fields.
+            named = dict(
+                re.findall(
+                    r'col\.(\w+)(?: AS TIMESTAMP_NTZ\))? AS `(\w+)`', text
+                )
+            )
             seeds = pd.DataFrame(
                 [{named.get(f, f): v for f, v in key.items()} for key in keys]
                 if keys and isinstance(keys[0], dict)

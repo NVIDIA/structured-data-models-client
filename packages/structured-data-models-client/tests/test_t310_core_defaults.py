@@ -129,7 +129,7 @@ def test_public_source_flow_defaults_to_core_without_old_packages(
             with SDMClient(url, max_retries=0) as client:
                 result = client.predict(request, model=KumoRelational())
         assert len(result) == 2
-        assert len(received) == 1
+        assert len(received.requests) == 1
     connection.close()
     assert 'sdm_client._native' in sys.modules
     assert not any(name in sys.modules for name in OLD)
