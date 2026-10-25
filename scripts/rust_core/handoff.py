@@ -37,8 +37,8 @@ time, stopping at the first that fails:
 In a fix round whose ``--previous`` SHA has a stamp, ``own tests`` takes
 the files changed since it.
 
-The optional ``--fixture-repair-scope t310-fixtures-7ab261a6d`` is limited
-to the pinned T3.10 fixture repair below and requires its explicit owner
+The optional ``--fixture-repair-scope`` is limited
+to the named, pinned T3.10 fixture repair below and requires its explicit owner
 approval row. It changes neither the default nor phase-end CI coverage.
 
 While it runs, ``run`` holds ``<git common dir>/sdm-handoff/running/<ID>.json``,
@@ -123,6 +123,38 @@ FIXTURE_REPAIR_SELECTION = {
     'tests/test_t21a_temporary_approval.py': None,
     'tests/test_t132g_reference_internal_error.py': None,
 }
+
+
+# A distinct finite K proposal; old scope bytes/authority remain unchanged.
+K_FIXTURE_REPAIR_SCOPE = 't310-gate-captures-eb267cbf1'
+K_FIXTURE_REPAIR_SOURCE = 'eb267cbf10ef130cf15e67dd5a9b20e7e85931f3'
+K_FIXTURE_REPAIR_ROW = 'T310-OWNER-2026-10-25-FIXTURE-SCOPE-K'
+K_FIXTURE_REPAIR_FILES = {
+    '.github/workflows/ci.yml': 'ee65053e2f78dda658ff7041ba1323e34357c1bbe7f2fbd1c55bff0bbd0aed92',
+    'contract/tests/test_gate_controls.py': '2c6b3704a8ea9c5c886240388c7f34f7b17f1934e11499e43ee8bc5e6eaa1303',
+    'contract/tests/test_gate_modes.py': '84e97d6cf4bd96f77c6f9d4f92a3f9c9504b24f1282b7520f6df0c4de38b007e',
+    'contract/tests/test_t20f_gate.py': 'aed8c87ae98f130143d05f1234c91be952ea4528180a3bd042d57ab61f994a59',
+    'tests/test_contract_ratchet.py': 'df5200b2f47f2697f4ba8cb28a96572f27e8c373f5939cf58673b54d6d2cf72e',
+    'tests/test_t310_fresh_cargo_lock.py': 'f32072adebb9594949ba727e24f2c3bbd6e01389d72f12881bbf20df5d6501af',
+    'tests/test_ci_workflow.py': 'bc5bdd8bf7aef2421e6375a633efd148555a927a7a3c80d2b59eb8791b3560c9',
+    'conftest.py': '0c53666b527da78177e49c77835f7eb472000c072b0853bd50dda0f84986c9cb',
+    'contract/tests/conftest.py': '9e58c7aad08be624bf81f880605c8736db019f5d500a7c640447f6c1c3d308f8',
+    'scripts/rust_core/gate.sh': 'd7e3635ddce9dec5289ca76ccea9e34477d8355619bef34468507cb868e59b61',
+    'scripts/rust_core/coverage.py': '8b44badcbb8cc7d744040efe891e519071c3618f12113c3ba268cd4dfce510f2',
+    'contract/runners/capture_check.py': '398f4edc3b1a4fb17469a7b2bd9cd82e146426e97cd5958817eb129a2d83530d',
+}
+K_FIXTURE_REPAIR_SELECTORS = (
+    'tests/test_ci_workflow.py',
+    'tests/test_t310_fresh_cargo_lock.py',
+    'tests/test_contract_ratchet.py',
+    'contract/tests/test_gate_controls.py',
+    'contract/tests/test_gate_modes.py::test_real_coverage_gate_keeps_capture_evidence_without_duplicate_working_files',
+    'contract/tests/test_gate_modes.py::test_locked_gate_preserves_real_manifest_admission',
+    'contract/tests/test_gate_modes.py::test_locked_1b_passes_on_the_admitted_inventory_and_writes_the_evidence',
+    'contract/tests/test_t20f_gate.py::test_reference_rekey_keeps_every_capture_citation_and_parent_blob',
+    'contract/tests/test_t20f_gate.py::test_main_at_the_reference_commit_passes_the_main_step',
+    'contract/tests/test_t20f_gate.py::test_main_merged_without_the_reference_rerun_fails_the_main_step',
+)
 
 
 class Failure(Exception):
@@ -391,12 +423,48 @@ def own_suites(root: Path, touched: list[str]) -> list[affected.Suite]:
 
 
 def fixture_repair_plan(
-    root: Path, touched: list[str], package: str
+    root: Path,
+    touched: list[str],
+    package: str,
+    *,
+    scope: str = FIXTURE_REPAIR_SCOPE,
 ) -> tuple[list[affected.Suite], dict[str, object]]:
     """Require the exact reviewed inputs and owner policy before narrowing."""
     if package != 'T3.10':
         raise Failure('the fixture repair scope is only T3.10')
-    for name, expected in FIXTURE_REPAIR_FILES.items():
+    if scope == FIXTURE_REPAIR_SCOPE:
+        source, files, row_id = (
+            FIXTURE_REPAIR_SOURCE,
+            FIXTURE_REPAIR_FILES,
+            FIXTURE_REPAIR_ROW,
+        )
+        selection = {
+            name: () if node is None else (node,)
+            for name, node in FIXTURE_REPAIR_SELECTION.items()
+        }
+        mandatory = tuple(
+            node
+            for node in FIXTURE_REPAIR_SELECTION.values()
+            if node is not None
+        )
+    elif scope == K_FIXTURE_REPAIR_SCOPE:
+        source, files, row_id = (
+            K_FIXTURE_REPAIR_SOURCE,
+            K_FIXTURE_REPAIR_FILES,
+            K_FIXTURE_REPAIR_ROW,
+        )
+        selection = {
+            'contract/tests/test_gate_modes.py': K_FIXTURE_REPAIR_SELECTORS[
+                4:7
+            ],
+            'contract/tests/test_t20f_gate.py': K_FIXTURE_REPAIR_SELECTORS[
+                7:10
+            ],
+        }
+        mandatory = K_FIXTURE_REPAIR_SELECTORS
+    else:
+        raise Failure('unknown fixture repair scope')
+    for name, expected in files.items():
         try:
             actual = hashlib.sha256((root / name).read_bytes()).hexdigest()
         except OSError as error:
@@ -411,7 +479,7 @@ def fixture_repair_plan(
     approved, decision_rows = register.owner_approved()
     try:
         policy = (root / FIXTURE_REPAIR_DECISIONS).read_bytes()
-        row = decision_rows(policy.decode('utf-8')).get(FIXTURE_REPAIR_ROW)
+        row = decision_rows(policy.decode('utf-8')).get(row_id)
     except (OSError, UnicodeDecodeError) as error:
         raise Failure(
             'fixture repair scope needs its owner-approved row'
@@ -419,36 +487,34 @@ def fixture_repair_plan(
     if (
         row is None
         or not approved(row[1])
-        or FIXTURE_REPAIR_SCOPE not in row[0]
-        or FIXTURE_REPAIR_SOURCE not in row[0]
+        or scope not in row[0]
+        or source not in row[0]
     ):
         raise Failure('fixture repair scope needs its exact owner-approved row')
     prefix = affected.PYTEST
     selected: list[affected.Suite] = []
     for suite in own_suites(root, touched):
-        if (
-            suite[: len(prefix)] == prefix
-            and suite[-1] in FIXTURE_REPAIR_SELECTION
-        ):
-            node = FIXTURE_REPAIR_SELECTION[suite[-1]]
-            if node is None:
-                continue
-            suite = (*prefix, node)
+        if suite[: len(prefix)] == prefix and suite[-1] in selection:
+            for node in selection[suite[-1]]:
+                chosen = (*prefix, node)
+                if chosen not in selected:
+                    selected.append(chosen)
+            continue
         if suite not in selected:
             selected.append(suite)
-    # The ten allocation cases, four outcomes and two actual fixture consumers
-    # are mandatory even if a legitimate previous stamp narrows the file delta.
-    for node in FIXTURE_REPAIR_SELECTION.values():
-        if node is not None and (*prefix, node) not in selected:
+    # Every scope's explicit controls stay mandatory even if a legitimate
+    # previous stamp narrows the file delta.
+    for node in mandatory:
+        if (*prefix, node) not in selected:
             selected.append((*prefix, node))
     return selected, {
-        'id': FIXTURE_REPAIR_SCOPE,
-        'source': FIXTURE_REPAIR_SOURCE,
-        'files': dict(FIXTURE_REPAIR_FILES),
+        'id': scope,
+        'source': source,
+        'files': dict(files),
         'suites': [list(suite) for suite in selected],
         'decision_ref': {
             'file': FIXTURE_REPAIR_DECISIONS,
-            'row': FIXTURE_REPAIR_ROW,
+            'row': row_id,
             'sha256': hashlib.sha256(policy).hexdigest(),
         },
     }
@@ -709,7 +775,9 @@ def cmd_run(args: argparse.Namespace) -> int:
     scope = None
     scoped_suites = None
     if args.fixture_repair_scope:
-        scoped_suites, scope = fixture_repair_plan(root, recent, args.package)
+        scoped_suites, scope = fixture_repair_plan(
+            root, recent, args.package, scope=args.fixture_repair_scope
+        )
     python = args.python or sys.executable
     # Every command the run starts reads the lane's interpreter (the Rust
     # tests that load cases run SDM_PYTHON, else a bare python3 that lacks
@@ -929,7 +997,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     p.add_argument('--previous', help="a fix round's previous SHA")
     p.add_argument(
         '--fixture-repair-scope',
-        choices=[FIXTURE_REPAIR_SCOPE],
+        choices=[FIXTURE_REPAIR_SCOPE, K_FIXTURE_REPAIR_SCOPE],
         help='explicit owner-approved pinned T3.10 fixture repair only',
     )
     p.add_argument(
