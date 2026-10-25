@@ -817,6 +817,7 @@ sentences! {
     KeyRepeatsColumn = "key_repeats_column", W::KeyRepeats;
     KeyRepeatsColumns = "key_repeats_columns", W::KeyRepeats;
     KeyDeclined = "key_declined", W::KeyDeclined;
+    FrameLinkNotTheKeySequence = "frame_link_not_the_key_sequence", E::InvalidRequest;
     FrameKeyRepeats = "frame_key_repeats", W::KeyRepeats;
     FrameKeyRepeatsComposite = "frame_key_repeats_composite", W::KeyRepeats;
     FrameKeyRepeatsUnusable = "frame_key_repeats_unusable", W::KeyRepeats;

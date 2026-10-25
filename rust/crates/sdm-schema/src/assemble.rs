@@ -430,12 +430,15 @@ pub(crate) fn checked(
         // What the target's key is (`_require_joinable`): several columns,
         // or one or none other than the column named.
         Err(Unjoinable::NotTheKey) => {
-            let key: &[String] = link
+            let target = link
                 .get(1)
-                .and_then(|end| tables.iter().find(|t| t.name == end.table))
-                .map_or(&[], |t| t.primary_key.as_slice());
+                .and_then(|end| tables.iter().find(|t| t.name == end.table));
+            let key: &[String] = target.map_or(&[], |t| t.primary_key.as_slice());
             let (sentence, reason) = match key.len() {
                 0 => (Sentence::LinkNoKey, "no_key"),
+                1 if target.is_some_and(|t| t.frame_key_form == Some(FrameKeyForm::Sequence)) => {
+                    (Sentence::FrameLinkNotTheKeySequence, "not_the_key")
+                }
                 1 => (Sentence::LinkNotTheKey, "not_the_key"),
                 _ => (Sentence::LinkCompositeKey, "composite_key"),
             };

@@ -6153,6 +6153,7 @@
         "key_repeats_column",
         "key_repeats_columns",
         "key_declined",
+        "frame_link_not_the_key_sequence",
         "frame_key_repeats",
         "frame_key_repeats_composite",
         "frame_key_repeats_unusable",
