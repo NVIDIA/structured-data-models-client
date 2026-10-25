@@ -10501,3 +10501,69 @@ entries:
     round-3 reports. Their approval covers only finite safe classifications,
     requested-operation and logical caller context, and validated codes;
     it grants no raw-driver disclosure or new owner authorization.
+
+- id: P3E-8
+  title: Invalid classification statistics are rejected before unnecessary gathering
+  kind: change
+  old_behavior: >-
+    A mean or median prediction_statistic on a classification task is
+    refused with INVALID_REQUEST after gathering, which may first emit
+    the warning that the supplied anchor is after the available data.
+  new_behavior: >-
+    The core reports the same invalid-statistic error earlier and avoids
+    unnecessary gathering, so that failed call may omit the downstream
+    ANCHOR_AFTER_DATA warning. Valid requests retain that warning under
+    its existing condition. Warnings already emitted before the refusal
+    remain observable.
+  affected_inputs: >-
+    A regression-only prediction_statistic supplied for a classification
+    task, where the reference gathers before refusing and the supplied
+    anchor is after its latest data.
+  cases: [T3.10]
+  refs: [E76, contract/tools/differential.py]
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T310-OWNER-2026-10-25-EARLY-INVALID-1}
+  notes: >-
+    Owner explicitly chose the earlier invalid-option error on 2026-10-25
+    after the old and new behavior were explained with the example of
+    asking for an average when predicting a category. Measured in the
+    seed-27 generated-source cases g76, g84, g151 and g165. Preserve the
+    original warnings, outcomes and SQL traces; fewer reads result from
+    rejecting this invalid option before the reference gathers. This
+    approves no new refusal, generic warning exclusion or valid-request
+    warning change.
+
+- id: P3H-1
+  title: Internal SQL numbering and batching can differ with exact source evidence
+  kind: change
+  old_behavior: >-
+    H9 compares each statement count and typed result literally, including
+    operation-local table indexes assigned by Python set iteration and
+    seed positions that restart in separately issued query batches.
+  new_behavior: >-
+    Different internal table or seed numbering and query batching may be
+    classified as equivalent only with exact proof of the semantic table
+    and seed mappings, source values, typed rows and row multiplicities.
+    Public payloads and public identifiers remain unchanged. Raw driver
+    statements and results remain preserved and every logical seed and
+    source row must be accounted for.
+  affected_inputs: >-
+    SQL reads whose internal table or seed positions or batching differ
+    while the complete source evidence and public payloads are equal.
+  cases: [T3.10]
+  refs: [H9, contract/tools/differential.py]
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T310-OWNER-2026-10-25-H9-EQUIVALENCE-1}
+  notes: >-
+    Approved by the owner on 2026-10-25 after the SQLite set-order and
+    four-read versus one-read examples were presented. The measured
+    numbering examples are seed-27 cases g43, g57, g86, g123 and g133;
+    g99 proves all 896 rows against all five original typed multiset
+    hashes and maps every batch's seed positions. This approval supplies
+    no automatic comparator exclusion: preserve the original result and
+    separately review its exact evidence before classifying a difference.
+    Missing reads, changed predicates, unmatched rows, public identifier
+    changes, numeric tolerances and changes of floating-point aggregation
+    order are not covered.

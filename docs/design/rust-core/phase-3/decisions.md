@@ -233,3 +233,13 @@ This records that bounded approval only; both package approvals and postapproval
 | T313-OWNER-2026-10-24-SDK-AUTH-1 | Use Databricks' official Java SDK and its supported authentication methods; retire the token-only and missing-client-identity proposal P3S-7 | "We should use the native java library provided by Databricks. If it supports more than token auth, we should support it" | approved by owner 2026-10-24 |
 | T313-OWNER-2026-10-24-SERVING-EMULATION-1 | Retire the proposed request-crate emulation exception in favor of the shared wire codec and explicit serving rules; no request-crate leaf is allowlisted | Superseded by the owner's shared-codec choice below | rejected, superseded |
 | T313-OWNER-2026-10-24-SHARED-SERVING-1 | Use the existing `sdm-wire` JSON codec for both envelope layers and count actual UTF-8 bytes, preserving number tokens and member order; use explicit JSON type names, nonblank diagnostic text/title fallback, bounded ASCII codes, ASCII-insensitive known code/phrase matching and standard whitespace, with named malformed response handling instead of status clamping; preserve useful stable gateway codes without inventing host exception classes | "Shared wire codec and explicit rules (recommended)" | approved by owner 2026-10-24 |
+
+## Phase-end generated-source diagnostics, 2026-10-25
+
+These decisions resolve the two bounded questions raised by the generated-source comparisons.
+They grant no numeric tolerance, missing evidence, changed public identifiers or new refusal of supported input.
+
+| # | Decision and presented context | Owner's words | Status |
+|---|---|---|---|
+| T310-OWNER-2026-10-25-EARLY-INVALID-1 | Keep the earlier rejection of a regression-only prediction statistic on a classification task with the same invalid-option error; the old client gathers data and may emit an anchor-after-data warning before rejecting, whereas Rust may omit that downstream warning and avoid the unnecessary gathering; valid requests retain the date warning | "Ok for the first question, keep Rust's behavior about reporting the same invalid-option error earlier" | approved by owner 2026-10-25 |
+| T310-OWNER-2026-10-25-H9-EQUIVALENCE-1 | Accept different internal table/seed numbering and query batching only when exact evidence proves the same source values, typed rows, row multiplicities and semantic table/seed identities; preserve raw SQL traces, require complete mappings and keep public payloads unchanged | "Accept with exact evidence (recommended)" | approved by owner 2026-10-25 |
