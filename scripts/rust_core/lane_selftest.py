@@ -189,7 +189,10 @@ class World:
             'affected.py',
         ):
             shutil.copy2(SCRIPTS / name, scripts / name)
-        self.git('add', 'scripts', cwd=self.seed)
+        shutil.copy2(
+            SCRIPTS.parents[1] / '.gitignore', self.seed / '.gitignore'
+        )
+        self.git('add', 'scripts', '.gitignore', cwd=self.seed)
         self.base = self.commit(self.seed, 'Base')
         self.git('push', '--quiet', 'origin', 'HEAD:refs/heads/main', 'HEAD:refs/heads/rust-core', cwd=self.seed)  # fmt: skip
         self.phase = self.commit(self.seed, 'Land T1.11d: the landed package')
