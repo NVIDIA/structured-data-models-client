@@ -26,7 +26,7 @@ import re
 import shutil
 import subprocess
 import sys
-from collections.abc import Callable, Iterator
+from collections.abc import Callable
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -199,14 +199,8 @@ def build(repo: Path, *, coverage_inputs: bool = False) -> tuple[Path, str]:
 
 
 @pytest.fixture(scope='module')
-def origin(
-    tmp_path_factory: pytest.TempPathFactory,
-) -> Iterator[tuple[Path, str]]:
-    owned = tmp_path_factory.mktemp('origin')
-    try:
-        yield build(owned)
-    finally:
-        shutil.rmtree(owned)
+def origin(owned_module_dir: Callable[[str], Path]) -> tuple[Path, str]:
+    return build(owned_module_dir('origin'))
 
 
 @pytest.fixture

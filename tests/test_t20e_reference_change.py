@@ -182,8 +182,8 @@ def build(tmp: Path) -> tuple[Path, str]:
 
 
 @pytest.fixture(scope='module')
-def origin(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, str]:
-    return build(tmp_path_factory.mktemp('origin'))
+def origin(owned_module_dir: Callable[[str], Path]) -> tuple[Path, str]:
+    return build(owned_module_dir('origin'))
 
 
 @pytest.fixture

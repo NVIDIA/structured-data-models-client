@@ -261,8 +261,8 @@ def stood_in(
 
 
 @pytest.fixture(scope='module')
-def built(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Any]:
-    return world(tmp_path_factory.mktemp('t20-bootstrap'))
+def built(owned_module_dir: Callable[[str], Path]) -> dict[str, Any]:
+    return world(owned_module_dir('t20-bootstrap'))
 
 
 def at_fork(built: dict[str, Any]) -> tuple[Path, dict[str, str]]:
@@ -555,9 +555,9 @@ def epic_failures(done: subprocess.CompletedProcess[str]) -> list[str]:
 
 
 @pytest.fixture(scope='module')
-def merged(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Any]:
+def merged(owned_module_dir: Callable[[str], Path]) -> dict[str, Any]:
     r"""A clean owner merge of a landing, nothing else on rust-core."""
-    return merged_world(tmp_path_factory.mktemp('t20-epic-merged'))
+    return merged_world(owned_module_dir('t20-epic-merged'))
 
 
 def at_merge(merged: dict[str, Any]) -> tuple[Path, dict[str, str]]:

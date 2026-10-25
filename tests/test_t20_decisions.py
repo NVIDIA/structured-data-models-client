@@ -140,9 +140,9 @@ def relaxed(decision: str) -> Callable[[Path], None]:
 
 @pytest.fixture(scope='module')
 def ratchet_origin(
-    tmp_path_factory: pytest.TempPathFactory,
+    owned_module_dir: Callable[[str], Path],
 ) -> tuple[Path, str]:
-    return helpers.build(tmp_path_factory.mktemp('origin'))  # type: ignore[no-any-return]
+    return helpers.build(owned_module_dir('origin'))  # type: ignore[no-any-return]
 
 
 @pytest.fixture
@@ -295,9 +295,9 @@ def test_ratchet_phase_1_s_file_missing_fails_by_name(repo: Path) -> None:
 
 @pytest.fixture(scope='module')
 def coverage_origin(
-    tmp_path_factory: pytest.TempPathFactory,
+    owned_module_dir: Callable[[str], Path],
 ) -> tuple[Path, str]:
-    return coverage.build(tmp_path_factory.mktemp('coverage'))  # type: ignore[no-any-return]
+    return coverage.build(owned_module_dir('coverage'))  # type: ignore[no-any-return]
 
 
 @pytest.fixture

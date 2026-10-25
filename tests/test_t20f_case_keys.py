@@ -249,8 +249,8 @@ def _hold_database_baselines(tree: Path) -> None:
 
 
 @pytest.fixture(scope='module')
-def origin(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Any]:
-    repo, _ = helpers.build(tmp_path_factory.mktemp('origin'))
+def origin(owned_module_dir: Callable[[str], Path]) -> dict[str, Any]:
+    repo, _ = helpers.build(owned_module_dir('origin'))
     recorded = land(
         repo, 'T2.1a', _record_database_lines, protected='contract/**'
     )

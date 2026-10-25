@@ -75,8 +75,8 @@ SEED = 'T21A-1'
 
 
 @pytest.fixture(scope='module')
-def origin(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, str]:
-    repo, landed = helpers.build(tmp_path_factory.mktemp('origin'))
+def origin(owned_module_dir: Callable[[str], Path]) -> tuple[Path, str]:
+    repo, landed = helpers.build(owned_module_dir('origin'))
     return repo, landed
 
 
