@@ -198,14 +198,28 @@ def repo(origin: tuple[Path, str], tmp_path: Path) -> Path:
     return tree
 
 
+@pytest.mark.parametrize('factory', ['ratchet', 'gate_controls', 'gate_modes'])
 def test_the_fixture_reuses_a_removed_worktree_without_pruning_failed_evidence(
     tmp_path: Path,
+    factory: str,
 ) -> None:
     source = tmp_path / 'origin'
     source.mkdir()
     git(source, 'init', '-q', '-b', 'fixture')
     landed = commit(source, 'fixture origin')
-    create = repo.__wrapped__
+    if factory == 'ratchet':
+        create = repo.__wrapped__
+    else:
+        gate_tests = _module(
+            ROOT / f'contract/tests/test_{factory}.py',
+            f'{factory}_worktree_reuse',
+        )
+        if factory == 'gate_controls':
+            create = gate_tests.repo.__wrapped__
+        else:
+
+            def create(origin, path):
+                return gate_tests.worktree({'repo': origin[0]}, path, origin[1])
     original = create((source, landed), tmp_path / 'reused')
     failed = create((source, landed), tmp_path / 'failed')
     evidence = failed / 'failure.txt'
