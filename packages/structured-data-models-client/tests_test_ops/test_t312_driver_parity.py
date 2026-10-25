@@ -757,7 +757,10 @@ def _steps(database: str, statements: list[str], bound: bool) -> dict[str, Any]:
             }
         )
         planned[-1] = {'dialect': database, 'text': text, 'params': [param]}
-    return {'plan': {'plan': 'sql', 'statements': planned}}
+    plan = {'plan': 'sql', 'statements': planned}
+    if database == 'postgres':
+        plan['result_conversions'] = [{'conversion': 'zoned_text_utc'}]
+    return {'plan': plan}
 
 
 class Refused(NamedTuple):
@@ -1002,6 +1005,7 @@ def test_zoned_text_is_python_s_in_every_zone_postgres_names(
         {
             'plan': {
                 'plan': 'sql',
+                'result_conversions': [{'conversion': 'zoned_text_utc'}],
                 'statements': [
                     {'dialect': 'postgres', 'text': text, 'params': []}
                     for text in (f"SET TimeZone = '{name}'", read)

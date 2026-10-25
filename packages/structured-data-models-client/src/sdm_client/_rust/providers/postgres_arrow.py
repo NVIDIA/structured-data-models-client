@@ -220,11 +220,12 @@ def _cell(value: Any, kind: Any) -> Any:
 
 
 def _utc_text_value(value: Any) -> Any:
-    """Normalize zoned native values before their native text conversion.
+    """Native encoding for the core-selected zoned_text_utc result policy.
 
     This is used only for a text Arrow cell, including an array element.
     Scalar timestamp columns keep their existing Arrow conversion.
     Range and multirange formatting remains the driver's own formatting.
+    Standalone capture reads retain the same native UTC encoding.
     """
     if isinstance(value, datetime):
         offset = value.utcoffset()

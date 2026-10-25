@@ -35,7 +35,8 @@ class T312PostgresReadTest {
     for (String text : statements) {
       planned.add(Map.of("dialect", "postgres", "text", text, "params", List.of()));
     }
-    return Map.of("plan", Map.of("plan", "sql", "statements", planned));
+    return Map.of("plan", Map.of("plan", "sql", "statements", planned,
+        "result_conversions", List.of(Map.of("conversion", "zoned_text_utc"))));
   }
 
   private static int rows(Connection connection, Map<String, Object> step) throws Exception {

@@ -72,6 +72,13 @@ class PostgresProvider:
     def __call__(
         self, step: dict[str, Any], keys: Mapping[int, Any] | None = None
     ) -> Any:
+        plan = step.get('plan')
+        if not isinstance(plan, Mapping) or plan.get('result_conversions') != [
+            {'conversion': 'zoned_text_utc'}
+        ]:
+            raise PlanNotRun(
+                'a Postgres plan without its exact UTC text policy'
+            )
         statements = providers.statements(step, 'postgres')
         bound: list[str | None] = []
         for statement in statements:

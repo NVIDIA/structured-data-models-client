@@ -204,7 +204,15 @@ impl DataLayer for Data {
         request: &DataRequest,
         provider: &ProviderChoice,
     ) -> Result<FetchPlan, CoreError> {
-        self.render(request, provider, 0)
+        let mut plan = self.render(request, provider, 0)?;
+        if sql_dialect(provider).is_some_and(|dialect| dialect.name() == "postgres")
+            && let FetchPlan::Sql {
+                result_conversions, ..
+            } = &mut plan
+        {
+            result_conversions.push(SqlResultConversion::ZonedTextUtc);
+        }
+        Ok(plan)
     }
 
     fn result_metadata(

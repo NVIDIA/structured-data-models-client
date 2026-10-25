@@ -53,7 +53,13 @@ class T328KeyTextTest {
   private static Map<String, Object> step(String dialect, String text, Map<String, Object> param) {
     Map<String, Object> statement =
         Map.of("dialect", dialect, "text", text, "params", List.of(param));
-    return Map.of("plan", Map.of("plan", "sql", "statements", List.of(statement)));
+    Map<String, Object> plan = new java.util.LinkedHashMap<>();
+    plan.put("plan", "sql");
+    plan.put("statements", List.of(statement));
+    if (dialect.equals("postgres")) {
+      plan.put("result_conversions", List.of(Map.of("conversion", "zoned_text_utc")));
+    }
+    return Map.of("plan", plan);
   }
 
   private static final Map<String, Object> TEXT = Map.of("param", "text", "attachment", 1);

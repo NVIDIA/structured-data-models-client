@@ -1244,12 +1244,16 @@ pub enum SqlTimestampKind {
     WallTime,
 }
 
-/// One output column projected by the SQL data layer for lossless native
-/// transfer. Positions are zero-based and names remain exactly the
+/// A native result conversion selected by the SQL data layer.
+/// Column positions are zero-based and names remain exactly the
 /// warehouse's original output names, including duplicates.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "conversion", rename_all = "snake_case", deny_unknown_fields)]
 pub enum SqlResultConversion {
+    /// PostgreSQL zoned values read as text, including array elements and
+    /// range bounds, use canonical UTC without changing the session.
+    /// This policy applies to the whole result, not one projection.
+    ZonedTextUtc,
     TimestampMicros {
         column: u32,
         name: String,

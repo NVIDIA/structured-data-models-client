@@ -273,7 +273,7 @@
       "moved": "T3.28: the key set's JSON text is the core's (sdm-data pg_values::key_rows, split past the budget by key_text); _bound_text and the arrow_table import gone; T3.20 (frozen at T3.7): the Arrow building's constants and functions moved unchanged into postgres_arrow.py, BATCH_ROWS and rows_arrow imported from it"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::PostgresProvider.__call__": {
-      "moved": "T3.28: binds the one text the core wrote of the key set, read by sdm_connectors.providers.text, in place of writing it from the Arrow key set"
+      "moved": "T3.10: the core SQL data layer selects ZonedTextUtc for PostgreSQL results; this provider requires the exact instruction before I/O, then performs native value-to-Arrow mapping. T3.28: binds the core-written key-set text without choosing its spelling."
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::PostgresProvider.__init__": {
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
@@ -528,7 +528,7 @@
       "refactor": "T3.20 (frozen at T3.7): postgres.py's _arrow_type moved here unchanged; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres_arrow.py::_cell": {
-      "refactor": "T3.20 (frozen at T3.7): postgres.py's _cell moved here unchanged; no rule added"
+      "moved": "T3.10: canonical zoned text is a core-selected SqlResultConversion::ZonedTextUtc policy, required by PostgresProvider before native row conversion. This primitive maps a native value to its requested Arrow form; T3.9 UTC text behavior was not an unchanged T3.20 refactor."
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres_arrow.py::_element_type": {
       "refactor": "T3.20 (frozen at T3.7): postgres.py's _element_type moved here unchanged; no rule added"
@@ -558,7 +558,7 @@
       "refactor": "T3.20 (frozen at T3.7): postgres.py's _result's batch building after fetchall, unchanged but for names (field for _field, kind for the loop's field); no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres_arrow.py::<module>": {
-      "refactor": "T3.20 (frozen at T3.7): postgres.py's Arrow building, its constants (markers, tags, BATCH_ROWS, the type tables) and functions moved here unchanged; no rule added"
+      "moved": "T3.10: PostgreSQL UTC text policy is selected by the core's ZonedTextUtc result instruction and required by the provider; datetime/range imports support native encoding only. The earlier T3.9 UTC addition was not an unchanged T3.20 move."
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::conversion_notes": {
       "moved": "T3.5: a semantic model's conversion notes, the core's typed notes (DescribedSource.notes) said by their sentences, a note of a table the schema does not take or of a time column its table no longer has left out, as the contract says a host shows them"
@@ -571,6 +571,9 @@
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::source_values": {
       "moved": "T3.5: the values a source's sentences name, the semantic model's repr among them (old-behaviour row 5)"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres_arrow.py::_utc_text_value": {
+      "moved": "T3.10: selection of canonical UTC text moved into the core PostgreSQL SQL plan (ZonedTextUtc). This is only the native datetime/range/multirange encoder, with no provider policy choice or session mutation; standalone capture conversion retains its existing UTC behavior."
     }
   }
 }

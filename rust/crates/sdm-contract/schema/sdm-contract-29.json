@@ -5395,8 +5395,22 @@
       ]
     },
     "SqlResultConversion": {
-      "description": "One output column projected by the SQL data layer for lossless native\ntransfer. Positions are zero-based and names remain exactly the\nwarehouse's original output names, including duplicates.",
+      "description": "A native result conversion selected by the SQL data layer.\nColumn positions are zero-based and names remain exactly the\nwarehouse's original output names, including duplicates.",
       "oneOf": [
+        {
+          "description": "PostgreSQL zoned values read as text, including array elements and\nrange bounds, use canonical UTC without changing the session.\nThis policy applies to the whole result, not one projection.",
+          "type": "object",
+          "properties": {
+            "conversion": {
+              "type": "string",
+              "const": "zoned_text_utc"
+            }
+          },
+          "required": [
+            "conversion"
+          ],
+          "additionalProperties": false
+        },
         {
           "type": "object",
           "properties": {

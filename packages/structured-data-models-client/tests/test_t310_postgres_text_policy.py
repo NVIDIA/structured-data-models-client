@@ -57,7 +57,9 @@ def test_unmarked_or_invalid_postgres_policy_is_refused_before_io(conversions):
 
     plan = {
         'plan': 'sql',
-        'statements': [{'dialect': 'postgres', 'text': 'SELECT 1', 'params': []}],
+        'statements': [
+            {'dialect': 'postgres', 'text': 'SELECT 1', 'params': []}
+        ],
     }
     if conversions is not None:
         plan['result_conversions'] = conversions

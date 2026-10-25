@@ -125,13 +125,26 @@ public final class JdbcProvider implements Host.Provider {
     if (statements == null || statements.isEmpty()) {
       throw new PlanNotRun("a plan with no statement or another dialect");
     }
-    if (driver == Driver.DATABRICKS) {
-      List<Map<String, Object>> conversions =
-          (List<Map<String, Object>>) plan.getOrDefault("result_conversions", List.of());
-      return databricks(databricksPlanned(statements, keys), texts(keys), conversions, allocator);
+    Object conversions = plan.getOrDefault("result_conversions", List.of());
+    if (!(conversions instanceof List<?> converted)) {
+      throw new PlanNotRun("invalid SQL result conversions");
     }
-    if (!((List<?>) plan.getOrDefault("result_conversions", List.of())).isEmpty()) {
+    if (driver == Driver.POSTGRES) {
+      if (!List.of(Map.of("conversion", "zoned_text_utc")).equals(converted)) {
+        throw new PlanNotRun("a Postgres plan without its exact UTC text policy");
+      }
+    } else if (driver != Driver.DATABRICKS && !converted.isEmpty()) {
       throw new PlanNotRun("this driver does not implement result conversions");
+    }
+    if (driver == Driver.DATABRICKS) {
+      for (Object value : converted) {
+        if (!(value instanceof Map<?, ?> conversion)
+            || !"timestamp_micros".equals(conversion.get("conversion"))) {
+          throw new PlanNotRun("an unsupported SQL result conversion");
+        }
+      }
+      return databricks(databricksPlanned(statements, keys), texts(keys),
+          (List<Map<String, Object>>) conversions, allocator);
     }
     List<Planned> planned = new ArrayList<>();
     Map<String, Integer> relations = new LinkedHashMap<>();
