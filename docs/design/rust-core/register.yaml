@@ -9723,6 +9723,285 @@ entries:
 
 # --- lane J entries, Phase 3 (P3J-1..19) ---
 
+- id: P3S-1
+  title: An unrepresentable serving failure status is a named malformed response
+  kind: change
+  old_behavior: >-
+    The old serving transport takes any integer status of 400 or more in
+    the served model's answer as its failure and raises
+    NimRequestError(status) with that integer as it is
+    (CL/core/databricks_serving.py, _decoded, _refused_in_band).
+  new_behavior: >-
+    The core refuses a failure status outside the shared unsigned 16-bit
+    status field as INVALID_RESPONSE, reason invalid_serving_status.
+    It never clamps a supplied status to a different one.
+    Representable integer statuses retain their existing handling.
+  affected_inputs: >-
+    A served model answering a status past 65535 in its response_json.
+  cases: [T3.13]
+  refs: [T3.13, T3.27]
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T313-OWNER-2026-10-24-SHARED-SERVING-1}
+  notes: >-
+    The previous proposed clamp is retired, not treated as accepted.
+    The owner's explicit serving rules authorize named malformed-response
+    handling; the existing error and scalar contracts suffice.
+- id: P3S-2
+  title: A serving reply the old client crashes on is a named transport error
+  kind: change
+  old_behavior: >-
+    The old serving transport hands the SDK's reading of the reply to
+    _response_body; a 2xx reply whose JSON is a list or a scalar makes the
+    SDK's QueryEndpointResponse.from_dict raise AttributeError or
+    TypeError, which escapes the client's error contract.
+  new_behavior: >-
+    The core reads the reply itself and names any reply that is not an
+    object holding one prediction row TRANSPORT_ERROR
+    (serving_prediction_row_count), as the old client names an object
+    without one.
+  affected_inputs: >-
+    A serving endpoint answering 2xx with a JSON list, string, number or
+    boolean.
+  cases: [T3.13]
+  refs: [T3.13]
+  status: approved
+  approved_by: reviewer
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T313-REVIEW-P3S-2}
+  notes: >-
+    The independent broad Sol High reviewer explicitly APPROVE-P3S-2 in
+    T3.13-sol-broad-r1.md for candidate 7ddfd7b5: a named error where the
+    old client crashes. This approves only the malformed-success error,
+    not other P3S differences or the package's blocking review findings.
+- id: P3S-3
+  title: Serving refusals retain explicit null details and add structured context
+  kind: change
+  old_behavior: >-
+    The old serving transport's NimRequestError details hold the endpoint
+    and, where they apply, provider_code, provider_error, and for a failure
+    that is the caller's to fix endpoint_code (None where the endpoint gave
+    none) and diagnosis; a refusal past the limit holds bytes and limit.
+  new_behavior: >-
+    The same class, status, code and message, and every detail the old
+    client gives, including explicit endpoint_code null. A refusal under
+    the model's own code also holds it as endpoint_code (its sentence names
+    it), a past-limit refusal holds the endpoint, and every core error
+    holds kind and retryable.
+  affected_inputs: >-
+    A caller reading a serving refusal's details by key.
+  cases: [T3.13]
+  refs: [T3.13, T3.27]
+  status: approved
+  approved_by: reviewer
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T313-REVIEW-P3S-3}
+  notes: >-
+    Both independent Sol High round-6 reviewers explicitly recorded
+    APPROVE-P3S-3 after the caller-fault endpoint_code null was restored.
+    Their approval covers only additive structured diagnostic context,
+    without dropping old detail values or inventing host exception classes.
+    The sentences are T3.27's; the client's test_t313_serving_route holds
+    each value the old client gives.
+- id: P3S-4
+  title: Common serving policy retains stable HTML gateway codes without fabricating host classes
+  kind: change
+  old_behavior: >-
+    Through the Databricks SDK, an error page in HTML is named by the HTTP
+    reason phrase as its error code (BAD_GATEWAY: request failed
+    (BAD_GATEWAY)), and every SDK failure carries the SDK error's class in
+    details (provider_error).
+  new_behavior: >-
+    The core recognizes HTML gateway pages and retains stable
+    BAD_GATEWAY, SERVICE_UNAVAILABLE and GATEWAY_TIMEOUT codes for HTTP
+    502, 503 and 504 respectively, with the existing public status policy.
+    Java carries the stable code but no invented Python SDK exception
+    class. An actual host exception class remains present where supplied.
+  affected_inputs: >-
+    Java predicting through a Databricks serving endpoint whose gateway
+    answers an error page in HTML, or any failure's provider_error.
+  cases: [T3.13]
+  refs: [T3.13]
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T313-OWNER-2026-10-24-SHARED-SERVING-1}
+  notes: >-
+    The previous proposed loss of the gateway code is repaired under the
+    explicit shared serving policy. No host exception class is fabricated.
+- id: P3S-5
+  title: Java reads Databricks nested values through the driver's text
+  kind: change
+  old_behavior: >-
+    The Databricks SQL connector gives Python's provider each column as
+    the warehouse's Arrow: a TIMESTAMP as timestamp[us] with no zone (C-1's
+    recorded tables, session zone Etc/UTC), a STRUCT, MAP or ARRAY as
+    Arrow's own nested types.
+  new_behavior: >-
+    Java's Databricks column currently reads a STRUCT, MAP, INTERVAL or an ARRAY of decimals or time
+    stamps as utf8 of the driver's text; every other type as the connector
+    gives it. The timestamp transport defects are repaired without a
+    compatibility exception: the core selects UNIX_MICROS for a zoned
+    instant and native NTZ calendar-field arithmetic for timezone-free
+    walls, followed by explicit indexed BIGINT-to-Arrow transfer.
+    Both meanings survive non-UTC SQL sessions without changing them.
+  affected_inputs: >-
+    Java over a Databricks nested or interval column the core reads as data.
+  cases: [T3.13]
+  refs: [T3.13]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: owner. Proposed by T3.13's implementer, never self-approved.
+    A narrow probe with released Databricks JDBC 3.4.2 reproduced both
+    the unsupported LocalDateTime typed getter and the gap normalization.
+    The typed-getter failure is repaired. The lossless NTZ projection
+    preserves gap wall fields rather than accepting that corruption;
+    the explicit transfer was verified narrowly with the actual released
+    driver's integer getter under LA and Berlin JVM zones.
+    The bounded live JDBC probe (B7) confirmed the timestamp bugs and
+    replacement SQL against actual Python Arrow in UTC, Los Angeles
+    and Berlin sessions, including gaps, nulls, negative microseconds
+    and years 0001/9999. The remaining nested-value difference is not
+    approved: the core omits numeric/string lists and refuses struct/map,
+    so host text fallback must not turn those into supported text features.
+- id: P3S-6
+  title: Java reads a Databricks error class anywhere before the statement the message appends
+  kind: change
+  old_behavior: >-
+    Python's provider reads a Databricks failure's error class from the
+    driver's accessor, else the bracketed name the SQL connector's message
+    opens with (DB/errors.py, error_class).
+  new_behavior: >-
+    Java's provider reads the first bracketed upper-case name in the
+    message before the statement Databricks appends, since the JDBC driver
+    wraps the warehouse's message in its own; the SQLSTATE is the driver's
+    getSQLState(), else the last one the message writes, as Python reads it.
+  affected_inputs: >-
+    A Databricks JDBC failure whose message holds a bracketed upper-case
+    word before the warehouse's error class.
+  cases: [T3.13]
+  refs: [T3.13, T3.27]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: owner. Proposed by T3.13's implementer, never self-approved;
+    the live JDBC probe (B7) settles the driver's message form.
+- id: P3S-7
+  title: Java calls a serving endpoint with a caller-supplied token and names no client in its User-Agent
+  kind: change
+  old_behavior: >-
+    Python calls a serving endpoint through the Databricks SDK, which
+    authenticates in every way the SDK takes (a notebook's identity, OAuth,
+    a token) and names structured-data-models-client in its User-Agent.
+  new_behavior: >-
+    Withdrawn: Java's DatabricksServing accepts the official Databricks
+    SDK WorkspaceClient or its default unified authentication, forwarding
+    refreshed SDK authentication headers without changing core request or
+    response bytes. The existing token-supplier factory remains available.
+    Requests identify structured-data-models-client and retain the SDK's
+    User-Agent identity without changing its global product setting.
+  affected_inputs: >-
+    Java callers of a Databricks serving endpoint.
+  cases: [T3.13]
+  refs: [T3.13]
+  status: rejected
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T313-OWNER-2026-10-24-SDK-AUTH-1}
+  notes: >-
+    Owner requires the official Java library and every authentication
+    method it supports rather than accepting the proposed token-only
+    limitation. Retirement does not approve narrower authentication or
+    altered prediction semantics. SDK credential refresh and the serving
+    exchange share the call's overall deadline; failures omit raw SDK
+    credential diagnostics.
+
+- id: P3S-8
+  title: An unusually long JDBC diagnostic can exceed the host control limit
+  kind: change
+  old_behavior: >-
+    The old Python warehouse route reports the database driver's failure
+    with its native diagnostic and codes.
+  new_behavior: >-
+    Java includes the original JDBC diagnostic in ProviderError's internal
+    driver_message. If the serialized fetch reply exceeds the 65536-byte
+    host control limit, the host reports INTERNAL_ERROR before the core
+    can interpret the independent SQLSTATE, vendor code or error class.
+    The diagnostic is not exposed as public core error text.
+  affected_inputs: >-
+    A JDBC failure containing an unusually long echoed statement or value
+    that makes the fetch reply exceed the control-message budget.
+  cases: [T3.13]
+  refs: [T3.6, T3.13]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: owner. P2 carry-forward identified by independent focused
+    review F3 in T3.13-sol-focused-r1.md for candidate 7ddfd7b5.
+    Proposed follow-up: specify one bounded internal diagnostic policy
+    shared by hosts that retains the independent structured failure facts;
+    a complete diagnostic would require an attachment contract.
+    No truncation or new public diagnostic policy is approved here.
+- id: P3S-9
+  title: Serving envelopes use shared UTF-8 JSON and actual encoded-byte limits
+  kind: change
+  old_behavior: >-
+    The old serving transport serializes both JSON layers through
+    json.dumps, escaping non-ASCII text and normalizing number tokens
+    through Python numbers before applying the serving request limit.
+  new_behavior: >-
+    Both layers use the existing sdm-wire JSON value and writer.
+    Member order, negative zero, exponent tokens and arbitrarily wide
+    integer tokens are preserved, while non-finite float values including
+    1e400 remain refused. The limit counts exactly the final UTF-8 bytes
+    posted, so encoded byte counts and near-limit admission may differ.
+    The logical supported model payload and endpoint envelope shape remain.
+  affected_inputs: >-
+    Serving requests containing Unicode, number spellings normalized by
+    json.dumps, or a limit between the two encoded body sizes.
+  cases: [T3.13]
+  refs: [T3.13, PD-2]
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T313-OWNER-2026-10-24-SHARED-SERVING-1}
+  notes: >-
+    The owner chose Shared wire codec and explicit rules (recommended).
+    Existing genuine reference vectors remain unchanged; tests compare
+    logical payloads and separately assert new exact bytes and boundaries.
+    This authorizes the stated serving encoding/limit difference only,
+    not a model-input conversion or comparison-rule relaxation.
+
+- id: P3S-10
+  title: Serving diagnostics use explicit JSON and ASCII rules
+  kind: change
+  old_behavior: >-
+    The old transport's diagnostics depend on Python type names,
+    truthiness, casefold and regular-expression whitespace/end anchors.
+    A nonempty nontext detail can suppress a useful title; Unicode long-s
+    or ligatures can match an ASCII diagnosis, and a code may end in one newline.
+  new_behavior: >-
+    Nonobject replies name the JSON type: array, string, number, boolean
+    or null. Only nonblank text is diagnostic input, with title fallback
+    for an absent, blank or nontext detail. Known code names and phrases
+    compare without ASCII case; unknown codes require a bounded uppercase
+    ASCII enum form, with no trailing newline. Leading-code detail uses
+    standard whitespace, without Python-specific control separators.
+    These are explicit serving rules, not language-runtime emulation.
+  affected_inputs: >-
+    Malformed or unusual serving diagnostics, including nontext/blank
+    detail, nonobject JSON responses, Unicode-folded phrases, lowercase
+    known codes, trailing-newline codes and information separators.
+  cases: [T3.13]
+  refs: [T3.13]
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T313-OWNER-2026-10-24-SHARED-SERVING-1}
+  notes: >-
+    The owner's shared-codec choice explicitly permits the reviewed
+    malformed/Unicode diagnostic differences. Ordinary statuses, codes,
+    refusals, retries and request limits retain their existing policies.
+    Parser-only emulation guards are restored without a serving exception.
+
 - id: P3J-1
   title: A view definition that is no readable YAML is refused by name
   kind: change

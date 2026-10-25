@@ -40,6 +40,7 @@ fn contract() -> PathBuf {
 /// run before any table (T3.7).
 fn postgres() -> ProviderChoice {
     ProviderChoice::Sql {
+        timestamp_encoding: None,
         dialect: Dialect::new("postgres"),
         namespace: vec![Some("public".to_owned())],
         view: None,

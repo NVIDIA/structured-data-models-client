@@ -56,7 +56,8 @@ import org.apache.arrow.vector.types.pojo.Field;
  * driver binds it: DuckDB's Arrow registered (kept as a temporary table, since a registered
  * stream is read once), SQLite's ingested as a temporary table of the types ADBC gives it,
  * Postgres's the statement's one parameter, the JSON text the core wrote of it (T3.28), handed
- * over as one text cell ({@link #text}). Not part of the API.
+ * over as one text cell ({@link #text}), and Databricks's the same text, bound to its {@code ?}
+ * marker (T3.13). Not part of the API.
  */
 abstract class KeySets {
   /** A key set read whole: its Arrow IPC bytes, its fields and each column's values. */
@@ -161,7 +162,7 @@ abstract class KeySets {
     return switch (driver) {
       case DUCKDB -> new DuckDbKeys();
       case SQLITE -> new SqliteKeys();
-      case POSTGRES -> new PostgresKeys();
+      case POSTGRES, DATABRICKS -> new TextKeys();
     };
   }
 
@@ -299,11 +300,14 @@ abstract class KeySets {
 
   // --- Postgres -------------------------------------------------------------------------
 
-  /** Postgres's: the text the core wrote, the statement's one parameter ({@link #text}). */
-  static final class PostgresKeys extends KeySets {
+  /**
+   * Postgres's and Databricks's: the text the core wrote, bound as a statement's parameter
+   * ({@link #text}), never a relation.
+   */
+  static final class TextKeys extends KeySets {
     @Override
     void bind(Connection on, String name, Keys keys, BufferAllocator allocator) {
-      throw new UnsupportedOperationException("a Postgres key set is a statement's parameter");
+      throw new UnsupportedOperationException("this driver's key set is a statement's parameter");
     }
   }
 

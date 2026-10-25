@@ -2,9 +2,9 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-import com.nvidia.sdm.PredictiveQuery;
-import com.nvidia.sdm.Profile;
-import com.nvidia.sdm.QuerySchema;
+import com.nvidia.sdm.internal.Profile;
+import com.nvidia.sdm.internal.QuerySchema;
+import com.nvidia.sdm.internal.QueryValidation;
 import com.nvidia.sdm.internal.NativeCore;
 import java.util.List;
 import java.util.Map;
@@ -42,8 +42,7 @@ public final class JarLoad {
                     null)),
             List.of());
     boolean accepted =
-        PredictiveQuery.parse("PREDICT users.age FOR EACH users.id")
-            .validate(schema, Profile.RELATIONAL)
+        QueryValidation.validate("PREDICT users.age FOR EACH users.id", schema, Profile.RELATIONAL)
             .accepted();
     if (!accepted) {
       throw new IllegalStateException("the core refused a valid query");

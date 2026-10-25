@@ -2,6 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
+import com.nvidia.sdm.DatabricksSource;
 import com.nvidia.sdm.DuckDbSource;
 import com.nvidia.sdm.FromSourceOptions;
 import com.nvidia.sdm.MaterializeOptions;
@@ -32,7 +33,11 @@ import org.apache.arrow.vector.ipc.ArrowReader;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.io.PrintStream;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
@@ -47,6 +52,8 @@ import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
+import java.util.concurrent.TimeUnit;
 
 /**
  * The Java runner program of the contract cases (design choice 10, "Tests"), run by
@@ -344,7 +351,10 @@ public final class ContractRunner {
     answer.put("case", call.get("case"));
     answer.put("identity", identity());
     Recorder recorder = new Recorder();
-    try (Connection connection = connect(database, (Map<?, ?>) call.get("connect"))) {
+    Map<?, ?> how = (Map<?, ?>) call.get("connect");
+    SqlGuard guard = "databricks-sql".equals(database) ? new SqlGuard(how) : null;
+    try (Connection raw = connect(database, how)) {
+      Connection connection = guard == null ? raw : guard.wrap(raw);
       if ("duckdb".equals(database)) {
         try (Statement statement = connection.createStatement()) {
           for (Object setup : (List<?>) call.get("setup")) {
@@ -359,9 +369,12 @@ public final class ContractRunner {
       Trace.install(recorder);
       Map<String, Object> outcome;
       try {
-        outcome = calls(call, source(database, connection), recorder);
+        outcome = calls(call, source(database, connection, (Map<?, ?>) call.get("source")), recorder);
       } finally {
         Trace.install(null);
+      }
+      if (guard != null) {
+        guard.checkPassed();
       }
       answer.put("outcome", outcome);
       if ("duckdb".equals(database)) {
@@ -438,16 +451,107 @@ public final class ContractRunner {
       case "postgres" ->
           DriverManager.getConnection(
               (String) how.get("url"), (String) how.get("user"), (String) how.get("password"));
+      case "databricks-sql" -> {
+        Properties properties = new Properties();
+        ((Map<?, ?>) how.get("properties")).forEach(
+            (key, value) -> properties.setProperty((String) key, (String) value));
+        yield DriverManager.getConnection((String) how.get("url"), properties);
+      }
       default -> throw new IllegalArgumentException("a database this runner does not open");
     };
   }
 
-  private static Source source(String database, Connection connection) {
+  private static Source source(String database, Connection connection, Map<?, ?> how) {
     return switch (database) {
       case "duckdb" -> DuckDbSource.of(connection);
       case "sqlite" -> SqliteSource.of(connection);
-      default -> PostgresSource.of(connection);
+      case "postgres" -> PostgresSource.of(connection);
+      case "databricks-sql" -> {
+        DatabricksSource source = DatabricksSource.of(connection,
+            (String) how.get("catalog"), (String) how.get("schema"));
+        yield how.get("view") instanceof Map<?, ?> view
+            ? source.semanticModel((String) view.get("name"),
+                Boolean.TRUE.equals(view.get("trust_expressions")))
+            : source;
+      }
+      default -> throw new IllegalArgumentException("a database this runner does not open");
     };
+  }
+
+  /** A runner-only JDBC guard delegating to the existing Python SQL validator, never a second SQL parser. */
+  static final class SqlGuard {
+    private final Map<?, ?> options;
+    private boolean refused;
+
+    SqlGuard(Map<?, ?> options) {
+      this.options = options;
+    }
+
+    private void check(String sql) throws SQLException {
+      Process process = null;
+      try {
+        process = new ProcessBuilder((String) options.get("guard_python"),
+            (String) options.get("guard_program"), "--check-databricks-read")
+            .redirectError(ProcessBuilder.Redirect.DISCARD)
+            .redirectOutput(ProcessBuilder.Redirect.DISCARD).start();
+        try (OutputStream input = process.getOutputStream()) {
+          input.write(sql.getBytes(StandardCharsets.UTF_8));
+        }
+        if (!process.waitFor(20, TimeUnit.SECONDS) || process.exitValue() != 0) {
+          throw new IOException("the read guard refused or did not finish");
+        }
+      } catch (IOException | InterruptedException failure) {
+        refused = true;
+        if (failure instanceof InterruptedException) {
+          Thread.currentThread().interrupt();
+        }
+        throw new SQLException("the runner's SQL read guard refused a statement");
+      } finally {
+        if (process != null && process.isAlive()) {
+          process.destroyForcibly();
+        }
+      }
+    }
+
+    void checkPassed() {
+      if (refused) {
+        throw new IllegalStateException("a guard refusal is a runner failure, never a product observation");
+      }
+    }
+
+    private static Object invoke(Object target, Method method, Object[] arguments) throws Throwable {
+      try {
+        return method.invoke(target, arguments);
+      } catch (InvocationTargetException failure) {
+        throw failure.getCause();
+      }
+    }
+
+    Connection wrap(Connection raw) {
+      return (Connection) Proxy.newProxyInstance(Connection.class.getClassLoader(),
+          new Class<?>[] {Connection.class}, (proxy, method, arguments) -> {
+            String name = method.getName();
+            if (name.equals("prepareCall")) {
+              refused = true;
+              throw new SQLException("the read-only case never calls a procedure");
+            }
+            if (name.equals("prepareStatement")) {
+              check((String) arguments[0]);
+            }
+            Object answer = invoke(raw, method, arguments);
+            if (name.equals("createStatement")) {
+              return Proxy.newProxyInstance(Statement.class.getClassLoader(),
+                  new Class<?>[] {Statement.class}, (statement, call, values) -> {
+                    if (values != null && values.length > 0 && values[0] instanceof String sql
+                        && (call.getName().startsWith("execute") || call.getName().equals("addBatch"))) {
+                      check(sql);
+                    }
+                    return invoke(answer, call, values);
+                  });
+            }
+            return answer;
+          });
+    }
   }
 
   private static String version(Connection connection) throws SQLException {

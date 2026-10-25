@@ -3570,6 +3570,17 @@
                 }
               ]
             },
+            "timestamp_encoding": {
+              "description": "A host's required lossless transport for timestamps that its\ndriver cannot preserve through native getters. The data layer\nowns the SQL projection; the host performs only the conversion\nexplicitly named by the resulting plan.",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SqlTimestampEncoding"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "provider": {
               "type": "string",
               "const": "sql"
@@ -3619,6 +3630,16 @@
       "required": [
         "name",
         "trust_expressions"
+      ]
+    },
+    "SqlTimestampEncoding": {
+      "description": "A driver's requested lossless SQL timestamp transport.",
+      "oneOf": [
+        {
+          "description": "Timestamps as signed microseconds: timezone-free wall fields from\nthe epoch's wall fields, or a zoned timestamp's physical instant\nfrom the Unix epoch. The core selects the source kind from actual\nwarehouse result metadata, independent of the session or JVM zone.",
+          "type": "string",
+          "const": "microseconds"
+        }
       ]
     },
     "ProviderCapabilities": {
@@ -5214,6 +5235,12 @@
             "expect": {
               "$ref": "#/$defs/ExpectedSchema"
             },
+            "result_conversions": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/SqlResultConversion"
+              }
+            },
             "plan": {
               "type": "string",
               "const": "sql"
@@ -5364,6 +5391,53 @@
             "expect",
             "fields"
           ]
+        }
+      ]
+    },
+    "SqlResultConversion": {
+      "description": "One output column projected by the SQL data layer for lossless native\ntransfer. Positions are zero-based and names remain exactly the\nwarehouse's original output names, including duplicates.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "column": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "name": {
+              "type": "string"
+            },
+            "source_kind": {
+              "$ref": "#/$defs/SqlTimestampKind"
+            },
+            "conversion": {
+              "type": "string",
+              "const": "timestamp_micros"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "conversion",
+            "column",
+            "name",
+            "source_kind"
+          ]
+        }
+      ]
+    },
+    "SqlTimestampKind": {
+      "description": "The timestamp meaning used by the core's SQL projection, retained\nthrough key-set binding and chunk re-rendering. A host transfers the\nprojected integer unchanged for either kind.",
+      "oneOf": [
+        {
+          "description": "A timestamp's physical instant, measured from the Unix epoch.",
+          "type": "string",
+          "const": "instant"
+        },
+        {
+          "description": "A timezone-free timestamp's civil fields, measured from the\nepoch's wall fields without assigning any local timezone.",
+          "type": "string",
+          "const": "wall_time"
         }
       ]
     },

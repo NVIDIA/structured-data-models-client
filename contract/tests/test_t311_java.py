@@ -136,7 +136,7 @@ def test_t311_the_pending_list_only_shrinks() -> None:
 def _jar() -> Path:
     given = os.environ.get('SDM_JAVA_JAR', '')
     assert given, 'SDM_JAVA_JAR names no JAR'
-    return Path(given)
+    return Path(given).resolve()
 
 
 def _java_homes() -> list[Path]:

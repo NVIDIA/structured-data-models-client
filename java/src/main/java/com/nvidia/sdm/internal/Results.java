@@ -30,7 +30,11 @@ public final class Results {
   public record Validated(boolean accepted, List<Diagnostic> diagnostics, QueryFacts query) {}
 
   /** {@code describe_source}'s result: the attachment of the {@code SourceDescription}. */
-  public record Described(int description) {}
+  public record Described(int description, List<ViewNote> notes) {}
+
+  /** A view conversion's core-owned sentence, and which table or time it describes. */
+  public record ViewNote(
+      String sentence, Map<String, Object> fields, String table, String timeColumn) {}
 
   /** {@code edit_schema}'s result: the attachment of the schema edited. */
   public record Edited(int schema, Map<String, Object> declared) {}
@@ -62,7 +66,7 @@ public final class Results {
       }
       return switch (op) {
         case "validate_query" -> validated(result);
-        case "describe_source" -> new Described(count(result, "description"));
+        case "describe_source" -> described(result);
         case "edit_schema" -> new Edited(count(result, "schema"), map(result.get("declared")));
         case "materialize" -> new Gathered(state(map(result.get("state"))), facts(result.get("query")));
         case "predict" -> predicted(result);
@@ -75,6 +79,19 @@ public final class Results {
           Map.of(),
           null);
     }
+  }
+
+  private static Described described(Map<String, Object> read) {
+    List<ViewNote> notes = new ArrayList<>();
+    if (read.get("notes") != null) {
+      for (Object item : list(read.get("notes"))) {
+        Map<String, Object> note = map(item);
+        Map<String, Object> fields = note.get("fields") == null ? Map.of() : map(note.get("fields"));
+        notes.add(new ViewNote(text(note, "sentence"), Map.copyOf(fields),
+            (String) note.get("table"), (String) note.get("time_column")));
+      }
+    }
+    return new Described(count(read, "description"), List.copyOf(notes));
   }
 
   private static Validated validated(Map<String, Object> read) {

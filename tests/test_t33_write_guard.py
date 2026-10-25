@@ -48,6 +48,83 @@ GUARDS = {
     'postgres': POSTGRES,
 }
 
+
+@pytest.mark.parametrize(
+    'sql',
+    [
+        'DESCRIBE QUERY SELECT `at` FROM `other`.s.t',
+        "DESC QUERY WITH s AS (SELECT posexplode(from_json(?, 'array<int>'))) SELECT * FROM s",
+        "SELECT timestampdiff(MICROSECOND, TIMESTAMP_NTZ '1970-01-01 00:00:00', CAST(`at` AS TIMESTAMP_NTZ)) FROM `other`.s.t",
+    ],
+)
+def test_lossless_timestamp_metadata_uses_the_existing_read_guard(
+    sql: str,
+) -> None:
+    DATABRICKS.check(sql)
+
+
+def test_the_approved_utc_projection_is_a_pure_read() -> None:
+    SNOWFLAKE.check(
+        "SELECT CONVERT_TIMEZONE('UTC', ts)::TIMESTAMP_NTZ FROM other.s.t"
+    )
+
+
+@pytest.mark.parametrize(
+    'sql',
+    [
+        'SELECT UNIX_MICROS(`instant`) FROM `other`.s.t',
+        "SELECT CAST(DATEDIFF(CAST(`wall` AS DATE), DATE '1970-01-01') "
+        'AS BIGINT) * 86400000000 + CAST(HOUR(`wall`) AS BIGINT) * 3600000000 '
+        '+ CAST(MINUTE(`wall`) AS BIGINT) * 60000000 '
+        '+ CAST(EXTRACT(SECOND FROM `wall`) * 1000000 AS BIGINT) FROM `other`.s.t',
+    ],
+)
+def test_lossless_instant_and_civil_timestamp_functions_are_pure_reads(
+    sql: str,
+) -> None:
+    DATABRICKS.check(sql)
+
+
+@pytest.mark.parametrize(
+    'function', ['UNIX_MICROS', 'DATEDIFF', 'HOUR', 'MINUTE']
+)
+@pytest.mark.parametrize(
+    'template',
+    [
+        'SELECT other.s.{function}(1)',
+        'SELECT `{function}`(1)',
+        'SELECT {function}(1); DELETE FROM other.s.t',
+    ],
+)
+def test_lossless_timestamp_function_names_do_not_allow_other_calls_or_writes(
+    function: str,
+    template: str,
+) -> None:
+    with pytest.raises(wg.WriteRefused):
+        DATABRICKS.check(template.format(function=function))
+
+
+@pytest.mark.parametrize(
+    'sql',
+    [
+        'DESCRIBE QUERY DELETE FROM other.s.t',
+        'DESCRIBE QUERY CREATE TABLE other.s.t (id INT)',
+        'DESCRIBE QUERY SELECT 1; DELETE FROM other.s.t',
+        "DESCRIBE QUERY SELECT secret('scope', 'key')",
+        'DESCRIBE QUERY SELECT other.s.timestampdiff(1)',
+        'DESCRIBE QUERY SELECT `timestampdiff`(1)',
+        'DESCRIBE QUERY WITH t AS (DELETE FROM other.s.t) SELECT * FROM t',
+        'DESCRIBE QUERY DESCRIBE QUERY SELECT 1',
+        'DESCRIBE QUERY',
+    ],
+)
+def test_describe_query_cannot_hide_secondary_writes_or_unknown_calls(
+    sql: str,
+) -> None:
+    with pytest.raises(wg.WriteRefused):
+        DATABRICKS.check(sql)
+
+
 ALLOWED = {
     'snowflake': [
         'SELECT * FROM "OTHER_DB"."PUBLIC"."T"',

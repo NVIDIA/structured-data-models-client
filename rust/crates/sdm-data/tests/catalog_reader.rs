@@ -27,6 +27,7 @@ use sdm_data::Data;
 
 fn duckdb() -> ProviderChoice {
     ProviderChoice::Sql {
+        timestamp_encoding: None,
         dialect: Dialect::new("duckdb"),
         namespace: Vec::new(),
         view: None,
@@ -412,6 +413,7 @@ fn an_answer_not_in_its_checked_shape_is_refused_not_a_panic() {
         .read(
             &columns,
             &ProviderChoice::Sql {
+                timestamp_encoding: None,
                 dialect: Dialect::new("nope"),
                 namespace: Vec::new(),
                 view: None,

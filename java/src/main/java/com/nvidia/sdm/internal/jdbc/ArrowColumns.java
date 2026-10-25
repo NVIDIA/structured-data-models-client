@@ -18,6 +18,7 @@ import org.apache.arrow.vector.DateDayVector;
 import org.apache.arrow.vector.Decimal256Vector;
 import org.apache.arrow.vector.DecimalVector;
 import org.apache.arrow.vector.FieldVector;
+import org.apache.arrow.vector.Float4Vector;
 import org.apache.arrow.vector.Float8Vector;
 import org.apache.arrow.vector.IntVector;
 import org.apache.arrow.vector.IntervalMonthDayNanoVector;
@@ -26,6 +27,7 @@ import org.apache.arrow.vector.SmallIntVector;
 import org.apache.arrow.vector.TimeMicroVector;
 import org.apache.arrow.vector.TimeStampMicroTZVector;
 import org.apache.arrow.vector.TimeStampMicroVector;
+import org.apache.arrow.vector.TinyIntVector;
 import org.apache.arrow.vector.VarBinaryVector;
 import org.apache.arrow.vector.VarCharVector;
 import org.apache.arrow.vector.VectorSchemaRoot;
@@ -48,11 +50,14 @@ public final class ArrowColumns {
   private ArrowColumns() {}
 
   /** The Arrow types the host builds, by their Arrow name. */
+  public static final ArrowType INT8 = new ArrowType.Int(8, true);
+
   public static final ArrowType INT16 = new ArrowType.Int(16, true);
 
   public static final ArrowType INT32 = new ArrowType.Int(32, true);
   public static final ArrowType INT64 = new ArrowType.Int(64, true);
   public static final ArrowType BOOL = ArrowType.Bool.INSTANCE;
+  public static final ArrowType FLOAT32 = new ArrowType.FloatingPoint(FloatingPointPrecision.SINGLE);
   public static final ArrowType FLOAT64 = new ArrowType.FloatingPoint(FloatingPointPrecision.DOUBLE);
   public static final ArrowType UTF8 = ArrowType.Utf8.INSTANCE;
   public static final ArrowType BINARY = ArrowType.Binary.INSTANCE;
@@ -130,6 +135,10 @@ public final class ArrowColumns {
       v.setSafe(at, ((Number) value).intValue());
     } else if (vector instanceof SmallIntVector v) {
       v.setSafe(at, ((Number) value).shortValue());
+    } else if (vector instanceof TinyIntVector v) {
+      v.setSafe(at, ((Number) value).byteValue());
+    } else if (vector instanceof Float4Vector v) {
+      v.setSafe(at, ((Number) value).floatValue());
     } else if (vector instanceof BitVector v) {
       v.setSafe(at, Boolean.TRUE.equals(value) ? 1 : 0);
     } else if (vector instanceof Float8Vector v) {

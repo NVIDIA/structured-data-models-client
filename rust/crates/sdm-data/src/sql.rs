@@ -27,8 +27,8 @@ use sdm_contract::catalog::CatalogAnswer;
 use sdm_contract::data::{
     BATCH_COLUMN, DataRequest, DescribePart, Dialect, ExpectedSchema, FailureFacts, FetchPlan,
     Filter, KeySet, OptionalRequest, ProviderCapabilities, ProviderError, Relation, SEED_BATCH,
-    SqlParam, SqlStatement, TableColumn, TableKey, TieBreak, TieTerm, Window, refuse_derived,
-    refuse_relation, refused, seed_key_columns,
+    SqlParam, SqlResultConversion, SqlStatement, SqlTimestampKind, TableColumn, TableKey, TieBreak,
+    TieTerm, Window, refuse_derived, refuse_relation, refused, seed_key_columns,
 };
 use sdm_contract::ops::Dtype;
 use sdm_contract::{CoreError, Detail, Scalar, Sentence};
@@ -88,6 +88,12 @@ pub(crate) trait SqlDialect: Sync {
 
     /// The dialect's name on the wire.
     fn name(&self) -> &'static str;
+
+    /// A lossless integer encoding of the timestamp meaning selected
+    /// from warehouse metadata; only supporting dialects supply one.
+    fn timestamp_micros(&self, _value: &str, _kind: SqlTimestampKind) -> Option<String> {
+        None
+    }
 
     /// What a source of this dialect answers through this layer.
     fn capabilities(&self) -> ProviderCapabilities;
@@ -566,6 +572,7 @@ pub(crate) struct SeedRead<'a> {
     /// batch of its key set's first seed, which a dialect numbering seeds
     /// by their position in the key set's JSON counts from.
     pub offset: usize,
+    pub result_conversions: &'a [SqlResultConversion],
 }
 
 impl SeedRead<'_> {
@@ -587,7 +594,15 @@ impl SeedRead<'_> {
     pub fn projected(&self) -> String {
         self.columns
             .iter()
-            .map(|c| format!("t.{}", self.dialect.identifier(c)))
+            .enumerate()
+            .map(|(at, c)| {
+                transferred(
+                    self.dialect,
+                    &format!("t.{}", self.dialect.identifier(c)),
+                    at + 1,
+                    self.result_conversions,
+                )
+            })
             .collect::<Vec<_>>()
             .join(", ")
     }
@@ -663,7 +678,29 @@ pub(crate) fn plan(
     namespace: &[String],
     offset: usize,
 ) -> Result<FetchPlan, CoreError> {
+    plan_projected(dialect, request, namespace, offset, &[])
+}
+
+/// The same builder with explicit output-position conversions, selected
+/// from the warehouse's result metadata rather than inferred by a host.
+pub(crate) fn plan_projected(
+    dialect: &dyn SqlDialect,
+    request: &DataRequest,
+    namespace: &[String],
+    offset: usize,
+    conversions: &[SqlResultConversion],
+) -> Result<FetchPlan, CoreError> {
     let d = dialect;
+    if !conversions.is_empty()
+        && d.timestamp_micros("value", SqlTimestampKind::WallTime)
+            .is_none()
+    {
+        return Err(refused(
+            request,
+            "timestamp_encoding",
+            "the dialect does not support this result encoding",
+        ));
+    }
     let mut before = Vec::new();
     let mut params = Vec::new();
     let text = match request {
@@ -699,7 +736,7 @@ pub(crate) fn plan(
             }
             format!(
                 "SELECT {} FROM {table}{} LIMIT {limit}",
-                identifiers(d, columns),
+                transferred_columns(d, columns, conversions),
                 d.preview_order()
             )
         }
@@ -715,9 +752,13 @@ pub(crate) fn plan(
                 ));
             }
             let mut selects = vec!["COUNT(*)".to_owned()];
-            for column in columns {
+            for (at, column) in columns.iter().enumerate() {
                 let quoted = d.identifier(column);
-                selects.push(format!("MIN({quoted}), MAX({quoted}), COUNT({quoted})"));
+                selects.push(format!(
+                    "{}, {}, COUNT({quoted})",
+                    transferred(d, &format!("MIN({quoted})"), 1 + 3 * at, conversions),
+                    transferred(d, &format!("MAX({quoted})"), 2 + 3 * at, conversions)
+                ));
             }
             format!("SELECT {}\nFROM {table}", selects.join(", "))
         }
@@ -726,10 +767,11 @@ pub(crate) fn plan(
             if key.is_empty() {
                 return Err(refused(request, "key", "a repeated key names no columns"));
             }
-            let quoted = identifiers(d, key);
+            let quoted = transferred_columns(d, key, conversions);
+            let grouped = identifiers(d, key);
             let present = present(&key.iter().map(|c| d.identifier(c)).collect::<Vec<_>>());
             format!(
-                "SELECT {quoted}\nFROM {table}\nWHERE {present}\nGROUP BY {quoted}\nHAVING COUNT(*) > 1\nLIMIT 1"
+                "SELECT {quoted}\nFROM {table}\nWHERE {present}\nGROUP BY {grouped}\nHAVING COUNT(*) > 1\nLIMIT 1"
             )
         }
         DataRequest::SampleEntities {
@@ -760,7 +802,7 @@ pub(crate) fn plan(
                 key,
                 n: *n,
                 seed,
-                projected: identifiers(d, columns),
+                projected: transferred_columns(d, columns, conversions),
                 filtered: conditions(d, request, filters, "\n")?,
                 key_dtype: *key_dtype,
                 rows: *rows,
@@ -787,6 +829,7 @@ pub(crate) fn plan(
                 seeds,
                 window.as_ref(),
                 offset,
+                conversions,
             )?;
             let prelude = d.seeds_prelude(&read)?;
             params.push(key_set(&read));
@@ -804,7 +847,17 @@ pub(crate) fn plan(
             columns,
             seeds,
         } => {
-            let read = seed_read(d, request, table, key, columns, seeds, None, offset)?;
+            let read = seed_read(
+                d,
+                request,
+                table,
+                key,
+                columns,
+                seeds,
+                None,
+                offset,
+                conversions,
+            )?;
             let prelude = d.seeds_prelude(&read)?;
             params.push(key_set(&read));
             no_columns(request, columns)?;
@@ -822,7 +875,7 @@ pub(crate) fn plan(
             }
             let mut text = format!(
                 "SELECT {} FROM {table}{}",
-                identifiers(d, columns),
+                transferred_columns(d, columns, conversions),
                 conditions(d, request, filters, " ")?
             );
             if let Some(limit) = limit {
@@ -835,6 +888,20 @@ pub(crate) fn plan(
             &conditions(d, request, filters, " ")?,
         ),
     };
+    // Bounds are a UNION of aggregate rows. Convert its already-coerced
+    // output, preserving the warehouse's own common type across branches.
+    // Their table_index labels, not row order, identify each bound.
+    let text = if matches!(request, DataRequest::TimeBounds { .. }) && !conversions.is_empty() {
+        let columns = ["table_index", "min_date", "max_date"]
+            .iter()
+            .enumerate()
+            .map(|(at, name)| transferred(d, &d.identifier(name), at, conversions))
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!("SELECT {columns} FROM ({text}) AS __sdm_result")
+    } else {
+        text
+    };
     let statement = |text: String, params: Vec<SqlParam>| SqlStatement {
         dialect: Dialect::new(d.name()),
         text,
@@ -846,9 +913,46 @@ pub(crate) fn plan(
         .collect();
     statements.push(statement(text, params));
     Ok(FetchPlan::Sql {
+        result_conversions: conversions.to_vec(),
         statements,
         expect: d.expected(request),
     })
+}
+
+fn transferred(
+    d: &dyn SqlDialect,
+    value: &str,
+    at: usize,
+    conversions: &[SqlResultConversion],
+) -> String {
+    for conversion in conversions {
+        match conversion {
+            SqlResultConversion::TimestampMicros {
+                column,
+                name,
+                source_kind,
+            } if usize::try_from(*column) == Ok(at) => {
+                if let Some(value) = d.timestamp_micros(value, *source_kind) {
+                    return format!("{value} AS {}", d.identifier(name));
+                }
+            }
+            _ => {}
+        }
+    }
+    value.to_owned()
+}
+
+fn transferred_columns(
+    d: &dyn SqlDialect,
+    columns: &[String],
+    conversions: &[SqlResultConversion],
+) -> String {
+    columns
+        .iter()
+        .enumerate()
+        .map(|(at, name)| transferred(d, &d.identifier(name), at, conversions))
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 /// `names` as identifiers, joined by commas.
@@ -957,6 +1061,7 @@ fn seed_read<'a>(
     seeds: &'a KeySet,
     window: Option<&'a Window>,
     offset: usize,
+    result_conversions: &'a [SqlResultConversion],
 ) -> Result<SeedRead<'a>, CoreError> {
     let seeds_name = d.seeds_for(request, table);
     Ok(SeedRead {
@@ -969,6 +1074,7 @@ fn seed_read<'a>(
         seeds,
         window,
         offset,
+        result_conversions,
     })
 }
 

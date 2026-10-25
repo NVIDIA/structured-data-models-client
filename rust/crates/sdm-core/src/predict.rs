@@ -21,13 +21,18 @@
 //!
 //! An answer with a status other than 2xx is the endpoint's refusal, which
 //! the host's transport reports as the reference's does; a host that hands
-//! one over gets `INVALID_RESPONSE` naming the status. A transport that
+//! one over gets `INVALID_RESPONSE` naming the status. A Databricks Model
+//! Serving endpoint the host names (`Predict::model_endpoint`, T3.13) is
+//! the core's to speak to: each call is wrapped in its envelope and weighed
+//! against the caller's limit when it is sent, and its every answer, its
+//! failures included, is read as the old client's serving transport reads
+//! it ([`sdm_request::serving`]). A transport that
 //! failed before an answer is `TRANSPORT_ERROR` with the kind and
 //! retryability the host gave. No error carries a value of the request or
 //! the answer (decision H17).
 
 use sdm_contract::error::AnsweredParts;
-use sdm_contract::ops::{OperationResult, Predicted};
+use sdm_contract::ops::{ModelEndpoint, OperationResult, Predicted};
 use sdm_contract::run::Endpoint;
 use sdm_contract::{CoreError, CoreWarning, Detail, Scalar, Sentence};
 use sdm_request::predict::{
@@ -35,6 +40,7 @@ use sdm_request::predict::{
     empty, layout, left_out, merge, nothing_to_score, numbered_from, predict_rows, preflight,
     prepare, refused, steps_unexplained, table,
 };
+use sdm_request::serving::{self, Failure};
 use sdm_wire::json::{self, Value};
 use sdm_wire::response::PredictionResponse;
 
@@ -92,6 +98,10 @@ pub(crate) struct Inputs {
     /// scoring the rows after the last (`RequestState::batches`); `None`
     /// for a request of one call.
     pub batches: Option<Vec<LaterCall>>,
+    /// The serving endpoint the host's transport calls, whose envelope the
+    /// core writes and whose answers it reads (T3.13); `None` for the
+    /// client's own endpoint.
+    pub endpoint: Option<ModelEndpoint>,
 }
 
 /// The JSON a request state's payload holds, or a refusal naming where in
@@ -361,7 +371,7 @@ pub(crate) async fn one(
         let starts = call_starts(&payloads)?;
         let mut parts = Vec::with_capacity(payloads.len());
         for ((payload, bytes), start) in payloads.iter().zip(bodies).zip(starts) {
-            let answered = match call(asker, payload, bytes).await {
+            let answered = match call(asker, payload, bytes, inputs.endpoint.as_ref()).await {
                 Ok(part) => numbered_from(part, start),
                 Err(error) => Err(error),
             };
@@ -381,44 +391,95 @@ pub(crate) async fn one(
     Ok((merged, outputs, scored))
 }
 
-/// One payload's call, its body as written, sent and its answer laid out.
-async fn call(asker: &Asker, payload: &Value, bytes: Vec<u8>) -> Result<Part, CoreError> {
+/// One payload's call, its body as written, sent and its answer laid out;
+/// to a serving endpoint, in its envelope, its answer read out of its row.
+async fn call(
+    asker: &Asker,
+    payload: &Value,
+    bytes: Vec<u8>,
+    endpoint: Option<&ModelEndpoint>,
+) -> Result<Part, CoreError> {
+    let serving = endpoint.map(
+        |ModelEndpoint::ServingEndpoint {
+             name,
+             max_request_bytes,
+         }| { (name.as_str(), *max_request_bytes) },
+    );
+    let sent = match serving {
+        Some((name, limit)) => serving::envelope(name, limit, &bytes)?,
+        None => bytes,
+    };
     let reply = asker
-        .call_model(Endpoint::Predict, "application/json".to_owned(), bytes)
+        .call_model(Endpoint::Predict, "application/json".to_owned(), sent)
         .await;
-    let answer = match reply {
-        Reply::Model(ModelResult::Response { status, body, .. }) => {
+    let answer = match (reply, serving) {
+        (Reply::Model(ModelResult::Response { status, body, .. }), Some((name, _))) => {
+            if (200..300).contains(&status) {
+                serving::answer(name, &body)?
+            } else {
+                // The HTTP failure's body, as a host without the SDK has it.
+                return Err(serving::failure(
+                    name,
+                    &Failure {
+                        status,
+                        detail: Some(&body),
+                        provider_code: None,
+                        provider_error: None,
+                    },
+                ));
+            }
+        }
+        (
+            Reply::Model(ModelResult::Failed {
+                status,
+                detail,
+                provider_code,
+                provider_error,
+            }),
+            Some((name, _)),
+        ) => {
+            return Err(serving::failure(
+                name,
+                &Failure {
+                    status,
+                    detail: detail.as_deref(),
+                    provider_code: provider_code.as_deref(),
+                    provider_error: provider_error.as_deref(),
+                },
+            ));
+        }
+        (Reply::Model(ModelResult::Response { status, body, .. }), None) => {
             if !(200..300).contains(&status) {
                 return Err(bad_response("status", "not_a_success")
                     .with_field("status", Detail::Scalar(Scalar::UInt16(status))));
             }
-            body
+            // The answer is read whatever content type it names, as the
+            // client's transport decodes every answer's body as JSON, a
+            // `NaN` or `Infinity` token taken as the number Python's
+            // reader takes it for, and a token past a double's range as an
+            // infinity (owner decision of 2026-10-12, register P1B-4).
+            // Text nested past the reader's depth is refused before
+            // anything of it is built (`sdm_wire::json::MAX_DEPTH`,
+            // approved by the owner, register P1B-22).
+            json::read_answer(&body).map_err(|e| {
+                let reason = match e.category {
+                    "depth" => "too_deep",
+                    _ => "not_json",
+                };
+                bad_response("response", reason).with_field("category", Detail::text(e.category))
+            })?
         }
-        // A failure with no body is refused as one with a body is, by its
-        // status; reading its codes is a serving endpoint's (T3.13).
-        Reply::Model(ModelResult::Failed { status, .. }) => {
+        // A failure with no body, from the client's own endpoint, is
+        // refused as one with a body is, by its status.
+        (Reply::Model(ModelResult::Failed { status, .. }), None) => {
             return Err(bad_response("status", "not_a_success")
                 .with_field("status", Detail::Scalar(Scalar::UInt16(status))));
         }
-        Reply::Model(ModelResult::TransportError { kind, retryable }) => {
+        (Reply::Model(ModelResult::TransportError { kind, retryable }), _) => {
             return Err(CoreError::transport(kind, retryable));
         }
-        Reply::Fetch(_) => return Err(internal("a model call was answered as a fetch")),
+        (Reply::Fetch(_), _) => return Err(internal("a model call was answered as a fetch")),
     };
-    // The answer is read whatever content type it names, as the client's
-    // transport decodes every answer's body as JSON, a `NaN` or `Infinity`
-    // token taken as the number Python's reader takes it for, and a token
-    // past a double's range as an infinity (owner decision of 2026-10-12,
-    // register P1B-4). Text nested past the reader's depth is refused
-    // before anything of it is built (`sdm_wire::json::MAX_DEPTH`, approved
-    // by the owner, register P1B-22).
-    let read = json::read_answer(&answer).map_err(|e| {
-        let reason = match e.category {
-            "depth" => "too_deep",
-            _ => "not_json",
-        };
-        bad_response("response", reason).with_field("category", Detail::text(e.category))
-    })?;
-    let response = PredictionResponse::read(&read).map_err(refused)?;
+    let response = PredictionResponse::read(&answer).map_err(refused)?;
     layout(payload, &response, crate::pql::float_text)
 }

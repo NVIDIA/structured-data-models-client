@@ -59,6 +59,7 @@ fn relation(parts: &[&str]) -> Relation {
 
 fn plan(request: &DataRequest) -> Result<FetchPlan, sdm_contract::CoreError> {
     let duckdb = ProviderChoice::Sql {
+        timestamp_encoding: None,
         dialect: Dialect::new("duckdb"),
         namespace: Vec::new(),
         view: None,

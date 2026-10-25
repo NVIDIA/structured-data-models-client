@@ -113,6 +113,7 @@ USING SAMPLE reservoir(10000 ROWS) REPEATABLE (42)"#,
 #[test]
 fn each_request_of_the_decimal_family_renders_its_pinned_statement() {
     let duckdb = ProviderChoice::Sql {
+        timestamp_encoding: None,
         dialect: Dialect::new("duckdb"),
         namespace: Vec::new(),
         view: None,

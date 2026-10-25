@@ -38,6 +38,7 @@
     <arrow.version>19.0.0</arrow.version>
     <slf4j.version>2.0.17</slf4j.version>
     <junit.version>5.13.4</junit.version>
+    <databricks.sdk.version>0.170.0</databricks.sdk.version>
     <!-- The JDBC drivers the providers are tested with (T3.12): DuckDB at
          the reference's version (1.5.6), SQLite's and Postgres's current
          releases. None ships with the JAR: a source is built from the
@@ -45,6 +46,7 @@
     <duckdb.version>1.5.6.0</duckdb.version>
     <sqlite.version>3.53.4.0</sqlite.version>
     <postgresql.version>42.7.14</postgresql.version>
+    <databricks.jdbc.version>3.4.2</databricks.jdbc.version>
     <!-- Where the natives are copied before packaging: one directory per
          platform. -->
     <sdm.natives>${project.build.directory}/natives</sdm.natives>
@@ -56,6 +58,12 @@
   </properties>
 
   <dependencies>
+    <!-- Official unified authentication, including refreshed OAuth credentials. -->
+    <dependency>
+      <groupId>com.databricks</groupId>
+      <artifactId>databricks-sdk-java</artifactId>
+      <version>${databricks.sdk.version}</version>
+    </dependency>
     <dependency>
       <groupId>org.apache.arrow</groupId>
       <artifactId>arrow-c-data</artifactId>
@@ -109,6 +117,16 @@
       <groupId>org.postgresql</groupId>
       <artifactId>postgresql</artifactId>
       <version>${postgresql.version}</version>
+      <scope>provided</scope>
+    </dependency>
+
+    <!-- Databricks's public native array parser handles default text results.
+         This version pins that api.impl coupling; the caller supplies the driver,
+         as for DuckDB and Postgres. Never shipped in the client JAR. -->
+    <dependency>
+      <groupId>com.databricks</groupId>
+      <artifactId>databricks-jdbc</artifactId>
+      <version>${databricks.jdbc.version}</version>
       <scope>provided</scope>
     </dependency>
 
@@ -177,6 +195,9 @@
         <version>3.4.2</version>
         <configuration>
           <archive>
+            <manifest>
+              <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
+            </manifest>
             <manifestEntries>
               <Automatic-Module-Name>com.nvidia.sdm</Automatic-Module-Name>
             </manifestEntries>
@@ -212,7 +233,7 @@
             </goals>
             <configuration>
               <includeScope>test</includeScope>
-              <includeArtifactIds>duckdb_jdbc,sqlite-jdbc,postgresql</includeArtifactIds>
+              <includeArtifactIds>duckdb_jdbc,sqlite-jdbc,postgresql,databricks-jdbc</includeArtifactIds>
               <outputDirectory>${project.build.directory}/jdbc</outputDirectory>
             </configuration>
           </execution>

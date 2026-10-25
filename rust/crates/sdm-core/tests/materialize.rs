@@ -519,6 +519,7 @@ fn at_the_sample(
 
 fn duckdb() -> ProviderChoice {
     ProviderChoice::Sql {
+        timestamp_encoding: None,
         dialect: Dialect::new("duckdb"),
         namespace: Vec::new(),
         view: None,

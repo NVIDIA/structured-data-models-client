@@ -635,6 +635,7 @@ impl Source<'_> {
         match self {
             Source::Duck(_) => given,
             Source::Sqlite(_) => ProviderChoice::Sql {
+                timestamp_encoding: None,
                 dialect: Dialect::new(Database::Sqlite.name()),
                 namespace: Vec::new(),
                 view: None,
@@ -644,6 +645,7 @@ impl Source<'_> {
                 ..
             } => given,
             Source::Replay { .. } => ProviderChoice::Sql {
+                timestamp_encoding: None,
                 dialect: Dialect::new(Database::Postgres.name()),
                 namespace: Vec::new(),
                 view: None,

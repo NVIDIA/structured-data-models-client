@@ -57,7 +57,8 @@ def test_t312_an_s1_case_on_java_s_paths_has_a_leg_on_each_of_its_databases() ->
     case = _case('base.binary')
     for database in ('duckdb', 'sqlite', 'postgres'):
         assert run_java.on_java(case, database), database
-    assert not run_java.on_java(case, 'databricks-sql')
+    # T3.13 extends this same warehouse-capable case to Java's SQL leg.
+    assert run_java.on_java(case, 'databricks-sql')
 
 
 def test_t312_a_ranking_or_a_forecast_has_no_java_leg() -> None:

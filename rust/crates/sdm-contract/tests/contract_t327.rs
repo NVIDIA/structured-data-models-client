@@ -118,6 +118,7 @@ fn a_text_parameter_names_its_attachment_and_the_step_lists_it() {
     );
     assert_eq!(written(&param), json!({"param": "text", "attachment": 7}));
     let plan = FetchPlan::Sql {
+        result_conversions: Vec::new(),
         statements: vec![SqlStatement {
             dialect: sdm_contract::data::Dialect::new("postgres"),
             text: "SELECT 1".into(),
@@ -306,6 +307,7 @@ fn keys(values: &[i64]) -> KeyData {
 
 fn keyed_plan(attachments: &[u32]) -> FetchPlan {
     FetchPlan::Sql {
+        result_conversions: Vec::new(),
         statements: vec![SqlStatement {
             dialect: sdm_contract::data::Dialect::new("postgres"),
             text: "SELECT 1".into(),

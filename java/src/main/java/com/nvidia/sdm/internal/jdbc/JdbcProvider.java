@@ -17,6 +17,8 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.arrow.vector.ipc.ArrowReader;
@@ -34,23 +36,30 @@ import org.apache.arrow.vector.types.pojo.Schema;
  *   <li>how a key set the plan names is bound ({@link KeySets}): DuckDB registers it as Arrow and
  *       keeps it as a temporary table, SQLite ingests it as a temporary table as ADBC does,
  *       Postgres binds the JSON text the core wrote of it (T3.28), handed over as one text cell,
- *       as the statement's one parameter, as it was handed;
+ *       as the statement's one parameter, as it was handed; Databricks binds each statement's
+ *       values to its {@code ?} markers in order, a text scalar and a key set's text alike, as
+ *       Python's Databricks provider binds them (T3.13);
  *   <li>how a result becomes Arrow: the driver's column of the conversion table ({@link
  *       ConversionTable}).
  * </ul>
  *
  * A plan this provider cannot run (one for a host provider, one of another dialect, one with a
- * scalar parameter, one naming a key set it was not handed, two key sets under one name, a key
- * set's Arrow on Postgres or a text elsewhere) is
- * refused by an exception whose text names no value, and the run loop hands the core a provider
- * error. Not part of the API.
+ * scalar parameter (on Databricks, one no driver value here holds), one naming a key set it was
+ * not handed, two key sets under one name, a key set's Arrow on Postgres or Databricks, or a text
+ * on DuckDB or SQLite) is refused by an exception whose text names no value, and the run loop
+ * hands the core a provider error.
+ *
+ * <p>A failure is told to the core by the facts it carries ({@link #failure}): the driver's
+ * SQLSTATE and vendor code, and on Databricks its error class, read as Python's Databricks
+ * provider reads them ({@code error_fields}). Not part of the API.
  */
 public final class JdbcProvider implements Host.Provider {
   /** The databases this provider reads, by the dialect the core names each by. */
   public enum Driver {
     DUCKDB("duckdb"),
     SQLITE("sqlite"),
-    POSTGRES("postgres");
+    POSTGRES("postgres"),
+    DATABRICKS("databricks");
 
     private final String dialect;
 
@@ -116,6 +125,14 @@ public final class JdbcProvider implements Host.Provider {
     if (statements == null || statements.isEmpty()) {
       throw new PlanNotRun("a plan with no statement or another dialect");
     }
+    if (driver == Driver.DATABRICKS) {
+      List<Map<String, Object>> conversions =
+          (List<Map<String, Object>>) plan.getOrDefault("result_conversions", List.of());
+      return databricks(databricksPlanned(statements, keys), texts(keys), conversions, allocator);
+    }
+    if (!((List<?>) plan.getOrDefault("result_conversions", List.of())).isEmpty()) {
+      throw new PlanNotRun("this driver does not implement result conversions");
+    }
     List<Planned> planned = new ArrayList<>();
     Map<String, Integer> relations = new LinkedHashMap<>();
     for (Object item : statements) {
@@ -167,6 +184,7 @@ public final class JdbcProvider implements Host.Provider {
       case DUCKDB -> duckdb(planned, relations, read(keys), allocator);
       case SQLITE -> sqlite(planned, relations, read(keys), allocator);
       case POSTGRES -> postgres(planned, texts(keys), allocator);
+      case DATABRICKS -> throw new PlanNotRun("a Databricks plan is read above");
     };
   }
 
@@ -450,6 +468,203 @@ public final class JdbcProvider implements Host.Provider {
       return intervalStyle;
     }
 
+  }
+
+  // --- Databricks -----------------------------------------------------------------------
+
+  /** A key set's text a Databricks statement binds, by the attachment it was handed as. */
+  record KeyText(int attachment) {}
+
+  /**
+   * A Databricks plan's statements, each its text and its values in the order of its {@code ?}
+   * markers: a scalar as the driver binds it ({@link #bindable}), a key set's text by its
+   * attachment ({@link KeyText}).
+   */
+  @SuppressWarnings("unchecked")
+  private static List<DatabricksStatement> databricksPlanned(
+      List<Object> statements, Map<Integer, ArrowReader> keys) throws PlanNotRun {
+    List<DatabricksStatement> planned = new ArrayList<>();
+    for (Object item : statements) {
+      Map<String, Object> statement = (Map<String, Object>) item;
+      if (!Driver.DATABRICKS.dialect().equals(statement.get("dialect"))) {
+        throw new PlanNotRun("a plan with no statement or another dialect");
+      }
+      List<Object> values = new ArrayList<>();
+      for (Object p : (List<Object>) statement.get("params")) {
+        Map<String, Object> param = (Map<String, Object>) p;
+        Object kind = param.get("param");
+        if ("value".equals(kind)) {
+          values.add(bindable(param.get("value")));
+        } else if ("text".equals(kind)) {
+          int attachment = ((Number) param.get("attachment")).intValue();
+          if (!keys.containsKey(attachment)) {
+            throw new PlanNotRun("a plan naming a key set not handed over");
+          }
+          values.add(new KeyText(attachment));
+        } else if ("key_set".equals(kind)) {
+          throw new PlanNotRun("a key set Databricks binds only as the text the core wrote of it");
+        } else {
+          throw new PlanNotRun("a parameter of an unknown kind");
+        }
+      }
+      planned.add(new DatabricksStatement(String.valueOf(statement.get("text")), values));
+    }
+    return planned;
+  }
+
+  /** One Databricks statement: its text, and its values in order. */
+  private record DatabricksStatement(String text, List<Object> values) {}
+
+  /**
+   * A contract scalar as the value the driver binds: text, a boolean, a whole number or a double;
+   * any other is not run (the core binds only text on Databricks).
+   */
+  private static Object bindable(Object scalar) throws PlanNotRun {
+    if (!(scalar instanceof Map<?, ?> tagged) || !(tagged.get("t") instanceof String tag)) {
+      throw new PlanNotRun("a parameter the contract does not hold");
+    }
+    Object v = tagged.get("v");
+    try {
+      return switch (tag) {
+        case "utf8" -> (String) v;
+        case "bool" -> (Boolean) v;
+        case "i8", "i16", "i32", "i64", "u8", "u16", "u32" -> Long.valueOf((String) v);
+        case "f32", "f64" -> Double.valueOf((String) v);
+        default -> throw new PlanNotRun("a parameter of a type not bound here");
+      };
+    } catch (ClassCastException | NumberFormatException e) {
+      throw new PlanNotRun("a parameter the contract does not hold");
+    }
+  }
+
+  /**
+   * The statements run in order on the connection, as Python's provider runs them on one cursor:
+   * one binding no value run as its text alone, with no escape processing, so its text reaches
+   * the warehouse as the core wrote it; one binding values prepared with them, each to its
+   * {@code ?} marker in order. The last one's rows are read by the Databricks column of the
+   * conversion table.
+   */
+  private ArrowReader databricks(
+      List<DatabricksStatement> planned, Map<Integer, String> keys,
+      List<Map<String, Object>> conversions, BufferAllocator allocator)
+      throws Exception {
+    Trace trace = Trace.installed();
+    if (trace != null) {
+      trace.cursor(0);
+    }
+    ArrowReader answer = null;
+    for (int at = 0; at < planned.size(); at++) {
+      DatabricksStatement statement = planned.get(at);
+      boolean last = at == planned.size() - 1;
+      if (trace != null) {
+        trace.statement(0, statement.text());
+      }
+      try (Statement prepared = databricksStatement(statement, keys)) {
+        if (!last) {
+          execute(prepared, statement.text());
+          continue;
+        }
+        try (ResultSet rows = executeQuery(prepared, statement.text())) {
+          List<Map<String, Object>> types = types(rows, trace);
+          answer = answered(built(ConversionTable.databricks(rows, conversions), allocator), types, allocator, trace);
+        }
+      } catch (SQLException e) {
+        if (trace != null) {
+          trace.statementFailed(e.getClass().getName());
+        }
+        throw e;
+      }
+    }
+    return answer;
+  }
+
+  private Statement databricksStatement(DatabricksStatement statement, Map<Integer, String> keys)
+      throws SQLException {
+    if (statement.values().isEmpty()) {
+      Statement plain = connection.createStatement();
+      try {
+        plain.setEscapeProcessing(false);
+      } catch (SQLException e) {
+        plain.close();
+        throw e;
+      }
+      return plain;
+    }
+    PreparedStatement prepared = connection.prepareStatement(statement.text());
+    try {
+      int at = 1;
+      for (Object value : statement.values()) {
+        if (value instanceof KeyText text) {
+          prepared.setString(at, keys.get(text.attachment()));
+        } else if (value instanceof String text) {
+          prepared.setString(at, text);
+        } else if (value instanceof Boolean truth) {
+          prepared.setBoolean(at, truth);
+        } else if (value instanceof Long whole) {
+          prepared.setLong(at, whole);
+        } else {
+          prepared.setDouble(at, (Double) value);
+        }
+        at++;
+      }
+    } catch (SQLException | RuntimeException e) {
+      prepared.close();
+      throw e;
+    }
+    return prepared;
+  }
+
+  // --- a failure's facts ---------------------------------------------------------------
+
+  /** The SQLSTATE a Databricks message writes last, before the statement it appends. */
+  private static final Pattern SQL_STATE = Pattern.compile("SQLSTATE:\\s*([0-9A-Z]{5})");
+
+  /** Where a Databricks message appends the statement, which may quote anything. */
+  private static final Pattern SQL_CONTEXT = Pattern.compile("\\n\\s*== SQL\\b");
+
+  /** A Databricks error class, such as {@code UNRESOLVED_COLUMN.WITH_SUGGESTION}, in brackets. */
+  private static final Pattern ERROR_CLASS =
+      Pattern.compile("\\[([A-Z0-9_]+(?:\\.[A-Z0-9_]+)*)\\]");
+
+  /**
+   * What {@code failure} tells the core ({@code ProviderError}'s facts), each where it says one:
+   * a driver's {@link SQLException}'s SQLSTATE ({@code sqlstate}) and vendor code ({@code
+   * vendor_code}); on Databricks, the SQLSTATE its message writes where the driver gives none, and
+   * the error class its message names ({@code error_class}), as Python's provider reads them
+   * ({@code sql_state}, {@code error_class}), from the message before the statement Databricks
+   * appends. The original message passes unread as internal {@code driver_message}; the core
+   * sanitizes its public errors. Any other exception tells nothing.
+   */
+  public Map<String, Object> failure(Exception failure) {
+    Map<String, Object> facts = new LinkedHashMap<>();
+    if (!(failure instanceof SQLException sql)) {
+      return facts;
+    }
+    if (sql.getMessage() != null) {
+      facts.put("driver_message", sql.getMessage());
+    }
+    String head =
+        sql.getMessage() == null ? "" : SQL_CONTEXT.split(sql.getMessage(), 2)[0];
+    String state = sql.getSQLState();
+    if ((state == null || state.isBlank()) && driver == Driver.DATABRICKS) {
+      Matcher found = SQL_STATE.matcher(head);
+      while (found.find()) {
+        state = found.group(1);
+      }
+    }
+    if (state != null && !state.isBlank()) {
+      facts.put("sqlstate", state);
+    }
+    if (sql.getErrorCode() != 0) {
+      facts.put("vendor_code", Integer.toString(sql.getErrorCode()));
+    }
+    if (driver == Driver.DATABRICKS) {
+      Matcher named = ERROR_CLASS.matcher(head);
+      if (named.find()) {
+        facts.put("error_class", named.group(1));
+      }
+    }
+    return facts;
   }
 
   // --- shared ---------------------------------------------------------------------------

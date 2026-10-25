@@ -16,6 +16,7 @@ fn sharing_a_catalog_reply_requires_the_same_complete_concrete_read() {
         params: vec![],
     };
     let plan = FetchPlan::Sql {
+        result_conversions: Vec::new(),
         statements: vec![statement.clone()],
         expect: ExpectedSchema::Discover {},
     };
@@ -35,6 +36,7 @@ fn sharing_a_catalog_reply_requires_the_same_complete_concrete_read() {
         vec![statement.clone(), statement.clone()],
     ] {
         let different = FetchPlan::Sql {
+            result_conversions: Vec::new(),
             statements,
             expect: ExpectedSchema::Discover {},
         };
@@ -42,6 +44,7 @@ fn sharing_a_catalog_reply_requires_the_same_complete_concrete_read() {
         assert!(!different.same_catalog_read(&plan));
     }
     assert!(!plan.same_catalog_read(&FetchPlan::Sql {
+        result_conversions: Vec::new(),
         statements: vec![statement],
         expect: ExpectedSchema::Schema { fields: vec![] },
     }));

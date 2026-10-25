@@ -26,6 +26,7 @@ fn statement(dialect: &str, unique: bool) -> String {
         Vec::new()
     };
     let choice = ProviderChoice::Sql {
+        timestamp_encoding: None,
         namespace,
         dialect: Dialect::new(dialect),
         view: None,

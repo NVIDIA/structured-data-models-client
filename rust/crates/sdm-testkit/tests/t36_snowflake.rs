@@ -133,6 +133,7 @@ fn layer() -> Arc<dyn DataLayer> {
 /// left to the session.
 fn snowflake(namespace: &[Option<&str>]) -> ProviderChoice {
     ProviderChoice::Sql {
+        timestamp_encoding: None,
         dialect: Dialect::new("snowflake"),
         namespace: namespace.iter().map(|p| p.map(str::to_owned)).collect(),
         view: None,
@@ -1075,7 +1076,8 @@ fn snowflake_declares_what_the_old_clients_sampler_does() {
     assert!(!capabilities.keys_optional);
     // The schema's hybrid tables are asked before a key is counted.
     assert!(capabilities.key_enforcement);
-    assert!(!capabilities.derived_relations);
+    // Semantic-view tables use derived relations (T3.5).
+    assert!(capabilities.derived_relations);
     assert!(capabilities.fallback.is_none());
     assert_eq!(layer.source_database(&named()), Some("snowflake"));
     assert!(layer.reads_tables_as_they_stand(&named()));

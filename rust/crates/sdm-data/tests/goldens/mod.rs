@@ -84,12 +84,14 @@ fn misrendered(dialect: &str, goldens: &Owned) -> Vec<String> {
             }
         };
         let choice = ProviderChoice::Sql {
+            timestamp_encoding: None,
             dialect: Dialect::new(dialect),
             namespace: settled(dialect, &parsed),
             view: None,
         };
         match Data::new().plan(&parsed, &choice) {
             Ok(FetchPlan::Sql {
+                result_conversions: Vec::new(),
                 statements: planned,
                 ..
             }) => {

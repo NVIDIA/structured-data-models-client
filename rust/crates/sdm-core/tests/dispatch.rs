@@ -262,6 +262,7 @@ impl DataLayer for Fake {
 
     fn plan(&self, _: &DataRequest, _: &ProviderChoice) -> Result<FetchPlan, CoreError> {
         Ok(FetchPlan::Sql {
+            result_conversions: Vec::new(),
             statements: vec![SqlStatement {
                 dialect: Dialect::new("duckdb"),
                 text: "SELECT 1".into(),
@@ -332,6 +333,7 @@ fn named(err: &CoreError, field: &str) -> String {
 fn the_root_s_data_layer_serves_a_built_in_dialect_or_a_host_provider() {
     let root = root();
     let duckdb = ProviderChoice::Sql {
+        timestamp_encoding: None,
         dialect: Dialect::new("duckdb"),
         namespace: Vec::new(),
         view: None,
@@ -368,7 +370,10 @@ fn the_root_s_data_layer_serves_a_built_in_dialect_or_a_host_provider() {
         tables: vec![],
         part: DescribePart::Tables,
     };
-    let FetchPlan::Sql { statements, expect } = access.plan(&tables).unwrap() else {
+    let FetchPlan::Sql {
+        statements, expect, ..
+    } = access.plan(&tables).unwrap()
+    else {
         panic!("DuckDB answers with SQL");
     };
     assert_eq!(statements.len(), 1);
@@ -380,6 +385,7 @@ fn the_root_s_data_layer_serves_a_built_in_dialect_or_a_host_provider() {
     // Every dialect this build knows by name it renders (Snowflake's from
     // T3.6).
     let snowflake = ProviderChoice::Sql {
+        timestamp_encoding: None,
         dialect: Dialect::new("snowflake"),
         namespace: Vec::new(),
         view: None,
@@ -388,6 +394,7 @@ fn the_root_s_data_layer_serves_a_built_in_dialect_or_a_host_provider() {
     // A name the data layer does not know is refused the same way, and
     // not repeated: the contract names no dialect, so it lets any through.
     let unknown = ProviderChoice::Sql {
+        timestamp_encoding: None,
         dialect: Dialect::new("a dialect\nof no name"),
         namespace: Vec::new(),
         view: None,
@@ -698,6 +705,7 @@ fn a_negative_seed_is_refused_by_the_core_and_a_seed_of_any_size_is_taken() {
 /// A start of `describe_source` naming `tables` (`[name, source]`).
 fn describe_named(tables: &[(&str, &str)]) -> Result<sdm_core::Run, CoreError> {
     let operation = describe(ProviderChoice::Sql {
+        timestamp_encoding: None,
         dialect: Dialect::new("duckdb"),
         namespace: Vec::new(),
         view: None,

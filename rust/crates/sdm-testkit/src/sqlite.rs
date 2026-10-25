@@ -555,6 +555,7 @@ mod tests {
         )
         .unwrap();
         let sqlite = ProviderChoice::Sql {
+            timestamp_encoding: None,
             dialect: Dialect::new("sqlite"),
             namespace: Vec::new(),
             view: None,

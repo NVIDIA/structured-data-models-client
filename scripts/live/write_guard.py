@@ -55,6 +55,8 @@ Reads (the forms the old client and the runner issue), anywhere:
   <s>]``, ``SHOW IMPORTED KEYS IN TABLE <t>``, ``SHOW PARAMETERS LIKE <p>
   IN SESSION``, ``USE CATALOG | SCHEMA | DATABASE <s>`` and ``ALTER
   SESSION SET <p> = <value>`` of :data:`SESSION_PARAMETERS`.
+- Databricks ``DESCRIBE QUERY <read>`` only when ``<read>`` starts with
+  ``SELECT`` or ``WITH`` and passes the same guarded-read validation.
 
 Writes (the forms the contract loader issues), each target ``<t>`` fully
 qualified in the test schema (``<database>.<schema>.<object>``; Postgres
@@ -252,7 +254,9 @@ FUNCTIONS = frozenset(
         'FROM_JSON', 'COALESCE',
         # Text and time.
         'LOWER', 'UPPER', 'TRIM', 'REPLACE', 'CHR', 'DATE_TRUNC', 'DATEADD',
-        'EXTRACT',
+        'EXTRACT', 'TIMESTAMPDIFF', 'CONVERT_TIMEZONE',
+        # Core-planned lossless Databricks instant and civil-wall transport.
+        'UNIX_MICROS', 'DATEDIFF', 'HOUR', 'MINUTE',
         # Nested values and their rows.
         'STRUCT', 'NAMED_STRUCT', 'OBJECT', 'ARRAY', 'MAP', 'FLATTEN',
         'TABLE', 'POSEXPLODE', 'JSONB_ARRAY_ELEMENTS',
@@ -867,10 +871,15 @@ class WriteGuard:
         if verb in ('SELECT', 'WITH'):
             self._held(items, WRITE_WORDS, s.what, read=True)
         elif verb in ('DESCRIBE', 'DESC'):
-            s.expect('TABLE')
-            s.accept('EXTENDED')
-            self._name(s)
-            s.end()
+            if self.dialect == 'databricks' and s.accept('QUERY'):
+                if _upper(s.peek()) not in ('SELECT', 'WITH'):
+                    s.refuse('DESCRIBE QUERY must describe a read')
+                self._held(s.items[s.at :], WRITE_WORDS, s.what, read=True)
+            else:
+                s.expect('TABLE')
+                s.accept('EXTENDED')
+                self._name(s)
+                s.end()
         elif verb == 'SHOW':
             self._show(s)
         elif verb == 'USE':

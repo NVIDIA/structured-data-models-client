@@ -120,6 +120,7 @@ pub fn messages() -> Vec<ControlMessage> {
         start(Operation::ValidateQuery(validate)),
         start(Operation::DescribeSource(DescribeSource {
             provider: sdm_contract::data::ProviderChoice::Sql {
+                timestamp_encoding: None,
                 dialect: Dialect::new("duckdb"),
                 namespace: Vec::new(),
                 view: None,
@@ -133,6 +134,7 @@ pub fn messages() -> Vec<ControlMessage> {
         })),
         start(Operation::Materialize(Materialize {
             provider: sdm_contract::data::ProviderChoice::Sql {
+                timestamp_encoding: None,
                 dialect: Dialect::new("duckdb"),
                 namespace: Vec::new(),
                 view: None,
@@ -202,6 +204,7 @@ pub fn messages() -> Vec<ControlMessage> {
                     limit: None,
                 },
                 plan: FetchPlan::Sql {
+                    result_conversions: Vec::new(),
                     statements: vec![SqlStatement {
                         dialect: Dialect::new("duckdb"),
                         text: "SELECT id, at FROM orders WHERE id IN (SELECT id FROM keys)".into(),

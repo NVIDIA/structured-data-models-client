@@ -314,6 +314,22 @@ impl Asker {
         let request = self.guarded(request);
         let limits = match data.route(&request)? {
             Route::Plan(plan) => {
+                if let Some(metadata) = data.result_metadata(&request, &plan)? {
+                    let plans = self.bind_with(data, &request, metadata, true)?;
+                    let metadata = Box::new(self.ask_bound(request.clone(), plans));
+                    return Ok(Ask {
+                        shared: Arc::clone(&self.shared),
+                        state: AskState::Projection(Box::new(ProjectionAsk {
+                            asker: self.clone(),
+                            request,
+                            plan,
+                            metadata,
+                            actual: None,
+                        })),
+                        budget: None,
+                        raw: false,
+                    });
+                }
                 let plans = self.bind(data, &request, plan)?;
                 return Ok(self.ask_bound(request, plans));
             }
@@ -378,6 +394,19 @@ impl Asker {
         request: &DataRequest,
         plan: FetchPlan,
     ) -> Result<Vec<FetchPlan>, CoreError> {
+        self.bind_with(data, request, plan, false)
+    }
+
+    /// A schema-only preflight binds empty seeds and keeps the original
+    /// seed attachments for the later data query. The source query is
+    /// never executed to discover its result types.
+    fn bind_with(
+        &self,
+        data: &DataAccess,
+        request: &DataRequest,
+        plan: FetchPlan,
+        metadata: bool,
+    ) -> Result<Vec<FetchPlan>, CoreError> {
         let named: BTreeSet<AttachmentId> = plan.key_sets().into_iter().collect();
         let keys: BTreeMap<AttachmentId, KeyData> = {
             let shared = lock(&self.shared);
@@ -388,7 +417,11 @@ impl Asker {
                         *id,
                         KeyData {
                             schema: Arc::clone(&made.schema),
-                            batches: made.batches.clone(),
+                            batches: if metadata {
+                                Vec::new()
+                            } else {
+                                made.batches.clone()
+                            },
                         },
                     )),
                     _ => None,
@@ -417,8 +450,10 @@ impl Asker {
             plans.push(plan);
         }
         let still: BTreeSet<AttachmentId> = plans.iter().flat_map(FetchPlan::key_sets).collect();
-        for id in named.difference(&still) {
-            shared.attachments.remove(id);
+        if !metadata {
+            for id in named.difference(&still) {
+                shared.attachments.remove(id);
+            }
         }
         Ok(plans)
     }
@@ -722,6 +757,9 @@ struct Chunked {
 
 enum AskState {
     New(Asked),
+    /// A warehouse schema-only preflight, followed by the original data
+    /// request with explicit lossless transport conversions.
+    Projection(Box<ProjectionAsk>),
     /// Asked as several fetches in one step, each a chunk of the request's
     /// key set (T3.28), whose answers, joined in order, are the request's
     /// one answer: read as the run reads an answer (`data`, its
@@ -738,6 +776,53 @@ enum AskState {
         pages: Option<ArrowData>,
     },
     Answered,
+}
+
+struct ProjectionAsk {
+    asker: Asker,
+    request: DataRequest,
+    plan: FetchPlan,
+    metadata: Box<Ask>,
+    actual: Option<Box<Ask>>,
+}
+
+fn poll_projection(
+    projected: &mut ProjectionAsk,
+    budget: &mut Option<Box<Budget>>,
+    raw: bool,
+    context: &mut Context<'_>,
+) -> Poll<Reply> {
+    if projected.actual.is_none() {
+        let metadata = match Pin::new(projected.metadata.as_mut()).poll(context) {
+            Poll::Pending => return Poll::Pending,
+            Poll::Ready(Reply::Fetch(FetchResult::Data(metadata))) => metadata,
+            other => return other,
+        };
+        let Some(data) = projected.asker.data.as_ref() else {
+            projected
+                .asker
+                .fail(internal("a projected fetch has no data access"));
+            return Poll::Pending;
+        };
+        let plans = data
+            .project_result(&projected.request, &projected.plan, &metadata)
+            .and_then(|plan| projected.asker.bind(data, &projected.request, plan));
+        let plans = match plans {
+            Ok(plans) => plans,
+            Err(error) => {
+                projected.asker.fail(error);
+                return Poll::Pending;
+            }
+        };
+        let mut actual = projected.asker.ask_bound(projected.request.clone(), plans);
+        actual.budget = budget.take();
+        actual.raw = raw;
+        projected.actual = Some(Box::new(actual));
+    }
+    match projected.actual.as_mut() {
+        Some(actual) => Pin::new(actual.as_mut()).poll(context),
+        None => Poll::Pending,
+    }
 }
 
 /// The run's next reply id, or `None` once they are used up, which ends the
@@ -854,6 +939,9 @@ impl Future for Ask {
 
     fn poll(self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<Reply> {
         let this = self.get_mut();
+        if let AskState::Projection(projected) = &mut this.state {
+            return poll_projection(projected, &mut this.budget, this.raw, context);
+        }
         // The fallback's own asks, and a chunked request's fetches, lock the
         // run's state as they are polled.
         if let AskState::Fallback(answer) = &mut this.state {
@@ -987,7 +1075,9 @@ impl Future for Ask {
                 },
                 Some(reply) => Poll::Ready(reply),
             },
-            AskState::Fallback(_) | AskState::Chunks(_) => unreachable!("polled above"),
+            AskState::Fallback(_) | AskState::Chunks(_) | AskState::Projection(_) => {
+                unreachable!("polled above")
+            }
             AskState::Answered => panic!("a request's reply was awaited after it was taken"),
         }
     }

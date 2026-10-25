@@ -134,6 +134,7 @@ pub fn start(
                 forecast: asked.forecast,
                 ranking: asked.ranking,
                 batches: asked.batches,
+                endpoint: request.model_endpoint,
             };
             Run::new(move |asker| crate::predict::run(asker, inputs))
         }

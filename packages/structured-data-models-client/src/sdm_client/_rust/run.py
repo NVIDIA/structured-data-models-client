@@ -31,7 +31,11 @@ the client's transport failed (the endpoint could not be reached, or its
 answer could not be read), which the core is told as the contract's
 transport error (kind and ``retryable`` only, never the transport's text);
 anything else it raises (the endpoint's refusal, which the caller has made
-safe to show) cancels the run and is raised as it is.
+safe to show) cancels the run and is raised as it is. A serving endpoint's
+transport raises :class:`~sdm_client.core.transport.EndpointFailed` for a
+failure with no answer, which the core is told as it is (the contract's
+failed outcome: the status, the SDK's message as an attachment, its code
+and class), and names (T3.13).
 """
 
 from __future__ import annotations
@@ -47,6 +51,7 @@ if TYPE_CHECKING:
 
 from sdm_client._routing import RouteError
 from sdm_client._rust import codec, errors, facts
+from sdm_client.core.transport import EndpointFailed
 from sdm_client.errors import StructuredDataError
 
 # A provider (``sdm_connectors.providers.Provider``) answers one fetch, the
@@ -382,6 +387,15 @@ def _call(
         answer = model(body)
     except TransportFailed:
         outcome: dict[str, Any] = transport_error
+    except EndpointFailed as failed:
+        said: dict[str, Any] = {'status': failed.status}
+        if failed.detail:
+            attached[1] = failed.detail.encode('utf-8', 'surrogatepass')
+            said['detail'] = 1
+        if failed.provider_code is not None:
+            said['provider_code'] = failed.provider_code
+        said['provider_error'] = failed.provider_error
+        outcome = {'outcome': 'failed', 'answer': said}
     except Refused as failed:
         refused = failed
         status = failed.status

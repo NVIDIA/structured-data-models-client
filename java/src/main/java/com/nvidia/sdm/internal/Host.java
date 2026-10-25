@@ -4,6 +4,7 @@
 
 package com.nvidia.sdm.internal;
 
+import com.nvidia.sdm.ModelEndpointException;
 import com.nvidia.sdm.StructuredDataException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -25,15 +26,16 @@ import org.slf4j.LoggerFactory;
  * StructuredDataException}, its code and fields the core's. Not part of the API.
  *
  * <p>A provider's failure reaches the core as the contract's {@code ProviderError}: its kind,
- * whether it may be retried, its SQLSTATE and vendor code, never the driver's text (decision
- * H17); the error the run then ends with names the driver's exception class ({@code
+ * whether it may be retried, its SQLSTATE and vendor code and an internal driver diagnostic.
+ * The diagnostic is never public (decision H17); the error the run then ends with names the driver's exception class ({@code
  * driver_class}). A model's {@link TransportFailed} is told to the core as the contract's
  * transport error; a {@link Refused} call is told as its status, and once the core ends the run,
  * the refusal is raised with what the core counted as answered before it.
  */
 public final class Host {
   /** The databases the Java host has a provider for, and so the Java legs its cases run on. */
-  public static final List<String> PROVIDERS = List.of("duckdb", "sqlite", "postgres");
+  public static final List<String> PROVIDERS =
+      List.of("duckdb", "sqlite", "postgres", "databricks-sql");
 
   /** The largest control message, in bytes, in either direction. */
   public static final int CONTROL_CAP = 64 * 1024;
@@ -56,12 +58,54 @@ public final class Host {
     ArrowReader answer(
         Map<String, Object> request, Map<Integer, ArrowReader> keys, BufferAllocator allocator)
         throws Exception;
+
+    /**
+     * The facts {@code failure} tells the core ({@code ProviderError}'s {@code sqlstate}, {@code
+     * vendor_code}, {@code error_class} and internal {@code driver_message}), each where it says one: a driver's {@link
+     * java.sql.SQLException}'s state and vendor code, by default.
+     */
+    default Map<String, Object> failure(Exception failure) {
+      Map<String, Object> facts = new LinkedHashMap<>();
+      if (failure instanceof java.sql.SQLException sql) {
+        if (sql.getMessage() != null) {
+          facts.put("driver_message", sql.getMessage());
+        }
+        if (sql.getSQLState() != null) {
+          facts.put("sqlstate", sql.getSQLState());
+        }
+        if (sql.getErrorCode() != 0) {
+          facts.put("vendor_code", Integer.toString(sql.getErrorCode()));
+        }
+      }
+      return facts;
+    }
   }
 
   /** Answers one model call: the core's body, as written, and the endpoint's answer's bytes. */
   @FunctionalInterface
   public interface Model {
-    byte[] call(byte[] body) throws TransportFailed, Refused;
+    byte[] call(byte[] body) throws TransportFailed, Refused, EndpointFailed;
+  }
+
+  /**
+   * The endpoint failed with no answer the core reads as one (T3.13): its HTTP status and the
+   * body it sent, which the core reads only for codes and never repeats; the core names the
+   * refusal. It carries no other text.
+   */
+  public static final class EndpointFailed extends Exception {
+    private static final long serialVersionUID = 1L;
+    private final int status;
+    private final transient byte[] body;
+
+    public EndpointFailed(int status, byte[] body) {
+      super(null, null, false, false);
+      this.status = status;
+      this.body = body == null ? new byte[0] : body.clone();
+    }
+
+    public int status() {
+      return status;
+    }
   }
 
   /** The transport could not reach the endpoint or read its answer; it carries no text. */
@@ -383,10 +427,16 @@ public final class Host {
       Map<String, Object> provided = new LinkedHashMap<>();
       provided.put("kind", "data_source");
       provided.put("retryable", failure instanceof java.sql.SQLTransientException);
-      String sqlstate = failure instanceof java.sql.SQLException sql ? sql.getSQLState() : null;
-      provided.put("sqlstate", sqlstate);
-      int vendor = failure instanceof java.sql.SQLException sql ? sql.getErrorCode() : 0;
-      provided.put("vendor_code", vendor == 0 ? null : Integer.toString(vendor));
+      // Internal facts go to the core; its public provider error sanitizes driver text.
+      Map<String, Object> facts = provider.failure(failure);
+      provided.put("sqlstate", facts.get("sqlstate"));
+      provided.put("vendor_code", facts.get("vendor_code"));
+      if (facts.get("error_class") != null) {
+        provided.put("error_class", facts.get("error_class"));
+      }
+      if (facts.get("driver_message") != null) {
+        provided.put("driver_message", facts.get("driver_message"));
+      }
       outcome.put("outcome", "error");
       outcome.put("error", provided);
       driverClass = failure.getClass().getName();
@@ -489,6 +539,17 @@ public final class Host {
       outcome = response(200);
     } catch (TransportFailed failed) {
       outcome = transportError;
+    } catch (EndpointFailed failed) {
+      // The endpoint's failure, its status and its body, for the core to name (T3.13).
+      Map<String, Object> answer = new LinkedHashMap<>();
+      answer.put("status", failed.status());
+      if (failed.body.length > 0) {
+        attached.put(1, failed.body);
+        answer.put("detail", 1);
+      }
+      outcome = new LinkedHashMap<>();
+      outcome.put("outcome", "failed");
+      outcome.put("answer", answer);
     } catch (Refused failed) {
       refused = failed;
       Integer status = failed.status();
@@ -622,9 +683,32 @@ public final class Host {
     String said = held.isEmpty() ? raised.getMessage() : Wording.said(given, held);
     Map<String, Object> details = new LinkedHashMap<>(raised.details());
     details.putAll(more);
+    if (ENDPOINT_REFUSED.equals(raised.code())) {
+      // As Python raises NimRequestError(status, code=...): the endpoint's status and the code
+      // the refusal is raised under, none where it has none, from the core's fields
+      // (REFUSED_STATUS, REFUSED_CODE), which leave the details (T3.27).
+      Object status = details.remove(REFUSED_STATUS);
+      Object code = details.remove(REFUSED_CODE);
+      return ModelEndpointException.refused(
+          status instanceof Number number ? number.intValue() : 0,
+          said,
+          code == null ? null : String.valueOf(code),
+          details,
+          raised.kind(),
+          raised.retryable());
+    }
     return new StructuredDataException(
         said, raised.code(), details, raised.kind(), raised.retryable(), null);
   }
+
+  /** The code of an endpoint's refusal, which Java raises as {@link ModelEndpointException}. */
+  static final String ENDPOINT_REFUSED = "ENDPOINT_REFUSED";
+
+  /** The field of an endpoint's refusal holding its HTTP status ({@code REFUSED_STATUS}). */
+  static final String REFUSED_STATUS = "status";
+
+  /** The field of an endpoint's refusal holding the code it is raised under ({@code REFUSED_CODE}). */
+  static final String REFUSED_CODE = "refused_code";
 
   static StructuredDataException internal(String message) {
     return Messages.internal(message);

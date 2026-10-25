@@ -700,6 +700,7 @@ fn request_state_leaves_one_run_as_bytes_and_returns_under_the_host_s_id() {
     let materialize = start_message(
         Operation::Materialize(Materialize {
             provider: ProviderChoice::Sql {
+                timestamp_encoding: None,
                 dialect: Dialect::new("duckdb"),
                 namespace: Vec::new(),
                 view: None,

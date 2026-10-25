@@ -57,6 +57,7 @@ fn spaces() -> &'static Spaces {
 
 fn databricks() -> ProviderChoice {
     ProviderChoice::Sql {
+        timestamp_encoding: None,
         dialect: Dialect::new("databricks"),
         namespace: vec![Some("cat".into()), Some("sch".into())],
         view: Some(ViewChoice {
@@ -193,6 +194,7 @@ fn a_layer_that_reads_no_view_refuses_one_by_name() {
             .is_ok()
     );
     let duckdb = ProviderChoice::Sql {
+        timestamp_encoding: None,
         dialect: Dialect::new("duckdb"),
         namespace: vec![],
         view: None,
@@ -329,6 +331,7 @@ fn semantic_definition_names_are_bound_without_physical_table_qualification() {
         (vec![Some("DB".into()), Some("SHOP".into())], "DB.SHOP.V"),
     ] {
         let source = ProviderChoice::Sql {
+            timestamp_encoding: None,
             dialect: Dialect::new("snowflake"),
             namespace,
             view: None,

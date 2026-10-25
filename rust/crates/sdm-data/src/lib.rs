@@ -67,8 +67,9 @@ use std::collections::BTreeMap;
 
 use sdm_contract::data::{
     AttachmentId, BoundFetch, BoundRequest, DataLayer, DataRequest, DescribePart, Dialect,
-    FailureFacts, FetchPlan, KeyData, ProviderCapabilities, ProviderChoice, ProviderError,
-    Relation, SqlStatement, views_unread,
+    ExpectedSchema, FailureFacts, FetchPlan, KeyData, ProviderCapabilities, ProviderChoice,
+    ProviderError, Relation, SqlResultConversion, SqlStatement, SqlTimestampEncoding,
+    SqlTimestampKind, views_unread,
 };
 use sdm_contract::view::{ViewTextAnswer, ViewTextAsk};
 use sdm_contract::wording::DatabaseNames;
@@ -206,6 +207,106 @@ impl DataLayer for Data {
         self.render(request, provider, 0)
     }
 
+    fn result_metadata(
+        &self,
+        provider: &ProviderChoice,
+        request: &DataRequest,
+        plan: &FetchPlan,
+    ) -> Result<Option<FetchPlan>, CoreError> {
+        if !matches!(
+            provider,
+            ProviderChoice::Sql {
+                timestamp_encoding: Some(SqlTimestampEncoding::Microseconds),
+                ..
+            }
+        ) || matches!(
+            request,
+            DataRequest::Describe { .. }
+                | DataRequest::KeyCounts { .. }
+                | DataRequest::CountRows { .. }
+        ) {
+            return Ok(None);
+        }
+        if sql_dialect(provider).is_none_or(|d| {
+            d.timestamp_micros("value", SqlTimestampKind::WallTime)
+                .is_none()
+        }) {
+            return Err(CoreError::new(
+                Sentence::Undeclared,
+                "the data source does not support the requested timestamp transport",
+            )
+            .with_field("request", Detail::text("timestamp_encoding")));
+        }
+        let FetchPlan::Sql { statements, .. } = plan else {
+            return Ok(None);
+        };
+        let mut statements = statements.clone();
+        let last = statements.last_mut().ok_or_else(|| {
+            CoreError::new(Sentence::Internal, "a SQL result plan has no statement")
+        })?;
+        last.text = format!("DESCRIBE QUERY {}", last.text);
+        Ok(Some(FetchPlan::Sql {
+            statements,
+            expect: ExpectedSchema::Discover {},
+            result_conversions: Vec::new(),
+        }))
+    }
+
+    fn project_result(
+        &self,
+        provider: &ProviderChoice,
+        request: &DataRequest,
+        plan: &FetchPlan,
+        metadata: &[RecordBatch],
+    ) -> Result<FetchPlan, CoreError> {
+        let mut conversions = Vec::new();
+        let mut position = 0_u32;
+        for batch in metadata {
+            let names = read::text_at(batch, 0)?;
+            let types = read::text_at(batch, 1)?;
+            for row in 0..batch.num_rows() {
+                let name = read::text(&names, row).ok_or_else(|| {
+                    CoreError::new(Sentence::Internal, "a result metadata column has no name")
+                })?;
+                let kind = read::text(&types, row).ok_or_else(|| {
+                    CoreError::new(Sentence::Internal, "a result metadata column has no type")
+                })?;
+                let kind = kind.trim().to_ascii_lowercase();
+                let source_kind = if kind == "timestamp_ntz" || kind.starts_with("timestamp_ntz(") {
+                    Some(SqlTimestampKind::WallTime)
+                } else if kind == "timestamp"
+                    || kind.starts_with("timestamp(")
+                    || kind == "timestamp_ltz"
+                    || kind.starts_with("timestamp_ltz(")
+                {
+                    Some(SqlTimestampKind::Instant)
+                } else {
+                    None
+                };
+                if let Some(source_kind) = source_kind {
+                    conversions.push(SqlResultConversion::TimestampMicros {
+                        column: position,
+                        name,
+                        source_kind,
+                    });
+                }
+                position = position.checked_add(1).ok_or_else(|| {
+                    CoreError::new(Sentence::Internal, "too many result metadata columns")
+                })?;
+            }
+        }
+        if position == 0 {
+            return Err(CoreError::new(
+                Sentence::Internal,
+                "the warehouse returned no result metadata columns",
+            ));
+        }
+        if conversions.is_empty() {
+            return Ok(plan.clone());
+        }
+        self.render_projected(request, provider, 0, &conversions)
+    }
+
     fn conform(
         &self,
         provider: &ProviderChoice,
@@ -232,9 +333,15 @@ impl DataLayer for Data {
         keys: &BTreeMap<AttachmentId, KeyData>,
         float_text: fn(f64) -> String,
     ) -> Result<BoundRequest, CoreError> {
+        let conversions = match &plan {
+            FetchPlan::Sql {
+                result_conversions, ..
+            } => result_conversions.clone(),
+            _ => Vec::new(),
+        };
         match sql_dialect(provider) {
             Some(dialect) => key_text::bind(dialect, request, plan, keys, float_text, &|offset| {
-                self.render(request, provider, offset)
+                self.render_projected(request, provider, offset, &conversions)
             }),
             None => Ok(BoundRequest {
                 fetches: vec![BoundFetch {
@@ -281,12 +388,14 @@ impl DataLayer for Data {
                 dialect,
                 namespace,
                 view,
+                timestamp_encoding,
             } => {
                 let parts = match sql_dialect(provider) {
                     Some(dialect) => dialect.settled_namespace(namespace, parts),
                     None => parts,
                 };
                 ProviderChoice::Sql {
+                    timestamp_encoding: *timestamp_encoding,
                     dialect: dialect.clone(),
                     namespace: parts.into_iter().map(Some).collect(),
                     view: view.clone(),
@@ -464,6 +573,16 @@ impl Data {
         provider: &ProviderChoice,
         offset: usize,
     ) -> Result<FetchPlan, CoreError> {
+        self.render_projected(request, provider, offset, &[])
+    }
+
+    fn render_projected(
+        &self,
+        request: &DataRequest,
+        provider: &ProviderChoice,
+        offset: usize,
+        conversions: &[SqlResultConversion],
+    ) -> Result<FetchPlan, CoreError> {
         match provider {
             ProviderChoice::Host { .. } => Ok(FetchPlan::Host {
                 expect: request.expected(),
@@ -472,6 +591,13 @@ impl Data {
                 dialect, namespace, ..
             } => {
                 let dialect = rendered(dialect)?;
+                let plan = |request: &DataRequest, namespace: &[String]| {
+                    if conversions.is_empty() {
+                        sql::plan(dialect, request, namespace, offset)
+                    } else {
+                        sql::plan_projected(dialect, request, namespace, offset, conversions)
+                    }
+                };
                 // The namespace itself, read where a part is left to the
                 // connection inside one given, which the core then reads
                 // every relation under (T3.4).
@@ -488,6 +614,7 @@ impl Data {
                     deeper(request, &parts, dialect.namespace_depth())?;
                     let (text, params) = dialect.current_namespace(request, namespace)?;
                     return Ok(FetchPlan::Sql {
+                        result_conversions: Vec::new(),
                         statements: vec![SqlStatement {
                             dialect: Dialect::new(dialect.name()),
                             text,
@@ -507,7 +634,7 @@ impl Data {
                         .iter()
                         .all(|(_, r)| r.source.len() == dialect.namespace_depth() + 1)
                 {
-                    return sql::plan(dialect, request, &[], offset);
+                    return plan(request, &[]);
                 }
                 let namespace = if matches!(
                     request,
@@ -527,12 +654,7 @@ impl Data {
                     qualifying(request, namespace)?
                 };
                 deeper(request, &namespace, dialect.namespace_depth())?;
-                sql::plan(
-                    dialect,
-                    &in_namespace(request, &namespace),
-                    &namespace,
-                    offset,
-                )
+                plan(&in_namespace(request, &namespace), &namespace)
             }
         }
     }
