@@ -4,7 +4,7 @@
 # Bridge code: native conversion and public objects remain Python's;
 # the routing seam is removed in Phase 5 after the complete frame switch.
 
-"""Constructor-only primitive frames, using fixed core Table/Schema stages."""
+"""Numeric/Boolean constructors, using fixed core Table/Schema stages."""
 
 from __future__ import annotations
 
@@ -35,13 +35,20 @@ def _frame_example(
     # Let the actual native library traverse a selected composite scalar.
     # A mixed numeric pandas row can widen its components; typed Arrow
     # scalar repr alone would not reproduce that presentation.
-    selected = pd.concat(
-        [
-            pd.Series([value], dtype=types[name])
-            for name, value in zip(columns, fields['example'], strict=True)
-        ],
-        axis=1,
-    )
+    pieces = []
+    for name, value in zip(columns, fields['example'], strict=True):
+        dtype = types[name]
+        if type(dtype) in (pd.Float32Dtype, pd.Float64Dtype):
+            # The core selected a present scalar. Construct its native
+            # representation without turning a valid NaN into pd.NA.
+            native = pd.arrays.FloatingArray(
+                np.array([value], dtype=dtype.numpy_dtype),
+                np.zeros(1, dtype=bool),
+            )
+            pieces.append(pd.Series(native))
+        else:
+            pieces.append(pd.Series([value], dtype=dtype))
+    selected = pd.concat(pieces, axis=1)
     selected.columns = columns
     example = (
         selected[columns[0]].iloc[0]
@@ -105,12 +112,27 @@ def _convert(name: str, frame: pd.DataFrame) -> tuple[Any, dict[str, Any]]:
                 or (dtype.kind == 'f' and dtype.itemsize in (4, 8))
             )
         )
-        if not primitive:
+        masked = type(dtype) in (
+            pd.Int8Dtype,
+            pd.Int16Dtype,
+            pd.Int32Dtype,
+            pd.Int64Dtype,
+            pd.UInt8Dtype,
+            pd.UInt16Dtype,
+            pd.UInt32Dtype,
+            pd.UInt64Dtype,
+            pd.Float32Dtype,
+            pd.Float64Dtype,
+            pd.BooleanDtype,
+        )
+        if not (primitive or masked):
             raise RouteError(
-                f'the partial frame constructor supports only NumPy numeric and Boolean columns: {name}.{column}'
+                f'the partial frame constructor supports only NumPy or pandas masked numeric and Boolean columns: {name}.{column}'
             )
         # Convert values only. DataFrame export may add a non-Range index
         # column, which the public schema constructor never describes.
+        # Native conversion supplies validity: NumPy NaNs become null;
+        # a masked float's unmasked NaN remains a present Arrow value.
         arrays.append(pa.array(series, from_pandas=True))
         native_types[column] = dtype
     return pa.Table.from_arrays(arrays, names=list(frame.columns)), native_types

@@ -381,8 +381,9 @@ pub fn final_notices(
 }
 
 /// Whole-table frame inference, not preview-sized SQL inference. This first
-/// consumer accepts numeric and Boolean arrays, with no text, object,
-/// extension, Decimal or time adapter.
+/// consumer accepts NumPy and pandas masked numeric/Boolean arrays, with
+/// no text, object, other extension, Decimal or time adapter. Native
+/// conversion has already encoded missingness in Arrow validity.
 pub fn read(
     name: &str,
     source: &Relation,
@@ -393,7 +394,7 @@ pub fn read(
     let mut columns = Vec::new();
     let mut all_values = Vec::new();
     for (at, field) in schema.fields().iter().enumerate() {
-        let values = values::column(batches, at, Floats::NanMissing)?;
+        let values = values::column(batches, at, Floats::Frame)?;
         let dtype = match field.data_type() {
             DataType::Boolean => Dtype::Bool,
             DataType::Int8
