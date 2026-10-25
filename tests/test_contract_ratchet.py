@@ -209,9 +209,9 @@ def build(
         protected='scripts/rust_core/ratchet.py (new)',
     )
     if sparse_captures:
-        # The gate reads complete committed captures through Git. Keep
-        # every original blob while avoiding copies in this worktree and
-        # the candidate/checkpoint worktrees Git creates from it.
+        # Coverage reads bulk capture JSON/Arrow through Git, but locked
+        # admission discovers physical manifests. Keep those original
+        # manifests and every committed blob in all judging worktrees.
         git(repo, 'sparse-checkout', 'init', '--no-cone')
         git(
             repo,
@@ -219,7 +219,8 @@ def build(
             'set',
             '--no-cone',
             '/*',
-            '!/contract/captures/',
+            '!/contract/captures/**/capture.json',
+            '!/contract/captures/**/*.arrows',
         )
     return repo, landed
 
