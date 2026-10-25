@@ -1164,6 +1164,9 @@ def _relation_key(relation: str) -> str:
     r"""A warehouse relation by its table: the last part of its name,
     unquoted and case-folded (Snowflake folds an unquoted name, and a view
     names its tables as the warehouse gives them back)."""
+    identity = _databricks_identity(relation)
+    if identity is not None:
+        return identity[-1]
     last = relation
     for part in re.finditer(_PART, relation):
         last = part.group(0)
