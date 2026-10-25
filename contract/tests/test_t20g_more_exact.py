@@ -73,11 +73,17 @@ def _differences(
     reference['identity']['inputs']['case'] = run_python.digest(
         CASE.read_bytes()
     )
-    # These are synthetic observations of matching result rows. Keep
-    # independent text evidence when the typed digest is excused.
-    reference['public']['result_text'] = reference_text
     observation = copy.deepcopy(reference)
-    observation['public']['result_text'] = observed_text
+    # A missing optional digest is absent, never JSON null. Remove both
+    # supported spellings so missing evidence reaches the result check.
+    for public, text in (
+        (reference['public'], reference_text),
+        (observation['public'], observed_text),
+    ):
+        public.pop('result_text', None)
+        public['result'].pop('text_digest', None)
+        if text is not None:
+            public['result_text'] = text
     observation['identity']['runner'] = 'python-core'
     observation['identity']['reference'] = None
     parsed = observation['public']['payloads'][0]['parsed']
