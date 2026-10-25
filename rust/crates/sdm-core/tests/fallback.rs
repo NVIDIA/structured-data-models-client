@@ -666,6 +666,48 @@ fn bytes_past_the_limit_fail_by_name() {
 }
 
 #[test]
+fn pages_of_one_shared_parent_fit_without_retaining_or_charging_the_parent() {
+    let schema = Arc::new(Schema::new(vec![Field::new(
+        "user",
+        DataType::Int64,
+        false,
+    )]));
+    let parent = RecordBatch::try_new(
+        schema.clone(),
+        vec![Arc::new(Int64Array::from_iter_values(
+            (0..100_000).map(|i| i % 3),
+        ))],
+    )
+    .unwrap();
+    let next = Mutex::new(0);
+    let ran = run_with(
+        host(&[], Some(limits(7, 10_000))),
+        DataRequest::RepeatedKey {
+            table: "events".into(),
+            key: vec!["user".into()],
+        },
+        None,
+        |_| {
+            let mut at = next.lock().unwrap();
+            let length = (7 - *at).min(3);
+            let data = ArrowData::new(schema.clone(), vec![parent.slice(50_000 + *at, length)]);
+            *at += length;
+            if *at < 7 {
+                FetchResult::Page {
+                    data,
+                    continuation: at.to_string(),
+                }
+            } else {
+                FetchResult::Data(data)
+            }
+        },
+    );
+    assert!(ran.answer.is_ok(), "{:?}", ran.answer);
+    assert_eq!(ran.asked.len(), 3);
+    assert_eq!(*next.lock().unwrap(), 7);
+}
+
+#[test]
 fn a_time_the_fallback_does_not_read_fails_by_name() {
     let request = DataRequest::TimeBounds {
         columns: vec![TableColumn {
