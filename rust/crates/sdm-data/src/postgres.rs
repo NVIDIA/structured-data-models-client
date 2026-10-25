@@ -229,8 +229,22 @@ impl SqlDialect for Postgres {
         ]
     }
 
-    /// The reference's neighbor reads (`_by_time` and `_by_fkey` on
-    /// Postgres) with a limit per seed: the first rows of each seed in
+    /// The reference's `_by_time`: complete windows ordered by seed and
+    /// time column. The order matters for float32 label aggregation.
+    fn neighbors_all(&self, read: &SeedRead<'_>) -> String {
+        let mut text = read.joined();
+        if let Some(window) = read.window {
+            text.push_str(&format!(
+                "\nORDER BY s.{}, t.{}",
+                identifier(SEED_BATCH),
+                identifier(&window.column),
+            ));
+        }
+        text
+    }
+
+    /// The reference's `_by_fkey` on Postgres with a limit per seed:
+    /// the first rows of each seed in
     /// `order`, read for each seed (`JOIN LATERAL`, as the reference reads
     /// them), the result in `(batch, order)`. The window's column is
     /// compared in its own type with the seed's time read in that type

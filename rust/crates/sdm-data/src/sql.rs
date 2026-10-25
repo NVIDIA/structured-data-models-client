@@ -691,7 +691,9 @@ pub(crate) fn plan_projected(
     conversions: &[SqlResultConversion],
 ) -> Result<FetchPlan, CoreError> {
     let d = dialect;
-    if !conversions.is_empty()
+    if conversions
+        .iter()
+        .any(|conversion| matches!(conversion, SqlResultConversion::TimestampMicros { .. }))
         && d.timestamp_micros("value", SqlTimestampKind::WallTime)
             .is_none()
     {
