@@ -4,10 +4,10 @@
   "files": {
     "packages/structured-data-models-client/src/sdm_client/_rust/schema.py": {
       "<module>": {
-        "fingerprint": "d32d73169e280d5ecbfe20bf4691e72a1c9fecf9265dbfdf862c62f4ad2cf12a"
+        "fingerprint": "b29fe101355f7102a2e1097b9633f1d40c4e0c564d45554dff0c00ce0945cccc"
       },
       "build": {
-        "fingerprint": "1ffa9b79f4ead237521dee3b3b02d7080dd908d00a0c39a53b29beee006830e0"
+        "fingerprint": "8cc491f3c48333738142f36f0240375901ebbad47a1f3ebd2d892b5bacef40fa"
       },
       "conversion_notes": {
         "fingerprint": "508ac21006be52f300b68ce0ac50cfb65c45ab8ae95a20270866b9fc418f9de1"

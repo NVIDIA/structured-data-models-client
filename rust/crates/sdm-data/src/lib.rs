@@ -147,7 +147,7 @@ fn rendered(dialect: &Dialect) -> Result<&'static dyn SqlDialect, CoreError> {
 fn sql_dialect(provider: &ProviderChoice) -> Option<&'static dyn SqlDialect> {
     match provider {
         ProviderChoice::Sql { dialect, .. } => sql::dialect(dialect.name()),
-        ProviderChoice::Host { .. } => None,
+        ProviderChoice::Host { .. } | ProviderChoice::Frames { .. } => None,
     }
 }
 
@@ -185,6 +185,7 @@ impl Data {
 impl DataLayer for Data {
     fn capabilities(&self, provider: &ProviderChoice) -> Result<ProviderCapabilities, CoreError> {
         match provider {
+            ProviderChoice::Frames { .. } => Err(sdm_contract::frames::not_provider()),
             ProviderChoice::Host { capabilities } => Ok(capabilities.clone()),
             ProviderChoice::Sql { dialect, view, .. } => {
                 let rendered_dialect = rendered(dialect)?;
@@ -383,7 +384,7 @@ impl DataLayer for Data {
                             && namespace.iter().flatten().count() < d.namespace_depth()
                     })
             }
-            ProviderChoice::Host { .. } => false,
+            ProviderChoice::Host { .. } | ProviderChoice::Frames { .. } => false,
         }
     }
 
@@ -409,7 +410,7 @@ impl DataLayer for Data {
                     view: view.clone(),
                 }
             }
-            ProviderChoice::Host { .. } => provider.clone(),
+            ProviderChoice::Host { .. } | ProviderChoice::Frames { .. } => provider.clone(),
         }
     }
 
@@ -470,6 +471,7 @@ impl DataLayer for Data {
             .with_field("request", Detail::text(request.name())));
         };
         let answer = match provider {
+            ProviderChoice::Frames { .. } => return Err(sdm_contract::frames::not_provider()),
             ProviderChoice::Host { .. } => read::host(*part, batches)?,
             ProviderChoice::Sql { dialect, .. } if *part == DescribePart::ViewDefinition => {
                 let spaces = self.spaces.ok_or_else(views_unread)?;
@@ -592,6 +594,7 @@ impl Data {
         conversions: &[SqlResultConversion],
     ) -> Result<FetchPlan, CoreError> {
         match provider {
+            ProviderChoice::Frames { .. } => Err(sdm_contract::frames::not_provider()),
             ProviderChoice::Host { .. } => Ok(FetchPlan::Host {
                 expect: request.expected(),
             }),

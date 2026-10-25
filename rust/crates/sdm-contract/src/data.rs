@@ -1247,6 +1247,12 @@ impl Dialect {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "provider", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ProviderChoice {
+    /// Frames already admitted for this describe call. This is an internal
+    /// core source, never a host provider or a SQL dialect.
+    Frames {
+        /// Bytes containing [`crate::frames::FrameManifest`].
+        manifest: AttachmentId,
+    },
     Sql {
         dialect: Dialect,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -1282,7 +1288,7 @@ impl ProviderChoice {
     pub fn view(&self) -> Option<&ViewChoice> {
         match self {
             ProviderChoice::Sql { view, .. } => view.as_ref(),
-            ProviderChoice::Host { .. } => None,
+            ProviderChoice::Host { .. } | ProviderChoice::Frames { .. } => None,
         }
     }
 }

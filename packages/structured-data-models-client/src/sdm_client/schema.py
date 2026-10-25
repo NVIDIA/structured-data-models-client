@@ -1100,6 +1100,18 @@ class Schema:
         relationship is told it cannot join, while a caller who never asked
         for it is not refused for a guess this made on their behalf.
         """
+        from sdm_client._routing import frame_constructor_on_core
+
+        if frame_constructor_on_core():
+            from sdm_client._rust.frames import from_data
+
+            return from_data(
+                cls,
+                tables,
+                primary_keys=primary_keys,
+                time_columns=time_columns,
+                relationships=relationships,
+            )
         if not tables:
             raise StructuredDataError(
                 'a schema needs at least one table', code='INVALID_REQUEST'

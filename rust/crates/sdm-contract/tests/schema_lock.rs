@@ -543,7 +543,10 @@ const JSON: [(&str, &str); 27] = [
 /// The other fields naming an attachment, and why the lock needs no entry.
 const OTHER: [(&str, &str); 12] = [
     ("FrameInput.rows", "Arrow, with its schema"),
-    ("OperationResult/describe_source.frame_rows", "Arrow, with its schema"),
+    (
+        "OperationResult/describe_source.frame_rows",
+        "Arrow, with its schema",
+    ),
     (
         "ControlMessage/attached.attachment",
         "a control message: the root schema",

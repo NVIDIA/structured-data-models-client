@@ -79,6 +79,12 @@ fn logging(py: Python<'_>) -> Option<&pyo3_log::ResetHandle> {
 ///   the run's following state.
 fn core_call<T: Send>(py: Python<'_>, call: impl FnOnce() -> T + Send) -> PyResult<T> {
     let answer = py.detach(call);
+    core_result(py, answer)
+}
+
+/// Apply the same pending-exception policy whether ownership permits
+/// releasing the GIL during the core call or requires holding it.
+fn core_result<T>(py: Python<'_>, answer: T) -> PyResult<T> {
     match PyErr::take(py) {
         None => Ok(answer),
         Some(raised) if raised.is_instance_of::<PyException>(py) => {
@@ -542,11 +548,27 @@ impl Run {
         logging(py);
         let (attachments, unreadable) = attachments_from_python(attachments)?;
         let message = message.to_vec();
-        core_call(py, || {
-            HostRun::start_reading(&default_root(), &message, attachments, &unreadable)
-        })?
-        .map(|run| Run { run })
-        .map_err(|out| core_error(py, out))
+        // A valid frame start copies foreign buffers before inference. Keep
+        // the GIL until that copy finishes: dropping the GIL first would let
+        // another Python thread mutate a NumPy producer while we borrow it.
+        // The typed envelope is inspected only to choose ownership timing;
+        // HostRun retains the sole manifest/attachment validation path.
+        let frames = matches!(sdm_host::decode(&message), Ok(ControlMessage::Start(start))
+            if matches!(&start.operation, sdm_contract::ops::Operation::DescribeSource(request)
+                if matches!(request.provider, sdm_contract::data::ProviderChoice::Frames { .. })));
+        let result = if frames {
+            core_result(
+                py,
+                HostRun::start_reading(&default_root(), &message, attachments, &unreadable),
+            )?
+        } else {
+            core_call(py, || {
+                HostRun::start_reading(&default_root(), &message, attachments, &unreadable)
+            })?
+        };
+        result
+            .map(|run| Run { run })
+            .map_err(|out| core_error(py, out))
     }
 
     /// The run's next step, as `(control, attachments)`.

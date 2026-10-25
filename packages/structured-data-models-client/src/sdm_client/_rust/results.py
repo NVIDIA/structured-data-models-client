@@ -264,6 +264,7 @@ class Described:
 
     description: int
     notes: tuple[ViewNote, ...] = ()
+    frame_rows: int | None = None
 
 
 @dataclasses.dataclass(frozen=True)
@@ -299,6 +300,7 @@ def _note(value: Any) -> ViewNote:
 def _described(read: dict[str, Any]) -> Described:
     return Described(
         description=_int(read['description'], 'description'),
+        frame_rows=_optional(read.get('frame_rows'), _int, 'frame_rows'),
         # Left out where there is none, which the reading gives as None.
         notes=tuple(
             _note(note) for note in _list(read.get('notes') or [], 'notes')
@@ -508,7 +510,7 @@ def _predicted(read: dict[str, Any]) -> Predicted:
 
 _RESULTS: dict[str, tuple[tuple[str, ...], tuple[str, ...], Any]] = {
     'validate_query': (('accepted', 'diagnostics'), ('query',), _validated),
-    'describe_source': (('description',), ('notes',), _described),
+    'describe_source': (('description',), ('notes', 'frame_rows'), _described),
     'edit_schema': (('schema',), ('declared',), _edited),
     'materialize': (
         ('state',),

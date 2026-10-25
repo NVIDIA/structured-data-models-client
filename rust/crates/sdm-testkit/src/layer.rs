@@ -58,6 +58,7 @@ fn no_dialect(dialect: &Dialect) -> CoreError {
 impl DataLayer for HostLayer {
     fn capabilities(&self, provider: &ProviderChoice) -> Result<ProviderCapabilities, CoreError> {
         match provider {
+            ProviderChoice::Frames { .. } => Err(sdm_contract::frames::not_provider()),
             ProviderChoice::Host { capabilities } => Ok(capabilities.clone()),
             ProviderChoice::Sql { dialect, .. } => Err(no_dialect(dialect)),
         }
@@ -69,6 +70,7 @@ impl DataLayer for HostLayer {
         provider: &ProviderChoice,
     ) -> Result<FetchPlan, CoreError> {
         match provider {
+            ProviderChoice::Frames { .. } => Err(sdm_contract::frames::not_provider()),
             ProviderChoice::Host { .. } => Ok(FetchPlan::Host {
                 expect: request.expected(),
             }),

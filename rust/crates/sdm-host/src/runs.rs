@@ -43,7 +43,7 @@ use sdm_contract::facts::LocalZone;
 use sdm_contract::ops::AttachmentKind;
 use sdm_contract::run::{FetchOutcome, ModelOutcome};
 use sdm_contract::{ControlMessage, CoreError, Detail, ErrorKind, Scalar, Sentence};
-use sdm_core::attached::check_attachments;
+use sdm_core::attached::{check_attachments, resolved_attachments};
 use sdm_core::run::schema_mismatch;
 use sdm_core::{
     ArrowData, Attachment, AttachmentIds, Attachments, CompositionRoot, FetchResult, ModelResult,
@@ -247,7 +247,7 @@ impl HostRun {
     pub fn start_reading(
         root: &CompositionRoot,
         message: &[u8],
-        attachments: Attachments,
+        mut attachments: Attachments,
         unreadable: &Unreadables,
     ) -> Result<HostRun, Outgoing> {
         contain(|| {
@@ -266,8 +266,29 @@ impl HostRun {
             )));
             if let Some((&id, &failure)) = unreadable.first_key_value() {
                 let envelope = with_stand_ins(attachments, unreadable);
-                check_attachments(&start.operation.attachments(), &envelope)?;
+                check_attachments(
+                    &resolved_attachments(&start.operation, &envelope)?,
+                    &envelope,
+                )?;
                 return Err(unreadable_error(id, failure));
+            }
+            // Frame data is input, not fetched provider data. Validate its
+            // complete dynamic attachment set before admission/copying, then
+            // detach foreign buffers before a later next() can read them.
+            if matches!(&start.operation, sdm_contract::ops::Operation::DescribeSource(request)
+                if matches!(request.provider, sdm_contract::data::ProviderChoice::Frames { .. }))
+            {
+                let named = resolved_attachments(&start.operation, &attachments)?;
+                check_attachments(&named, &attachments)?;
+                for (id, kind) in named {
+                    if kind == AttachmentKind::Arrow {
+                        let Some(Attachment::Arrow(data)) = attachments.remove(&id) else {
+                            return Err(invalid("a frame rows attachment is not Arrow"));
+                        };
+                        let admitted = admit_from(&data, None)?;
+                        attachments.insert(id, Attachment::Arrow(crate::detach_frame(admitted)?));
+                    }
+                }
             }
             // The core resolves zones through the host's own resolver, the
             // one whose sources the host records (decision H14).
