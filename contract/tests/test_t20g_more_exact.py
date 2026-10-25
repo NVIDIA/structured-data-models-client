@@ -23,8 +23,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
-import yaml
 import pytest
+import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 CASE = ROOT / 'contract/cases/s1/base.regression.json'
@@ -56,8 +56,8 @@ def _differences(
     *,
     other_field: bool = False,
     target_as: Any = None,
-    reference_text: str | None = None,
-    observed_text: str | None = None,
+    reference_text: str | None = '1' * 64,
+    observed_text: str | None = '1' * 64,
 ) -> set[str | None]:
     r"""The rules that fail, the observation differing from the reference
     in ``TARGET`` and ``DIGEST`` (and in ``metadata.source_query`` with
@@ -73,6 +73,8 @@ def _differences(
     reference['identity']['inputs']['case'] = run_python.digest(
         CASE.read_bytes()
     )
+    # These are synthetic observations of matching result rows. Keep
+    # independent text evidence when the typed digest is excused.
     reference['public']['result_text'] = reference_text
     observation = copy.deepcopy(reference)
     observation['public']['result_text'] = observed_text

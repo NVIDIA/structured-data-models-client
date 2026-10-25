@@ -64,7 +64,11 @@ RECORDED: dict[str, Any] = json.loads(
 SEEDS = ('seeds-table', 'seeds-table-numbered', 'seeds-table-upper')
 
 
-def _on_the_core(monkeypatch: pytest.MonkeyPatch, name: str) -> dict[str, Any]:
+def _on_the_core(
+    monkeypatch: pytest.MonkeyPatch,
+    name: str,
+    locate_counts: list[int] | None = None,
+) -> dict[str, Any]:
     r"""The scenario through the public calls on SQLite's core routes:
     ``from_source`` (tables named or not), ``materialize`` and
     validation."""
@@ -79,6 +83,31 @@ def _on_the_core(monkeypatch: pytest.MonkeyPatch, name: str) -> dict[str, Any]:
     # Not vacuous: the build routes each forced path on the core.
     assert set(routes) <= _routing.CORE_ROUTED
     monkeypatch.setenv(_routing.ENVIRONMENT, ','.join(dict.fromkeys(routes)))
+    if locate_counts is not None:
+        from sdm_client import PredictiveQuery
+        from sdm_client._rust.providers.sqlite import SqliteProvider
+
+        provider = SqliteProvider.__call__
+        materialize = PredictiveQuery.materialize
+        located: list[int] = []
+
+        def fetch(self: Any, step: dict[str, Any], keys: Any = None) -> Any:
+            if step.get('purpose') != 'locate':
+                return provider(self, step, keys)
+            with R._runner().StatementLog('sqlite') as log:
+                answer = provider(self, step, keys)
+            located.append(sum(bool(text) for text in log.texts))
+            return answer
+
+        def call(self: Any, *args: Any, **kwargs: Any) -> Any:
+            before = sum(located)
+            try:
+                return materialize(self, *args, **kwargs)
+            finally:
+                locate_counts.append(sum(located) - before)
+
+        monkeypatch.setattr(SqliteProvider, '__call__', fetch)
+        monkeypatch.setattr(PredictiveQuery, 'materialize', call)
     answer: dict[str, Any] = R.run(RECORDED['scenarios'][name])
     return answer
 
@@ -187,12 +216,16 @@ def test_a_composite_key_s_integer_column_is_read_as_the_reference_does(
 def test_a_partial_unique_index_keeps_the_key_unique(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    r"""A partial unique index on the key: the public schema, the
-    statements run per call and the request are the reference's."""
+    r"""A partial unique index: reference gather reads plus current source facts."""
     wanted = _reference('partial-unique')
-    got = _on_the_core(monkeypatch, 'partial-unique')
+    locate: list[int] = []
+    got = _on_the_core(monkeypatch, 'partial-unique', locate)
+    assert locate == [7]
     assert got['schema'] == wanted['schema']
-    assert got['statements'] == wanted['statements']
+    assert got['statements'] == {
+        **wanted['statements'],
+        'materialize': wanted['statements']['materialize'] + locate[0],
+    }
     assert got['outcome'] == wanted['outcome']
     assert got['payloads'] == wanted['payloads']
 
@@ -201,14 +234,19 @@ def test_a_second_materialize_reads_no_more_than_the_reference_s(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     r"""``materialize`` twice on one query, the time column stored as text:
-    each call's statements and request are the reference's, the second
-    call's among them."""
+    each call refreshes its source facts once, then gathers with the
+    reference's statement count and request."""
     wanted = _reference('materialize-twice')
-    got = _on_the_core(monkeypatch, 'materialize-twice')
+    locate: list[int] = []
+    got = _on_the_core(monkeypatch, 'materialize-twice', locate)
+    assert locate == [6, 6]
     assert got['outcome'] == wanted['outcome']
-    assert got['statements'] == wanted['statements']
+    assert got['statements'] == {
+        **wanted['statements'],
+        'materialize': wanted['statements']['materialize'] + locate[0],
+    }
     assert got['payloads'] == wanted['payloads']
-    assert [r['statements'] for r in got['repeated']] == [
-        r['statements'] for r in wanted['repeated']
+    assert got['repeated'] == [
+        {**repeated, 'statements': repeated['statements'] + count}
+        for repeated, count in zip(wanted['repeated'], locate[1:], strict=True)
     ]
-    assert got['repeated'] == wanted['repeated']
