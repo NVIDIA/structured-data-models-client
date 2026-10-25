@@ -1193,6 +1193,38 @@ def _databricks_identity(source: str) -> tuple[str, ...] | None:
     return tuple(part.casefold() for part in parts)
 
 
+def _constraint_sql(sql: str) -> str | None:
+    r"""Fold only outside whitespace for the two frozen catalog queries.
+
+    Preserve all bytes inside single, double and backtick quotes, including
+    doubled quote escapes. Unknown query shapes still fail the exact match;
+    an unterminated quote supplies no constraint evidence.
+    """
+    out: list[str] = []
+    quote = None
+    index = 0
+    while index < len(sql):
+        char = sql[index]
+        if quote is not None:
+            out.append(char)
+            if char == quote:
+                if index + 1 < len(sql) and sql[index + 1] == quote:
+                    out.append(sql[index + 1])
+                    index += 1
+                else:
+                    quote = None
+        elif char in '\'"`':
+            quote = char
+            out.append(char)
+        elif char in ' \t\r\n':
+            if out and out[-1] != ' ':
+                out.append(' ')
+        else:
+            out.append(char)
+        index += 1
+    return None if quote is not None else ''.join(out).strip(' ')
+
+
 def _as_named(
     types: dict[tuple[str, str], set[str]], names: list[str]
 ) -> dict[tuple[str, str], set[str]]:
@@ -1252,7 +1284,9 @@ def _databricks_undeclared(
     names = Counter(samples.values())
     reads: dict[tuple[str, ...], dict[str, list[int | None]]] = {}
     for statement in statements:
-        sql = ' '.join(statement['sql'].split())
+        sql = _constraint_sql(statement['sql'])
+        if sql is None:
+            continue
         catalog = _DB_CATALOG.search(sql)
         if catalog is None:
             continue
