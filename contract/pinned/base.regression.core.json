@@ -16,6 +16,7 @@
    {
     "columns": [
      {
+      "declared_type": "BIGINT",
       "dtype": "int",
       "name": "order_id",
       "nullable": true,
@@ -27,6 +28,7 @@
       "unique": false
      },
      {
+      "declared_type": "BIGINT",
       "dtype": "int",
       "name": "user_id",
       "nullable": true,
@@ -38,6 +40,7 @@
       "unique": false
      },
      {
+      "declared_type": "DOUBLE",
       "dtype": "float",
       "name": "price",
       "nullable": true,
@@ -49,6 +52,7 @@
       "unique": false
      },
      {
+      "declared_type": "TIMESTAMP",
       "dtype": "date",
       "name": "ts",
       "nullable": true,
@@ -81,6 +85,7 @@
    {
     "columns": [
      {
+      "declared_type": "BIGINT",
       "dtype": "int",
       "name": "user_id",
       "nullable": true,
@@ -92,6 +97,7 @@
       "unique": false
      },
      {
+      "declared_type": "INTEGER",
       "dtype": "int",
       "name": "age",
       "nullable": true,
@@ -1219,6 +1225,7 @@
       "inclusive": false,
       "seed_column": "start"
      },
+     "source_type": "TIMESTAMP",
      "upper": {
       "inclusive": true,
       "seed_column": "end"
@@ -1409,6 +1416,7 @@
     "window": {
      "column": "ts",
      "lower": null,
+     "source_type": "TIMESTAMP",
      "upper": {
       "inclusive": true,
       "seed_column": "time"
@@ -1474,6 +1482,7 @@
         "dtype": "int64",
         "name": "order_id",
         "source": {
+         "declared_type": "BIGINT",
          "dtype": "int",
          "nullable": true,
          "received": {
@@ -1493,6 +1502,7 @@
         "dtype": "int64",
         "name": "user_id",
         "source": {
+         "declared_type": "BIGINT",
          "dtype": "int",
          "nullable": true,
          "received": {
@@ -1512,6 +1522,7 @@
         "dtype": "float64",
         "name": "price",
         "source": {
+         "declared_type": "DOUBLE",
          "dtype": "float",
          "nullable": true,
          "received": {
@@ -1531,6 +1542,7 @@
         "dtype": "timestamp[us]",
         "name": "ts",
         "source": {
+         "declared_type": "TIMESTAMP",
          "dtype": "date",
          "nullable": true,
          "received": {
@@ -1570,6 +1582,7 @@
         "dtype": "int64",
         "name": "user_id",
         "source": {
+         "declared_type": "BIGINT",
          "dtype": "int",
          "nullable": true,
          "received": {
@@ -1589,6 +1602,7 @@
         "dtype": "int64",
         "name": "age",
         "source": {
+         "declared_type": "INTEGER",
          "dtype": "int",
          "nullable": true,
          "received": {
