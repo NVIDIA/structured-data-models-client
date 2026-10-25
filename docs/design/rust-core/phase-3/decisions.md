@@ -290,17 +290,19 @@ The genuine repair package uses actual landed G as its base and prior judging ha
 |---|---|---|---|
 | T310-OWNER-2026-10-25-RESTORE-INPUT-CLAIMS-1 | Restore and admit only `binary/feature` and `list/feature` for `java.databricks-sql.types`, as valid warehouse INPUT-role coverage claims under E96(b), even though those columns are omitted from public schema/model payload. Keep exact G case blob `9f82573b05d3890e72f28121fce7b0193336ff7a` and its unchanged inputs/expectations/outcomes; use the independently landed G coverage repair for the next genuine repair package, preserving all old red CI evidence and ordinary independent judging. | "Approved" | approved by owner 2026-10-25 |
 
-## Proposed K gate-fixture repair check scope, 2026-10-25
+## Owner-approved K gate-fixture repair check scope, 2026-10-25
 
-This is a distinct proposal for the exact reviewed K source, not an extension of the earlier 7ab scope's authority.
-The owner has been asked to choose the ten-selector scope or full local tests; no answer is recorded here.
-The row remains PROPOSED and the normal handoff refuses activation until actual owner approval is recorded.
+This is a distinct approval for the exact reviewed K source, not an extension of the earlier 7ab scope's authority.
+The owner was asked: "May I test the fixes locally, then run the full suite in CI before merging, instead of repeating the full suite both locally and in CI?"
+The owner replied exactly "Yes please".
+The coordinating agent relayed that actual reply; the exact question, answer and relay source are preserved in `$SDM_ORCH_STATE/phase-3/owner-answers-2026-10-25-K-fixture-scope.relay.md` and its JSON companion.
+This approval authorizes only the finite scope below after both exact CODE reviews and required postapproval controls.
 The ten selectors are pinned by SHA256 `4a0d7c311dbe7229139a7060f2a8073f124fcdc3d38cae5f684ad6561ebb17eb` and enumerated in `handoff.py`.
-The proposed local run keeps four complete modules: workflow tests, fresh Cargo controls, ratchet tests and public gate controls.
+The approved local run keeps four complete modules: workflow tests, fresh Cargo controls, ratchet tests and public gate controls.
 It also runs the actual coverage/allocation control, all three real locked capture-admission cases, the locked 1b sound path, exact citation rekeying and two real phase-2 reference consumers.
 Only the remaining unchanged scenarios in `test_gate_modes.py` and `test_t20f_gate.py` narrow locally.
 Both exact CODE approvals and required postapproval controls remain necessary, and all 49 gate scenarios remain mandatory in actual final-source full CI.
 
 | # | Proposal | Owner's words | Status |
 |---|---|---|---|
-| T310-OWNER-2026-10-25-FIXTURE-SCOPE-K | Permit explicit T3.10 handoff scope `t310-gate-captures-eb267cbf1`, with twelve original fixture/workflow/consumer files pinned to reviewed source `eb267cbf10ef130cf15e67dd5a9b20e7e85931f3` and exactly the ten selectors named above. Keep complete changed and mandatory substantive modules, every additional changed test, normal full-delta lint and all 49 gate scenarios in final-source full CI. Refuse missing or modified pinned inputs, another package or incomplete owner approval, and retain exact selected suites, hashes and this decision row in the normal handoff stamp. | No owner answer recorded | PROPOSED, owner approval pending |
+| T310-OWNER-2026-10-25-FIXTURE-SCOPE-K | Permit explicit T3.10 handoff scope `t310-gate-captures-eb267cbf1`, with twelve original fixture/workflow/consumer files pinned to reviewed source `eb267cbf10ef130cf15e67dd5a9b20e7e85931f3` and exactly the ten selectors named above. Keep complete changed and mandatory substantive modules, every additional changed test, normal full-delta lint and all 49 gate scenarios in final-source full CI. Refuse missing or modified pinned inputs, another package or incomplete owner approval, and retain exact selected suites, hashes and this decision row in the normal handoff stamp. | "Yes please" | approved by owner 2026-10-25 |
