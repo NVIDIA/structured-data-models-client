@@ -274,3 +274,17 @@ Both exact-source reviews and required controls still precede its use on a combi
 | # | Proposal | Owner's words | Status |
 |---|---|---|---|
 | T310-OWNER-2026-10-25-FIXTURE-SCOPE-1 | Permit explicit handoff scope `t310-fixtures-7ab261a6d` for T3.10 only, with the fixture files and full-CI workflow pinned to source `7ab261a6d0139c87e6c1bae13d563fded79843e3`: run all ten real factory controls, all four lifecycle outcomes and two real gate fixture consumer smokes in place of unchanged semantic scenarios in the named fixture-only files. Keep complete changed coverage-checker tests, every other substantive regression, normal lint and all 49 gate scenarios in actual final-source full CI; refuse a changed pinned file and record the exact selected suites, hashes and this decision row in the stamp. | "Use targeted fixture checks (recommended)" | approved by owner 2026-10-25 |
+
+
+## Proposed restoration of two valid input-role claims, 2026-10-25
+
+This proposal does not record an owner answer or authorize its own use.
+The earlier removal approval followed a mistaken diagnosis and does not approve restoration.
+P3M-2 proposes only admission of the two metadata strings already restored in G; the original case bytes, inputs, SQL, expectations and outcomes remain unchanged by this repair.
+The earlier P3M-1 proposal and failed G CI evidence remain historical and are not relabeled as acceptance.
+The separate CI installer repair requests the existing client test extra for the already-committed wording-census tests; it changes no product dependency.
+A normal reviewed repair package uses actual landed G as its base and prior judging harness, with no empty landing, checker override or fixture-scope extension.
+
+| # | Proposal | Owner's words | Status |
+|---|---|---|---|
+| T310-OWNER-2026-10-25-RESTORE-INPUT-CLAIMS-1 | Restore and admit only `binary/feature` and `list/feature` for `java.databricks-sql.types`, as valid warehouse INPUT-role coverage claims under E96(b), even though those columns are omitted from public schema/model payload. Keep exact G case blob `9f82573b05d3890e72f28121fce7b0193336ff7a` and its unchanged inputs/expectations/outcomes; use the independently landed G coverage repair for the next genuine repair package, preserving all old red CI evidence and ordinary independent judging. | No answer recorded | PROPOSED, owner restoration approval pending |

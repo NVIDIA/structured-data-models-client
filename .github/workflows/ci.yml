@@ -2136,7 +2136,7 @@ jobs:
           pip install --no-deps "$GITHUB_WORKSPACE"/dist/*.whl
           pip install --find-links "$GITHUB_WORKSPACE/dist" \
             "$GITHUB_WORKSPACE/packages/structured-data-models-relational-engine" \
-            "structured-data-models-client[relational,sqlite,duckdb,snowflake]==$VERSION"
+            "structured-data-models-client[test,relational,sqlite,duckdb,snowflake]==$VERSION"
       - name: The installed distribution is what gets imported, and it is typed
         working-directory: /tmp
         run: |

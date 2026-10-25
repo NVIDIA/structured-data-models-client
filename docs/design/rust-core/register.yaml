@@ -10601,3 +10601,52 @@ entries:
     exception to P3E-2's reference-word requirement; it grants no warning
     suppression, category change, timing change, decoder emulation,
     broader comparison exclusion or case metadata change.
+
+
+- id: P3M-2
+  title: Retain the two evidenced Java Databricks input-role coverage claims
+  kind: keep
+  old_behavior: >-
+    The original java.databricks-sql.types case claims binary/feature and
+    list/feature for token and tags in its warehouse input. These columns
+    are omitted from the public schema and model payload, but the captured
+    input establishes their roles under E96(b). F1 removed the two metadata
+    strings while misdiagnosing the older coverage reader's evidence gap.
+  new_behavior: >-
+    Preserve the original two valid input-role claims already restored in
+    G, with no change to case inputs, SQL, expectations, observations or
+    runner outcomes. The independently reviewed coverage reader repair
+    establishes those input roles; this entry proposes only the named
+    metadata restoration's case-file admission, not a comparison exception.
+  affected_inputs: >-
+    Only the binary/feature and list/feature metadata strings in
+    contract/cases/s2/java.databricks-sql.types.json, restored between
+    F1 3da8f3a2fe6854437513dbe2898a01eace13fb37 and
+    G 15050bfde80764bbe4574aafcbcc906fe9038a2b. The complete G case blob is
+    9f82573b05d3890e72f28121fce7b0193336ff7a, SHA256 d3dc5ee4b5503f67502e914af1948c2d0297c9ae6d673b39165c7bdbe260f020.
+  cases: [T3.10, java.databricks-sql.types]
+  refs: [E96, scripts/rust_core/coverage.py]
+  status: proposed
+  approved_by: null
+  decision_ref:
+    file: docs/design/rust-core/phase-3/decisions.md
+    row: T310-OWNER-2026-10-25-RESTORE-INPUT-CLAIMS-1
+  notes: >-
+    Proposed only: no owner restoration answer has been received. The
+    earlier answer approving removal after the incorrect diagnosis is not
+    restoration approval, and the unused P3M-1 proposal remains historical.
+    The G coverage implementation is SHA256 8b44badcbb8cc7d744040efe891e519071c3618f12113c3ba268cd4dfce510f2; this entry
+    changes neither it nor the case bytes. Actual CI 40214125978 remains
+    failed: F1's ratchet lacks admission and its coverage reader cannot
+    establish these valid roles. A genuine dependency/admission repair
+    package is judged by G's already-landed harness, without an empty
+    checkpoint advance, failed-evidence reuse or self-judging override.
+    No case_outcomes row is asserted because no projected outcome changes.
+    This entry does not make F1's mechanical case-admission or coverage
+    check pass retroactively: cases alone is not ratchet authorization.
+    H keeps the complete case byte-identical to G and contains a real CI
+    installer repair; its normal checkpoint is G, not an invented baseline.
+    Whether this explicit owner-backed historical metadata authorization
+    and normal repair sequence satisfy the process requires independent
+    review before the owner is asked. No warehouse observation is relabeled
+    as a bare case or reference-cell runtime observation.
