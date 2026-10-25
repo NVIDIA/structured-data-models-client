@@ -193,33 +193,84 @@ fn frame_detachment_owns_nested_sliced_and_dictionary_buffers() {
 
     fn buffers(data: &arrow_data::ArrayData, found: &mut BTreeSet<usize>) {
         for buffer in data.buffers() {
-            if !buffer.is_empty() {found.insert(buffer.as_ptr() as usize);}
+            if !buffer.is_empty() {
+                found.insert(buffer.as_ptr() as usize);
+            }
         }
         if let Some(nulls) = data.nulls() {
-            if !nulls.inner().values().is_empty() {found.insert(nulls.inner().values().as_ptr() as usize);}
+            if !nulls.inner().values().is_empty() {
+                found.insert(nulls.inner().values().as_ptr() as usize);
+            }
         }
-        for child in data.child_data() {buffers(child, found);}
+        for child in data.child_data() {
+            buffers(child, found);
+        }
     }
     let list = ListArray::from_iter_primitive::<Int32Type, _, _>([
-        Some(vec![Some(1), None]), None, Some(vec![Some(3), Some(4)]),
+        Some(vec![Some(1), None]),
+        None,
+        Some(vec![Some(3), Some(4)]),
     ]);
     let text = StringArray::from(vec![Some("first"), None, Some("last")]);
     let nested = StructArray::from(vec![
-        (Arc::new(Field::new("list", list.data_type().clone(), true)), Arc::new(list) as arrow_array::ArrayRef),
-        (Arc::new(Field::new("text", text.data_type().clone(), true)), Arc::new(text) as arrow_array::ArrayRef),
+        (
+            Arc::new(Field::new("list", list.data_type().clone(), true)),
+            Arc::new(list) as arrow_array::ArrayRef,
+        ),
+        (
+            Arc::new(Field::new("text", text.data_type().clone(), true)),
+            Arc::new(text) as arrow_array::ArrayRef,
+        ),
     ]);
     let mut dictionary = StringDictionaryBuilder::<Int8Type>::new();
-    dictionary.append("first").unwrap(); dictionary.append_null(); dictionary.append("last").unwrap();
+    dictionary.append("first").unwrap();
+    dictionary.append_null();
+    dictionary.append("last").unwrap();
     let batch = RecordBatch::try_from_iter([
         ("nested", Arc::new(nested) as arrow_array::ArrayRef),
-        ("dictionary", Arc::new(dictionary.finish()) as arrow_array::ArrayRef),
-    ]).unwrap().slice(1, 2);
+        (
+            "dictionary",
+            Arc::new(dictionary.finish()) as arrow_array::ArrayRef,
+        ),
+    ])
+    .unwrap()
+    .slice(1, 2);
     let original = ArrowData::new(batch.schema(), vec![batch]);
     let owned = sdm_host::detach_frame(original.clone()).unwrap();
     assert_eq!(owned.batches, original.batches);
     let mut foreign = BTreeSet::new();
     let mut detached = BTreeSet::new();
-    for array in original.batches[0].columns() {buffers(&array.to_data(), &mut foreign);}
-    for array in owned.batches[0].columns() {buffers(&array.to_data(), &mut detached);}
-    assert!(foreign.is_disjoint(&detached), "a nested/dictionary/null/data buffer is still shared");
+    for array in original.batches[0].columns() {
+        buffers(&array.to_data(), &mut foreign);
+    }
+    for array in owned.batches[0].columns() {
+        buffers(&array.to_data(), &mut detached);
+    }
+    assert!(
+        foreign.is_disjoint(&detached),
+        "a nested/dictionary/null/data buffer is still shared"
+    );
+}
+
+#[test]
+fn text_frame_is_an_explicit_unfinished_input_family() {
+    let batch = RecordBatch::try_from_iter([(
+        "user_id",
+        Arc::new(arrow_array::StringArray::from(vec!["a", "b"])) as arrow_array::ArrayRef,
+    )])
+    .unwrap();
+    let mut attached = inputs();
+    attached.insert(
+        AttachmentId(3),
+        Attachment::Arrow(ArrowData::new(batch.schema(), vec![batch])),
+    );
+    let failure = match HostRun::start(&sdm_host::default_root(), &message(), attached) {
+        Err(out) => error(out),
+        Ok(run) => error(
+            run.next()
+                .err()
+                .expect("text frame remains an unfinished development family"),
+        ),
+    };
+    assert_eq!(failure.code, ErrorCode::UnsupportedRequest);
 }
