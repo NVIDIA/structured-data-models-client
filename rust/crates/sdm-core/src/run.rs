@@ -1611,3 +1611,34 @@ mod tests {
         }
     }
 }
+#[test]
+fn page_budgets_measure_logical_slices_at_exact_and_over_limits() {
+    let schema = Arc::new(arrow_schema::Schema::new(vec![arrow_schema::Field::new(
+        "a",
+        arrow_schema::DataType::Int64,
+        true,
+    )]));
+    let parent = RecordBatch::try_new(
+        schema.clone(),
+        vec![Arc::new(arrow_array::Int64Array::from(
+            (0..1000)
+                .map(|i| if i == 501 { None } else { Some(i) })
+                .collect::<Vec<_>>(),
+        ))],
+    )
+    .unwrap();
+    let data = ArrowData::new(schema, vec![parent.slice(500, 1), parent.slice(501, 1)]);
+    // Each page carries eight value bytes and one null byte.
+    let mut budget = Budget {
+        rows: 2,
+        bytes: 18,
+        past_rows: internal("rows"),
+        past_bytes: internal("bytes"),
+    };
+    assert!(budget.exceeded(&data).is_none());
+    budget.bytes = 17;
+    assert_eq!(budget.exceeded(&data).unwrap().message, "bytes");
+    budget.bytes = 18;
+    budget.rows = 1;
+    assert_eq!(budget.exceeded(&data).unwrap().message, "rows");
+}
