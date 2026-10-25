@@ -392,6 +392,45 @@ def test_real_databricks_omitted_columns_keep_their_evidenced_input_roles() -> (
 
 
 @pytest.mark.parametrize(
+    'source',
+    [
+        '{catalog}.{schema}.users',
+        '`{catalog}`.`{schema}`.`users`',
+        '`{catalog}`.{schema}.USERS',
+    ],
+)
+def test_qualified_source_must_match_the_proven_sample_identity(
+    source: str,
+) -> None:
+    assert (
+        _databricks_omitted_features(lambda capture: None, source=source) == []
+    )
+
+
+@pytest.mark.parametrize(
+    'source',
+    [
+        '{catalog}.another.users',
+        'another.{schema}.users',
+        '`{CATALOG}`.`{schema}`.`users`',
+        '{schema}.users',
+        'users trailing',
+        'catalog..users',
+    ],
+)
+def test_a_single_sample_does_not_prove_a_different_or_unknown_source(
+    source: str,
+) -> None:
+    # The genuine sample and complete zero-row proof remain unchanged.
+    # A matching final name cannot replace the case's catalog/schema.
+    problems = _databricks_omitted_features(lambda capture: None, source=source)
+    assert len(problems) == 2, problems
+    assert all(
+        'rule 6: case java.databricks-sql.types: claims ' in p for p in problems
+    )
+
+
+@pytest.mark.parametrize(
     'raw', ['missing', 'null', 'object', 'string', 'empty']
 )
 def test_serialized_derived_bindings_never_replace_missing_raw_evidence(
