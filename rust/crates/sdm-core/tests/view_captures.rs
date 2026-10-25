@@ -836,7 +836,7 @@ fn held(description: &SourceDescription) -> sdm_contract::ops::HeldSchema {
 /// request past plan B's reads (the view read again), or how it ended
 /// before.
 enum Located {
-    Past(DataRequest),
+    Past(Box<DataRequest>),
     Ended(sdm_contract::CoreError),
 }
 
@@ -939,7 +939,7 @@ fn materialize_query(
         };
         for asked in requests {
             if asked.purpose.is_none() {
-                return Located::Past(asked.request);
+                return Located::Past(Box::new(asked.request));
             }
             if let Some(answer) = edits.answer.as_ref().and_then(|f| f(&asked.request)) {
                 run.submit_fetch(asked.id, answer).unwrap();
@@ -1193,7 +1193,7 @@ fn logical_table_aliases_and_swapped_names_survive_describe_and_materialize() {
                 panic!("aliased view schema did not reach sampling setup");
             };
             assert!(
-                matches!(request, DataRequest::CountRows { .. }),
+                matches!(*request, DataRequest::CountRows { .. }),
                 "{request:?}"
             );
             assert!(
