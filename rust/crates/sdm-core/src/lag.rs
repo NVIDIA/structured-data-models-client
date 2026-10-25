@@ -220,7 +220,7 @@ impl Lag {
                             LagValues::Empty(values.len())
                         }
                     }
-                    Labels::Int(_) | Labels::Text(_) => {
+                    Labels::Int(_) | Labels::Text(_) | Labels::Lists(_) => {
                         return Err(CoreError::new(
                             Sentence::Internal,
                             "a lagged target is neither a number nor a condition",

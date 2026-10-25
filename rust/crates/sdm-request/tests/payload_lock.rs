@@ -119,6 +119,7 @@ fn shop() -> Sampled {
             pairs: vec![(0, 0), (1, 0), (2, 1), (3, 3)],
         }],
         entity_table: "users".into(),
+        link_target: None,
         source_query: "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id".into(),
     }
 }
@@ -175,6 +176,7 @@ fn family() -> Sampled {
             pairs: vec![(0, 1), (1, 2)],
         }],
         entity_table: "Users".into(),
+        link_target: None,
         source_query: String::new(),
     }
 }

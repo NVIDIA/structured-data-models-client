@@ -538,6 +538,11 @@ fn asked(query: &ValidatedQuery) -> Result<Asked, CoreError> {
     let target = shape(&query.target, &entity.table)?;
     let task = match &target {
         Shape::Condition { .. } | Shape::Not(_) | Shape::Both { .. } => Task::Binary,
+        Shape::Aggregated(windowed)
+            if windowed.aggregation == labels::Aggregation::ListDistinct =>
+        {
+            Task::TemporalLink
+        }
         Shape::Aggregated(_) => Task::Regression,
         Shape::Column(_) => match query.target.stype {
             Some(Stype::Id | Stype::Categorical) => Task::Multiclass,
@@ -607,9 +612,8 @@ fn shape(node: &PqlNode, entity_table: &str) -> Result<Shape, CoreError> {
                 Aggregation::Max => labels::Aggregation::Max,
                 // `LIST_DISTINCT` of a foreign key, which the validation lets
                 // through as a temporal link prediction (`_get_task_type`):
-                // link prediction is Phase 4's (design, "Explicitly out"),
-                // refused by name until then.
-                Aggregation::ListDistinct => return Err(not_yet("aggregation")),
+                // its ordered FK labels are gathered below.
+                Aggregation::ListDistinct => labels::Aggregation::ListDistinct,
                 _ => return Err(unvalidated("an aggregation the model does not take")),
             };
             // A column of the aggregated table, or its rows a filter
@@ -3101,6 +3105,34 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         Err(err) => return Err(err),
     };
     let asked = asked(&validated)?;
+    let link_target = if let Shape::Aggregated(windowed) = &asked.target
+        && windowed.aggregation == labels::Aggregation::ListDistinct
+    {
+        let column = windowed
+            .column
+            .as_deref()
+            .ok_or_else(|| unvalidated("a list target with no column"))?;
+        let edges: Vec<_> = graph
+            .edges
+            .iter()
+            .filter(|e| e.src == windowed.table && e.fkey == column)
+            .collect();
+        match edges.as_slice() {
+            [edge] => Some(edge.dst.clone()),
+            _ => {
+                return Err(CoreError::new(
+                    Sentence::LinkTargetNotForeignKey,
+                    "the list target is not one foreign key",
+                )
+                .with_field(
+                    "column",
+                    Detail::text(format!("{}.{}", windowed.table, column)),
+                ));
+            }
+        }
+    } else {
+        None
+    };
     options::statistic_for(asked.task, statistic.as_ref())?;
     let entity = graph
         .table(&asked.entity_table)
@@ -3463,7 +3495,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     keep_stored_times(&mut memo, &read_times);
     let steps = match lag_timesteps {
         None => 0,
-        Some(asked) => asked.refusal(!fetches.is_empty())?,
+        Some(asked) => asked.refusal(!fetches.is_empty() && link_target.is_none())?,
     };
     let lag = match steps {
         0 => None,
@@ -3552,7 +3584,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // many as the host's limit, 100 where it names none, refused once the
     // context is gathered, as the client refuses it after its engine's task
     // table (`_refuse_more_entities_than_fit_in_memory`, `main`'s 1fc5a686).
-    let per_call = usize::try_from(options::rows_one_call_scores(rows_per_call))
+    let per_call = usize::try_from(asked.task.rows_one_call_scores(rows_per_call))
         .map_err(|_| internal("a call's rows past usize"))?;
     let num_test = indices.len();
     let calls = num_test.div_ceil(per_call);
@@ -3814,6 +3846,14 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
             .with_field("tables", count(walked.tables.len()))
             .with_field("limit", count(SUBGRAPH_TABLES)));
         }
+        if let Some(rhs) = &link_target
+            && !walked.tables.iter().any(|table| &table.name == rhs)
+        {
+            return Err(CoreError::new(
+                Sentence::LinkHistoryMissing,
+                "the sampled subgraph has no historical target entities",
+            ));
+        }
         sent.extend(walked.tables.iter().map(|t| t.name.clone()));
         // The lagged columns of this call's examples (T2.9): the narrowed
         // context's, then this call's own entities, each its own row's,
@@ -3856,6 +3896,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
             tables: walked.tables,
             links: walked.links,
             entity_table: entity.name.clone(),
+            link_target: link_target.clone(),
             source_query: source_query.clone(),
             run_mode: mode,
             use_prediction_time,
@@ -4169,7 +4210,9 @@ fn null_compared(target: &Shape, mask: &[bool]) -> Result<(), CoreError> {
     let rule = match aggregation {
         labels::Aggregation::Avg => "average_null",
         labels::Aggregation::Min | labels::Aggregation::Max => "min_max_null",
-        labels::Aggregation::Sum | labels::Aggregation::Count => return Ok(()),
+        labels::Aggregation::Sum
+        | labels::Aggregation::Count
+        | labels::Aggregation::ListDistinct => return Ok(()),
     };
     let batch = &mask[..mask.len().min(LABEL_BATCH)];
     if batch.is_empty() {
@@ -4506,7 +4549,7 @@ impl Labelling<'_> {
                     condition_column(array, self.entity_rows)?
                 })
             }
-            Shape::Aggregated(windowed) => labels::Target::Aggregated(aggregate(
+            Shape::Aggregated(windowed) => aggregate_target(
                 windowed,
                 {
                     let rows = fetched
@@ -4534,7 +4577,7 @@ impl Labelling<'_> {
                 &self.examples.anchors,
                 self.examples.index.len(),
                 "anchor_time",
-            )?),
+            )?,
             Shape::Condition { target, test } => tested(self.build(target, fetched, false)?, test),
             Shape::Not(inner) => labels::Target::Not(Box::new(self.build(inner, fetched, false)?)),
             Shape::Both { op, left, right } => labels::Target::Both {
@@ -4575,7 +4618,7 @@ fn temporal_target(
 ) -> Result<labels::Target, CoreError> {
     let part = |inner: &Shape| temporal_target(inner, fetched, anchors, examples, field);
     Ok(match shape {
-        Shape::Aggregated(windowed) => labels::Target::Aggregated(aggregate(
+        Shape::Aggregated(windowed) => aggregate_target(
             windowed,
             fetched
                 .get(&windowed.table)
@@ -4583,7 +4626,7 @@ fn temporal_target(
             anchors,
             examples,
             field,
-        )?),
+        )?,
         Shape::Condition { target, test } => tested(part(target)?, test),
         Shape::Not(inner) => labels::Target::Not(Box::new(part(inner)?)),
         Shape::Both { op, left, right } => labels::Target::Both {
@@ -4652,22 +4695,44 @@ fn shifted(anchors: &[i64], offset: Offset, field: &str) -> Result<Vec<i64>, Cor
 /// `windowed` over each of `examples` examples' rows of its table in
 /// `fetched`: those its filter keeps, after its own window's start and
 /// not after its end from the example's anchor (`execute_aggregation`).
-fn aggregate(
+fn aggregate_target(
     windowed: &Windowed,
     fetched: &Fetched,
     anchors: &[i64],
     examples: usize,
     field: &str,
-) -> Result<labels::Aggregated, CoreError> {
+) -> Result<labels::Target, CoreError> {
     let ends = shifted(anchors, windowed.end, field)?;
     let starts = shifted(anchors, windowed.start, field)?;
-    let values = match &windowed.column {
-        Some(column) => label_values(named(&fetched.rows, column)?)?,
-        None => labels::Values::Ones(fetched.rows.num_rows()),
-    };
     let kept = match &windowed.filter {
         None => None,
         Some(filter) => Some(labels::truth(&row_condition(filter, &fetched.rows)?)?.values),
+    };
+    let bounds = labels::Bounds {
+        starts: Some(&starts),
+        ends: &ends,
+    };
+    if windowed.aggregation == labels::Aggregation::ListDistinct {
+        let name = windowed
+            .column
+            .as_deref()
+            .ok_or_else(|| unvalidated("a list target with no column"))?;
+        let array = named(&fetched.rows, name)?;
+        let rows: Vec<usize> = (0..array.len()).collect();
+        let values = static_column(array, &rows)?;
+        return labels::distinct(
+            examples,
+            &fetched.batch,
+            &values,
+            &fetched.times,
+            bounds,
+            kept.as_deref(),
+        )
+        .map(labels::Target::Listed);
+    }
+    let values = match &windowed.column {
+        Some(column) => label_values(named(&fetched.rows, column)?)?,
+        None => labels::Values::Ones(fetched.rows.num_rows()),
     };
     labels::aggregate_kept(
         windowed.aggregation,
@@ -4681,6 +4746,7 @@ fn aggregate(
         },
         kept.as_deref(),
     )
+    .map(labels::Target::Aggregated)
 }
 
 /// `target` tested as `test` asks.
@@ -4734,6 +4800,9 @@ fn labels_result(
         labels::Labels::Int(v) => Arc::new(Int64Array::from(v.clone())),
         labels::Labels::Bool(v) => Arc::new(BooleanArray::from(v.clone())),
         labels::Labels::Text(v) => Arc::new(StringArray::from(v.clone())),
+        labels::Labels::Lists(_) => {
+            return Err(internal("the scalar label echo does not carry list labels"));
+        }
     };
     let schema = Arc::new(arrow_schema::Schema::new(vec![
         arrow_schema::Field::new("entity", keys.data_type().clone(), true),

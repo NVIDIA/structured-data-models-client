@@ -186,31 +186,96 @@ fn read(path: &Path) -> String {
     std::fs::read_to_string(path).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
 }
 
-/// Writes the schema of `format`'s current version and sets its lock
-/// entry, the phase's working entry (decision H4).
+/// Replace one working entry only when the merge-base lock proves which
+/// entries are immutable. Read-only verification needs no new Git access.
+fn updated_lock(
+    lock: &str,
+    merged: Option<&str>,
+    version: u32,
+    hash: &str,
+    file: &str,
+) -> Result<String, String> {
+    let merged = parse_lock(merged.ok_or("no merged-version proof")?)?;
+    if merged.is_empty() {
+        return Err("no merged-version proof".into());
+    }
+    let current = parse_lock(lock)?;
+    for entry in &merged {
+        if !current.contains(entry) {
+            return Err(format!("merged version {} is missing or changed", entry.0));
+        }
+    }
+    let is_merged = |v| merged.iter().any(|(known, ..)| *known == v);
+    if current.iter().filter(|(v, ..)| !is_merged(*v)).count() > 1 {
+        return Err("more than one unmerged working entry".into());
+    }
+    if let Some((_, old_hash, old_file)) = merged.iter().find(|(v, ..)| *v == version) {
+        return if hash == old_hash && file == old_file {
+            Ok(lock.to_owned())
+        } else {
+            Err(format!("cannot rewrite merged version {version}"))
+        };
+    }
+    if merged.iter().any(|(v, ..)| *v >= version) {
+        return Err("a working version must follow the merged versions".into());
+    }
+    let mut lines: Vec<&str> = lock
+        .lines()
+        .filter(|line| {
+            line.split_whitespace()
+                .next()
+                .and_then(|v| v.parse::<u32>().ok())
+                .is_none_or(is_merged)
+        })
+        .collect();
+    let entry = format!("{version} sha256:{hash} {file}");
+    lines.push(&entry);
+    Ok(lines.join("\n") + "\n")
+}
+
+fn merged_lock(format: &Format) -> Result<String, String> {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let git = |args: &[&str]| -> Result<String, String> {
+        let output = std::process::Command::new("git")
+            .current_dir(&root)
+            .args(args)
+            .stdin(std::process::Stdio::null())
+            .output()
+            .map_err(|_| "cannot read merged-version proof")?;
+        if !output.status.success() {
+            return Err("cannot read merged-version proof".into());
+        }
+        String::from_utf8(output.stdout).map_err(|_| "merged-version proof is not UTF-8".into())
+    };
+    let bases = git(&["merge-base", "--all", "HEAD", "origin/rust-core"])?;
+    let bases: Vec<&str> = bases.split_whitespace().collect();
+    let [base] = bases.as_slice() else {
+        return Err("merged-version proof needs exactly one merge base".into());
+    };
+    if base.len() != 40 || !base.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err("merged-version proof has no exact commit".into());
+    }
+    git(&[
+        "show",
+        &format!("{base}:rust/crates/sdm-contract/schema/{}", format.lock),
+    ])
+}
+
+/// Writes the schema and the one working entry, preserving every entry
+/// proven merged at HEAD's merge base with origin/rust-core (H4).
 fn write(format: &Format, generated: &str) {
     let lock_path = schema_dir().join(format.lock);
-    let lock = std::fs::read_to_string(&lock_path).unwrap_or_default();
-    parse_lock(&lock).unwrap();
-    let entry = format!(
-        "{} sha256:{} {}",
+    let lock = read(&lock_path);
+    let merged = merged_lock(format).expect("write needs unambiguous merged-version proof");
+    let updated = updated_lock(
+        &lock,
+        Some(&merged),
         format.version,
-        sha256(generated),
-        format.schema_file(format.version)
-    );
-    let mut lines: Vec<String> = lock
-        .lines()
-        .filter(|line| line.split_whitespace().next() != Some(format.version.to_string().as_str()))
-        .map(str::to_owned)
-        .collect();
-    if lines.is_empty() {
-        lines.push(format!(
-            "# The {} schema lock: one line per version; see contract_lock.py.",
-            format.prefix
-        ));
-    }
-    lines.push(entry);
-    std::fs::write(&lock_path, lines.join("\n") + "\n").unwrap();
+        &sha256(generated),
+        &format.schema_file(format.version),
+    )
+    .expect("write preserves all merged locks and replaces one working entry");
+    std::fs::write(&lock_path, updated).unwrap();
     std::fs::write(
         schema_dir().join(format.schema_file(format.version)),
         generated,
@@ -568,29 +633,88 @@ const MERGED_FOR_WRITER: &str = "# merged locks\n25 sha256:a sdm-contract-25.jso
 
 #[test]
 fn the_writer_replaces_only_the_one_proven_unmerged_working_version() {
-    let current = format!("{MERGED_FOR_WRITER}# keep this comment\n28 sha256:d sdm-contract-28.json\n");
-    let updated = updated_lock(&current, Some(MERGED_FOR_WRITER), 30, "e", "sdm-contract-30.json").unwrap();
-    assert_eq!(updated, format!("{MERGED_FOR_WRITER}# keep this comment\n30 sha256:e sdm-contract-30.json\n"));
+    let current =
+        format!("{MERGED_FOR_WRITER}# keep this comment\n28 sha256:d sdm-contract-28.json\n");
+    let updated = updated_lock(
+        &current,
+        Some(MERGED_FOR_WRITER),
+        30,
+        "e",
+        "sdm-contract-30.json",
+    )
+    .unwrap();
+    assert_eq!(
+        updated,
+        format!("{MERGED_FOR_WRITER}# keep this comment\n30 sha256:e sdm-contract-30.json\n")
+    );
     // Regenerating the same working version changes only that entry.
-    let next = updated_lock(&updated, Some(MERGED_FOR_WRITER), 30, "f", "sdm-contract-30.json").unwrap();
+    let next = updated_lock(
+        &updated,
+        Some(MERGED_FOR_WRITER),
+        30,
+        "f",
+        "sdm-contract-30.json",
+    )
+    .unwrap();
     assert_eq!(next, updated.replace("sha256:e", "sha256:f"));
 }
 
 #[test]
 fn the_writer_never_removes_or_rewrites_an_entry_proven_merged() {
-    for current in [MERGED_FOR_WRITER.replace("26 sha256:b sdm-contract-26.json\n", ""),
+    for current in [
+        MERGED_FOR_WRITER.replace("26 sha256:b sdm-contract-26.json\n", ""),
         MERGED_FOR_WRITER.replace("sha256:b", "sha256:changed"),
-        MERGED_FOR_WRITER.replace("sdm-contract-26.json", "another.json")] {
-        assert!(updated_lock(&current, Some(MERGED_FOR_WRITER), 30, "e", "sdm-contract-30.json").is_err());
+        MERGED_FOR_WRITER.replace("sdm-contract-26.json", "another.json"),
+    ] {
+        assert!(
+            updated_lock(
+                &current,
+                Some(MERGED_FOR_WRITER),
+                30,
+                "e",
+                "sdm-contract-30.json"
+            )
+            .is_err()
+        );
     }
-    assert!(updated_lock(MERGED_FOR_WRITER, Some(MERGED_FOR_WRITER), 27, "changed", "sdm-contract-27.json").is_err());
-    assert_eq!(updated_lock(MERGED_FOR_WRITER, Some(MERGED_FOR_WRITER), 27, "c", "sdm-contract-27.json").unwrap(), MERGED_FOR_WRITER);
+    assert!(
+        updated_lock(
+            MERGED_FOR_WRITER,
+            Some(MERGED_FOR_WRITER),
+            27,
+            "changed",
+            "sdm-contract-27.json"
+        )
+        .is_err()
+    );
+    assert_eq!(
+        updated_lock(
+            MERGED_FOR_WRITER,
+            Some(MERGED_FOR_WRITER),
+            27,
+            "c",
+            "sdm-contract-27.json"
+        )
+        .unwrap(),
+        MERGED_FOR_WRITER
+    );
 }
 
 #[test]
 fn the_writer_refuses_multiple_unmerged_entries_instead_of_guessing_history() {
-    let current = format!("{MERGED_FOR_WRITER}28 sha256:d sdm-contract-28.json\n29 sha256:e sdm-contract-29.json\n");
-    assert!(updated_lock(&current, Some(MERGED_FOR_WRITER), 30, "f", "sdm-contract-30.json").is_err());
+    let current = format!(
+        "{MERGED_FOR_WRITER}28 sha256:d sdm-contract-28.json\n29 sha256:e sdm-contract-29.json\n"
+    );
+    assert!(
+        updated_lock(
+            &current,
+            Some(MERGED_FOR_WRITER),
+            30,
+            "f",
+            "sdm-contract-30.json"
+        )
+        .is_err()
+    );
 }
 
 #[test]

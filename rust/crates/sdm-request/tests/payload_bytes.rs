@@ -50,6 +50,7 @@ fn sampled(note: &str) -> Sampled {
         }],
         links: vec![],
         entity_table: "users".into(),
+        link_target: None,
         source_query: String::new(),
         run_mode: RunMode::Fast,
         use_prediction_time: false,
