@@ -3848,6 +3848,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
             anchors: &anchors,
             nulls,
             entity,
+            link_target: link_target.as_deref(),
             neighbors: &walk_hops,
             excluded: &excluded,
             lookback: &lookback,

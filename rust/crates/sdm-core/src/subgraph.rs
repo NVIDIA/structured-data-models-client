@@ -114,6 +114,9 @@ pub(crate) struct Walk<'a> {
     pub anchors: &'a [i64],
     pub nulls: NullOrder,
     pub entity: &'a Table,
+    /// The second entity role of a link request, whose sampled key must
+    /// survive the feature projection just as the first entity's does.
+    pub link_target: Option<&'a str>,
     /// The hops walked, each with the neighbors it keeps of each row: the
     /// run mode's two by default, or as the sampling options ask
     /// (`num_hops`, `num_neighbors`, [`options::neighbors`]); the walk ends
@@ -693,7 +696,8 @@ impl Walk<'_> {
                 }
                 frame = first_of_each_key(frame, table, key)?;
             }
-            let entity = table.name == self.entity.name;
+            let entity =
+                table.name == self.entity.name || self.link_target == Some(table.name.as_str());
             let features = features(self.graph, table, self.excluded);
             let mut sent: BTreeSet<String> = features.iter().map(|(n, _)| n.clone()).collect();
             if entity && let Some(key) = &table.primary_key {
