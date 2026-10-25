@@ -725,24 +725,76 @@ pub(crate) struct Budget {
 }
 
 impl Budget {
-    /// The error of the limit `data`, the pages read so far, is past.
+    /// The error of the remaining limit the incoming page is past.
     fn exceeded(&self, data: &ArrowData) -> Option<CoreError> {
-        let rows: usize = data.batches.iter().map(RecordBatch::num_rows).sum();
-        if rows as u64 > self.rows {
-            return Some(self.past_rows.clone());
-        }
-        let bytes: usize = data
+        let Some(rows) = data
             .batches
             .iter()
-            .map(RecordBatch::get_array_memory_size)
-            .sum();
-        (bytes as u64 > self.bytes).then(|| self.past_bytes.clone())
+            .try_fold(0u64, |n, batch| n.checked_add(batch.num_rows() as u64))
+        else {
+            return Some(self.past_rows.clone());
+        };
+        if rows > self.rows {
+            return Some(self.past_rows.clone());
+        }
+        match page_bytes(data) {
+            Ok(bytes) => (bytes > self.bytes).then(|| self.past_bytes.clone()),
+            Err(error) => Some(error),
+        }
+    }
+
+    /// Charge the incoming page once, before compaction can discard a
+    /// redundant null buffer or rebase offsets. Earlier pages' transfer
+    /// costs are never reconstructed from their compacted representation.
+    fn consume(&mut self, data: &ArrowData) -> Result<(), CoreError> {
+        if let Some(error) = self.exceeded(data) {
+            return Err(error);
+        }
+        self.rows -= data
+            .batches
+            .iter()
+            .map(|batch| batch.num_rows() as u64)
+            .sum::<u64>();
+        self.bytes -= page_bytes(data)?;
+        Ok(())
     }
 }
 
-/// The error of the limit `data` is past, where `budget` is given.
-fn past(budget: &Option<Box<Budget>>, data: &ArrowData) -> Option<CoreError> {
-    budget.as_ref().and_then(|budget| budget.exceeded(data))
+fn page_bytes(data: &ArrowData) -> Result<u64, CoreError> {
+    data.batches.iter().try_fold(0u64, |bytes, batch| {
+        Ok(bytes.saturating_add(crate::pages::logical_bytes(batch)?))
+    })
+}
+
+enum PageFailure {
+    Fatal(CoreError),
+    Limit(CoreError),
+}
+
+/// A bounded page is measured as received, then copied off any shared
+/// parent before it is retained. Ordinary fetches remain zero-copy.
+fn keep_page(
+    mut data: ArrowData,
+    budget: &mut Option<Box<Budget>>,
+) -> Result<ArrowData, PageFailure> {
+    if let Some(budget) = budget {
+        budget.consume(&data).map_err(PageFailure::Limit)?;
+        data = crate::pages::compact(data).map_err(PageFailure::Fatal)?;
+    }
+    Ok(data)
+}
+
+fn append_page(
+    earlier: Option<ArrowData>,
+    more: ArrowData,
+    budget: &mut Option<Box<Budget>>,
+) -> Result<ArrowData, PageFailure> {
+    // Page schema failures keep precedence over a simultaneous budget
+    // refusal, and remain terminal rather than describe recovery.
+    if let Some(earlier) = &earlier {
+        check_part(earlier, &more, "page").map_err(PageFailure::Fatal)?;
+    }
+    add_page(earlier, keep_page(more, budget)?).map_err(PageFailure::Fatal)
 }
 
 /// One fetch of a request the data layer bound into several
@@ -856,6 +908,12 @@ fn add_part(
     let Some(mut earlier) = earlier else {
         return Ok(more);
     };
+    check_part(&earlier, &more, part)?;
+    earlier.batches.extend(more.batches);
+    Ok(earlier)
+}
+
+fn check_part(earlier: &ArrowData, more: &ArrowData, part: &str) -> Result<(), CoreError> {
     if earlier.schema != more.schema || earlier.received != more.received {
         return Err(schema_mismatch(
             &format!("{part}s"),
@@ -863,8 +921,7 @@ fn add_part(
             &format!("a {part} of the answer has another schema than the {part}s before it"),
         ));
     }
-    earlier.batches.extend(more.batches);
-    Ok(earlier)
+    Ok(())
 }
 
 /// A request asked as several fetches, `parts`, polled: pending until
@@ -875,7 +932,7 @@ fn poll_parts(
     data: Option<&DataAccess>,
     expect: &ExpectedSchema,
     shared: &Mutex<Shared>,
-    budget: &Option<Box<Budget>>,
+    budget: &mut Option<Box<Budget>>,
     context: &mut Context<'_>,
 ) -> Poll<Reply> {
     let mut pending = false;
@@ -931,10 +988,14 @@ fn poll_parts(
             return Poll::Pending;
         }
     };
-    if let Some(err) = past(budget, &whole) {
-        return Poll::Ready(Reply::Failed(err));
+    match keep_page(whole, budget) {
+        Ok(whole) => Poll::Ready(Reply::Fetch(FetchResult::Data(whole))),
+        Err(PageFailure::Limit(error)) => Poll::Ready(Reply::Failed(error)),
+        Err(PageFailure::Fatal(error)) => {
+            lock(shared).exhausted.get_or_insert(error);
+            Poll::Pending
+        }
     }
-    Poll::Ready(Reply::Fetch(FetchResult::Data(whole)))
 }
 
 impl Future for Ask {
@@ -961,7 +1022,7 @@ impl Future for Ask {
                 data.as_ref(),
                 expect,
                 &this.shared,
-                &this.budget,
+                &mut this.budget,
                 context,
             );
         }
@@ -1021,17 +1082,14 @@ impl Future for Ask {
                 // A page: kept, and the next one asked for with the
                 // provider's continuation, under a new id.
                 Some(Reply::Fetch(FetchResult::Page { data, continuation })) => {
-                    let pages = match add_page(pages, data) {
+                    let pages = match append_page(pages, data, &mut this.budget) {
                         Ok(pages) => pages,
-                        Err(err) => {
+                        Err(PageFailure::Limit(error)) => return Poll::Ready(Reply::Failed(error)),
+                        Err(PageFailure::Fatal(err)) => {
                             shared.exhausted.get_or_insert(err);
                             return Poll::Pending;
                         }
                     };
-                    // Past the budget: no next page is asked for.
-                    if let Some(err) = past(&this.budget, &pages) {
-                        return Poll::Ready(Reply::Failed(err));
-                    }
                     let Some(asked) = fetch else {
                         shared
                             .exhausted
@@ -1062,16 +1120,16 @@ impl Future for Ask {
                 }
                 // The last page, or the only one: the pages read as one
                 // answer, held to the budget.
-                Some(Reply::Fetch(FetchResult::Data(data))) => match add_page(pages, data) {
-                    Ok(whole) => match past(&this.budget, &whole) {
-                        Some(err) => Poll::Ready(Reply::Failed(err)),
-                        None => Poll::Ready(Reply::Fetch(FetchResult::Data(whole))),
-                    },
-                    Err(err) => {
-                        shared.exhausted.get_or_insert(err);
-                        Poll::Pending
+                Some(Reply::Fetch(FetchResult::Data(data))) => {
+                    match append_page(pages, data, &mut this.budget) {
+                        Ok(whole) => Poll::Ready(Reply::Fetch(FetchResult::Data(whole))),
+                        Err(PageFailure::Limit(error)) => Poll::Ready(Reply::Failed(error)),
+                        Err(PageFailure::Fatal(err)) => {
+                            shared.exhausted.get_or_insert(err);
+                            Poll::Pending
+                        }
                     }
-                },
+                }
                 Some(reply) => Poll::Ready(reply),
             },
             AskState::Fallback(_) | AskState::Chunks(_) | AskState::Projection(_) => {

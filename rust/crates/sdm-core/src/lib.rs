@@ -19,6 +19,7 @@ mod fallback;
 mod held;
 mod lag;
 pub mod materialize;
+mod pages;
 pub mod pql;
 mod predict;
 pub mod profiles;
