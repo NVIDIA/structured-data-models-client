@@ -17,6 +17,7 @@ not an observation is refused by name (``read:``), never a traceback.
 
 from __future__ import annotations
 
+import copy
 import importlib.util
 import json
 import os
@@ -350,6 +351,7 @@ def test_a_warehouse_only_case_is_held_to_its_captures_reference_line() -> None:
 
 def _databricks_omitted_features(
     change: Callable[[dict[str, Any]], None],
+    source: str = 'users',
 ) -> list[str]:
     """The real ordinary capture through the capture reader and rule 6."""
     coverage = _coverage_module()
@@ -358,6 +360,7 @@ def _databricks_omitted_features(
     capture = json.loads((ROOT / path).read_text())
     change(capture)
     case = json.loads((ROOT / f'contract/cases/s2/{case_id}.json').read_text())
+    case['input']['from_source']['tables']['users'] = source
     case['cells'] = ['binary/feature', 'list/feature']
     real_tree = coverage._module('ratchet').Tree(
         ROOT, _git(dict(os.environ), 'rev-parse', 'HEAD')
@@ -386,6 +389,73 @@ def test_real_databricks_omitted_columns_keep_their_evidenced_input_roles() -> (
     # E96(b): the reference reads token:binary and tags:list<int32>, then
     # leaves them out. Both real catalog constraint reads return no rows.
     assert _databricks_omitted_features(lambda capture: None) == []
+
+
+@pytest.mark.parametrize(
+    'raw', ['missing', 'null', 'object', 'string', 'empty']
+)
+def test_serialized_derived_bindings_never_replace_missing_raw_evidence(
+    raw: str,
+) -> None:
+    def change(capture: dict[str, Any]) -> None:
+        statements = capture['reference']['driver']['capture']['statements']
+        for statement, kept in zip(
+            statements, capture['statements'], strict=True
+        ):
+            parameters = kept.get('parameters')
+            if isinstance(parameters, list) and len(parameters) == 2:
+                statement['_coverage_parameters'] = list(parameters)
+        if raw == 'missing':
+            capture.pop('statements')
+        else:
+            capture['statements'] = {
+                'null': None,
+                'object': {},
+                'string': 'not a statement list',
+                'empty': [],
+            }[raw]
+
+    problems = _databricks_omitted_features(change)
+    assert len(problems) == 2, problems
+    assert all(
+        'rule 6: case java.databricks-sql.types: claims ' in p for p in problems
+    )
+
+
+def test_constraint_absence_does_not_cross_sampled_namespaces() -> None:
+    def change(capture: dict[str, Any]) -> None:
+        statements = capture['reference']['driver']['capture']['statements']
+        recorded = capture['statements']
+        samples = []
+        for index, (statement, kept) in enumerate(
+            zip(statements, recorded, strict=True)
+        ):
+            if kept.get('parameters') == ['{schema}', 'users']:
+                # Both catalog reads now prove absence only for a.users.
+                kept['parameters'][0] = 'a'
+                statement['parameters'][0]['value'] = repr('a')
+            relation = '`{catalog}`.`{schema}`.`users`'
+            if relation in kept['text'] and kept['text'].endswith('LIMIT 1000'):
+                a = '`{catalog}`.`a`.`users`'
+                b = '`{catalog}`.`b`.`users`'
+                kept['text'] = kept['text'].replace(relation, a)
+                statement['sql'] = kept['text']
+                other_kept, other_statement = copy.deepcopy((kept, statement))
+                other_kept['text'] = other_kept['text'].replace(a, b)
+                other_statement['sql'] = other_kept['text']
+                samples.append((index, other_kept, other_statement))
+        assert len(samples) == 1
+        index, kept, statement = samples[0]
+        recorded.insert(index + 1, kept)
+        statements.insert(index + 1, statement)
+
+    # Both a.users and b.users are sampled, but the case names only b.users
+    # and no catalog read establishes constraint absence for b.users.
+    problems = _databricks_omitted_features(change, source='{catalog}.b.users')
+    assert len(problems) == 2, problems
+    assert all(
+        'rule 6: case java.databricks-sql.types: claims ' in p for p in problems
+    )
 
 
 @pytest.mark.parametrize('kind', ['keys', 'foreign'])
