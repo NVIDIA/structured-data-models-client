@@ -179,7 +179,8 @@ T4.2 remains one canonical package, with these explicit implementation substeps:
 1. First constructor consumer: Native-endian NumPy-backed signed/unsigned integer, Float32/Float64 and Boolean DataFrame columns, including numeric NaN, empty/all-null numeric columns, with ordinary built-in table/override/relationship arguments.
    Working contract 31 supplies a run-local manifest and fixed Table/Schema describe stages; core inference, key/link assembly and notices consume the detached values.
    Each Table call returns an owned Arrow stream for fresh binding in the final Schema call; public tables retain original DataFrame references and metadata retains no attachment ids.
-   Native override-map order is carried separately from SourceSpec's value maps.
+   Native override-map order and scalar/sequence key form are carried separately from SourceSpec's value maps.
+   The frame result and held-schema facts preserve key form; explicit frame relationships use one ordered typed slot list validated after overrides, including malformed built-in values at their consumed position.
 2. Native-family completion: text/date, object, Decimal, pandas nullable/other extension arrays and custom argument/hooks need their own conversion and stage facts before they join the development seam.
    The first consumer excludes those native families by type, with no content-based date detector, host semantic fallback, new SDK refusal policy or compatibility exception.
 3. Complete frame/index/mutation/edit behavior and the real large-offset admission cases listed below before claiming T4.2 complete or switching defaults.

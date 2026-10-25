@@ -181,6 +181,7 @@ pub fn held(described: &SourceDescription) -> HeldSchema {
                         }),
                     })
                     .collect(),
+                frame_key_form: table.frame_key_form,
                 primary_key: table.primary_key.clone(),
                 time_column: table.time_column.clone(),
                 duplicate_keys: table.duplicate_keys.clone(),
@@ -215,6 +216,7 @@ pub fn described(held: &HeldSchema) -> Option<SourceDescription> {
             name: table.name.clone(),
             source: table.source.clone(),
             columns,
+            frame_key_form: table.frame_key_form,
             primary_key: table.primary_key.clone(),
             time_column: table.time_column.clone(),
             time_column_inferred: None,

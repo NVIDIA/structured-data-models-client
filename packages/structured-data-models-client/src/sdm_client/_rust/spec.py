@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 
 def held_schema(schema: Schema) -> dict[str, Any]:
     r"""``schema`` as the contract's ``HeldSchema``."""
-    from sdm_client.schema import _as_key_tuple
+    from sdm_client.schema import Table, _as_key_tuple
 
     tables = []
     for name, table in schema.tables.items():
@@ -59,6 +59,10 @@ def held_schema(schema: Schema) -> dict[str, Any]:
             'primary_key': [] if key is None else list(_as_key_tuple(key)),
             'time_column': table.time_column,
         }
+        if isinstance(table, Table) and key is not None:
+            held['frame_key_form'] = (
+                'scalar' if isinstance(key, str) else 'sequence'
+            )
         repeated = getattr(table, 'duplicate_keys', None)
         if repeated is not None:
             held['duplicate_keys'] = codec.integer('u64', int(repeated))

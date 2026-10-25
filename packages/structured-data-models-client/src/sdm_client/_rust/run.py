@@ -302,7 +302,7 @@ def _steps(
             try:
                 control, sent = handle.next()
             except core.CoreError as failed:
-                _warn(handle, quiet, given, kept)
+                _warn(handle, quiet, given, kept, owned_frame)
                 error = errors.error_from_core(
                     failed.control,
                     failed.attachments,
@@ -318,7 +318,7 @@ def _steps(
                     _of_the_part(error, refused.raised)
                     raise refused.raised
                 raise error from None
-            _warn(handle, quiet, given, kept)
+            _warn(handle, quiet, given, kept, owned_frame)
             step = codec.read(control, sent)
             if step['message'] != 'step':
                 raise StructuredDataError(
@@ -539,6 +539,7 @@ def _warn(
     quiet: frozenset[str],
     given: set[str] | None,
     kept: list[dict[str, Any]] | None = None,
+    frame_constructor: bool = False,
 ) -> None:
     taken = handle.take_warnings()
     # Warning filters may raise and retain this frame in a traceback. The
@@ -547,5 +548,10 @@ def _warn(
     if taken is not None:
         control, sent = taken
         errors.warn_from_core(
-            control, sent, quiet=quiet, given=given, held=kept
+            control,
+            sent,
+            quiet=quiet,
+            given=given,
+            held=kept,
+            frame_constructor=frame_constructor,
         )

@@ -274,7 +274,13 @@ def build(
         object.__setattr__(
             table_shape,
             'primary_key',
-            None if not keys else keys[0] if len(keys) == 1 else keys,
+            None
+            if not keys
+            else keys
+            if frames is not None and table.get('frame_key_form') == 'sequence'
+            else keys[0]
+            if len(keys) == 1
+            else keys,
         )
         object.__setattr__(table_shape, 'time_column', table['time_column'])
         duplicates = table['duplicate_keys']

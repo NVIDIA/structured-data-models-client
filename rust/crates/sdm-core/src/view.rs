@@ -594,6 +594,7 @@ pub(crate) fn describe(
             name: logical.name.clone(),
             source: Relation::named(logical.name.clone()),
             columns,
+            frame_key_form: None,
             primary_key: logical.primary_key.iter().cloned().collect(),
             time_column,
             time_column_inferred: inferred_time,

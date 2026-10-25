@@ -87,7 +87,7 @@
       "refactor": "T2.2: a SQLite source routes as a DuckDB one (_routing.on_the_core with the backend's from-source paths); no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::build": {
-      "moved": "T3.16 (fix A): the Schema is written as the core answered it, field by field, each column with what the source said of it (Column._source), so the old route's setters and their checks, which ask the old PQL package, are not run again on the core route (rule 11); the time columns the setters marked as declared are marked so still; T4.2: consume the same core metadata for primitive frames with native Table.data references, no SQL SourceFacts or EngineTables side effects; ordinary source construction is unchanged"
+      "moved": "T3.16 (fix A): the Schema is written as the core answered it, field by field, each column with what the source said of it (Column._source), so the old route's setters and their checks, which ask the old PQL package, are not run again on the core route (rule 11); the time columns the setters marked as declared are marked so still; T4.2: consume the same core metadata for primitive frames with native Table.data references, no SQL SourceFacts or EngineTables side effects; ordinary source construction is unchanged; T4.2 R2: rebuild scalar versus sequence primary-key forms from the core frame fact; ordinary SQL reconstruction stays unchanged"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::description": {
       "gone": "T3.16 (fix A): the schema is handed over as plain data by _rust/spec.py's held_schema; no saved description, no merge (sdm_schema::edit::read_held is gone)"
@@ -231,7 +231,7 @@
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::<module>": {
-      "moved": "T3.6: owner-approved P3D-13 removes the routine Snowflake seed warning because the seed is optional; the sampling limitation is documented and no Python SEED_IGNORED mapping remains; T3.5: source_values, decoded and _opening, saying a semantic model's sentences; T3.10: the first invalid-string-escape warning is selected by the core; the host only presents its warning class; T3.10: map the core-selected inference_option_not_finite sentence to authentic installed host-library wording; task, key and refusal selection stay in Rust"
+      "moved": "T3.6: owner-approved P3D-13 removes the routine Snowflake seed warning because the seed is optional; the sampling limitation is documented and no Python SEED_IGNORED mapping remains; T3.5: source_values, decoded and _opening, saying a semantic model's sentences; T3.10: the first invalid-string-escape warning is selected by the core; the host only presents its warning class; T3.10: map the core-selected inference_option_not_finite sentence to authentic installed host-library wording; task, key and refusal selection stay in Rust; T4.2 R2: fixed constructor warning presentation mode preserves native plain text and SDMWarning category; ordinary SQL mode is unchanged"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_Words.convert_field": {
       "moved": "T3.17: the one value formatter gains the conversions the shared templates name (d, p); fix 1: host-held values from the call in progress (holding), the a and I conversions and the to() pairing"
@@ -489,7 +489,7 @@
       "moved": "T3.17: the core's table of sentences, read once from _native.templates()"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::warn_from_core": {
-      "moved": "T3.17: warnings group by the table's data; host values replace the words callback; fix 1: host-held values from the call in progress (holding), the a and I conversions and the to() pairing; T3.5: a group's opening said with the call's held values"
+      "moved": "T3.17: warnings group by the table's data; host values replace the words callback; fix 1: host-held values from the call in progress (holding), the a and I conversions and the to() pairing; T3.5: a group's opening said with the call's held values; T4.2 R2: deliver every core frame notice in normal order with native plain text and SDMWarning category, without SQL code prefixes or suppression"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::warn_held": {
       "moved": "T3.17: a held warning says its sentence"

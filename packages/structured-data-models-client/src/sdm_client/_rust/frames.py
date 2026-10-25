@@ -121,23 +121,30 @@ def _describe(
     frames: Mapping[str, Any],
     spec: dict[str, Any],
     native_types: Mapping[str, Mapping[str, Any]],
+    *,
+    key_forms: dict[str, str] | None = None,
+    relationships: list[dict[str, Any]] | None = None,
 ) -> Finished:
     manifest: dict[str, Any] = {
         'stage': stage,
         'tables': [],
+        'key_forms': key_forms or {},
         'override_order': {
             'primary_keys': list(spec['primary_keys']),
             'time_columns': list(spec['time_columns']),
         },
     }
+    if relationships is not None:
+        manifest['relationships'] = relationships
+    rows: Any = None
     attached: dict[int, Any] = {1: codec.attachment(spec)}
-    for ordinal, (name, rows) in enumerate(frames.items(), 3):
-        manifest['tables'].append(
-            {'source': codec.relation(name), 'rows': ordinal}
-        )
-        attached[ordinal] = rows
-    attached[2] = codec.attachment(manifest)
     try:
+        for ordinal, (name, rows) in enumerate(frames.items(), 3):
+            manifest['tables'].append(
+                {'source': codec.relation(name), 'rows': ordinal}
+            )
+            attached[ordinal] = rows
+        attached[2] = codec.attachment(manifest)
         with errors.holding(
             frame_example=lambda fields: _frame_example(fields, native_types),
             frame_key=_frame_key,
@@ -153,7 +160,43 @@ def _describe(
                 attached,
             )
     finally:
+        rows = None
         attached.clear()
+
+
+def _ordinary_builtin(value: Any, seen: set[int]) -> bool:
+    # Only native representation facts are captured here. Never run repr
+    # on a container until all nested values are known ordinary built-ins.
+    kind = type(value)
+    if kind in (
+        type(None),
+        bool,
+        int,
+        float,
+        complex,
+        str,
+        bytes,
+        bytearray,
+        range,
+        object,
+    ):
+        return True
+    if kind is slice:
+        return all(
+            _ordinary_builtin(item, seen)
+            for item in (value.start, value.stop, value.step)
+        )
+    if kind not in (list, tuple, dict, set, frozenset):
+        return False
+    if id(value) in seen:
+        return True
+    seen.add(id(value))
+    if kind is dict:
+        return all(
+            _ordinary_builtin(key, seen) and _ordinary_builtin(item, seen)
+            for key, item in value.items()
+        )
+    return all(_ordinary_builtin(item, seen) for item in value)
 
 
 def from_data(
@@ -268,48 +311,59 @@ def from_data(
                 for name, value in (time_columns or {}).items()
             },
         }
+        slots = None
         if relationships is not None:
-            links = []
+            slots = []
             for link in relationships:
-                if (
-                    isinstance(link, Relationship)
-                    and type(link) is not Relationship
-                ):
-                    raise RouteError(
-                        'the partial frame constructor requires ordinary built-in relationships'
-                    )
-                if not isinstance(link, Relationship):
-                    raise StructuredDataError(
-                        'a relationship must be a Relationship. Build one with '
-                        'Relationship(source_table, source_column, target_table, target_column)',
-                        code='INVALID_REQUEST',
-                    )
-                if any(
-                    type(value) is not str
-                    for value in (
-                        link.source_table,
-                        link.source_column,
-                        link.target_table,
-                        link.target_column,
-                    )
-                ):
-                    raise RouteError(
-                        'the partial frame constructor requires ordinary built-in relationship names'
-                    )
-                links.append(
-                    [
+                if type(link) is Relationship:
+                    if any(
+                        type(value) is not str
+                        for value in (
+                            link.source_table,
+                            link.source_column,
+                            link.target_table,
+                            link.target_column,
+                        )
+                    ):
+                        raise RouteError(
+                            'the partial frame constructor requires ordinary built-in relationship names'
+                        )
+                    slots.append(
                         {
-                            'table': link.source_table,
-                            'column': link.source_column,
-                        },
+                            'kind': 'link',
+                            'source': {
+                                'table': link.source_table,
+                                'column': link.source_column,
+                            },
+                            'target': {
+                                'table': link.target_table,
+                                'column': link.target_column,
+                            },
+                        }
+                    )
+                elif _ordinary_builtin(link, set()):
+                    slots.append(
                         {
-                            'table': link.target_table,
-                            'column': link.target_column,
-                        },
-                    ]
-                )
-            spec['relationships'] = links
-        finished = _describe('schema', snapshots, spec, native_types)
+                            'kind': 'invalid',
+                            'native_type': type(link).__name__,
+                            'native_repr': repr(link),
+                        }
+                    )
+                else:
+                    raise RouteError(
+                        'the partial frame constructor requires ordinary built-in relationship arguments'
+                    )
+        finished = _describe(
+            'schema',
+            snapshots,
+            spec,
+            native_types,
+            key_forms={
+                name: 'scalar' if type(value) is str else 'sequence'
+                for name, value in (primary_keys or {}).items()
+            },
+            relationships=slots,
+        )
         result = results.expect(finished.result, results.Described)
         if result.frame_rows is not None:
             raise StructuredDataError(

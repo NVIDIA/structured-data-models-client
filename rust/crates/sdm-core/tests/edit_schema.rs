@@ -94,6 +94,7 @@ fn described() -> SourceDescription {
                 column("age", Dtype::Int, Stype::Numerical),
                 column("country", Dtype::String, Stype::Categorical),
             ],
+            frame_key_form: None,
             primary_key: vec!["user_id".into()],
             time_column: None,
             time_column_inferred: None,
@@ -130,6 +131,7 @@ fn held(description: &SourceDescription) -> HeldSchema {
                         }),
                     })
                     .collect(),
+                frame_key_form: None,
                 primary_key: t.primary_key.clone(),
                 time_column: t.time_column.clone(),
                 duplicate_keys: t.duplicate_keys.clone(),

@@ -7,7 +7,10 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use std::collections::BTreeMap;
+
 use crate::data::{AttachmentId, Relation};
+use crate::ops::ColumnRef;
 
 /// The ordered Arrow tables admitted for one describe call.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -19,6 +22,12 @@ pub struct FrameManifest {
     /// Empty/default only when both maps are empty.
     #[serde(default)]
     pub override_order: FrameOverrideOrder,
+    /// Native scalar/sequence form of each explicit key override.
+    #[serde(default)]
+    pub key_forms: BTreeMap<String, FrameKeyForm>,
+    /// The single authoritative ordered explicit link list, or inference.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relationships: Option<Vec<FrameRelationship>>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -52,4 +61,27 @@ pub fn not_provider() -> crate::CoreError {
         crate::Sentence::InvalidMessage,
         "a frame source is only consumed by the core frame describe operation",
     )
+}
+
+/// A native scalar name or ordered key sequence, even of one column.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum FrameKeyForm {
+    Scalar,
+    Sequence,
+}
+
+/// One native relationship argument at its original validation position.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum FrameRelationship {
+    Link {
+        source: ColumnRef,
+        target: ColumnRef,
+    },
+    /// Native presentation facts only; the core decides this slot is invalid.
+    Invalid {
+        native_type: String,
+        native_repr: String,
+    },
 }

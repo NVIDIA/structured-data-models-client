@@ -20,6 +20,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use sdm_contract::frames::{FrameKeyForm, FrameRelationship};
 use sdm_contract::ops::{
     self, ColumnRef, DescribedColumn, DescribedTable, Dtype, ExactNumber, SourceDescription, Stype,
 };
@@ -199,12 +200,51 @@ pub fn assemble_frames(
     tables: Vec<InferredTable>,
     given: Given<'_>,
     duplicates: Option<Scalar>,
+    key_forms: &BTreeMap<String, FrameKeyForm>,
+    slots: Option<&[FrameRelationship]>,
 ) -> Result<(Assembled, Vec<CoreWarning>), CoreError> {
     let choices = tables.iter().map(|t| t.time.clone()).collect();
-    let described = tables
+    let mut described: Vec<_> = tables
         .into_iter()
         .map(|t| described_table(t, duplicates.clone()))
         .collect();
+    for table in &mut described {
+        if !table.primary_key.is_empty() {
+            table.frame_key_form = Some(
+                key_forms
+                    .get(&table.name)
+                    .copied()
+                    .unwrap_or(FrameKeyForm::Scalar),
+            );
+        }
+    }
+    let mut explicit = Vec::new();
+    if let Some(slots) = slots {
+        for slot in slots {
+            match slot {
+                FrameRelationship::Link { source, target } => {
+                    let link = vec![source.clone(), target.clone()];
+                    checked(&described, &link, &HostTypes::default())?;
+                    explicit.push(link);
+                }
+                FrameRelationship::Invalid {
+                    native_type,
+                    native_repr,
+                } => {
+                    return Err(CoreError::new(
+                        Sentence::FrameRelationshipInvalid,
+                        "a native relationship slot is not a Relationship",
+                    )
+                    .with_field("native_type", Detail::text(native_type))
+                    .with_field("native_repr", Detail::text(native_repr)));
+                }
+            }
+        }
+    }
+    let given = Given {
+        relationships: slots.map(|_| explicit.as_slice()),
+        ..given
+    };
     let mut links = Vec::new();
     let assembled = assemble_described(described, choices, vec![], given, true, Some(&mut links))?;
     Ok((assembled, links))
@@ -341,6 +381,7 @@ pub fn described_table(table: InferredTable, duplicates: Option<Scalar>) -> Desc
                 exact_number: c.exact_number,
             })
             .collect(),
+        frame_key_form: None,
         primary_key: table.primary_key,
         time_column: table.time_column,
         time_column_inferred: None,
@@ -816,6 +857,9 @@ fn by_name(tables: &[DescribedTable]) -> Vec<Link> {
     let mut ambiguous = BTreeSet::new();
     let mut keys: BTreeMap<&str, &str> = BTreeMap::new();
     for table in tables {
+        if table.frame_key_form == Some(FrameKeyForm::Sequence) {
+            continue;
+        }
         let [key] = table.primary_key.as_slice() else {
             continue;
         };

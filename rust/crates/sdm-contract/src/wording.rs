@@ -422,6 +422,9 @@ pub fn template(sentence: Sentence) -> Template {
         S::FrameKeyRepeatsUnusable => said(
             r#"{table}.{key} identifies a row {repeats:,} time(s) it has already been used, e.g. {host.frame_example}. Those rows are indistinguishable to the model. They differ only by {others!l}, which a primary key cannot be made of, so there is no composite key to name here: keep one row per {key!r} if the model should see one, or name a different primary key."#,
         ),
+        S::FrameRelationshipInvalid => said(
+            r#"a relationship must be a Relationship, got {native_type}: {native_repr}. Build one with Relationship(source_table, source_column, target_table, target_column)"#,
+        ),
         S::FrameKeyMissing => said(
             r#"{host.frame_key} has {missing:,} row(s) with no value, in {missing_columns!l}, so those rows cannot be identified; fill or drop them before using {pronoun} as a primary key"#,
         ),

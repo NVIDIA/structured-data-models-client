@@ -321,6 +321,7 @@ pub fn read(
             name: table.name,
             source: table.source,
             columns,
+            frame_key_form: table.frame_key_form,
             primary_key: table.primary_key,
             time_column: table.time_column,
             time_column_inferred: None,
@@ -357,6 +358,7 @@ pub fn held(
                     .iter()
                     .map(|column| held_column(table, column, unfacted, retyped))
                     .collect(),
+                frame_key_form: table.frame_key_form,
                 primary_key: table.primary_key.clone(),
                 time_column: table.time_column.clone(),
                 duplicate_keys: table.duplicate_keys.clone(),
