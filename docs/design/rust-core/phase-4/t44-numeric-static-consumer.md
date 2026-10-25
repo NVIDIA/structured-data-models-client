@@ -38,3 +38,18 @@ Recorded cases prove neither every NumPy dispatch nor Torch equivalence; those o
 Tests first: scalar inspection/prediction, multi-call merge, stream continuation/reset, failure before draws, snapshot reuse and aggregation refusals, with an old-engine tripwire.
 Frozen observations also reach the compiled sampler and public failure after sampling.
 Review checkpoint shape/MT ownership before production edits; add HostRun twins for rebinding, failed state, versions and buffer release with the consumer.
+
+## Consumed interface amendment
+
+The coordinator accepted the first-consumer direction with these concrete conditions on 2026-10-25.
+Implementation advances the working contract through its real generator; contract 31 describes the baseline only.
+`MaterializeFrames` remains an operation-specific bytes manifest of Arrow bindings, selected by the existing Frames identity.
+The existing `SamplerState` gains an optional versioned `FrameCheckpoint` naming a bytes manifest, whose typed members name metadata bytes and separately owned Arrow tables.
+Metadata contains frozen logical graph facts, a source/snapshot fingerprint and MT words/position; it contains no Arrow buffers, attachment ids used as identity, or CSC graph dump.
+Each call rebinds checkpoint tables and metadata under fresh ids, while the snapshot identity is computed from logical schema/source and detached row values.
+The core publishes the checkpoint immediately after graph construction and updates it as draws occur, before any later error; an unknown-key failure therefore retains the built snapshot without advancing its neighbor RNG.
+Done, error and cancellation preserve only explicitly transferred checkpoint owners; run teardown and existing close acknowledgments release all other admitted and exported owners.
+Python holds opaque checkpoint values on the existing query materializer and never rereads mutable caller frames after that graph was built.
+HostRun twins will exercise rebinding with different ids, unknown state versions, pre/post-draw failures, cancellation and lifetime release, alongside existing Java decoding compatibility.
+The shared MT primitive moves once into `sdm-engine::random`; the existing SQLite coefficient adapter and RS-2 vectors continue to use that implementation.
+Temporal constructor files remain owned by their author; this consumer uses separate materialize orchestration and does not rewrite describe.
