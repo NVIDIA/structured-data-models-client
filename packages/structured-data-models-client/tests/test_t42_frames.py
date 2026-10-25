@@ -429,3 +429,150 @@ def test_development_constructor_does_not_traverse_custom_argument_hooks(
     monkeypatch.setenv('SDM_CORE_ROUTES', PATHS)
     with pytest.raises(RouteError, match='ordinary built-in'):
         Schema.from_data(frames, **options)
+
+
+@pytest.mark.parametrize('key', ['user_id', ['user_id'], ('user_id',)])
+def test_native_key_form_controls_graph_and_survives_snapshot_and_held_schema(
+    monkeypatch, key
+):
+    from sdm_client._rust.spec import held_schema
+
+    frames = {
+        'users': pd.DataFrame({'user_id': [1, 2]}),
+        'orders': pd.DataFrame({'order_id': [10, 11], 'user_id': [1, 1]}),
+    }
+    old, old_warnings = describe(
+        monkeypatch, frames, core=False, primary_keys={'users': key}
+    )
+    new, new_warnings = describe(
+        monkeypatch, frames, core=True, primary_keys={'users': key}
+    )
+    assert projection(new) == projection(old)
+    assert new_warnings == old_warnings
+    assert type(new['users'].primary_key) is type(old['users'].primary_key)
+    expected = 'scalar' if type(key) is str else 'sequence'
+    for schema in (new, new.snapshot(), pickle.loads(pickle.dumps(new))):
+        assert schema['users'].primary_key == old['users'].primary_key
+        written = held_schema(schema)
+        assert written['tables'][0]['frame_key_form'] == expected
+
+
+def test_frame_warning_text_category_order_and_message_filter_are_preserved(
+    monkeypatch,
+):
+    frame = pd.DataFrame({'user_id': [*range(99), np.nan]})
+    outcomes = []
+    for core in (False, True):
+        monkeypatch.setenv('SDM_CORE_ROUTES', PATHS if core else '')
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter('always')
+            Schema.from_data({'users': frame})
+        outcomes.append([(str(w.message), w.category) for w in caught])
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                'error',
+                message='users.user_id identifies a row',
+                category=SDMWarning,
+            )
+            with pytest.raises(
+                SDMWarning, match='^users.user_id identifies a row'
+            ):
+                Schema.from_data({'users': frame})
+    assert outcomes[1] == outcomes[0]
+    assert outcomes[0] and outcomes[0][0][1] is SDMWarning
+
+
+def test_only_first_declined_key_per_table_is_presented(monkeypatch):
+    values = [*range(98), 0, 1]
+    frames = {
+        name: pd.DataFrame({'x_id': values, 'y_id': values})
+        for name in ('a', 'b')
+    }
+    old, old_warnings = describe(monkeypatch, frames, core=False)
+    new, new_warnings = describe(monkeypatch, frames, core=True)
+    assert projection(new) == projection(old)
+    assert new_warnings == old_warnings
+    assert len(old_warnings) == 2
+    assert old_warnings[0].startswith('a.x_id')
+    assert old_warnings[1].startswith('b.x_id')
+
+
+@pytest.mark.parametrize(
+    'axis', ['key', 'time', 'earlier_link', 'int', 'none', 'warning']
+)
+def test_relationship_slots_are_validated_after_overrides_and_in_order(
+    monkeypatch, axis
+):
+    from sdm_client import Relationship
+
+    frame = pd.DataFrame({'user_id': [*range(99), 98], 'other_id': range(100)})
+    options = {'relationships': [1]}
+    if axis == 'key':
+        options['primary_keys'] = {'users': 'missing'}
+    elif axis == 'time':
+        options['time_columns'] = {'users': 'missing'}
+    elif axis == 'earlier_link':
+        options['relationships'] = [
+            Relationship('absent', 'user_id', 'users', 'user_id'),
+            1,
+        ]
+    elif axis == 'none':
+        options['relationships'] = [None]
+    elif axis == 'warning':
+        options['primary_keys'] = {'users': 'user_id'}
+    outcomes = []
+    for core in (False, True):
+        monkeypatch.setenv('SDM_CORE_ROUTES', PATHS if core else '')
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter('always')
+            with pytest.raises(StructuredDataError) as failed:
+                Schema.from_data({'users': frame}, **options)
+        outcomes.append(
+            (
+                failed.value.code,
+                str(failed.value),
+                [(str(w.message), w.category) for w in caught],
+            )
+        )
+    assert outcomes[1] == outcomes[0]
+    if axis == 'int':
+        assert 'got int: 1.' in outcomes[0][1]
+    elif axis == 'none':
+        assert 'got NoneType: None.' in outcomes[0][1]
+
+
+def test_retained_schema_error_traceback_does_not_own_frame_streams(
+    monkeypatch,
+):
+    from sdm_client import _native
+
+    monkeypatch.setenv('SDM_CORE_ROUTES', PATHS)
+    with pytest.raises(StructuredDataError) as retained:
+        Schema.from_data(
+            {'users': pd.DataFrame({'user_id': range(100)})},
+            primary_keys={'users': 'missing'},
+        )
+
+    # Inspect the genuine traceback while it is retained. Both a direct
+    # loop-local alias and a stream nested in the call's dictionaries count.
+    def owns(value, seen):
+        if isinstance(value, (_native.ArrowStream, _native.Run)):
+            return True
+        if id(value) in seen:
+            return False
+        seen.add(id(value))
+        if type(value) is dict:
+            return any(owns(item, seen) for item in value.values())
+        if type(value) in (tuple, list):
+            return any(owns(item, seen) for item in value)
+        return False
+
+    traceback = retained.value.__traceback__
+    visited = []
+    while traceback is not None:
+        module = traceback.tb_frame.f_globals.get('__name__', '')
+        if module.startswith('sdm_client._rust'):
+            visited.append(traceback.tb_frame.f_code.co_name)
+            assert not owns(traceback.tb_frame.f_locals, set()), visited
+        traceback = traceback.tb_next
+    assert '_describe' in visited
