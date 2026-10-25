@@ -353,6 +353,54 @@ def _rekey_reference(sha: str) -> Callable[[Path], None]:
     return edit
 
 
+def test_reference_rekey_keeps_every_capture_citation_and_parent_blob(
+    repo: Path, origin: dict[str, Any], tmp_path: Path
+) -> None:
+    """The physical citation consumer may not lose sparse capture inputs."""
+    before = git(repo, 'rev-parse', 'HEAD')
+    old = re.search(
+        r'^reference: ([0-9a-f]{40})$',
+        (repo / 'contract/reference-env.txt').read_text(),
+        re.M,
+    )
+    assert old is not None
+    cited = subprocess.check_output(
+        ['git', '-C', str(repo), 'grep', '-l', '-F', old[1], before,
+         '--', 'contract/captures'],
+        text=True,
+    ).splitlines()  # fmt: skip
+    paths = [name.partition(':')[2] for name in cited]
+    assert paths
+    replacement = '7' * 40
+    _rekey_reference(replacement)(repo)
+    git(repo, 'add', '--sparse', '-A')
+    git(repo, 'commit', '-q', '-m', 'T3.10: rekey the original fixture bytes')
+    for name in paths:
+        original = subprocess.check_output(
+            ['git', '-C', str(repo), 'show', f'{before}:{name}']
+        )
+        current = subprocess.check_output(
+            ['git', '-C', str(repo), 'show', f'HEAD:{name}']
+        )
+        assert current == original.replace(
+            old[1].encode(), replacement.encode()
+        )
+    sibling = tmp_path / 'sibling'
+    git(
+        origin['repo'],
+        'worktree',
+        'add',
+        '-q',
+        '--detach',
+        str(sibling),
+        before,
+    )
+    assert not (sibling / 'contract/captures').exists()
+    assert not (origin['repo'] / 'contract/captures').exists()
+    assert git(repo, 'status', '--porcelain') == ''
+    assert git(sibling, 'status', '--porcelain') == ''
+
+
 def _main_half() -> str:
     r"""A half 2a listing the main step, check 7 holding the ratchet and
     main steps, and its cases."""

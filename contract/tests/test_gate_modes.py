@@ -51,6 +51,7 @@ import importlib.util
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 from collections.abc import Callable
@@ -487,6 +488,70 @@ def without_the_case(runner: str, lines: list[dict[str, Any]]) -> None:
 
 
 # --- --only: one check ---------------------------------------------------------
+
+
+def test_real_coverage_gate_keeps_capture_evidence_without_duplicate_working_files(
+    repo: Path,
+    origin: dict[str, Any],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Run the actual gate and measure its real Git checkpoint allocation."""
+    real_git = shutil.which('git')
+    assert real_git is not None
+    recorder = tmp_path / 'git-allocation.jsonl'
+    bin_dir = tmp_path / 'bin'
+    bin_dir.mkdir()
+    wrapper = bin_dir / 'git'
+    # Every command still executes the real Git, with original output and
+    # status. This recorder changes no fixture inputs or consumer behavior.
+    wrapper.write_text(
+        f'#!{sys.executable}\n'
+        'import json, pathlib, subprocess, sys\n'
+        f'code = subprocess.call([{real_git!r}, *sys.argv[1:]])\n'
+        'args = sys.argv[1:]\n'
+        'if code == 0 and "worktree" in args and "add" in args:\n'
+        '    tree = pathlib.Path(args[-2])\n'
+        '    files = [p for p in (tree / "contract/captures").rglob("*") '
+        'if p.is_file()]\n'
+        '    item = {"tree": str(tree), "capture_files": len(files), '
+        '"allocated_bytes": sum(p.stat().st_blocks * 512 for p in files)}\n'
+        f'    with open({str(recorder)!r}, "a") as out:\n'
+        '        out.write(json.dumps(item) + "\\n")\n'
+        'sys.exit(code)\n'
+    )
+    wrapper.chmod(0o700)
+    monkeypatch.setenv('PATH', f'{bin_dir}{os.pathsep}{os.environ["PATH"]}')
+    landed = git(repo, 'rev-parse', 'HEAD')
+    original_tree = git(repo, 'rev-parse', 'HEAD^{tree}')
+    capture_paths = git(repo, 'ls-files', 'contract/captures').splitlines()
+    witnesses = [
+        next(p for p in capture_paths if p.endswith('/capture.json')),
+        next(p for p in capture_paths if p.endswith('.arrows')),
+    ]
+    commit(repo)
+    done = gate(repo, '--no-l0', '--base', landed, '--only', 'coverage')
+    assert done.returncode == 0, done.stdout + done.stderr
+    assert summary(done) == {'coverage': 'ok'}, done.stdout
+    assert git(repo, 'rev-parse', 'HEAD^{tree}') == original_tree
+    for name in witnesses:
+        assert (
+            subprocess.check_output(
+                [real_git, '-C', str(repo), 'show', f'HEAD:{name}']
+            )
+            == (ROOT / name).read_bytes()
+        )
+    checkpoints = [
+        json.loads(line) for line in recorder.read_text().splitlines()
+    ]
+    assert checkpoints, 'the real gate never constructed its judging worktree'
+    assert all(item['capture_files'] == 0 for item in checkpoints), checkpoints
+    assert all(item['allocated_bytes'] == 0 for item in checkpoints), (
+        checkpoints
+    )
+    assert not (repo / 'contract/captures').exists()
+    assert not (origin['repo'] / 'contract/captures').exists()
+    assert git(repo, 'status', '--porcelain') == ''
 
 
 def test_only_compare_judges_the_observations_given(
