@@ -201,7 +201,7 @@ P3J-14's separate owner policy approval is recorded below.
 | --- | --- | --- | --- |
 | T310-DEFAULTS | Covered S0/S1/S2 entrypoints default to the core together; an explicit private routing selection preserves legacy comparison controls and invalid selections still fail | KO3-36; owner-approved switch, implemented without a new user setting | implementation of approved owner policy |
 | T310-LEGACY-TESTS | Existing old-route comparisons explicitly select legacy code; the engine package alone keeps its internal suite on the old route until Phase 5 | KO3-37 | implementation of approved owner policy |
-| T310-S2-INVENTORY | Append the 77 landed S2 acceptance IDs to half 3a, preserving the 309 existing IDs and every check | Locked-set design: the S2 list joins once in T3.10 | implementation of approved inventory extension |
+| T310-S2-INVENTORY | Append all 79 landed S2 acceptance IDs to half 3a, preserving the 309 existing IDs and every check | Locked-set design: the S2 list joins once in T3.10 | implementation of approved inventory extension |
 
 ## Remaining continuation approvals (2026-10-24)
 

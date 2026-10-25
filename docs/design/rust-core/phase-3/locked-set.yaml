@@ -352,6 +352,8 @@ halves:
       - databricks.name.three-part
       - databricks.name.three-part-quoted
       - databricks.value.struct-feature
+      - java.databricks-sql.multiclass
+      - java.databricks-sql.types
       - lakebase.binary
       - lakebase.connect
       - lakebase.multiclass.tables

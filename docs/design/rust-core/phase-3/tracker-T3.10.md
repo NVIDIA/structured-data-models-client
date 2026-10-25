@@ -35,7 +35,7 @@ No recorded expectation, observation, capture, comparison threshold or generated
 ## Locked acceptance
 
 Half `3a` retains its original 309 acceptance cases and all existing steps and checks.
-It appends the 77 S2 acceptance cases landed at the views phase head, bringing the locked total to 386.
+It appends all 79 landed S2 acceptance cases, including the final Java Databricks cases, bringing the locked total to 388.
 This is the one planned T3.10 inventory extension, not a reduction of the existing acceptance floor.
 
 ## Validation status
