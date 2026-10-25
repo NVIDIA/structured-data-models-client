@@ -103,9 +103,9 @@ def test_the_explicit_scope_keeps_every_substantive_target_and_all_factory_contr
     touched = [*HANDOFF.FIXTURE_REPAIR_FILES, *SUBSTANTIVE]
     suites, proof = HANDOFF.fixture_repair_plan(root, touched, 'T3.10')
     assert {(*HANDOFF.affected.PYTEST, node) for node in NODES} <= set(suites)
-    assert not {
-        (*HANDOFF.affected.PYTEST, name) for name in OMITTED
-    } & set(suites)
+    assert not {(*HANDOFF.affected.PYTEST, name) for name in OMITTED} & set(
+        suites
+    )
     assert set(HANDOFF.own_suites(root, list(SUBSTANTIVE))) <= set(suites)
     assert proof['id'] == SCOPE and proof['source'] == SOURCE
     assert proof['suites'] == [list(suite) for suite in suites]
@@ -124,7 +124,10 @@ def test_the_explicit_scope_keeps_every_substantive_target_and_all_factory_contr
     wider, _ = HANDOFF.fixture_repair_plan(
         root, [*touched, extra.relative_to(root).as_posix()], 'T3.10'
     )
-    assert (*HANDOFF.affected.PYTEST, extra.relative_to(root).as_posix()) in wider
+    assert (
+        *HANDOFF.affected.PYTEST,
+        extra.relative_to(root).as_posix(),
+    ) in wider
 
 
 @pytest.mark.parametrize('package', ['T3.11', 'T4.3'])
@@ -135,7 +138,15 @@ def test_another_package_cannot_use_the_fixture_repair_scope(
         HANDOFF.fixture_repair_plan(_tree(tmp_path), [], package)
 
 
-@pytest.mark.parametrize('name', [*OMITTED, *(node.split('::')[0] for node in NODES), 'conftest.py', '.github/workflows/ci.yml'])
+@pytest.mark.parametrize(
+    'name',
+    [
+        *OMITTED,
+        *(node.split('::')[0] for node in NODES),
+        'conftest.py',
+        '.github/workflows/ci.yml',
+    ],
+)
 def test_every_pinned_file_refuses_unreviewed_changes_or_missing_inputs(
     tmp_path: Path, name: str
 ) -> None:
@@ -151,8 +162,11 @@ def test_every_pinned_file_refuses_unreviewed_changes_or_missing_inputs(
 
 @pytest.mark.parametrize(
     'status',
-    ['PROPOSED, owner approval pending', 'approved by reviewer 2026-10-25',
-     'approved by owner 2026-10-25, pending'],
+    [
+        'PROPOSED, owner approval pending',
+        'approved by reviewer 2026-10-25',
+        'approved by owner 2026-10-25, pending',
+    ],
 )
 def test_proposed_or_partial_policy_cannot_authorize_the_scope(
     tmp_path: Path, status: str
@@ -217,9 +231,19 @@ def test_cli_stamps_only_completed_actual_selection_with_honest_scope_metadata(
 
     monkeypatch.chdir(root)
     monkeypatch.setattr(HANDOFF, 'finish_on_signals', lambda: None)
-    monkeypatch.setattr(HANDOFF, 'step_lint', lambda *args: HANDOFF.Step('lint'))
+    monkeypatch.setattr(
+        HANDOFF, 'step_lint', lambda *args: HANDOFF.Step('lint')
+    )
     monkeypatch.setattr(HANDOFF, 'run_suites', run_suites)
-    argv = ['run', '--package', 'T3.10', '--base', base, '--python', '/lane/python']
+    argv = [
+        'run',
+        '--package',
+        'T3.10',
+        '--base',
+        base,
+        '--python',
+        '/lane/python',
+    ]
     if scoped:
         argv += ['--fixture-repair-scope', SCOPE]
     assert HANDOFF.main(argv) == (1 if fails else 0)
@@ -235,7 +259,9 @@ def test_cli_stamps_only_completed_actual_selection_with_honest_scope_metadata(
             assert stamp['own_test_scope']['suites'] == [
                 list(suite) for suite in received[0]
             ]
-            assert stamp['own_test_scope']['files'] == HANDOFF.FIXTURE_REPAIR_FILES
+            assert (
+                stamp['own_test_scope']['files'] == HANDOFF.FIXTURE_REPAIR_FILES
+            )
             assert SCOPE in said and SOURCE in said
         else:
             assert 'own_test_scope' not in stamp and SCOPE not in said
