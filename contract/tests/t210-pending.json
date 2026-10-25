@@ -1,18 +1,6 @@
 {
  "about": "T2.10's acceptance tests that failed when the test author wrote them, before the implementation, by key (contract/tests/test_t210_targets.py as py:<case key>, the case's line against python-ref's, py-labels:<scenario>@<database>, the label vectors of contract/t210-target-vectors.json, and py-name:<vector id>, the filter role's column-name vectors; sdm-testkit's tests/t210_targets.rs as rust:<case key>). Each listed key must still fail (strict); the implementer takes a key out of 'pending' once it passes, and changes nothing else: 'pending' stays within 'authored', which is the test author's.",
- "pending": [
-  "py:target.aggregation.list-distinct",
-  "py:target.aggregation.list-distinct@sqlite",
-  "py:target.aggregation.list-distinct@postgres",
-  "rust:target.aggregation.list-distinct",
-  "rust:target.aggregation.list-distinct@sqlite",
-  "py-labels:aggregation.list-distinct@duckdb",
-  "py-labels:aggregation.list-distinct.users@duckdb",
-  "py-labels:aggregation.list-distinct@sqlite",
-  "py-labels:aggregation.list-distinct.users@sqlite",
-  "py-labels:aggregation.list-distinct@postgres",
-  "py-labels:aggregation.list-distinct.users@postgres"
- ],
+ "pending": [],
  "authored": [
   "py:rank.decimal-key",
   "py:rank.odd-column",

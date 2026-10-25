@@ -375,8 +375,32 @@ def test_distinct_labels_keep_executor_order_null_filter_and_window_boundaries(
         assert len(users_one) == 2
         assert all(row[at_item] == 3 for row in users_one)
         assert any(row[at_item] is None for row in buys['rows'])
+        # Every feature, timestamp and unaffected cell must remain exact.
+        # Only the two observed links shifted by the phantom row differ.
+        expected_buys = copy.deepcopy(old['predict']['related_tables']['buys'])
+        shifted = [row for row in expected_buys['rows'] if row[at_user] == 1]
+        assert len(shifted) == 2
+        assert all(row[at_item] == 1 for row in shifted)
+        for row in shifted:
+            row[at_item] = 3
+        assert buys == expected_buys
         items = core['predict']['related_tables']['items']
         item_key = items['columns'].index('item_id')
+        expected_items = copy.deepcopy(
+            old['predict']['related_tables']['items']
+        )
+        phantom = [
+            at
+            for at, row in enumerate(expected_items['rows'])
+            if row[0] == 1 and row[item_key] == 1
+        ]
+        assert len(phantom) == 2
+        assert (
+            expected_items['rows'][phantom[0]]
+            == expected_items['rows'][phantom[1]]
+        )
+        expected_items['rows'].pop(phantom[1])
+        assert items == expected_items
         keys = [(row[0], row[item_key]) for row in items['rows']]
         assert len(keys) == len(set(keys))
         assert all(

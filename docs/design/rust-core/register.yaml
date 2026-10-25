@@ -7984,13 +7984,17 @@ entries:
     From T3.10 the listed Lakebase Python lines use this same approved
     Postgres-source behavior; Lakebase uses the Postgres provider and
     shares the existing case inputs, without a new comparison exclusion.
-  case_outcomes:
-  - {case: target.aggregation.list-distinct, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', statements_differ: [materialize], summary: 'T2.10: LIST_DISTINCT link prediction refused by name until Phase 4 (KO2-75)'}
-  - {case: target.aggregation.list-distinct, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal UNSUPPORTED_REQUEST', statements_differ: [materialize], summary: 'T2.10: LIST_DISTINCT link prediction refused by name until Phase 4 (KO2-75)'}
-  - {case: target.aggregation.list-distinct@sqlite, cell: ref-pandas3, runner: python-core, old: 'refusal - at predict (NimRequestError)', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', statements_differ: [materialize], summary: 'T2.10: LIST_DISTINCT link prediction refused by name until Phase 4 (KO2-75)'}
-  - {case: target.aggregation.list-distinct@sqlite, cell: ref-pandas3, runner: rust-host, old: 'refusal -', new: 'refusal UNSUPPORTED_REQUEST', statements_differ: [materialize], summary: 'T2.10: LIST_DISTINCT link prediction refused by name until Phase 4 (KO2-75)'}
-  - {case: target.aggregation.list-distinct@postgres, cell: ref-pandas3, runner: python-core, old: 'refusal - at predict (NimRequestError)', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', statements_differ: [materialize], summary: 'T2.10: LIST_DISTINCT link prediction refused by name until Phase 4 (KO2-75)'}
-  - {case: target.aggregation.list-distinct@postgres, cell: ref-pandas3, runner: rust-host, old: 'refusal -', new: 'refusal UNSUPPORTED_REQUEST', statements_differ: [materialize], summary: 'T2.10: LIST_DISTINCT link prediction refused by name until Phase 4 (KO2-75)'}
+    T4.5 restores the measured SQL journey on DuckDB, SQLite and Postgres:
+    materialize builds the original link request and the scripted endpoint
+    retains its original no_classes refusal at predict.
+    Only the six obsolete SQL early-refusal/statement-masking rows are
+    retired here; their original text remains in Git history.
+    This is a partial SQL retirement, not rejection or reuse of this ID.
+    Unimplemented frame/table routes retain their existing refusal and
+    require their own implementation and evidence; no SQL observation
+    admits those routes.
+    KO2-75 remains the original owner decision, with no new approval
+    assigned to it. P4E-1 records only the measured SQL bookkeeping.
 
 # --- lane E entries, Phase 3 (P3E-1..19) ---
 
@@ -11437,3 +11441,46 @@ entries:
     The three-prediction deployed comparison is2.4701percent worse in RMSE,
     within five percent; no broader accuracy improvement is claimed.
     No sampler change or new raw-source join is approved.
+# --- Phase 4 SQL restoration ---
+
+- id: P4E-1
+  title: SQL foreign-key LIST_DISTINCT restores the reference journey and existing endpoint-error mapping
+  kind: change
+  old_behavior: >-
+    The original DuckDB baselines hold the temporary P2E-19 refusal at
+    materialize, UNSUPPORTED_REQUEST on both core hosts. SQLite and
+    Postgres have no held baseline for this case; their frozen reference
+    ends in the scripted endpoint's code-less NimRequestError at predict.
+  new_behavior: >-
+    The measured SQL journey materializes the reference-equivalent link
+    request on all three databases. Python-core preserves the original
+    NimRequestError at predict. Rust-host records INVALID_RESPONSE for
+    that endpoint refusal, the existing T2.1g host mapping, without a
+    Python exception class or public-call stage. No input newly refuses.
+  affected_inputs: >-
+    Only target.aggregation.list-distinct on DuckDB, SQLite and Postgres
+    through the existing SQL Python-core and Rust-host observers.
+    No frame/table route or Java feature is admitted here.
+  cases: [target.aggregation.list-distinct]
+  refs: [T4.5, T2.1g, P2E-19]
+  status: approved
+  approved_by: reviewer
+  decision_ref: null
+  notes: >-
+    Approver: reviewer. The coordinator approved this narrow bookkeeping
+    classification for authoring on 2026-10-25 after reading all six
+    canonical measured proposals; this is not an owner decision and the
+    coordinator does not count as either independent source reviewer.
+    Both final independent exact-source reviewers must approve these
+    transitions before package acceptance or landing.
+    The old/new fields below were generated with ratchet.py's projection,
+    outcome_text and proposal from actual SQL observations, retaining
+    the original no_classes behavior and the existing host mapping.
+    Python's SQLite/Postgres first admissions already equal the reference
+    and need no no-op transition row. Baselines are generated by
+    ratchet.accept, preserving every untouched baseline record.
+  case_outcomes:
+  - {"case": "target.aggregation.list-distinct", "cell": "ref-pandas3", "runner": "python-core", "old": "refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)", "new": "refusal - at predict (NimRequestError)", "summary": "T4.5: measured SQL restoration; original no_classes refusal and existing T2.1g host mapping"}
+  - {"case": "target.aggregation.list-distinct", "cell": "ref-pandas3", "runner": "rust-host", "old": "refusal UNSUPPORTED_REQUEST", "new": "refusal INVALID_RESPONSE", "summary": "T4.5: measured SQL restoration; original no_classes refusal and existing T2.1g host mapping"}
+  - {"case": "target.aggregation.list-distinct@sqlite", "cell": "ref-pandas3", "runner": "rust-host", "old": "refusal -", "new": "refusal INVALID_RESPONSE", "summary": "T4.5: measured SQL restoration; original no_classes refusal and existing T2.1g host mapping"}
+  - {"case": "target.aggregation.list-distinct@postgres", "cell": "ref-pandas3", "runner": "rust-host", "old": "refusal -", "new": "refusal INVALID_RESPONSE", "summary": "T4.5: measured SQL restoration; original no_classes refusal and existing T2.1g host mapping"}
