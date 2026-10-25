@@ -244,6 +244,7 @@ def test_the_fixture_reuses_a_removed_worktree_without_pruning_failed_evidence(
 
             def create(origin, path):
                 return gate_tests.worktree({'repo': origin[0]}, path, origin[1])
+
     original = create((source, landed), tmp_path / 'reused')
     failed = create((source, landed), tmp_path / 'failed')
     evidence = failed / 'failure.txt'

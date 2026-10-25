@@ -3003,19 +3003,19 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // path, every check over what the source holds comes after: the
     // engine's meanings, time columns and edges ([`kept_checks`]), the
     // graph and what the sampler needs.
-    let fresh_sql_source = asker.located().is_none()
+    let refresh_source_facts = asker.located().is_none()
         && asker
             .data()
             .is_some_and(crate::compose::DataAccess::reads_a_source);
     if let Some(located) = crate::describe::initialize(asker, pending.as_ref(), &facts).await? {
-        // Plan B reads current SQL rows and view definitions. Neither the
+        // Plan B reads current rows and view definitions. Neither the
         // held schema's fingerprint nor a matching fresh preview proves
         // that their bounds, counts or stored time spelling are unchanged.
         // Expire only data facts, once at the fresh source boundary: E52's
         // index/warning lifetime and reuse within this run remain intact.
-        // Host providers that do not refresh a SQL source retain E52's
+        // Providers without source refresh retain E52's
         // cross-run data memo as well.
-        if fresh_sql_source {
+        if refresh_source_facts {
             memo.memo.bounds.clear();
             memo.memo.rows.clear();
             memo.memo.stored_times.clear();
