@@ -10626,27 +10626,26 @@ entries:
     9f82573b05d3890e72f28121fce7b0193336ff7a, SHA256 d3dc5ee4b5503f67502e914af1948c2d0297c9ae6d673b39165c7bdbe260f020.
   cases: [T3.10, java.databricks-sql.types]
   refs: [E96, scripts/rust_core/coverage.py]
-  status: proposed
-  approved_by: null
+  status: approved
+  approved_by: owner
   decision_ref:
     file: docs/design/rust-core/phase-3/decisions.md
     row: T310-OWNER-2026-10-25-RESTORE-INPUT-CLAIMS-1
   notes: >-
-    Proposed only: no owner restoration answer has been received. The
-    earlier answer approving removal after the incorrect diagnosis is not
-    restoration approval, and the unused P3M-1 proposal remains historical.
+    Owner explicitly answered "Approved" on 2026-10-25 to the corrected
+    question naming these two valid input labels and the normal meaningful
+    repair sequence judged by independently landed G. The exact question
+    and answer are preserved in the private owner-answer record named by
+    the decision row. The earlier removal answer and unused P3M-1 proposal
+    remain historical, not restoration authority.
     The G coverage implementation is SHA256 8b44badcbb8cc7d744040efe891e519071c3618f12113c3ba268cd4dfce510f2; this entry
     changes neither it nor the case bytes. Actual CI 40214125978 remains
     failed: F1's ratchet lacks admission and its coverage reader cannot
-    establish these valid roles. A genuine dependency/admission repair
-    package is judged by G's already-landed harness, without an empty
-    checkpoint advance, failed-evidence reuse or self-judging override.
-    No case_outcomes row is asserted because no projected outcome changes.
-    This entry does not make F1's mechanical case-admission or coverage
-    check pass retroactively: cases alone is not ratchet authorization.
-    H keeps the complete case byte-identical to G and contains a real CI
-    installer repair; its normal checkpoint is G, not an invented baseline.
-    Whether this explicit owner-backed historical metadata authorization
-    and normal repair sequence satisfy the process requires independent
-    review before the owner is asked. No warehouse observation is relabeled
-    as a bare case or reference-cell runtime observation.
+    establish these valid roles. No case_outcomes row is asserted because
+    no projected outcome changes, and no warehouse observation is relabeled
+    as a bare case or reference-cell runtime recording. This entry does
+    not make F1's mechanical case-admission or coverage check pass
+    retroactively: cases alone is not ratchet authorization. The genuine
+    CI repair keeps the case byte-identical to G and uses its ordinary G
+    checkpoint, without an empty baseline advance, self-judging override,
+    failed-evidence reuse or comparison relaxation.

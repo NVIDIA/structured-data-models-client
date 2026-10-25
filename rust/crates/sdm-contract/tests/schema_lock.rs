@@ -226,8 +226,11 @@ fn the_committed_schemas_are_the_generated_ones() {
             write(format, &generated);
         }
         let path = schema_dir().join(format.schema_file(format.version));
-        assert!(
-            read(&path) == generated,
+        // JSON object member order is not schema shape. Fresh generator
+        // dependencies may change it; arrays and every value still match.
+        assert_eq!(
+            serde_json::from_str::<Value>(&read(&path)).expect("the committed schema is JSON"),
+            serde_json::from_str::<Value>(&generated).expect("the generated schema is JSON"),
             "{} differs from the schema the types generate; regenerate it with \
              SDM_CONTRACT_WRITE=1 cargo test -p sdm-contract --test schema_lock -- generated",
             path.display()

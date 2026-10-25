@@ -1289,6 +1289,7 @@ class TestDistributionCoherence:
                     'pytest',
                     'pytest-xdist',
                     'requests-mock',
+                    'jsonschema',
                     'databricks-sdk',
                 }, (
                     f'extra {extra!r} requires {name!r}, which is not one of '

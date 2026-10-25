@@ -49,26 +49,28 @@ def test_materialize_preserves_the_first_invalid_escape_warning(
         old = materialize('')
         core = materialize(None)
 
-    old_deprecated = [
-        warning for warning in old if warning.category is DeprecationWarning
-    ]
-    core_deprecated = [
-        warning
-        for warning in core
-        if issubclass(warning.category, DeprecationWarning)
-    ]
+    def invalid_escape(warning: warnings.WarningMessage) -> bool:
+        text = str(warning.message)
+        return (
+            'invalid escape sequence' in text
+            or '[INVALID_STRING_ESCAPE]' in text
+        )
+
+    old_invalid = [warning for warning in old if invalid_escape(warning)]
+    core_invalid = [warning for warning in core if invalid_escape(warning)]
     if deprecated:
-        assert len(old_deprecated) > 1
-        assert len(core_deprecated) == 1
+        assert len(old_invalid) > 1
+        assert len(core_invalid) == 1
+        assert old_invalid[0].category is DeprecationWarning
         # P3E-9 keeps this one body stable across hosts and runtimes;
         # P3E-2's code prefix and every other warning's words are unchanged.
         body = r"invalid escape sequence '\/'"
         prefix = '[INVALID_STRING_ESCAPE] '
-        assert str(core_deprecated[0].message) == prefix + body
-        assert core_deprecated[0].category is old_deprecated[0].category
-        old_body = str(old_deprecated[0].message)
+        assert str(core_invalid[0].message) == prefix + body
+        assert core_invalid[0].category is old_invalid[0].category
+        old_body = str(old_invalid[0].message)
         if old_body == body:
-            assert str(core_deprecated[0].message) == prefix + old_body
+            assert str(core_invalid[0].message) == prefix + old_body
         else:
             # The approved difference is Python 3.14's native expansion,
             # including its final space, observed on the old route in CI.
@@ -77,6 +79,6 @@ def test_materialize_preserves_the_first_invalid_escape_warning(
                 r'"\/" is an invalid escape sequence. '
                 'Such sequences will not work in the future. '
             )
-        assert core[0] is core_deprecated[0]
+        assert core[0] is core_invalid[0]
     else:
-        assert old_deprecated == core_deprecated == []
+        assert old_invalid == core_invalid == []

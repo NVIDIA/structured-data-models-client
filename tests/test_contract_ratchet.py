@@ -54,8 +54,8 @@ COPIED = (
 # gate fixtures opt into their exact metadata and the sample Arrow blobs
 # coverage reads, while leaving all other replay payloads out.
 UNCOPIED_PAYLOADS = (
-    'contract/captures/r2/*/*/capture.json',
-    'contract/captures/r2/*/*/tables/*.arrows',
+    'capture.json',
+    '*.arrows',
 )
 IDENTITY = ['-c', 'user.name=Gate Test', '-c', 'user.email=gate@example.com']
 CELL = 'ref-pandas3'
@@ -77,12 +77,16 @@ CI4 = _module(ROOT / 'contract/tests/ci4_gate.py', 'ci4_gate')
 
 
 def git(repo: Path, *args: str) -> str:
-    done = subprocess.run(
-        ['git', '-C', str(repo), *IDENTITY, *args],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
+    try:
+        done = subprocess.run(
+            ['git', '-C', str(repo), *IDENTITY, *args],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except subprocess.CalledProcessError as error:
+        print(error.stderr.strip(), file=sys.stderr)
+        raise
     return done.stdout.strip()
 
 
@@ -142,7 +146,10 @@ def build(repo: Path, *, coverage_inputs: bool = False) -> tuple[Path, str]:
         )
         for raw in filter(None, listed):
             name = raw.decode()
-            if Path(name).match('contract/captures/r2/*/*/capture.json'):
+            if (
+                name.startswith('contract/captures/')
+                and Path(name).name == 'capture.json'
+            ):
                 capture = json.loads((ROOT / name).read_text(encoding='utf-8'))
                 coverage_payloads.add(name)
                 # Use the real coverage reader's requested paths, retaining
@@ -156,7 +163,8 @@ def build(repo: Path, *, coverage_inputs: bool = False) -> tuple[Path, str]:
                 )
     for name in filter(None, (item.decode() for item in listed)):
         if (
-            any(Path(name).match(pattern) for pattern in UNCOPIED_PAYLOADS)
+            name.startswith('contract/captures/')
+            and any(Path(name).match(pattern) for pattern in UNCOPIED_PAYLOADS)
             and name not in coverage_payloads
         ):
             continue
@@ -351,10 +359,16 @@ def test_the_synthetic_fixture_omits_only_bulk_warehouse_capture_inputs(
     expected = sorted(originals.rglob('manifest.json'))
     assert expected
     assert {path.relative_to(originals).parts[0] for path in expected} >= {
-        'r2', 'snowflake', 'lakebase', 's2', 'databricks-sql'
+        'r2',
+        'snowflake',
+        'lakebase',
+        's2',
+        'databricks-sql',
     }
     for path in expected:
-        assert (source / path.relative_to(ROOT)).read_bytes() == path.read_bytes()
+        assert (
+            source / path.relative_to(ROOT)
+        ).read_bytes() == path.read_bytes()
     assert not list(copied.rglob('capture.json'))
     assert not list(copied.rglob('*.arrows'))
     assert (source / 'contract/protected-paths.txt').read_bytes() == (
@@ -376,9 +390,10 @@ def test_the_gate_fixture_keeps_real_coverage_inputs_across_capture_layouts(
     )
     expected_blobs: set[Path] = set()
     originals = sorted((ROOT / 'contract/captures').rglob('capture.json'))
-    assert {path.relative_to(ROOT / 'contract/captures').parts[0] for path in originals} == {
-        'r2', 'snowflake', 'lakebase', 's2', 'databricks-sql'
-    }
+    assert {
+        path.relative_to(ROOT / 'contract/captures').parts[0]
+        for path in originals
+    } == {'r2', 'snowflake', 'lakebase', 's2', 'databricks-sql'}
     for path in originals:
         relative = path.relative_to(ROOT)
         assert (source / relative).read_bytes() == path.read_bytes()
@@ -406,9 +421,13 @@ def test_the_gate_fixture_keeps_real_coverage_inputs_across_capture_layouts(
     assert actual_blobs == expected_blobs
     for blob in expected_blobs:
         assert (source / blob).read_bytes() == (ROOT / blob).read_bytes()
-    assert len(actual_blobs) < len(list((ROOT / 'contract/captures').rglob('*.arrows')))
+    assert len(actual_blobs) < len(
+        list((ROOT / 'contract/captures').rglob('*.arrows'))
+    )
     for path in (ROOT / 'contract/captures').rglob('manifest.json'):
-        assert (source / path.relative_to(ROOT)).read_bytes() == path.read_bytes()
+        assert (
+            source / path.relative_to(ROOT)
+        ).read_bytes() == path.read_bytes()
 
 
 def test_an_omitted_capture_path_still_requires_protected_edit_review(
