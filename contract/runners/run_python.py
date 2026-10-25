@@ -80,6 +80,7 @@ import sys
 import warnings
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 
 HERE = Path(__file__).resolve().parent
@@ -3848,6 +3849,29 @@ _DRIVERS = {
 }
 
 
+def _driver_version(live: Live, name: str) -> str | None:
+    r"""A driver's distribution version, or its consumed managed module.
+
+    Managed Spark can supply PySpark without distribution metadata. Read
+    only that already loaded client's declared version, never the server's
+    version or the notebook runtime release, and leave other legs alone.
+    """
+    found = _version(name)
+    if found is not None or name != 'pyspark' or live.leg != 'databricks-spark':
+        return found
+    connection = getattr(live, 'connection', None)
+    if not any(
+        cls.__name__ == 'SparkSession' and cls.__module__.startswith('pyspark.')
+        for cls in type(connection).__mro__
+    ):
+        return None
+    module = sys.modules.get('pyspark')
+    if not isinstance(module, ModuleType):
+        return None
+    version = vars(module).get('__version__')
+    return version if isinstance(version, str) and version.strip() else None
+
+
 def _workspace(options: dict[str, Any]) -> Any:
     r"""The workspace client a connect function is given: the profile the
     configuration names, else the ambient one."""
@@ -4153,7 +4177,7 @@ def capture_line(
             draws.append({'statement': position, **draw})
     versions = dict(observation['identity']['versions'])
     for name in _DRIVERS[live.leg]:
-        found = _version(name)
+        found = _driver_version(live, name)
         if found is not None:
             versions[name] = found
     runtime = os.environ.get('DATABRICKS_RUNTIME_VERSION')
