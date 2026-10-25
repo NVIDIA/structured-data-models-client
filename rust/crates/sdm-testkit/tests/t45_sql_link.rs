@@ -77,6 +77,31 @@ fn both_fk_directions_keep_the_reference_labels_entity_roles_and_occurrences() {
         let actual = payload(&observed);
         let expected = host::numbers_as_text(reference(reverse));
         assert_eq!(actual["task"], expected["task"]);
+        let (rhs, key) = if reverse {
+            ("users", "user_id")
+        } else {
+            ("items", "item_id")
+        };
+        let related = &actual["schema"]["related_tables"];
+        assert_eq!(related[rhs]["primary_key"], json!(["instance_id", key]));
+        assert_eq!(related[rhs]["columns"][key]["dtype"], "int64");
+        assert!(related[rhs]["columns"].get("__node_id").is_none());
+        // A non-entity related table keeps its existing synthetic identity.
+        assert_eq!(
+            related["buys"]["primary_key"],
+            json!(["instance_id", "__node_id"])
+        );
+        assert!(
+            actual["schema"]["relationships"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(
+                    |link| link["source_columns"] == json!(["__kumo_entity_ref_1"])
+                        && link["target_table"] == rhs
+                        && link["target_columns"] == json!([key])
+                )
+        );
         for half in ["context", "predict"] {
             assert_eq!(actual[half]["instance_table"], expected[half], "{half}");
         }

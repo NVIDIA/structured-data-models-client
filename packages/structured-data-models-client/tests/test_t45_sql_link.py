@@ -118,6 +118,17 @@ def test_both_public_sql_directions_match_frozen_labels_and_decode_rankings(
     with connection() as db:
         request = materialize(db, query)
         payload = request.payloads[0]
+        rhs, key = ('users', 'user_id') if reverse else ('items', 'item_id')
+        related = payload['schema']['related_tables']
+        assert related[rhs]['primary_key'] == ['instance_id', key]
+        assert related[rhs]['columns'][key]['dtype'] == 'int64'
+        assert '__node_id' not in related[rhs]['columns']
+        assert related['buys']['primary_key'] == ['instance_id', '__node_id']
+        assert {
+            'source_columns': ['__kumo_entity_ref_1'],
+            'target_table': rhs,
+            'target_columns': [key],
+        } in payload['schema']['relationships']
         vectors = json.loads(
             (ROOT / 'contract/t210-target-vectors.json').read_text()
         )
