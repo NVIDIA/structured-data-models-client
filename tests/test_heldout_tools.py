@@ -462,7 +462,7 @@ def test_counts_retain_hyphenated_warehouse_legs_and_count_payload_differences(
         'databricks-sql',
     )
     assert done.returncode == 1, done.stdout + done.stderr
-    assert 'databricks-sql 3' in done.stdout
+    assert 'databricks-sql 3' in (run / 'counts.md').read_text()
     assert "with no approval: 1 ['dummy.b']" in done.stdout
     reported = tool(
         'report', run, '--prefix', PREFIX, '--databases', 'databricks-sql'
@@ -764,7 +764,6 @@ def test_java_comparison_selects_exact_admitted_case_keys_per_database(
                 **case,
                 'id': name,
                 'status': 'diagnostic',
-                'databases': ['duckdb', 'sqlite', 'postgres'],
             },
         )
     subset = tmp_path / 'java.txt'

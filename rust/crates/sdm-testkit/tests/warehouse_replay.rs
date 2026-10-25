@@ -118,7 +118,7 @@ fn case(path: &Path, leg: &str) -> PathBuf {
     case["warehouses"] = json!([leg]);
     case["until"] = json!("from_source");
     case["expect"] = json!({"outcome": "success", "stage": "from_source"});
-    case["input"]["from_source"] = json!({"tables": {"people": "users"}, "check_keys": false});
+    case["input"]["from_source"] = json!({"tables": {"people": "users"}});
     let file = path.join("case.json");
     std::fs::write(&file, serde_json::to_vec(&case).unwrap()).unwrap();
     file
