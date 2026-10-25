@@ -1,0 +1,56 @@
+{
+  "reference": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+  "numpy": "2.5.3",
+  "pandas": "3.0.6",
+  "source_receipt_sha256": "028258f2a06501a58637857ba77981a0623c4d30da7bbf28489039a6e0fa229a",
+  "seed7_markers": [
+    52,
+    60,
+    58,
+    68,
+    72,
+    73
+  ],
+  "unseeded_markers": [
+    [
+      55,
+      60,
+      52,
+      65,
+      64,
+      70
+    ],
+    [
+      60,
+      58,
+      62,
+      69,
+      71,
+      66
+    ]
+  ],
+  "after_seed7_markers": [
+    59,
+    57,
+    62,
+    65,
+    69,
+    71
+  ],
+  "merged_predictions": [
+    101.0,
+    102.0
+  ],
+  "batched_markers": [
+    [
+      52,
+      60,
+      58
+    ],
+    [
+      65,
+      73,
+      68
+    ]
+  ]
+}
