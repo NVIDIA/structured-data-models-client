@@ -353,6 +353,7 @@ fn fetching_run() -> Run {
                 Reply::Fetch(FetchResult::Error(error)) => {
                     CoreError::provider(&error).code.as_str().to_owned()
                 }
+                Reply::Failed(error) => error.code.as_str().to_owned(),
                 Reply::Model(_) => "model".into(),
                 Reply::Fetch(FetchResult::Page { .. }) => "page".into(),
             });

@@ -429,9 +429,9 @@ async fn spelled<const N: usize>(
 ///
 /// The second test reads only the code and the `request` field: any
 /// `UNSUPPORTED_REQUEST` naming `column_ranges` falls back, whatever
-/// raised it. Today only [`crate::compose::undeclared`] raises one; a
-/// refusal of another kind that came to carry that field would fall back
-/// too.
+/// raised it, including a bounded fallback refusing the whole-column
+/// read. Admission, schema and protocol failures keep their own codes
+/// and do not enter this recovery.
 pub(crate) fn falls_back(failed: &CoreError) -> bool {
     match failed.code {
         ErrorCode::ProviderError => true,

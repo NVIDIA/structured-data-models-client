@@ -149,6 +149,7 @@ fn run_with(
                     }))
                 }
                 Reply::Fetch(FetchResult::Error(error)) => Err(CoreError::provider(&error)),
+                Reply::Failed(error) => Err(error),
                 _ => unreachable!(),
             }
         },

@@ -1026,6 +1026,7 @@ pub(crate) fn data(reply: Reply, request: &'static str) -> Result<ArrowData, Cor
         Reply::Fetch(FetchResult::Error(error)) => {
             Err(CoreError::provider(&error).with_field("request", Detail::text(request)))
         }
+        Reply::Failed(error) => Err(error),
         Reply::Model(_) => Err(internal("a fetch was answered by the model")),
         // The run reads a provider's pages as one answer before it reaches
         // the body.

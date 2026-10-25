@@ -479,6 +479,7 @@ async fn call(
             return Err(CoreError::transport(kind, retryable));
         }
         (Reply::Fetch(_), _) => return Err(internal("a model call was answered as a fetch")),
+        (Reply::Failed(error), _) => return Err(error),
     };
     let response = PredictionResponse::read(&answer).map_err(refused)?;
     layout(payload, &response, crate::pql::float_text)

@@ -112,6 +112,10 @@ pub enum ModelResult {
 pub enum Reply {
     Fetch(FetchResult),
     Model(ModelResult),
+    /// A local request failure, such as the bounded fallback refusing a
+    /// scan. The operation decides whether its existing recovery applies.
+    /// Admission, protocol and page-schema failures still end the run.
+    Failed(CoreError),
 }
 
 /// Where a run is; see the module documentation.
@@ -468,7 +472,7 @@ impl Asker {
     }
 
     /// Ends the run with `error` at its next step, as a provider's pages
-    /// that do not match end it: what the in-memory fallback fails with.
+    /// that do not match end it: a failure preparing a projected request.
     pub(crate) fn fail(&self, error: CoreError) {
         lock(&self.shared).exhausted.get_or_insert(error);
     }
@@ -711,8 +715,8 @@ pub struct Ask {
 
 /// What one fetch's answer may hold, the in-memory fallback's limits on a
 /// scan it asks (T2.6): checked as each page arrives, so past either the
-/// run ends with that limit's error, at once, and no later page is asked
-/// for or its failure awaited.
+/// request returns that limit's error, at once, and no later page is asked
+/// for or its failure awaited. The operation may recover from that error.
 pub(crate) struct Budget {
     pub(crate) rows: u64,
     pub(crate) bytes: u64,
@@ -928,8 +932,7 @@ fn poll_parts(
         }
     };
     if let Some(err) = past(budget, &whole) {
-        lock(shared).exhausted.get_or_insert(err);
-        return Poll::Pending;
+        return Poll::Ready(Reply::Failed(err));
     }
     Poll::Ready(Reply::Fetch(FetchResult::Data(whole)))
 }
@@ -1027,8 +1030,7 @@ impl Future for Ask {
                     };
                     // Past the budget: no next page is asked for.
                     if let Some(err) = past(&this.budget, &pages) {
-                        shared.exhausted.get_or_insert(err);
-                        return Poll::Pending;
+                        return Poll::Ready(Reply::Failed(err));
                     }
                     let Some(asked) = fetch else {
                         shared
@@ -1062,10 +1064,7 @@ impl Future for Ask {
                 // answer, held to the budget.
                 Some(Reply::Fetch(FetchResult::Data(data))) => match add_page(pages, data) {
                     Ok(whole) => match past(&this.budget, &whole) {
-                        Some(err) => {
-                            shared.exhausted.get_or_insert(err);
-                            Poll::Pending
-                        }
+                        Some(err) => Poll::Ready(Reply::Failed(err)),
                         None => Poll::Ready(Reply::Fetch(FetchResult::Data(whole))),
                     },
                     Err(err) => {

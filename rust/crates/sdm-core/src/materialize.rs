@@ -1694,7 +1694,7 @@ fn sampling_capabilities(asker: &Asker) -> Result<NullOrder, CoreError> {
         OptionalRequest::Neighbors,
         OptionalRequest::Lookup,
     ] {
-        if !capabilities.optional.contains(&needed) {
+        if !capabilities.optional.contains(&needed) && capabilities.fallback.is_none() {
             return Err(crate::compose::undeclared(needed.name()));
         }
     }
