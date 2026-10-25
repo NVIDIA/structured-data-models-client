@@ -391,6 +391,54 @@ def test_real_databricks_omitted_columns_keep_their_evidenced_input_roles() -> (
     assert _databricks_omitted_features(lambda capture: None) == []
 
 
+def test_constraint_query_spacing_outside_quotes_does_not_change_proof() -> (
+    None
+):
+    def change(capture: dict[str, Any]) -> None:
+        statements = capture['reference']['driver']['capture']['statements']
+        for statement, kept in zip(
+            statements, capture['statements'], strict=True
+        ):
+            if 'information_schema.table_constraints tc' in kept['text']:
+                kept['text'] = (
+                    kept['text'].replace('\n', '\r\n\t').replace(' = ', '\t=\n')
+                )
+                statement['sql'] = kept['text']
+
+    assert _databricks_omitted_features(change) == []
+
+
+@pytest.mark.parametrize('whitespace', ['  ', '\t', '\n'])
+@pytest.mark.parametrize('quoted', ['catalog', 'PRIMARY KEY', 'FOREIGN KEY'])
+def test_quoted_constraint_identity_and_literal_bytes_are_never_collapsed(
+    quoted: str, whitespace: str
+) -> None:
+    def change(capture: dict[str, Any]) -> None:
+        statements = capture['reference']['driver']['capture']['statements']
+        for statement, kept in zip(
+            statements, capture['statements'], strict=True
+        ):
+            text = kept['text']
+            if quoted == 'catalog':
+                # The sample is cat name; constraints are a distinct catalog
+                # with an extra space, tab or newline inside its identifier.
+                text = text.replace('`{catalog}`', '`cat name`')
+                if 'information_schema.table_constraints tc' in text:
+                    text = text.replace('`cat name`', f'`cat{whitespace}name`')
+            else:
+                changed = quoted.replace(' ', whitespace)
+                text = text.replace(f"'{quoted}'", f"'{changed}'")
+            kept['text'] = text
+            statement['sql'] = text
+
+    source = '`cat name`.`{schema}`.`users`' if quoted == 'catalog' else 'users'
+    problems = _databricks_omitted_features(change, source=source)
+    assert len(problems) == 2, problems
+    assert all(
+        'rule 6: case java.databricks-sql.types: claims ' in p for p in problems
+    )
+
+
 @pytest.mark.parametrize(
     'source',
     [
