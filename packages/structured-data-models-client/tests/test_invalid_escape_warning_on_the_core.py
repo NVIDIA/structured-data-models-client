@@ -59,7 +59,10 @@ def test_materialize_preserves_the_first_invalid_escape_warning(
     if deprecated:
         assert len(old_deprecated) > 1
         assert len(core_deprecated) == 1
-        assert str(core_deprecated[0].message) == str(old_deprecated[0].message)
+        # Core warnings retain the approved diagnostic-code prefix.
+        assert str(core_deprecated[0].message) == (
+            '[INVALID_STRING_ESCAPE] ' + str(old_deprecated[0].message)
+        )
         assert core[0] is core_deprecated[0]
     else:
         assert old_deprecated == core_deprecated == []
