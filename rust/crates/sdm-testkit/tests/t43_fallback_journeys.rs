@@ -9,7 +9,9 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use arrow_array::{ArrayRef, Float64Array, Int64Array, RecordBatch, TimestampMicrosecondArray};
+use arrow_array::{
+    ArrayRef, Float64Array, Int64Array, RecordBatch, StringArray, TimestampMicrosecondArray,
+};
 use arrow_schema::{DataType, Field, Schema, TimeUnit};
 use arrow_select::concat::concat_batches;
 use sdm_contract::data::{FallbackLimits, OptionalRequest};
@@ -41,6 +43,7 @@ fn table(name: &str, fields: Vec<(&str, ArrayRef)>, key: &str) -> Table {
             declared_type: match data.data_type() {
                 DataType::Int64 => "BIGINT",
                 DataType::Float64 => "DOUBLE",
+                DataType::Utf8 => "VARCHAR",
                 DataType::Timestamp(TimeUnit::Microsecond, None) => "TIMESTAMP",
                 other => panic!("unexpected fixture type {other:?}"),
             }
@@ -236,4 +239,115 @@ fn a_materialized_prediction_does_not_charge_an_unrelated_parent_of_a_scan_slice
     );
     assert_eq!(observed.described, expected.described);
     assert_eq!(observed.answer, expected.answer);
+}
+
+#[test]
+fn a_public_materialize_uses_the_fallbacks_defined_text_order_before_a_cut() {
+    let users = table(
+        "users",
+        vec![
+            ("user_id", Arc::new(Int64Array::from_iter_values(0..8))),
+            (
+                "target",
+                Arc::new(Float64Array::from_iter_values(
+                    (0..8).map(|i| 10.0 + i as f64 * 1.5),
+                )),
+            ),
+        ],
+        "user_id",
+    );
+    let mut orders = table(
+        "orders",
+        vec![
+            (
+                "order_id",
+                Arc::new(StringArray::from_iter_values(
+                    (0..8).flat_map(|i| [format!("Z{i}"), format!("a{i}")]),
+                )),
+            ),
+            (
+                "user_id",
+                Arc::new(Int64Array::from_iter_values((0..8).flat_map(|i| [i, i]))),
+            ),
+            (
+                "amount",
+                Arc::new(Float64Array::from_iter_values(
+                    (0..8).flat_map(|_| [1.0, 9.0]),
+                )),
+            ),
+        ],
+        "order_id",
+    );
+    orders.foreign_keys.push(ForeignKey {
+        key: 1,
+        referenced_table: "users".into(),
+        columns: vec!["user_id".into()],
+        referenced_columns: vec!["user_id".into()],
+    });
+    let mut given = case();
+    given.input.pql = "PREDICT users.target FOR EACH users.user_id".into();
+    given.input.materialize.num_hops = Some(case::AsWritten("1".into()));
+    given.input.materialize.num_neighbors = Some(case::AsWritten("[1]".into()));
+    given.core.as_mut().unwrap().predict = None;
+    for reverse in [false, true] {
+        let mut memory = Memory {
+            tables: vec![users.clone(), orders.clone()],
+            ..Memory::default()
+        };
+        if reverse {
+            let rows = &memory.tables[1].rows;
+            let positions =
+                arrow_array::UInt32Array::from_iter_values((0..rows.num_rows() as u32).rev());
+            memory.tables[1].rows =
+                arrow_select::take::take_record_batch(rows, &positions).unwrap();
+        }
+        fallback(
+            &mut memory,
+            &[OptionalRequest::Neighbors],
+            Some(FallbackLimits {
+                max_rows: 1000,
+                max_bytes: 1_000_000,
+            }),
+        );
+        let observed = host::run_memory_over(&given, &memory, &layer::root()).unwrap();
+        assert!(
+            matches!(observed.answer, Answer::Materialized(_)),
+            "{observed:?}"
+        );
+        let payload = &observed.materialized.as_ref().unwrap()["payload"];
+        for (half, expected) in [("context", 6), ("predict", 2)] {
+            let orders = &payload[half]["related_tables"]["orders"];
+            let amount = orders["columns"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .position(|name| name == "amount")
+                .unwrap();
+            let rows = orders["rows"].as_array().unwrap();
+            assert_eq!(rows.len(), expected);
+            // UTF-8 byte order keeps Z before a, independently of scan order.
+            // Native SQL collation is a provider operation's own semantics.
+            assert!(
+                rows.iter()
+                    .all(|row| row[amount].as_str().unwrap().parse::<f64>().unwrap() == 1.0),
+                "{orders}"
+            );
+        }
+        assert!(
+            memory
+                .asked
+                .lock()
+                .unwrap()
+                .iter()
+                .all(|request| request.name() != "neighbors")
+        );
+        assert!(
+            memory
+                .asked
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|request| request.name() == "scan")
+        );
+    }
 }
