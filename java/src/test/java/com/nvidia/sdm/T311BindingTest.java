@@ -85,6 +85,19 @@ class T311BindingTest {
                 "the facts the Java tests send are the recorder's");
     }
 
+    /** Contract 29's escape warning remains binding evidence, not just a done digest. */
+    @Test
+    void escapeWarningsArePresentInTheBindingVectors() throws IOException {
+        Map<String, Object> vector = T311Json.object(
+                T311Json.object(section("binding").get("validate")).get("s0.boundary.escapes"));
+        List<?> controls = (List<?>) vector.get("warnings");
+        assertTrue(controls != null && !controls.isEmpty(), "escape warning controls were dropped");
+        Map<String, Object> message = T311Json.object(T311Json.object(controls.get(0)).get("control"));
+        assertEquals("warnings", message.get("message"));
+        Map<String, Object> warning = T311Json.object(((List<?>) message.get("warnings")).get(0));
+        assertEquals("INVALID_STRING_ESCAPE", warning.get("code"));
+    }
+
     /** Brief, input axes (text across JNI) and exit 1's footing: each S0
      * case's validate_query, and the texts no case holds, answered through
      * the Java binding with the same control bytes Python's binding
