@@ -67,7 +67,8 @@ pub const REGRESSION_FIELDS: [&str; 1] = ["prediction"];
 pub const CLASSIFICATION_FIELDS: [&str; 2] = ["prediction", "probabilities"];
 
 /// The task kinds whose call this build writes.
-const CALLED: [&str; 3] = [
+const CALLED: [&str; 4] = [
+    "temporal_link_prediction",
     "regression",
     "binary_classification",
     "multiclass_classification",
@@ -2371,14 +2372,11 @@ mod tests {
     /// item ranks candidates under `rankings`, a list of objects, which the
     /// reference's bindings read (`_mapping_tuple`) and its result keeps as
     /// a list in one row (`PredictionResult.to_pandas`, `row['rankings']`).
-    /// The core asks no link prediction until Phase 4 (register P2E-19,
-    /// KO2-75): laid out against a link prediction's payload the answer is
-    /// refused by name (`problem_type`), never read as another task's;
-    /// against a payload of a task it asks, its `rankings` are kept, each
-    /// item's mappings in the order written, as the reference keeps them
-    /// (T2.8 reads the field; T2.10).
+    /// T4.5 consumes the existing ranking decoder for the actual link
+    /// task, preserving each item's mapping order. An unknown task kind
+    /// still refuses by name rather than borrowing another task's rules.
     #[test]
-    fn a_link_prediction_s_answer_is_refused_by_name_never_read_as_another_task_s() {
+    fn a_link_prediction_s_answer_keeps_rankings_and_unknown_tasks_stay_refused() {
         let read = |text: &str| sdm_wire::json::read(text.as_bytes()).unwrap();
         let answer = read(
             r#"{"id": "r1", "model": "kumo-relational", "metadata": {},
@@ -2404,9 +2402,12 @@ mod tests {
             ))
         };
         let spell = |x: f64| x.to_string();
-        let linked = layout(&payload("temporal_link_prediction"), &response, spell).unwrap_err();
-        assert_eq!(linked.code, ErrorCode::UnsupportedRequest);
-        assert_eq!(linked.fields["rule"], Detail::text("problem_type"));
+        let linked = layout(&payload("temporal_link_prediction"), &response, spell).unwrap();
+        assert_eq!(linked.rows[0].rankings, response.predictions[0].rankings);
+        assert_eq!(linked.rows[1].rankings, response.predictions[1].rankings);
+        let unknown = layout(&payload("static_link_prediction"), &response, spell).unwrap_err();
+        assert_eq!(unknown.code, ErrorCode::UnsupportedRequest);
+        assert_eq!(unknown.fields["rule"], Detail::text("problem_type"));
         let asked = layout(&payload("regression"), &response, spell).unwrap();
         assert_eq!(asked.rows.len(), 2);
         assert_eq!(asked.rows[0].rankings, response.predictions[0].rankings);

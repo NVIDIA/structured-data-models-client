@@ -916,6 +916,12 @@ pub fn template(sentence: Sentence) -> Template {
             r#"Cannot score {shown!j} and {more:,} more: more than one row of table '{table}' holds each of these values of '{key}', so which row is meant would be a guess. The source does not enforce the key; keep one row per value, or key the table on columns that identify a row."#,
         ),
         S::NotInTable => said(r#""The primary keys {keys!r} do not exist in the '{table}' table""#),
+        S::LinkHistoryMissing => said(
+            "Cannot perform link prediction on subgraphs without any historical target entities. Please increase the number of hops and try again.",
+        ),
+        S::LinkTargetNotForeignKey => said(
+            "Multilabel-classification queries based on 'LIST_DISTINCT' are not supported yet. If you planned to write a link prediction query instead, make sure to register {column!r} as a foreign key.",
+        ),
         S::SubgraphPastTables => said(
             r#"the request's subgraph carries {tables:,} tables, and the endpoint reads at most {limit:,}"#,
         ),

@@ -90,6 +90,7 @@ pub enum Aggregation {
     Avg,
     Min,
     Max,
+    ListDistinct,
 }
 
 /// Each example's window: times after `starts`, when given, and not after
@@ -311,6 +312,12 @@ pub fn aggregate_kept(
             continue;
         }
         out[at] = match aggregation {
+            Aggregation::ListDistinct => {
+                return Err(CoreError::new(
+                    Sentence::Internal,
+                    "a list aggregation reached the numeric aggregator",
+                ));
+            }
             Aggregation::Count => rows.len() as i64 as f32,
             Aggregation::Sum => match values {
                 Values::Float(v) => kahan_f32(rows.iter().map(|&r| v[r].unwrap_or(0.0))).0,
@@ -448,6 +455,7 @@ pub enum Labels {
     Int(Vec<i64>),
     Bool(Vec<bool>),
     Text(Vec<String>),
+    Lists(Vec<Vec<LinkValue>>),
 }
 
 impl Labels {
@@ -457,6 +465,7 @@ impl Labels {
             Labels::Int(v) => v.len(),
             Labels::Bool(v) => v.len(),
             Labels::Text(v) => v.len(),
+            Labels::Lists(v) => v.len(),
         }
     }
 
@@ -479,6 +488,7 @@ impl Labels {
             Labels::Int(v) => Labels::Int(only(v, keep)),
             Labels::Bool(v) => Labels::Bool(only(v, keep)),
             Labels::Text(v) => Labels::Text(only(v, keep)),
+            Labels::Lists(v) => Labels::Lists(only(v, keep)),
         }
     }
 
@@ -489,9 +499,90 @@ impl Labels {
             Labels::Int(v) => v.truncate(n),
             Labels::Bool(v) => v.truncate(n),
             Labels::Text(v) => v.truncate(n),
+            Labels::Lists(v) => v.truncate(n),
         }
         self
     }
+}
+
+/// One executor-read link label. Keep its value until payload encoding,
+/// especially a decimal's scale and a float's float32 rounding.
+#[derive(Debug, Clone, PartialEq)]
+pub enum LinkValue {
+    Int(i64),
+    Float(f32),
+    Bool(bool),
+    Text(String),
+    Decimal(i128, i8),
+}
+
+impl LinkValue {
+    fn key(&self) -> Vec<u8> {
+        match self {
+            Self::Int(v) => v.to_le_bytes().to_vec(),
+            // pandas equality treats the two signed zeros as one value.
+            Self::Float(v) => (v + 0.0).to_bits().to_le_bytes().to_vec(),
+            Self::Bool(v) => vec![u8::from(*v)],
+            Self::Text(v) => v.as_bytes().to_vec(),
+            Self::Decimal(v, _) => v.to_le_bytes().to_vec(),
+        }
+    }
+}
+
+/// LIST_DISTINCT as execute_aggregation_type: remove null/NaN, deduplicate
+/// (batch, executor-read value), retain first row order within each batch.
+/// Groups without a value have no label, rather than an empty-list label.
+pub fn distinct(
+    examples: usize,
+    batch: &[usize],
+    column: &Column,
+    times: &[Option<i64>],
+    bounds: Bounds<'_>,
+    kept: Option<&[bool]>,
+) -> Result<Labelled, CoreError> {
+    let present = column.present();
+    if present.len() != batch.len()
+        || times.len() != batch.len()
+        || bounds.ends.len() != examples
+        || bounds.starts.is_some_and(|s| s.len() != examples)
+        || kept.is_some_and(|k| k.len() != batch.len())
+        || batch.iter().any(|b| *b >= examples)
+    {
+        return Err(CoreError::new(
+            Sentence::Internal,
+            "a link label's rows and windows do not align",
+        ));
+    }
+    let mut seen = vec![std::collections::BTreeSet::new(); examples];
+    let mut lists = vec![Vec::new(); examples];
+    for (row, &at) in batch.iter().enumerate() {
+        if !present[row] || kept.is_some_and(|k| !k[row]) {
+            continue;
+        }
+        let Some(time) = times[row] else {
+            continue;
+        };
+        if time > bounds.ends[at] || bounds.starts.is_some_and(|s| time <= s[at]) {
+            continue;
+        }
+        let value = match column {
+            Column::Int(v) => LinkValue::Int(v[row].unwrap_or_default()),
+            Column::Float(v) => LinkValue::Float(v[row].unwrap_or_default()),
+            Column::Bool(v) => LinkValue::Bool(v[row].unwrap_or_default()),
+            Column::Text(v) => LinkValue::Text(v[row].clone().unwrap_or_default()),
+            Column::Decimal { values, scale, .. } => {
+                LinkValue::Decimal(values[row].unwrap_or_default(), *scale)
+            }
+            Column::Time(_) | Column::UInt(_) => return Err(not_yet("target_type")),
+        };
+        if seen[at].insert(value.key()) {
+            lists[at].push(value);
+        }
+    }
+    Ok(Labelled {
+        mask: lists.iter().map(|v| !v.is_empty()).collect(),
+        labels: Labels::Lists(lists.into_iter().filter(|v| !v.is_empty()).collect()),
+    })
 }
 
 /// A condition the query's validation lets through only for operands and
@@ -758,6 +849,8 @@ pub enum Target {
     Column(Column),
     /// A windowed aggregation.
     Aggregated(Aggregated),
+    /// A whole FK-list target, already carrying its presence mask.
+    Listed(Labelled),
     /// `target op constant`; no constant is `NULL`.
     Condition {
         target: Box<Target>,
@@ -858,7 +951,7 @@ pub fn truth(target: &Target) -> Result<Truth, CoreError> {
                     .collect(),
             })
         }
-        Target::Column(_) | Target::Aggregated(_) => Err(CoreError::new(
+        Target::Column(_) | Target::Aggregated(_) | Target::Listed(_) => Err(CoreError::new(
             Sentence::Internal,
             "a column or an aggregation stands where a condition is read",
         )),
@@ -1138,6 +1231,7 @@ fn kept_truth(truth: Truth) -> Labelled {
 
 fn labelled(target: &Target, classes: bool) -> Result<Labelled, CoreError> {
     match target {
+        Target::Listed(labelled) => Ok(labelled.clone()),
         Target::Column(column) => {
             fn kept<T: Clone>(
                 values: &[Option<T>],

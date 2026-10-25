@@ -15,7 +15,7 @@
 use sdm_contract::data::NegativeNeighborBound;
 use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 use sdm_wire::json::{Value, is_integer_token, whole};
-use sdm_wire::payload::{ClassificationConfig, InferenceConfig};
+use sdm_wire::payload::{BaseConfig, ClassificationConfig, InferenceConfig};
 
 /// An integer the caller gave: its sign, and its magnitude, `None` past
 /// `u128`.
@@ -797,15 +797,15 @@ pub fn rows_per_call(given: &Value) -> Result<Option<u64>, CoreError> {
 
 /// The most rows one model call scores (`predict_rows_max`, the serving
 /// layer's `TFM_MAX_TEST_ROWS`, which the reference's client and engine
-/// hold at 10,000 from `main`'s 1fc5a686). A temporal link prediction,
-/// which scores 200, is not a task this core gathers.
+/// hold at 10,000 from `main`'s 1fc5a686). Temporal links use their own
+/// 200-row cap through [`Kind::rows_one_call_scores`].
 pub const PREDICT_ROWS: u64 = 10_000;
 
 /// How many entities one call scores, as the caller asked or as the
 /// endpoint allows (`rows_one_call_scores`): the caller's size only ever
 /// lowers the endpoint's.
 pub fn rows_one_call_scores(asked: Option<u64>) -> u64 {
-    asked.map_or(PREDICT_ROWS, |n| n.min(PREDICT_ROWS))
+    Kind::Regression.rows_one_call_scores(asked)
 }
 
 /// A task's kind, as the engine names it.
@@ -814,6 +814,7 @@ pub enum Kind {
     Regression,
     Binary,
     Multiclass,
+    TemporalLink,
 }
 
 impl Kind {
@@ -823,11 +824,22 @@ impl Kind {
             Kind::Regression => "regression",
             Kind::Binary => "binary_classification",
             Kind::Multiclass => "multiclass_classification",
+            Kind::TemporalLink => "temporal_link_prediction",
         }
     }
 
     pub fn is_classification(self) -> bool {
-        !matches!(self, Kind::Regression)
+        matches!(self, Kind::Binary | Kind::Multiclass)
+    }
+
+    /// Link predictions have their own serving cap, before caller narrowing.
+    pub fn rows_one_call_scores(self, asked: Option<u64>) -> u64 {
+        let limit = if self == Kind::TemporalLink {
+            200
+        } else {
+            PREDICT_ROWS
+        };
+        asked.map_or(limit, |n| n.min(limit))
     }
 }
 
@@ -1276,6 +1288,17 @@ pub fn options(kind: Kind, given: Option<&Value>) -> Result<Options, CoreError> 
 }
 
 impl Options {
+    /// A link task's shared inference options, with no classification or
+    /// regression-only members.
+    pub fn base(&self) -> BaseConfig {
+        BaseConfig {
+            kind: "base".to_owned(),
+            num_estimators: self.num_estimators,
+            column_shuffle: self.column_shuffle,
+            category_shuffle: self.category_shuffle,
+            hop_shuffle: self.hop_shuffle,
+        }
+    }
     /// A regression's options as the engine writes them.
     pub fn regression(&self) -> InferenceConfig {
         InferenceConfig {

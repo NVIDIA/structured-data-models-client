@@ -21,10 +21,9 @@ fn root() -> PathBuf {
 }
 
 fn link_case(reverse: bool, predict: bool) -> Case {
-    let loaded = case::load(&[root().join(
-        "contract/cases/s1/target.aggregation.list-distinct.json",
-    )])
-    .unwrap();
+    let loaded =
+        case::load(&[root().join("contract/cases/s1/target.aggregation.list-distinct.json")])
+            .unwrap();
     let mut case = loaded[0].case.clone();
     if reverse {
         case.input.pql = "PREDICT LIST_DISTINCT(buys.user_id, 0, 30, days) \
@@ -179,7 +178,10 @@ fn the_original_case_reaches_its_unchanged_no_classes_endpoint_refusal() {
     assert_eq!(kind, "model_endpoint");
     assert_eq!(code, "INVALID_RESPONSE");
     assert_eq!(fields.get("field").map(String::as_str), Some("status"));
-    assert_eq!(fields.get("reason").map(String::as_str), Some("not_a_success"));
+    assert_eq!(
+        fields.get("reason").map(String::as_str),
+        Some("not_a_success")
+    );
 }
 
 #[test]
@@ -209,10 +211,14 @@ fn a_separate_successful_script_preserves_rankings_and_restores_public_entity_id
                 })
                 .collect();
             recorded.borrow_mut().push(sent);
-            (200, serde_json::to_vec(&json!({
-                "id": "offline-link-proof", "model": "kumo-relational",
-                "metadata": {}, "predictions": predictions,
-            })).unwrap())
+            (
+                200,
+                serde_json::to_vec(&json!({
+                    "id": "offline-link-proof", "model": "kumo-relational",
+                    "metadata": {}, "predictions": predictions,
+                }))
+                .unwrap(),
+            )
         },
         || run(&link_case(false, true)),
     );
@@ -236,10 +242,16 @@ fn a_separate_successful_script_preserves_rankings_and_restores_public_entity_id
     for (row, id) in rows.iter().zip(["0", "1"]) {
         assert_eq!(row[at("id")], json!({"i64": id}));
         let rankings = row[at("rankings")]["list"].as_array().unwrap();
-        let values: Vec<Value> = rankings.iter().map(|value| {
-            serde_json::from_str(value["utf8"].as_str().unwrap()).unwrap()
-        }).collect();
-        assert_eq!(values, [json!({"item": 3, "score": 0.9}),
-                           json!({"item": 1, "score": 0.4})]);
+        let values: Vec<Value> = rankings
+            .iter()
+            .map(|value| serde_json::from_str(value["utf8"].as_str().unwrap()).unwrap())
+            .collect();
+        assert_eq!(
+            values,
+            [
+                json!({"item": 3, "score": 0.9}),
+                json!({"item": 1, "score": 0.4})
+            ]
+        );
     }
 }

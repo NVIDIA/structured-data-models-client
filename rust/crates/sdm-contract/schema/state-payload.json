@@ -207,6 +207,58 @@
             "target",
             "entity_table_names"
           ]
+        },
+        {
+          "description": "The two entity roles of a SQL foreign-key link query, in query order.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "temporal_link_prediction"
+              ]
+            },
+            "target": {
+              "description": "A temporal link's label is a list of target keys, encoded as text.",
+              "type": "object",
+              "properties": {
+                "column_name": {
+                  "type": "string"
+                },
+                "dtype": {
+                  "type": "string",
+                  "enum": [
+                    "stringlist"
+                  ]
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "column_name",
+                "dtype"
+              ]
+            },
+            "entity_table_names": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "anchor_time_column": {
+              "type": "string"
+            },
+            "top_k": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "target",
+            "entity_table_names"
+          ]
         }
       ]
     },
@@ -668,6 +720,40 @@
                 },
                 "class_shuffle": {
                   "description": "Always written; a reader may meet a state without it.",
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "kind",
+                "num_estimators",
+                "column_shuffle",
+                "category_shuffle",
+                "hop_shuffle"
+              ]
+            },
+            {
+              "description": "The reference's base inference configuration, used by link prediction.",
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "base"
+                  ]
+                },
+                "num_estimators": {
+                  "type": "integer",
+                  "format": "uint64",
+                  "minimum": 0
+                },
+                "column_shuffle": {
+                  "type": "boolean"
+                },
+                "category_shuffle": {
+                  "type": "boolean"
+                },
+                "hop_shuffle": {
                   "type": "boolean"
                 }
               },

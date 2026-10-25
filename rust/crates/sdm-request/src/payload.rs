@@ -203,6 +203,8 @@ pub struct Sampled {
     pub tables: Vec<SampledTable>,
     pub links: Vec<SampledLink>,
     pub entity_table: String,
+    /// The FK target entity of a temporal-link task.
+    pub link_target: Option<String>,
     /// The query, as the reference writes it back.
     pub source_query: String,
     pub run_mode: RunMode,
@@ -691,6 +693,37 @@ fn target(
             .collect::<Vec<_>>()
     };
     Ok(match (kind, labels) {
+        (Kind::TemporalLink, Labels::Lists(lists)) => (
+            Dtype::StringList,
+            lists
+                .iter()
+                .map(|list| {
+                    list.iter()
+                        .map(|value| {
+                            use sdm_engine::labels::LinkValue as L;
+                            let text = match value {
+                                L::Int(v) => v.to_string(),
+                                L::Float(v) => {
+                                    if !v.is_finite() {
+                                        return Err(not_finite(TARGET, f64::from(*v)));
+                                    }
+                                    float_text(f64::from(*v))
+                                }
+                                L::Bool(v) => if *v { "True" } else { "False" }.to_owned(),
+                                L::Text(v) => v.clone(),
+                                L::Decimal(v, scale) => decimal_text(*v, *scale),
+                            };
+                            Ok(Value::text(text))
+                        })
+                        .collect::<Result<Vec<_>, _>>()
+                        .map(Value::Array)
+                })
+                .collect::<Result<Vec<_>, _>>()?,
+            vec![],
+        ),
+        (Kind::TemporalLink, _) | (_, Labels::Lists(_)) => {
+            return Err(internal("a link task's labels are not lists"));
+        }
         (Kind::Binary, Labels::Bool(values)) => (
             Dtype::Bool,
             values.iter().map(|v| Value::Bool(*v)).collect(),
@@ -846,63 +879,76 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
     }
     let kind = sampled.kind;
 
-    // The instance table: one row per example.
-    let entity = sampled
-        .tables
-        .iter()
-        .find(|t| t.name == sampled.entity_table)
-        .ok_or_else(|| internal("the entity table was not sampled"))?;
-    let key = entity
-        .primary_key
-        .as_deref()
-        .ok_or_else(|| internal("the entity table has no key"))?;
-    let key_array = entity
-        .columns
-        .iter()
-        .find_map(|(n, column)| match column {
-            SampledColumn::Arrow(array) if n == key => Some(array),
-            _ => None,
-        })
-        .ok_or_else(|| internal("the entity table's key was not sampled"))?;
-    let mut first = vec![None; examples];
-    for (row, &instance) in entity.batch.iter().enumerate() {
-        if instance < examples && first[instance].is_none() {
-            first[instance] = Some(row);
-        }
-    }
-    // The lagged target columns are the task's own, which the wire's names
-    // keep clear of (`occupied`).
     let mut occupied = vec![INSTANCE_ID.to_owned(), TARGET.to_owned()];
     occupied.extend(sampled.lags.iter().map(|lag| lag.name.clone()));
-    let reference = unique_name(&occupied, &format!("{ENTITY_REFERENCE}_0"));
-    occupied.push(reference.clone());
+    let mut entity_names = vec![sampled.entity_table.clone()];
+    if let Some(rhs) = &sampled.link_target {
+        entity_names.push(rhs.clone());
+    }
+    let mut references = Vec::new();
     let mut instance = Frame {
         columns: vec![int_column(INSTANCE_ID, 0..examples)],
         rows: examples,
     };
-    // A float32 key's reference is a float64: the reference builds the
-    // column from the keys as Python floats, which pandas types float64
-    // (T2.12; each value is written widened either way).
-    let reference_dtype = match key_dtype(key_array)? {
-        Dtype::Float32 => Dtype::Float64,
-        dtype => dtype,
-    };
-    let reference_cells = first
-        .iter()
-        .enumerate()
-        .map(|(at, row)| match row {
-            Some(row) => cell(key_array, *row, &reference, reference_dtype).map_err(|e| {
-                e.with_field("table", Detail::text(INSTANCE_TABLE))
-                    .with_field("row", count(at))
-            }),
-            None => Ok(Value::Null),
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-    instance.columns.push(FrameColumn {
-        name: reference.clone(),
-        dtype: reference_dtype,
-        cells: reference_cells,
-    });
+    for (role, name) in entity_names.iter().enumerate() {
+        let entity = sampled
+            .tables
+            .iter()
+            .find(|t| &t.name == name)
+            .ok_or_else(|| internal("an entity table was not sampled"))?;
+        let key = entity
+            .primary_key
+            .as_deref()
+            .ok_or_else(|| internal("an entity table has no key"))?;
+        let key_array = entity
+            .columns
+            .iter()
+            .find_map(|(n, column)| match column {
+                SampledColumn::Arrow(array) if n == key => Some(array),
+                _ => None,
+            })
+            .ok_or_else(|| internal("an entity key was not sampled"))?;
+        let mut first = vec![None; examples];
+        for (row, &at) in entity.batch.iter().enumerate() {
+            if at < examples && first[at].is_none() {
+                first[at] = Some(row);
+            }
+        }
+        let reference = unique_name(&occupied, &format!("{ENTITY_REFERENCE}_{role}"));
+        occupied.push(reference.clone());
+        let source_dtype = key_dtype(key_array)?;
+        let promote = source_dtype == Dtype::Int64 && first.iter().any(Option::is_none);
+        let dtype = if promote || source_dtype == Dtype::Float32 {
+            Dtype::Float64
+        } else {
+            source_dtype
+        };
+        let cells = first
+            .iter()
+            .enumerate()
+            .map(|(at, row)| match row {
+                Some(row) => {
+                    let value = cell(key_array, *row, &reference, source_dtype).map_err(|e| {
+                        e.with_field("table", Detail::text(INSTANCE_TABLE))
+                            .with_field("row", count(at))
+                    })?;
+                    if promote {
+                        float_key(&value)
+                    } else {
+                        Ok(value)
+                    }
+                }
+                None => Ok(Value::Null),
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        instance.columns.push(FrameColumn {
+            name: reference.clone(),
+            dtype,
+            cells,
+        });
+        references.push((name.clone(), reference, key.to_owned()));
+    }
+    let reference = references[0].1.clone();
     let anchor_column =
         if !sampled.anchors.is_empty() && sampled.anchors.iter().any(|a| *a != NO_ANCHOR) {
             let name = unique_name(&occupied, ANCHOR_TIME);
@@ -974,19 +1020,12 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
     }
 
     let mut relationships = Vec::new();
-    {
-        let (_, _, target_column, _) = frames
-            .iter()
-            .find(|(n, ..)| *n == sampled.entity_table)
-            .ok_or_else(|| internal("the entity table was not sampled"))?;
-        if Some(target_column.as_str()) != entity.primary_key.as_deref() {
-            return Err(internal("the entity table sends no key of its own"));
-        }
+    for (name, reference, key) in &references {
         relationships.push(Relationship {
             source_table: None,
             source_columns: vec![reference.clone()],
-            target_table: sampled.entity_table.clone(),
-            target_columns: vec![target_column.clone()],
+            target_table: name.clone(),
+            target_columns: vec![key.clone()],
         });
     }
     // Each foreign key once, merging every partial link row by row. The
@@ -1069,16 +1108,20 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
     }
 
     let num_train = sampled.num_train;
-    let mut instance_stypes = vec![
-        (INSTANCE_ID.to_owned(), Stype::Id),
-        (reference.clone(), Stype::Id),
-    ];
+    let mut instance_stypes = vec![(INSTANCE_ID.to_owned(), Stype::Id)];
+    instance_stypes.extend(
+        references
+            .iter()
+            .map(|(_, name, _)| (name.clone(), Stype::Id)),
+    );
     if let Some(anchor) = &anchor_column {
         instance_stypes.push((anchor.clone(), Stype::Timestamp));
     }
     instance_stypes.push((
         TARGET.to_owned(),
-        if kind.is_classification() {
+        if kind == Kind::TemporalLink {
+            Stype::Multicategorical
+        } else if kind.is_classification() {
             Stype::Categorical
         } else {
             Stype::Numerical
@@ -1141,6 +1184,7 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
     let mut fields: Vec<String> = match kind {
         Kind::Regression if sampled.options.output_type == "quantiles" => vec!["quantiles".into()],
         Kind::Regression => vec!["prediction".into()],
+        Kind::TemporalLink => vec!["rankings".into()],
         Kind::Binary | Kind::Multiclass => vec!["prediction".into(), "probabilities".into()],
     };
     if sampled.return_embeddings {
@@ -1152,7 +1196,7 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
             Task {
                 kind: kind.wire_name().to_owned(),
                 target: $target,
-                entity_table_names: vec![sampled.entity_table.clone()],
+                entity_table_names: entity_names.clone(),
                 anchor_time_column: anchor_column.clone(),
                 top_k: sampled.top_k,
             }
@@ -1182,7 +1226,28 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
         num_prediction_examples: sampled.num_test as u64,
     };
     let model = "kumo-relational".to_owned();
-    let bytes = if kind.is_classification() {
+    let bytes = if kind == Kind::TemporalLink {
+        StatePayload {
+            model,
+            task: sdm_wire::payload::TemporalLinkTask {
+                kind: kind.wire_name().to_owned(),
+                target: sdm_wire::payload::TemporalLinkTarget {
+                    column_name: TARGET.to_owned(),
+                    dtype: target_dtype,
+                },
+                entity_table_names: entity_names.clone(),
+                anchor_time_column: anchor_column.clone(),
+                top_k: sampled.top_k,
+            },
+            schema,
+            context: half(true),
+            predict: half(false),
+            output,
+            inference: inference!(sampled.options.base()),
+            metadata,
+        }
+        .to_bytes()
+    } else if kind.is_classification() {
         StatePayload {
             model,
             task: task!(ClassTarget {
