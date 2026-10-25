@@ -136,9 +136,7 @@ def with_fixtures(r: Path) -> None:
 def repo(origin: tuple[Path, str], tmp_path: Path) -> Path:
     r"""A worktree at a landing (not judged) on the checkpoint adding the
     fixture cases: the checkpoint each test's candidate is judged against."""
-    source, landed = origin
-    tree = tmp_path / 'tree'
-    git(source, 'worktree', 'add', '-q', '--detach', str(tree), landed)
+    tree = helpers.repo.__wrapped__(origin, tmp_path)
     land(tree, 'T1.32e', with_fixtures)
     return tree
 
