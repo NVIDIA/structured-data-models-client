@@ -99,7 +99,9 @@ fn buffers(array: &dyn Array) -> Result<u64, CoreError> {
 /// Retained array allocations plus the batch and its column-pointer storage.
 /// Arrow's array sizes include buffer capacity and array objects, and may
 /// conservatively count shared buffers more than once.
-/// The outer batches vector's spare capacity is checked separately by Budget.
+/// Compacted pages have exact-sized column vectors, so their column count
+/// is also their column-pointer capacity. The outer batches vector's spare
+/// capacity is checked separately by Budget.
 pub(crate) fn retained_batch_bytes(batch: &RecordBatch) -> u64 {
     (batch.get_array_memory_size() as u64)
         .saturating_add(std::mem::size_of::<RecordBatch>() as u64)
@@ -145,7 +147,12 @@ pub(crate) fn compact(data: ArrowData) -> Result<ArrowData, CoreError> {
             .columns()
             .iter()
             .map(|array| copy(&array.to_data()).map(make_array))
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect::<Result<Vec<_>, _>>()?
+            // RecordBatch retains this Vec unchanged. Boxed slices discard
+            // spare slots and converting back guarantees capacity == len,
+            // matching retained_batch_bytes' column-pointer charge.
+            .into_boxed_slice()
+            .into_vec();
         batches.push(
             RecordBatch::try_new_with_options(
                 batch.schema(),
