@@ -197,8 +197,7 @@ class T313ConversionTableTest {
   void aConversionMustMatchTheExactOutputPositionNameAndIntegerType() {
     List<Map<String, Object>> bad = List.of(
         Map.of("conversion", "timestamp_micros", "column", 1, "name", "at"),
-        Map.of("conversion", "timestamp_micros", "column", 0, "name", "another"),
-        Map.of("conversion", "not_supported", "column", 0, "name", "at"));
+        Map.of("conversion", "timestamp_micros", "column", 0, "name", "another"));
     for (Map<String, Object> conversion : bad) {
       assertThrows(java.sql.SQLException.class, () -> answeredWithConversions(
           List.of(conversion), FakeJdbc.Column.of("at", "BIGINT", 0L)));
@@ -206,6 +205,21 @@ class T313ConversionTableTest {
     assertThrows(java.sql.SQLException.class, () -> answeredWithConversions(
         List.of(Map.of("conversion", "timestamp_micros", "column", 0, "name", "at")),
         FakeJdbc.Column.of("at", "DOUBLE", 0.5)));
+  }
+
+  @Test
+  void anUnsupportedConversionIsRefusedBeforeAnySqlRuns() {
+    FakeJdbc.Database database =
+        new FakeJdbc.Database(text -> List.of(FakeJdbc.Column.of("at", "BIGINT", 0L)));
+    JdbcProvider provider =
+        new JdbcProvider(database.connection(), JdbcProvider.Driver.DATABRICKS);
+    assertThrows(JdbcProvider.PlanNotRun.class, () -> provider.answer(
+        Map.of("plan", Map.of("plan", "sql", "statements",
+            List.of(T313DatabricksProviderTest.statement("SELECT *")),
+            "result_conversions",
+            List.of(Map.of("conversion", "not_supported", "column", 0, "name", "at")))),
+        new HashMap<>(), ArrowData.allocator()));
+    assertEquals(List.of(), database.ran);
   }
 
   @Test
