@@ -3,16 +3,21 @@
 ## Scope and baseline
 
 This is a planning draft based on provisional Phase 3 code freeze `21e6d40845f58e8e7f6cb683b3db203ee0e40cf2`, with contract version 29 and Python S0/S1/S2 routed to the core by default.
-Phase 3 is still active; reconcile its final source and carried findings before Phase 4 starts, without changing its frozen candidate or treating this draft as authorization to start implementation.
+Phase 3 is still active; the owner requested isolated Phase 4 foundation work alongside its validation, on a separate branch cut from the landed Phase 3 head.
+Reconcile final Phase 3 source and carried findings before dependent changes, preserve its frozen validation candidate, and rebase the Phase 4 branch onto `rust-core` after the owner's Phase 3 merge.
 The format follows the current [handbook's design instructions](../orchestration/README.md#design-and-repeated-findings): an itemized plan with concrete ownership, interfaces, dependencies, tests and unresolved choices.
 The much larger Phase 3 design and [historical preparation](../orchestration/later-phases-prep.md#phase-4-s3-frames-link-prediction-sessions-and-tabular) supply evidence, not a current schedule or process mandate.
 
-- Deliver Python slice S3 as defined in [migration-plan.md sections 4 and 8](../migration-plan.md#4-delivery-slices-not-modules): in-memory frames, including CSV/Parquet read locally or from Amazon S3; frame ranking and forecasting; link prediction; tabular requests; and fitted sessions on every currently supported Python backend.
+- Deliver Python delivery slice 3, called S3 in [migration-plan.md sections 4 and 8](../migration-plan.md#4-delivery-slices-not-modules): in-memory frames and local CSV/Parquet files; frame ranking and forecasting; link prediction; tabular requests; and fitted sessions on every currently supported Python backend.
+- Amazon S3 support and validation are not Phase 4 requirements.
+  The owner explicitly directed this exclusion on 2026-10-25: "update the doc (if needed) so it doesn't have to support \"Amazon S3\"" (P4-OWNER-2026-10-25-NO-S3-1).
+  Existing Python `sdm_connectors.read("s3://...")` behavior remains available without migration work; no Rust S3 client, public bucket access or S3-specific acceptance campaign is required.
 - Enable all three owner-required deferred paths: `model`, `text_time_rules`, and `aggregation` for `LIST_DISTINCT` over a foreign key, including temporal link prediction (KO2-94, KO2-75, P2E-19).
 - Complete the fallback behavior, sliced-page byte accounting and text-order decision carried as P2-T2.5-1/2/3, and the large-value behavior FX-3 (KO2-31).
 - Cover `Schema.from_data`, hand-built frame tables, `PredictiveQuery(..., mapping)`, `materialize(indices=...)`, `materialize(predict=frame)`, direct `Request(context, predict, ...)`, one-shot prediction, fit, fitted prediction, close, result reading and merging, and connector reads feeding those journeys.
 - Use [scope-python.yaml](../phase-0/scope-python.yaml) as the public-path inventory, including warehouse and semantic-view sessions, rather than assuming that S3 means only a frame backend.
-  Its historical inventory has 121 S3 paths; reconcile the actual manifest and current source at T4.1 rather than freezing this historical count as acceptance.
+  Its historical inventory has 121 slice-3 paths; T4.1 reconciles the actual manifest and current source with the owner's Amazon S3 exclusion rather than freezing this historical count as acceptance.
+  Specifically, `connectors.read/csv/s3` and `connectors.read/parquet/s3` are excluded from Phase 4 delivery and acceptance under P4-OWNER-2026-10-25-NO-S3-1; do not claim them as newly migrated or tested paths.
 - Java retains Phase 3's approved S0/S1/Databricks scope and receives only shared-contract compatibility changes and regression checks.
   Java frames, sessions, tabular, link prediction, ranking, forecasting, Snowflake, Lakebase and Spark require owner scope expansion.
 - Release packaging, publishing, platform expansion, old-engine deletion, routing-seam deletion and distribution consolidation remain Phase 5 work.
@@ -21,7 +26,8 @@ The much larger Phase 3 design and [historical preparation](../orchestration/lat
 ## Ownership and data flow
 
 The public journey is native data → lossless Arrow plus explicit native facts → core schema/materialization → model-call bytes → host transport → core result → native presentation.
-File and S3 reads remain in `sdm_connectors.reader`; the core never opens a file, database connection or network socket.
+Local file reads remain in `sdm_connectors.reader`; the core never opens a file, database connection or network socket.
+The existing optional S3 reader remains outside this phase's work and returns the same frame input when used by callers with access.
 The same Arrow frame input is usable by Python and the pure-Rust test host, and later by another language without importing pandas semantics into a Rust crate.
 
 | Owner | Existing modules to change | New modules proposed | Responsibility |
@@ -35,7 +41,7 @@ The same Arrow frame input is usable by Python and the pure-Rust test host, and 
 | `sdm-data` | Existing dialect renderers only when a link-prediction request needs SQL support | None initially | Continue planning SQL and reading catalogs through `DataLayer`; no pandas or session rules |
 | `sdm-host` and `sdm-py` | `sdm-host/src/admission.rs`, `runs.rs`, `codec.rs`; `bindings/sdm-py/src/lib.rs` | None initially | Arrow admission, message validation, buffer/run ownership and panic containment |
 | `structured-data-models-client` / `sdm_client` | `schema.py`, `query.py`, `request.py`, `client.py`, `_routing.py`, `_rust/{schema,materialize,predict,spec,run,results,codec,errors}.py` | `_rust/frames.py`, `_rust/sessions.py` | Native conversion, object construction and lifetime, transport dispatch, exceptions and presentation |
-| `structured-data-models-connectors` / `sdm_connectors` | `reader.py` and backend conversion helpers only where a public reproduction needs a fix | None initially | CSV/Parquet/S3 and warehouse I/O, driver conversion and connector errors |
+| `structured-data-models-connectors` / `sdm_connectors` | `reader.py` and backend conversion helpers only where a public reproduction needs a fix | None initially | Local CSV/Parquet and warehouse I/O, driver conversion and connector errors |
 | `structured-data-models-api` / `sdm_api` | Hand-written API source only if the existing model contract requires it | None planned | Existing model API types; regenerate generated output through its generator if required |
 | `structured-data-models-pql` and `structured-data-models-relational-engine` | Reference code and tests remain available | None planned | Comparison baseline during migration; production core paths must not call either runtime |
 | Java / `sdm-jni` | Existing contract/message/endpoint decoders and binding exhaustiveness as required | None planned | Preserve existing supported calls across the contract bump; no new public feature scope |
@@ -114,7 +120,7 @@ These are bounded additions to existing contracts, not a new abstraction for eve
 Only the paths listed above and tests/contracts needed by each journey are implementation scope; tooling defects ride with the affected work only when a concrete failure requires them.
 At most three packages run concurrently within eight vCPUs; full CI runs only nightly and at phase end.
 Tests are written before implementation, and both independent Sol 6.1 High reviewers approve the same exact candidate before its package tests, lint or cheap checks run.
-This document does not authorize implementation, live work, phase activation or a merge into `rust-core`.
+The owner's separate direction permits isolated foundation progress while Phase 3 validates; it does not approve a serialized contract bump, changed behavior, new live resources or a merge into `rust-core`.
 
 ### T4.1 – Shared input, state and session contracts
 
@@ -194,12 +200,12 @@ This document does not authorize implementation, live work, phase activation or 
 
 ### T4.8 – S3 integration, reference evidence and switch
 
-- Complete all remaining S3 manifest paths through connector reads, result inspection/merge and reference-pickle compatibility; verify frame/file reads never invoke the old engine after routing to the core.
+- Complete all in-scope delivery-slice-3 manifest paths through local connector reads, result inspection/merge and reference-pickle compatibility, excluding the two Amazon S3 paths identified above; verify frame/file reads never invoke the old engine after routing to the core.
 - Update `_routing.py` once for the complete S3 scope, retaining the test-only routing seam until Phase 5 and preserving S0/S1/S2 defaults.
 - Remove the three enabled not-yet rules and their temporary refusal expectations/census bounds together; reconcile register entries with observed answers rather than merely deleting refusal tests.
 - Run the slice and switch acceptance on the final reviewed candidate: Python and rust-host cases, existing Java regressions, generated/differential and refusal coverage, real-data/held-out evidence, memory and native-lifetime checks, plus the applicable live gates.
 - Record bounded frame versus SQL comparisons on real AdventureWorks/RelBench data for ranking, forecasting and link labels, including the resolved ordering policy; performance claims use real data rather than generated accuracy tasks.
-- Include CSV/Parquet and S3 read → schema → materialize → predict, warehouse/view fit → fitted predict → close, tabular one-shot/session calls on an endpoint serving that model, and link calls on a supporting endpoint.
+- Include local CSV/Parquet read → schema → materialize → predict, warehouse/view fit → fitted predict → close, tabular one-shot/session calls on an endpoint serving that model, and link calls on a supporting endpoint.
 - Keep the existing slice/switch requirements for live L6, the Databricks matrix and applicable L7 timing; reuse Phase 3 evidence only when the accepted gate permits it and the relevant code/data identity is unchanged.
   No new live-resource permissions, gate relaxation or reuse policy is assumed by this draft.
 - Dependencies: all prior packages and any owner decisions needed for proposed changed model inputs; phase-end full CI and the owner's merge decision remain separate from package checks.
@@ -239,7 +245,7 @@ No new owner decision is required to draft or independently review this plan.
 
 ## Exit conditions
 
-- Every S3 inventory path is linked to a passing public case or an already approved explicit refusal, with Python and rust-host agreeing on the same typed inputs and scripted/captured model replies.
+- Every in-scope delivery-slice-3 inventory path, excluding the two owner-excluded Amazon S3 paths above, is linked to a passing public case or an already approved explicit refusal, with Python and rust-host agreeing on the same typed inputs and scripted/captured model replies.
 - `model`, `text_time_rules` and foreign-key `LIST_DISTINCT` each have successful reference-equivalent end-to-end answers, their temporary refusal rules are gone, and their census/register expectations match measured behavior.
 - P2-T2.5-1/2/3 and FX-3 each have a verified outcome or an owner-approved precise behavioral decision, with no silent transfer truncation, collation approximation or offset narrowing.
 - Sessions pin context once, send only scoring rows thereafter, preserve question/schema/identity meaning, and release resources with the documented success/failure behavior.
