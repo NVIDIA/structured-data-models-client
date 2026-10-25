@@ -135,6 +135,7 @@ WARNINGS: dict[str, type[Warning]] = {
     'TIME_VALUES_UNREAD': UserWarning,
     'DATES_READ_DAY_FIRST': UserWarning,
     'DATE_LITERAL_DAY_FIRST': UserWarning,
+    'INVALID_STRING_ESCAPE': DeprecationWarning,
     'KEY_CANDIDATES_TIED': UserWarning,
 }
 

@@ -3038,7 +3038,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         &facts,
         &*zones,
     )?;
-    // D4's warning is validate_query's: a public call validates its query
+    // Literal warnings belong to validate_query: a public call validates its query
     // before it materializes it (`PredictiveQuery._resolve`), so this run,
     // which reads the same literals, does not give it again.
     let (Some(validated), Some(source_query)) = (validation.query, validation.text) else {

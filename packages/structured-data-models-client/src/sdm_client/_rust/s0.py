@@ -26,11 +26,12 @@ from sdm_client.errors import StructuredDataError
 #: The core's warnings the old validator gives on this route in the
 #: reference's own words when the core accepts the query: a day-first date
 #: literal (D4), which the shadow check's validator reads with
-#: ``pd.to_datetime``. They are held while the core validates and shown
+#: ``pd.to_datetime``, and the decoder's deprecated string escape. They are
+#: held while the core validates and shown
 #: only when it refuses, since a refused query meets no shadow check.
 #: Bridge code: it goes with the shadow check in Phase 5, and the core's
 #: warning is shown then.
-SHADOWED = frozenset({'DATE_LITERAL_DAY_FIRST'})
+SHADOWED = frozenset({'DATE_LITERAL_DAY_FIRST', 'INVALID_STRING_ESCAPE'})
 
 if TYPE_CHECKING:
     from predictive_query import ValidatedPredictiveQuery
@@ -67,7 +68,7 @@ def validate(
     The query text and the schema travel as attachments, so neither the
     query's length nor the schema's width meets the control cap
     (decision H5). The shadow check's validator says an accepted query's
-    day-first literal itself; a caller that runs no shadow check (a query
+    literal warnings itself; a caller that runs no shadow check (a query
     the core gathers alone, T3.8) shows the held warnings
     (``errors.warn_held``).
     """

@@ -46,7 +46,9 @@ pub mod types;
 pub mod validator;
 pub mod visitor;
 
-pub use api::{DateWarning, Parse, Parsed, Resolved, Unparsed, parse, parse_held, resolve};
+pub use api::{
+    DateWarning, LiteralWarning, Parse, Parsed, Resolved, Unparsed, parse, parse_held, resolve,
+};
 pub use profiles::{Filters, Mode};
 pub use query::{ParsedQuery, ValidatedQuery};
 pub use response::{Span, ValidationError, ValidationResponse, ValidationWarning};

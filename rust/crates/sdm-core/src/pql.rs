@@ -59,8 +59,7 @@ pub struct Validation {
     /// The query, when it has no errors, written back as the reference's
     /// `ValidatedPredictiveQuery.to_string()` writes it.
     pub text: Option<String>,
-    /// D4's warning for each day-first date literal read, in the order
-    /// read, accepted or not.
+    /// The warnings of the literals read, in order, accepted or not.
     pub warnings: Vec<CoreWarning>,
     /// A forecast's plan, when it has no errors: how many steps it asks,
     /// and what each step's regression is written from ([`per_step`]),
@@ -242,7 +241,7 @@ fn resolve_here(
         max_ns: range.max_ns,
     });
     let parse = parser::parse_held(query, mode, reader, held);
-    let warnings: Vec<CoreWarning> = parse.warnings.iter().map(day_first_warning).collect();
+    let warnings: Vec<CoreWarning> = parse.warnings.iter().map(literal_warning).collect();
     // An error after a literal was read keeps the literal's warning (U1).
     let halted = |error: CoreError| Halted {
         error: Box::new(error),
@@ -480,6 +479,25 @@ fn internal(message: impl Into<String>) -> CoreError {
 
 // --- Host facts --------------------------------------------------------------
 
+/// Reading a deprecated string escape preserves its first diagnostic;
+/// validation's warning channel, not the materializer, presents it.
+fn literal_warning(warning: &parser::LiteralWarning) -> CoreWarning {
+    match warning {
+        parser::LiteralWarning::DayFirst(warning) => day_first_warning(warning),
+        parser::LiteralWarning::InvalidStringEscape { location } => {
+            let mut warning = CoreWarning::new(
+                Sentence::InvalidStringEscape,
+                "a string literal uses a deprecated escape",
+            );
+            warning
+                .fields
+                .insert("escape".to_owned(), Detail::text("\\/"));
+            literal_location(&mut warning.fields, *location);
+            warning
+        }
+    }
+}
+
 /// D4's warning for one literal, as the run gives it: the format and where
 /// the literal is, never its text.
 fn day_first_warning(warning: &parser::DateWarning) -> CoreWarning {
@@ -488,13 +506,7 @@ fn day_first_warning(warning: &parser::DateWarning) -> CoreWarning {
         "format".to_owned(),
         Detail::text(warning.day_first.format()),
     );
-    if let Some(at) = warning.location.and_then(parser::Span::at) {
-        let count = |n: usize| Detail::Scalar(Scalar::UInt64(u64::try_from(n).unwrap_or(u64::MAX)));
-        fields.insert("start_row".to_owned(), count(at.start_row));
-        fields.insert("start_col".to_owned(), count(at.start_col));
-        fields.insert("end_row".to_owned(), count(at.end_row));
-        fields.insert("end_col".to_owned(), count(at.end_col));
-    }
+    literal_location(&mut fields, warning.location);
     // D4's warning: a date literal read day first, whose format, as
     // `strftime` writes it, is the `format` field, and whose place in the
     // query is `start_row`, `start_col`, `end_row` and `end_col`.
@@ -504,6 +516,19 @@ fn day_first_warning(warning: &parser::DateWarning) -> CoreWarning {
     );
     warning.fields = fields;
     warning
+}
+
+fn literal_location(
+    fields: &mut std::collections::BTreeMap<String, Detail>,
+    location: Option<parser::ast::Location>,
+) {
+    if let Some(at) = location.and_then(parser::Span::at) {
+        let count = |n: usize| Detail::Scalar(Scalar::UInt64(u64::try_from(n).unwrap_or(u64::MAX)));
+        fields.insert("start_row".to_owned(), count(at.start_row));
+        fields.insert("start_col".to_owned(), count(at.start_col));
+        fields.insert("end_row".to_owned(), count(at.end_row));
+        fields.insert("end_col".to_owned(), count(at.end_col));
+    }
 }
 
 /// The current year in the host's local zone, which places a two-digit

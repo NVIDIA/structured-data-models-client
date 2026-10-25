@@ -1,5 +1,5 @@
 {
-  "$id": "sdm-contract/28",
+  "$id": "sdm-contract/29",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ControlMessage",
   "description": "Every control message that crosses between a host and the core.",
@@ -6082,6 +6082,7 @@
         "context_answers_static",
         "null_keys_left_out",
         "date_literal_day_first",
+        "invalid_string_escape",
         "entity_uncast",
         "time_past_nanoseconds",
         "time_past_unit",

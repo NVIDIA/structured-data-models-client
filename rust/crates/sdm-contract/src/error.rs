@@ -741,6 +741,7 @@ warning_codes! {
     ContextAnswers = "CONTEXT_ANSWERS",
     NullKeysLeftOut = "NULL_KEYS_LEFT_OUT",
     DateLiteralDayFirst = "DATE_LITERAL_DAY_FIRST",
+    InvalidStringEscape = "INVALID_STRING_ESCAPE",
     ViewReadInPart = "VIEW_READ_IN_PART",
     SeedIgnored = "SEED_IGNORED",
 }
@@ -1034,6 +1035,7 @@ sentences! {
     ContextAnswersStatic = "context_answers_static", W::ContextAnswers;
     NullKeysLeftOut = "null_keys_left_out", W::NullKeysLeftOut;
     DateLiteralDayFirst = "date_literal_day_first", W::DateLiteralDayFirst;
+    InvalidStringEscape = "invalid_string_escape", W::InvalidStringEscape;
     EntityUncast = "entity_uncast", E::InvalidRequest;
     TimePastNanoseconds = "time_past_nanoseconds", E::ValueOutOfRange;
     TimePastUnit = "time_past_unit", E::ValueOutOfRange;

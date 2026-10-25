@@ -1024,6 +1024,7 @@ pub fn template(sentence: Sentence) -> Template {
             r#"a date literal of the query was read in {format} format, which puts the day first"#,
             Owner::HostDates,
         ),
+        S::InvalidStringEscape => said("invalid escape sequence '{escape}'"),
         S::EntityUncast => said(
             r#"the entity at position {position} of indices cannot name a row of a key of {key_type}"#,
         ),
