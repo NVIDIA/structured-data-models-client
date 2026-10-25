@@ -11,6 +11,7 @@ use std::sync::Arc;
 
 use arrow_array::{ArrayRef, Float64Array, Int64Array, RecordBatch, TimestampMicrosecondArray};
 use arrow_schema::{DataType, Field, Schema, TimeUnit};
+use arrow_select::concat::concat_batches;
 use sdm_contract::data::{FallbackLimits, OptionalRequest};
 use sdm_testkit::case::{self, Case};
 use sdm_testkit::host::{self, Answer, Observed};
@@ -207,4 +208,32 @@ fn materialize_uses_declared_fallback_for_each_undeclared_sampling_operation() {
         );
         assert!(asked.iter().any(|r| r.name() == "scan"));
     }
+}
+
+#[test]
+fn a_materialized_prediction_does_not_charge_an_unrelated_parent_of_a_scan_slice() {
+    let mut compact = source();
+    let limits = Some(FallbackLimits {
+        max_rows: 10_000,
+        max_bytes: 100_000,
+    });
+    fallback(&mut compact, &[OptionalRequest::Lookup], limits);
+    let expected = host::run_memory_over(&case(), &compact, &layer::root()).unwrap();
+    assert!(
+        matches!(expected.answer, Answer::Predicted(_)),
+        "{expected:?}"
+    );
+
+    let mut sliced = source();
+    let original = &sliced.tables[1].rows;
+    let parent = concat_batches(original.schema_ref(), &vec![original.clone(); 1000]).unwrap();
+    sliced.tables[1].rows = parent.slice(40_000, original.num_rows());
+    fallback(&mut sliced, &[OptionalRequest::Lookup], limits);
+    let observed = host::run_memory_over(&case(), &sliced, &layer::root()).unwrap();
+    assert!(
+        matches!(observed.answer, Answer::Predicted(_)),
+        "{observed:?}"
+    );
+    assert_eq!(observed.described, expected.described);
+    assert_eq!(observed.answer, expected.answer);
 }
