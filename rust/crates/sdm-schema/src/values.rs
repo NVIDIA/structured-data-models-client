@@ -26,12 +26,18 @@ use crate::not_yet;
 /// and `'NaN'`) two, and `-0.0` and `0.0` two; or NumPy-backed pandas
 /// (Postgres's rows), where a NaN is missing, as a null is (`isna`, and
 /// every count drops it), and `-0.0` equals `0.0` (`nunique` counts them
-/// once).
+/// once); or constructor frames, where native conversion already supplied
+/// missingness through Arrow validity and valid NaNs remain present.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Floats {
     #[default]
     NanValue,
     NanMissing,
+    /// Constructor Arrow has already encoded native missingness in its
+    /// validity bitmap. Count valid NaNs as one present value and signed
+    /// zeros as equal, as native pandas numeric arrays do. This affects
+    /// inference equality keys, never the Arrow buffers or model values.
+    Frame,
 }
 
 /// One value, ordered and compared exactly.
@@ -177,7 +183,12 @@ fn float(
     }
     let bits = match floats {
         Floats::NanMissing if nan => return None,
-        Floats::NanMissing if is_zero => zero,
+        Floats::NanMissing | Floats::Frame if is_zero => zero,
+        // A width-independent equality key: no Float32 encoding can
+        // collide with these Float64 NaN bits; other Float64 NaNs also
+        // enter this arm. Native distinct/duplicate counts ignore NaN
+        // payload and sign while original Arrow/scalar values stay intact.
+        Floats::Frame if nan => f64::NAN.to_bits(),
         _ => bits,
     };
     Some(Value::Float(bits))
