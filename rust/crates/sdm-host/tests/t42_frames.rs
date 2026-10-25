@@ -226,6 +226,189 @@ fn coarse_native_frame_units_are_not_silently_clamped_into_the_temporal_slice() 
     }
 }
 
+fn encoded_timestamps(column: arrow_array::ArrayRef, encoding: &str) -> arrow_array::ArrayRef {
+    use arrow_array::types::{Int8Type, Int16Type};
+    use arrow_array::{ArrayRef, DictionaryArray, Int8Array, RunArray};
+
+    let dictionary = |values: ArrayRef| -> ArrayRef {
+        Arc::new(
+            DictionaryArray::<Int8Type>::try_new(Int8Array::from(vec![0, 1, 2]), values).unwrap(),
+        )
+    };
+    let runs = |values: ArrayRef| -> ArrayRef {
+        Arc::new(
+            RunArray::<Int16Type>::try_new(&Int16Array::from(vec![1, 2, 3]), values.as_ref())
+                .unwrap(),
+        )
+    };
+    match encoding {
+        "dictionary" => dictionary(column),
+        "run_end" => runs(column),
+        "dictionary_run_end" => dictionary(runs(column)),
+        "run_end_dictionary" => runs(dictionary(column)),
+        _ => unreachable!(),
+    }
+}
+
+#[test]
+fn encoded_coarse_timestamps_are_refused_at_both_constructor_stages() {
+    use arrow_array::{ArrayRef, TimestampMillisecondArray, TimestampSecondArray};
+
+    for encoding in [
+        "dictionary",
+        "run_end",
+        "dictionary_run_end",
+        "run_end_dictionary",
+    ] {
+        for millis in [false, true] {
+            for stage in ["table", "schema"] {
+                let values = vec![Some(i64::MAX - 1), Some(i64::MAX), None];
+                let plain: ArrayRef = if millis {
+                    Arc::new(TimestampMillisecondArray::from(values))
+                } else {
+                    Arc::new(TimestampSecondArray::from(values))
+                };
+                let batch = RecordBatch::try_from_iter([(
+                    "observed_at",
+                    encoded_timestamps(plain, encoding),
+                )])
+                .unwrap();
+                let mut attached = inputs();
+                attached.insert(
+                    AttachmentId(2),
+                    bytes(
+                        json!({"stage":stage,"tables":[{"source":{"source":["users"]},"rows":3}]}),
+                    ),
+                );
+                attached.insert(
+                    AttachmentId(3),
+                    Attachment::Arrow(ArrowData::new(batch.schema(), vec![batch])),
+                );
+                let outgoing = match HostRun::start(&sdm_host::default_root(), &message(), attached)
+                {
+                    Ok(run) => run.next().unwrap(),
+                    Err(outgoing) => outgoing,
+                };
+                let failure = error(outgoing);
+                assert_eq!(
+                    failure.code,
+                    ErrorCode::UnsupportedRequest,
+                    "{encoding}/{millis}/{stage}"
+                );
+                assert_eq!(
+                    failure.fields.get("rule"),
+                    Some(&sdm_contract::Detail::text("frame_native_family")),
+                    "{encoding}/{millis}/{stage}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn encoded_fine_timestamps_keep_raw_counts_validity_and_constructor_time_choice() {
+    use arrow_array::{ArrayRef, TimestampMicrosecondArray, TimestampNanosecondArray};
+    use arrow_schema::{DataType, TimeUnit};
+    use sdm_contract::ops::SourceDescription;
+
+    for encoding in [
+        "dictionary",
+        "run_end",
+        "dictionary_run_end",
+        "run_end_dictionary",
+    ] {
+        for unit in [TimeUnit::Microsecond, TimeUnit::Nanosecond] {
+            for stage in ["table", "schema"] {
+                let values = vec![Some(-2), Some(-1), None];
+                let plain: ArrayRef = match unit {
+                    TimeUnit::Microsecond => {
+                        Arc::new(TimestampMicrosecondArray::from(values.clone()))
+                    }
+                    TimeUnit::Nanosecond => {
+                        Arc::new(TimestampNanosecondArray::from(values.clone()))
+                    }
+                    _ => unreachable!(),
+                };
+                let batch = RecordBatch::try_from_iter([(
+                    "observed_at",
+                    encoded_timestamps(plain, encoding),
+                )])
+                .unwrap();
+                let mut attached = inputs();
+                attached.insert(
+                    AttachmentId(2),
+                    bytes(
+                        json!({"stage":stage,"tables":[{"source":{"source":["users"]},"rows":3}]}),
+                    ),
+                );
+                attached.insert(
+                    AttachmentId(3),
+                    Attachment::Arrow(ArrowData::new(batch.schema(), vec![batch])),
+                );
+                let run = HostRun::start(&sdm_host::default_root(), &message(), attached)
+                    .unwrap_or_else(|e| panic!("{encoding}/{unit:?}/{stage}: {:?}", error(e)));
+                loop {
+                    match sdm_host::read(&run.next().unwrap()).unwrap() {
+                        ControlMessage::Warnings { .. } => {}
+                        ControlMessage::Step(Step::Done {
+                            result: OperationResult::DescribeSource(result),
+                            ..
+                        }) => {
+                            let Attachment::Bytes(data) =
+                                run.take_attachment(result.description).unwrap().unwrap()
+                            else {
+                                panic!("description bytes")
+                            };
+                            let described: SourceDescription =
+                                serde_json::from_slice(&data).unwrap();
+                            assert_eq!(
+                                described.tables[0].time_column.as_deref(),
+                                Some("observed_at")
+                            );
+                            assert!(described.tables[0].primary_key.is_empty());
+                            if stage == "table" {
+                                let Attachment::Arrow(owned) = run
+                                    .take_attachment(result.frame_rows.unwrap())
+                                    .unwrap()
+                                    .unwrap()
+                                else {
+                                    panic!("owned temporal rows")
+                                };
+                                assert_eq!(
+                                    owned.schema.field(0).data_type(),
+                                    &DataType::Timestamp(unit, None)
+                                );
+                                let column = owned.batches[0].column(0);
+                                assert_eq!(column.null_count(), 1);
+                                let held: Vec<Option<i64>> = match unit {
+                                    TimeUnit::Microsecond => column
+                                        .as_any()
+                                        .downcast_ref::<TimestampMicrosecondArray>()
+                                        .unwrap()
+                                        .iter()
+                                        .collect(),
+                                    TimeUnit::Nanosecond => column
+                                        .as_any()
+                                        .downcast_ref::<TimestampNanosecondArray>()
+                                        .unwrap()
+                                        .iter()
+                                        .collect(),
+                                    _ => unreachable!(),
+                                };
+                                assert_eq!(held, values, "{encoding}/{unit:?}/{stage}");
+                            } else {
+                                assert!(result.frame_rows.is_none());
+                            }
+                            break;
+                        }
+                        other => panic!("encoded frame may not fetch or call a model: {other:?}"),
+                    }
+                }
+            }
+        }
+    }
+}
+
 #[test]
 fn frame_arrow_validity_retains_present_nan_and_merges_signed_zero() {
     use arrow_array::Float64Array;
