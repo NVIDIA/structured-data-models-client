@@ -164,8 +164,17 @@ def _driver(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     these runs never reach (round 2's Codex P2). Every module that read
     the driver is imported anew over the stand-ins, and forgotten after,
     so a later test sees the driver as it is installed."""
-    for name in list(sys.modules):
+    # Importing a child also caches it on its parent package. Restore those
+    # attributes with the modules, so later imports cannot see a fake backend.
+    for name in sorted(sys.modules, reverse=True):
         if 'databricks' in name:
+            parent_name, _, child = name.rpartition('.')
+            parent = sys.modules.get(parent_name)
+            if (
+                parent is not None
+                and vars(parent).get(child) is sys.modules[name]
+            ):
+                monkeypatch.delattr(parent, child)
             monkeypatch.delitem(sys.modules, name)
     before = set(sys.modules)
     client = types.ModuleType('databricks.sql.client')
@@ -180,10 +189,19 @@ def _driver(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
         ('databricks.sql.client', client),
     ):
         monkeypatch.setitem(sys.modules, name, module)
-    yield
-    for name in set(sys.modules) - before:
-        if 'databricks' in name:
-            sys.modules.pop(name, None)
+    try:
+        yield
+    finally:
+        for name in sorted(set(sys.modules) - before, reverse=True):
+            if 'databricks' in name:
+                parent_name, _, child = name.rpartition('.')
+                parent = sys.modules.get(parent_name)
+                if (
+                    parent is not None
+                    and vars(parent).get(child) is sys.modules[name]
+                ):
+                    delattr(parent, child)
+                sys.modules.pop(name, None)
 
 
 #: Recognised as a Databricks SQL connection by its module.
