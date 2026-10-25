@@ -18,6 +18,7 @@ import jsonschema
 import pandas as pd
 import pytest
 import yaml
+from sdm_connectors import DuckDBSource
 
 from sdm_client import (
     KumoRelational,
@@ -28,7 +29,6 @@ from sdm_client import (
 )
 from sdm_client._routing import CORE_ROUTED
 from sdm_client.errors import NimRequestError
-from sdm_connectors import DuckDBSource
 
 ROOT = Path(__file__).resolve().parents[3]
 QUERY = (
