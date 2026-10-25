@@ -63,6 +63,8 @@ fn catalog_columns(part: DescribePart) -> &'static [&'static str] {
         DescribePart::Namespace => &["name"],
         // DuckDB reads no view's definition; never planned (T3.27).
         DescribePart::ViewDefinition => &[],
+        // Key-enforcement listings are Snowflake-only; never planned for DuckDB.
+        DescribePart::KeyEnforcement => &[],
     }
 }
 

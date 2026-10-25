@@ -638,7 +638,11 @@ fn timestamp_preflight_binds_empty_keys_then_preserves_the_original_lookup() {
     };
     assert_eq!(requests.len(), 1);
     let actual = &requests[0];
-    assert_eq!(cell(run.take_attachment(text_param(actual))), "[7, 8]");
+    assert_eq!(
+        serde_json::from_str::<Vec<i64>>(&cell(run.take_attachment(text_param(actual))))
+            .unwrap(),
+        vec![7, 8]
+    );
     let FetchPlan::Sql {
         statements,
         result_conversions,
