@@ -38,10 +38,15 @@ def test_the_canonical_binding_writer_records_actual_escape_warning_controls(
     output = tmp_path / 'vectors.json'
     output.write_text(json.dumps(original))
     monkeypatch.setattr(recorder, 'OUT', output)
+    texts = recorder._texts()
+    texts['text.escape-warning'] = (
+        r"PREDICT users.country = 'a\/' FOR EACH users.user_id"
+    )
+    monkeypatch.setattr(recorder, '_texts', lambda: texts)
     assert recorder.main(['binding']) == 0
     recorded = json.loads(output.read_text())
     assert recorded['reference'] == original['reference']
-    vector = recorded['binding']['validate']['s0.boundary.escapes']
+    vector = recorded['binding']['validate']['text.escape-warning']
     operation = json.loads(vector['operation'])
     import base64
 
@@ -50,17 +55,24 @@ def test_the_canonical_binding_writer_records_actual_escape_warning_controls(
         for key, value in vector['attachments'].items()
     }
     run = _native.Run.start(recorder._start(_native, operation), attachments)
-    warnings = []
-    while True:
-        control, carried = run.next()
-        message = json.loads(control)
-        if message['message'] == 'attached':
-            message = json.loads(carried[message['attachment']])
-        if message['message'] != 'warnings':
-            break
-        warnings.append(
-            {'digest': hashlib.sha256(control).hexdigest(), 'control': message}
-        )
+    control, carried = run.next()
+    message = json.loads(control)
+    if message['message'] == 'attached':
+        message = json.loads(carried[message['attachment']])
+    done_control = control
+    taken = run.take_warnings()
+    assert taken is not None
+    warning_control, carried = taken
+    warning_message = json.loads(warning_control)
+    if warning_message['message'] == 'attached':
+        warning_message = json.loads(carried[warning_message['attachment']])
+    warnings = [
+        {
+            'digest': hashlib.sha256(warning_control).hexdigest(),
+            'control': warning_message,
+        }
+    ]
+    assert run.take_warnings() is None
     assert vector['warnings'] == warnings
     assert (
         warnings
@@ -68,23 +80,24 @@ def test_the_canonical_binding_writer_records_actual_escape_warning_controls(
         == 'INVALID_STRING_ESCAPE'
     )
     assert message['message'] == 'step' and message['step'] == 'done'
-    assert vector['digest'] == hashlib.sha256(control).hexdigest()
+    assert vector['digest'] == hashlib.sha256(done_control).hexdigest()
     assert vector['accepted'] is True
     assert (
         recorded['binding']['validate'][recorder.SCHEMA_CASE]['warnings'] == []
     )
 
 
-def test_attached_and_multiple_warning_controls_keep_their_order(monkeypatch):
+def test_attached_warning_controls_keep_warning_order_and_done_digest(
+    monkeypatch,
+):
     recorder = _recorder()
     monkeypatch.setattr(recorder, '_texts', lambda: {'one': 'unused'})
-    first = {
+    warned = {
         'message': 'warnings',
-        'warnings': [{'code': 'FIRST', 'fields': {'n': 1}}],
-    }
-    second = {
-        'message': 'warnings',
-        'warnings': [{'code': 'SECOND', 'fields': {}}],
+        'warnings': [
+            {'code': 'FIRST', 'fields': {'n': 1}},
+            {'code': 'SECOND', 'fields': {}},
+        ],
     }
     done = {
         'message': 'step',
@@ -92,28 +105,56 @@ def test_attached_and_multiple_warning_controls_keep_their_order(monkeypatch):
         'result': {'op': 'validate_query', 'accepted': True, 'diagnostics': []},
     }
     attached = json.dumps({'message': 'attached', 'attachment': 7}).encode()
-    second_bytes = json.dumps(second).encode()
     done_bytes = json.dumps(done).encode()
-    stream = iter(
-        [
-            (attached, {7: json.dumps(first).encode()}),
-            (second_bytes, {}),
-            (done_bytes, {}),
-        ]
-    )
     native = SimpleNamespace(
         CONTRACT_VERSION=29,
         CoreError=RuntimeError,
         Run=SimpleNamespace(
-            start=lambda *args: SimpleNamespace(next=lambda: next(stream))
+            start=lambda *args: SimpleNamespace(
+                next=lambda: (done_bytes, {}),
+                take_warnings=lambda: (
+                    attached,
+                    {7: json.dumps(warned).encode()},
+                ),
+            )
         ),
     )
     vector = recorder._validate(native)['one']
     assert vector['warnings'] == [
-        {'digest': hashlib.sha256(attached).hexdigest(), 'control': first},
-        {'digest': hashlib.sha256(second_bytes).hexdigest(), 'control': second},
+        {'digest': hashlib.sha256(attached).hexdigest(), 'control': warned}
     ]
     assert vector['digest'] == hashlib.sha256(done_bytes).hexdigest()
+
+
+def test_warning_controls_are_kept_when_validation_raises(monkeypatch):
+    recorder = _recorder()
+    monkeypatch.setattr(recorder, '_texts', lambda: {'one': 'unused'})
+
+    class CoreError(Exception):
+        code = 'EXPECTED_ERROR'
+        control = b'{"message":"error"}'
+
+    def fail():
+        raise CoreError()
+
+    warned = b'{"message":"warnings","warnings":[{"code":"FIRST"}]}'
+    native = SimpleNamespace(
+        CONTRACT_VERSION=29,
+        CoreError=CoreError,
+        Run=SimpleNamespace(
+            start=lambda *args: SimpleNamespace(
+                next=fail, take_warnings=lambda: (warned, {})
+            )
+        ),
+    )
+    vector = recorder._validate(native)['one']
+    assert vector['error'] == 'EXPECTED_ERROR'
+    assert vector['warnings'] == [
+        {
+            'digest': hashlib.sha256(warned).hexdigest(),
+            'control': json.loads(warned),
+        }
+    ]
 
 
 def test_an_unexpected_nonterminal_control_is_not_a_warning(monkeypatch):
@@ -124,10 +165,11 @@ def test_an_unexpected_nonterminal_control_is_not_a_warning(monkeypatch):
         CoreError=RuntimeError,
         Run=SimpleNamespace(
             start=lambda *args: SimpleNamespace(
+                take_warnings=lambda: None,
                 next=lambda: (
                     b'{"message":"step","step":"fetch","result":{}}',
                     {},
-                )
+                ),
             )
         ),
     )

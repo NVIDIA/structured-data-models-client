@@ -89,7 +89,7 @@ class T311BindingTest {
     @Test
     void escapeWarningsArePresentInTheBindingVectors() throws IOException {
         Map<String, Object> vector = T311Json.object(
-                T311Json.object(section("binding").get("validate")).get("s0.boundary.escapes"));
+                T311Json.object(section("binding").get("validate")).get("text.escape-warning"));
         List<?> controls = (List<?>) vector.get("warnings");
         assertTrue(controls != null && !controls.isEmpty(), "escape warning controls were dropped");
         Map<String, Object> message = T311Json.object(T311Json.object(controls.get(0)).get("control"));
