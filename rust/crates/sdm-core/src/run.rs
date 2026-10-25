@@ -1713,13 +1713,14 @@ fn page_budgets_measure_logical_slices_at_exact_and_over_limits() {
         schema.clone(),
         vec![Arc::new(arrow_array::Int64Array::from(
             (0..1000)
-                .map(|i| if i == 501 { None } else { Some(i) })
+                .map(|i| if i == 500 || i == 501 { None } else { Some(i) })
                 .collect::<Vec<_>>(),
         ))],
     )
     .unwrap();
     let data = ArrowData::new(schema, vec![parent.slice(500, 1), parent.slice(501, 1)]);
-    // Each page carries eight value bytes and one null byte.
+    // Each selected row is null, so both pages retain a validity byte
+    // beside their eight value bytes. An all-valid slice may drop it.
     let mut budget = Budget {
         rows: 2,
         bytes: 18,
