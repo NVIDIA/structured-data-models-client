@@ -54,7 +54,7 @@ Do not promote [`sdm-testkit::memory`](../../../../rust/crates/sdm-testkit/src/m
 ## Contract and API boundaries
 
 T4.1 owns the common contract change, provisionally version 30 if Phase 3 finishes at 29.
-The following are the proposed contract responsibilities; T4.1 locks their serialized shapes and state versions together before dependent packages implement them.
+The following are proposed contract responsibilities; T4.1 must complete the proof checkpoint below before proposing serialized shapes and state versions for approval and dependent implementation.
 
 1. **Frames enter as data, not as a Python provider.**
    Add one typed source selection to describe/materialize: an existing provider choice, or a frame-table manifest naming Arrow attachments and neutral table metadata.
@@ -65,7 +65,7 @@ The following are the proposed contract responsibilities; T4.1 locks their seria
    Frame requests retain the same request validation and expected-schema admission checks; a frame-source distinction must not bypass the provider contract's key, filter, paging or completeness rules.
    Frame execution is an internal source branch in the existing run, not a second public run protocol, a new driver framework, or a SQL engine embedded for frames.
 2. **Native conversion reports facts; the core decides behavior.**
-   `_rust/frames.py` converts each pandas column once using a reviewed conversion table and existing codec scalars, preserving integer widths, decimals, nulls, zones, nested values and empty/all-null columns.
+   `_rust/frames.py` converts native values through a reviewed conversion table and existing codec scalars, preserving integer widths, decimals, nulls, zones, nested values and empty/all-null columns at their consumed call stages.
    Object columns are classified column-wise, with explicit diagnostics for values that have no lossless contract representation; they are never coerced wholesale through text or float64.
    Native index information travels only as typed input conversion facts, supplied before the run selects rows; the core owns filtering, sampling and ordering of the resulting subset.
    [`_context_within_limit`](../../../../packages/structured-data-models-client/src/sdm_client/materializers/tabular.py) runs `candidates.sample(...).sort_index()`: equal index labels can preserve sampled order, so sorting sampled rows by a precomputed full-frame permutation is insufficient.
@@ -113,6 +113,44 @@ The following are the proposed contract responsibilities; T4.1 locks their seria
 The frame source branch is needed because the current fetch protocol sends host-provider requests to the host, which would otherwise put sampling and time rules back into Python.
 The session additions are needed because [`Operation`](../../../../rust/crates/sdm-contract/src/ops.rs) has no session operations and [`Endpoint`](../../../../rust/crates/sdm-contract/src/run.rs) currently has only `Predict`.
 These are bounded additions to existing contracts, not a new abstraction for every S3 feature.
+
+### T4.1 proof checkpoint
+
+The recommendation is to preserve observed legacy ordering and per-call native mutability.
+Earlier recommendations for an original-input-row-order default and an early custom-conversion timing exception are withdrawn; both behavior differences remain unapproved.
+The owner's request for further investigation approves design work only, with no interface freeze, implementation, contract bump or new model experiment.
+The fourth private interface draft remains a historical, unactivated checkpoint rather than a complete input representation.
+
+1. **Preserve the actual context-order policies and measure their consequences.**
+   Over-cap tabular materialization filters, samples with seed 42 and sorts the selected rows by pandas index labels; candidates within the cap and direct `Request` context retain their supplied order.
+   Direct requests retain their existing over-cap refusal rather than acquiring sampling; neither regression nor classification acquires an inferred target/time sort.
+   The captured 128-call experiment found four identical responses per variant but material regression sensitivity to original-row ordering, including a 22.63% MAE increase for the 10,000-row duplicate-index case and mixed MAE/RMSE/quantile effects elsewhere.
+   The same 32 scoring identities recur across variants and repeats, so this establishes neither independent accuracy replications nor a general accuracy winner or verified internal model cause.
+2. **Prove the ordered consumption stages before choosing APIs.**
+   Trace constructor, one-shot prediction, fit and fitted prediction through their public entrypoints, keeping model-neutral constructor checks distinct from later model binding.
+   In [`SDMClient._prepare`](../../../../packages/structured-data-models-client/src/sdm_client/client.py), output input-form checks, model/default-output resolution and empty-output checks precede capability truth; supported output-name checks in [`check_request_against_model`](../../../../packages/structured-data-models-client/src/sdm_client/base.py) follow capability and runtime-task checks.
+   Preserve parts/decomposition, context caps, empty scoring, frame encoding, inference normalization and final JSON encoding at their own stages, without traversing ignored values on an earlier-refused or empty path.
+3. **Retain native edits and distinguish reads across their effects.**
+   The constructor shallow-copies option entries, retaining referenced value objects; edits to `request.task.options`, replacement of `request.task`, and current schema/frame values remain observable on later calls.
+   The anchor option undergoes native truth conversion, not invocation as a registered callback; its hook can mutate a later encoded value even when it returns false.
+   `required_capabilities` captures task kind before that effect, reads schema relationships/count afterward, and later runtime validation rereads task kind; one wholly early or wholly late Request snapshot cannot represent both observations.
+   Prove task/schema replacement, frame and row-count changes, repeated toggles, mutation followed by an exception, `__len__`, invalid truth results and native formatting/equality/traversal timing, retaining original native failures at the consumed stage without replaying hooks or semantic checks.
+4. **Keep call and fitted-state lifetimes explicit.**
+   Investigate independently useful core resolution, validation and payload/session stages, keeping resolved values local to the call and collecting later-read native facts freshly instead of caching editable Request data permanently.
+   The existing `sdm-host::capabilities` export is descriptive metadata, not a complete preflight interface or permission to rebuild capability policy in Python.
+   Fit's source computes its pinned Question after a confirmed successful session-create reply; prove its relationship to the uploaded payload, pinned keys/schema and native effects, and explicitly resolve edits during a suspended create before claiming compatibility.
+   Fitted prediction retains closed/parts/Question/empty guards, does not evaluate one-shot anchor capability truth, and encodes nonempty scoring rows against pinned dtypes; retain existing attachment, cancellation, late-reply and endpoint-specific retry ownership.
+5. **Complete native scalar facts rather than freezing display-only values.**
+   A native Arrow decimal scale fact must retain its full signed 32-bit width before admission checks, rather than narrowing to the fourth draft's signed 8-bit field.
+   Accepted complex, Period, Interval, duration, time and UUID values need sufficient typed value, equality, missingness and distinctness facts independently of their display strings, with source formatting and error stages proved where consumed.
+   Missing representation evidence is a design obligation, not permission for string coercion, a new refusal, an opaque object handle or a semantic callback.
+6. **Prove index input facts and the core's selected-subset sort.**
+   Supply facts before selection, tied to the admitted frame's mutation/lifetime, covering comparison/null rules, category levels/code widths, temporal and Arrow families, Interval/MultiIndex levels and codes, mixed-label subset failures and subset-monotonic shortcuts.
+   Python and rust-host must reach the same actual Rust subset sorting from those facts; neither a global permutation nor host sorting after selection is sufficient, and no language-behavior Step or generic callback may supply the answer.
+   Exact unstable primitive/category ties across supported runtime cells remain unproved; a proposed stable label-sort tie policy needs its own measured input/prediction consequences and explicit approval, since the original-row-order experiment does not test that alternative.
+
+These gates refine T4.1, T4.2, T4.6 and T4.7 within the ownership table above, without adding a crate, distribution, provider framework or Java feature scope.
+If a remaining incompatibility requires an owner choice, name the affected public input, read order and possible payload/result change rather than describing it as an exception-timing detail.
 
 ## Work packages and dependencies
 
