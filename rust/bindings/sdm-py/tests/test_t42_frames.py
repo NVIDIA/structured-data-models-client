@@ -13,7 +13,6 @@ import messages
 import numpy as np
 import pyarrow as pa
 import pytest
-
 from sdm_client import _native
 
 

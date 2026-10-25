@@ -347,7 +347,7 @@ pub fn final_notices(
                     "a key name is ambiguous among frames",
                 )
                 .with_fields(vec![
-                    ("key", Detail::text(key)),
+                    ("key", Detail::text(*key)),
                     ("tables", texts(&names)),
                     ("first", Detail::text(names[0])),
                 ]),

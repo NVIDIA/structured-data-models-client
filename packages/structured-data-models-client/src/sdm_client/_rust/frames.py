@@ -16,10 +16,10 @@ import numpy as np
 import pandas as pd
 
 from sdm_client._routing import RouteError
-from sdm_client._rust import codec, errors, results, schema as schemas
+from sdm_client._rust import codec, errors, results
+from sdm_client._rust import schema as schemas
 from sdm_client._rust.run import Finished, run
 from sdm_client.errors import StructuredDataError
-
 
 if TYPE_CHECKING:
     from sdm_client.schema import Relationship, Schema
