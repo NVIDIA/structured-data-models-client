@@ -129,7 +129,12 @@ def land(
     )
 
 
-def build(repo: Path, *, coverage_inputs: bool = False) -> tuple[Path, str]:
+def build(
+    repo: Path,
+    *,
+    coverage_inputs: bool = False,
+    sparse_captures: bool = False,
+) -> tuple[Path, str]:
     r"""The temporary repository, in ``repo``: a first landing with the
     harness's files but ``ratchet.py``, then a landing adding it, the
     checkpoint; with that landing's SHA."""
@@ -203,6 +208,19 @@ def build(repo: Path, *, coverage_inputs: bool = False) -> tuple[Path, str]:
         lambda r: ratchet_file.write_bytes(kept),
         protected='scripts/rust_core/ratchet.py (new)',
     )
+    if sparse_captures:
+        # The gate reads complete committed captures through Git. Keep
+        # every original blob while avoiding copies in this worktree and
+        # the candidate/checkpoint worktrees Git creates from it.
+        git(repo, 'sparse-checkout', 'init', '--no-cone')
+        git(
+            repo,
+            'sparse-checkout',
+            'set',
+            '--no-cone',
+            '/*',
+            '!/contract/captures/',
+        )
     return repo, landed
 
 

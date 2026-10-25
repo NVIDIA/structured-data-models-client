@@ -51,7 +51,9 @@ def origin(
     owned_module_dir: Callable[[str], Path],
 ) -> tuple[Path, str]:
     owned = owned_module_dir('origin')
-    built: tuple[Path, str] = helpers.build(owned, coverage_inputs=True)
+    built: tuple[Path, str] = helpers.build(
+        owned, coverage_inputs=True, sparse_captures=True
+    )
     return built
 
 

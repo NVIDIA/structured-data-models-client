@@ -206,7 +206,9 @@ def origin(
     r"""The temporary repository, its landing holding this tree's harness,
     and a later landing whose harness has the locked steps' stubs."""
     owned = owned_module_dir('origin')
-    repo, landed = helpers.build(owned, coverage_inputs=True)
+    repo, landed = helpers.build(
+        owned, coverage_inputs=True, sparse_captures=True
+    )
     stubbed = land(
         repo, 'T1.15', stub_the_checkpoint, protected='scripts/rust_core/**'
     )

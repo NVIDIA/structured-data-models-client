@@ -336,6 +336,10 @@ def _rekey_reference(sha: str) -> Callable[[Path], None]:
     observations' identities, the vector files)."""
 
     def edit(tree: Path) -> None:
+        # This consumer rewrites every real tracked citation by reading
+        # physical bytes. Materialize this worktree only; the origin and
+        # sibling gate worktrees retain their sparse checkout settings.
+        git(tree, 'sparse-checkout', 'disable')
         env = (tree / 'contract/reference-env.txt').read_text()
         old = re.search(r'^reference: ([0-9a-f]{40})$', env, re.M)
         assert old is not None
