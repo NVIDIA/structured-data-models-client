@@ -264,12 +264,13 @@ P3E-9 records this one warning-body exception to P3E-2; every other warning requ
 |---|---|---|---|
 | T310-OWNER-2026-10-25-STABLE-ESCAPE-1 | Python 3.14 added a long explanation to its invalid-escape warning. May the core keep the concise body `invalid escape sequence '\\/'` across Python and Java? The warning code, category and timing stay the same; results are unchanged. I recommend stable wording. The existing compatibility rule requires your approval for this text difference. | "Keep stable wording (recommended)" | approved by owner 2026-10-25 |
 
-## Proposed fixture repair check scope, 2026-10-25
+## Owner-approved fixture repair check scope, 2026-10-25
 
-This is a reviewable proposal only; the owner has not approved its use.
-The existing whole-file handoff remains the default and the running repair checks are unchanged.
-The optional scope is mechanically disabled until this row records the owner's actual answer as approved.
+The owner answered the reviewed proposal at 16:30:22 UTC after both code reviews and the 27 selector controls passed.
+The exact question and answer are preserved from the primary transcript in `$SDM_ORCH_STATE/phase-3/owner-answers-2026-10-25-fixture-scope.md`.
+This one-time exception is limited to the explicit source-pinned scope below; whole changed test files remain the default.
+Both exact-source reviews and required controls still precede its use on a combined candidate.
 
 | # | Proposal | Owner's words | Status |
 |---|---|---|---|
-| T310-OWNER-2026-10-25-FIXTURE-SCOPE-1 | Permit explicit handoff scope `t310-fixtures-7ab261a6d` for T3.10 only, with the fixture files and full-CI workflow pinned to source `7ab261a6d0139c87e6c1bae13d563fded79843e3`: run all ten real factory controls, all four lifecycle outcomes and two real gate fixture consumer smokes in place of unchanged semantic scenarios in the named fixture-only files. Keep complete changed coverage-checker tests, every other substantive regression, normal lint and all 49 gate scenarios in actual final-source full CI; refuse a changed pinned file and record the exact selected suites, hashes and this decision row in the stamp. | No answer recorded | PROPOSED, owner approval pending |
+| T310-OWNER-2026-10-25-FIXTURE-SCOPE-1 | Permit explicit handoff scope `t310-fixtures-7ab261a6d` for T3.10 only, with the fixture files and full-CI workflow pinned to source `7ab261a6d0139c87e6c1bae13d563fded79843e3`: run all ten real factory controls, all four lifecycle outcomes and two real gate fixture consumer smokes in place of unchanged semantic scenarios in the named fixture-only files. Keep complete changed coverage-checker tests, every other substantive regression, normal lint and all 49 gate scenarios in actual final-source full CI; refuse a changed pinned file and record the exact selected suites, hashes and this decision row in the stamp. | "Use targeted fixture checks (recommended)" | approved by owner 2026-10-25 |

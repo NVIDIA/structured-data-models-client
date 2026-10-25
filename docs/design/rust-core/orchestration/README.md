@@ -144,16 +144,16 @@ After fixes receive both exact-SHA approvals, confirm the fast targets that fail
 This changes neither the required checks nor the passing-stamp requirement.
 The general setup and test commands in [CONTRIBUTING.md](../../../../CONTRIBUTING.md) describe available suites, not permission to run them all within a topic.
 
-### Proposed T3.10 fixture repair scope, not yet approved
+### Owner-approved T3.10 fixture repair scope
 
 The default remains whole changed test files.
-The optional `--fixture-repair-scope t310-fixtures-7ab261a6d` is a proposed exception for the exact T3.10 fixture sources pinned in `handoff.py`, not an active policy approval.
-It requires decision row `T310-OWNER-2026-10-25-FIXTURE-SCOPE-1` to contain the owner's actual approval of that scope and its source commit before use.
-Until then the tool refuses the option before checking or stamping anything.
-If approved, it keeps the ten real factory controls, four lifecycle outcomes and two actual gate fixture consumers instead of repeating unchanged semantic scenarios in the pinned fixture-only files.
+On 2026-10-25 the owner approved the one-time `--fixture-repair-scope t310-fixtures-7ab261a6d` exception for the exact T3.10 fixture sources pinned in `handoff.py`.
+Decision row `T310-OWNER-2026-10-25-FIXTURE-SCOPE-1` records the actual approval of that scope and its source commit, which the tool requires before use.
+Both exact-source reviews and required controls still precede execution.
+The exception keeps the ten real factory controls, four lifecycle outcomes and two actual gate fixture consumers instead of repeating unchanged semantic scenarios in the pinned fixture-only files.
 The complete changed coverage-checker tests, all other substantive own tests, normal lint and every final-source CI scenario remain required.
 The flag is explicit, limited to T3.10, refuses any changed pinned source and records its exact suites, source hashes and approval-row digest in the log and passing stamp.
-This proposal supplies no failed-stamp reuse, automatic fixture classification, global pytest filter or change to full phase-end evidence.
+This exception supplies no failed-stamp reuse, automatic fixture classification, global pytest filter or change to full phase-end evidence.
 
 ## Landing
 
