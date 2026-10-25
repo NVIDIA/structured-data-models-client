@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import sys
 import warnings
 
 import pytest
@@ -59,10 +60,23 @@ def test_materialize_preserves_the_first_invalid_escape_warning(
     if deprecated:
         assert len(old_deprecated) > 1
         assert len(core_deprecated) == 1
-        # Core warnings retain the approved diagnostic-code prefix.
-        assert str(core_deprecated[0].message) == (
-            '[INVALID_STRING_ESCAPE] ' + str(old_deprecated[0].message)
-        )
+        # P3E-9 keeps this one body stable across hosts and runtimes;
+        # P3E-2's code prefix and every other warning's words are unchanged.
+        body = r"invalid escape sequence '\/'"
+        prefix = '[INVALID_STRING_ESCAPE] '
+        assert str(core_deprecated[0].message) == prefix + body
+        assert core_deprecated[0].category is old_deprecated[0].category
+        old_body = str(old_deprecated[0].message)
+        if old_body == body:
+            assert str(core_deprecated[0].message) == prefix + old_body
+        else:
+            # The approved difference is Python 3.14's native expansion,
+            # including its final space, observed on the old route in CI.
+            assert sys.version_info[:2] == (3, 14)
+            assert old_body == (
+                r'"\/" is an invalid escape sequence. '
+                'Such sequences will not work in the future. '
+            )
         assert core[0] is core_deprecated[0]
     else:
         assert old_deprecated == core_deprecated == []
