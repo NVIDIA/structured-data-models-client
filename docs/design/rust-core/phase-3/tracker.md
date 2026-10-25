@@ -1,5 +1,10 @@
 # Phase 3 tracker
 
+This file preserves the original planning and design-review snapshot.
+Its package table, counters and carried-case notes are historical, not a live status report.
+The package-specific trackers describe scope and checks; use the `Land ...` history on `rust-core-phase-3` to establish what has actually landed.
+Phase completion requires its final CI and acceptance evidence separately from those package landings.
+
 One row per package; each package keeps its own `tracker-<ID>.md` (KO2-17) and writes only there.
 The slip report (`phase_stats.py --forecast forecast.yaml`) gives the phase's lateness against [design.md](design.md)'s forecast at each check-in.
 
