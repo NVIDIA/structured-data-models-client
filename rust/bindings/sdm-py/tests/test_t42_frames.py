@@ -51,7 +51,7 @@ def test_frame_start_detaches_numpy_producer_before_later_steps(kind):
     del attached, table, array
     gc.collect()
     while True:
-        outgoing = json.loads(run.next())
+        outgoing = json.loads(run.next()[0])
         if outgoing['message'] == 'warnings':
             continue
         assert outgoing['message'] == 'step'
