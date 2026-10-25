@@ -329,7 +329,7 @@ fn a_public_materialize_uses_the_fallbacks_defined_text_order_before_a_cut() {
             // Native SQL collation is a provider operation's own semantics.
             assert!(
                 rows.iter()
-                    .all(|row| row[amount].as_str().unwrap().parse::<f64>().unwrap() == 1.0),
+                    .all(|row| row[amount] == json!({"number": "1.0"})),
                 "{orders}"
             );
         }
