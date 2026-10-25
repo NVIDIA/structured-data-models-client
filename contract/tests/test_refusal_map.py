@@ -941,6 +941,46 @@ def test_a_family_map_without_a_case_s_probe_or_with_a_stranger_fails() -> None:
 FAMILY_PIN = ROOT / 'contract/pinned/families.probes.json'
 
 
+def test_repinning_preserves_inventory_descriptions_and_nonmetadata(tmp_path):
+    path = tmp_path / 'pin.json'
+    before = {
+        'description': 'A synthetic generated pin.',
+        'probes': {
+            'one': {
+                'described': 'a' * 64,
+                'materialize_schema': 'b' * 64,
+                'warnings': 'c' * 64,
+            }
+        },
+    }
+    path.write_text(json.dumps(before))
+    found = copy.deepcopy(before['probes'])
+    found['one']['described'] = 'd' * 64
+    found['one']['materialize_schema'] = 'e' * 64
+    _write_probe_pin(path, found)
+    assert json.loads(path.read_text()) == {**before, 'probes': found}
+
+
+@pytest.mark.parametrize('fault', ['missing', 'extra', 'field', 'warnings'])
+def test_repinning_refuses_inventory_or_nonmetadata_drift(tmp_path, fault):
+    path = tmp_path / 'pin.json'
+    probes = {'one': {'described': 'a' * 64, 'warnings': 'c' * 64}}
+    path.write_text(json.dumps({'description': 'Unchanged.', 'probes': probes}))
+    original = path.read_bytes()
+    found = copy.deepcopy(probes)
+    if fault == 'missing':
+        found.clear()
+    elif fault == 'extra':
+        found['two'] = copy.deepcopy(found['one'])
+    elif fault == 'field':
+        found['one']['materialize_schema'] = 'b' * 64
+    else:
+        found['one']['warnings'] = 'd' * 64
+    with pytest.raises(AssertionError):
+        _write_probe_pin(path, found)
+    assert path.read_bytes() == original
+
+
 def _python_core_run(
     document: dict[str, Any],
     digests: dict[str, dict[str, str]] | None = None,
