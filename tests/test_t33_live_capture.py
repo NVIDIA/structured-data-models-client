@@ -550,6 +550,18 @@ def test_a_failed_case_is_recorded_and_the_rest_continue(
     # others are recorded and imported, and the run exits 1.
     names = ('a', 'b', 'c', 'd', 'e')
     paths = [str(tmp_path / f'{name}.json') for name in names]
+    # Complete offline fixtures reach the real locked recording checker;
+    # only the runner's execution and the final import are replaced here.
+    spec = importlib.util.spec_from_file_location(
+        't33_recording_fixtures',
+        ROOT / 'contract/tests/test_t32_recording_own.py',
+    )
+    assert spec is not None and spec.loader is not None
+    fixtures = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = fixtures
+    spec.loader.exec_module(fixtures)
+    recordings: dict[str, dict[str, Any]] = {}
+    attempted: list[str] = []
     monkeypatch.setattr(
         capture_run,
         'plan',
@@ -565,11 +577,9 @@ def test_a_failed_case_is_recorded_and_the_rest_continue(
     class Failure(Exception):
         pass
 
-    def load_cases(given: list[Path]) -> list[tuple[dict[str, Any], str]]:
-        return [({'id': Path(given[0]).stem}, 'digest')]
-
     def run(mode: str, cases: Any, reference: Any, **options: Any) -> list[Any]:
         case = cases[0][0]['id']
+        attempted.append(case)
         if case == 'b':
             raise Failure(
                 'lakebase could not be opened or loaded (WriteRefused)'
@@ -582,11 +592,12 @@ def test_a_failed_case_is_recorded_and_the_rest_continue(
             guard.REFUSALS.append(
                 'SELECT SETSEED: SETSEED(), a function on no list'
             )
-        options['record'].write_text(json.dumps({'case': case}) + '\n')
-        return [{'case': case}]
+        recording = recordings[case]
+        options['record'].write_text(json.dumps(recording) + '\n')
+        return [recording['observation']]
 
     runner = types.SimpleNamespace(
-        run=run, load_cases=load_cases, RunnerFailure=Failure
+        run=run, load_cases=fixtures.run.load_cases, RunnerFailure=Failure
     )
     monkeypatch.setattr(
         capture_run,
@@ -633,10 +644,32 @@ def test_a_failed_case_is_recorded_and_the_rest_continue(
             check=True,
             capture_output=True,
         )
+    source_identity = fixtures.run._git(identity)
+    assert source_identity['clean'] is True
+    for name, path in zip(names, paths, strict=True):
+        case, recording, _ = fixtures._capture()
+        case['id'] = name
+        Path(path).write_text(json.dumps(case))
+        recording['leg'] = 'lakebase'
+        recording['case'] = f'{name}@lakebase'
+        recording['observation']['case'] = recording['case']
+        recording['observation']['identity']['commit'] = dict(source_identity)
+        recording['observation']['identity']['reference']['commit'] = dict(
+            source_identity
+        )
+        recording['recording'].update(
+            commit=source_identity['sha'], reference=source_identity['sha']
+        )
+        recording['versions']['psycopg'] = '3.2.0'
+        recording['input'] = fixtures.run.input_hash(
+            case, fixtures.run.load_bases()
+        )
+        recordings[name] = recording
     monkeypatch.setattr(capture_run, 'ROOT', identity)
     status = capture_run.run('lakebase', identity, tmp_path / 'out')
     assert status == 1
-    assert imported == [['a', 'e']]
+    assert attempted == list(names)
+    assert imported == [['a@lakebase', 'e@lakebase']]
     failed = json.loads((tmp_path / 'out' / 'lakebase.failed.json').read_text())
     assert failed == {
         'b': 'lakebase could not be opened or loaded (WriteRefused)',

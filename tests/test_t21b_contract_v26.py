@@ -17,8 +17,9 @@ The design's row for T2.1b, each exit with the tests below that prove it:
   Rust loader (written beside the implementation, in ``sdm-contract``'s
   tests) deserializes each into the type it names. Every v25 vector among
   the refusals is shown valid under v25, so its refusal is the bump's.
-- **The binding jobs green on the bump**: the native module speaks 27, and
-  a host speaking 25 is refused by name (``test_the_core_speaks_*``).
+- **The binding jobs green on the bump**: the native module speaks the
+  current locked version, and a host speaking 25 is refused by name
+  (``test_the_core_speaks_*``).
 - **SQL goldens unchanged**: the statements the core renders on the public
   route over the ``shop`` base, recorded at v25 by
   ``tests/golden/t21b_statements_record.py``, are rendered the same at v26
@@ -178,11 +179,14 @@ def test_v25_stays_locked_as_merged() -> None:
 
 def test_the_lock_holds_v26_locked_to_its_own_file() -> None:
     # Schema lock: v26, merged into rust-core mid-phase, is locked to its
-    # own file; v27 (T2.12) merged after it, and v28 is Phase 3's working
-    # entry (T3.8's provider namespace, T3.4's relation fields).
+    # own file; later entries must agree with the current native contract.
+    from sdm_client._rust.run import native
+
     lock = _lock_module()
     entries = lock.parse_lock(LOCK.read_text(encoding='utf-8'))
-    assert max(entries) == 28
+    current = native().CONTRACT_VERSION
+    assert max(entries) == current
+    assert entries[current][1] == f'sdm-contract-{current}.json'
     digest, file = entries[26]
     assert file == 'sdm-contract-26.json'
     assert lock.digest(V26.read_bytes()) == digest

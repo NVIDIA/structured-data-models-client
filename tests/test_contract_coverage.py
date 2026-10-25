@@ -165,6 +165,10 @@ def repo(origin: tuple[Path, str], tmp_path: Path) -> Path:
     r"""A worktree at the checkpoint, for one test's candidate."""
     source, landed = origin
     tree = tmp_path / 'tree'
+    # Passed-only tmp_path retention can remove this path but leave its Git
+    # registration. Prune missing worktrees in this fixture's own origin,
+    # preserving every extant worktree and its failed-test evidence.
+    git(source, 'worktree', 'prune', '--expire', 'now')
     git(source, 'worktree', 'add', '-q', '--detach', str(tree), landed)
     return tree
 

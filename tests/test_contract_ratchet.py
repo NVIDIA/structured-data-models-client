@@ -222,7 +222,9 @@ def repo(origin: tuple[Path, str], tmp_path: Path) -> Path:
     return tree
 
 
-@pytest.mark.parametrize('factory', ['ratchet', 'gate_controls', 'gate_modes'])
+@pytest.mark.parametrize(
+    'factory', ['ratchet', 'coverage', 'gate_controls', 'gate_modes']
+)
 def test_the_fixture_reuses_a_removed_worktree_without_pruning_failed_evidence(
     tmp_path: Path,
     factory: str,
@@ -233,6 +235,11 @@ def test_the_fixture_reuses_a_removed_worktree_without_pruning_failed_evidence(
     landed = commit(source, 'fixture origin')
     if factory == 'ratchet':
         create = repo.__wrapped__
+    elif factory == 'coverage':
+        coverage_tests = _module(
+            ROOT / 'tests/test_contract_coverage.py', 'coverage_worktree_reuse'
+        )
+        create = coverage_tests.repo.__wrapped__
     else:
         gate_tests = _module(
             ROOT / f'contract/tests/test_{factory}.py',
