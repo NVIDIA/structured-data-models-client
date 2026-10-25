@@ -9,6 +9,9 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -29,7 +32,7 @@ def _recorder():
 
 
 def test_the_canonical_binding_writer_records_actual_escape_warning_controls(
-    tmp_path, monkeypatch
+    tmp_path,
 ):
     from sdm_client import _native
 
@@ -37,15 +40,34 @@ def test_the_canonical_binding_writer_records_actual_escape_warning_controls(
     original = json.loads(recorder.OUT.read_text())
     output = tmp_path / 'vectors.json'
     output.write_text(json.dumps(original))
-    monkeypatch.setattr(recorder, 'OUT', output)
-    texts = recorder._texts()
-    texts['text.escape-warning'] = (
-        r"PREDICT users.country = 'a\/' FOR EACH users.user_id"
+    # CI's parent has the production binding; only the existing kit
+    # interpreter has the fail operation the canonical recorder also needs.
+    python = os.environ.get('SDM_KIT_PYTHON') or sys.executable
+    recorded_run = subprocess.run(
+        [
+            python,
+            '-I',
+            '-c',
+            'import importlib.util, sys; from pathlib import Path; '
+            "spec = importlib.util.spec_from_file_location('recorder', sys.argv[1]); "
+            'recorder = importlib.util.module_from_spec(spec); '
+            'spec.loader.exec_module(recorder); recorder.OUT = Path(sys.argv[2]); '
+            "raise SystemExit(recorder.main(['binding']))",
+            str(ROOT / 'contract/tools/t311_java_record.py'),
+            str(output),
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
     )
-    monkeypatch.setattr(recorder, '_texts', lambda: texts)
-    assert recorder.main(['binding']) == 0
+    assert recorded_run.returncode == 0, (
+        recorded_run.stdout + recorded_run.stderr
+    )
     recorded = json.loads(output.read_text())
     assert recorded['reference'] == original['reference']
+    assert recorded['binding']['contract'] == _native.CONTRACT_VERSION
     vector = recorded['binding']['validate']['text.escape-warning']
     operation = json.loads(vector['operation'])
     import base64
