@@ -399,8 +399,20 @@ def test_reference_rekey_keeps_every_capture_citation_and_parent_blob(
         str(sibling),
         before,
     )
-    assert not (sibling / 'contract/captures').exists()
-    assert not (origin['repo'] / 'contract/captures').exists()
+    manifests = {
+        name
+        for name in git(repo, 'ls-files', 'contract/captures').splitlines()
+        if name.endswith('/manifest.json')
+    }
+    assert manifests
+    for tree in (sibling, origin['repo']):
+        assert {
+            p.relative_to(tree).as_posix()
+            for p in (tree / 'contract/captures').rglob('*')
+            if p.is_file()
+        } == manifests
+        for name in manifests:
+            assert (tree / name).read_bytes() == (ROOT / name).read_bytes()
     assert git(repo, 'status', '--porcelain') == ''
     assert git(sibling, 'status', '--porcelain') == ''
 

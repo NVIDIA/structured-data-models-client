@@ -517,6 +517,8 @@ def test_real_coverage_gate_keeps_capture_evidence_without_duplicate_working_fil
         '    files = [p for p in (tree / "contract/captures").rglob("*") '
         'if p.is_file()]\n'
         '    item = {"tree": str(tree), "capture_files": len(files), '
+        '"capture_paths": sorted(p.relative_to(tree).as_posix() '
+        'for p in files), '
         '"allocated_bytes": sum(p.stat().st_blocks * 512 for p in files)}\n'
         f'    with open({str(recorder)!r}, "a") as out:\n'
         '        out.write(json.dumps(item) + "\\n")\n'
@@ -527,6 +529,14 @@ def test_real_coverage_gate_keeps_capture_evidence_without_duplicate_working_fil
     landed = git(repo, 'rev-parse', 'HEAD')
     original_tree = git(repo, 'rev-parse', 'HEAD^{tree}')
     capture_paths = git(repo, 'ls-files', 'contract/captures').splitlines()
+    manifests = sorted(p for p in capture_paths if p.endswith('/manifest.json'))
+    assert manifests
+    # Allow the small admission manifests, rounded generously to 64 KiB
+    # allocation units, while forbidding every bulk JSON/Arrow workfile.
+    manifest_bound = sum(
+        ((ROOT / name).stat().st_size + 65535) // 65536 * 65536
+        for name in manifests
+    )
     witnesses = [
         next(p for p in capture_paths if p.endswith('/capture.json')),
         next(p for p in capture_paths if p.endswith('.arrows')),
@@ -547,12 +557,19 @@ def test_real_coverage_gate_keeps_capture_evidence_without_duplicate_working_fil
         json.loads(line) for line in recorder.read_text().splitlines()
     ]
     assert checkpoints, 'the real gate never constructed its judging worktree'
-    assert all(item['capture_files'] == 0 for item in checkpoints), checkpoints
-    assert all(item['allocated_bytes'] == 0 for item in checkpoints), (
-        checkpoints
-    )
-    assert not (repo / 'contract/captures').exists()
-    assert not (origin['repo'] / 'contract/captures').exists()
+    for item in checkpoints:
+        assert item['capture_paths'] == manifests, item
+        assert item['capture_files'] == len(manifests), item
+        assert 0 < item['allocated_bytes'] <= manifest_bound, item
+    for tree in (repo, origin['repo']):
+        physical = sorted(
+            p.relative_to(tree).as_posix()
+            for p in (tree / 'contract/captures').rglob('*')
+            if p.is_file()
+        )
+        assert physical == manifests
+        for name in manifests:
+            assert (tree / name).read_bytes() == (ROOT / name).read_bytes()
     # The real gate guards tracked source; normal tool imports may leave
     # untracked bytecode in this minimal synthetic history.
     assert git(repo, 'status', '--porcelain', '--untracked-files=no') == ''
@@ -744,6 +761,56 @@ def test_the_post_landing_state_passes(
 
 
 # --- --locked 1a ----------------------------------------------------------------
+
+
+@pytest.mark.parametrize('reference', ['original', 'missing', 'invalid'])
+def test_locked_gate_preserves_real_manifest_admission(
+    stubbed: Path,
+    tmp_path: Path,
+    observed: dict[str, list[dict[str, Any]]],
+    stubs: dict[str, Any],
+    reference: str,
+) -> None:
+    """The real locked gate must run its real manifest admission checker."""
+    manifests = sorted(
+        name
+        for name in git(stubbed, 'ls-files', 'contract/captures').splitlines()
+        if name.endswith('/manifest.json')
+    )
+    assert manifests
+    selected = manifests[0]
+    original = subprocess.check_output(
+        ['git', '-C', str(stubbed), 'show', f'HEAD:{selected}']
+    )
+    if reference != 'original':
+        document = json.loads(original)
+        if reference == 'missing':
+            del document['reference_commit']
+        else:
+            document['reference_commit'] = 'not-a-reference-commit'
+        target = stubbed / selected
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(json.dumps(document))
+        git(stubbed, 'add', '--sparse', '--', selected)
+    commit(stubbed)
+    done = locked(
+        stubbed, stubs, '1a', '--run', 'rust-host', *files(observed, tmp_path)
+    )
+    output = done.stdout + done.stderr
+    assert 'warehouse legs wait for C-1' not in output, output
+    assert '(the locked run fails on any)' in output, output
+    assert f'{len(manifests)} manifests read' in output, output
+    if reference == 'original':
+        assert done.returncode == 0, output
+        assert 'captures: ok;' in output, output
+        assert summary(done)['compare'] == 'ok', output
+        for name in manifests:
+            assert (stubbed / name).read_bytes() == (ROOT / name).read_bytes()
+    else:
+        assert done.returncode == 1, output
+        assert 'captures: FAILED;' in output, output
+        assert f'{selected}: no reference_commit' in output, output
+        assert summary(done)['compare'] == 'FAIL', output
 
 
 def test_locked_1a_passes_on_stubs_and_writes_the_evidence(
