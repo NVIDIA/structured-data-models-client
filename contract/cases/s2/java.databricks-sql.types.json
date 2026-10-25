@@ -41,6 +41,8 @@
     "decimal128/feature",
     "utf8/feature",
     "bool/feature",
+    "binary/feature",
+    "list/feature",
     "date32/feature",
     "timestamp-us-tz/feature",
     "timestamp-us/feature"

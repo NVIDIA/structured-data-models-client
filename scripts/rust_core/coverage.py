@@ -47,9 +47,9 @@ design "Contract corpus"). The rules, each problem printed naming its rule:
    scope-format.md: "a cell names the type the core receives") and plays
    ``<role>`` there (:func:`observed`): the key, time column, links and
    other columns of the schema the reference described, with the case's
-   edits; the query's target from ``materialize`` on; and, in a refusal at
-   ``from_source`` before any schema, only what the case's options declare
-   and ``feature`` for a column of a table holding no declared constraint.
+   edits; the query's target from ``materialize`` on; and, for a column
+   refused or left out at ``from_source``, its declared input role or
+   ``feature`` where recorded constraints establish no other role (E96(b)).
    A claim with no observation of the case, or an observation that does
    not show it (no capture, no sample, a shape it does not read), fails;
    it is never taken on trust;
@@ -377,6 +377,7 @@ def _read_capture(
         report.fail('read', f'{name}: not a capture of {case_id} on {leg}')
         return
     base = name.rpartition('/')[0]
+    bound_parameters(capture, line)
     row_schemas(capture, line, lambda path: blobs.read(f'{base}/{path}'))
     found.setdefault(case_id, []).append(line)
 
@@ -412,6 +413,43 @@ class Blobs:
             self._batch.kill()
             self._batch.wait()
             self._batch = None
+
+
+def bound_parameters(capture: dict[str, Any], line: dict[str, Any]) -> None:
+    r"""The capture's typed bindings beside its exact reference statement.
+
+    Constraint evidence needs the bound schema and table, not a guess from
+    the SQL or a parsed Python repr. Only matching two-string recordings
+    supply these local coverage facts; the original capture stays unchanged.
+    """
+    driver = line.get('driver')
+    recorded = driver.get('capture') if isinstance(driver, dict) else None
+    statements = (
+        recorded.get('statements') if isinstance(recorded, dict) else None
+    )
+    held = capture.get('statements')
+    if not isinstance(statements, list) or not isinstance(held, list):
+        return
+    for statement in statements:
+        if isinstance(statement, dict):
+            statement.pop('_coverage_parameters', None)
+    for statement, kept in zip(statements, held, strict=False):
+        if not isinstance(statement, dict) or not isinstance(kept, dict):
+            continue
+        parameters = kept.get('parameters')
+        if (
+            statement.get('stage') == 'from_source'
+            and statement.get('sql') == kept.get('text')
+            and isinstance(parameters, list)
+            and len(parameters) == 2
+            and all(isinstance(value, str) for value in parameters)
+            and statement.get('parameters')
+            == [
+                {'type': 'builtins.str', 'value': repr(value)}
+                for value in parameters
+            ]
+        ):
+            statement['_coverage_parameters'] = list(parameters)
 
 
 def row_schemas(
@@ -921,6 +959,41 @@ _WAREHOUSE_SAMPLE = re.compile(
 _CONSTRAINTS = re.compile(
     r"FROM duckdb_constraints\(\)\s+WHERE table_name = '((?:[^']|'')+)'"
 )
+#: The frozen reference's two Databricks catalog reads. Both must succeed
+#: with no rows before E96(b)'s omitted columns default to input features.
+#: An unfamiliar query never establishes absence of constraints.
+_DB_KEYS = (
+    'SELECT tc.constraint_type, tc.constraint_name, kcu.column_name '
+    'FROM {catalog}.information_schema.table_constraints tc '
+    'JOIN {catalog}.information_schema.key_column_usage kcu '
+    'ON tc.constraint_catalog = kcu.constraint_catalog '
+    'AND tc.constraint_schema = kcu.constraint_schema '
+    'AND tc.constraint_name = kcu.constraint_name '
+    'WHERE tc.table_schema = lower(?) AND tc.table_name = lower(?) '
+    "AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE')"
+)
+_DB_FOREIGN = (
+    'SELECT tc.constraint_name, kcu.column_name, ccu.table_catalog, '
+    'ccu.table_schema, ccu.table_name, ccu.column_name '
+    'FROM {catalog}.information_schema.table_constraints tc '
+    'JOIN {catalog}.information_schema.referential_constraints rc '
+    'ON tc.constraint_catalog = rc.constraint_catalog '
+    'AND tc.constraint_schema = rc.constraint_schema '
+    'AND tc.constraint_name = rc.constraint_name '
+    'JOIN {catalog}.information_schema.key_column_usage kcu '
+    'ON tc.constraint_catalog = kcu.constraint_catalog '
+    'AND tc.constraint_schema = kcu.constraint_schema '
+    'AND tc.constraint_name = kcu.constraint_name '
+    'JOIN {catalog}.information_schema.constraint_column_usage ccu '
+    'ON rc.unique_constraint_catalog = ccu.constraint_catalog '
+    'AND rc.unique_constraint_schema = ccu.constraint_schema '
+    'AND rc.unique_constraint_name = ccu.constraint_name '
+    "WHERE tc.constraint_type = 'FOREIGN KEY' "
+    'AND tc.table_schema = lower(?) AND tc.table_name = lower(?)'
+)
+_DB_CATALOG = re.compile(
+    r' FROM (`(?:[^`]|``)+`).information_schema.table_constraints tc '
+)
 #: A PQL query's first column reference before its ``FOR``: its target,
 #: with or without an ``EVALUATE`` or ``EXPLAIN`` before ``PREDICT``, for
 #: each entity (``FOR EACH t.c``) or for the ones it names (``FOR t.c = 1``,
@@ -1118,7 +1191,69 @@ def _undeclared(line: dict[str, Any]) -> set[str]:
             r.get('rows') if isinstance(r, dict) else None
             for r in statement['results']
         )
-    return {table for table, counts in rows.items() if counts == [0]}
+    return {
+        table for table, counts in rows.items() if counts == [0]
+    } | _databricks_undeclared(line)
+
+
+def _databricks_undeclared(line: dict[str, Any]) -> set[str]:
+    r"""Databricks tables with both recorded catalog reads empty.
+
+    Match the exact reference queries, typed bound names and the sampled
+    three-part relation. Missing, failed, nonempty or unknown evidence
+    does not prove that an omitted column was an unconstrained feature.
+    """
+    if not str(line.get('case')).endswith('@databricks-sql'):
+        return set()
+    statements = _statements(line)
+    samples = {}
+    for statement in statements:
+        sample = _WAREHOUSE_SAMPLE.fullmatch(statement['sql'].strip())
+        if sample is not None:
+            relation = sample.group(1) or sample.group(2)
+            samples[relation.casefold()] = _relation_key(relation)
+    reads: dict[str, dict[str, list[int | None]]] = {}
+    for statement in statements:
+        sql = ' '.join(statement['sql'].split())
+        catalog = _DB_CATALOG.search(sql)
+        if catalog is None:
+            continue
+        kind = next(
+            (
+                name
+                for name, query in [
+                    ('keys', _DB_KEYS),
+                    ('foreign', _DB_FOREIGN),
+                ]
+                if sql == query.format(catalog=catalog.group(1))
+            ),
+            None,
+        )
+        if kind is None:
+            continue
+        parameters = statement.get('_coverage_parameters')
+        if not (_strs(parameters) and len(parameters) == 2):
+            return set()
+        schema, table = (value.replace('`', '``') for value in parameters)
+        relation = f'{catalog.group(1)}.`{schema}`.`{table}`'.casefold()
+        if relation not in samples:
+            continue
+        results = statement['results']
+        count = None
+        if (
+            statement.get('error') is None
+            and len(results) == 1
+            and isinstance(results[0], dict)
+            and results[0].get('method') == 'fetchall'
+            and type(results[0].get('rows')) is int
+        ):
+            count = results[0]['rows']
+        reads.setdefault(relation, {}).setdefault(kind, []).append(count)
+    return {
+        samples[relation]
+        for relation, kinds in reads.items()
+        if kinds.get('keys') == [0] and kinds.get('foreign') == [0]
+    }
 
 
 def _keys(value: Any) -> set[str]:
@@ -1259,6 +1394,12 @@ def observed(case: dict[str, Any], line: dict[str, Any]) -> set[str]:
             ]
         )
         types = _as_named(types, names)
+        free = {
+            source
+            for source, _ in _as_named(
+                {(table, ''): set() for table in free}, names
+            )
+        }
     roles: dict[tuple[str, str], set[str]] = {}
     held: set[tuple[str, str]] = set()
     if schema is not None:

@@ -18,7 +18,6 @@ not an observation is refused by name (``read:``), never a traceback.
 from __future__ import annotations
 
 import importlib.util
-import copy
 import json
 import os
 import subprocess

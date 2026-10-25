@@ -118,7 +118,9 @@ def test_owned_module_directories_follow_the_complete_outcome(
     else:
         assert f'owned {failure_phase} failure' in done.stdout
         assert (source / 'payload').read_text() == 'a small real repository'
-        where = Path(tree_marker.read_text()) if tree_marker.exists() else source
+        where = (
+            Path(tree_marker.read_text()) if tree_marker.exists() else source
+        )
         history = subprocess.run(
             ['git', '-C', str(where), 'log', '-1', '--format=%s'],
             capture_output=True,
