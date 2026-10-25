@@ -44,7 +44,7 @@ fn inputs() -> Attachments {
     Attachments::from([
         (AttachmentId(1), bytes(json!({"tables":[{"name":"users","source":{"source":["users"]}}],
             "primary_keys":{},"time_columns":{}}))),
-        (AttachmentId(2), bytes(json!({"tables":[{"source":{"source":["users"]},"rows":3}]}))),
+        (AttachmentId(2), bytes(json!({"stage":"schema","tables":[{"source":{"source":["users"]},"rows":3}]}))),
         (AttachmentId(3), Attachment::Arrow(ArrowData::new(batch.schema(), vec![batch]))),
     ])
 }
@@ -85,7 +85,7 @@ fn manifest_expands_exact_attachments_and_precedes_unreadable_arrow() {
             "missing" => {attached.remove(&AttachmentId(3));},
             "extra" => {attached.insert(AttachmentId(4), bytes(json!("extra")));},
             "kind" => {attached.insert(AttachmentId(3), bytes(json!("not Arrow")));},
-            "collision" => {attached.insert(AttachmentId(2), bytes(json!({"tables":[{"source":{"source":["users"]},"rows":2}]})));},
+            "collision" => {attached.insert(AttachmentId(2), bytes(json!({"stage":"schema","tables":[{"source":{"source":["users"]},"rows":2}]})));},
             "malformed" => {attached.insert(AttachmentId(2), bytes(json!({"tables":"bad"})));},
             _ => unreachable!(),
         }
@@ -98,4 +98,20 @@ fn manifest_expands_exact_attachments_and_precedes_unreadable_arrow() {
     let unreadable = Unreadables::from([(AttachmentId(3), Unreadable::Producer)]);
     let failed = HostRun::start_reading(&sdm_host::default_root(), &message(), attached, &unreadable).err().unwrap();
     assert_eq!(error(failed).code, ErrorCode::InvalidMessage);
+}
+
+#[test]
+fn table_stage_rejects_constructor_overrides_and_the_manifest_is_locked() {
+    let mut attached = inputs();
+    attached.insert(AttachmentId(2), bytes(json!({"stage":"table","tables":[{"source":{"source":["users"]},"rows":3}]})));
+    attached.insert(AttachmentId(1), bytes(json!({"tables":[{"name":"users","source":{"source":["users"]}}],
+        "primary_keys":{"users":{"value":["age"]}},"time_columns":{}})));
+    let failure = match HostRun::start(&sdm_host::default_root(), &message(), attached) {
+        Err(out) => error(out),
+        Ok(run) => error(run.next().err().expect("table stage must reject overrides")),
+    };
+    assert_eq!(failure.code, ErrorCode::InvalidMessage);
+    let schema: Value = serde_json::from_str(&sdm_contract::schema_json()).unwrap();
+    assert_eq!(schema["$defs"]["Attachments"]["properties"]["Frames.manifest"]["$ref"], "#/$defs/FrameManifest");
+    assert!(schema["$defs"]["FrameManifest"]["required"].as_array().unwrap().contains(&json!("stage")));
 }
