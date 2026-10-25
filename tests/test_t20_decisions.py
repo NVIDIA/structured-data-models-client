@@ -393,13 +393,28 @@ def capture_tree(tmp_path: Path) -> tuple[Path, str]:
 
 def capture_policy(tree: Path) -> subprocess.CompletedProcess[str]:
     r"""The copy's ``policy()``, with its defaults, as the comparator calls
-    it, in a process of its own."""
+    it, in a process of its own.
+
+    Loading also evaluates policy, so retain the module before executing it.
+    Only its PolicyError is a policy refusal; other failures keep a traceback.
+    """
     return subprocess.run(
         [
             sys.executable,
             '-c',
-            'import sys; sys.path.insert(0, sys.argv[1]); '
-            'import capture_check; capture_check.policy(); print("policy ok")',
+            'import importlib.util, sys\n'
+            'sys.path.insert(0, sys.argv[1])\n'
+            'spec = importlib.util.spec_from_file_location(\n'
+            '    "capture_check", sys.argv[1] + "/capture_check.py")\n'
+            'module = importlib.util.module_from_spec(spec)\n'
+            'sys.modules[spec.name] = module\n'
+            'try:\n'
+            '    spec.loader.exec_module(module)\n'
+            '    module.policy()\n'
+            'except getattr(module, "PolicyError", ()) as error:\n'
+            '    print(error, file=sys.stderr)\n'
+            '    raise SystemExit(2)\n'
+            'print("policy ok")\n',
             str(tree / 'contract/runners'),
         ],
         capture_output=True,
@@ -448,7 +463,8 @@ def test_capture_check_an_exclusion_approved_only_in_a_malformed_file_fails_by_n
 
 @pytest.mark.parametrize('fault', ['missing-import', 'runtime-error'])
 def test_capture_policy_does_not_mistake_unexpected_failures_for_policy_refusals(
-    tmp_path: Path, fault: str,
+    tmp_path: Path,
+    fault: str,
 ) -> None:
     tree, e35 = capture_tree(tmp_path)
     phase2(e35)(tree)
