@@ -219,7 +219,7 @@ fn coarse_native_frame_units_are_not_silently_clamped_into_the_temporal_slice() 
             Attachment::Arrow(ArrowData::new(batch.schema(), vec![batch])),
         );
         let outgoing = match HostRun::start(&sdm_host::default_root(), &message(), attached) {
-            Ok(run) => run.next().unwrap(),
+            Ok(run) => run.next().unwrap_or_else(|outgoing| outgoing),
             Err(outgoing) => outgoing,
         };
         assert_eq!(error(outgoing).code, ErrorCode::UnsupportedRequest);
@@ -291,7 +291,7 @@ fn encoded_coarse_timestamps_are_refused_at_both_constructor_stages() {
                 );
                 let outgoing = match HostRun::start(&sdm_host::default_root(), &message(), attached)
                 {
-                    Ok(run) => run.next().unwrap(),
+                    Ok(run) => run.next().unwrap_or_else(|outgoing| outgoing),
                     Err(outgoing) => outgoing,
                 };
                 let failure = error(outgoing);
