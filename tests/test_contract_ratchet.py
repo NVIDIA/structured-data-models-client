@@ -217,7 +217,18 @@ def repo(origin: tuple[Path, str], tmp_path: Path) -> Path:
 
 
 @pytest.mark.parametrize(
-    'factory', ['ratchet', 'coverage', 'gate_controls', 'gate_modes']
+    'factory',
+    [
+        'ratchet',
+        'coverage',
+        'gate_controls',
+        'gate_modes',
+        'reference_change',
+        'decisions_repo',
+        'decisions_manifests',
+        'case_keys',
+        'temporary_approval',
+    ],
 )
 def test_the_fixture_reuses_a_removed_worktree_without_pruning_failed_evidence(
     tmp_path: Path,
@@ -234,6 +245,32 @@ def test_the_fixture_reuses_a_removed_worktree_without_pruning_failed_evidence(
             ROOT / 'tests/test_contract_coverage.py', 'coverage_worktree_reuse'
         )
         create = coverage_tests.repo.__wrapped__
+    elif factory in (
+        'reference_change',
+        'decisions_repo',
+        'decisions_manifests',
+        'temporary_approval',
+    ):
+        filename, fixture = {
+            'reference_change': ('test_t20e_reference_change', 'repo'),
+            'decisions_repo': ('test_t20_decisions', 'repo'),
+            'decisions_manifests': ('test_t20_decisions', 'manifests'),
+            'temporary_approval': ('test_t21a_temporary_approval', 'tree'),
+        }[factory]
+        owner_tests = _module(
+            ROOT / f'tests/{filename}.py', f'{factory}_worktree_reuse'
+        )
+        create = getattr(owner_tests, fixture).__wrapped__
+    elif factory == 'case_keys':
+        case_keys_tests = _module(
+            ROOT / 'tests/test_t20f_case_keys.py', 'case_keys_worktree_reuse'
+        )
+
+        def create(origin, path):
+            return case_keys_tests._worktree(
+                {'repo': origin[0]}, path, origin[1]
+            )
+
     else:
         gate_tests = _module(
             ROOT / f'contract/tests/test_{factory}.py',
@@ -256,6 +293,8 @@ def test_the_fixture_reuses_a_removed_worktree_without_pruning_failed_evidence(
     replacement = create((source, landed), tmp_path / 'reused')
     assert replacement == original and replacement.is_dir()
     assert evidence.read_text() == 'preserve this failed test evidence'
+    assert git(replacement, 'rev-parse', 'HEAD') == landed
+    assert git(failed, 'log', '-1', '--format=%s') == 'fixture origin'
     registrations = git(source, 'worktree', 'list', '--porcelain')
     assert f'worktree {replacement}' in registrations
     assert f'worktree {failed}' in registrations
