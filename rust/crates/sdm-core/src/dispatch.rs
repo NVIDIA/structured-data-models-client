@@ -14,7 +14,7 @@ use sdm_contract::run::StartRun;
 use sdm_contract::{CONTRACT_VERSION, CoreError, Detail, HeldState, HostFacts, Scalar, Sentence};
 use sdm_engine::time::Zones;
 
-use crate::attached::{check_attachments, take_json, take_json_if};
+use crate::attached::{check_attachments, resolved_attachments, take_json, take_json_if};
 use crate::compose::CompositionRoot;
 use crate::profiles::Profile;
 use crate::run::{Attachment, Attachments, Run, internal};
@@ -57,7 +57,10 @@ pub fn start(
         )
         .with_field("field", Detail::text("facts.now")));
     }
-    check_attachments(&start.operation.attachments(), &attachments)?;
+    check_attachments(
+        &resolved_attachments(&start.operation, &attachments)?,
+        &attachments,
+    )?;
     let mut attachments = attachments;
     let facts = start.facts;
     Ok(match start.operation {
@@ -79,6 +82,12 @@ pub fn start(
         }
         Operation::DescribeSource(request) => {
             let source: SourceSpec = take_json(&mut attachments, request.source)?;
+            if let sdm_contract::data::ProviderChoice::Frames { manifest } = request.provider {
+                let manifest = crate::frames::take_manifest(&mut attachments, manifest)?;
+                return Ok(Run::new(move |asker| {
+                    crate::frames::run(asker, source, manifest, attachments)
+                }));
+            }
             let access = root.data_access(&request.provider)?;
             let check_keys = request.check_keys;
             let zones = Arc::clone(&zones);

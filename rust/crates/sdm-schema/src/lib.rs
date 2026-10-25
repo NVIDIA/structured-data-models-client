@@ -49,6 +49,7 @@
 pub mod assemble;
 pub mod catalog;
 pub mod edit;
+pub mod frames;
 pub mod held;
 pub mod infer;
 pub mod keys;

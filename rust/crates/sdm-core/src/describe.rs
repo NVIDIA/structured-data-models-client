@@ -330,6 +330,7 @@ pub(crate) async fn run(
         .map_err(|_| internal("a source description does not serialize"))?;
     let id = asker.attach(Attachment::Bytes(bytes))?;
     Ok(OperationResult::DescribeSource(DescribedSource {
+        frame_rows: None,
         description: id,
         notes: Vec::new(),
     }))

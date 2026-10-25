@@ -460,6 +460,13 @@ CORE_ROUTED = frozenset(
     + PREDICT_SNOWFLAKE_SEMANTIC_VIEW
 )
 
+# A partial constructor consumer can be forced for development without
+# switching any default path or claiming the remaining native families.
+FRAME_CONSTRUCTORS = (
+    'schema.from-data/frames/frames',
+    'schema.from-data/mapping/frames',
+)
+
 
 #: The Phase 3 defaults. Other paths retain their route until their slice
 #: is implemented; edits and inspection of a core-held schema inherit its
@@ -486,12 +493,24 @@ def forced() -> frozenset[str]:
     for path in sorted(named):
         if path not in ROUTES:
             raise RouteError(f'{ENVIRONMENT} names an unknown path {path!r}')
-        if path not in CORE_ROUTED:
+        if path not in CORE_ROUTED and path not in FRAME_CONSTRUCTORS:
             raise RouteError(
                 f'{ENVIRONMENT} forces {path!r} onto the core, which has no '
                 f'route for it in this build'
             )
     return frozenset(named)
+
+
+def frame_constructor_on_core() -> bool:
+    # Preserve existing constructor behavior for settings that concern other
+    # routes, including when another entrypoint will diagnose a bad setting.
+    named = {
+        part.strip() for part in os.environ.get(ENVIRONMENT, '').split(',')
+    } - {''}
+    return (
+        bool(named.intersection(FRAME_CONSTRUCTORS))
+        and route(FRAME_CONSTRUCTORS) == 'core'
+    )
 
 
 def route(paths: tuple[str, ...]) -> str:

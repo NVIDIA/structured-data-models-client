@@ -233,8 +233,20 @@ def run(
             # E74): the next run starts without one.
             state.pop('held', None)
         errors.raise_from_core(refused.control, refused.attachments)
+    owned_frame = (
+        operation['op'] == 'describe_source'
+        and operation.get('provider', {}).get('provider') == 'frames'
+    )
     try:
-        return _steps(core, handle, provider, model, quiet, given, kept)
+        return _steps(
+            core, handle, provider, model, quiet, given, kept, owned_frame
+        )
+    except BaseException:
+        if owned_frame:
+            # Drop the completed/current frame Run even when the caller
+            # keeps this exception's traceback. Its snapshots are call-owned.
+            handle = None
+        raise
     finally:
         if state is not None:
             _keep(core, handle, state)
@@ -279,92 +291,100 @@ def _steps(
     quiet: frozenset[str],
     given: set[str] | None,
     kept: list[dict[str, Any]] | None = None,
+    owned_frame: bool = False,
 ) -> Finished:
     r"""The run's steps, each answered, to its result."""
-    driver_class: str | None = None
-    refused: Refused | None = None
-    while True:
-        error: StructuredDataError | None = None
-        try:
-            control, sent = handle.next()
-        except core.CoreError as failed:
-            _warn(handle, quiet, given, kept)
-            error = errors.error_from_core(
-                failed.control, failed.attachments, driver_class=driver_class
-            )
-            _answered(handle, failed, error)
-        if error is not None:
-            # Raised outside the handler, so nothing is its context.
-            if refused is not None:
-                # The call's own failure, as the caller sees it, carrying
-                # what the core carried on its end of the run.
-                _carried(error, refused.raised)
-                _of_the_part(error, refused.raised)
-                raise refused.raised
-            raise error from None
-        _warn(handle, quiet, given, kept)
-        step = codec.read(control, sent)
-        if step['message'] != 'step':
-            raise StructuredDataError(
-                'the core gave a message that is not a step',
-                code='INTERNAL_ERROR',
-            )
-        if step['step'] == 'done':
-            return Finished(step['result'], handle)
-        if step['step'] == 'call_model' and model is not None:
-            refused = _call(core, handle, step, model)
-            continue
-        if step['step'] != 'fetch' or provider is None:
-            handle.cancel()
-            raise StructuredDataError(
-                f'the core asked for a {step["step"]} step this call cannot '
-                'answer',
-                code='INTERNAL_ERROR',
-            )
-        # A provider's failure is named by its driver's class only for the
-        # step that failed: the core may carry on past one (a whole-table
-        # read it falls back from, T1.32e), and a later error is no other
-        # step's.
-        driver_class = None
-        for request in step['requests']:
-            attached: dict[int, Any] = {}
+    try:
+        driver_class: str | None = None
+        refused: Refused | None = None
+        while True:
+            error: StructuredDataError | None = None
             try:
-                # A later page's step names the key sets the first took.
-                keys = (
-                    {}
-                    if request.get('continuation')
-                    else _key_sets(handle, request)
-                )
-                answer = provider(request, keys)
-                outcome: dict[str, Any] = {'outcome': 'data', 'data': 1}
-                if isinstance(answer, Page):
-                    attached[1] = answer.data
-                    outcome['continuation'] = answer.continuation
-                else:
-                    attached[1] = answer
-            except RouteError:
-                # The route itself failed (an import of the old engine on
-                # it, say), which is no provider's error to hand the core.
-                handle.cancel()
-                raise
-            except Exception as failure:  # noqa: BLE001 - the provider's
-                provided, driver_class = _driver(failure, provider)
-                outcome = {'outcome': 'error', 'error': provided}
-            reply = codec.encode(
-                {
-                    'message': 'fetch_reply',
-                    'id': request['id'],
-                    'outcome': outcome,
-                }
-            )
-            try:
-                handle.reply(reply, attached)
-            except core.CoreError as refused:
-                errors.raise_from_core(
-                    refused.control,
-                    refused.attachments,
+                control, sent = handle.next()
+            except core.CoreError as failed:
+                _warn(handle, quiet, given, kept)
+                error = errors.error_from_core(
+                    failed.control,
+                    failed.attachments,
                     driver_class=driver_class,
                 )
+                _answered(handle, failed, error)
+            if error is not None:
+                # Raised outside the handler, so nothing is its context.
+                if refused is not None:
+                    # The call's own failure, as the caller sees it, carrying
+                    # what the core carried on its end of the run.
+                    _carried(error, refused.raised)
+                    _of_the_part(error, refused.raised)
+                    raise refused.raised
+                raise error from None
+            _warn(handle, quiet, given, kept)
+            step = codec.read(control, sent)
+            if step['message'] != 'step':
+                raise StructuredDataError(
+                    'the core gave a message that is not a step',
+                    code='INTERNAL_ERROR',
+                )
+            if step['step'] == 'done':
+                return Finished(step['result'], handle)
+            if step['step'] == 'call_model' and model is not None:
+                refused = _call(core, handle, step, model)
+                continue
+            if step['step'] != 'fetch' or provider is None:
+                handle.cancel()
+                raise StructuredDataError(
+                    f'the core asked for a {step["step"]} step this call cannot '
+                    'answer',
+                    code='INTERNAL_ERROR',
+                )
+            # A provider's failure is named by its driver's class only for the
+            # step that failed: the core may carry on past one (a whole-table
+            # read it falls back from, T1.32e), and a later error is no other
+            # step's.
+            driver_class = None
+            for request in step['requests']:
+                attached: dict[int, Any] = {}
+                try:
+                    # A later page's step names the key sets the first took.
+                    keys = (
+                        {}
+                        if request.get('continuation')
+                        else _key_sets(handle, request)
+                    )
+                    answer = provider(request, keys)
+                    outcome: dict[str, Any] = {'outcome': 'data', 'data': 1}
+                    if isinstance(answer, Page):
+                        attached[1] = answer.data
+                        outcome['continuation'] = answer.continuation
+                    else:
+                        attached[1] = answer
+                except RouteError:
+                    # The route itself failed (an import of the old engine on
+                    # it, say), which is no provider's error to hand the core.
+                    handle.cancel()
+                    raise
+                except Exception as failure:  # noqa: BLE001 - the provider's
+                    provided, driver_class = _driver(failure, provider)
+                    outcome = {'outcome': 'error', 'error': provided}
+                reply = codec.encode(
+                    {
+                        'message': 'fetch_reply',
+                        'id': request['id'],
+                        'outcome': outcome,
+                    }
+                )
+                try:
+                    handle.reply(reply, attached)
+                except core.CoreError as refused:
+                    errors.raise_from_core(
+                        refused.control,
+                        refused.attachments,
+                        driver_class=driver_class,
+                    )
+    except BaseException:
+        if owned_frame:
+            handle = None
+        raise
 
 
 def _call(
@@ -521,6 +541,9 @@ def _warn(
     kept: list[dict[str, Any]] | None = None,
 ) -> None:
     taken = handle.take_warnings()
+    # Warning filters may raise and retain this frame in a traceback. The
+    # caller owns the Run; presentation needs only the warning bytes now.
+    handle = None
     if taken is not None:
         control, sent = taken
         errors.warn_from_core(

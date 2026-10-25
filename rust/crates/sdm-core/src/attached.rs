@@ -9,8 +9,9 @@
 
 use std::collections::BTreeSet;
 
-use sdm_contract::data::AttachmentId;
-use sdm_contract::ops::AttachmentKind;
+use sdm_contract::data::{AttachmentId, ProviderChoice};
+use sdm_contract::frames::FrameManifest;
+use sdm_contract::ops::{AttachmentKind, Operation};
 use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 use serde::de::DeserializeOwned;
 
@@ -19,6 +20,61 @@ use crate::run::{Attachment, Attachments};
 fn invalid(message: &str, id: AttachmentId) -> CoreError {
     CoreError::protocol(Sentence::InvalidMessage, message)
         .with_field("attachment", Detail::Scalar(Scalar::UInt32(id.0)))
+}
+
+/// Resolves the input-sized frame manifest before checking the entire
+/// attachment set. HostRun's unreadable path uses this same resolver.
+/// Ordinary operations retain their envelope-only attachment rules.
+pub fn resolved_attachments(
+    operation: &Operation,
+    attachments: &Attachments,
+) -> Result<Vec<(AttachmentId, AttachmentKind)>, CoreError> {
+    let mut named = operation.attachments();
+    let Operation::DescribeSource(request) = operation else {
+        return Ok(named);
+    };
+    let ProviderChoice::Frames { manifest } = &request.provider else {
+        return Ok(named);
+    };
+    // Check the static bytes fields first without discarding extra entries:
+    // dynamic Arrow ids are not known until this manifest is read.
+    let mut seen = BTreeSet::new();
+    for &(id, kind) in &named {
+        if !seen.insert(id) {
+            return Err(invalid("the message names one attachment twice", id));
+        }
+        let one: Attachments = attachments
+            .get(&id)
+            .cloned()
+            .map(|value| (id, value))
+            .into_iter()
+            .collect();
+        check_attachments(&[(id, kind)], &one)?;
+    }
+    let mut bytes: Attachments = attachments
+        .get(manifest)
+        .cloned()
+        .map(|value| (*manifest, value))
+        .into_iter()
+        .collect();
+    let manifest: FrameManifest = take_json(&mut bytes, *manifest)?;
+    let mut relations = BTreeSet::new();
+    for table in manifest.tables {
+        if table.source.source.len() != 1
+            || table.source.source[0].is_empty()
+            || !table.source.columns.is_empty()
+            || table.source.filter.is_some()
+            || table.source.found
+            || !relations.insert(table.source)
+        {
+            return Err(invalid(
+                "frame sources must have unique literal logical relations",
+                table.rows,
+            ));
+        }
+        named.push((table.rows, AttachmentKind::Arrow));
+    }
+    Ok(named)
 }
 
 /// Checks that `attachments` holds exactly the ids `named`, each once and

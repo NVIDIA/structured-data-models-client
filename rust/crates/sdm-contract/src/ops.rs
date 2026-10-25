@@ -78,7 +78,13 @@ impl Operation {
         use AttachmentKind::{Arrow, Bytes};
         match self {
             Operation::ValidateQuery(v) => vec![(v.query, Bytes), (v.schema, Bytes)],
-            Operation::DescribeSource(d) => vec![(d.source, Bytes)],
+            Operation::DescribeSource(d) => {
+                let mut named = vec![(d.source, Bytes)];
+                if let ProviderChoice::Frames { manifest } = d.provider {
+                    named.push((manifest, Bytes));
+                }
+                named
+            }
             Operation::EditSchema(e) => vec![(e.schema, Bytes), (e.edit, Bytes)],
             Operation::Materialize(m) => {
                 let mut named = vec![(m.schema, Bytes), (m.query, Bytes)];
@@ -427,6 +433,11 @@ pub struct NamedTable {
 pub struct DescribedSource {
     /// A bytes attachment of a [`SourceDescription`] as JSON.
     pub description: AttachmentId,
+    /// Table-stage frames only: the detached Arrow table, taken before
+    /// dropping this Run and rebound with fresh ids for Schema. Never
+    /// present in SQL/Schema results or persistent schema metadata.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub frame_rows: Option<AttachmentId>,
     /// What a semantic model's conversion notes of the schema it gave
     /// (contract v28, T3.27): each measure as the predictive query it is,
     /// each time column taken in place of the view's own, each parameter
@@ -1478,6 +1489,8 @@ pub struct Predicted {
 #[derive(JsonSchema)]
 #[schemars(deny_unknown_fields)]
 pub struct Attachments {
+    #[schemars(rename = "Frames.manifest")]
+    pub frames_manifest: crate::frames::FrameManifest,
     #[schemars(rename = "ValidateQuery.query")]
     pub validate_query_query: String,
     #[schemars(rename = "ValidateQuery.schema")]

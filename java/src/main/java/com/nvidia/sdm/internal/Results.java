@@ -30,7 +30,11 @@ public final class Results {
   public record Validated(boolean accepted, List<Diagnostic> diagnostics, QueryFacts query) {}
 
   /** {@code describe_source}'s result: the attachment of the {@code SourceDescription}. */
-  public record Described(int description, List<ViewNote> notes) {}
+  public record Described(int description, List<ViewNote> notes, Integer frameRows) {
+    public Described(int description, List<ViewNote> notes) {
+      this(description, notes, null);
+    }
+  }
 
   /** A view conversion's core-owned sentence, and which table or time it describes. */
   public record ViewNote(
@@ -91,7 +95,8 @@ public final class Results {
             (String) note.get("table"), (String) note.get("time_column")));
       }
     }
-    return new Described(count(read, "description"), List.copyOf(notes));
+    return new Described(count(read, "description"), List.copyOf(notes),
+        read.get("frame_rows") == null ? null : count(read, "frame_rows"));
   }
 
   private static Validated validated(Map<String, Object> read) {

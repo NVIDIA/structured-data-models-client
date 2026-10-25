@@ -832,6 +832,7 @@ pub(crate) async fn describe_source(
         .map_err(|_| internal("a source description does not serialize"))?;
     let id = asker.attach(Attachment::Bytes(bytes))?;
     Ok(OperationResult::DescribeSource(DescribedSource {
+        frame_rows: None,
         description: id,
         notes,
     }))

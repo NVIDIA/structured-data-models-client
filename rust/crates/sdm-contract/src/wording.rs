@@ -406,6 +406,37 @@ pub fn template(sentence: Sentence) -> Template {
         S::KeyRepeatsColumns => said(
             r#"{table}.{columns!d} identifies a row {repeats:,} time(s) it has already been used, e.g. {example!p}. Those rows are indistinguishable to the model. Name a different primary key if this column is a foreign key rather than an identifier."#,
         ),
+        S::FrameNameEmpty => said(r#"The name {name!r} must be a non-empty string."#),
+        S::FrameNameCharacters => {
+            said(r#"The name {name!r} contains one or more invalid characters: {characters!r}."#)
+        }
+        S::FrameKeyRepeats => said(
+            r#"{table}.{key} identifies a row {repeats:,} time(s) it has already been used, e.g. {host.frame_example}. Those rows are indistinguishable to the model. Name a different primary key if this column is a foreign key rather than an identifier."#,
+        ),
+        S::FrameKeyRepeatsComposite => said(
+            r#"{table}.{key} identifies a row {repeats:,} time(s) it has already been used, e.g. {host.frame_example}. Those rows are indistinguishable to the model. {key!r} is unique together with {others!j}, which is what a composite key looks like; pass that as the primary key if so."#,
+        ),
+        S::FrameKeyRepeatsUnusable => said(
+            r#"{table}.{key} identifies a row {repeats:,} time(s) it has already been used, e.g. {host.frame_example}. Those rows are indistinguishable to the model. They differ only by {others!l}, which a primary key cannot be made of, so there is no composite key to name here: keep one row per {key!r} if the model should see one, or name a different primary key."#,
+        ),
+        S::FrameKeyMissing => said(
+            r#"{host.frame_key} has {missing:,} row(s) with no value, in {missing_columns!l}, so those rows cannot be identified; fill or drop them before using {pronoun} as a primary key"#,
+        ),
+        S::FrameKeyNotUnique => said(
+            r#"{host.frame_key} is not unique enough to identify a row: {repeats:,} of {rows:,} rows repeat a value already used, e.g. {host.frame_example}"#,
+        ),
+        S::FrameCategoricalSample => said(
+            r#"{table}.{column} holds {distinct} distinct values in the {present} rows that have one, so the rows ran out before the values did and the count is a measure of the frame rather than of the column. It is read as categorical here because {distinct} is at most 64; on more rows the same column could pass that and be read as text, which the models treat differently. If this frame is a sample, say what the column is with schema[{table!r}][{column!r}].stype = 'categorical' (or 'text'), so that it does not change under a larger one."#,
+        ),
+        S::FrameKeyAmbiguous => said(
+            r#"{key!r} is the primary key of {tables!l}, so a column named {key!r} identifies a row in each of them and names a parent in none. No relationship is inferred through an ambiguous name, so nothing can point at any of those tables: none of them is gathered as another table's related rows, and a question about one of them is answered from that table alone. Say what the graph is: relationships=[Relationship(child, column, {first!r}, {key!r}), ...], or give each table a key of its own name, so that the column naming it can be matched to it."#,
+        ),
+        S::FrameKeylessShared => said(
+            r#"{table!r} has no primary key, and nothing can link to a table without one: every relationship pointing at {table!r} is dropped, so nothing is gathered through it, and a question about another table reaches it only where {table!r} names that table itself. {candidates!l} {identify} every row of {table!r} and {verb} named by {elsewhere} too, which makes {each} either a key or a foreign key that happens not to repeat in the rows read. If {identifies} {table!r}, say so with primary_keys={{{table!r}: {host.frame_key_candidate}}}; if {subject} instead {name_verb} the rows of the {tables_word} {subject} {verb} shared with, {need_key} the key."#,
+        ),
+        S::FrameKeyDeclined => said(
+            r#"{table}.{column} is named like a key and another table names it too, but {repeats:,} of {rows:,} rows repeat a value already used, e.g. {host.frame_example}, so it does not identify a row and {table!r} gets no primary key. Nothing can link to a table without one: every relationship pointing at {table!r} is dropped, so nothing is gathered through it, and a question about another table reaches it only where {table!r} names that table itself. Keep one row per {column!r}: frame = frame.drop_duplicates({column!r}), and infer again, or name a column that does identify a row with primary_keys={{{table!r}: ...}}."#,
+        ),
         S::KeyDeclined => said(
             r#"{table}.{column} is named like a key and another table names it too, but {repeats:,} of {rows:,} rows repeat a value already used, e.g. {example!p}, so it does not identify a row and {table!r} gets no primary key. Nothing can link to a table without one: every relationship pointing at {table!r} is dropped, so nothing is gathered through it, and a question about another table reaches it only where {table!r} names that table itself. Keep one row per {column!r} in the source, or name a column that does identify a row with {advice:name_primary_key(table)}."#,
         ),

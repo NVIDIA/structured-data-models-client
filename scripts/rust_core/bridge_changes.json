@@ -87,13 +87,13 @@
       "refactor": "T2.2: a SQLite source routes as a DuckDB one (_routing.on_the_core with the backend's from-source paths); no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::build": {
-      "moved": "T3.16 (fix A): the Schema is written as the core answered it, field by field, each column with what the source said of it (Column._source), so the old route's setters and their checks, which ask the old PQL package, are not run again on the core route (rule 11); the time columns the setters marked as declared are marked so still"
+      "moved": "T3.16 (fix A): the Schema is written as the core answered it, field by field, each column with what the source said of it (Column._source), so the old route's setters and their checks, which ask the old PQL package, are not run again on the core route (rule 11); the time columns the setters marked as declared are marked so still; T4.2: consume the same core metadata for primitive frames with native Table.data references, no SQL SourceFacts or EngineTables side effects; ordinary source construction is unchanged"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::description": {
       "gone": "T3.16 (fix A): the schema is handed over as plain data by _rust/spec.py's held_schema; no saved description, no merge (sdm_schema::edit::read_held is gone)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::<module>": {
-      "moved": "T3.17 fix 1: imports the errors module for its host values; T3.5: conversion_notes, the host's saying of the core's typed notes of a semantic model"
+      "moved": "T3.17 fix 1: imports the errors module for its host values; T3.5: conversion_notes, the host's saying of the core's typed notes of a semantic model; T4.2: build accepts native frame references alongside the same core metadata reader"
     },
     "packages/structured-data-models-client/src/sdm_client/client.py::_predicts_on_the_core": {
       "refactor": "T2.2: a request over a SQLite source routes as one over DuckDB (_routing.on_the_core with the backend's predict paths); no rule added"
@@ -528,7 +528,7 @@
       "refactor": "T3.20 (frozen at T3.7): postgres.py's _arrow_type moved here unchanged; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres_arrow.py::_cell": {
-      "refactor": "T3.20 (frozen at T3.7): postgres.py's _cell moved here unchanged; no rule added"
+      "refactor": "T3.20 (frozen at T3.7): postgres.py's _cell moved here unchanged; no rule added; T4.2: canonical fingerprint regeneration reconciles the inherited F8 baseline with this already-present, byte-unchanged Postgres source; this package changes no provider code"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres_arrow.py::_element_type": {
       "refactor": "T3.20 (frozen at T3.7): postgres.py's _element_type moved here unchanged; no rule added"
@@ -558,7 +558,7 @@
       "refactor": "T3.20 (frozen at T3.7): postgres.py's _result's batch building after fetchall, unchanged but for names (field for _field, kind for the loop's field); no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres_arrow.py::<module>": {
-      "refactor": "T3.20 (frozen at T3.7): postgres.py's Arrow building, its constants (markers, tags, BATCH_ROWS, the type tables) and functions moved here unchanged; no rule added"
+      "refactor": "T3.20 (frozen at T3.7): postgres.py's Arrow building, its constants (markers, tags, BATCH_ROWS, the type tables) and functions moved here unchanged; no rule added; T4.2: canonical fingerprint regeneration reconciles the inherited F8 baseline with this already-present, byte-unchanged Postgres source; this package changes no provider code"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::conversion_notes": {
       "moved": "T3.5: a semantic model's conversion notes, the core's typed notes (DescribedSource.notes) said by their sentences, a note of a table the schema does not take or of a time column its table no longer has left out, as the contract says a host shows them"
@@ -571,6 +571,9 @@
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::source_values": {
       "moved": "T3.5: the values a source's sentences name, the semantic model's repr among them (old-behaviour row 5)"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres_arrow.py::_utc_text_value": {
+      "refactor": "T4.2: canonical fingerprint regeneration reconciles the inherited F8 baseline with this already-present, byte-unchanged Postgres source; this package changes no provider code"
     }
   }
 }

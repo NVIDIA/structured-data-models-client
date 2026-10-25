@@ -173,6 +173,21 @@ The owner's separate direction permits isolated foundation progress while Phase 
 
 ### T4.2 – Frame conversion, schema and large-offset admission
 
+The user accepted the bounded-first-package audit plan on 2026-10-25.
+T4.2 remains one canonical package, with these explicit implementation substeps:
+
+1. First constructor consumer: Native-endian NumPy-backed signed/unsigned integer, Float32/Float64 and Boolean DataFrame columns, including numeric NaN, empty/all-null numeric columns, with ordinary built-in table/override/relationship arguments.
+   Working contract 31 supplies a run-local manifest and fixed Table/Schema describe stages; core inference, key/link assembly and notices consume the detached values.
+   Each Table call returns an owned Arrow stream for fresh binding in the final Schema call; public tables retain original DataFrame references and metadata retains no attachment ids.
+   Native override-map order is carried separately from SourceSpec's value maps.
+2. Native-family completion: text/date, object, Decimal, pandas nullable/other extension arrays and custom argument/hooks need their own conversion and stage facts before they join the development seam.
+   The first consumer excludes those native families by type, with no content-based date detector, host semantic fallback, new SDK refusal policy or compatibility exception.
+3. Complete frame/index/mutation/edit behavior and the real large-offset admission cases listed below before claiming T4.2 complete or switching defaults.
+   T4.4 sampling order, adjacency and random-state work remain separate dependencies.
+
+Default frame constructor routing and setters remain old, including text/date/object/extension support.
+No frame materialization, sampling, index-order, session or full T4.2 completion is claimed by the first constructor consumer.
+
 - Deliver `Schema.from_data`, mapping input and manually constructed frame tables through `_rust/frames.py`, `sdm-core::frames`, and existing `sdm-schema` inference/assembly/edit rules.
 - Reuse `_rust/spec.py`'s held-schema serialization and `Column._source` facts; do not introduce a second schema representation or persistent copy that overrides live edits.
 - Implement column-wise native conversion, the proven native index input facts and Arrow admission/lifetime changes, including FX-3 in `sdm-host::admission`, schema inference and the pre-materialize size guard.

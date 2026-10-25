@@ -4,10 +4,10 @@
   "files": {
     "packages/structured-data-models-client/src/sdm_client/_rust/schema.py": {
       "<module>": {
-        "fingerprint": "d32d73169e280d5ecbfe20bf4691e72a1c9fecf9265dbfdf862c62f4ad2cf12a"
+        "fingerprint": "b29fe101355f7102a2e1097b9633f1d40c4e0c564d45554dff0c00ce0945cccc"
       },
       "build": {
-        "fingerprint": "1ffa9b79f4ead237521dee3b3b02d7080dd908d00a0c39a53b29beee006830e0"
+        "fingerprint": "8cc491f3c48333738142f36f0240375901ebbad47a1f3ebd2d892b5bacef40fa"
       },
       "conversion_notes": {
         "fingerprint": "508ac21006be52f300b68ce0ac50cfb65c45ab8ae95a20270866b9fc418f9de1"
@@ -330,7 +330,7 @@
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres_arrow.py": {
       "<module>": {
-        "fingerprint": "ece57f2d861e2a986feb1c6340d20130eb9724ee30af67c37026c34429d57e97"
+        "fingerprint": "3a398505d3992ea5a2496ef9bb010cf4867ced751d9d548eb37fc43c20b8f8d7"
       },
       "_array": {
         "fingerprint": "8373cfcd4c2046e8068c0336c4d292064110aa7cf69989a24bd449f2323ed33d"
@@ -339,7 +339,7 @@
         "fingerprint": "38f23ced009259c6d1a377c771107be728c232c53db4503284a882022652619b"
       },
       "_cell": {
-        "fingerprint": "90a26e98a8649cd77620844f7052f97a88945f3a05cf3a1fa16e318911d32e69"
+        "fingerprint": "02eea75100c450b5c40ad70a5bf5c96629c1f71ac66ad86b0dfa1d5d607bcda3"
       },
       "_element_type": {
         "fingerprint": "bcdd8b8ca93ef8dc582b4d026ee3eca4b0e777073a60bc5d02e773c08df14fd3"
@@ -361,6 +361,9 @@
       },
       "_tags": {
         "fingerprint": "4199278e8874a8eee10279f2ccec1d94f0d908b7e51f153102e6b532a662d5b1"
+      },
+      "_utc_text_value": {
+        "fingerprint": "03fc1888d0b0c38a011e8dbef8758375e8fa855896d7dd6671f0d1257c22610b"
       },
       "field": {
         "fingerprint": "cea6477af1ca7a4d35ac934e1ab6c9b6dce11e130a2f1f4d01dfc3c6ab5b5241"

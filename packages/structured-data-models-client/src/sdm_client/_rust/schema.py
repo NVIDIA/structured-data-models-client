@@ -192,7 +192,13 @@ def conversion_notes(
     return tuple(said)
 
 
-def build(cls: type[Schema], source: Any, described: dict[str, Any]) -> Schema:
+def build(
+    cls: type[Schema],
+    source: Any,
+    described: dict[str, Any],
+    *,
+    frames: Mapping[str, Any] | None = None,
+) -> Schema:
     r"""Today's ``Schema`` of a ``SourceDescription``, as the core assembled
     it: each column's meaning as the description gives it, with what it
     meant before the schema joined on it (``Column._stype_before_key``,
@@ -202,9 +208,9 @@ def build(cls: type[Schema], source: Any, described: dict[str, Any]) -> Schema:
     from sdm_client._rust.results import SourceFacts
     from sdm_client.core.warnings import SDMWarning
     from sdm_client.materializers.sources import EngineTables, wire_dtype
-    from sdm_client.schema import Column, Relationship, SourceTable
+    from sdm_client.schema import Column, Relationship, SourceTable, Table
 
-    built: dict[str, SourceTable] = {}
+    built: dict[str, Any] = {}
     for table in described['tables']:
         name = table['name']
         # The columns a time column was set on, which the old route's setter
@@ -233,7 +239,12 @@ def build(cls: type[Schema], source: Any, described: dict[str, Any]) -> Schema:
                 ('untyped', False),
                 ('stype_declared', column['name'] in timed),
                 ('_stype_before_key', column['stype_before_key']),
-                ('_source', SourceFacts.of_described(column, table['source'])),
+                (
+                    '_source',
+                    None
+                    if frames is not None
+                    else SourceFacts.of_described(column, table['source']),
+                ),
             ):
                 object.__setattr__(made, field, value)
             columns[column['name']] = made
@@ -242,12 +253,20 @@ def build(cls: type[Schema], source: Any, described: dict[str, Any]) -> Schema:
         # or a line break in a column's name is data (KO2-36, T2.18). The
         # table is built without its columns, which SourceTable would check
         # by the old route's rule, and then given them.
-        table_shape = SourceTable(
-            name=name,
-            source_name=codec.relation_name(table['source']),
-            columns={},
-        )
-        table_shape.columns = columns
+        table_shape: SourceTable | Table
+        if frames is None:
+            table_shape = SourceTable(
+                name=name,
+                source_name=codec.relation_name(table['source']),
+                columns={},
+            )
+        else:
+            # Rows retain the caller's object. The admitted Arrow snapshot
+            # belongs only to this describe call; it never becomes Table.data.
+            table_shape = Table.__new__(Table)
+            object.__setattr__(table_shape, 'name', name)
+            object.__setattr__(table_shape, 'data', frames[name])
+        object.__setattr__(table_shape, 'columns', columns)
         table_shape._own_columns()
         keys = tuple(table['primary_key'])
         # The key and time column as the core answered them, which marked
@@ -281,5 +300,6 @@ def build(cls: type[Schema], source: Any, described: dict[str, Any]) -> Schema:
     with warnings.catch_warnings():
         warnings.simplefilter('ignore', SDMWarning)
         schema = cls(built, links, source=source)
-    schema._engine_tables = EngineTables()
+    if frames is None:
+        schema._engine_tables = EngineTables()
     return schema

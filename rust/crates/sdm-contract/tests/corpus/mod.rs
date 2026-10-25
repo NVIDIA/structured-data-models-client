@@ -426,6 +426,7 @@ pub fn messages() -> Vec<ControlMessage> {
         }),
         ControlMessage::Step(Step::Done {
             result: OperationResult::DescribeSource(DescribedSource {
+                frame_rows: None,
                 description: AttachmentId(9),
                 notes: Vec::new(),
             }),

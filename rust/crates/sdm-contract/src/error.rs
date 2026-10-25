@@ -743,6 +743,7 @@ warning_codes! {
     DateLiteralDayFirst = "DATE_LITERAL_DAY_FIRST",
     ViewReadInPart = "VIEW_READ_IN_PART",
     SeedIgnored = "SEED_IGNORED",
+    FrameSchema = "FRAME_SCHEMA",
 }
 
 sentences! {
@@ -816,6 +817,17 @@ sentences! {
     KeyRepeatsColumn = "key_repeats_column", W::KeyRepeats;
     KeyRepeatsColumns = "key_repeats_columns", W::KeyRepeats;
     KeyDeclined = "key_declined", W::KeyDeclined;
+    FrameKeyRepeats = "frame_key_repeats", W::KeyRepeats;
+    FrameKeyRepeatsComposite = "frame_key_repeats_composite", W::KeyRepeats;
+    FrameKeyRepeatsUnusable = "frame_key_repeats_unusable", W::KeyRepeats;
+    FrameKeyMissing = "frame_key_missing", E::InvalidRequest;
+    FrameKeyNotUnique = "frame_key_not_unique", E::InvalidRequest;
+    FrameNameEmpty = "frame_name_empty", E::InvalidRequest;
+    FrameNameCharacters = "frame_name_characters", E::InvalidRequest;
+    FrameCategoricalSample = "frame_categorical_sample", W::FrameSchema;
+    FrameKeyAmbiguous = "frame_key_ambiguous", W::FrameSchema;
+    FrameKeylessShared = "frame_keyless_shared", W::FrameSchema;
+    FrameKeyDeclined = "frame_key_declined", W::KeyDeclined;
     TimeColumnsTakenEarliest = "time_columns_taken_earliest", W::TimeColumnsGuessed;
     TimeColumnsTakenUncheckedEmpty = "time_columns_taken_unchecked_empty", W::TimeColumnsGuessed;
     TimeColumnsTakenUncheckedSparse = "time_columns_taken_unchecked_sparse", W::TimeColumnsGuessed;

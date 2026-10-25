@@ -189,7 +189,25 @@ pub fn assemble(
         .into_iter()
         .map(|t| described_table(t, duplicates.clone()))
         .collect();
-    assemble_described(described, choices, declared, given, true)
+    assemble_described(described, choices, declared, given, true, None)
+}
+
+/// Frame construction emits link validation notices before its final frame
+/// inference notices, then time/two-way notices. Its Schema constructor's
+/// internal pair notice was deliberately not presented by the native path.
+pub fn assemble_frames(
+    tables: Vec<InferredTable>,
+    given: Given<'_>,
+    duplicates: Option<Scalar>,
+) -> Result<(Assembled, Vec<CoreWarning>), CoreError> {
+    let choices = tables.iter().map(|t| t.time.clone()).collect();
+    let described = tables
+        .into_iter()
+        .map(|t| described_table(t, duplicates.clone()))
+        .collect();
+    let mut links = Vec::new();
+    let assembled = assemble_described(described, choices, vec![], given, true, Some(&mut links))?;
+    Ok((assembled, links))
 }
 
 /// Assemble logical source facts already converted by a semantic model.
@@ -202,7 +220,7 @@ pub fn assemble_converted(
     time_columns: &BTreeMap<String, ops::Given<Option<String>>>,
     relationships: Option<&[Link]>,
 ) -> Result<Assembled, CoreError> {
-    apply_described_keys_and_times(&mut description.tables, primary_keys, time_columns)?;
+    apply_described_keys_and_times(&mut description.tables, primary_keys, time_columns, false)?;
     let timed = time_columns.keys().cloned().collect();
     assemble_described(
         description.tables,
@@ -213,6 +231,7 @@ pub fn assemble_converted(
             relationships,
         },
         false,
+        None,
     )
 }
 
@@ -222,6 +241,7 @@ fn assemble_described(
     declared: Vec<Link>,
     given: Given<'_>,
     infer_by_name: bool,
+    mut frame_links: Option<&mut Vec<CoreWarning>>,
 ) -> Result<Assembled, CoreError> {
     let mut warnings = Vec::new();
     let links = if let Some(given) = given.relationships {
@@ -260,6 +280,10 @@ fn assemble_described(
         links
     };
 
+    let frames = frame_links.is_some();
+    if let Some(link_notices) = &mut frame_links {
+        link_notices.append(&mut warnings);
+    }
     // A lone edit stamp, settled by the links, unless the caller named the
     // table's time column.
     let inferred: Vec<Option<String>> = choices.iter().map(|c| c.column.clone()).collect();
@@ -287,7 +311,9 @@ fn assemble_described(
     };
     mark_keys(&mut description);
     warnings.extend(guessed_time_columns(&description, &choices, given));
-    warnings.extend(name_each_other(&description.links));
+    if !frames {
+        warnings.extend(name_each_other(&description.links));
+    }
     warnings.extend(two_ways(&description.links));
     Ok(Assembled {
         description,
@@ -296,7 +322,7 @@ fn assemble_described(
 }
 
 /// A table's inferred source facts as the common schema description.
-fn described_table(table: InferredTable, duplicates: Option<Scalar>) -> DescribedTable {
+pub fn described_table(table: InferredTable, duplicates: Option<Scalar>) -> DescribedTable {
     DescribedTable {
         name: table.name,
         source: table.source,
@@ -435,6 +461,25 @@ pub fn apply_keys_and_times(
     primary_keys: &BTreeMap<String, ops::Given<Option<Vec<String>>>>,
     time_columns: &BTreeMap<String, ops::Given<Option<String>>>,
 ) -> Result<(), CoreError> {
+    apply_keys_and_times_mode(tables, primary_keys, time_columns, false)
+}
+
+/// Frame construction follows native setter key sequences. P1B-73's
+/// duplicate-column refusal belongs only to ordinary source description.
+pub fn apply_frame_keys_and_times(
+    tables: &mut [InferredTable],
+    primary_keys: &BTreeMap<String, ops::Given<Option<Vec<String>>>>,
+    time_columns: &BTreeMap<String, ops::Given<Option<String>>>,
+) -> Result<(), CoreError> {
+    apply_keys_and_times_mode(tables, primary_keys, time_columns, true)
+}
+
+fn apply_keys_and_times_mode(
+    tables: &mut [InferredTable],
+    primary_keys: &BTreeMap<String, ops::Given<Option<Vec<String>>>>,
+    time_columns: &BTreeMap<String, ops::Given<Option<String>>>,
+    frames: bool,
+) -> Result<(), CoreError> {
     if primary_keys.is_empty() && time_columns.is_empty() {
         return Ok(());
     }
@@ -443,7 +488,7 @@ pub fn apply_keys_and_times(
         .cloned()
         .map(|t| described_table(t, None))
         .collect();
-    apply_described_keys_and_times(&mut described, primary_keys, time_columns)?;
+    apply_described_keys_and_times(&mut described, primary_keys, time_columns, frames)?;
     for (table, updated) in tables.iter_mut().zip(described) {
         table.primary_key = updated.primary_key;
         table.time_column = updated.time_column;
@@ -459,6 +504,7 @@ fn apply_described_keys_and_times(
     tables: &mut [DescribedTable],
     primary_keys: &BTreeMap<String, ops::Given<Option<Vec<String>>>>,
     time_columns: &BTreeMap<String, ops::Given<Option<String>>>,
+    frames: bool,
 ) -> Result<(), CoreError> {
     let find =
         |tables: &mut [DescribedTable], name: &str, field: &str| -> Result<usize, CoreError> {
@@ -488,7 +534,7 @@ fn apply_described_keys_and_times(
         // A column named twice is refused by name (P1B-73, the owner's;
         // `describe_source` only).
         let mut named = BTreeSet::new();
-        if let Some(twice) = key.iter().find(|column| !named.insert(column.as_str())) {
+        if !frames && let Some(twice) = key.iter().find(|column| !named.insert(column.as_str())) {
             return Err(invalid(
                 Sentence::KeyColumnTwice,
                 "a primary key names a column more than once",
