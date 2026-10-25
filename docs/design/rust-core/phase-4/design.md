@@ -1,0 +1,225 @@
+# Phase 4: frames, link prediction, tabular requests and sessions
+
+## Scope and baseline
+
+This is a planning draft based on provisional Phase 3 code freeze `21e6d40845f58e8e7f6cb683b3db203ee0e40cf2`, with contract version 29 and Python S0/S1/S2 routed to the core by default.
+Phase 3 is still active; reconcile its final source and carried findings before Phase 4 starts, without changing its frozen candidate or treating this draft as authorization to start implementation.
+The format follows the current [handbook's design instructions](../orchestration/README.md#design-and-repeated-findings): an itemized plan with concrete ownership, interfaces, dependencies, tests and unresolved choices.
+The much larger Phase 3 design and [historical preparation](../orchestration/later-phases-prep.md#phase-4-s3-frames-link-prediction-sessions-and-tabular) supply evidence, not a current schedule or process mandate.
+
+- Deliver Python slice S3 as defined in [migration-plan.md sections 4 and 8](../migration-plan.md#4-delivery-slices-not-modules): in-memory frames, including CSV/Parquet read locally or from Amazon S3; frame ranking and forecasting; link prediction; tabular requests; and fitted sessions on every currently supported Python backend.
+- Enable all three owner-required deferred paths: `model`, `text_time_rules`, and `aggregation` for `LIST_DISTINCT` over a foreign key, including temporal link prediction (KO2-94, KO2-75, P2E-19).
+- Complete the fallback behavior, sliced-page byte accounting and text-order decision carried as P2-T2.5-1/2/3, and the large-value behavior FX-3 (KO2-31).
+- Cover `Schema.from_data`, hand-built frame tables, `PredictiveQuery(..., mapping)`, `materialize(indices=...)`, `materialize(predict=frame)`, direct `Request(context, predict, ...)`, one-shot prediction, fit, fitted prediction, close, result reading and merging, and connector reads feeding those journeys.
+- Use [scope-python.yaml](../phase-0/scope-python.yaml) as the public-path inventory, including warehouse and semantic-view sessions, rather than assuming that S3 means only a frame backend.
+  Its historical inventory has 121 S3 paths; reconcile the actual manifest and current source at T4.1 rather than freezing this historical count as acceptance.
+- Java retains Phase 3's approved S0/S1/Databricks scope and receives only shared-contract compatibility changes and regression checks.
+  Java frames, sessions, tabular, link prediction, ranking, forecasting, Snowflake, Lakebase and Spark require owner scope expansion.
+- Release packaging, publishing, platform expansion, old-engine deletion, routing-seam deletion and distribution consolidation remain Phase 5 work.
+  This phase creates no new Rust crate, Python distribution or Java artifact.
+
+## Ownership and data flow
+
+The public journey is native data → lossless Arrow plus explicit native facts → core schema/materialization → model-call bytes → host transport → core result → native presentation.
+File and S3 reads remain in `sdm_connectors.reader`; the core never opens a file, database connection or network socket.
+The same Arrow frame input is usable by Python and the pure-Rust test host, and later by another language without importing pandas semantics into a Rust crate.
+
+| Owner | Existing modules to change | New modules proposed | Responsibility |
+|---|---|---|---|
+| `sdm-contract` | `src/ops.rs`, `data.rs`, `run.rs`, `types.rs`, `error.rs`, `schema_check.rs` | `src/frames.rs`, `src/session.rs` | Typed frame inputs, explicit request/session state and endpoints, errors, supported large-offset types; no algorithms |
+| `sdm-schema` | `src/infer.rs`, `assemble.rs`, `held.rs`, `values.rs` | None initially | Infer frame schema, apply overrides and check links through the existing schema algorithms |
+| `sdm-engine` | `src/sample.rs`, `random.rs`, `keys.rs`, `graph.rs`, `labels.rs`, `time/text.rs` | `src/frames.rs` | Arrow row selection and frame indexes, frame sampling and random-state transitions, link labels and text-time rules |
+| `sdm-request` | `src/predict.rs`, `payload.rs`, `options.rs`, `ranking.rs` | `src/tabular.rs`, `src/session.rs` | Model-specific request validation, wire layout, session pin/scoring layouts, results and limits |
+| `sdm-wire` | `src/payload.rs`, `response.rs`, `key.rs` | None initially | Model wire encoding/decoding, including tabular and link responses; no transport |
+| `sdm-core` | `src/dispatch.rs`, `run.rs`, `compose.rs`, `describe.rs`, `materialize.rs`, `fallback.rs`, `subgraph.rs`, `predict.rs` | `src/frames.rs`, `src/tabular.rs`, `src/session.rs` | Operation orchestration, source selection, held state, leakage prevention, session transitions and request composition |
+| `sdm-data` | Existing dialect renderers only when a link-prediction request needs SQL support | None initially | Continue planning SQL and reading catalogs through `DataLayer`; no pandas or session rules |
+| `sdm-host` and `sdm-py` | `sdm-host/src/admission.rs`, `runs.rs`, `codec.rs`; `bindings/sdm-py/src/lib.rs` | None initially | Arrow admission, message validation, buffer/run ownership and panic containment |
+| `structured-data-models-client` / `sdm_client` | `schema.py`, `query.py`, `request.py`, `client.py`, `_routing.py`, `_rust/{schema,materialize,predict,spec,run,results,codec,errors}.py` | `_rust/frames.py`, `_rust/sessions.py` | Native conversion, object construction and lifetime, transport dispatch, exceptions and presentation |
+| `structured-data-models-connectors` / `sdm_connectors` | `reader.py` and backend conversion helpers only where a public reproduction needs a fix | None initially | CSV/Parquet/S3 and warehouse I/O, driver conversion and connector errors |
+| `structured-data-models-api` / `sdm_api` | Hand-written API source only if the existing model contract requires it | None planned | Existing model API types; regenerate generated output through its generator if required |
+| `structured-data-models-pql` and `structured-data-models-relational-engine` | Reference code and tests remain available | None planned | Comparison baseline during migration; production core paths must not call either runtime |
+| Java / `sdm-jni` | Existing contract/message/endpoint decoders and binding exhaustiveness as required | None planned | Preserve existing supported calls across the contract bump; no new public feature scope |
+
+Paths in the Rust rows are relative to `rust/crates/<crate>/`, unless a binding path is given.
+The crate dependency graph remains [the existing one](../../../../rust/README.md#dependency-diagram): bindings → `sdm-host` → `sdm-core` → domain crates → `sdm-contract`, with `sdm-data` composed through `DataLayer`.
+Reuse Arrow compute/row kernels and the existing time library; port only the defined reference algorithms and registered random streams.
+Do not promote [`sdm-testkit::memory`](../../../../rust/crates/sdm-testkit/src/memory.rs) into production: it is deliberately a limited, SQL-like test provider, with different sampling and only its documented filters.
+
+## Contract and API boundaries
+
+T4.1 owns the common contract change, provisionally version 30 if Phase 3 finishes at 29.
+The following are the proposed contract responsibilities; T4.1 locks their serialized shapes and state versions together before dependent packages implement them.
+
+1. **Frames enter as data, not as a Python provider.**
+   Add one typed source selection to describe/materialize: an existing provider choice, or a frame-table manifest naming Arrow attachments and neutral table metadata.
+   The manifest is an input-sized bytes attachment; data stays in Arrow attachments, with original row ordinals and column order preserved.
+   `sdm-core::frames` owns a run-local table set and derives its capabilities; the caller does not supply arbitrary frame sampling policies.
+   Existing `DataRequest` shapes, neutral catalog answers and expected-schema checks remain the shared vocabulary.
+   A frame request is answered inside the core through `sdm-engine::frames`, while an external provider request retains the existing `DataLayer` planning and `FetchStep` path.
+   Frame requests retain the same request validation and expected-schema admission checks; a frame-source distinction must not bypass the provider contract's key, filter, paging or completeness rules.
+   Frame execution is an internal source branch in the existing run, not a second public run protocol, a new driver framework, or a SQL engine embedded for frames.
+2. **Native conversion reports facts; the core decides behavior.**
+   `_rust/frames.py` converts each pandas column once using a reviewed conversion table and existing codec scalars, preserving integer widths, decimals, nulls, zones, nested values and empty/all-null columns.
+   Object columns are classified column-wise, with explicit diagnostics for values that have no lossless contract representation; they are never coerced wholesale through text or float64.
+   Native equality or ordering that cannot be derived from Arrow travels as a narrowly defined fact, such as the index-order permutation needed by the tabular reference's `sort_index()`.
+   A pandas dtype name, object handle, arbitrary callback, `repr` or inferred PQL tree never crosses the contract.
+   Core inference, overrides, task choice, leakage checks, sampling, limits and warnings do not move into this converter.
+3. **State is an explicit value with a defined lifetime.**
+   Extend the existing `SamplerState`/`SamplerMemo` pattern to carry the frame neighbor stream needed by RS-3, including continuation across unseeded calls and reset rules for seeded subgraphs.
+   The host owns Arrow buffers and opaque versioned state between calls; the run borrows admitted data for its lifetime and returns replacement state, including the reference's state progression on failure.
+   Data/schema identity and mutation invalidate cached frame indexes and incompatible sampler state; no process-global RNG, hidden core registry or host-object identity enters the memo.
+   A request snapshots schema meaning as today, and changes to caller frames must follow the observed reference behavior rather than silently reusing stale converted data.
+4. **Direct requests and model selection are core operations.**
+   Add a typed prepare-request operation for context/predict Arrow halves, target, task, held schema and options, so direct `Request(...)` and PQL materialization share core validation and model-specific payload builders.
+   Preserve the public Python constructor and `materialize(..., model=...)` signatures.
+   The core chooses relational or tabular validation/layout from the model specification; the host does not select a Python adapter to decide semantics.
+   Existing request state and held-payload compatibility remain accepted, including requests made before the core switch and inspection of their halves.
+5. **Sessions are typed model calls and explicit session state.**
+   Add fit, fitted-predict and close operations, and extend the current predict-only `Endpoint` with create-session, session-predict and delete-session calls carrying an explicit session id where required.
+   The model-call contract must express the HTTP method, body presence and expected reply kind needed for DELETE and its successful empty reply; a successful close must not be parsed as a prediction response.
+   The host maps those calls onto existing transport methods and returns raw bytes or structured failure facts; it performs no retry or lifecycle transition the core did not request.
+   Versioned session state holds the returned id, model, pinned question/schema/task, selected outputs and identities needed for leakage checks, without retaining the uploaded context payload.
+   The core validates later requests against that pinned contract and sends only scoring rows; the host owns `FittedModel` context-manager behavior and transport lifetime.
+   While a step is suspended, the host keeps its run and referenced Arrow buffers alive; callbacks submit a reply only to that live run, under the binding's existing ownership/busy rules.
+   Abandoning a pending call releases native run resources and permits no later callback into the disposed run; it does not invent a successful remote acknowledgment or automatically replay fit.
+   A lost create reply yields no fitted handle without a confirmed id, and an unacknowledged delete leaves the handle retryable; remote expiry and transport cancellation retain the existing endpoint/host behavior.
+6. **Buffer limits and error boundaries remain explicit.**
+   Arrow admission preserves large-offset text/binary where FX-3 requires description, with an explicit closed-type extension rather than truncating offsets or converting through Python objects.
+   Ordinary lossless large-to-small conversions still use the current admission path when values fit.
+   Oversized values are blocked before an incompatible kernel or wire encoder reads them; FX-3's VARCHAR is described and then refused by name at materialize, while its BLOB is omitted without reading its contents.
+   New errors join the existing closed code/kind/wording tables, with input-sized details attached and no host parsing of error text.
+   Regenerate contract schemas/locks and public snapshots with their existing generators, update binding decoders together, and verify current Java calls still decode unchanged results.
+
+The frame source branch is needed because the current fetch protocol sends host-provider requests to the host, which would otherwise put sampling and time rules back into Python.
+The session additions are needed because [`Operation`](../../../../rust/crates/sdm-contract/src/ops.rs) has no session operations and [`Endpoint`](../../../../rust/crates/sdm-contract/src/run.rs) currently has only `Predict`.
+These are bounded additions to existing contracts, not a new abstraction for every S3 feature.
+
+## Work packages and dependencies
+
+`T4.*` names units of work, not Cargo crates, distributions or installable packages.
+Only the paths listed above and tests/contracts needed by each journey are implementation scope; tooling defects ride with the affected work only when a concrete failure requires them.
+At most three packages run concurrently within eight vCPUs; full CI runs only nightly and at phase end.
+Tests are written before implementation, and both independent Sol 6.1 High reviewers approve the same exact candidate before its package tests, lint or cheap checks run.
+This document does not authorize implementation, live work, phase activation or a merge into `rust-core`.
+
+### T4.1 – Shared input, state and session contracts
+
+- Own the contract work above, binding/message compatibility and the mapping from the current S3 manifest to the following package responsibilities.
+- Modify `sdm-contract`, `sdm-host`, `sdm-py`, Python codecs/stubs and the compatible Java/JNI decoders together; generate schemas and locks through the existing tooling.
+- Specify attachment ownership, close acknowledgments, failed-call state progression, native ordering facts, frame mutation invalidation and the large-offset admission boundary before freezing shapes.
+- Write round-trip, unknown-version, attachment-kind, empty-delete-reply and existing Java-call compatibility tests first.
+- Dependency: final Phase 3 contract/source reconciliation; T4.2, T4.3, T4.5 and T4.6 may develop against this reviewed interface after it lands.
+
+### T4.2 – Frame conversion, schema and large-offset admission
+
+- Deliver `Schema.from_data`, mapping input and manually constructed frame tables through `_rust/frames.py`, `sdm-core::frames`, and existing `sdm-schema` inference/assembly/edit rules.
+- Reuse `_rust/spec.py`'s held-schema serialization and `Column._source` facts; do not introduce a second schema representation or persistent copy that overrides live edits.
+- Implement column-wise native conversion, explicit index-order facts and Arrow admission/lifetime changes, including FX-3 in `sdm-host::admission`, schema inference and the pre-materialize size guard.
+- Exercise public constructors, snapshots, edits and reference pickles with mixed object columns, nullable/wide numeric keys, nested values, non-default/duplicate indexes and caller frame mutation.
+- Prove FX-3 using the actual DuckDB `arrow_large_buffer_size` path: unread oversized BLOB, described oversized VARCHAR, named materialize refusal, and adjacent fitting values.
+  A reduced-capacity unit check supplements that public reproduction; it does not replace the real large-offset acceptance case.
+- Dependency: T4.1; exports the Arrow frame input consumed by T4.4 and T4.6.
+
+### T4.3 – Complete the reusable fallback
+
+- Fix P2-T2.5-1 in `sdm-core::{compose,describe,materialize,fallback}`: a bounded `column_ranges` fallback failure follows describe's existing preview recovery where appropriate, and materialize accepts undeclared optional requests when the declared fallback can answer them.
+  A provider that declares an operation and then fails still returns its error; it never silently falls back.
+- Fix P2-T2.5-2 in `sdm-core::fallback`, `run` and `sdm-host::runs`: account for the logical Arrow page slice and retained data deliberately, including offsets, null buffers and nested children, without charging an unrelated shared parent buffer as transferred page bytes.
+  Distinguish the transfer budget from actual retained memory and avoid unbounded retention as the price of correcting false refusals.
+- Resolve P2-T2.5-3 explicitly: Arrow byte order is not PostgreSQL locale collation, so fallback cannot claim equivalence for a provider whose text ordering changes selected rows.
+  Keep frame native ordering and external-provider collation separate; the owner choice below determines whether such a fallback remains restricted or gains an explicit supported ordering contract.
+- Write public describe/materialize cases for undeclared `time_bounds`, `sample_entities`, `neighbors`, `lookup`, multi-page slices, exact/over limits, declared failures and text order affecting a cut.
+- Dependency: T4.1 only for any required ordering/budget clarification; T4.4 reuses fallback kernels only where their measured semantics agree.
+
+### T4.4 – Frame materialize and predict, including ranking and forecasting
+
+- Deliver the frame journey end to end through `sdm-core::{frames,materialize,subgraph,predict}`, `sdm-engine::frames`, and the existing request, ranking, forecast and result modules.
+- Port the actual rules from `rfm/backend/local/{graph_store,sampler}.py`, `csrc/neighbor_sampler.cpp` and `rfm/base/sampler.py`: sanitization, relationship-wide key representation, entity mapping, temporal/static hops, query-data traversal, row order and feature/label construction.
+- Reuse existing Arrow filtering/take/grouping and time kernels; implement frame-specific selection policies once rather than duplicating the whole SQL sampler or copying the test-only memory provider.
+- Implement RS-3 and RS-4 using the registered algorithms and explicit state; retain the already shipped RS-1/RS-2 behavior and verify no regression in SQL paths.
+- Enable `TextTimes::ClientRules` using `sdm-engine::time::text`'s fixed-format reader and whole-column shape/day-order decisions, preserving existing approved out-of-format refusals.
+  Remove both `text_time_rules` refusals in `sdm-core::materialize`, including timestamp features as well as time columns; no call delegates parsing to pandas.
+- Test indices and supplied predict frames, zero/missing/repeated keys, null and duplicate time/key sanitization, static/temporal/keyless neighbors, tied cuts, composite/decimal relationships, seeded/unseeded call sequences and failure-state continuation.
+- Include frame ranking and multi-step forecasting, UTC/named-zone/fold cases, DT-3's public frame/H24 proof, schema mutation and result inspection/merge through Python and rust-host.
+- Dependencies: T4.2 and T4.3; preserve each path's observed ordering/null behavior, and obtain approval before accepting any proposed changed model inputs.
+
+### T4.5 – Link prediction on frames and existing providers
+
+- Lift P2E-19's `LIST_DISTINCT`-over-foreign-key refusal in `sdm-core::materialize` and carry the referenced entity identity through label construction, payload encoding and result decoding.
+- Cover static and temporal link prediction across S1/S2 providers as well as frames, preserving time windows, distinctness, relationship key types and the difference between target ids and displayed keys.
+- Modify `sdm-engine::labels/keys`, `sdm-request::payload/predict`, `sdm-wire::payload/response` and dialect renderers only where the existing typed requests cannot yet produce the required rows.
+- Start with recorded reference requests and answers for `target.aggregation.list-distinct`, then cover nulls, duplicate links, empty neighborhoods, composite/decimal/text ids and time boundaries.
+  Do not widen direct `Request(...)` to arbitrary multi-label targets: its current refusal is distinct from relational link prediction and needs a supported model wire shape before it can change.
+- Dependencies: T4.1; existing SQL legs can proceed before T4.4, with frame integration following T4.4.
+
+### T4.6 – Tabular preparation and one-shot prediction
+
+- Move `materializers/tabular.py`, `adapters/tabular.py` and the direct constructor's data-dependent validation into `sdm-core::tabular` and `sdm-request::tabular`, reusing wire/result primitives.
+- Support direct context/predict frames and single-table PQL via both indices and supplied predict rows, including task derivation/overrides, model/profile constraints, schema widening across both halves, identity mapping and empty scoring.
+- Preserve holdout/leakage behavior, remove rows with unknown targets before sampling, implement the 10,000-context-row limit and warning, and implement RS-5's fixed-seed sample followed by the supplied native index order.
+- Lift `model` at the real model-selection/preflight boundary and test both `KumoTabular()` and `model='kumo-tabular'`; relational gathered payloads passed to the tabular model retain their existing diagnostic.
+- Compare payloads and results with the reference for classification/regression, one/two/many classes, all-null versus typed predict columns, exact/wide numeric targets, context limits, duplicate/non-default indexes, and missing/incompatible features.
+- Dependencies: T4.1 and T4.2; its prepared-request/session layout feeds T4.7.
+
+### T4.7 – Fit, fitted prediction and close
+
+- Implement the typed lifecycle in `sdm-core::session` and request pin/scoring layout in `sdm-request::session`, with `_rust/sessions.py` translating objects and dispatching existing transport methods.
+- Cover relational contexts materialized on all existing providers, semantic views and frames, plus tabular sessions; reuse one-shot request validation and response decoding.
+- Preserve `client.py`'s observed behavior: context-only fit, holdout exclusion across temporal anchors, pinned-question checks, pinned dtype conversion, scoring-leak warnings, empty prediction, batched numbering, missing session ids and unsupported endpoints.
+- Keep existing refusals for rewritten/multi-question requests unless the reference supports the exact journey; a session pins one context and must not silently collapse ranking or forecasting decomposition into it.
+- Close becomes final only after successful deletion, remains retryable after a failed deletion, and is idempotent after success.
+  Python context managers preserve an already active exception and client close handles outstanding fitted objects as today.
+- Test create/predict/delete wire calls with a scripted endpoint, failed creation/deletion, repeated close, closed prediction, context-manager exceptions, concurrent separate handles, cancellation/late replies, native-buffer release, and state-version mismatch.
+- Dependencies: T4.4, T4.5 where link sessions are reference-supported, and T4.6; warehouse-session live evidence is part of T4.8, not silently postponed to Phase 5.
+
+### T4.8 – S3 integration, reference evidence and switch
+
+- Complete all remaining S3 manifest paths through connector reads, result inspection/merge and reference-pickle compatibility; verify frame/file reads never invoke the old engine after routing to the core.
+- Update `_routing.py` once for the complete S3 scope, retaining the test-only routing seam until Phase 5 and preserving S0/S1/S2 defaults.
+- Remove the three enabled not-yet rules and their temporary refusal expectations/census bounds together; reconcile register entries with observed answers rather than merely deleting refusal tests.
+- Run the slice and switch acceptance on the final reviewed candidate: Python and rust-host cases, existing Java regressions, generated/differential and refusal coverage, real-data/held-out evidence, memory and native-lifetime checks, plus the applicable live gates.
+- Record bounded frame versus SQL comparisons on real AdventureWorks/RelBench data for ranking, forecasting and link labels, including the resolved ordering policy; performance claims use real data rather than generated accuracy tasks.
+- Include CSV/Parquet and S3 read → schema → materialize → predict, warehouse/view fit → fitted predict → close, tabular one-shot/session calls on an endpoint serving that model, and link calls on a supporting endpoint.
+- Keep the existing slice/switch requirements for live L6, the Databricks matrix and applicable L7 timing; reuse Phase 3 evidence only when the accepted gate permits it and the relevant code/data identity is unchanged.
+  No new live-resource permissions, gate relaxation or reuse policy is assumed by this draft.
+- Dependencies: all prior packages and any owner decisions needed for proposed changed model inputs; phase-end full CI and the owner's merge decision remain separate from package checks.
+
+The dependency spine is T4.1 → T4.2/T4.3 → T4.4, with T4.5 on the shared contract and T4.6 on frame conversion; those journeys converge at T4.7 and T4.8.
+Run complete user journeys early on Python and rust-host so the final switch does not become the first integration of conversion, sampling, wire encoding or session state.
+
+## Decisive risks and owner choices
+
+1. **Make SQL/frame ordering explicit without changing the model's context accidentally.**
+   F2 and ORD-2/ORD-3 explicitly defer this settlement to Phase 4.
+   The historical register describes frame null times as retained, but the current reference's `local/graph_store.py::sanitize` builds a mask excluding null keys, duplicate keys and null times before traversal.
+   T4.4 must reproduce the public journey and trace where that mask is applied before proposing final rules.
+   Default and recommendation: keep each path's measured reference policies explicit in core-owned request/sampling rules, including order-sensitive float32 reductions.
+   Record that compatibility settlement for F2 rather than making broad unification a prerequisite; propose unification to the owner only with a concrete measured benefit and examples of changed selected rows, labels or model inputs.
+   Do not silently extend ORD-3's numerical allowance to arbitrary frame differences or copy its tolerance into a new comparator.
+2. **Choose the text-order promise for external-provider fallback.**
+   PostgreSQL locale collation and Arrow's byte order can choose different neighbors at a limit; Python-native frame ordering does not establish PostgreSQL equivalence.
+   Recommendation: support frame ordering from its defined data/facts, and restrict external fallback when it cannot honor the provider's ordering, with a named refusal and exact trigger proposed to the owner if it removes reference support.
+   Shipping a locale approximation or changing PostgreSQL pushdown order requires a separate owner decision.
+3. **Text-time support has an existing boundary, not an invitation to emulate pandas.**
+   Implement the accepted formats and client whole-column decisions under E66(h), DT-15 and DT-16, while reconciling PK-7's older wording against the current `core/dates.py` and recorded reference.
+   Inputs inside those documented formats that change reading still need owner approval; documented out-of-format refusals already have it.
+   Removing `text_time_rules` must demonstrate actual successful frame time and timestamp-feature predictions, not rename the refusal.
+4. **Live tabular/session support is a resource prerequisite.**
+   Phase 3's warm relational-v26 endpoint and Databricks serving transport are not evidence that tabular or session endpoints are available; Databricks serving explicitly has a one-shot sessions refusal today.
+   Identify usable endpoints and permissions before T4.8's campaign and retain the existing unsupported-session diagnostics where the transport does not serve them.
+   The historical suggestions to drop warehouse-session live tests or defer tabular were never authorization to shrink Phase 4.
+
+Only a concrete proposed user-visible change or missing live-resource authorization needs owner input.
+Module names, use of existing Arrow kernels, package scheduling and precise contract serialization are reviewable engineering decisions within the stated scope.
+No new owner decision is required to draft or independently review this plan.
+
+## Exit conditions
+
+- Every S3 inventory path is linked to a passing public case or an already approved explicit refusal, with Python and rust-host agreeing on the same typed inputs and scripted/captured model replies.
+- `model`, `text_time_rules` and foreign-key `LIST_DISTINCT` each have successful reference-equivalent end-to-end answers, their temporary refusal rules are gone, and their census/register expectations match measured behavior.
+- P2-T2.5-1/2/3 and FX-3 each have a verified outcome or an owner-approved precise behavioral decision, with no silent transfer truncation, collation approximation or offset narrowing.
+- Sessions pin context once, send only scoring rows thereafter, preserve question/schema/identity meaning, and release resources with the documented success/failure behavior.
+- Default S3 calls perform core-owned semantics without importing the old relational engine or Python PQL runtime; native conversion, I/O, object behavior and presentation remain in their hosts.
+- Package checks follow two exact-SHA independent approvals; nightly and phase-end full checks remain distinct, and both repository Python suites run separately as required by `CONTRIBUTING.md`.
+- The final slice/switch gates and whole-phase review pass on the final reconciled candidate, with no unresolved P0/P1 and all other findings assigned or explicitly declined.
+  Phase 3 completes independently, and only the owner authorizes the later phase merge into `rust-core`.
