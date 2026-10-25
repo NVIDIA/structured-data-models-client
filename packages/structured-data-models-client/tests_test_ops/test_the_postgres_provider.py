@@ -165,6 +165,70 @@ def _fetch(request: dict[str, Any]) -> dict[str, Any]:
     return {'request': request, 'provider': POSTGRES, 'echo': True}
 
 
+def test_public_window_sums_keep_postgres_chronological_order(
+    server: Server | None,
+) -> None:
+    import pandas as pd
+    from sdm_connectors import PostgresSource
+
+    from sdm_client import PredictiveQuery, Relationship, Schema
+
+    if server is None:
+        pytest.fail('needs the local Postgres test service')
+    connection = server.database(
+        [
+            "CREATE TABLE e AS SELECT 'e' || i AS id FROM range(200) t(i)",
+            'CREATE TABLE a AS SELECT i::BIGINT AS aid, '
+            "'e' || (i % 40) AS e_ref, ((i % 17) * 0.1)::FLOAT AS f, "
+            "TIMESTAMP '2023-11-20' + "
+            'to_seconds(((i // 2) * 25200)::BIGINT) AS ts '
+            'FROM range(400) t(i)',
+        ]
+    )
+    try:
+        # An unordered hash join reverses these windows on PostgreSQL 17.
+        # The public result must not depend on the chosen join strategy.
+        connection.execute('SET enable_nestloop = off')
+        connection.execute('SET enable_mergejoin = off')
+        schema = Schema.from_source(
+            PostgresSource(connection, schema='public'),
+            primary_keys={'e': 'id', 'a': 'aid'},
+            time_columns={'a': 'ts'},
+            relationships=[
+                Relationship(
+                    source_table='a',
+                    source_column='e_ref',
+                    target_table='e',
+                    target_column='id',
+                )
+            ],
+        )
+        with pytest.warns(UserWarning):
+            request = PredictiveQuery(
+                'PREDICT SUM(a.f, 0, 2, months) FOR EACH e.id', schema
+            ).materialize(
+                indices=['e0', 'e1'],
+                anchor_time=pd.Timestamp('2024-01-31'),
+                num_context_samples=1500,
+                prediction_statistic='median',
+            )
+        context = request._payloads[0]['context']['instance_table']
+        key = context['columns'].index('__kumo_entity_ref_0')
+        target = context['columns'].index('TARGET')
+        values = {row[key]: row[target] for row in context['rows']}
+        assert len(context['rows']) == len(values) == 200
+        # Exact targets recorded from the frozen Python reference's
+        # chronological float32 Kahan sums, without a numeric tolerance.
+        assert {name: values[name] for name in ('e13', 'e18', 'e1', 'e15')} == {
+            'e13': 7.899999618530273,
+            'e18': 6.799999713897705,
+            'e1': 6.799999713897705,
+            'e15': 6.099999904632568,
+        }
+    finally:
+        connection.close()
+
+
 def _table(finished: Any) -> pa.Table:
     stream = finished.take(finished.result['data'])
     return pa.RecordBatchReader._import_from_c_capsule(
