@@ -2645,6 +2645,11 @@ jobs:
         with:
           name: java-jar
           path: jar
+          # The pinned action's REST client retries failed network requests
+          # up to five times, without retrying the Java steps below.
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ github.run_id }}
       - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
