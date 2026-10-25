@@ -125,7 +125,7 @@ fn the_shared_codec_preserves_the_call_and_the_recorded_reference_logical_payloa
         sdm_wire::json::read(call.as_bytes()).unwrap()
     );
     assert!(!wrapped.is_ascii());
-    // Members in order, a name past ASCII escaped too, an integer past
+    // Members in order, a Unicode name retained as UTF-8, an integer past
     // every fixed width as its digits.
     let call = r#"{"kü":null,"t":true,"f":false,"n":-12345678901234567890123}"#;
     let reference = r#"{"dataframe_records":[{"request_json":"{\"k\\u00fc\":null,\"t\":true,\"f\":false,\"n\":-12345678901234567890123}"}]}"#;

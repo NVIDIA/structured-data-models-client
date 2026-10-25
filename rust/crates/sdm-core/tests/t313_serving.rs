@@ -304,8 +304,8 @@ fn each_call_is_wrapped_as_the_endpoint_reads_it_and_answered_from_its_row() {
     };
     let (end, bodies) = drive(&mut run, None, &failure);
     // The same calls the client's own endpoint is sent, each as the one
-    // `request_json` row of its envelope, every character past ASCII
-    // escaped as Python's writer escapes it.
+    // `request_json` row of its envelope. The shared wire codec retains
+    // Unicode as UTF-8 while preserving the complete logical payload.
     let mut plain = predict(calls, None);
     let mut sent = Vec::new();
     while let Ok(Step::CallModel(call)) = plain.next() {
@@ -328,10 +328,10 @@ fn each_call_is_wrapped_as_the_endpoint_reads_it_and_answered_from_its_row() {
     }
     assert_eq!(bodies.len(), 2);
     for (body, plain) in bodies.iter().zip(&sent) {
-        assert!(body.is_ascii());
+        assert!(!body.is_ascii());
         let text = String::from_utf8(body.clone()).unwrap();
         assert!(text.starts_with(r#"{"dataframe_records":[{"request_json":"{\"model\":"#));
-        assert!(text.contains(r#"Zo\\u00eb \\\"\\u00d8\\\""#), "{text}");
+        assert!(text.contains("Zoë") && text.contains('Ø'), "{text}");
         assert_eq!(&unwrapped(body), plain);
     }
     // The answers read as the client's own endpoint's are.
