@@ -392,7 +392,15 @@ def test_unfinished_native_families_are_not_forced_through_numeric_constructor(
 
 @pytest.mark.parametrize(
     'argument',
-    ['tables', 'frame', 'keys', 'key_value', 'times', 'relationships'],
+    [
+        'tables',
+        'frame',
+        'keys',
+        'key_value',
+        'times',
+        'relationships',
+        'nested_relationship',
+    ],
 )
 def test_development_constructor_does_not_traverse_custom_argument_hooks(
     monkeypatch, argument
@@ -412,6 +420,9 @@ def test_development_constructor_does_not_traverse_custom_argument_hooks(
         def __iter__(self):
             raise AssertionError('unproved key hook ran')
 
+        def __repr__(self):
+            raise AssertionError('unproved nested repr hook ran')
+
     frames = {'users': users()}
     options = {}
     if argument == 'tables':
@@ -424,6 +435,8 @@ def test_development_constructor_does_not_traverse_custom_argument_hooks(
         options['primary_keys'] = {'users': CustomKey()}
     elif argument == 'times':
         options['time_columns'] = CustomDict(users=None)
+    elif argument == 'nested_relationship':
+        options['relationships'] = [{'nested': CustomKey()}]
     else:
         options['relationships'] = CustomKey()
     monkeypatch.setenv('SDM_CORE_ROUTES', PATHS)
