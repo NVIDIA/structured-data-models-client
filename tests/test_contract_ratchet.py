@@ -400,8 +400,8 @@ def test_the_gate_fixture_keeps_real_coverage_inputs_across_capture_layouts(
         capture = json.loads(path.read_text())
         original_line = copy.deepcopy(capture['reference'])
 
-        def read_original(name: str) -> bytes:
-            blob = (path.parent / name).relative_to(ROOT)
+        def read_original(name: str, base: Path = path.parent) -> bytes:
+            blob = (base / name).relative_to(ROOT)
             expected_blobs.add(blob)
             return (ROOT / blob).read_bytes()
 
@@ -410,7 +410,7 @@ def test_the_gate_fixture_keeps_real_coverage_inputs_across_capture_layouts(
         coverage.row_schemas(
             capture,
             projected_line,
-            lambda name: (source / relative.parent / name).read_bytes(),
+            lambda name, base=source / relative.parent: (base / name).read_bytes(),
         )
         assert projected_line == original_line
     assert expected_blobs
