@@ -27,14 +27,14 @@
       "holds": "Sentence::UnsupportedType,",
       "why": "DuckDB's INTERVAL (month_day_nano_interval) refused by name in place of the reference's unnamed RuntimeError: register P1B-8, proposed, which T1.32e resolves when it admits time.feature-interval. The probe without the column reaches predict's result on both runners",
       "observed": {
-        "python-core": {
-          "stage": "from_source",
-          "error": "StructuredDataError",
+        "rust-host": {
           "code": "UNSUPPORTED_TYPE",
           "operation": null,
           "rule": null
         },
-        "rust-host": {
+        "python-core": {
+          "stage": "from_source",
+          "error": "StructuredDataError",
           "code": "UNSUPPORTED_TYPE",
           "operation": null,
           "rule": null
@@ -47,18 +47,18 @@
       "rule": "PROVIDER_ERROR: the time bounds' CAST of text the source cannot read as a timestamp",
       "owner": "T1.32e",
       "register": "DT-12",
-      "where": "rust/crates/sdm-data/src/duckdb.rs:347",
+      "where": "rust/crates/sdm-data/src/duckdb.rs:353-355",
       "holds": "format!(\"CAST({value} AS TIMESTAMP)\")",
       "why": "Text read as dates by inference (US dates; ISO dates with one unreadable value) that DuckDB's CAST in the time bounds cannot read: the reference's same statement fails and its client reports INTERNAL_ERROR, the core's provider error is PROVIDER_ERROR, a code proposed in register DT-12, which T1.32e settles when it admits the cases",
       "observed": {
-        "python-core": {
-          "stage": "materialize",
-          "error": "StructuredDataError",
+        "rust-host": {
           "code": "PROVIDER_ERROR",
           "operation": null,
           "rule": null
         },
-        "rust-host": {
+        "python-core": {
+          "stage": "materialize",
+          "error": "StructuredDataError",
           "code": "PROVIDER_ERROR",
           "operation": null,
           "rule": null
