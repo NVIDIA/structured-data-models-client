@@ -897,9 +897,10 @@ fn times_ns_from(
 /// It also keeps, for a provider whose source compares a window's bounds
 /// with its stored text (`DataLayer::compares_stored_times`, SQLite's),
 /// one stored value of each windowed table's time column, read once before
-/// that table's first windowed read and kept in the sampler's memo across
-/// the materializer's runs (decision E52), as the reference's SQLite
-/// sampler reads one per table and keeps it (`_time_spelling`), and names
+/// that table's first windowed read and kept in the sampler's memo.
+/// A fresh SQL source read expires it under plan B; host providers keep
+/// it across the materializer's runs (decision E52). The stored value is
+/// the reference SQLite sampler's `_time_spelling`, named
 /// it on each window bound's seed column ([`SEED_STORED_TIME`]) for the
 /// data layer to spell the bound by.
 pub(crate) struct Times {
@@ -911,8 +912,8 @@ pub(crate) struct Times {
 }
 
 impl Times {
-    /// The reading of a run's times, holding the stored values `memo` kept
-    /// from the materializer's earlier runs.
+    /// The reading of a run's times, holding the memo's stored values
+    /// after the source refresh policy has expired any stale data facts.
     pub(crate) fn new(reader: Reader, text: Option<TextTimes>, memo: &SamplerMemo) -> Self {
         Times {
             reader,
@@ -1546,7 +1547,8 @@ impl Memo<'_> {
 }
 
 /// The stored time values `times` read, kept in the memo the run leaves
-/// where they are new, so the materializer's next run reads none again.
+/// where they are new. A SQL source refresh expires them at the next run;
+/// a host provider keeps its E52 lifetime.
 fn keep_stored_times(memo: &mut Memo<'_>, times: &Times) {
     let stored = times.stored_times();
     if stored != memo.memo.stored_times {
@@ -1561,7 +1563,8 @@ fn keep_stored_times(memo: &mut Memo<'_>, times: &Times) {
 /// time counting as `pd.Timestamp.max` and `min`): each as the memo holds
 /// it, read by a run of this materializer before, as the reference's
 /// sampler reads them once and keeps them; the others read, in one
-/// request, and kept.
+/// request, and kept. A fresh SQL source read expires earlier bounds, so
+/// the memo reuses them only within that run; host providers retain E52.
 async fn time_bounds(
     memo: &mut Memo<'_>,
     times: &Times,
@@ -1719,7 +1722,8 @@ fn sampling_capabilities(asker: &Asker) -> Result<NullOrder, CoreError> {
 /// `neighbor_lookback`; contract v28), as the reference's warehouse
 /// samplers count every table of the graph, in its order, as they are
 /// built (`num_rows_dict`); kept in the memo, so a later run counts none
-/// again. A provider declaring neither is asked nothing.
+/// again unless the run refreshes its SQL source (plan B), which expires
+/// source-data facts. A provider declaring neither is asked nothing.
 async fn table_rows(memo: &mut Memo<'_>, graph: &Graph) -> Result<(), CoreError> {
     let capabilities = memo.asker.capabilities()?;
     if !(capabilities.sample_rows || capabilities.neighbor_lookback) {
@@ -2999,7 +3003,24 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // path, every check over what the source holds comes after: the
     // engine's meanings, time columns and edges ([`kept_checks`]), the
     // graph and what the sampler needs.
+    let fresh_sql_source = asker.located().is_none()
+        && asker
+            .data()
+            .is_some_and(crate::compose::DataAccess::reads_a_source);
     if let Some(located) = crate::describe::initialize(asker, pending.as_ref(), &facts).await? {
+        // Plan B reads current SQL rows and view definitions. Neither the
+        // held schema's fingerprint nor a matching fresh preview proves
+        // that their bounds, counts or stored time spelling are unchanged.
+        // Expire only data facts, once at the fresh source boundary: E52's
+        // index/warning lifetime and reuse within this run remain intact.
+        // Host providers that do not refresh a SQL source retain E52's
+        // cross-run data memo as well.
+        if fresh_sql_source {
+            memo.memo.bounds.clear();
+            memo.memo.rows.clear();
+            memo.memo.stored_times.clear();
+            memo.keep();
+        }
         description = located;
         sdm_schema::assemble::mark_keys(&mut description);
     }
