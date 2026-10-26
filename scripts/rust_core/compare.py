@@ -3080,6 +3080,17 @@ SAMPLED_KEEPS = ('outcome', 'route', 'inputs', 'reach', 'schema', 'warnings')
 _SAMPLES = re.compile(r'\bSAMPLE\b', re.IGNORECASE)
 
 
+def _sampled_rows(statement: dict[str, Any]) -> list[int] | None:
+    r"""The successful sample read's recorded, nonnegative row counts."""
+    results = statement.get('results')
+    if statement.get('error') is not None or not results:
+        return None
+    counts = [result.get('rows') for result in results]
+    if any(type(count) is not int or count < 0 for count in counts):
+        return None
+    return counts
+
+
 def sampled_judgment(
     report: Report,
     since: int,
@@ -3093,9 +3104,12 @@ def sampled_judgment(
     failures since ``since`` under any rule but :data:`SAMPLED_KEEPS` (and
     those naming no rule) are reported, since an unseeded sample draws other
     rows each run; then each runner is held to the reference on the
-    sampling statement (at ``sample``'s stage and position, a statement that
-    samples and reads as many rows as the reference's, ``sql.result``) and
-    on the public result's row count (``result``)."""
+    sampling statement (at ``sample``'s reference stage and position,
+    matched uniquely within that stage by its exact SQL, outer whitespace
+    aside, and typed parameters, ``sql.result``) and its read and public
+    result row counts (``sql.result`` and ``result``).
+    Complete captures still gate, including freshness reads before the
+    sample, whose physical position may differ (H9)."""
     kept = [
         (rule, text)
         for rule, text in report.failures[since:]
@@ -3107,46 +3121,70 @@ def sampled_judgment(
     del report.failures[since:]
     report.failures.extend(kept)
     if reference is None:
+        report.fail(f'{key}: no python-ref sampling record', 'sql.result')
+        return
+    if not _complete(report, f'{key}: python-ref (sampled)', reference):
         return
     stage, position = sample['stage'], sample['statement']
     theirs = (_by_stage(reference) or {}).get(stage, [])
     wanted = theirs[position] if position < len(theirs) else None
-    if wanted is None or not _SAMPLES.search(wanted['sql']):
+    if (
+        wanted is None
+        or not _SAMPLES.search(wanted['sql'])
+        or _sampled_rows(wanted) is None
+    ):
         report.fail(
             f'{key}: python-ref: {stage} statement {position} is no sampling '
-            'statement, as the policy names it',
+            'statement with successful row counts, as the policy names it',
             'sql.result',
         )
         return
     for who, observation in sorted(observed.items()):
         where = f'{key}: {who} against python-ref (sampled)'
-        grouped = _by_stage(observation)
-        if grouped is not None:
-            ours = grouped.get(stage, [])
-            mine = ours[position] if position < len(ours) else None
-            if mine is None or not _SAMPLES.search(mine['sql']):
-                report.fail(
-                    f'{where}: {stage} statement {position} does not sample',
-                    'sql.result',
-                )
-            elif [r.get('rows') for r in mine['results']] != [
-                r.get('rows') for r in wanted['results']
-            ]:
-                report.fail(
-                    f'{where}: {stage} statement {position} reads '
-                    f'{[r.get("rows") for r in mine["results"]]} rows, against '
-                    f'{[r.get("rows") for r in wanted["results"]]}',
-                    'sql.result',
-                )
+        if not _complete(report, where, observation):
+            continue
+        ours = (_by_stage(observation) or {}).get(stage, [])
+        matches = [
+            statement
+            for statement in ours
+            if statement['sql'].strip() == wanted['sql'].strip()
+            and statement['parameters'] == wanted['parameters']
+        ]
+        if len(matches) != 1:
+            report.fail(
+                f'{where}: {stage}: {len(matches)} statements match the '
+                'reference sampling SQL and typed parameters; need one',
+                'sql.result',
+            )
+        elif _sampled_rows(matches[0]) != _sampled_rows(wanted):
+            report.fail(
+                f'{where}: {stage} sampling statement reads '
+                f'{_sampled_rows(matches[0])} rows, against '
+                f'{_sampled_rows(wanted)}',
+                'sql.result',
+            )
         mine_result = (observation.get('public') or {}).get('result')
         theirs_result = (reference.get('public') or {}).get('result')
-        if isinstance(mine_result, dict) and isinstance(theirs_result, dict):
-            if mine_result.get('rows') != theirs_result.get('rows'):
-                report.fail(
-                    f'{where}: public.result: {mine_result.get("rows")} rows, '
-                    f'against {theirs_result.get("rows")}',
-                    'result',
-                )
+        mine_rows = (
+            mine_result.get('rows') if isinstance(mine_result, dict) else None
+        )
+        their_rows = (
+            theirs_result.get('rows')
+            if isinstance(theirs_result, dict)
+            else None
+        )
+        if (
+            type(mine_rows) is not int
+            or type(their_rows) is not int
+            or mine_rows < 0
+            or their_rows < 0
+            or mine_rows != their_rows
+        ):
+            report.fail(
+                f'{where}: public.result: {mine_rows} rows, '
+                f'against {their_rows}; need matching nonnegative counts',
+                'result',
+            )
 
 
 def compare(
