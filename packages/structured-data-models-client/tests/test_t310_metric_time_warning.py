@@ -67,7 +67,7 @@ class _MetricProvider:
             count = len(request['keys'])
             return pa.table(
                 {
-                    'k': list(range(count)),
+                    'k': pa.array(range(count), pa.int32()),
                     'n': [3] * count,
                     'd': [3] * count,
                     'z': [0] * count,

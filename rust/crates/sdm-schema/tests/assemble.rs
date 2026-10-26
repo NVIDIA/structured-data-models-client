@@ -1055,6 +1055,8 @@ fn every_warning_given_is_listed_and_every_listed_one_is_given() {
     );
     let mut given = Vec::new();
     for made in [
+        made_of(vec![converted_date(&["month"]), users()], vec![]),
+        made_of(vec![converted_date(&["month", "day"]), users()], vec![]),
         made_of(vec![refused.clone(), earliest, plans(), users()], vec![]),
         made_of(vec![unchecked, users()], vec![]),
         made_of(
