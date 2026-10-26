@@ -1160,7 +1160,7 @@ def test_ci4_the_token_goes_only_to_ghcr_io(
                             'run-id': '${{ github.run_id }}',
                         },
                     }, (name, step)
-                    assert workflow['permissions']['actions'] == 'read'
+                    assert workflow['permissions'].get('actions') == 'read'
                     artifact_downloads += 1
                 assert not re.search(TOKEN, str(step.get('run'))), (name, step)
                 for key, value in (step.get('env') or {}).items():
