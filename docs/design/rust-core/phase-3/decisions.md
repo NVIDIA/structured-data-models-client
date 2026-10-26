@@ -153,7 +153,7 @@ This row records that prior approval for the policy checkpoint; it does not crea
 
 | # | Decision | Owner's words | Status |
 |---|---|---|---|
-| KO3-63 | In compare-policy.yaml, activate only the previously approved `snowflake.sampled.entity-table` sampling comparison; keep sampling product behavior unchanged; no multicall or Databricks extension. | "Ok let's do C, no product change. That loosens the comparison which is ok." | approved by owner 2026-10-22 |
+| KO3-63 | In `compare-policy.yaml`, activate only the previously approved `snowflake.sampled.entity-table` sampling comparison; keep sampling product behavior unchanged; no multicall or Databricks extension. | "Ok let's do C, no product change. That loosens the comparison which is ok." | approved by owner 2026-10-22 |
 
 ## View conversion answers (2026-10-24)
 
