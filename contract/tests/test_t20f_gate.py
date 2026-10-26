@@ -764,11 +764,15 @@ def database_keys(
             path.write_text(
                 ''.join(json.dumps(x) + '\n' for x in lines if x['case'] == X)
             )
-        # The private checkpoint needs no transitions for unrelated cases.
+        # Keep a real task-only entry to satisfy the register's nonempty
+        # schema without importing transitions for unrelated corpus cases.
         register = tree / 'docs/design/rust-core/register.yaml'
-        register.write_text(
-            yaml.safe_dump({'format': 'sdm-register/2', 'entries': []})
-        )
+        entries = yaml.safe_load(register.read_text())
+        entries['entries'] = [
+            entry for entry in entries['entries'] if entry['id'] == 'PK-1'
+        ]
+        assert len(entries['entries']) == 1
+        register.write_text(yaml.safe_dump(entries))
         policy = tree / 'contract/compare-policy.yaml'
         rules = yaml.safe_load(policy.read_text())
         for selector in ('reach', 'ordered', 'sampled'):
