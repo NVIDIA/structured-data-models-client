@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import copy
 import json
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -19,6 +20,7 @@ from sdm_client import (
     PredictiveQuery,
     Schema,
     SDMClient,
+    SDMWarning,
     StructuredDataError,
 )
 from sdm_client.materializers.relational import RelationalMaterializer
@@ -265,6 +267,98 @@ def test_unknown_first_entity_still_keeps_the_successfully_built_snapshot(core):
     assert resumed.predict.related_tables['orders']['amount'].tolist() == [
         marker + 1 for marker in REFERENCE['unseeded_markers'][0]
     ]
+
+
+@pytest.mark.parametrize('failure', ['negative_seed', 'empty_indices'])
+def test_resumed_early_failure_preserves_snapshot_and_continuation(
+    core, failure
+):
+    frames = shop()
+    question = query(frames)
+    assert (
+        markers(materialize(question, seed=None))
+        == REFERENCE['unseeded_markers'][0]
+    )
+    frames['orders']['amount'] = np.full(
+        len(frames['orders']), 999, dtype=np.float32
+    )
+    with pytest.raises(StructuredDataError):
+        if failure == 'negative_seed':
+            materialize(question, seed=-1)
+        else:
+            materialize(question, seed=None, indices=[])
+    resumed = materialize(question, seed=None)
+    assert markers(resumed) == REFERENCE['unseeded_markers'][1]
+    assert resumed.predict.related_tables['orders']['amount'].tolist() == [
+        marker + 1 for marker in REFERENCE['unseeded_markers'][1]
+    ]
+
+
+def unsanitized_question():
+    frames = shop()
+    question = query(frames)
+    frames['orders']['order_id'] = frames['orders']['order_id'].astype('Int64')
+    frames['orders'].loc[1, 'order_id'] = 0
+    frames['orders'].loc[2, 'order_id'] = pd.NA
+    return question, frames
+
+
+def test_sanitization_notice_retains_counts_reasons_and_cached_snapshot(core):
+    question, frames = unsanitized_question()
+    for _ in range(2):
+        with pytest.warns(
+            SDMWarning, match='the graph was built without'
+        ) as caught:
+            materialize(question)
+        notices = [
+            str(w.message)
+            for w in caught
+            if 'the graph was built without' in str(w.message)
+        ]
+        assert len(notices) == 1
+        assert (
+            '[orders: 2 of 76 rows dropped (1 with no primary key, 1 with a repeated primary key)]'
+            in notices[0]
+        )
+        frames['orders']['order_id'] = np.arange(len(frames['orders']))
+
+
+def test_sanitization_warning_as_error_retains_snapshot_before_any_draw(core):
+    question, frames = unsanitized_question()
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            'error', message='the graph was built without', category=SDMWarning
+        )
+        with pytest.raises(SDMWarning, match='the graph was built without'):
+            materialize(question, seed=None)
+    frames['orders']['amount'] = np.full(
+        len(frames['orders']), 999, dtype=np.float32
+    )
+    with pytest.warns(SDMWarning, match='the graph was built without'):
+        resumed = materialize(question, seed=None)
+    assert markers(resumed) == REFERENCE['unseeded_markers'][0]
+    assert resumed.predict.related_tables['orders']['amount'].tolist() == [
+        marker + 1 for marker in REFERENCE['unseeded_markers'][0]
+    ]
+
+
+def test_opt_in_numeric_consumer_declines_boolean_primary_keys_before_caching(
+    monkeypatch,
+):
+    monkeypatch.setenv('SDM_CORE_ROUTES', CORE)
+    frames = {
+        'users': pd.DataFrame({'user_id': [False, True], 'age': [21, 22]})
+    }
+    question = PredictiveQuery(
+        'PREDICT users.age FOR EACH users.user_id',
+        Schema.from_data(
+            frames, primary_keys={'users': 'user_id'}, time_columns={}
+        ),
+    )
+    with pytest.raises(StructuredDataError) as failed:
+        materialize(question, indices=[True])
+    assert failed.value.code == 'UNSUPPORTED_REQUEST'
+    assert failed.value.fields['rule'] == 'frame_boolean_key'
 
 
 @pytest.mark.parametrize('aggregation', ['COUNT', 'SUM'])
