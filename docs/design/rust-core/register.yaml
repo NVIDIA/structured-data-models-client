@@ -2847,7 +2847,12 @@ entries:
     PredictiveQuery.materialize with indices over a DuckDB source under a
     forced core route past the entity count, the context size or the hops
     the endpoint takes.
-  cases: [T1.28a, sample.num-hops.seven, sample.num-neighbors.seven-hops]
+  cases:
+  - T1.28a
+  - sample.num-hops.seven
+  - sample.num-neighbors.seven-hops
+  - sample.num-hops.seven@lakebase
+  - sample.num-neighbors.seven-hops@lakebase
   status: approved
   approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E78}
@@ -2863,6 +2868,9 @@ entries:
     T2.11 names its two hop-bound cases here: the same refusal of more
     than six hops, num_hops=7 and seven num_neighbors sizes, its class
     name the only difference.
+    From T3.10 the listed Lakebase Python lines use this same approved
+    Postgres-source behavior; Lakebase uses the Postgres provider and
+    shares the existing case inputs, without a new comparison exclusion.
   case_outcomes:
   - {case: sample.num-hops.seven, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'more than six hops refused as UnsupportedRequestError, a subclass of the reference''s class'}
   - {case: sample.num-hops.seven@sqlite, cell: ref-pandas3, runner: python-core, old: 'refusal UNSUPPORTED_REQUEST at materialize (StructuredDataError)', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'more than six hops refused as UnsupportedRequestError, a subclass of the reference''s class'}
@@ -2872,6 +2880,8 @@ entries:
   - {case: sample.num-neighbors.seven-hops@postgres, cell: ref-pandas3, runner: python-core, old: 'refusal UNSUPPORTED_REQUEST at materialize (StructuredDataError)', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'more than six hops refused as UnsupportedRequestError, a subclass of the reference''s class'}
 
 
+  - {case: sample.num-hops.seven@lakebase, cell: ref-pandas3, runner: python-core, old: 'refusal UNSUPPORTED_REQUEST at materialize (StructuredDataError)', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'more than six hops refused as UnsupportedRequestError, a subclass of the reference''s class'}
+  - {case: sample.num-neighbors.seven-hops@lakebase, cell: ref-pandas3, runner: python-core, old: 'refusal UNSUPPORTED_REQUEST at materialize (StructuredDataError)', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'more than six hops refused as UnsupportedRequestError, a subclass of the reference''s class'}
 - id: P1B-21
   title: AVG, MIN or MAX compared with NULL is refused by name only where the reference fails INTERNAL_ERROR
   kind: change
@@ -6780,7 +6790,11 @@ entries:
     PredictiveQuery.materialize on the core route of a temporal query whose
     target is AVG, MIN or MAX over a window, or a comparison of one, with
     lag_timesteps of 1 or more.
-  cases: [lag.average-empty-windows, lag.condition-per-call]
+  cases:
+  - lag.average-empty-windows
+  - lag.condition-per-call
+  - lag.average-empty-windows@lakebase
+  - lag.condition-per-call@lakebase
   refs: ['packages/structured-data-models-relational-engine/src/sdm_relational_engine/rfm/rfm.py#KumoRelational.add_lagged_target', 'packages/structured-data-models-relational-engine/src/sdm_relational_engine/rfm/query/pandas_executor.py#PQueryPandasExecutor.execute_join']
   more_exact:
   - case: lag.average-empty-windows
@@ -6879,6 +6893,22 @@ entries:
     - 'core.predicted.calls/*/predict/instance_table/rows/*/3'
     - 'core.predicted.calls/*/predict/instance_table/rows/*/4'
     null_on_one_side: true
+  - case: lag.average-empty-windows@lakebase
+    runners: [python-core]
+    fields:
+    - 'public.payloads/*/2/context/instance_table/rows/*/4'
+    - 'public.payloads/*/2/context/instance_table/rows/*/5'
+    - 'public.payloads/*/2/predict/instance_table/rows/*/3'
+    - 'public.payloads/*/2/predict/instance_table/rows/*/4'
+    null_on_one_side: true
+  - case: lag.condition-per-call@lakebase
+    runners: [python-core]
+    fields:
+    - 'public.payloads/*/2/context/instance_table/rows/*/4'
+    - 'public.payloads/*/2/context/instance_table/rows/*/5'
+    - 'public.payloads/*/2/predict/instance_table/rows/*/3'
+    - 'public.payloads/*/2/predict/instance_table/rows/*/4'
+    null_on_one_side: true
   status: approved
   approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-70}
@@ -6906,6 +6936,9 @@ entries:
     and Postgres (runner java), which run the same core as rust-host and
     answer as it does: each rust-host row below has its java twin (the
     implementer's proposal, listed for the owner; T3.11's S0 precedent).
+    From T3.10 the listed Lakebase Python lines use this same approved
+    Postgres-source behavior; Lakebase uses the Postgres provider and
+    shares the existing case inputs, without a new comparison exclusion.
 # --- lane D entries (P2D-1..19) ---
 
 - id: P2D-1
@@ -7104,7 +7137,32 @@ entries:
     Schema.from_source, PredictiveQuery.materialize and SDMClient.predict on
     the core route over a DuckDB, SQLite or Postgres source with a column
     whose name holds a dot, a backtick, a line feed or a carriage return.
-  cases: [name.backtick-aggregation, name.backtick-entity, name.backtick-feature, name.backtick-filter, name.backtick-target, name.dot-aggregation, name.dot-entity, name.dot-feature, name.dot-filter, name.dot-target, name.line-break-aggregation, name.line-break-entity, name.line-break-feature, name.line-break-filter, name.line-break-target, rank.odd-column]
+  cases:
+  - name.backtick-aggregation
+  - name.backtick-entity
+  - name.backtick-feature
+  - name.backtick-filter
+  - name.backtick-target
+  - name.dot-aggregation
+  - name.dot-entity
+  - name.dot-feature
+  - name.dot-filter
+  - name.dot-target
+  - name.line-break-aggregation
+  - name.line-break-entity
+  - name.line-break-feature
+  - name.line-break-filter
+  - name.line-break-target
+  - rank.odd-column
+  - name.backtick-aggregation@lakebase
+  - name.backtick-entity@lakebase
+  - name.backtick-filter@lakebase
+  - name.backtick-target@lakebase
+  - name.dot-aggregation@lakebase
+  - name.dot-entity@lakebase
+  - name.dot-filter@lakebase
+  - name.dot-target@lakebase
+  - rank.odd-column@lakebase
   core_only_columns:
   - users.a.b
   - users.a`b
@@ -7142,6 +7200,9 @@ entries:
     and Postgres (runner java), which run the same core as rust-host and
     answer as it does: each rust-host row below has its java twin (the
     implementer's proposal, listed for the owner; T3.11's S0 precedent).
+    From T3.10 the listed Lakebase Python lines use this same approved
+    Postgres-source behavior; Lakebase uses the Postgres provider and
+    shares the existing case inputs, without a new comparison exclusion.
   case_outcomes:
   - {case: name.backtick-aggregation, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
   - {case: name.backtick-aggregation, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
@@ -7258,6 +7319,15 @@ entries:
   - {case: rank.odd-column@postgres, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'T2.10: a ranking over a key whose name holds a dot, which the reference leaves out, answered (KO2-36)'}
   - {case: rank.odd-column@postgres, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'success', statements_differ: [materialize], summary: 'T2.10: a ranking over a key whose name holds a dot, which the reference leaves out, answered (KO2-36)'}
 
+  - {case: name.backtick-aggregation@lakebase, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.backtick-entity@lakebase, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.backtick-target@lakebase, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.dot-aggregation@lakebase, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.dot-entity@lakebase, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.dot-target@lakebase, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.backtick-filter@lakebase, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'T2.10: a filter naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.dot-filter@lakebase, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'T2.10: a filter naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: rank.odd-column@lakebase, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'T2.10: a ranking over a key whose name holds a dot, which the reference leaves out, answered (KO2-36)'}
 - id: P2E-2
   title: A target filter on a column only the core names is refused by the core's not-yet rule target_filter, until T2.10
   kind: change
@@ -7386,7 +7456,11 @@ entries:
     Schema.from_source on the core route over a Postgres source a table of
     which declares a primary key or a foreign key of several columns, and
     every call after it.
-  cases: [rule.composite-key-declared, rule.composite-foreign-key-declared]
+  cases:
+  - rule.composite-key-declared
+  - rule.composite-foreign-key-declared
+  - rule.composite-foreign-key-declared@lakebase
+  - rule.composite-key-declared@lakebase
   refs:
   - P2C-11
   - E92
@@ -7415,6 +7489,9 @@ entries:
     and Postgres (runner java), which run the same core as rust-host and
     answer as it does: each rust-host row below has its java twin (the
     implementer's proposal, listed for the owner; T3.11's S0 precedent).
+    From T3.10 the listed Lakebase Python lines use this same approved
+    Postgres-source behavior; Lakebase uses the Postgres provider and
+    shares the existing case inputs, without a new comparison exclusion.
   case_outcomes:
   - {case: rule.composite-foreign-key-declared@postgres, cell: ref-pandas3, runner: python-core, old: 'refusal - at from_source (ValueError)', new: 'success at predict', statements_differ: [from_source], summary: 'the Postgres line: the catalog key of several columns read as no key, so from_source, materialize and predict answer'}
   - {case: rule.composite-foreign-key-declared@postgres, cell: ref-pandas3, runner: rust-host, old: 'refusal -', new: 'success', statements_differ: [from_source], summary: 'the Postgres line: the catalog key of several columns read as no key, so from_source, materialize and predict answer'}
@@ -7423,6 +7500,8 @@ entries:
   - {case: rule.composite-key-declared@postgres, cell: ref-pandas3, runner: rust-host, old: 'refusal -', new: 'success', statements_differ: [from_source], summary: 'the Postgres line: the catalog key of several columns read as no key, so from_source, materialize and predict answer'}
   - {case: rule.composite-key-declared@postgres, cell: ref-pandas3, runner: java, old: 'refusal -', new: 'success', statements_differ: [from_source], summary: 'the Postgres line: the catalog key of several columns read as no key, so from_source, materialize and predict answer'}
 
+  - {case: rule.composite-foreign-key-declared@lakebase, cell: ref-pandas3, runner: python-core, old: 'refusal - at from_source (ValueError)', new: 'success at predict', statements_differ: [from_source], summary: 'the Postgres line: the catalog key of several columns read as no key, so from_source, materialize and predict answer'}
+  - {case: rule.composite-key-declared@lakebase, cell: ref-pandas3, runner: python-core, old: 'refusal - at from_source (ValueError)', new: 'success at predict', statements_differ: [from_source], summary: 'the Postgres line: the catalog key of several columns read as no key, so from_source, materialize and predict answer'}
 - id: P2E-5
   title: A schema keyed by several columns is refused at materialize without the reference's read of the folded key, one statement fewer
   kind: change
@@ -7444,7 +7523,9 @@ entries:
   affected_inputs: >-
     materialize on the core route with a schema a table of which is keyed
     by several columns (given to Schema.from_source), on a SQL source.
-  cases: [rule.composite-key-given]
+  cases:
+  - rule.composite-key-given
+  - rule.composite-key-given@lakebase
   refs:
   - KO2-68
   - E92
@@ -7463,6 +7544,9 @@ entries:
     and Postgres (runner java), which run the same core as rust-host and
     answer as it does: each rust-host row below has its java twin (the
     implementer's proposal, listed for the owner; T3.11's S0 precedent).
+    From T3.10 the listed Lakebase Python lines use this same approved
+    Postgres-source behavior; Lakebase uses the Postgres provider and
+    shares the existing case inputs, without a new comparison exclusion.
   case_outcomes:
   - {case: rule.composite-key-given, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', statements_differ: [materialize], summary: "the DuckDB line: refused at materialize as the reference refuses it, without the reference's read of the folded key"}
   - {case: rule.composite-key-given, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'refusal INVALID_REQUEST', statements_differ: [materialize], summary: "the DuckDB line: refused at materialize as the reference refuses it, without the reference's read of the folded key"}
@@ -7474,6 +7558,7 @@ entries:
   - {case: rule.composite-key-given@sqlite, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'refusal INVALID_REQUEST', statements_differ: [materialize], summary: "the SQLite line: refused at materialize as the reference refuses it, without the reference's read of the folded key"}
   - {case: rule.composite-key-given@sqlite, cell: ref-pandas3, runner: java, old: 'refusal INVALID_REQUEST', new: 'refusal INVALID_REQUEST', statements_differ: [materialize], summary: "the SQLite line: refused at materialize as the reference refuses it, without the reference's read of the folded key"}
 
+  - {case: rule.composite-key-given@lakebase, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', statements_differ: [materialize], summary: "the Postgres line: refused at materialize as the reference refuses it, without the reference's read of the folded key"}
 - id: P2E-15
   title: A string constant's invalid escape warns as often as the query is read, twice on the core route where the reference warns five times
   kind: change
@@ -7693,7 +7778,9 @@ entries:
     PredictiveQuery.materialize on the core route of a target
     LIST_DISTINCT of a foreign key without RANK TOP, on DuckDB, SQLite and
     Postgres.
-  cases: [target.aggregation.list-distinct]
+  cases:
+  - target.aggregation.list-distinct
+  - target.aggregation.list-distinct@lakebase
   refs: [T2.10, E92, P1B-3]
   status: approved
   approved_by: owner
@@ -7709,6 +7796,9 @@ entries:
     call): the core refuses there, before the reference's later refusal
     at predict, so the reference's statements past materialize are no
     expectation of its own.
+    From T3.10 the listed Lakebase Python lines use this same approved
+    Postgres-source behavior; Lakebase uses the Postgres provider and
+    shares the existing case inputs, without a new comparison exclusion.
   case_outcomes:
   - {case: target.aggregation.list-distinct, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', statements_differ: [materialize], summary: 'T2.10: LIST_DISTINCT link prediction refused by name until Phase 4 (KO2-75)'}
   - {case: target.aggregation.list-distinct, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal UNSUPPORTED_REQUEST', statements_differ: [materialize], summary: 'T2.10: LIST_DISTINCT link prediction refused by name until Phase 4 (KO2-75)'}
@@ -7719,6 +7809,7 @@ entries:
 
 # --- lane E entries, Phase 3 (P3E-1..19) ---
 
+  - {case: target.aggregation.list-distinct@lakebase, cell: ref-pandas3, runner: python-core, old: 'refusal - at predict (NimRequestError)', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', statements_differ: [materialize], summary: 'T2.10: LIST_DISTINCT link prediction refused by name until Phase 4 (KO2-75)'}
 - id: P3E-1
   title: A Postgres table a source without a schema lacks is named without the current schema
   kind: change
@@ -8126,7 +8217,9 @@ entries:
     PredictiveQuery.materialize and SDMClient.predict on the core route over
     a Postgres source with a numeric(p,s) primary or foreign key the catalog
     declares.
-  cases: [key.past-2-53.catalog@postgres]
+  cases:
+  - key.past-2-53.catalog@postgres
+  - key.past-2-53.catalog@lakebase
   refs: [KO2-35, P2C-3]
   more_exact:
   - case: key.past-2-53.catalog@postgres
@@ -8145,6 +8238,16 @@ entries:
     - 'core.predicted.body/*/schema/instance_table/columns/__kumo_entity_ref_0/dtype'
     - 'core.predicted.body/*/schema/related_tables/users/columns/user_id/dtype'
     - 'core.predicted.body/*/schema/related_tables/orders/columns/user_id/dtype'
+  - case: key.past-2-53.catalog@lakebase
+    runners: [python-core]
+    fields:
+    - 'public.payloads/*/2/schema/instance_table/columns/__kumo_entity_ref_0/dtype'
+    - 'public.payloads/*/2/schema/related_tables/users/columns/user_id/dtype'
+    - 'public.payloads/*/2/schema/related_tables/orders/columns/user_id/dtype'
+    - 'public.schema/tables/0/columns/1/dtype'
+    - 'public.schema/tables/1/columns/0/dtype'
+    - 'public.result/columns/1/dtype'
+    - 'public.result/digest'
   status: approved
   approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-35}
@@ -8161,6 +8264,9 @@ entries:
     and Postgres (runner java), which run the same core as rust-host and
     answer as it does: each rust-host row below has its java twin (the
     implementer's proposal, listed for the owner; T3.11's S0 precedent).
+    From T3.10 the listed Lakebase Python lines use this same approved
+    Postgres-source behavior; Lakebase uses the Postgres provider and
+    shares the existing case inputs, without a new comparison exclusion.
 - id: P2G-4
   title: On Postgres a caller-keyed numeric key spelled two ways on a link's two ends is one key, kept as its text
   kind: change
@@ -8338,6 +8444,10 @@ entries:
   - decimal.feature-38-0-wide@postgres
   - decimal.key-wide@postgres
   - key.uint64-above-int64-max@postgres
+  - decimal.feature-38-0-wide@lakebase
+  - decimal.key-wide@lakebase
+  - key.decimal-38-10@lakebase
+  - key.uint64-above-int64-max@lakebase
   refs:
   - P2B-1
   - 'contract/postgres-key-vectors.json#pair.d12-4.i16 success -> success'
@@ -8380,6 +8490,17 @@ entries:
     - 'core.predicted.body/*/schema/instance_table/columns/__kumo_entity_ref_0/dtype'
     - 'core.predicted.body/*/schema/related_tables/users/columns/user_id/dtype'
     - 'core.predicted.body/*/schema/related_tables/orders/columns/user_id/dtype'
+  - case: key.decimal-38-10@lakebase
+    runners: [python-core]
+    fields:
+    - 'public.result/columns/1/dtype'
+    - 'public.result/digest'
+    - 'public.payloads/*/2/*/instance_table/rows/*/1'
+    - 'public.payloads/*/2/*/related_tables/orders/rows/*/4'
+    - 'public.payloads/*/2/*/related_tables/users/rows/*/1'
+    - 'public.payloads/*/2/schema/instance_table/columns/__kumo_entity_ref_0/dtype'
+    - 'public.payloads/*/2/schema/related_tables/users/columns/user_id/dtype'
+    - 'public.payloads/*/2/schema/related_tables/orders/columns/user_id/dtype'
   status: approved
   approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-35}
@@ -8396,6 +8517,9 @@ entries:
     and Postgres (runner java), which run the same core as rust-host and
     answer as it does: each rust-host row below has its java twin (the
     implementer's proposal, listed for the owner; T3.11's S0 precedent).
+    From T3.10 the listed Lakebase Python lines use this same approved
+    Postgres-source behavior; Lakebase uses the Postgres provider and
+    shares the existing case inputs, without a new comparison exclusion.
   case_outcomes:
   - {case: decimal.feature-38-0-wide@postgres, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'T2.3: a numeric(38,0) feature past int64 answered exactly where the reference overflows'}
   - {case: decimal.feature-38-0-wide@postgres, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'T2.3: a numeric(38,0) feature past int64 answered exactly where the reference overflows'}
@@ -8407,6 +8531,9 @@ entries:
   - {case: key.uint64-above-int64-max@postgres, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'T2.3: a numeric(20,0) key past int64 answered exactly where the reference overflows'}
   - {case: key.uint64-above-int64-max@postgres, cell: ref-pandas3, runner: java, old: 'none', new: 'success', summary: 'T2.3: a numeric(20,0) key past int64 answered exactly where the reference overflows'}
 
+  - {case: decimal.feature-38-0-wide@lakebase, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'T2.3: a numeric(38,0) feature past int64 answered exactly where the reference overflows'}
+  - {case: decimal.key-wide@lakebase, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'T2.3: a numeric(38,0) key past int64 answered exactly where the reference overflows'}
+  - {case: key.uint64-above-int64-max@lakebase, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'T2.3: a numeric(20,0) key past int64 answered exactly where the reference overflows'}
 - id: P2C-4
   title: On Postgres an empty fact table and an interval column are refused by name, as on DuckDB
   kind: change
@@ -8420,7 +8547,11 @@ entries:
   affected_inputs: >-
     Schema.from_source on the core route over a Postgres source with an
     empty table or an interval column.
-  cases: [empty.fact-table@postgres, time.feature-interval@postgres]
+  cases:
+  - empty.fact-table@postgres
+  - time.feature-interval@postgres
+  - empty.fact-table@lakebase
+  - time.feature-interval@lakebase
   refs: [P1B-11, P1B-8]
   status: approved
   approved_by: reviewer
@@ -8435,6 +8566,9 @@ entries:
     and Postgres (runner java), which run the same core as rust-host and
     answer as it does: each rust-host row below has its java twin (the
     implementer's proposal, listed for the owner; T3.11's S0 precedent).
+    From T3.10 the listed Lakebase Python lines use this same approved
+    Postgres-source behavior; Lakebase uses the Postgres provider and
+    shares the existing case inputs, without a new comparison exclusion.
   case_outcomes:
   - {case: empty.fact-table@postgres, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal INVALID_REQUEST at from_source (StructuredDataError)', summary: 'T2.3: as on DuckDB (P1B-11)'}
   - {case: empty.fact-table@postgres, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal INVALID_REQUEST', summary: 'T2.3: as on DuckDB (P1B-11)'}
@@ -8443,6 +8577,8 @@ entries:
   - {case: time.feature-interval@postgres, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal UNSUPPORTED_TYPE', summary: 'T2.3: as on DuckDB (P1B-8)'}
   - {case: time.feature-interval@postgres, cell: ref-pandas3, runner: java, old: 'none', new: 'refusal UNSUPPORTED_TYPE', summary: 'T2.3: as on DuckDB (P1B-8)'}
 
+  - {case: empty.fact-table@lakebase, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal INVALID_REQUEST at from_source (StructuredDataError)', summary: 'T2.3: as on DuckDB (P1B-11)'}
+  - {case: time.feature-interval@lakebase, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal UNSUPPORTED_TYPE at from_source (StructuredDataError)', summary: 'T2.3: as on DuckDB (P1B-8)'}
 - id: P2C-5
   title: On Postgres a text time value pandas reads and the core's list does not is refused by name at materialize
   kind: change
@@ -8625,7 +8761,9 @@ entries:
   affected_inputs: >-
     PredictiveQuery.materialize over a Postgres source whose text time
     column holds a value the core's list does not read, on the core route.
-  cases: [time.text-one-bad-value@postgres]
+  cases:
+  - time.text-one-bad-value@postgres
+  - time.text-one-bad-value@lakebase
   refs: [DT-7, DT-15, P2B-11]
   status: approved
   approved_by: owner
@@ -8641,11 +8779,15 @@ entries:
     and Postgres (runner java), which run the same core as rust-host and
     answer as it does: each rust-host row below has its java twin (the
     implementer's proposal, listed for the owner; T3.11's S0 precedent).
+    From T3.10 the listed Lakebase Python lines use this same approved
+    Postgres-source behavior; Lakebase uses the Postgres provider and
+    shares the existing case inputs, without a new comparison exclusion.
   case_outcomes:
   - {case: time.text-one-bad-value@postgres, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'the Postgres line: the text time outside the list refused (DT-15)'}
   - {case: time.text-one-bad-value@postgres, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'refusal UNSUPPORTED_REQUEST', summary: 'the Postgres line: the text time outside the list refused (DT-15)'}
   - {case: time.text-one-bad-value@postgres, cell: ref-pandas3, runner: java, old: 'refusal INVALID_REQUEST', new: 'refusal UNSUPPORTED_REQUEST', summary: 'the Postgres line: the text time outside the list refused (DT-15)'}
 
+  - {case: time.text-one-bad-value@lakebase, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'the Postgres line: the text time outside the list refused (DT-15)'}
 - id: P2C-11
   title: On Postgres a composite primary or foreign key is refused by name, where the reference fails the source's description with an unnamed ValueError
   kind: change

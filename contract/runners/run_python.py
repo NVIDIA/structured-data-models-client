@@ -2248,6 +2248,23 @@ def _description(
     return [str(c[0]) for c in described], types
 
 
+def _postgres_type_names(connection: Any, schema: str) -> dict[int, str]:
+    """Names of schema-local types whose server OIDs change on recreation.
+
+    Read during fixture setup, before the connection reaches the source,
+    so the same composite or array records the same name on both clients.
+    Keep unknown type codes unchanged rather than guessing their identity.
+    """
+    with connection.cursor() as cursor:
+        cursor.execute(
+            'SELECT t.oid, t.typname FROM pg_type t '
+            'JOIN pg_namespace n ON n.oid = t.typnamespace '
+            'WHERE n.nspname = %s',
+            (schema,),
+        )
+        return {int(oid): str(name) for oid, name in cursor.fetchall()}
+
+
 class DriverLog:
     r"""What the capture recorded of one case: each statement, in the order
     the driver ran them, with its handle (0 the connection the source was
@@ -4108,6 +4125,7 @@ class Live:
         self, case: dict[str, Any], bases: dict[str, list[str]], leg: str
     ) -> None:
         self.leg = leg
+        self.type_names: dict[int, str] = {}
         spec, self.names, self.private = live_configuration(leg)
         self.case = resolve_placeholders(case)
         given = self.case['input']
@@ -4142,6 +4160,10 @@ class Live:
                     given.get('warehouse_setup'),
                 ),
             )
+            if leg == 'lakebase':
+                self.type_names = _postgres_type_names(
+                    writer, self.names['schema']
+                )
             self.tables = [
                 (
                     name,
@@ -4173,6 +4195,7 @@ class Live:
             duck.close()
 
     def captured(self, log: DriverLog) -> Any:
+        log.type_names = self.type_names
         path = self.case['input'].get('connect')
         kind = 'snowpark' if path == 'snowpark' else self.leg
         return _WAREHOUSE_CAPTURES[kind](self.connection, log)
@@ -4512,14 +4535,7 @@ def _open(
             scoped = make_conninfo(dsn, dbname=name)
             loader.load(duck, 'postgres', scoped)
             with psycopg.connect(scoped) as side:
-                types = {
-                    int(oid): str(typname)
-                    for oid, typname in side.execute(
-                        'SELECT t.oid, t.typname FROM pg_type t '
-                        'JOIN pg_namespace n ON n.oid = t.typnamespace '
-                        "WHERE n.nspname = 'public'"
-                    ).fetchall()
-                }
+                types = _postgres_type_names(side, 'public')
             connection = psycopg.connect(scoped)
         undo.append(connection.close)
     except RunnerFailure:

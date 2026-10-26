@@ -788,20 +788,25 @@ def test_lakebase_live_capture_names_composite_types_in_its_own_schema(
 
     connection = types.SimpleNamespace(cursor=Cursor)
     monkeypatch.setattr(
-        runner, 'live_configuration',
+        runner,
+        'live_configuration',
         lambda leg: ({}, {'schema': 'only_this_schema'}, []),
     )
     monkeypatch.setattr(runner, 'resolve_placeholders', lambda case: case)
     monkeypatch.setattr(
-        runner, '_connection',
+        runner,
+        '_connection',
         lambda *args: types.SimpleNamespace(close=lambda: None),
     )
     monkeypatch.setattr(runner, '_duck_tables', lambda duck: [])
     monkeypatch.setattr(
-        runner, 'connect_leg', lambda *args, **kwargs: (connection, lambda: None)
+        runner,
+        'connect_leg',
+        lambda *args, **kwargs: (connection, lambda: None),
     )
     monkeypatch.setattr(
-        runner, '_sibling',
+        runner,
+        '_sibling',
         lambda name: types.SimpleNamespace(load=lambda *args: None),
     )
     monkeypatch.setattr(runner, 'session_zone', lambda *args: 'UTC')
@@ -816,7 +821,8 @@ def test_lakebase_live_capture_names_composite_types_in_its_own_schema(
     assert log.type_names == {oid: type_name, oid + 1: '_' + type_name}
     driver = types.SimpleNamespace(description=[('f', oid), ('unknown', 999)])
     assert runner._description(driver, log.type_names) == (
-        ['f', 'unknown'], [type_name, '999']
+        ['f', 'unknown'],
+        [type_name, '999'],
     )
     assert log.statements == []
     live.close()
