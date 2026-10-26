@@ -1,6 +1,6 @@
 # Phase 3 validation tracker
 
-Updated 2026-10-26, 04:26 UTC.
+Updated 2026-10-26, 04:30 UTC.
 Phase 4 is paused at the owner's request; current agents focus on Phase 3.
 
 ## Acceptance
@@ -27,7 +27,7 @@ Use the existing common cases, pinned data, seeds, anchors and model settings ac
 | Databricks SQL | Ordinary SQL smoke payload matches exactly; full 302-case run active, comparison follows | All 13 model cases pass the existing comparison: 385 prediction rows across six successes match exactly; seven endpoint refusals match exact codes | Exact predictions and refusal parity for this Python model pair; remaining runtime cells pending | Databricks agent and coordinator | Finish active SQL run and compare all 302 cases |
 | Databricks Spark | Full 300-case run prepared; needs the original ARM/serverless runtime and genuine new ARM client artifact | Reference/core model jobs active on their original managed runtime | Not yet compared | Databricks agent | Build the truthful ARM client in final CI, then run all 300 original cases after SQL cleanup |
 | Snowflake | Prior observations retained; capture and large-key fixes have both approvals; boundary tests pass after restoring the proven optional engine, with one test-only assertion carry in final review | Final comparison pending | Not measured | Snowflake agent | Finish the reviewed test carry and normal checks, then all 304 data cases and model comparisons |
-| Lakebase | 282/282 observed; existing approved policies resolve 25 differing cases; an extra empty read has two evidence approvals; one type-identity refresh is active | All ten model pairs pass: four exact prediction matches (285 rows), six exact refusal matches, all payloads exact except request IDs | Exact prediction/refusal parity for this local Python pair; remaining runtime cells pending | Lakebase agent and coordinator | Finish the one-case type-identity refresh and restore the pinned fixture |
+| Lakebase | All 282 existing cases reconciled: 128 original differences match existing approvals, two type-capture differences repaired, one retained count difference has two exact-equivalence approvals | All ten model pairs pass: four exact prediction matches (285 rows), six exact refusal matches, all payloads exact except request IDs | Exact prediction/refusal parity for this local Python pair; remaining runtime cells pending | Lakebase agent and coordinator | Complete final source integration and remaining runtime cells; pinned 173106-row fixture is restored exactly |
 | Databricks metric views | One SQL smoke payload matches exactly; 19 cases per SQL/Spark path remain in the full comparison | All three original SQL model questions have exact payloads and either exact predictions or matching endpoint refusal | SQL model parity; Spark and full data coverage pending | Databricks agent | Complete SQL and Spark metric-view coverage |
 | Snowflake semantic views | Twin now executes; its stale reference was identified as type-label-only case edits and refreshed with frozen Python | Pending | Not measured | Snowflake agent | Validate the shared capture fix, then compare all ten existing semantic-view cases |
 
@@ -47,6 +47,17 @@ Use the existing common cases, pinned data, seeds, anchors and model settings ac
 5. Model comparison uses the same ten existing ordinary questions across warehouses, plus Databricks' three existing metric-view questions.
    Retain endpoint refusals and compare their underlying cause under the owner's approval.
    Databricks SQL's thirteen-question model pair now has exact public-result/payload parity; Spark reference/core model jobs are active separately from the serialized data writers.
+
+
+## Full CI and phase exit
+
+- **Required: green full CI on the final integrated Phase 3 source before closing T3.10 or merging into `rust-core`.**
+- [Run 40258337766](https://github.com/NVIDIA/structured-data-models-client/actions/runs/40258337766) is terminal with **81 passing jobs and one failed job**, `tooling (contract)`, on older source `2a492e889c8a3b0e601a5df252a1f4465596148a`.
+- The previously identified contract-fixture repair is already landed at `f57b4ca19330fb122041d3fb22fcc14ac743aab6` and passed its normal package checks; this older red run does not prove the repaired final source is green.
+- Recheck the failed test names against that repair, integrate the reviewed Snowflake and Lakebase corrections, then dispatch full phase-end CI and inspect every terminal job.
+- Fix every remaining failure or flake, obtain both required code approvals, rerun the affected checks and finish with green full CI; no failure is waived or accepted as complete.
+- Collect the genuine final-source ARM client artifact for the reference-compatible Spark data run; do not substitute the obsolete client.
+- Also finish existing model/runtime comparisons, original notebook/provider checks, direct paired performance checks, memory checks and the sealed final check, then final evidence review and merge/push.
 
 ## Finish sequence
 
