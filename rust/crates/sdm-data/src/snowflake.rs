@@ -1310,4 +1310,91 @@ mod tests {
             CatalogAnswer::Namespace(vec!["D".to_owned()])
         );
     }
+
+    /// The binding exercised by the public Snowflake materialize journey.
+    fn bound_keys(column: ArrayRef) -> Result<Vec<String>, CoreError> {
+        use sdm_contract::data::{AttachmentId, KeySet};
+
+        let column_type = ColumnType::from_arrow(SEED_KEY, column.data_type()).unwrap();
+        let request = DataRequest::Lookup {
+            table: Relation::of(vec!["d".into(), "s".into(), "users".into()]),
+            key: vec!["user_id".into()],
+            columns: vec!["user_id".into()],
+            seeds: KeySet {
+                attachment: AttachmentId(2),
+                columns: vec![field(SEED_KEY, column_type, true)],
+            },
+        };
+        let schema = Arc::new(Schema::new(vec![Field::new(
+            SEED_KEY,
+            column.data_type().clone(),
+            true,
+        )]));
+        let batch = RecordBatch::try_new(Arc::clone(&schema), vec![column]).unwrap();
+        key_rows(&request, &schema, &[batch], |value| format!("{value:?}"))
+    }
+
+    #[test]
+    fn integer_keys_outside_the_snowflake_binding_range_are_invalid_requests() {
+        use arrow_array::{Decimal128Array, UInt64Array};
+        use sdm_contract::ErrorCode;
+
+        for value in [
+            i128::from(i64::MAX) + 1,
+            i128::from(i64::MIN) - 1,
+            10_i128.pow(25),
+            -10_i128.pow(25),
+        ] {
+            let column = Decimal128Array::from(vec![Some(value), None])
+                .with_precision_and_scale(38, 0)
+                .unwrap();
+            let error = bound_keys(Arc::new(column)).unwrap_err();
+            assert_eq!(error.code, ErrorCode::InvalidRequest, "{value}");
+            assert_eq!(error.sentence, Sentence::SnowflakeIntegerKeyRange);
+        }
+        let error = bound_keys(Arc::new(UInt64Array::from(vec![u64::MAX]))).unwrap_err();
+        assert_eq!(error.code, ErrorCode::InvalidRequest);
+        assert_eq!(error.sentence, Sentence::SnowflakeIntegerKeyRange);
+    }
+
+    #[test]
+    fn signed_boundaries_in_range_decimals_unsigned_keys_and_nulls_keep_their_json() {
+        use arrow_array::{Decimal128Array, UInt64Array};
+
+        let decimal = Decimal128Array::from(vec![
+            Some(i128::from(i64::MIN)),
+            Some(0),
+            Some(1),
+            Some(i128::from(i64::MAX)),
+            None,
+        ])
+        .with_precision_and_scale(38, 0)
+        .unwrap();
+        assert_eq!(
+            bound_keys(Arc::new(decimal)).unwrap(),
+            [
+                i64::MIN.to_string(),
+                "0".into(),
+                "1".into(),
+                i64::MAX.to_string(),
+                "null".into(),
+            ]
+        );
+        assert_eq!(
+            bound_keys(Arc::new(UInt64Array::from(vec![
+                Some(0),
+                Some(i64::MAX as u64),
+                None,
+            ])))
+            .unwrap(),
+            ["0".to_owned(), i64::MAX.to_string(), "null".to_owned()]
+        );
+        let fraction = Decimal128Array::from(vec![Some(10), Some(-25), None])
+            .with_precision_and_scale(38, 2)
+            .unwrap();
+        assert_eq!(
+            bound_keys(Arc::new(fraction)).unwrap(),
+            ["0.1", "-0.25", "null"]
+        );
+    }
 }
