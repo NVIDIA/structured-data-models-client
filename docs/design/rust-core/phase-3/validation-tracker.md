@@ -1,6 +1,6 @@
 # Phase 3 validation tracker
 
-Updated 2026-10-26, 13:41 UTC.
+Updated 2026-10-26, 13:54 UTC.
 Phase 3 / T3.10 is unfinished.
 Phase 4 is paused by the owner.
 The coordinator alone edits this tracker; agents report results and next actions.
@@ -35,19 +35,19 @@ Completed results below retain their actual producing sources until the final ap
 
 ## Exact remaining T3.10 checklist
 
-Each unchecked row is required before closing T3.10.
+Each unfinished row is required before closing T3.10; completed rows remain explicitly marked DONE.
 Counts describe existing cases only.
 
 | ID | Pending item | Current state | Owner / next action |
 |---|---|---|---|
-| R1 | Land the Databricks foreign-key metadata fix | Actual driver reproduction proves duplicate SQL column labels break FK discovery; alias-only product fix has two code approvals; normal package checks running on candidate `3771248e8c` | FK author completes checks; coordinator integrates onto current phase head with required patch-preserving review confirmations |
-| R2 | Rerun every case affected by the FK fix | Inferred relationships and graph shape can change; earlier empty-FK observations are not authoritative absence | Coordinator and two reviewers identify affected original cases; author reruns them, including the original dot-entity case |
+| R1 | **DONE: Databricks foreign-key metadata fix landed** | Pushed and independently verified `dd5b3f37ef`; both exact carry approvals and normal 188-second package handoff passed | Coordinator consumed handoff; original native producer IDs retained |
+| R2 | Rerun every case affected by the FK fix | Full 302-case setup inventory identifies six stored-FK cases, two with missing public edges; proposed regression scope is those six plus one empty-result control; both impact reviews still required | Coordinator and two reviewers identify affected original cases; author reruns them, including the original dot-entity case |
 | R3 | Finish Spark originals 228–299 | 228/300 complete; job `1066106807422509` is running positions 228–251; then 252–275 and 276–299 | Cloud author collects each terminal result and verified cleanup, then runs the next original batch |
-| R4 | Complete Java Databricks SQL and timezone comparisons on x86 and ARM | Both first attempts failed before any Java case: JDBC configuration omitted required options; zero Java cases and zero J2 cases completed | Cloud author validates corrected configuration with the actual JDBC/privacy consumers, obtains both carry approvals, then runs 249 SQL cases plus 18 J2 comparisons per architecture |
-| R5 | Complete the original Lakebase notebook | Prior attempts stopped on validation guard omissions; ARRAY_AGG and MD5 fixes landed; no notebook completion claim | Cloud author publishes genuine `7e41bb73a5` assets, obtains both exact carry reviews and fresh fixture admission, then reruns the original notebook |
+| R4 | Complete Java Databricks SQL and timezone comparisons on x86 and ARM | Both first attempts failed before any Java case: JDBC configuration omitted required options; zero Java cases and zero J2 cases completed | Both corrected configurations now pass actual JDBC/privacy consumer validations; cloud author freezes both carry reviews, then runs 249 SQL cases plus 18 J2 comparisons per architecture on the corrected FK client |
+| R5 | Complete the original Lakebase notebook | Prior attempts stopped on validation guard omissions; ARRAY_AGG and MD5 fixes landed; no notebook completion claim | Genuine `7e41bb73a5` production assets are published and readback-verified; cloud author obtains both exact carry/source-impact reviews and fresh fixture admission, then runs the original notebook |
 | R6 | Complete the original Databricks notebook | Original cells verified; MD5/COUNT_IF guard fixes landed; no completed run | Cloud author obtains both exact carry reviews and runs at a clean shared Spark boundary |
 | R7 | Run the existing Databricks generated-source and provider checks | 20 seeded generated-source checks plus 33 provider cases and two existing fault controls remain unexecuted in this cloud lane | Cloud author executes original checks with honest source/native binding and verifies cleanup |
-| R8 | Finalize finite Databricks/Snowflake comparison acceptance and scoped compatibility metadata | Both reconciliation packets assembled; raw differences retained; exact applicability proposals await coordinator integration and independent acceptance | Coordinator batches exact entries under existing approvals, obtains required reviews/checks, and resolves the owner-pending sampling entry |
+| R8 | Finalize finite Databricks/Snowflake comparison acceptance and scoped compatibility metadata | Both reconciliation packets assembled; 23-case metadata candidate `eefe28c013` is pushed on actual FK landing and in two independent CODE reviews; raw differences retained | Coordinator batches exact entries under existing approvals, obtains required reviews/checks, and resolves the owner-pending sampling entry |
 | R9 | Obtain two final-source applicability reviews and rerun all affected completed results | Owner has now approved bounded reuse; completed 255-question model matrix, 18 census questions, 20 memory controls and local campaigns retain original IDs | Two independent reviewers verify source impact; coordinator retains only proven-unaffected results and dispatches every affected rerun |
 | R10 | Obtain green full CI on the final integrated branch | Current run `40322768900` is on older `7e41bb73a5`: 74 successful jobs, zero failed, three running as checked at 13:38 UTC; it lacks the now-landed timeout fix and pending FK fix | Coordinator integrates repairs and dispatches full final-source CI; fix any remaining failure under normal review rules |
 | R11 | Resolve the second Snowflake sampling allowance | Owner requested an explanation; allowance remains unapproved | Owner decides whether different random 10000-row samples from identical SQL may pass this original case; all other checks and the 5% accuracy limit remain required |
@@ -60,14 +60,17 @@ The original performance reports still contain incomplete pairs and missing stoc
 
 ## Current execution and integration
 
-- Pushed Phase 3 head: `c7e38c6fa201a618f58d691882259d0bbdd1031d`.
-- The case-map CI timeout fix landed there after both code approvals and a passing normal 477-second handoff, including the whole runner test module in 322 seconds.
+- Pushed Phase 3 head: `dd5b3f37ef07f80800c7d31be2e4373a93976ec0`.
+- The Databricks FK alias-only fix is landed there, with both exact carry approvals, a normal 188-second handoff and terminal explicit landing verification.
+  It retains the genuine `aa27490b64` native producer identity; no rebuilt or relabeled native is claimed.
+- The case-map CI timeout fix previously landed at `c7e38c6fa2` after both code approvals and a passing normal 477-second handoff, including the whole runner test module in 322 seconds.
   It loads the existing 394-case map once instead of repeatedly revalidating the complete corpus inside the comparison loop; assertions and coverage are unchanged.
 - Prior CI `40315122377` on `ad28ef4287` finished with 80 successful jobs and one contract-tooling timeout; its 201 other contract tests passed.
 - Current [CI 40322768900](https://github.com/NVIDIA/structured-data-models-client/actions/runs/40322768900) began after a 36-minute queue and still runs code before that timeout repair.
   Its current running jobs are Rust tests, root tooling and contract tooling.
 - FK author owns R1 and affected-source handoff; cloud author owns Spark, Java, notebooks and remaining Databricks checks; coordinator owns integration, finite acceptance and this tracker.
-- All eight official `7e41bb73a5` artifact groups are authenticated locally; cloud publication and notebook carry reviews are not yet complete.
+- All eight official `7e41bb73a5` artifact groups are authenticated locally; production assets are published with all remote SHA readbacks verified.
+  Notebook carry reviews remain pending; one independent FK source-impact proof is frozen, with the second requested.
 - Failed Java attempts and their partial Python observations are preserved; both owned empty schemas were verified and removed without force.
 - Maximum three active package lanes, two heavy local slots, Cargo jobs capped at two.
   Both independent Sol High code approvals precede package tests and builds; changed code requires renewed approvals.
