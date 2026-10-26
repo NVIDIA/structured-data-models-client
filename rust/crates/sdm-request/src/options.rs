@@ -1844,19 +1844,16 @@ mod tests {
             neighbors(&given, RunMode::Fast).unwrap(),
             vec![Hop::Keep(5), Hop::Keep(1), Hop::Stop, Hop::Keep(3)]
         );
-        // KO3-44 retains the signed bound for the provider's semantics.
-        for (sizes, negative) in [
-            ("[4, -1]", "-1"),
-            ("[4, -0.5]", "-0.5"),
-            (r#"[4, "-2"]"#, "-2"),
+        // Numeric bounds keep their sign; caller text retains its origin
+        // for capability-driven warehouse lookback arithmetic.
+        for (sizes, wanted) in [
+            ("[4, -1]", Hop::Negative("-1".into())),
+            ("[4, -0.5]", Hop::Negative("-0.5".into())),
+            (r#"[4, "-2"]"#, Hop::SqlExpression("-2".into())),
         ] {
             assert_eq!(
-                neighbors(
-                    &asked(&format!(r#"{{"num_neighbors": {sizes}}}"#)),
-                    RunMode::Fast
-                )
-                .unwrap(),
-                vec![Hop::Keep(4), Hop::Negative(negative.into())],
+                neighbors(&asked(&format!(r#"{{"num_neighbors": {sizes}}}"#)), RunMode::Fast).unwrap(),
+                vec![Hop::Keep(4), wanted],
             );
         }
         assert_eq!(hops_ignored(&given), None);
@@ -1910,7 +1907,7 @@ mod tests {
             vec![
                 Hop::Negative("-1".into()),
                 Hop::Negative("-0.5".into()),
-                Hop::Negative("-2".into()),
+                Hop::SqlExpression("-2".into()),
                 Hop::SqlExpression("3 OR TRUE".into()),
                 Hop::SqlExpression("nonsense".into()),
                 Hop::Keep(u64::MAX),

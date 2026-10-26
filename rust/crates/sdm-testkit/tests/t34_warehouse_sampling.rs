@@ -153,3 +153,31 @@ fn a_provider_sized_otherwise_is_asked_no_row_count_and_no_look_back() {
             .any(|r| matches!(r, DataRequest::SampleEntities { rows: None, .. }))
     );
 }
+
+#[test]
+fn a_numeric_negative_bound_is_not_text_in_warehouse_lookback_arithmetic() {
+    // Exercise the actual core/host materialization journey with the
+    // existing warehouse-sized capability fixture, without any live call.
+    let (mut numeric, numeric_memory) = memory(true);
+    numeric.input.materialize.num_neighbors = Some(case::AsWritten("[-2]".into()));
+    let observed = host::run_memory_over(&numeric, &numeric_memory, &default_root()).unwrap();
+    assert_eq!(observed.answer.outcome(), ("success", None));
+    assert!(asked(&numeric_memory).iter().any(|request| matches!(
+        request,
+        DataRequest::Neighbors { per_seed: Some(sdm_contract::data::NeighborLimit::Negative { value }), .. }
+            if value == "-2"
+    )));
+    for value in [r#"["-2"]"#, r#"["-.5"]"#] {
+        let (mut text, text_memory) = memory(true);
+        text.input.materialize.num_neighbors = Some(case::AsWritten(value.into()));
+        let observed = host::run_memory_over(&text, &text_memory, &default_root()).unwrap();
+        let host::Answer::Error { code, fields, .. } = observed.answer else {
+            panic!("text must fail lookback arithmetic, not become a numeric bound")
+        };
+        assert_eq!(code, "INVALID_REQUEST");
+        assert_eq!(fields.get("field").map(String::as_str), Some("num_neighbors"));
+        assert!(!asked(&text_memory).iter().any(|request| matches!(
+            request, DataRequest::Neighbors { per_seed: Some(_), .. }
+        )), "text fails arithmetic before a bounded neighbor read");
+    }
+}
