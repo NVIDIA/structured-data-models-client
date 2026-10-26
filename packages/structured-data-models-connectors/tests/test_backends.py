@@ -730,7 +730,14 @@ class _Resolved(Exception):
             'from_default',
             'nvidia/kumo-sdm',
         ),
+        (
+            {'connections_file_path': _THE_FILE},
+            'SF_PARTNER',
+            'from_default',
+            'their_partner',
+        ),
         ({}, None, 'from_default', 'nvidia/kumo-sdm'),
+        ({}, 'streamlit', 'from_default', 'streamlit'),
     ],
 )
 def test_snowflake_names_a_session_only_where_nothing_else_does(

@@ -138,7 +138,9 @@ class _NamedConnection(Connection):
 
     The driver resolves the arguments, a ``connections.toml`` profile and its
     own detection of ``SF_PARTNER``, Streamlit and notebooks before it first
-    calls ``connect``, so an ``application`` any of them gives is kept.
+    calls ``connect``, so an ``application`` any of them gives is kept. Where
+    it loads the default connection instead, it drops what it detected, so
+    the detection is asked again before this name is used.
     """
 
     _application_defaulted = False
@@ -146,7 +148,10 @@ class _NamedConnection(Connection):
     def connect(self, **kwargs: Any) -> None:
         if not self._application_defaulted:
             self._application_defaulted = True
-            kwargs.setdefault('application', APPLICATION)
+            if 'application' not in kwargs:
+                kwargs['application'] = (
+                    self._detect_application() or APPLICATION
+                )
         super().connect(**kwargs)
 
 
