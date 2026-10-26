@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import pickle
+import re
 import warnings
 
 import numpy as np
@@ -344,8 +345,11 @@ def test_string_date_advice_prunes_only_diagnostic_key_candidates(
         assert not key_advice
 
 
+@pytest.mark.parametrize(
+    'warning_policy', ['always', 'all_errors', 'link_error']
+)
 def test_string_advice_keeps_link_validation_and_grouped_time_notice_order(
-    monkeypatch, string_dtype
+    monkeypatch, string_dtype, warning_policy
 ):
     frames = {
         'users': pd.DataFrame(
@@ -373,7 +377,42 @@ def test_string_advice_keeps_link_validation_and_grouped_time_notice_order(
             }
         ),
     }
-    paired(monkeypatch, frames)
+    _, notices = paired(monkeypatch, frames)
+    assert 'orders.user_id' in notices[0]
+    assert any('earlier' in notice and 'later' in notice for notice in notices)
+    if warning_policy == 'always':
+        return
+
+    import sdm_client.schema as schema_module
+
+    original = schema_module._warn_dates_stored_as_text
+    outcomes = []
+    for core in (False, True):
+        touched = []
+
+        def observe(table):
+            touched.append(table.name)
+            return original(table)
+
+        monkeypatch.setattr(
+            schema_module, '_warn_dates_stored_as_text', observe
+        )
+        monkeypatch.setenv('SDM_CORE_ROUTES', PATHS if core else '')
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter('always')
+            if warning_policy == 'all_errors':
+                warnings.simplefilter('error', SDMWarning)
+            else:
+                warnings.filterwarnings(
+                    'error', message=re.escape(notices[0]), category=SDMWarning
+                )
+            with pytest.raises(SDMWarning) as error:
+                Schema.from_data(frames)
+        outcomes.append(
+            (str(error.value), [str(n.message) for n in caught], touched)
+        )
+    assert outcomes[0] == (notices[0], [], [])
+    assert outcomes[1] == outcomes[0]
 
 
 def test_string_advice_never_reenters_python_schema_inference(
