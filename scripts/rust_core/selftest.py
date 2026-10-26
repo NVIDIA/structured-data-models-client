@@ -3289,13 +3289,13 @@ def scan_cases(results: list[Result]) -> None:
         )
 
     steps(
-        'a fourth step variant in the source',
+        'a language behavior step variant in the source',
         lambda r: edit(
             r / contract / 'src/run.rs',
             '    CallModel(ModelCall),\n',
             '    CallModel(ModelCall),\n    SortRows { column: String },\n',
         ),
-        "Step has ['fetch', 'call_model', 'sort_rows', 'done']",
+        "Step has ['warnings', 'fetch', 'call_model', 'sort_rows', 'done']",
     )
 
     def schema_variant(root: Path) -> None:
@@ -3311,7 +3311,11 @@ def scan_cases(results: list[Result]) -> None:
                 branch['oneOf'].append(extra)
         path.write_text(json.dumps(schema, indent=2) + '\n')
 
-    steps('a fourth step variant in the schema', schema_variant, "'truthiness'")
+    steps(
+        'a language behavior step variant in the schema',
+        schema_variant,
+        "'truthiness'",
+    )
 
 
 # --- the clippy bans, for real ------------------------------------------------
