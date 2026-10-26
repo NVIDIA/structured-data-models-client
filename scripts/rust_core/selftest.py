@@ -1090,9 +1090,9 @@ def freeze_cases(results: list[Result]) -> None:
             'a swallowing try',
             lambda r: edit(
                 r / materialize,
-                '    choice, provider = providers.for_source(schema.source)\n',
-                '    try:\n        choice, provider = providers.for_source(schema.source)\n'
-                '    except StructuredDataError:\n        pass\n',
+                '        choice, provider = providers.for_source(schema.source)\n',
+                '        try:\n            choice, provider = providers.for_source(schema.source)\n'
+                '        except StructuredDataError:\n            pass\n',
             ),
             gather,
         ),
@@ -1100,10 +1100,10 @@ def freeze_cases(results: list[Result]) -> None:
             'an aliased contextlib.suppress',
             lambda r: edit(
                 r / materialize,
-                '    choice, provider = providers.for_source(schema.source)\n',
-                '    import contextlib\n\n    quiet = contextlib.suppress\n'
-                '    with quiet(ValueError):\n'
                 '        choice, provider = providers.for_source(schema.source)\n',
+                '        import contextlib\n\n        quiet = contextlib.suppress\n'
+                '        with quiet(ValueError):\n'
+                '            choice, provider = providers.for_source(schema.source)\n',
             ),
             gather,
         ),
