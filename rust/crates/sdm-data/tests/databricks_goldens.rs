@@ -78,13 +78,13 @@ const GOLDENS: goldens::Goldens = &[
     (
         r##"{"part":"foreign_keys","request":"describe","tables":[{"source":["main","shop","orders"]}]}"##,
         &[
-            "SELECT tc.constraint_name, kcu.column_name,\n       ccu.table_catalog, ccu.table_schema,\n       ccu.table_name, ccu.column_name\nFROM `main`.information_schema.table_constraints tc\nJOIN `main`.information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN `main`.information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN `main`.information_schema.constraint_column_usage ccu\n  ON rc.unique_constraint_catalog = ccu.constraint_catalog\n AND rc.unique_constraint_schema = ccu.constraint_schema\n AND rc.unique_constraint_name = ccu.constraint_name\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = lower(?)\n  AND tc.table_name = lower(?)",
+            "SELECT tc.constraint_name, kcu.column_name AS source_column,\n       ccu.table_catalog, ccu.table_schema,\n       ccu.table_name, ccu.column_name AS referenced_column\nFROM `main`.information_schema.table_constraints tc\nJOIN `main`.information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN `main`.information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN `main`.information_schema.constraint_column_usage ccu\n  ON rc.unique_constraint_catalog = ccu.constraint_catalog\n AND rc.unique_constraint_schema = ccu.constraint_schema\n AND rc.unique_constraint_name = ccu.constraint_name\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = lower(?)\n  AND tc.table_name = lower(?)",
         ],
     ),
     (
         r##"{"part":"foreign_keys","request":"describe","tables":[{"source":["main","shop","users"]}]}"##,
         &[
-            "SELECT tc.constraint_name, kcu.column_name,\n       ccu.table_catalog, ccu.table_schema,\n       ccu.table_name, ccu.column_name\nFROM `main`.information_schema.table_constraints tc\nJOIN `main`.information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN `main`.information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN `main`.information_schema.constraint_column_usage ccu\n  ON rc.unique_constraint_catalog = ccu.constraint_catalog\n AND rc.unique_constraint_schema = ccu.constraint_schema\n AND rc.unique_constraint_name = ccu.constraint_name\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = lower(?)\n  AND tc.table_name = lower(?)",
+            "SELECT tc.constraint_name, kcu.column_name AS source_column,\n       ccu.table_catalog, ccu.table_schema,\n       ccu.table_name, ccu.column_name AS referenced_column\nFROM `main`.information_schema.table_constraints tc\nJOIN `main`.information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN `main`.information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN `main`.information_schema.constraint_column_usage ccu\n  ON rc.unique_constraint_catalog = ccu.constraint_catalog\n AND rc.unique_constraint_schema = ccu.constraint_schema\n AND rc.unique_constraint_name = ccu.constraint_name\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = lower(?)\n  AND tc.table_name = lower(?)",
         ],
     ),
     (
@@ -344,7 +344,8 @@ fn every_request_kind_has_a_golden_on_databricks() {
 /// 212-246, 271-300, 318-370; RE/graph.py:1199), text and parameters, so
 /// exact replay serves C-1's catalog answers to the core's catalog reader
 /// (design choice 2). The schema and the table are bound as the old client
-/// binds them, `lower(?)` each, never written into the text.
+/// binds them, `lower(?)` each, never written into the text. Foreign-key
+/// output labels alone are distinct so the driver's Arrow read is valid.
 #[test]
 fn the_catalog_statements_are_the_old_client_s_with_its_parameters() {
     let mut seen = Vec::new();
@@ -361,10 +362,24 @@ fn the_catalog_statements_are_the_old_client_s_with_its_parameters() {
         }
         let statements = planned(&request);
         let (last, params) = statements.last().unwrap();
+        let reference = the_reference_s(reference_kind);
+        let expected = if reference_kind == "describe/foreign_keys" {
+            // The old duplicate column_name labels fail real Arrow schema
+            // unification. Only the two output roles change; all six values,
+            // joins, predicates and bound parameters remain the reference's.
+            reference
+                .replace("kcu.column_name,", "kcu.column_name AS source_column,")
+                .replace(
+                    "ccu.table_name, ccu.column_name",
+                    "ccu.table_name, ccu.column_name AS referenced_column",
+                )
+        } else {
+            reference
+        };
         assert_eq!(
             normalised(last),
-            normalised(&the_reference_s(reference_kind)),
-            "{text}: not the old client's catalog statement"
+            normalised(&expected),
+            "{text}: not the exact catalog query with distinct FK labels"
         );
         let bound: Vec<Option<&str>> = params.iter().map(text_of).collect();
         let wanted: Vec<Option<&str>> = match tables.as_slice() {

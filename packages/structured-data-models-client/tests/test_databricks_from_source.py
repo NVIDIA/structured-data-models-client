@@ -154,12 +154,25 @@ class _Warehouse:
                 for at, current in enumerate(['main', self.schema])
             ]
             return pa.table({'name': parts})
-        key = (text, json.dumps(parameters))
+        # The fixed catalog query names the two column roles separately;
+        # the immutable old recording still carries the same six values.
+        recorded_text = text.replace(
+            'kcu.column_name AS source_column', 'kcu.column_name'
+        ).replace('ccu.column_name AS referenced_column', 'ccu.column_name')
+        key = (recorded_text, json.dumps(parameters))
         if key not in self._recorded:
             raise AssertionError(
                 f'no recorded answer for {text!r} {parameters!r}'
             )
-        return self._recorded[key]
+        found = self._recorded[key]
+        if recorded_text != text:
+            names = list(found.column_names)
+            if 'kcu.column_name AS source_column' in text:
+                names[1] = 'source_column'
+            if 'ccu.column_name AS referenced_column' in text:
+                names[5] = 'referenced_column'
+            found = found.rename_columns(names)
+        return found
 
 
 @pytest.fixture(autouse=True)
@@ -381,6 +394,99 @@ _DeclaredKeyConnection = type(
     (_DeclaredKeyWarehouse,),
     {'__module__': 'databricks.sql.client'},
 )
+
+
+class _ArrowHeaderCursor(_Cursor):
+    """Use the real Arrow schema admission that rejects duplicate headers."""
+
+    def fetchall_arrow(self) -> pa.Table:
+        table = super().fetchall_arrow()
+        if "constraint_type = 'FOREIGN KEY'" in self._connection.calls[-1][0]:
+            self._connection.fk_headers.append(list(table.column_names))
+        # The real SQL connector unifies Arrow result chunks, including
+        # empty results. This raises ArrowInvalid on the original FK names.
+        pa.unify_schemas([table.schema, table.schema])
+        return table
+
+    def fetchall(self) -> list[tuple[Any, ...]]:
+        self.fetchall_arrow()
+        return super().fetchall()
+
+
+class _ArrowHeaderWarehouse(_DeclaredKeyWarehouse):
+    """The existing buyer FK rows through the driver's Arrow boundary."""
+
+    def __init__(self, *, declared: bool = True) -> None:
+        super().__init__()
+        self.declared = declared
+        self.fk_headers: list[list[str]] = []
+
+    def cursor(self) -> _ArrowHeaderCursor:
+        return _ArrowHeaderCursor(self)
+
+    def answer(self, operation: str, parameters: list[Any]) -> pa.Table:
+        found = super().answer(operation, parameters)
+        if not self.declared and "constraint_type = 'FOREIGN KEY'" in operation:
+            return found.slice(0)
+        return found
+
+
+_ArrowHeaderConnection = type(
+    'Connection',
+    (_ArrowHeaderWarehouse,),
+    {'__module__': 'databricks.sql.client'},
+)
+
+
+@pytest.mark.parametrize('declared', [False, True], ids=['empty', 'buyer-fk'])
+def test_foreign_key_arrow_headers_preserve_non_inferred_relationships(
+    declared: bool,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Real Arrow header validation must not turn available FKs into none."""
+    _route('core', monkeypatch)
+    connection = _ArrowHeaderConnection(declared=declared)
+    described = Schema.from_source(
+        DatabricksSource(connection, catalog='main', schema='shop')
+    )
+    expected = ['orders', 'buyer', 'users', 'user_id']
+    assert (expected in _projection(described)['links']) is declared
+    assert len(connection.fk_headers) == 2
+    for names in connection.fk_headers:
+        assert names == [
+            'constraint_name',
+            'source_column',
+            'table_catalog',
+            'table_schema',
+            'table_name',
+            'referenced_column',
+        ]
+        assert len(set(names)) == len(names)
+    fk_calls = [
+        (sql, params)
+        for sql, params in connection.calls
+        if "constraint_type = 'FOREIGN KEY'" in sql
+    ]
+    assert {tuple(params) for _, params in fk_calls} == {
+        ('shop', 'orders'),
+        ('shop', 'users'),
+    }
+
+
+def test_old_duplicate_headers_fail_at_the_same_arrow_boundary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The old route swallows the genuine Arrow failure and loses buyer."""
+    _route('old', monkeypatch)
+    connection = _ArrowHeaderConnection()
+    described = Schema.from_source(
+        DatabricksSource(connection, catalog='main', schema='shop')
+    )
+    assert ['orders', 'buyer', 'users', 'user_id'] not in _projection(
+        described
+    )['links']
+    assert connection.fk_headers
+    assert any(len(names) != len(set(names)) for names in connection.fk_headers)
 
 
 @pytest.mark.parametrize(
