@@ -895,3 +895,33 @@ def test_a_forecast_s_and_a_ranking_s_refusal_name_their_part_as_the_old_client(
         'the question asked for candidate 1, one of 2 this ranking is asked '
         'as.',
     ]
+
+
+def test_finite_validator_comparison_ignores_only_its_documentation_minor_version() -> (
+    None
+):
+    recorded = (
+        '1 validation error for RegressionInferenceConfig\nnum_estimators\n'
+        '  Input should be a finite number [type=finite_number, input_value=inf, input_type=float]\n'
+        '    For further information visit https://errors.pydantic.dev/2.13/v/finite_number'
+    )
+    installed = recorded.replace('/2.13/', '/2.14/')
+    assert _finite_validator_words(recorded) == _finite_validator_words(
+        installed
+    )
+    for changed in [
+        installed.replace('/v/finite_number', '/v/int_type'),
+        installed.replace('finite number', 'whole number'),
+        installed.replace(
+            'RegressionInferenceConfig', 'ClassificationInferenceConfig'
+        ),
+        installed.replace('num_estimators', 'other'),
+        installed.replace('input_value=inf', 'input_value=nan'),
+        installed.replace('input_type=float', 'input_type=float64'),
+        installed.replace('/2.14/', '/3.14/'),
+    ]:
+        assert _finite_validator_words(recorded) != _finite_validator_words(
+            changed
+        )
+    other = 'https://errors.pydantic.dev/2.13/v/int_type'
+    assert _finite_validator_words(other) == other
