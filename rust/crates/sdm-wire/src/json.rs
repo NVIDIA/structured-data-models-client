@@ -743,6 +743,19 @@ mod option_attachment_tests {
     }
 
     #[test]
+    fn ordinary_json_numbers_keep_their_full_exponent_range() {
+        let finite = read_options(br#"{"lag_timesteps":1e400,"nested":[-1e400,18446744073709551616]}"#).unwrap();
+        assert!(finite.all_json_numbers());
+        assert!(!finite.all_finite(), "finite JSON need not fit a double");
+        for token in ["NaN", "Infinity", "-Infinity"] {
+            let nested = read_options(format!(r#"{{"nested":[{token}]}}"#).as_bytes()).unwrap();
+            assert!(!nested.all_json_numbers(), "{token}");
+            let text = read_options(format!(r#"{{"nested":["{token}"]}}"#).as_bytes()).unwrap();
+            assert!(text.all_json_numbers(), "{token} text stays text");
+        }
+    }
+
+    #[test]
     fn options_do_not_inherit_endpoint_encoding_or_surrogate_repair() {
         assert!(read_options(b"\xff\xfe{\0}\0").is_err());
         assert!(read_options(br#"{"lag_timesteps":NaN,"text":"\ud800"}"#).is_err());

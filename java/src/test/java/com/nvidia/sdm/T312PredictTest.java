@@ -14,6 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.nvidia.sdm.internal.ArrowData;
 import com.nvidia.sdm.internal.Trace;
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.time.LocalDate;
@@ -94,6 +95,24 @@ class T312PredictTest {
         assertEquals(List.of("explanation"), result.absent(List.of("explanation")));
         assertNull(result.explanation());
       }
+    }
+  }
+
+  @Test
+  void aFiniteLagPastDoubleRangeKeepsTheCoreRulesForStaticAndTemporalQueries() throws Exception {
+    try (Connection connection = T312Shop.open("duckdb")) {
+      Schema schema = Schema.fromSource(DuckDbSource.of(connection));
+      MaterializeOptions options = MaterializeOptions.builder()
+          .indices(List.of(0L, 1L)).anchorTime(LocalDate.of(2024, 3, 1))
+          .option("lag_timesteps", new BigDecimal("1e400")).build();
+      Request request = PredictiveQuery.parse("PREDICT users.age FOR EACH users.user_id")
+          .materialize(schema, options);
+      assertEquals(1, request.payloads().size());
+      StructuredDataException temporal = assertThrows(StructuredDataException.class,
+          () -> PredictiveQuery.parse(REGRESSION).materialize(schema, options));
+      assertEquals("INVALID_REQUEST", temporal.code());
+      assertEquals("lag_timesteps", temporal.details().get("field"));
+      assertEquals("not_a_whole_number", temporal.details().get("reason"));
     }
   }
 
