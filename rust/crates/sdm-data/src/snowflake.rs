@@ -627,7 +627,7 @@ fn key_rows(
     float_text: fn(f64) -> String,
 ) -> Result<Vec<String>, CoreError> {
     key_text::in_batch_order(schema, batches)?;
-    let (schema, batches) = key_text::coerced(schema, batches, Sentence::SnowflakeIntegerKeyRange)?;
+    let (schema, batches) = key_text::coerced(schema, batches, Sentence::KeySetIntegerRange)?;
     let names: Vec<&str> = schema.fields().iter().map(|f| f.name().as_str()).collect();
     if key_text::key_columns(&names).len() != 1 {
         return Err(not_taken(
@@ -674,7 +674,7 @@ fn key_bounds(
     else {
         return Ok(Vec::new());
     };
-    let (schema, batches) = key_text::coerced(schema, batches, Sentence::SnowflakeIntegerKeyRange)?;
+    let (schema, batches) = key_text::coerced(schema, batches, Sentence::KeySetIntegerRange)?;
     let texts = |column: &str| -> Vec<String> {
         let Ok(at) = schema.index_of(column) else {
             return Vec::new();

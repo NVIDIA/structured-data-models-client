@@ -5828,7 +5828,7 @@
         "derived_relation_malformed",
         "metric_view_as_table",
         "key_set_type_unbound",
-        "snowflake_integer_key_range",
+        "key_set_integer_range",
         "data_request_refused",
         "unsupported_type",
         "not_yet_describe",

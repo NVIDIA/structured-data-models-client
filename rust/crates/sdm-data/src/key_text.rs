@@ -438,8 +438,8 @@ fn arrow_cast(
                     };
                     CoreError::new(
                         sentence,
-                        if sentence == Sentence::SnowflakeIntegerKeyRange {
-                            "Snowflake's SQL key binding cannot represent integer keys outside the signed 64-bit range"
+                        if sentence == Sentence::KeySetIntegerRange {
+                            "this SQL key binding cannot represent integer keys outside the signed 64-bit range"
                         } else {
                             "a key is not an integer the binding writes"
                         },

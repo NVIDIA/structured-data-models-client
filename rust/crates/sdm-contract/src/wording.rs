@@ -275,8 +275,8 @@ pub fn template(sentence: Sentence) -> Template {
         S::KeySetTypeUnbound => said(
             r#"the core asked the data source to match keys of a type its SQL does not bind as text"#,
         ),
-        S::SnowflakeIntegerKeyRange => said(
-            r#"Snowflake's SQL key binding cannot represent integer keys outside the signed 64-bit range"#,
+        S::KeySetIntegerRange => said(
+            r#"this SQL key binding cannot represent integer keys outside the signed 64-bit range"#,
         ),
         S::DataRequestRefused => said(
             r#"the core asked the data source for a {request} whose {field} it does not take; this is a defect, not a problem with the request"#,
