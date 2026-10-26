@@ -116,6 +116,90 @@ def test_lossless_timestamp_function_names_do_not_allow_other_calls_or_writes(
         DATABRICKS.check(template.format(function=function))
 
 
+#: The unchanged metadata read from the original Lakebase notebook setup.
+_ARRAY_AGG_CATALOG = (
+    'SELECT table_name, array_agg(column_name::text ORDER BY ordinal_position) '
+    'FROM information_schema.columns WHERE table_schema = %s GROUP BY table_name'
+)
+
+
+@pytest.mark.parametrize(
+    'function', ['array_agg', 'ARRAY_AGG', 'pg_catalog.array_agg']
+)
+def test_original_catalog_array_aggregation_is_a_builtin_read(
+    function: str,
+) -> None:
+    POSTGRES.check(_ARRAY_AGG_CATALOG.replace('array_agg', function))
+
+
+@pytest.mark.parametrize('dialect', ['postgres', 'snowflake', 'databricks'])
+def test_pure_array_aggregation_uses_the_existing_builtin_function_rules(
+    dialect: str,
+) -> None:
+    GUARDS[dialect].check('SELECT ARRAY_AGG(a ORDER BY b) FROM other.t')
+    quote = '`' if dialect == 'databricks' else '"'
+    for sql in (
+        'SELECT other.array_agg(a) FROM other.t',
+        f'SELECT {quote}array_agg{quote}(a) FROM other.t',
+        'SELECT array_agg_writes(a) FROM other.t',
+    ):
+        with pytest.raises(wg.WriteRefused):
+            GUARDS[dialect].check(sql)
+
+
+@pytest.mark.parametrize(
+    'sql',
+    [
+        _ARRAY_AGG_CATALOG + '; DELETE FROM outside.t',
+        'WITH changed AS (DELETE FROM outside.t RETURNING a) SELECT array_agg(a) FROM changed',
+        'SELECT array_agg(a) INTO outside.t FROM other.t',
+        'SELECT live_tests.array_agg(a) FROM other.t',
+        'SELECT outside.pg_catalog.array_agg(a) FROM other.t',
+        'SELECT "pg_catalog".array_agg(a) FROM other.t',
+        'SELECT "PG_CATALOG".array_agg(a) FROM other.t',
+        'SELECT pg_catalog."array_agg"(a) FROM other.t',
+        "CREATE FUNCTION live_tests.array_agg(text) RETURNS text LANGUAGE SQL AS 'SELECT $1'",
+    ],
+)
+def test_array_aggregation_cannot_admit_writes_or_shadowing_calls(
+    sql: str,
+) -> None:
+    with pytest.raises(wg.WriteRefused):
+        POSTGRES.check(sql)
+
+
+def test_original_catalog_read_and_parameters_reach_only_the_guarded_driver() -> (
+    None
+):
+    import psycopg
+
+    seen: list[tuple[str, Any]] = []
+
+    class CatalogCursor(psycopg.Cursor):
+        def execute(self, query: str, params: Any = None, **kwargs: Any) -> Any:
+            seen.append((query, params))
+            return self
+
+    parameters = ('live_tests',)
+    cursor = object.__new__(CatalogCursor)
+    cursor._closed = True
+    undo = wg.install({'postgres': POSTGRES})
+    try:
+        assert cursor.execute(_ARRAY_AGG_CATALOG, parameters) is cursor
+        assert seen == [(_ARRAY_AGG_CATALOG, parameters)]
+        for refused in (
+            _ARRAY_AGG_CATALOG + '; DELETE FROM outside.t',
+            'SELECT live_tests.array_agg(a) FROM other.t',
+            'SELECT "PG_CATALOG".array_agg(a) FROM other.t',
+            'SELECT pg_catalog."array_agg"(a) FROM other.t',
+        ):
+            with pytest.raises(wg.WriteRefused):
+                cursor.execute(refused, parameters)
+        assert seen == [(_ARRAY_AGG_CATALOG, parameters)]
+    finally:
+        undo()
+
+
 @pytest.mark.parametrize(
     'sql',
     [
