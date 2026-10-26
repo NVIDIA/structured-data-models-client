@@ -123,7 +123,8 @@ pub struct SampledTable {
 /// row of `dst` it refers to, if any. The links of one foreign key may come
 /// more than once, as the reference's sampled edge types of both
 /// directions. Their partial maps are consolidated by sampled source-row
-/// position: the first valid mapping supplies that occurrence's key.
+/// position: the first partial map with a valid mapping supplies its key.
+/// Within one partial map, the last valid pair retains precedence.
 #[derive(Debug, Clone)]
 pub struct SampledLink {
     pub src: String,
@@ -989,8 +990,9 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
         });
     }
     // Each foreign key once, merging every partial link row by row. The
-    // first valid pair for each sampled source row supplies its key; only
-    // a row no link supplies is null. An integer key column holding a
+    // first partial map supplying a sampled source row gives its key,
+    // preserving last-valid-pair precedence within each map. Only a row
+    // no link supplies is null. An integer key column holding a
     // null, or a float32 key's column, is written as float64, as pandas
     // types such a column.
     let mut written: Vec<(&str, &str, &str)> = Vec::new();
@@ -1021,7 +1023,7 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
         for partial in sampled.links.iter().filter(|partial| {
             partial.src == link.src && partial.fkey == link.fkey && partial.dst == link.dst
         }) {
-            for &(row, at) in &partial.pairs {
+            for &(row, at) in partial.pairs.iter().rev() {
                 if row < src_rows && at < dst_rows && values[row].is_none() {
                     values[row] = Some(key_cells[at].clone());
                 }
