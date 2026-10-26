@@ -50,6 +50,18 @@ class JsonTest {
   }
 
   @Test
+  void onlyOptionAttachmentsPreserveNonfiniteNumbersForCoreAdmission() throws Exception {
+    Map<String, Object> value = new LinkedHashMap<>();
+    value.put("lag_timesteps", Double.NaN);
+    value.put("text", "NaN");
+    assertThrows(Json.JsonException.class, () -> Json.write(value));
+    assertEquals(
+        "{\"lag_timesteps\":NaN,\"text\":\"NaN\"}",
+        new String(Json.writeOptions(value), StandardCharsets.UTF_8));
+    assertThrows(Json.JsonException.class, () -> Json.writeOptions("\uD800"));
+  }
+
+  @Test
   void thousandsOfNestedLevelsAreRefusedByNameNeverByOverflow() {
     String deep = "[".repeat(100_000) + "]".repeat(100_000);
     Json.JsonException refused = assertThrows(Json.JsonException.class, () -> read(deep));
