@@ -2,7 +2,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 # Bridge code: native conversion and public objects remain Python's;
-# the routing seam is removed in Phase 5 after the complete frame switch.
+# the routing seam is deleted in Phase 5 after the complete frame switch.
 
 """Closed native-family constructors, using fixed core Table/Schema stages."""
 
