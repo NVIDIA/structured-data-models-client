@@ -1,6 +1,6 @@
 # Phase 3 validation tracker
 
-Updated 2026-10-26, 20:51 UTC.
+Updated 2026-10-26, 21:12 UTC.
 Phase 3 / T3.10 is unfinished.
 Phase 4 is paused by the owner.
 The coordinator alone edits this tracker; agents report results and next actions.
@@ -44,7 +44,7 @@ Counts describe existing cases only.
 | R1 | **DONE: Databricks foreign-key metadata fix landed** | Pushed and independently verified `dd5b3f37ef`; both exact carry approvals and normal 188-second package handoff passed | Coordinator consumed handoff; original native producer IDs retained |
 | R2 | **DONE: execute all nine affected originals** | Genuine d90: 9/9 observed, zero operator failures, SDK0 cleanup; corrected key32 and odd-name cases succeed, metric warning restored, negative-neighbor has zero strict differences; 186 raw differences remain for finite attribution | Coordinator consumes actual results and exact owner-approved key32 support; final comparison acceptance remains R8 |
 | R3 | **DONE: Spark comparison assembly and finite review** | All 300 original executions assembled; both independent opinions support observed product semantics and aggregate quality, retaining raw read-attribution limits and final single-row diagnostic regression | Original producer IDs and all 4780 raw differences retained; no strict comparator PASS claimed |
-| R4 | Complete Java Databricks SQL and timezone comparisons on x86 and ARM | Both M2 32 GiB jobs genuinely passed resource admission and completed through 120/249 Java and Python cases per architecture; completed results and cleanup preserved, normal cancellation acknowledged | Both CODE reviews approve source S2 and six bindings; seven new controls passed, 23 unchanged controls retained; old jobs/clusters terminal and owned cleanup verified; six disjoint tail jobs actually accepted at 20:50, with one J2 run per architecture; focused reviewer classifies completed 48-case results while tails run |
+| R4 | Complete Java Databricks SQL and timezone comparisons on x86 and ARM | Retained Java120/249 per architecture; six new tails are executing actual cases, with Python133/249 x86 and131/249 ARM at21:11; all six actual memory and unchanged fixed2GiB JVM admissions PASS | Both CODE reviews approve source S2 and six bindings; seven new controls passed, 23 unchanged controls retained; old jobs/clusters terminal and owned cleanup verified; six disjoint tail jobs accepted at 20:50 are now actually RUNNING; both independent finite reviews accept the first120 cases per architecture with original identities and raw differences retained; future tails/J2 remain open |
 | R5 | **DONE: original Lakebase notebook** | Parent `1028333862593563` passed all 32 original commands on genuine 7e41; full 173106-row data and PK/FK post-check exact; read lease released | Coordinator consumed authentic success/export/fixture receipt; both source-impact approvals retain original IDs |
 | R6 | **DONE: original Databricks notebook** | Parent `435766366545516` passed all 39 original commands on genuine 7e41; source/export verified; only the verified owned metric view removed, SDK0 cleanup | Coordinator consumed authentic success and cleanup receipt; original failed attempts retained |
 | R7 | **DONE: Databricks generated-source and provider checks** | Both finite opinions accept all 20 classified generated journeys; after both CODE approvals, corrected directCountRows oracle rechecked all 99 complete saved live answers: normal 33/33, truncate detected, silent-capability detected | Receipt `712a0c21`; all 99 original judgments reproduced first, only direct count-header judgment changed per pass; original failures preserved, no new queries |
@@ -53,7 +53,7 @@ Counts describe existing cases only.
 | R10 | **DONE: green full CI on final integrated source** | [Run 40375303944](https://github.com/NVIDIA/structured-data-models-client/actions/runs/40375303944) completed SUCCESS on exact `15ec2ad916`: 81 successful jobs, two intentional skips, zero failures; raw run SHA `6a9ede69` | Authenticated final producer artifacts, root978 and contract202 passing checks retained; no repeated full CI needed while product source stays unchanged |
 | R11 | **DONE: Snowflake identical-input comparison** | Full 10101-row source and original 10000-row draw verified; both complete current requests match the originals; all 10001 actual model26 predictions exactly equal old, RMSE ratio 1.0 on both batches and aggregate; SDK0 cleanup | Coordinator consumed receipt `8f48d1c7`; sampling unchanged; historical independent-draw 26.51% loss and failed recorder-mode attempt preserved |
 | R12 | **DONE: locked acceptance `3a` and pre-heldout evidence** | Genuine final-source gate PASSED all ten steps, 364 fault tests and 452 guard controls; subsequent cache-symlink packaging failure retained | Seven clean 315-case observation sets regenerated; stock ratchet/compare, cargo boundary, size reports and pre-heldout evidence writer all PASS without repeating the passed gate or CI |
-| R13 | Close final acceptance, run the sealed check last, merge and push Phase 3 into `rust-core` | External runtime/Spark payload preparation active without reading cases or creating a marker; protected `rust-core` remains Phase 2 | Coordinator obtains both final evidence approvals, closes performance dispositions, runs the sealed check last, then merges and pushes |
+| R13 | Close final acceptance, run the sealed check last, merge and push Phase 3 into `rust-core` | External runtime/Spark payload/fresh namespaces prepared; both H2 CODE approvals and the exact stock dry run PASS all seven-leg preconditions; actual sealed check remains unstarted; protected `rust-core` remains Phase 2 | Coordinator obtains remaining Java/final evidence approvals, runs the sealed check last, assembles its actual report, then merges and pushes |
 | R14 | **DONE: existing Spark and Lakebase live provider kits** | Spark saved-answer correction has both CODE approvals, five controls and actual 99-answer readjudication PASS; Lakebase actually completed all 99 normal/fault cases on final15e, normal33 clean and both faults detected | Spark receipt `08a8d2c7`, Lakebase `d3f3825e`; original failures, all driver captures and source IDs preserved; cleanup verified and lease released |
 
 R9 supplies the two independent applicability opinions; R2 now supplies the actual nine affected reruns.
@@ -113,6 +113,9 @@ The final compatibility records landed at `42dbb880f9` on passing exact `ebd02c1
 The owner reported reminders arriving repeatedly.
 The coordinator disabled the reminder script and removed its exact cron entry at 15:59 UTC; the independent nightly CI entry is unchanged.
 Do not re-enable reminders automatically.
+
+Both independent first120 Java opinions are recorded, preserving actual d90/final15e producing sources, raw SQL-count failures, the10001-case sampled-body difference and warning-observation limits.
+The six fresh jobs have actual resource admissions and case observations; submissions alone are not counted as execution completion.
 
 ## Completed evidence retained for final review
 
