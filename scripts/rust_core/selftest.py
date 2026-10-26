@@ -3820,11 +3820,12 @@ def main(argv: list[str] | None = None) -> int:
     parser_name_cases(results, metadata)
     if not args.no_clippy:
         clippy_case(results)
-    for result in results:
+    # The handoff retains a short tail: keep every failure after successes.
+    failed = [r for r in results if not r.ok]
+    for result in [r for r in results if r.ok] + failed:
         print(
             f'{"ok  " if result.ok else "FAIL"} {result.name}: {result.detail}'
         )
-    failed = [r for r in results if not r.ok]
     print(
         f'{len(results) - len(failed)} of {len(results)} self-tests as expected'
     )
