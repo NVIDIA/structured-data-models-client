@@ -338,10 +338,11 @@ fn take_arrow_stream(value: &Bound<'_, PyAny>) -> PyResult<FFI_ArrowArrayStream>
     Ok(unsafe { FFI_ArrowArrayStream::from_raw(pointer) })
 }
 
-/// Checks raw buffer addresses before Arrow's importer can dereference typed
-/// offsets or construct scalar slices. Arrow's own layout is the single source
-/// of physical alignments; child and dictionary buffers are checked as well.
-fn arrow_buffers_aligned(array: &FFI_ArrowArray, data_type: &DataType) -> bool {
+/// Checks C buffer structure and the addresses Arrow's importer reads as typed
+/// offsets or variadic lengths. Other value buffers stay bytes until
+/// `ArrayData::align_buffers` prepares them for typed construction below.
+/// Arrow's layout supplies alignments, including in children and dictionaries.
+fn arrow_import_preflight(array: &FFI_ArrowArray, data_type: &DataType) -> bool {
     let mut pending = vec![(array, data_type)];
     while let Some((array, data_type)) = pending.pop() {
         if array.length < 0 || array.offset < 0 || array.n_buffers < 0 || array.n_children < 0 {
@@ -377,7 +378,9 @@ fn arrow_buffers_aligned(array: &FFI_ArrowArray, data_type: &DataType) -> bool {
                 && (extent != 0 || (offsets && index == 0))
             {
                 let pointer = array.buffer(first + index);
-                if pointer.is_null() || pointer.align_offset(*alignment) != 0 {
+                if pointer.is_null()
+                    || (offsets && index == 0 && pointer.align_offset(*alignment) != 0)
+                {
                     return false;
                 }
             }
@@ -425,9 +428,10 @@ fn arrow_buffers_aligned(array: &FFI_ArrowArray, data_type: &DataType) -> bool {
     true
 }
 
-/// Standard C-stream consumption, with alignment checked before Arrow's typed
-/// importer. FFI owners release streams and arrays on every early return; on
-/// success Arrow's imported buffers retain the array owner without a copy.
+/// Standard C-stream consumption: preflight the importer's typed reads, then
+/// align value buffers and validate before constructing typed arrays. Aligned
+/// buffers remain shared; only misaligned values receive owned copies.
+/// FFI owners release streams and arrays on every early return.
 #[allow(
     unsafe_code,
     reason = "Arrow's C callbacks and importer require valid owned FFI objects"
@@ -461,18 +465,21 @@ fn read_arrow_stream(mut stream: FFI_ArrowArrayStream) -> Result<ArrowData, Unre
         if array.is_released() {
             break;
         }
-        if !arrow_buffers_aligned(&array, &data_type) {
+        if !arrow_import_preflight(&array, &data_type) {
             return Err(Unreadable::Declared);
         }
-        // SAFETY: the producer's C array is valid for its declared schema and
-        // owns its buffers. Every typed buffer in the complete array tree was
-        // checked for alignment before this importer can read offsets or sizes.
-        let data = unsafe { from_ffi_and_data_type(array, data_type.clone()) }.map_err(
+        // SAFETY: the producer supplies valid owned C data. Offsets and sizes
+        // the importer dereferences are aligned throughout the array tree.
+        // Other buffers are imported as bytes, aligned below, and fully
+        // validated before any typed array can read them.
+        let mut data = unsafe { from_ffi_and_data_type(array, data_type.clone()) }.map_err(
             |error| match error {
                 ArrowError::CDataInterface(_) => Unreadable::Producer,
                 _ => Unreadable::Declared,
             },
         )?;
+        data.align_buffers();
+        data.validate_full().map_err(|_| Unreadable::Declared)?;
         let length = data.len();
         let batch = RecordBatch::try_new_with_options(
             schema.clone(),
