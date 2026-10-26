@@ -1,6 +1,6 @@
 # Phase 3 validation tracker
 
-Updated 2026-10-26, 07:23 UTC.
+Updated 2026-10-26, 07:44 UTC.
 Phase 4 is paused at the owner's request; current agents focus on Phase 3.
 
 ## Acceptance
@@ -24,10 +24,10 @@ Use the existing common cases, pinned data, seeds, anchors and model settings ac
 
 | Area | Data and payload comparison | Model comparison | Quality verdict | Owner | Next action |
 |---|---|---|---|---|---|
-| Databricks SQL | Corrected client has 257/301 original non-connector observations, zero operator failures; completed 24-case processes each cleaned and verified empty; original connector case remains pending | Thirteen original model cases reconcile; all 15 corrected-client Databricks runtime jobs succeeded, final paired collection pending | Completed model pairs have exact predictions or approved matching refusals; data reconciliation remains open | Databricks agent | Finish 301 cases, diagnose the genuine wide-decimal INTERNAL_ERROR, run the original connector and reconcile all 302 |
-| Databricks Spark | Original 300 cases prepared with verified final-source production wheels and original serverless ARM runtime; not submitted while SQL owns the fixture | Prior 13 original model pairs reconciled; corrected runtime job succeeded, paired collection pending | Original parity retained; corrected full data verdict pending | Databricks agent | Submit the original 300-case run immediately after SQL/connector cleanup |
-| Snowflake | All 304 original cases captured and cleaned; approved lag/name differences recorded; diamond has differing raw catalog orders | Fifteen ordinary/semantic pairs have exact payloads and nine exact positive predictions plus six approved matching refusals; original diamond also returns predictions | Diamond RMSE is 1.54% worse, within the owner's 5% limit; it is not exact payload/prediction parity | Snowflake agent | Finish existing 20-source differential/provider checks on the final native, with unchanged frozen-reference preparation underway |
-| Lakebase | All 282 existing cases reconciled: 128 original differences match existing approvals, two type-capture differences repaired, one retained count difference has two exact-equivalence approvals | All ten model pairs pass: four exact prediction matches (285 rows), six exact refusal matches, all payloads exact except request IDs | Exact prediction/refusal parity for this local Python pair; remaining runtime cells pending | Lakebase agent and coordinator | Complete final source integration and remaining runtime cells; pinned 173106-row fixture is restored exactly |
+| Databricks SQL | All 302 original cases executed: 301 non-connector cases plus the repaired original connector; zero operator failures and cleanup clear; strict reconciliation pending | Complete corrected-client runtime comparison passes on actual `76eb785b91` source | All corresponding prediction rows and logical payloads exact, approved matching refusals retained | Databricks agent | Finish strict data reconciliation and the bounded wide-decimal error diagnosis; run final affected checks after the reviewed sampling correction |
+| Databricks Spark | Original 300 cases and runtime prepared; submission waits for the imminent reviewed sampling correction and genuine new native | Complete original runtime comparison passes on actual `76eb785b91` source | Exact prediction/payload parity and approved matching refusals on that source | Databricks agent | Use the genuine corrected final source/native for the original 300-case run, avoiding a knowingly obsolete campaign |
+| Snowflake | All 304 original cases captured and cleaned; finite reconciliation continues, including 16 stale reference digests; catalog order explains 131 positional schema differences | Fifteen ordinary/semantic pairs have exact payloads and nine exact positive predictions plus six approved matching refusals; original diamond also returns predictions | Diamond RMSE is 1.54% worse, within the owner's 5% limit; it is not exact payload/prediction parity | Snowflake agent | Finish existing 20-source differential/provider checks on the final native, with unchanged frozen-reference preparation underway |
+| Lakebase | All 282 existing cases reconciled on recorded source; pinned 173106-row fixture intact | All six corrected-client runtime profiles pass the full paired comparison on actual `76eb785b91` source | Exact predictions and logical payloads; approved matching refusals | Runtime agent and coordinator | Preserve all producing source/build IDs and finish final-source acceptance after the sampling correction |
 | Databricks metric views | One SQL smoke payload matches exactly; 19 cases per SQL/Spark path remain in the full comparison | All three original SQL model questions have exact payloads and either exact predictions or matching endpoint refusal | SQL model parity; Spark and full data coverage pending | Databricks agent | Complete SQL and Spark metric-view coverage |
 | Snowflake semantic views | All original cases captured; repaired wide-decimal and semantic-twin boundaries execute correctly | Five original semantic model pairs have exact logical payloads and predictions | Exact prediction parity | Snowflake agent | Timing complete but 31.51% slower; finish final evidence assessment |
 
@@ -39,24 +39,30 @@ Use the existing common cases, pinned data, seeds, anchors and model settings ac
    The protected `rust-core` branch remains Phase 2 until every exit requirement passes.
 2. Databricks owns the exclusive SQL fixture lease and the original 301-case continuation.
    The unbounded process grew to 14.6 GiB RSS; 24-case processes preserve all 146 earlier complete observations and bound process lifetime, with cleanup and zero-table verification between them.
-   `decimal.key-wide` still has a genuine materialization INTERNAL_ERROR against a reference INVALID_REQUEST; the cause is unproven and must be diagnosed, not waived.
-   The original connector case follows cleanup, then Spark's original 300-case campaign.
+   `decimal.key-wide` has a genuine materialization INTERNAL_ERROR against a reference INVALID_REQUEST.
+   The original public case reproduced it and the native control identifies signed-64-bit key binding overflow; Databricks supplies the internal-error classification where Snowflake supplies the existing named invalid-input classification.
+   A minimal Databricks classification correction and regression controls are authorized in an isolated topic, with two independent code reviews before checks.
+   The original connector case completed successfully with cleanup clear; Spark's original 300 cases wait for the imminent reviewed product correction and its genuine artifact.
 3. Snowflake completed all 304 data captures and 15 original ordinary/semantic model pairs.
    Nine positive pairs have exact typed predictions; six fully materialized same-code endpoint refusals count as parity under existing approval, with response bodies explicitly unrecorded.
    Full same-input diamond controls prove identical payloads for each catalog order; the one actual original model pair has differing catalog orders and predictions, with RMSE 4.668331 versus 4.740305, 1.54% degradation and within budget.
    Its strict 46-difference report remains preserved; matching task accuracy does not imply exact request parity.
    Both five-pair timing runs completed with detected slow controls and cleared fixtures; existing differential/reference preparations are next.
 4. Lakebase's 282 data cases and ten local model pairs remain reconciled on their recorded source.
-   All six Lakebase reference runtime jobs succeeded and were collected; all six corrected-client Lakebase core jobs succeeded and final artifacts are being collected.
+   All six Lakebase reference and corrected-client runtime profiles succeeded and their paired results are collected and reconciled.
    The canonical 173106-row fixture remains protected by the existing runtime read lease.
 5. All 21 corrected-client model/runtime profiles remain required, totaling 255 questions per client pass.
-   All 21 corrected-client runtime jobs succeeded, including all six Lakebase profiles; final paired artifact collection is active.
-   Twenty references are complete; the remaining J11 reference uses the authorized on-demand driver after two preserved spot-driver interruptions.
-   The reviewed partial diagnostic accounts for 169 questions, 5005 typed-exact prediction rows and 91 approved matching refusals, with zero actual differences; eight incomplete profiles prevent a full matrix PASS.
+   All 42 original reference/core executions succeeded, including the one on-demand reference recovery after two preserved spot interruptions.
+   The complete reviewed comparison passes all 255 questions: every logical payload exact, 114 positive prediction pairs with 7485 typed-exact rows, 141 approved matching endpoint refusals, zero actual differences or operator errors.
+   The report retains 147 original stricter diagnostics and does not claim unrecorded error response bodies.
+   Receipt SHA256: `cfabf1853ccc01d722da21d0f9261d7a970d95cbd6f3566ad9a8ee2b380e28ce`.
    Original source/build IDs remain attached to every reused artifact; no completed job is relabeled as new source evidence.
 6. The runtime agent also owns the genuine T3.9 closure miss: the approved NaN lag, SQL-text neighbor limit and negative-neighbor refusals remain in the current product and must be lifted.
    Closest public old/new reproductions are recorded; typed core/provider boundaries and explicit SQL-expression intent are the approved design.
-   Implementation and canonical working-contract generation are complete with tests-first commits; the candidate is being frozen on the actual phase head for two exact independent code reviews before checks.
+   Candidate `f2f1f52624d79a87fc63721467498730557d66e4`, based on `b549507b87`, has both fresh independent code approvals.
+   The prior reviewed build caught one missing existing error conversion; the one-expression correction has fresh approvals, and genuine cached production/test-ops builds are active.
+   No successful new native or package validation is claimed yet.
+   Existing completed model/data receipts keep their actual older source IDs; prepared Spark and source-differential core runs wait for the new truthful artifact.
 7. The coordinator owns CI, offline performance, integration and this tracker.
    Snowflake owns its remaining model/timing work; Databricks owns SQL/Spark, wide-decimal diagnosis and the sole artifact collector; the runtime agent owns cloud jobs and the T3.9 correction.
    These are the three active lanes; Phase 4 stays paused.
@@ -110,7 +116,8 @@ The next landing must derive every changed protected path from the actual Git di
   Preserve the original failures and producing source IDs.
 - [Run 40277736422](https://github.com/NVIDIA/structured-data-models-client/actions/runs/40277736422) is the new full CI run, actively executing on exact integrated source `76eb785b91aeaa319e6537ac8017a70b6f186ed4`.
   It was dispatched once with locked dependencies and the full workflow, without a topic subset.
-  It currently has eight failed jobs: four stale wheel-smoke inventories, three DuckDB contract cells and one Rust test job.
+  Nine jobs failed: four stale wheel-smoke inventories, three DuckDB contract cells, the Rust job and the root-tooling inventory check.
+  The contract-tooling job passed; root tooling completed 977 passed and one failed test in 71 minutes, with its sole stale inventory assertion already corrected in `130bd0f94c`.
   The Rust job passed observations, comparison and coverage; only its landing ratchet failed on the already-corrected trailer pathname.
   The third DuckDB cell additionally exposes a stale test rejecting approved database-scoped Lakebase register entries; the one-file test correction passed both reviews and normal checks, and is landed and verified at `b549507b87`.
   All four smoke jobs passed their 12 production and 59 native tests before the stale inventory check failed.
@@ -121,7 +128,8 @@ The next landing must derive every changed protected path from the actual Git di
   Import, boundary overhead, control size and provider pandas checks pass; native baseline size and statement inputs are not yet measured in this report.
   A bounded same-case diagnostic shows the DuckDB outlier uses the old materializer under its scoped test routing: actual default-core median is 62.94 ms against 109.54 ms for that mixed route; all ten calls succeed, but the original failed report is not overwritten.
   SQLite completed 160 scenarios and 150 complete pairs: median CPU ratio 0.345 with no individual slowdown, but five ranking cases exceed the 2 ms boundary budget, worst 2.403 ms.
-  PostgreSQL reference is complete and core measurement is active.
+  PostgreSQL completed 176 scenarios and 167 complete pairs: median CPU ratio 0.524, no individual CPU or boundary failures, and import/control/provider checks pass.
+  Its stock report still explicitly lacks native baseline and statement inputs, so this is not an overall performance PASS.
   The measured production native is 15831864 bytes against the immutable recorded Phase 1 baseline 9562016, ratio 1.656 above the 1.25 limit; no synthetic baseline wheel or size waiver is used.
 - Also finish existing model/runtime comparisons, original notebook/provider checks, direct paired performance checks, memory checks and the sealed final check, then final evidence review and merge/push.
 
