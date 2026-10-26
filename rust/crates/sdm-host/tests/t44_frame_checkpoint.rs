@@ -414,3 +414,42 @@ fn unseeded_entity_draw_accepts_the_full_host_entropy_domain() {
     .unwrap();
     terminal(&run).unwrap_or_else(|out| panic!("full-width OS entropy: {:?}", decoded(&out)));
 }
+
+#[test]
+fn resumed_early_failure_and_pre_next_cancel_retain_the_incoming_checkpoint() {
+    for cancellation in [false, true] {
+        let first = HostRun::start(&sdm_host::default_root(), &message(), inputs(3)).unwrap();
+        terminal(&first).unwrap();
+        let (state, owned) = checkpoint(&first);
+        let before = metadata(&state, &owned);
+        let (message, mut attached) = rebound(&state, &owned, 1);
+        attached.insert(AttachmentId(5), bytes(json!({"num_context_samples":0})));
+        let resumed = HostRun::start(&sdm_host::default_root(), &message, attached).unwrap();
+        if cancellation {
+            resumed.cancel().unwrap();
+        } else {
+            terminal(&resumed).expect_err("early context-size refusal");
+        }
+        let (state, owned) = checkpoint(&resumed);
+        assert_eq!(metadata(&state, &owned), before);
+        let (message, mut attached) = rebound(&state, &owned, 1);
+        let mut start: Value = serde_json::from_slice(&message).unwrap();
+        start["operation"]["seed"] = Value::Null;
+        start["operation"]["unseeded"] = json!(true);
+        attached.insert(
+            AttachmentId(5),
+            bytes(json!({"num_context_samples":1,"num_neighbors":[2],"random_seed":null})),
+        );
+        let next = HostRun::start(
+            &sdm_host::default_root(),
+            &serde_json::to_vec(&start).unwrap(),
+            attached,
+        )
+        .unwrap();
+        terminal(&next).unwrap();
+        let (state, owned) = checkpoint(&next);
+        let after = metadata(&state, &owned);
+        assert_eq!(after["source"], before["source"]);
+        assert_ne!(after["neighbors"], before["neighbors"]);
+    }
+}
