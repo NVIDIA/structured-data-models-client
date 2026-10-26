@@ -13,7 +13,9 @@ Static target `COUNT`/`SUM` retain their missing-time-range refusals; windowed a
 **API and ownership.**
 Keep `ProviderChoice::Frames`; dispatch `Materialize` directly to the core frame consumer, without `DataLayer`, a second provider or semantic callback.
 Propose operation-specific `MaterializeFrames { tables: Vec<FrameInput> }`, reusing ordered `FrameInput { source, rows }` bindings and existing Arrow admission, not describe's Table/Schema policies.
-At the reference's first graph-build position, detach current values; constructor snapshots are too early.
+At native start, the existing frame admission path detaches call-local foreign buffers while the binding retains its ownership guard.
+The first successful graph build retains those immutable rows as the query snapshot; an earlier failure caches none, so the next call converts current caller frames again.
+Schema construction does not freeze the query's snapshot.
 The core owns sanitization, row maps, CSC adjacency, selection and labels.
 Extend the sampler-state channel with a versioned opaque `FrameCheckpoint`: detached Arrow buffers, frozen graph facts and MT19937 words/position.
 Python retains it on this query's existing relational materializer and rebinds buffers with fresh attachment ids on every run, without interpreting semantics.
@@ -52,6 +54,7 @@ Metadata contains frozen logical graph facts, a source/snapshot fingerprint and 
 Each call rebinds checkpoint tables and metadata under fresh ids, while the snapshot identity is computed from logical schema/source and detached row values.
 The core publishes the checkpoint immediately after graph construction and updates it as draws occur, before any later error; an unknown-key failure therefore retains the built snapshot without advancing its neighbor RNG.
 Done, error and cancellation preserve only explicitly transferred checkpoint owners; run teardown and existing close acknowledgments release all other admitted and exported owners.
+The materializer uses the constructor's existing Host admission/detachment and Python GIL guard, without a second core copy or a new release mechanism.
 Python holds opaque checkpoint values on the existing query materializer and never rereads mutable caller frames after that graph was built.
 HostRun twins will exercise rebinding with different ids, unknown state versions, pre/post-draw failures, cancellation and lifetime release, alongside existing Java decoding compatibility.
 The shared MT primitive moves once into `sdm-engine::random`; the existing SQLite coefficient adapter and RS-2 vectors continue to use that implementation.
