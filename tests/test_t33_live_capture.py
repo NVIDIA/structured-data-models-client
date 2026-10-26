@@ -761,3 +761,62 @@ def test_the_job_installs_only_its_hosts_wheels(tmp_path: Path) -> None:
         'capture_run.installable_wheels'
         in (LIVE / 'capture_job.py').read_text()
     )
+
+
+@pytest.mark.parametrize('oid', [54844, 59540])
+def test_lakebase_live_capture_names_composite_types_in_its_own_schema(
+    oid: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = capture_run._named('run_python')
+    calls: list[tuple[str, Any]] = []
+    closed: list[str] = []
+    type_name = 'sdm_composite_users_f'
+
+    class Cursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc: Any) -> None:
+            closed.append('cursor')
+
+        def execute(self, sql: str, parameters: Any = None):
+            calls.append((sql, parameters))
+            return self
+
+        def fetchall(self):
+            return [(oid, type_name), (oid + 1, '_' + type_name)]
+
+    connection = types.SimpleNamespace(cursor=Cursor)
+    monkeypatch.setattr(
+        runner, 'live_configuration',
+        lambda leg: ({}, {'schema': 'only_this_schema'}, []),
+    )
+    monkeypatch.setattr(runner, 'resolve_placeholders', lambda case: case)
+    monkeypatch.setattr(
+        runner, '_connection',
+        lambda *args: types.SimpleNamespace(close=lambda: None),
+    )
+    monkeypatch.setattr(runner, '_duck_tables', lambda duck: [])
+    monkeypatch.setattr(
+        runner, 'connect_leg', lambda *args, **kwargs: (connection, lambda: None)
+    )
+    monkeypatch.setattr(
+        runner, '_sibling',
+        lambda name: types.SimpleNamespace(load=lambda *args: None),
+    )
+    monkeypatch.setattr(runner, 'session_zone', lambda *args: 'UTC')
+    live = runner.Live({'id': 'nested.struct', 'input': {}}, {}, 'lakebase')
+    log = runner.DriverLog()
+    live.captured(log)
+    assert len(calls) == 1
+    sql, parameters = calls[0]
+    assert 'pg_type' in sql and 'pg_namespace' in sql
+    assert parameters == ('only_this_schema',)
+    assert closed == ['cursor']
+    assert log.type_names == {oid: type_name, oid + 1: '_' + type_name}
+    driver = types.SimpleNamespace(description=[('f', oid), ('unknown', 999)])
+    assert runner._description(driver, log.type_names) == (
+        ['f', 'unknown'], [type_name, '999']
+    )
+    assert log.statements == []
+    live.close()
