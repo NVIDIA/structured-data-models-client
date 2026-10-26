@@ -152,9 +152,13 @@ def _convert(name: str, frame: pd.DataFrame) -> tuple[Any, dict[str, Any]]:
             type(dtype) is pd.DatetimeTZDtype
             and dtype.unit in ('s', 'ms', 'us', 'ns')
         )
-        if not (primitive or masked or temporal):
+        text = type(dtype) is pd.StringDtype and dtype.storage in (
+            'python',
+            'pyarrow',
+        )
+        if not (primitive or masked or temporal or text):
             raise RouteError(
-                f'the partial frame constructor supports only NumPy or pandas masked numeric and Boolean columns, or native datetimes: {name}.{column}'
+                f'the partial frame constructor supports only NumPy or pandas masked numeric and Boolean columns, native datetimes, or built-in pandas strings: {name}.{column}'
             )
         # Convert values only. DataFrame export may add a non-Range index
         # column, which the public schema constructor never describes.
