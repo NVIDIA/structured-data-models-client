@@ -379,3 +379,38 @@ fn native_count_dtype_failure_keeps_the_reset_but_unconsumed_stream() {
     assert_eq!(state["neighbors"]["position"], 624);
     assert_eq!(state["neighbors"]["words"][0], 7);
 }
+
+#[test]
+fn unseeded_entity_draw_accepts_the_full_host_entropy_domain() {
+    let mut attached = inputs(3);
+    attached.insert(
+        AttachmentId(8),
+        data(&[
+            ("user_id", (1..=100).collect()),
+            ("age", (20..120).collect()),
+        ]),
+    );
+    attached.insert(
+        AttachmentId(5),
+        bytes(json!({
+            "num_context_samples": 1, "num_neighbors": [2],
+            "num_hops": 1, "random_seed": null,
+        })),
+    );
+    let Attachment::Bytes(raw) = &attached[&AttachmentId(7)] else {
+        panic!("manifest")
+    };
+    let mut manifest: Value = serde_json::from_slice(raw).unwrap();
+    manifest["entropy"] = json!(u64::MAX);
+    attached.insert(AttachmentId(7), bytes(manifest));
+    let mut start: Value = serde_json::from_slice(&message()).unwrap();
+    start["operation"]["seed"] = Value::Null;
+    start["operation"]["unseeded"] = json!(true);
+    let run = HostRun::start(
+        &sdm_host::default_root(),
+        &serde_json::to_vec(&start).unwrap(),
+        attached,
+    )
+    .unwrap();
+    terminal(&run).unwrap_or_else(|out| panic!("full-width OS entropy: {:?}", decoded(&out)));
+}
