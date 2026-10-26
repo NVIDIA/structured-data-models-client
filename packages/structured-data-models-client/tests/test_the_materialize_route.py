@@ -641,9 +641,9 @@ def test_other_nonfinite_inference_fields_are_still_refused(
 ) -> None:
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     for config, message in [
-        ({'column_shuffle': given}, 'must be a boolean'),
+        ({'column_shuffle': given}, 'is true or false'),
         ({'target_transforms': [given]}, 'target_transforms'),
-        ({'class_shuffle': given}, 'not an option'),
+        ({'class_shuffle': given}, 'not an inference option'),
     ]:
         with pytest.raises(StructuredDataError) as refused:
             _materialize(inference_config=config)
