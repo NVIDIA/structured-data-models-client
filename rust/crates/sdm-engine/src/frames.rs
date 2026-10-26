@@ -10,7 +10,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use arrow_array::{
-    Array, ArrayRef, BooleanArray, Float32Array, Float64Array, Int64Array, RecordBatch, UInt64Array,
+    Array, ArrayRef, Float32Array, Float64Array, Int64Array, RecordBatch, UInt64Array,
 };
 use arrow_schema::{DataType, Field, Schema};
 use sdm_contract::data::{BATCH_COLUMN, MATCHES_COLUMN};
@@ -30,15 +30,9 @@ fn named<'a>(batch: &'a RecordBatch, name: &str) -> Result<&'a ArrayRef, CoreErr
         .ok_or_else(|| invalid("a frame lacks a described column"))
 }
 
-/// Boolean foreign-key values compare as native 0 and 1. Boolean primary
-/// keys are outside the constructor's admitted identifying types.
+/// Reuse the shared numeric identifier reader, applying native missingness.
+/// Boolean features do not enter this identifying-key path.
 fn read_keys(array: &ArrayRef) -> Result<Vec<Option<Key>>, CoreError> {
-    if let Some(array) = array.as_any().downcast_ref::<BooleanArray>() {
-        return Ok(array
-            .iter()
-            .map(|v| v.map(|v| Key::Int(if v { 1 } else { 0 })))
-            .collect());
-    }
     let mut values = keys::read(array)?;
     if let Some(array) = array.as_any().downcast_ref::<Float32Array>() {
         for (row, value) in values.iter_mut().enumerate() {

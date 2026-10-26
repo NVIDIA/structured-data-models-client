@@ -1,8 +1,8 @@
 # T4.4 first numeric frame consumer
 
 **Consumed boundary, implementation in progress.**
-Initial source base was `6f29cd29e970e5c57c55339e14445044abf48d66`; this source integrates onto the independently CODE-approved TimestampUnit32 candidate `aa1d300d95f4d68fba8624fa0a66769c3b4ef607`.
-The coordinator authorized complete checkpoint33 generation and review on that approved source without waiting for its empty landing metadata.
+Initial source base was `6f29cd29e970e5c57c55339e14445044abf48d66`; integration now uses actual TimestampUnit32 landing `6281c23dfd7e453bf977731bc0667fdee9cdf17d`, whose tree equals approved candidate `aa1d300d95f4d68fba8624fa0a66769c3b4ef607`.
+The mechanical move onto that landing preserved every owned commit tree and tests-first ordering.
 This consumer introduces its checkpoint at wire 33 through the canonical generator.
 Default routes remain unchanged while this first consumer is explicitly selected.
 
