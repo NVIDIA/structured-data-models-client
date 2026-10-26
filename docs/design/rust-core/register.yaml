@@ -11073,3 +11073,367 @@ entries:
     All637 original failed FK reads across277 cases remain immutable; this entry adds no catalog, statement, graph, payload or warning wildcard.
   case_outcomes:
   - {case: key.declared-int32@databricks-sql, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'Owner approved the measured non-name-inferred declared FK prediction success'}
+
+- id: P3F-2
+  title: Retain all valid links supplied by sampled foreign-key partial maps
+  kind: change
+  old_behavior: >-
+    The first nonempty partial map completes an entire logical foreign key.
+    Later partial maps are skipped, leaving null keys for sampled source rows
+    whose correct targets were reached through another sampled path.
+    Table discovery order can therefore change which links reach the model.
+  new_behavior: >-
+    Merge existing partial maps by sampled source-row occurrence.
+    The first partial supplying a row retains its key; conflicting duplicates
+    inside one partial retain the legacy last-valid bounds-checked pair.
+    Fill only keys supplied by actual sampled pairs and keep other rows null.
+    Existing null-dependent FK numeric typing follows the completed column.
+    Sampling, source rows, temporal bounds, labels and source reads stay unchanged.
+  affected_inputs: >-
+    Relational requests with multiple sampled partial maps for one logical
+    foreign key where a later map supplies a source-row occurrence missing
+    from earlier maps. This is not limited to diamond-shaped schemas.
+  cases:
+  - sample.parent-table.decimal-keys
+  - sample.parent-table
+  - sample.parent-table.relbench-avito
+  - sample.parent-table.relbench-stack
+  - sample.parent-table.static
+  - shape.diamond-from-source
+  - shape.diamond.addresses
+  - shape.two-paths.keyed
+  - shape.two-paths.keyless
+  refs: [T3.10, rust/crates/sdm-request/src/payload.rs, rust/crates/sdm-request/tests/payload_lock.rs, packages/structured-data-models-client/tests/test_diamond_foreign_keys.py]
+  more_exact:
+  - case: sample.parent-table.decimal-keys
+    runners: [python-core, rust-host, java]
+    fields: &p3f2_fields_1
+    - 'public.payloads/*/2/schema/related_tables/accounts/columns/owner_id/dtype'
+    - 'public.payloads/*/2/context/related_tables/accounts/rows/*/3'
+    - 'public.payloads/*/2/predict/related_tables/accounts/rows/*/3'
+    - 'core.predicted.body/*/schema/related_tables/accounts/columns/owner_id/dtype'
+    - 'core.predicted.body/*/context/related_tables/accounts/rows/*/3'
+    - 'core.predicted.body/*/predict/related_tables/accounts/rows/*/3'
+    null_on_one_side: true
+  - case: sample.parent-table.decimal-keys@sqlite
+    runners: [python-core, rust-host, java]
+    fields: *p3f2_fields_1
+    null_on_one_side: true
+  - case: sample.parent-table.decimal-keys@postgres
+    runners: [python-core, rust-host, java]
+    fields: *p3f2_fields_1
+    null_on_one_side: true
+  - case: sample.parent-table.decimal-keys@databricks-sql
+    runners: [python-core, rust-host, java]
+    fields: *p3f2_fields_1
+    null_on_one_side: true
+  - case: sample.parent-table.decimal-keys@databricks-spark
+    runners: [python-core]
+    fields: *p3f2_fields_1
+    null_on_one_side: true
+  - case: sample.parent-table.decimal-keys@snowflake
+    runners: [python-core]
+    fields: *p3f2_fields_1
+    null_on_one_side: true
+  - case: sample.parent-table.decimal-keys@lakebase
+    runners: [python-core]
+    fields: *p3f2_fields_1
+    null_on_one_side: true
+  - case: sample.parent-table
+    runners: [python-core, rust-host, java]
+    fields: &p3f2_fields_2
+    - 'public.payloads/*/2/schema/related_tables/orders/columns/user_id/dtype'
+    - 'public.payloads/*/2/context/related_tables/orders/rows/*/4'
+    - 'public.payloads/*/2/predict/related_tables/orders/rows/*/4'
+    - 'core.predicted.body/*/schema/related_tables/orders/columns/user_id/dtype'
+    - 'core.predicted.body/*/context/related_tables/orders/rows/*/4'
+    - 'core.predicted.body/*/predict/related_tables/orders/rows/*/4'
+    null_on_one_side: true
+  - case: sample.parent-table@sqlite
+    runners: [python-core, rust-host, java]
+    fields: *p3f2_fields_2
+    null_on_one_side: true
+  - case: sample.parent-table@postgres
+    runners: [python-core, rust-host, java]
+    fields: *p3f2_fields_2
+    null_on_one_side: true
+  - case: sample.parent-table@databricks-sql
+    runners: [python-core, rust-host, java]
+    fields: *p3f2_fields_2
+    null_on_one_side: true
+  - case: sample.parent-table@databricks-spark
+    runners: [python-core]
+    fields: *p3f2_fields_2
+    null_on_one_side: true
+  - case: sample.parent-table@snowflake
+    runners: [python-core]
+    fields: *p3f2_fields_2
+    null_on_one_side: true
+  - case: sample.parent-table@lakebase
+    runners: [python-core]
+    fields: *p3f2_fields_2
+    null_on_one_side: true
+  - case: sample.parent-table.relbench-avito
+    runners: [python-core, rust-host, java]
+    fields: &p3f2_fields_3
+    - 'public.payloads/*/2/context/related_tables/AdsInfo/rows/*/3'
+    - 'public.payloads/*/2/context/related_tables/AdsInfo/rows/*/4'
+    - 'public.payloads/*/2/predict/related_tables/AdsInfo/rows/*/3'
+    - 'public.payloads/*/2/predict/related_tables/AdsInfo/rows/*/4'
+    - 'core.predicted.body/*/context/related_tables/AdsInfo/rows/*/3'
+    - 'core.predicted.body/*/context/related_tables/AdsInfo/rows/*/4'
+    - 'core.predicted.body/*/predict/related_tables/AdsInfo/rows/*/3'
+    - 'core.predicted.body/*/predict/related_tables/AdsInfo/rows/*/4'
+    null_on_one_side: true
+  - case: sample.parent-table.relbench-avito@sqlite
+    runners: [python-core, rust-host, java]
+    fields: *p3f2_fields_3
+    null_on_one_side: true
+  - case: sample.parent-table.relbench-avito@postgres
+    runners: [python-core, rust-host, java]
+    fields: *p3f2_fields_3
+    null_on_one_side: true
+  - case: sample.parent-table.relbench-avito@databricks-sql
+    runners: [python-core, rust-host, java]
+    fields: *p3f2_fields_3
+    null_on_one_side: true
+  - case: sample.parent-table.relbench-avito@databricks-spark
+    runners: [python-core]
+    fields: *p3f2_fields_3
+    null_on_one_side: true
+  - case: sample.parent-table.relbench-avito@snowflake
+    runners: [python-core]
+    fields: *p3f2_fields_3
+    null_on_one_side: true
+  - case: sample.parent-table.relbench-avito@lakebase
+    runners: [python-core]
+    fields: *p3f2_fields_3
+    null_on_one_side: true
+  - case: sample.parent-table.relbench-stack
+    runners: [python-core, rust-host, java]
+    fields: &p3f2_fields_4
+    - 'public.payloads/*/2/context/related_tables/posts/rows/*/5'
+    - 'public.payloads/*/2/context/related_tables/posts/rows/*/4'
+    - 'public.payloads/*/2/context/related_tables/votes/rows/*/5'
+    - 'public.payloads/*/2/predict/related_tables/posts/rows/*/4'
+    - 'public.payloads/*/2/predict/related_tables/posts/rows/*/5'
+    - 'public.payloads/*/2/predict/related_tables/votes/rows/*/5'
+    - 'core.predicted.body/*/context/related_tables/posts/rows/*/5'
+    - 'core.predicted.body/*/context/related_tables/posts/rows/*/4'
+    - 'core.predicted.body/*/context/related_tables/votes/rows/*/5'
+    - 'core.predicted.body/*/predict/related_tables/posts/rows/*/4'
+    - 'core.predicted.body/*/predict/related_tables/posts/rows/*/5'
+    - 'core.predicted.body/*/predict/related_tables/votes/rows/*/5'
+    null_on_one_side: true
+  - case: sample.parent-table.relbench-stack@sqlite
+    runners: [python-core, rust-host, java]
+    fields: *p3f2_fields_4
+    null_on_one_side: true
+  - case: sample.parent-table.relbench-stack@postgres
+    runners: [python-core, rust-host, java]
+    fields: *p3f2_fields_4
+    null_on_one_side: true
+  - case: sample.parent-table.relbench-stack@databricks-sql
+    runners: [python-core, rust-host, java]
+    fields: *p3f2_fields_4
+    null_on_one_side: true
+  - case: sample.parent-table.relbench-stack@databricks-spark
+    runners: [python-core]
+    fields: *p3f2_fields_4
+    null_on_one_side: true
+  - case: sample.parent-table.relbench-stack@snowflake
+    runners: [python-core]
+    fields: *p3f2_fields_4
+    null_on_one_side: true
+  - case: sample.parent-table.relbench-stack@lakebase
+    runners: [python-core]
+    fields: *p3f2_fields_4
+    null_on_one_side: true
+  - case: sample.parent-table.static
+    runners: [python-core, rust-host, java]
+    fields: &p3f2_fields_5
+    - 'public.payloads/*/2/schema/related_tables/orders/columns/user_id/dtype'
+    - 'public.payloads/*/2/context/related_tables/orders/rows/*/3'
+    - 'public.payloads/*/2/predict/related_tables/orders/rows/*/3'
+    - 'core.predicted.body/*/schema/related_tables/orders/columns/user_id/dtype'
+    - 'core.predicted.body/*/context/related_tables/orders/rows/*/3'
+    - 'core.predicted.body/*/predict/related_tables/orders/rows/*/3'
+    null_on_one_side: true
+  - case: sample.parent-table.static@sqlite
+    runners: [python-core, rust-host, java]
+    fields: *p3f2_fields_5
+    null_on_one_side: true
+  - case: sample.parent-table.static@postgres
+    runners: [python-core, rust-host, java]
+    fields: *p3f2_fields_5
+    null_on_one_side: true
+  - case: sample.parent-table.static@databricks-sql
+    runners: [python-core, rust-host, java]
+    fields: *p3f2_fields_5
+    null_on_one_side: true
+  - case: sample.parent-table.static@databricks-spark
+    runners: [python-core]
+    fields: *p3f2_fields_5
+    null_on_one_side: true
+  - case: sample.parent-table.static@snowflake
+    runners: [python-core]
+    fields: *p3f2_fields_5
+    null_on_one_side: true
+  - case: sample.parent-table.static@lakebase
+    runners: [python-core]
+    fields: *p3f2_fields_5
+    null_on_one_side: true
+  - case: shape.diamond-from-source
+    runners: [python-core, rust-host, java]
+    fields: &p3f2_fields_6
+    - 'public.payloads/*/2/schema/related_tables/orders/columns/cid/dtype'
+    - 'public.payloads/*/2/context/related_tables/orders/rows/*/7'
+    - 'public.payloads/*/2/predict/related_tables/orders/rows/*/7'
+    - 'core.predicted.body/*/schema/related_tables/orders/columns/cid/dtype'
+    - 'core.predicted.body/*/context/related_tables/orders/rows/*/7'
+    - 'core.predicted.body/*/predict/related_tables/orders/rows/*/7'
+    null_on_one_side: true
+  - case: shape.diamond-from-source@sqlite
+    runners: [python-core, rust-host, java]
+    fields: *p3f2_fields_6
+    null_on_one_side: true
+  - case: shape.diamond-from-source@postgres
+    runners: [python-core, rust-host, java]
+    fields: *p3f2_fields_6
+    null_on_one_side: true
+  - case: shape.diamond-from-source@databricks-sql
+    runners: [python-core, rust-host, java]
+    fields: *p3f2_fields_6
+    null_on_one_side: true
+  - case: shape.diamond-from-source@databricks-spark
+    runners: [python-core]
+    fields: *p3f2_fields_6
+    null_on_one_side: true
+  - case: shape.diamond-from-source@snowflake
+    runners: [python-core]
+    fields: *p3f2_fields_6
+    null_on_one_side: true
+  - case: shape.diamond-from-source@lakebase
+    runners: [python-core]
+    fields: *p3f2_fields_6
+    null_on_one_side: true
+  - case: shape.diamond.addresses
+    runners: [python-core, rust-host, java]
+    fields: &p3f2_fields_7
+    - 'public.payloads/*/2/schema/related_tables/orders/columns/cid/dtype'
+    - 'public.payloads/*/2/context/related_tables/orders/rows/*/7'
+    - 'public.payloads/*/2/predict/related_tables/orders/rows/*/7'
+    - 'core.predicted.body/*/schema/related_tables/orders/columns/cid/dtype'
+    - 'core.predicted.body/*/context/related_tables/orders/rows/*/7'
+    - 'core.predicted.body/*/predict/related_tables/orders/rows/*/7'
+    null_on_one_side: true
+  - case: shape.diamond.addresses@sqlite
+    runners: [python-core, rust-host, java]
+    fields: *p3f2_fields_7
+    null_on_one_side: true
+  - case: shape.diamond.addresses@postgres
+    runners: [python-core, rust-host, java]
+    fields: *p3f2_fields_7
+    null_on_one_side: true
+  - case: shape.diamond.addresses@databricks-sql
+    runners: [python-core, rust-host, java]
+    fields: *p3f2_fields_7
+    null_on_one_side: true
+  - case: shape.diamond.addresses@databricks-spark
+    runners: [python-core]
+    fields: *p3f2_fields_7
+    null_on_one_side: true
+  - case: shape.diamond.addresses@snowflake
+    runners: [python-core]
+    fields: *p3f2_fields_7
+    null_on_one_side: true
+  - case: shape.diamond.addresses@lakebase
+    runners: [python-core]
+    fields: *p3f2_fields_7
+    null_on_one_side: true
+  - case: shape.two-paths.keyed
+    runners: [python-core, rust-host, java]
+    fields: &p3f2_fields_8
+    - 'public.payloads/*/2/schema/related_tables/details/columns/hid/dtype'
+    - 'public.payloads/*/2/context/related_tables/details/rows/*/4'
+    - 'public.payloads/*/2/predict/related_tables/details/rows/*/4'
+    - 'core.predicted.body/*/schema/related_tables/details/columns/hid/dtype'
+    - 'core.predicted.body/*/context/related_tables/details/rows/*/4'
+    - 'core.predicted.body/*/predict/related_tables/details/rows/*/4'
+    null_on_one_side: true
+  - case: shape.two-paths.keyed@sqlite
+    runners: [python-core, rust-host, java]
+    fields: *p3f2_fields_8
+    null_on_one_side: true
+  - case: shape.two-paths.keyed@postgres
+    runners: [python-core, rust-host, java]
+    fields: *p3f2_fields_8
+    null_on_one_side: true
+  - case: shape.two-paths.keyed@databricks-sql
+    runners: [python-core, rust-host, java]
+    fields: *p3f2_fields_8
+    null_on_one_side: true
+  - case: shape.two-paths.keyed@databricks-spark
+    runners: [python-core]
+    fields: *p3f2_fields_8
+    null_on_one_side: true
+  - case: shape.two-paths.keyed@snowflake
+    runners: [python-core]
+    fields: *p3f2_fields_8
+    null_on_one_side: true
+  - case: shape.two-paths.keyed@lakebase
+    runners: [python-core]
+    fields: *p3f2_fields_8
+    null_on_one_side: true
+  - case: shape.two-paths.keyless
+    runners: [python-core, rust-host, java]
+    fields: &p3f2_fields_9
+    - 'public.payloads/*/2/schema/related_tables/details/columns/hid/dtype'
+    - 'public.payloads/*/2/context/related_tables/details/rows/*/5'
+    - 'public.payloads/*/2/predict/related_tables/details/rows/*/5'
+    - 'core.predicted.body/*/schema/related_tables/details/columns/hid/dtype'
+    - 'core.predicted.body/*/context/related_tables/details/rows/*/5'
+    - 'core.predicted.body/*/predict/related_tables/details/rows/*/5'
+    null_on_one_side: true
+  - case: shape.two-paths.keyless@sqlite
+    runners: [python-core, rust-host, java]
+    fields: *p3f2_fields_9
+    null_on_one_side: true
+  - case: shape.two-paths.keyless@postgres
+    runners: [python-core, rust-host, java]
+    fields: *p3f2_fields_9
+    null_on_one_side: true
+  - case: shape.two-paths.keyless@databricks-sql
+    runners: [python-core, rust-host, java]
+    fields: *p3f2_fields_9
+    null_on_one_side: true
+  - case: shape.two-paths.keyless@databricks-spark
+    runners: [python-core]
+    fields: *p3f2_fields_9
+    null_on_one_side: true
+  - case: shape.two-paths.keyless@snowflake
+    runners: [python-core]
+    fields: *p3f2_fields_9
+    null_on_one_side: true
+  - case: shape.two-paths.keyless@lakebase
+    runners: [python-core]
+    fields: *p3f2_fields_9
+    null_on_one_side: true
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T310-OWNER-2026-10-26-COMPLETE-SAMPLED-LINKS-1}
+  notes: >-
+    The owner explicitly chose to keep all valid links on 2026-10-26.
+    The original315-case audit changes only these nine cases:1320 null-to-key
+    fills,383 exact numeric-token changes and seven FK dtype restorations.
+    Exact producer and per-row source proofs remain in the private evidence.
+    The scalar paths name only the affected physical FK columns and their
+    existing dtype fields in the original cases; YAML aliases reuse the same
+    precise path lists across the existing database counterparts.
+    They supply no row-count, ordering, relationship-list, sampling, label,
+    feature, error, warning or whole-payload exclusion.
+    Raw differences remain preserved and every changed mapping must still
+    have an actual sampled same-instance target under finite review.
+    The three-prediction deployed comparison is2.4701percent worse in RMSE,
+    within five percent; no broader accuracy improvement is claimed.
+    No sampler change or new raw-source join is approved.

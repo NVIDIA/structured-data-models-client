@@ -387,3 +387,21 @@ No sampling code, case inventory, comparison matcher, numeric tolerance or compa
 | # | Question and scope | Owner's words | Status |
 |---|---|---|---|
 | T310-OWNER-2026-10-26-SF-IDENTICAL-INPUT-1 | Keep Snowflake sampling unchanged and validate the one original multicall question on identical original captured source rows and contexts; preserve the independent-draw failure and all source/model identities | "Ok don't change any sampling, i.e. for snowflake. Just compare on identical rows/contexts." | approved by owner 2026-10-26 |
+
+
+## Complete valid sampled foreign-key links, 2026-10-26
+
+The old Python client and Rust source15e retain only the first partial mapping for a logical foreign key, dropping links supplied by later sampled paths.
+The original diamond has43 already-sampled source rows with matching sampled targets, but table discovery order leaves21 or22 links.
+The shared request producer now merges those partial mappings by sampled source-row occurrence, preserving the first supplying partial and the legacy last-valid duplicate within each partial.
+Sampling, selected rows, temporal bounds, labels, feature values, table order, public APIs and warehouse reads remain unchanged.
+Only an existing partial map may supply a missing key; merely finding another target row in the source is insufficient.
+The exact existing315-case DuckDB audit identifies nine changed payloads,1320 valid null-to-key fills and their existing null-dependent numeric dtype consequences, with no other materialized fields changed.
+The deployed model26 experiment on the original diamond has RMSE2.4701percent worse across three predictions, within the owner's five-percent limit; it demonstrates no accuracy improvement or universal temporal-leakage guarantee.
+Both independent code and actual-result reviews precede this decision record.
+The exact owner message is preserved in `$SDM_ORCH_STATE/phase-3/owner-answer-20261026-complete-sampled-links.primary.json`.
+All affected existing warehouse/runtime cases and final-source full CI remain required.
+
+| # | Question and scope | Owner's words | Status |
+|---|---|---|---|
+| T310-OWNER-2026-10-26-COMPLETE-SAMPLED-LINKS-1 | Keep every valid link supplied by the existing sampled partial maps instead of preserving the old partial-link behavior, subject to affected-case checks and final CI; sampling stays unchanged | 'Regarding the earlier question on "Keep all valid links" vs "Preserve the old partial-link behavior" - sure, keep all valid links' | approved by owner 2026-10-26 |
