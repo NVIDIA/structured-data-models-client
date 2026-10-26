@@ -101,6 +101,19 @@
       },
       "oneOf": [
         {
+          "description": "Present the pending warnings before requesting the next step.\nNo data reply is required; cancel or close instead of continuing if the\nhost's warning policy raises. The core has not crossed the boundary.",
+          "type": "object",
+          "properties": {
+            "step": {
+              "type": "string",
+              "const": "warnings"
+            }
+          },
+          "required": [
+            "step"
+          ]
+        },
+        {
           "description": "Answer every one of these before asking for the next step.",
           "type": "object",
           "properties": {
@@ -6486,6 +6499,7 @@
         "frame_task_references",
         "frame_no_valid_rows",
         "frame_neighbor_dtype",
+        "frame_rows_dropped",
         "link_history_missing",
         "link_target_not_foreign_key",
         "subgraph_past_tables",
