@@ -616,7 +616,17 @@ def test_inference_options_not_a_mapping_are_refused(
         (BINARY, 'ClassificationInferenceConfig'),
     ],
 )
-@pytest.mark.parametrize('given', [float('inf'), float('-inf'), float('nan')])
+@pytest.mark.parametrize(
+    'given',
+    [
+        float('inf'),
+        float('-inf'),
+        float('nan'),
+        np.float32('inf'),
+        np.float64('inf'),
+        np.longdouble('inf'),
+    ],
+)
 def test_nonfinite_estimators_keep_the_task_validators_public_message(
     monkeypatch: pytest.MonkeyPatch, query: str, title: str, given: float
 ) -> None:
