@@ -104,7 +104,10 @@ def test_unsafe_download_or_other_token_destination_still_fails(
         document['jobs']['engine']['steps'].append(download)
     elif mutation == 'extra-action':
         java['steps'].append(
-            {'uses': 'example/untrusted@main', 'with': copy.deepcopy(download['with'])}
+            {
+                'uses': 'example/untrusted@main',
+                'with': copy.deepcopy(download['with']),
+            }
         )
     elif mutation == 'duplicate-download':
         java['steps'].append(copy.deepcopy(download))

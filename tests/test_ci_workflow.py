@@ -1119,7 +1119,8 @@ def test_ci4_the_token_goes_only_to_ghcr_io(
     which are exactly ``github.actor`` and ``secrets.GITHUB_TOKEN``; a
     service whose image is elsewhere has no credentials; and the landing
     job's skip step, which reads the candidate's runs from the GitHub API
-    (round 4) and runs no container. No other secret is used, and nothing
+    (round 4) and runs no container, and the pinned Java artifact action
+    reading this repository's current run. No other secret is used, and nothing
     wider than reading packages and Actions runs is granted."""
 
     def check() -> None:
@@ -1129,7 +1130,7 @@ def test_ci4_the_token_goes_only_to_ghcr_io(
             {'contents': 'read', 'packages': 'read', 'actions': 'read'},
         )
         assert not re.search(TOKEN, str(workflow.get('env')))
-        steps = services = 0
+        steps = services = artifact_downloads = 0
         for name, job in workflow['jobs'].items():
             assert not re.search(TOKEN, str(job.get('env'))), name
             # Only the nightly dispatch writes: it starts runs (Actions).
@@ -1144,7 +1145,23 @@ def test_ci4_the_token_goes_only_to_ghcr_io(
             if 'container' in job:
                 assert isinstance(job['container'], str), name
             for step in job.get('steps', []):
-                assert not re.search(TOKEN, str(step.get('with'))), (name, step)
+                if re.search(TOKEN, str(step.get('with'))):
+                    assert name == 'java', (name, step)
+                    assert step == {
+                        'uses': (
+                            'actions/download-artifact@'
+                            '9000827ccba6bdab643e8b6fd33ac0654aef8333'
+                        ),
+                        'with': {
+                            'name': 'java-jar',
+                            'path': 'jar',
+                            'github-token': '${{ github.token }}',
+                            'repository': '${{ github.repository }}',
+                            'run-id': '${{ github.run_id }}',
+                        },
+                    }, (name, step)
+                    assert workflow['permissions']['actions'] == 'read'
+                    artifact_downloads += 1
                 assert not re.search(TOKEN, str(step.get('run'))), (name, step)
                 for key, value in (step.get('env') or {}).items():
                     if not re.search(TOKEN, str(value)):
@@ -1183,9 +1200,19 @@ def test_ci4_the_token_goes_only_to_ghcr_io(
             'GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}',
             'password: ${{ secrets.GITHUB_TOKEN }}',
         } | {f'{key}: {value}' for key, value in API_TOKENS}
+        artifact_token_lines = 0
         for line in CI.read_text(encoding='utf-8').splitlines():
             if re.search(TOKEN, line) and not line.strip().startswith('#'):
-                assert line.strip() in allowed, line
+                if line.strip() == 'github-token: ${{ github.token }}':
+                    artifact_token_lines += 1
+                else:
+                    assert line.strip() in allowed, line
+        # The one new textual token occurrence must belong to the exact
+        # structurally checked action, never another key or duplicate step.
+        assert artifact_token_lines == artifact_downloads == 1, (
+            artifact_token_lines,
+            artifact_downloads,
+        )
 
     _held(request, check)
 
