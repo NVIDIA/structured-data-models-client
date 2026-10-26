@@ -20,7 +20,7 @@ use std::collections::BTreeMap;
 use sdm_contract::facts::{InstantRange, PlatformFacts};
 use sdm_contract::ops::{ProfileName, ProfileSpec, QuerySchema, Severity};
 use sdm_contract::pql::{NodeKind, PqlLiteral};
-use sdm_contract::{CoreWarning, HostFacts, Scalar, Unit};
+use sdm_contract::{CoreWarning, HostFacts, Scalar, TimestampUnit};
 use sdm_core::pql::{DATE_LITERAL_DAY_FIRST, resolve, validate};
 use sdm_core::profiles::Profile;
 use serde_json::json;
@@ -48,7 +48,7 @@ fn pandas_2() -> InstantRange {
 fn facts(range: Option<InstantRange>) -> HostFacts {
     HostFacts {
         now: Scalar::Timestamp {
-            unit: Unit::Us,
+            unit: TimestampUnit::Us,
             zone: Some("UTC".into()),
             value: 1_767_225_600_000_000,
         },

@@ -262,7 +262,7 @@ fn a_timestamp_is_passed_over_for_its_values_and_why_is_kept() {
             "modified_date".to_owned(),
             PassedOver::Constant {
                 value: Some(Scalar::Timestamp {
-                    unit: sdm_contract::Unit::Us,
+                    unit: sdm_contract::TimestampUnit::Us,
                     zone: None,
                     value: 1_700_000_000_000_000
                 }),
@@ -329,7 +329,7 @@ fn a_timestamp_is_passed_over_for_its_values_and_why_is_kept() {
                 "same",
                 &PassedOver::Constant {
                     value: Some(Scalar::Timestamp {
-                        unit: sdm_contract::Unit::Us,
+                        unit: sdm_contract::TimestampUnit::Us,
                         zone: None,
                         value: day(3)
                     }),
@@ -575,7 +575,7 @@ fn whole(rows: usize, columns: &[(&str, usize, bool, Option<i64>)]) -> infer::Wh
                         held: *held,
                         same: *same,
                         low: start.map(|value| Scalar::Timestamp {
-                            unit: sdm_contract::Unit::Us,
+                            unit: sdm_contract::TimestampUnit::Us,
                             zone: None,
                             value,
                         }),
@@ -636,7 +636,7 @@ fn the_whole_table_decides_what_the_preview_cannot() {
             "happened".to_owned(),
             PassedOver::Constant {
                 value: Some(Scalar::Timestamp {
-                    unit: sdm_contract::Unit::Us,
+                    unit: sdm_contract::TimestampUnit::Us,
                     zone: None,
                     value: day(0),
                 }),
@@ -1034,7 +1034,7 @@ fn a_whole_table_read_that_failed_keeps_what_the_preview_doubts() {
             "happened".to_owned(),
             PassedOver::Constant {
                 value: Some(Scalar::Timestamp {
-                    unit: sdm_contract::Unit::Us,
+                    unit: sdm_contract::TimestampUnit::Us,
                     zone: None,
                     value: day(0),
                 }),

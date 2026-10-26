@@ -24,13 +24,13 @@ use sdm_contract::run::{
 };
 use sdm_contract::{
     CONTRACT_VERSION, ColumnType, ControlMessage, CoreError, CoreWarning, Detail, ErrorKind, Field,
-    HostFacts, Scalar, Sentence, Step, Unit,
+    HostFacts, Scalar, Sentence, Step, TimestampUnit,
 };
 
 pub fn facts() -> HostFacts {
     HostFacts {
         now: Scalar::Timestamp {
-            unit: Unit::Us,
+            unit: TimestampUnit::Us,
             zone: Some("UTC".into()),
             value: 1_790_000_000_000_000,
         },
@@ -75,7 +75,7 @@ pub fn seeds(times: &[&str]) -> KeySet {
         field(
             name,
             ColumnType::Timestamp {
-                unit: Unit::Ns,
+                unit: TimestampUnit::Ns,
                 zone: None,
             },
         )
@@ -192,7 +192,7 @@ pub fn messages() -> Vec<ControlMessage> {
                             column: "at".into(),
                             lower: Some(Bound {
                                 value: Scalar::Timestamp {
-                                    unit: Unit::Us,
+                                    unit: TimestampUnit::Us,
                                     zone: None,
                                     value: i64::MIN,
                                 },

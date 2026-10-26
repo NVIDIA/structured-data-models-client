@@ -29,7 +29,7 @@ use sdm_contract::run::{FetchOutcome, FetchReply, FetchStep, ReplyId, StartRun};
 use sdm_contract::test_ops::{TestFetch, TestOperation, TestResult};
 use sdm_contract::{
     CONTRACT_VERSION, ColumnType, ControlMessage, CoreError, CoreWarning, Detail, ErrorCode,
-    ErrorKind, Field, HostFacts, Scalar, Sentence, Step, Unit,
+    ErrorKind, Field, HostFacts, Scalar, Sentence, Step, TimestampUnit,
 };
 use sdm_core::{ArrowData, Attachment, Attachments};
 use sdm_host::{CONTROL_CAP, HostRun, Outgoing, decode, encode, read};
@@ -37,7 +37,7 @@ use sdm_host::{CONTROL_CAP, HostRun, Outgoing, decode, encode, read};
 fn facts(local_zone: Option<LocalZone>) -> HostFacts {
     HostFacts {
         now: Scalar::Timestamp {
-            unit: Unit::Us,
+            unit: TimestampUnit::Us,
             zone: Some("UTC".into()),
             value: 1_767_225_600_000_000,
         },

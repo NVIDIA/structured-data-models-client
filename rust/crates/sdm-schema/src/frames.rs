@@ -8,7 +8,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use arrow_array::RecordBatch;
-use arrow_schema::{DataType, Schema, TimeUnit};
+use arrow_schema::{DataType, Schema};
 use sdm_contract::data::Relation;
 use sdm_contract::ops::{Dtype, SourceDescription, Stype};
 use sdm_contract::{ColumnType, CoreError, CoreWarning, Detail, Scalar, Sentence};
@@ -418,7 +418,7 @@ pub fn read(
             }
             DataType::Float32 => Dtype::Float32,
             DataType::Float64 => Dtype::Float64,
-            DataType::Timestamp(TimeUnit::Microsecond | TimeUnit::Nanosecond, _) => Dtype::Date,
+            DataType::Timestamp(_, _) => Dtype::Date,
             _ => return Err(crate::not_yet("frame_native_family")),
         };
         let stype = match dtype {

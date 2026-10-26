@@ -285,7 +285,7 @@ impl HostRun {
                         let Some(Attachment::Arrow(data)) = attachments.remove(&id) else {
                             return Err(invalid("a frame rows attachment is not Arrow"));
                         };
-                        let admitted = admit_from(&data, None)?;
+                        let admitted = crate::admission::admit_frame(&data)?;
                         attachments.insert(id, Attachment::Arrow(crate::detach_frame(admitted)?));
                     }
                 }

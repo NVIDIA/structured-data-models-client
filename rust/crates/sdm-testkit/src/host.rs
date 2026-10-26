@@ -44,7 +44,7 @@ use sdm_contract::ops::{
 use sdm_contract::run::{FetchOutcome, FetchReply, ModelOutcome, ModelReply, StartRun};
 use sdm_contract::{
     CONTRACT_VERSION, ControlMessage, CoreError, Detail, ErrorCode, ErrorKind, HostFacts, Scalar,
-    Step, Unit,
+    Step, TimestampUnit,
 };
 use sdm_host::{
     ArrowData, Attachment, CompositionRoot, HostRun, Outgoing, default_root, encode, read,
@@ -157,7 +157,7 @@ pub fn facts() -> Result<HostFacts> {
         .context("the clock is before 1970")?;
     Ok(HostFacts {
         now: Scalar::Timestamp {
-            unit: Unit::Us,
+            unit: TimestampUnit::Us,
             zone: Some("UTC".into()),
             value: i64::try_from(now.as_micros()).context("the clock is past int64")?,
         },
@@ -1341,8 +1341,7 @@ fn column_of(values: &[Scalar]) -> Result<ArrayRef> {
     use duckdb::arrow::array::builder::{
         BinaryBuilder, BooleanBuilder, Date32Builder, Decimal128Builder, Decimal256Builder,
         Float32Builder, Float64Builder, Int8Builder, Int16Builder, Int32Builder, Int64Builder,
-        StringBuilder, TimestampMicrosecondBuilder, TimestampNanosecondBuilder, UInt8Builder,
-        UInt16Builder, UInt32Builder, UInt64Builder,
+        StringBuilder, UInt8Builder, UInt16Builder, UInt32Builder, UInt64Builder,
     };
     let Some(first) = values.iter().find(|v| !matches!(v, Scalar::Null)) else {
         return Ok(Arc::new(NullArray::new(values.len())));
@@ -1414,35 +1413,35 @@ fn column_of(values: &[Scalar]) -> Result<ArrayRef> {
             Arc::new(built.finish().with_precision_and_scale(precision, scale)?)
         }
         Scalar::Timestamp { unit, zone, .. } => {
-            let (unit, zone) = (*unit, zone.clone());
-            let same = |u: &Unit, z: &Option<String>| *u == unit && *z == zone;
+            let counts = values
+                .iter()
+                .map(|value| match value {
+                    Scalar::Null => Ok(None),
+                    Scalar::Timestamp {
+                        unit: u,
+                        zone: z,
+                        value,
+                    } if u == unit && z == zone => Ok(Some(*value)),
+                    _ => Err(mixed()),
+                })
+                .collect::<Result<Vec<_>>>()?;
             match unit {
-                Unit::Ns => {
-                    let mut built = TimestampNanosecondBuilder::new();
-                    for value in values {
-                        match value {
-                            Scalar::Null => built.append_null(),
-                            Scalar::Timestamp { unit, zone, value } if same(unit, zone) => {
-                                built.append_value(*value)
-                            }
-                            _ => return Err(mixed()),
-                        }
-                    }
-                    Arc::new(built.finish().with_timezone_opt(zone))
-                }
-                Unit::Us => {
-                    let mut built = TimestampMicrosecondBuilder::new();
-                    for value in values {
-                        match value {
-                            Scalar::Null => built.append_null(),
-                            Scalar::Timestamp { unit, zone, value } if same(unit, zone) => {
-                                built.append_value(*value)
-                            }
-                            _ => return Err(mixed()),
-                        }
-                    }
-                    Arc::new(built.finish().with_timezone_opt(zone))
-                }
+                TimestampUnit::S => Arc::new(
+                    duckdb::arrow::array::TimestampSecondArray::from(counts)
+                        .with_timezone_opt(zone.clone()),
+                ),
+                TimestampUnit::Ms => Arc::new(
+                    duckdb::arrow::array::TimestampMillisecondArray::from(counts)
+                        .with_timezone_opt(zone.clone()),
+                ),
+                TimestampUnit::Us => Arc::new(
+                    duckdb::arrow::array::TimestampMicrosecondArray::from(counts)
+                        .with_timezone_opt(zone.clone()),
+                ),
+                TimestampUnit::Ns => Arc::new(
+                    duckdb::arrow::array::TimestampNanosecondArray::from(counts)
+                        .with_timezone_opt(zone.clone()),
+                ),
             }
         }
         _ => bail!("the indices are of a type this host does not build"),

@@ -83,8 +83,8 @@ use sdm_contract::ops::{
 use sdm_contract::ops::{Dtype, Stype};
 use sdm_contract::pql::{Aggregation, ConditionOp, NodeKind, PqlLiteral, PqlNode, ValidatedQuery};
 use sdm_contract::{
-    ColumnType, CoreError, CoreWarning, Detail, Field, HostFacts, Scalar, Sentence, Unit,
-    WarningCode,
+    ColumnType, CoreError, CoreWarning, Detail, Field, HostFacts, Scalar, Sentence, TimestampUnit,
+    Unit, WarningCode,
 };
 use sdm_engine::graph::{Edge, Graph, Table};
 use sdm_engine::keys;
@@ -4011,8 +4011,14 @@ async fn anchors_checked(
         // shown: read at its UTC wall clock, as the reference's engine
         // reads one (`to_naive_utc`).
         Some(Scalar::Timestamp { unit, value, .. }) => match unit {
-            Unit::Ns => value,
-            Unit::Us => value
+            TimestampUnit::Ns => value,
+            TimestampUnit::S => value
+                .checked_mul(1_000_000_000)
+                .ok_or_else(|| sample::out_of_range("anchor_time"))?,
+            TimestampUnit::Ms => value
+                .checked_mul(1_000_000)
+                .ok_or_else(|| sample::out_of_range("anchor_time"))?,
+            TimestampUnit::Us => value
                 .checked_mul(1_000)
                 .ok_or_else(|| sample::out_of_range("anchor_time"))?,
         },
@@ -4041,7 +4047,7 @@ async fn anchors_checked(
         // Each names the times, as the reference's words show them.
         let at = |value: i64| {
             Detail::Scalar(Scalar::Timestamp {
-                unit: Unit::Ns,
+                unit: TimestampUnit::Ns,
                 zone: None,
                 value,
             })
@@ -4080,7 +4086,7 @@ async fn anchors_checked(
         // them.
         let at = |value: i64| {
             Detail::Scalar(Scalar::Timestamp {
-                unit: Unit::Ns,
+                unit: TimestampUnit::Ns,
                 zone: None,
                 value,
             })
@@ -4292,7 +4298,7 @@ async fn empty_sample(
     };
     let at = |value: i64| {
         Detail::Scalar(Scalar::Timestamp {
-            unit: Unit::Ns,
+            unit: TimestampUnit::Ns,
             zone: None,
             value,
         })

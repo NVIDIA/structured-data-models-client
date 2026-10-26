@@ -21,7 +21,7 @@ use arrow_array::RecordBatch;
 use arrow_schema::{DataType, Field, Schema};
 use sdm_contract::data::{EXACT_NUMBER_MARKED, EXACT_NUMBER_MARKER, Relation};
 use sdm_contract::ops::{Dtype, ExactNumber, SourceFacts, Stype};
-use sdm_contract::{ColumnType, CoreError, Detail, Scalar, Sentence, Unit};
+use sdm_contract::{ColumnType, CoreError, Detail, Scalar, Sentence, TimestampUnit};
 
 use crate::names;
 use crate::not_yet;
@@ -1399,7 +1399,7 @@ pub fn first_values_past_the_years(
             continue;
         }
         let Some(Scalar::Timestamp {
-            unit: Unit::Us,
+            unit: TimestampUnit::Us,
             zone,
             value,
         }) = &previewed.firsts[i]
@@ -1547,7 +1547,7 @@ fn infinity_as_read(value: Scalar) -> Scalar {
     match value {
         Scalar::Timestamp { value, .. } if value == i64::MAX || value == -i64::MAX => {
             Scalar::Timestamp {
-                unit: Unit::Us,
+                unit: TimestampUnit::Us,
                 zone: None,
                 value: if value > 0 {
                     DATETIME_MAX_US

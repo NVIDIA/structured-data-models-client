@@ -11,7 +11,8 @@ use arrow_array::cast::AsArray;
 use arrow_array::types::{
     Date32Type, Decimal128Type, Float32Type, Float64Type, Int8Type, Int16Type, Int32Type,
     Int64Type, Time64MicrosecondType, Time64NanosecondType, TimestampMicrosecondType,
-    TimestampNanosecondType, UInt8Type, UInt16Type, UInt32Type, UInt64Type,
+    TimestampMillisecondType, TimestampNanosecondType, TimestampSecondType, UInt8Type, UInt16Type,
+    UInt32Type, UInt64Type,
 };
 use arrow_array::{Array, RecordBatch};
 use arrow_schema::{DataType, TimeUnit};
@@ -90,6 +91,8 @@ pub(crate) fn column(
             DataType::UInt32 => ints!(UInt32Type),
             DataType::UInt64 => ints!(UInt64Type),
             DataType::Date32 => ints!(Date32Type),
+            DataType::Timestamp(TimeUnit::Second, _) => ints!(TimestampSecondType),
+            DataType::Timestamp(TimeUnit::Millisecond, _) => ints!(TimestampMillisecondType),
             DataType::Timestamp(TimeUnit::Microsecond, _) => ints!(TimestampMicrosecondType),
             DataType::Timestamp(TimeUnit::Nanosecond, _) => ints!(TimestampNanosecondType),
             DataType::Time64(TimeUnit::Microsecond) => ints!(Time64MicrosecondType),
@@ -210,17 +213,7 @@ pub(crate) fn first_temporal(batches: &[RecordBatch], index: usize) -> Option<Sc
             continue;
         };
         return match array.data_type() {
-            DataType::Date32 => Some(Scalar::Date32(array.as_primitive::<Date32Type>().value(i))),
-            DataType::Timestamp(TimeUnit::Microsecond, zone) => Some(Scalar::Timestamp {
-                unit: Unit::Us,
-                zone: zone.as_ref().map(ToString::to_string),
-                value: array.as_primitive::<TimestampMicrosecondType>().value(i),
-            }),
-            DataType::Timestamp(TimeUnit::Nanosecond, zone) => Some(Scalar::Timestamp {
-                unit: Unit::Ns,
-                zone: zone.as_ref().map(ToString::to_string),
-                value: array.as_primitive::<TimestampNanosecondType>().value(i),
-            }),
+            DataType::Date32 | DataType::Timestamp(_, _) => scalar(array.as_ref(), i),
             _ => None,
         };
     }
@@ -276,6 +269,14 @@ pub(crate) fn instants(batches: &[RecordBatch], index: usize) -> Vec<Option<i128
                         i128::from(array.as_primitive::<Date32Type>().value(i))
                             * 86_400_000_000_000,
                     ),
+                    DataType::Timestamp(TimeUnit::Second, _) => Some(
+                        i128::from(array.as_primitive::<TimestampSecondType>().value(i))
+                            * 1_000_000_000,
+                    ),
+                    DataType::Timestamp(TimeUnit::Millisecond, _) => Some(
+                        i128::from(array.as_primitive::<TimestampMillisecondType>().value(i))
+                            * 1_000_000,
+                    ),
                     DataType::Timestamp(TimeUnit::Microsecond, _) => Some(
                         i128::from(array.as_primitive::<TimestampMicrosecondType>().value(i))
                             * 1_000,
@@ -319,15 +320,19 @@ pub(crate) fn scalar(array: &dyn Array, row: usize) -> Option<Scalar> {
         },
         DataType::Utf8 => Scalar::Utf8(array.as_string::<i32>().value(row).to_owned()),
         DataType::Date32 => Scalar::Date32(array.as_primitive::<D>().value(row)),
-        DataType::Timestamp(TimeUnit::Microsecond, zone) => Scalar::Timestamp {
-            unit: Unit::Us,
+        DataType::Timestamp(unit, zone) => Scalar::Timestamp {
+            unit: (*unit).into(),
             zone: zone.as_ref().map(ToString::to_string),
-            value: array.as_primitive::<TimestampMicrosecondType>().value(row),
-        },
-        DataType::Timestamp(TimeUnit::Nanosecond, zone) => Scalar::Timestamp {
-            unit: Unit::Ns,
-            zone: zone.as_ref().map(ToString::to_string),
-            value: array.as_primitive::<TimestampNanosecondType>().value(row),
+            value: match unit {
+                TimeUnit::Second => array.as_primitive::<TimestampSecondType>().value(row),
+                TimeUnit::Millisecond => {
+                    array.as_primitive::<TimestampMillisecondType>().value(row)
+                }
+                TimeUnit::Microsecond => {
+                    array.as_primitive::<TimestampMicrosecondType>().value(row)
+                }
+                TimeUnit::Nanosecond => array.as_primitive::<TimestampNanosecondType>().value(row),
+            },
         },
         DataType::Time64(TimeUnit::Microsecond) => Scalar::Time64 {
             unit: Unit::Us,

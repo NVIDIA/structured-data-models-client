@@ -27,7 +27,7 @@ use serde::{Deserialize, Serialize};
 use crate::catalog::CatalogAnswer;
 use crate::error::{CoreError, Detail, ErrorKind, Sentence};
 use crate::scalar::Scalar;
-use crate::types::{ColumnType, Field, Unit};
+use crate::types::{ColumnType, Field, TimestampUnit};
 use crate::view::{ViewTextAnswer, ViewTextAsk};
 
 /// The column of a seed key set that holds each seed's key (decision H15).
@@ -931,7 +931,7 @@ impl DataRequest {
                             f.name == bound.seed_column
                                 && f.column_type
                                     == ColumnType::Timestamp {
-                                        unit: Unit::Ns,
+                                        unit: TimestampUnit::Ns,
                                         zone: None,
                                     }
                         });
@@ -1801,7 +1801,7 @@ impl DataRequest {
         use ColumnType::{Bool, Int32, Int64, Utf8};
         use catalog_columns as c;
         let timestamp = || ColumnType::Timestamp {
-            unit: Unit::Us,
+            unit: TimestampUnit::Us,
             zone: None,
         };
         let names = || ColumnType::List {

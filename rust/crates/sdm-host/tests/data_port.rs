@@ -27,7 +27,7 @@ use sdm_contract::run::{FetchOutcome, FetchReply, ReplyId, StartRun};
 use sdm_contract::test_ops::{TestFetch, TestOperation, TestResult};
 use sdm_contract::{
     CONTRACT_VERSION, ColumnType, ControlMessage, CoreError, ErrorCode, ErrorKind, HostFacts,
-    Scalar, Step, Unit,
+    Scalar, Step, TimestampUnit,
 };
 use sdm_core::{ArrowData, Attachment, Attachments};
 use sdm_host::{HostRun, Outgoing, ZoneError, ZoneResolver, ZoneRoot, ZoneSource, encode, read};
@@ -59,7 +59,7 @@ fn start_message(operation: Operation, roots: &[&Path]) -> Vec<u8> {
         contract: CONTRACT_VERSION,
         facts: HostFacts {
             now: Scalar::Timestamp {
-                unit: Unit::Us,
+                unit: TimestampUnit::Us,
                 zone: Some("UTC".into()),
                 value: 1_767_225_600_000_000,
             },
@@ -93,7 +93,7 @@ fn error(out: Outgoing) -> CoreError {
 /// A summer instant of 2024, as a `ts` scalar.
 fn summer() -> Scalar {
     Scalar::Timestamp {
-        unit: Unit::Us,
+        unit: TimestampUnit::Us,
         zone: Some("UTC".into()),
         value: 1_719_835_200_000_000,
     }

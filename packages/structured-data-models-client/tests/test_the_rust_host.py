@@ -77,7 +77,7 @@ def test_every_scalar_edge_decodes_exactly() -> None:
         {'t': 'f64', 'v': CANARY},
         {'t': 'd128', 'p': 2, 's': 0, 'v': '100'},
         {'t': 'd128', 'p': 39, 's': 0, 'v': '1'},
-        {'t': 'ts', 'unit': 'ms', 'zone': None, 'v': '1'},
+        {'t': 'ts', 'unit': 'h', 'zone': None, 'v': '1'},
         {'t': 'ts', 'unit': 'us', 'zone': '', 'v': '1'},
         {'t': 'binary', 'v': f'{CANARY}*'},
         {'t': CANARY, 'v': '1'},
@@ -137,7 +137,7 @@ def test_the_encoder_writes_only_what_the_decoder_reads() -> None:
     )
     for refused in [
         lambda: codec.timestamp(2**63, 'us', None),
-        lambda: codec.timestamp(0, 'ms', None),
+        lambda: codec.timestamp(0, 'h', None),
         lambda: codec.timestamp(0, 'us', ''),
         lambda: codec.timestamp(0, 'us', 42),  # type: ignore[arg-type]
         lambda: codec.integer('u8', 256),

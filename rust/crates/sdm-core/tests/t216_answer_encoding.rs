@@ -63,7 +63,8 @@ use sdm_contract::facts::PlatformFacts;
 use sdm_contract::ops::{Operation, OperationResult, Predict, REQUEST_STATE_VERSION, RequestState};
 use sdm_contract::run::{Endpoint, StartRun};
 use sdm_contract::{
-    CONTRACT_VERSION, CoreError, Detail, ErrorCode, ErrorKind, HostFacts, Scalar, Step, Unit,
+    CONTRACT_VERSION, CoreError, Detail, ErrorCode, ErrorKind, HostFacts, Scalar, Step,
+    TimestampUnit,
 };
 use sdm_core::{
     Attachment, Attachments, CompositionRoot, ModelResult, Run, UnknownZone, Zones, start,
@@ -282,7 +283,7 @@ impl Zones for NoZones {
 fn facts() -> HostFacts {
     HostFacts {
         now: Scalar::Timestamp {
-            unit: Unit::Us,
+            unit: TimestampUnit::Us,
             zone: Some("UTC".into()),
             value: 0,
         },

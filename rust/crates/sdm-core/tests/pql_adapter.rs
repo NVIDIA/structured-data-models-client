@@ -20,7 +20,9 @@ use std::collections::BTreeMap;
 use sdm_contract::facts::PlatformFacts;
 use sdm_contract::ops::{Capability, ProfileName, ProfileSpec, QuerySchema};
 use sdm_contract::pql::{Aggregation, EntityClause, NodeKind, PqlLiteral, QueryMode};
-use sdm_contract::{CoreError, CoreWarning, Detail, ErrorCode, ErrorKind, HostFacts, Scalar, Unit};
+use sdm_contract::{
+    CoreError, CoreWarning, Detail, ErrorCode, ErrorKind, HostFacts, Scalar, TimestampUnit,
+};
 use sdm_core::pql::{DATE_LITERAL_DAY_FIRST, resolve, validate};
 use sdm_core::profiles::Profile;
 use serde_json::json;
@@ -37,7 +39,7 @@ impl sdm_core::Zones for NoZones {
 fn facts() -> HostFacts {
     HostFacts {
         now: Scalar::Timestamp {
-            unit: Unit::Us,
+            unit: TimestampUnit::Us,
             zone: Some("UTC".into()),
             value: 1_767_225_600_000_000,
         },
@@ -852,7 +854,7 @@ fn two_digit_years_follow_the_year_in_the_host_s_local_zone() {
     assert_eq!(local["year"], 2026);
     let at = |zone: Option<sdm_contract::facts::LocalZone>| HostFacts {
         now: Scalar::Timestamp {
-            unit: Unit::Us,
+            unit: TimestampUnit::Us,
             zone: Some("UTC".into()),
             value: 1_798_777_800_000_000,
         },

@@ -131,7 +131,7 @@ fn column(name: &str, dtype: Dtype, stype: Stype) -> InferredColumn {
             Dtype::String => ColumnType::Utf8,
             Dtype::Float => ColumnType::Float64,
             Dtype::Date => ColumnType::Timestamp {
-                unit: sdm_contract::Unit::Us,
+                unit: sdm_contract::TimestampUnit::Us,
                 zone: None,
             },
             _ => ColumnType::Int64,
@@ -892,7 +892,7 @@ fn every_warning_given_is_listed_and_every_listed_one_is_given() {
     let stamp = |name: &str| column(name, Dtype::Date, Stype::Timestamp);
     let ts = |v| {
         Some(Scalar::Timestamp {
-            unit: sdm_contract::Unit::Us,
+            unit: sdm_contract::TimestampUnit::Us,
             zone: None,
             value: v,
         })
@@ -987,7 +987,7 @@ fn every_warning_given_is_listed_and_every_listed_one_is_given() {
     );
     let value = || {
         Some(Scalar::Timestamp {
-            unit: sdm_contract::Unit::Us,
+            unit: sdm_contract::TimestampUnit::Us,
             zone: None,
             value: 0,
         })

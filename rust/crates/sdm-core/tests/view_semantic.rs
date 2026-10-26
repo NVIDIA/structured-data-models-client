@@ -27,7 +27,7 @@ use sdm_contract::ops::{
 };
 use sdm_contract::run::StartRun;
 use sdm_contract::view::{DeclaredType, ViewKind, ViewTextAnswer, ViewTextAsk};
-use sdm_contract::{CONTRACT_VERSION, CoreError, HostFacts, Scalar, Step, Unit};
+use sdm_contract::{CONTRACT_VERSION, CoreError, HostFacts, Scalar, Step, TimestampUnit};
 use sdm_core::{
     ArrowData, Attachment, Attachments, CompositionRoot, FetchResult, UnknownZone, Zones, start,
 };
@@ -151,7 +151,7 @@ impl DataLayer for Fake {
 fn facts() -> HostFacts {
     HostFacts {
         now: Scalar::Timestamp {
-            unit: Unit::Us,
+            unit: TimestampUnit::Us,
             zone: Some("UTC".into()),
             value: 0,
         },
@@ -399,7 +399,7 @@ fn converted_temporal_facts_reach_the_existing_zoned_window_planner() {
             sdm_contract::data::field(
                 "end",
                 sdm_contract::ColumnType::Timestamp {
-                    unit: Unit::Ns,
+                    unit: TimestampUnit::Ns,
                     zone: None,
                 },
                 false,

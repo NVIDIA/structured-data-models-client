@@ -17,7 +17,7 @@ use sdm_contract::data::{
     ProviderCapabilities, Relation, SeedBound, SqlParam, TableColumn, TableKey, TieTerm, Window,
     field, seed_integer,
 };
-use sdm_contract::{ColumnType, CoreError, Detail, Scalar, Unit};
+use sdm_contract::{ColumnType, CoreError, Detail, Scalar, TimestampUnit};
 
 use crate::PROVIDERS;
 use crate::sql::{self, DIALECTS, Sample, SeedRead, SqlDialect};
@@ -388,7 +388,7 @@ fn a_new_dialect_gets_every_shared_shape_by_implementing_the_trait() {
         field(
             name,
             ColumnType::Timestamp {
-                unit: Unit::Ns,
+                unit: TimestampUnit::Ns,
                 zone: None,
             },
             false,

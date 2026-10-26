@@ -45,10 +45,10 @@ pub use facts::HostFacts;
 pub use pql::{VALIDATED_QUERY_VERSION, ValidatedQuery, validated_query_schema_json};
 pub use run::{ControlMessage, Step};
 pub use scalar::Scalar;
-pub use types::{ColumnType, Field, Unit};
+pub use types::{ColumnType, Field, TimestampUnit, Unit};
 
 /// The contract version this build speaks.
-pub const CONTRACT_VERSION: u32 = 31;
+pub const CONTRACT_VERSION: u32 = 32;
 
 /// The JSON Schema of [`ControlMessage`], as committed: pretty-printed, with
 /// a trailing newline. Its `$defs` hold [`ops::Attachments`] too, the JSON

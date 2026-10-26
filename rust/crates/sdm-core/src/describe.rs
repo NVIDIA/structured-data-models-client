@@ -38,7 +38,7 @@ use sdm_contract::ops::{
     ColumnRef, DescribedSource, HeldSchema, NamedTable, OperationResult, SourceDescription,
     SourceSpec,
 };
-use sdm_contract::{CoreError, Detail, ErrorCode, HostFacts, Scalar, Sentence, Unit};
+use sdm_contract::{CoreError, Detail, ErrorCode, HostFacts, Scalar, Sentence};
 use sdm_engine::time::text::Reader;
 use sdm_engine::time::{Instant, Zones};
 use sdm_schema::assemble::{self, Assembled, Given};
@@ -59,10 +59,7 @@ pub(crate) fn text_reader(facts: &HostFacts) -> Result<Reader, CoreError> {
     let Scalar::Timestamp { unit, value, .. } = &facts.now else {
         return Err(internal("the host's clock is not a ts scalar"));
     };
-    let unit = match unit {
-        Unit::Ns => TimeUnit::Nanosecond,
-        Unit::Us => TimeUnit::Microsecond,
-    };
+    let unit: TimeUnit = (*unit).into();
     Ok(Reader::new(Instant::from_count(*value, unit).civil(0).year))
 }
 

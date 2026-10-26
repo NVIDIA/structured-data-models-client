@@ -497,7 +497,7 @@ def _timestamp(value: codec.Temporal) -> Any:
         return pd.Timestamp(datetime.date(1970, 1, 1)) + pd.Timedelta(
             days=value.value
         )
-    unit = {'us': 'us', 'ns': 'ns'}[str(value.unit)]
+    unit = {'s': 's', 'ms': 'ms', 'us': 'us', 'ns': 'ns'}[str(value.unit)]
     if value.zone is None:
         return pd.Timestamp(value.value, unit=unit)
     return pd.Timestamp(value.value, unit=unit, tz='UTC').tz_convert(value.zone)
@@ -522,7 +522,7 @@ def _shown_timestamp(value: codec.Temporal) -> str:
         import pandas as pd
         import pyarrow as pa
 
-        unit = {'us': 'us', 'ns': 'ns'}[str(value.unit)]
+        unit = {'s': 's', 'ms': 'ms', 'us': 'us', 'ns': 'ns'}[str(value.unit)]
         try:
             read = pa.scalar(value.value, pa.timestamp(unit, tz=value.zone))
             held = read.as_py()
@@ -541,7 +541,11 @@ def _duckdb_text(count: int, unit: str) -> str:
     `` (BC)``, the fraction of a second without its trailing zeros, then
     ``+00`` (``10000-06-01 12:34:56.5+00``, ``0001-12-31 (BC)
     15:00:00+00``)."""
-    micros = count // 1_000 if unit == 'ns' else count
+    micros = (
+        count // 1_000
+        if unit == 'ns'
+        else count * {'s': 1_000_000, 'ms': 1_000, 'us': 1}[unit]
+    )
     days, of_day = divmod(micros, 86_400_000_000)
     # Days since 1970-01-01 to a proleptic Gregorian date (civil_from_days).
     shifted = days + 719_468

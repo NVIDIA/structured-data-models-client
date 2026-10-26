@@ -11,7 +11,7 @@ mod corpus;
 
 use arrow_buffer::i256;
 use proptest::prelude::*;
-use sdm_contract::{ControlMessage, Scalar, Unit};
+use sdm_contract::{ControlMessage, Scalar, TimestampUnit, Unit};
 use serde_json::Value;
 
 fn config() -> ProptestConfig {
@@ -24,6 +24,15 @@ fn config() -> ProptestConfig {
 
 fn unit() -> impl Strategy<Value = Unit> {
     prop_oneof![Just(Unit::Ns), Just(Unit::Us)]
+}
+
+fn timestamp_unit() -> impl Strategy<Value = TimestampUnit> {
+    prop_oneof![
+        Just(TimestampUnit::S),
+        Just(TimestampUnit::Ms),
+        Just(TimestampUnit::Us),
+        Just(TimestampUnit::Ns)
+    ]
 }
 
 fn scalar() -> impl Strategy<Value = Scalar> {
@@ -59,7 +68,11 @@ fn scalar() -> impl Strategy<Value = Scalar> {
         ".*".prop_map(Scalar::Utf8),
         prop::collection::vec(any::<u8>(), 0..64).prop_map(Scalar::Binary),
         any::<i32>().prop_map(Scalar::Date32),
-        (unit(), prop::option::of("[A-Za-z_/]{1,20}"), any::<i64>())
+        (
+            timestamp_unit(),
+            prop::option::of("[A-Za-z_/]{1,20}"),
+            any::<i64>()
+        )
             .prop_map(|(unit, zone, value)| Scalar::Timestamp { unit, zone, value }),
         (unit(), any::<i64>()).prop_map(|(unit, value)| Scalar::Duration { unit, value }),
         (unit(), any::<i64>()).prop_map(|(unit, value)| Scalar::Time64 { unit, value }),
@@ -71,7 +84,7 @@ fn scalar() -> impl Strategy<Value = Scalar> {
 /// digits than the precision.
 fn unencodable() -> impl Strategy<Value = Scalar> {
     prop_oneof![
-        (unit(), any::<i64>()).prop_map(|(unit, value)| Scalar::Timestamp {
+        (timestamp_unit(), any::<i64>()).prop_map(|(unit, value)| Scalar::Timestamp {
             unit,
             zone: Some(String::new()),
             value,

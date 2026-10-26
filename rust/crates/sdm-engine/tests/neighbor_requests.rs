@@ -10,7 +10,7 @@
 
 use sdm_contract::data::{AttachmentId, DataRequest, KeySet, NullOrder};
 use sdm_contract::ops::{DescribedColumn, Dtype, Stype};
-use sdm_contract::{ColumnType, Unit};
+use sdm_contract::{ColumnType, TimestampUnit};
 use sdm_engine::graph::Table;
 use sdm_engine::sample::{by_fkey, by_time};
 use serde_json::Value;
@@ -44,7 +44,7 @@ fn table(name: &str) -> Table {
             column(
                 "ts",
                 ColumnType::Timestamp {
-                    unit: Unit::Us,
+                    unit: TimestampUnit::Us,
                     zone,
                 },
                 Dtype::Date,

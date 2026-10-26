@@ -21,7 +21,8 @@ use sdm_contract::ops::{
 };
 use sdm_contract::run::StartRun;
 use sdm_contract::{
-    CONTRACT_VERSION, ColumnType, CoreError, Detail, ErrorCode, HostFacts, Scalar, Step, Unit,
+    CONTRACT_VERSION, ColumnType, CoreError, Detail, ErrorCode, HostFacts, Scalar, Step,
+    TimestampUnit,
 };
 use sdm_core::{Attachment, Attachments, CompositionRoot, UnknownZone, Zones};
 
@@ -36,7 +37,7 @@ impl Zones for NoZones {
 fn facts() -> HostFacts {
     HostFacts {
         now: Scalar::Timestamp {
-            unit: Unit::Us,
+            unit: TimestampUnit::Us,
             zone: Some("UTC".into()),
             value: 0,
         },

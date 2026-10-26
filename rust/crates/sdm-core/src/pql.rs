@@ -33,9 +33,7 @@ use sdm_contract::pql::{
     Aggregation, ConditionOp, EntityClause, LogicalOp, NodeKind, NodeType, PqlLiteral, PqlNode,
     ProblemType, QueryMode, TimeUnit, ValidatedQuery, Window,
 };
-use sdm_contract::{
-    CoreError, CoreWarning, Detail, HostFacts, Scalar, Sentence, Unit, WarningCode,
-};
+use sdm_contract::{CoreError, CoreWarning, Detail, HostFacts, Scalar, Sentence, WarningCode};
 use sdm_engine::time::{Instant, Zones};
 use sdm_pql as parser;
 use sdm_pql::ast::{self, ConstValue, Kind, NodeRef};
@@ -541,10 +539,7 @@ pub fn local_year(facts: &HostFacts, zones: &dyn Zones) -> Result<i16, CoreError
     let Scalar::Timestamp { unit, value, .. } = &facts.now else {
         return Err(internal("the host's clock is not a ts scalar"));
     };
-    let unit = match unit {
-        Unit::Ns => arrow_schema::TimeUnit::Nanosecond,
-        Unit::Us => arrow_schema::TimeUnit::Microsecond,
-    };
+    let unit: arrow_schema::TimeUnit = (*unit).into();
     let now = Instant::from_count(*value, unit);
     let unread = || {
         CoreError::new(
@@ -1252,7 +1247,7 @@ mod tests {
     fn facts(micros: i64, local_zone: Option<LocalZone>) -> HostFacts {
         HostFacts {
             now: Scalar::Timestamp {
-                unit: Unit::Us,
+                unit: sdm_contract::TimestampUnit::Us,
                 zone: Some("UTC".into()),
                 value: micros,
             },
