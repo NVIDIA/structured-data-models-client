@@ -427,7 +427,7 @@ class _ArrowHeaderWarehouse(_DeclaredKeyWarehouse):
     def answer(self, operation: str, parameters: list[Any]) -> pa.Table:
         found = super().answer(operation, parameters)
         if not self.declared and "constraint_type = 'FOREIGN KEY'" in operation:
-            return found.slice(0)
+            return found.slice(0, 0)
         return found
 
 
