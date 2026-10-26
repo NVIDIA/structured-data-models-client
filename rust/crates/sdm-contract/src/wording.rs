@@ -545,6 +545,9 @@ pub fn template(sentence: Sentence) -> Template {
         S::FallbackSeedTypes => said(
             r#"the in-memory fallback of this data source joins a key only to seeds of its own type, or integers to integers"#,
         ),
+        S::FallbackSqlExpression => said(
+            r#"the in-memory fallback does not execute caller-authored SQL expressions in {field} of a {request} request"#,
+        ),
         S::HostClockNotUtc => said(r#"the host's clock must be a timestamp in UTC"#),
         S::StateVersion => said(
             r#"the request's state is of version {version}, and this client reads version {reads}: materialize the request again with this client to predict it"#,
@@ -759,12 +762,21 @@ pub fn template(sentence: Sentence) -> Template {
             said(r#"the call names an option, {field!r}, that materialize does not take"#)
         }
         S::OptionNotABoolean => said(r#"{field} is true or false, and the value given is neither"#),
+        S::OptionValueNotFinite => said(
+            r#"{field} carries a value that cannot be sent as JSON (a NaN, an infinity, or a type JSON has no form for)"#,
+        ),
         S::NeighborsNotASequence => said(r#"num_neighbors must be a sequence of hop sizes"#),
         S::HopNotWhole => said(
             r#"each hop of num_neighbors is a whole number of neighbors, and one given is not"#,
         ),
         S::HopNegative => {
             said(r#"each hop of num_neighbors is a number of neighbors, and one given is negative"#)
+        }
+        S::NeighborLookbackRange => {
+            said(r#"a neighbor lookback is outside the supported time range"#)
+        }
+        S::NeighborLookbackNotNumeric => {
+            said(r#"a neighbor bound used to size a time window is not numeric"#)
         }
         S::ContextAnchorNotATime => {
             said(r#"context_anchor_time is a time or 'entity', and the value given is neither"#)

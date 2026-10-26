@@ -470,7 +470,7 @@ fn neighbors() -> Vec<DataRequest> {
         columns: names(columns),
         seeds,
         window,
-        per_seed,
+        per_seed: per_seed.map(Into::into),
         order,
     };
     let t = || relation(&["t"]);

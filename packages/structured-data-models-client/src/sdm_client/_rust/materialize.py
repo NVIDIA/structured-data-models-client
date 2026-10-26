@@ -370,6 +370,7 @@ def gather(
         # the client's transport refuses it; a context size of none is none.
         5: codec.attachment(
             named=True,
+            option_values=True,
             value={
                 'num_context_samples': num_context_samples,
                 **{

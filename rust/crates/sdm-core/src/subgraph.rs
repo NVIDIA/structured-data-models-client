@@ -154,11 +154,48 @@ const LOOKBACK_MOST: f64 = 5.0 * 365.0 * 24.0 * 60.0 * 60.0;
     reason = "the reference's float arithmetic and its whole seconds"
 )]
 pub(crate) fn lookback_seconds(neighbors: u64, rate: f64) -> i64 {
-    let seconds = ((5 * neighbors) as f64 / rate).ceil();
+    let seconds = ((5 * u128::from(neighbors)) as f64 / rate).ceil();
     if seconds.is_nan() || seconds >= LOOKBACK_MOST {
         LOOKBACK_MOST as i64
     } else {
         seconds as i64
+    }
+}
+
+/// The provider's lookback capability requires numeric arithmetic before
+/// it renders SQL, as the reference's warehouse samplers do.
+#[allow(
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    reason = "the reference's signed float arithmetic and whole seconds"
+)]
+fn limit_lookback_seconds(
+    limit: &sdm_contract::data::NeighborLimit,
+    rate: f64,
+) -> Result<i64, CoreError> {
+    use sdm_contract::data::NeighborLimit;
+    match limit {
+        NeighborLimit::Unsigned(value) => Ok(lookback_seconds(*value, rate)),
+        NeighborLimit::Negative { value } => {
+            let value = value
+                .parse::<f64>()
+                .map_err(|_| internal("a negative neighbor bound is not numeric"))?;
+            let seconds = (5.0 * value / rate).ceil();
+            if !seconds.is_finite() || seconds < i64::MIN as f64 {
+                return Err(CoreError::new(
+                    Sentence::NeighborLookbackRange,
+                    "a neighbor lookback is outside the supported time range",
+                )
+                .with_field("field", Detail::text("num_neighbors")));
+            }
+            Ok(seconds.min(LOOKBACK_MOST) as i64)
+        }
+        NeighborLimit::SqlExpression { .. } => Err(CoreError::new(
+            Sentence::NeighborLookbackNotNumeric,
+            "a neighbor bound used to size a time window is not numeric",
+        )
+        .with_field("field", Detail::text("num_neighbors"))
+        .with_field("reason", Detail::text("not_a_whole_number"))),
     }
 }
 
@@ -273,10 +310,17 @@ impl Walk<'_> {
             entity.batches.push((0..examples).collect());
             entity.counts[0] = examples;
         }
-        for (hop, &neighbors) in self.neighbors.iter().enumerate() {
+        for (hop, neighbors) in self.neighbors.iter().enumerate() {
             // A hop of size zero ends the walk (`neighbors == 0`).
-            let Hop::Keep(neighbors) = neighbors else {
-                break;
+            let neighbors = match neighbors {
+                Hop::Stop => break,
+                Hop::Keep(value) => sdm_contract::data::NeighborLimit::Unsigned(*value),
+                Hop::Negative(value) => sdm_contract::data::NeighborLimit::Negative {
+                    value: value.clone(),
+                },
+                Hop::SqlExpression(sql) => {
+                    sdm_contract::data::NeighborLimit::SqlExpression { sql: sql.clone() }
+                }
             };
             // The frames each table held when this hop began. A table
             // reached by two paths gains frames for the next hop while this
@@ -288,7 +332,7 @@ impl Walk<'_> {
                 .map(|v| (v.name.clone(), v.frames.len()))
                 .collect();
             for (name, end) in visiting {
-                self.visit(&mut visits, &mut edges, &name, end, hop, neighbors)
+                self.visit(&mut visits, &mut edges, &name, end, hop, &neighbors)
                     .await?;
             }
         }
@@ -302,7 +346,7 @@ impl Walk<'_> {
         name: &str,
         end: usize,
         hop: usize,
-        neighbors: u64,
+        neighbors: &sdm_contract::data::NeighborLimit,
     ) -> Result<(), CoreError> {
         let at = position(visits, name)?;
         if visits[at].counts[hop] == 0 {
@@ -478,12 +522,16 @@ impl Walk<'_> {
             // anchor, exclusive (`_by_fkey`'s `start_time`); a missing
             // anchor stays missing, and a start before the earliest time
             // the reference holds is that time.
-            let lookback = src_table.time_column.as_ref().and_then(|_| {
-                self.lookback
-                    .iter()
-                    .find(|l| l.src == *src && l.dst == name)
-                    .map(|l| lookback_seconds(neighbors, l.rate))
-            });
+            let lookback = src_table
+                .time_column
+                .as_ref()
+                .and_then(|_| {
+                    self.lookback
+                        .iter()
+                        .find(|l| l.src == *src && l.dst == name)
+                        .map(|l| limit_lookback_seconds(neighbors, l.rate))
+                })
+                .transpose()?;
             let mut seed_times = Vec::new();
             if src_table.time_column.is_some() {
                 seed_times.push((SEED_TIME, times.clone()));
@@ -494,23 +542,29 @@ impl Walk<'_> {
                     .iter()
                     .map(|&t| {
                         if t == sample::MISSING_ANCHOR {
-                            t
+                            Ok(t)
                         } else {
-                            i64::try_from(i128::from(t) - span)
-                                .unwrap_or(-i64::MAX)
-                                .max(-i64::MAX)
+                            match i64::try_from(i128::from(t) - span) {
+                                Ok(start) => Ok(start.max(-i64::MAX)),
+                                Err(_) if span >= 0 => Ok(-i64::MAX),
+                                Err(_) => Err(CoreError::new(
+                                    Sentence::NeighborLookbackRange,
+                                    "a neighbor lookback is outside the supported time range",
+                                )
+                                .with_field("field", Detail::text("num_neighbors"))),
+                            }
                         }
                     })
-                    .collect();
+                    .collect::<Result<Vec<_>, CoreError>>()?;
                 seed_times.push((sample::SEED_START, starts));
             }
             let seeds = sample::seeds(Arc::clone(named(&frame, pkey_column)?), seed_times)?;
-            let mut request = sample::by_fkey(
+            let mut request = sample::by_fkey_limit(
                 src_table,
                 fkey,
                 sample_columns(self.graph, src_table, self.excluded),
                 key_set(self.asker, seeds)?,
-                neighbors,
+                neighbors.clone(),
                 self.nulls,
             )?;
             if lookback.is_some()
@@ -919,7 +973,8 @@ mod null_key_tests {
 
 #[cfg(test)]
 mod lookback_tests {
-    use super::lookback_seconds;
+    use super::{limit_lookback_seconds, lookback_seconds};
+    use sdm_contract::data::NeighborLimit;
 
     #[test]
     fn the_look_back_is_the_reference_arithmetic() {
@@ -932,5 +987,36 @@ mod lookback_tests {
             157_680_000
         );
         assert_eq!(lookback_seconds(5, 7.0 / 3.0 / 1.0), 11);
+        assert_eq!(lookback_seconds(u64::MAX, 1.0), 157_680_000);
+    }
+
+    #[test]
+    fn signed_lookback_and_expression_arithmetic_keep_their_meaning() {
+        assert_eq!(
+            limit_lookback_seconds(&NeighborLimit::Negative { value: "-1".into() }, 2.0).unwrap(),
+            -2
+        );
+        assert_eq!(
+            limit_lookback_seconds(
+                &NeighborLimit::Negative {
+                    value: "-0.5".into()
+                },
+                2.0
+            )
+            .unwrap(),
+            -1
+        );
+        let error = limit_lookback_seconds(
+            &NeighborLimit::SqlExpression {
+                sql: "3 OR TRUE".into(),
+            },
+            2.0,
+        )
+        .unwrap_err();
+        assert_eq!(error.code, sdm_contract::ErrorCode::InvalidRequest);
+        assert_eq!(
+            error.fields["field"],
+            sdm_contract::Detail::text("num_neighbors")
+        );
     }
 }

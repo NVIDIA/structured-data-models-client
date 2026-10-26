@@ -413,6 +413,18 @@ pub fn by_fkey(
     per_seed: u64,
     nulls: NullOrder,
 ) -> Result<DataRequest, CoreError> {
+    by_fkey_limit(table, fkey, columns, seeds, per_seed.into(), nulls)
+}
+
+/// A neighbor request with the caller's explicit signed or SQL bound.
+pub fn by_fkey_limit(
+    table: &Table,
+    fkey: &str,
+    columns: Vec<String>,
+    seeds: KeySet,
+    per_seed: sdm_contract::data::NeighborLimit,
+    nulls: NullOrder,
+) -> Result<DataRequest, CoreError> {
     Ok(DataRequest::Neighbors {
         table: table.source.clone(),
         key: vec![fkey.to_owned()],

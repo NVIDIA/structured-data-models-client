@@ -15,7 +15,7 @@
       "moved": "T1.32a: the bridge's key_type refusal, for a key type it had no cast for, is the core's (sdm_engine::keys::cast refuses a key type no rule casts to)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::gather": {
-      "moved": "T3.16 (fix A): the schema as plain data, each column with its source facts, the core reading the rest (no description or held pair); T3.16 (fix D): the result decoded once into results.Gathered and kept as results.CoreRequest; T3.5: the model's values held for the core's refusals of a table or column the view no longer gives"
+      "moved": "T3.16 (fix A): the schema as plain data, each column with its source facts, the core reading the rest (no description or held pair); T3.16 (fix D): the result decoded once into results.Gathered and kept as results.CoreRequest; T3.5: the model's values held for the core's refusals of a table or column the view no longer gives; T3.9 KO3-44: select the dedicated option encoding, leaving nonfinite admission and lag meaning in Rust"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_text": {
       "moved": "T1.36 fix 4 (the final review's P2-2): the host's half of the moved cast: a float in a mix written as the core now writes a float entity (sdm_engine::keys's float_text), the reference's text of it, pyarrow's cast of the float to text at its own width (1e16 is 1e+16), so the core reads back the number the host was given; a boolean as before"
@@ -135,7 +135,7 @@
       "refactor": "T2.13: the result attachment read as a table, as _rows reads it, so its schema's metadata is read too; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::<module>": {
-      "moved": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added; T2.14b: spelled and SPELLED_MOST, a value no contract type holds written as its repr for the core to name (KO2-86)"
+      "moved": "T3.9 KO3-44: attachment option-encoding argument is structural plumbing; nonfinite option admission moves to Rust and ordinary JSON remains strict"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::_bits32": {
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
@@ -165,7 +165,7 @@
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::attachment": {
-      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+      "moved": "T3.9 KO3-44: option attachments preserve nonfinite numeric tokens for Rust-owned admission; ordinary JSON remains strict, with no sampling policy in Python"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::decode_scalar": {
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"

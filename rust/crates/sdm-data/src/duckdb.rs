@@ -390,7 +390,13 @@ impl SqlDialect for Duckdb {
     /// The reference's neighbor reads (`_by_time` and `_by_fkey` on
     /// DuckDB) with a limit per seed: the joined read, then the first rows
     /// of each seed in `order`, the result in `(batch, order)`.
-    fn neighbors_per_seed(&self, read: &SeedRead<'_>, limit: u64, terms: &[TieTerm]) -> String {
+    fn neighbors_per_seed(
+        &self,
+        read: &SeedRead<'_>,
+        limit: &sdm_contract::data::NeighborLimit,
+        terms: &[TieTerm],
+    ) -> String {
+        let limit = crate::sql::neighbor_limit(limit);
         let order = terms
             .iter()
             .map(|t| self.order_term(t, "t.", None))

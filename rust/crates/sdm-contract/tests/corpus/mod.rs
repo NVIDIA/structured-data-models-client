@@ -242,7 +242,7 @@ pub fn messages() -> Vec<ControlMessage> {
                                 inclusive: true,
                             }),
                         }),
-                        per_seed: Some(32),
+                        per_seed: Some(32_u64.into()),
                         order: Some(TieBreak(vec![
                             TieTerm {
                                 column: "ts".into(),

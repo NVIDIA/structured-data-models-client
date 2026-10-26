@@ -362,6 +362,22 @@ async fn answered(held: &mut Held<'_>, seeds: Option<ArrowData>) -> Result<Arrow
             order,
             ..
         } => {
+            let limit = match per_seed {
+                Some(sdm_contract::data::NeighborLimit::Unsigned(limit)) => Some(*limit),
+                // This non-SQL provider uses a row-position bound: no
+                // nonnegative position meets a negative bound. SQL
+                // providers keep their own native LIMIT semantics.
+                Some(sdm_contract::data::NeighborLimit::Negative { .. }) => Some(0),
+                None => None,
+                Some(sdm_contract::data::NeighborLimit::SqlExpression { .. }) => {
+                    return Err(not_kept(
+                        Sentence::FallbackSqlExpression,
+                        request,
+                        "per_seed",
+                        "the in-memory fallback does not execute caller-authored SQL expressions",
+                    ));
+                }
+            };
             named(request, "columns", columns)?;
             let seeds = seeds_of(held, seeds)?;
             let mut asked = key.clone();
@@ -375,8 +391,8 @@ async fn answered(held: &mut Held<'_>, seeds: Option<ArrowData>) -> Result<Arrow
             if let Some(window) = window {
                 pairs = within(request, &scanned, &seeds, window, pairs)?;
             }
-            if let (Some(limit), Some(TieBreak(terms))) = (per_seed, order) {
-                pairs = first_per_seed(request, &scanned, &seeds, terms, *limit, pairs)?;
+            if let (Some(limit), Some(TieBreak(terms))) = (limit, order) {
+                pairs = first_per_seed(request, &scanned, &seeds, terms, limit, pairs)?;
             }
             let mut out = Out::default();
             out.batch(&seeds, &pairs)?;

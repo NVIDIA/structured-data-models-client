@@ -35,6 +35,19 @@ use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 
 use crate::{databricks, duckdb, postgres, quote, snowflake, sqlite};
 
+/// Renders only the explicit caller-authored bound variant as query code.
+/// Numeric variants are validated by DataRequest::check before rendering.
+pub(crate) fn neighbor_limit(
+    limit: &sdm_contract::data::NeighborLimit,
+) -> std::borrow::Cow<'_, str> {
+    use sdm_contract::data::NeighborLimit;
+    match limit {
+        NeighborLimit::Unsigned(value) => value.to_string().into(),
+        NeighborLimit::Negative { value } => value.as_str().into(),
+        NeighborLimit::SqlExpression { sql } => sql.as_str().into(),
+    }
+}
+
 /// The dialects this build renders, in the order `PROVIDERS` names them.
 pub(crate) static DIALECTS: &[&dyn SqlDialect] = &[
     &duckdb::Duckdb,
@@ -301,7 +314,12 @@ pub(crate) trait SqlDialect: Sync {
 
     /// A neighbor read keeping the first `limit` rows of each seed in the
     /// order of `terms`, the result in `(batch, order)`.
-    fn neighbors_per_seed(&self, read: &SeedRead<'_>, limit: u64, terms: &[TieTerm]) -> String;
+    fn neighbors_per_seed(
+        &self,
+        read: &SeedRead<'_>,
+        limit: &sdm_contract::data::NeighborLimit,
+        terms: &[TieTerm],
+    ) -> String;
 
     /// A neighbor read given a limit per seed without an order, or the
     /// reverse, which the core never asks (`DataRequest::check`): read as
@@ -837,7 +855,7 @@ pub(crate) fn plan_projected(
             params.push(key_set(&read));
             no_columns(request, columns)?;
             let body = match (per_seed, order) {
-                (Some(limit), Some(TieBreak(terms))) => d.neighbors_per_seed(&read, *limit, terms),
+                (Some(limit), Some(TieBreak(terms))) => d.neighbors_per_seed(&read, limit, terms),
                 (None, None) => d.neighbors_all(&read),
                 _ => d.neighbors_unpaired(&read)?,
             };

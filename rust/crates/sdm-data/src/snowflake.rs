@@ -328,9 +328,10 @@ impl SqlDialect for Snowflake {
     fn neighbors_per_seed(
         &self,
         read: &SeedRead<'_>,
-        limit: u64,
+        limit: &sdm_contract::data::NeighborLimit,
         terms: &[sdm_contract::data::TieTerm],
     ) -> String {
+        let limit = crate::sql::neighbor_limit(limit);
         let order = terms
             .iter()
             .map(|t| self.order_term(t, "", None))

@@ -307,7 +307,7 @@ fn neighbors(window: bool, per_seed: Option<u64>, seeds: &RecordBatch) -> DataRe
                 inclusive: true,
             }),
         }),
-        per_seed,
+        per_seed: per_seed.map(Into::into),
         order: per_seed.map(|_| {
             TieBreak(vec![TieTerm {
                 column: "at".into(),
@@ -738,4 +738,35 @@ fn a_declared_request_is_the_providers_and_none_undeclared_without_limits() {
     assert_eq!(error.code, ErrorCode::UnsupportedRequest);
     assert_eq!(field(error, "rule"), None);
     assert!(ran.asked.is_empty());
+}
+
+#[test]
+fn portable_neighbors_keep_signed_bounds_and_refuse_sql_code_explicitly() {
+    use sdm_contract::data::NeighborLimit;
+    let seeds = seeds(&[Some(1)], &[100]);
+    let mut request = neighbors(true, Some(1), &seeds);
+    let DataRequest::Neighbors { per_seed, .. } = &mut request else {
+        unreachable!()
+    };
+    *per_seed = Some(NeighborLimit::Negative { value: "-1".into() });
+    let negative = fallback(request, Some(seeds.clone()));
+    assert_eq!(negative.answer.unwrap().num_rows(), 0);
+    assert_eq!(negative.asked.len(), 1, "the ordinary scan still runs");
+    let mut request = neighbors(true, Some(1), &seeds);
+    let DataRequest::Neighbors { per_seed, .. } = &mut request else {
+        unreachable!()
+    };
+    *per_seed = Some(NeighborLimit::SqlExpression {
+        sql: "3 OR TRUE".into(),
+    });
+    let expression = fallback(request, Some(seeds));
+    assert_eq!(refusal(&expression).code, ErrorCode::UnsupportedRequest);
+    assert_eq!(
+        field(refusal(&expression), "field"),
+        Some(&Detail::text("per_seed"))
+    );
+    assert!(
+        expression.asked.is_empty(),
+        "SQL code is not guessed from source rows"
+    );
 }

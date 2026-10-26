@@ -241,8 +241,17 @@ public final class Host {
    * refuses it, {@code INVALID_REQUEST}, in its words.
    */
   public static byte[] attachment(Object value) {
+    return attachment(value, false);
+  }
+
+  /** Sampling option numbers cross losslessly; the core owns their admission. */
+  public static byte[] optionAttachment(Object value) {
+    return attachment(value, true);
+  }
+
+  private static byte[] attachment(Object value, boolean optionValues) {
     try {
-      return Json.write(value);
+      return optionValues ? Json.writeOptions(value) : Json.write(value);
     } catch (Json.JsonException e) {
       throw new StructuredDataException(
           "this request carries a value that cannot be sent as JSON",

@@ -52,11 +52,19 @@ public final class Json {
   /** {@code value} as UTF-8 JSON. */
   public static byte[] write(Object value) throws JsonException {
     StringBuilder out = new StringBuilder();
-    write(value, out, 0);
+    write(value, out, 0, false);
     return out.toString().getBytes(StandardCharsets.UTF_8);
   }
 
-  private static void write(Object value, StringBuilder out, int depth) throws JsonException {
+  /** Option attachment numbers are admitted by the core, separately from ordinary JSON. */
+  public static byte[] writeOptions(Object value) throws JsonException {
+    StringBuilder out = new StringBuilder();
+    write(value, out, 0, true);
+    return out.toString().getBytes(StandardCharsets.UTF_8);
+  }
+
+  private static void write(Object value, StringBuilder out, int depth, boolean optionValues)
+      throws JsonException {
     if (depth > MAX_DEPTH) {
       throw new JsonException("a value is nested past " + MAX_DEPTH + " levels");
     }
@@ -76,7 +84,7 @@ public final class Json {
       out.append(decimal.toString());
     } else if (value instanceof Double || value instanceof Float) {
       double number = ((Number) value).doubleValue();
-      if (!Double.isFinite(number)) {
+      if (!optionValues && !Double.isFinite(number)) {
         throw new JsonException("a number is not finite");
       }
       out.append(value);
@@ -93,7 +101,7 @@ public final class Json {
         first = false;
         string(key, out);
         out.append(':');
-        write(member.getValue(), out, depth + 1);
+        write(member.getValue(), out, depth + 1, optionValues);
       }
       out.append('}');
     } else if (value instanceof List<?> list) {
@@ -102,7 +110,7 @@ public final class Json {
         if (i > 0) {
           out.append(',');
         }
-        write(list.get(i), out, depth + 1);
+        write(list.get(i), out, depth + 1, optionValues);
       }
       out.append(']');
     } else {

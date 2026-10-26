@@ -307,6 +307,20 @@ pub fn values(given: Option<&Value>) -> Result<Asked, CoreError> {
             "not_an_object",
         ));
     };
+    // Hosts preserve nonfinite numeric values in this one attachment.
+    // KO3-44 admits only the reference's NaN lag, not other nonfinite
+    // options or strings that happen to spell a nonfinite number.
+    for (name, value) in members {
+        let nan_lag =
+            name == "lag_timesteps" && matches!(value, Value::Number(token) if token == "NaN");
+        if !nan_lag && !value.all_finite() {
+            return Err(CoreError::new(
+                Sentence::OptionValueNotFinite,
+                format!("{name} carries a value that cannot be sent as JSON (a NaN, an infinity, or a type JSON has no form for)"),
+            )
+            .with_field("field", Detail::text(name)));
+        }
+    }
     for (name, value) in members {
         match (name.as_str(), value) {
             // A size or a list of hops left as none is no size asked; a
@@ -562,12 +576,18 @@ fn iterations(given: &Value) -> Result<Iterations, CoreError> {
 
 /// What one hop of the walk keeps of the rows referring to each row it
 /// visits ([`neighbors`]).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Hop {
     /// At most this many of each row's referring rows, latest first; none
     /// for a size between zero and one, as `ROW_NUMBER() <= 0.5` keeps none
     /// while the hop's lookups still run.
     Keep(u64),
+    /// A negative bound reaches the provider; its native predicate or
+    /// limit semantics decide the result (KO3-44).
+    Negative(String),
+    /// Caller-authored SQL expression, in the reference's original
+    /// neighbor-bound position, not a parsed or normalized row count.
+    SqlExpression(String),
     /// A size of zero: the walk ends before this hop (`neighbors == 0`).
     Stop,
 }
@@ -615,13 +635,12 @@ pub fn neighbors(asked: &Asked, mode: RunMode) -> Result<Vec<Hop>, CoreError> {
 /// that number); equal to zero
 /// (as a number, never as text) ending the walk (`neighbors == 0`), below
 /// one keeping no rows, else keeping its whole part, any past `u64` read
-/// as `u64::MAX`. Other text, a list or none is refused as mistyped
-/// (`not_a_whole_number`), where the reference's SQL fails (register
-/// P2I-1). A size below zero is refused, `INVALID_REQUEST` (`negative`),
-/// where the reference's three samplers disagree (register P2I-4, KO2-82).
+/// as `u64::MAX`. Other text is caller-authored SQL expression code and
+/// reaches the provider unchanged, where the reference writes it. A
+/// negative numeric bound keeps its sign and value for native provider
+/// semantics (KO3-44); a list or none remains mistyped.
 fn hop(given: &Value) -> Result<Hop, CoreError> {
     let refused = || mistyped(Sentence::HopNotWhole, "num_neighbors", "not_a_whole_number");
-    let below_zero = || invalid(Sentence::HopNegative, "num_neighbors", "negative");
     let size = match given {
         Value::Bool(b) => f64::from(u8::from(*b)),
         Value::Text(text) => {
@@ -632,13 +651,20 @@ fn hop(given: &Value) -> Result<Hop, CoreError> {
                 && number
                     .bytes()
                     .all(|b| b.is_ascii_digit() || matches!(b, b'+' | b'-' | b'.' | b'e' | b'E'));
-            let size: f64 = number
-                .parse()
+            let Some(size) = number
+                .parse::<f64>()
                 .ok()
-                .filter(|size: &f64| plain && size.is_finite())
-                .ok_or_else(refused)?;
+                .filter(|size| plain && size.is_finite())
+            else {
+                return Ok(Hop::SqlExpression(text.clone()));
+            };
             if size < 0.0 {
-                return Err(below_zero());
+                let value = if serde_json::from_str::<serde::de::IgnoredAny>(number).is_ok() {
+                    number.to_owned()
+                } else {
+                    size.to_string()
+                };
+                return Ok(Hop::Negative(value));
             }
             // `'0' == 0` is false: a zero spelled as text ends nothing.
             return Ok(if size >= 1.0 {
@@ -655,7 +681,7 @@ fn hop(given: &Value) -> Result<Hop, CoreError> {
             {
                 return Ok(match magnitude {
                     Some(0) => Hop::Stop,
-                    _ if negative => return Err(below_zero()),
+                    _ if negative => return Ok(Hop::Negative(token.clone())),
                     Some(n) => Hop::Keep(u64::try_from(n).unwrap_or(u64::MAX)),
                     None => Hop::Keep(u64::MAX),
                 });
@@ -668,7 +694,10 @@ fn hop(given: &Value) -> Result<Hop, CoreError> {
         return Err(refused());
     }
     if size < 0.0 {
-        return Err(below_zero());
+        let Value::Number(token) = given else {
+            return Err(refused());
+        };
+        return Ok(Hop::Negative(token.clone()));
     }
     Ok(if size == 0.0 {
         Hop::Stop
@@ -1678,6 +1707,30 @@ mod tests {
     /// a temporal one where it is not whole or past `u64`, and otherwise
     /// the steps a temporal query adds, none for a static one.
     #[test]
+    fn only_the_legacy_nan_lag_is_admitted_from_nonfinite_option_tokens() {
+        let given = sdm_wire::json::read_options(br#"{"lag_timesteps":NaN}"#).unwrap();
+        assert_eq!(
+            values(Some(&given)).unwrap().lag_timesteps,
+            Some(AskedLag::Steps(0))
+        );
+        for (text, field) in [
+            (br#"{"num_hops":NaN}"#.as_slice(), "num_hops"),
+            (br#"{"lag_timesteps":Infinity}"#.as_slice(), "lag_timesteps"),
+            (
+                br#"{"inference_config":{"num_estimators":NaN}}"#.as_slice(),
+                "inference_config",
+            ),
+        ] {
+            let given = sdm_wire::json::read_options(text).unwrap();
+            let error = values(Some(&given)).unwrap_err();
+            assert_eq!(error.code, ErrorCode::InvalidRequest);
+            assert_eq!(error.fields["field"], Detail::text(field));
+        }
+        let text = asked(r#"{"lag_timesteps":"NaN"}"#);
+        assert!(text.lag_timesteps.unwrap().refusal(true).is_err());
+    }
+
+    #[test]
     fn lag_timesteps_is_refused_where_the_engine_refuses_it() {
         let lag = |text: &str| {
             values(Some(&read(&format!(r#"{{"lag_timesteps": {text}}}"#))))
@@ -1791,18 +1844,20 @@ mod tests {
             neighbors(&given, RunMode::Fast).unwrap(),
             vec![Hop::Keep(5), Hop::Keep(1), Hop::Stop, Hop::Keep(3)]
         );
-        // A size below zero, which the reference's samplers read three
-        // ways, refused naming the hop (P2I-4, KO2-82).
-        for sizes in ["[4, -1]", "[4, -0.5]", r#"[4, "-2"]"#] {
-            let e = neighbors(
-                &asked(&format!(r#"{{"num_neighbors": {sizes}}}"#)),
-                RunMode::Fast,
-            )
-            .unwrap_err();
-            assert_eq!(e.code, ErrorCode::InvalidRequest, "{sizes}");
-            assert_eq!(e.fields["field"], Detail::text("num_neighbors"));
-            assert_eq!(reason(&e), Detail::text("negative"), "{sizes}");
-            assert_eq!(e.fields["hop"], Detail::Scalar(Scalar::UInt64(1)));
+        // KO3-44 retains the signed bound for the provider's semantics.
+        for (sizes, negative) in [
+            ("[4, -1]", "-1"),
+            ("[4, -0.5]", "-0.5"),
+            (r#"[4, "-2"]"#, "-2"),
+        ] {
+            assert_eq!(
+                neighbors(
+                    &asked(&format!(r#"{{"num_neighbors": {sizes}}}"#)),
+                    RunMode::Fast
+                )
+                .unwrap(),
+                vec![Hop::Keep(4), Hop::Negative(negative.into())],
+            );
         }
         assert_eq!(hops_ignored(&given), None);
         let wide = asked(r#"{"num_neighbors": [100000000000000000000000000000]}"#);
@@ -1834,14 +1889,7 @@ mod tests {
             neighbors(&spaced, RunMode::Fast).unwrap(),
             vec![Hop::Keep(3), Hop::Keep(10), Hop::Keep(0)]
         );
-        for size in [
-            r#""x""#,
-            r#""3 OR TRUE""#,
-            r#""inf""#,
-            r#""""#,
-            "null",
-            "[1]",
-        ] {
+        for size in ["null", "[1]"] {
             let e = neighbors(
                 &asked(&format!(r#"{{"num_neighbors": [{size}]}}"#)),
                 RunMode::Fast,
@@ -1854,7 +1902,9 @@ mod tests {
 
     #[test]
     fn owner_admitted_neighbor_values_keep_their_distinct_meanings() {
-        let values = asked(r#"{"num_neighbors": [-1, -0.5, "-2", "3 OR TRUE", "nonsense", 18446744073709551615]}"#);
+        let values = asked(
+            r#"{"num_neighbors": [-1, -0.5, "-2", "3 OR TRUE", "nonsense", 18446744073709551615]}"#,
+        );
         assert_eq!(
             neighbors(&values, RunMode::Fast).unwrap(),
             vec![

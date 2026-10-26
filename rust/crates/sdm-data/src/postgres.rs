@@ -249,7 +249,13 @@ impl SqlDialect for Postgres {
     /// them), the result in `(batch, order)`. The window's column is
     /// compared in its own type with the seed's time read in that type
     /// ([`seed_cte`]), as the reference compares them.
-    fn neighbors_per_seed(&self, read: &SeedRead<'_>, limit: u64, terms: &[TieTerm]) -> String {
+    fn neighbors_per_seed(
+        &self,
+        read: &SeedRead<'_>,
+        limit: &sdm_contract::data::NeighborLimit,
+        terms: &[TieTerm],
+    ) -> String {
+        let limit = crate::sql::neighbor_limit(limit);
         let positioned = positioned(read.columns);
         let order = terms
             .iter()
