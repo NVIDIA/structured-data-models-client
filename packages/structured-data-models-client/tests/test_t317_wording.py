@@ -595,6 +595,8 @@ def test_the_census_s_refusals_say_the_old_client_s_words_or_a_registered_differ
             continue
         # Only the core's sentences are this package's: a refusal the host
         # raises itself says its own words.
+        if mine['sentence'] is None:
+            continue
         my_words, their_words = words(mine), words(theirs)
         if probe['site'] == (
             'packages/structured-data-models-client/src/sdm_client/'
@@ -602,7 +604,7 @@ def test_the_census_s_refusals_say_the_old_client_s_words_or_a_registered_differ
         ):
             my_words = _finite_validator_words(my_words)
             their_words = _finite_validator_words(their_words)
-        if mine['sentence'] is not None and my_words != their_words:
+        if my_words != their_words:
             differs[probe['site']] = (my_words, their_words)
     assert {
         site: said for site, said in differs.items() if site not in DIFFERS
