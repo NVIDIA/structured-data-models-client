@@ -246,7 +246,7 @@ COLUMN_WORDS = WRITE_WORDS | {
 FUNCTIONS = frozenset(
     {
         # Aggregates, windows and the session's identity.
-        'COUNT', 'MIN', 'MAX', 'SUM', 'AVG', 'MEDIAN', 'ROW_NUMBER',
+        'COUNT', 'MIN', 'MAX', 'SUM', 'AVG', 'MEDIAN', 'ARRAY_AGG', 'ROW_NUMBER',
         'CURRENT_SCHEMA', 'CURRENT_DATABASE', 'CURRENT_CATALOG',
         'CURRENT_TIMEZONE',
         # Casts, conversions and literals.
