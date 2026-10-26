@@ -153,9 +153,7 @@ def _provider_report(
     case['expect'] = {'outcome': 'success', 'stage': 'materialize'}
     case['core'].pop('predict')
     case['input'].update(given or {})
-    if database in ('duckdb', 'sqlite', 'postgres'):
-        case['databases'] = [database]
-    else:
+    if database not in ('duckdb', 'sqlite', 'postgres'):
         case.update(slice='S2', warehouses=[database])
     if pinned is not None:
         for spec in case['core'].values():
