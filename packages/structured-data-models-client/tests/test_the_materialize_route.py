@@ -610,6 +610,48 @@ def test_inference_options_not_a_mapping_are_refused(
 
 
 @pytest.mark.parametrize(
+    'query, title',
+    [
+        (QUERY, 'RegressionInferenceConfig'),
+        (BINARY, 'ClassificationInferenceConfig'),
+    ],
+)
+@pytest.mark.parametrize('given', [float('inf'), float('-inf'), float('nan')])
+def test_nonfinite_estimators_keep_the_task_validators_public_message(
+    monkeypatch: pytest.MonkeyPatch, query: str, title: str, given: float
+) -> None:
+    from pydantic import ValidationError
+
+    expected = ValidationError.from_exception_data(
+        title,
+        [{'type': 'finite_number', 'loc': ('num_estimators',), 'input': given}],
+    )
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    with pytest.raises(StructuredDataError) as refused:
+        _materialize(query=query, inference_config={'num_estimators': given})
+    assert refused.value.code == 'INVALID_REQUEST'
+    assert str(refused.value) == f'[INVALID_REQUEST] {expected}'
+    assert refused.value.details['field'] == 'inference_config'
+    assert refused.value.details['key'] == 'num_estimators'
+
+
+@pytest.mark.parametrize('given', [float('inf'), float('nan')])
+def test_other_nonfinite_inference_fields_are_still_refused(
+    monkeypatch: pytest.MonkeyPatch, given: float
+) -> None:
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    for config, message in [
+        ({'column_shuffle': given}, 'must be a boolean'),
+        ({'target_transforms': [given]}, 'target_transforms'),
+        ({'class_shuffle': given}, 'not an option'),
+    ]:
+        with pytest.raises(StructuredDataError) as refused:
+            _materialize(inference_config=config)
+        assert refused.value.code == 'INVALID_REQUEST'
+        assert message in str(refused.value)
+
+
+@pytest.mark.parametrize(
     'depth', [500, 100_000], ids=['past-the-core', 'past-json']
 )
 def test_inference_options_nested_deep_are_refused_never_a_crash(

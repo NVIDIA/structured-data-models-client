@@ -239,3 +239,35 @@ def test_the_owner_confirmed_the_row_as_written(row: str) -> None:
         assert 'owner' in status and '2026-10-13' in status, status
 
     _held(f'test_the_owner_confirmed_the_row_as_written[{row}]', check)
+
+
+def test_restored_negative_neighbors_move_the_actual_checkpoint_refusal() -> (
+    None
+):
+    ratchet = _module(
+        't133_negative_neighbor_ratchet', ROOT / 'scripts/rust_core/ratchet.py'
+    )
+    entry = _entry('P2I-4')
+    for row in entry['case_outcomes']:
+        assert not row.get('statements_differ') or (
+            row['old'].startswith('refusal') or row['new'].startswith('refusal')
+        ), row
+    case = 'sample.num-neighbors.minus-one'
+    for runner in ('python-core', 'rust-host'):
+        baseline = [
+            json.loads(line)
+            for line in (
+                ROOT / 'contract/baselines/ref-pandas3' / f'{runner}.jsonl'
+            )
+            .read_text()
+            .splitlines()
+        ]
+        held = next(
+            line['projection'] for line in baseline if line['case'] == case
+        )
+        moved = ratchet.moved(
+            [entry], case, runner, ratchet.outcome_text(held), held
+        )
+        assert moved is not None and moved['outcome.result'] == 'success', (
+            runner
+        )

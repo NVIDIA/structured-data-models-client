@@ -1707,6 +1707,49 @@ mod tests {
         }
     }
 
+    #[test]
+    fn nonfinite_estimators_reach_the_task_validator_without_leaking_into_payloads() {
+        for kind in [Kind::Regression, Kind::Binary, Kind::Multiclass] {
+            for token in ["NaN", "Infinity", "-Infinity"] {
+                let raw = format!(r#"{{"inference_config":{{"num_estimators":{token}}}}}"#);
+                let value = sdm_wire::json::read_options(raw.as_bytes()).unwrap();
+                let asked = values(Some(&value)).unwrap();
+                let error = options(kind, asked.inference_config.as_ref()).unwrap_err();
+                assert_eq!(error.sentence, Sentence::InferenceOptionNotFinite);
+                assert_eq!(error.fields["task"], Detail::text(kind.wire_name()));
+                assert_eq!(error.fields["key"], Detail::text("num_estimators"));
+                assert_eq!(error.fields["given"], Detail::text(token));
+            }
+        }
+        for (raw, sentence) in [
+            (
+                r#"{"column_shuffle":Infinity}"#,
+                Sentence::InferenceOptionNotABoolean,
+            ),
+            (
+                r#"{"target_transforms":[NaN]}"#,
+                Sentence::InferenceOptionNotTransforms,
+            ),
+            (r#"{"class_shuffle":NaN}"#, Sentence::InferenceOptionUnknown),
+            (
+                r#"{"num_estimators":"NaN"}"#,
+                Sentence::InferenceOptionNotOneToFour,
+            ),
+            (
+                r#"{"num_estimators":1e400}"#,
+                Sentence::InferenceOptionNotOneToFour,
+            ),
+        ] {
+            let value = sdm_wire::json::read_options(raw.as_bytes()).unwrap();
+            assert_eq!(
+                options(Kind::Regression, Some(&value))
+                    .unwrap_err()
+                    .sentence,
+                sentence
+            );
+        }
+    }
+
     /// `lag_timesteps` read as the engine meets each value (T2.9): refused
     /// for any query where it is negative or not ordered against zero, for
     /// a temporal one where it is not whole or past `u64`, and otherwise
