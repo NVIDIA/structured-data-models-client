@@ -117,6 +117,33 @@ class T312PredictTest {
   }
 
   @Test
+  void nonfiniteEstimatorsUseTheSharedRefusalWithoutParsingThemAsOrdinaryJson() throws Exception {
+    try (Connection connection = T312Shop.open("duckdb")) {
+      Schema schema = Schema.fromSource(DuckDbSource.of(connection));
+      for (String query : List.of(REGRESSION, BINARY)) {
+        for (double value : new double[] {Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY}) {
+          MaterializeOptions options = MaterializeOptions.builder()
+              .indices(List.of(0L, 1L)).anchorTime(LocalDate.of(2024, 3, 1))
+              .option("inference_config", Map.of("num_estimators", value)).build();
+          StructuredDataException refused = assertThrows(StructuredDataException.class,
+              () -> PredictiveQuery.parse(query).materialize(schema, options));
+          assertEquals("INVALID_REQUEST", refused.code());
+          assertEquals("inference_config", refused.details().get("field"));
+          assertEquals("num_estimators", refused.details().get("key"));
+          assertTrue(refused.getMessage().contains("must be a finite number"));
+          assertFalse(refused.getMessage().contains("the core said"));
+        }
+      }
+      MaterializeOptions finite = MaterializeOptions.builder()
+          .indices(List.of(0L, 1L)).anchorTime(LocalDate.of(2024, 3, 1))
+          .option("inference_config", Map.of("num_estimators", new BigDecimal("1e400"))).build();
+      StructuredDataException range = assertThrows(StructuredDataException.class,
+          () -> PredictiveQuery.parse(REGRESSION).materialize(schema, finite));
+      assertEquals("not_a_whole_number", range.details().get("reason"));
+    }
+  }
+
+  @Test
   void anExplanationIsReadFromTheResult() throws Exception {
     try (Connection connection = T312Shop.open("duckdb");
         T312Shop.Endpoint endpoint = new T312Shop.Endpoint();
