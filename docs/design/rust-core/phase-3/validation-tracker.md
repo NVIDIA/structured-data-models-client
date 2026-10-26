@@ -1,6 +1,6 @@
 # Phase 3 validation tracker
 
-Updated 2026-10-26, 22:49 UTC.
+Updated 2026-10-26, 23:05 UTC.
 Phase 3 / T3.10 is unfinished.
 Phase 4 is paused by the owner.
 The coordinator alone edits this tracker; agents report results and next actions.
@@ -16,6 +16,7 @@ The coordinator alone edits this tracker; agents report results and next actions
 - Owner approved retaining proven-unaffected completed results after later changes only when two independent reviewers verify their applicability; rerun every affected case, preserve original build IDs and require green final-source full CI.
 - Owner directed sampling to remain unchanged and Snowflake to be compared on identical original rows/contexts.
   Preserve the earlier independent-draw 26.51% loss as a historical measurement; it does not establish controlled-input migration accuracy.
+- Owner explicitly approved keeping all valid sampled links instead of the old partial-link behavior; exact decision row is `T310-OWNER-2026-10-26-COMPLETE-SAMPLED-LINKS-1` on the current repair candidate.
 - Preserve failed attempts, raw strict differences and original source/native/build identities; recording an observation is not comparison acceptance.
 - Use existing coverage only; do not add scenarios or new validation machinery.
 
@@ -49,13 +50,13 @@ Counts describe existing cases only.
 | R6 | **DONE: original Databricks notebook** | Parent `435766366545516` passed all 39 original commands on genuine 7e41; source/export verified; only the verified owned metric view removed, SDK0 cleanup | Coordinator consumed authentic success and cleanup receipt; original failed attempts retained |
 | R7 | **DONE: Databricks generated-source and provider checks** | Both finite opinions accept all 20 classified generated journeys; after both CODE approvals, corrected directCountRows oracle rechecked all 99 complete saved live answers: normal 33/33, truncate detected, silent-capability detected | Receipt `712a0c21`; all 99 original judgments reproduced first, only direct count-header judgment changed per pass; original failures preserved, no new queries |
 | R8 | **DONE: finite warehouse comparison evidence and affected Lakebase original** | Both final DK302/SF304 opinions accept bounded evidence; final15e Lakebase negative-neighbor original now actually returns PostgreSQL PROVIDER_ERROR/2201W under P2I-4, with one observed case and no operator failure | Full original AW173106 typed rows, ordered columns/types and PK/FK restored exactly; SDK0 between case and restoration, lease released; receipt `4ff68507` retained for final pack sign-off |
-| R9 | Reconfirm retained-result applicability after the graph repair | Both original opinions retain completed cohorts through source15e; those opinions do not automatically cover the new graph implementation. Actual candidate f833 ran all 315 existing DuckDB cases: nine materialized/public payloads change, 306 remain canonically equal, and all original input hashes agree | Both independent reviewers are evaluating exact affected cases and producer applicability; rerun affected existing cases, preserve all original identities and raw differences |
+| R9 | Finish bounded retention and affected-case disposition after the graph repair | Both reviewers independently verify all 255 saved model requests remain unchanged by the repair: complete int64 FK columns leave no missing mapping to fill. Actual315-case DuckDB inventory identifies nine changed payloads and306 unchanged; focused warehouse/runtime scans give precise narrower affected sets | Preserve actual76eb model producers; incoming coordinator resolves remaining second-opinion cohort scope and reruns affected existing cases, retaining all raw differences |
 | R10 | Green full CI on the eventual corrected integrated source | [Run 40375303944](https://github.com/NVIDIA/structured-data-models-client/actions/runs/40375303944) passed on exact `15ec2ad916`: 81 successful jobs, two intentional skips, zero failures; raw run SHA `6a9ede69`. This predates the graph repair | Freeze the approved corrected source and run one fresh full CI; do not attribute the old green run to the new Rust implementation |
 | R11 | **DONE: Snowflake identical-input comparison** | Full 10101-row source and original 10000-row draw verified; both complete current requests match the originals; all 10001 actual model26 predictions exactly equal old, RMSE ratio 1.0 on both batches and aggregate; SDK0 cleanup | Coordinator consumed receipt `8f48d1c7`; sampling unchanged; historical independent-draw 26.51% loss and failed recorder-mode attempt preserved |
 | R12 | Corrected-source acceptance and pre-heldout evidence | Original15e locked gate passed all ten steps, 364 fault tests and 452 guard controls; stock packaging checks passed after preserving the cache-symlink failure. These are genuine old-source results | Bind required acceptance and observation checks to the eventual corrected source; retain unaffected prior results only within both reviewers' explicit scope |
 | R13 | Final sealed check, evidence package and authorized source integration | Reviewed H2 stock dry run passed all seven-leg prerequisites on15e; the actual sealed check remains unstarted. Separate evidence lane is prepared | Update source/artifact bindings after the graph decision, complete all ordinary checks and final-source CI, run the existing sealed40-case set last, obtain both GO opinions, then merge/push validated Phase3 into rust-core |
 | R14 | **DONE: existing Spark and Lakebase live provider kits** | Spark saved-answer correction has both CODE approvals, five controls and actual 99-answer readjudication PASS; Lakebase actually completed all 99 normal/fault cases on final15e, normal33 clean and both faults detected | Spark receipt `08a8d2c7`, Lakebase `d3f3825e`; original failures, all driver captures and source IDs preserved; cleanup verified and lease released |
-| R15 | Shared graph correction and explicit model-input decision | Candidate f833 merges partial foreign-key maps by sampled row; both CODE reviews approve, all nine Rust target tests and both public discovery-order tests pass. The genuine deployed-model pair keeps43 links instead of21 and has RMSE 2.4701% worse on three predictions, within5%; both finite reviews verify this bounded result | Owner decision pending because the old client also drops links; no sampling changes, future rows or new features were introduced. Source-impact review identifies nine changed existing cases, not only the diamond |
+| R15 | Land the approved shared graph correction | Owner chose to keep all valid links. Current clean pushed candidate `6c1740fb64` includes the unchanged tested repair plus exact P3F-2 decision/register metadata, with both independent current CODE approvals. Genuine f833 normal handoff passed268seconds; both public discovery-order tests retain43links | Current-candidate normal handoff and landing remain unexecuted; then freeze the final source, run fresh CI and affected comparisons. The deployed N3 experiment remains2.4701% worse within5%, not an accuracy-improvement claim |
 
 R9 supplies the two independent applicability opinions; R2 now supplies the actual nine affected reruns.
 Their execution is complete; finite acceptance of the remaining raw differences stays in R8.
@@ -69,7 +70,8 @@ The original raw count differences, incomplete timing pairs and PostgreSQL Rust 
 
 The owner requested a two-hour completion focus, targeting approximately 22:15 UTC.
 That target was missed after the Java tail exposed a real shared Rust graph defect.
-The current critical path is the graph decision, affected-result review and corrected-source validation; the deadline does not lower correctness requirements.
+The graph decision is approved; the critical path is its landing, affected-result acceptance and corrected-source validation.
+The deadline does not lower correctness requirements.
 
 ## Current execution and integration
 
@@ -140,11 +142,21 @@ The actual existing model26 experiment compares original21-link and corrected43-
 RMSE changes from4.668331 to4.783642, or2.4701% worse, on just three predictions; this is within5% and does not establish an accuracy improvement.
 Both finite reviewers verify the actual experiment, including unchanged model settings and independently computed labels.
 The discarded-link step has no temporal filter; this exact experiment adds no future-dated rows, which does not prove universal leakage safety.
-Behavior approval remains with the owner because the correction changes historical model inputs.
+The owner approved keeping all valid links; the literal answer is preserved privately and recorded in the current candidate's Phase3decisions.
 
 Actual315-case DuckDB impact receipt `4511ff3e` identifies exactly nine changed materialized/public payloads: five sample.parent-table variants, two diamond variants and two keyed/keyless two-path variants.
 The other306 match under the existing canonical policy; all case/base hashes agree and207 raw section differences remain recorded.
 Both independent reviewers are deriving the affected warehouse, model and runtime reruns; a generic non-diamond or acyclic-graph exemption is insufficient.
+
+## Coordinator transfer
+
+The owner requested that a separate new agent take sole ownership of Phase3, preserving existing Phase4work for its separate coordinator.
+All outgoing agents completed their current handoffs and report no active processes, cloud jobs, connections, leases or owned fixtures.
+No current-candidate handoff, new CI, affected rerun or sealed execution has been launched during the transfer.
+The incoming coordinator starts from approved candidate6c1740fb64 and consumes both completed CODE reports before its normal package checks and landing.
+The private handoff prompt is `$SDM_ORCH_STATE/phase-3/new-agent-phase3-prompt.md`; its detailed snapshot is `phase3-takeover-state-20261026.md` beside it.
+The optional selective-Java draft is explicitly unreviewed and unexecuted, not accepted validation tooling.
+There is no pending owner decision for the valid-link repair.
 
 ## Completed evidence retained for final review
 
