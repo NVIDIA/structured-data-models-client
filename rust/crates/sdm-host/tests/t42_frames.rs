@@ -115,11 +115,19 @@ fn primitive_frame_is_described_without_any_fetch() {
 
 #[test]
 fn native_temporal_whole_frame_rebinds_with_exact_units_and_nanosecond_equality() {
-    use arrow_array::{ArrayRef, TimestampMicrosecondArray, TimestampNanosecondArray};
+    use arrow_array::{
+        ArrayRef, TimestampMicrosecondArray, TimestampMillisecondArray, TimestampNanosecondArray,
+        TimestampSecondArray,
+    };
     use arrow_schema::{DataType, TimeUnit};
     use sdm_contract::ops::{Dtype, SourceDescription, Stype};
 
-    for unit in [TimeUnit::Microsecond, TimeUnit::Nanosecond] {
+    for unit in [
+        TimeUnit::Second,
+        TimeUnit::Millisecond,
+        TimeUnit::Microsecond,
+        TimeUnit::Nanosecond,
+    ] {
         for variant in ["positive", "negative", "duplicate", "null"] {
             let values = match variant {
                 "positive" => vec![Some(1), Some(2)],
@@ -128,9 +136,10 @@ fn native_temporal_whole_frame_rebinds_with_exact_units_and_nanosecond_equality(
                 _ => vec![Some(1), None],
             };
             let column: ArrayRef = match unit {
+                TimeUnit::Second => Arc::new(TimestampSecondArray::from(values.clone())),
+                TimeUnit::Millisecond => Arc::new(TimestampMillisecondArray::from(values.clone())),
                 TimeUnit::Microsecond => Arc::new(TimestampMicrosecondArray::from(values.clone())),
                 TimeUnit::Nanosecond => Arc::new(TimestampNanosecondArray::from(values.clone())),
-                _ => unreachable!(),
             };
             let batch = RecordBatch::try_from_iter([("observed_at", column)]).unwrap();
             let mut rows = Some(ArrowData::new(batch.schema(), vec![batch]));
@@ -202,8 +211,11 @@ fn native_temporal_whole_frame_rebinds_with_exact_units_and_nanosecond_equality(
 }
 
 #[test]
-fn coarse_native_frame_units_are_not_silently_clamped_into_the_temporal_slice() {
-    use arrow_array::{ArrayRef, TimestampMillisecondArray, TimestampSecondArray};
+fn coarse_provider_admission_keeps_dt14_saturation() {
+    use arrow_array::{
+        ArrayRef, TimestampMicrosecondArray, TimestampMillisecondArray, TimestampSecondArray,
+    };
+    use arrow_schema::{DataType, TimeUnit};
 
     for millis in [false, true] {
         let values = vec![Some(i64::MAX - 1), Some(i64::MAX)];
@@ -213,16 +225,21 @@ fn coarse_native_frame_units_are_not_silently_clamped_into_the_temporal_slice() 
             Arc::new(TimestampSecondArray::from(values))
         };
         let batch = RecordBatch::try_from_iter([("observed_at", column)]).unwrap();
-        let mut attached = inputs();
-        attached.insert(
-            AttachmentId(3),
-            Attachment::Arrow(ArrowData::new(batch.schema(), vec![batch])),
+        let admitted = sdm_host::admit(&ArrowData::new(batch.schema(), vec![batch])).unwrap();
+        assert_eq!(
+            admitted.schema.field(0).data_type(),
+            &DataType::Timestamp(TimeUnit::Microsecond, None)
         );
-        let outgoing = match HostRun::start(&sdm_host::default_root(), &message(), attached) {
-            Ok(run) => run.next().unwrap_or_else(|outgoing| outgoing),
-            Err(outgoing) => outgoing,
-        };
-        assert_eq!(error(outgoing).code, ErrorCode::UnsupportedRequest);
+        assert_eq!(
+            admitted.batches[0]
+                .column(0)
+                .as_any()
+                .downcast_ref::<TimestampMicrosecondArray>()
+                .unwrap()
+                .iter()
+                .collect::<Vec<_>>(),
+            vec![Some(i64::MAX), Some(i64::MAX)]
+        );
     }
 }
 
@@ -260,8 +277,11 @@ fn encoded_timestamp_batch(column: arrow_array::ArrayRef, encoding: &str) -> Rec
 }
 
 #[test]
-fn encoded_coarse_timestamps_are_refused_at_both_constructor_stages() {
-    use arrow_array::{ArrayRef, TimestampMillisecondArray, TimestampSecondArray};
+fn encoded_coarse_provider_admission_keeps_dt14_saturation() {
+    use arrow_array::{
+        ArrayRef, TimestampMicrosecondArray, TimestampMillisecondArray, TimestampSecondArray,
+    };
+    use arrow_schema::{DataType, TimeUnit};
 
     for encoding in [
         "dictionary",
@@ -270,49 +290,38 @@ fn encoded_coarse_timestamps_are_refused_at_both_constructor_stages() {
         "run_end_dictionary",
     ] {
         for millis in [false, true] {
-            for stage in ["table", "schema"] {
-                let values = vec![Some(i64::MAX - 1), Some(i64::MAX), None];
-                let plain: ArrayRef = if millis {
-                    Arc::new(TimestampMillisecondArray::from(values))
-                } else {
-                    Arc::new(TimestampSecondArray::from(values))
-                };
-                let batch = encoded_timestamp_batch(plain, encoding);
-                let mut attached = inputs();
-                attached.insert(
-                    AttachmentId(2),
-                    bytes(
-                        json!({"stage":stage,"tables":[{"source":{"source":["users"]},"rows":3}]}),
-                    ),
-                );
-                attached.insert(
-                    AttachmentId(3),
-                    Attachment::Arrow(ArrowData::new(batch.schema(), vec![batch])),
-                );
-                let outgoing = match HostRun::start(&sdm_host::default_root(), &message(), attached)
-                {
-                    Ok(run) => run.next().unwrap_or_else(|outgoing| outgoing),
-                    Err(outgoing) => outgoing,
-                };
-                let failure = error(outgoing);
-                assert_eq!(
-                    failure.code,
-                    ErrorCode::UnsupportedRequest,
-                    "{encoding}/{millis}/{stage}"
-                );
-                assert_eq!(
-                    failure.fields.get("rule"),
-                    Some(&sdm_contract::Detail::text("frame_native_family")),
-                    "{encoding}/{millis}/{stage}"
-                );
-            }
+            let values = vec![Some(i64::MAX - 1), Some(i64::MAX), None];
+            let plain: ArrayRef = if millis {
+                Arc::new(TimestampMillisecondArray::from(values))
+            } else {
+                Arc::new(TimestampSecondArray::from(values))
+            };
+            let batch = encoded_timestamp_batch(plain, encoding);
+            let admitted = sdm_host::admit(&ArrowData::new(batch.schema(), vec![batch])).unwrap();
+            assert_eq!(
+                admitted.schema.field(0).data_type(),
+                &DataType::Timestamp(TimeUnit::Microsecond, None)
+            );
+            assert_eq!(
+                admitted.batches[0]
+                    .column(0)
+                    .as_any()
+                    .downcast_ref::<TimestampMicrosecondArray>()
+                    .unwrap()
+                    .iter()
+                    .collect::<Vec<_>>(),
+                vec![Some(i64::MAX), Some(i64::MAX), None]
+            );
         }
     }
 }
 
 #[test]
-fn encoded_fine_timestamps_keep_raw_counts_validity_and_constructor_time_choice() {
-    use arrow_array::{ArrayRef, TimestampMicrosecondArray, TimestampNanosecondArray};
+fn encoded_timestamps_keep_raw_counts_validity_and_constructor_time_choice() {
+    use arrow_array::{
+        ArrayRef, TimestampMicrosecondArray, TimestampMillisecondArray, TimestampNanosecondArray,
+        TimestampSecondArray,
+    };
     use arrow_schema::{DataType, TimeUnit};
     use sdm_contract::ops::SourceDescription;
 
@@ -322,17 +331,32 @@ fn encoded_fine_timestamps_keep_raw_counts_validity_and_constructor_time_choice(
         "dictionary_run_end",
         "run_end_dictionary",
     ] {
-        for unit in [TimeUnit::Microsecond, TimeUnit::Nanosecond] {
-            for stage in ["table", "schema"] {
-                let values = vec![Some(-2), Some(-1), None];
+        for unit in [
+            TimeUnit::Second,
+            TimeUnit::Millisecond,
+            TimeUnit::Microsecond,
+            TimeUnit::Nanosecond,
+        ] {
+            for (stage, values) in ["table", "schema"].into_iter().flat_map(|stage| {
+                [
+                    vec![Some(-2), Some(-1), None],
+                    vec![Some(i64::MAX - 1), Some(i64::MAX), None],
+                    vec![Some(i64::MIN + 1), Some(i64::MIN + 2), None],
+                ]
+                .into_iter()
+                .map(move |values| (stage, values))
+            }) {
                 let plain: ArrayRef = match unit {
+                    TimeUnit::Second => Arc::new(TimestampSecondArray::from(values.clone())),
+                    TimeUnit::Millisecond => {
+                        Arc::new(TimestampMillisecondArray::from(values.clone()))
+                    }
                     TimeUnit::Microsecond => {
                         Arc::new(TimestampMicrosecondArray::from(values.clone()))
                     }
                     TimeUnit::Nanosecond => {
                         Arc::new(TimestampNanosecondArray::from(values.clone()))
                     }
-                    _ => unreachable!(),
                 };
                 let batch = encoded_timestamp_batch(plain, encoding);
                 let mut attached = inputs();
@@ -382,6 +406,18 @@ fn encoded_fine_timestamps_keep_raw_counts_validity_and_constructor_time_choice(
                                 let column = owned.batches[0].column(0);
                                 assert_eq!(column.null_count(), 1);
                                 let held: Vec<Option<i64>> = match unit {
+                                    TimeUnit::Second => column
+                                        .as_any()
+                                        .downcast_ref::<TimestampSecondArray>()
+                                        .unwrap()
+                                        .iter()
+                                        .collect(),
+                                    TimeUnit::Millisecond => column
+                                        .as_any()
+                                        .downcast_ref::<TimestampMillisecondArray>()
+                                        .unwrap()
+                                        .iter()
+                                        .collect(),
                                     TimeUnit::Microsecond => column
                                         .as_any()
                                         .downcast_ref::<TimestampMicrosecondArray>()
@@ -394,7 +430,6 @@ fn encoded_fine_timestamps_keep_raw_counts_validity_and_constructor_time_choice(
                                         .unwrap()
                                         .iter()
                                         .collect(),
-                                    _ => unreachable!(),
                                 };
                                 assert_eq!(held, values, "{encoding}/{unit:?}/{stage}");
                             } else {

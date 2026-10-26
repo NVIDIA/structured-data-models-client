@@ -2,7 +2,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Native us/ns temporal constructors through complete owned snapshots."""
+"""Native timestamp constructors through complete owned snapshots."""
 
 from __future__ import annotations
 
@@ -15,7 +15,6 @@ import pytest
 from test_t42_frames import PATHS, describe, projection
 
 from sdm_client import Schema, StructuredDataError
-from sdm_client._routing import RouteError
 
 
 def stamps(values, unit='ns', zone=None):
@@ -40,7 +39,7 @@ def paired(monkeypatch, frames, **options):
     return new, new_warnings
 
 
-@pytest.mark.parametrize('unit', ['us', 'ns'])
+@pytest.mark.parametrize('unit', ['s', 'ms', 'us', 'ns'])
 @pytest.mark.parametrize('zone', [None, 'UTC', 'America/Los_Angeles'])
 @pytest.mark.parametrize(
     'variant', ['ordinary', 'empty', 'null', 'constant', 'sparse']
@@ -110,7 +109,7 @@ def test_submicrosecond_values_distinguish_repeated_keys_without_becoming_keys(
     assert notices
 
 
-@pytest.mark.parametrize('unit', ['us', 'ns'])
+@pytest.mark.parametrize('unit', ['s', 'ms', 'us', 'ns'])
 @pytest.mark.parametrize(
     'kind',
     [
@@ -177,7 +176,7 @@ def test_whole_frame_time_choice_and_final_notices(monkeypatch, unit, kind):
         assert schema['events'].time_column is None
 
 
-@pytest.mark.parametrize('unit', ['us', 'ns'])
+@pytest.mark.parametrize('unit', ['s', 'ms', 'us', 'ns'])
 @pytest.mark.parametrize('zone', ['UTC', 'America/Los_Angeles'])
 def test_native_zoned_constant_warning_preserves_native_spelling(
     monkeypatch, unit, zone
@@ -291,19 +290,57 @@ def test_table_owned_time_choice_does_not_reread_mutated_original(monkeypatch):
 
 
 @pytest.mark.parametrize('unit', ['s', 'ms'])
-def test_coarse_native_units_keep_old_default_until_lossless_frame_admission(
+@pytest.mark.parametrize('name', ['event_id', 'observed_at'])
+@pytest.mark.parametrize('side', ['positive', 'negative', 'with_nat'])
+def test_coarse_native_units_keep_extreme_frame_distinctions(
+    monkeypatch, unit, name, side
+):
+    counts = {
+        'positive': [2**63 - 2, 2**63 - 1],
+        'negative': [-(2**63) + 1, -(2**63) + 2],
+        'with_nat': [-(2**63) + 1, -(2**63), 2**63 - 1],
+    }[side]
+    frame = pd.DataFrame(
+        {name: np.array(counts, dtype='int64').view(f'datetime64[{unit}]')}
+    )
+    monkeypatch.delenv('SDM_CORE_ROUTES', raising=False)
+    legacy = Schema.from_data({'events': frame})
+    assert legacy['events'].time_column == name
+    new, _ = paired(monkeypatch, {'events': frame})
+    assert new['events'].time_column == name
+    assert new['events'].primary_key is None
+    assert new['events'].data is frame
+    snapshot = new.snapshot()
+    before = projection(snapshot)
+    frame.loc[:, name] = pd.Series(
+        np.array([0] * len(frame), dtype=f'datetime64[{unit}]')
+    )
+    fresh, _ = paired(monkeypatch, {'events': frame})
+    assert fresh['events'].time_column is None
+    assert projection(snapshot) == before
+
+
+@pytest.mark.parametrize('unit', ['s', 'ms'])
+def test_coarse_native_mixed_unit_time_order_and_repeated_key_values(
     monkeypatch, unit
 ):
     frame = pd.DataFrame(
         {
-            'observed_at': np.array([2**63 - 2, 2**63 - 1], dtype='int64').view(
+            'row_id': [1, 1, 2],
+            'created_at': np.array([2, 3, 4], dtype='int64').view(
                 f'datetime64[{unit}]'
-            )
+            ),
+            'observed_at': np.array([-2, -1, 0], dtype='int64').view(
+                'datetime64[ns]'
+            ),
         }
     )
-    monkeypatch.delenv('SDM_CORE_ROUTES', raising=False)
-    legacy = Schema.from_data({'events': frame})
-    assert legacy['events'].time_column == 'observed_at'
-    monkeypatch.setenv('SDM_CORE_ROUTES', PATHS)
-    with pytest.raises(RouteError, match='numeric and Boolean'):
-        Schema.from_data({'events': frame})
+    new, _ = paired(monkeypatch, {'events': frame})
+    assert new['events'].time_column == 'created_at'
+    explicit, _ = paired(
+        monkeypatch,
+        {'events': frame},
+        primary_keys={'events': 'row_id'},
+        time_columns={'events': 'observed_at'},
+    )
+    assert explicit['events'].time_column == 'observed_at'

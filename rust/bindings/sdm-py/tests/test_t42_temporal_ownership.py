@@ -24,12 +24,16 @@ def done(run):
         return reply['result']
 
 
-@pytest.mark.parametrize('unit', ['us', 'ns'])
+@pytest.mark.parametrize('unit', ['s', 'ms', 'us', 'ns'])
 @pytest.mark.parametrize('zone', [None, 'America/Los_Angeles'])
+@pytest.mark.parametrize('wide', [False, True])
 def test_temporal_table_owns_exact_unit_zone_counts_and_validity_after_run_drop(
-    unit, zone
+    unit, zone, wide
 ):
-    counts = np.array([-2, -1, 0, 1], dtype=np.int64)
+    original = (
+        [-(2**63) + 1, -(2**63) + 2, 0, 2**63 - 1] if wide else [-2, -1, 0, 1]
+    )
+    counts = np.array(original, dtype=np.int64)
     validity = bytearray([0b1011])
     kind = pa.timestamp(unit, tz=zone)
     array = pa.Array.from_buffers(
@@ -69,10 +73,10 @@ def test_temporal_table_owns_exact_unit_zone_counts_and_validity_after_run_drop(
     owned = pa.RecordBatchReader.from_stream(snapshot).read_all()
     assert owned.schema.field('observed_at').type == kind
     assert owned['observed_at'].cast(pa.int64()).to_pylist() == [
-        -2,
-        -1,
+        original[0],
+        original[1],
         None,
-        1,
+        original[3],
     ]
     del owned
     second = _native.Run.start(
