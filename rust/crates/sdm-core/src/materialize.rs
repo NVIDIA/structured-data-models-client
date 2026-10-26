@@ -3330,11 +3330,20 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // Seeds are optional. An unseeded provider documents its limitation
     // without issuing a routine warning for the default seed (P3D-13).
     let sampled = if let Some(frames) = &frames {
+        let entity_seed = seed.to_u128().unwrap_or(0);
+        // The OS fact also seeds RS-1, whose entropy domain is wider.
+        // RS-4's legacy MT seed uses its own 32-bit domain; caller-given
+        // seeds retain the native range check when a draw is required.
+        let entity_seed = if unseeded {
+            entity_seed & u128::from(u32::MAX)
+        } else {
+            entity_seed
+        };
         crate::frame_materialize::lock(frames).entities(
             entity,
             &entity.ordered(&entity_columns),
             trials,
-            seed.to_u128().unwrap_or(0),
+            entity_seed,
         )?
     } else {
         read_times.read(
