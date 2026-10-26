@@ -1,0 +1,211 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+"""A successful Snowflake row fallback is not a failed SQL statement."""
+
+from __future__ import annotations
+
+import importlib.util
+import sys
+from pathlib import Path
+from typing import Any
+
+import pyarrow as pa
+import pytest
+from snowflake.connector.errors import NotSupportedError
+
+ROOT = Path(__file__).resolve().parents[2]
+
+
+def _module(name: str, path: Path) -> Any:
+    if name not in sys.modules:
+        spec = importlib.util.spec_from_file_location(name, path)
+        assert spec is not None and spec.loader is not None
+        loaded = importlib.util.module_from_spec(spec)
+        sys.modules[name] = loaded
+        spec.loader.exec_module(loaded)
+    return sys.modules[name]
+
+
+OWN = _module(
+    't310_fallback_recording_fixtures',
+    Path(__file__).with_name('test_t32_recording_own.py'),
+)
+run = OWN.run
+
+
+class Cursor:
+    description = [('name', 2)]
+
+    def __init__(self) -> None:
+        self.execute_error: Exception | None = None
+        self.arrow_error: Exception = NotSupportedError('rows only')
+        self.row_error: Exception | None = None
+        self.calls: list[str] = []
+
+    def execute(self, sql: str) -> Cursor:
+        self.calls.append(sql)
+        if self.execute_error is not None:
+            raise self.execute_error
+        return self
+
+    def fetch_arrow_all(self, **kwargs: Any) -> Any:
+        self.calls.append('fetch_arrow_all')
+        raise self.arrow_error
+
+    def fetchall(self) -> list[tuple[str]]:
+        self.calls.append('fetchall')
+        if self.row_error is not None:
+            raise self.row_error
+        return [('user_id',)]
+
+    def fetchone(self) -> tuple[str]:
+        self.calls.append('fetchone')
+        return ('user_id',)
+
+
+def _captured() -> tuple[Any, Any, Cursor]:
+    driver = Cursor()
+    log = run.DriverLog()
+    log.stage = 'from_source'
+    cursor = run._CapturedSnowflake(driver, log)
+    cursor.execute('DESCRIBE TABLE users')
+    return cursor, log, driver
+
+
+def _unsupported(cursor: Any) -> None:
+    with pytest.raises(NotSupportedError):
+        cursor.fetch_arrow_all(force_return_table=True)
+
+
+def test_public_schema_records_successful_rows_only_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixture = _module(
+        't310_fallback_public_source_fixtures',
+        ROOT
+        / 'packages/structured-data-models-client/tests'
+        / 'test_snowflake_from_source.py',
+    )
+    warehouse = fixture._Warehouse('base.binary')
+    log = run.DriverLog()
+    log.stage = 'from_source'
+    captured = run._CapturedSnowflake(warehouse, log)
+    schema = fixture._described('core', monkeypatch, captured, **fixture._NAMED)
+    assert set(schema.tables) == {'users', 'orders'}
+    metadata = [
+        statement
+        for statement in log.statements
+        if statement.get('fetch_errors')
+    ]
+    assert metadata
+    for statement in metadata:
+        assert statement['sql'].lstrip().startswith(('SHOW', 'DESCRIBE'))
+        assert statement['error'] is None
+        assert statement['fetch_errors'] == [
+            {'method': 'fetch_arrow_all', 'error': 'NotSupportedError'}
+        ]
+        assert statement['results'][0]['method'] == 'fetchall'
+    assert log.incomplete == []
+    assert log.passed == []
+    assert any(event['event'] == 'close' for event in log.events)
+
+
+def test_rows_fallback_clears_only_its_unsupported_arrow_status() -> None:
+    cursor, log, driver = _captured()
+    _unsupported(cursor)
+    assert log.statements[0]['error'] == 'NotSupportedError'
+    assert cursor.fetchall() == [('user_id',)]
+    statement = log.statements[0]
+    assert statement['error'] is None
+    assert statement['fetch_errors'] == [
+        {'method': 'fetch_arrow_all', 'error': 'NotSupportedError'}
+    ]
+    assert statement['results'][0]['rows'] == 1
+    assert driver.calls == [
+        'DESCRIBE TABLE users',
+        'fetch_arrow_all',
+        'fetchall',
+    ]
+
+
+@pytest.mark.parametrize(
+    'failure', [RuntimeError('fetch failed'), pa.ArrowInvalid('bad rows')]
+)
+def test_fatal_arrow_failure_survives_a_later_read(failure: Exception) -> None:
+    cursor, log, driver = _captured()
+    driver.arrow_error = failure
+    with pytest.raises(type(failure)) as raised:
+        cursor.fetch_arrow_all()
+    assert raised.value is failure
+    cursor.fetchall()
+    assert log.statements[0]['error'] == type(failure).__name__
+    assert log.statements[0]['fetch_errors'] == [
+        {'method': 'fetch_arrow_all', 'error': type(failure).__name__}
+    ]
+
+
+def test_failed_execute_is_not_recovered_using_a_stale_result() -> None:
+    cursor, log, driver = _captured()
+    driver.execute_error = RuntimeError('execution failed')
+    with pytest.raises(RuntimeError):
+        cursor.execute('DESCRIBE TABLE missing')
+    _unsupported(cursor)
+    cursor.fetchall()
+    assert log.statements[-1]['error'] == 'RuntimeError'
+    assert log.statements[-1]['fetch_errors'] == [
+        {'method': 'fetch_arrow_all', 'error': 'NotSupportedError'}
+    ]
+
+
+def test_failed_row_fallback_remains_failed_and_keeps_both_attempts() -> None:
+    cursor, log, driver = _captured()
+    _unsupported(cursor)
+    driver.row_error = RuntimeError('row fetch failed')
+    with pytest.raises(RuntimeError):
+        cursor.fetchall()
+    assert log.statements[0]['error'] == 'RuntimeError'
+    assert log.statements[0]['fetch_errors'] == [
+        {'method': 'fetch_arrow_all', 'error': 'NotSupportedError'},
+        {'method': 'fetchall', 'error': 'RuntimeError'},
+    ]
+
+
+def test_other_successful_read_cannot_later_clear_the_error() -> None:
+    cursor, log, _ = _captured()
+    _unsupported(cursor)
+    cursor.fetchone()
+    cursor.fetchall()
+    assert log.statements[0]['error'] == 'NotSupportedError'
+
+
+def test_a_prior_read_prevents_reclassifying_a_later_fetch_failure() -> None:
+    cursor, log, _ = _captured()
+    cursor.fetchone()
+    _unsupported(cursor)
+    cursor.fetchall()
+    assert log.statements[0]['error'] == 'NotSupportedError'
+
+
+def test_new_execution_does_not_recover_the_previous_statement() -> None:
+    cursor, log, _ = _captured()
+    _unsupported(cursor)
+    cursor.execute('DESCRIBE TABLE orders')
+    cursor.fetchall()
+    assert [statement['error'] for statement in log.statements] == [
+        'NotSupportedError',
+        None,
+    ]
+
+
+def test_another_cursor_cannot_recover_the_failed_cursor() -> None:
+    cursor, log, _ = _captured()
+    _unsupported(cursor)
+    other = run._CapturedSnowflake(Cursor(), log)
+    other.execute('DESCRIBE TABLE orders')
+    other.fetchall()
+    assert [statement['error'] for statement in log.statements] == [
+        'NotSupportedError',
+        None,
+    ]
