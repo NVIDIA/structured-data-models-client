@@ -930,10 +930,10 @@ fn frame_detachment_owns_nested_sliced_and_dictionary_buffers() {
 }
 
 #[test]
-fn text_frame_is_an_explicit_unfinished_input_family() {
+fn date32_frame_is_an_explicit_unfinished_input_family() {
     let batch = RecordBatch::try_from_iter([(
         "user_id",
-        Arc::new(arrow_array::StringArray::from(vec!["a", "b"])) as arrow_array::ArrayRef,
+        Arc::new(arrow_array::Date32Array::from(vec![20_000, 20_001])) as arrow_array::ArrayRef,
     )])
     .unwrap();
     let mut attached = inputs();
@@ -946,10 +946,11 @@ fn text_frame_is_an_explicit_unfinished_input_family() {
         Ok(run) => error(
             run.next()
                 .err()
-                .expect("text frame remains an unfinished development family"),
+                .expect("date32 frame remains an unfinished development family"),
         ),
     };
     assert_eq!(failure.code, ErrorCode::UnsupportedRequest);
+    assert_eq!(failure.sentence, sdm_contract::Sentence::NotYetDescribe);
 }
 
 #[test]
