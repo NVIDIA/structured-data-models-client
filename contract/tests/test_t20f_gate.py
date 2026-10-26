@@ -738,6 +738,56 @@ def _only_compare(
     )
 
 
+@pytest.fixture
+def database_keys(
+    repo: Path, tmp_path: Path
+) -> tuple[Path, str, dict[str, list[dict[str, Any]]]]:
+    r"""A private single-case checkpoint and its real runner observations.
+
+    A database key makes the gate compare that database's whole catalog.
+    Keep this key-validation scenario's catalog, reference and baselines
+    to X, rather than supplying unrelated database observations.
+    The shared full-catalog fixtures used by the other tests stay intact.
+    """
+
+    def isolate(tree: Path) -> None:
+        case = tree / f'contract/cases/s0/{X}.json'
+        assert case.is_file()
+        for path in (tree / 'contract/cases').rglob('*.json'):
+            if path != case:
+                path.unlink()
+        for path in (
+            _reference_file(tree),
+            *(tree / 'contract/baselines').rglob('*.jsonl'),
+        ):
+            lines = [json.loads(x) for x in path.read_text().splitlines()]
+            path.write_text(
+                ''.join(json.dumps(x) + '\n' for x in lines if x['case'] == X)
+            )
+        # The private checkpoint needs no transitions for unrelated cases.
+        register = tree / 'docs/design/rust-core/register.yaml'
+        register.write_text(
+            yaml.safe_dump({'format': 'sdm-register/2', 'entries': []})
+        )
+        policy = tree / 'contract/compare-policy.yaml'
+        rules = yaml.safe_load(policy.read_text())
+        for selector in ('reach', 'ordered', 'sampled'):
+            rules[selector] = {
+                name: value
+                for name, value in rules[selector].items()
+                if name == X
+            }
+        policy.write_text(yaml.safe_dump(rules))
+
+    landed = land(repo, 'T2.1a', isolate)
+    where = tmp_path / 'database-key-observations'
+    where.mkdir()
+    observed = GM.observed.__wrapped__({'repo': repo}, lambda _: where)
+    for runner in ('python-core', 'python-old'):
+        assert [line['case'] for line in observed[runner]] == [X]
+    return repo, landed, observed
+
+
 def test_bare_case_ids_compare_as_before(
     repo: Path, tmp_path: Path, observed: Any
 ) -> None:
@@ -766,7 +816,8 @@ BAD_REFERENCE = 'nocase.reference-only@postgres'
 
 
 def test_compare_takes_database_keys_and_refuses_malformed_ones_by_name(
-    repo: Path, tmp_path: Path, observed: Any
+    database_keys: tuple[Path, str, dict[str, list[dict[str, Any]]]],
+    tmp_path: Path,
 ) -> None:
     r"""Exit 3. Twin: the reference (as recorded, or seeded where it does
     not) and both Python runners hold ``X@sqlite`` and ``X@postgres``:
@@ -774,7 +825,7 @@ def test_compare_takes_database_keys_and_refuses_malformed_ones_by_name(
     python-old's lines for no case, an unknown database, ``@duckdb``, an
     empty part, two suffixes and upper case, and the reference's line for
     no case, each fail it, named by key or by file and line."""
-    landed = git(repo, 'rev-parse', 'HEAD')
+    repo, landed, observed = database_keys
     commit(repo, 'T2.1a: database lines', _with_reference_keys(*DATABASE_KEYS))
     done = _only_compare(
         repo,
