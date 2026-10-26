@@ -813,10 +813,10 @@ def freeze_cases(results: list[Result]) -> None:
     def added_raise(root: Path) -> None:
         edit(
             root / schema,
-            '    return build(cls, source, json.loads(finished.take(described.description)))\n',
+            '    schema = build(\n',
             '    if described is None:\n'
             "        raise StructuredDataError('none', code='INTERNAL_ERROR')\n"
-            '    return build(cls, source, json.loads(finished.take(described.description)))\n',
+            '    schema = build(\n',
         )
 
     # The tree, through git, and its copy against itself.
@@ -1338,8 +1338,8 @@ def freeze_cases(results: list[Result]) -> None:
             'a copy on a value',
             lambda r: edit(
                 r / schema,
-                '    return build(cls, source, json.loads(finished.take(described.description)))\n',
-                '    return build(cls, source, json.loads(finished.take(described.description)).copy())\n',
+                '        cls, source, json.loads(finished.take(described.description))\n',
+                '        cls, source, json.loads(finished.take(described.description)).copy()\n',
             ),
             from_source,
         ),
