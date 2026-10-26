@@ -1,6 +1,6 @@
 # Phase 3 validation tracker
 
-Updated 2026-10-26, 09:20 UTC.
+Updated 2026-10-26, 09:44 UTC.
 Phase 4 is paused at the owner's request; current agents focus on Phase 3.
 
 ## Acceptance
@@ -25,10 +25,10 @@ Use the existing common cases, pinned data, seeds, anchors and model settings ac
 | Area | Data and payload comparison | Model comparison | Quality verdict | Owner | Next action |
 |---|---|---|---|---|---|
 | Databricks SQL | All 302 original cases executed: 301 non-connector cases plus the repaired original connector; zero operator failures and cleanup clear; strict reconciliation pending | Complete corrected-client runtime comparison passes on actual `76eb785b91` source | All corresponding prediction rows and logical payloads exact, approved matching refusals retained | Databricks agent | Finish finite data reconciliation; wide-key error correction is landed and both original public cases now match the reference |
-| Databricks Spark | Original 300 cases and runtime prepared; submission waits for final-source artifacts from the next full CI batch | Complete original runtime comparison passes on actual `76eb785b91` source | Exact prediction/payload parity and approved matching refusals on that source | Databricks agent | Collect fresh final-source CI artifacts and submit the original 300-case run |
+| Databricks Spark | Original 300-case run is active on exact final-source campaign `91b7f348f8`, using the fresh official x86/ARM production artifacts | Complete original runtime comparison passes on actual `76eb785b91` source | Exact prediction/payload parity and approved matching refusals on that source | Databricks agent | Collect run `852230986910623` and verify every original case plus cleanup |
 | Snowflake | All 304 original cases captured and cleaned; finite reconciliation continues; all 16 stale digests have exact historical-input proofs and all 131 positional schema differences have raw catalog-order proofs | Fifteen ordinary/semantic pairs have exact payloads and nine exact positive predictions plus six approved matching refusals; original diamond also returns predictions | Diamond RMSE is 1.54% worse, within the owner's 5% limit; it is not exact payload/prediction parity | Snowflake agent | Single-case sampling oracle landed; finish finite reconciliation; original 20-source and 33-provider checks complete with explicit evidence |
 | Lakebase | All 282 existing cases reconciled on recorded source; pinned 173106-row fixture intact | All six corrected-client runtime profiles pass the full paired comparison on actual `76eb785b91` source | Exact predictions and logical payloads; approved matching refusals | Runtime agent and coordinator | Preserve all producing source/build IDs and finish final-source acceptance after the sampling correction |
-| Databricks metric views | One SQL smoke payload matches exactly; 19 cases per SQL/Spark path remain in the full comparison | All three original SQL model questions have exact payloads and either exact predictions or matching endpoint refusal | SQL model parity; Spark and full data coverage pending | Databricks agent | Complete SQL and Spark metric-view coverage |
+| Databricks metric views | One SQL smoke payload matches exactly; 19 cases per SQL/Spark path remain in the full comparison | All three original SQL model questions have exact payloads and either exact predictions or matching endpoint refusal | SQL model parity; Spark and full data coverage pending | Databricks agent | Finish Spark metric-view coverage and restore the missing time-column choice warning |
 | Snowflake semantic views | All original cases captured; repaired wide-decimal and semantic-twin boundaries execute correctly | Five original semantic model pairs have exact logical payloads and predictions | Exact prediction parity | Snowflake agent | Timing complete but 31.51% slower; finish final evidence assessment |
 
 ## Active blockers and next steps
@@ -61,16 +61,31 @@ Use the existing common cases, pinned data, seeds, anchors and model settings ac
    There are 114 positive prediction pairs with 7485 typed-exact rows, 141 approved matching endpoint refusals, exact logical payloads, zero actual differences and zero operator errors.
    Receipt SHA256 is `cfabf1853ccc01d722da21d0f9261d7a970d95cbd6f3566ad9a8ee2b380e28ce`.
    All 42 cloud executions are terminal; actual `76eb785b91` source/build identities and 147 stricter diagnostics remain preserved.
-5. Full CI [40298299579](https://github.com/NVIDIA/structured-data-models-client/actions/runs/40298299579) is now running on exact integrated `91b7f348f8`, dispatched immediately after the oracle landed, with locked dependencies and the full workflow.
-   Fresh successful x86/ARM native and Java/JNI artifacts will unblock the original Spark 300 cases and remaining Java runtime coverage; compatible artifact collection starts before the entire workflow finishes.
+5. Full CI [40298299579](https://github.com/NVIDIA/structured-data-models-client/actions/runs/40298299579) is still running on exact integrated `91b7f348f8`, but has 33 failed jobs at the latest inspection.
+   Most failures share two diagnosed causes: invalid/stale negative-neighbor register transitions, and changed wording for a nonfinite inference option.
+   The runtime agent owns both corrections in one isolated topic, with no wording waiver or weakened comparator.
+   The contract-tooling runner also shut down before reporting its test failures; preserve that incomplete log and require the next complete run.
+   Fresh official x86/ARM production and test-ops wheels, the complete four-platform JNI JAR and dependencies are collected and verified.
+   All 13 production and 49 Java publication files passed typed absence checks and SHA readbacks.
+   Spark original 300-case run `852230986910623` is active; its exclusive fixture lease prevents concurrent warehouse writers.
+   The existing read-only local Java check is active on genuine `91b7f348f8` artifacts for six original J2 shapes across three timezones.
+   The remaining 157-case Java warehouse run follows fixture release.
    The sole artifact collector owns publication and retains original producer IDs for all proven unchanged reused assets.
    No completed model or SQL campaign will be relabeled as final-source execution.
 6. The runtime agent owns missing original local generated-source checks for DuckDB, SQLite and PostgreSQL, plus full-data census and memory readiness.
    The fresh DuckDB 200-source run completed with output byte-identical to its earlier execution: 166 strict agreements, 26 approved empty-table outcomes and eight existing finite decimal/date proofs with no residual.
    The fresh SQLite 200-source run also completed with all 200 public records and canonical verdicts identical; its original 34 finite failures and 17 SQL-numbering rows remain under exact proof review.
-   PostgreSQL is active on owned temporary databases.
+   PostgreSQL also completed all 200 original sources with zero operator errors.
+   Its raw report has 151 agreements, 26 approved empty-table outcomes and 23 unclassified rows; finite existing-authority assessment covers the latter as 22 approved PostgreSQL wide-decimal improvements and one strict text-time case.
+   Its two g99 SQL result differences have all six typed read hashes independently reproduced across 38400 seeds and 896 rows, with exact public payloads and results.
+   Raw reports remain unchanged and final independent evidence review is required.
    The original pinned census caches are present and verified, with no download or disk-space blocker.
+   The full census is running after the twice-reviewed private producer repair omitted empty optional arguments that the canonical case schema forbids; no source data, case inventory or acceptance schema was weakened.
+   All 20 existing native and host memory/ownership controls passed.
    The coordinator owns final CI dispatch, finite Databricks reconciliation, integration, performance disposition and this tracker.
+   Snowflake also owns the reproduced missing metric-view time-choice warning, with candidate `2cf4beb833` in two independent code reviews.
+   The fix keeps warning selection in Rust after final table/time overrides; Python remains a formatting adapter.
+   Its shared sentence/schema changes land before the inference-wording repair to avoid conflicting generation or duplicate CI batches.
    These are the three active lanes; Phase 4 stays paused.
 7. Two owner decisions remain unanswered: the measured live metadata-freshness latency cost, and extending the existing one-case Snowflake random-sampling comparison rule to the original multicall stress case.
    The second sampling case is not authorized by KO3-63; the protected comparison guard explicitly requires the owner for a second case.
@@ -140,7 +155,7 @@ The next landing must derive every changed protected path from the actual Git di
   SQLite completed 160 scenarios and 150 complete pairs: median CPU ratio 0.345 with no individual slowdown, but five ranking cases exceed the 2 ms boundary budget, worst 2.403 ms.
   PostgreSQL completed 176 scenarios and 167 complete pairs: median CPU ratio 0.524, no individual CPU or boundary failures, and import/control/provider checks pass.
   Its stock report still explicitly lacks native baseline and statement inputs, so this is not an overall performance PASS.
-  The measured production native is 15831864 bytes against the immutable recorded Phase 1 baseline 9562016, ratio 1.656 above the 1.25 limit; no synthetic baseline wheel or size waiver is used.
+  The fresh official `91b7f348f8` production native is 15863640 bytes against the immutable recorded Phase 1 baseline 9562016, ratio 1.659 above the 1.25 limit; no synthetic baseline wheel or size waiver is used.
 - Also finish existing model/runtime comparisons, original notebook/provider checks, direct paired performance checks, memory checks and the sealed final check, then final evidence review and merge/push.
 
 ## Finish sequence
