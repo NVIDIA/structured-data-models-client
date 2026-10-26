@@ -168,6 +168,8 @@ pub enum Taken {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct TimeChoice {
     pub column: Option<String>,
+    /// The view dimensions that truncate or cast the chosen raw column.
+    pub instead_of: Vec<String>,
     pub how: Option<Taken>,
     /// The columns it was chosen from, itself included.
     pub among: Vec<String>,
@@ -194,6 +196,11 @@ impl TimeChoice {
         };
         TimeChoice {
             column: (!linked).then(|| fallback.clone()),
+            instead_of: if !linked && self.column.as_ref() == Some(fallback) {
+                self.instead_of.clone()
+            } else {
+                vec![]
+            },
             how: (!linked).then_some(Taken::EditStamp),
             among: if linked {
                 vec![]
@@ -1628,6 +1635,7 @@ fn choose_time_column(
     }
     let chosen = |column: Option<String>, how: Option<Taken>, among: Vec<String>| TimeChoice {
         column,
+        instead_of: vec![],
         how,
         among,
         refused: refused.clone(),

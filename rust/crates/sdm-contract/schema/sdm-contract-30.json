@@ -5921,6 +5921,8 @@
         "key_repeats_columns",
         "key_declined",
         "time_columns_taken_earliest",
+        "time_columns_taken_instead_of",
+        "time_columns_taken_instead_of_many",
         "time_columns_taken_unchecked_empty",
         "time_columns_taken_unchecked_sparse",
         "time_columns_taken_unchecked_constant_where_held",

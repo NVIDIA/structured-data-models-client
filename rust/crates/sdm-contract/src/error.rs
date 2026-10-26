@@ -819,6 +819,8 @@ sentences! {
     KeyRepeatsColumns = "key_repeats_columns", W::KeyRepeats;
     KeyDeclined = "key_declined", W::KeyDeclined;
     TimeColumnsTakenEarliest = "time_columns_taken_earliest", W::TimeColumnsGuessed;
+    TimeColumnsTakenInsteadOf = "time_columns_taken_instead_of", W::TimeColumnsGuessed;
+    TimeColumnsTakenInsteadOfMany = "time_columns_taken_instead_of_many", W::TimeColumnsGuessed;
     TimeColumnsTakenUncheckedEmpty = "time_columns_taken_unchecked_empty", W::TimeColumnsGuessed;
     TimeColumnsTakenUncheckedSparse = "time_columns_taken_unchecked_sparse", W::TimeColumnsGuessed;
     TimeColumnsTakenUncheckedConstantWhereHeld = "time_columns_taken_unchecked_constant_where_held", W::TimeColumnsGuessed;

@@ -416,6 +416,14 @@ pub fn template(sentence: Sentence) -> Template {
             r#"{table}.{column} was taken as the time column because its values start earliest of {among!l}. If another says when a row became true, name it: {advice:name_time_column(table, other)}. If none does, clear it: {advice:clear_time_column(table)}."#,
             Group::TimeColumnsGuessed,
         ),
+        S::TimeColumnsTakenInsteadOf => grouped(
+            r#"{table}.{column} was taken as the time column rather than {instead_of!l}, which truncates or casts it, since it says when a row happened more precisely. If a question should count by it, name it: {advice:name_time_column(table, other)}."#,
+            Group::TimeColumnsGuessed,
+        ),
+        S::TimeColumnsTakenInsteadOfMany => grouped(
+            r#"{table}.{column} was taken as the time column rather than {instead_of!l}, which truncate or cast it, since it says when a row happened more precisely. If a question should count by one of those, name it: {advice:name_time_column(table, other)}."#,
+            Group::TimeColumnsGuessed,
+        ),
         S::TimeColumnsTakenUncheckedEmpty => grouped(
             r#"{table}.{column} was taken as the time column although none of the {rows:,} rows read holds a value, because the query over the whole table failed and the rows past them were not checked. If the whole table is like that, clear it: {advice:clear_time_column(table)}."#,
             Group::TimeColumnsGuessed,

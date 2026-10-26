@@ -1193,6 +1193,7 @@ pub(super) async fn convert(
         super::sync(table, logical);
     }
     let mut times: BTreeMap<String, (Option<String>, Option<String>)> = BTreeMap::new();
+    let mut instead_of = BTreeMap::new();
     for logical in model.tables.clone() {
         let table = metric
             .tables
@@ -1202,6 +1203,7 @@ pub(super) async fn convert(
             .ok_or_else(|| internal("a view's model holds a table not read"))?;
         let taken = super::time_column(reading, table, &read.window_orders).await?;
         if let Some(note) = &taken.note {
+            instead_of.insert(logical.name.clone(), note.instead_of.clone());
             notes.push(super::time_note(note));
         }
         if let Some(model_table) = model.tables.iter_mut().find(|t| t.name == logical.name) {
@@ -1231,7 +1233,12 @@ pub(super) async fn convert(
             ),
         );
     }
-    let time_choices = super::time_choices(&model, &times);
+    let mut time_choices = super::time_choices(&model, &times);
+    for (name, columns) in instead_of {
+        if let Some(choice) = time_choices.get_mut(&name) {
+            choice.instead_of = columns;
+        }
+    }
     let times = super::settle_times(&model, times);
     model
         .validate()

@@ -1408,28 +1408,45 @@ fn guessed_time_columns(
             ]
         };
         match &table.time_column {
-            Some(column) if Some(column) == choice.column.as_ref() => match choice.how {
-                Some(Taken::Earliest) => {
-                    let other = choice.among.iter().find(|c| *c != column);
+            Some(column) if Some(column) == choice.column.as_ref() => {
+                if let Some(other) = choice.instead_of.first() {
                     let mut fields = at(column);
-                    fields.push(("variant", Detail::text("taken_earliest")));
-                    fields.push(("among", texts(&choice.among)));
-                    fields.push(("other", Detail::text(other.map_or("", String::as_str))));
-                    said.push(warning(Sentence::TimeColumnsTakenEarliest, message, fields));
-                    said.extend(unchecked(choice, column, &at));
-                }
-                Some(Taken::EditStamp) => {
-                    let mut fields = at(column);
-                    fields.push(("variant", Detail::text("taken_edit_stamp")));
+                    fields.push(("variant", Detail::text("taken_instead_of")));
+                    fields.push(("instead_of", texts(&choice.instead_of)));
+                    fields.push(("other", Detail::text(other)));
                     said.push(warning(
-                        Sentence::TimeColumnsTakenEditStamp,
+                        if choice.instead_of.len() == 1 {
+                            Sentence::TimeColumnsTakenInsteadOf
+                        } else {
+                            Sentence::TimeColumnsTakenInsteadOfMany
+                        },
                         message,
                         fields,
                     ));
-                    said.extend(unchecked(choice, column, &at));
                 }
-                _ => said.extend(unchecked(choice, column, &at)),
-            },
+                match choice.how {
+                    Some(Taken::Earliest) => {
+                        let other = choice.among.iter().find(|c| *c != column);
+                        let mut fields = at(column);
+                        fields.push(("variant", Detail::text("taken_earliest")));
+                        fields.push(("among", texts(&choice.among)));
+                        fields.push(("other", Detail::text(other.map_or("", String::as_str))));
+                        said.push(warning(Sentence::TimeColumnsTakenEarliest, message, fields));
+                        said.extend(unchecked(choice, column, &at));
+                    }
+                    Some(Taken::EditStamp) => {
+                        let mut fields = at(column);
+                        fields.push(("variant", Detail::text("taken_edit_stamp")));
+                        said.push(warning(
+                            Sentence::TimeColumnsTakenEditStamp,
+                            message,
+                            fields,
+                        ));
+                        said.extend(unchecked(choice, column, &at));
+                    }
+                    _ => said.extend(unchecked(choice, column, &at)),
+                }
+            }
             Some(_) => {}
             None => {
                 for (column, why) in choice.rejected() {
