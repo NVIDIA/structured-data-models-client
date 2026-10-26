@@ -1250,7 +1250,7 @@ pub(crate) fn key_rows(
     float_text: fn(f64) -> String,
 ) -> Result<Vec<String>, CoreError> {
     key_text::in_batch_order(schema, batches)?;
-    let (schema, batches) = key_text::coerced(schema, batches, Sentence::Internal)?;
+    let (schema, batches) = key_text::coerced(schema, batches, Sentence::KeySetIntegerRange)?;
     let named = key_text::fields(
         schema.fields().iter().map(|field| field.name().as_str()),
         request,
