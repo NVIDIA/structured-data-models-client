@@ -6795,6 +6795,8 @@ entries:
   - lag.condition-per-call
   - lag.average-empty-windows@lakebase
   - lag.condition-per-call@lakebase
+  - lag.average-empty-windows@snowflake
+  - lag.condition-per-call@snowflake
   refs: ['packages/structured-data-models-relational-engine/src/sdm_relational_engine/rfm/rfm.py#KumoRelational.add_lagged_target', 'packages/structured-data-models-relational-engine/src/sdm_relational_engine/rfm/query/pandas_executor.py#PQueryPandasExecutor.execute_join']
   more_exact:
   - case: lag.average-empty-windows
@@ -6909,6 +6911,22 @@ entries:
     - 'public.payloads/*/2/predict/instance_table/rows/*/3'
     - 'public.payloads/*/2/predict/instance_table/rows/*/4'
     null_on_one_side: true
+  - case: lag.average-empty-windows@snowflake
+    runners: [python-core]
+    fields:
+    - 'public.payloads/*/2/context/instance_table/rows/*/4'
+    - 'public.payloads/*/2/context/instance_table/rows/*/5'
+    - 'public.payloads/*/2/predict/instance_table/rows/*/3'
+    - 'public.payloads/*/2/predict/instance_table/rows/*/4'
+    null_on_one_side: true
+  - case: lag.condition-per-call@snowflake
+    runners: [python-core]
+    fields:
+    - 'public.payloads/*/2/context/instance_table/rows/*/4'
+    - 'public.payloads/*/2/context/instance_table/rows/*/5'
+    - 'public.payloads/*/2/predict/instance_table/rows/*/3'
+    - 'public.payloads/*/2/predict/instance_table/rows/*/4'
+    null_on_one_side: true
   status: approved
   approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-70}
@@ -6939,6 +6957,10 @@ entries:
     From T3.10 the listed Lakebase Python lines use this same approved
     Postgres-source behavior; Lakebase uses the Postgres provider and
     shares the existing case inputs, without a new comparison exclusion.
+    The two listed Snowflake Python lines use the same approved own-row
+    lag behavior and the existing four scalar and null-side field rules.
+    Their original source rows and every actual lag cell were independently
+    checked against each example's entity and window before this carry.
 # --- lane D entries (P2D-1..19) ---
 
 - id: P2D-1
@@ -7137,6 +7159,8 @@ entries:
     Schema.from_source, PredictiveQuery.materialize and SDMClient.predict on
     the core route over a DuckDB, SQLite or Postgres source with a column
     whose name holds a dot, a backtick, a line feed or a carriage return.
+    The eleven listed Snowflake Python cases cover this same behavior on
+    ordinary source tables with dot or backtick column names.
   cases:
   - name.backtick-aggregation
   - name.backtick-entity
@@ -7163,6 +7187,17 @@ entries:
   - name.dot-filter@lakebase
   - name.dot-target@lakebase
   - rank.odd-column@lakebase
+  - name.backtick-aggregation@snowflake
+  - name.backtick-entity@snowflake
+  - name.backtick-feature@snowflake
+  - name.backtick-filter@snowflake
+  - name.backtick-target@snowflake
+  - name.dot-aggregation@snowflake
+  - name.dot-entity@snowflake
+  - name.dot-feature@snowflake
+  - name.dot-filter@snowflake
+  - name.dot-target@snowflake
+  - rank.odd-column@snowflake
   core_only_columns:
   - users.a.b
   - users.a`b
@@ -7203,6 +7238,14 @@ entries:
     From T3.10 the listed Lakebase Python lines use this same approved
     Postgres-source behavior; Lakebase uses the Postgres provider and
     shares the existing case inputs, without a new comparison exclusion.
+    The eleven listed Snowflake Python cases carry KO2-36's same permanent
+    column-name behavior onto the measured ordinary-table source axis.
+    Nine record the reference's INVALID_REQUEST at materialize and the
+    core's success through predict; the two feature cases both succeed
+    while the core retains the named column. Their original inputs,
+    schemas and quoted SQL were independently checked in the actual
+    reference and core Python observations before this finite carry. No other
+    Snowflake case, host or semantic-view behavior is added here.
   case_outcomes:
   - {case: name.backtick-aggregation, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
   - {case: name.backtick-aggregation, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
@@ -7328,6 +7371,16 @@ entries:
   - {case: name.backtick-filter@lakebase, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'T2.10: a filter naming a column the reference leaves out, answered (KO2-36)'}
   - {case: name.dot-filter@lakebase, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'T2.10: a filter naming a column the reference leaves out, answered (KO2-36)'}
   - {case: rank.odd-column@lakebase, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'T2.10: a ranking over a key whose name holds a dot, which the reference leaves out, answered (KO2-36)'}
+  - {case: name.backtick-aggregation@snowflake, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.backtick-entity@snowflake, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.backtick-target@snowflake, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.dot-aggregation@snowflake, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.dot-entity@snowflake, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.dot-target@snowflake, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.backtick-filter@snowflake, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'T2.10: a filter naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.dot-filter@snowflake, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'T2.10: a filter naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: rank.odd-column@snowflake, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'T2.10: a ranking over a key whose name holds a dot, which the reference leaves out, answered (KO2-36)'}
+
 - id: P2E-2
   title: A target filter on a column only the core names is refused by the core's not-yet rule target_filter, until T2.10
   kind: change
