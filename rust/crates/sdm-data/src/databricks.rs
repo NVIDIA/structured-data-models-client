@@ -1395,4 +1395,115 @@ mod tests {
             ]
         );
     }
+
+    /// The lookup binding exercised by the public materialize journey.
+    fn bound_keys(column: arrow_array::ArrayRef) -> Result<Vec<String>, CoreError> {
+        use std::sync::Arc;
+
+        use arrow_array::Int64Array;
+        use arrow_schema::{DataType, Field as ArrowField, Schema};
+        use sdm_contract::data::{AttachmentId, KeySet, field};
+
+        let column_type = ColumnType::from_arrow(SEED_KEY, column.data_type()).unwrap();
+        let request = DataRequest::Lookup {
+            table: Relation::of(vec!["c".into(), "s".into(), "users".into()]),
+            key: vec!["user_id".into()],
+            columns: vec!["user_id".into()],
+            seeds: KeySet {
+                attachment: AttachmentId(2),
+                columns: vec![
+                    field(SEED_KEY, column_type, true),
+                    field(SEED_BATCH, ColumnType::Int64, false),
+                ],
+            },
+        };
+        request.check().unwrap();
+        let schema = Arc::new(Schema::new(vec![
+            ArrowField::new(SEED_KEY, column.data_type().clone(), true),
+            ArrowField::new(SEED_BATCH, DataType::Int64, false),
+        ]));
+        let positions =
+            Int64Array::from_iter_values((0..column.len()).map(|row| i64::try_from(row).unwrap()));
+        let batch =
+            RecordBatch::try_new(Arc::clone(&schema), vec![column, Arc::new(positions)]).unwrap();
+        key_rows(&request, &schema, &[batch], |value| format!("{value:?}"))
+    }
+
+    #[test]
+    fn integer_keys_outside_the_databricks_binding_range_are_invalid_requests() {
+        use std::sync::Arc;
+
+        use arrow_array::{Decimal128Array, UInt64Array};
+        use sdm_contract::ErrorCode;
+
+        for value in [
+            i128::from(i64::MAX) + 1,
+            i128::from(i64::MIN) - 1,
+            10_i128.pow(25),
+            -10_i128.pow(25),
+        ] {
+            let column = Decimal128Array::from(vec![Some(value), None])
+                .with_precision_and_scale(38, 0)
+                .unwrap();
+            let error = bound_keys(Arc::new(column)).unwrap_err();
+            assert_eq!(error.code, ErrorCode::InvalidRequest, "{value}");
+            assert_eq!(error.sentence, Sentence::KeySetIntegerRange, "{value}");
+        }
+        let error = bound_keys(Arc::new(UInt64Array::from(vec![u64::MAX]))).unwrap_err();
+        assert_eq!(error.code, ErrorCode::InvalidRequest);
+        assert_eq!(error.sentence, Sentence::KeySetIntegerRange);
+    }
+
+    #[test]
+    fn signed_boundaries_decimals_unsigned_keys_and_nulls_keep_their_json() {
+        use std::sync::Arc;
+
+        use arrow_array::{Decimal128Array, UInt64Array};
+
+        let column = Decimal128Array::from(vec![
+            Some(i128::from(i64::MIN)),
+            Some(0),
+            Some(1),
+            Some(i128::from(i64::MAX)),
+            None,
+        ])
+        .with_precision_and_scale(38, 0)
+        .unwrap();
+        assert_eq!(
+            bound_keys(Arc::new(column)).unwrap(),
+            [
+                i64::MIN.to_string(),
+                "0".into(),
+                "1".into(),
+                i64::MAX.to_string(),
+                "null".into(),
+            ]
+        );
+        assert_eq!(
+            bound_keys(Arc::new(UInt64Array::from(vec![
+                Some(0),
+                Some(u64::try_from(i64::MAX).unwrap()),
+                None,
+            ])))
+            .unwrap(),
+            ["0".to_owned(), i64::MAX.to_string(), "null".into()]
+        );
+    }
+
+    #[test]
+    fn an_unsupported_integer_key_type_is_not_misreported_as_a_range_error() {
+        use std::sync::Arc;
+
+        use arrow_array::Decimal256Array;
+        use sdm_contract::ErrorCode;
+
+        // A non-null zero is in i64's range, but integer_at does not read
+        // this type. The range classification must not cover that defect.
+        let column = Decimal256Array::from_iter_values([Default::default()])
+            .with_precision_and_scale(76, 0)
+            .unwrap();
+        let error = bound_keys(Arc::new(column)).unwrap_err();
+        assert_eq!(error.code, ErrorCode::InternalError);
+        assert_eq!(error.sentence, Sentence::Internal);
+    }
 }
