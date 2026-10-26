@@ -241,7 +241,9 @@ def reference_validation(
 def test_register_reads_each_reference_once_with_the_existing_projections(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    reference_validation: tuple[dict[str, Any], list[tuple[dict[str, Any], ...]]],
+    reference_validation: tuple[
+        dict[str, Any], list[tuple[dict[str, Any], ...]]
+    ],
 ) -> None:
     document, seen = reference_validation
     reference = tmp_path / register.REFERENCE
@@ -350,7 +352,9 @@ def test_register_reads_each_reference_once_with_the_existing_projections(
 
 def test_register_keeps_missing_reference_behavior(
     tmp_path: Path,
-    reference_validation: tuple[dict[str, Any], list[tuple[dict[str, Any], ...]]],
+    reference_validation: tuple[
+        dict[str, Any], list[tuple[dict[str, Any], ...]]
+    ],
 ) -> None:
     document, seen = reference_validation
     assert any(
@@ -366,7 +370,9 @@ def test_register_keeps_missing_reference_behavior(
 def test_register_keeps_reference_read_errors(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    reference_validation: tuple[dict[str, Any], list[tuple[dict[str, Any], ...]]],
+    reference_validation: tuple[
+        dict[str, Any], list[tuple[dict[str, Any], ...]]
+    ],
     failure: Exception,
 ) -> None:
     document, seen = reference_validation
