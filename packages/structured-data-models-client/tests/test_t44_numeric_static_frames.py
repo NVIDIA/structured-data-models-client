@@ -80,11 +80,11 @@ def query(frames=None, target='users.age'):
     return PredictiveQuery(f'PREDICT {target} FOR EACH users.user_id', schema)
 
 
-def materialize(question, *, seed=7, indices=(7, 8), **options):
+def materialize(question, *, seed=7, indices=(7, 8), neighbors=(3,), **options):
     return question.materialize(
         indices=list(indices),
         num_context_samples=3,
-        num_neighbors=[3],
+        num_neighbors=list(neighbors),
         num_hops=1,
         random_seed=seed,
         **options,
@@ -213,6 +213,24 @@ def test_unknown_entity_failure_does_not_consume_neighbor_draws(core):
     after = materialize(question, seed=None)
     assert markers(first) == REFERENCE['unseeded_markers'][0]
     assert markers(after) == REFERENCE['unseeded_markers'][1]
+
+
+@pytest.mark.parametrize('counts', [[3.0], [3.5], [True], ['3']])
+def test_native_neighbor_dtype_failure_keeps_its_reset_stream(core, counts):
+    question = query()
+    with pytest.raises(
+        StructuredDataError, match='must have dtype int64'
+    ) as failed:
+        materialize(question, neighbors=counts)
+    assert failed.value.code == 'INTERNAL_ERROR'
+    assert (
+        markers(materialize(question, seed=None)) == REFERENCE['seed7_markers']
+    )
+
+
+def test_native_negative_neighbor_count_keeps_the_whole_neighborhood(core):
+    request = materialize(query(), neighbors=[-1])
+    assert markers(request) == list(range(51, 76))
 
 
 def test_first_numeric_materialization_keeps_its_detached_snapshot(core):
