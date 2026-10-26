@@ -366,8 +366,8 @@ def gather(
         1: codec.attachment(held_schema(schema)),
         2: codec.attachment(query.to_string()),
         3: _indices(indices),
-        # Each as the caller gave it, a value JSON cannot hold refused as
-        # the client's transport refuses it; a context size of none is none.
+        # Values retain their types, including nonfinite numeric tokens in
+        # this option attachment only; the core owns their admission.
         5: codec.attachment(
             named=True,
             option_values=True,
