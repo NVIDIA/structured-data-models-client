@@ -569,3 +569,59 @@ fn a_missing_entity_anchor_is_sent_as_null_and_the_others_as_their_times() {
     assert!(rows[0][at].as_str().unwrap().starts_with("2024-02-27"));
     assert_eq!(check("StatePayload", &payload), Ok(()));
 }
+
+/// A table reached along two paths contributes partial maps of the same
+/// foreign key. The first path must not erase rows known by the second.
+#[test]
+fn foreign_key_partial_links_are_merged_per_source_row() {
+    for reverse in [false, true] {
+        let mut sampled = shop();
+        sampled.tables[0].columns[0].1 = array(Int64Array::from(vec![0, 1, 2, 3, 4]));
+        let edge = sampled.links[0].clone();
+        sampled.links = vec![
+            SampledLink { pairs: vec![(0, 0), (2, 1)], ..edge.clone() },
+            SampledLink { pairs: vec![(1, 0), (3, 3)], ..edge },
+        ];
+        if reverse { sampled.links.reverse(); }
+        let payload = built(&sampled);
+        assert_eq!(foreign_keys(&payload, "context"), json!([0, 0, 1]));
+        assert_eq!(foreign_keys(&payload, "predict"), json!([3]));
+        assert_eq!(payload["schema"]["relationships"].as_array().unwrap().len(), 2);
+    }
+}
+
+#[test]
+fn foreign_key_overlap_keeps_first_valid_pair_for_each_row() {
+    let mut sampled = shop();
+    sampled.tables[0].columns[0].1 = array(Int64Array::from(vec![0, 1, 2, 3, 4]));
+    let edge = sampled.links[0].clone();
+    sampled.links = vec![
+        SampledLink { pairs: vec![(99, 0), (0, 99), (0, 1), (1, 0)], ..edge.clone() },
+        SampledLink { pairs: vec![(0, 2), (1, 0), (2, 1), (3, 3)], ..edge },
+    ];
+    let payload = built(&sampled);
+    assert_eq!(foreign_keys(&payload, "context"), json!([1, 0, 1]));
+    assert_eq!(foreign_keys(&payload, "predict"), json!([3]));
+}
+
+#[test]
+fn empty_and_invalid_partial_maps_do_not_hide_later_valid_rows() {
+    let mut sampled = shop();
+    sampled.tables[0].columns[0].1 = array(Int64Array::from(vec![0, 1, 2, 3, 4]));
+    let edge = sampled.links[0].clone();
+    sampled.links = vec![
+        SampledLink { pairs: vec![], ..edge.clone() },
+        SampledLink { pairs: vec![(99, 0), (0, 99)], ..edge.clone() },
+        SampledLink { pairs: vec![(1, 0), (3, 3)], ..edge },
+    ];
+    let payload = built(&sampled);
+    assert_eq!(foreign_keys(&payload, "context"), json!([null, 0.0, null]));
+    assert_eq!(foreign_keys(&payload, "predict"), json!([3.0]));
+    assert_eq!(payload["schema"]["related_tables"]["orders"]["columns"]["user_id"]["dtype"], json!("float64"));
+}
+
+fn foreign_keys(payload: &Value, half: &str) -> Value {
+    let table = &payload[half]["related_tables"]["orders"];
+    let at = table["columns"].as_array().unwrap().iter().position(|name| name == "user_id").unwrap();
+    Value::Array(table["rows"].as_array().unwrap().iter().map(|row| row[at].clone()).collect())
+}
