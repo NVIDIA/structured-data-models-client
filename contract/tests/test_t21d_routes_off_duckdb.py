@@ -16,6 +16,8 @@ import sys
 from pathlib import Path
 from types import ModuleType
 
+import pytest
+
 from sdm_client import _routing
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -63,3 +65,74 @@ def test_off_duckdb_every_call_a_case_makes_is_routed() -> None:
     for case in (s0, nested):
         assert RUNNER.routes_on(case, 'duckdb') == case['routes']
         assert set(RUNNER.routes_on(case, 'sqlite')) <= set(_routing.PATHS)
+
+
+@pytest.mark.parametrize(
+    'path',
+    [
+        'contract/cases/s1/assuming.binary.json',
+        'contract/cases/s2/lakebase.binary.json',
+    ],
+)
+def test_lakebase_forces_the_actual_postgres_source_routes(
+    monkeypatch: pytest.MonkeyPatch, path: str
+) -> None:
+    case = _case(path)
+    routes = RUNNER.routes_on(case, 'lakebase')
+    assert routes and not any(route.endswith('/lakebase') for route in routes)
+    expected = {
+        *(
+            p.rsplit('/', 1)[0] + '/postgres'
+            for p in _routing.FROM_SOURCE_DUCKDB
+        ),
+        *(
+            p.rsplit('/', 1)[0] + '/postgres'
+            for p in _routing.MATERIALIZE_DUCKDB
+        ),
+        *(p.rsplit('/', 1)[0] + '/postgres' for p in _routing.PREDICT_DUCKDB),
+    }
+    assert expected <= set(routes)
+    monkeypatch.setenv('SDM_CORE_ROUTES', ','.join(routes))
+    assert _routing.forced() == frozenset(routes)
+    assert RUNNER.case_key(case['id'], 'lakebase') == case['id'] + '@lakebase'
+
+
+@pytest.mark.parametrize('leg', ['snowflake', 'lakebase'])
+@pytest.mark.parametrize(
+    'name',
+    [
+        'adventureworks.notebook.demand-3-timeframes',
+        'adventureworks.notebook.demand-30d-historical',
+        'adventureworks.notebook.recommend-top5',
+        'adventureworks.quickstart.large-order-90d',
+        'adventureworks.quickstart.no-order-180d',
+        'adventureworks.quickstart.no-order-90d',
+        'adventureworks.quickstart.product-line',
+    ],
+)
+def test_cross_warehouse_cases_have_no_unimplemented_lakebase_alias(
+    monkeypatch: pytest.MonkeyPatch, leg: str, name: str
+) -> None:
+    case = _case('contract/cases/s2/' + name + '.json')
+    assert any(route.endswith('/lakebase') for route in case['routes'])
+    routes = RUNNER.routes_on(case, leg)
+    assert routes and not any(route.endswith('/lakebase') for route in routes)
+    monkeypatch.setenv('SDM_CORE_ROUTES', ','.join(routes))
+    assert _routing.forced() == frozenset(routes)
+    assert RUNNER.case_key(case['id'], leg) == case['id'] + '@' + leg
+
+
+@pytest.mark.parametrize(
+    'backend',
+    [
+        'postgres',
+        'databricks-sql',
+        'databricks-spark',
+        'databricks-metric-view',
+        'snowflake',
+        'snowflake-semantic-view',
+    ],
+)
+def test_other_explicit_source_kinds_keep_their_route(backend: str) -> None:
+    path = 'schema.from-source/all-tables/' + backend
+    assert RUNNER.on_database(path, 'lakebase') == path
