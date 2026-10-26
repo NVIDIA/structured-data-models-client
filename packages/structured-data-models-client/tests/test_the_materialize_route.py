@@ -392,15 +392,12 @@ def test_a_decimal_seed_is_said_as_the_reference_says_it(
     assert 'random_seed must be a whole number' in str(refused.value)
 
 
-@pytest.mark.parametrize('value', [float('nan'), float('inf'), -float('inf')])
-def test_a_nan_lag_is_refused_on_the_core_route_only(
+@pytest.mark.parametrize('value', [float('inf'), -float('inf')])
+def test_an_infinite_lag_is_refused_on_the_core_route(
     monkeypatch: pytest.MonkeyPatch, value: float
 ) -> None:
-    # Register P2B-19 (approved, KO2-70): the reference adds no lag for a
-    # NaN and refuses an infinity after labelling (a TypeError, or as
-    # negative); the core route cannot send either as the JSON the call's
-    # values travel in, and refuses each before anything is read, naming
-    # lag_timesteps.
+    # KO3-44 admits a NaN lag, which the reference treats as no lag.
+    # It does not admit infinities, which the reference refuses.
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     with pytest.raises(StructuredDataError) as refused:
         _materialize(lag_timesteps=value)
@@ -414,11 +411,28 @@ def test_a_nan_lag_is_refused_on_the_core_route_only(
         with pytest.raises(StructuredDataError) as old:
             _materialize(lag_timesteps=value)
         assert old.value.code == 'INVALID_REQUEST'
-    elif not _old_route_needs_the_engine():
-        columns = _materialize(lag_timesteps=float('nan'))._payloads[0][
-            'context'
-        ]['instance_table']['columns']
-        assert not [c for c in columns if c.startswith('__kumo_arl')]
+
+
+@pytest.mark.parametrize(
+    'options',
+    [
+        {'lag_timesteps': float('nan')},
+        {'num_neighbors': [-1]},
+        {'num_neighbors': ['3 OR TRUE']},
+    ],
+    ids=['nan-lag', 'negative-neighbor', 'neighbor-sql-expression'],
+)
+def test_owner_admitted_sampling_values_match_the_frozen_client(
+    monkeypatch: pytest.MonkeyPatch, options: dict[str, Any]
+) -> None:
+    # KO3-44 supersedes the three earlier Phase 2 refusals.
+    # These public calls all succeed in genuine frozen43e.
+    # Comparing complete payloads also catches a tempting but incorrect
+    # conversion of SQL expressions or negative bounds to a common limit.
+    payload = _both_routes(monkeypatch, **options)
+    if 'lag_timesteps' in options:
+        columns = payload['context']['instance_table']['columns']
+        assert not any(c.startswith('__kumo_arl') for c in columns)
 
 
 @pytest.mark.parametrize(
