@@ -42,7 +42,7 @@
         "fingerprint": "32485edb4f50fd57ef9c965f6d5eebcfdb8b2f520cb1c260b9cd8596a91390d5"
       },
       "gather": {
-        "fingerprint": "e409741898db8103e226290ef32d3a99aa42d11b70751c03cecdac02a68d5a16"
+        "fingerprint": "229a5bf1f96d869797e3e1a39ea0bf85abe5f81d244820cc9597228f3bb60f42"
       }
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py": {
@@ -209,7 +209,7 @@
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py": {
       "<module>": {
-        "fingerprint": "d9ef307b79c1e7fe6a30f2232e80f14e5bad2f8060b5d46db76fa9aa6228a12b"
+        "fingerprint": "df79c953b785810ddca85bfcdfea406d80d104b4adcf87f0a2d7eea46518e0bc"
       },
       "_Held.__getattr__": {
         "fingerprint": "1c11f042b8200ddeeed1c4f0ca22f07fa367d50bc7957f1262c3f92fde717fca"
@@ -236,7 +236,7 @@
         "fingerprint": "ca4f3d1e70dac9cc6de9fd5ce0dbbb5fb4fff5698271fa33e9893bf8ebebe8e1"
       },
       "_Words.format_field": {
-        "fingerprint": "81c8c351e7ddf05153c3af8aa4d84a40768096aa48ea08f8f47531cde624bffa"
+        "fingerprint": "3cba91f64b95d55cd79284ce3610ad69e8001907fdbdb370d47ab8f3bcb86cc3"
       },
       "_Words.get_value": {
         "fingerprint": "c71335d3757eddf42f4722cd9496b2b5bfe2f8130d8975793ef974cf82093f35"

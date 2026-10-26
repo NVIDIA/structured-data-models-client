@@ -15,7 +15,7 @@
       "moved": "T1.32a: the bridge's key_type refusal, for a key type it had no cast for, is the core's (sdm_engine::keys::cast refuses a key type no rule casts to)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::gather": {
-      "moved": "T3.16 (fix A): the schema as plain data, each column with its source facts, the core reading the rest (no description or held pair); T3.16 (fix D): the result decoded once into results.Gathered and kept as results.CoreRequest; T3.5: the model's values held for the core's refusals of a table or column the view no longer gives; T3.9 KO3-44: select the dedicated option encoding, leaving nonfinite admission and lag meaning in Rust"
+      "moved": "T3.16 (fix A): the schema as plain data, each column with its source facts, the core reading the rest (no description or held pair); T3.16 (fix D): the result decoded once into results.Gathered and kept as results.CoreRequest; T3.5: the model's values held for the core's refusals of a table or column the view no longer gives; T3.9 KO3-44: select the dedicated option encoding, leaving nonfinite admission and lag meaning in Rust; T3.10: retain the original caller inference option only as a scoped host-held formatting value for the Rust-selected finite-number error; no host admission rule or value conversion"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_text": {
       "moved": "T1.36 fix 4 (the final review's P2-2): the host's half of the moved cast: a float in a mix written as the core now writes a float entity (sdm_engine::keys's float_text), the reference's text of it, pyarrow's cast of the float to text at its own width (1e16 is 1e+16), so the core reads back the number the host was given; a boolean as before"
@@ -231,7 +231,7 @@
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::<module>": {
-      "moved": "T3.6: owner-approved P3D-13 removes the routine Snowflake seed warning because the seed is optional; the sampling limitation is documented and no Python SEED_IGNORED mapping remains; T3.5: source_values, decoded and _opening, saying a semantic model's sentences; T3.10: the first invalid-string-escape warning is selected by the core; the host only presents its warning class"
+      "moved": "T3.6: owner-approved P3D-13 removes the routine Snowflake seed warning because the seed is optional; the sampling limitation is documented and no Python SEED_IGNORED mapping remains; T3.5: source_values, decoded and _opening, saying a semantic model's sentences; T3.10: the first invalid-string-escape warning is selected by the core; the host only presents its warning class; T3.10: map the core-selected inference_option_not_finite sentence to authentic installed host-library wording; task, key and refusal selection stay in Rust"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_Words.convert_field": {
       "moved": "T3.17: the one value formatter gains the conversions the shared templates name (d, p); fix 1: host-held values from the call in progress (holding), the a and I conversions and the to() pairing"
@@ -495,7 +495,7 @@
       "moved": "T3.17: a held warning says its sentence"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_Words.format_field": {
-      "moved": "T3.17: advice and database names from the table; fix 1: host-held values from the call in progress (holding), the a and I conversions and the to() pairing"
+      "moved": "T3.17: advice and database names from the table; fix 1: host-held values from the call in progress (holding), the a and I conversions and the to() pairing; T3.10: fill the Rust-selected finite-number sentence using installed Pydantic wording and the original held caller value, with the typed scalar fallback; no host validation, legacy engine import or parser emulation"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_Words.get_value": {
       "moved": "T3.17: advice and host values in a template"
