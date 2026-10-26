@@ -190,10 +190,17 @@ T4.2 remains one canonical package, with these explicit implementation substeps:
    Contract32 gives timestamps a dedicated s/ms/us/ns unit domain while Duration and Time64 retain us/ns.
    Source SQL admission and its historical coverage cells retain DT14 unchanged; all default routes remain old.
    Java only receives compatible explicit timestamp-unit rendering for representable existing scalar paths; no Java frame API or extra-wide Java.time value domain is added.
-   Other extension arrays, text/date-like text, object, Decimal and custom hooks remain explicit open families.
+   The StringDtype constructor substep admits built-in Python/pyarrow storage and their supported pandas missing-value forms through the same conversion, shared UTF8 admission and owned Table/Schema stages.
+   Empty/all-null strings retain their known string type; Rust infers meaning, identifiers and links from the whole detached column without parsing date-shaped strings as timestamps.
+   Object-backed text/date-like text, other extension arrays, Decimal and custom hooks remain explicit open families.
    These remaining native families stay outside the development seam by type, with no content-based date detector, host semantic fallback, new SDK refusal policy or compatibility exception.
 3. Complete frame/index/mutation/edit behavior and the real large-offset admission cases listed below before claiming T4.2 complete or switching defaults.
    T4.4 sampling order, adjacency and random-state work remain separate dependencies.
+
+The host-held diagnostic audit has one narrow exception approved by [T42-PANDAS-ADVICE-2026-10-26](decisions.md): `_rust/frames.py` invokes the unchanged pandas `_warn_dates_stored_as_text` hint only after successful core schema construction.
+Table/key/override/link notices retain their immediate order; the existing held-warning path presents the native hint before core final notices, preserving grouping and warning-as-error behavior.
+Only advisory text removes that hinted date column from the core-selected key-advice candidates, using the existing native formatter; no hint, candidate adjustment, callback or new metadata returns to the core or changes schema, values, sampling, state or model inputs.
+Rust and Java hosts do not reproduce this pandas-specific hint.
 
 Default frame constructor routing and setters remain old, including text/date/object/extension support.
 No frame materialization, sampling, index-order, session or full T4.2 completion is claimed by the first constructor consumer.
