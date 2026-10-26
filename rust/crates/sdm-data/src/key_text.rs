@@ -309,10 +309,13 @@ pub(crate) fn json_cell(column: &ArrayRef, row: usize, float_text: fn(f64) -> St
 /// A key set as this dialect writes it (the module's documentation): the
 /// batch left out, the key coerced as the reference coerces it for its
 /// JSON (`_coerce_id`), each seed time its wall clock's text to the
-/// second.
+/// second. `integer_range_error` is the caller's classification of an
+/// integer value outside this binding's i64 range; it does not change
+/// the classification of an unsupported input type.
 pub(crate) fn coerced(
     schema: &SchemaRef,
     batches: &[RecordBatch],
+    integer_range_error: Sentence,
 ) -> Result<(SchemaRef, Vec<RecordBatch>), CoreError> {
     let unbound = || {
         CoreError::new(
@@ -350,14 +353,15 @@ pub(crate) fn coerced(
             let column = batch.column(at);
             let bound: ArrayRef = if field.name() == SEED_KEY {
                 match arrow_key_type(field.data_type()) {
-                    KeyType::Integer => arrow_cast(column, &DataType::Int64)?,
-                    KeyType::Double => arrow_cast(column, &DataType::Float64)?,
-                    KeyType::Text => arrow_cast(column, &DataType::Utf8)?,
+                    KeyType::Integer => arrow_cast(column, &DataType::Int64, integer_range_error)?,
+                    KeyType::Double => arrow_cast(column, &DataType::Float64, integer_range_error)?,
+                    KeyType::Text => arrow_cast(column, &DataType::Utf8, integer_range_error)?,
                 }
             } else {
                 let times = arrow_cast(
                     column,
                     &DataType::Timestamp(arrow_schema::TimeUnit::Nanosecond, None),
+                    integer_range_error,
                 )?;
                 let times = times.as_primitive::<TimestampNanosecondType>();
                 Arc::new(
@@ -405,7 +409,11 @@ fn arrow_key_type(data_type: &DataType) -> KeyType {
     }
 }
 
-fn arrow_cast(column: &ArrayRef, to: &DataType) -> Result<ArrayRef, CoreError> {
+fn arrow_cast(
+    column: &ArrayRef,
+    to: &DataType,
+    integer_range_error: Sentence,
+) -> Result<ArrayRef, CoreError> {
     if column.data_type() == to {
         return Ok(Arc::clone(column));
     }
@@ -416,9 +424,25 @@ fn arrow_cast(column: &ArrayRef, to: &DataType) -> Result<ArrayRef, CoreError> {
                 .collect::<Option<Vec<_>>>()
                 .map(Int64Array::from)
                 .ok_or_else(|| {
+                    // Only these admitted integer types can fail because
+                    // their value is outside i64. Preserve the existing
+                    // internal refusal for a type integer_at does not read.
+                    let outside = matches!(
+                        column.data_type(),
+                        DataType::UInt64 | DataType::Decimal128(_, 0)
+                    );
+                    let sentence = if outside {
+                        integer_range_error
+                    } else {
+                        Sentence::Internal
+                    };
                     CoreError::new(
-                        Sentence::Internal,
-                        "a key is not an integer the binding writes",
+                        sentence,
+                        if sentence == Sentence::SnowflakeIntegerKeyRange {
+                            "Snowflake's SQL key binding cannot represent integer keys outside the signed 64-bit range"
+                        } else {
+                            "a key is not an integer the binding writes"
+                        },
                     )
                 })?,
         ),
