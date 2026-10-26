@@ -122,6 +122,46 @@ def test_cross_warehouse_cases_have_no_unimplemented_lakebase_alias(
 
 
 @pytest.mark.parametrize(
+    'name,leg',
+    [
+        ('databricks.connect.warehouse', 'databricks-sql'),
+        ('databricks.connect.spark', 'databricks-spark'),
+        ('lakebase.connect', 'lakebase'),
+        ('snowflake.connect.snowpark', 'snowflake'),
+    ],
+)
+def test_existing_connection_journeys_force_core_calls_but_not_host_sources(
+    monkeypatch: pytest.MonkeyPatch, name: str, leg: str
+) -> None:
+    case = _case('contract/cases/s2/' + name + '.json')
+    declared = list(case['routes'])
+    routes = RUNNER.routes_on(case, leg)
+    # Opening and connecting a source are host operations in scope-python;
+    # their catalog paths remain coverage facts, never forced core routes.
+    assert not any(route.startswith('source.') for route in routes)
+    assert case['routes'] == declared
+    assert _on(_routing.FROM_SOURCE_DUCKDB, leg) <= set(routes)
+    assert _on(_routing.MATERIALIZE_DUCKDB, leg) <= set(routes)
+    assert _on(_routing.PREDICT_DUCKDB, leg) <= set(routes)
+    assert set(routes) <= set(_routing.PATHS)
+    monkeypatch.setenv('SDM_CORE_ROUTES', ','.join(routes))
+    assert _routing.forced() == frozenset(routes)
+
+
+def test_an_unknown_core_route_is_not_silently_filtered_with_host_sources(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    case = _case('contract/cases/s2/databricks.connect.warehouse.json')
+    unknown = 'query.validate/not-a-real-mode/any'
+    case['routes'].append(unknown)
+    routes = RUNNER.routes_on(case, 'databricks-sql')
+    assert unknown in routes
+    monkeypatch.setenv('SDM_CORE_ROUTES', ','.join(routes))
+    with pytest.raises(_routing.RouteError, match='unknown path'):
+        _routing.forced()
+
+
+@pytest.mark.parametrize(
     'backend',
     [
         'postgres',
