@@ -3696,7 +3696,13 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // (`_columns_to_leave_out`, then the hops `_resolve_options` resolves,
     // then the names `sample_subgraph` checks.)
     let exclude_cols = options::excluded(&deferred)?;
-    let walk_hops = options::neighbors(&deferred, mode)?;
+    let walk_hops = if frames.is_some() && deferred.neighbors.is_some() {
+        // The native frame sampler validates its signed array after
+        // seed reset; SQL's numeric-comparison coercions do not apply.
+        vec![]
+    } else {
+        options::neighbors(&deferred, mode)?
+    };
     // Each fact table's look-back rate, where the provider's neighbor
     // reads look back no further than the reference's warehouse samplers.
     let lookback = if frames.is_some() {
@@ -3901,6 +3907,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
                 entity,
                 &all_keys,
                 &walk_hops,
+                deferred.neighbors.as_deref(),
                 &excluded,
                 (!unseeded).then(|| seed.to_u128()).flatten(),
             )?

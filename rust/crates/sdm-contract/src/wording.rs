@@ -959,6 +959,9 @@ pub fn template(sentence: Sentence) -> Template {
         S::FrameNoValidRows => said(
             r#"Found no valid rows in table '{table}'. Please make sure that there exists valid non-N/A primary keys in this table."#,
         ),
+        S::FrameNeighborDtype => said(
+            r#"the relational engine failed while building this request: RuntimeError: Type '{edge}' in num_neighbors must have dtype int64."#,
+        ),
         S::LinkHistoryMissing => said(
             "Cannot perform link prediction on subgraphs without any historical target entities. Please increase the number of hops and try again.",
         ),
