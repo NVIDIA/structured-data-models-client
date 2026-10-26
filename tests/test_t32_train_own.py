@@ -733,7 +733,8 @@ def test_sample_counts_need_actual_nonnegative_integer_evidence(
 
 
 @pytest.mark.parametrize(
-    'fault', ['capture-off', 'incomplete', 'query-log', 'missing-result']
+    'fault',
+    ['capture-off', 'incomplete', 'query-log', 'log-count', 'missing-result'],
 )
 def test_sampled_input_completeness_and_public_result_counts_stay_strict(
     fault: str,
@@ -746,9 +747,36 @@ def test_sampled_input_completeness_and_public_result_counts_stay_strict(
         line['driver']['capture']['incomplete'] = ['an unrecorded read']
     elif fault == 'query-log':
         line['driver']['query_log'] = None
+    elif fault == 'log-count':
+        line['driver']['query_log']['statements'] += 1
     else:
         line['public']['result'] = None
     assert _sampled_report(line, reference).failures
+
+
+@pytest.mark.parametrize('rows', [None, True, -1])
+def test_equal_but_invalid_sampled_public_counts_are_not_evidence(
+    rows: Any,
+) -> None:
+    reference = _sampled_line(5, 5)
+    line = _sampled_line(5, 5)
+    for item in (line, reference):
+        item['public']['result']['rows'] = rows
+    assert _sampled_report(line, reference).failures
+
+
+@pytest.mark.parametrize('fault', ['failed', 'no-results', 'incomplete'])
+def test_the_sampled_reference_itself_must_be_successful_and_complete(
+    fault: str,
+) -> None:
+    reference = _sampled_line(5, 5)
+    if fault == 'failed':
+        reference['driver']['capture']['statements'][1]['error'] = 'Error'
+    elif fault == 'no-results':
+        reference['driver']['capture']['statements'][1]['results'] = []
+    else:
+        reference['driver']['capture']['incomplete'] = ['an unrecorded read']
+    assert _sampled_report(_sampled_line(5, 5), reference).failures
 
 
 @pytest.mark.parametrize(
