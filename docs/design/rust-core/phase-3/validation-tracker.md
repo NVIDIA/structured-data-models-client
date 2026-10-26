@@ -1,6 +1,6 @@
 # Phase 3 validation tracker
 
-Updated 2026-10-26, 21:51 UTC.
+Updated 2026-10-26, 22:49 UTC.
 Phase 3 / T3.10 is unfinished.
 Phase 4 is paused by the owner.
 The coordinator alone edits this tracker; agents report results and next actions.
@@ -44,17 +44,18 @@ Counts describe existing cases only.
 | R1 | **DONE: Databricks foreign-key metadata fix landed** | Pushed and independently verified `dd5b3f37ef`; both exact carry approvals and normal 188-second package handoff passed | Coordinator consumed handoff; original native producer IDs retained |
 | R2 | **DONE: execute all nine affected originals** | Genuine d90: 9/9 observed, zero operator failures, SDK0 cleanup; corrected key32 and odd-name cases succeed, metric warning restored, negative-neighbor has zero strict differences; 186 raw differences remain for finite attribution | Coordinator consumes actual results and exact owner-approved key32 support; final comparison acceptance remains R8 |
 | R3 | **DONE: Spark comparison assembly and finite review** | All 300 original executions assembled; both independent opinions support observed product semantics and aggregate quality, retaining raw read-attribution limits and final single-row diagnostic regression | Original producer IDs and all 4780 raw differences retained; no strict comparator PASS claimed |
-| R4 | Finish Java SQL and model/timezone acceptance on x86 and ARM | Both finite reviewers accept 192/249 SQL cases per architecture; latest Java execution233/249 x86 and229/249 ARM, with Python240/249 each; four tails active. All18 Java timezone/model statuses per architecture are collected, with actual SDK0 and expected raw strict RuntimeError preserved | Review remaining57 paired SQL cases and complete all-zone finite review; close exact old-client model baseline for the same six saved requests using the frozen43e public client, after both CODE approvals; final job/schema cleanup remains |
+| R4 | Finish Java graph parity after the final source repair | All 249 SQL cases and all 18 Java timezone/model observations per architecture are executed; finite reviews identified one real x86 diamond graph defect. Both reviewers closed the exact old-client six-request baseline; all owned cloud jobs and schema cleanup are terminal | Corrected-source runtime reruns depend on the bounded impact review and owner graph decision in R15; no further baseline calls are needed |
 | R5 | **DONE: original Lakebase notebook** | Parent `1028333862593563` passed all 32 original commands on genuine 7e41; full 173106-row data and PK/FK post-check exact; read lease released | Coordinator consumed authentic success/export/fixture receipt; both source-impact approvals retain original IDs |
 | R6 | **DONE: original Databricks notebook** | Parent `435766366545516` passed all 39 original commands on genuine 7e41; source/export verified; only the verified owned metric view removed, SDK0 cleanup | Coordinator consumed authentic success and cleanup receipt; original failed attempts retained |
 | R7 | **DONE: Databricks generated-source and provider checks** | Both finite opinions accept all 20 classified generated journeys; after both CODE approvals, corrected directCountRows oracle rechecked all 99 complete saved live answers: normal 33/33, truncate detected, silent-capability detected | Receipt `712a0c21`; all 99 original judgments reproduced first, only direct count-header judgment changed per pass; original failures preserved, no new queries |
 | R8 | **DONE: finite warehouse comparison evidence and affected Lakebase original** | Both final DK302/SF304 opinions accept bounded evidence; final15e Lakebase negative-neighbor original now actually returns PostgreSQL PROVIDER_ERROR/2201W under P2I-4, with one observed case and no operator failure | Full original AW173106 typed rows, ordered columns/types and PK/FK restored exactly; SDK0 between case and restoration, lease released; receipt `4ff68507` retained for final pack sign-off |
-| R9 | **DONE: two reviews approve bounded retention of completed cohorts** | Both independently approve retaining all 255 model questions, 18 census questions, 20 memory controls and 600 local generated-source results with original IDs; model warning/raw-FK equality is not claimed | All nine affected originals are executed in R2; final finite comparison acceptance remains in R8 |
-| R10 | **DONE: green full CI on final integrated source** | [Run 40375303944](https://github.com/NVIDIA/structured-data-models-client/actions/runs/40375303944) completed SUCCESS on exact `15ec2ad916`: 81 successful jobs, two intentional skips, zero failures; raw run SHA `6a9ede69` | Authenticated final producer artifacts, root978 and contract202 passing checks retained; no repeated full CI needed while product source stays unchanged |
+| R9 | Reconfirm retained-result applicability after the graph repair | Both original opinions retain completed cohorts through source15e; those opinions do not automatically cover the new graph implementation. Actual candidate f833 ran all 315 existing DuckDB cases: nine materialized/public payloads change, 306 remain canonically equal, and all original input hashes agree | Both independent reviewers are evaluating exact affected cases and producer applicability; rerun affected existing cases, preserve all original identities and raw differences |
+| R10 | Green full CI on the eventual corrected integrated source | [Run 40375303944](https://github.com/NVIDIA/structured-data-models-client/actions/runs/40375303944) passed on exact `15ec2ad916`: 81 successful jobs, two intentional skips, zero failures; raw run SHA `6a9ede69`. This predates the graph repair | Freeze the approved corrected source and run one fresh full CI; do not attribute the old green run to the new Rust implementation |
 | R11 | **DONE: Snowflake identical-input comparison** | Full 10101-row source and original 10000-row draw verified; both complete current requests match the originals; all 10001 actual model26 predictions exactly equal old, RMSE ratio 1.0 on both batches and aggregate; SDK0 cleanup | Coordinator consumed receipt `8f48d1c7`; sampling unchanged; historical independent-draw 26.51% loss and failed recorder-mode attempt preserved |
-| R12 | **DONE: locked acceptance `3a` and pre-heldout evidence** | Genuine final-source gate PASSED all ten steps, 364 fault tests and 452 guard controls; subsequent cache-symlink packaging failure retained | Seven clean 315-case observation sets regenerated; stock ratchet/compare, cargo boundary, size reports and pre-heldout evidence writer all PASS without repeating the passed gate or CI |
-| R13 | Final sealed check, evidence package and authorized source integration | Reviewed H2 stock dry run passed all seven-leg prerequisites; the actual sealed check remains unstarted. Separate evidence lane is prepared without modifying validated source15e | After Java acceptance, run existing sealed40-case set once, finalize generated reports and both GO opinions, publish reviewed evidence with its own identity, then fast-forward/push exact validated15e into rust-core |
+| R12 | Corrected-source acceptance and pre-heldout evidence | Original15e locked gate passed all ten steps, 364 fault tests and 452 guard controls; stock packaging checks passed after preserving the cache-symlink failure. These are genuine old-source results | Bind required acceptance and observation checks to the eventual corrected source; retain unaffected prior results only within both reviewers' explicit scope |
+| R13 | Final sealed check, evidence package and authorized source integration | Reviewed H2 stock dry run passed all seven-leg prerequisites on15e; the actual sealed check remains unstarted. Separate evidence lane is prepared | Update source/artifact bindings after the graph decision, complete all ordinary checks and final-source CI, run the existing sealed40-case set last, obtain both GO opinions, then merge/push validated Phase3 into rust-core |
 | R14 | **DONE: existing Spark and Lakebase live provider kits** | Spark saved-answer correction has both CODE approvals, five controls and actual 99-answer readjudication PASS; Lakebase actually completed all 99 normal/fault cases on final15e, normal33 clean and both faults detected | Spark receipt `08a8d2c7`, Lakebase `d3f3825e`; original failures, all driver captures and source IDs preserved; cleanup verified and lease released |
+| R15 | Shared graph correction and explicit model-input decision | Candidate f833 merges partial foreign-key maps by sampled row; both CODE reviews approve, all nine Rust target tests and both public discovery-order tests pass. The genuine deployed-model pair keeps43 links instead of21 and has RMSE 2.4701% worse on three predictions, within5%; both finite reviews verify this bounded result | Owner decision pending because the old client also drops links; no sampling changes, future rows or new features were introduced. Source-impact review identifies nine changed existing cases, not only the diamond |
 
 R9 supplies the two independent applicability opinions; R2 now supplies the actual nine affected reruns.
 Their execution is complete; finite acceptance of the remaining raw differences stays in R8.
@@ -67,7 +68,8 @@ Both final count reviewers independently close completed comparable scenarios us
 The original raw count differences, incomplete timing pairs and PostgreSQL Rust missing count measurement remain explicit; no blanket numerical PASS is claimed.
 
 The owner requested a two-hour completion focus, targeting approximately 22:15 UTC.
-Java runtime is the remaining critical path; finishing by that time is not grounds to omit coverage or lower correctness requirements.
+That target was missed after the Java tail exposed a real shared Rust graph defect.
+The current critical path is the graph decision, affected-result review and corrected-source validation; the deadline does not lower correctness requirements.
 
 ## Current execution and integration
 
@@ -88,8 +90,8 @@ Java runtime is the remaining critical path; finishing by that time is not groun
   The sole cloud collector retains all artifact identities and starts dependent runs as producers finish, without waiting for full CI to complete.
 - Superseded `7e41bb73a5` CI `40322768900` was cancelled after preserving its 78 successful jobs, remaining job states and all eight authenticated official artifact groups.
   It lacked the timeout repair and FK fix; cancellation released workflow concurrency so the corrected run started without the previous 36-minute queue.
-- Cloud author owns Java configs, publication and jobs; a separate author owns only the thin residual-shard notebook and controls.
-  Two independent CODE reviews precede new shard execution; completed ranges are retained and never restarted for convenience.
+- All six residual Java cloud jobs have finished; the cloud owner collected the complete original249-case assembly and all timezone model outputs, verified SDK0, and removed only the six owned schemas.
+  Raw strict failures remain preserved; one graph discrepancy requires the separate R15 correction.
   All four live provider kits are complete; prior failures and duplicate Spark attempt remain preserved with owned cleanup verified.
 - The original Snowflake rank diagnostic completed after both CODE approvals and four passing controls: actual old int8 index overflow precedes lookup; all seven materialization SQL texts match the historical capture.
   It is fresh corroboration, with exact historical body unknown; cleanup verified zero tables/views.
@@ -114,20 +116,35 @@ The owner reported reminders arriving repeatedly.
 The coordinator disabled the reminder script and removed its exact cron entry at 15:59 UTC; the independent nightly CI entry is unchanged.
 Do not re-enable reminders automatically.
 
-Both independent opinions cover192 Java SQL cases per architecture, preserving actual d90/final15e producing sources, raw SQL-count failures, the10001-case sampled-body difference and warning-observation limits.
-The six fresh jobs have actual resource admissions and case observations; submissions alone are not counted as execution completion.
+Both independent opinions cover all249 Java SQL cases per architecture, preserving actual d90/final15e producing sources, raw SQL-count failures, the10001-case sampled-body difference and warning-observation limits.
+All cases other than the x86 diamond graph discrepancy have bounded finite acceptance; completing execution does not waive that discrepancy.
 
 ## Exact Java model-reference gap and closure
 
 All six current Java/Python model requests agree, but earlier old-client J21 runs used different product/customer selections and a different historical anchor.
-Their matching error-code pattern alone is insufficient proof for these exact requests.
-The coordinator authorized a bounded baseline using the same six saved requests through the genuine frozen43e public client, without rematerializing data or changing sampling.
-Public Schema.from_source metadata hydration and original schema edits are permitted; any necessary reads are scoped and read-only.
-Both independent CODE opinions precede those metadata/model calls, and the actual old post-adapter request must be checked with exact value/type/sign provenance.
-No old-client parity claim, new refusal waiver or rewritten strict result follows from preparation alone.
+The exact gap is now closed by six genuine frozen43e public-client predictions using the same saved requests, without rematerializing or changing sampling.
+Both CODE reviews preceded calls; both actual-result reviews verify three INVALID_REQUEST rejections, two UNSUPPORTED_DTYPE rejections, and one successful25-row result with all50 probability bits exactly matching the current client.
+Actual old post-adapter requests were captured and checked before forwarding to the model.
+Receipt `81fb6351` preserves source, request, response and model26 identities; no old-client local-materializer or current-wire-capture claim is inferred.
 
-Both final reviewers confirmed publishing the generated evidence on a separate evidence lane while retaining tested source15e unchanged.
-The later documentation commit receives its own review/checks and does not inherit15e's CI identity.
+Both final reviewers confirmed publishing the generated evidence on a separate evidence lane while retaining the eventual tested source unchanged.
+The later documentation commit receives its own review/checks and does not inherit the product source's CI identity.
+
+## Shared graph repair and bounded accuracy experiment
+
+The old Python client and source15e each mark a logical foreign key complete after the first partial map, dropping valid links supplied by later sampled paths.
+The public original diamond reproduces21 or22 links out of43 solely from table-discovery order.
+Candidate `f83375b1` merges per sampled row, preserving the old last-valid duplicate rule within each partial map and adding no samples, rows or source reads.
+Both independent CODE reviews approve; the genuine production native has SHA `531ff395`, all nine Rust payload tests pass, and both public discovery-order tests retain all43 links.
+The actual existing model26 experiment compares original21-link and corrected43-link requests with identical other values.
+RMSE changes from4.668331 to4.783642, or2.4701% worse, on just three predictions; this is within5% and does not establish an accuracy improvement.
+Both finite reviewers verify the actual experiment, including unchanged model settings and independently computed labels.
+The discarded-link step has no temporal filter; this exact experiment adds no future-dated rows, which does not prove universal leakage safety.
+Behavior approval remains with the owner because the correction changes historical model inputs.
+
+Actual315-case DuckDB impact receipt `4511ff3e` identifies exactly nine changed materialized/public payloads: five sample.parent-table variants, two diamond variants and two keyed/keyless two-path variants.
+The other306 match under the existing canonical policy; all case/base hashes agree and207 raw section differences remain recorded.
+Both independent reviewers are deriving the affected warehouse, model and runtime reruns; a generic non-diamond or acyclic-graph exemption is insufficient.
 
 ## Completed evidence retained for final review
 
