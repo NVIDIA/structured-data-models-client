@@ -357,3 +357,33 @@ This individual approval covers no other input, sampling behavior or accuracy al
 | # | Question as presented | Owner's words | Status |
 |---|---|---|---|
 | T310-OWNER-2026-10-26-DK-INT32-SUPPORT-1 | May we keep one verified Databricks improvement: a valid 32-bit key case now succeeds instead of the old client’s incorrect “no primary key” error? Fixing lost foreign-key metadata restored relationship/key discovery, and the full prediction recheck succeeded. This approves only that compatibility entry. | "Keep corrected support (recommended)" | approved by owner 2026-10-26 |
+
+
+## Java boundary restoration and measured proposal disposition, 2026-10-26
+
+The private design packet is pinned by SHA256 `880b40b175e062d1c1881245933c02487a89f11c03b0fe8e9a904e7c85351adf` and its actual public baseline facts by `47d2d6c698c167d713b4477e564c06dd2227a9a06fa2664026a8ebf629d133fa`.
+Its authentic official d90 JAR and embedded native retain their original producer identities; the Java/core production inputs are unchanged through 42dbb880.
+P3S-5's conversion-only nested storage observation does not establish a semantic feature-selection change: the existing typed catalog facts already precede generic inference on public discovery.
+P3S-6's actual B7 diagnostics preserve the correct class/state; no speculative parser change or future-wrapper waiver is introduced.
+P3S-8 is a defect to repair, with optional internal diagnostic omission only at the Java fetch-reply budget boundary and all independent facts, privacy and strict control limits retained.
+These entries are withdrawn or repaired rather than accepted as new compatibility exceptions; two exact independent CODE reviews and the normal checks remain required before landing.
+
+| # | Disposition | Basis | Status |
+|---|---|---|---|
+| T310-REVIEW-2026-10-26-JAVA-BOUNDARIES-1 | Withdraw P3S-5/P3S-6 as unestablished public semantic exceptions on the measured routes, and repair P3S-8's oversized optional internal diagnostic without changing public failure contracts or the control cap | Authentic public Java baseline, actual B7 driver facts and independently reviewed bounded design; no owner compatibility waiver | reviewer disposition, exact source reviews and checks required |
+
+## Owner-directed identical-input Snowflake validation, 2026-10-26
+
+The original owner message is preserved in `$SDM_ORCH_STATE/phase-3/owner-answer-20261026-sf-identical-input-no-sampler.primary.json`, SHA256 `a248f756b673dbd669535536101741008ee2a7e5ce9d407b3d64e79dc47659dd`.
+The owner directed: "Ok don't change any sampling, i.e. for snowflake. Just compare on identical rows/contexts."
+The source-pinned completed control receipt is `$SDM_ORCH_STATE/phase-3/sf-identical-original-draw-C2-20261026/execution/controlled-original-input-complete.private.json`, SHA256 `8f48d1c726ea4904f2cfec81390fd7be010cfd63da645efdd7a460232d096361`.
+For only original `multicall.entities-per-call.10001@snowflake`, the complete 10101-row typed source and one original ordered 10000-row draw were bound before actual current42 public materialization; both complete requests equal the original reference requests under existing E35 request-ID masking only.
+The supplied draw is explicitly not warehouse execution evidence, and no fictitious SAMPLE statement or replay artifact is created.
+Both actual current model26 batches produce all10001 predictions exactly equal to the authentic old S2 responses; each batch and aggregate RMSE ratio is1.0, with normal cleanup and zero remaining fixture objects verified.
+Materialization uses authentic current42 native provenance, while the separate unchanged SDK/normalizer runtime truthfully retains its older b1 producer identity.
+The historical independent-draw 26.5percent accuracy failure remains retained, and this controlled result does not declare independent draws equal or change the five-percent quality requirement.
+No sampling code, case inventory, comparison matcher, numeric tolerance or compare-policy sampled-case allowance is expanded.
+
+| # | Question and scope | Owner's words | Status |
+|---|---|---|---|
+| T310-OWNER-2026-10-26-SF-IDENTICAL-INPUT-1 | Keep Snowflake sampling unchanged and validate the one original multicall question on identical original captured source rows and contexts; preserve the independent-draw failure and all source/model identities | "Ok don't change any sampling, i.e. for snowflake. Just compare on identical rows/contexts." | approved by owner 2026-10-26 |

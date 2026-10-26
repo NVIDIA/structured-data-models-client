@@ -27,7 +27,8 @@ import org.slf4j.LoggerFactory;
  *
  * <p>A provider's failure reaches the core as the contract's {@code ProviderError}: its kind,
  * whether it may be retried, its SQLSTATE and vendor code and an internal driver diagnostic.
- * The diagnostic is never public (decision H17); the error the run then ends with names the driver's exception class ({@code
+ * The diagnostic is never public (decision H17), and is omitted if the complete fetch reply
+ * cannot fit the control budget; the error the run then ends with names the driver's exception class ({@code
  * driver_class}). A model's {@link TransportFailed} is told to the core as the contract's
  * transport error; a {@link Refused} call is told as its status, and once the core ends the run,
  * the refusal is raised with what the core counted as answered before it.
@@ -463,7 +464,7 @@ public final class Host {
     reply.put("id", request.get("id"));
     reply.put("outcome", outcome);
     try {
-      run.reply(control(reply), attached);
+      run.reply(fetchControl(reply), attached);
     } catch (NativeError e) {
       told(e);
       throw error(e, Map.of(), driverClass == null ? Map.of() : Map.of("driver_class", driverClass));
@@ -633,6 +634,38 @@ public final class Host {
       throw internal("a control message of " + bytes.length + " bytes is past the control cap");
     }
     return bytes;
+  }
+
+  /** A fetch failure keeps all its facts; its internal diagnostic is optional within the cap. */
+  static byte[] fetchControl(Map<String, Object> reply) {
+    if (!"fetch_reply".equals(reply.get("message"))
+        || !(reply.get("outcome") instanceof Map<?, ?> outcome)
+        || !"error".equals(outcome.get("outcome"))
+        || !(outcome.get("error") instanceof Map<?, ?> error)
+        || !(error.get("driver_message") instanceof String diagnostic)) {
+      return control(reply);
+    }
+    try {
+      // Valid JSON's UTF-8 cannot be shorter than its text's UTF-16 code-unit count.
+      // Validate even guaranteed overflow, without allocating a huge encoded diagnostic.
+      if (diagnostic.length() <= CONTROL_CAP) {
+        byte[] complete = Json.write(reply);
+        if (complete.length <= CONTROL_CAP) {
+          return complete;
+        }
+      } else {
+        Json.validateText(diagnostic);
+      }
+    } catch (Json.JsonException e) {
+      throw internal("a control message cannot be written: " + e.getMessage());
+    }
+    Map<Object, Object> facts = new LinkedHashMap<>(error);
+    facts.remove("driver_message");
+    Map<Object, Object> heldOutcome = new LinkedHashMap<>(outcome);
+    heldOutcome.put("error", facts);
+    Map<String, Object> heldReply = new LinkedHashMap<>(reply);
+    heldReply.put("outcome", heldOutcome);
+    return control(heldReply);
   }
 
   /**

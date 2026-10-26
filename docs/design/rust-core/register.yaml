@@ -10194,65 +10194,63 @@ entries:
     The previous proposed loss of the gateway code is repaired under the
     explicit shared serving policy. No host exception class is fabricated.
 - id: P3S-5
-  title: Java reads Databricks nested values through the driver's text
+  title: Java Databricks nested storage does not authorize a text-feature exception
   kind: change
   old_behavior: >-
-    The Databricks SQL connector gives Python's provider each column as
-    the warehouse's Arrow: a TIMESTAMP as timestamp[us] with no zone (C-1's
-    recorded tables, session zone Etc/UTC), a STRUCT, MAP or ARRAY as
-    Arrow's own nested types.
+    The Databricks SQL connector gives Python each column as warehouse
+    Arrow, including nested values. The typed catalog declares supported
+    numeric/string lists as omitted features and struct/map as unsupported.
   new_behavior: >-
-    Java's Databricks column currently reads a STRUCT, MAP, INTERVAL or an ARRAY of decimals or time
-    stamps as utf8 of the driver's text; every other type as the connector
-    gives it. The timestamp transport defects are repaired without a
-    compatibility exception: the core selects UNIX_MICROS for a zoned
-    instant and native NTZ calendar-field arithmetic for timezone-free
-    walls, followed by explicit indexed BIGINT-to-Arrow transfer.
-    Both meanings survive non-UTC SQL sessions without changing them.
+    Withdrawn as a public feature-selection exception. Java's JDBC adapter
+    may hold nested driver text in utf8, but the existing Databricks catalog
+    reader supplies typed CatalogColumn.dtype before generic inference.
+    Public discovery already omits decimal/integer lists and refuses
+    struct/map and timestamp arrays; an actual STRING remains a feature.
+    Storage representations are not claimed equal, and no fake Arrow list,
+    null feature or second type parser is introduced.
   affected_inputs: >-
-    Java over a Databricks nested or interval column the core reads as data.
-  cases: [T3.13]
+    Java Databricks discovery over a nested source feature with its catalog
+    type, including the existing struct/list cases and B7 driver shapes.
+  cases: [T3.13, databricks.value.struct-feature, nested.list-int]
   refs: [T3.13]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: rejected
+  approved_by: reviewer
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T310-REVIEW-2026-10-26-JAVA-BOUNDARIES-1}
   notes: >-
-    Approver: owner. Proposed by T3.13's implementer, never self-approved.
-    A narrow probe with released Databricks JDBC 3.4.2 reproduced both
-    the unsupported LocalDateTime typed getter and the gap normalization.
-    The typed-getter failure is repaired. The lossless NTZ projection
-    preserves gap wall fields rather than accepting that corruption;
-    the explicit transfer was verified narrowly with the actual released
-    driver's integer getter under LA and Berlin JVM zones.
-    The bounded live JDBC probe (B7) confirmed the timestamp bugs and
-    replacement SQL against actual Python Arrow in UTC, Los Angeles
-    and Berlin sessions, including gaps, nulls, negative microseconds
-    and years 0001/9999. The remaining nested-value difference is not
-    approved: the core omits numeric/string lists and refuses struct/map,
-    so host text fallback must not turn those into supported text features.
+    No new observable behavior is accepted. The authentic unchanged d90
+    JAR public Schema.fromSource baseline is pinned in the private Java
+    boundary design packet: struct/map/timestamp-array refusal,
+    decimal/int-list omission and real STRING retention. Conversion-only
+    utf8 observations had not established a public feature-selection bug.
+    Public regression controls retain nulls, empty lists and the distinction
+    from ordinary string features. The repaired timestamp transport remains
+    unchanged, including indexed integer transfer, gap walls and SQL zones.
 - id: P3S-6
-  title: Java reads a Databricks error class anywhere before the statement the message appends
+  title: Actual Databricks JDBC wrapper diagnostics preserve the error class
   kind: change
   old_behavior: >-
-    Python's provider reads a Databricks failure's error class from the
-    driver's accessor, else the bracketed name the SQL connector's message
-    opens with (DB/errors.py, error_class).
+    Python reads the driver's error-class accessor, else the bracketed
+    class opening the SQL connector's message.
   new_behavior: >-
-    Java's provider reads the first bracketed upper-case name in the
-    message before the statement Databricks appends, since the JDBC driver
-    wraps the warehouse's message in its own; the SQLSTATE is the driver's
-    getSQLState(), else the last one the message writes, as Python reads it.
+    Withdrawn as an observed compatibility exception. The actual B7 JDBC
+    wrapper places the correct upper-case error class before appended SQL;
+    its earlier wrapper brackets do not match that class grammar. Existing
+    Java extraction therefore preserves the actual SQLSTATE, vendor code
+    and class in UTC, Los Angeles and Berlin without a parser change.
   affected_inputs: >-
-    A Databricks JDBC failure whose message holds a bracketed upper-case
-    word before the warehouse's error class.
+    The actual released Databricks JDBC 3.4.2 wrapper diagnostics recorded
+    by B7; other unobserved wrapper shapes gain no exception.
   cases: [T3.13]
   refs: [T3.13, T3.27]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: rejected
+  approved_by: reviewer
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T310-REVIEW-2026-10-26-JAVA-BOUNDARIES-1}
   notes: >-
-    Approver: owner. Proposed by T3.13's implementer, never self-approved;
-    the live JDBC probe (B7) settles the driver's message form.
+    No failure parser or source classification is changed. B7's actual
+    unresolved-column diagnostic preserves SQLSTATE 42703, vendor 1003
+    and UNRESOLVED_COLUMN.WITH_SUGGESTION in all three zones.
+    This withdraws the unestablished hypothetical wrapper exception,
+    rather than approving wrong extraction for a future driver message.
 - id: P3S-7
   title: Java calls a serving endpoint with a caller-supplied token and names no client in its User-Agent
   kind: change
@@ -10283,32 +10281,37 @@ entries:
     credential diagnostics.
 
 - id: P3S-8
-  title: An unusually long JDBC diagnostic can exceed the host control limit
+  title: Oversized optional JDBC diagnostics preserve the structured provider failure
   kind: change
   old_behavior: >-
-    The old Python warehouse route reports the database driver's failure
-    with its native diagnostic and codes.
+    A database failure retains the driver's independent failure facts;
+    its native diagnostic is not public core error text.
   new_behavior: >-
-    Java includes the original JDBC diagnostic in ProviderError's internal
-    driver_message. If the serialized fetch reply exceeds the 65536-byte
-    host control limit, the host reports INTERNAL_ERROR before the core
-    can interpret the independent SQLSTATE, vendor code or error class.
-    The diagnostic is not exposed as public core error text.
+    Repaired rather than adopted. The Java fetch-reply boundary preserves
+    the complete encoded reply within 65536 bytes. If only the optional
+    internal driver_message makes it exceed that cap, the host omits that
+    field and rechecks the complete facts-only reply through the same cap.
+    SQLSTATE, vendor code, error class, kind, retryability and request ID
+    stay intact. Malformed text and overflowing independent facts still
+    fail closed; ordinary control messages remain strict.
   affected_inputs: >-
-    A JDBC failure containing an unusually long echoed statement or value
-    that makes the fetch reply exceed the control-message budget.
+    Java JDBC failures whose optional internal diagnostic makes the encoded
+    fetch reply exceed the existing control-message budget.
   cases: [T3.13]
   refs: [T3.6, T3.13]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: rejected
+  approved_by: reviewer
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T310-REVIEW-2026-10-26-JAVA-BOUNDARIES-1}
   notes: >-
-    Approver: owner. P2 carry-forward identified by independent focused
-    review F3 in T3.13-sol-focused-r1.md for candidate 7ddfd7b5.
-    Proposed follow-up: specify one bounded internal diagnostic policy
-    shared by hosts that retains the independent structured failure facts;
-    a complete diagnostic would require an attachment contract.
-    No truncation or new public diagnostic policy is approved here.
+    The authentic d90 public baseline reproduces the defect: the same
+    42703/1003 failure is PROVIDER_ERROR with a short diagnostic and
+    INTERNAL_ERROR with a 65793-byte reply. The fix uses the already
+    optional ProviderError.driver_message, with no ABI/schema change,
+    public diagnostic truncation, raised cap or unbounded attachment.
+    Oversized text still passes shared UTF16 validation without allocating
+    its encoded copy; smaller text uses the actual JSON/UTF8 byte count.
+    Public failure, exact-budget, escaped/multibyte, malformed-text,
+    immutable-facts and closing controls cover the boundary.
 - id: P3S-9
   title: Serving envelopes use shared UTF-8 JSON and actual encoded-byte limits
   kind: change

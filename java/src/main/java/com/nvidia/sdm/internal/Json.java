@@ -118,19 +118,32 @@ public final class Json {
     }
   }
 
+  /** Validate UTF-16 without allocating an encoded copy of the text. */
+  static void validateText(String text) throws JsonException {
+    for (int i = 0; i < text.length(); i++) {
+      if (Character.isSurrogate(text.charAt(i))) {
+        i = surrogateEnd(text, i);
+      }
+    }
+  }
+
+  private static int surrogateEnd(String text, int at) throws JsonException {
+    if (Character.isHighSurrogate(text.charAt(at)) && at + 1 < text.length()
+        && Character.isLowSurrogate(text.charAt(at + 1))) {
+      return at + 1;
+    }
+    throw new JsonException("text holds an unpaired surrogate");
+  }
+
   private static void string(String text, StringBuilder out) throws JsonException {
     out.append('"');
     for (int i = 0; i < text.length(); i++) {
       char c = text.charAt(i);
-      if (Character.isHighSurrogate(c)) {
-        if (i + 1 < text.length() && Character.isLowSurrogate(text.charAt(i + 1))) {
-          out.append(c).append(text.charAt(++i));
-          continue;
-        }
-        throw new JsonException("text holds an unpaired surrogate");
-      }
-      if (Character.isLowSurrogate(c)) {
-        throw new JsonException("text holds an unpaired surrogate");
+      if (Character.isSurrogate(c)) {
+        int last = surrogateEnd(text, i);
+        out.append(c).append(text.charAt(last));
+        i = last;
+        continue;
       }
       switch (c) {
         case '"' -> out.append("\\\"");
