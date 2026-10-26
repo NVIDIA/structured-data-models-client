@@ -11061,13 +11061,13 @@ entries:
     Only the measured Python ref-pandas3 key.declared-int32@databricks-sql original, whose declared single-column FK cannot be reconstructed from names.
   cases: [key.declared-int32@databricks-sql]
   refs: [P1B-31, P2E-1, E66, KO2-11]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T310-OWNER-2026-10-26-DK-INT32-SUPPORT-1}
   notes: >-
-    Approver: owner.
-    This is a named INVALID_REQUEST-to-success difference, so the crash/unnamed-error class does not by itself authorize its admission; the implementation repair and its two CODE approvals do not manufacture an owner comparison decision.
+    The owner explicitly approved only this measured qualified input with "Keep corrected support (recommended)" on2026-10-26, recorded verbatim in T310-OWNER-2026-10-26-DK-INT32-SUPPORT-1.
+    This named-refusal-to-success admission uses that individual approval, not the crash/unnamed-error class or implementation CODE approvals.
     The final d90 nine-original receipt SHA256 f70a2087bb8307658e4be9c664829c4d76ab6016baf7d7d9010d2aeb429b68c2 preserves original inputs, the restored declared edge, genuine native397f4bcf identity and SDK-zero cleanup.
     All637 original failed FK reads across277 cases remain immutable; this entry adds no catalog, statement, graph, payload or warning wildcard.
   case_outcomes:
-  - {case: key.declared-int32@databricks-sql, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'Measured declared non-name-inferred FK succeeds; owner admission remains proposed'}
+  - {case: key.declared-int32@databricks-sql, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'Owner approved the measured non-name-inferred declared FK prediction success'}

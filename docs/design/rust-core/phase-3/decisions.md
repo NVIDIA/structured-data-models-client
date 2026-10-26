@@ -339,7 +339,7 @@ The exact source-pinned CODE review packet retains original observations, typed 
 - E120 is the global authority for the one Databricks bare-clock inference change in DT-17; the SQLite-only KO2-61 row is not a new Databricks approval.
 - T36-OWNER-2026-10-24-UTC-1 covers the two original Snowflake UTC-window cases; only two measured TARGET scalars gain exact fields, with the changed ltz-time row vector still requiring its finite source proof.
 - KO2-36 covers the corrected name.dot-entity Databricks outcome and retained declared odd-name relationship under P2E-1.
-- P3F-1 separately records the measured key.declared-int32 named-refusal-to-success transition as proposed for the owner; implementation approval is not substituted for its comparison-policy authority.
+- P3F-1 records only the measured key.declared-int32 named-refusal-to-success transition, individually approved by the owner in the exact row below; implementation review is not substituted for that owner answer.
 
 The actual d90 metric time-choice warning matches the frozen Python body exactly after only the existing P3E-2 diagnostic-code prefix is removed.
 Its class remains SDMWarning, and no warning suppression or new wording allowance is added.
@@ -347,3 +347,13 @@ The final original negative-neighbor Databricks case has no strict differences.
 The catalog/table and relationship permutations remain exact finite human evidence, with their raw diagnostics retained; no generic ordering matcher is introduced.
 Unknown historical warning bodies remain unknown.
 The separate second Snowflake sampled-case allowance and its failed quality result remain outside this batch, with no sampling, accuracy or row-vector relaxation.
+
+
+### Individual declared-key support approval
+
+The exact question, answer and bounded scope are retained in `$SDM_ORCH_STATE/phase-3/owner-answer-20261026-dk-int32-support.primary.json`.
+This individual approval covers no other input, sampling behavior or accuracy allowance.
+
+| # | Question as presented | Owner's words | Status |
+|---|---|---|---|
+| T310-OWNER-2026-10-26-DK-INT32-SUPPORT-1 | May we keep one verified Databricks improvement: a valid 32-bit key case now succeeds instead of the old client’s incorrect “no primary key” error? Fixing lost foreign-key metadata restored relationship/key discovery, and the full prediction recheck succeeded. This approves only that compatibility entry. | "Keep corrected support (recommended)" | approved by owner 2026-10-26 |
