@@ -197,6 +197,7 @@ _DAY_FIRST = (
     'warning.'
 )
 HOST_OWNED: dict[str, str] = {
+    'inference_option_not_finite': '{given:finite_number}',
     'dates_read_day_first': _DAY_FIRST,
     'date_literal_day_first': _DAY_FIRST,
     'float32_overflow': 'overflow encountered in cast',
@@ -269,6 +270,29 @@ class _Words(string.Formatter):
             name, _, rest = format_spec.partition('(')
             given = [a.strip() for a in rest.rstrip(')').split(',')]
             return ADVICE[name](*(self._fields[a] for a in given if a))
+        if format_spec == 'finite_number':
+            # Rust selected the failed validator and task. This host only
+            # relays the installed library's own spelling, including its
+            # versioned documentation URL, without importing the engine.
+            from pydantic import ValidationError
+
+            title = (
+                'RegressionInferenceConfig'
+                if self._fields['task'] == 'regression'
+                else 'ClassificationInferenceConfig'
+            )
+            return str(
+                ValidationError.from_exception_data(
+                    title,
+                    [
+                        {
+                            'type': 'finite_number',
+                            'loc': (self._fields['key'],),
+                            'input': value,
+                        }
+                    ],
+                )
+            )
         if format_spec.startswith('to(') and format_spec.endswith(')'):
             # A list paired with another field's: each pair as its two
             # literals joined by ` to `, the pairs by commas.

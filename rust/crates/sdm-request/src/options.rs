@@ -309,12 +309,15 @@ pub fn values(given: Option<&Value>) -> Result<Asked, CoreError> {
         ));
     };
     // Hosts preserve nonfinite numeric values in this one attachment.
-    // KO3-44 admits only the reference's NaN lag, not other nonfinite
-    // options or strings that happen to spell a nonfinite number.
+    // KO3-44 admits the reference's NaN lag. Inference config objects
+    // go to their task-aware validator, which consumes every member and
+    // refuses nonfinite values before an ordinary request is built.
+    // Other fields and malformed config shapes retain this JSON guard.
     for (name, value) in members {
         let nan_lag =
             name == "lag_timesteps" && matches!(value, Value::Number(token) if token == "NaN");
-        if !nan_lag && !value.all_json_numbers() {
+        let inference = name == "inference_config" && matches!(value, Value::Object(_));
+        if !nan_lag && !inference && !value.all_json_numbers() {
             return Err(CoreError::new(
                 Sentence::OptionValueNotFinite,
                 format!("{name} carries a value that cannot be sent as JSON (a NaN, an infinity, or a type JSON has no form for)"),
@@ -1218,7 +1221,25 @@ pub fn options(kind: Kind, given: Option<&Value>) -> Result<Options, CoreError> 
     };
     for (key, value) in members {
         match key.as_str() {
-            "num_estimators" => options.num_estimators = estimators(key, value)?,
+            "num_estimators" => {
+                let nonfinite = match value {
+                    Value::Number(token) if token == "NaN" => Some(f64::NAN),
+                    Value::Number(token) if token == "Infinity" => Some(f64::INFINITY),
+                    Value::Number(token) if token == "-Infinity" => Some(f64::NEG_INFINITY),
+                    _ => None,
+                };
+                if let Some(given) = nonfinite {
+                    return Err(invalid(
+                        Sentence::InferenceOptionNotFinite,
+                        "inference_config",
+                        "not_finite",
+                    )
+                    .with_field("key", Detail::text(key))
+                    .with_field("task", Detail::text(kind.wire_name()))
+                    .with_field("given", Detail::Scalar(Scalar::Float64(given))));
+                }
+                options.num_estimators = estimators(key, value)?;
+            }
             "column_shuffle" => options.column_shuffle = boolean(key, value)?,
             "category_shuffle" => options.category_shuffle = boolean(key, value)?,
             "hop_shuffle" => options.hop_shuffle = boolean(key, value)?,
@@ -1718,7 +1739,15 @@ mod tests {
                 assert_eq!(error.sentence, Sentence::InferenceOptionNotFinite);
                 assert_eq!(error.fields["task"], Detail::text(kind.wire_name()));
                 assert_eq!(error.fields["key"], Detail::text("num_estimators"));
-                assert_eq!(error.fields["given"], Detail::text(token));
+                let given = match token {
+                    "NaN" => f64::NAN,
+                    "Infinity" => f64::INFINITY,
+                    _ => f64::NEG_INFINITY,
+                };
+                assert_eq!(
+                    error.fields["given"],
+                    Detail::Scalar(Scalar::Float64(given))
+                );
             }
         }
         for (raw, sentence) in [
@@ -1765,7 +1794,7 @@ mod tests {
             (br#"{"num_hops":NaN}"#.as_slice(), "num_hops"),
             (br#"{"lag_timesteps":Infinity}"#.as_slice(), "lag_timesteps"),
             (
-                br#"{"inference_config":{"num_estimators":NaN}}"#.as_slice(),
+                br#"{"inference_config":[NaN]}"#.as_slice(),
                 "inference_config",
             ),
         ] {
