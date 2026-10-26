@@ -640,9 +640,9 @@ pub enum NeighborLimit {
         #[serde(rename = "negative")]
         value: String,
     },
-    SqlExpression {
+    Expression {
         #[serde(rename = "sql_expression")]
-        sql: String,
+        text: String,
     },
 }
 

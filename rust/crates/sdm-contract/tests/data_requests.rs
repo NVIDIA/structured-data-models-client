@@ -292,14 +292,21 @@ fn neighbor_limits_preserve_unsigned_width_signed_values_and_caller_expressions(
         serde_json::to_string(&largest).unwrap(),
         u64::MAX.to_string()
     );
+    assert_eq!(
+        serde_json::to_string(&NeighborLimit::Expression {
+            text: "3 OR TRUE".into(),
+        })
+        .unwrap(),
+        r#"{"sql_expression":"3 OR TRUE"}"#
+    );
     for limit in [
         largest,
         NeighborLimit::Negative { value: "-1".into() },
         NeighborLimit::Negative {
             value: "-0.5".into(),
         },
-        NeighborLimit::SqlExpression {
-            sql: "3 OR TRUE".into(),
+        NeighborLimit::Expression {
+            text: "3 OR TRUE".into(),
         },
     ] {
         let bytes = serde_json::to_vec(&limit).unwrap();

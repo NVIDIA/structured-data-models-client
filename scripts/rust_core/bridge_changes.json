@@ -162,7 +162,7 @@
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::_scalar": {
-      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+      "refactor": "T3.9 KO3-44: NumPy extended-precision NaN encodes as the same numeric NaN token as other float scalars; Rust alone admits option values and ordinary attachments remain strict"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::attachment": {
       "moved": "T3.9 KO3-44: option attachments preserve nonfinite numeric tokens for Rust-owned admission; ordinary JSON remains strict, with no sampling policy in Python"

@@ -44,7 +44,7 @@ pub(crate) fn neighbor_limit(
     match limit {
         NeighborLimit::Unsigned(value) => value.to_string().into(),
         NeighborLimit::Negative { value } => value.as_str().into(),
-        NeighborLimit::SqlExpression { sql } => sql.as_str().into(),
+        NeighborLimit::Expression { text } => text.as_str().into(),
     }
 }
 

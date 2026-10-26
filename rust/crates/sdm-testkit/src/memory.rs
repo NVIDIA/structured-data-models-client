@@ -322,7 +322,7 @@ impl Memory {
                         // The non-SQL provider's row-position predicate
                         // keeps no row for a negative numeric bound.
                         sdm_contract::data::NeighborLimit::Negative { .. } => 0,
-                        sdm_contract::data::NeighborLimit::SqlExpression { .. } => {
+                        sdm_contract::data::NeighborLimit::Expression { .. } => {
                             return Err(not_read());
                         }
                     };

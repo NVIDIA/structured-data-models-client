@@ -8,6 +8,7 @@ Current production refuses all three before materialization.
 ## Boundaries
 
 Python and Java encode option values, without deciding their sampling meaning.
+NumPy NaNs, including extended-precision scalar NaNs, are encoded as the same NaN token as Python floats only in the option attachment.
 A dedicated option-attachment decoder reuses the wire codec's lossless nonfinite-token mechanism.
 Ordinary message, attachment and request JSON remain strict, and strings such as "NaN" remain strings.
 Rust admits only the nonfinite value accepted by the old client: a NaN lag_timesteps, meaning no extra lag.
@@ -18,7 +19,8 @@ The shared data contract carries an explicit neighbor limit.
 It preserves the full unsigned64 range, signed negative numbers, and caller-authored SQL-expression text as distinct variants.
 Positive numeric limits retain their existing encoding and behavior.
 Only a numeric zero stops the walk; textual zero continues it as before.
-Core code carries the typed limit without naming a dialect.
+Core and request code carry opaque provider-expression text separately from numbers, without interpreting a language or naming a dialect.
+The data contract documents SQL-expression trust and retains the explicit sql_expression wire tag; only SQL providers render its text.
 SQL dialects retain their original predicate or LIMIT placement and precedence, including their different answers to negative bounds.
 An SQL expression is caller-authored query code under the existing derived-expression trust boundary, never an identifier or metadata value.
 No invented SQL parser or new accepted-expression subset is introduced.

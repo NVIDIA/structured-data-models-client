@@ -285,15 +285,15 @@ def _scalar(value: Any) -> Any:
     of hop counts and the engine's config classes a sequence of transforms;
     any other value refused, as the encoder refuses it. From T1.28b a NumPy
     float wider than a double (``np.longdouble``) is written as the double
-    it holds where that double is exactly its value, as the engine's config
-    classes read it, else refused."""
+    it holds where that double is exactly its value, or as NaN where it
+    holds NaN, as the engine's config classes read it, else refused."""
     import numpy as np
 
     if isinstance(value, np.floating):
         item = value.item()
         if isinstance(item, float):
             return item
-        if float(value) == value:
+        if float(value) == value or np.isnan(value):
             return float(value)
         raise TypeError(
             f'Object of type {type(value).__name__} is not JSON serializable'

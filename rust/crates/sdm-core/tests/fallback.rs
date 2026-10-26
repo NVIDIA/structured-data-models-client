@@ -756,8 +756,8 @@ fn portable_neighbors_keep_signed_bounds_and_refuse_sql_code_explicitly() {
     let DataRequest::Neighbors { per_seed, .. } = &mut request else {
         unreachable!()
     };
-    *per_seed = Some(NeighborLimit::SqlExpression {
-        sql: "3 OR TRUE".into(),
+    *per_seed = Some(NeighborLimit::Expression {
+        text: "3 OR TRUE".into(),
     });
     let expression = fallback(request, Some(seeds));
     assert_eq!(refusal(&expression).code, ErrorCode::UnsupportedRequest);

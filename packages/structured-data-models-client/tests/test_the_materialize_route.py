@@ -402,7 +402,11 @@ def test_an_infinite_lag_is_refused_on_the_core_route(
     with pytest.raises(StructuredDataError) as refused:
         _materialize(lag_timesteps=value)
     assert refused.value.code == 'INVALID_REQUEST'
-    assert refused.value.details == {'field': 'lag_timesteps'}
+    assert refused.value.details == {
+        'field': 'lag_timesteps',
+        'kind': 'invalid_request',
+        'retryable': False,
+    }
     assert str(refused.value).startswith(
         '[INVALID_REQUEST] lag_timesteps carries a value'
     )
@@ -441,14 +445,19 @@ def test_owner_admitted_sampling_values_match_the_frozen_client(
         assert not any(c.startswith('__kumo_arl') for c in columns)
 
 
-@pytest.mark.parametrize('scalar', [float, np.float32, np.float64, np.longdouble])
+@pytest.mark.parametrize(
+    'scalar', [float, np.float32, np.float64, np.longdouble]
+)
 def test_numeric_nan_is_only_encoded_on_the_option_attachment(scalar) -> None:
     # The extended NumPy scalar must reach the same Rust admission as a
     # Python NaN, without changing ordinary request JSON's strictness.
     value = scalar('nan')
-    assert codec.attachment(
-        {'lag_timesteps': value}, named=True, option_values=True
-    ) == b'{"lag_timesteps": NaN}'
+    assert (
+        codec.attachment(
+            {'lag_timesteps': value}, named=True, option_values=True
+        )
+        == b'{"lag_timesteps": NaN}'
+    )
     with pytest.raises(StructuredDataError) as refused:
         codec.attachment({'lag_timesteps': value}, named=True)
     assert refused.value.code == 'INVALID_REQUEST'

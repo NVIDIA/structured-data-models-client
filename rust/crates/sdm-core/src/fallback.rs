@@ -369,12 +369,12 @@ async fn answered(held: &mut Held<'_>, seeds: Option<ArrowData>) -> Result<Arrow
                 // providers keep their own native LIMIT semantics.
                 Some(sdm_contract::data::NeighborLimit::Negative { .. }) => Some(0),
                 None => None,
-                Some(sdm_contract::data::NeighborLimit::SqlExpression { .. }) => {
+                Some(sdm_contract::data::NeighborLimit::Expression { .. }) => {
                     return Err(not_kept(
-                        Sentence::FallbackSqlExpression,
+                        Sentence::FallbackExpression,
                         request,
                         "per_seed",
-                        "the in-memory fallback does not execute caller-authored SQL expressions",
+                        "the in-memory fallback does not execute caller-authored provider expressions",
                     )
                     .into());
                 }

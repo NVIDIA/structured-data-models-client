@@ -585,9 +585,9 @@ pub enum Hop {
     /// A negative bound reaches the provider; its native predicate or
     /// limit semantics decide the result (KO3-44).
     Negative(String),
-    /// Caller-authored SQL expression, in the reference's original
+    /// Caller-authored provider expression, kept opaque in the original
     /// neighbor-bound position, not a parsed or normalized row count.
-    SqlExpression(String),
+    Expression(String),
     /// A size of zero: the walk ends before this hop (`neighbors == 0`).
     Stop,
 }
@@ -656,13 +656,13 @@ fn hop(given: &Value) -> Result<Hop, CoreError> {
                 .ok()
                 .filter(|size| plain && size.is_finite())
             else {
-                return Ok(Hop::SqlExpression(text.clone()));
+                return Ok(Hop::Expression(text.clone()));
             };
             if size < 0.0 {
                 // Preserve the caller's text origin: warehouse sizing
                 // arithmetic refuses text before SQL, while SQL-only
                 // providers evaluate the original expression in place.
-                return Ok(Hop::SqlExpression(text.clone()));
+                return Ok(Hop::Expression(text.clone()));
             }
             // `'0' == 0` is false: a zero spelled as text ends nothing.
             return Ok(if size >= 1.0 {
@@ -1847,7 +1847,7 @@ mod tests {
         for (sizes, wanted) in [
             ("[4, -1]", Hop::Negative("-1".into())),
             ("[4, -0.5]", Hop::Negative("-0.5".into())),
-            (r#"[4, "-2"]"#, Hop::SqlExpression("-2".into())),
+            (r#"[4, "-2"]"#, Hop::Expression("-2".into())),
         ] {
             assert_eq!(
                 neighbors(
@@ -1909,9 +1909,9 @@ mod tests {
             vec![
                 Hop::Negative("-1".into()),
                 Hop::Negative("-0.5".into()),
-                Hop::SqlExpression("-2".into()),
-                Hop::SqlExpression("3 OR TRUE".into()),
-                Hop::SqlExpression("nonsense".into()),
+                Hop::Expression("-2".into()),
+                Hop::Expression("3 OR TRUE".into()),
+                Hop::Expression("nonsense".into()),
                 Hop::Keep(u64::MAX),
             ]
         );

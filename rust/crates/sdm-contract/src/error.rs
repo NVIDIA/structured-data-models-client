@@ -863,7 +863,7 @@ sentences! {
     FallbackTimeType = "fallback_time_type", E::UnsupportedRequest, rule "fallback";
     FallbackNoColumn = "fallback_no_column", E::UnsupportedRequest, rule "fallback";
     FallbackSeedTypes = "fallback_seed_types", E::UnsupportedRequest, rule "fallback";
-    FallbackSqlExpression = "fallback_sql_expression", E::UnsupportedRequest, rule "fallback";
+    FallbackExpression = "fallback_sql_expression", E::UnsupportedRequest, rule "fallback";
     HostClockNotUtc = "host_clock_not_utc", E::InvalidRequest;
     StateVersion = "state_version", E::InvalidRequest;
     StateUnread = "state_unread", E::InvalidRequest;

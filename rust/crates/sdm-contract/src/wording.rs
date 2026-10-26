@@ -545,7 +545,7 @@ pub fn template(sentence: Sentence) -> Template {
         S::FallbackSeedTypes => said(
             r#"the in-memory fallback of this data source joins a key only to seeds of its own type, or integers to integers"#,
         ),
-        S::FallbackSqlExpression => said(
+        S::FallbackExpression => said(
             r#"the in-memory fallback does not execute caller-authored SQL expressions in {field} of a {request} request"#,
         ),
         S::HostClockNotUtc => said(r#"the host's clock must be a timestamp in UTC"#),

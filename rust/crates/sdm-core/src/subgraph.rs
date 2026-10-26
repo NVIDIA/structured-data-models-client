@@ -190,7 +190,7 @@ fn limit_lookback_seconds(
             }
             Ok(seconds.min(LOOKBACK_MOST) as i64)
         }
-        NeighborLimit::SqlExpression { .. } => Err(CoreError::new(
+        NeighborLimit::Expression { .. } => Err(CoreError::new(
             Sentence::NeighborLookbackNotNumeric,
             "a neighbor bound used to size a time window is not numeric",
         )
@@ -318,8 +318,8 @@ impl Walk<'_> {
                 Hop::Negative(value) => sdm_contract::data::NeighborLimit::Negative {
                     value: value.clone(),
                 },
-                Hop::SqlExpression(sql) => {
-                    sdm_contract::data::NeighborLimit::SqlExpression { sql: sql.clone() }
+                Hop::Expression(text) => {
+                    sdm_contract::data::NeighborLimit::Expression { text: text.clone() }
                 }
             };
             // The frames each table held when this hop began. A table
@@ -1007,8 +1007,8 @@ mod lookback_tests {
             -1
         );
         let error = limit_lookback_seconds(
-            &NeighborLimit::SqlExpression {
-                sql: "3 OR TRUE".into(),
+            &NeighborLimit::Expression {
+                text: "3 OR TRUE".into(),
             },
             2.0,
         )

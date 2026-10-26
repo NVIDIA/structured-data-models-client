@@ -65,8 +65,8 @@ fn signed_bounds_and_expressions_retain_native_precedence_and_unsigned_width() {
                 "-0.5",
             ),
             (
-                NeighborLimit::SqlExpression {
-                    sql: "3 OR TRUE".into(),
+                NeighborLimit::Expression {
+                    text: "3 OR TRUE".into(),
                 },
                 "3 OR TRUE",
             ),
