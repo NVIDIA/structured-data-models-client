@@ -63,7 +63,12 @@ fn a_converted_raw_time_keeps_each_dimension_it_replaces() {
         assert_eq!(said(warnings[0], "other"), "month");
         assert_eq!(
             warnings[0].fields["instead_of"],
-            Detail::List(instead_of.iter().map(|name| Detail::text(*name)).collect())
+            Detail::List(
+                instead_of
+                    .iter()
+                    .map(|name| Scalar::Utf8((*name).into()))
+                    .collect()
+            )
         );
     }
 }

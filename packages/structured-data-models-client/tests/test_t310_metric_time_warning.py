@@ -76,11 +76,33 @@ class _MetricProvider:
         if request['request'] == 'describe':
             part = request['part']
             if part == 'view_definition':
+                described = [
+                    ('order_id', 'bigint'),
+                    ('user_id', 'bigint'),
+                    ('ts', 'timestamp'),
+                    ('price', 'double'),
+                    ('revenue', 'double measure'),
+                    ('', ''),
+                    ('# Parameters', ''),
+                    ('min_price', 'double'),
+                    ('', ''),
+                    ('# Detailed Table Information', ''),
+                    ('Catalog', 'cat'),
+                    ('Database', 'shop'),
+                    ('Table', 'metrics'),
+                    ('Type', 'METRIC_VIEW'),
+                    ('View Text', _VIEW),
+                ]
                 return pa.table(
                     {
-                        'col_name': ['Type', 'View Text'],
-                        'data_type': ['METRIC_VIEW', _VIEW],
-                        'comment': pa.array([None, None], pa.string()),
+                        'col_name': [name for name, _ in described],
+                        'data_type': [kind for _, kind in described],
+                        'comment': pa.array(
+                            [None] * len(described), pa.string()
+                        ),
+                        'metadata': pa.array(
+                            [None] * len(described), pa.string()
+                        ),
                     }
                 )
             assert part in ('columns', 'keys')
@@ -162,8 +184,8 @@ def _metric_source(monkeypatch: pytest.MonkeyPatch) -> Any:
             True,
             True,
         ),
-        (['orders'], None, 'orders', 'ts_raw', False, True),
-        (['users'], None, 'users', None, False, False),
+        ({'orders': 'orders'}, None, 'orders', 'ts_raw', False, True),
+        ({'users': 'users'}, None, 'users', None, False, False),
         (None, {'orders': 'ts'}, 'orders', 'ts', False, False),
         (None, {'orders': 'ts_raw'}, 'orders', 'ts_raw', False, True),
         (None, {'orders': None}, 'orders', None, False, False),
