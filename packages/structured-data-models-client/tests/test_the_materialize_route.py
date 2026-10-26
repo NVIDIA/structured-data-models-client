@@ -423,12 +423,14 @@ def test_an_infinite_lag_is_refused_on_the_core_route(
         {'lag_timesteps': float('nan')},
         {'lag_timesteps': np.longdouble('nan')},
         {'num_neighbors': [-1]},
+        {'num_neighbors': [2, -1]},
         {'num_neighbors': ['3 OR TRUE']},
     ],
     ids=[
         'nan-lag',
         'numpy-wide-nan-lag',
         'negative-neighbor',
+        'negative-second-hop',
         'neighbor-sql-expression',
     ],
 )
@@ -535,10 +537,6 @@ def test_the_sampling_options_are_taken_as_the_old_route_takes_them(
     ('options', 'field'),
     [
         ({'num_hops': None}, 'num_hops'),
-        ({'num_neighbors': ['x']}, 'num_neighbors'),
-        # A negative size, which the reference's databases read three ways
-        # (P2I-4, KO2-82).
-        ({'num_neighbors': [2, -1]}, 'num_neighbors'),
         ({'max_pq_iterations': 0}, 'max_pq_iterations'),
         ({'use_prediction_time': None}, 'use_prediction_time'),
         ({'exclude_cols_dict': {'orders': ['order_id']}}, 'exclude_cols_dict'),
@@ -559,6 +557,24 @@ def test_a_sampling_option_the_engine_refuses_is_the_caller_s_error(
         _materialize(**options)
     assert refused.value.code == 'INVALID_REQUEST'
     assert refused.value.details.get('field') == field
+
+
+@pytest.mark.parametrize('expression', ['x', 'nonsense'])
+def test_an_invalid_neighbor_expression_is_refused_by_its_provider(
+    monkeypatch: pytest.MonkeyPatch, expression: str
+) -> None:
+    # KO3-44 permits caller expressions to reach their provider, while
+    # unknown identifiers still fail there, as in the frozen client.
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    with pytest.raises(StructuredDataError) as refused:
+        _materialize(num_neighbors=[expression])
+    assert refused.value.code == 'PROVIDER_ERROR'
+    assert refused.value.details == {
+        'request': 'neighbors',
+        'kind': 'data_source',
+        'retryable': False,
+        'driver_class': '_duckdb.BinderException',
+    }
 
 
 def test_an_unseeded_sample_is_a_new_sample_of_the_entities_asked(

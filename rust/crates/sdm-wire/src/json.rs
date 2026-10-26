@@ -566,6 +566,19 @@ impl Value {
         }
     }
 
+    /// Whether a decoded value has only ordinary JSON numeric tokens.
+    /// Unlike [`Self::all_finite`], this preserves finite numbers outside
+    /// double range; only the three extra literal tokens admitted by
+    /// [`read_options`] and [`read_answer`] are excluded.
+    pub fn all_json_numbers(&self) -> bool {
+        match self {
+            Value::Number(token) => !matches!(token.as_str(), "NaN" | "Infinity" | "-Infinity"),
+            Value::Array(items) => items.iter().all(Value::all_json_numbers),
+            Value::Object(members) => members.iter().all(|(_, v)| v.all_json_numbers()),
+            _ => true,
+        }
+    }
+
     /// Whether every number in the value reads as a finite double: an
     /// integer token always does, as an integer of any size; a float token
     /// past a double's range (`1e400`) reads as an infinity, and does not.
@@ -744,7 +757,9 @@ mod option_attachment_tests {
 
     #[test]
     fn ordinary_json_numbers_keep_their_full_exponent_range() {
-        let finite = read_options(br#"{"lag_timesteps":1e400,"nested":[-1e400,18446744073709551616]}"#).unwrap();
+        let finite =
+            read_options(br#"{"lag_timesteps":1e400,"nested":[-1e400,18446744073709551616]}"#)
+                .unwrap();
         assert!(finite.all_json_numbers());
         assert!(!finite.all_finite(), "finite JSON need not fit a double");
         for token in ["NaN", "Infinity", "-Infinity"] {

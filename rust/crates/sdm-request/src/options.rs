@@ -313,7 +313,7 @@ pub fn values(given: Option<&Value>) -> Result<Asked, CoreError> {
     for (name, value) in members {
         let nan_lag =
             name == "lag_timesteps" && matches!(value, Value::Number(token) if token == "NaN");
-        if !nan_lag && !value.all_finite() {
+        if !nan_lag && !value.all_json_numbers() {
             return Err(CoreError::new(
                 Sentence::OptionValueNotFinite,
                 format!("{name} carries a value that cannot be sent as JSON (a NaN, an infinity, or a type JSON has no form for)"),

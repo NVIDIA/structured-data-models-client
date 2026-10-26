@@ -12,7 +12,8 @@ NumPy NaNs, including extended-precision scalar NaNs, are encoded as the same Na
 A dedicated option-attachment decoder reuses the wire codec's lossless nonfinite-token mechanism.
 Ordinary message, attachment and request JSON remain strict, and strings such as "NaN" remain strings.
 Rust admits only the nonfinite value accepted by the old client: a NaN lag_timesteps, meaning no extra lag.
-Existing errors for other nonfinite option values remain named refusals.
+Existing errors for other literal nonfinite option values remain named refusals.
+Finite lossless JSON numbers outside double range retain their existing option rules; transport admission does not convert them to doubles.
 The endpoint response decoder's encoding and surrogate rules do not apply to options.
 
 The shared data contract carries an explicit neighbor limit.
