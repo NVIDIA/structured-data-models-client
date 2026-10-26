@@ -1,6 +1,6 @@
 # Phase 3 validation tracker
 
-Updated 2026-10-26, 09:44 UTC.
+Updated 2026-10-26, 10:17 UTC.
 Phase 4 is paused at the owner's request; current agents focus on Phase 3.
 
 ## Acceptance
@@ -33,7 +33,7 @@ Use the existing common cases, pinned data, seeds, anchors and model settings ac
 
 ## Active blockers and next steps
 
-1. Current Phase 3 head is `91b7f348f87971b4ed24cb6ef1e0c8be8ab4cade`, pushed after two exact code approvals and normal unscoped handoff checks.
+1. Current Phase 3 head is `fc643df9fe5dac83f65dd6a01f0e36685e82b6c5`, pushed after two exact code approvals and normal unscoped handoff checks.
    The protected `rust-core` branch remains Phase 2 until every exit requirement passes.
    `451aa3bde4` landed the minimal Databricks key-overflow classification repair; both original wide-key public cases now return the same named invalid request as the frozen client.
    `b2b447c4fb` lands T3.9's approved NaN lag, SQL-expression and negative-neighbor support with explicit typed boundaries.
@@ -67,9 +67,12 @@ Use the existing common cases, pinned data, seeds, anchors and model settings ac
    The contract-tooling runner also shut down before reporting its test failures; preserve that incomplete log and require the next complete run.
    Fresh official x86/ARM production and test-ops wheels, the complete four-platform JNI JAR and dependencies are collected and verified.
    All 13 production and 49 Java publication files passed typed absence checks and SHA readbacks.
-   Spark original 300-case run `852230986910623` is active; its exclusive fixture lease prevents concurrent warehouse writers.
-   The existing read-only local Java check is active on genuine `91b7f348f8` artifacts for six original J2 shapes across three timezones.
-   The remaining 157-case Java warehouse run follows fixture release.
+   Spark original 300-case run `852230986910623` is active, with 85 original cases completed at 10:14 UTC and the first 48 complete bundles collected; its exclusive fixture lease prevents concurrent Databricks writers.
+   The original Lakebase notebook is independently running as job `438410656072665` after exact full-fixture admission of all 173106 rows and both code reviews.
+   The original Databricks notebook is reviewed and staged, and waits only for the Databricks fixture lease.
+   The read-only local Java comparison completed on genuine `91b7f348f8`: all 18 request pairs are exact after the existing request-ID exception; 15 endpoint-refusal code pairs match, and 75 ordered prediction rows with 150 binary64 probabilities are exact.
+   Python DataFrame probability columns and Java probability maps are fully accounted for in finite evidence; the original strict report remains preserved for final independent review.
+   The remaining Java warehouse runs are explicitly queued for x86 and ARM, each with 157 SQL cases plus six J2 shapes in three zones, after Spark releases its fixture.
    The sole artifact collector owns publication and retains original producer IDs for all proven unchanged reused assets.
    No completed model or SQL campaign will be relabeled as final-source execution.
 6. The runtime agent owns missing original local generated-source checks for DuckDB, SQLite and PostgreSQL, plus full-data census and memory readiness.
@@ -80,12 +83,17 @@ Use the existing common cases, pinned data, seeds, anchors and model settings ac
    Its two g99 SQL result differences have all six typed read hashes independently reproduced across 38400 seeds and 896 rows, with exact public payloads and results.
    Raw reports remain unchanged and final independent evidence review is required.
    The original pinned census caches are present and verified, with no download or disk-space blocker.
-   The full census is running after the twice-reviewed private producer repair omitted empty optional arguments that the canonical case schema forbids; no source data, case inventory or acceptance schema was weakened.
+   The full census completed DuckDB and is active on full-size SQLite H&M after the twice-reviewed empty-argument producer repair.
+   The SQLite fixture has no indexes and has scanned about 1.87 TB of logical data against a 0.9 GB file.
+   A separate, bounded nonunique-index fixture correction is being authored and reviewed; it retains all 16931173 H&M rows, questions, seeds, logical schema and ordering checks, with no mutation of the active attempt or cache framework.
    All 20 existing native and host memory/ownership controls passed.
    The coordinator owns final CI dispatch, finite Databricks reconciliation, integration, performance disposition and this tracker.
-   Snowflake also owns the reproduced missing metric-view time-choice warning, with candidate `2cf4beb833` in two independent code reviews.
+   The missing metric-view time-choice warning is fixed and landed at `fc643df9fe` after both exact code approvals, eight passing public controls, all 17 assembly tests and the complete normal unscoped handoff.
+   Genuine native artifacts retain their `2cf4beb833` producer identity across the test-only repairs.
    The fix keeps warning selection in Rust after final table/time overrides; Python remains a formatting adapter.
-   Its shared sentence/schema changes land before the inference-wording repair to avoid conflicting generation or duplicate CI batches.
+   The remaining inference-wording/register repair is frozen at `b1c5d775c3` on that landed base and is in two code reviews.
+   Its Python formatter uses the actual installed Pydantic library; the new direct client requirement `pydantic>=2.7` is explicit and the resolved lock packages remain unchanged.
+   Snowflake now owns a small full-data SQLite fixture indexing correction, while the runtime agent owns the CI repair and Databricks owns cloud validation.
    These are the three active lanes; Phase 4 stays paused.
 7. Two owner decisions remain unanswered: the measured live metadata-freshness latency cost, and extending the existing one-case Snowflake random-sampling comparison rule to the original multicall stress case.
    The second sampling case is not authorized by KO3-63; the protected comparison guard explicitly requires the owner for a second case.
