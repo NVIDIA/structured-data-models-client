@@ -933,6 +933,7 @@ fn drive(
             Err(failed) => return Ok(Err(error_of(&failed)?)),
         };
         match read(&out).map_err(|_| anyhow!("an unreadable step"))? {
+            ControlMessage::Step(Step::Warnings) => continue,
             ControlMessage::Step(Step::Done { result }) => return Ok(Ok(result)),
             ControlMessage::Step(Step::Fetch { requests }) => {
                 for step in &requests {

@@ -435,7 +435,9 @@ pub(crate) fn materialize(
                 let (description, types) = crate::frame_materialize::description(&frames, held)?;
                 let source = crate::frame_materialize::lock(&frames).source();
                 return Ok(Run::new(move |asker| {
-                    crate::materialize::run(asker, inputs(description, source, None, types))
+                    let inputs = inputs(description, source, None, types);
+                    crate::frame_materialize::lock(&frames).carry(&asker, inputs.memo.as_ref());
+                    crate::materialize::run(asker, inputs)
                 }));
             }
             let access = root.data_access(&provider)?;

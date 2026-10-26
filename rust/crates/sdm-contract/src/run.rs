@@ -51,6 +51,10 @@ pub struct ReplyId(pub u32);
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "step", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Step {
+    /// Present the pending warnings before requesting the next step.
+    /// No data reply is required; cancel or close instead of continuing if the
+    /// host's warning policy raises. The core has not crossed the boundary.
+    Warnings,
     /// Answer every one of these before asking for the next step.
     Fetch {
         requests: Vec<FetchStep>,

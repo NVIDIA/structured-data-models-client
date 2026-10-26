@@ -372,6 +372,9 @@ public final class Host {
         trace.stepped(read);
       }
       Object kind = read.get("step");
+      if ("warnings".equals(kind)) {
+        continue;
+      }
       if ("done".equals(kind)) {
         Map<String, Object> result = (Map<String, Object>) read.get("result");
         if (trace != null) {

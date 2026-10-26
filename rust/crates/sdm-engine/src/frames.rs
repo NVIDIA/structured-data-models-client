@@ -30,7 +30,8 @@ fn named<'a>(batch: &'a RecordBatch, name: &str) -> Result<&'a ArrayRef, CoreErr
         .ok_or_else(|| invalid("a frame lacks a described column"))
 }
 
-/// Boolean frame identifiers compare as the native values 0 and 1.
+/// Boolean foreign-key values compare as native 0 and 1. Boolean primary
+/// keys are outside the constructor's admitted identifying types.
 fn read_keys(array: &ArrayRef) -> Result<Vec<Option<Key>>, CoreError> {
     if let Some(array) = array.as_any().downcast_ref::<BooleanArray>() {
         return Ok(array
@@ -89,6 +90,14 @@ struct Adjacency {
 pub struct Snapshot {
     tables: BTreeMap<String, Table>,
     adjacency: Vec<Adjacency>,
+    pub dropped: Vec<DroppedRows>,
+}
+
+pub struct DroppedRows {
+    pub table: String,
+    pub input: usize,
+    pub null_keys: usize,
+    pub duplicate_keys: usize,
 }
 
 pub struct WalkedTable {
@@ -110,6 +119,7 @@ pub struct Walked {
 impl Snapshot {
     pub fn new(graph: &Graph, mut input: BTreeMap<String, RecordBatch>) -> Result<Self, CoreError> {
         let mut tables = BTreeMap::new();
+        let mut dropped = Vec::new();
         for table in &graph.tables {
             if table.time_column.is_some() {
                 return Err(crate::not_yet("frame_temporal"));
@@ -138,14 +148,20 @@ impl Snapshot {
                 ));
             }
             let mut index = BTreeMap::new();
+            let mut null_keys = 0;
+            let mut duplicate_keys = 0;
             let valid: Vec<usize> = match &table.primary_key {
                 None => (0..rows.num_rows()).collect(),
                 Some(key) => read_keys(named(&rows, key)?)?
                     .into_iter()
                     .enumerate()
                     .filter_map(|(row, key)| {
-                        let key = key?;
+                        let Some(key) = key else {
+                            null_keys += 1;
+                            return None;
+                        };
                         if index.contains_key(&key) {
+                            duplicate_keys += 1;
                             None
                         } else {
                             index.insert(key, row);
@@ -160,6 +176,14 @@ impl Snapshot {
                     "a frame has no valid primary-key rows",
                 )
                 .with_field("table", Detail::text(&table.name)));
+            }
+            if null_keys + duplicate_keys > 0 {
+                dropped.push(DroppedRows {
+                    table: table.name.clone(),
+                    input: rows.num_rows(),
+                    null_keys,
+                    duplicate_keys,
+                });
             }
             tables.insert(table.name.clone(), Table { rows, valid, index });
         }
@@ -194,7 +218,11 @@ impl Snapshot {
                 groups: reverse,
             });
         }
-        Ok(Self { tables, adjacency })
+        Ok(Self {
+            tables,
+            adjacency,
+            dropped,
+        })
     }
 
     /// Entity sampling uses the sanitized primary-key map, before RS-1.

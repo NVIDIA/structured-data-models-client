@@ -3035,11 +3035,17 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     }
 
     let graph = Graph::new(&description)?;
-    if let Some(frames) = &frames {
+    let dropped_notice = if let Some(frames) = &frames {
         let mut frames = crate::frame_materialize::lock(frames);
         frames.initialize(asker, &description, &graph)?;
         memo.memo.source = frames.source();
         memo.keep();
+        frames.warn_dropped(asker)
+    } else {
+        false
+    };
+    if dropped_notice {
+        asker.flush_warnings().await;
     }
     let profile = Profile::resolve(&ProfileSpec {
         name: ProfileName::Relational,

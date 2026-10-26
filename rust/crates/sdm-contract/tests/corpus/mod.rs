@@ -178,6 +178,7 @@ pub fn messages() -> Vec<ControlMessage> {
             inference_asked: vec![],
             model_endpoint: None,
         })),
+        ControlMessage::Step(Step::Warnings),
         ControlMessage::Step(Step::Fetch {
             requests: vec![FetchStep {
                 id: ReplyId(1),

@@ -14,8 +14,8 @@ use sdm_contract::frames::{
     FRAME_CHECKPOINT_VERSION, FrameCheckpoint, FrameCheckpointManifest, FrameCheckpointMetadata,
     MaterializeFrames,
 };
-use sdm_contract::ops::{HeldSchema, SourceDescription};
-use sdm_contract::{CoreError, Detail, HeldState, Scalar, Sentence};
+use sdm_contract::ops::{Dtype, HeldSchema, SamplerMemo, SourceDescription};
+use sdm_contract::{CoreError, CoreWarning, Detail, HeldState, Scalar, Sentence};
 use sdm_engine::frames::Snapshot;
 use sdm_engine::graph::{Graph, Table};
 use sdm_engine::random::Mt19937;
@@ -110,6 +110,16 @@ pub(crate) fn take(
             )
         }
     };
+    if let Some(metadata) = &metadata {
+        let source = fingerprint(&metadata.description, &tables)
+            .map_err(|error| error.dropping(HeldState::SamplerState))?;
+        if metadata.source != source {
+            return Err(
+                invalid("frame checkpoint no longer matches its logical snapshot")
+                    .dropping(HeldState::SamplerState),
+            );
+        }
+    }
     Ok(Arc::new(Mutex::new(FrameRun {
         tables,
         metadata,
@@ -131,6 +141,18 @@ pub(crate) fn description(
         .as_ref()
         .map(|state| state.description.clone())
         .unwrap_or_else(|| read.description.clone());
+    // This first opt-in consumer accepts numeric scalar identifiers.
+    // Boolean feature columns and all constructor admission stay unchanged.
+    if description.tables.iter().any(|table| {
+        table.primary_key.iter().any(|key| {
+            table
+                .columns
+                .iter()
+                .any(|column| column.name == *key && column.dtype == Dtype::Bool)
+        })
+    }) {
+        return Err(sdm_engine::not_yet("frame_boolean_key"));
+    }
     Ok((description, read.types))
 }
 
@@ -223,6 +245,17 @@ fn native_hops(graph: &Graph, values: &[Value]) -> Result<Vec<i64>, CoreError> {
 }
 
 impl FrameRun {
+    /// Publish an already validated retained owner at Run construction,
+    /// before its body can fail or be cancelled without ever being polled.
+    pub fn carry(&mut self, asker: &Asker, memo: Option<&SamplerMemo>) {
+        if let Some(metadata) = &self.metadata {
+            asker.keep(memo.cloned().unwrap_or_else(|| SamplerMemo {
+                source: metadata.source.clone(),
+                ..SamplerMemo::default()
+            }));
+            self.keep(asker);
+        }
+    }
     pub fn source(&self) -> String {
         self.metadata
             .as_ref()
@@ -284,6 +317,48 @@ impl FrameRun {
                 tables: self.tables.clone(),
             });
         }
+    }
+
+    /// The cached graph reports the same removals on every materialize call.
+    pub fn warn_dropped(&self, asker: &Asker) -> bool {
+        let Some(snapshot) = &self.snapshot else {
+            return false;
+        };
+        if snapshot.dropped.is_empty() {
+            return false;
+        }
+        let detail = snapshot
+            .dropped
+            .iter()
+            .map(|row| {
+                let mut causes = Vec::new();
+                if row.null_keys > 0 {
+                    causes.push(format!("{} with no primary key", row.null_keys));
+                }
+                if row.duplicate_keys > 0 {
+                    causes.push(format!(
+                        "{} with a repeated primary key",
+                        row.duplicate_keys
+                    ));
+                }
+                format!(
+                    "{}: {} of {} rows dropped ({})",
+                    row.table,
+                    row.null_keys + row.duplicate_keys,
+                    row.input,
+                    causes.join(", ")
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("; ");
+        asker.warn(
+            CoreWarning::new(
+                Sentence::FrameRowsDropped,
+                "graph sanitization removed rows",
+            )
+            .with_field("detail", Detail::text(format!("[{detail}]"))),
+        );
+        true
     }
 
     pub fn entities(
