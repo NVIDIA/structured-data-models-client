@@ -21,7 +21,6 @@ from sdm_connectors import DatabricksSource
 from sdm_client import Schema, SDMWarning, _routing
 from sdm_client._rust import providers
 
-
 _VIEW = """
 version: 0.1
 source: cat.shop.orders
