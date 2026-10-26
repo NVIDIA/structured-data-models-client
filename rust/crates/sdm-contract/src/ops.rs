@@ -891,6 +891,11 @@ pub struct Materialize {
     /// `entity`, `null`, or the text `unreadable` for any other value. The core reads it with `sdm-wire`'s
     /// bounded reader and holds each value's type to what the reference's
     /// client takes, so the host checks none of them.
+    /// Working v30's option encoding also preserves bare `NaN`, `Infinity`
+    /// and `-Infinity` numeric tokens in this attachment only. The core
+    /// admits only a NaN `lag_timesteps` under KO3-44; other nonfinite
+    /// option values remain named refusals. Text tokens and ordinary
+    /// message JSON retain their existing strict interpretation.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub values: Option<AttachmentId>,
     /// The names of the call's other sampling options, which this message
