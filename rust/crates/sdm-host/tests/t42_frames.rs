@@ -222,6 +222,61 @@ fn empty_timezone_constant_frames_encode_a_null_zone_warning_in_every_unit() {
     use sdm_contract::ops::SourceDescription;
     use sdm_contract::{ColumnType, Detail, Sentence};
 
+    // Each Table call owns exactly one complete input. Its Run is dropped
+    // before both snapshots are rebound by a separate Schema call.
+    fn table_snapshot(name: &str, batch: RecordBatch) -> (SourceDescription, ArrowData) {
+        let attached = Attachments::from([
+            (
+                AttachmentId(1),
+                bytes(
+                    json!({"tables":[{"name":name,"source":{"source":[name]}}],"primary_keys":{},"time_columns":{}}),
+                ),
+            ),
+            (
+                AttachmentId(2),
+                bytes(json!({"stage":"table","tables":[{"source":{"source":[name]},"rows":3}]})),
+            ),
+            (
+                AttachmentId(3),
+                Attachment::Arrow(ArrowData::new(batch.schema(), vec![batch])),
+            ),
+        ]);
+        let run = HostRun::start(&sdm_host::default_root(), &message(), attached)
+            .unwrap_or_else(|out| panic!("Table {name}: {:?}", error(out)));
+        let next = run
+            .next()
+            .unwrap_or_else(|out| panic!("Table {name}: {:?}", error(out)));
+        let ControlMessage::Step(Step::Done {
+            result: OperationResult::DescribeSource(result),
+            ..
+        }) = sdm_host::read(&next).unwrap()
+        else {
+            panic!("Table must complete without a fetch or model call")
+        };
+        if let Some(out) = run
+            .take_warnings()
+            .unwrap_or_else(|out| panic!("Table warning: {:?}", error(out)))
+        {
+            assert!(matches!(
+                sdm_host::read(&out).unwrap(),
+                ControlMessage::Warnings { .. }
+            ));
+        }
+        let Attachment::Bytes(data) = run.take_attachment(result.description).unwrap().unwrap()
+        else {
+            panic!("description bytes")
+        };
+        let described = serde_json::from_slice(&data).unwrap();
+        let Attachment::Arrow(owned) = run
+            .take_attachment(result.frame_rows.unwrap())
+            .unwrap()
+            .unwrap()
+        else {
+            panic!("owned Table rows")
+        };
+        (described, owned)
+    }
+
     for unit in [
         TimeUnit::Second,
         TimeUnit::Millisecond,
@@ -243,119 +298,156 @@ fn empty_timezone_constant_frames_encode_a_null_zone_warning_in_every_unit() {
                 Arc::new(TimestampNanosecondArray::from(expected.clone()).with_timezone(""))
             }
         };
-        let batch = RecordBatch::try_from_iter([("observed_at", column)]).unwrap();
-        let mut rows = Some(ArrowData::new(batch.schema(), vec![batch]));
-        for (stage, id) in [("table", 3), ("schema", 7)] {
-            let mut attached = inputs();
-            attached.remove(&AttachmentId(3));
-            attached.insert(
+        let events = RecordBatch::try_from_iter([
+            (
+                "event_id",
+                Arc::new(Int32Array::from(vec![10, 11, 12])) as ArrayRef,
+            ),
+            (
+                "user_id",
+                Arc::new(Int32Array::from(vec![1, 1, 2])) as ArrayRef,
+            ),
+            ("observed_at", column),
+        ])
+        .unwrap();
+        let (described, events) = table_snapshot("events", events);
+        assert!(described.tables[0].time_column.is_none());
+        assert_eq!(
+            described.tables[0].columns[2].received,
+            ColumnType::Timestamp {
+                unit: unit.into(),
+                zone: None
+            }
+        );
+        assert_eq!(
+            events.schema.field(2).data_type(),
+            &DataType::Timestamp(unit, Some("".into()))
+        );
+        let column = events.batches[0].column(2);
+        let counts: Vec<Option<i64>> = match unit {
+            TimeUnit::Second => column
+                .as_any()
+                .downcast_ref::<TimestampSecondArray>()
+                .unwrap()
+                .iter()
+                .collect(),
+            TimeUnit::Millisecond => column
+                .as_any()
+                .downcast_ref::<TimestampMillisecondArray>()
+                .unwrap()
+                .iter()
+                .collect(),
+            TimeUnit::Microsecond => column
+                .as_any()
+                .downcast_ref::<TimestampMicrosecondArray>()
+                .unwrap()
+                .iter()
+                .collect(),
+            TimeUnit::Nanosecond => column
+                .as_any()
+                .downcast_ref::<TimestampNanosecondArray>()
+                .unwrap()
+                .iter()
+                .collect(),
+        };
+        assert_eq!(counts, expected);
+        assert_eq!(column.null_count(), 1);
+        let users = RecordBatch::try_from_iter([(
+            "user_id",
+            Arc::new(Int32Array::from(vec![1, 2])) as ArrayRef,
+        )])
+        .unwrap();
+        let (_, users) = table_snapshot("users", users);
+        let attached = Attachments::from([
+            (
+                AttachmentId(1),
+                bytes(
+                    json!({"tables":[{"name":"users","source":{"source":["users"]}},{"name":"events","source":{"source":["events"]}}],"primary_keys":{},"time_columns":{}}),
+                ),
+            ),
+            (
                 AttachmentId(2),
-                bytes(json!({"stage":stage,"tables":[{"source":{"source":["users"]},"rows":id}]})),
-            );
-            attached.insert(AttachmentId(id), Attachment::Arrow(rows.take().unwrap()));
-            let run = HostRun::start(&sdm_host::default_root(), &message(), attached)
-                .unwrap_or_else(|out| panic!("{unit:?}/{stage}: {:?}", error(out)));
-            let mut constant_notices = 0;
-            loop {
-                let next = run
-                    .next()
-                    .unwrap_or_else(|out| panic!("{unit:?}/{stage}: {:?}", error(out)));
-                if let Some(out) = run
-                    .take_warnings()
-                    .unwrap_or_else(|out| panic!("warning encoding: {:?}", error(out)))
-                {
-                    let ControlMessage::Warnings { warnings } = sdm_host::read(&out).unwrap()
-                    else {
-                        panic!("warning channel")
-                    };
-                    for notice in warnings {
-                        if notice.sentence == Sentence::TimeColumnsRefusedConstantWhereHeld {
-                            constant_notices += 1;
-                            assert_eq!(
-                                notice.fields.get("value"),
-                                Some(&Detail::Scalar(Scalar::Timestamp {
-                                    unit: unit.into(),
-                                    zone: None,
-                                    value: 1
-                                }))
-                            );
-                        }
-                    }
-                }
-                match sdm_host::read(&next).unwrap() {
-                    ControlMessage::Step(Step::Done {
-                        result: OperationResult::DescribeSource(result),
-                        ..
-                    }) => {
-                        let Attachment::Bytes(data) =
-                            run.take_attachment(result.description).unwrap().unwrap()
-                        else {
-                            panic!("description bytes")
-                        };
-                        let described: SourceDescription = serde_json::from_slice(&data).unwrap();
-                        assert_eq!(
-                            described.tables[0].columns[0].received,
-                            ColumnType::Timestamp {
-                                unit: unit.into(),
-                                zone: None
-                            }
-                        );
-                        assert!(described.tables[0].time_column.is_none());
-                        if stage == "table" {
-                            let Attachment::Arrow(owned) = run
-                                .take_attachment(result.frame_rows.unwrap())
-                                .unwrap()
-                                .unwrap()
-                            else {
-                                panic!("owned rows")
-                            };
-                            assert_eq!(
-                                owned.schema.field(0).data_type(),
-                                &DataType::Timestamp(unit, Some("".into()))
-                            );
-                            let column = owned.batches[0].column(0);
-                            let counts: Vec<Option<i64>> = match unit {
-                                TimeUnit::Second => column
-                                    .as_any()
-                                    .downcast_ref::<TimestampSecondArray>()
-                                    .unwrap()
-                                    .iter()
-                                    .collect(),
-                                TimeUnit::Millisecond => column
-                                    .as_any()
-                                    .downcast_ref::<TimestampMillisecondArray>()
-                                    .unwrap()
-                                    .iter()
-                                    .collect(),
-                                TimeUnit::Microsecond => column
-                                    .as_any()
-                                    .downcast_ref::<TimestampMicrosecondArray>()
-                                    .unwrap()
-                                    .iter()
-                                    .collect(),
-                                TimeUnit::Nanosecond => column
-                                    .as_any()
-                                    .downcast_ref::<TimestampNanosecondArray>()
-                                    .unwrap()
-                                    .iter()
-                                    .collect(),
-                            };
-                            assert_eq!(counts, expected);
-                            assert_eq!(column.null_count(), 1);
-                            rows = Some(owned);
-                        } else {
-                            assert!(result.frame_rows.is_none());
-                            assert_eq!(
-                                constant_notices, 1,
-                                "{unit:?}: actual Schema constant warning"
-                            );
-                        }
-                        break;
-                    }
-                    other => panic!("frame may not fetch or call a model: {other:?}"),
+                bytes(
+                    json!({"stage":"schema","tables":[{"source":{"source":["users"]},"rows":107},{"source":{"source":["events"]},"rows":109}]}),
+                ),
+            ),
+            (AttachmentId(107), Attachment::Arrow(users)),
+            (AttachmentId(109), Attachment::Arrow(events)),
+        ]);
+        let run = HostRun::start(&sdm_host::default_root(), &message(), attached)
+            .unwrap_or_else(|out| panic!("Schema {unit:?}: {:?}", error(out)));
+        let next = run
+            .next()
+            .unwrap_or_else(|out| panic!("Schema {unit:?}: {:?}", error(out)));
+        let mut constant_notices = 0;
+        if let Some(out) = run
+            .take_warnings()
+            .unwrap_or_else(|out| panic!("Schema warning encoding: {:?}", error(out)))
+        {
+            let ControlMessage::Warnings { warnings } = sdm_host::read(&out).unwrap() else {
+                panic!("warning channel")
+            };
+            for notice in warnings {
+                if notice.sentence == Sentence::TimeColumnsRefusedConstantWhereHeld {
+                    constant_notices += 1;
+                    assert_eq!(notice.fields.get("table"), Some(&Detail::text("events")));
+                    assert_eq!(
+                        notice.fields.get("column"),
+                        Some(&Detail::text("observed_at"))
+                    );
+                    assert_eq!(
+                        notice.fields.get("value"),
+                        Some(&Detail::Scalar(Scalar::Timestamp {
+                            unit: unit.into(),
+                            zone: None,
+                            value: 1
+                        }))
+                    );
                 }
             }
         }
+        assert!(
+            run.take_warnings().unwrap().is_none(),
+            "warnings drain once"
+        );
+        let ControlMessage::Step(Step::Done {
+            result: OperationResult::DescribeSource(result),
+            ..
+        }) = sdm_host::read(&next).unwrap()
+        else {
+            panic!("Schema must complete without a fetch or model call")
+        };
+        assert!(result.frame_rows.is_none());
+        let Attachment::Bytes(data) = run.take_attachment(result.description).unwrap().unwrap()
+        else {
+            panic!("description bytes")
+        };
+        let described: SourceDescription = serde_json::from_slice(&data).unwrap();
+        assert_eq!(described.tables.len(), 2);
+        let events = described
+            .tables
+            .iter()
+            .find(|table| table.name == "events")
+            .unwrap();
+        assert!(events.time_column.is_none());
+        assert_eq!(
+            events.columns[2].received,
+            ColumnType::Timestamp {
+                unit: unit.into(),
+                zone: None
+            }
+        );
+        assert_eq!(described.links.len(), 1);
+        let mut joined: Vec<_> = described.links[0]
+            .iter()
+            .map(|column| (column.table.as_str(), column.column.as_str()))
+            .collect();
+        joined.sort();
+        assert_eq!(joined, vec![("events", "user_id"), ("users", "user_id")]);
+        assert_eq!(
+            constant_notices, 1,
+            "{unit:?}: actual linked Schema constant warning"
+        );
     }
 }
 
