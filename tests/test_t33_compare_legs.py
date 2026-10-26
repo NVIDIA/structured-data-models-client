@@ -334,9 +334,9 @@ def test_explicit_provider_and_view_fields_are_not_rewritten(
 ) -> None:
     provider = {
         'provider': 'sql',
-        'dialect': 'postgres',
-        'namespace': ['pinned'],
+        'dialect': 'snowflake',
+        'namespace': ['pinned_catalog', 'pinned_schema'],
         'view': {'name': 'pinned_view', 'trust_expressions': False},
     }
-    report = _provider_report(tmp_path, 'lakebase', provider, pinned=provider)
+    report = _provider_report(tmp_path, 'snowflake', provider, pinned=provider)
     assert report.failures == [], report.texts
