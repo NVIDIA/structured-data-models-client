@@ -400,6 +400,7 @@ FROM_SOURCE_TABLES = {
     'snowflake-semantic-view': FROM_SOURCE_SNOWFLAKE_SEMANTIC_VIEW,
 }
 MATERIALIZE = {
+    'frames': ('query.materialize/indices-regression/frames',),
     'duckdb': MATERIALIZE_DUCKDB,
     'sqlite': MATERIALIZE_SQLITE,
     'postgres': MATERIALIZE_POSTGRES,
@@ -410,6 +411,7 @@ MATERIALIZE = {
     'snowflake-semantic-view': MATERIALIZE_SNOWFLAKE_SEMANTIC_VIEW,
 }
 PREDICT = {
+    'frames': ('client.predict/regression/frames',),
     'duckdb': PREDICT_DUCKDB,
     'sqlite': PREDICT_SQLITE,
     'postgres': PREDICT_POSTGRES,
@@ -467,6 +469,10 @@ FRAME_CONSTRUCTORS = (
     'schema.from-data/mapping/frames',
 )
 
+# The first fixed numeric static consumer is opt-in, like its constructors.
+# Remaining frame families and tasks retain their existing default route.
+FRAME_CONSUMERS = MATERIALIZE['frames'] + PREDICT['frames']
+
 
 #: The Phase 3 defaults. Other paths retain their route until their slice
 #: is implemented; edits and inspection of a core-held schema inherit its
@@ -493,7 +499,11 @@ def forced() -> frozenset[str]:
     for path in sorted(named):
         if path not in ROUTES:
             raise RouteError(f'{ENVIRONMENT} names an unknown path {path!r}')
-        if path not in CORE_ROUTED and path not in FRAME_CONSTRUCTORS:
+        if (
+            path not in CORE_ROUTED
+            and path not in FRAME_CONSTRUCTORS
+            and path not in FRAME_CONSUMERS
+        ):
             raise RouteError(
                 f'{ENVIRONMENT} forces {path!r} onto the core, which has no '
                 f'route for it in this build'
@@ -553,7 +563,7 @@ def on_the_core(source: object, paths: dict[str, tuple[str, ...]]) -> bool:
     Raises:
         RouteError: As :func:`route` does.
     """
-    kind = kind_of(source)
+    kind = 'frames' if source is None else kind_of(source)
     if kind is None or kind not in paths:
         return False
     return route(paths[kind]) == 'core'

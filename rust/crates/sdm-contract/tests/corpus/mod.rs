@@ -155,6 +155,7 @@ pub fn messages() -> Vec<ControlMessage> {
             sampler_state: Some(SamplerState {
                 version: 1,
                 memo: AttachmentId(4),
+                frame_checkpoint: None,
             }),
         })),
         start(Operation::Predict(Predict {
@@ -481,6 +482,7 @@ pub fn messages() -> Vec<ControlMessage> {
             state: SamplerState {
                 version: 1,
                 memo: AttachmentId(7),
+                frame_checkpoint: None,
             },
         },
     ]

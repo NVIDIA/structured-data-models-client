@@ -1962,6 +1962,7 @@ fn handing_back_changed(
         start.sampler_state = Some(SamplerState {
             version: *version,
             memo: AttachmentId(4),
+            frame_checkpoint: None,
         });
         attachments.insert(AttachmentId(4), Attachment::Bytes(bytes.clone()));
     }

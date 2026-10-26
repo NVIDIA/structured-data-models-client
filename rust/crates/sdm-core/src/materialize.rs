@@ -163,6 +163,8 @@ pub use sdm_contract::ops::REQUEST_STATE_VERSION;
 /// What a `materialize` start gives its body.
 #[derive(Clone)]
 pub(crate) struct Inputs {
+    /// Fixed frame consumption, not a DataLayer or optional-provider fallback.
+    pub frames: Option<crate::frame_materialize::Context>,
     pub description: SourceDescription,
     pub query: String,
     pub indices: Option<ArrowData>,
@@ -2852,6 +2854,7 @@ fn resolved(
 
 /// One question gathered: the body of `materialize` before T1.36 fix 21.
 pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreError> {
+    let frames = inputs.frames.clone();
     // The memo the run leaves the host: the one handed back, or a new one
     // (decision E52), left as it is by a run refused before it reads.
     let mut memo = Memo {
@@ -2949,10 +2952,12 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // An unseeded sample draws under a seed of its own, new each call.
     let seed = match seed {
         Some(seed) => seed,
-        None if unseeded => Seed::from(u128::from(fresh_seed(
-            &facts.now,
-            asker.capabilities()?.max_seed,
-        ))),
+        None if unseeded => Seed::from(u128::from(match &frames {
+            Some(frames) => crate::frame_materialize::lock(frames)
+                .entropy
+                .ok_or_else(|| internal("an unseeded frame call lacks its OS entropy fact"))?,
+            None => fresh_seed(&facts.now, asker.capabilities()?.max_seed),
+        })),
         None => Seed::from(DEFAULT_SEED),
     };
     let entropy = Entropy::from_hex(seed.magnitude_hex())
@@ -3030,6 +3035,12 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     }
 
     let graph = Graph::new(&description)?;
+    if let Some(frames) = &frames {
+        let mut frames = crate::frame_materialize::lock(frames);
+        frames.initialize(asker, &description, &graph)?;
+        memo.memo.source = frames.source();
+        memo.keep();
+    }
     let profile = Profile::resolve(&ProfileSpec {
         name: ProfileName::Relational,
         model: None,
@@ -3067,7 +3078,11 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     }
     // What the sampler needs of its provider, refused before anything is
     // fetched.
-    let nulls = sampling_capabilities(asker)?;
+    let nulls = if frames.is_some() {
+        NullOrder::First
+    } else {
+        sampling_capabilities(asker)?
+    };
     // The index read, the sampler's check of the indexes it would use
     // (only under the provider's index advice, once for a materializer),
     // comes before anything of the task is read, as the reference builds
@@ -3076,10 +3091,14 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // this core's own order, not the reference's: an input with several
     // errors may be refused for another of them than the reference's first
     // (decision E41(k)(i)).
-    missing_indexes(&mut memo, &graph, asker.capabilities()?.index_advice).await?;
+    if frames.is_none() {
+        missing_indexes(&mut memo, &graph, asker.capabilities()?.index_advice).await?;
+    }
     // Each table's rows, where the provider sizes its sampling by them,
     // as the reference's warehouse sampler counts them as it is built.
-    table_rows(&mut memo, &graph).await?;
+    if frames.is_none() {
+        table_rows(&mut memo, &graph).await?;
+    }
     // The context's anchor and the candidates per example, read with the
     // task (`_get_task_table`).
     let (context_anchor, max_pq_iterations) = options::task_table(&deferred)?;
@@ -3099,7 +3118,11 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         Err(_) if !seed.is_negative() => {
             return Err(crate::compose::past_seed_range(
                 OptionalRequest::SampleEntities.name(),
-                asker.capabilities()?.max_seed,
+                if frames.is_some() {
+                    u32::MAX as u64
+                } else {
+                    asker.capabilities()?.max_seed
+                },
             ));
         }
         Err(err) => return Err(err),
@@ -3158,7 +3181,11 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // reads them.
     let read_times = Times::new(
         crate::describe::text_reader(&facts)?,
-        asker.capabilities()?.text_times,
+        if frames.is_some() {
+            None
+        } else {
+            asker.capabilities()?.text_times
+        },
         &memo.memo,
     );
 
@@ -3197,6 +3224,15 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // context anchored the same way; no time bounds are read or checked
     // for it (`_get_task_table`). Otherwise the anchor and the context's
     // anchor, checked against the data's times.
+    let anchor_time = if frames.is_some() && anchor_time.is_none() {
+        Some(Scalar::Timestamp {
+            value: i128::from(TIME_MAX),
+            unit: Unit::Ns,
+            zone: None,
+        })
+    } else {
+        anchor_time
+    };
     let (anchor, context_anchor, earliest) = if anchor_entity {
         if span.is_some() {
             return Err(invalid(
@@ -3272,38 +3308,47 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     }
     // Seeds are optional. An unseeded provider documents its limitation
     // without issuing a routine warning for the default seed (P3D-13).
-    let sampled = read_times.read(
-        asker,
-        entity,
-        one_batch(
-            &ask(
-                asker,
-                DataRequest::SampleEntities {
-                    table: entity.source.clone(),
-                    key: vec![key.clone()],
-                    n: trials as u64,
-                    seed: seed_value,
-                    columns: entity.ordered(&entity_columns),
-                    filters,
-                    // The schema's type of the key, for a provider that
-                    // orders the draw by it (SQLite's, which reads the
-                    // type the key's declaration fixes first).
-                    key_dtype: asker
-                        .samples_by_key_dtype()
-                        .then(|| entity.column(&key).map(|c| c.dtype))
-                        .flatten(),
-                    // The table's rows, for a provider sizing its draw by
-                    // them (the reference's sampled percentage).
-                    rows: if asker.capabilities()?.sample_rows {
-                        rows_of(&memo.memo, &entity.name)
-                    } else {
-                        None
+    let sampled = if let Some(frames) = &frames {
+        crate::frame_materialize::lock(frames).entities(
+            entity,
+            &entity.ordered(&entity_columns),
+            trials,
+            seed.to_u128().unwrap_or(0),
+        )?
+    } else {
+        read_times.read(
+            asker,
+            entity,
+            one_batch(
+                &ask(
+                    asker,
+                    DataRequest::SampleEntities {
+                        table: entity.source.clone(),
+                        key: vec![key.clone()],
+                        n: trials as u64,
+                        seed: seed_value,
+                        columns: entity.ordered(&entity_columns),
+                        filters,
+                        // The schema's type of the key, for a provider that
+                        // orders the draw by it (SQLite's, which reads the
+                        // type the key's declaration fixes first).
+                        key_dtype: asker
+                            .samples_by_key_dtype()
+                            .then(|| entity.column(&key).map(|c| c.dtype))
+                            .flatten(),
+                        // The table's rows, for a provider sizing its draw by
+                        // them (the reference's sampled percentage).
+                        rows: if asker.capabilities()?.sample_rows {
+                            rows_of(&memo.memo, &entity.name)
+                        } else {
+                            None
+                        },
                     },
-                },
-            )
-            .await?,
-        )?,
-    )?;
+                )
+                .await?,
+            )?,
+        )?
+    };
     if sampled.num_rows() == 0 {
         return Err(invalid(
             Sentence::EntityTableEmpty,
@@ -3633,7 +3678,11 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     let walk_hops = options::neighbors(&deferred, mode)?;
     // Each fact table's look-back rate, where the provider's neighbor
     // reads look back no further than the reference's warehouse samplers.
-    let lookback = lookbacks(&mut memo, &read_times, &graph).await?;
+    let lookback = if frames.is_some() {
+        vec![]
+    } else {
+        lookbacks(&mut memo, &read_times, &graph).await?
+    };
     let hops_ignored = options::hops_ignored(&deferred);
     // The engine says it ignores `num_hops` where `num_neighbors` is given
     // (`_resolve_options`), once the task is labelled.
@@ -3694,22 +3743,26 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         anchors.extend(std::iter::repeat_n(anchor, num_test));
 
         // The subgraph: each example's entity row.
-        let looked_up = read_times.read(
-            asker,
-            entity,
-            one_batch(
-                &ask(
-                    asker,
-                    sample::by_pkey(
-                        entity,
-                        entity_read.clone(),
-                        key_set(asker, sample::seeds(all_keys, vec![])?)?,
-                        true,
-                    )?,
-                )
-                .await?,
-            )?,
-        )?;
+        let looked_up = if let Some(frames) = &frames {
+            crate::frame_materialize::lock(frames).lookup(entity, &all_keys, &entity_read)?
+        } else {
+            read_times.read(
+                asker,
+                entity,
+                one_batch(
+                    &ask(
+                        asker,
+                        sample::by_pkey(
+                            entity,
+                            entity_read.clone(),
+                            key_set(asker, sample::seeds(Arc::clone(&all_keys), vec![])?)?,
+                            true,
+                        )?,
+                    )
+                    .await?,
+                )?,
+            )?
+        };
         let positions = batches(&looked_up, examples_total)?;
         // A key the source enforces unique is held by one row each: a
         // dialect may leave its count out (`SEED_KEY_UNIQUE`), and any
@@ -3820,20 +3873,32 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         .map_err(|_| internal("the entity rows do not make one batch"))?;
 
         // The neighbors of each example's entity, hop by hop.
-        let walked = crate::subgraph::Walk {
-            asker,
-            graph: &graph,
-            times: &read_times,
-            anchors: &anchors,
-            nulls,
-            entity,
-            link_target: link_target.as_deref(),
-            neighbors: &walk_hops,
-            excluded: &excluded,
-            lookback: &lookback,
-        }
-        .run(entity_rows)
-        .await?;
+        let walked = if let Some(frames) = &frames {
+            crate::frame_materialize::lock(frames).walk(
+                asker,
+                &graph,
+                entity,
+                &all_keys,
+                &walk_hops,
+                &excluded,
+                (!unseeded).then(|| seed.to_u128()).flatten(),
+            )?
+        } else {
+            crate::subgraph::Walk {
+                asker,
+                graph: &graph,
+                times: &read_times,
+                anchors: &anchors,
+                nulls,
+                entity,
+                link_target: link_target.as_deref(),
+                neighbors: &walk_hops,
+                excluded: &excluded,
+                lookback: &lookback,
+            }
+            .run(entity_rows)
+            .await?
+        };
         keep_stored_times(&mut memo, &read_times);
         // The subgraph carries at most as many tables as the endpoint
         // reads, refused as the reference's engine refuses it

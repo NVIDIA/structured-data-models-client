@@ -22,6 +22,9 @@
 //! core does not take, and a seed's range is the provider's (RS-7, a
 //! capability `sdm-core` reads).
 
+mod mt19937;
+pub use mt19937::Mt19937;
+
 /// A non-negative integer of any size, as numpy's `SeedSequence` reads it:
 /// its 32-bit words, least significant first, `[0]` for zero.
 #[derive(Debug, Clone, PartialEq, Eq)]

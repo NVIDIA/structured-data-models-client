@@ -10,7 +10,7 @@
 use std::collections::BTreeSet;
 
 use sdm_contract::data::{AttachmentId, ProviderChoice};
-use sdm_contract::frames::FrameManifest;
+use sdm_contract::frames::{FrameCheckpointManifest, FrameManifest, MaterializeFrames};
 use sdm_contract::ops::{AttachmentKind, Operation};
 use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 use serde::de::DeserializeOwned;
@@ -30,12 +30,39 @@ pub fn resolved_attachments(
     attachments: &Attachments,
 ) -> Result<Vec<(AttachmentId, AttachmentKind)>, CoreError> {
     let mut named = operation.attachments();
-    let Operation::DescribeSource(request) = operation else {
-        return Ok(named);
+    let manifest = match operation {
+        Operation::DescribeSource(request) => match request.provider {
+            ProviderChoice::Frames { manifest } => manifest,
+            _ => return Ok(named),
+        },
+        Operation::Materialize(request) => match request.provider {
+            ProviderChoice::Frames { manifest } => manifest,
+            _ => {
+                if request
+                    .sampler_state
+                    .as_ref()
+                    .is_some_and(|state| state.frame_checkpoint.is_some())
+                {
+                    return Err(CoreError::protocol(
+                        Sentence::InvalidMessage,
+                        "a non-frame materializer cannot consume a frame checkpoint",
+                    )
+                    .dropping(sdm_contract::HeldState::SamplerState));
+                }
+                return Ok(named);
+            }
+        },
+        _ => return Ok(named),
     };
-    let ProviderChoice::Frames { manifest } = &request.provider else {
-        return Ok(named);
+    let read = |id| {
+        let Some(Attachment::Bytes(bytes)) = attachments.get(&id) else {
+            return Err(invalid("a frame manifest lacks bytes", id));
+        };
+        Ok(bytes.as_slice())
     };
+    if !attachments.contains_key(&manifest) {
+        return Ok(named);
+    }
     // Check the static bytes fields first without discarding extra entries:
     // dynamic Arrow ids are not known until this manifest is read.
     let mut seen = BTreeSet::new();
@@ -51,15 +78,34 @@ pub fn resolved_attachments(
             .collect();
         check_attachments(&[(id, kind)], &one)?;
     }
-    let mut bytes: Attachments = attachments
-        .get(manifest)
-        .cloned()
-        .map(|value| (*manifest, value))
-        .into_iter()
-        .collect();
-    let manifest: FrameManifest = take_json(&mut bytes, *manifest)?;
+    let mut tables = match operation {
+        Operation::DescribeSource(_) => {
+            serde_json::from_slice::<FrameManifest>(read(manifest)?)
+                .map_err(|_| invalid("unreadable constructor frame manifest", manifest))?
+                .tables
+        }
+        Operation::Materialize(request) => {
+            let mut tables = serde_json::from_slice::<MaterializeFrames>(read(manifest)?)
+                .map_err(|_| invalid("unreadable materialize frame manifest", manifest))?
+                .tables;
+            if let Some(checkpoint) = request
+                .sampler_state
+                .as_ref()
+                .and_then(|state| state.frame_checkpoint.as_ref())
+            {
+                let checkpoint_manifest: FrameCheckpointManifest =
+                    serde_json::from_slice(read(checkpoint.manifest)?).map_err(|_| {
+                        invalid("unreadable frame checkpoint manifest", checkpoint.manifest)
+                    })?;
+                named.push((checkpoint_manifest.metadata, AttachmentKind::Bytes));
+                tables.extend(checkpoint_manifest.tables);
+            }
+            tables
+        }
+        _ => unreachable!(),
+    };
     let mut relations = BTreeSet::new();
-    for table in manifest.tables {
+    for table in tables.drain(..) {
         if table.source.source.len() != 1
             || table.source.source[0].is_empty()
             || !table.source.columns.is_empty()

@@ -1003,6 +1003,8 @@ sentences! {
     HeldBySeveralRows = "held_by_several_rows", E::InvalidRequest;
     HeldBySeveralRowsMany = "held_by_several_rows_many", E::InvalidRequest;
     NotInTable = "not_in_table", E::InvalidRequest;
+    FrameTaskReferences = "frame_task_references", E::InvalidRequest;
+    FrameNoValidRows = "frame_no_valid_rows", E::InvalidRequest;
     LinkHistoryMissing = "link_history_missing", E::InvalidRequest;
     LinkTargetNotForeignKey = "link_target_not_foreign_key", E::UnsupportedRequest;
     SubgraphPastTables = "subgraph_past_tables", E::InvalidRequest;

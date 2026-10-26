@@ -1659,6 +1659,7 @@ dependencies = [
  "arrow-schema",
  "fancy-regex",
  "sdm-contract",
+ "sdm-engine",
  "serde_json",
 ]
 
@@ -1668,6 +1669,7 @@ version = "1.0.0"
 dependencies = [
  "arrow-array",
  "arrow-schema",
+ "arrow-select",
  "jiff",
  "sdm-contract",
  "sdm-schema",

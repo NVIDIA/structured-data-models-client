@@ -173,6 +173,23 @@ def test_numeric_static_multi_call_predictions_merge_in_input_order(core):
     assert joined['age'].tolist() == [27, 28]
 
 
+def test_core_df1_adjacency_preserves_reversed_source_row_ties(monkeypatch):
+    monkeypatch.setenv('SDM_CORE_ROUTES', CORE)
+
+    def old_engine_was_called(*args, **kwargs):
+        raise AssertionError('the DF-1 frame journey called the old engine')
+
+    monkeypatch.setattr(
+        RelationalMaterializer, '_get_model', old_engine_was_called
+    )
+    frames = shop()
+    frames['orders'] = frames['orders'].iloc[::-1].reset_index(drop=True)
+    request = materialize(query(frames))
+    # DF-1 keeps source-row order within a destination's neighborhood.
+    # Reverse each original group at the frozen selected positions.
+    assert markers(request) == [61, 53, 55, 70, 66, 65]
+
+
 def test_numeric_static_neighbor_stream_resets_and_continues_per_query(core):
     question = query()
     first = materialize(question, seed=None)
@@ -207,13 +224,11 @@ def test_first_numeric_materialization_keeps_its_detached_snapshot(core):
         len(frames['orders']), 999, dtype=np.float32
     )
     cached = materialize(question)
-    assert (
-        cached.predict.related_tables['orders']['amount'].tolist() == amounts
-    )
+    assert cached.predict.related_tables['orders']['amount'].tolist() == amounts
     rebuilt = materialize(query(frames))
-    assert rebuilt.predict.related_tables['orders']['amount'].tolist() == [
-        999
-    ] * 6
+    assert (
+        rebuilt.predict.related_tables['orders']['amount'].tolist() == [999] * 6
+    )
     assert (
         initial.predict.related_tables['orders']['amount'].tolist() == amounts
     )

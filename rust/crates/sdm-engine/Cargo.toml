@@ -15,6 +15,7 @@ publish.workspace = true
 [dependencies]
 arrow-array.workspace = true
 arrow-schema.workspace = true
+arrow-select.workspace = true
 jiff.workspace = true
 sdm-contract = { path = "../sdm-contract" }
 sdm-schema = { path = "../sdm-schema" }
