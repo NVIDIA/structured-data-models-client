@@ -39,7 +39,14 @@ from sdm_connectors import SnowflakeSource
 from snowflake.connector import SnowflakeConnection
 from snowflake.connector.errors import NotSupportedError, ProgrammingError
 
-from sdm_client import PredictiveQuery, Schema, StructuredDataError, _routing
+from sdm_client import (
+    KumoRelational,
+    PredictiveQuery,
+    Schema,
+    SDMClient,
+    StructuredDataError,
+    _routing,
+)
 
 ROOT = Path(__file__).resolve().parents[3]
 CAPTURES = ROOT / 'contract' / 'captures'
@@ -1087,3 +1094,67 @@ def test_public_materialize_keeps_the_reference_large_key_refusal(
     assert raised.value._sentence == 'key_set_integer_range'
     assert 'SQL key binding' in str(raised.value)
     assert 'signed 64-bit range' in str(raised.value)
+
+
+@pytest.mark.parametrize('misaligned', [False, True])
+def test_public_wide_decimal_feature_keeps_the_reference_journey(
+    monkeypatch: pytest.MonkeyPatch, misaligned: bool
+) -> None:
+    class Warehouse(_Warehouse):
+        def __init__(self) -> None:
+            super().__init__('decimal.feature-38-0-wide')
+            self.decimal_answers = 0
+
+        def answer(self, text: str, parameters: list[Any]) -> pa.Table:
+            found = super().answer(text, parameters)
+            if 'f' not in found.column_names:
+                return found
+            column = found['f'].combine_chunks()
+            assert column.type == pa.decimal128(38, 0)
+            original = column.buffers()[1]
+            storage = pa.allocate_buffer(original.size + 16)
+            copied = storage.slice(8 if misaligned else 0, original.size)
+            memoryview(copied).cast('B')[:] = memoryview(original).cast('B')
+            assert copied.address % 16 == (8 if misaligned else 0)
+            replacement = pa.Array.from_buffers(
+                column.type,
+                len(column),
+                [column.buffers()[0], copied],
+                null_count=column.null_count,
+                offset=column.offset,
+            )
+            assert replacement.equals(column)
+            self.decimal_answers += 1
+            return found.set_column(
+                found.schema.get_field_index('f'),
+                found.schema.field('f'),
+                replacement,
+            )
+
+    requests = {}
+    projections = {}
+    endpoint = _capture_runner()._sibling('scripted_endpoint')
+    for route in ('old', 'core'):
+        warehouse = Warehouse()
+        schema = _described(route, monkeypatch, warehouse, **_NAMED)
+        projections[route] = _projection(schema)
+        request = _materialize(
+            schema,
+            'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id',
+        )
+        requests[route] = _payloads(request)
+        assert warehouse.decimal_answers
+        users = request.payloads[0]['predict']['related_tables']['users']
+        feature = users['columns'].index('f')
+        key = users['columns'].index('user_id')
+        assert {row[key]: row[feature] for row in users['rows']} == {
+            0: '12345678901234567890123456789',
+            1: '12345678901234567890123456790',
+        }
+        with endpoint.serve() as (url, received):
+            with SDMClient(url, max_retries=0) as client:
+                result = client.predict(request, model=KumoRelational())
+            assert len(result.to_pandas()) == 2
+            assert len(received.requests) == 1
+    assert projections['old'] == projections['core']
+    assert requests['old'] == requests['core']
