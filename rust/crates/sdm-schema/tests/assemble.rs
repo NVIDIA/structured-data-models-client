@@ -21,6 +21,85 @@ use sdm_contract::{
 use sdm_schema::assemble::{self, Given, Link};
 use sdm_schema::infer::{InferredColumn, InferredTable, PassedOver, Taken, TimeChoice};
 
+fn converted_date(instead_of: &[&str]) -> InferredTable {
+    let mut source = table(
+        "orders",
+        vec![
+            column("order_id", Dtype::Int, Stype::Id),
+            column("raw", Dtype::Date, Stype::Timestamp),
+            column("month", Dtype::Date, Stype::Timestamp),
+            column("day", Dtype::Date, Stype::Timestamp),
+        ],
+        Some("order_id"),
+    );
+    source.time = TimeChoice {
+        column: Some("raw".into()),
+        instead_of: instead_of.iter().map(|name| (*name).into()).collect(),
+        ..TimeChoice::default()
+    };
+    source.time_column = Some("raw".into());
+    source
+}
+
+#[test]
+fn a_converted_raw_time_keeps_each_dimension_it_replaces() {
+    for (instead_of, sentence) in [
+        (vec!["month"], Sentence::TimeColumnsTakenInsteadOf),
+        (
+            vec!["month", "day"],
+            Sentence::TimeColumnsTakenInsteadOfMany,
+        ),
+    ] {
+        let made = made_of(vec![converted_date(&instead_of), users()], vec![]);
+        let warnings: Vec<_> = made
+            .warnings
+            .iter()
+            .filter(|w| w.code == WarningCode::TimeColumnsGuessed.as_str())
+            .collect();
+        assert_eq!(warnings.len(), 1, "{:?}", made.warnings);
+        assert_eq!(warnings[0].sentence, sentence);
+        assert_eq!(said(warnings[0], "table"), "orders");
+        assert_eq!(said(warnings[0], "column"), "raw");
+        assert_eq!(said(warnings[0], "other"), "month");
+        assert_eq!(
+            warnings[0].fields["instead_of"],
+            Detail::List(instead_of.iter().map(|name| Detail::text(*name)).collect())
+        );
+    }
+}
+
+#[test]
+fn the_converted_time_warning_respects_the_final_choice_and_window_scope() {
+    let source = converted_date(&["month"]);
+    let mut changed = source.clone();
+    changed.time_column = Some("month".into());
+    let explicitly_named = BTreeSet::from(["orders".to_owned()]);
+    let cases = [
+        made_of(vec![source.clone()], vec![]),
+        made_of(vec![changed, users()], vec![]),
+        assemble::assemble(
+            vec![source, users()],
+            vec![],
+            Given {
+                time_columns: Some(&explicitly_named),
+                relationships: None,
+            },
+            None,
+        )
+        .unwrap(),
+    ];
+    for made in cases {
+        assert!(
+            !made
+                .warnings
+                .iter()
+                .any(|w| w.code == WarningCode::TimeColumnsGuessed.as_str()),
+            "{:?}",
+            made.warnings
+        );
+    }
+}
+
 fn column(name: &str, dtype: Dtype, stype: Stype) -> InferredColumn {
     InferredColumn {
         name: name.into(),
@@ -310,6 +389,7 @@ fn plans() -> InferredTable {
     );
     plans.time = TimeChoice {
         column: None,
+        instead_of: vec![],
         how: None,
         among: vec![],
         refused: vec![
@@ -869,6 +949,7 @@ fn every_warning_given_is_listed_and_every_listed_one_is_given() {
     );
     earliest.time = TimeChoice {
         column: Some("x".into()),
+        instead_of: vec![],
         how: Some(Taken::Earliest),
         among: vec!["x".into(), "y".into()],
         refused: vec![],
@@ -892,6 +973,7 @@ fn every_warning_given_is_listed_and_every_listed_one_is_given() {
     };
     unchecked.time = TimeChoice {
         column: Some("x".into()),
+        instead_of: vec![],
         how: Some(Taken::Only),
         among: vec!["x".into()],
         refused: vec![],
