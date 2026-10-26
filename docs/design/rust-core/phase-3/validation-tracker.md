@@ -1,6 +1,6 @@
 # Phase 3 validation tracker
 
-Updated 2026-10-26, 11:28 UTC.
+Updated 2026-10-26, 11:34 UTC.
 Phase 4 is paused at the owner's request; current agents focus on Phase 3.
 
 ## Acceptance
@@ -25,7 +25,7 @@ Use the existing common cases, pinned data, seeds, anchors and model settings ac
 | Area | Data and payload comparison | Model comparison | Quality verdict | Owner | Next action |
 |---|---|---|---|---|---|
 | Databricks SQL | All 302 original cases executed: 301 non-connector cases plus the repaired original connector; zero operator failures and cleanup clear; strict reconciliation pending | Complete corrected-client runtime comparison passes on actual `76eb785b91` source | All corresponding prediction rows and logical payloads exact, approved matching refusals retained | Databricks agent | Finish finite data reconciliation; wide-key error correction is landed and both original public cases now match the reference |
-| Databricks Spark | Original monolithic run stopped after 108 complete cases when the serverless process ran out of memory; all complete bundles are retained; the missing 192 are running in eight serial 24-case jobs on actual `80c763a7be` | Complete original runtime comparison passes on actual `76eb785b91` source | Exact prediction/payload parity and approved matching refusals on that source | Databricks agent | Collect first bounded job `818601119704735`, immediately continue the remaining original batches, and verify all 300 cases plus cleanup |
+| Databricks Spark | 132 of 300 original cases executed: 108 retained from the interrupted monolithic run and the first fresh 24-case batch completed successfully on actual `80c763a7be`, with zero operator failures and verified cleanup; the next batch is active | Complete original runtime comparison passes on actual `76eb785b91` source | Exact prediction/payload parity and approved matching refusals on that source | Databricks agent | Collect current job `934739526487490` for original positions 132–155, then continue the remaining original batches and verify all 300 cases plus cleanup |
 | Snowflake | All 304 original cases captured and cleaned; finite reconciliation continues; all 16 stale digests have exact historical-input proofs and all 131 positional schema differences have raw catalog-order proofs | Fifteen ordinary/semantic pairs have exact payloads and nine exact positive predictions plus six approved matching refusals; original diamond also returns predictions | Diamond RMSE is 1.54% worse, within the owner's 5% limit; it is not exact payload/prediction parity | Snowflake agent | Single-case sampling oracle landed; finish finite reconciliation; original 20-source and 33-provider checks complete with explicit evidence |
 | Lakebase | All 282 existing cases reconciled on recorded source; pinned 173106-row fixture intact | All six corrected-client runtime profiles pass the full paired comparison on actual `76eb785b91` source | Exact predictions and logical payloads; approved matching refusals | Runtime agent and coordinator | Preserve all producing source/build IDs and finish final-source acceptance after the sampling correction |
 | Databricks metric views | One SQL smoke payload matches exactly; 19 cases per SQL/Spark path remain in the full comparison | All three original SQL model questions have exact payloads and either exact predictions or matching endpoint refusal | SQL model parity; Spark and full data coverage pending | Databricks agent | Finish Spark metric-view coverage; the missing time-column choice warning is restored and landed |
@@ -48,6 +48,7 @@ Use the existing common cases, pinned data, seeds, anchors and model settings ac
 2. Databricks SQL's 302 original functional cases are all captured with zero operator failures and verified cleanup.
    The strict comparator's 5599 raw differences remain preserved, not silently waived.
    All 95 schema-order cases have exact named table contents and matching full link multisets, plus the same actual catalog query, typed parameters and unordered typed rows; raw catalog order differs without an ORDER BY.
+   All 12 typed core-input diagnostics are also isolated exactly to schema table-list permutation, with every complete named table/query/profile/link field and adapted describe-source input unchanged.
    Six decimal/key cases have exact mathematical proofs of correct current conversion; finite register applicability still needs reconciliation.
    All six ranking request lists are exact after only relationship permutation and the existing volatile request ID; all 72 lag cells independently match their own source windows.
    These finite proofs retain the original failures and do not introduce automatic comparator exclusions.
@@ -70,17 +71,19 @@ Use the existing common cases, pinned data, seeds, anchors and model settings ac
 5. Fresh full locked-dependency CI [40315122377](https://github.com/NVIDIA/structured-data-models-client/actions/runs/40315122377) was dispatched once at 11:26:47 UTC on exact integrated `ad28ef4287`.
    The earlier queued `aff7e32d2e` run [40313141056](https://github.com/NVIDIA/structured-data-models-client/actions/runs/40313141056) was cancelled before any jobs started after the preceding run exposed additional failures.
    Previous run [40308222963](https://github.com/NVIDIA/structured-data-models-client/actions/runs/40308222963) on `80c763a7be` had ten failed jobs; all failed-job logs and all official producer artifacts are retained.
-   The coordinator requested cancellation of its sole remaining long root-tooling job because branch-level workflow concurrency was blocking the corrected final run.
+   Its cancellation is terminal and the corrected final full CI is now running; cancelling the sole remaining long root-tooling job removed the branch-level workflow concurrency block.
    This avoids waiting for another known-red source; every check still runs in the new full CI.
    The missing bridge registrations are corrected at `2d073d5b57`; the negative-neighbor statement/golden expectations, canonical baseline outcomes and two stale source citations are corrected at `ad28ef4287`.
    The cross-host failure cascaded from the missing Rust observation artifact.
    Contract tooling ended with a runner shutdown before complete assertion details; that incomplete diagnostic is preserved and the new complete run is required.
    No dependency or Pydantic runtime failure was identified in the retrieved logs.
    The older `91b7f348f8` run is terminal failure; its option-formatting and invalid-register failures were repaired at `80c763a7be`.
-   Official `80c763a7be` x86/ARM production/test-ops artifacts, complete Java/JNI and the full source bootstrap are authenticated and published with original producer IDs.
+   Official `80c763a7be` x86/ARM production/test-ops artifacts, complete Java/JNI and source bootstrap remain authenticated with original producer IDs.
+   Exact `ad28ef4287` source publication is now complete with every tracked blob/mode, full Git bootstrap closure and remote SHA readback verified; one collector owns its fresh official producer artifacts as they complete.
    The Spark serverless process ran out of memory after 108 complete original cases; all 108 are retained and the automatic retry was stopped without duplicate case execution.
    Both reviewers approved fresh 24-case processes for only the remaining original positions 108–299, using actual `80c763a7be` artifacts and unchanged original cases.
-   The first of eight serial jobs is `818601119704735`; the Databricks agent owns its exclusive fixture lease and immediate continuation.
+   First serial job `818601119704735` is terminal success with all 24 observations, zero operator failures and verified SDK-empty cleanup.
+   The next job `934739526487490` owns original positions 132–155; the Databricks agent owns its exclusive fixture lease and immediate continuation.
    The original Lakebase notebook failed before its data/model journey because the read guard rejected ARRAY_AGG in its original metadata query.
    Its failed job is terminal and its read lease is explicitly released; no competing Lakebase reader remains.
    That narrow guard defect is now fixed at `aff7e32d2e`; rerun the original notebook through a fresh immutable output prefix with proper source identity.
@@ -91,7 +94,8 @@ Use the existing common cases, pinned data, seeds, anchors and model settings ac
    Each architecture also requires the existing six J2 shapes in three zones.
    The Databricks agent froze bounded execution with fresh Python/Java child processes, retaining all cases and avoiding the same monolithic-memory failure.
    Both independent B1 code approvals are complete and all eight approved controls passed.
-   A tiny B2 carry derives an omitted JDK path from the actual job JAVA_HOME and retains the strict Java 17 check before fixture access; its two reviews are active and no changed carry code has executed.
+   A tiny B2 carry derives an omitted JDK path from the actual job JAVA_HOME and retains the strict Java 17 check before fixture access.
+   Both independent carry reviews approved it, and the whole 12-control module passed; actual architecture admission and fixture access still wait for the correct runtime and lease.
    The sole artifact collector retains original producer IDs for all proven unchanged reused assets.
    No completed model or SQL campaign is relabeled as final-source execution.
 6. The runtime agent owns missing original local generated-source checks for DuckDB, SQLite and PostgreSQL, plus full-data census and memory readiness.
