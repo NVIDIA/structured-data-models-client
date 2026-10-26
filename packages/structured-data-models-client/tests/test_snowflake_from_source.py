@@ -23,8 +23,10 @@ connector gives them, a recorded failure as the connector raises it.
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import re
+import sys
 import warnings
 from pathlib import Path
 from typing import Any
@@ -1019,3 +1021,67 @@ def test_a_missing_anchor_keeps_its_entity_and_other_entities_history(
     } == {1}
     assert warehouse.missing_batches
     assert warehouse.present_batches
+
+
+def _capture_runner() -> Any:
+    """The real functional recorder around this module's optional driver."""
+    name = 't310_public_snowflake_capture'
+    if name not in sys.modules:
+        spec = importlib.util.spec_from_file_location(
+            name, ROOT / 'contract/runners/run_python.py'
+        )
+        assert spec is not None and spec.loader is not None
+        loaded = importlib.util.module_from_spec(spec)
+        sys.modules[name] = loaded
+        spec.loader.exec_module(loaded)
+    return sys.modules[name]
+
+
+def test_public_schema_records_successful_rows_only_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run = _capture_runner()
+    warehouse = _Warehouse('base.binary')
+    log = run.DriverLog()
+    log.stage = 'from_source'
+    captured = run._CapturedSnowflake(warehouse, log)
+    schema = _described('core', monkeypatch, captured, **_NAMED)
+    assert set(schema.tables) == {'users', 'orders'}
+    metadata = [
+        statement
+        for statement in log.statements
+        if statement.get('fetch_errors')
+    ]
+    assert metadata
+    for statement in metadata:
+        assert statement['sql'].lstrip().startswith(('SHOW', 'DESCRIBE'))
+        assert statement['error'] is None
+        assert statement['fetch_errors'] == [
+            {'method': 'fetch_arrow_all', 'error': 'NotSupportedError'}
+        ]
+        assert statement['results'][0]['method'] == 'fetchall'
+    assert log.incomplete == []
+    assert log.passed == []
+    assert any(event['event'] == 'close' for event in log.events)
+
+
+def test_public_materialize_keeps_the_reference_large_key_refusal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from decimal import Decimal
+
+    warehouse = _Warehouse('snowflake.key.number-38-0.past-int64')
+    schema = _described('core', monkeypatch, warehouse, **_NAMED)
+    query = PredictiveQuery(
+        'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id',
+        schema,
+    )
+    with pytest.raises(StructuredDataError) as raised:
+        query.materialize(
+            indices=[Decimal(10**25), Decimal(10**25 + 1)],
+            anchor_time=pd.Timestamp('2024-03-01'),
+        )
+    assert raised.value.code == 'INVALID_REQUEST'
+    assert raised.value._sentence == 'snowflake_integer_key_range'
+    assert 'Snowflake' in str(raised.value)
+    assert 'signed 64-bit range' in str(raised.value)

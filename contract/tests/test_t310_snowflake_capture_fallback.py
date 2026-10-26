@@ -13,9 +13,6 @@ from typing import Any
 
 import pyarrow as pa
 import pytest
-from snowflake.connector.errors import NotSupportedError
-
-ROOT = Path(__file__).resolve().parents[2]
 
 
 def _module(name: str, path: Path) -> Any:
@@ -33,6 +30,19 @@ OWN = _module(
     Path(__file__).with_name('test_t32_recording_own.py'),
 )
 run = OWN.run
+
+
+class NotSupportedError(Exception):
+    """The optional driver's class identity, supplied by a fake driver API."""
+
+
+@pytest.fixture(autouse=True)
+def _snowflake_error_api(monkeypatch: pytest.MonkeyPatch) -> None:
+    from types import ModuleType
+
+    errors = ModuleType('snowflake.connector.errors')
+    errors.NotSupportedError = NotSupportedError
+    monkeypatch.setitem(sys.modules, 'snowflake.connector.errors', errors)
 
 
 class Cursor:
@@ -79,48 +89,23 @@ def _unsupported(cursor: Any) -> None:
         cursor.fetch_arrow_all(force_return_table=True)
 
 
-def test_public_schema_records_successful_rows_only_metadata(
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize('subclass', [False, True])
+def test_rows_fallback_clears_only_its_unsupported_arrow_status(
+    subclass: bool,
 ) -> None:
-    fixture = _module(
-        't310_fallback_public_source_fixtures',
-        ROOT
-        / 'packages/structured-data-models-client/tests'
-        / 'test_snowflake_from_source.py',
-    )
-    warehouse = fixture._Warehouse('base.binary')
-    log = run.DriverLog()
-    log.stage = 'from_source'
-    captured = run._CapturedSnowflake(warehouse, log)
-    schema = fixture._described('core', monkeypatch, captured, **fixture._NAMED)
-    assert set(schema.tables) == {'users', 'orders'}
-    metadata = [
-        statement
-        for statement in log.statements
-        if statement.get('fetch_errors')
-    ]
-    assert metadata
-    for statement in metadata:
-        assert statement['sql'].lstrip().startswith(('SHOW', 'DESCRIBE'))
-        assert statement['error'] is None
-        assert statement['fetch_errors'] == [
-            {'method': 'fetch_arrow_all', 'error': 'NotSupportedError'}
-        ]
-        assert statement['results'][0]['method'] == 'fetchall'
-    assert log.incomplete == []
-    assert log.passed == []
-    assert any(event['event'] == 'close' for event in log.events)
-
-
-def test_rows_fallback_clears_only_its_unsupported_arrow_status() -> None:
     cursor, log, driver = _captured()
+    if subclass:
+        driver.arrow_error = type('RowsOnlySubtype', (NotSupportedError,), {})(
+            'rows only'
+        )
+    expected_class = type(driver.arrow_error).__name__
     _unsupported(cursor)
-    assert log.statements[0]['error'] == 'NotSupportedError'
+    assert log.statements[0]['error'] == expected_class
     assert cursor.fetchall() == [('user_id',)]
     statement = log.statements[0]
     assert statement['error'] is None
     assert statement['fetch_errors'] == [
-        {'method': 'fetch_arrow_all', 'error': 'NotSupportedError'}
+        {'method': 'fetch_arrow_all', 'error': expected_class}
     ]
     assert statement['results'][0]['rows'] == 1
     assert driver.calls == [
@@ -240,34 +225,41 @@ def test_malformed_failed_fetch_evidence_does_not_validate(field: str) -> None:
     assert OWN.check.capture_problems(line, case, tables)
 
 
-def test_public_materialize_keeps_the_reference_large_key_refusal(
+def test_absent_driver_does_not_replace_a_fake_cursor_fetch_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from decimal import Decimal
+    import builtins
 
-    import pandas as pd
-    from sdm_client import PredictiveQuery, StructuredDataError
+    original_import = builtins.__import__
 
-    fixture = _module(
-        't310_fallback_public_source_fixtures',
-        ROOT
-        / 'packages/structured-data-models-client/tests'
-        / 'test_snowflake_from_source.py',
-    )
-    warehouse = fixture._Warehouse('snowflake.key.number-38-0.past-int64')
-    schema = fixture._described(
-        'core', monkeypatch, warehouse, **fixture._NAMED
-    )
-    query = PredictiveQuery(
-        'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id',
-        schema,
-    )
-    with pytest.raises(StructuredDataError) as raised:
-        query.materialize(
-            indices=[Decimal(10**25), Decimal(10**25 + 1)],
-            anchor_time=pd.Timestamp('2024-03-01'),
-        )
-    assert raised.value.code == 'INVALID_REQUEST'
-    assert raised.value._sentence == 'snowflake_integer_key_range'
-    assert 'Snowflake' in str(raised.value)
-    assert 'signed 64-bit range' in str(raised.value)
+    def without_snowflake(name: str, *args: Any, **kwargs: Any) -> Any:
+        if name == 'snowflake' or name.startswith('snowflake.'):
+            raise ModuleNotFoundError('optional Snowflake driver is absent')
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.delitem(sys.modules, 'snowflake.connector.errors')
+    monkeypatch.setattr(builtins, '__import__', without_snowflake)
+    cursor, log, driver = _captured()
+    failure = pa.ArrowInvalid('the original fake driver failure')
+    driver.arrow_error = failure
+    with pytest.raises(pa.ArrowInvalid) as raised:
+        cursor.fetch_arrow_all()
+    assert raised.value is failure
+    assert driver.calls == ['DESCRIBE TABLE users', 'fetch_arrow_all']
+    assert log.statements[0]['error'] == 'ArrowInvalid'
+    assert log.statements[0]['results'] == []
+    assert log.statements[0]['fetch_errors'] == [
+        {'method': 'fetch_arrow_all', 'error': 'ArrowInvalid'}
+    ]
+
+
+def test_an_unrelated_same_name_exception_is_not_a_supported_fallback() -> None:
+    foreign_type = type('NotSupportedError', (RuntimeError,), {})
+    failure = foreign_type('not the optional driver class')
+    cursor, log, driver = _captured()
+    driver.arrow_error = failure
+    with pytest.raises(foreign_type) as raised:
+        cursor.fetch_arrow_all()
+    assert raised.value is failure
+    cursor.fetchall()
+    assert log.statements[0]['error'] == 'NotSupportedError'
