@@ -135,7 +135,7 @@
       "refactor": "T2.13: the result attachment read as a table, as _rows reads it, so its schema's metadata is read too; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::<module>": {
-      "moved": "T3.9 KO3-44: attachment option-encoding argument is structural plumbing; nonfinite option admission moves to Rust and ordinary JSON remains strict"
+      "moved": "T3.9 KO3-44: attachment option-encoding argument is structural plumbing; nonfinite option admission moves to Rust and ordinary JSON remains strict; T4.2 contract32: the timestamp transport unit vocabulary is s/ms/us/ns, separate from Duration/Time64 us/ns, matching the dedicated core TimestampUnit domain"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::_bits32": {
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
@@ -168,7 +168,7 @@
       "moved": "T3.9 KO3-44: option attachments preserve nonfinite numeric tokens for Rust-owned admission; ordinary JSON remains strict, with no sampling policy in Python"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::decode_scalar": {
-      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added; T4.2 contract32: decode raw timestamp s/ms/us/ns transport values while Duration/Time64 retain us/ns; integer range and nonempty-zone validation are unchanged"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::encode": {
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
@@ -201,7 +201,7 @@
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::timestamp": {
-      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added; T4.2 contract32: serialize the dedicated timestamp s/ms/us/ns transport domain; the raw integer and zone fields retain their existing validation"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/edits.py::<module>": {
       "refactor": "T3.16 (fix A): edits reach the core for a schema described on the core, whose columns hold their source facts, not one holding a saved description"
@@ -231,10 +231,10 @@
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::<module>": {
-      "moved": "T3.6: owner-approved P3D-13 removes the routine Snowflake seed warning because the seed is optional; the sampling limitation is documented and no Python SEED_IGNORED mapping remains; T3.5: source_values, decoded and _opening, saying a semantic model's sentences; T3.10: the first invalid-string-escape warning is selected by the core; the host only presents its warning class; T3.10: map the core-selected inference_option_not_finite sentence to authentic installed host-library wording; task, key and refusal selection stay in Rust; T4.2 R2: fixed constructor warning presentation mode preserves native plain text and SDMWarning category; ordinary SQL mode is unchanged"
+      "moved": "T3.6: owner-approved P3D-13 removes the routine Snowflake seed warning because the seed is optional; the sampling limitation is documented and no Python SEED_IGNORED mapping remains; T3.5: source_values, decoded and _opening, saying a semantic model's sentences; T3.10: the first invalid-string-escape warning is selected by the core; the host only presents its warning class; T3.10: map the core-selected inference_option_not_finite sentence to authentic installed host-library wording; task, key and refusal selection stay in Rust; T4.2 R2: fixed constructor warning presentation mode preserves native plain text and SDMWarning category; ordinary SQL mode is unchanged; T4.2: present native frame timestamp facts in their admitted unit domain; T4.4: typed coded/frame_schema/frame_graph warning presentation profiles preserve exact frozen graph-warning filters while other warnings retain their code policy"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_Words.convert_field": {
-      "moved": "T3.17: the one value formatter gains the conversions the shared templates name (d, p); fix 1: host-held values from the call in progress (holding), the a and I conversions and the to() pairing"
+      "moved": "T3.17: the one value formatter gains the conversions the shared templates name (d, p); fix 1: host-held values from the call in progress (holding), the a and I conversions and the to() pairing; T4.2 native temporal frames: format an attached host timestamp value with its original native dtype for the existing timestamp presentation conversion; no inference or sampling rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_as_timestamp": {
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
@@ -243,19 +243,19 @@
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_duckdb_text": {
-      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added; T4.2 contract32: render admitted raw timestamp s/ms/us/ns counts in the existing timestamp presentation format without narrowing their range"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_instance": {
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added; T3.27 fix 1: ENDPOINT_REFUSED raised as NimRequestError under the status and code the core's fields name (REFUSED_STATUS, REFUSED_CODE), as the old serving transport raises it; no rule here"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_shown_timestamp": {
-      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added; T4.2 contract32: preserve admitted s/ms/us/ns units while presenting raw timestamp counts, including the existing wide-range fallback"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_time_of_day": {
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_timestamp": {
-      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added; T4.2 contract32: construct presentation timestamps in their admitted s/ms/us/ns unit with unchanged timezone handling"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_worded": {
       "gone": "T3.17: the choice of template by field, rule and fields is the core's choice of sentence"
@@ -489,7 +489,7 @@
       "moved": "T3.17: the core's table of sentences, read once from _native.templates()"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::warn_from_core": {
-      "moved": "T3.17: warnings group by the table's data; host values replace the words callback; fix 1: host-held values from the call in progress (holding), the a and I conversions and the to() pairing; T3.5: a group's opening said with the call's held values; T4.2 R2: deliver every core frame notice in normal order with native plain text and SDMWarning category, without SQL code prefixes or suppression"
+      "moved": "T3.17: warnings group by the table's data; host values replace the words callback; fix 1: host-held values from the call in progress (holding), the a and I conversions and the to() pairing; T3.5: a group's opening said with the call's held values; T4.2 R2: deliver every core frame notice in normal order with native plain text and SDMWarning category, without SQL code prefixes or suppression; T4.4: one typed frame_graph presentation profile emits only FRAME_ROWS_DROPPED as the frozen unprefixed SDMWarning; frame_schema retains constructor presentation and coded/other materializer warnings retain their existing policy"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::warn_held": {
       "moved": "T3.17: a held warning says its sentence"
