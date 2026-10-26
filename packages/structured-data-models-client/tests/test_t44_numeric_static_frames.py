@@ -252,6 +252,21 @@ def test_first_numeric_materialization_keeps_its_detached_snapshot(core):
     )
 
 
+def test_unknown_first_entity_still_keeps_the_successfully_built_snapshot(core):
+    frames = shop()
+    question = query(frames)
+    with pytest.raises(StructuredDataError, match='unresolved row'):
+        materialize(question, seed=None, indices=[9999])
+    frames['orders']['amount'] = np.full(
+        len(frames['orders']), 999, dtype=np.float32
+    )
+    resumed = materialize(question, seed=None)
+    assert markers(resumed) == REFERENCE['unseeded_markers'][0]
+    assert resumed.predict.related_tables['orders']['amount'].tolist() == [
+        marker + 1 for marker in REFERENCE['unseeded_markers'][0]
+    ]
+
+
 @pytest.mark.parametrize('aggregation', ['COUNT', 'SUM'])
 def test_numeric_static_aggregation_keeps_the_missing_time_refusal(
     core, aggregation
