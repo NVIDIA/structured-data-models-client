@@ -3247,8 +3247,8 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // anchor, checked against the data's times.
     let anchor_time = if frames.is_some() && anchor_time.is_none() {
         Some(Scalar::Timestamp {
-            value: i128::from(TIME_MAX),
-            unit: Unit::Ns,
+            value: TIME_MAX,
+            unit: TimestampUnit::Ns,
             zone: None,
         })
     } else {
