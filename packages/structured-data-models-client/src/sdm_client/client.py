@@ -2,20 +2,23 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""One connection to one NIM, serving every model it can reach.
+r"""One connection to one NIM, serving every model it can reach, or to the
+models run in this process.
 
 The model is an argument:
 
 >>> with SDMClient(url='http://localhost:8000') as client:
 ...     result = client.predict(request, model=KumoTabular())
 
-Each client owns its own transport, so several can target different endpoints
+Each client owns its own backend, so several can target different endpoints
 or tenants at once, including from several threads: a prediction always goes to
-the endpoint and credential of the client that started it.
+the endpoint and credential of the client that started it, or for a client
+opened with :meth:`SDMClient.in_process`, to the models that client holds.
 """
 
 from __future__ import annotations
 
+import copy
 import dataclasses
 import warnings
 from collections.abc import Callable, Iterable, Mapping, Sequence
@@ -29,7 +32,8 @@ from sdm_client.base import (
     check_request_against_model,
     describe,
 )
-from sdm_client.core.transport import Transport, WireTransport, redact_url
+from sdm_client.core.backend import Backend, NimBackend
+from sdm_client.core.transport import Transport, redact_url
 from sdm_client.core.warnings import SDMWarning, caller_stacklevel
 from sdm_client.decompose import RANKING, Decomposition, about_the_part
 from sdm_client.errors import (
@@ -52,10 +56,6 @@ from sdm_client.wire.keys import (
     scored_rows,
     without_the_keys,
 )
-
-# A NIM that does not serve the session routes at all, as opposed to one that
-# has merely forgotten this session.
-_SESSIONS_UNSUPPORTED = frozenset({404, 405, 501})
 
 
 def _adapter_for(spec: ModelSpec) -> ModelAdapter:
@@ -83,13 +83,15 @@ class FittedModel:
     against it is a second call. That is what ``fit`` and ``predict`` are here.
 
     Close it when done, or use it as a context manager. A session holds memory
-    on the endpoint until it is released or expires.
+    on the endpoint until it is released or expires. For a client opened with
+    :meth:`SDMClient.in_process`, the endpoint is this process: the context is
+    fitted and held here, and released when the session or the client closes.
 
     ``pinned`` is what the session pinned, minus the context itself. Reading an
     answer needs the task and the schema, where the key an id stands for is
-    named. The rows have been uploaded and live on the endpoint, so
-    keeping a second encoded copy for the lifetime of the handle would hold a
-    whole dataset for nothing.
+    named. The rows have been uploaded and live on the endpoint, or in process
+    have been fitted and are not kept, so keeping a second encoded copy for the
+    lifetime of the handle would hold a whole dataset for nothing.
 
     It is not constructed directly. What it is built from is how the client
     talks to a model and what the session pinned, none of which is public.
@@ -190,12 +192,12 @@ class FittedModel:
             self._adapter.session_prediction_plan(
                 request, self._outputs, self._pinned
             ),
-            lambda payload: self._adapter.normalize(
-                self._client._transport.session_predict(
-                    self._session_id, payload
-                ),
+            lambda payload: self._client._backend.session_predict(
+                self._adapter,
+                self._session_id,
+                payload,
                 self._outputs,
-                {**self._pinned, **payload},
+                self._pinned,
             ),
         )
         if not parts:
@@ -218,7 +220,7 @@ class FittedModel:
         """
         if self._closed:
             return
-        self._client._transport.delete_session(self._session_id)
+        self._client._backend.delete_session(self._session_id)
         self._closed = True
         pinned = getattr(self._client, '_pinned', None)
         if pinned is not None:
@@ -253,7 +255,8 @@ class FittedModel:
 
 
 class SDMClient:
-    r"""A connection to one Universal TFM NIM.
+    r"""A connection to one Universal TFM NIM, or to models run in this
+    process when opened with :meth:`in_process`.
 
     Use it as a context manager, or call :meth:`close`.
     """
@@ -288,24 +291,26 @@ class SDMClient:
                 endpoint.
         """
         self._start(
-            Transport(
-                url,
-                api_key,
-                verify_ssl=verify_ssl,
-                timeout=timeout,
-                max_retries=max_retries,
+            NimBackend(
+                Transport(
+                    url,
+                    api_key,
+                    verify_ssl=verify_ssl,
+                    timeout=timeout,
+                    max_retries=max_retries,
+                )
             )
         )
 
-    def _start(self, transport: WireTransport) -> None:
-        r"""Set everything a client holds, given what carries its requests.
+    def _start(self, backend: Backend) -> None:
+        r"""Set everything a client holds, given what answers its requests.
 
         The one place a client's state is set. :meth:`for_databricks_serving`
         builds its client without ``__init__``, so state set only there was
         missing from a serving client until something reached for it. Add
         new state here, not to ``__init__``.
         """
-        self._transport: WireTransport = transport
+        self._backend: Backend = backend
         self._adapters: dict[str, ModelAdapter] = {}
         self._pinned: set[FittedModel] = set()
 
@@ -363,29 +368,79 @@ class SDMClient:
 
         client = cls.__new__(cls)
         client._start(
-            DatabricksServingTransport(
-                endpoint, workspace_client, timeout=timeout
+            NimBackend(
+                DatabricksServingTransport(
+                    endpoint, workspace_client, timeout=timeout
+                )
             )
         )
+        return client
+
+    @classmethod
+    def in_process(cls, *models: Any, device: Any = None) -> SDMClient:
+        r"""Open a client that runs the models in this Python process.
+
+        The same calls, answered by structured-data-models here instead of by
+        a NIM. Pass models already loaded with it, or none to load each one
+        from its published weights the first time it is asked for:
+
+        >>> import sdm
+        >>> relational = sdm.models.KumoRelational()
+        >>> with SDMClient.in_process(relational) as client:
+        ...     result = client.predict(request, model=KumoRelational())
+
+        The request is prepared exactly as it is for a NIM, and the model run
+        on it directly. Each context is fitted as the NIM fits it, at the same
+        seed and, on a GPU, the same precision. A request the model cannot
+        answer is refused with a :class:`~sdm_client.errors.StructuredDataError`
+        whose code says why, from the codes a NIM uses. It is not a
+        :class:`~sdm_client.errors.NimRequestError`, and has no HTTP status,
+        since nothing was sent.
+
+        Args:
+            *models: ``sdm.models.KumoTabular`` or ``sdm.models.KumoRelational``
+                models, at most one of each. A model passed is only used:
+                each context is fitted on a copy that shares its weights.
+            device: Where to load the models this client loads itself, such as
+                ``'cuda'``. Defaults to CUDA when it is available, else the
+                CPU. Refused with ``models``, which stay where they are.
+
+        Raises:
+            MissingExtraError: If structured-data-models is not installed;
+                install ``structured-data-models-client[in-process]``. On
+                Python 3.10, which it does not support, the error is a
+                :class:`StructuredDataError` with the same code
+                ``MISSING_EXTRA`` that names the Python it needs.
+            StructuredDataError: With code ``INVALID_CONFIGURATION``, for a
+                model other than those two, two of one kind, or ``device``
+                given with ``models``.
+        """
+        from sdm_client.in_process import InProcessBackend
+
+        client = cls.__new__(cls)
+        client._start(InProcessBackend(models, device=device))
         return client
 
     @property
     def url(self) -> str:
         r"""Where this client sends requests.
 
-        A NIM's base URL, or ``'databricks-serving:<name>'`` for a client
-        opened with :meth:`for_databricks_serving`.
+        A NIM's base URL, ``'databricks-serving:<name>'`` for a client opened
+        with :meth:`for_databricks_serving`, or ``'in-process'`` for one
+        opened with :meth:`in_process`.
         """
-        return self._transport.url
+        return self._backend.url
 
     def models(self) -> list[str]:
         r"""The model ids **the endpoint** advertises.
 
         Read from ``/v1/models``, not from this client's own list. The previous
         generation reported its own registry here, which meant it claimed a
-        model the endpoint did not serve.
+        model the endpoint did not serve. A client opened with
+        :meth:`in_process` lists the models it was given, or both when it
+        loads its own.
         """
-        return self._transport.list_models()
+        return self._backend.list_models()
 
     def capabilities(self, model: str | Model) -> ModelCapabilities:
         r"""What ``model`` supports, as far as this client knows.
@@ -397,8 +452,9 @@ class SDMClient:
         return describe(self._spec(model))
 
     def health_ready(self) -> bool:
-        r"""Whether the NIM answers ``GET /v1/health/ready`` with 200."""
-        return self._transport.health_ready()
+        r"""Whether the NIM answers ``GET /v1/health/ready`` with 200, or for
+        a client opened with :meth:`in_process`, whether it is still open."""
+        return self._backend.health_ready()
 
     def predict(
         self,
@@ -440,9 +496,7 @@ class SDMClient:
         # rows, so returning only the last would drop the earlier batches.
         parts = _numbered_across_calls(
             adapter.prediction_plan(request, fields),
-            lambda payload: adapter.normalize(
-                self._send(adapter, payload), fields, payload
-            ),
+            lambda payload: self._backend.predict(adapter, payload, fields),
         )
         if not parts:
             raise StructuredDataError(
@@ -589,19 +643,6 @@ class SDMClient:
         )
         return frozenset(positions)
 
-    def _send(self, adapter: Any, payload: dict[str, Any]) -> dict[str, Any]:
-        r"""Post one payload, letting the adapter explain a refusal."""
-        try:
-            return self._transport.predict(payload)
-        except StructuredDataError as error:
-            explained = adapter.explain_error(error, payload)
-            if explained is error:
-                # An adapter that had nothing to add returns the same object,
-                # and `raise error from error` makes it its own cause, which
-                # is a cycle for anything that walks the chain.
-                raise
-            raise explained from error
-
     def fit(
         self,
         request: Request,
@@ -614,7 +655,9 @@ class SDMClient:
 
         The pinned half is model, task, schema and context; later calls send
         only the rows to score. Use this when asking several questions of the
-        same context, which is what makes uploading it once worthwhile.
+        same context, which is what makes uploading it once worthwhile. A
+        client opened with :meth:`in_process` uploads nothing: it fits the
+        context once, here, and keeps it until the session closes.
 
         `holdout` names every row the session will go on to score. The context
         is chosen once, here, and `request` only excludes the rows *it* names,
@@ -644,9 +687,9 @@ class SDMClient:
             StructuredDataError: If the endpoint does not serve sessions,
                 with code ``'SESSIONS_UNSUPPORTED'``.
         """
-        if not getattr(self._transport, 'serves_sessions', True):
+        if not self._backend.serves_sessions:
             raise StructuredDataError(
-                f'{self._transport.url} cannot pin a context: it answers one '
+                f'{self._backend.url} cannot pin a context: it answers one '
                 f'request at a time. Use predict(), which sends the context '
                 f'with every call',
                 code='SESSIONS_UNSUPPORTED',
@@ -657,37 +700,19 @@ class SDMClient:
         adapter, fields = self._prepare(request, model, outputs)
         payload = adapter.session_plan(request, fields)
         held = _held_back(payload, holdout)
-        try:
-            try:
-                created = self._transport.create_session(payload)
-            except StructuredDataError as error:
-                explained = adapter.explain_error(error, payload)
-                if explained is error:
-                    raise
-                raise explained from error
-        except Exception as error:
-            status = getattr(error, 'status_code', None)
-            if status in _SESSIONS_UNSUPPORTED:
-                raise StructuredDataError(
-                    f'this endpoint does not serve sessions (HTTP {status}); '
-                    f'use predict() instead, which sends the context with '
-                    f'every call',
-                    code='SESSIONS_UNSUPPORTED',
-                ) from error
-            raise
-        session_id = created.get('session_id') or created.get('id')
-        if not session_id:
-            raise StructuredDataError(
-                'the endpoint created a session but named no session id',
-                code='INVALID_RESPONSE',
-                details={'response_keys': sorted(created)},
-            )
+        session_id = self._backend.create_session(adapter, payload)
         fitted = FittedModel._open(
             self,
             adapter,
-            str(session_id),
+            session_id,
             fields,
-            {key: value for key, value in payload.items() if key != 'context'},
+            copy.deepcopy(
+                {
+                    key: value
+                    for key, value in payload.items()
+                    if key != 'context'
+                }
+            ),
             named_outputs=outputs,
             pinned_keys=keys_in(
                 payload, 'context', with_anchor=request.target_moves_with_time
@@ -745,9 +770,9 @@ class SDMClient:
     def close(self) -> None:
         r"""Release pooled connections and retire this client.
 
-        Contexts this client pinned are released first, because the transport
+        Contexts this client pinned are released first, because the backend
         that would release them is about to close and `FittedModel.close()`
-        is the only call that can. Adapters follow, then the transport itself
+        is the only call that can. Adapters follow, then the backend itself
         even if one of them fails. Its pool is the one that cannot be
         rebuilt on demand.
         """
@@ -767,7 +792,7 @@ class SDMClient:
             if error is not None:
                 raise error
         finally:
-            self._transport.close()
+            self._backend.close()
 
     def __enter__(self) -> SDMClient:
         return self
@@ -781,7 +806,7 @@ class SDMClient:
         self.close()
 
     def __repr__(self) -> str:
-        return f'SDMClient(url={redact_url(self._transport.url)!r})'
+        return f'SDMClient(url={redact_url(self._backend.url)!r})'
 
 
 def _numbered_across_calls(

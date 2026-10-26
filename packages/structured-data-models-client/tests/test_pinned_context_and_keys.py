@@ -37,6 +37,7 @@ from sdm_client import (
     Schema,
 )
 from sdm_client.client import _warn_scoring_what_was_pinned
+from sdm_client.core.backend import NimBackend
 from sdm_client.errors import StructuredDataError
 from sdm_client.wire.keys import _named_by, keys_in, scored_keys
 
@@ -137,7 +138,7 @@ class Transport:
 
 class Client:
     def __init__(self) -> None:
-        self._transport = Transport()
+        self._backend = NimBackend(Transport())
 
 
 def handle(pinned_keys) -> object:
@@ -384,7 +385,7 @@ def test_a_session_remembers_the_keys_it_pinned():
         def delete_session(self, session_id):
             pass
 
-    client._transport = Fake()
+    client._backend = NimBackend(Fake())
     fitted = client.fit(request, model='kumo-tabular')
 
     assert len(fitted._pinned_keys) == 298
