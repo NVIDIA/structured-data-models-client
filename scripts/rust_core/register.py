@@ -376,9 +376,16 @@ def problems(
         ]
     corpus = case_ids(root)
     inventory = inventory_ids(root)
-    accepted = reference_outcomes(root)
-    refused = reference_refusals(root)
-    codes = reference_codes(root)
+    accepted = {}
+    refused = {}
+    codes = {}
+    # One local snapshot: fixtures can change these files between validations.
+    for case, outcome in _reference_lines(root).items():
+        accepted[case] = str(outcome['result'])
+        if outcome.get('result') == 'refusal':
+            if isinstance(outcome.get('stage'), str):
+                refused[case] = outcome['stage']
+            codes[case] = outcome.get('code')
     for entry in entries:
         where = entry['id']
         for case in entry['cases']:
