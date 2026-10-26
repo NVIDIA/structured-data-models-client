@@ -148,11 +148,18 @@ def test_existing_connection_journeys_force_core_calls_but_not_host_sources(
     assert _routing.forced() == frozenset(routes)
 
 
-def test_an_unknown_core_route_is_not_silently_filtered_with_host_sources(
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize(
+    'unknown',
+    [
+        'query.validate/not-a-real-mode/any',
+        'source.open/not-a-real-mode/databricks-sql',
+        'source.connect-databricks/not-a-real-mode/databricks-sql',
+    ],
+)
+def test_an_unknown_route_is_not_silently_filtered_with_host_sources(
+    monkeypatch: pytest.MonkeyPatch, unknown: str
 ) -> None:
     case = _case('contract/cases/s2/databricks.connect.warehouse.json')
-    unknown = 'query.validate/not-a-real-mode/any'
     case['routes'].append(unknown)
     routes = RUNNER.routes_on(case, 'databricks-sql')
     assert unknown in routes
