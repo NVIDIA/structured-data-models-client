@@ -97,9 +97,10 @@ graph; these check the text:
   cannot ban. A parse whose target is only inferred, such as ``s.parse()``
   returned as ``Result<Zoned, _>`` or ``Option<Zoned>``, is not seen; review
   covers it.
-- ``steps``: ``Step`` has exactly the three variants ``fetch``,
-  ``call_model`` and ``done``, in the Rust source and in the locked schema:
-  no step asks the host for language behavior (migration plan, L0).
+- ``steps``: ``Step`` has exactly ``fetch``, ``call_model`` and ``done``,
+  plus the reply-free ``warnings`` boundary introduced in wire33.
+  Older locked schemas retain exactly their original three variants.
+  No step asks the host for language behavior (migration plan, L0).
 
 Threat model (decision E56, checkpoint 4): the threat is honest drift by
 cooperating agents, a term, a statement, a skip or an allow written by
@@ -1794,7 +1795,8 @@ def check_bans(root: Path) -> list[str]:
 
 # --- the step variants --------------------------------------------------------
 
-STEP_VARIANTS = ('fetch', 'call_model', 'done')
+LEGACY_STEP_VARIANTS = ('fetch', 'call_model', 'done')
+STEP_VARIANTS = ('warnings', *LEGACY_STEP_VARIANTS)
 _STEP_ENUM = re.compile(r'\bpub\s+enum\s+Step\s*\{')
 CONTRACT = Path('rust/crates/sdm-contract')
 
@@ -1875,10 +1877,14 @@ def check_steps(root: Path) -> list[str]:
         problems.append(f'{CONTRACT}/schema: no contract schema')
     for path in schemas:
         variants = step_variants_in_schema(json.loads(path.read_text()))
-        if variants is None or sorted(variants) != expected:
+        version = int(path.stem.rsplit('-', 1)[1])
+        schema_expected = (
+            STEP_VARIANTS if version >= 33 else LEGACY_STEP_VARIANTS
+        )
+        if variants is None or sorted(variants) != sorted(schema_expected):
             problems.append(
                 f'{path.relative_to(root)}: the step message has {variants}; it '
-                f'has exactly {list(STEP_VARIANTS)}'
+                f'has exactly {list(schema_expected)}'
             )
     return problems
 

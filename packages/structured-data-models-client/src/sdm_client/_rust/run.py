@@ -209,6 +209,9 @@ def run(
     """
     core = native()
     core.reset_log_cache()
+    # A frame call releases its local attachment bindings after Start.
+    # Own that mutable map rather than clearing the caller's Mapping.
+    attachments = dict(attachments)
     owned_frame = operation.get('provider', {}).get('provider') == 'frames'
     warning_presentation: errors.WarningPresentation = 'coded'
     if owned_frame and operation['op'] == 'describe_source':
