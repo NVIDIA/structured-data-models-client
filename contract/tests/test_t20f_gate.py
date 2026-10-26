@@ -691,6 +691,20 @@ def _reference_file(tree: Path) -> Path:
 def _keyed(line: dict[str, Any], key: str) -> dict[str, Any]:
     added = copy.deepcopy(line)
     added['case'] = key
+    # These key-parser controls copy DuckDB observations, not live database
+    # runs. Preserve the input-schema facts of the named database too:
+    # SQLite stores the case's timestamp as text, unlike DuckDB/Postgres.
+    database = key.partition('@')[2]
+    core = added.get('core')
+    if core is not None and database in ('sqlite', 'postgres'):
+        compare = _module(ROOT / 'scripts/rust_core/compare.py', 't20f_compare')
+        case = json.loads((ROOT / f'contract/cases/s0/{X}.json').read_text())
+        bases = compare._runner().load_bases()
+        for operation in core['inputs'] or []:
+            if operation['op'] == 'validate_query':
+                operation['schema'] = compare.stored_schema(
+                    operation['schema'], case, bases, database
+                )
     return added
 
 
