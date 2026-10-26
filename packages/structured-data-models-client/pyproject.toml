@@ -78,6 +78,12 @@ s3 = ["structured-data-models-connectors[s3]==1.0.0"]
 # model rather than a backend to read, so `all` does not carry it; ask for it by
 # name.
 databricks-serving = ["databricks-sdk>=0.68.0,<1.0"]
+# Running the models in this process rather than reaching a NIM. Like
+# `databricks-serving` it is a way to reach a model, and it brings PyTorch, so
+# `all` does not carry it. structured-data-models needs Python 3.11; on 3.10
+# the extra installs nothing, and `SDMClient.in_process()` says why. The marker
+# is also what lets the workspace lock resolve.
+in-process = ["structured-data-models>=0.2.1,<0.3; python_version >= '3.11'"]
 all = [
     "structured-data-models-client[relational,sqlite,duckdb,postgres,snowflake,databricks,lakebase,s3]",
 ]

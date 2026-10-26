@@ -32,6 +32,12 @@ Both endpoints enforce sizes, and most of these are the relational one's.
 | hops | relational | 6 | at `materialize()` |
 | tables | relational | 15 | against the graph the request carries, not the schema it was built from |
 
+A client opened with `SDMClient.in_process()` is held to this table as well,
+since this client checks it. A NIM also has limits of its own, which each
+deployment sets, such as the longest string a cell may hold or the most
+distinct values a column may have. Those protect a shared server, and are
+not applied when the model runs in your own process.
+
 A relational request for more entities than one call scores is not refused.
 `materialize()` gathers it in batches of at most that many, each with a
 context of its own, sampled around that batch's rows rather than copied from
@@ -181,7 +187,8 @@ not read from the endpoint.
 `models()` *is* read from the endpoint, so it is the endpoint's own answer. The
 route it uses is supplied by the NIM runtime rather than by the Universal TFM
 contract, so an endpoint that does not serve it gives a clear error rather than
-a wrong answer.
+a wrong answer. A client opened with `SDMClient.in_process()` has no endpoint,
+and lists the models it can run.
 
 There is more than one build of `kumo-relational`. The client declares the
 broader build with six task kinds and seven output fields. A narrower build

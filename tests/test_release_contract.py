@@ -1192,12 +1192,14 @@ class TestDistributionCoherence:
                     .split('>=')[0]
                     .strip()
                 )
-                # databricks-sdk is imported by the client's own serving
-                # transport, so the client is the distribution that declares it.
+                # databricks-sdk and structured-data-models are imported by the
+                # client's own transports, so the client is the distribution
+                # that declares them.
                 assert name in known or name in {
                     'pytest',
                     'requests-mock',
                     'databricks-sdk',
+                    'structured-data-models',
                 }, (
                     f'extra {extra!r} requires {name!r}, which is not one of '
                     f"this repository's distributions"
@@ -1667,3 +1669,34 @@ class TestInterpreterSupportIsStated:
         assert 'relational' in install_doc, (
             'the installation guide does not mention the relational extra'
         )
+
+
+@pytest.mark.parametrize(
+    ('suffix', 'refused'),
+    [
+        ('', False),
+        ('-client', False),
+        ('-api', False),
+        ('-pql', False),
+        ('-connectors', False),
+        ('-relational-engine', False),
+        ('-nim', True),
+        ('-serving', True),
+        ('-client-nim', True),
+        ('-api-internal', True),
+        ('-relational-engine-nim', True),
+        ('-client_nim', True),
+    ],
+)
+def test_only_a_published_distribution_may_be_named(suffix, refused):
+    """The bare name is the public model package, and the five suffixes are
+    what this repository publishes. Any other suffix is an internal build a
+    reader cannot look up, and naming one in a shipped file is a leak.
+
+    The names are assembled rather than spelled, because spelling one here
+    would be the very thing the rule refuses.
+    """
+    hygiene = _loaded('check_repo_hygiene')
+    name = 'structured-data-models' + suffix
+    matched = any(pattern.search(name) for pattern in hygiene.INTERNAL_PATTERNS)
+    assert matched is refused

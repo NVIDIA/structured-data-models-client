@@ -21,6 +21,7 @@ import pandas as pd
 import pytest
 
 from sdm_client import KumoTabular, Request, SDMClient
+from sdm_client.core.backend import NimBackend
 from sdm_client.errors import StructuredDataError, UnsupportedRequestError
 
 
@@ -64,7 +65,7 @@ def test_fit_raises_the_error_its_docstring_names(
     request_: Request, status: int
 ) -> None:
     client = SDMClient('http://127.0.0.1:1', 'none', timeout=1.0, max_retries=0)
-    client._transport = _NoSessions(status)
+    client._backend = NimBackend(_NoSessions(status))
 
     with pytest.raises(StructuredDataError) as caught:
         client.fit(request_, model=KumoTabular())
