@@ -276,17 +276,12 @@ impl FrameRun {
         // HostRun has already detached every admitted native input under
         // the binding's ownership guard. Successful graph construction
         // retains those immutable rows; failed construction caches none.
-        let source = fingerprint(description, &self.tables)?;
-        if self
-            .metadata
-            .as_ref()
-            .is_some_and(|metadata| metadata.source != source)
-        {
-            return Err(
-                invalid("frame checkpoint no longer matches its logical snapshot")
-                    .dropping(HeldState::SamplerState),
-            );
-        }
+        // Resumed rows and identity were validated once at the ownership
+        // boundary, before carry. Immutable owners need no second full scan.
+        let source = match &self.metadata {
+            Some(metadata) => metadata.source.clone(),
+            None => fingerprint(description, &self.tables)?,
+        };
         let rows = description
             .tables
             .iter()
