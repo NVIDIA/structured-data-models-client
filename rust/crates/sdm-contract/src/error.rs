@@ -1005,6 +1005,7 @@ sentences! {
     NotInTable = "not_in_table", E::InvalidRequest;
     FrameTaskReferences = "frame_task_references", E::InvalidRequest;
     FrameNoValidRows = "frame_no_valid_rows", E::InvalidRequest;
+    FrameNeighborDtype = "frame_neighbor_dtype", E::InternalError;
     LinkHistoryMissing = "link_history_missing", E::InvalidRequest;
     LinkTargetNotForeignKey = "link_target_not_foreign_key", E::UnsupportedRequest;
     SubgraphPastTables = "subgraph_past_tables", E::InvalidRequest;

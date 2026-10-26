@@ -356,3 +356,26 @@ fn a_cap_failure_after_frame_walk_keeps_the_consumed_stream() {
     let (state, owned) = checkpoint(&run);
     assert_ne!(metadata(&state, &owned)["neighbors"]["position"], 624);
 }
+
+#[test]
+fn native_count_dtype_failure_keeps_the_reset_but_unconsumed_stream() {
+    let mut attached = inputs(3);
+    attached.insert(
+        AttachmentId(5),
+        bytes(json!({
+            "num_context_samples": 1, "num_neighbors": [3.0],
+            "num_hops": 1, "random_seed": 7,
+        })),
+    );
+    let run = HostRun::start(&sdm_host::default_root(), &message(), attached).unwrap();
+    let failed = terminal(&run).expect_err("the actual native sampler refuses float counts");
+    assert_eq!(decoded(&failed)["error"]["code"], "INTERNAL_ERROR");
+    assert_eq!(
+        decoded(&failed)["error"]["sentence"],
+        "frame_neighbor_dtype"
+    );
+    let (state, owned) = checkpoint(&run);
+    let state = metadata(&state, &owned);
+    assert_eq!(state["neighbors"]["position"], 624);
+    assert_eq!(state["neighbors"]["words"][0], 7);
+}

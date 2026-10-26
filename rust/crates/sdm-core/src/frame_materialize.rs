@@ -21,6 +21,7 @@ use sdm_engine::graph::{Graph, Table};
 use sdm_engine::random::Mt19937;
 use sdm_request::options::Hop;
 use sdm_request::payload::{SampledColumn, SampledLink, SampledTable};
+use sdm_wire::json::Value;
 
 use crate::attached::take_json;
 use crate::run::{ArrowData, Asker, Attachment, Attachments, internal};
@@ -205,6 +206,42 @@ fn detached(data: &ArrowData) -> Result<ArrowData, CoreError> {
     Ok(ArrowData::new(copy.schema(), vec![copy]))
 }
 
+/// The native sampler admits a signed int64 array, rather than the SQL
+/// sampler's numeric comparison. NumPy promotes mixed bool/integer lists
+/// to int64, but rejects an all-boolean or any float/text/object array.
+fn native_hops(graph: &Graph, values: &[Value]) -> Result<Vec<i64>, CoreError> {
+    let Some(edge) = graph.edges.first() else {
+        return Ok(vec![]);
+    };
+    let refused = || {
+        CoreError::new(
+            Sentence::FrameNeighborDtype,
+            "native neighbor counts lack int64 dtype",
+        )
+        .with_field(
+            "edge",
+            Detail::text(format!("{}__{}__{}", edge.src, edge.fkey, edge.dst)),
+        )
+    };
+    let mut has_integer = false;
+    let hops = values
+        .iter()
+        .map(|value| match value {
+            Value::Bool(value) => Ok(i64::from(*value)),
+            Value::Number(token) => {
+                let number = token.parse::<i64>().map_err(|_| refused())?;
+                has_integer = true;
+                Ok(number)
+            }
+            _ => Err(refused()),
+        })
+        .collect::<Result<Vec<_>, CoreError>>()?;
+    if !values.is_empty() && !has_integer {
+        return Err(refused());
+    }
+    Ok(hops)
+}
+
 impl FrameRun {
     pub fn source(&self) -> String {
         self.metadata
@@ -305,6 +342,7 @@ impl FrameRun {
         entity: &Table,
         keys: &ArrayRef,
         hops: &[Hop],
+        neighbor_values: Option<&[Value]>,
         excluded: &[(String, String)],
         seed: Option<u128>,
     ) -> Result<crate::subgraph::Walked, CoreError> {
@@ -323,14 +361,24 @@ impl FrameRun {
                 })?;
             self.neighbors = Mt19937::seeded(seed);
         }
-        let hops = hops
-            .iter()
-            .take_while(|hop| !matches!(hop, Hop::Stop))
-            .map(|hop| match hop {
-                Hop::Keep(count) => i64::try_from(*count).unwrap_or(i64::MAX),
-                Hop::Stop => 0,
-            })
-            .collect::<Vec<_>>();
+        let hops = match neighbor_values {
+            Some(values) => match native_hops(graph, values) {
+                Ok(hops) => hops,
+                Err(error) => {
+                    // The actual local sampler resets before validating
+                    // its count array, without consuming a neighbor draw.
+                    self.keep(asker);
+                    return Err(error);
+                }
+            },
+            None => hops
+                .iter()
+                .map(|hop| match hop {
+                    Hop::Keep(count) => i64::try_from(*count).unwrap_or(i64::MAX),
+                    Hop::Stop => 0,
+                })
+                .collect::<Vec<_>>(),
+        };
         let sampled = self
             .snapshot
             .as_ref()
