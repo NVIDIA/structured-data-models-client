@@ -122,8 +122,8 @@ pub struct SampledTable {
 /// A foreign key between two sampled tables: for each row of `src`, the
 /// row of `dst` it refers to, if any. The links of one foreign key may come
 /// more than once, as the reference's sampled edge types of both
-/// directions; the first that gives a row a key is written, as the
-/// reference's payload writes it (`_populate_relationship_columns`).
+/// directions. Their partial maps are consolidated by sampled source-row
+/// position: the first valid mapping supplies that occurrence's key.
 #[derive(Debug, Clone)]
 pub struct SampledLink {
     pub src: String,
@@ -988,8 +988,9 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
             target_columns: vec![target_column.clone()],
         });
     }
-    // Each foreign key once, from the first of its links that gives a row
-    // a key; a row given none is null, and an integer key column holding a
+    // Each foreign key once, merging every partial link row by row. The
+    // first valid pair for each sampled source row supplies its key; only
+    // a row no link supplies is null. An integer key column holding a
     // null, or a float32 key's column, is written as float64, as pandas
     // types such a column.
     let mut written: Vec<(&str, &str, &str)> = Vec::new();
@@ -1017,9 +1018,13 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
         };
         let src_rows = frames[src].1.rows;
         let mut values = vec![None; src_rows];
-        for &(row, at) in &link.pairs {
-            if row < src_rows && at < dst_rows {
-                values[row] = Some(key_cells[at].clone());
+        for partial in sampled.links.iter().filter(|partial| {
+            partial.src == link.src && partial.fkey == link.fkey && partial.dst == link.dst
+        }) {
+            for &(row, at) in &partial.pairs {
+                if row < src_rows && at < dst_rows && values[row].is_none() {
+                    values[row] = Some(key_cells[at].clone());
+                }
             }
         }
         if values.iter().all(Option::is_none) {
