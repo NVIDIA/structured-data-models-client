@@ -9,7 +9,9 @@
 from __future__ import annotations
 
 import json
+import warnings
 from collections.abc import Mapping, Sequence
+from contextlib import AbstractContextManager
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -19,10 +21,23 @@ from sdm_client._routing import RouteError
 from sdm_client._rust import codec, errors, results
 from sdm_client._rust import schema as schemas
 from sdm_client._rust.run import Finished, run
+from sdm_client.core.warnings import SDMWarning, caller_stacklevel
 from sdm_client.errors import StructuredDataError
 
 if TYPE_CHECKING:
     from sdm_client.schema import Relationship, Schema
+
+
+# Only successful Schema-stage final notices wait for the native pandas hint.
+# Table/override/key/link diagnostics retain their immediate boundaries.
+_FINAL_NOTICE_CODES = frozenset(
+    {
+        'FRAME_SCHEMA',
+        'KEY_DECLINED',
+        'TIME_COLUMNS_GUESSED',
+        'TWO_WAYS_TO_A_TABLE',
+    }
+)
 
 
 def _frame_example(
@@ -85,6 +100,74 @@ def _frame_timestamp(
         stamp = pd.Timestamp(value.value, unit=value.unit)
         unit = np.datetime_data(dtype)[0]
     return str(stamp.as_unit(unit))
+
+
+def _presentation(
+    native_types: Mapping[str, Mapping[str, Any]],
+) -> AbstractContextManager[None]:
+    return errors.holding(
+        frame_example=lambda fields: _frame_example(fields, native_types),
+        frame_key=_frame_key,
+        frame_key_candidate=_frame_key_candidate,
+        frame_timestamp=lambda fields: _frame_timestamp(fields, native_types),
+    )
+
+
+def _show_held(notices: list[dict[str, Any]]) -> None:
+    if notices:
+        errors.warn_from_core(
+            codec.encode({'message': 'warnings', 'warnings': notices}),
+            {},
+            presentation='frame_schema',
+        )
+
+
+def _final_notices(
+    schema: Schema,
+    notices: list[dict[str, Any]],
+    native_types: Mapping[str, Mapping[str, Any]],
+) -> None:
+    # Owner-approved host-only diagnostic exception (2026-10-26): this
+    # existing pandas hint never changes the core's result or its inputs.
+    from sdm_client.schema import (
+        _unlinkable_table_reads,
+        _warn_dates_stored_as_text,
+    )
+
+    dates = {}
+    for name, table in schema.tables.items():
+        if (column := _warn_dates_stored_as_text(table)) is not None:
+            dates[name] = column
+    pending = []
+    with _presentation(native_types):
+        for notice in notices:
+            if notice['sentence'] != 'frame_keyless_shared':
+                pending.append(notice)
+                continue
+            fields = errors.decoded(notice.get('fields', {}))
+            name = fields['table']
+            if dates.get(name) not in fields['candidates']:
+                pending.append(notice)
+                continue
+            # The core selected the candidates. Remove only the column the
+            # native date advice already named, to avoid contradictory advice.
+            # This is presentation only; no fields return to the core.
+            _show_held(pending)
+            pending.clear()
+            candidates = [c for c in fields['candidates'] if c != dates[name]]
+            if candidates:
+                elsewhere = {
+                    other
+                    for other, table in schema.tables.items()
+                    if other != name
+                    and any(c in table.columns for c in candidates)
+                }
+                warnings.warn(
+                    _unlinkable_table_reads(name, candidates, len(elsewhere)),
+                    category=SDMWarning,
+                    stacklevel=caller_stacklevel(),
+                )
+        _show_held(pending)
 
 
 def _convert(name: str, frame: pd.DataFrame) -> tuple[Any, dict[str, Any]]:
@@ -177,6 +260,7 @@ def _describe(
     *,
     key_forms: dict[str, str] | None = None,
     relationships: list[dict[str, Any]] | None = None,
+    held_notices: list[dict[str, Any]] | None = None,
 ) -> Finished:
     manifest: dict[str, Any] = {
         'stage': stage,
@@ -198,14 +282,7 @@ def _describe(
             )
             attached[ordinal] = rows
         attached[2] = codec.attachment(manifest)
-        with errors.holding(
-            frame_example=lambda fields: _frame_example(fields, native_types),
-            frame_key=_frame_key,
-            frame_key_candidate=_frame_key_candidate,
-            frame_timestamp=lambda fields: _frame_timestamp(
-                fields, native_types
-            ),
-        ):
+        with _presentation(native_types):
             return run(
                 {
                     'op': 'describe_source',
@@ -214,6 +291,10 @@ def _describe(
                     'check_keys': True,
                 },
                 attached,
+                quiet=_FINAL_NOTICE_CODES
+                if held_notices is not None
+                else frozenset(),
+                kept=held_notices,
             )
     finally:
         rows = None
@@ -278,6 +359,7 @@ def from_data(
     native_types: dict[str, dict[str, Any]] = {}
     finished: Finished | None = None
     converted: Any = None
+    held_notices: list[dict[str, Any]] = []
     try:
         for name, frame in tables.items():
             if isinstance(name, str) and type(name) is not str:
@@ -409,17 +491,25 @@ def from_data(
                     raise RouteError(
                         'the partial frame constructor requires ordinary built-in relationship arguments'
                     )
-        finished = _describe(
-            'schema',
-            snapshots,
-            spec,
-            native_types,
-            key_forms={
-                name: 'scalar' if type(value) is str else 'sequence'
-                for name, value in (primary_keys or {}).items()
-            },
-            relationships=slots,
-        )
+        try:
+            finished = _describe(
+                'schema',
+                snapshots,
+                spec,
+                native_types,
+                key_forms={
+                    name: 'scalar' if type(value) is str else 'sequence'
+                    for name, value in (primary_keys or {}).items()
+                },
+                relationships=slots,
+                held_notices=held_notices,
+            )
+        except BaseException:
+            # A failed Schema stage never reaches the native final hint.
+            # Preserve any core notices that preceded its failure.
+            with _presentation(native_types):
+                _show_held(held_notices)
+            raise
         result = results.expect(finished.result, results.Described)
         if result.frame_rows is not None:
             raise StructuredDataError(
@@ -427,7 +517,9 @@ def from_data(
             )
         described = json.loads(finished.take(result.description))
         finished = None
-        return schemas.build(cls, None, described, frames=originals)
+        schema = schemas.build(cls, None, described, frames=originals)
+        _final_notices(schema, held_notices, native_types)
+        return schema
     finally:
         # Tracebacks can retain these frames. Clear only call-owned snapshots;
         # the public tables retain their original DataFrames by reference.
@@ -435,3 +527,4 @@ def from_data(
         converted = None
         snapshots.clear()
         native_types.clear()
+        held_notices.clear()

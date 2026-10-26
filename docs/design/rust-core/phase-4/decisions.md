@@ -6,8 +6,6 @@ Cite those rows by ID rather than copying their approvals into this phase.
 A status `approved by owner <date>` records an answer the owner wrote; an agent never assigns that status to its own choice.
 Implementation and reviewer decisions belong in [design.md](design.md) and package records.
 
-No new owner policy approvals are recorded here.
-The file supplies the phase structure required by the existing decision reader because this phase has a design file.
-
 | # | Decision | Owner's words | Status |
 |---|---|---|---|
+| T42-PANDAS-ADVICE-2026-10-26 | Keep only the existing pandas dates-as-text advisory and its presentation order in Python; Rust retains all data, schema and prediction rules, with no pandas parser emulation, semantic callback or data-driving metadata. | "Keep pandas advice in Python (recommended)" | approved by owner 2026-10-26 |
