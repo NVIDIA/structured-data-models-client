@@ -602,22 +602,22 @@ fn foreign_key_partial_links_are_merged_per_source_row() {
 }
 
 #[test]
-fn foreign_key_overlap_keeps_first_valid_pair_for_each_row() {
+fn foreign_key_overlap_keeps_last_valid_pair_within_first_partial() {
     let mut sampled = shop();
     sampled.tables[0].columns[0].1 = array(Int64Array::from(vec![0, 1, 2, 3, 4]));
     let edge = sampled.links[0].clone();
     sampled.links = vec![
         SampledLink {
-            pairs: vec![(99, 0), (0, 99), (0, 1), (1, 0)],
+            pairs: vec![(99, 0), (0, 1), (0, 2), (0, 99), (1, 0)],
             ..edge.clone()
         },
         SampledLink {
-            pairs: vec![(0, 2), (1, 0), (2, 1), (3, 3)],
+            pairs: vec![(0, 3), (1, 1), (2, 1), (3, 3)],
             ..edge
         },
     ];
     let payload = built(&sampled);
-    assert_eq!(foreign_keys(&payload, "context"), json!([1, 0, 1]));
+    assert_eq!(foreign_keys(&payload, "context"), json!([2, 0, 1]));
     assert_eq!(foreign_keys(&payload, "predict"), json!([3]));
 }
 
