@@ -350,18 +350,22 @@ def encode(message: dict[str, Any]) -> bytes:
     return data
 
 
-def attachment(value: Any, *, named: bool = False) -> bytes:
+def attachment(
+    value: Any, *, named: bool = False, option_values: bool = False
+) -> bytes:
     r"""An input-sized field as a bytes attachment of its JSON. A value JSON
     cannot hold (one of a type the encoder does not know, a number that is
     not finite, one nested past what the encoder writes) is refused as the
     client's transport refuses it, ``INVALID_REQUEST``: from T1.28a the
     call's option values travel here as the caller gave them, and from
     T2.9 (``named``, for them alone) the refusal names the first option
-    whose value JSON cannot hold, in ``details['field']``."""
+    whose value JSON cannot hold, in ``details['field']``.
+    With ``option_values``, nonfinite numeric tokens cross losslessly for
+    Rust's option admission; ordinary attachments remain strict JSON."""
 
     def written(item: Any) -> bytes:
         return json.dumps(
-            item, ensure_ascii=False, allow_nan=False, default=_scalar
+            item, ensure_ascii=False, allow_nan=option_values, default=_scalar
         ).encode()
 
     def writes(item: Any) -> bool:

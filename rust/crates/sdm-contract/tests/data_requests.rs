@@ -48,7 +48,7 @@ fn neighbors(
         columns: vec!["price".into()],
         seeds: seeds(&["anchor", "start"]),
         window,
-        per_seed,
+        per_seed: per_seed.map(Into::into),
         order,
     }
 }
@@ -288,14 +288,43 @@ fn every_request_has_its_contract_name() {
 fn neighbor_limits_preserve_unsigned_width_signed_values_and_caller_expressions() {
     use sdm_contract::data::NeighborLimit;
     let largest = NeighborLimit::Unsigned(u64::MAX);
-    assert_eq!(serde_json::to_string(&largest).unwrap(), u64::MAX.to_string());
+    assert_eq!(
+        serde_json::to_string(&largest).unwrap(),
+        u64::MAX.to_string()
+    );
     for limit in [
         largest,
         NeighborLimit::Negative { value: "-1".into() },
-        NeighborLimit::Negative { value: "-0.5".into() },
-        NeighborLimit::SqlExpression { sql: "3 OR TRUE".into() },
+        NeighborLimit::Negative {
+            value: "-0.5".into(),
+        },
+        NeighborLimit::SqlExpression {
+            sql: "3 OR TRUE".into(),
+        },
     ] {
         let bytes = serde_json::to_vec(&limit).unwrap();
-        assert_eq!(serde_json::from_slice::<NeighborLimit>(&bytes).unwrap(), limit);
+        assert_eq!(
+            serde_json::from_slice::<NeighborLimit>(&bytes).unwrap(),
+            limit
+        );
     }
+}
+
+#[test]
+fn numeric_neighbor_bounds_cannot_smuggle_sql_as_a_number() {
+    use sdm_contract::data::NeighborLimit;
+    for value in ["0", "NaN", "-1 OR TRUE", "-1; SELECT 1"] {
+        let mut request = neighbors(None, Some(1), Some(TieBreak(vec![term("order_id")])));
+        let DataRequest::Neighbors { per_seed, .. } = &mut request else {
+            unreachable!()
+        };
+        *per_seed = Some(NeighborLimit::Negative {
+            value: value.into(),
+        });
+        refused(&request, "per_seed");
+    }
+    assert!(
+        serde_json::from_str::<NeighborLimit>(r#"{"negative":"-1","sql_expression":"3 OR TRUE"}"#)
+            .is_err()
+    );
 }

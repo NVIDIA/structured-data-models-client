@@ -221,13 +221,7 @@ fn problem(id: &str, line: &Value, wanted: &Value) -> Option<String> {
         .iter()
         .map(|o| o.as_str().unwrap())
         .collect();
-    // A decided case is refused at materialize (its register entry's
-    // answer), so the operations after it do not run.
-    let decided = DECIDED.contains(&id);
     for operation in operations(id) {
-        if decided && operation == "predict" {
-            continue;
-        }
         if !ran.contains(operation.as_str()) {
             return Some(format!("its core operation {operation} did not run"));
         }
@@ -275,18 +269,8 @@ fn problem(id: &str, line: &Value, wanted: &Value) -> Option<String> {
     None
 }
 
-/// The cases whose answer the orchestrator decided apart from the
-/// reference's (`contract/tests/test_t211_sampling.py`'s `DECIDED`):
-/// num_neighbors=[-1], which the reference answers differently on each
-/// database, refused by name, INVALID_REQUEST (KO2-82; register P2I-4).
-const DECIDED: [&str; 1] = ["sample.num-neighbors.minus-one"];
-
-/// A decided case's answer as the register carries it (P2I-4: refused at
-/// materialize, INVALID_REQUEST), in the shape of an observation's; its
-/// case's `expect` stays the reference's DuckDB outcome.
-fn decided(_id: &str) -> Value {
-    serde_json::json!({"outcome": {"result": "refusal", "code": "INVALID_REQUEST"}})
-}
+// KO3-44 lifts the former decided negative-neighbor refusal: both
+// local SQL sources must reach predict and match their own reference.
 
 /// Each T2.11 case on `database` through rust-host, held to python-ref's
 /// line: a key not pending must answer as the reference does, a pending
@@ -303,9 +287,6 @@ fn answers_as_the_reference(database: &str) {
         let found = match (observed.get(&key), reference.get(&key)) {
             (None, _) => Some("not observed".to_owned()),
             (_, None) => Some("no python-ref line".to_owned()),
-            (Some(line), Some(_)) if DECIDED.contains(&id.as_str()) => {
-                problem(&id, line, &decided(&id))
-            }
             (Some(line), Some(wanted)) => problem(&id, line, wanted),
         };
         match (found, pending.contains(&key)) {

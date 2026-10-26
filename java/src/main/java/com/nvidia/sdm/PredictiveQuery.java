@@ -113,7 +113,7 @@ public final class PredictiveQuery {
     attachments.put(1, Host.attachment(schema.toHeld()));
     attachments.put(2, Host.attachment(text));
     attachments.put(3, Indices.column(options.indices(), ArrowData.allocator()));
-    attachments.put(5, Host.attachment(values(options)));
+    attachments.put(5, Host.optionAttachment(values(options)));
     Map<String, Function<Map<String, Object>, Object>> held =
         new LinkedHashMap<>(Providers.held(schema.source()));
     held.put("query", fields -> text);

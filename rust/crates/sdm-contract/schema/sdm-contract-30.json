@@ -4838,12 +4838,14 @@
               ]
             },
             "per_seed": {
-              "type": [
-                "integer",
-                "null"
-              ],
-              "format": "uint64",
-              "minimum": 0
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/NeighborLimit"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "order": {
               "anyOf": [
@@ -5184,6 +5186,41 @@
       "required": [
         "seed_column",
         "inclusive"
+      ]
+    },
+    "NeighborLimit": {
+      "description": "The caller's per-seed neighbor bound, interpreted by its provider.\nPositive counts retain their original unsigned JSON representation.\nSQL expressions are caller-authored query code under the same trust\nboundary as derived relation expressions, never identifiers or values.",
+      "anyOf": [
+        {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        {
+          "description": "A negative JSON number's exact text, including fractional bounds.",
+          "type": "object",
+          "properties": {
+            "negative": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "negative"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "sql_expression": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "sql_expression"
+          ]
+        }
       ]
     },
     "TieBreak": {
@@ -5924,6 +5961,7 @@
         "fallback_time_type",
         "fallback_no_column",
         "fallback_seed_types",
+        "fallback_sql_expression",
         "host_clock_not_utc",
         "state_version",
         "state_unread",
@@ -6005,9 +6043,12 @@
         "option_not_whole",
         "option_unknown",
         "option_not_a_boolean",
+        "option_value_not_finite",
         "neighbors_not_a_sequence",
         "hop_not_whole",
         "hop_negative",
+        "neighbor_lookback_range",
+        "neighbor_lookback_not_numeric",
         "context_anchor_not_a_time",
         "excluded_not_a_mapping",
         "excluded_not_a_sequence",

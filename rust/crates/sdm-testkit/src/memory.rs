@@ -317,7 +317,16 @@ impl Memory {
                     pairs = within(rows, seeds, window, pairs)?;
                 }
                 if let (Some(limit), Some(order)) = (per_seed, order) {
-                    pairs = first_per_seed(rows, seeds, &order.0, *limit, pairs)?;
+                    let limit = match limit {
+                        sdm_contract::data::NeighborLimit::Unsigned(value) => *value,
+                        // The non-SQL provider's row-position predicate
+                        // keeps no row for a negative numeric bound.
+                        sdm_contract::data::NeighborLimit::Negative { .. } => 0,
+                        sdm_contract::data::NeighborLimit::SqlExpression { .. } => {
+                            return Err(not_read());
+                        }
+                    };
+                    pairs = first_per_seed(rows, seeds, &order.0, limit, pairs)?;
                 }
                 answered(rows, seeds, columns, &pairs, None)
             }

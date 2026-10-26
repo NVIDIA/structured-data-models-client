@@ -230,7 +230,13 @@ impl SqlDialect for Plain {
         )]
     }
 
-    fn neighbors_per_seed(&self, read: &SeedRead<'_>, limit: u64, terms: &[TieTerm]) -> String {
+    fn neighbors_per_seed(
+        &self,
+        read: &SeedRead<'_>,
+        limit: &sdm_contract::data::NeighborLimit,
+        terms: &[TieTerm],
+    ) -> String {
+        let limit = crate::sql::neighbor_limit(limit);
         let order: Vec<String> = terms
             .iter()
             .map(|t| self.order_term(t, "t.", None))
@@ -425,7 +431,7 @@ fn a_new_dialect_gets_every_shared_shape_by_implementing_the_trait() {
             columns: names(&["a"]),
             seeds: seeds.clone(),
             window: None,
-            per_seed: Some(2),
+            per_seed: Some(2_u64.into()),
             order: Some(sdm_contract::data::TieBreak(vec![TieTerm {
                 column: "at".into(),
                 as_timestamp: true,

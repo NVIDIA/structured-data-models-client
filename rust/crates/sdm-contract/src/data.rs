@@ -627,6 +627,31 @@ pub struct TieTerm {
 #[serde(transparent)]
 pub struct TieBreak(pub Vec<TieTerm>);
 
+/// The caller's per-seed neighbor bound, interpreted by its provider.
+/// Positive counts retain their original unsigned JSON representation.
+/// SQL expressions are caller-authored query code under the same trust
+/// boundary as derived relation expressions, never identifiers or values.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(untagged, deny_unknown_fields)]
+pub enum NeighborLimit {
+    Unsigned(u64),
+    /// A negative JSON number's exact text, including fractional bounds.
+    Negative {
+        #[serde(rename = "negative")]
+        value: String,
+    },
+    SqlExpression {
+        #[serde(rename = "sql_expression")]
+        sql: String,
+    },
+}
+
+impl From<u64> for NeighborLimit {
+    fn from(value: u64) -> Self {
+        Self::Unsigned(value)
+    }
+}
+
 /// A typed request for data.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "request", rename_all = "snake_case", deny_unknown_fields)]
@@ -716,7 +741,7 @@ pub enum DataRequest {
         columns: Vec<String>,
         seeds: KeySet,
         window: Option<Window>,
-        per_seed: Option<u64>,
+        per_seed: Option<NeighborLimit>,
         order: Option<TieBreak>,
     },
     /// One row per seed whose key `table` holds, `columns` in order after
@@ -835,6 +860,22 @@ impl DataRequest {
                 ..
             } => {
                 check_seeds(self, key, seeds)?;
+                if let Some(NeighborLimit::Negative { value }) = per_seed
+                    && (!value.starts_with('-')
+                        || serde_json::from_str::<serde::de::IgnoredAny>(value).is_err()
+                        || !value
+                            .split(['e', 'E'])
+                            .next()
+                            .unwrap_or("")
+                            .bytes()
+                            .any(|digit| matches!(digit, b'1'..=b'9')))
+                {
+                    return Err(refused(
+                        self,
+                        "per_seed",
+                        "a negative bound is not a negative number",
+                    ));
+                }
                 match (per_seed, order) {
                     (Some(_), None) => {
                         return Err(refused(

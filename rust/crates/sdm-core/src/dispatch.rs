@@ -369,7 +369,7 @@ pub(crate) fn materialize(
                     let Some(Attachment::Bytes(bytes)) = attachments.remove(&id) else {
                         return Err(internal("the call's values are not the bytes named"));
                     };
-                    Some(sdm_wire::json::read(&bytes).map_err(|e| {
+                    Some(sdm_wire::json::read_options(&bytes).map_err(|e| {
                         CoreError::new(
                             Sentence::OptionValuesUnread,
                             "the call's option values are not JSON this core reads",

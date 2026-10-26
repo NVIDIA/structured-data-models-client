@@ -6731,7 +6731,7 @@ entries:
     VALUE_OUT_OF_RANGE); no contract case asks such a lag.
 
 - id: P2B-19
-  title: A NaN or infinite lag_timesteps is refused on the core route by name, where the reference adds no lag for a NaN and refuses an infinity after labelling
+  title: NaN lag_timesteps adds no lag under the superseding owner decision; other nonfinite options remain refused
   kind: change
   old_behavior: >-
     The reference compares lag_timesteps with zero (lag < 0, then lag > 0)
@@ -6740,31 +6740,32 @@ entries:
     window is multiplied by it (a TypeError, "unsupported operand type(s)
     for *: 'float' and 'DateOffset'"), and -inf as negative.
   new_behavior: >-
-    On the core route the call's option values travel to the core as JSON
-    (Materialize.values, contract v27), which holds no NaN and no infinity,
-    so the Python host refuses each INVALID_REQUEST before anything is
-    read, naming the option (details field lag_timesteps, "lag_timesteps
-    carries a value that cannot be sent as JSON (a NaN, an infinity, or a
-    type JSON has no form for)"; codec.attachment names the first option
-    value it cannot write). The infinities keep the reference's code; the
-    NaN is refused where the reference answers.
+    KO3-44 lifts the earlier NaN refusal: Python and Java preserve the
+    option's nonfinite numeric token in the dedicated option attachment,
+    and Rust reads a NaN lag_timesteps as no extra lag, as the reference
+    does. Other nonfinite option values remain named INVALID_REQUEST
+    refusals; ordinary JSON, text spelling NaN, and Decimal inputs retain
+    their separate type and transport rules.
   affected_inputs: >-
     PredictiveQuery.materialize on the core route with lag_timesteps a
     float NaN or infinity, or a Decimal NaN or infinity (which the
     reference fails INTERNAL_ERROR on).
   cases: []
-  refs: ['packages/structured-data-models-client/src/sdm_client/_rust/codec.py#attachment', 'packages/structured-data-models-client/tests/test_the_materialize_route.py#test_a_nan_lag_is_refused_on_the_core_route_only']
+  refs: ['packages/structured-data-models-client/src/sdm_client/_rust/codec.py#attachment', 'packages/structured-data-models-client/tests/test_the_materialize_route.py#test_owner_admitted_sampling_values_match_the_frozen_client']
   status: approved
   approved_by: owner
-  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-70}
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: KO3-44}
   notes: >-
+    Superseded in part by the explicit owner KO3-44 on 2026-10-22:
+    NaN admission is restored by T3.9. The following records the historical
+    Phase2 restriction, not an approval to keep refusing a NaN.
     Approved as a permanent difference by the orchestrator under the
     owner's standing delegation (KO2-70) on 2026-10-19: a NaN or an
     infinity is no number of steps, so a caller who passes one has made a
     mistake the reference hides (a NaN adds no lag) or reports in Python's
     own words; the core route names the option before anything is read.
-    Diagnostic test: test_a_nan_lag_is_refused_on_the_core_route_only (NaN,
-    +inf and -inf). Measured at T2.9; the infinities noted by round 1's
+    Historical diagnostic: test_a_nan_lag_is_refused_on_the_core_route_only
+    (NaN, +inf and -inf). Measured at T2.9; the infinities noted by round 1's
     Claude review (P3-1).
 
 # --- lane F entries (P2F-1..19) ---
@@ -8951,7 +8952,7 @@ entries:
     (Recommended)", relayed by the orchestrator; recorded at T2.14c).
 
 - id: P2I-1
-  title: A sampling option value the reference writes into its SQL as given is read as its DuckDB sampler reads it, and one that is no number is refused by name
+  title: Sampling numbers retain their numeric policy and caller SQL expressions reach the native provider under KO3-44
   kind: change
   old_behavior: >-
     The reference's engine writes each num_neighbors size into its SQL as
@@ -8966,22 +8967,28 @@ entries:
     SQLite and Postgres samplers read some of these values otherwise
     (Postgres refuses `<= True`).
   new_behavior: >-
-    The core reads every such value as the reference's DuckDB sampler
-    reads it, on every database: a size's whole part, a boolean as 0 or
+    The core reads numeric sampling values as the reference's DuckDB
+    sampler reads them, on every database: a size's whole part, a boolean as 0 or
     1, a number spelled as text as that number, a size below one keeping
     no referring rows; a float max_pq_iterations of a static query
     rounded half to even, a temporal query's refused INVALID_REQUEST
-    naming max_pq_iterations. A num_neighbors size that is text spelling
-    no number, a list or none is refused INVALID_REQUEST naming
-    num_neighbors (not_a_whole_number) before anything is read.
+    naming max_pq_iterations. Under KO3-44 a num_neighbors size that is
+    text spelling no number is preserved as a caller-authored SQL
+    expression at the native bound position, without a new parser or
+    universal numeric interpretation. A list or none is still refused
+    INVALID_REQUEST naming num_neighbors. Non-SQL providers explicitly
+    refuse SQL expressions rather than inventing an interpretation.
   affected_inputs: >-
     materialize on the core route with num_neighbors holding a size that
     is not an integer, or with a max_pq_iterations that is a float.
   cases: [T2.11]
   status: approved
   approved_by: owner
-  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-82}
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: KO3-44}
   notes: >-
+    KO3-44 supersedes only the nonnumeric-text refusal below; the
+    existing numeric option policy remains. The remaining notes record
+    the historical Phase2 rationale and measurements.
     Proposed by T2.11's implementer, never self-approved. Recorded as
     approved under the owner's overnight delegation (KO2-82), as KO2-70
     recorded T2.9's P2F-1, by the orchestrator's instruction. Measured on the
@@ -9088,7 +9095,7 @@ entries:
     no difference is left to keep.
 
 - id: P2I-4
-  title: A negative num_neighbors size is refused by name, where the reference's three samplers answer it three ways
+  title: Negative num_neighbors retains native provider semantics under KO3-44
   kind: change
   old_behavior: >-
     The reference writes a negative num_neighbors size into its SQL as
@@ -9097,10 +9104,14 @@ entries:
     (`LIMIT -1` is no limit) and answers; Postgres' fails the statement
     (INTERNAL_ERROR).
   new_behavior: >-
-    The core refuses a num_neighbors size below zero (a number, a float or
-    text spelling one) before anything is read, INVALID_REQUEST naming
-    num_neighbors, the reason negative and the hop's place, on every
-    database.
+    KO3-44 lifts the earlier refusal. The core carries the explicit signed
+    numeric bound through the data port without a dialect branch.
+    SQL providers keep their native predicate or LIMIT semantics:
+    DuckDB and Snowflake retain no neighboring rows, SQLite retains all,
+    and Postgres rejects the negative LIMIT as a preserved provider
+    failure. The non-SQL row-position-bound provider retains no rows.
+    Numeric zero alone stops the walk; a negative bound still performs
+    the normal key lookups and sampling request.
   affected_inputs: >-
     materialize on the core route with a negative num_neighbors size.
   cases: [sample.num-neighbors.minus-one]
@@ -9108,8 +9119,11 @@ entries:
   - P2I-1
   status: approved
   approved_by: owner
-  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-82}
+  decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: KO3-44}
   notes: >-
+    Superseded by the explicit owner KO3-44 on 2026-10-22 and restored
+    by T3.9. Historical Phase2 refusal notes follow; they do not authorize
+    a current refusal on a source that answers the negative bound.
     Proposed by T2.11's implementer, never self-approved. Recorded as
     approved under the owner's overnight delegation (KO2-82), as KO2-70
     recorded T2.9's P2F-1, by the orchestrator's instruction. The
@@ -9125,18 +9139,18 @@ entries:
     answer as it does: each rust-host row below has its java twin (the
     implementer's proposal, listed for the owner; T3.11's S0 precedent).
   case_outcomes:
-  - {case: sample.num-neighbors.minus-one, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', summary: 'num_neighbors=[-1] refused by name, where the reference''s DuckDB sampler keeps no referring rows and answers'}
-  - {case: sample.num-neighbors.minus-one, cell: ref-pandas3, runner: python-core, old: 'success at predict', new: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', statements_differ: [materialize], summary: 'num_neighbors=[-1] refused by name, where the reference''s DuckDB sampler keeps no referring rows and answers'}
-  - {case: sample.num-neighbors.minus-one, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal INVALID_REQUEST', summary: 'num_neighbors=[-1] refused by name, where the reference''s DuckDB sampler keeps no referring rows and answers'}
-  - {case: sample.num-neighbors.minus-one, cell: ref-pandas3, runner: java, old: 'none', new: 'refusal INVALID_REQUEST', summary: 'num_neighbors=[-1] refused by name, where the reference''s DuckDB sampler keeps no referring rows and answers'}
-  - {case: sample.num-neighbors.minus-one, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'refusal INVALID_REQUEST', statements_differ: [materialize], summary: 'num_neighbors=[-1] refused by name, where the reference''s DuckDB sampler keeps no referring rows and answers'}
-  - {case: sample.num-neighbors.minus-one, cell: ref-pandas3, runner: java, old: 'none', new: 'refusal INVALID_REQUEST', statements_differ: [materialize], summary: 'num_neighbors=[-1] refused by name, where the reference''s DuckDB sampler keeps no referring rows and answers'}
-  - {case: sample.num-neighbors.minus-one@sqlite, cell: ref-pandas3, runner: python-core, old: 'success at predict', new: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', statements_differ: [materialize], summary: 'num_neighbors=[-1] refused by name, where the reference''s SQLite keeps every referring row (LIMIT -1) and answers'}
-  - {case: sample.num-neighbors.minus-one@sqlite, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'refusal INVALID_REQUEST', statements_differ: [materialize], summary: 'num_neighbors=[-1] refused by name, where the reference''s SQLite keeps every referring row (LIMIT -1) and answers'}
-  - {case: sample.num-neighbors.minus-one@sqlite, cell: ref-pandas3, runner: java, old: 'success', new: 'refusal INVALID_REQUEST', statements_differ: [materialize], summary: 'num_neighbors=[-1] refused by name, where the reference''s SQLite keeps every referring row (LIMIT -1) and answers'}
-  - {case: sample.num-neighbors.minus-one@postgres, cell: ref-pandas3, runner: python-core, old: 'refusal INTERNAL_ERROR at materialize (StructuredDataError)', new: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', summary: 'num_neighbors=[-1] refused by name, where the reference''s Postgres fails INTERNAL_ERROR'}
-  - {case: sample.num-neighbors.minus-one@postgres, cell: ref-pandas3, runner: rust-host, old: 'refusal INTERNAL_ERROR', new: 'refusal INVALID_REQUEST', summary: 'num_neighbors=[-1] refused by name, where the reference''s Postgres fails INTERNAL_ERROR'}
-  - {case: sample.num-neighbors.minus-one@postgres, cell: ref-pandas3, runner: java, old: 'refusal INTERNAL_ERROR', new: 'refusal INVALID_REQUEST', summary: 'num_neighbors=[-1] refused by name, where the reference''s Postgres fails INTERNAL_ERROR'}
+  - {case: sample.num-neighbors.minus-one, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'KO3-44 restores the native signed-bound behavior; raw prior refusal evidence remains historical'}
+  - {case: sample.num-neighbors.minus-one, cell: ref-pandas3, runner: python-core, old: 'success at predict', new: 'success at predict', statements_differ: [materialize], summary: 'KO3-44 restores the native signed-bound behavior; raw prior refusal evidence remains historical'}
+  - {case: sample.num-neighbors.minus-one, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'KO3-44 restores the native signed-bound behavior; raw prior refusal evidence remains historical'}
+  - {case: sample.num-neighbors.minus-one, cell: ref-pandas3, runner: java, old: 'none', new: 'success', summary: 'KO3-44 restores the native signed-bound behavior; raw prior refusal evidence remains historical'}
+  - {case: sample.num-neighbors.minus-one, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'success', statements_differ: [materialize], summary: 'KO3-44 restores the native signed-bound behavior; raw prior refusal evidence remains historical'}
+  - {case: sample.num-neighbors.minus-one, cell: ref-pandas3, runner: java, old: 'none', new: 'success', statements_differ: [materialize], summary: 'KO3-44 restores the native signed-bound behavior; raw prior refusal evidence remains historical'}
+  - {case: sample.num-neighbors.minus-one@sqlite, cell: ref-pandas3, runner: python-core, old: 'success at predict', new: 'success at predict', statements_differ: [materialize], summary: 'KO3-44 restores the native signed-bound behavior; raw prior refusal evidence remains historical'}
+  - {case: sample.num-neighbors.minus-one@sqlite, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'success', statements_differ: [materialize], summary: 'KO3-44 restores the native signed-bound behavior; raw prior refusal evidence remains historical'}
+  - {case: sample.num-neighbors.minus-one@sqlite, cell: ref-pandas3, runner: java, old: 'success', new: 'success', statements_differ: [materialize], summary: 'KO3-44 restores the native signed-bound behavior; raw prior refusal evidence remains historical'}
+  - {case: sample.num-neighbors.minus-one@postgres, cell: ref-pandas3, runner: python-core, old: 'refusal INTERNAL_ERROR at materialize (StructuredDataError)', new: 'refusal PROVIDER_ERROR at materialize (StructuredDataError)', summary: 'KO3-44 restores the native signed-bound behavior; raw prior refusal evidence remains historical'}
+  - {case: sample.num-neighbors.minus-one@postgres, cell: ref-pandas3, runner: rust-host, old: 'refusal INTERNAL_ERROR', new: 'refusal PROVIDER_ERROR', summary: 'KO3-44 restores the native signed-bound behavior; raw prior refusal evidence remains historical'}
+  - {case: sample.num-neighbors.minus-one@postgres, cell: ref-pandas3, runner: java, old: 'refusal INTERNAL_ERROR', new: 'refusal PROVIDER_ERROR', summary: 'KO3-44 restores the native signed-bound behavior; raw prior refusal evidence remains historical'}
 
 # --- Phase 3 lane B entries (P3B-1..19) ---
 - id: P3B-1

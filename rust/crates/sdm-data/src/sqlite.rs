@@ -291,7 +291,13 @@ impl SqlDialect for Sqlite {
     /// The reference's neighbor reads on SQLite (`_by_time` and `_by_fkey`)
     /// with a limit per seed: the first rows of each seed in `order`, read
     /// by `rowid`, the result in `(batch, order)`.
-    fn neighbors_per_seed(&self, read: &SeedRead<'_>, limit: u64, terms: &[TieTerm]) -> String {
+    fn neighbors_per_seed(
+        &self,
+        read: &SeedRead<'_>,
+        limit: &sdm_contract::data::NeighborLimit,
+        terms: &[TieTerm],
+    ) -> String {
+        let limit = crate::sql::neighbor_limit(limit);
         let windowed = read.window.map(|w| w.column.as_str());
         let ordered = |alias: &str| {
             terms

@@ -340,7 +340,13 @@ impl SqlDialect for Databricks {
     /// The reference's `_by_fkey`: each seed's rows within its window, the
     /// first `limit` in `terms`' order (`QUALIFY ROW_NUMBER()`), the result
     /// in `(batch, order)`.
-    fn neighbors_per_seed(&self, read: &SeedRead<'_>, limit: u64, terms: &[TieTerm]) -> String {
+    fn neighbors_per_seed(
+        &self,
+        read: &SeedRead<'_>,
+        limit: &sdm_contract::data::NeighborLimit,
+        terms: &[TieTerm],
+    ) -> String {
+        let limit = crate::sql::neighbor_limit(limit);
         let order = terms
             .iter()
             .map(|t| self.order_term(t, "t.", None))

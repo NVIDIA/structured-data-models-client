@@ -863,6 +863,7 @@ sentences! {
     FallbackTimeType = "fallback_time_type", E::UnsupportedRequest, rule "fallback";
     FallbackNoColumn = "fallback_no_column", E::UnsupportedRequest, rule "fallback";
     FallbackSeedTypes = "fallback_seed_types", E::UnsupportedRequest, rule "fallback";
+    FallbackSqlExpression = "fallback_sql_expression", E::UnsupportedRequest, rule "fallback";
     HostClockNotUtc = "host_clock_not_utc", E::InvalidRequest;
     StateVersion = "state_version", E::InvalidRequest;
     StateUnread = "state_unread", E::InvalidRequest;
@@ -944,9 +945,12 @@ sentences! {
     OptionNotWhole = "option_not_whole", E::InvalidRequest;
     OptionUnknown = "option_unknown", E::InvalidRequest;
     OptionNotABoolean = "option_not_a_boolean", E::InvalidRequest;
+    OptionValueNotFinite = "option_value_not_finite", E::InvalidRequest;
     NeighborsNotASequence = "neighbors_not_a_sequence", E::InvalidRequest;
     HopNotWhole = "hop_not_whole", E::InvalidRequest;
     HopNegative = "hop_negative", E::InvalidRequest;
+    NeighborLookbackRange = "neighbor_lookback_range", E::ValueOutOfRange;
+    NeighborLookbackNotNumeric = "neighbor_lookback_not_numeric", E::InvalidRequest;
     ContextAnchorNotATime = "context_anchor_not_a_time", E::InvalidRequest;
     ExcludedNotAMapping = "excluded_not_a_mapping", E::InvalidRequest;
     ExcludedNotASequence = "excluded_not_a_sequence", E::InvalidRequest;

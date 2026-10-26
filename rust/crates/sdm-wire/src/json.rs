@@ -184,7 +184,14 @@ fn lone_surrogates_replaced(bytes: &[u8]) -> std::borrow::Cow<'_, [u8]> {
     out.map_or(Cow::Borrowed(bytes), Cow::Owned)
 }
 
-/// [`read_answer`] of bytes already decoded to UTF-8.
+/// Reads the option attachment's nonfinite numeric tokens losslessly.
+/// This does not decide which options admit them, and does not apply the
+/// endpoint decoder's encoding detection or surrogate replacement.
+pub fn read_options(bytes: &[u8]) -> Result<Value, ReadError> {
+    read_answer_utf8(bytes)
+}
+
+/// Lossless nonfinite-token decoding shared by answer and option readers.
 fn read_answer_utf8(bytes: &[u8]) -> Result<Value, ReadError> {
     let tokens = non_finite_tokens(bytes);
     if tokens.is_empty() {
@@ -726,7 +733,10 @@ mod option_attachment_tests {
         let bytes = br#"{"lag_timesteps":NaN,"text":"NaN","nested":[Infinity,-Infinity]}"#;
         assert!(read(bytes).is_err());
         let value = read_options(bytes).unwrap();
-        assert_eq!(value.get("lag_timesteps"), Some(&Value::Number("NaN".into())));
+        assert_eq!(
+            value.get("lag_timesteps"),
+            Some(&Value::Number("NaN".into()))
+        );
         assert_eq!(value.get("text"), Some(&Value::Text("NaN".into())));
         assert!(!value.get("nested").unwrap().all_finite());
         assert!(read_options(br#"{"lag_timesteps":NaNa}"#).is_err());

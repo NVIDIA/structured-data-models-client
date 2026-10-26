@@ -25,7 +25,9 @@ No invented SQL parser or new accepted-expression subset is introduced.
 
 Capability-driven warehouse lookback remains numeric and preserves the old error order where text cannot participate in arithmetic.
 Signed negative lookback is preserved rather than converted to a positive or zero window.
-A non-SQL provider receives the explicit typed contract; fallback code must not silently interpret an SQL expression as a universal row count.
+The non-SQL Arrow and test providers use an explicit row-position bound: a negative numeric bound keeps no rows after ordinary lookup and scan work.
+They refuse caller SQL expressions because they have no SQL execution language.
+SQL providers retain their native negative LIMIT behavior, including SQLite’s unlimited result; no core-wide conversion discards the signed bound.
 Unsigned limits continue through the existing generic fallback.
 
 ## Evidence and compatibility
