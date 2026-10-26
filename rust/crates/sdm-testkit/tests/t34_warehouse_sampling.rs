@@ -175,9 +175,19 @@ fn a_numeric_negative_bound_is_not_text_in_warehouse_lookback_arithmetic() {
             panic!("text must fail lookback arithmetic, not become a numeric bound")
         };
         assert_eq!(code, "INVALID_REQUEST");
-        assert_eq!(fields.get("field").map(String::as_str), Some("num_neighbors"));
-        assert!(!asked(&text_memory).iter().any(|request| matches!(
-            request, DataRequest::Neighbors { per_seed: Some(_), .. }
-        )), "text fails arithmetic before a bounded neighbor read");
+        assert_eq!(
+            fields.get("field").map(String::as_str),
+            Some("num_neighbors")
+        );
+        assert!(
+            !asked(&text_memory).iter().any(|request| matches!(
+                request,
+                DataRequest::Neighbors {
+                    per_seed: Some(_),
+                    ..
+                }
+            )),
+            "text fails arithmetic before a bounded neighbor read"
+        );
     }
 }

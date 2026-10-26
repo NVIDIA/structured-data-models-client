@@ -8975,7 +8975,9 @@ entries:
     naming max_pq_iterations. Under KO3-44 a num_neighbors size that is
     text spelling no number is preserved as a caller-authored SQL
     expression at the native bound position, without a new parser or
-    universal numeric interpretation. A list or none is still refused
+    universal numeric interpretation. Negative caller text retains its
+    origin: warehouse numeric lookback can refuse it before SQL, as the
+    reference does. A list or none is still refused
     INVALID_REQUEST naming num_neighbors. Non-SQL providers explicitly
     refuse SQL expressions rather than inventing an interpretation.
   affected_inputs: >-

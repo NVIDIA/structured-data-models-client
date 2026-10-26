@@ -24,6 +24,7 @@ An SQL expression is caller-authored query code under the existing derived-expre
 No invented SQL parser or new accepted-expression subset is introduced.
 
 Capability-driven warehouse lookback remains numeric and preserves the old error order where text cannot participate in arithmetic.
+Negative caller text retains its SQL-expression identity, distinct from the same numeric value; the existing P2I-1 policy for positive numeric text remains unchanged.
 Signed negative lookback is preserved rather than converted to a positive or zero window.
 The non-SQL Arrow and test providers use an explicit row-position bound: a negative numeric bound keeps no rows after ordinary lookup and scan work.
 They refuse caller SQL expressions because they have no SQL execution language.

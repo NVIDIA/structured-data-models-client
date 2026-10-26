@@ -659,12 +659,10 @@ fn hop(given: &Value) -> Result<Hop, CoreError> {
                 return Ok(Hop::SqlExpression(text.clone()));
             };
             if size < 0.0 {
-                let value = if serde_json::from_str::<serde::de::IgnoredAny>(number).is_ok() {
-                    number.to_owned()
-                } else {
-                    size.to_string()
-                };
-                return Ok(Hop::Negative(value));
+                // Preserve the caller's text origin: warehouse sizing
+                // arithmetic refuses text before SQL, while SQL-only
+                // providers evaluate the original expression in place.
+                return Ok(Hop::SqlExpression(text.clone()));
             }
             // `'0' == 0` is false: a zero spelled as text ends nothing.
             return Ok(if size >= 1.0 {
@@ -1852,7 +1850,11 @@ mod tests {
             (r#"[4, "-2"]"#, Hop::SqlExpression("-2".into())),
         ] {
             assert_eq!(
-                neighbors(&asked(&format!(r#"{{"num_neighbors": {sizes}}}"#)), RunMode::Fast).unwrap(),
+                neighbors(
+                    &asked(&format!(r#"{{"num_neighbors": {sizes}}}"#)),
+                    RunMode::Fast
+                )
+                .unwrap(),
                 vec![Hop::Keep(4), wanted],
             );
         }
