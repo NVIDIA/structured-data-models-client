@@ -1161,7 +1161,10 @@ entries:
     reference reads as text too, and +01:99 and +0160, which it reads as a
     time column (packages/structured-data-models-client/tests/
     test_the_schema_route.py).
-  cases: [T1.25b]
+  cases:
+  - T1.25b
+  - time.text-one-bad-value@databricks-sql
+  - time.text-one-bad-value@snowflake
   refs: [DT-6, DT-7, P1B-2]
   status: approved
   approved_by: owner
@@ -1184,6 +1187,10 @@ entries:
     inference no longer refuses text_time, and the changed answers that
     follows (the +01:99 and +0160 offsets, text where the reference reads
     a time) are the owner's rule.
+  case_outcomes:
+  - {case: time.text-one-bad-value@databricks-sql, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: "T3.10: exact measured warehouse applicability of DT-15 under its existing owner decision"}
+  - {case: time.text-one-bad-value@snowflake, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: "T3.10: exact measured warehouse applicability of DT-15 under its existing owner decision"}
+
 
 - id: DT-16
   title: Text in the core's list read, refused or warned of otherwise than the reference
@@ -2243,7 +2250,15 @@ entries:
     it meets in the view's rows, which are the database's catalog:
     text_time over a source of one table, column_type over the shop
     base.
-  cases: [nested.map, nested.struct, T1.21e, T1.23, T1.24, T1.32c]
+  cases:
+  - nested.map
+  - nested.struct
+  - T1.21e
+  - T1.23
+  - T1.24
+  - T1.32c
+  - nested.map@databricks-sql
+  - nested.struct@databricks-sql
   refs:
   - 'contract/nested-type-vectors.json#struct.* refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
   - 'contract/nested-type-vectors.json#map.* refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
@@ -2277,6 +2292,9 @@ entries:
   - {case: nested.struct, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal UNSUPPORTED_REQUEST at from_source (UnsupportedRequestError)', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
   - {case: nested.struct, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal UNSUPPORTED_REQUEST', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
   - {case: nested.struct, cell: ref-pandas3, runner: java, old: 'none', new: 'refusal UNSUPPORTED_REQUEST', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
+  - {case: nested.map@databricks-sql, cell: ref-pandas3, runner: python-core, old: 'refusal - at from_source (ValueError)', new: 'refusal UNSUPPORTED_REQUEST at from_source (UnsupportedRequestError)', summary: "T3.10: exact measured warehouse applicability of P1B-10 under its existing owner decision"}
+  - {case: nested.struct@databricks-sql, cell: ref-pandas3, runner: python-core, old: 'refusal - at from_source (ValueError)', new: 'refusal UNSUPPORTED_REQUEST at from_source (UnsupportedRequestError)', summary: "T3.10: exact measured warehouse applicability of P1B-10 under its existing owner decision"}
+
 
 - id: P1B-11
   title: empty.fact-table is refused by name on the core route where the reference raises an unnamed RuntimeError
@@ -2303,7 +2321,15 @@ entries:
     named as a table, whose preview holds no row, which the reference
     fails with its RuntimeError (pinned by the client's
     tests/test_the_schema_route.py).
-  cases: [empty.fact-table, T1.21e, T1.23, T1.24, T1.32d, T1.32g]
+  cases:
+  - empty.fact-table
+  - T1.21e
+  - T1.23
+  - T1.24
+  - T1.32d
+  - T1.32g
+  - empty.fact-table@databricks-sql
+  - empty.fact-table@snowflake
   refs:
   - 'contract/empty-null-vectors.json#empty.orders refusal UNNAMED -> refusal INVALID_REQUEST'
   - 'contract/empty-null-vectors.json#empty.users refusal UNNAMED -> refusal INVALID_REQUEST'
@@ -2338,6 +2364,9 @@ entries:
   - {case: empty.fact-table, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal INVALID_REQUEST at from_source (StructuredDataError)', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
   - {case: empty.fact-table, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal INVALID_REQUEST', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
   - {case: empty.fact-table, cell: ref-pandas3, runner: java, old: 'none', new: 'refusal INVALID_REQUEST', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
+  - {case: empty.fact-table@databricks-sql, cell: ref-pandas3, runner: python-core, old: 'refusal - at from_source (EmptyTableError)', new: 'refusal INVALID_REQUEST at from_source (StructuredDataError)', summary: "T3.10: exact measured warehouse applicability of P1B-11 under its existing owner decision"}
+  - {case: empty.fact-table@snowflake, cell: ref-pandas3, runner: python-core, old: 'refusal - at from_source (RuntimeError)', new: 'refusal INVALID_REQUEST at from_source (StructuredDataError)', summary: "T3.10: exact measured warehouse applicability of P1B-11 under its existing owner decision"}
+
 
 - id: P1B-12
   title: Schema.from_source's keys and time columns of the wrong type are refused by the core, by name, where the reference refuses them or fails unnamed
@@ -2853,6 +2882,8 @@ entries:
   - sample.num-neighbors.seven-hops
   - sample.num-hops.seven@lakebase
   - sample.num-neighbors.seven-hops@lakebase
+  - sample.num-hops.seven@databricks-sql
+  - sample.num-neighbors.seven-hops@databricks-sql
   status: approved
   approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E78}
@@ -2882,6 +2913,9 @@ entries:
 
   - {case: sample.num-hops.seven@lakebase, cell: ref-pandas3, runner: python-core, old: 'refusal UNSUPPORTED_REQUEST at materialize (StructuredDataError)', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'more than six hops refused as UnsupportedRequestError, a subclass of the reference''s class'}
   - {case: sample.num-neighbors.seven-hops@lakebase, cell: ref-pandas3, runner: python-core, old: 'refusal UNSUPPORTED_REQUEST at materialize (StructuredDataError)', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'more than six hops refused as UnsupportedRequestError, a subclass of the reference''s class'}
+  - {case: sample.num-hops.seven@databricks-sql, cell: ref-pandas3, runner: python-core, old: 'refusal UNSUPPORTED_REQUEST at materialize (StructuredDataError)', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: "T3.10: exact measured warehouse applicability of P1B-20 under its existing owner decision"}
+  - {case: sample.num-neighbors.seven-hops@databricks-sql, cell: ref-pandas3, runner: python-core, old: 'refusal UNSUPPORTED_REQUEST at materialize (StructuredDataError)', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: "T3.10: exact measured warehouse applicability of P1B-20 under its existing owner decision"}
+
 - id: P1B-21
   title: AVG, MIN or MAX compared with NULL is refused by name only where the reference fails INTERNAL_ERROR
   kind: change
@@ -7199,6 +7233,11 @@ entries:
   - name.dot-filter@snowflake
   - name.dot-target@snowflake
   - rank.odd-column@snowflake
+  - name.dot-aggregation@databricks-sql
+  - name.dot-feature@databricks-sql
+  - name.dot-filter@databricks-sql
+  - name.dot-target@databricks-sql
+  - rank.odd-column@databricks-sql
   core_only_columns:
   - users.a.b
   - users.a`b
@@ -7381,6 +7420,11 @@ entries:
   - {case: name.backtick-filter@snowflake, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'T2.10: a filter naming a column the reference leaves out, answered (KO2-36)'}
   - {case: name.dot-filter@snowflake, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'T2.10: a filter naming a column the reference leaves out, answered (KO2-36)'}
   - {case: rank.odd-column@snowflake, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'T2.10: a ranking over a key whose name holds a dot, which the reference leaves out, answered (KO2-36)'}
+  - {case: name.dot-aggregation@databricks-sql, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', summary: "T3.10: exact measured warehouse applicability of P2E-1 under its existing owner decision", statements_differ: [materialize]}
+  - {case: name.dot-filter@databricks-sql, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', summary: "T3.10: exact measured warehouse applicability of P2E-1 under its existing owner decision", statements_differ: [materialize]}
+  - {case: name.dot-target@databricks-sql, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', summary: "T3.10: exact measured warehouse applicability of P2E-1 under its existing owner decision", statements_differ: [materialize]}
+  - {case: rank.odd-column@databricks-sql, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', summary: "T3.10: exact measured warehouse applicability of P2E-1 under its existing owner decision", statements_differ: [materialize]}
+
 
 - id: P2E-2
   title: A target filter on a column only the core names is refused by the core's not-yet rule target_filter, until T2.10
@@ -7580,6 +7624,7 @@ entries:
   cases:
   - rule.composite-key-given
   - rule.composite-key-given@lakebase
+  - rule.composite-key-given@snowflake
   refs:
   - KO2-68
   - E92
@@ -7613,6 +7658,8 @@ entries:
   - {case: rule.composite-key-given@sqlite, cell: ref-pandas3, runner: java, old: 'refusal INVALID_REQUEST', new: 'refusal INVALID_REQUEST', statements_differ: [materialize], summary: "the SQLite line: refused at materialize as the reference refuses it, without the reference's read of the folded key"}
 
   - {case: rule.composite-key-given@lakebase, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', statements_differ: [materialize], summary: "the Postgres line: refused at materialize as the reference refuses it, without the reference's read of the folded key"}
+  - {case: rule.composite-key-given@snowflake, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', summary: "T3.10: exact measured warehouse applicability of P2E-5 under its existing owner decision", statements_differ: [materialize]}
+
 - id: P2E-15
   title: A string constant's invalid escape warns as often as the query is read, twice on the core route where the reference warns five times
   kind: change
@@ -7835,6 +7882,8 @@ entries:
   cases:
   - target.aggregation.list-distinct
   - target.aggregation.list-distinct@lakebase
+  - target.aggregation.list-distinct@databricks-sql
+  - target.aggregation.list-distinct@snowflake
   refs: [T2.10, E92, P1B-3]
   status: approved
   approved_by: owner
@@ -7864,6 +7913,9 @@ entries:
 # --- lane E entries, Phase 3 (P3E-1..19) ---
 
   - {case: target.aggregation.list-distinct@lakebase, cell: ref-pandas3, runner: python-core, old: 'refusal - at predict (NimRequestError)', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', statements_differ: [materialize], summary: 'T2.10: LIST_DISTINCT link prediction refused by name until Phase 4 (KO2-75)'}
+  - {case: target.aggregation.list-distinct@databricks-sql, cell: ref-pandas3, runner: python-core, old: 'refusal - at predict (NimRequestError)', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: "T3.10: exact measured warehouse applicability of P2E-19 under its existing owner decision", statements_differ: [materialize]}
+  - {case: target.aggregation.list-distinct@snowflake, cell: ref-pandas3, runner: python-core, old: 'refusal - at predict (NimRequestError)', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: "T3.10: exact measured warehouse applicability of P2E-19 under its existing owner decision", statements_differ: [materialize]}
+
 - id: P3E-1
   title: A Postgres table a source without a schema lacks is named without the current schema
   kind: change
@@ -9176,7 +9228,9 @@ entries:
   affected_inputs: >-
     A Databricks table (SQL warehouse or Spark session) holding a column of
     a type _to_dtype reads as unsupported, under a forced core route.
-  cases: [T3.4]
+  cases:
+  - T3.4
+  - databricks.value.struct-feature@databricks-sql
   refs: [T3.4, P1B-10, E66]
   status: approved
   approved_by: owner
@@ -9192,6 +9246,8 @@ entries:
     where the reference gives an unnamed error, the class E66(b) covers
     (KO3-41's better error). Measured offline on the stand-in once T3.3's
     stand-in serves the case's catalog by exact replay; live in E-1.
+  case_outcomes:
+  - {case: databricks.value.struct-feature@databricks-sql, cell: ref-pandas3, runner: python-core, old: 'refusal - at from_source (ValueError)', new: 'refusal UNSUPPORTED_REQUEST at from_source (UnsupportedRequestError)', summary: "T3.10: exact measured warehouse applicability of P3B-1 under its existing owner decision"}
 
 # --- lane o entries (P2O-1..9) ---
 
@@ -9726,13 +9782,18 @@ entries:
   affected_inputs: >-
     PredictiveQuery.materialize over a SnowflakeSource whose schema holds a
     view as a table (DESCRIBE TABLE resolves a view, so it describes).
-  cases: [snowflake.rowcount.view-as-table]
+  cases:
+  - snowflake.rowcount.view-as-table
+  - snowflake.rowcount.view-as-table@snowflake
   refs: [T3.6, 'old-behaviour/T3.6-snowflake.md row 37', P3D-2]
   status: approved
   approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T36-OWNER-2026-10-24-COUNTS-1}
   notes: >-
     Approved after explaining query cost. Fake provider coverage uses recorded view metadata and recorded base-table rows for reads after the old failure; no live performance claim is made.
+  case_outcomes:
+  - {case: snowflake.rowcount.view-as-table@snowflake, cell: ref-pandas3, runner: python-core, old: 'refusal INTERNAL_ERROR at materialize (StructuredDataError)', new: 'success at predict', summary: "T3.10: exact measured warehouse applicability of P3D-3 under its existing owner decision", statements_differ: [materialize]}
+
 
 - id: P3D-4
   title: "Snowflake names a missing current database"
@@ -10861,3 +10922,36 @@ entries:
     CI repair keeps the case byte-identical to G and uses its ordinary G
     checkpoint, without an empty baseline advance, self-judging override,
     failed-evidence reuse or comparison relaxation.
+
+# --- Exact measured Phase 3 warehouse applicability ---
+
+- id: P3V-1
+  title: Named refusals for the five already-unsupported Snowflake nested inputs
+  kind: change
+  old_behavior: >-
+    The five listed original Snowflake cases fail at from_source with an unnamed ValueError when raw ARRAY, OBJECT or VARIANT declarations cannot be converted.
+  new_behavior: >-
+    The same original cases remain refused at from_source as UnsupportedRequestError with UNSUPPORTED_REQUEST.
+    No previously accepted input is newly refused.
+  affected_inputs: >-
+    Only the five qualified Snowflake Python cases listed below, as measured on the recorded original source.
+  cases:
+  - nested.fixed-array@snowflake
+  - nested.list-int@snowflake
+  - nested.map@snowflake
+  - nested.struct@snowflake
+  - nested.union@snowflake
+  refs: [E66, KO3-41, KO3-47]
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E66}
+  notes: >-
+    Existing owner decision E66(b) approves a named refusal over an unnamed or internal error.
+    The exact original Snowflake types and outcomes are independently evidenced; this grants no warehouse-wide nested-type exclusion, payload tolerance or missing-input acceptance.
+    Original source and build IDs remain attached to the retained observations.
+  case_outcomes:
+  - {case: nested.fixed-array@snowflake, cell: ref-pandas3, runner: python-core, old: 'refusal - at from_source (ValueError)', new: 'refusal UNSUPPORTED_REQUEST at from_source (UnsupportedRequestError)', summary: "T3.10: exact original Snowflake raw nested-type refusal under existing E66(b)"}
+  - {case: nested.list-int@snowflake, cell: ref-pandas3, runner: python-core, old: 'refusal - at from_source (ValueError)', new: 'refusal UNSUPPORTED_REQUEST at from_source (UnsupportedRequestError)', summary: "T3.10: exact original Snowflake raw nested-type refusal under existing E66(b)"}
+  - {case: nested.map@snowflake, cell: ref-pandas3, runner: python-core, old: 'refusal - at from_source (ValueError)', new: 'refusal UNSUPPORTED_REQUEST at from_source (UnsupportedRequestError)', summary: "T3.10: exact original Snowflake raw nested-type refusal under existing E66(b)"}
+  - {case: nested.struct@snowflake, cell: ref-pandas3, runner: python-core, old: 'refusal - at from_source (ValueError)', new: 'refusal UNSUPPORTED_REQUEST at from_source (UnsupportedRequestError)', summary: "T3.10: exact original Snowflake raw nested-type refusal under existing E66(b)"}
+  - {case: nested.union@snowflake, cell: ref-pandas3, runner: python-core, old: 'refusal - at from_source (ValueError)', new: 'refusal UNSUPPORTED_REQUEST at from_source (UnsupportedRequestError)', summary: "T3.10: exact original Snowflake raw nested-type refusal under existing E66(b)"}

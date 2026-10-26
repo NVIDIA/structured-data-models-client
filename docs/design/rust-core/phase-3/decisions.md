@@ -316,3 +316,14 @@ Both exact CODE approvals and required postapproval controls remain necessary, a
 | # | Proposal | Owner's words | Status |
 |---|---|---|---|
 | T310-OWNER-2026-10-25-FIXTURE-SCOPE-K | Permit explicit T3.10 handoff scope `t310-gate-captures-eb267cbf1`, with twelve original fixture/workflow/consumer files pinned to reviewed source `eb267cbf10ef130cf15e67dd5a9b20e7e85931f3` and exactly the ten selectors named above. Keep complete changed and mandatory substantive modules, every additional changed test, normal full-delta lint and all 49 gate scenarios in final-source full CI. Refuse missing or modified pinned inputs, another package or incomplete owner approval, and retain exact selected suites, hashes and this decision row in the normal handoff stamp. | "Yes please" | approved by owner 2026-10-25 |
+
+## Owner-approved phase-end performance costs and evidence reuse, 2026-10-26
+
+These approvals retain all correctness and prediction-accuracy requirements and mandatory final-source full CI.
+They do not authorize relabeling a native artifact or blanket reuse across changed behavior.
+The separate second Snowflake sampling question remains unanswered.
+
+| # | Decision and presented context | Owner's words | Status |
+|---|---|---|---|
+| T310-OWNER-2026-10-26-PERFORMANCE-COSTS-1 | Accept measured Databricks warehouse latency approximately 2× slower, Snowflake latency 21–32% slower because metadata is refreshed, native library approximately 16 MB versus 9.6 MB baseline, and five SQLite overhead cases exceeding target by at most 0.4 ms; document costs and optimize afterwards, retaining all correctness and accuracy requirements | "Accept documented costs; optimize afterwards (Recommended)" | approved by owner 2026-10-26 |
+| T310-OWNER-2026-10-26-UNAFFECTED-REUSE-1 | Retain completed warehouse/model results only when two independent reviewers verify later fixes cannot affect those cases; rerun every affected case, preserve original build/result commit IDs and require green full CI on the final branch | "Reuse proven unaffected results; rerun affected cases (Recommended)" | approved by owner 2026-10-26 |
