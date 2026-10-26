@@ -85,8 +85,20 @@ def test_lossless_instant_and_civil_timestamp_functions_are_pure_reads(
     DATABRICKS.check(sql)
 
 
+def test_zoned_seed_timestamp_conversion_is_a_pure_read() -> None:
+    # The live AdventureWorks materialization emits this conversion when
+    # rebuilding UTC seed anchors from its bound JSON rows.
+    DATABRICKS.check(
+        'WITH tmp AS (SELECT col.id, '
+        "CAST(CONCAT(col.anchor, 'Z') AS TIMESTAMP) AS anchor "
+        "FROM (SELECT POSEXPLODE(FROM_JSON(?, "
+        "'array<struct<id:bigint,anchor:string>>')))) "
+        'SELECT * FROM tmp'
+    )
+
+
 @pytest.mark.parametrize(
-    'function', ['UNIX_MICROS', 'DATEDIFF', 'HOUR', 'MINUTE']
+    'function', ['UNIX_MICROS', 'DATEDIFF', 'HOUR', 'MINUTE', 'CONCAT']
 )
 @pytest.mark.parametrize(
     'template',
