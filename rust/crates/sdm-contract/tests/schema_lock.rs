@@ -504,8 +504,15 @@ fn unaccounted(schema: &Value) -> Result<(), String> {
 
 /// The fields whose attachment is JSON of the contract's, with the entry of
 /// `$defs/Attachments` that locks it.
-const JSON: [(&str, &str); 27] = [
+const JSON: [(&str, &str); 30] = [
     ("ProviderChoice/frames.manifest", "Frames.manifest"),
+    // The same provider manifest field has an operation-specific JSON type.
+    ("ProviderChoice/frames.manifest", "Materialize.frames"),
+    ("FrameCheckpoint.manifest", "FrameCheckpoint.manifest"),
+    (
+        "FrameCheckpointManifest.metadata",
+        "FrameCheckpointManifest.metadata",
+    ),
     ("Operation/validate_query.query", "ValidateQuery.query"),
     ("Operation/validate_query.schema", "ValidateQuery.schema"),
     ("Operation/describe_source.source", "DescribeSource.source"),

@@ -440,6 +440,10 @@ fn resumed_early_failure_and_pre_next_cancel_retain_the_incoming_checkpoint() {
         start["operation"]["seed"] = Value::Null;
         start["operation"]["unseeded"] = json!(true);
         attached.insert(
+            AttachmentId(7),
+            bytes(json!({"tables": [], "entropy": 123456789_u64})),
+        );
+        attached.insert(
             AttachmentId(5),
             bytes(json!({"num_context_samples":1,"num_neighbors":[2],"random_seed":null})),
         );
