@@ -1289,11 +1289,12 @@ entries:
     reads as dates. No day-first warning differs for this reason (the 11
     T1.25b first counted here are in-list order-rule differences, DT-16,
     fix round 1). None of T1.25b's 60 generated sources.
-  cases: [T1.25b]
-  refs: [DT-15, P1B-2]
+    The one qualified Databricks SQL case receives its bare-clock feature as Arrow utf8 and applies the same global E120 rule, without adding native TIME support.
+  cases: [T1.25b, time.feature-time-of-day@databricks-sql]
+  refs: [DT-15, P1B-2, E120]
   status: approved
   approved_by: owner
-  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E68}
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E120}
   notes: >-
     Approved by the owner on 2026-10-11, relayed by the orchestrator during
     T1.25b's fix round 1 ("approve both", as recommended); recorded in E68.
@@ -1307,6 +1308,11 @@ entries:
     part 3 to every name by the owner's item 24 of 2026-10-14 (confirmed in
     item 27), recorded in E120: the old code was right, the core reads the
     values and does not refuse for the name.
+    The measured Databricks SQL bare-clock case is the same global E120 inference rule: users.f stays categorical text, and users has no inferred time column, where the reference chose f as a timestamp then refused INVALID_REQUEST at materialize.
+    Its original Arrow field is utf8, not native TIME, and its canonical outcome row is limited to this exact Python case and materialize stopping point.
+    Saved catalog order places users at different table-list positions, so no positional schema-field mask is added: the named users.f.stype and users.time_column facts remain finite evidence, with the original table-order diagnostics preserved.
+  case_outcomes:
+  - {case: time.feature-time-of-day@databricks-sql, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'E120 global text inference: bare clock text remains categorical and has no time-column role'}
 
 - id: DT-18
   title: A time of day set as a time column fails the source's CAST, reported as the provider's error
@@ -6069,7 +6075,8 @@ entries:
     average the reference computes as floats, a DECIMAL sum past 38
     digits, or a DECIMAL class target with distinct values one float32
     cannot tell apart.
-  cases: [key.decimal-38-10, decimal.class-target-38-18, decimal.sum-10-2, decimal.feature-inexact-38-18]
+    The six explicitly qualified Databricks SQL cases apply these same exact-decimal rules to their measured decimal keys, features and amount column only.
+  cases: [key.decimal-38-10, decimal.class-target-38-18, decimal.sum-10-2, decimal.feature-inexact-38-18, databricks.key.decimal-38-6@databricks-sql, databricks.key.decimal-scales@databricks-sql, decimal.feature-inexact-38-18@databricks-sql, decimal.sum-10-2@databricks-sql, java.databricks-sql.types@databricks-sql, key.decimal-38-10@databricks-sql]
   refs:
   - eb6c68eb
   - P1B-18
@@ -6165,6 +6172,54 @@ entries:
     - 'core.predicted.body/*/schema/instance_table/columns/__kumo_entity_ref_0/dtype'
     - 'core.predicted.body/*/schema/related_tables/users/columns/user_id/dtype'
     - 'core.predicted.body/*/schema/related_tables/orders/columns/user_id/dtype'
+  - case: decimal.feature-inexact-38-18@databricks-sql
+    runners: [python-core]
+    fields:
+    - 'public.payloads/*/2/*/related_tables/users/rows/*/4/*'
+    - 'public.payloads/*/2/*/related_tables/users/rows/*/5/*'
+  - case: decimal.sum-10-2@databricks-sql
+    runners: [python-core]
+    fields:
+    - 'public.payloads/*/2/*/related_tables/orders/rows/*/4/*'
+  - case: java.databricks-sql.types@databricks-sql
+    runners: [python-core]
+    fields:
+    - 'public.payloads/*/2/context/related_tables/users/rows/*/9/*'
+  - case: databricks.key.decimal-38-6@databricks-sql
+    runners: [python-core]
+    fields:
+    - 'public.result/columns/1/dtype'
+    - 'public.result/digest'
+    - 'public.payloads/*/2/*/instance_table/rows/*/1'
+    - 'public.payloads/*/2/*/related_tables/orders/rows/*/4'
+    - 'public.payloads/*/2/*/related_tables/users/rows/*/1'
+    - 'public.payloads/*/2/schema/instance_table/columns/__kumo_entity_ref_0/dtype'
+    - 'public.payloads/*/2/schema/related_tables/users/columns/user_id/dtype'
+    - 'public.payloads/*/2/schema/related_tables/orders/columns/user_id/dtype'
+    - 'public.result_text'
+  - case: databricks.key.decimal-scales@databricks-sql
+    runners: [python-core]
+    fields:
+    - 'public.result/columns/1/dtype'
+    - 'public.result/digest'
+    - 'public.payloads/*/2/*/instance_table/rows/*/1'
+    - 'public.payloads/*/2/*/related_tables/orders/rows/*/4'
+    - 'public.payloads/*/2/*/related_tables/users/rows/*/1'
+    - 'public.payloads/*/2/schema/instance_table/columns/__kumo_entity_ref_0/dtype'
+    - 'public.payloads/*/2/schema/related_tables/users/columns/user_id/dtype'
+    - 'public.payloads/*/2/schema/related_tables/orders/columns/user_id/dtype'
+    - 'public.result_text'
+  - case: key.decimal-38-10@databricks-sql
+    runners: [python-core]
+    fields:
+    - 'public.result/columns/1/dtype'
+    - 'public.result/digest'
+    - 'public.payloads/*/2/*/instance_table/rows/*/1'
+    - 'public.payloads/*/2/*/related_tables/orders/rows/*/4'
+    - 'public.payloads/*/2/*/related_tables/users/rows/*/1'
+    - 'public.payloads/*/2/schema/instance_table/columns/__kumo_entity_ref_0/dtype'
+    - 'public.payloads/*/2/schema/related_tables/users/columns/user_id/dtype'
+    - 'public.payloads/*/2/schema/related_tables/orders/columns/user_id/dtype'
   status: approved
   approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-35}
@@ -6187,6 +6242,10 @@ entries:
     and Postgres (runner java), which run the same core as rust-host and
     answer as it does: each rust-host row below has its java twin (the
     implementer's proposal, listed for the owner; T3.11's S0 precedent).
+    The finite Databricks carry was measured against frozen43e with actual B049/native917d94e0 provenance.
+    Exact original decimal coefficients and scales prove nearest-binary64 features, unchanged rational key identities and exact sums read once as binary32; proof SHA256 536caf43f44303b8bfa4c72dc451399355efd27b23f22435a7be3a294e3052af.
+    Only the listed decimal scalar fields, their declared key types and corresponding typed-result digests/text are admitted; no numeric tolerance, schema-order rule, payload wildcard, row-count or warning exemption is added.
+    The java.databricks-sql.types case here is its Python SQL execution, not a Java run.
   case_outcomes:
   - {case: decimal.class-target-38-18, cell: ref-pandas3, runner: python-core, old: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', new: 'success at predict', summary: 'T2.0c exact decimals: a decimal class target answered, as the reference at 6298913c answers it'}
   - {case: decimal.class-target-38-18, cell: ref-pandas3, runner: rust-host, old: 'refusal UNSUPPORTED_REQUEST', new: 'success', summary: 'T2.0c exact decimals: a decimal class target answered, as the reference at 6298913c answers it'}
@@ -6832,6 +6891,8 @@ entries:
   - lag.condition-per-call@lakebase
   - lag.average-empty-windows@snowflake
   - lag.condition-per-call@snowflake
+  - lag.average-empty-windows@databricks-sql
+  - lag.condition-per-call@databricks-sql
   refs: ['packages/structured-data-models-relational-engine/src/sdm_relational_engine/rfm/rfm.py#KumoRelational.add_lagged_target', 'packages/structured-data-models-relational-engine/src/sdm_relational_engine/rfm/query/pandas_executor.py#PQueryPandasExecutor.execute_join']
   more_exact:
   - case: lag.average-empty-windows
@@ -6962,6 +7023,22 @@ entries:
     - 'public.payloads/*/2/predict/instance_table/rows/*/3'
     - 'public.payloads/*/2/predict/instance_table/rows/*/4'
     null_on_one_side: true
+  - case: lag.average-empty-windows@databricks-sql
+    runners: [python-core]
+    fields:
+    - 'public.payloads/*/2/context/instance_table/rows/*/4'
+    - 'public.payloads/*/2/context/instance_table/rows/*/5'
+    - 'public.payloads/*/2/predict/instance_table/rows/*/3'
+    - 'public.payloads/*/2/predict/instance_table/rows/*/4'
+    null_on_one_side: true
+  - case: lag.condition-per-call@databricks-sql
+    runners: [python-core]
+    fields:
+    - 'public.payloads/*/2/context/instance_table/rows/*/4'
+    - 'public.payloads/*/2/context/instance_table/rows/*/5'
+    - 'public.payloads/*/2/predict/instance_table/rows/*/3'
+    - 'public.payloads/*/2/predict/instance_table/rows/*/4'
+    null_on_one_side: true
   status: approved
   approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-70}
@@ -6996,6 +7073,8 @@ entries:
     lag behavior and the existing four scalar and null-side field rules.
     Their original source rows and every actual lag cell were independently
     checked against each example's entity and window before this carry.
+    The two exact Databricks SQL keys reuse the same four scalar/null fields after an independent calculation of all72 own-entity, own-window cells (proof SHA256 8b597baa06cade51d654568cc27c4f070e8808f3ef5a44adf6b9663ac59b1bfe).
+    This adds no lag algorithm, scalar predicate, vector-length or ordering exception.
 # --- lane D entries (P2D-1..19) ---
 
 - id: P2D-1
@@ -7234,6 +7313,7 @@ entries:
   - name.dot-target@snowflake
   - rank.odd-column@snowflake
   - name.dot-aggregation@databricks-sql
+  - name.dot-entity@databricks-sql
   - name.dot-feature@databricks-sql
   - name.dot-filter@databricks-sql
   - name.dot-target@databricks-sql
@@ -7286,7 +7366,10 @@ entries:
     schemas and quoted SQL were independently checked in the actual
     reference and core Python observations before this finite carry. No other
     Snowflake case, host or semantic-view behavior is added here.
+    The final d90 observation of name.dot-entity@databricks-sql now retains the declared orders.user_id to users.a.b edge and answers through predict after the duplicate-header FK repair.
+    This exact qualified outcome is the already approved KO2-36 any-name behavior, with original reference and failed-FK evidence retained; it does not approve arbitrary FK outcome changes.
   case_outcomes:
+  - {case: name.dot-entity@databricks-sql, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'KO2-36 any-name entity and declared FK edge retained after metadata-header repair'}
   - {case: name.backtick-aggregation, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
   - {case: name.backtick-aggregation, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
   - {case: name.backtick-aggregation, cell: ref-pandas3, runner: java, old: 'none', new: 'success', summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
@@ -9874,13 +9957,22 @@ entries:
     Current temporal catalog types travel as plain source facts to the window. Snowflake normalizes LTZ/TZ columns to UTC-naive timestamps before comparing them with UTC bounds. Databricks TIMESTAMP/LTZ seed bounds carry an explicit Z when cast to TIMESTAMP. NTZ and DATE retain wall-time semantics on both dialects.
   affected_inputs: >-
     Snowflake TIMESTAMP_LTZ/TZ and Databricks TIMESTAMP/LTZ window columns in non-UTC sessions, especially rows near window edges. NTZ and DATE controls preserve wall time.
-  cases: [time.timestamptz, snowflake.zone.ltz-time]
+  cases: [time.timestamptz, snowflake.zone.ltz-time, time.timestamptz@snowflake, snowflake.zone.ltz-time@snowflake]
   refs: [T3.6, 'old-behaviour/T3.6-snowflake.md row 53', 'design-remaining.md T3.6 part 5, part 6']
+  more_exact:
+  - case: time.timestamptz@snowflake
+    runners: [python-core]
+    fields:
+    - 'public.payloads/0/2/context/instance_table/rows/47/3'
+    - 'public.payloads/0/2/context/instance_table/rows/103/3'
   status: approved
   approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-3/decisions.md, row: T36-OWNER-2026-10-24-UTC-1}
   notes: >-
     The owner authorized both warehouses. Narrow regressions include UTC bounds at Los Angeles DST edges and NTZ/DATE controls. Non-UTC/DST live checks have not run and require the separate authorized matrix.
+    Finite Snowflake applicability preserves the original source fixture and both UTC window cases.
+    Only time.timestamptz context TARGET cells at instance rows47 and103 are registered as corrected UTC-window scalar values; their entity IDs and anchors are unchanged.
+    The ltz-time edge changes a retained orders row vector, so its raw row-vector difference remains finite human evidence with no scalar, length, identifier, payload or ordering bypass.
 
 - id: P3D-8
   title: "A missing Snowflake anchor retains its entity with empty temporal history"
@@ -10955,3 +11047,27 @@ entries:
   - {case: nested.map@snowflake, cell: ref-pandas3, runner: python-core, old: 'refusal - at from_source (ValueError)', new: 'refusal UNSUPPORTED_REQUEST at from_source (UnsupportedRequestError)', summary: "T3.10: exact original Snowflake raw nested-type refusal under existing E66(b)"}
   - {case: nested.struct@snowflake, cell: ref-pandas3, runner: python-core, old: 'refusal - at from_source (ValueError)', new: 'refusal UNSUPPORTED_REQUEST at from_source (UnsupportedRequestError)', summary: "T3.10: exact original Snowflake raw nested-type refusal under existing E66(b)"}
   - {case: nested.union@snowflake, cell: ref-pandas3, runner: python-core, old: 'refusal - at from_source (ValueError)', new: 'refusal UNSUPPORTED_REQUEST at from_source (UnsupportedRequestError)', summary: "T3.10: exact original Snowflake raw nested-type refusal under existing E66(b)"}
+
+- id: P3F-1
+  title: Databricks reads a declared foreign key whose column names do not imply a link
+  kind: change
+  old_behavior: >-
+    The original FK catalog SELECT exposes duplicate column_name labels.
+    The real Databricks cursor raises ArrowInvalid and the optional-key fallback yields no declared edges; orders.buyer cannot be inferred as users.uid, and the original key.declared-int32 case refuses INVALID_REQUEST at materialize.
+  new_behavior: >-
+    Distinct source/referenced projection aliases preserve the six-column ordinal contract and permit the existing catalog decoder to recover orders.buyer to users.uid.
+    The same original case succeeds through predict on genuine d90 source and native artifacts, with its original rows and keys unchanged.
+  affected_inputs: >-
+    Only the measured Python ref-pandas3 key.declared-int32@databricks-sql original, whose declared single-column FK cannot be reconstructed from names.
+  cases: [key.declared-int32@databricks-sql]
+  refs: [P1B-31, P2E-1, E66, KO2-11]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: owner.
+    This is a named INVALID_REQUEST-to-success difference, so the crash/unnamed-error class does not by itself authorize its admission; the implementation repair and its two CODE approvals do not manufacture an owner comparison decision.
+    The final d90 nine-original receipt SHA256 f70a2087bb8307658e4be9c664829c4d76ab6016baf7d7d9010d2aeb429b68c2 preserves original inputs, the restored declared edge, genuine native397f4bcf identity and SDK-zero cleanup.
+    All637 original failed FK reads across277 cases remain immutable; this entry adds no catalog, statement, graph, payload or warning wildcard.
+  case_outcomes:
+  - {case: key.declared-int32@databricks-sql, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'Measured declared non-name-inferred FK succeeds; owner admission remains proposed'}

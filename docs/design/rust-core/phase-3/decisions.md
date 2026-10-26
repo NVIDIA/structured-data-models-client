@@ -327,3 +327,23 @@ The separate second Snowflake sampling question remains unanswered.
 |---|---|---|---|
 | T310-OWNER-2026-10-26-PERFORMANCE-COSTS-1 | Accept measured Databricks warehouse latency approximately 2× slower, Snowflake latency 21–32% slower because metadata is refreshed, native library approximately 16 MB versus 9.6 MB baseline, and five SQLite overhead cases exceeding target by at most 0.4 ms; document costs and optimize afterwards, retaining all correctness and accuracy requirements | "Accept documented costs; optimize afterwards (Recommended)" | approved by owner 2026-10-26 |
 | T310-OWNER-2026-10-26-UNAFFECTED-REUSE-1 | Retain completed warehouse/model results only when two independent reviewers verify later fixes cannot affect those cases; rerun every affected case, preserve original build/result commit IDs and require green full CI on the final branch | "Reuse proven unaffected results; rerun affected cases (Recommended)" | approved by owner 2026-10-26 |
+
+
+## Final finite warehouse applicability evidence, 2026-10-26
+
+This section records application of existing semantic approvals, not new owner answers or final Phase 3 acceptance.
+The exact source-pinned CODE review packet retains original observations, typed source proofs and raw strict comparison failures.
+
+- KO2-35 applies exact-decimal semantics to the six measured Databricks SQL cases listed in P2B-1: exact rational key identities, mathematically nearest feature values and exact sums read once at binary32.
+- P2F-1 applies its existing own-row lag rule to the two measured Databricks SQL keys; its two Snowflake keys were already listed and remain unchanged.
+- E120 is the global authority for the one Databricks bare-clock inference change in DT-17; the SQLite-only KO2-61 row is not a new Databricks approval.
+- T36-OWNER-2026-10-24-UTC-1 covers the two original Snowflake UTC-window cases; only two measured TARGET scalars gain exact fields, with the changed ltz-time row vector still requiring its finite source proof.
+- KO2-36 covers the corrected name.dot-entity Databricks outcome and retained declared odd-name relationship under P2E-1.
+- P3F-1 separately records the measured key.declared-int32 named-refusal-to-success transition as proposed for the owner; implementation approval is not substituted for its comparison-policy authority.
+
+The actual d90 metric time-choice warning matches the frozen Python body exactly after only the existing P3E-2 diagnostic-code prefix is removed.
+Its class remains SDMWarning, and no warning suppression or new wording allowance is added.
+The final original negative-neighbor Databricks case has no strict differences.
+The catalog/table and relationship permutations remain exact finite human evidence, with their raw diagnostics retained; no generic ordering matcher is introduced.
+Unknown historical warning bodies remain unknown.
+The separate second Snowflake sampled-case allowance and its failed quality result remain outside this batch, with no sampling, accuracy or row-vector relaxation.
