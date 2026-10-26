@@ -83,7 +83,9 @@ def test_unsafe_download_or_other_token_destination_still_fails(
 ) -> None:
     document = guard._workflow()
     java = document['jobs']['java']
-    download = next(step for step in java['steps'] if step.get('uses') == ACTION)
+    download = next(
+        step for step in java['steps'] if step.get('uses') == ACTION
+    )
     extra = ''
     if mutation == 'pin':
         download['uses'] = 'actions/download-artifact@main'
