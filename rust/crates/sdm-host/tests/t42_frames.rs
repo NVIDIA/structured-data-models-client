@@ -213,6 +213,153 @@ fn native_temporal_whole_frame_rebinds_with_exact_units_and_nanosecond_equality(
 }
 
 #[test]
+fn empty_timezone_constant_frames_encode_a_null_zone_warning_in_every_unit() {
+    use arrow_array::{
+        ArrayRef, TimestampMicrosecondArray, TimestampMillisecondArray, TimestampNanosecondArray,
+        TimestampSecondArray,
+    };
+    use arrow_schema::{DataType, TimeUnit};
+    use sdm_contract::ops::SourceDescription;
+    use sdm_contract::{ColumnType, Detail, Sentence};
+
+    for unit in [
+        TimeUnit::Second,
+        TimeUnit::Millisecond,
+        TimeUnit::Microsecond,
+        TimeUnit::Nanosecond,
+    ] {
+        let expected = vec![Some(1), Some(1), None];
+        let column: ArrayRef = match unit {
+            TimeUnit::Second => {
+                Arc::new(TimestampSecondArray::from(expected.clone()).with_timezone(""))
+            }
+            TimeUnit::Millisecond => {
+                Arc::new(TimestampMillisecondArray::from(expected.clone()).with_timezone(""))
+            }
+            TimeUnit::Microsecond => {
+                Arc::new(TimestampMicrosecondArray::from(expected.clone()).with_timezone(""))
+            }
+            TimeUnit::Nanosecond => {
+                Arc::new(TimestampNanosecondArray::from(expected.clone()).with_timezone(""))
+            }
+        };
+        let batch = RecordBatch::try_from_iter([("observed_at", column)]).unwrap();
+        let mut rows = Some(ArrowData::new(batch.schema(), vec![batch]));
+        for (stage, id) in [("table", 3), ("schema", 7)] {
+            let mut attached = inputs();
+            attached.remove(&AttachmentId(3));
+            attached.insert(
+                AttachmentId(2),
+                bytes(json!({"stage":stage,"tables":[{"source":{"source":["users"]},"rows":id}]})),
+            );
+            attached.insert(AttachmentId(id), Attachment::Arrow(rows.take().unwrap()));
+            let run = HostRun::start(&sdm_host::default_root(), &message(), attached)
+                .unwrap_or_else(|out| panic!("{unit:?}/{stage}: {:?}", error(out)));
+            let mut constant_notices = 0;
+            loop {
+                let next = run
+                    .next()
+                    .unwrap_or_else(|out| panic!("{unit:?}/{stage}: {:?}", error(out)));
+                if let Some(out) = run
+                    .take_warnings()
+                    .unwrap_or_else(|out| panic!("warning encoding: {:?}", error(out)))
+                {
+                    let ControlMessage::Warnings { warnings } = sdm_host::read(&out).unwrap()
+                    else {
+                        panic!("warning channel")
+                    };
+                    for notice in warnings {
+                        if notice.sentence == Sentence::TimeColumnsRefusedConstantWhereHeld {
+                            constant_notices += 1;
+                            assert_eq!(
+                                notice.fields.get("value"),
+                                Some(&Detail::Scalar(Scalar::Timestamp {
+                                    unit: unit.into(),
+                                    zone: None,
+                                    value: 1
+                                }))
+                            );
+                        }
+                    }
+                }
+                match sdm_host::read(&next).unwrap() {
+                    ControlMessage::Step(Step::Done {
+                        result: OperationResult::DescribeSource(result),
+                        ..
+                    }) => {
+                        let Attachment::Bytes(data) =
+                            run.take_attachment(result.description).unwrap().unwrap()
+                        else {
+                            panic!("description bytes")
+                        };
+                        let described: SourceDescription = serde_json::from_slice(&data).unwrap();
+                        assert_eq!(
+                            described.tables[0].columns[0].received,
+                            ColumnType::Timestamp {
+                                unit: unit.into(),
+                                zone: None
+                            }
+                        );
+                        assert!(described.tables[0].time_column.is_none());
+                        if stage == "table" {
+                            let Attachment::Arrow(owned) = run
+                                .take_attachment(result.frame_rows.unwrap())
+                                .unwrap()
+                                .unwrap()
+                            else {
+                                panic!("owned rows")
+                            };
+                            assert_eq!(
+                                owned.schema.field(0).data_type(),
+                                &DataType::Timestamp(unit, Some("".into()))
+                            );
+                            let column = owned.batches[0].column(0);
+                            let counts: Vec<Option<i64>> = match unit {
+                                TimeUnit::Second => column
+                                    .as_any()
+                                    .downcast_ref::<TimestampSecondArray>()
+                                    .unwrap()
+                                    .iter()
+                                    .collect(),
+                                TimeUnit::Millisecond => column
+                                    .as_any()
+                                    .downcast_ref::<TimestampMillisecondArray>()
+                                    .unwrap()
+                                    .iter()
+                                    .collect(),
+                                TimeUnit::Microsecond => column
+                                    .as_any()
+                                    .downcast_ref::<TimestampMicrosecondArray>()
+                                    .unwrap()
+                                    .iter()
+                                    .collect(),
+                                TimeUnit::Nanosecond => column
+                                    .as_any()
+                                    .downcast_ref::<TimestampNanosecondArray>()
+                                    .unwrap()
+                                    .iter()
+                                    .collect(),
+                            };
+                            assert_eq!(counts, expected);
+                            assert_eq!(column.null_count(), 1);
+                            rows = Some(owned);
+                        } else {
+                            assert!(result.frame_rows.is_none());
+                            assert_eq!(
+                                constant_notices, 1,
+                                "{unit:?}: actual Schema constant warning"
+                            );
+                        }
+                        break;
+                    }
+                    other => panic!("frame may not fetch or call a model: {other:?}"),
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn coarse_provider_admission_keeps_dt14_saturation() {
     use arrow_array::{
         ArrayRef, TimestampMicrosecondArray, TimestampMillisecondArray, TimestampSecondArray,

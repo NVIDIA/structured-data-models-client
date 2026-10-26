@@ -321,12 +321,12 @@ def test_coarse_native_units_keep_extreme_frame_distinctions(
 
 
 @pytest.mark.parametrize('unit', ['s', 'ms'])
-def test_coarse_native_mixed_unit_time_order_and_repeated_key_values(
+def test_coarse_native_creation_priority_and_valid_key_time_override(
     monkeypatch, unit
 ):
     frame = pd.DataFrame(
         {
-            'row_id': [1, 1, 2],
+            'row_id': [1, 2, 3],
             'created_at': np.array([2, 3, 4], dtype='int64').view(
                 f'datetime64[{unit}]'
             ),
@@ -344,3 +344,42 @@ def test_coarse_native_mixed_unit_time_order_and_repeated_key_values(
         time_columns={'events': 'observed_at'},
     )
     assert explicit['events'].time_column == 'observed_at'
+
+
+@pytest.mark.parametrize('unit', ['s', 'ms'])
+def test_coarse_native_repeated_key_uses_tolerated_duplicate_rate(
+    monkeypatch, unit
+):
+    factor = 1 if unit == 's' else 1_000
+    frame = pd.DataFrame(
+        {
+            'user_id': [*range(99), 98],
+            'observed_at': (
+                np.arange(100, dtype='int64') + 1_700_000_000 * factor
+            ).view(f'datetime64[{unit}]'),
+        }
+    )
+    schema, notices = paired(monkeypatch, {'users': frame})
+    assert schema['users'].primary_key == 'user_id'
+    assert schema['users'].duplicate_keys == 1
+    assert notices
+
+
+@pytest.mark.parametrize('unit', ['s', 'ms'])
+def test_coarse_native_cross_unit_earliest_choice_has_no_creation_priority(
+    monkeypatch, unit
+):
+    factor = 1 if unit == 's' else 1_000
+    frame = pd.DataFrame(
+        {
+            'row_id': [1, 2, 3],
+            'stamp_a': (
+                np.arange(3, dtype='int64') + 1_704_067_201 * factor
+            ).view(f'datetime64[{unit}]'),
+            'stamp_b': (
+                np.arange(3, dtype='int64') + 1_704_067_200_000_000_000
+            ).view('datetime64[ns]'),
+        }
+    )
+    schema, _ = paired(monkeypatch, {'events': frame})
+    assert schema['events'].time_column == 'stamp_b'
