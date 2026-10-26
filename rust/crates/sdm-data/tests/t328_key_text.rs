@@ -406,7 +406,7 @@ fn one_databricks_key_past_the_budget_alone_is_a_chunk_of_its_own() {
                 .last()
                 .unwrap()
                 .text
-                .contains("pos + 2 AS")
+                .contains("CAST(pos AS BIGINT) + 2 AS")
         })
         .collect();
     assert_eq!(offsets, [false, false, true]);
