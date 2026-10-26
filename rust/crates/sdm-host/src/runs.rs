@@ -275,9 +275,18 @@ impl HostRun {
             // Frame data is input, not fetched provider data. Validate its
             // complete dynamic attachment set before admission/copying, then
             // detach foreign buffers before a later next() can read them.
-            if matches!(&start.operation, sdm_contract::ops::Operation::DescribeSource(request)
-                if matches!(request.provider, sdm_contract::data::ProviderChoice::Frames { .. }))
-            {
+            let frames = match &start.operation {
+                sdm_contract::ops::Operation::DescribeSource(request) => matches!(
+                    request.provider,
+                    sdm_contract::data::ProviderChoice::Frames { .. }
+                ),
+                sdm_contract::ops::Operation::Materialize(request) => matches!(
+                    request.provider,
+                    sdm_contract::data::ProviderChoice::Frames { .. }
+                ),
+                _ => false,
+            };
+            if frames {
                 let named = resolved_attachments(&start.operation, &attachments)?;
                 check_attachments(&named, &attachments)?;
                 for (id, kind) in named {

@@ -8,7 +8,7 @@
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
-use arrow_array::{ArrayRef, RecordBatch, UInt64Array};
+use arrow_array::{ArrayRef, RecordBatch};
 use sdm_contract::data::{AttachmentId, Relation};
 use sdm_contract::frames::{
     FRAME_CHECKPOINT_VERSION, FrameCheckpoint, FrameCheckpointManifest, FrameCheckpointMetadata,
@@ -186,26 +186,6 @@ fn fingerprint(
     Ok(format!("{hash:016x}"))
 }
 
-fn detached(data: &ArrowData) -> Result<ArrowData, CoreError> {
-    let batch = crate::materialize::one_batch(data)?;
-    let indices = UInt64Array::from(
-        (0..batch.num_rows())
-            .map(|row| row as u64)
-            .collect::<Vec<_>>(),
-    );
-    let arrays = batch
-        .columns()
-        .iter()
-        .map(|array| {
-            arrow_select::take::take(array.as_ref(), &indices, None)
-                .map_err(|_| internal("detaching a frame failed"))
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-    let copy = RecordBatch::try_new(batch.schema(), arrays)
-        .map_err(|_| internal("detached frame columns do not align"))?;
-    Ok(ArrowData::new(copy.schema(), vec![copy]))
-}
-
 /// The native sampler admits a signed int64 array, rather than the SQL
 /// sampler's numeric comparison. NumPy promotes mixed bool/integer lists
 /// to int64, but rejects an all-boolean or any float/text/object array.
@@ -260,13 +240,9 @@ impl FrameRun {
         if self.snapshot.is_some() {
             return Ok(());
         }
-        if self.metadata.is_none() {
-            self.tables = self
-                .tables
-                .iter()
-                .map(|(source, data)| Ok((source.clone(), detached(data)?)))
-                .collect::<Result<_, CoreError>>()?;
-        }
+        // HostRun has already detached every admitted native input under
+        // the binding's ownership guard. Successful graph construction
+        // retains those immutable rows; failed construction caches none.
         let source = fingerprint(description, &self.tables)?;
         if self
             .metadata

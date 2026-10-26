@@ -547,8 +547,13 @@ impl Run {
         // The typed envelope is inspected only to choose ownership timing;
         // HostRun retains the sole manifest/attachment validation path.
         let frames = matches!(sdm_host::decode(&message), Ok(ControlMessage::Start(start))
-            if matches!(&start.operation, sdm_contract::ops::Operation::DescribeSource(request)
-                if matches!(request.provider, sdm_contract::data::ProviderChoice::Frames { .. })));
+        if match &start.operation {
+            sdm_contract::ops::Operation::DescribeSource(request) => matches!(
+                request.provider, sdm_contract::data::ProviderChoice::Frames { .. }),
+            sdm_contract::ops::Operation::Materialize(request) => matches!(
+                request.provider, sdm_contract::data::ProviderChoice::Frames { .. }),
+            _ => false,
+        });
         let result = if frames {
             core_result(
                 py,
