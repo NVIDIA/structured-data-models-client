@@ -1845,8 +1845,8 @@ mod tests {
         // Numeric bounds keep their sign; caller text retains its origin
         // for capability-driven warehouse lookback arithmetic.
         for (sizes, wanted) in [
-            ("[4, -1]", Hop::Negative("-1".into())),
-            ("[4, -0.5]", Hop::Negative("-0.5".into())),
+            ("[4, -1]", Hop::Negative(sdm_contract::data::NegativeNeighborBound::new("-1".into()).unwrap())),
+            ("[4, -0.5]", Hop::Negative(sdm_contract::data::NegativeNeighborBound::new("-0.5".into()).unwrap())),
             (r#"[4, "-2"]"#, Hop::Expression("-2".into())),
         ] {
             assert_eq!(
@@ -1907,8 +1907,8 @@ mod tests {
         assert_eq!(
             neighbors(&values, RunMode::Fast).unwrap(),
             vec![
-                Hop::Negative("-1".into()),
-                Hop::Negative("-0.5".into()),
+                Hop::Negative(sdm_contract::data::NegativeNeighborBound::new("-1".into()).unwrap()),
+                Hop::Negative(sdm_contract::data::NegativeNeighborBound::new("-0.5".into()).unwrap()),
                 Hop::Expression("-2".into()),
                 Hop::Expression("3 OR TRUE".into()),
                 Hop::Expression("nonsense".into()),

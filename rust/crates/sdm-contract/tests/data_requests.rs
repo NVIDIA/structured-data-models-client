@@ -301,9 +301,9 @@ fn neighbor_limits_preserve_unsigned_width_signed_values_and_caller_expressions(
     );
     for limit in [
         largest,
-        NeighborLimit::Negative { value: "-1".into() },
+        NeighborLimit::Negative { value: sdm_contract::data::NegativeNeighborBound::new("-1".into()).unwrap() },
         NeighborLimit::Negative {
-            value: "-0.5".into(),
+            value: sdm_contract::data::NegativeNeighborBound::new("-0.5".into()).unwrap(),
         },
         NeighborLimit::Expression {
             text: "3 OR TRUE".into(),
@@ -319,19 +319,28 @@ fn neighbor_limits_preserve_unsigned_width_signed_values_and_caller_expressions(
 
 #[test]
 fn numeric_neighbor_bounds_cannot_smuggle_sql_as_a_number() {
-    use sdm_contract::data::NeighborLimit;
-    for value in ["0", "NaN", "-1 OR TRUE", "-1; SELECT 1"] {
-        let mut request = neighbors(None, Some(1), Some(TieBreak(vec![term("order_id")])));
-        let DataRequest::Neighbors { per_seed, .. } = &mut request else {
-            unreachable!()
-        };
-        *per_seed = Some(NeighborLimit::Negative {
-            value: value.into(),
-        });
-        refused(&request, "per_seed");
+    use sdm_contract::data::{NegativeNeighborBound, NeighborLimit};
+    for value in ["0", "-0", "-0.0", "1", "NaN", "-Infinity", "-1 OR TRUE", "-1; SELECT 1", "-.5", "-01"] {
+        assert!(NegativeNeighborBound::new(value.into()).is_none(), "{value}");
+        let mut request = serde_json::to_value(neighbors(None, Some(1), Some(TieBreak(vec![term("order_id")])))).unwrap();
+        request["per_seed"] = serde_json::json!({"negative": value});
+        assert!(serde_json::from_value::<DataRequest>(request).is_err(), "{value}");
     }
     assert!(
         serde_json::from_str::<NeighborLimit>(r#"{"negative":"-1","sql_expression":"3 OR TRUE"}"#)
             .is_err()
     );
+}
+
+#[test]
+fn checked_negative_bounds_preserve_every_numeric_digit_and_exponent() {
+    use sdm_contract::data::{NegativeNeighborBound, NeighborLimit};
+    for token in ["-1", "-0.5", "-1e400", "-0.0001e-400", "-123456789012345678901234567890.0001"] {
+        let bound = NegativeNeighborBound::new(token.into()).unwrap();
+        assert_eq!(bound.as_str(), token);
+        let limit = NeighborLimit::Negative { value: bound };
+        let bytes = serde_json::to_string(&limit).unwrap();
+        assert_eq!(bytes, format!(r#"{{"negative":"{token}"}}"#));
+        assert_eq!(serde_json::from_str::<NeighborLimit>(&bytes).unwrap(), limit);
+    }
 }

@@ -993,13 +993,13 @@ mod lookback_tests {
     #[test]
     fn signed_lookback_and_expression_arithmetic_keep_their_meaning() {
         assert_eq!(
-            limit_lookback_seconds(&NeighborLimit::Negative { value: "-1".into() }, 2.0).unwrap(),
+            limit_lookback_seconds(&NeighborLimit::Negative { value: sdm_contract::data::NegativeNeighborBound::new("-1".into()).unwrap() }, 2.0).unwrap(),
             -2
         );
         assert_eq!(
             limit_lookback_seconds(
                 &NeighborLimit::Negative {
-                    value: "-0.5".into()
+                    value: sdm_contract::data::NegativeNeighborBound::new("-0.5".into()).unwrap()
                 },
                 2.0
             )

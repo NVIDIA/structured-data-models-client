@@ -748,7 +748,7 @@ fn portable_neighbors_keep_signed_bounds_and_refuse_sql_code_explicitly() {
     let DataRequest::Neighbors { per_seed, .. } = &mut request else {
         unreachable!()
     };
-    *per_seed = Some(NeighborLimit::Negative { value: "-1".into() });
+    *per_seed = Some(NeighborLimit::Negative { value: sdm_contract::data::NegativeNeighborBound::new("-1".into()).unwrap() });
     let negative = fallback(request, Some(seeds.clone()));
     assert_eq!(negative.answer.unwrap().num_rows(), 0);
     assert_eq!(negative.asked.len(), 1, "the ordinary scan still runs");

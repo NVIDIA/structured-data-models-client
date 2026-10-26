@@ -165,7 +165,7 @@ fn a_numeric_negative_bound_is_not_text_in_warehouse_lookback_arithmetic() {
     assert!(asked(&numeric_memory).iter().any(|request| matches!(
         request,
         DataRequest::Neighbors { per_seed: Some(sdm_contract::data::NeighborLimit::Negative { value }), .. }
-            if value == "-2"
+            if value.as_str() == "-2"
     )));
     for value in [r#"["-2"]"#, r#"["-.5"]"#] {
         let (mut text, text_memory) = memory(true);

@@ -697,3 +697,75 @@ struct FiltersScalars {
 fn typed_values_named_as_filters_are_refused() {
     refused::<FiltersScalars>("Denied(\"#/filters/items -> Scalar\")");
 }
+
+
+#[test]
+fn only_the_closed_neighbor_seam_carries_checked_numbers_and_opaque_expressions() {
+    let request = schema::<DataRequest>();
+    assert!(problems(&request).is_empty());
+    let found = findings(&request);
+    assert!(found.iter().any(|f| matches!(f, Finding::Number(path) if path.contains("NegativeNeighborBound"))), "{found:#?}");
+    assert!(found.iter().any(|f| matches!(f, Finding::Opaque(path) if path.ends_with("/sql_expression"))), "{found:#?}");
+    assert!(!found.iter().any(|f| matches!(f, Finding::Identifier(path) if path.contains("NeighborLimit") || path.contains("NegativeNeighborBound"))));
+}
+
+#[test]
+fn the_numeric_token_schema_cannot_widen_or_become_arbitrary_text() {
+    for widened in [
+        serde_json::json!({"type":"string"}),
+        serde_json::json!({"type":"string","pattern":".*"}),
+        serde_json::json!({"type":"array","items":{"type":"string"}}),
+        Value::Bool(true),
+    ] {
+        let mut request = schema::<DataRequest>();
+        request["$defs"]["NegativeNeighborBound"] = widened;
+        assert!(!problems(&request).is_empty(), "{request:#?}");
+    }
+}
+
+#[test]
+fn neighbor_expression_shape_drift_never_inherits_the_reviewed_seam() {
+    let original = schema::<DataRequest>();
+    let object = serde_json::json!({"type":"object", "properties":{"sql_expression":{"type":"string"}}, "required":["sql_expression"], "additionalProperties":false});
+    let mut versions = Vec::new();
+    let mut extra = original.clone();
+    extra["$defs"]["NeighborLimit"]["anyOf"][2]["properties"]["note"] = serde_json::json!({"type":"string"});
+    versions.push(extra);
+    for branch in [1, 2] {
+        let mut open = original.clone();
+        open["$defs"]["NeighborLimit"]["anyOf"][branch].as_object_mut().unwrap().remove("additionalProperties");
+        versions.push(open);
+        let mut optional = original.clone();
+        optional["$defs"]["NeighborLimit"]["anyOf"][branch].as_object_mut().unwrap().remove("required");
+        versions.push(optional);
+    }
+    for widened in [
+        Value::Bool(true),
+        serde_json::json!({"type":"array","items":{"type":"string"}}),
+        serde_json::json!({"type":"object","additionalProperties":{"type":"string"}}),
+    ] {
+        let mut request = original.clone();
+        request["$defs"]["NeighborLimit"]["anyOf"][2]["properties"]["sql_expression"] = widened;
+        versions.push(request);
+    }
+    for nested in [
+        serde_json::json!({"type":"array","items":object.clone()}),
+        serde_json::json!({"type":"object","additionalProperties":object.clone()}),
+        serde_json::json!({"allOf":[object]}),
+    ] {
+        let mut request = original.clone();
+        request["$defs"]["NeighborLimit"]["anyOf"][2] = nested;
+        versions.push(request);
+    }
+    let mut number = original.clone();
+    number["$defs"]["NeighborLimit"]["anyOf"][0]["type"] = Value::String("number".into());
+    versions.push(number);
+    let mut extra_branch = original.clone();
+    extra_branch["$defs"]["NeighborLimit"]["anyOf"].as_array_mut().unwrap().push(serde_json::json!({"type":"string"}));
+    versions.push(extra_branch);
+    for request in versions {
+        let found = problems(&request);
+        assert!(!found.is_empty(), "{request:#?}");
+        assert!(!findings(&request).iter().any(|f| matches!(f, Finding::Opaque(_))), "{found:#?}");
+    }
+}
