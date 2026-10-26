@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 import string
 import sys
 import tempfile
@@ -543,6 +544,17 @@ def _routed(census: Any, probes: list[dict[str, Any]]) -> list[dict[str, Any]]:
         return found
 
 
+def _finite_validator_words(message: str) -> str:
+    # This one recorded probe used Pydantic2.13; the installed library may
+    # be a later2.x release. Its documentation minor version is metadata,
+    # while the path and all actual diagnostic words remain strict.
+    return re.sub(
+        r'(https://errors\.pydantic\.dev/2\.)[0-9]+(/v/finite_number)(?=\s|$)',
+        r'\1<minor>\2',
+        message,
+    )
+
+
 def test_the_census_s_refusals_say_the_old_client_s_words_or_a_registered_difference(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -583,8 +595,15 @@ def test_the_census_s_refusals_say_the_old_client_s_words_or_a_registered_differ
             continue
         # Only the core's sentences are this package's: a refusal the host
         # raises itself says its own words.
-        if mine['sentence'] is not None and words(mine) != words(theirs):
-            differs[probe['site']] = (words(mine), words(theirs))
+        my_words, their_words = words(mine), words(theirs)
+        if probe['site'] == (
+            'packages/structured-data-models-client/src/sdm_client/'
+            '_rust/codec.py::attachment#1'
+        ):
+            my_words = _finite_validator_words(my_words)
+            their_words = _finite_validator_words(their_words)
+        if mine['sentence'] is not None and my_words != their_words:
+            differs[probe['site']] = (my_words, their_words)
     assert {
         site: said for site, said in differs.items() if site not in DIFFERS
     } == {}
