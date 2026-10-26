@@ -2,7 +2,7 @@
 
 Updated 2026-10-26, 23:05 UTC.
 Phase 3 / T3.10 is unfinished.
-Phase 4 is paused by the owner.
+The owner assigned existing Phase4work to a separate new agent; this coordinator continues Phase3.
 The coordinator alone edits this tracker; agents report results and next actions.
 
 ## Acceptance and owner decisions
@@ -56,7 +56,7 @@ Counts describe existing cases only.
 | R12 | Corrected-source acceptance and pre-heldout evidence | Original15e locked gate passed all ten steps, 364 fault tests and 452 guard controls; stock packaging checks passed after preserving the cache-symlink failure. These are genuine old-source results | Bind required acceptance and observation checks to the eventual corrected source; retain unaffected prior results only within both reviewers' explicit scope |
 | R13 | Final sealed check, evidence package and authorized source integration | Reviewed H2 stock dry run passed all seven-leg prerequisites on15e; the actual sealed check remains unstarted. Separate evidence lane is prepared | Update source/artifact bindings after the graph decision, complete all ordinary checks and final-source CI, run the existing sealed40-case set last, obtain both GO opinions, then merge/push validated Phase3 into rust-core |
 | R14 | **DONE: existing Spark and Lakebase live provider kits** | Spark saved-answer correction has both CODE approvals, five controls and actual 99-answer readjudication PASS; Lakebase actually completed all 99 normal/fault cases on final15e, normal33 clean and both faults detected | Spark receipt `08a8d2c7`, Lakebase `d3f3825e`; original failures, all driver captures and source IDs preserved; cleanup verified and lease released |
-| R15 | Land the approved shared graph correction | Owner chose to keep all valid links. Current clean pushed candidate `6c1740fb64` includes the unchanged tested repair plus exact P3F-2 decision/register metadata, with both independent current CODE approvals. Genuine f833 normal handoff passed268seconds; both public discovery-order tests retain43links | Current-candidate normal handoff and landing remain unexecuted; then freeze the final source, run fresh CI and affected comparisons. The deployed N3 experiment remains2.4701% worse within5%, not an accuracy-improvement claim |
+| R15 | Land the approved shared graph correction | Owner chose to keep all valid links. Current clean pushed candidate `6c1740fb64` has both independent CODE approvals; its normal handoff is actively running, retaining only tool-permitted unchanged-test evidence from the passing f833 stamp | Coordinator consumes the running handoff, lands and freezes final source, then starts fresh CI alongside affected comparisons. The deployed N3 experiment remains2.4701% worse within5%, not an accuracy-improvement claim |
 
 R9 supplies the two independent applicability opinions; R2 now supplies the actual nine affected reruns.
 Their execution is complete; finite acceptance of the remaining raw differences stays in R8.
@@ -148,14 +148,15 @@ Actual315-case DuckDB impact receipt `4511ff3e` identifies exactly nine changed 
 The other306 match under the existing canonical policy; all case/base hashes agree and207 raw section differences remain recorded.
 Both independent reviewers are deriving the affected warehouse, model and runtime reruns; a generic non-diamond or acyclic-graph exemption is insufficient.
 
-## Coordinator transfer
+## Separate Phase4ownership, ongoing Phase3execution
 
-The owner requested that a separate new agent take sole ownership of Phase3, preserving existing Phase4work for its separate coordinator.
-All outgoing agents completed their current handoffs and report no active processes, cloud jobs, connections, leases or owned fixtures.
-No current-candidate handoff, new CI, affected rerun or sealed execution has been launched during the transfer.
-The incoming coordinator starts from approved candidate6c1740fb64 and consumes both completed CODE reports before its normal package checks and landing.
-The private handoff prompt is `$SDM_ORCH_STATE/phase-3/new-agent-phase3-prompt.md`; its detailed snapshot is `phase3-takeover-state-20261026.md` beside it.
-The optional selective-Java draft is explicitly unreviewed and unexecuted, not accepted validation tooling.
+The owner clarified: "Keep Phase 3 here; new agent handles Phase 4".
+The earlier Phase3transfer interpretation was incorrect and is superseded.
+This coordinator remains responsible for Phase3, its tracker, landing, CI and warehouse validation; current-candidate normal handoff is running.
+The cloud owner is active again on the affected-case carry and will obtain both CODE approvals before checks or launches.
+A separate read-only author is preparing a handoff for the new Phase4agent from its existing branches and worktrees.
+The earlier private Phase3handoff files are marked superseded; they do not transfer ownership or halt Phase3.
+The optional selective-Java draft remains unreviewed and unexecuted until its new packet receives both approvals.
 There is no pending owner decision for the valid-link repair.
 
 ## Completed evidence retained for final review
