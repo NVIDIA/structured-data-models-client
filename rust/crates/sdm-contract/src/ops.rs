@@ -1514,7 +1514,7 @@ pub struct Attachments {
     pub materialize_frames: crate::frames::MaterializeFrames,
     #[schemars(rename = "FrameCheckpoint.manifest")]
     pub frame_checkpoint_manifest: crate::frames::FrameCheckpointManifest,
-    #[schemars(rename = "FrameCheckpoint.metadata")]
+    #[schemars(rename = "FrameCheckpointManifest.metadata")]
     pub frame_checkpoint_metadata: crate::frames::FrameCheckpointMetadata,
     #[schemars(rename = "ValidateQuery.query")]
     pub validate_query_query: String,

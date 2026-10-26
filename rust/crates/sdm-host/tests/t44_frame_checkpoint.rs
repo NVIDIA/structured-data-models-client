@@ -12,7 +12,7 @@ use sdm_contract::data::AttachmentId;
 use sdm_contract::facts::PlatformFacts;
 use sdm_contract::ops::{Operation, OperationResult, SamplerState};
 use sdm_contract::run::StartRun;
-use sdm_contract::{CONTRACT_VERSION, ControlMessage, HostFacts, Scalar, Step, Unit};
+use sdm_contract::{CONTRACT_VERSION, ControlMessage, HostFacts, Scalar, Step, TimestampUnit};
 use sdm_host::{ArrowData, Attachment, Attachments, HostRun, Outgoing};
 use serde_json::{Value, json};
 
@@ -47,7 +47,7 @@ fn message() -> Vec<u8> {
         facts: HostFacts {
             now: Scalar::Timestamp {
                 value: 1_709_251_200_000_000,
-                unit: Unit::Us,
+                unit: TimestampUnit::Us,
                 zone: Some("UTC".into()),
             },
             local_zone: None,
