@@ -28,9 +28,6 @@ A rename that sweeps the tree will change these, and nothing will fail:
   `SAMPLING_QUERY_TAG` sits beside the second. They are what a warehouse sees,
   so changing them splits Databricks partner telemetry and query history at
   that version.
-- `APPLICATION` in `sdm_connectors/backends/snowflake.py`, `nvidia/kumo-sdm`.
-  It is the application name Snowflake attributes this client's sessions to,
-  so changing it splits that attribution at that version.
 - `_term('sdm-relational-engine')` in `rfm/graph_fingerprint.py`. It is hashed.
   Changing it gives identical graphs different names, which the module says
   only `FINGERPRINT_VERSION` may do.

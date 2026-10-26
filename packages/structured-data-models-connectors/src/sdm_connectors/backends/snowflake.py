@@ -28,10 +28,6 @@ else:
 
 Connection: TypeAlias = snowflake_connector.SnowflakeConnection
 
-#: The application every Snowflake session this client opens names itself as,
-#: which Snowflake attributes the session's queries to.
-APPLICATION = 'nvidia/kumo-sdm'
-
 _AUTH_ARGS = frozenset(
     {
         'account',
@@ -107,10 +103,6 @@ def connect(
     the escape hatch can never quietly replace a validated credential. What it
     does supply still counts towards the borrow decision, so credentials passed
     that way are honoured rather than silently ignored.
-
-    A connection it opens names itself to Snowflake as ``nvidia/kumo-sdm``
-    when nothing else names it; see :class:`_NamedConnection`. A borrowed
-    Snowpark session is used as it is.
     """
     check_connect_args('snowflake', kwargs, _CONNECT_ARGS)
     kwargs = merge_driver_options('snowflake', kwargs, driver_options)
@@ -130,24 +122,7 @@ def connect(
             return borrowed
         if not kwargs:
             return _connect_without_arguments()
-    return _NamedConnection(**kwargs)
-
-
-class _NamedConnection(Connection):
-    r"""A connection that names itself :data:`APPLICATION` if nothing else does.
-
-    The driver resolves the arguments, a ``connections.toml`` profile and its
-    own detection of ``SF_PARTNER``, Streamlit and notebooks before it first
-    calls ``connect``, so an ``application`` any of them gives is kept.
-    """
-
-    _application_defaulted = False
-
-    def connect(self, **kwargs: Any) -> None:
-        if not self._application_defaulted:
-            self._application_defaulted = True
-            kwargs.setdefault('application', APPLICATION)
-        super().connect(**kwargs)
+    return snowflake_connector.connect(**kwargs)
 
 
 def _connect_without_arguments() -> Connection:
@@ -159,7 +134,7 @@ def _connect_without_arguments() -> Connection:
     where it is configured; only the failure is re-stated in the client's terms.
     """
     try:
-        connection = _NamedConnection()
+        connection = snowflake_connector.connect()
     except Exception as error:
         raise ConnectorError(
             f'snowflake connector requires connection arguments (at least '
