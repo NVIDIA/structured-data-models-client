@@ -55,6 +55,60 @@ pub struct FrameInput {
     pub rows: AttachmentId,
 }
 
+/// The first frame materializer's ordered, call-local Arrow bindings.
+/// Unlike constructor stages, this manifest names no inference policy.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct MaterializeFrames {
+    /// Empty only when a frame checkpoint supplies the frozen snapshot.
+    pub tables: Vec<FrameInput>,
+    /// Fresh OS entropy supplied by the host, consumed only by an unseeded
+    /// entity/example sample. Neighbor continuation never reads this fact.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub entropy: Option<u64>,
+}
+
+/// Version of the opaque frame checkpoint, independent of the wire version.
+pub const FRAME_CHECKPOINT_VERSION: u32 = 1;
+
+/// A fixed-size reference to an input-sized frame checkpoint manifest.
+/// Each run uses fresh ids; none identifies a persistent table or snapshot.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FrameCheckpoint {
+    pub version: u32,
+    pub manifest: AttachmentId,
+}
+
+/// Ownership bindings of a materializer's detached frame snapshot.
+/// The metadata is JSON; every table remains a separately owned Arrow attachment.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FrameCheckpointManifest {
+    pub metadata: AttachmentId,
+    pub tables: Vec<FrameInput>,
+}
+
+/// The exact continuing state of the legacy MT19937 primitive.
+/// The consumer validates the 624 words and the position before reading it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Mt19937State {
+    pub words: Vec<u32>,
+    pub position: u32,
+}
+
+/// Core-owned snapshot semantics, opaque to a host retaining the checkpoint.
+/// Arrow data and derived CSC structures never travel inside this JSON.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FrameCheckpointMetadata {
+    /// Fingerprint of logical schema/source and detached row values, never ids.
+    pub source: String,
+    pub description: crate::ops::SourceDescription,
+    pub neighbors: Mt19937State,
+}
+
 /// A frame source is consumed internally by describe, never by DataLayer.
 pub fn not_provider() -> crate::CoreError {
     crate::CoreError::protocol(

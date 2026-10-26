@@ -127,7 +127,7 @@ ALLOWED: dict[str, frozenset[str]] = {
     'sdm-pql': frozenset(),
     'sdm-wire': frozenset({'sdm-contract'}),
     'sdm-schema': frozenset({'sdm-contract'}),
-    'sdm-data': frozenset({'sdm-contract'}),
+    'sdm-data': frozenset({'sdm-contract', 'sdm-engine'}),
     'sdm-engine': frozenset({'sdm-schema', 'sdm-contract'}),
     'sdm-request': frozenset(
         {'sdm-engine', 'sdm-schema', 'sdm-wire', 'sdm-contract'}

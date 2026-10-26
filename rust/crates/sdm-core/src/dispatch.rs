@@ -388,13 +388,27 @@ pub(crate) fn materialize(
                     })?)
                 }
             };
-            let access = root.data_access(&request.provider)?;
-            let provider = request.provider;
+            let frames = match request.provider {
+                sdm_contract::data::ProviderChoice::Frames { manifest } => {
+                    Some(crate::frame_materialize::take(
+                        manifest,
+                        request
+                            .sampler_state
+                            .as_ref()
+                            .and_then(|state| state.frame_checkpoint.clone()),
+                        &mut attachments,
+                    )?)
+                }
+                _ => None,
+            };
+            let provider = request.provider.clone();
+            let frame_inputs = frames.clone();
             // The run's inputs, once the schema is read (below) and its
             // fingerprint taken: the memo is read only if it was made under
             // this provider and schema (decision E52).
             let inputs =
                 move |description, source: String, pending, types| crate::materialize::Inputs {
+                    frames: frame_inputs.clone(),
                     memo: memo.filter(|memo| memo.source == source),
                     source,
                     description,
@@ -417,6 +431,14 @@ pub(crate) fn materialize(
                     #[cfg(feature = "test-ops")]
                     labels_only,
                 };
+            if let Some(frames) = frames {
+                let (description, types) = crate::frame_materialize::description(&frames, held)?;
+                let source = crate::frame_materialize::lock(&frames).source();
+                return Ok(Run::new(move |asker| {
+                    crate::materialize::run(asker, inputs(description, source, None, types))
+                }));
+            }
+            let access = root.data_access(&provider)?;
             Ok(Run::with_data(access, move |asker| async move {
                 // A source's tables (a SQL provider's) are read as they stand
                 // at each run, their location, columns and types, once the

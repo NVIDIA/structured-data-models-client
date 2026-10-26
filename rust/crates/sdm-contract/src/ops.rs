@@ -88,9 +88,18 @@ impl Operation {
             Operation::EditSchema(e) => vec![(e.schema, Bytes), (e.edit, Bytes)],
             Operation::Materialize(m) => {
                 let mut named = vec![(m.schema, Bytes), (m.query, Bytes)];
+                if let ProviderChoice::Frames { manifest } = m.provider {
+                    named.push((manifest, Bytes));
+                }
                 named.extend(m.indices.map(|id| (id, Arrow)));
                 named.extend(m.candidates.map(|id| (id, Bytes)));
                 named.extend(m.sampler_state.as_ref().map(|s| (s.memo, Bytes)));
+                named.extend(
+                    m.sampler_state
+                        .as_ref()
+                        .and_then(|s| s.frame_checkpoint.as_ref())
+                        .map(|s| (s.manifest, Bytes)),
+                );
                 named.extend(m.values.map(|id| (id, Bytes)));
                 named
             }
@@ -966,6 +975,10 @@ pub struct SamplerState {
     pub version: u32,
     /// A bytes attachment of a [`SamplerMemo`] as JSON.
     pub memo: AttachmentId,
+    /// The numeric frame materializer's owned snapshot and continuing stream.
+    /// Absent for SQL samplers; metadata and Arrow have distinct ownership.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub frame_checkpoint: Option<crate::frames::FrameCheckpoint>,
 }
 
 /// [`SamplerState`]'s memo: what the runs read, and of what.
@@ -1502,6 +1515,12 @@ pub struct Predicted {
 pub struct Attachments {
     #[schemars(rename = "Frames.manifest")]
     pub frames_manifest: crate::frames::FrameManifest,
+    #[schemars(rename = "Materialize.frames")]
+    pub materialize_frames: crate::frames::MaterializeFrames,
+    #[schemars(rename = "FrameCheckpoint.manifest")]
+    pub frame_checkpoint_manifest: crate::frames::FrameCheckpointManifest,
+    #[schemars(rename = "FrameCheckpoint.metadata")]
+    pub frame_checkpoint_metadata: crate::frames::FrameCheckpointMetadata,
     #[schemars(rename = "ValidateQuery.query")]
     pub validate_query_query: String,
     #[schemars(rename = "ValidateQuery.schema")]

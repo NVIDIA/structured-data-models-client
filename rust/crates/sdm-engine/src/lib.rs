@@ -21,6 +21,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod frames;
 pub mod graph;
 pub mod keys;
 pub mod labels;

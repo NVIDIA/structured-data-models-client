@@ -1,7 +1,9 @@
 # T4.4 first numeric frame consumer
 
-**Proposed boundary, awaiting coordinator review.**
-Base `6f29cd29e970e5c57c55339e14445044abf48d66`; defaults and contract 31 remain unchanged.
+**Consumed boundary, implementation in progress.**
+Initial source base was `6f29cd29e970e5c57c55339e14445044abf48d66`; integration baseline is now `8d33ef91e48ae5603f8c98a173a9011d002046d9` with contract 31.
+The independent temporal consumer owns TimestampUnit wire 32 first; this consumer rebases onto its actual landing and introduces its checkpoint at wire 33 through the canonical generator.
+Default routes remain unchanged while this first consumer is explicitly selected.
 
 **Journey.**
 Admitted numeric/Boolean frames and scalar numeric keys: `Schema.from_data → PREDICT users.age FOR EACH users.user_id → materialize → inspect → scripted predict → merge`.

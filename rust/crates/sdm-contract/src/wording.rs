@@ -953,6 +953,12 @@ pub fn template(sentence: Sentence) -> Template {
             r#"Cannot score {shown!j} and {more:,} more: more than one row of table '{table}' holds each of these values of '{key}', so which row is meant would be a guess. The source does not enforce the key; keep one row per value, or key the table on columns that identify a row."#,
         ),
         S::NotInTable => said(r#""The primary keys {keys!r} do not exist in the '{table}' table""#),
+        S::FrameTaskReferences => said(
+            r#"Task references {rows} unresolved row(s) in table '{table}' after graph sanitization"#,
+        ),
+        S::FrameNoValidRows => said(
+            r#"Found no valid rows in table '{table}'. Please make sure that there exists valid non-N/A primary keys in this table."#,
+        ),
         S::LinkHistoryMissing => said(
             "Cannot perform link prediction on subgraphs without any historical target entities. Please increase the number of hops and try again.",
         ),

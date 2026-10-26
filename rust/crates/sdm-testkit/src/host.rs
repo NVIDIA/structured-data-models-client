@@ -1799,6 +1799,7 @@ fn start_materialize(
                 .map(|(version, _)| SamplerState {
                     version: *version,
                     memo: AttachmentId(4),
+                    frame_checkpoint: None,
                 }),
         }),
     }));

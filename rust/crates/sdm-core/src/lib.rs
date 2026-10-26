@@ -16,6 +16,7 @@ pub mod dispatch;
 mod edit;
 pub mod exact_number;
 mod fallback;
+mod frame_materialize;
 mod frames;
 mod held;
 mod lag;

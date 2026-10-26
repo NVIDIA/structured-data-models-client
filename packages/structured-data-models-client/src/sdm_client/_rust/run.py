@@ -209,6 +209,7 @@ def run(
     """
     core = native()
     core.reset_log_cache()
+    owned_frame = operation.get('provider', {}).get('provider') == 'frames'
     held = None if state is None else state.get('held')
     if held is not None:
         memo = max(attachments, default=0) + 1
@@ -217,6 +218,12 @@ def run(
             'sampler_state': {'version': held['version'], 'memo': memo},
         }
         attachments = {**attachments, memo: held['memo']}
+        if owned_frame:
+            from sdm_client._rust import frame_materialize
+
+            checkpoint = frame_materialize.rebind(held, attachments)
+            if checkpoint is not None:
+                operation['sampler_state']['frame_checkpoint'] = checkpoint
     start = codec.encode(
         {
             'message': 'start',
@@ -232,17 +239,30 @@ def run(
             # The core says the state it refused is to be dropped (decision
             # E74): the next run starts without one.
             state.pop('held', None)
+        if owned_frame:
+            attachments.clear()
+            held = None
         errors.raise_from_core(refused.control, refused.attachments)
-    owned_frame = (
-        operation['op'] == 'describe_source'
-        and operation.get('provider', {}).get('provider') == 'frames'
-    )
+    if owned_frame:
+        attachments.clear()
+        held = None
     try:
         return _steps(
-            core, handle, provider, model, quiet, given, kept, owned_frame
+            core,
+            handle,
+            provider,
+            model,
+            quiet,
+            given,
+            kept,
+            owned_frame,
+            operation['op'] == 'describe_source' and owned_frame,
         )
     except BaseException:
         if owned_frame:
+            if state is not None:
+                _keep(core, handle, state)
+                state = None
             # Drop the completed/current frame Run even when the caller
             # keeps this exception's traceback. Its snapshots are call-owned.
             handle = None
@@ -279,6 +299,12 @@ def _keep(core: Any, handle: Any, state: dict[str, Any]) -> None:
             'version': left['version'],
             'memo': handle.take_attachment(left['memo']),
         }
+        if left.get('frame_checkpoint') is not None:
+            from sdm_client._rust import frame_materialize
+
+            state['held']['frame_checkpoint'] = frame_materialize.take(
+                handle, left['frame_checkpoint']
+            )
     except (core.CoreError, codec.CodecError):
         return
 
@@ -292,6 +318,7 @@ def _steps(
     given: set[str] | None,
     kept: list[dict[str, Any]] | None = None,
     owned_frame: bool = False,
+    frame_constructor: bool = False,
 ) -> Finished:
     r"""The run's steps, each answered, to its result."""
     try:
@@ -302,7 +329,7 @@ def _steps(
             try:
                 control, sent = handle.next()
             except core.CoreError as failed:
-                _warn(handle, quiet, given, kept, owned_frame)
+                _warn(handle, quiet, given, kept, frame_constructor)
                 error = errors.error_from_core(
                     failed.control,
                     failed.attachments,
@@ -318,7 +345,7 @@ def _steps(
                     _of_the_part(error, refused.raised)
                     raise refused.raised
                 raise error from None
-            _warn(handle, quiet, given, kept, owned_frame)
+            _warn(handle, quiet, given, kept, frame_constructor)
             step = codec.read(control, sent)
             if step['message'] != 'step':
                 raise StructuredDataError(

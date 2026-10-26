@@ -160,6 +160,8 @@ struct Shared {
     /// The sampler memo the operation leaves for the host (decision E52),
     /// as it last kept it.
     memo: Option<SamplerMemo>,
+    /// Separately owned frame tables and opaque metadata, never buffers in JSON.
+    frame_checkpoint: Option<crate::frame_materialize::OwnedCheckpoint>,
     /// Answered, not yet taken by the body.
     replies: BTreeMap<ReplyId, Reply>,
     /// The fetches whose answers are kept as the provider handed them over,
@@ -648,6 +650,10 @@ impl Asker {
     /// host takes once the run ends, done or failed (decision E52).
     pub fn keep(&self, memo: SamplerMemo) {
         lock(&self.shared).memo = Some(memo);
+    }
+
+    pub(crate) fn keep_frame(&self, checkpoint: crate::frame_materialize::OwnedCheckpoint) {
+        lock(&self.shared).frame_checkpoint = Some(checkpoint);
     }
 }
 
@@ -1514,9 +1520,39 @@ impl Run {
         let bytes =
             serde_json::to_vec(&memo).map_err(|_| internal("a sampler memo does not serialize"))?;
         let id = attach(&mut shared, Attachment::Bytes(bytes))?;
+        let frame_checkpoint = match shared.frame_checkpoint.take() {
+            None => None,
+            Some(checkpoint) => {
+                let metadata = attach(
+                    &mut shared,
+                    Attachment::Bytes(
+                        serde_json::to_vec(&checkpoint.metadata)
+                            .map_err(|_| internal("frame metadata does not serialize"))?,
+                    ),
+                )?;
+                let mut tables = Vec::new();
+                for (source, data) in checkpoint.tables {
+                    let rows = attach(&mut shared, Attachment::Arrow(data))?;
+                    tables.push(sdm_contract::frames::FrameInput { source, rows });
+                }
+                let manifest = sdm_contract::frames::FrameCheckpointManifest { metadata, tables };
+                let manifest = attach(
+                    &mut shared,
+                    Attachment::Bytes(
+                        serde_json::to_vec(&manifest)
+                            .map_err(|_| internal("frame ownership manifest does not serialize"))?,
+                    ),
+                )?;
+                Some(sdm_contract::frames::FrameCheckpoint {
+                    version: sdm_contract::frames::FRAME_CHECKPOINT_VERSION,
+                    manifest,
+                })
+            }
+        };
         Ok(Some(SamplerState {
             version: SAMPLER_STATE_VERSION,
             memo: id,
+            frame_checkpoint,
         }))
     }
 }

@@ -17,6 +17,8 @@ fancy-regex.workspace = true
 arrow-array.workspace = true
 arrow-schema.workspace = true
 sdm-contract = { path = "../sdm-contract" }
+# The single legacy MT primitive shared by SQLite RS-2 and frame RS-3/RS-4.
+sdm-engine = { path = "../sdm-engine" }
 # The request as the contract writes it, which names a key set's table
 # (sqlite.rs, `seeds_for`); already shipped through sdm-contract.
 serde_json.workspace = true
