@@ -5201,7 +5201,7 @@
           "type": "object",
           "properties": {
             "negative": {
-              "type": "string"
+              "$ref": "#/$defs/NegativeNeighborBound"
             }
           },
           "additionalProperties": false,
@@ -5222,6 +5222,10 @@
           ]
         }
       ]
+    },
+    "NegativeNeighborBound": {
+      "type": "string",
+      "pattern": "^-(?:[1-9][0-9]*(?:\\.[0-9]+)?|0\\.0*[1-9][0-9]*)(?:[eE][+-]?[0-9]+)?$"
     },
     "TieBreak": {
       "description": "The total order a `neighbors` request keeps per seed, built by the core\nfrom the reference's rule (design, \"Data access\").",

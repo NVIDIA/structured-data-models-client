@@ -12,6 +12,7 @@
 //! Each refusal is a code and fields naming the option and why, never the
 //! value given; the host words it.
 
+use sdm_contract::data::NegativeNeighborBound;
 use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 use sdm_wire::json::{Value, is_integer_token, whole};
 use sdm_wire::payload::{ClassificationConfig, InferenceConfig};
@@ -584,7 +585,7 @@ pub enum Hop {
     Keep(u64),
     /// A negative bound reaches the provider; its native predicate or
     /// limit semantics decide the result (KO3-44).
-    Negative(String),
+    Negative(NegativeNeighborBound),
     /// Caller-authored provider expression, kept opaque in the original
     /// neighbor-bound position, not a parsed or normalized row count.
     Expression(String),
@@ -679,7 +680,11 @@ fn hop(given: &Value) -> Result<Hop, CoreError> {
             {
                 return Ok(match magnitude {
                     Some(0) => Hop::Stop,
-                    _ if negative => return Ok(Hop::Negative(token.clone())),
+                    _ if negative => {
+                        return NegativeNeighborBound::new(token.clone())
+                            .map(Hop::Negative)
+                            .ok_or_else(refused);
+                    }
                     Some(n) => Hop::Keep(u64::try_from(n).unwrap_or(u64::MAX)),
                     None => Hop::Keep(u64::MAX),
                 });
@@ -695,7 +700,9 @@ fn hop(given: &Value) -> Result<Hop, CoreError> {
         let Value::Number(token) = given else {
             return Err(refused());
         };
-        return Ok(Hop::Negative(token.clone()));
+        return NegativeNeighborBound::new(token.clone())
+            .map(Hop::Negative)
+            .ok_or_else(refused);
     }
     Ok(if size == 0.0 {
         Hop::Stop
@@ -1845,8 +1852,16 @@ mod tests {
         // Numeric bounds keep their sign; caller text retains its origin
         // for capability-driven warehouse lookback arithmetic.
         for (sizes, wanted) in [
-            ("[4, -1]", Hop::Negative(sdm_contract::data::NegativeNeighborBound::new("-1".into()).unwrap())),
-            ("[4, -0.5]", Hop::Negative(sdm_contract::data::NegativeNeighborBound::new("-0.5".into()).unwrap())),
+            (
+                "[4, -1]",
+                Hop::Negative(sdm_contract::data::NegativeNeighborBound::new("-1".into()).unwrap()),
+            ),
+            (
+                "[4, -0.5]",
+                Hop::Negative(
+                    sdm_contract::data::NegativeNeighborBound::new("-0.5".into()).unwrap(),
+                ),
+            ),
             (r#"[4, "-2"]"#, Hop::Expression("-2".into())),
         ] {
             assert_eq!(
@@ -1908,7 +1923,9 @@ mod tests {
             neighbors(&values, RunMode::Fast).unwrap(),
             vec![
                 Hop::Negative(sdm_contract::data::NegativeNeighborBound::new("-1".into()).unwrap()),
-                Hop::Negative(sdm_contract::data::NegativeNeighborBound::new("-0.5".into()).unwrap()),
+                Hop::Negative(
+                    sdm_contract::data::NegativeNeighborBound::new("-0.5".into()).unwrap()
+                ),
                 Hop::Expression("-2".into()),
                 Hop::Expression("3 OR TRUE".into()),
                 Hop::Expression("nonsense".into()),

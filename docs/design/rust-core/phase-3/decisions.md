@@ -145,6 +145,16 @@ The register's entries P3A-1 to P3A-5 name these original decisions; the later i
 | KO3-61 | Item 3: a column retyped against the source is a named error | "3. Sure" | approved by owner 2026-10-24 |
 | KO3-62 | Item 6: one query object freezing its graph at first materialize, on the old client, is registered and confirmed | "6. Hmm ok" | approved by owner 2026-10-24 |
 
+## Previously approved Snowflake sampled-case comparison (2026-10-22)
+
+Source: the retained primary owner record `$SDM_ORCH_STATE/phase-3/owner-answers-2026-10-21.md`, heading "2026-10-22 evening: Snowflake sampling, option C", lines119-123.
+The existing protected `contract/runners/capture_check.py::APPROVED_SAMPLED` and commit `31b96c9e36fbfb4400505b4b05e61fb6c2337701` already enforce this one-case, one-backend authority.
+This row records that prior approval for the policy checkpoint; it does not create a new decision or change sampling product behavior.
+
+| # | Decision | Owner's words | Status |
+|---|---|---|---|
+| KO3-63 | In compare-policy.yaml, activate only the previously approved `snowflake.sampled.entity-table` sampling comparison; keep sampling product behavior unchanged; no multicall or Databricks extension. | "Ok let's do C, no product change. That loosens the comparison which is ok." | approved by owner 2026-10-22 |
+
 ## View conversion answers (2026-10-24)
 
 Source: the owner's direct continuation answers recorded in `$SDM_ORCH_STATE/phase-3/owner-answers-2026-10-24-codex.md`, items 11 and 16 and the later answer retiring P3J-7 and P3J-8.

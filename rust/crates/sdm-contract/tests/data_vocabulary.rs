@@ -2,19 +2,22 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The data-request vocabulary carries no expression and no SQL (decision
-//! E28): the structural guard that replaced the L0 scan's weak SQL tier.
+//! The data-request vocabulary carries typed requests rather than core-built
+//! SQL (E28), with precisely reviewed opaque caller-expression seams.
+//! KO3-44 extends the existing relation seam only to a closed neighbor limit.
 //!
 //! A `DataRequest` names what it wants with typed fields; a provider, or
 //! `sdm-data` for a SQL provider, decides how to fetch it. So no field of
 //! the vocabulary, at any depth, may hold a free-text expression or a SQL
-//! string. The test reads the generated JSON Schema of `DataRequest` and
+//! string outside those exact seams. The test reads the generated JSON
+//! Schema of `DataRequest` and
 //! classifies every property's schema recursively: through local `$ref`s
 //! (each definition once per path, so a cycle ends), `anyOf`, `oneOf` and
 //! `allOf`, list items at any depth, nested objects and map values. It
 //! holds:
 //!
-//! - no property is named as SQL or an expression (`DENIED`), anywhere,
+//! - outside the exact reviewed seams, no property is named as SQL or an
+//!   expression (`DENIED`), anywhere,
 //!   the typed values included, matched against the whole name and against
 //!   each of its `_`-separated parts, so `predicate_expr` is refused;
 //! - a property typed as a reviewed typed value is refused also when its
@@ -23,8 +26,8 @@
 //!   disguise, where the vocabulary has typed structures for both;
 //! - text (a string, at any depth of lists, maps, options or newtypes) is
 //!   held only by a property named as an identifier the request refers to
-//!   (`IDENTIFIERS`), the nearest property naming it, or by an exact scoped
-//!   exception below;
+//!   (`IDENTIFIERS`), the nearest property naming it, or by the exact
+//!   checked numeric-token value or scoped opaque-expression seam below;
 //! - an any-typed schema (`true` or `{}`, as `serde_json::Value` gives, or a
 //!   map of anything) is refused, since it can hold text of any shape;
 //! - the typed values (`TYPED_VALUES`: a scalar, an Arrow field and its
@@ -41,7 +44,7 @@ use schemars::JsonSchema;
 use sdm_contract::data::DataRequest;
 use serde_json::{Map, Value};
 
-/// Property names that hold SQL or an expression; never allowed.
+/// SQL or expression property names, refused outside the exact reviewed seams.
 const DENIED: &[&str] = &[
     "sql",
     "text",
@@ -107,6 +110,10 @@ enum Finding {
     Identifier(String),
     /// Text under any other property, or with no property naming it.
     Text(String),
+    /// A checked lossless numeric token, never arbitrary text.
+    Number(String),
+    /// Caller code only in the precisely closed reviewed neighbor seam.
+    Opaque(String),
     /// A schema that accepts anything.
     Any(String),
     /// A property named as SQL or an expression.
@@ -157,6 +164,85 @@ fn window_catalog_type(schema: &Value) -> bool {
         && kinds.iter().all(|kind| matches!(*kind, "string" | "null"))
 }
 
+/// Exact schema keywords, allowing only harmless annotations beside them.
+fn exact_schema(schema: &Value, expected: &[(&str, Value)]) -> bool {
+    let Some(map) = schema.as_object() else {
+        return false;
+    };
+    map.keys().all(|key| {
+        ANNOTATIONS.contains(&key.as_str())
+            || expected.iter().any(|(name, _)| key.as_str() == *name)
+    }) && expected
+        .iter()
+        .all(|(key, value)| map.get(*key) == Some(value))
+}
+
+fn checked_negative_number(schema: &Value) -> bool {
+    exact_schema(
+        schema,
+        &[
+            ("type", serde_json::json!("string")),
+            (
+                "pattern",
+                serde_json::json!(
+                    r"^-(?:[1-9][0-9]*(?:\.[0-9]+)?|0\.0*[1-9][0-9]*)(?:[eE][+-]?[0-9]+)?$"
+                ),
+            ),
+        ],
+    )
+}
+
+/// One required property, no additional fields, and its exact child schema.
+fn closed_bound(schema: &Value, property: &str, child: &[(&str, Value)]) -> bool {
+    let Some(properties) = schema.get("properties").and_then(Value::as_object) else {
+        return false;
+    };
+    properties.len() == 1
+        && properties
+            .get(property)
+            .is_some_and(|value| exact_schema(value, child))
+        && exact_schema(
+            schema,
+            &[
+                ("type", serde_json::json!("object")),
+                ("properties", Value::Object(properties.clone())),
+                ("required", serde_json::json!([property])),
+                ("additionalProperties", Value::Bool(false)),
+            ],
+        )
+}
+
+/// KO3-44: preserve unsigned counts, checked negative numeric text and one
+/// distinct caller-expression property. Never admit a whole unreviewed type.
+fn closed_neighbor_limit(schema: &Value, defs: &Map<String, Value>) -> bool {
+    let Some(branches) = schema.get("anyOf").and_then(Value::as_array) else {
+        return false;
+    };
+    branches.len() == 3
+        && exact_schema(schema, &[("anyOf", Value::Array(branches.clone()))])
+        && exact_schema(
+            &branches[0],
+            &[
+                ("type", serde_json::json!("integer")),
+                ("format", serde_json::json!("uint64")),
+                ("minimum", serde_json::json!(0)),
+            ],
+        )
+        && closed_bound(
+            &branches[1],
+            "negative",
+            &[("$ref", serde_json::json!("#/$defs/NegativeNeighborBound"))],
+        )
+        && defs
+            .get("NegativeNeighborBound")
+            .is_some_and(checked_negative_number)
+        && closed_bound(
+            &branches[2],
+            "sql_expression",
+            &[("type", serde_json::json!("string"))],
+        )
+}
+
 impl Walk<'_> {
     /// Classify `schema`, reached at `path`, under the nearest property
     /// `name` (None at the root); `seen` holds the definitions entered on
@@ -193,6 +279,14 @@ impl Walk<'_> {
             inner.push(def.to_owned());
             match self.defs.get(def) {
                 None => self.found.push(Finding::Any(format!("{at} (missing)"))),
+                Some(target)
+                    if def == "NegativeNeighborBound" && checked_negative_number(target) =>
+                {
+                    if name.is_some_and(|property| denied(property, true)) {
+                        self.found.push(Finding::Denied(at.clone()));
+                    }
+                    self.found.push(Finding::Number(at));
+                }
                 Some(target) if TYPED_VALUES.contains(&def) => {
                     // The property holding a typed value is named for what
                     // it holds; a condition or an ordering never is one.
@@ -214,7 +308,18 @@ impl Walk<'_> {
                 .flatten()
                 .enumerate()
             {
-                self.classify(branch, &format!("{path}/{key}/{i}"), name, seen, None);
+                if definition == Some("NeighborLimit")
+                    && key == "anyOf"
+                    && i == 2
+                    && closed_neighbor_limit(schema, self.defs)
+                {
+                    // The full closed branch has exactly this one string.
+                    // Other branches still traverse the ordinary walker.
+                    self.found
+                        .push(Finding::Opaque(format!("{path}/{key}/{i}/sql_expression")));
+                } else {
+                    self.classify(branch, &format!("{path}/{key}/{i}"), name, seen, None);
+                }
             }
         }
         let closed = map.contains_key("const") || map.contains_key("enum");
@@ -330,7 +435,12 @@ fn findings(schema: &Value) -> Vec<Finding> {
 fn problems(schema: &Value) -> Vec<Finding> {
     findings(schema)
         .into_iter()
-        .filter(|f| !matches!(f, Finding::Identifier(_)))
+        .filter(|f| {
+            !matches!(
+                f,
+                Finding::Identifier(_) | Finding::Number(_) | Finding::Opaque(_)
+            )
+        })
         .collect()
 }
 
@@ -698,14 +808,23 @@ fn typed_values_named_as_filters_are_refused() {
     refused::<FiltersScalars>("Denied(\"#/filters/items -> Scalar\")");
 }
 
-
 #[test]
 fn only_the_closed_neighbor_seam_carries_checked_numbers_and_opaque_expressions() {
     let request = schema::<DataRequest>();
     assert!(problems(&request).is_empty());
     let found = findings(&request);
-    assert!(found.iter().any(|f| matches!(f, Finding::Number(path) if path.contains("NegativeNeighborBound"))), "{found:#?}");
-    assert!(found.iter().any(|f| matches!(f, Finding::Opaque(path) if path.ends_with("/sql_expression"))), "{found:#?}");
+    assert!(
+        found
+            .iter()
+            .any(|f| matches!(f, Finding::Number(path) if path.contains("NegativeNeighborBound"))),
+        "{found:#?}"
+    );
+    assert!(
+        found
+            .iter()
+            .any(|f| matches!(f, Finding::Opaque(path) if path.ends_with("/sql_expression"))),
+        "{found:#?}"
+    );
     assert!(!found.iter().any(|f| matches!(f, Finding::Identifier(path) if path.contains("NeighborLimit") || path.contains("NegativeNeighborBound"))));
 }
 
@@ -729,14 +848,21 @@ fn neighbor_expression_shape_drift_never_inherits_the_reviewed_seam() {
     let object = serde_json::json!({"type":"object", "properties":{"sql_expression":{"type":"string"}}, "required":["sql_expression"], "additionalProperties":false});
     let mut versions = Vec::new();
     let mut extra = original.clone();
-    extra["$defs"]["NeighborLimit"]["anyOf"][2]["properties"]["note"] = serde_json::json!({"type":"string"});
+    extra["$defs"]["NeighborLimit"]["anyOf"][2]["properties"]["note"] =
+        serde_json::json!({"type":"string"});
     versions.push(extra);
     for branch in [1, 2] {
         let mut open = original.clone();
-        open["$defs"]["NeighborLimit"]["anyOf"][branch].as_object_mut().unwrap().remove("additionalProperties");
+        open["$defs"]["NeighborLimit"]["anyOf"][branch]
+            .as_object_mut()
+            .unwrap()
+            .remove("additionalProperties");
         versions.push(open);
         let mut optional = original.clone();
-        optional["$defs"]["NeighborLimit"]["anyOf"][branch].as_object_mut().unwrap().remove("required");
+        optional["$defs"]["NeighborLimit"]["anyOf"][branch]
+            .as_object_mut()
+            .unwrap()
+            .remove("required");
         versions.push(optional);
     }
     for widened in [
@@ -761,11 +887,31 @@ fn neighbor_expression_shape_drift_never_inherits_the_reviewed_seam() {
     number["$defs"]["NeighborLimit"]["anyOf"][0]["type"] = Value::String("number".into());
     versions.push(number);
     let mut extra_branch = original.clone();
-    extra_branch["$defs"]["NeighborLimit"]["anyOf"].as_array_mut().unwrap().push(serde_json::json!({"type":"string"}));
+    extra_branch["$defs"]["NeighborLimit"]["anyOf"]
+        .as_array_mut()
+        .unwrap()
+        .push(serde_json::json!({"type":"string"}));
     versions.push(extra_branch);
     for request in versions {
         let found = problems(&request);
         assert!(!found.is_empty(), "{request:#?}");
-        assert!(!findings(&request).iter().any(|f| matches!(f, Finding::Opaque(_))), "{found:#?}");
+        assert!(
+            !findings(&request)
+                .iter()
+                .any(|f| matches!(f, Finding::Opaque(_))),
+            "{found:#?}"
+        );
     }
+}
+
+#[derive(JsonSchema)]
+#[allow(dead_code, reason = "only its schema is read")]
+struct CheckedNumberAsFilter {
+    table: String,
+    filter: sdm_contract::data::NegativeNeighborBound,
+}
+
+#[test]
+fn a_checked_numeric_token_cannot_be_repurposed_as_a_filter() {
+    refused::<CheckedNumberAsFilter>("Denied(\"#/filter -> NegativeNeighborBound\")");
 }

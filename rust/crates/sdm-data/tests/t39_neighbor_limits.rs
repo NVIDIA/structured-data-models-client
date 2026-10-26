@@ -57,7 +57,12 @@ fn signed_bounds_and_expressions_retain_native_precedence_and_unsigned_width() {
             ") <= "
         };
         for (limit, literal) in [
-            (NeighborLimit::Negative { value: sdm_contract::data::NegativeNeighborBound::new("-1".into()).unwrap() }, "-1"),
+            (
+                NeighborLimit::Negative {
+                    value: sdm_contract::data::NegativeNeighborBound::new("-1".into()).unwrap(),
+                },
+                "-1",
+            ),
             (
                 NeighborLimit::Negative {
                     value: sdm_contract::data::NegativeNeighborBound::new("-0.5".into()).unwrap(),

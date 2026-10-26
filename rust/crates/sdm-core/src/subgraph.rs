@@ -178,6 +178,7 @@ fn limit_lookback_seconds(
         NeighborLimit::Unsigned(value) => Ok(lookback_seconds(*value, rate)),
         NeighborLimit::Negative { value } => {
             let value = value
+                .as_str()
                 .parse::<f64>()
                 .map_err(|_| internal("a negative neighbor bound is not numeric"))?;
             let seconds = (5.0 * value / rate).ceil();
@@ -993,7 +994,13 @@ mod lookback_tests {
     #[test]
     fn signed_lookback_and_expression_arithmetic_keep_their_meaning() {
         assert_eq!(
-            limit_lookback_seconds(&NeighborLimit::Negative { value: sdm_contract::data::NegativeNeighborBound::new("-1".into()).unwrap() }, 2.0).unwrap(),
+            limit_lookback_seconds(
+                &NeighborLimit::Negative {
+                    value: sdm_contract::data::NegativeNeighborBound::new("-1".into()).unwrap()
+                },
+                2.0
+            )
+            .unwrap(),
             -2
         );
         assert_eq!(

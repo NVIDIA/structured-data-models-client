@@ -17,7 +17,11 @@ Finite lossless JSON numbers outside double range retain their existing option r
 The endpoint response decoder's encoding and surrogate rules do not apply to options.
 
 The shared data contract carries an explicit neighbor limit.
-It preserves the full unsigned64 range, signed negative numbers, and caller-authored SQL-expression text as distinct variants.
+It preserves the full unsigned64 range, checked signed negative numeric tokens, and caller-authored SQL-expression text as distinct variants.
+Negative numeric text has a private validated type, an exact JSON-number schema pattern and checked deserialization; it cannot carry an arbitrary expression.
+Its string representation preserves every digit through internally tagged serde envelopes, which otherwise buffer fractional JSON numbers through doubles.
+KO3-44 extends E28 only at this precisely closed typed neighbor-limit boundary, alongside the existing reviewed opaque relation-expression seam.
+The structural vocabulary guard classifies checked numeric tokens and opaque caller expressions separately from identifiers, and rejects schema drift, extra fields and nested expression shapes.
 Positive numeric limits retain their existing encoding and behavior.
 Only a numeric zero stops the walk; textual zero continues it as before.
 Core and request code carry opaque provider-expression text separately from numbers, without interpreting a language or naming a dialect.

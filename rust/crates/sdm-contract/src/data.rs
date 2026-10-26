@@ -627,6 +627,48 @@ pub struct TieTerm {
 #[serde(transparent)]
 pub struct TieBreak(pub Vec<TieTerm>);
 
+/// A strictly negative, nonzero JSON numeric token, held losslessly.
+/// The private representation can be constructed only through validation;
+/// it is encoded as numeric text because tagged serde envelopes buffer
+/// actual fractional JSON numbers through doubles before reading fields.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(transparent)]
+pub struct NegativeNeighborBound(String);
+
+impl NegativeNeighborBound {
+    pub fn new(token: String) -> Option<Self> {
+        serde_json::from_str::<serde::de::IgnoredAny>(&token).ok()?;
+        let number = written_number(&token)?;
+        (number.negative && !number.digits.is_empty()).then_some(Self(token))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl<'de> Deserialize<'de> for NegativeNeighborBound {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let token = String::deserialize(deserializer)?;
+        Self::new(token).ok_or_else(|| {
+            serde::de::Error::custom("a negative bound is not a negative JSON number")
+        })
+    }
+}
+
+impl JsonSchema for NegativeNeighborBound {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "NegativeNeighborBound".into()
+    }
+
+    fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "string",
+            "pattern": r"^-(?:[1-9][0-9]*(?:\.[0-9]+)?|0\.0*[1-9][0-9]*)(?:[eE][+-]?[0-9]+)?$",
+        })
+    }
+}
+
 /// The caller's per-seed neighbor bound, interpreted by its provider.
 /// Positive counts retain their original unsigned JSON representation.
 /// SQL expressions are caller-authored query code under the same trust
@@ -638,7 +680,7 @@ pub enum NeighborLimit {
     /// A negative JSON number's exact text, including fractional bounds.
     Negative {
         #[serde(rename = "negative")]
-        value: String,
+        value: NegativeNeighborBound,
     },
     Expression {
         #[serde(rename = "sql_expression")]
@@ -860,22 +902,6 @@ impl DataRequest {
                 ..
             } => {
                 check_seeds(self, key, seeds)?;
-                if let Some(NeighborLimit::Negative { value }) = per_seed
-                    && (!value.starts_with('-')
-                        || serde_json::from_str::<serde::de::IgnoredAny>(value).is_err()
-                        || !value
-                            .split(['e', 'E'])
-                            .next()
-                            .unwrap_or("")
-                            .bytes()
-                            .any(|digit| matches!(digit, b'1'..=b'9')))
-                {
-                    return Err(refused(
-                        self,
-                        "per_seed",
-                        "a negative bound is not a negative number",
-                    ));
-                }
                 match (per_seed, order) {
                     (Some(_), None) => {
                         return Err(refused(
