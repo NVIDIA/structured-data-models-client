@@ -181,12 +181,11 @@ def test_the_s0_cases_agree_with_the_reference_on_both_python_runners(
         # and from T1.11d its predict.
         'S1': ['describe_source', 'materialize', 'predict'],
     }
+    cases_by_id = {
+        case['id']: case for case, _ in run_python.load_cases([CASES])
+    }
     for observation in _observations(core):
-        case = next(
-            case
-            for case, _ in run_python.load_cases([CASES])
-            if case['id'] == observation['case']
-        )
+        case = cases_by_id[observation['case']]
         # A case that forces no route (base.adventureworks, whose journey
         # had no core route at T1.21b, E51(c); from T1.24 its refusal map's
         # probes force it and the case is unchanged, so its reference line
