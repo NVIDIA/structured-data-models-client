@@ -4,6 +4,7 @@
 
 package com.nvidia.sdm.internal;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -19,6 +20,7 @@ import java.lang.reflect.Proxy;
 import java.sql.Connection;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
@@ -121,6 +123,85 @@ class T313HostTest {
     assertFalse(error.details().toString().contains("secret_driver_text"));
     assertEquals("42501", error.details().get("sqlstate"));
     assertEquals("17", error.details().get("vendor_code"));
+  }
+
+  private static Map<String, Object> fetchFailure(Object diagnostic, String state) {
+    Map<String, Object> facts = Map.of(
+        "kind", "data_source", "retryable", true, "sqlstate", state,
+        "vendor_code", "1003", "error_class", "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        "driver_message", diagnostic);
+    return Map.of("message", "fetch_reply", "id", 71L,
+        "outcome", Map.of("outcome", "error", "error", facts));
+  }
+
+  private static Map<String, Object> withoutDiagnostic(Map<String, Object> reply) {
+    Map<?, ?> outcome = (Map<?, ?>) reply.get("outcome");
+    Map<?, ?> error = (Map<?, ?>) outcome.get("error");
+    Map<String, Object> facts = new LinkedHashMap<>();
+    error.forEach((key, value) -> facts.put((String) key, value));
+    facts.remove("driver_message");
+    return Map.of("message", reply.get("message"), "id", reply.get("id"),
+        "outcome", Map.of("outcome", "error", "error", facts));
+  }
+
+  @Test
+  void optionalDiagnosticsUseTheCompleteEncodedReplyBudget() throws Exception {
+    int overhead = Json.write(fetchFailure("", "42703")).length;
+    String fits = "x".repeat(Host.CONTROL_CAP - overhead);
+    Map<String, Object> exact = fetchFailure(fits, "42703");
+    assertEquals(Host.CONTROL_CAP, Json.write(exact).length);
+    assertArrayEquals(Json.write(exact), Host.fetchControl(exact));
+    Map<String, Object> past = fetchFailure(fits + "x", "42703");
+    assertEquals(Host.CONTROL_CAP + 1, Json.write(past).length);
+    assertEquals(withoutDiagnostic(past), Json.read(Host.fetchControl(past)));
+    assertEquals(fits + "x", ((Map<?, ?>) ((Map<?, ?>) past.get("outcome"))
+        .get("error")).get("driver_message"), "caller-owned immutable facts are unchanged");
+  }
+
+  @Test
+  void escapedAndMultibyteDiagnosticsUseEncodedBytesNotCharacters() throws Exception {
+    for (String text : List.of("é".repeat(30_000), "\\\n".repeat(20_000),
+        "é".repeat(40_000), "\uD83D\uDE00".repeat(17_000), "x".repeat(100_000))) {
+      Map<String, Object> original = fetchFailure(text, "42703");
+      Object expected = Json.write(original).length <= Host.CONTROL_CAP
+          ? original : withoutDiagnostic(original);
+      byte[] encoded = Host.fetchControl(original);
+      assertTrue(encoded.length <= Host.CONTROL_CAP);
+      assertEquals(expected, Json.read(encoded));
+    }
+  }
+
+  @Test
+  void oversizedMalformedTextStillFailsTheExistingJsonValidation() {
+    for (String text : List.of("\uD800", "\uDC00", "x".repeat(100_000) + "\uD800",
+        "\uDC00" + "x".repeat(100_000), "\uD83D\uDE00".repeat(40_000) + "\uD800")) {
+      Map<String, Object> original = fetchFailure(text, "42703");
+      StructuredDataException ordinary = assertThrows(StructuredDataException.class,
+          () -> Host.control(original));
+      StructuredDataException fetched = assertThrows(StructuredDataException.class,
+          () -> Host.fetchControl(original));
+      assertEquals(ordinary.code(), fetched.code());
+      assertEquals(ordinary.getMessage(), fetched.getMessage());
+      assertTrue(fetched.getMessage().contains("unpaired surrogate"));
+    }
+  }
+
+  @Test
+  void onlyTheOptionalStringDiagnosticMayBeOmitted() throws Exception {
+    Map<String, Object> numbered = fetchFailure(17L, "42703");
+    assertArrayEquals(Host.control(numbered), Host.fetchControl(numbered));
+    for (Object value : List.of(new Object(), List.of("x".repeat(100_000)))) {
+      assertThrows(StructuredDataException.class,
+          () -> Host.fetchControl(fetchFailure(value, "42703")));
+    }
+    assertThrows(StructuredDataException.class,
+        () -> Host.fetchControl(fetchFailure("x".repeat(100_000), "s".repeat(100_000))));
+    Map<String, Object> data = Map.of("message", "fetch_reply", "id", 71L,
+        "outcome", Map.of("outcome", "data", "data", 1L));
+    assertArrayEquals(Host.control(data), Host.fetchControl(data));
+    assertThrows(StructuredDataException.class,
+        () -> Host.control(fetchFailure("x".repeat(100_000), "42703")),
+        "ordinary control messages retain their strict cap");
   }
 
   /** The core's error of {@code sentence} under {@code status} and {@code code}. */

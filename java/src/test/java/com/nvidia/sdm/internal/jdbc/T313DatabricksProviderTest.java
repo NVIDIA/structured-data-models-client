@@ -5,9 +5,14 @@
 package com.nvidia.sdm.internal.jdbc;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.nvidia.sdm.DatabricksSource;
+import com.nvidia.sdm.FromSourceOptions;
+import com.nvidia.sdm.Schema;
+import com.nvidia.sdm.StructuredDataException;
 import com.nvidia.sdm.internal.ArrowData;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
@@ -35,6 +40,91 @@ import org.junit.jupiter.api.Test;
  * text, as the Python provider tells them.
  */
 class T313DatabricksProviderTest {
+  private static FromSourceOptions users() {
+    return FromSourceOptions.builder().table("users").primaryKey("users", "user_id")
+        .noTimeColumn("users").relationships(List.of()).checkKeys(false).build();
+  }
+
+  private static FakeJdbc.Database nestedDatabase(String kind, Object... values) {
+    return new FakeJdbc.Database(sql -> {
+      if (sql.contains("information_schema.columns")) {
+        return List.of(
+            FakeJdbc.Column.of("column_name", "STRING", "user_id", "score", "f"),
+            FakeJdbc.Column.of("full_data_type", "STRING", "BIGINT", "DOUBLE", kind),
+            FakeJdbc.Column.of("is_nullable", "STRING", "NO", "YES", "YES"),
+            FakeJdbc.Column.of("table_catalog", "STRING", "catalog", "catalog", "catalog"),
+            FakeJdbc.Column.of("table_schema", "STRING", "schema", "schema", "schema"),
+            FakeJdbc.Column.of("table_name", "STRING", "users", "users", "users"),
+            FakeJdbc.Column.of("table_type", "STRING", "MANAGED", "MANAGED", "MANAGED"));
+      }
+      if (sql.startsWith("DESCRIBE QUERY ")) {
+        return List.of(FakeJdbc.Column.of("col_name", "STRING", "user_id", "score", "f"),
+            FakeJdbc.Column.of("data_type", "STRING", "BIGINT", "DOUBLE", kind));
+      }
+      if (sql.contains("information_schema.referential_constraints")) {
+        return List.of(FakeJdbc.Column.of("constraint_name", "STRING"),
+            FakeJdbc.Column.of("source_column", "STRING"),
+            FakeJdbc.Column.of("table_catalog", "STRING"),
+            FakeJdbc.Column.of("table_schema", "STRING"),
+            FakeJdbc.Column.of("table_name", "STRING"),
+            FakeJdbc.Column.of("referenced_column", "STRING"));
+      }
+      if (sql.contains("information_schema.table_constraints")) {
+        return List.of(FakeJdbc.Column.of("constraint_type", "STRING"),
+            FakeJdbc.Column.of("constraint_name", "STRING"),
+            FakeJdbc.Column.of("column_name", "STRING"));
+      }
+      if (sql.contains("FROM `catalog`.`schema`.`users`")) {
+        return List.of(FakeJdbc.Column.of("user_id", "BIGINT", 0L, 1L, 2L, 3L),
+            FakeJdbc.Column.of("score", "DOUBLE", 0.0, 1.0, 2.0, 3.0),
+            FakeJdbc.Column.of("f", kind, values));
+      }
+      throw new AssertionError("unexpected SQL: " + sql);
+    });
+  }
+
+  @Test
+  void publicCatalogTypingKeepsNestedRefusalsAndListOmission() {
+    for (String kind : List.of("STRUCT<age: INT, country: STRING>", "MAP<STRING, INT>",
+        "ARRAY<TIMESTAMP>")) {
+      FakeJdbc.Database db = nestedDatabase(kind, "value", "value", null, "value");
+      StructuredDataException error = assertThrows(StructuredDataException.class,
+          () -> Schema.fromSource(DatabricksSource.of(db.connection(), "catalog", "schema"), users()));
+      assertEquals("UNSUPPORTED_REQUEST", error.code(), kind);
+      assertEquals("column_type", error.details().get("rule"), kind);
+      assertEquals(0, db.statementsOpen, kind);
+    }
+    for (String kind : List.of("ARRAY<DECIMAL(8,2)>", "ARRAY<INT>", "STRING")) {
+      Object[] values = kind.equals("ARRAY<INT>")
+          ? new Object[] {List.of(1, 2), List.of(), null, List.of(3)}
+          : new Object[] {"[1.25,2.50]", "[]", null, "[3.75]"};
+      FakeJdbc.Database db = nestedDatabase(kind, values);
+      Schema schema = Schema.fromSource(DatabricksSource.of(db.connection(), "catalog", "schema"), users());
+      assertEquals(kind.equals("STRING") ? List.of("user_id", "score", "f")
+          : List.of("user_id", "score"),
+          schema.table("users").columns().stream().map(c -> c.name()).toList(), kind);
+      assertEquals(0, db.statementsOpen, kind);
+    }
+  }
+
+  @Test
+  void publicOversizedDriverFailuresKeepFactsAndTheNextCallUsable() {
+    for (String message : List.of("secret_short", "secret_" + "x".repeat(100_000), "secret_next")) {
+      FakeJdbc.Database db = new FakeJdbc.Database(
+          sql -> new SQLTransientException("[UNRESOLVED_COLUMN.WITH_SUGGESTION] " + message, "42703", 1003));
+      StructuredDataException error = assertThrows(StructuredDataException.class,
+          () -> Schema.fromSource(DatabricksSource.of(db.connection(), "catalog", "schema"), users()));
+      assertEquals("PROVIDER_ERROR", error.code());
+      assertTrue(error.retryable());
+      assertEquals("42703", error.details().get("sqlstate"));
+      assertEquals("1003", error.details().get("vendor_code"));
+      assertEquals(SQLTransientException.class.getName(), error.details().get("driver_class"));
+      assertFalse(error.getMessage().contains("secret_"));
+      assertFalse(error.details().toString().contains("secret_"));
+      assertEquals(0, db.statementsOpen);
+    }
+  }
+
   /** A key set's text as the core hands it over: one text cell, as an Arrow stream. */
   static ArrowReader text(String json) throws Exception {
     BufferAllocator allocator = ArrowData.allocator();
