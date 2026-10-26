@@ -635,6 +635,19 @@ def test_nonfinite_estimators_keep_the_task_validators_public_message(
     assert refused.value.details['key'] == 'num_estimators'
 
 
+def test_invalid_statistic_keeps_its_approved_early_precedence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    with pytest.raises(StructuredDataError) as refused:
+        _materialize(
+            prediction_statistic='unknown',
+            inference_config={'num_estimators': float('inf')},
+        )
+    assert refused.value.code == 'INVALID_REQUEST'
+    assert refused.value.details['field'] == 'prediction_statistic'
+
+
 @pytest.mark.parametrize('given', [float('inf'), float('nan')])
 def test_other_nonfinite_inference_fields_are_still_refused(
     monkeypatch: pytest.MonkeyPatch, given: float
