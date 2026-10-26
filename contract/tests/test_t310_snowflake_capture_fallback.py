@@ -238,3 +238,36 @@ def test_malformed_failed_fetch_evidence_does_not_validate(field: str) -> None:
         'fetch_errors'
     ] = [evidence]
     assert OWN.check.capture_problems(line, case, tables)
+
+
+def test_public_materialize_keeps_the_reference_large_key_refusal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from decimal import Decimal
+
+    import pandas as pd
+    from sdm_client import PredictiveQuery, StructuredDataError
+
+    fixture = _module(
+        't310_fallback_public_source_fixtures',
+        ROOT
+        / 'packages/structured-data-models-client/tests'
+        / 'test_snowflake_from_source.py',
+    )
+    warehouse = fixture._Warehouse('snowflake.key.number-38-0.past-int64')
+    schema = fixture._described(
+        'core', monkeypatch, warehouse, **fixture._NAMED
+    )
+    query = PredictiveQuery(
+        'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id',
+        schema,
+    )
+    with pytest.raises(StructuredDataError) as raised:
+        query.materialize(
+            indices=[Decimal(10**25), Decimal(10**25 + 1)],
+            anchor_time=pd.Timestamp('2024-03-01'),
+        )
+    assert raised.value.code == 'INVALID_REQUEST'
+    assert raised.value._sentence == 'snowflake_integer_key_range'
+    assert 'Snowflake' in str(raised.value)
+    assert 'signed 64-bit range' in str(raised.value)
