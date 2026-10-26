@@ -2298,10 +2298,10 @@ def _expected_statements(
     statements: list[dict[str, Any]], database: str
 ) -> list[dict[str, Any]]:
     r"""The reference's ``statements`` of one public call that a core runner
-    is expected to match: on Postgres, all but the reads whose results
+    is expected to match: on Postgres (including Lakebase), all but the reads whose results
     the reference never uses (:data:`_POSTGRES_UNUSED_READS`, KO2-58), each
     with no parameters; every one elsewhere."""
-    if database != 'postgres':
+    if _loader().ENGINE.get(database, database) != 'postgres':
         return statements
     return [
         each
